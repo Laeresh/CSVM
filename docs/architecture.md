@@ -3276,7 +3276,11 @@ FlightModel, CameraController + CamParams, SpeedCue, Loadout + ProjectilePool (g
 `player_crash_dirt` + `snd_exp_ground_a`, `water`(1) `player_crash_water` + `snd_exp_water_a`, and
 everything else — id 0 plus the ids whose def this install does not ship — falls back to slot 0,
 `player_crash_default`, which authors no surface boom of its own. `--crash` has no struck body, so
-it takes the null-material arm to that same slot 0.
+it takes the null-material arm to that same slot 0. On an AI plane `CrashDefs` is the `ai_crash_*`
+vector instead (M4 G21 — `BuildFlightCrashRuntime` keys the family on `IsHumanPiloted`; same
+cascade, same trio per chapter, and its defs hide the wreck rather than flinging pieces);
+`LastCrashDef` records the selection and the `CRASH … def=` line prints it, which is how the
+`ai-crash-defs` suite and a headless run read which family fired.
 **The original's death is two-stage; this build's `Crash` only ever models the second stage.**
 `FUN_00498bf0` forks on a signed field of the death event: negative plays a canned mid-air destruct
 (`FUN_004b82d0` — no `player_crash_*` def, sets the byte `this+0x91f`) and defers the surface pick
@@ -4482,17 +4486,21 @@ No session state — every call takes the `SessionSpec` explicitly rather than c
 these are pure over their arguments.
 
 ## src/Session/SurfaceDefTable.cs
-One of the original's per-surface anim-def vectors — `"player_crash_" + name` or `"touchdown_" +
-name` over every `SurfaceRegistry` slot — plus the cascade that indexes it with a struck material's
-numeric surface id (`SceneBuilder.SurfaceIdMeta`). Faithful to `FUN_0048b920`
+One of the original's per-surface anim-def vectors — `"player_crash_" + name`, `"ai_crash_" +
+name` (M4 G21) or `"touchdown_" + name` over every `SurfaceRegistry` slot — plus the cascade that
+indexes it with a struck material's numeric surface id (`SceneBuilder.SurfaceIdMeta`). Faithful to
+`FUN_0048b920`
 `0x0048bac5`–`0x0048bb00`: a null struck material, a negative id, an id at/beyond the vector length,
 or a slot naming a def the program does not define all resolve **slot 0**; an empty vector or an
 empty slot 0 resolves the bare last-resort anim name; anything else is `vector[id]`. Built once per
 bind from a caller-supplied "does this def exist" test, so `PlayableDefs` is what a runtime must
-bind and `DefForSurfaceId` is what an impact asks. Engine-free and pure.
+bind and `DefForSurfaceId` is what an impact asks. Engine-free and pure. The AI family is the same
+cascade over the same fields (`FUN_00475820` copies its params-built vector onto the vehicle,
+`FUN_00476250` swaps in the player vector only on the vehicle named `player`); its last resort is
+the vehicle's own name (`FUN_00479240` at `0x0047b11b`), so `AiCrashDefTable` passes the plane name.
 ⚠ **The empty-slot arm is the mechanism, not a special case.** This install ships three defs per
   family, so eleven of fourteen slots fall back — never hardcode *which*: ask the bound program.
-⚠ **The two families differ in the last arm only.** The touchdown handler `FUN_0048d2c0`
+⚠ **The touchdown family differs in the last arm only.** The touchdown handler `FUN_0048d2c0`
   `0x0048d425`–`0x0048d460` repeats the crash test byte for byte against the global vector
   `DAT_0071c2e8`/`DAT_0071c2ec`, but its fallback jumps past the play call to `LAB_0048d4c1` and
   plays nothing, where the crash family resolves a bare anim handle. So `lastResort` is null for
@@ -4540,7 +4548,10 @@ flight-essential subset of a player rig — painted plane, `FlightController` wi
 loadout, the standard crash runtime — over the same `FlightRigAssembler.Inputs` the rigs used.
 `GameSession.SpawnAiAircraft` is the entry point (`--ai=` is its CLI probe); the session steps
 every spawned plane in `DriveSimSteps` after the rigs. Shooter ids run from `ShooterIdBase` (100),
-outside every player index and `IncomingFire.ShooterId`.
+outside every player index and `IncomingFire.ShooterId`. The crash runtime it builds indexes the
+`ai_crash_*` family, not `player_crash_*` — `BuildFlightCrashRuntime` keys the family on
+`IsHumanPiloted` (M4 G21, the original's own vehicle split); `--crash` forces spawned AI planes
+too, so the split is readable off the `CRASH … def=` line headlessly.
 ⚠ Liveries draw from the session paint stream AFTER every player (players draw at build, AI at
   spawn) — player paint is unchanged by AI existing; keep that ordering.
 ⚠ The spawned subtree is deliberately NOT indexed into the world runtime's `NameResolver` (same
@@ -4619,8 +4630,11 @@ over the whole surface registry, `CrashDefPrefix`/`CrashAnimRoot` its prefix and
 `PlaneDamageEffectAnims`: the four `<part>_damage_effects` shims; `PropChoreographyAnims`:
 `startprops`/`stopprops`, played directly by `FlightController` rather than through a CALL;
 `PlayerDamageStageAnims`: the authored damage-stage menu `pdpanelN`/`player_fuelleak`/
-`player_damage_trail` DamageVisuals plays as injure_anims thresholds cross, `BL-259`), and the two
-surface-indexed def vectors: `CrashDefTable(program)` for the per-plane crash rig and
+`player_damage_trail` DamageVisuals plays as injure_anims thresholds cross, `BL-259`), and the
+three surface-indexed def vectors: `CrashDefTable(program)` for a human rig,
+`AiCrashDefTable(program, planeName)` for an AI plane's rig (M4 G21 — prefix `ai_crash_`,
+scaffold NAME `kestrel`, last resort the plane's own name; `CrashDefTableFor` keys the pick on
+`IsHumanPiloted`, the original's own vehicle split at `FUN_00476250`) and
 `TouchdownDefTable(program)` for the level's graze reaction (`SurfaceDefTable`, null last resort).
 `WorldEffectAnimNames(program)` is `EffectAnimNames` plus that vector's playable slots, so the bind,
 the stage closure and the `--effects-test`/`effects-census` sweeps all see one set.
@@ -4668,11 +4682,13 @@ its whole producible range resolves inside `EffectAnimNames`/`PlaneDamageEffectA
   Extend those lists, never the walk (`PLAN-effect-catalogue` B2's Outcome).
 
 ## src/Session/WorldEffectsFactory.cs
-Builds the impact/destruction effect stages and the per-player crash runtime: the world-effects runtime (D32) and
+Builds the impact/destruction effect stages and the per-plane crash runtime: the world-effects runtime (D32) and
 `BuildFlightCrashRuntime` — which despite the name binds every def that plays ON one aircraft: EVERY
-playable slot of the crash-def vector (`EffectCatalogue.CrashDefTable`, handed to the controller as
-`CrashDefs`; the struck surface is only known at impact, so the whole vector is bound and
-`FlightController.Crash` indexes it with the struck body's surface id)
+playable slot of the crash-def vector (`EffectCatalogue.CrashDefTableFor` — `player_crash_*` for a
+human rig, `ai_crash_*` for an AI plane, keyed on `IsHumanPiloted` (M4 G21); handed to the
+controller as `CrashDefs`; the struck surface is only known at impact, so the whole vector is
+bound and `FlightController.Crash` indexes it with the struck body's surface id — an AI rig also
+gets a meshless `kestrel` scaffold under the crash root, the ai family's authored NAME)
 **plus** `EffectCatalogue.PlaneDamageEffectAnims` (the four `<part>_damage_effects` shims →
 `random_gun_impact` → `yellow_sparks_follow`) **plus** `EffectCatalogue.PropChoreographyAnims`
 (`startprops`/`stopprops`), because those need exactly what it already has — the

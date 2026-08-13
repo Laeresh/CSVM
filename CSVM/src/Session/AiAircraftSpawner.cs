@@ -122,8 +122,9 @@ public sealed class AiAircraftSpawner
         _worldRoot.AddChild(controller);
 
         // The standard per-plane crash choreography, built after the controller joins the tree
-        // (its reset states read global transforms) — same call, same defs as a player rig; G21
-        // later re-keys AI crashes onto the ai_crash_<surface> vector.
+        // (its reset states read global transforms) — same call as a player rig; the factory keys
+        // this controller (IsHumanPiloted false) onto the ai_crash_<surface> vector, the
+        // original's own AI family.
         if (_in.CrashProgram != null && _in.WorldScene != null)
         {
             _worldEffects.BuildFlightCrashRuntime(controller, planeBuilder, planeName, _in.Gamez,

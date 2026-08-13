@@ -40,6 +40,25 @@ public static class EffectCatalogue
     // install: all eight chapters' cam_anim carry player_crash_default, so slot 0 always resolves.
     public const string CrashAnimRoot = "player";
 
+    // The AI aircraft family's vector prefix: slot i is "ai_crash_" + SurfaceRegistry.Names[i].
+    // The original builds it in the AI vehicle-params constructor FUN_00478a00 (string 0x00627d40,
+    // registry walk FUN_00559650/FUN_00559660, interned via FUN_00523820) into the params object at
+    // +0x160/+0x164; the params parser FUN_00479240 sets the bare last resort at +0x158 to the
+    // interned VEHICLE NAME (0x0047b110-0x0047b11b, intern of params+0x4); and the params→vehicle
+    // bind FUN_00475820 copies both onto the live vehicle (+0x158→+0x6d0, vector→+0x6e0/+0x6e4) —
+    // the very fields the ONE crash selector FUN_0048b920 indexes with the struck material's
+    // surface id. The player setup FUN_00476250 then REPLACES that vector with player_crash_* (and
+    // +0x6d0 with "player") only on the vehicle named "player", so every AI aircraft crashes
+    // through this family and the cascade is shared, not duplicated.
+    public const string AiCrashDefPrefix = "ai_crash_";
+
+    // The ai_crash_* defs' authored NAME/anim-root: `kestrel`, the AI airframe they were written
+    // against (the player family's counterpart is `player`). All 24 shipped defs (3 per chapter)
+    // carry it. The AI crash rig stages a meshless scaffold of this name so the anchor closure
+    // resolves on every airframe; on the actual Kestrel the name resolves to the aircraft model
+    // itself, which is why it is also in CrashScaffoldAnchors (never placed like a template).
+    public const string AiCrashScaffoldName = "kestrel";
+
     // The graze family's vector prefix: slot i is "touchdown_" + SurfaceRegistry.Names[i], built by
     // FUN_004735b0 exactly as the crash vector is (prepend the literal 0x006274ec to each registry
     // name, intern it via FUN_00523820, push THAT handle) and indexed by FUN_0048d2c0 with the same
@@ -164,14 +183,16 @@ public static class EffectCatalogue
     // (`crash-rig-anchors` suite, TemplateStageTests.PlaceAtNeverMovesAPlaceExemptCallee).
     public static readonly string[] AirframeScopedAnchors = { "player_pfighter" };
 
-    // The crash rig's own anim-root scaffold NAME. The `player_crash_*` defs,
+    // The crash rigs' own anim-root scaffold NAMEs. The `player_crash_*` defs,
     // `player_destruction_reset`, `cpejectstop` and `random_gun_impact` are all authored
     // NAME=`player` — the crash root the rig builds — and a relocating CALL reaching any of them
     // (the dirt crash CALLs `cpejectstop` live) must never place that scaffold like a template:
     // TopLevel-pinning it at the first crash site takes the wreck and every pooled template copy
     // with it, so every later crash's destroyed plane and dirt burst replay at the FIRST crash's
     // position (`crash-rig-anchors`' crash→respawn→move→crash leg is the regression test).
-    public static readonly string[] CrashScaffoldAnchors = { "player" };
+    // `kestrel` is the ai_crash_* family's scaffold NAME (see AiCrashScaffoldName) — on the actual
+    // Kestrel airframe it resolves to the aircraft model, the player_pfighter shape exactly.
+    public static readonly string[] CrashScaffoldAnchors = { "player", AiCrashScaffoldName };
 
     /// <summary>The crash-def vector this program can play, built over the whole surface registry
     /// with <see cref="CrashDefPrefix"/> — what <c>BuildFlightCrashRuntime</c> binds and what
@@ -180,6 +201,24 @@ public static class EffectCatalogue
     /// own mechanism rather than a list of exceptions (see <see cref="SurfaceDefTable"/>).</summary>
     public static SurfaceDefTable CrashDefTable(AnimProgram program) =>
         new(CrashDefPrefix, CrashAnimRoot, DefExistsIn(program));
+
+    /// <summary>The AI aircraft counterpart of <see cref="CrashDefTable"/> — the
+    /// <c>ai_crash_*</c> vector <c>FUN_00478a00</c> builds per AI vehicle-params object, selected
+    /// by the SAME cascade (<c>FUN_0048b920</c>, via the <c>FUN_00475820</c> copy onto the
+    /// vehicle). Same fallback arms as the player family, including the bare last resort — which
+    /// the original sets to the interned VEHICLE NAME (<c>FUN_00479240</c> at <c>0x0047b11b</c>),
+    /// so the caller passes the plane's own name. Unreachable in this install: all eight chapters
+    /// ship <c>ai_crash_default</c>, so slot 0 always resolves.</summary>
+    public static SurfaceDefTable AiCrashDefTable(AnimProgram program, string planeName) =>
+        new(AiCrashDefPrefix, planeName, DefExistsIn(program));
+
+    /// <summary>The family a controller's crash indexes: the original keys it on the vehicle —
+    /// <c>FUN_00476250</c> swaps in <c>player_crash_*</c> only on the vehicle named
+    /// <c>player</c>; every other vehicle keeps the <c>ai_crash_*</c> vector its params carried.
+    /// Ours keys the same split on who is at the controls.</summary>
+    public static SurfaceDefTable CrashDefTableFor(AnimProgram program, bool humanPiloted,
+        string planeName) =>
+        humanPiloted ? CrashDefTable(program) : AiCrashDefTable(program, planeName);
 
     /// <summary>Everything the per-player crash rig binds — every playable crash-vector slot (the
     /// struck surface is only known at impact, so the whole vector is bound), the four damage
@@ -259,13 +298,20 @@ public static class EffectCatalogue
         Func<string, AnchorPlacement> resolveRoot) =>
         StageRootsFor(program, WorldEffectAnimNames(program), resolveRoot);
 
-    /// <summary>The same for the per-player crash rig: the closure of
+    /// <summary>The same for the per-plane crash rig: the closure of
     /// <see cref="CrashRigAnimNames"/> against that rig's own scope. The rig's
     /// <paramref name="resolveRoot"/> is scoped to the bound controller, so a name its
-    /// plane/wreck already carries needs no template.</summary>
+    /// plane/wreck already carries needs no template. <paramref name="crashDefs"/> is the rig's
+    /// own family (player or AI); the no-table overload keeps the player family for callers that
+    /// predate the split.</summary>
+    public static IReadOnlyList<string> CrashStageRoots(AnimProgram program,
+        Func<string, AnchorPlacement> resolveRoot, SurfaceDefTable crashDefs) =>
+        StageRootsFor(program, CrashRigAnimNames(crashDefs), resolveRoot);
+
+    /// <inheritdoc cref="CrashStageRoots(AnimProgram, Func{string, AnchorPlacement}, SurfaceDefTable)"/>
     public static IReadOnlyList<string> CrashStageRoots(AnimProgram program,
         Func<string, AnchorPlacement> resolveRoot) =>
-        StageRootsFor(program, CrashRigAnimNames(CrashDefTable(program)), resolveRoot);
+        CrashStageRoots(program, resolveRoot, CrashDefTable(program));
 
     /// <summary>The anchor-root closure of <paramref name="names"/> against a bound program — what a
     /// bind must stage for every definition those names can reach to have something to anchor on.

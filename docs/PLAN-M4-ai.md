@@ -1437,10 +1437,16 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
 
 ### Wave G — AI aircraft crash choreography (added 2026-08-13)
 
-21. ☐ G21 — The `ai_crash_<name>` surface family (ex-`BL-347`): locate the dispatch, model the
-    registry-indexed vector via `Session/SurfaceDefTable.cs` (probably reusable verbatim), and
-    wire it to AI aircraft terrain crashes. ⚠ Keep `BL-343` (`IMPACT_FORCE` wreckage velocity
-    inheritance) a separate change
+21. ☑ G21 — The `ai_crash_<name>` surface family (ex-`BL-347`) — **landed 2026-08-13**: the
+    dispatch is the SAME cascade — `FUN_00478a00` builds the vector per AI vehicle-params,
+    `FUN_00475820` copies it onto the vehicle's crash fields, `FUN_00476250` swaps in
+    `player_crash_*` only on the vehicle named `player`, and `FUN_0048b920` selects for both;
+    `SurfaceDefTable` reused verbatim (`EffectCatalogue.AiCrashDefTable`, last resort = the
+    plane's own name per `FUN_00479240`), `BuildFlightCrashRuntime` keys the family on
+    `IsHumanPiloted`, all 8 chapters ship the `ai_crash_{default,dirt,water}` trio (NAME
+    `kestrel`); pinned by the `ai-crash-defs` suite + `EffectCatalogueTests`, `--crash` now
+    forces spawned AI planes too. ⚠ `BL-343` (`IMPACT_FORCE` wreckage velocity inheritance)
+    stayed a separate change
 
 ## Dependency and parallelism notes
 

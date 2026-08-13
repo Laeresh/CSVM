@@ -243,6 +243,8 @@ public static class Suites
             "a second panel's tear takes its own pooled gimmeflakes copy and leaves the first burst flying at its site (BL-288)", DamageTemplatePool));
         into.Add(new TestHarness.Suite("crash-rig-anchors",
             "binding the crash rig leaves the airframe model under the controller — even the Devastator, whose model root shares the crash defs' authored NAME — and stages every pooled copy in the same reset pose", CrashRigAnchors));
+        into.Add(new TestHarness.Suite("ai-crash-defs",
+            "an AI plane's crash rig binds the ai_crash_* family and its crash indexes it by the struck surface id — dirt(13) plays ai_crash_dirt, no material plays ai_crash_default — while a human rig off the same factory keeps player_crash_* (G21)", AiCrashDefs));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------
@@ -5882,6 +5884,110 @@ public static class Suites
             }
         }
         return n;
+    }
+
+    // ---- an AI plane's crash picks from the ai_crash_* vector (G21) ----------------------------
+
+    /// <summary>The AI arm of the crash-family split, through the REAL factory call
+    /// (<c>WorldEffectsFactory.BuildFlightCrashRuntime</c> keys the family on
+    /// <c>IsHumanPiloted</c>): an AI controller's rig binds the <c>ai_crash_*</c> vector (three
+    /// playable slots against every shipped chapter), a crash on a body stamped <c>dirt</c>(13)
+    /// selects <c>ai_crash_dirt</c>, and a crash with no struck body takes the null-material arm
+    /// to slot 0, <c>ai_crash_default</c> — never a <c>player_crash_*</c> def. The A/B control is
+    /// a human-piloted controller through the same factory, which keeps the player family; without
+    /// it a family mix-up in the pick would be invisible from the AI side alone.</summary>
+    private static void AiCrashDefs(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+            var factory = new Session.WorldEffectsFactory(
+                SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
+            FlightController? ai = null;
+            FlightController? human = null;
+            StaticBody3D? dirt = null;
+            try
+            {
+                var spawn = new Vector3(0f, 500f, 0f);
+                var builder = new PlaneBuilder(planesGamez, textures);
+                var aiModel = builder.Build(ctx.PlaneName);
+                ai = new FlightController
+                {
+                    PlaneModel = aiModel,
+                    Collider = PlaneCollider.Build(aiModel),
+                    PlayerIndex = AiAircraftSpawner.ShooterIdBase,
+                    IsHumanPiloted = false,
+                    Pilot = AiPilot.HoldingCourse(spawn, spawn + Vector3.Forward),
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                };
+                ai.AddChild(aiModel);
+                ai.Setup(new FlightModel(stats), null, new CamParams(), spawn, spawn + Vector3.Forward);
+                ctx.Host.AddChild(ai);
+                factory.BuildFlightCrashRuntime(ai, builder, ctx.PlaneName, world.Gamez,
+                    world.Session.Builder.Scene, textures, world.Session.Program, verbose: false);
+
+                ctx.Check(ai.CrashRuntime != null && ai.CrashDefs != null,
+                    $"the AI rig built a crash runtime with a def table");
+                if (ai.CrashDefs == null)
+                    return;
+                ctx.Check(ai.CrashDefs.PlayableDefs.Count == 3
+                          && ai.CrashDefs.PlayableDefs.All(d =>
+                              d.StartsWith(Session.EffectCatalogue.AiCrashDefPrefix, System.StringComparison.Ordinal)),
+                    $"the AI table's playable slots are the ai_crash_* trio [{string.Join(", ", ai.CrashDefs.PlayableDefs)}]");
+
+                // A crash on a known surface: a struck body stamped dirt(13) — the id cascade's
+                // own-slot arm, through the production Crash path.
+                dirt = new StaticBody3D { Name = "dirt_probe" };
+                dirt.SetMeta(SceneBuilder.SurfaceIdMeta, 13);
+                ctx.Host.AddChild(dirt);
+                ai.DebugForceCrash(null, dirt);
+                ctx.Check(ai.Crashed && ai.LastCrashDef == Session.EffectCatalogue.AiCrashDefPrefix + "dirt",
+                    $"an AI crash on dirt(13) plays ai_crash_dirt def={ai.LastCrashDef ?? "-"}");
+
+                // No struck body: the null-material arm resolves slot 0 of the SAME family.
+                ai.Respawn();
+                ai.DebugForceCrash();
+                ctx.Check(ai.LastCrashDef == Session.EffectCatalogue.AiCrashDefPrefix + "default",
+                    $"an AI crash with no material falls to ai_crash_default def={ai.LastCrashDef ?? "-"}");
+
+                // The A/B control: a human rig through the same factory keeps the player family.
+                var humanBuilder = new PlaneBuilder(planesGamez, textures);
+                var humanModel = humanBuilder.Build(ctx.PlaneName);
+                human = new FlightController
+                {
+                    PlaneModel = humanModel,
+                    Collider = PlaneCollider.Build(humanModel),
+                    PlayerIndex = 0,
+                    UseKeyboard = false,
+                    AllowPause = false,
+                };
+                human.AddChild(humanModel);
+                human.Setup(new FlightModel(stats), ctx.Camera, new CamParams(),
+                    spawn + new Vector3(2000f, 0f, 0f), spawn + new Vector3(2000f, 0f, -1f));
+                ctx.Host.AddChild(human);
+                factory.BuildFlightCrashRuntime(human, humanBuilder, ctx.PlaneName, world.Gamez,
+                    world.Session.Builder.Scene, textures, world.Session.Program, verbose: false);
+                ctx.Check(human.CrashDefs != null && human.CrashDefs.PlayableDefs.All(d =>
+                        d.StartsWith(Session.EffectCatalogue.CrashDefPrefix, System.StringComparison.Ordinal)),
+                    $"the same factory keeps a human rig on player_crash_* [{string.Join(", ", human.CrashDefs?.PlayableDefs ?? System.Array.Empty<string>())}]");
+                human.DebugForceCrash(null, dirt);
+                ctx.Check(human.LastCrashDef == Session.EffectCatalogue.CrashDefPrefix + "dirt",
+                    $"…and its dirt crash plays player_crash_dirt def={human.LastCrashDef ?? "-"}");
+            }
+            finally
+            {
+                dirt?.Free();
+                human?.Free();
+                ai?.Free();
+                textures.Dispose();
+            }
+        });
     }
 
     // ---- the full effects sweep as suite verdicts ----------------------------------------------

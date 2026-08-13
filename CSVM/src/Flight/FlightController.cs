@@ -196,6 +196,13 @@ public partial class FlightController : Node3D
     /// on a crash.</summary>
     public SurfaceDefTable? CrashDefs;
 
+    /// <summary>The def the last <see cref="Crash"/> selected off <see cref="CrashDefs"/> —
+    /// <c>player_crash_*</c> on a human rig, <c>ai_crash_*</c> on an AI plane, null before any
+    /// crash or when no crash rig was built. The prefix names the family, so a suite (or a log
+    /// reader — the CRASH line prints the same value as <c>def=</c>) can pin which family
+    /// fired. Written only by <see cref="Crash"/>.</summary>
+    public string? LastCrashDef;
+
     /// <summary>The node the crash definition anchors to (its <c>player</c> anim-root) — passed to
     /// <see cref="AnimRuntime.Play"/> on a crash. Set alongside <see cref="CrashRuntime"/>.</summary>
     public Node3D? CrashAnchor;
@@ -798,11 +805,14 @@ public partial class FlightController : Node3D
     /// real impact on material carrying their surface id. A no-op once already crashed.
     /// <paramref name="killer"/> is null (a plain death) by default — <c>--crash</c> itself never
     /// passes one; <c>--debug-scoreboard --vs</c> passes a shooter id so a Dogfight screenshot has
-    /// a real, attributed kill to show without scripting an actual shot.</summary>
-    public void DebugForceCrash(int? killer = null)
+    /// a real, attributed kill to show without scripting an actual shot.
+    /// <paramref name="struckBody"/> lets a suite hand the cascade a body carrying a real
+    /// <see cref="SceneBuilder.SurfaceIdMeta"/> stamp; the default null keeps the null-material
+    /// arm above.</summary>
+    public void DebugForceCrash(int? killer = null, Node? struckBody = null)
     {
         if (!_crashed)
-            Crash(_model.Position, "debug-crash", "test", null, killer);
+            Crash(_model.Position, "debug-crash", "test", struckBody, killer);
     }
 
     /// <summary>One projectile hit on this plane (the pool resolved the struck box already):
@@ -1830,10 +1840,15 @@ public partial class FlightController : Node3D
     {
         switch (crashDef)
         {
+            // The AI family authors the same surface booms (ai_crash_dirt Sounds snd_exp_ground_a
+            // itself; ai_crash_water's snd_exp_water_a rides the plane_big_splash it calls), so
+            // both prefixes take the same arm.
             case EffectCatalogue.CrashDefPrefix + "water":
+            case EffectCatalogue.AiCrashDefPrefix + "water":
                 Audio?.OnWaterExplosion();
                 break;
             case EffectCatalogue.CrashDefPrefix + "dirt":
+            case EffectCatalogue.AiCrashDefPrefix + "dirt":
                 Audio?.OnGroundExplosion();
                 break;
         }
@@ -1863,6 +1878,7 @@ public partial class FlightController : Node3D
         // chapter's materials.
         int? surfaceId = SurfaceIdOf(hitBody);
         string? crashDef = CrashDefs?.DefForSurfaceId(surfaceId);
+        LastCrashDef = crashDef;
         Audio?.OnCrash();
         PlayCrashBoom(crashDef);
         // The engine wind-down cue layers over the explosion, replacing the loops' abrupt cut with

@@ -487,6 +487,45 @@ data before building on this.
 Not decoded: what the two variant lists at `+0x2c`/`+0x40` hold respectively, and whether any other
 path supplies a default when a row is empty.
 
+## 2026-08-13 — the `ai_crash_<name>` family: built per AI vehicle-params, selected by the same cascade (M4 G21)
+
+Decoded out of `crimson.exe` (read-only ghidra-mcp session), closing the dispatch question
+`BL-347`/G21 carried: the third registry-indexed vector found at `FUN_00478a00` is dispatched by
+the SAME selector as the player crash family — there is no second cascade.
+
+**Build.** `FUN_00478a00` is the constructor of the 0x298-byte AI vehicle-params object (one per
+`aiv`/vehicle-type entry; sole caller `FUN_004735b0`, the level-init function that also builds the
+touchdown global). It walks the surface registry (`FUN_00559650` count / `FUN_00559660` name),
+prepends the literal `"ai_crash_"` (`0x00627d40`), interns each result (`FUN_00523820`, the same
+intern the other two families use) and pushes the handle into the params object's vector at
+`+0x160`/`+0x164`. The params parser `FUN_00479240` sets the family's bare last resort at
+`+0x158` to the interned **vehicle name** (`0x0047b110`–`0x0047b11b`: intern of the params' own
+name at `+0x4`) — where the player family's last resort is the literal `player`.
+
+**Bind.** `FUN_00475820` (params → live vehicle) copies `+0x158` → vehicle `+0x6d0` and the
+vector `+0x160`/`+0x164` → vehicle `+0x6e0`/`+0x6e4` — exactly the fields the crash selector
+reads. `FUN_00476250` (plane setup) then ERASES that vector and rebuilds it as `player_crash_*`
+(and `+0x6d0` as `player`) **only when the vehicle's name compares equal to `player`** — so every
+AI aircraft keeps the `ai_crash_*` vector its params carried.
+
+**Select.** `FUN_0048b920` `0x0048bac5`–`0x0048bb00`, unchanged: index vehicle `+0x6e0` with the
+struck material's surface id; null material / negative / out-of-range / empty slot → slot 0;
+empty vector or empty slot 0 → the bare handle at `+0x6d0`. One cascade, two vectors, keyed by
+which vehicle crashed. `Session/SurfaceDefTable.cs` was reused verbatim with
+`lastResort = the plane's own name`.
+
+**Census.** All 8 chapters ship exactly three defs: `ai_crash_default` / `_dirt` / `_water`
+(`extracted/<Cx>/cam_anim/kestrel-ai_crash_*.json`) — the same trio as the player and touchdown
+families, so the same eleven slots fall back to slot 0. All 24 defs are authored NAME=`kestrel`
+(the AI airframe they were written against; the player family's counterpart is `player`). They
+are far simpler than the player defs: deactivate `dontmove`/`markers`/`healthy`/`destroyed` (the
+AI wreck is NOT shown — the plane vanishes), play one surface boom (`snd_exp_ground_a` on dirt;
+water's `snd_exp_water_a` rides the called `plane_big_splash`; default authors `air_mixed_exp_sg`
+only), and CALL `call_car_trails` (default/dirt — anchored on `carnage_trails`, the same template
+root as the player family's `call_crash_trails`), `flydirt_plane` (dirt) or `plane_big_splash`
+(water). No chapter gamez carries a node named `kestrel` (0/8 scanned), so the engine-side rig
+stages a meshless scaffold of that name.
+
 ## 2026-08-13 — A1: what the shipped weapons actually author, counted (`PLAN-surface-id-weapons` A1)
 
 **Source established.** `WeaponDefs.cs`'s doc comment names `weapons.json`; the data is
