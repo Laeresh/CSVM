@@ -1400,25 +1400,31 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   render as fixed-size soft sprites, no twinkle.
 
 - `BL-331` `[Feature]` **Aircraft cast no ground shadow; the original draws one, straight down**
-  (split out of `BL-324`, 2026-08-09). The original projects a shadow under each aircraft in
-  `FUN_0049d0a0`: it takes a direction (the `sunlight` node's vector, or — on every shipped
-  mission — the top-level `SHADOW_ANGLES [-90, 0, 0]`, i.e. **straight down**), raycasts the
-  terrain below the aircraft for a ground height, and draws a fading quad there. We draw nothing:
-  the world is built `fullbright: true` (unshaded) and an unshaded Godot material receives no
-  shadow, so Godot shadow mapping **cannot** be the mechanism — `BL-324` turned
-  `_sun.ShadowEnabled` off (landed 2026-08-09, `git log --grep=BL-324`) precisely because the only
-  thing it reached was other aircraft, which the original never shadows either. Recorded here so
-  that removal is not rediscovered as a regression.
-  ⚠ **Check the authored mesh first.** The original's plane models carry a node literally named
-  `shadow`, which `PlaneBuilder.cs:26` excludes from what we build (`WorldEffectsFactory.cs:54`
-  lists it among the plane's own nodes). That may *be* the shadow — an authored flat card the
-  engine drops to ground level — in which case this is a placement problem, not a renderer to
-  write. Settle that before designing a procedural blob.
-  *Not decoded:* `FUN_0049d0a0`'s size law, its distance fade (two squared-range terms), the
-  altitude ramp against the raycast hit, and the `0.8`/`3.0 − 2·a` alpha terms. Deliberately left
-  open rather than guessed at.
-  *Needs:* an original-game A/B — a low pass over flat ground showing the shadow's size and
-  softness against the aircraft's altitude.
+  (split out of `BL-324`, 2026-08-09). **Fully decoded 2026-08-13, in
+  [`docs/org/shadows.md`](docs/org/shadows.md).** The original rasterises each aircraft's
+  silhouette into a live 32×32 modulate texture, projected onto the terrain along `SHADOW_ANGLES`
+  (`[-90, 0, 0]`, straight down, in all 53 shipped files), and draws it as a ground quad. What is
+  left is building it, and the A/B below.
+  ⚠ **Godot shadow mapping cannot be the mechanism**, and the decode confirms it: the original
+  casts no shadow map at all. The world is built `fullbright: true` and an unshaded material
+  receives nothing, so `BL-324`'s removal of `_sun.ShadowEnabled` (landed 2026-08-09,
+  `git log --grep=BL-324`) stays correct and is not a regression to rediscover.
+  ⚠ **The authored `shadow` node is the SOFTWARE fallback, not the real shadow** (settles this
+  entry's former "check the authored mesh first" caveat). It is real and it is used, but only when
+  the projected path is off: `FUN_00565aa0` enables that path for the hardware renderer only, and
+  `FUN_004b3050` hides the card whenever it is on. Keeping `shadow` out of `PlaneBuilder.cs:26`
+  is right; do not build the card.
+  *Decoded, all of what this entry once listed as open:* the size law (footprint = the projected
+  bounding box, scaled 1× → **3× between 60 and 250 units for the player's own aircraft only**);
+  the distance fade (**horizontal** squared distance, `(far²−d²)/(far²−near²)`, near/far 1/200 for
+  aircraft and 300/600 for the Spruce Goose, skipped for the player); the altitude ramp
+  (`(250−alt)/190`, full below 60, gone at 250; 180/750 for the Spruce Goose); and the alpha terms
+  (`255·((1−A) + 0.8·A·k)` per channel, `k = ambient/(ambient + diffuse·|dir.y|)`, so **shadow
+  darkness follows the mission's `SUNLIGHT_AMBIENT`/`SUNLIGHT_DIFFUSE`**, the `BL-332` pair).
+  *Needs:* an original-game A/B, a low pass over flat ground showing size and softness against
+  altitude. The decode gives it four falsifiable predictions (`docs/org/shadows.md`, last section);
+  the one to shoot at first is that the **player's own** shadow trails the aircraft by ~1.5 × its
+  altitude along the flight direction while an AI aircraft's sits directly beneath it.
 
 - `BL-332` `[Bug]` **The aircraft light's intensity is hardcoded; the mission authors it**
   (split out of `BL-324`, 2026-08-09). `Launcher.cs` sets `LightEnergy 1.6` and

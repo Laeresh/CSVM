@@ -255,6 +255,10 @@ which reproduces `FUN_0053c610` exactly, pinned at `(0,0)`, `(−90,0)` and `(0,
 `sun` billboard the lens flare anchors to is a different node entirely and disagrees with it in C3
 by 90°. That disagreement is the original's, and reproducing it is correct (`WORLD-26`).
 
+⚠ **Ground shadows do not use this direction either.** The top-level `SHADOW_ANGLES` outranks it in
+the shadow renderer, and every shipped file authors straight down. The same node's diffuse and
+ambient triples set how dark a shadow is. Both are [`shadows.md`](shadows.md).
+
 ### The world-brightness scalar
 
 The original lights the baked-vertex world by the mission's `SUNLIGHT`
