@@ -1421,10 +1421,17 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
 
 ### Wave F — Zeppelins
 
-17. ☐ F17 — Zeppelin motion: net following, pitch/rate limits, engine-loss deceleration —
-    **the deceleration curve is decoded (a square root, not the design's bands)**; stop nodes are
-    confirmed to exist as a scripted concept (`COMPLETED_STOPPOINT`) but their per-node tag
-    encoding is still undecoded
+17. ☑ F17 — Zeppelin motion: net following, pitch/rate limits, engine-loss deceleration —
+    **landed 2026-08-13**: `Mech3/Zeppelins.cs` (the 58-record reader, authored units, F18
+    consumes the damage half), `Flight/ZeppelinMotion.cs` (kinematic forward-only follow on
+    B5's `AiNetFollower`, the record's rate/speed/pitch limits, the decoded sqrt engine-loss
+    curve behind the mutable `AliveEngines` seam; the load-time pitch-clamp unit bug NOT
+    reproduced) and `Session/ZeppelinRuntime.cs` behind `--zeppelins`; releases B6's altitude
+    gate (C1/IA1's held generator spawns at t=7 s once its zeppelin flies); pinned by
+    `ZeppelinsTests` + `ZeppelinMotionTests` + the `zeppelin-motion` suite. **Still open: stop
+    nodes** — the per-node tags are parsed and preserved but acted on by neither surviving
+    reading (stop-point id vs segment id); the discriminating instrument remains locating the
+    runtime net loader (try the `SET_AI_NET` handler or the net-follower's node access)
 18. ☐ F18 — Multi-zone zeppelin damage — **the survivor threshold is decoded and its polarity
     confirmed against the engine**; the design is decided (A4, 2026-08-13,
     [`org/vehicleDamage.md`](org/vehicleDamage.md) closing section): no registry zone work;

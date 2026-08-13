@@ -46,6 +46,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/AiNets.cs` — the chapter AI patrol nets: `ne0NNNNN` waypoint graphs + the `neindex` id→name table, raw tags/trailer included.
 - `src/Mech3/Maneuvers.cs` — the shared maneuver library (`zrdr/maneuvers.zrd`): 17 timed attitude-step programs with `natural_touch` difficulty gates, the eligibility cull, and the `signature_maneuvers` bitmask decode.
 - `src/Mech3/EnemyGenerators.cs` — the mission `egen.zrd.json` reader: the 23 enemy generators in their three shapes (zeppelin launch / plain / moving spawner), `[null]` files as empty.
+- `src/Mech3/Zeppelins.cs` — the mission `zeppelins.zrd.json` reader: the 58 zeppelin instances (motion limits, net, gasbags/healthy/engines, cannons), all values in authored units.
 - `src/Mech3/AiSkills.cs` — the `ai_skill_parameters` endpoint pairs from player.json (1–9 ratings, linear between the decoded endpoints) + the roster accessors: the skill vector (slots 22–30 by stat name), `primary_target` (slot 6) and `rating_biases` (slot 33, `AiRatingBias` wildcards).
 - `src/Mech3/Messages.cs` — the game's localized string table: the `messages.json` key→value map behind every `MSG_*` key.
 - `src/Mech3/MarkerRig.cs` — a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers`.
@@ -90,7 +91,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AiModeMachine.cs` — the nine-mode AI state machine (M4 D11), the engine's decoded mode vocabulary: patrol/pursue/lay off/evade/evasive maneuver/stunned/avoid crash + two enum-only danger-zone modes; steady-hand and sixth-sense reaction rolls on the shipped chances.
 - `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery (M4 D14): intercept lead via `AimAssist.TryIntercept`, the ±11° gun cone and the quick-draw cone as fire gates, per-shot dead-eye scatter; mutable target, primary-target name and rating biases (the D12 script seams).
 - `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula (M4 D12): rank = weight × 1200 + distance + objectiveBias, minimised; player base weight 0.7, ±0.2 bearing/altitude/facing terms, 1e21 beyond activation; rating-bias matching and the allied-attacker deconfliction pick.
-- `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints (M4 B5): nearest node first, then edge-list neighbours, seeded branch draws; aircraft-agnostic so F17's zeppelins reuse it.
+- `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints (M4 B5): nearest node first, then edge-list neighbours, seeded branch draws; aircraft-agnostic, shared by `AiPilot` and `ZeppelinMotion`.
+- `src/Flight/ZeppelinMotion.cs` — the kinematic zeppelin motion law (M4 F17): forward-only flight along a net under the record's speed/accel/rate/pitch limits, plus the decoded sqrt engine-loss curve behind the `AliveEngines` seam.
 - `src/Flight/ManeuverExecutor.cs` — plays one maneuver's attitude-step program as `FlightInput` per sim step (M4 D13): the input source D11's state machine runs during `evasive maneuver`.
 - `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
@@ -216,6 +218,7 @@ clusters they delegate to.
 - `src/Session/AiAircraftSpawner.cs` — spawns an AI-piloted aircraft into a running session (M4 A2): the flight-essential subset of a rig, an `AiPilot` at the controls, shooter ids from 100.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in.
 - `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (M4 B6, `--generators`): load-time drop rules, per-cycle stepping, spawns through `GameSession.SpawnAiAircraft`.
+- `src/Session/ZeppelinRuntime.cs` — runs a mission's zeppelins (M4 F17, `--zeppelins`): places each record's world node at its authored pose and flies it along its net through `ZeppelinMotion`.
 
 ### Session root and tests
 
@@ -899,6 +902,20 @@ Consumed by `Session/AiGeneratorRuntime`; golden counts in `CSVM.Tests/EnemyGene
 ⚠ `capacity` is 0 on all 23 and its decoded blocking rule is unresolved (the capacity puzzle,
   mission-entities.md); the stand-in lives in `Session/GeneratorCycle.cs`, not here. The reader
   reports the value verbatim.
+
+## src/Mech3/Zeppelins.cs
+The mission `zeppelins.zrd.json` reader (docs/formats/mission-entities.md): the 58 zeppelin
+instances typed as `ZeppelinDef` — motion limits, net name, targets, healthy zones +
+`num_healthy_required` (defaulted to 1 and clamped to the healthy count, the decoded load
+rule), engines, gasbags, cannons and `cannon_health`. Motion keys feed
+`Flight/ZeppelinMotion` (F17); the damage half is F18's input. Fixture units + install goldens
+in `CSVM.Tests/ZeppelinsTests.cs`.
+⚠ Every value stays in its AUTHORED unit (degrees). The original converts most angles to
+  radians at load but leaves min_pitch/max_pitch in degrees, so its initial-pitch clamp never
+  fires — never re-add that clamp, and never read the ±30 as radians.
+⚠ `deactivated` is decided by the VALUE, not key presence (9 keys, 7 author 1, C1/M04 and
+  C2/M03 author 0); `targets` can be an authored `null` (the 8 IA1 files), which reads as
+  present-but-empty; `team` accepts three names case-insensitively AND a bare integer id.
 
 ## src/Mech3/AiSkills.cs
 The AI pilot-skill constants (M4 D14, docs/formats/ai-rosters.md): player.json's
@@ -2198,15 +2215,30 @@ cue re-triggers no faster than the interval.
 Walks an `AiNet` patrol graph as a waypoint stream (M4 B5): first the nearest node, then
 edge-list neighbours, no immediate backtrack, branches drawn from its own seeded `Random` (per
 plane off the `Rng.Ai` stream at spawn, never Godot's global rng). Aircraft-agnostic on purpose:
-positions in, target node out; F17's zeppelin motion reuses it and only the consumer differs
-(`AiPilot.Patrol` is the aircraft one). Pinned by `AiNetFollowerTests` + the `ai-net-follow`
-suite.
+positions in, target node out; its two consumers are `AiPilot.Patrol` (aircraft) and
+`ZeppelinMotion` (F17's kinematic node follow). Pinned by `AiNetFollowerTests` + the
+`ai-net-follow` suite.
 ⚠ Traversal treats EDGES as undirected (our reading, not decoded: the worked C1 loop dead-ends
   under a directed one). Never walk node order; only the edge list is connectivity.
 ⚠ `DefaultArrivalRadius` (200 m, XZ-only) is INVENTED, sized to the placeholder law's tracking
-  error; wave D's real maneuvering shrinks it.
+  error; wave D's real maneuvering shrinks it. Zeppelins pass a wider per-record radius that
+  clears their turning circle (`ZeppelinRuntime`).
 ⚠ The trailer is recorded and exposed, never acted on (target-relative motion is later-wave
-  work); per-node tags ride along raw. Stop-point vs segment id is still open, F17 owns it.
+  work); per-node tags ride along raw. Stop-point vs segment id is still open (F17's remaining
+  item; the discriminating instrument is locating the runtime net loader).
+
+## src/Flight/ZeppelinMotion.cs
+The kinematic zeppelin motion law (M4 F17): flies a `ZeppelinDef` along its net through
+`AiNetFollower`, forward-only along the facing (the design's "require forward motion to turn,
+never bank"), yaw/pitch rate-limited by the record's `max_rate_*` with `accel_*` ramp-in, speed
+by `max_accel` toward `max_speed`, commanded pitch clamped to the record's ±30° band. Pure
+state — no Node, no flight model; `ZeppelinRuntime` writes the pose onto the world node. Pinned
+by `ZeppelinMotionTests` + the `zeppelin-motion` suite.
+⚠ Engine loss is the decoded square root — `f = sqrt(alive/total)`, `max_speed' = f·max_speed`,
+  `max_accel' = (0.8f+0.2)·max_accel` — NEVER the design's 10/40/50 bands. `AliveEngines` is
+  the mutable seam F18's damage aggregator writes; today nothing calls it.
+⚠ The authored initial `pitch` is taken verbatim: the original's load-time clamp compares
+  radians against raw degrees and never fires (mission-entities.md) — do not re-add it.
 
 ## src/Flight/AiPilot.cs
 The non-player `FlightModel` driver (M4 A2): standing orders in (heading in the mission-data
@@ -4570,6 +4602,24 @@ is the flag's observability.
   resolves, drops the generator at load. Never load one inert.
 ⚠ Stand-ins/stubs, all named in the class comment: host DEATH is unwired until F18/F20
   (`GeneratorCycle.HostDied` has no caller); the door choreography is skipped (F20).
+⚠ The min_altitude gate reads the host node's live Y, so it is real only with `--zeppelins`
+  (F17) placing/flying the host: C1/IA1's generator holds forever without it (unplaced
+  zeppelin below the 100 m gate) and releases at t=7 s with it.
+
+## src/Session/ZeppelinRuntime.cs
+Runs a mission's zeppelins (M4 F17, behind `--zeppelins`): each `ZeppelinDef` whose world node
+and net resolve gets a `ZeppelinMotion` on B5's `AiNetFollower` (arrival radius widened per
+record to clear the turning circle), is placed at its authored position/yaw/pitch, and the NODE
+is flown kinematically — no FlightController, zeppelins have no flight model. `MotionFor(node)`
+is F18's seam to the engine-loss curve. Observability is the `zep:` lines (place/skip/hold,
+node captures, a 10 s position heartbeat); `--debug-ainets=<net>` draws the route. Pinned by
+the `zeppelin-motion` suite.
+⚠ A `deactivated` record (value 1) is PLACED but held — mission-script wake-up is out of M4's
+  scope. A record whose net misses neindex is also placed-not-flown (the pose is real data and
+  B6's altitude gate reads the node's Y).
+⚠ Stop nodes are NOT implemented: the per-node tags are preserved and acted on by nothing (two
+  readings survive; F17's open item). Effect templates snap to absolute world points and never
+  track a moving host — a hit effect on a flying zeppelin stays behind; F18/F19 inherit that.
 
 ## src/Session/FlightRigAssembler.cs
 Assembles one player's flight rig: the painted plane model, the `FlightController` and everything hung

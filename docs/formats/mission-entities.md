@@ -6,9 +6,11 @@ the player attacks or escorts, and the generators that feed fighters into the fi
 2026-07-25 from a census over the whole install (50 `zeppelins.json` → 58 instances; 53
 `egen.json` → 23 generators, the other 33 files being an empty `[null]`).
 
-**The remake reads `egen.json`** (`CSVM/src/Mech3/EnemyGenerators.cs`, run by
-`Session/AiGeneratorRuntime.cs` behind the `--generators` flag, M4 B6); `zeppelins.json` is still
-unconsumed. Both are documented because they are complete, self-contained definitions — the data
+**The remake reads both**: `egen.json` via `CSVM/src/Mech3/EnemyGenerators.cs` (run by
+`Session/AiGeneratorRuntime.cs` behind `--generators`, M4 B6) and `zeppelins.json` via
+`CSVM/src/Mech3/Zeppelins.cs` (run by `Session/ZeppelinRuntime.cs` behind `--zeppelins`, M4 F17
+— the motion half; damage is F18). Both are documented because they are complete,
+self-contained definitions — the data
 half of the M4 combat work, and directly useful to the mech3ax fork. Which zeppelin *nodes* a
 mission shows at all is a separate mechanism, the per-mission `.gw` interp script — see
 [interp.md](interp.md).
@@ -30,7 +32,7 @@ instances; the rest are conditional.
 | `max_rate_yaw`, `max_rate_pitch` | °/s | turn-rate limits |
 | `min_pitch` / `max_pitch` | ° | ±30 throughout |
 | `net` | name | the AI "net" (roster/behaviour group) it belongs to |
-| `targets` | node names | who it shoots at — `player`, or another zeppelin (`piratezep`, `dantezep`, …) |
+| `targets` | node names | who it shoots at — `player`, or another zeppelin (`piratezep`, `dantezep`, …). ⚠ The 8 IA1 files author `targets, null` — key present, no list — so the "47" key census is 39 name lists + 8 nulls |
 | `healthy` | `[[zoneNode, "panels"], …]` | the **critical** zones; second field is `"panels"` on all 316 entries |
 | `num_healthy_required` | 2–5 | how many of those must **survive**; drop below and the zeppelin dies. Confirmed against the engine — see [below](#the-kill-threshold-counts-survivors). Defaults to **1** when a `healthy` list is present, and is clamped at load to the length of that list |
 | `engines` | node names | the engine nacelles (12 or 14: `leng11`…`reng42`) |
@@ -40,7 +42,7 @@ instances; the rest are conditional.
 | `cannon_health` | see below | per-cannon damage record (24 of 58 instances) |
 | `cannon_inaccuracy` | ° | 10.0, on 3 instances |
 | `team` | `enemy` / `ally` / `neutral` | 16 instances. The parser accepts all three names (case-insensitively) **and** a bare integer team id; this install only authors the names, and only two of the three |
-| `deactivated` | `[1]` | 9 instances — starts switched off |
+| `deactivated` | `[0]` / `[1]` | the KEY is on 9 instances but the VALUE decides: 7 author `1` (starts switched off, waiting on script), and C1/M04 + C2/M03 author `0` (active). Measured 2026-08-13; asserted in `CSVM.Tests/ZeppelinsTests.cs` |
 
 **`cannon_health` entry** —
 `[cannonNode, "gunback", "frame", gasbagName, hp, [destroyAnim], [[frac, stageAnim], …]]`.

@@ -171,6 +171,7 @@ public partial class GameSession : Node3D
     // The egen enemy generators (M4 B6, --generators): loaded with the rigs, stepped in
     // DriveSimSteps before the AI planes it spawns into _aiPlanes, freed with the world subtree.
     private AiGeneratorRuntime? _generators;
+    private ZeppelinRuntime? _zeppelins;
     // The dogfight scorekeeping (--vs): built with the rigs, fed their Downed reports, its clock
     // advanced on the sim dt (never wall time). Null outside Versus — the Downed events then
     // simply have no subscriber. Freed with this node; flight holds no match state.
@@ -1986,6 +1987,32 @@ public partial class GameSession : Node3D
             state.What += $" + {aiPlanes.Count} AI";
         }
 
+        // --zeppelins: the mission's zeppelin instances (M4 F17), placed at their authored
+        // pose and flown along their nets as kinematic world nodes (no flight model). Built
+        // before --generators below so a zeppelin generator's min_altitude gate reads the
+        // flown host's live Y from the first step.
+        if (_spec.Zeppelins)
+        {
+            List<ZeppelinDef> zepDefs;
+            try
+            {
+                zepDefs = Zeppelins.Load(state.MissionZrdrPath);
+            }
+            catch (IOException e)
+            {
+                GD.Print($"zep: no zeppelins file for {_spec.Chapter}/{_spec.Mission}: {e.Message}");
+                zepDefs = new List<ZeppelinDef>();
+            }
+            var zepNets = AiNets.Load(rigInputs.ChapterZrdrPath);
+            _zeppelins = new ZeppelinRuntime(zepDefs,
+                name => rigInputs.WorldRuntime?.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null,
+                zepNets);
+            _worldRoot!.AddChild(_zeppelins);
+            GD.Print($"zep: {_zeppelins.LiveCount} of {zepDefs.Count} zeppelin(s) placed for " +
+                     $"{_spec.Chapter}/{_spec.Mission}");
+            state.What += $" + {_zeppelins.LiveCount} zeppelin(s)";
+        }
+
         // --generators: the mission's egen enemy generators (M4 B6), spawning through the seam
         // above. Loaded here because the drop rules need the built world (host-node resolution).
         if (_spec.Generators)
@@ -2417,6 +2444,8 @@ public partial class GameSession : Node3D
             {
                 rig.Controller?.SimStep(dt);
             }
+            // Zeppelins move before the generators read their host altitude this step.
+            _zeppelins?.SimStep(dt);
             // Generators step before the AI-plane loop below: a spawn appends to _aiPlanes, which
             // must not happen while that list is being enumerated (the new plane ticks next step).
             _generators?.SimStep(dt);

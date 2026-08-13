@@ -191,6 +191,12 @@ public static class Suites
             "net following (B5): a real chapter net resolves by id and by name, its trailer and " +
             "tags ride along unacted-on, and an AI plane with a net-following pilot captures node " +
             "after node with every hop an EDGE of the graph, never node order", AiNetFollow));
+        into.Add(new TestHarness.Suite("zeppelin-motion",
+            "zeppelin motion (F17): C1/M04's piratezep record loads, its world node is placed at " +
+            "the authored pose and flown along PirateZep1 between manual sim steps — every hop an " +
+            "EDGE, displacement never over max_speed·dt, the route's raw shape-A tags acted on by " +
+            "NOTHING (stop nodes undecoded) — total engine loss decelerates it to a stop through " +
+            "the decoded sqrt curve, and a deactivated record is placed but held", ZeppelinMotionSuite));
         into.Add(new TestHarness.Suite("damage-stages",
             "each DAMAGE_SEQUENCE def fires its stage effects across an HP sweep", DamageStages));
         into.Add(new TestHarness.Suite("damage-hd",
@@ -4111,6 +4117,149 @@ public static class Suites
         {
             ai?.Free();
             textures.Dispose();
+        }
+    }
+
+    private static void ZeppelinMotionSuite(TestContext ctx)
+    {
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
+        ctx.RequireData(chapterZrdr, $"C1 zrdr");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "M04");
+        ctx.RequireData(missionZrdr, $"C1/M04 zrdr");
+
+        var defs = Zeppelins.Load(missionZrdr);
+        ctx.Check(defs.Count == 1 && defs[0].Node == "piratezep",
+            $"C1/M04 authors one zeppelin, piratezep count={defs.Count}");
+        if (defs.Count != 1)
+            return;
+        var def = defs[0];
+
+        var nets = AiNets.Load(chapterZrdr);
+        var net = AiNets.ByName(nets, def.Net);
+        ctx.Check(net != null, $"its net '{def.Net}' resolves in C1's neindex");
+        if (net == null)
+            return;
+        int tagged = 0;
+        foreach (var n in net.Nodes)
+        {
+            if (n.Tags.Count > 0)
+                tagged++;
+        }
+        ctx.Check(tagged > 0,
+            $"the zeppelin route carries raw shape-A tags, preserved and acted on by nothing (stop-point vs segment id undecoded) tagged={tagged}/{net.Nodes.Count}");
+
+        Node3D? host = null;
+        Node3D? heldHost = null;
+        ZeppelinRuntime? runtime = null;
+        ZeppelinRuntime? heldRuntime = null;
+        try
+        {
+            // A mission zeppelin is a world/anim node; the runtime moves the NODE, no flight
+            // model, so a bare Node3D is the exact contract (resolver stands in for the world
+            // runtime's FindNodes).
+            host = new Node3D { Name = "piratezep" };
+            ctx.Host.AddChild(host);
+            var resolvedHost = host;
+            runtime = new ZeppelinRuntime(defs, name =>
+                name.Equals("piratezep", System.StringComparison.OrdinalIgnoreCase) ? resolvedHost : null, nets);
+            ctx.Same(1, runtime.LiveCount, $"the zeppelin is live");
+            ctx.Check(host.GlobalPosition.DistanceTo(def.Position) < 0.1f,
+                $"placed at the authored position at load pos={host.GlobalPosition}");
+
+            var motion = runtime.MotionFor("piratezep");
+            ctx.Check(motion != null, $"MotionFor finds the live motion (the F18 seam's lookup)");
+            if (motion == null)
+                return;
+
+            // Fly until three node captures, checking per-step displacement against the
+            // record's own speed limit and every hop against the edge list.
+            const float dt = 1f / 60f;
+            var hops = new List<(int From, int To)>();
+            int last = motion.Follower.CurrentIndex;
+            int speedViolations = 0;
+            var start = host.GlobalPosition;
+            int steps = 0, budget = 60 * 900;
+            while (motion.Follower.Advances < 3 && steps < budget)
+            {
+                steps++;
+                var before = host.GlobalPosition;
+                runtime.SimStep(dt);
+                if (before.DistanceTo(host.GlobalPosition) > (def.MaxSpeed * dt) + 0.01f)
+                    speedViolations++;
+                if (motion.Follower.CurrentIndex != last)
+                {
+                    if (last >= 0)
+                        hops.Add((last, motion.Follower.CurrentIndex));
+                    last = motion.Follower.CurrentIndex;
+                }
+            }
+            ctx.Check(motion.Follower.Advances >= 3,
+                $"the node captures 3 net nodes advances={motion.Follower.Advances} in {steps / 60f:0} s of sim");
+            ctx.Check(start.DistanceTo(host.GlobalPosition) > 100f,
+                $"…moving the world node dist={start.DistanceTo(host.GlobalPosition):0} m");
+            bool allEdges = hops.Count > 0;
+            foreach (var (from, to) in hops)
+            {
+                if (!net.Edges.Contains((from, to)) && !net.Edges.Contains((to, from)))
+                    allEdges = false;
+            }
+            ctx.Check(allEdges,
+                $"every hop is an EDGE of the graph hops={string.Join(" ", hops.ConvertAll(h => $"{h.From}→{h.To}"))}");
+            ctx.Same(0, speedViolations, $"no step ever moved farther than max_speed·dt");
+
+            // Total engine loss: the decoded sqrt curve takes max_speed to 0 (accel keeps its
+            // 20 % floor), so the zeppelin decelerates to a stop. This is the seam F18 drives.
+            motion.AliveEngines = 0;
+            for (int i = 0; i < 60 * 60 && motion.Speed > 0f; i++)
+                runtime.SimStep(dt);
+            ctx.Check(motion.Speed == 0f,
+                $"total engine loss decelerates to a stop speed={motion.Speed:0.##}");
+            var stopped = host.GlobalPosition;
+            runtime.SimStep(dt);
+            ctx.Check(stopped.DistanceTo(host.GlobalPosition) < 1e-3f,
+                $"…and the node no longer moves");
+
+            // A deactivated record is placed at its pose but held (mission script would wake
+            // it; out of M4 scope).
+            var held = new ZeppelinDef
+            {
+                Node = "heldzep",
+                Position = new Vector3(500f, 640f, -500f),
+                YawDeg = 90f,
+                MaxSpeed = def.MaxSpeed,
+                MaxAccel = def.MaxAccel,
+                AccelPitchDeg = def.AccelPitchDeg,
+                AccelYawDeg = def.AccelYawDeg,
+                MaxRateYawDeg = def.MaxRateYawDeg,
+                MaxRatePitchDeg = def.MaxRatePitchDeg,
+                MinPitchDeg = def.MinPitchDeg,
+                MaxPitchDeg = def.MaxPitchDeg,
+                Net = def.Net,
+                Targets = System.Array.Empty<string>(),
+                Healthy = System.Array.Empty<ZeppelinHealthyZone>(),
+                NumHealthyRequired = 1,
+                Engines = System.Array.Empty<string>(),
+                Gasbags = System.Array.Empty<ZeppelinGasbag>(),
+                LeftCannons = System.Array.Empty<ZeppelinCannon>(),
+                RightCannons = System.Array.Empty<ZeppelinCannon>(),
+                CannonHealth = System.Array.Empty<ZeppelinCannonHealth>(),
+                Deactivated = true,
+            };
+            heldHost = new Node3D { Name = "heldzep" };
+            ctx.Host.AddChild(heldHost);
+            var resolvedHeld = heldHost;
+            heldRuntime = new ZeppelinRuntime(new[] { held }, _ => resolvedHeld, nets);
+            for (int i = 0; i < 60; i++)
+                heldRuntime.SimStep(dt);
+            ctx.Check(heldHost.GlobalPosition.DistanceTo(held.Position) < 1e-3f,
+                $"a deactivated record is placed but held pos={heldHost.GlobalPosition}");
+        }
+        finally
+        {
+            runtime?.Free();
+            heldRuntime?.Free();
+            host?.Free();
+            heldHost?.Free();
         }
     }
 
