@@ -1502,6 +1502,17 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
     forces spawned AI planes too. ⚠ `BL-343` (`IMPACT_FORCE` wreckage velocity inheritance)
     stayed a separate change
 
+### Wave H — Combat HUD (added 2026-08-14, user-requested at the controls)
+
+22. ☐ H22 — The VS-mode targeting HUD works on AI enemy planes in every flight session. The
+    Dogfight HUD already tracks opponent aircraft (leader line and the off-screen/edge
+    indication that keeps a target findable); against M4's AI enemies a plain flight session
+    shows nothing, and the user reports it is really easy to lose the enemy. Extend the
+    existing VS targeting elements to AI aircraft: track the pilot's current hostile (the D12
+    gunner/ranking notion of "the target" where one exists, else nearest hostile), per pane in
+    splitscreen, with the same look as VS mode. No new HUD language is being invented — this
+    reuses the shipped VS elements against a new target class.
+
 ## Dependency and parallelism notes
 
 **A1 landed 2026-08-06, so A2 is the sole remaining true blocker** — the spawn + driver seam
