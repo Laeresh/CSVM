@@ -203,19 +203,24 @@ an upper bound, and the correction to the 137.9 mph equilibrium are on `BL-115` 
 - `PT-43` `[Own]` **Dogfight v1 feel (PLAN-vs-mode landed 2026-08-06).** The invented splitscreen
   deathmatch — no original splitscreen reference exists, so every call here is a judgement on our
   own remake. Two pads (or pad + keyboard); menu path: Dogfight → any chapter → both press Start.
+  **(a)/(b)/(e)/(f) flown 2026-08-13 (`BL-342`'s C7) — settled, see below. (c) confirmed a real
+  problem, folded into `BL-301`. Still owed: (d) at 4 players.**
   *Look for:*
-  - (a) **damage balance plane-vs-plane** — a gun kill measured 18 rounds of `wep_00` in the suite;
-    does that read as right at the controls, and do rockets (fuse + falloff blast) feel like the
-    practical weapon they were in the original;
-  - (b) **hitting at all without the original's aim assistance** — if landing guns feels hopeless,
-    that is `BL-342` (build the decoded sticky-bullet assist) and `BL-301`'s strength call, not a
-    damage tune;
-  - (c) spawn camping viability after the 3 s auto-respawn (no invulnerability by design);
+  - (a) ~~damage balance plane-vs-plane~~ — settled 2026-08-13: good, 70-cal shreds planes;
+  - (b) ~~hitting at all without the original's aim assistance~~ — settled 2026-08-13: `BL-342`
+    built the decoded sticky-bullet assist and landing guns is markedly easier now, even on a
+    straight-flying target; `BL-301`'s strength call is closed too (no retune);
+  - (c) spawn camping viability after the 3 s auto-respawn (no invulnerability by design) —
+    **confirmed 2026-08-13: every player has a fixed spawn point and camping one is very much
+    viable.** Tracked as `BL-301`'s existing spawn-protection deferral, now evidenced rather than
+    speculative;
   - (d) opponent edge-arrows + the status line: readable at 2- and 4-player pane sizes, arrows
-    flip to the right edge, marker vanishes while the opponent is down;
-  - (e) kill banners, the end board's rows/winner/draw, and the R-rematch flow (R must still be
-    respawn while the board is hidden);
-  - (f) draw frequency at the 5-kills / 5-minutes defaults.
+    flip to the right edge, marker vanishes while the opponent is down — **2-player confirmed
+    2026-08-13 (small but readable); 4-player still owed, no second controller pair on hand that
+    session;**
+  - (e) ~~kill banners, the end board's rows/winner/draw, and the R-rematch flow~~ — settled
+    2026-08-13: all good;
+  - (f) ~~draw frequency at the 5-kills / 5-minutes defaults~~ — settled 2026-08-13: good.
 
   *Blocks:* the `BL-301` tuning decisions; a structural fail mints its own `BL` item.
   *Variations:* `--players=4` for pane-size readability; `--vs-kills=1` for a fast board check;

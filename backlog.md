@@ -710,56 +710,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   films it; measurement can reuse `analysis/video-flight-calibration` if the HUD is in frame.
   `wep_14` is mountable via `--rocket=wep_14` (no stock loadout carries it).
 
-- `BL-342` `[Feature]` **Sticky bullets — build the player's gun aim assist the original ships and we don't.**
-  Guns currently fire straight down the muzzle axis with no lead and no assist, which is the direct
-  cause of `BL-301`/`PT-43`'s "gun kills are impractical, everything leans on rockets". The
-  original's mechanism is fully decoded — build it, do not re-derive it.
-  *Evidence:* [`docs/org/aim-assist.md`](docs/org/aim-assist.md) — the whole mechanism read out of
-  `crimson.exe` 2026-08-10 (`FUN_004b6530` the assist, `FUN_004b3e50` the per-frame slot update,
-  `FUN_00460e30` the intercept solver, `FUN_004bae60` + 3 twins the scorer). Tuning is
-  `player.json`'s `sticky_bullet_catchup_rate 5.0` / `_inaccuracy 1.0` (degrees) /
-  `_forget_interval 1.5` / `_dist_factor 0.0`, decoded in
-  [`docs/formats/vehicle.md`](docs/formats/vehicle.md)'s `player.json` table.
-  *Fix shape:* eight per-muzzle slots on the plane (4 weapon groups × 2 alternating barrels), each
-  holding a **plane-local** gun-line direction and a target direction. Per frame: unwind the target
-  to local forward once `forget_interval` has passed since that barrel last fired, then slerp the
-  gun line toward it at `catchup_rate · dt` (snap at `≥ 1`). At spawn: scan candidates, reject
-  same-team / out-of-`RANGE` / outside the assist cone / no intercept, rank by
-  `alignment − distance · dist_factor`, write the winner into the target slot, and fire along the
-  **smoothed** line with a `inaccuracy`-wide random cone applied. Shooter-authoritative in MP — the
-  original transmits the assisted vector rather than re-running the scan per client.
-  *⚠ Traps:* **this is not bullet steering** — the pre-decode `vehicle.md` wording said rounds in
-  flight are pulled toward a target and that is wrong, nothing touches a round after spawn;
-  smoothing is in **plane-local** space, so the assist must lag your own roll/pitch, and doing it in
-  world space is a different feel; `forget_interval` counts from the **last shot**, so it never
-  expires while you hold the trigger; `dist_factor 0` means selection is *purely* most-aligned, so
-  a far target dead ahead legitimately outranks a near one off-axis; the scatter's polar angle is
-  uniform in `[0, θ]`, **not** uniform over the cone's solid angle; the candidate set is **not
-  aircraft-only** — it is vehicles + turrets + `targets.zrd` mission structures + **live
-  proximity-fused ordnance in flight**, so guns legitimately snap onto an incoming rocket, and
-  scoping the port to planes would be a silent behaviour change.
-  *Decoded 2026-08-12* (settles this entry's former "unsettled before tuning" clause; write-up in
-  [`docs/org/aim-assist.md`](docs/org/aim-assist.md)): **`CANNON_SPREAD` is not a dispersion term.**
-  Its one reader in the executable (`FUN_004ba6f0` @ `0x004ba9da`) stores `−cos(value × π/180)` into
-  `[def+0x210]+0x08`, read only by the four assist scorers — it is the assist's **acceptance cone**,
-  6° half-angle for the stock guns, and the 1° `inaccuracy` cone is the *only* scatter on a round.
-  No key means `0.0` from the block's `calloc`, i.e. a 90° hemisphere, not a non-zero default. The
-  per-target override at candidate `+0x50` is `−1.0` from every entity constructor (planes
-  `0x004b0006`, turrets `0x004a9ae7`, MStructs `0x004a25ee`, ordnance `0x00441be1`); the only
-  authored writer is the turret key `STICKINESS` (`FUN_004a9df0` @ `0x004aa5b4`), which ships zero
-  times, so with the shipped data the cone is always the firing weapon's.
-  ⚠ **Fallout, fix alongside:** `Projectile.cs:534` scatters every round through
-  `ApplySpread(forward, weapon.CannonSpread)`. The original scatters through nothing of the kind.
-  That 6° jitter is a live fidelity bug in shipped code, separate from the missing assist, and both
-  live at the same fire call.
-  *Playtest after fix:* `--vs` dogfight, and the `PT-43` gun-feel line — guns should become a
-  practical kill weapon without rockets. The honest risk is over-assist reading as aimbot; the
-  shipped constants are the original's answer, so tune only against footage, not taste.
-  *Cross-refs:* `BL-301` (Dogfight tuning — its bullet-magnetism line is this item, and the
-  strength call stays there), `PT-43` (where it gets judged), `docs/org/tracers.md` (the same
-  spawn-time-only orientation rule on the visual side). Supersedes `BL-091`, whose research half
-  the decode above closes.
-
 ## Flight model & collision physics
 
 - `BL-089` `[Feature]` **Nitro booster — scoped, low priority (the user's standing call).** Recorded because the data is
@@ -2868,19 +2818,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   uncovered canard tips are the known gap to close.
 
 - `BL-301` `[Tuning]` `[Owed-playtest]` **Dogfight (VS mode) tuning** — every deliberate v1 deferral, to be re-judged from
-  `PT-43` evidence, not speculation: **aim-assist strength** (the mechanism is no longer a question
-  — it is decoded in [`docs/org/aim-assist.md`](docs/org/aim-assist.md) and built by `BL-342`; what
-  stays here is whether the original's shipped constants feel right in VS), spawn
-  camping / spawn protection (none in v1), suicide penalty and last-damager credit (0 / none in
-  v1), sudden-death overtime on a drawn time-out (draw declared in v1), menu-side match options
-  (kill target and time limit are CLI-only), `dogfight_ace` vs `zeppelin_run` spawn spacing, the
-  self-blast exemption (own rockets can't hurt you — the guns invariant applied consistently, not
-  a balance call), VS HUD line/arrow sizing at 4-player panes. Related, not absorbed: `BL-126`
-  (splitscreen chrome). ⚠ The stunt race's abreast starting grid landed 2026-08-08 and deliberately
-  did **not** touch `--vs` — it is selected only when a race exists, so Dogfight still walks the
-  scattered `dogfight_ace` list. Spawn spacing here stays this item's call from `PT-43`, and copying
-  the grid over is the wrong reflex: four dogfighters 60 m apart on one heading is an instant
-  head-on merge every round.
+  `PT-43` evidence, not speculation. **Aim-assist strength settled 2026-08-13** from `PT-43`(a)/(b):
+  the shipped `sticky_bullet_*` constants (decoded in
+  [`docs/org/aim-assist.md`](docs/org/aim-assist.md), built by `BL-342`) read right at the
+  controls — damage balance plane-vs-plane felt good and guns are now a practical kill weapon
+  without rockets, a marked improvement over firing with no assist at all. No retune. Still open:
+  spawn camping / spawn protection (none in v1) — **confirmed a real problem, not speculation, by
+  `PT-43`(c) 2026-08-13**: every player has a fixed spawn point and camping one is very much
+  viable; the fix is spawn rotation, likely alongside whatever `--vs`'s existing spawn-spacing
+  logic already tracks per-pane; suicide penalty and last-damager credit (0 / none in
+  v1), sudden-death overtime on a drawn time-out (draw declared in v1; `PT-43`(f) found draw
+  frequency fine at the 5-kills/5-min defaults, so this stays low priority), menu-side match
+  options (kill target and time limit are CLI-only), `dogfight_ace` vs `zeppelin_run` spawn
+  spacing, the self-blast exemption (own rockets can't hurt you — the guns invariant applied
+  consistently, not a balance call), VS HUD line/arrow sizing at 4-player panes (`PT-43`(d):
+  readable and correctly edge-flipping at 2 players; 4-player still untested, no second controller
+  pair available yet). Related, not absorbed: `BL-126` (splitscreen chrome). ⚠ The stunt race's
+  abreast starting grid landed 2026-08-08 and deliberately did **not** touch `--vs` — it is
+  selected only when a race exists, so Dogfight still walks the scattered `dogfight_ace` list.
+  Spawn spacing here stays this item's call from `PT-43`, and copying the grid over is the wrong
+  reflex: four dogfighters 60 m apart on one heading is an instant head-on merge every round.
 
 - `BL-134` `[Feature]` **Cutscene player — the missing consumer (M04's zeppelin, `letterbox`, `CALLBACK`).**
   **This is a missing subsystem, not a bug.** The cutscene defs run because nothing tells them they

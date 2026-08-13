@@ -1,15 +1,16 @@
 # Sticky bullets — the player's gun aim assist
 
-**ACTIVE PLAN** (written 2026-08-13). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE** (written 2026-08-13, all 7 items landed 2026-08-13). `BL-342` closed the same day: the
+assist reads right at the controls (`PT-43`(a)/(b), no retune) and `BL-301` picked up the two
+findings that fell outside this plan's scope — spawn camping confirmed real, the 4-player HUD pass
+still owed.
 
 This plan builds `BL-342`: the per-muzzle gun aim assist the original ships and CSVM does not, plus
 the removal of a scatter CSVM applies and the original does not. Both halves live at the same fire
 call, which is why they are one plan rather than two, but they are separate changes with separate
 verification and the wrong-scatter removal goes **first** so the assist is not tuned against a
 dispersion the original never had. The mechanism is fully decoded in
-[`org/aim-assist.md`](org/aim-assist.md) (two Ghidra passes, 2026-08-10 and 2026-08-12) and this
+[`org/aim-assist.md`](../org/aim-assist.md) (two Ghidra passes, 2026-08-10 and 2026-08-12) and this
 plan builds it rather than re-deriving it. Every constant here has an address behind it; none came
 from footage.
 
@@ -96,7 +97,7 @@ ship `CANNON_SPREAD 6.0`, so the cone is a 6° half-angle and the stored cosine 
 The per-target override, candidate `+0x50`: `−1.0f` from every entity constructor (planes
 `0x004b0006`, turrets `0x004a9ae7`, MStructs `0x004a25ee`, tracked ordnance `0x00441be1`, all
 vtable `0x00608b58`), meaning "no override, use the weapon's cone". The only authored writer is the
-turret key `STICKINESS`, which [`formats/turrets.md`](formats/turrets.md) records shipping **zero
+turret key `STICKINESS`, which [`formats/turrets.md`](../formats/turrets.md) records shipping **zero
 times**. So with the shipped data the cone is always the firing weapon's.
 
 ## Ground rules
@@ -137,7 +138,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Judge it
 
-7. ☐ `PT-43` gun-feel pass in `--vs`, and hand the strength question back to `BL-301`
+7. ☑ `PT-43` gun-feel pass in `--vs`, and hand the strength question back to `BL-301`
 
 ## Dependency and parallelism notes
 
@@ -367,7 +368,7 @@ follow the assist: `FUN_00426570` places it at the selected group's muzzle midpo
 `0.5 × (VELOCITY × nose + planeVelocity)`, and `FUN_004267f0` rate-smooths its range; the assist
 slots at `+0x3a4` are read there for the muzzle attachment handles alone, never for their
 directions. So an assisted round deliberately leaves along a line the sight does not show. Recorded
-with its addresses in [`org/aim-assist.md`](org/aim-assist.md) ("What the pipper follows"), and the
+with its addresses in [`org/aim-assist.md`](../org/aim-assist.md) ("What the pipper follows"), and the
 HUD now follows that rule — which retired the 250 m `GunConvergenceDist` TUNE. **Still owed at the
 controls:** the `--vs` gun-line/lag check in this item's Verify (it is a live-cockpit judgement, and
 it rides with C7).
@@ -477,7 +478,7 @@ milestone derives the vector locally "because it is cheap", the invariant above 
 
 # Wave C — Judge it
 
-## C7 ☐ `PT-43` gun-feel pass in `--vs`, and hand the strength question back to `BL-301`
+## C7 ☑ `PT-43` gun-feel pass in `--vs`, and hand the strength question back to `BL-301`
 
 **Goal.** A judgement, at the controls, on whether guns are now a practical kill weapon without
 rockets — and a recorded answer either way.
