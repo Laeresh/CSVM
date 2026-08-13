@@ -203,6 +203,14 @@ public static class Suites
             "EDGE, displacement never over max_speed·dt, the route's raw shape-A tags acted on by " +
             "NOTHING (stop nodes undecoded) — total engine loss decelerates it to a stop through " +
             "the decoded sqrt curve, and a deactivated record is placed but held", ZeppelinMotionSuite));
+        into.Add(new TestHarness.Suite("zeppelin-launch",
+            "zeppelin fighter launch (F20): C1/IA1's zeppelin-launch generator authors the " +
+            "decoded shape (cargobay origin, −90° drop, mp1 door anims — both shipped as " +
+            "compiled OnCall defs over door_left/door_right), holds below the 100 m gate with " +
+            "the door shut, and on F17's flown zeppelin opens the door and drops fighters at " +
+            "the origin node's LIVE position on the composed 7 s schedule — the fast cycle " +
+            "leaving the hangar open (close early only past an 8 s gap) — while a max_active 1 " +
+            "clone stops after one live spawn", ZeppelinLaunch));
         into.Add(new TestHarness.Suite("damage-stages",
             "each DAMAGE_SEQUENCE def fires its stage effects across an HP sweep", DamageStages));
         into.Add(new TestHarness.Suite("damage-hd",
@@ -4421,6 +4429,214 @@ public static class Suites
             heldRuntime?.Free();
             host?.Free();
             heldHost?.Free();
+        }
+    }
+
+    private static void ZeppelinLaunch(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
+        ctx.RequireData(chapterZrdr, $"C1 zrdr");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
+
+        // The authored generator: the decoded zeppelin-launch shape, doors named explicitly.
+        var egen = EnemyGenerators.Load(missionZrdr);
+        ctx.Check(egen.Count == 1 && egen[0].IsZeppelin,
+            $"C1/IA1 authors one zeppelin-launch generator count={egen.Count}");
+        if (egen.Count != 1)
+            return;
+        var def = egen[0];
+        ctx.Check(def.Node == "multiplayer1zep" && def.Origin == "cargobay"
+            && def.OpenAnim == "mp1_open_doors" && def.CloseAnim == "mp1_close_doors"
+            && def.MinAltitude is 100f,
+            $"…on multiplayer1zep: cargobay origin, mp1 door anims, 100 m gate");
+        ctx.Check(def.RotationDeg is { } rot && Mathf.Abs(rot.X + 90f) < 0.01f,
+            $"the authored drop attitude is pitch −90° rot={def.RotationDeg}");
+        ctx.Check(Mathf.Abs(def.IndPeriod + def.WavePeriod - 7f) < 0.01f,
+            $"the composed spawn gap is ind 5 + wave 2 = 7 s");
+
+        // What the model ships for doors: the compiled mis_anim carries both OnCall defs,
+        // each moving the hull's door_left/door_right nodes (this is the visual F20 wires).
+        var (_, missionAnim) = AnimProgram.ArchivePaths(ctx.DataRoot, "C1", "IA1");
+        var archive = AnimArchive.Load(missionAnim, "mis_anim");
+        ctx.Check(archive != null, $"C1/IA1's compiled mis_anim archive loads");
+        if (archive == null)
+            return;
+        foreach (var animName in new[] { def.OpenAnim!, def.CloseAnim! })
+        {
+            AnimDefinition? doorDef = null;
+            foreach (var d in archive.Defs)
+            {
+                if (string.Equals(d.AnimName, animName, System.StringComparison.OrdinalIgnoreCase))
+                    doorDef = d;
+            }
+            var movedNodes = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+            if (doorDef != null)
+                foreach (var seq in doorDef.Sequences)
+                    foreach (var ev in seq.Events)
+                        if (ev.Data.Str("name") is { Length: > 0 } target)
+                            movedNodes.Add(target);
+            ctx.Check(doorDef != null && movedNodes.Contains("door_left") && movedNodes.Contains("door_right"),
+                $"'{animName}' ships as a compiled OnCall def over the hull's door nodes nodes=[{string.Join(",", movedNodes)}]");
+        }
+
+        var nets = AiNets.Load(chapterZrdr);
+        var zepDefs = new List<ZeppelinDef>();
+        foreach (var z in Zeppelins.Load(missionZrdr))
+        {
+            if (z.Node.Equals(def.Node, System.StringComparison.OrdinalIgnoreCase))
+                zepDefs.Add(z);
+        }
+        ctx.Check(zepDefs.Count == 1 && zepDefs[0].Position.Y >= 100f,
+            $"the host zeppelin record exists and its authored altitude clears the gate y={(zepDefs.Count > 0 ? zepDefs[0].Position.Y : 0):0}");
+        if (zepDefs.Count != 1)
+            return;
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var textures = new TextureArchive(texturesPath);
+        var spawned = new List<FlightController>();
+        var spawnPositions = new List<Vector3>();
+        var spawnLooks = new List<Vector3>();
+        var animPlays = new List<string>();
+        Node3D? host = null;
+        Node3D? host2 = null;
+        AiGeneratorRuntime? gens = null;
+        AiGeneratorRuntime? capped = null;
+        ZeppelinRuntime? zeps = null;
+        try
+        {
+            // The world stand-in: the host node with the cargobay drop point riding under the
+            // hull, exactly the parent/child shape the chapter gamez builds.
+            host = new Node3D { Name = "multiplayer1zep" };
+            var cargobay = new Node3D { Name = "cargobay", Position = new Vector3(0f, -20f, 0f) };
+            host.AddChild(cargobay);
+            ctx.Host.AddChild(host);
+            var resolvedHost = host;
+            var resolvedBay = cargobay;
+
+            FlightController? SpawnPlane(string planeName, Vector3 pos, Vector3 look, AiPilot pilot)
+            {
+                var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+                var c = new FlightController
+                {
+                    PlaneModel = model,
+                    Collider = PlaneCollider.Build(model),
+                    PlayerIndex = AiAircraftSpawner.ShooterIdBase + spawned.Count,
+                    IsHumanPiloted = false,
+                    Pilot = pilot,
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                };
+                c.AddChild(model);
+                c.Setup(new FlightModel(stats), null, new CamParams(), pos, look);
+                ctx.Host.AddChild(c);
+                spawned.Add(c);
+                spawnPositions.Add(pos);
+                spawnLooks.Add(look);
+                return c;
+            }
+
+            gens = new AiGeneratorRuntime(new[] { def },
+                (name, scope) => name.Equals("multiplayer1zep", System.StringComparison.OrdinalIgnoreCase)
+                    ? resolvedHost
+                    : name.Equals("cargobay", System.StringComparison.OrdinalIgnoreCase) ? resolvedBay : null,
+                nets, ctx.PlaneName, SpawnPlane,
+                (name, _) => { animPlays.Add(name); return 1; }, (_, _) => { });
+            ctx.Same(1, gens.LiveCount, $"the generator is live (host + IAZep net resolve)");
+
+            // Held below the gate: the unplaced host sits at y −20/0. Ten seconds of sim spawn
+            // nothing and never open the door (the blocked branch only ever CLOSES it).
+            const float dt = 1f / 60f;
+            for (int i = 0; i < 600; i++)
+                gens.SimStep(dt);
+            ctx.Check(spawned.Count == 0 && animPlays.Count == 0,
+                $"held below the 100 m gate: no spawn, door shut spawns={spawned.Count} plays={animPlays.Count}");
+
+            // F17 places and flies the zeppelin; the gate releases. The held spawn is overdue
+            // (timer 10 s > the 7 s threshold), so the first unblocked step opens the door and
+            // drops the fighter through it in the same tick.
+            zeps = new ZeppelinRuntime(zepDefs, name =>
+                name.Equals("multiplayer1zep", System.StringComparison.OrdinalIgnoreCase) ? resolvedHost : null, nets);
+            ctx.Same(1, zeps.LiveCount, $"the zeppelin is placed and flying (F17)");
+            for (int i = 0; i < 120; i++)
+                zeps.SimStep(dt);   // two seconds aloft: the hull is moving before any drop
+            ctx.Check(host.GlobalPosition.DistanceTo(zepDefs[0].Position) > 1f,
+                $"…and has left its authored pose dist={host.GlobalPosition.DistanceTo(zepDefs[0].Position):0.#} m");
+
+            gens.SimStep(dt);
+            ctx.Check(spawned.Count == 1, $"the held spawn fires on the first step at altitude");
+            ctx.Check(animPlays.Count == 1 && animPlays[0] == "mp1_open_doors",
+                $"the door opened with the authored anim plays=[{string.Join(",", animPlays)}]");
+            ctx.Check(spawnPositions.Count == 1
+                && spawnPositions[0].DistanceTo(cargobay.GlobalPosition + Vector3.Down * 12f) < 0.1f,
+                $"the fighter dropped at the origin node's LIVE position (riding the moving hull), 12 m under the doors (the invented bay clearance) pos={spawnPositions[0]} bay={cargobay.GlobalPosition}");
+            ctx.Check(spawnLooks.Count == 1 && (spawnLooks[0] - spawnPositions[0]).Normalized().Y < -0.9f,
+                $"…in the authored drop attitude (pitch −90°, clamped shy of vertical) dropY={(spawnLooks[0] - spawnPositions[0]).Normalized().Y:0.##}");
+
+            // The fast cycle: the next spawn is 7 s away, never more than 8, so the door stays
+            // open through the second drop (no close anim, no second open).
+            var firstPos = spawnPositions[0];
+            int steps = 0;
+            while (spawned.Count < 2 && steps < 60 * 12)
+            {
+                steps++;
+                zeps.SimStep(dt);
+                gens.SimStep(dt);
+            }
+            ctx.Check(spawned.Count == 2, $"the second fighter drops on the 7 s composed schedule t=+{steps / 60f:0.#} s");
+            ctx.Check(animPlays.Count == 1,
+                $"the hangar stayed open across it (close early only past an 8 s gap) plays=[{string.Join(",", animPlays)}]");
+            ctx.Check(spawnPositions.Count == 2 && spawnPositions[1].DistanceTo(firstPos) > 5f,
+                $"…again at the live drop point, which has flown on dist={spawnPositions[1].DistanceTo(firstPos):0.#} m");
+
+            // max_active: a capacity-untouched clone capped at 1 live spawn blocks after its
+            // first drop (wave_size − spawned + active > max_active) for as long as it lives.
+            var cappedDef = new EnemyGeneratorDef
+            {
+                Node = def.Node,
+                VehicleParams = def.VehicleParams,
+                Nets = def.Nets,
+                Capacity = def.Capacity,
+                MaxActive = 1,
+                WaveSize = def.WaveSize,
+                WavePeriod = def.WavePeriod,
+                IndPeriod = def.IndPeriod,
+                IsZeppelin = def.IsZeppelin,
+                OpenAnim = def.OpenAnim,
+                CloseAnim = def.CloseAnim,
+                Origin = def.Origin,
+                RotationDeg = def.RotationDeg,
+                MinAltitude = def.MinAltitude,
+            };
+            host2 = new Node3D { Name = "multiplayer1zep", Position = new Vector3(0f, 500f, 0f) };
+            ctx.Host.AddChild(host2);
+            var resolvedHost2 = host2;
+            int before = spawned.Count;
+            capped = new AiGeneratorRuntime(new[] { cappedDef },
+                (name, scope) => name.Equals("multiplayer1zep", System.StringComparison.OrdinalIgnoreCase)
+                    ? resolvedHost2 : null,
+                nets, ctx.PlaneName, SpawnPlane, (name, _) => 1, (_, _) => { });
+            for (int i = 0; i < 60 * 30; i++)
+                capped.SimStep(dt);
+            ctx.Same(1, spawned.Count - before,
+                $"max_active 1 allows exactly one live spawn in 30 s");
+        }
+        finally
+        {
+            gens?.Free();
+            capped?.Free();
+            zeps?.Free();
+            foreach (var c in spawned)
+                c.Free();
+            host?.Free();
+            host2?.Free();
+            textures.Dispose();
         }
     }
 

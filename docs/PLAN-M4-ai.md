@@ -1443,9 +1443,22 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
     anchor the sub-part defs, seed their scalar pools, build the survivor-count aggregator
 19. ☐ F19 — Broadside cannons: side-alternating volleys and the 90° arc — ⚠ **build it ballistic:
     the probabilistic hit curve is design-era and is not in the shipped engine**
-20. ☐ F20 — Zeppelin fighter launch — **the launch cycle is decoded** (hold-not-cancel confirmed,
-    door timings hardcoded, `ind_period`+`wave_period` compose); ⚠ **carries the unresolved
-    `capacity` discrepancy** — budget an investigation
+20. ☑ F20 — Zeppelin fighter launch — **landed 2026-08-14**: `GeneratorCycle.DoorOpen` runs the
+    decoded hardcoded door law inside `Step` (open 4 s before a due spawn, minimum 4 s open on
+    the since-spawn timer, close early only past an 8 s gap; while blocked ONLY the door closes
+    — hold-not-cancel); `AiGeneratorRuntime` plays the authored `open_anim`/`close_anim` (real
+    shipped compiled OnCall mis_anim defs rotating the hull's `door_left`/`door_right` ±90° over
+    5 s) through the new host-scoped `AnimRuntime.PlayWithin`/`StopWithin` (C1 has three
+    `hangerdoors` namesakes), and drops fighters at the origin node's live position on the
+    moving hull in the authored −90° attitude, 12 m below the doors (invented clearance — the
+    authored `cargobay` sits ON the bay floor and a spawn exactly there dies into the hull;
+    the binary's two untraced launch timers stay uninterpreted per BL-350 trap b).
+    `NotifyHostDied(node)` is the named F18 seam (no caller yet). Pinned by the extended
+    `GeneratorCycleTests` + the `zeppelin-launch` suite; demo: C1B/M03 `--zeppelins
+    --generators`. **The capacity stand-in stays** (capacity ≤ 0 disables the check): the IA
+    top-up the B7 decode found (mission-entities.md's 2026-08-13 correction) lives in the IA
+    wave sequencer — mission-layer, out of M4 scope — and the campaign-side raw-byte read of
+    `egen.zbd` remains the open discriminating instrument
 
 ### Wave G — AI aircraft crash choreography (added 2026-08-13)
 
