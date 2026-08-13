@@ -241,6 +241,83 @@ The two other airframe-only behaviours are the ones above: enemy aircraft take t
 scale as the boat, and aircraft alone additionally take the +/-5% per-spawn jitter on both pools
 (and on nine other def numbers), which is why two Bloodhawks on the same tier are not identical.
 
+## The A4 decision: what the remake builds on this
+
+M4 item A4 (decided 2026-08-13) asked how the remake represents multi-zone damage across its
+three consumers: aircraft, zeppelins, and the static world destructibles. The decision, justified
+against this decode:
+
+**The two systems stay two systems, and `DestructibleRegistry` gains no zone concept.** The
+original runs two disjoint damage models selected by how an instance was created (the scope note
+above), and their semantics share nothing: a destructible is one scalar pool with absolute
+`ANIM_HEALTH` thresholds and a one-way death; a vehicle is two ledgers with an armour pool, 1:1
+overflow, fraction-keyed reversible staging, and spawn-time scaling. Folding zones into
+`Mech3/DestructibleRegistry.cs` would graft the vehicle model onto a registry whose `(def, anchor)`
+scalar instances and monotonic `DamageStage` are correct for what they cover. The registry keeps
+the static destructibles only; vehicles keep their own damage component.
+
+**(a) Aircraft: `Flight/PlaneDamage.cs` is the vehicle ledger and grows the summary pair.** It
+already holds the per-part half of this page's model (four zones nose/tail/left/right, each an
+(armour, health) pair, armour first with 1:1 overflow, confirmed by CAP-19). What it lacks is the
+decoded whole-vehicle summary: after a part-scoped spend, whole-vehicle current health and armour
+are recomputed as the parts' fraction of their summed maxima times the whole-vehicle maxima, and a
+hit that names no zone spends against the summary directly. An AI airframe's `armor`/`health` pair
+is the scale that summary is expressed in, not a competing pool; player defs resolve none, so the
+open thread above (the initialiser) stands. Kill threshold: **whole-vehicle health current at or
+below zero**, which under the recompute means every zone exhausted, not one. ⚠ The remake today
+kills on any `critical` part reaching zero (`FlightController.cs:823`, `:1957`); no code on the
+decoded death path reads that flag (the open thread below), so the current rule is a recorded
+divergence. D14 retires it when it lands the damage routing, keeping the flag parsed; if a part
+kill is ever observed at the controls of the original, that observation reopens the flag question,
+not this decision.
+
+**(b) Zeppelins: an aggregator over per-part scalar pools, not a zoned registry instance.** The
+decoded kill check walks the `healthy` node list, counts entries still active, and kills when
+`survivors < num_healthy_required` ([`formats/mission-entities.md`](../formats/mission-entities.md);
+default 1, clamped to the `healthy` list length; the survivor polarity must be asserted in a test,
+because the inverse reading is an immortal zeppelin). Gasbags, engines and cannons are each their
+own node with their own pool and destruction anim, which is exactly the registry's existing
+`(def, anchor)` scalar shape once the sub-part defs anchor at all. So F18 builds: (1) the
+deliberate `NameResolver.Anchors` change that lets zeppelin sub-part defs anchor; (2) pool seeding
+from the mission record (`gasbags` hp 80-400, `cannon_health` hp 200) where authored; (3) a
+per-zeppelin aggregator component, fed by the mission's `zeppelins.json` record, that counts
+surviving `healthy` nodes and owns the kill, plus the engine-loss square root over the `engines`
+list. No `(def, anchor, zone)` keying is needed anywhere, because each zone is already its own
+instance; the zeppelin-level threshold lives in the aggregator, not the registry.
+
+**(c) Static destructibles: unchanged.** Scalar `HEALTH`, `DAMAGE_SEQUENCE`, death at zero, per
+[`formats/destructibles.md`](../formats/destructibles.md). This page's scope note is the reason:
+the executable itself never unifies the two models, so a unified remake registry would be an
+invention.
+
+What each downstream item consumes:
+
+- **F18** takes (b) whole: the anchor change, the seeding, the aggregator and its survivor
+  threshold, and the `WeaponDef.DamagesZeppelin` gate (parsed, never consumed today) as the
+  routing flag for what may hurt a gasbag.
+- **D14** takes the hit contract from "Taking a hit": every hit is a pair (armour damage, health
+  damage) plus an optional zone; zone hits spend the part then recompute the summary, zone-less
+  hits spend the summary. The remake's zone supplier is `PlaneDamage.MapStruckPart` (the
+  original's supplier is untraced, an accepted stand-in). D14 also retires the `critical` kill
+  divergence above.
+- **A2's spawned aircraft** seed the ledger exactly as "Where the numbers come from at spawn":
+  the `r*` def chain's `destroyable_parts` plus `armor`/`health`, then the roster's `init_health`
+  (only if > 0) and `armor` (if >= 0). The eight per-zone roster slots are parsed for index
+  alignment and ignored (`-1` on all 414 blocks; the sum-derivation path is dead in this install).
+  The difficulty scale (0.875/1.0/1.25) and the aircraft-only per-spawn jitter (uniform 5 %) are
+  decoded constants to apply when a difficulty setting exists, not TUNEs.
+- **G21** keys its crash choreography off the vehicle death event (the whole-vehicle kill raising
+  `FlightController.Downed`), never off `DestructibleRegistry`.
+
+One contradiction with the plan and the design document, recorded rather than smoothed over: the
+design's unified damage-zone model (every object divides into critical/non-critical zones and dies
+when a threshold count of critical zones dies) is design-era. The shipped engine has **two kill
+rules and no shared zone vocabulary**: vehicles die by sum-exhaustion of their zones, zeppelins by
+the survivor count, and the design's own aircraft example (1 of {tail, nose, wings} critical) is
+refuted by the decoded death path. `PLAN-M4-ai.md`'s "Damage zones" section and its
+architecture-constraints bullet proposing `(def, anchor, zone)` plus a threshold counter inside
+the registry are superseded by this note.
+
 ## Open threads
 
 - **Where a player plane's health max comes from.** No player def resolves a whole-vehicle pair, and
