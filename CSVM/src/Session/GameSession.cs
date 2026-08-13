@@ -175,6 +175,10 @@ public partial class GameSession : Node3D
     // DriveSimSteps before the AI planes it spawns into _aiPlanes, freed with the world subtree.
     private AiGeneratorRuntime? _generators;
     private ZeppelinRuntime? _zeppelins;
+    // The world AA emplacements (M4 C9b): built with the rigs whenever a chapter world and the
+    // shared pool exist, stepped in DriveSimSteps after the zeppelins (slung mounts read the
+    // moved pose). Shipped ACTIVATED honoured; --wake-turrets is the WAKEUP_TURRETS stand-in.
+    private TurretEmplacementRuntime? _turretEmplacements;
     // The dogfight scorekeeping (--vs): built with the rigs, fed their Downed reports, its clock
     // advanced on the sim dt (never wall time). Null outside Versus — the Downed events then
     // simply have no subscriber. Freed with this node; flight holds no match state.
@@ -2071,6 +2075,28 @@ public partial class GameSession : Node3D
             state.What += $" + {_generators.LiveCount} generator(s)";
         }
 
+        // World AA emplacements (M4 C9b): the standalone ai.zrd family, placed at its NODES
+        // patterns against this chapter's built world — unconditional, like the original's world
+        // placement pass. Shipped ACTIVATED is the default (4 awake entries engage, 22 dormant
+        // entries sleep); --wake-turrets is the explicit stand-in for the mission script's
+        // WAKEUP_TURRETS, which M4 does not implement.
+        if (state.WorldRuntime is { } worldRt && turretDefs != null)
+        {
+            var placedRt = worldRt;
+            _turretEmplacements = new TurretEmplacementRuntime(turretDefs, weaponDefs,
+                (pattern, scope) => placedRt.FindNodes(pattern, scope), projectiles);
+            int awakeByData = _turretEmplacements.AwakeCount;
+            int woken = _spec.WakeTurrets ? _turretEmplacements.WakeAll() : 0;
+            GD.Print($"turrets: {_turretEmplacements.Count} world emplacement(s) placed for " +
+                     $"{_spec.Chapter} ({awakeByData} awake by data, " +
+                     $"{_turretEmplacements.Count - awakeByData} dormant" +
+                     (woken > 0 ? $", {woken} woken by --wake-turrets" : "") + ")");
+            if (_turretEmplacements.Count > 0)
+            {
+                state.What += $" + {_turretEmplacements.Count} emplacement(s)";
+            }
+        }
+
         if (_rigs.Count > 1)
         {
             var flown = new List<string>(_rigs.Count);
@@ -2485,6 +2511,8 @@ public partial class GameSession : Node3D
             }
             // Zeppelins move before the generators read their host altitude this step.
             _zeppelins?.SimStep(dt);
+            // Emplacements after the zeppelins: a slung mount reads its ride's moved pose.
+            _turretEmplacements?.SimStep(dt);
             // Generators step before the AI-plane loop below: a spawn appends to _aiPlanes, which
             // must not happen while that list is being enumerated (the new plane ticks next step).
             _generators?.SimStep(dt);

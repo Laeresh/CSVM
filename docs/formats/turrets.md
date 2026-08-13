@@ -103,8 +103,8 @@ times are seconds; distances metres.
 | `SOUNDS` | 37 | sub-block: `ON`, `START`, `STOP`, `CANNON` |
 | `YAW` | 36 | `[min,max]` traverse arc |
 | `NODES` | 26 | standalone placement patterns |
-| `TEAM` | 20 | always `1` where present |
-| `HEALTH` | 17 | standalone-family hit points |
+| `TEAM` | 20 | always `1` = **ally** where present; absent = **enemy** (see "Teams" below) |
+| `HEALTH` | 17 | authored on the standalone family but **read by neither loader** (see below) |
 | `CREATE_STANDALONE` | 16 | always `0`; see above |
 | `HEALTHY_NODE` | 16 | the host node whose destruction kills the turret; defaults to `healthy` |
 | `DEACTIVATE` | **0** | a second node whose destruction *disables* the turret |
@@ -118,6 +118,29 @@ times are seconds; distances metres.
 **Eight of the 22 keys are accepted but never authored.** They are listed because the engine
 parses them and a faithful reader should not reject them — not because anything reads them in
 retail. A remake needs the fourteen that ship.
+
+### Teams
+
+The turret's team feeds the shared target-picker's gate. The engine's team space (the zeppelin
+loader's own name mapping) is **0 = neutral, 1 = ally (the player's side), 2 and up = enemy
+teams**, and the turret loader's default for an **absent `TEAM` key is the first enemy team,
+id 2** — which is why the 22 no-TEAM world emplacements all engage the player. Every authored
+value install-wide is `1`: the 16 carried entries (whose team the host overrides anyway) and the
+four `piratezep` entries — the player's own zeppelin's defensive rings are allied on purpose,
+three of them also the only standalone entries shipped awake. Decoded 2026-08-14 from the
+loader's TEAM arm (an absent key takes the enemy-from-index constructor at index 0; a present
+integer is stored raw) and the zeppelin parser's `enemy`/`ally`/`neutral` string mapping.
+
+### `HEALTH` is authored but unread
+
+⚠ **Neither turret loader reads the `HEALTH` key** — the world placement pass and the by-`TITLE`
+carried pass parse the same 20-key entry routine, and `HEALTH` is not among its lookups
+(measured 2026-08-14; no `HEALTH` string exists in the turret module's key cluster). A
+standalone emplacement's real hit points are its **own node's gamez destroy definition** —
+`aagun32` authors `HEALTH 8.0` in `ai.zrd` while its `destroy_aagun32` anim def carries
+`health: 30`, and the 30 is what kills it. The turret dies through gate 1 above: the destroy
+sequence's healthy→destroyed swap deactivates the `HEALTHY_NODE` (default `healthy`), and the
+gunner goes permanently quiet. Treat the `ai.zrd` value as editor-era authoring, not a pool.
 
 The `SOUNDS` sub-block likewise ships only `CANNON` (37 entries, always `snd_chaingun`); `ON`,
 `START` and `STOP` parse and are never used.
@@ -242,7 +265,8 @@ Two conditions gate the shot:
   projectile's reach — the turret does not fire at all. It does not fall back to a straight shot.
 
 `WEAPON.FIRE_RATE` is the interval between shots, redrawn as `uniform(min, max)` after each one
-(authored as a scalar on every shipped entry, in which case min = max). `FIRE_LIMITS`, were it
+(the carried entries author scalars, min = max; most standalone entries author real
+`[min, max]` pairs, e.g. the aagun belt's `[1.0, 1.8]`). `FIRE_LIMITS`, were it
 authored, would add a duty cycle on top: a charge that drains while firing and recharges at the
 same rate while not, forcing a `FIRE_LIMITS[1]`-second cooldown when exhausted.
 

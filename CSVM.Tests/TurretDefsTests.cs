@@ -96,6 +96,16 @@ public class TurretDefsTests
     }
 
     [Fact]
+    public void AnAbsentTeamDefaultsToTheFirstEnemyTeam()
+    {
+        // The decoded loader default: no TEAM key = enemy team id 2 (the original's team space
+        // is 0 neutral / 1 ally / 2+ enemy). Authored TEAM 1 stays the ally id.
+        var defs = Load();
+        Assert.Equal(TurretDef.DefaultTeamId, defs.FindByTitle("MSG_TUR_TEST_AAA")!.TeamId);
+        Assert.Equal(1, defs.FindByTitle("MSG_TUR_TEST_REAR")!.TeamId);
+    }
+
+    [Fact]
     public void ATitlelessEntryMatchesAnyLookup()
     {
         var defs = Load();
@@ -214,6 +224,27 @@ public class TurretDefsGoldenTests
         Assert.Equal(1, defs.All.Count(d => d.YawMinDeg == 0f && d.YawMaxDeg == 0f));
         Assert.All(defs.All.Where(d => d.YawMinDeg == 0f && d.YawMaxDeg == 0f),
             d => Assert.False(d.YawRestricted));
+    }
+
+    [ExtractedDataFact]
+    public void TheStandaloneFamilyShipsFourAwakeAndFourAllied()
+    {
+        // C9b's activation and team census: the four awake world emplacements are C5's thug
+        // boats plus the piratezep's belly/left/right rings, and the four authored TEAM 1
+        // (= ally) entries are the piratezep set — the player's own zeppelin's defences. Every
+        // other standalone entry is dormant (WAKEUP_TURRETS territory) and, with no TEAM key,
+        // lands on the loader's enemy default.
+        var defs = TurretDefs.Load(ZrdrPath);
+        var standalone = defs.All.Where(d => !d.Carried).ToList();
+        Assert.Equal(4, standalone.Count(d => d.Activated));
+        Assert.Equal(4, standalone.Count(d => d.Team != null));
+        Assert.All(standalone.Where(d => d.Team != null), d => Assert.Equal(1, d.TeamId));
+        Assert.All(standalone.Where(d => d.Team == null),
+            d => Assert.Equal(TurretDef.DefaultTeamId, d.TeamId));
+        // The awake set: MSG_TUR_THUG (no TEAM — hostile) + the three allied piratezep rings.
+        Assert.Equal(1, standalone.Count(d => d.Activated && d.Team == null));
+        Assert.Equal("MSG_TUR_THUG", standalone.Single(d => d.Activated && d.Team == null).Title);
+        Assert.Equal(3, standalone.Count(d => d.Activated && d.TeamId == 1));
     }
 
     [ExtractedDataFact]

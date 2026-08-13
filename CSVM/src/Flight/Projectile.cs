@@ -355,6 +355,7 @@ public sealed partial class ProjectilePool : Node3D
     // The flying aircraft bodies rounds can strike, one per rig (FlightController._Ready
     // registers) — how a round's shooter id resolves to the one body its hit ray must exclude.
     private readonly List<AircraftBody> _aircraft = new();
+    private readonly List<TurretController> _worldTurrets = new();
     private readonly SphereShape3D _proximitySphere = new();
     // The destructible blast sphere stays world-masked on purpose: planes never enter the
     // destructible DamageSink. The aircraft halves of fuse and blast run off the registered
@@ -519,10 +520,13 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>Appends every registered aircraft's carried turrets to the assist's candidate
-    /// set — the original's `TurretList` pass (C9a). A turret rides its host, so it moves with
-    /// the host's velocity and sits on the host's team; the host's own scan rejects it through
-    /// that same team gate, never through Self (the turret is its own Source).</summary>
+    /// <summary>Appends every registered aircraft's carried turrets (C9a) and every world
+    /// emplacement (C9b) to the assist's candidate set — the original's `TurretList` pass. A
+    /// carried turret rides its host, so it moves with the host's velocity and sits on the
+    /// host's team; the host's own scan rejects it through that same team gate, never through
+    /// Self (the turret is its own Source). An emplacement carries its own team and platform
+    /// velocity, and stays listed while dormant — a sleeping AA gun is still a lockable object;
+    /// only its death delists it as live.</summary>
     public void CollectTurrets(AimCandidateSet into)
     {
         foreach (var body in _aircraft)
@@ -534,7 +538,17 @@ public sealed partial class ProjectilePool : Node3D
                     AimAssist.TeamOfPilot(rig.PlayerIndex), turret.Alive, turret);
             }
         }
+        foreach (var turret in _worldTurrets)
+        {
+            into.AddTurret(turret.WorldPosition, turret.PlatformVelocity,
+                turret.EngineTeam, turret.Alive, turret);
+        }
     }
+
+    /// <summary>Registers the session's world emplacements (C9b) for
+    /// <see cref="CollectTurrets"/> — the same one-live-roster rule as the aircraft list.</summary>
+    public void RegisterWorldTurrets(IReadOnlyList<TurretController> turrets) =>
+        _worldTurrets.AddRange(turrets);
 
     /// <summary>A non-player fire source's launch bark (the turret gunners' <c>SOUNDS.CANNON</c>)
     /// through the pool's own one-shot pool — the same resolve-through-groups path a weapon's
