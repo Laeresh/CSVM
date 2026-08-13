@@ -42,7 +42,7 @@ reference, not its subject.
 |---|---|---|
 | 1 | Do `BL-344` and `BL-345` land separately? | **No, one plan.** `BL-344`'s fix collapses `SurfaceClass` into the registry, which is the same edit the overlay needs to colour by id. Landing the overlay first would build it against a type about to be deleted. |
 | 2 | Does `PLAN-crash-surface-id` Decision 3 ("keep the texture-name classifier, for weapons only") survive? | **No, it is disproven.** Decoded 2026-08-12: the IMPACT table is registry-indexed at parse time and soil-id-indexed at runtime. Decision 3 was taken on the premise this decode kills. |
-| 3 | What happens when a weapon authors no IMPACT block for the struck id? | **Measure first (A1), then decide with the user (A2).** The decode says the original plays nothing; ours currently plays `default`. Do not silently keep the unfaithful path, and do not silently ship a large visual regression. Same shape as `PLAN-crash-surface-id`'s Decisions 4 and 7. |
+| 3 | What happens when a weapon authors no IMPACT block for the struck id? | **Faithful: plays nothing (decided 2026-08-13, after A1).** A1 counted zero authoring weapons on `dirt`(13)/`fire`(5)/`airstrip`(8)/`dzone`(12); per-chapter silent-ground share runs C1 6.4%, C1B ~0%, C1C 0%, C2 10.6%, C2B 0%, C3 2.8%, C4 9.6%, C5 ~0% (worst: C2). B11 removes `ImpactOutcome`'s `SurfaceClass.Default` fallback rather than keeping it as a marked divergence. |
 | 4 | Does the overlay show the raw stamped id, or the id it resolves to? | **The resolved one.** The empty-slot arm is the mechanism, so an overlay that hides it re-creates the confusion `PLAN-crash-surface-id` removed. |
 
 ## ⚠ Read this before implementing anything
@@ -130,7 +130,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — count the data, then take the decision
 
 1. ☑ Survey which IMPACT blocks the shipped weapons actually author, per id
-2. ☐ Settle the empty-row rule with the user (plays nothing vs falls back to row 0)
+2. ☑ Settle the empty-row rule with the user (plays nothing vs falls back to row 0)
 
 ### Wave B — move the impact key onto the surface id
 
@@ -194,7 +194,7 @@ faithful build goes silent.
 that appears on only one weapon still leaves every other weapon silent on that id. Report per
 weapon, not as a union. Done: both the per-id and per-weapon tables are in `FINDINGS.md`.
 
-## A2 ☐ Settle the empty-row rule with the user (plays nothing vs falls back to row 0)
+## A2 ☑ Settle the empty-row rule with the user (plays nothing vs falls back to row 0)
 
 **Goal.** A recorded decision, in this file's Decisions table, on whether a round striking geometry
 whose id has no authored row plays nothing (faithful) or plays the `default` row (today's
@@ -215,10 +215,11 @@ as a marked, deliberate improvement, never as an unmarked divergence, which is t
 **Model recommendation.** medium. Presenting a measured trade-off, not making it.
 
 **Verify.** Not applicable; the deliverable is a row in the Decisions table above, dated, before
-B11 starts.
+B11 starts. Done: Decision 3 recorded 2026-08-13, faithful (plays nothing).
 
 **⚠ Traps.** Do not treat this as an implementation detail and pick the faithful path silently. The
 sibling plan hit the same shape at its Decision 6 and it was that plan's largest behavioural change.
+Done: put to the user directly with A1's per-chapter numbers; not picked silently.
 
 # Wave B — move the impact key onto the surface id
 
