@@ -109,6 +109,14 @@ public sealed class WorldSession
             }
         }
         StartupProfile.Record("zrdr", mark);
+        // The EFFECTS flipbooks (effects.zrd) are installed on their target materials BEFORE the
+        // build, because a material's frame list is part of what SceneBuilder registers with the
+        // TextureCycler as it builds. Same ordering the engine uses. See EffectCycles.
+        var effectCycles = EffectCycles.Apply(gamez, o.ZrdrPath);
+        if (effectCycles.Count > 0)
+        {
+            GD.Print($"effect cycles: {effectCycles.Count} material(s): " + string.Join(", ", effectCycles));
+        }
         mark = StartupProfile.Mark();
         var builder = new WorldBuilder(gamez, textures, collision: o.Collision,
             scrollOverrides: missionSetup?.ScrollByModel(gamez),

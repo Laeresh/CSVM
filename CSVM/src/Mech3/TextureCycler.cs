@@ -12,10 +12,14 @@ namespace CSVM.Mech3;
 /// <list type="bullet">
 /// <item>the per-material <c>cycle</c> block in the gamez (animated water, surf, boat wakes,
 /// turbulence, splashes, the walking/running crowd sprites), and</item>
-/// <item>the <c>EFFECTS</c> reader (<c>effects.zrd.json</c>), which binds a frame list to a
-/// NODE instead — the shared <c>fire1</c>/<c>fire2</c> billboards every burning object
-/// borrows.</item>
+/// <item>the <c>EFFECTS</c> reader (<c>effects.zrd.json</c>), which names a proxy node and lands
+/// on that node's material the same way: the fire flipbooks, applied by
+/// <see cref="EffectCycles"/> before the build.</item>
 /// </list>
+///
+/// Both are material-keyed in the original too: the cycle block hangs off the material record and
+/// the draw loop tests the material's own cycled bit per polygon, so a flipbook reaches every
+/// polygon using that material rather than the node that named it.
 ///
 /// Swapping a texture from C# rather than indexing a <c>sampler2DArray</c> in the shader is
 /// deliberate: a chapter has at most a handful of cycling materials (1 in C1, 5 in C1B), so the

@@ -1319,9 +1319,17 @@ void fragment() {
             return cached;
         var texName = _gamez.Materials[materialIndex].TextureName;
         var tex = texName != null ? Resolve(texName) : null;
-        Material mat = tex != null
-            ? BillboardMaterial(tex, blend: true, scissor: false, glow: true, lit: true, fogged: fogged, clampUv: clampUv)
-            : GetMaterial(materialIndex, 0, 0, noClutter: false, doubleSided: true, lit: true, fogged: fogged);
+        Material mat;
+        if (tex != null)
+        {
+            var billboard = BillboardMaterial(tex, blend: true, scissor: false, glow: true, lit: true, fogged: fogged, clampUv: clampUv);
+            RegisterCycle(_gamez.Materials[materialIndex], billboard); // same albedo_tex, see GetCylindricalMaterial
+            mat = billboard;
+        }
+        else
+        {
+            mat = GetMaterial(materialIndex, 0, 0, noClutter: false, doubleSided: true, lit: true, fogged: fogged);
+        }
         _glowMaterialCache[key] = mat;
         return mat;
     }
@@ -1339,7 +1347,12 @@ void fragment() {
             bool blend = _textures.LastHadAlpha && _textures.LastAlphaIsSoft;
             bool scissor = _textures.LastHadAlpha && !blend;
             bool glow = texName != null && _glowTexture != null && _glowTexture(texName);
-            mat = CylindricalBillboardMaterial(tex, axis, blend, scissor, glow, lit, fogged, clampUv);
+            var billboard = CylindricalBillboardMaterial(tex, axis, blend, scissor, glow, lit, fogged, clampUv);
+            // A billboard shader samples the same albedo_tex, so a flipbook drives it identically,
+            // and the fire cycles land HERE rather than on the bias path: fire1/fire2/flame01 are
+            // all Facade/CylindricalY meshes (EffectCycles).
+            RegisterCycle(_gamez.Materials[materialIndex], billboard);
+            mat = billboard;
         }
         else
         {
@@ -1429,7 +1442,11 @@ void fragment() {
             // branch here — their billboard treatment is per-MESH, see BuildMesh: the same
             // flare texture also skins polys inside regular geometry, which must stay put.)
             if (_billboardTexture != null && _billboardTexture(texName))
-                return BillboardMaterial(tex, blend, scissor, glow: false, lit: lit, fogged: fogged, clampUv: clampUv);
+            {
+                var billboard = BillboardMaterial(tex, blend, scissor, glow: false, lit: lit, fogged: fogged, clampUv: clampUv);
+                RegisterCycle(src, billboard); // same albedo_tex, see GetCylindricalMaterial
+                return billboard;
+            }
             var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp);
             _texturedMaterials.Add((textured, texName)); // for a live repaint, see Repaint()
             RegisterCycle(src, textured);

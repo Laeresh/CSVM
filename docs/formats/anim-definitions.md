@@ -609,38 +609,91 @@ starts it where the original's done state would refuse. 123 definitions name one
 a call and a stop (mostly `flame_light_seq`), but whether any of them reaches the stop *before*
 the call at run time is a control-flow question the static census cannot answer.
 
-## Fire: templates, flipbooks, and a trigger that lives in the exe
+## Fire: a texture cycle on a material, and behaviours nothing calls
 
-Decoded 2026-07-21 while chasing the user's "there is a fire flipbook at the refinery" report.
-Three separate layers, none of which is `OBJECT_ADD_CHILD`:
+Decoded 2026-07-21 while chasing the user's "there is a fire flipbook at the refinery" report;
+**the mechanism was re-decoded out of `crimson.exe` on 2026-08-13 and the earlier reading of it
+was wrong** (see "What changed" below). Three separate layers, none of which is
+`OBJECT_ADD_CHILD`:
 
 - **Templates.** `fire1`/`fire2` (C1 nodes 494/496) sit under the **parentless roots**
-  `fire1.flt`/`fire2.flt` (493/495) — real single-polygon `Facade`/`CylindricalY` meshes on
-  materials 88/133 (`fire101.tif`/`fire102.tif`). `WorldBuilder` builds only World children plus
-  partition-referenced subtrees, so they are never in the scene. The same is true of the other
-  effect roots (`large_firetrail`, `short_firetrail`, `lg_fireball`, `flame_ball_01`, … at
-  gamez indices ~74–150).
-- **The flipbook — `effects.zrd.json`.** `["fire1.flt", NAME ["fire1"], SPEED [10.0], LOOPING
-  ["ON"], MAPS [fire101.tif … fire112.tif]]` and `fire2` with 6 maps @ 5 fps. The maps resolve
-  **by filename against the texture archive**, not through the gamez texture table — every
-  chapter's `textures.json` registers only `fire101`/`fire102`, while `extracted/<ch>/texture/`
-  ships all twelve `fire1NN.png`. That asymmetry is the tell that EFFECTS is its own lookup path.
-- **Behaviours — `fire.zrd.json`.** Four `ON_CALL` definitions, **all anchored on `fire2.flt`**:
+  `fire1.flt`/`fire2.flt` (493/495), real single-polygon `Facade`/`CylindricalY` meshes on
+  materials 88/133 (`fire101.tif`/`fire102.tif`). They are not chapter geometry:
+  `support\load.gw` lines 357/360 load them from `common\effects\models\`, and every *other*
+  effect root (`large_firetrail`, `lg_fireball`, `flame_ball_01`, `fire_here`, `zep_skin_fire1`–`4`)
+  is loaded from `dummy.flt`, i.e. is an empty anchor that draws nothing by construction.
+  `WorldBuilder` builds only World children plus partition-referenced subtrees, so none of them
+  is ever in the scene.
+- **The flipbook, `effects.zrd.json`.** `["fire1.flt", NAME ["fire1"], SPEED [10.0], LOOPING
+  ["ON"], MAPS [fire101.tif … fire112.tif]]` and `fire2` with 6 maps @ 5 fps. Exactly two entries
+  exist install-wide. The maps resolve **by filename against the texture archive**, not through
+  the gamez texture table: every chapter's `textures.json` registers only `fire101`/`fire102`,
+  while `extracted/<ch>/texture/` ships all twelve `fire1NN.png`.
+- **Behaviours, `fire.zrd.json`.** Four `ON_CALL` definitions, **all anchored on `fire2.flt`**:
   `timed_big_fire`, `persistent_big_fire`, `persistent_small_fire`, `timed_small_fire`. They
   scale the template up and back down and flicker a `big_fire_light`.
 
-**EFFECTS binds to the NODE, not the texture or material** (settled 2026-07-21 by user
-observation, and it decides the design). `flame01` — the refinery gas flare, node 2998 under
-`vent1` → `refinery.flt` → `refinery` → `world1` — renders material 88, i.e. **frame 1 of the
-`fire1` flipbook**, as does the 3-polygon muzzle burst `mb_spinflame`. Were the effect bound to
-the texture, both would animate for free. A **sustained** muzzle flash never changes texture
-(always `fire101`, rotating and flashing but no frame advance), which rules that out — note a
-*brief* flash would have proved nothing, since 0.1 s at 10 fps is one frame. So `flame01` is a
-static base flame and the animated fire at the refinery is a **placed `fire2` instance**.
+### The flipbook is state on the MATERIAL, and the material is shared
 
-**Nothing in the data triggers them.** All four names appear in exactly one file — their own.
-No compiled archive, no other reader, and there is no index-based call form. The original
-invokes them engine-side, so reproducing a persistent fire requires choosing our own trigger.
+`zeff_ini.c`'s reader (`FUN_00523ac0`) resolves the entry's node name, walks down to the first
+mesh under it (`FUN_00525d40`), takes surface 0's material, and installs the frame list on the
+**material record** through `gmod_matl.c`'s `SetCycleTextureCount/Map/Loop/Speed`
+(`FUN_0055b0c0`/`0055b160`/`0055b280`/`0055b2c0`). The material's cycle block hangs off `+0x24`:
+
+| Offset | Field |
+|---|---|
+| `+0x00` | looping |
+| `+0x04` | frame stamp (the global frame counter this material last advanced on) |
+| `+0x08` | accumulated time |
+| `+0x0c` | speed, frames/sec (15.0 until `SPEED` overwrites it) |
+| `+0x10` | frame count |
+| `+0x14` | fill count, while the maps are being appended |
+| `+0x18` | the texture-handle array |
+
+`SetCycleTextureCount` sets `0x100` (textured) and `0x400` (cycled) in the material's own flag
+word. The polygon draw loop (`FUN_005524d0`) tests that word per polygon, calls the advance
+(`FUN_0055b1a0`) when `0x400` is set, and samples the material's live texture at `+0x10`. The
+advance is `mat[+0x10] = tex_array[ftol(acc) % count]; acc += dt * speed`, guarded by the frame
+stamp so it runs at most once per material per frame.
+
+**So a flipbook reaches every polygon that references the material, not the node that named it.**
+Materials are one record per texture (C1's 570-entry table has exactly one duplicate pair), and
+the gamez zbd is a memory snapshot (records carry live `cycle_ptr`/`tex_map_ptr`/`current_frame`,
+polygons carry `matl_refs_ptr`), so that sharing is the runtime state, not a file-format artifact.
+Material 88 is referenced by four models: `fire1` (the template), `flame01` (the refinery vent,
+node 2998 under `vent1` → `refinery.flt` → `refinery` → `world1`), `mb1` and `mb_spinflame`.
+Material 133 is used by `fire2` alone.
+
+`fire1.flt` is therefore a **proxy node**: it exists to name a material, exactly like the interp
+scripts' `watersetup`/`surfsetup` (`support\<ch>\tex_fx.gw`), which install the water, surf, wake,
+turbulence and walking-crowd cycles through the same four setters via the
+`CycleTextureSetOn/Speed/Looping/Map` commands in `zinterp.c` (`FUN_005b80a0`). The interp also
+has `CreateUniqueMaterials` for the case where sharing is *not* wanted; `support\cockpit.gw` is
+the only caller, de-sharing the gauge materials so each instrument indexes its own frame set
+(those run at `SPEED 0`, i.e. a frame set the game indexes explicitly rather than a flipbook).
+
+### What changed, 2026-08-13
+
+The 2026-07-21 reading said "EFFECTS binds to the NODE, not the texture or material", concluded
+that `flame01` is a static base flame, and that the animated fire the user saw was a placed
+`fire2` instance. The draw loop settles it the other way: **`flame01` plays `fire101` to `fire112`
+at 10 fps from load, with no trigger and no placement**, and `mb1`/`mb_spinflame` play the same
+cycle in lockstep because the frame stamp gives every polygon on material 88 the identical frame.
+
+The observation that drove the old reading, a sustained muzzle flash never leaving `fire101`,
+is contradicted by the code. It is not a strong observation either way: `mb_spinflame` is a small
+three-polygon sprite that is already spinning and flashing, and the twelve `fire1NN` frames are
+variations of one shape rather than a sequence with obvious motion. **The clean A/B is the
+refinery vent**, which is a still object where the frames should visibly roll.
+
+### The behaviours are still triggerless
+
+All four `fire.zrd.json` names appear in exactly one file, their own. No compiled archive, no
+other reader, and there is no index-based call form. `CATCHES_FIRE` is a real ZWEP weapon key
+(`zwep_ini.c` `FUN_005ad630`, flag bit 13) but **no weapon in this install sets it**, so it is not
+the missing trigger either. The original invokes them engine-side, so reproducing a *damaged
+object catching fire* still requires choosing our own trigger. The always-on refinery flame does
+not: it is the material cycle above, and CSVM installs it in `EffectCycles`.
 
 ## `LIGHT_STATE` / `LIGHT_ANIMATION` — the world's point lights
 

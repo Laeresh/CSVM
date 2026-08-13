@@ -1823,31 +1823,41 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   lens flare's anchor (`BL-165`, closed; `analysis/bl-165-lens-flare/FINDINGS.md`,
   `CSVM/src/Session/LensFlareRig.cs`).
 
-- `BL-032` `[Feature]` `[Blocked: user decision]` **Burning-object fires (`fire1`/`fire2` templates + `EFFECTS` flipbooks)** — **POSTPONED
-  2026-07-21 by user decision: minor detail, and the trigger is not findable.** Fully decoded,
-  so nothing needs re-deriving; what is missing is *when* to start a fire, not how. Blocked on
-  a decision, not on data. Decode in `docs/formats/anim-definitions.md` ("Fire: templates,
-  flipbooks, and a trigger that lives in the exe"):
-  - **Templates:** `fire1`/`fire2` are real single-poly `Facade`/`CylindricalY` meshes under the
-    **parentless roots** `fire1.flt`/`fire2.flt` (C1 nodes 493–496), which `WorldBuilder` never
-    builds (it builds only World children + partition-referenced subtrees). Same for the other
-    effect roots (`large_firetrail`, `short_firetrail`, `lg_fireball`, … ~gamez idx 74–150).
-  - **Flipbook:** `effects.zrd.json` gives `fire1` 12 maps @ 10 fps, `fire2` 6 @ 5 fps, resolved
-    **by filename from the texture archive** — `textures.json` registers only `fire101`/`fire102`
-    while `extracted/<ch>/texture/` ships all twelve `fire1NN.png`. `TextureCycler` already plays
-    frame lists, so this is small *once the templates are built*.
-  - **EFFECTS is node-keyed, not texture-keyed** (user-confirmed: a *sustained* muzzle flash never
-    changes texture, always `fire101`). So `flame01` — the refinery gas flare, sharing material 88
-    with the `fire1` template — is a **static base flame**, and the animated fire the user sees
-    there is a **placed `fire2` instance** (6 frames @ 5 fps, matching their independent read).
-  - **Why it is blocked:** the four `fire.zrd.json` behaviours (`timed_big_fire`,
+- `BL-032` `[Feature]` `[Blocked: user decision]` **Burning-object fires (the four `fire.zrd`
+  behaviours)** — **narrowed 2026-08-13.** The *ambient* half of this item is DONE: the always-on
+  refinery flame now runs, and the mechanism was re-decoded out of `crimson.exe`. What is still
+  blocked is only *when a damaged object catches fire*, which remains a decision, not a data gap.
+  Decode in `docs/formats/anim-definitions.md` ("Fire: a texture cycle on a material, and
+  behaviours nothing calls"):
+  - **What landed 2026-08-13.** An EFFECTS flipbook is state on the **material**, not on the node
+    that names it: `zeff_ini.c` (`FUN_00523ac0`) resolves the node, walks to its first mesh, and
+    installs the frame list on surface 0's material record; the polygon draw loop (`FUN_005524d0`)
+    tests the material's own cycled bit and advances it once per frame (`FUN_0055b1a0`). Materials
+    are one record per texture, so material 88 is shared by `fire1`, `flame01` (the refinery vent),
+    `mb1` and `mb_spinflame`, and all four animate together. `fire1.flt` is a proxy node exactly
+    like the interp's `watersetup`/`surfsetup`. `EffectCycles` applies both entries to their gamez
+    materials before the world build, and `SceneBuilder` registers them with the existing
+    `TextureCycler`; the billboard material paths had to register cycles too, since every fire mesh
+    is `Facade`/`CylindricalY`. C1 reports `fire1.flt→mat88 fire101.tif×12@10`. Material 133
+    (`fire2`) installs but never registers, because `fire2` is its only user and the world never
+    builds it, which is the decode's own prediction.
+  - **Correction to the 2026-07-21 reading.** "EFFECTS is node-keyed" was wrong, and with it the
+    conclusions that `flame01` is a static base flame and that the animated fire at the refinery is
+    a placed `fire2` instance. The muzzle-flash observation behind it (a sustained flash never
+    leaving `fire101`) is contradicted by the draw loop; `mb_spinflame` is a small spinning sprite
+    and the twelve `fire1NN` frames are variations of one shape, so it was never a strong read.
+    **A clean A/B is still owed:** watch the refinery vent in the original and confirm the frames
+    roll, since it is a still object where they should be plainly visible.
+  - **Why the rest is blocked:** the four `fire.zrd.json` behaviours (`timed_big_fire`,
     `persistent_big_fire`, `persistent_small_fire`, `timed_small_fire`, all anchored on
-    `fire2.flt`) are called by **nothing** — their names appear in exactly one file, their own,
+    `fire2.flt`) are called by **nothing**, their names appear in exactly one file, their own,
     and `CALL_ANIMATION` references animations by name string only (no index form exists anywhere
-    in this data). **User searched the disassembly 2026-07-21 and found no trigger either.** So
-    the original starts them engine-side by a condition we cannot recover; reproducing them means
-    inventing our own trigger, which is a fidelity guess rather than a data-driven port.
-  - **If resumed:** the placement half already works — `CALL_ANIMATION`'s target parameter landed
+    in this data). **User searched the disassembly 2026-07-21 and found no trigger**, and the
+    2026-08-13 sweep found none either: `CATCHES_FIRE` is a real ZWEP weapon key (`zwep_ini.c`,
+    flag bit 13) that **no weapon in this install sets**. So the original starts them engine-side
+    by a condition we cannot recover; reproducing them means inventing our own trigger, which is a
+    fidelity guess rather than a data-driven port.
+  - **If resumed:** the placement half already works, `CALL_ANIMATION`'s target parameter landed
     2026-07-21 and is the mechanism that puts a template at a site. Build the template pool first.
 
 - `BL-034` `[Bug]` **`SpinMotion` re-seeds its rest pose from an already-spun pose (found 2026-07-22, deliberately
