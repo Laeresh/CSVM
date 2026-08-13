@@ -1929,6 +1929,12 @@ public partial class GameSession : Node3D
             {
                 DebugShow = _spec.ShowColliders,
                 Planes = planeColliders,
+                // What each surface id resolves to on contact, asked of this session's own program
+                // rather than listed: the overlay colours by the id a touch will select, and which
+                // ids have a def of their own is whatever the bound program defines (BL-345).
+                ResolvedSurfaceIds = state.CrashProgram != null
+                    ? EffectCatalogue.ResolvedSurfaceIds(state.CrashProgram)
+                    : null,
             });
             Log.Info("world", $"collider overlay ready (C){(BuildsCollision ? "" : " — but this mode built NO collision; relaunch with --collision")}");
 

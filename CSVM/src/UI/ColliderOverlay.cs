@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Session;
 using CSVM.Utils;
 using Godot;
 
@@ -29,6 +30,19 @@ namespace CSVM.UI;
 /// and its wreck's on, so the drawing follows each shape's <c>Disabled</c> flag rather than being
 /// baked once, and the on/off tallies are reported as two numbers — never as a net, which for the
 /// C2 propane gate reads +8 and looks like death ADDING collision.</para>
+///
+/// <para><b>The colour is the RESOLVED surface id, not the stamp.</b> Each collider body carries
+/// the original's numeric surface id (<see cref="SceneBuilder.SurfaceIdMeta"/>), which is what the
+/// crash and <c>touchdown_*</c> cascades index, and this overlay draws the id a touch will
+/// actually select: an id whose def this install does not ship draws as <c>0/default</c>, because
+/// that is the def it plays (<see cref="ResolvedSurfaceIds"/>). Showing the raw stamp instead would
+/// hide the empty-slot arm, which is the mechanism, not a detail. ⚠ Two limits on reading it as
+/// source data: the id is stamped per collider BODY, not per polygon, so a mesh whose polygons
+/// disagree reports one id for all of them (up to 16.4 % of C1's dirt-tagged ground —
+/// <c>analysis/surface-classification/FINDINGS.md</c>), and the body NAME still comes from the
+/// texture-derived class, which disagrees with the id on real bodies — two of C1's
+/// <c>col_water</c> bodies draw <c>0/default</c>, and one C3 body that is not named
+/// <c>col_water</c> draws <c>1/water</c>. Both are what the engine will select.</para>
 /// </summary>
 public sealed partial class ColliderOverlay : Node
 {
@@ -56,18 +70,35 @@ public sealed partial class ColliderOverlay : Node
     // are never elided — a truncated name list must not read as a smaller change.
     private const int MaxNames = 12;
 
-    private static readonly Color WorldColor = new(0.35f, 0.65f, 1f);
-    private static readonly Color WaterColor = new(0.2f, 1f, 0.9f);
-    private static readonly Color BuildingColor = new(1f, 0.55f, 0.15f);
+    // The two owner classes neither surface tag decides, plus the fallback for a body that is
+    // neither. Negative, so a key can never collide with a registry surface id.
+    private const int ClutterKey = -1, PlaneKey = -2, OtherKey = -3;
+
     private static readonly Color ClutterColor = new(0.4f, 1f, 0.4f);
     private static readonly Color PlaneColor = new(1f, 0.9f, 0.25f);
     private static readonly Color OtherColor = new(1f, 0.3f, 1f);
 
-    // The legend's own class list — the full fixed palette, always shown regardless of what
-    // actually drew this session: a map legend describes the key, not just what is
-    // currently on screen. Colour still comes from ColorFor alone, so a palette change here
-    // cannot desync the legend from the wireframes.
-    private static readonly string[] LegendClasses = { "water", "buildings", "clutter", "plane", "world", "other" };
+    // One colour per SurfaceRegistry id, index == surface id. Eleven of the fourteen cannot be
+    // drawn in this install — an id whose def nothing ships resolves to slot 0 before it reaches
+    // here (ResolveId) — but the palette covers the registry rather than the shipped subset, so a
+    // chapter or install that does ship one gets a colour instead of a silent collapse.
+    private static readonly Color[] SurfaceColors =
+    {
+        new(0.35f, 0.65f, 1f),    // 0  default   (the world blue this overlay always drew terrain in)
+        new(0.2f, 1f, 0.9f),      // 1  water
+        new(0.15f, 0.45f, 0.75f), // 2  seafloor
+        new(0.9f, 0.85f, 0.4f),   // 3  quicksand
+        new(1f, 0.25f, 0.1f),     // 4  lava
+        new(1f, 0.5f, 0.5f),      // 5  fire
+        new(1f, 1f, 1f),          // 6  player
+        new(0.7f, 0f, 0f),        // 7  enemy
+        new(0.6f, 0.6f, 0.65f),   // 8  airstrip
+        new(0.55f, 0.3f, 1f),     // 9  opensesame
+        new(0.45f, 0f, 0.25f),    // 10 death
+        new(1f, 0.55f, 0.15f),    // 11 buildings
+        new(0.1f, 0.55f, 0.4f),   // 12 dzone
+        new(0.85f, 0.6f, 0.35f),  // 13 dirt
+    };
 
     private static StandardMaterial3D? _lineMaterial;
 
@@ -102,6 +133,13 @@ public sealed partial class ColliderOverlay : Node
     /// would apply its own local transform a second time.</summary>
     public IReadOnlyList<(Node3D Frame, PlaneCollider Collider)> Planes { get; init; } =
         Array.Empty<(Node3D, PlaneCollider)>();
+
+    /// <summary>What each surface id resolves to on contact against this session's program —
+    /// <see cref="EffectCatalogue.ResolvedSurfaceIds(Mech3.AnimProgram)"/>, index == id. Null only
+    /// when the session has no world program, which is also the only case in which nothing carries
+    /// a stamped id: <see cref="ResolveId"/> then shows the raw one rather than inventing a
+    /// resolution nothing measured.</summary>
+    public IReadOnlyList<int>? ResolvedSurfaceIds { get; init; }
 
     public override void _Process(double delta)
     {
@@ -176,53 +214,24 @@ public sealed partial class ColliderOverlay : Node
         RenderPriority = 15,
     };
 
-    /// <summary>Which owner class this shape belongs to — the overlay's colour key. Water and
-    /// building surfaces are already classified by SceneBuilder for the weapon-impact variants, so
-    /// the same stamp answers "what am I looking at" here.</summary>
-    private static string ClassOf(CollisionShape3D cs)
+    private static Color ColorFor(int key) => key switch
     {
-        var body = cs.GetParent();
-        if (body is StaticBody3D sb)
-        {
-            string name = sb.Name.ToString();
-            if (name.StartsWith("clutter_bld", StringComparison.Ordinal))
-            {
-                return "clutter";
-            }
-            if (sb.HasMeta(SceneBuilder.SurfaceMeta))
-            {
-                string surface = sb.GetMeta(SceneBuilder.SurfaceMeta).AsString();
-                return surface == "water" ? "water" : surface == "buildings" ? "buildings" : "world";
-            }
-            // SceneBuilder names its untagged/default body "col" and its tagged siblings
-            // "col_water"/"col_buildings" (CollidersForMesh) precisely so none of them collide
-            // as tree children and get renamed — a StartsWith stays a harmless safety net.
-            return name.StartsWith("col", StringComparison.Ordinal) ? "world" : "other";
-        }
-        return "other";
-    }
-
-    private static Color ColorFor(string cls) => cls switch
-    {
-        "water" => WaterColor,
-        "buildings" => BuildingColor,
-        "clutter" => ClutterColor,
-        "plane" => PlaneColor,
-        "world" => WorldColor,
-        _ => OtherColor,
+        ClutterKey => ClutterColor,
+        PlaneKey => PlaneColor,
+        OtherKey => OtherColor,
+        _ => key >= 0 && key < SurfaceColors.Length ? SurfaceColors[key] : OtherColor,
     };
 
-    // One coloured word per class, straight from ColorFor — the legend's only listing of class
-    // names, so a palette change (a new ColorFor case) is the only edit that can move it.
-    private static string BuildLegendText()
+    /// <summary>What a key reads as: <c>13/dirt</c> for a surface id, the bare word for the three
+    /// owner keys. Id and name together because fourteen ids do not have fourteen readable
+    /// colours — the number is the part that identifies the slot.</summary>
+    private static string LabelFor(int key) => key switch
     {
-        var parts = new List<string>(LegendClasses.Length);
-        foreach (var cls in LegendClasses)
-        {
-            parts.Add($"[color=#{ColorFor(cls).ToHtml(false)}]{cls}[/color]");
-        }
-        return string.Join("   ", parts);
-    }
+        ClutterKey => "clutter",
+        PlaneKey => "plane",
+        OtherKey => "other",
+        _ => $"{key}/{SurfaceRegistry.NameForId(key) ?? "?"}",
+    };
 
     // ---- shape emission ------------------------------------------------------------------------
 
@@ -405,10 +414,50 @@ public sealed partial class ColliderOverlay : Node
 
     // ---- building ------------------------------------------------------------------------------
 
+    /// <summary>The overlay's colour key for one shape: the surface id its body resolves to, or one
+    /// of the three owner keys above. The id decides what happens when you touch the geometry, so
+    /// it is what the wireframe is coloured by; the texture-derived class
+    /// (<see cref="SceneBuilder.SurfaceMeta"/>) decides nothing here and is not read.</summary>
+    private int KeyOf(CollisionShape3D cs)
+    {
+        if (cs.GetParent() is not StaticBody3D sb)
+        {
+            return OtherKey;
+        }
+        string name = sb.Name.ToString();
+        if (name.StartsWith("clutter_bld", StringComparison.Ordinal))
+        {
+            return ClutterKey;
+        }
+        if (sb.HasMeta(SceneBuilder.SurfaceIdMeta))
+        {
+            return ResolveId(sb.GetMeta(SceneBuilder.SurfaceIdMeta).AsInt32());
+        }
+        // SceneBuilder stamps the id on every collider body it builds, so this is only the safety
+        // net for its naming ("col" untagged, "col_water"/"col_buildings" tagged — CollidersForMesh
+        // names them apart so Godot cannot silently rename a sibling). An unstamped body answers
+        // default(0), which is what ProjectilePool.SurfaceIdOf answers an untagged collider
+        // (FUN_005acf60's null-material arm).
+        return name.StartsWith("col", StringComparison.Ordinal) ? SurfaceRegistry.Default : OtherKey;
+    }
+
+    /// <summary>The id a stamped body actually resolves to — its own when a touch cascade ships a
+    /// def for it, else slot 0, including for an id outside the registry (the cascade's own
+    /// out-of-range arm). Decision 4 of PLAN-surface-id-weapons: the overlay shows what will be
+    /// selected, never the raw stamp, or it hides the empty-slot arm it exists to expose.</summary>
+    private int ResolveId(int id)
+    {
+        if (ResolvedSurfaceIds is not { } resolved)
+        {
+            return id; // no world program: nothing in the tree carries a stamp to resolve
+        }
+        return id >= 0 && id < resolved.Count ? resolved[id] : SurfaceRegistry.Default;
+    }
+
     private void Build()
     {
         int lines = 0, boxed = 0, unknown = 0;
-        var perClass = new Dictionary<string, int>();
+        var perKey = new Dictionary<int, int>();
 
         void Walk(Node n)
         {
@@ -418,16 +467,18 @@ public sealed partial class ColliderOverlay : Node
             }
             if (n is CollisionShape3D { Shape: { } shape } cs && HasGeometry(shape))
             {
-                string cls = ClassOf(cs);
+                int key = KeyOf(cs);
                 var mesh = new ImmediateMesh();
-                bool asBox = EmitShape(mesh, shape, Transform3D.Identity, ColorFor(cls), ref lines);
+                bool asBox = EmitShape(mesh, shape, Transform3D.Identity, ColorFor(key), ref lines);
                 if (asBox)
                 {
                     boxed++;
                 }
-                var draw = MakeDraw(mesh, cs, $"col_wire_{cls}");
+                // '/' is not legal in a Godot node name (it would be silently substituted), so the
+                // id/name label is spelled with an underscore here and only here.
+                var draw = MakeDraw(mesh, cs, $"col_wire_{LabelFor(key).Replace('/', '_')}");
                 _entries.Add(new Entry { Shape = cs, Draw = draw, WasEnabled = !cs.Disabled });
-                perClass[cls] = perClass.GetValueOrDefault(cls) + 1;
+                perKey[key] = perKey.GetValueOrDefault(key) + 1;
             }
             else if (n is StaticBody3D body && body.GetChildCount() == 0)
             {
@@ -435,7 +486,7 @@ public sealed partial class ColliderOverlay : Node
                 int drawn = EmitBodyShapes(body, ref lines, ref boxed);
                 if (drawn > 0)
                 {
-                    perClass["clutter"] = perClass.GetValueOrDefault("clutter") + drawn;
+                    perKey[ClutterKey] = perKey.GetValueOrDefault(ClutterKey) + drawn;
                 }
                 else if (PhysicsServer3D.BodyGetShapeCount(body.GetRid()) > 0)
                 {
@@ -464,15 +515,25 @@ public sealed partial class ColliderOverlay : Node
             // (frame), which is the plane model's parent and the frame Collider.Parts.Local is
             // already expressed in — parenting to the model itself would double its own transform.
             _unswitched.Add(MakeDraw(mesh, frame, "col_wire_plane"));
-            perClass["plane"] = perClass.GetValueOrDefault("plane") + collider.Parts.Count;
+            perKey[PlaneKey] = perKey.GetValueOrDefault(PlaneKey) + collider.Parts.Count;
         }
 
-        var parts = new List<string>();
-        foreach (var (cls, count) in perClass)
+        // Surface ids first in slot order, then the three owner keys: a numeric sort keeps
+        // 0/default … 13/dirt in registry order, which an ordinal sort of the labels would not.
+        var keys = new List<int>(perKey.Keys);
+        keys.Sort((a, b) =>
         {
-            parts.Add($"{cls} {count}");
+            if (a >= 0 != b >= 0)
+            {
+                return a >= 0 ? -1 : 1;
+            }
+            return a >= 0 ? a.CompareTo(b) : b.CompareTo(a); // owner keys in their declared order
+        });
+        var parts = new List<string>(keys.Count);
+        foreach (int key in keys)
+        {
+            parts.Add($"{LabelFor(key)} {perKey[key]}");
         }
-        parts.Sort(StringComparer.Ordinal);
         _summary = $"colliders: {string.Join(" · ", parts)} · {lines} lines"
                    + (boxed > 0 ? $" · {boxed} drawn as bounding boxes (over {MaxShapeTris} tris or past the line budget)" : "");
         if (unknown > 0)
@@ -480,6 +541,8 @@ public sealed partial class ColliderOverlay : Node
             Log.Warn("world", $"collider overlay: {unknown} body(ies) carry server-side shapes this overlay cannot read back — they are NOT drawn");
         }
         Log.Info("world", $"collider overlay built: {_summary}");
+        // Said every build, not just in the docs: the two ways this picture is not the source data.
+        Log.Info("world", $"collider overlay: colours are the surface id a touch RESOLVES to — an id whose def this install does not ship draws as 0/default — and the id is stamped per collider BODY, not per polygon. It shows what the engine will select, not the material data.");
     }
 
     /// <summary>Releases this pass's drawings before the next show rebuilds from the live tree.
@@ -633,6 +696,29 @@ public sealed partial class ColliderOverlay : Node
     }
 
     // ---- notice --------------------------------------------------------------------------------
+
+    // One coloured label per key, straight from ColorFor — the legend's only listing of them, so a
+    // palette change is the only edit that can move it. The surface ids listed are the ones that
+    // resolve to themselves against this session's program: every other id draws as 0/default, so
+    // listing it would name a colour the overlay cannot produce. That is still the whole key rather
+    // than "what happens to be on screen" — an id is in it because the data can select it here, not
+    // because a body drew it.
+    private string BuildLegendText()
+    {
+        var parts = new List<string>();
+        for (int id = 0; id < SurfaceRegistry.Names.Count; id++)
+        {
+            if (ResolveId(id) == id)
+            {
+                parts.Add($"[color=#{ColorFor(id).ToHtml(false)}]{LabelFor(id)}[/color]");
+            }
+        }
+        foreach (int key in new[] { ClutterKey, PlaneKey, OtherKey })
+        {
+            parts.Add($"[color=#{ColorFor(key).ToHtml(false)}]{LabelFor(key)}[/color]");
+        }
+        return string.Join("   ", parts);
+    }
 
     // showLegend is false for the "no collision built" notice (the trap: a legend for
     // wireframes that were never drawn is the same false "nothing is collidable" read the overlay

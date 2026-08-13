@@ -27,7 +27,7 @@ Flags are specified in [`cli.md`](cli.md).
 | `Tab` | | cycle stunt target |
 | `numpad 1–9` (not `5`) | | hold a fixed camera view around the plane (P1's keyboard) — `--view=` |
 | `numpad 0` | | hold the look-behind view: ahead of the nose looking back, at the authored `back_dist` range — `--view=back` |
-| `C` | | show the built colliders (see `--collision`) — `--debug-colliders` |
+| `C` | | show the built colliders, coloured by the surface id they resolve to (see `--collision`) — `--debug-colliders` |
 | `X` | | colour world objects by class (destructible/facade/clutter/scenery) — `--debug-classoverlay` |
 
 ## Any mode
@@ -67,6 +67,6 @@ Flags are specified in [`cli.md`](cli.md).
 | `Home` / `End` | jump to the ends of that ladder | |
 | `N` | node lab | `--debug-nodelab=` |
 | `M` | mesh lab, on that selection alone | `--debug-mesh=` |
-| `C` | show the built colliders (see `--collision`) — also bound in `--fly`/`--stunt` | `--debug-colliders` |
+| `C` | show the built colliders, coloured by the surface id they resolve to (see `--collision`) — also bound in `--fly`/`--stunt` | `--debug-colliders` |
 | `X` | colour world objects by class (destructible/facade/clutter/scenery) — also bound in `--fly`/`--stunt` | `--debug-classoverlay` |
 | `F5` | damage lab on the selected destructible | `--debug-damage=` |

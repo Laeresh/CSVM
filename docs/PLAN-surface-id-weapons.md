@@ -142,7 +142,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — the overlay
 
-21. ☐ Colour the collision overlay by resolved surface id (`BL-345`)
+21. ☑ Colour the collision overlay by resolved surface id (`BL-345`)
 
 ## Dependency and parallelism notes
 
@@ -365,7 +365,7 @@ bounce branch either, which is the same body-granularity effect `C21` exists to 
 
 # Wave C — the overlay
 
-## C21 ☐ Colour the collision overlay by resolved surface id (`BL-345`)
+## C21 ☑ Colour the collision overlay by resolved surface id (`BL-345`)
 
 **Goal.** `--collision=show` (key C) colours each collider by the surface id that decides what
 happens when you touch it, with a legend naming id and registry name together (`13/dirt`), showing
@@ -392,10 +392,65 @@ tag decides them.
 **Model recommendation.** medium. One file, a key swap and a legend format, but the resolve-not-raw
 rule is the point of the item and getting it backwards silently re-creates the bug.
 
-**Verify.** `--collision=show` on C4, where the doubled water sheet gives a body named `col_water`
-carrying soil `0`: it must draw as `default`'s colour, not water's. Plus a chapter with mixed
-`dirt`/`default` terrain, where the two must now separate.
-<TODO: name the chapter with the clearest dirt/default split; `PLAN-crash-surface-id` A1's area measurement has the per-chapter numbers to pick from.>
+**Verify.** `--collision=show` on **C4**, which serves both halves: it has the clearest dirt/default
+split of the eight chapters after C2 (9.57 % `dirt` by area, 133 dirt-tagged collider bodies of
+1,853 by the weapon lab's own census), and it is the chapter the doubled water sheet lives in. Plus
+the 8-chapter `--freecam` regression from the ground rules.
+
+**Done, 2026-08-13.** Two instruments, an A/B against a throwaway `git worktree` at `6adb6ce`
+(never `git stash` — the worktree hazard above).
+
+*Pixels* — `--freecam --chapter=C4 --collision=show --no-fog --det --mute
+--pos=-3688,800,-2350 --direction=0,-0.62,-0.78 --screenshot=… --frames=120`, windowed
+(`docs/verification.md` SHOT-9). Before: every terrain tile one blue `world`, legend
+`water buildings clutter plane world other`. After: the dirt ridge separates in tan while the
+tiles beside it stay blue, legend `0/default 1/water 13/dirt clutter plane other`. Same pose, same
+113,739 lines, so the geometry is identical and only the key moved.
+
+*Census* — the same `--collision=show` run headless per chapter, before vs after (`lines` identical
+in all eight, i.e. one population re-keyed):
+
+| chapter | before | after |
+|---|---|---|
+| C1 | buildings 72 · water 50 · world 1869 | 0/default 1843 · 1/water 48 · 13/dirt 100 |
+| C1B | buildings 10 · water 169 · world 889 | 0/default 902 · 1/water 166 |
+| C1C | water 202 · world 1180 | 0/default 1180 · 1/water 202 |
+| C2 | buildings 80 · water 100 · world 1083 · clutter 14582 | 0/default 1082 · 1/water 100 · 13/dirt 81 · clutter 14582 |
+| C2B | water 202 · world 813 | 0/default 813 · 1/water 202 |
+| C3 | buildings 64 · water 398 · world 1319 | 0/default 1337 · 1/water 399 · 13/dirt 45 |
+| C4 | buildings 91 · water 12 · world 1789 | 0/default 1708 · 1/water 12 · 13/dirt 172 |
+| C5 | buildings 679 · water 175 · world 2745 · clutter 71993 | 0/default 3424 · 1/water 175 · clutter 71993 |
+
+Every chapter's `buildings` count goes to `0/default`, which is the empty-slot arm made visible:
+`buildings`(11) carries measurable area in one chapter only, so those bodies are named by their
+texture and behave as slot 0. Zero engine errors in all sixteen runs.
+
+**Two corrections to this item's own evidence, both measured.** (1) **C4's `col_water`-carrying-
+soil-0 case does not exist.** The doubled sheet is `g1708` (mesh#845, 2 polys, `wtr00000.tif`,
+soil `Water`) and `g2109` (mesh#860, 22 polys, **`shore1.tif`**, soil `Default`) — the second is
+not water-textured, so it is a plain `col` body, and C4's `col_water` count is 12 before and 12
+after. The `PLAN-crash-surface-id` B11 note this item cited only said the two meshes share a
+footprint. (2) **The name/id disagreement is real, just elsewhere**, and the census above finds it
+both ways: C1 50→48 and C1B 169→166 `col_water` bodies drop off the water colour, and C3 gains one
+(398→399) — a bucket whose texture is not water-classified but whose material soil is `Water`. The
+per-bucket source is in the census run this session (`soil_bucket_strand.py`'s bucketing, re-run
+for the name-vs-id question): C1 mesh#1260 (25 polys) and mesh#1313 (18 polys) are `water`-class
+buckets carrying soil `Default`; C3 mesh#765 (2 polys, untagged texture, soil `Water`) is the
+inverse. A third C1 candidate, the 1-poly mesh#33 bucket every chapter carries, does not reach a
+built collider — inferred from the counts moving by 2 rather than 3, not measured directly.
+
+**A number that moves for a legitimate reason.** The overlay's `13/dirt` count is not the lab's
+133: it walks the tree *after* `MapEdgeExtender` has built its 40 border cells, whose mirrored
+tiles are real rebuilt subtrees and carry the ids of the tiles they copy. Same C4 session, both
+instruments: lab 133 of 1,853 bodies (scanned at build), overlay 172 of 1,892 shapes; with
+`--map-edge-block=1` the overlay reads 173 and the lab still 133, and the freecam pose above reads
+182 because the extension's rolling window follows the camera. The base world's dirt count is the
+fixed one.
+
+Regression: `RunTests.ps1` green with `CSVM_DATA_ROOT` set (`docs/verification.md` LOG-17) — units,
+37 in-engine suites, engine errors clean, 13 goldens hash-identical with `manifest.json` unmodified
+in the working tree (GOLD-9). No golden shoots the overlay, so an unmoved hash is the expected
+result, not the evidence; the before/after captures above are.
 
 **⚠ Traps.** The overlay reads the tag off the collider **body**, and A2 stamped the id at body
 granularity, not per polygon: a mesh whose polygons carry different ids reports one id for the whole

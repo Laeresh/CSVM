@@ -140,7 +140,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session.
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
 - `src/UI/MeshLab.cs` — the geometry/shading lab (M): normal lines, smoothing seams, cull/normal overrides; on the parked plane, or on the selection.
-- `src/UI/ColliderOverlay.cs` — the collider wireframes (C): every built collision shape drawn, coloured by owner class; needs `--collision` outside flight.
+- `src/UI/ColliderOverlay.cs` — the collider wireframes (C): every built collision shape drawn, coloured by the surface id it resolves to; needs `--collision` outside flight.
 - `src/UI/ClassOverlay.cs` — the colour-by-class overlay (X): every drawn mesh tinted destructible/facade/clutter/scenery, a findable-targets view.
 - `src/UI/AiNetsOverlay.cs` — the AI patrol-net overlay (F13, `--debug-ainets`): the chapter's nets as coloured graphs with labels + census log.
 - `src/UI/TileGridOverlay.cs` — the map-edge tile-grid overlay (F14, `--debug-tilegrid`): every ground tile tinted 20 % by repetition band, so one colour band is one block; F15 steps the block depth, F16 swaps repeat/mirror. The instrument that settled the map-edge fold.
@@ -3332,11 +3332,26 @@ than under it (the anim lab's `--plane=` prop), each also capping its own ancest
 
 ## src/UI/ColliderOverlay.cs
 The collision wireframe overlay (key C, `--collision=show`/`--debug-colliders` script it) in
-`--freecam`/`--anim-lab`/`--fly`: one `ImmediateMesh` per collider host, colour-coded by owner class
-(world / water / buildings / clutter / plane / other), rebuilt from the live tree on every show. A colour→class legend (`BuildLegendText`, sourced from `ColorFor` alone so
+`--freecam`/`--anim-lab`/`--fly`: one `ImmediateMesh` per collider host, colour-coded by the
+**surface id** its body resolves to (`0/default`, `1/water`, `13/dirt` …) plus the three owner keys
+neither surface tag decides (clutter / plane / other), rebuilt from the live tree on every show. A
+colour→key legend (`BuildLegendText`, sourced from `ColorFor` alone so
 a palette change can't desync it) sits under the summary whenever wireframes are actually shown —
 never for the "no collision built" notice, an empty-legend echo of WORLD-9. Measured C2: 1,848
 node-backed shapes + 10k–14k clutter placements.
+⚠ **The id drawn is the RESOLVED one, not the stamp** (`BL-345`). `ResolvedSurfaceIds`, from
+  `EffectCatalogue.ResolvedSurfaceIds` against the session's own program, maps each id to itself
+  only where a touch cascade ships a def for it — so this install draws exactly `0`/`1`/`13` and
+  every other id draws as `0/default`, which is what a touch there plays (`SurfaceDefTable`'s
+  empty-slot arm). Drawing the raw stamp would hide that arm, which is the mechanism. The legend
+  lists the resolvable ids for the same reason: an id it omits is one the overlay cannot produce.
+⚠ **It is not a picture of the material data, and two things make that so.** The id is stamped per
+  collider BODY, not per polygon (up to 16.4 % of C1's dirt-tagged ground is stranded —
+  `analysis/surface-classification/FINDINGS.md`), and the body NAME still comes from the
+  texture-derived class, which disagrees with the id on real bodies: C1's `col_water` bodies drop
+  50→48 and C1B's 169→166 under the id key, while C3 gains one (398→399, a `shore`-textured bucket
+  carrying soil `Water`). Both are what the engine will select — `SceneBuilder.SurfaceMeta` decides
+  nothing here and is no longer read.
 ⚠ **Its first job is the notice.** Pressing C in a mode that built no collision prints the reason
   and draws NOTHING — an empty overlay would read as "nothing here is solid" (WORLD-9). The
   tallies that follow are logged as **separate on and off counts plus the names that flipped**,
@@ -3379,9 +3394,10 @@ node's `csky_tint` first.
   z-fights its own geometry), and it lacks Clutter's billboard spin (ghost tree cards at a fixed
   heading). Tinting inside the real shader — `SceneBuilder.TintLine`, last write to `ALBEDO`, after
   fog — has none of those by construction, and is the only form that can blend WITH the texture.
-⚠ **Deliberately NOT keyed on `SceneBuilder.SurfaceMeta`** — that tag answers "what does a bullet do
-  here" (water/buildings/default, for impact-effect selection), not "what is this object"; two
-  unrelated objects can share a surface tag.
+⚠ **Deliberately keyed on NEITHER surface tag** — not the texture-derived `SceneBuilder.SurfaceMeta`
+  (which since `BL-344` decides nothing but which collider a mesh's polygons join) and not
+  `SurfaceIdMeta`, which answers "what happens when you touch this" and is the collider overlay's
+  key, not "what is this object"; two unrelated objects can share either tag.
 ⚠ **A door that only LOOKS breakable reads as scenery, and that is the correct finding, not a bug**
   — `Resolve` requires a registered `HEALTH > 0` anchor, and the C2 SeaHangar's
   `sgh_door1`/`sgh_door2` have none: they are driven by `sghangar-opensgdoors`, a HEALTH-0
@@ -4150,6 +4166,11 @@ surface-indexed def vectors: `CrashDefTable(program)` for the per-plane crash ri
 `TouchdownDefTable(program)` for the level's graze reaction (`SurfaceDefTable`, null last resort).
 `WorldEffectAnimNames(program)` is `EffectAnimNames` plus that vector's playable slots, so the bind,
 the stage closure and the `--effects-test`/`effects-census` sweeps all see one set.
+`ResolvedSurfaceIds(program|defExists)` answers what each registry id RESOLVES to on contact —
+itself where either touch vector has a def of its own for it, else slot 0 — by asking the two
+`SurfaceDefTable`s rather than listing ids; the collider overlay's colour key is that map
+(`BL-345`). The weapon IMPACT table is deliberately not part of it: an unauthored row plays
+nothing rather than resolving row 0, so it contributes no resolved id.
 `GroundSplashAnimNames` (`flydirt_plane`) names the crash's ground-splash def for
 `AnimRuntime.InheritedVelocityExempt` (`BL-274`) — its `ObjectMotion` is authored the same
 vertical-only shape as a launched wreck piece, so only the name can tell "stay planted" from

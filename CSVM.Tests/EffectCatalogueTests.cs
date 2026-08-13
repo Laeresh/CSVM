@@ -92,6 +92,56 @@ public class EffectCatalogueTests
         Assert.Empty(table.PlayableDefs);
     }
 
+    /// <summary>What the collider overlay colours by (<c>BL-345</c>): against the three defs per
+    /// family this install ships, only <c>default</c>(0), <c>water</c>(1) and <c>dirt</c>(13)
+    /// resolve to themselves — every other id resolves slot 0, because that is the def a touch
+    /// there plays. Pinned as a list rather than as "the ids we ship", since which ids resolve is
+    /// whatever the bound program defines.</summary>
+    [Fact]
+    public void OnlyTheIdsWithADefOfTheirOwnResolveToThemselves()
+    {
+        var shipped = new HashSet<string>(
+            new[]
+            {
+                "player_crash_default", "player_crash_dirt", "player_crash_water",
+                "touchdown_default", "touchdown_dirt", "touchdown_water",
+            }, StringComparer.Ordinal);
+
+        var resolved = EffectCatalogue.ResolvedSurfaceIds(shipped.Contains);
+
+        Assert.Equal(SurfaceRegistry.Names.Count, resolved.Count);
+        foreach (int id in Enumerable.Range(0, resolved.Count))
+            Assert.Equal(id is 0 or 1 or 13 ? id : SurfaceRegistry.Default, resolved[id]);
+    }
+
+    /// <summary>Either family is enough: a program shipping a crash def for an id but no graze def
+    /// still makes that id behave as itself on contact, so the overlay must draw it as itself. The
+    /// union is why both vectors are asked rather than one standing in for both.</summary>
+    [Fact]
+    public void OneFamilysDefIsEnoughToResolveAnIdToItself()
+    {
+        var crashOnly = EffectCatalogue.ResolvedSurfaceIds(
+            name => name is "player_crash_default" or "player_crash_dirt");
+        var grazeOnly = EffectCatalogue.ResolvedSurfaceIds(
+            name => name is "touchdown_default" or "touchdown_dirt");
+
+        Assert.Equal(13, crashOnly[13]);
+        Assert.Equal(13, grazeOnly[13]);
+        Assert.Equal(SurfaceRegistry.Default, crashOnly[1]);
+        Assert.Equal(SurfaceRegistry.Default, grazeOnly[1]);
+    }
+
+    /// <summary>A program defining nothing resolves every id to slot 0, including slot 0 itself —
+    /// the overlay then draws one colour, which is honest: nothing distinguishes those surfaces on
+    /// contact. The able-to-fail control for the two cases above.</summary>
+    [Fact]
+    public void AProgramWithNoDefsResolvesEveryIdToSlotZero()
+    {
+        var resolved = EffectCatalogue.ResolvedSurfaceIds(_ => false);
+
+        Assert.All(resolved, id => Assert.Equal(SurfaceRegistry.Default, id));
+    }
+
     /// <summary>The per-part damage-effect shims (`DamageVisuals.OnPartDamage`'s own filter,
     /// <c>anim.EndsWith("_damage_effects")</c>): across every player airframe's
     /// <c>destroyable_parts</c>, every <c>injure_anims</c> entry that filter would fire on must be

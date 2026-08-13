@@ -2786,33 +2786,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scripted `--det`/`--hold` runs; the polling *sites* are the seam, `FireControl` itself never
   changes (it consumes `FireInputs` booleans). Update `docs/controls.md` when this lands.
 
-- `BL-345` `[Bug]` **The collision overlay colours colliders by the wrong tag.** `--collision=show`
-  keys its colours off `SceneBuilder.SurfaceMeta` (`ColliderOverlay.ClassOf`), the texture-derived
-  `water`/`buildings`/`default` class. Since `PLAN-crash-surface-id` A2 every collider also carries
-  `SceneBuilder.SurfaceIdMeta`, the original's numeric surface id, and that id is what actually
-  decides behaviour: B11 and B12 put both the crash def and the `touchdown_*` graze def on it. So
-  the overlay now shows a name space that no longer matches what happens when you touch the
-  geometry. Concretely: `dirt`(13) and `default`(0) terrain are one colour, though one raises dust
-  and the other sparks; `airstrip`(8)/`buildings`(11)/`dzone`(12) fall back to slot 0 in the engine
-  and the overlay cannot show that; and a body named `col_water` can carry soil `0` (C4's doubled
-  water sheet, `g1708` vs `g2109`, recorded in B11's landing commit), which is exactly the case
-  someone would open the overlay to diagnose.
-  *Fix shape:* colour by `SurfaceIdMeta` through `SurfaceRegistry.NameForId`, with the ids that
-  resolve no def of their own drawn as what they actually resolve (slot 0) rather than as
-  themselves — the empty-slot arm is the mechanism, so an overlay that hides it re-creates the
-  confusion this plan removed. A legend naming id and name (`13/dirt`) beats a fixed palette,
-  since fourteen ids do not have fourteen readable colours.
-  ⚠ **Do not "fix" this by deleting the class read.** `SurfaceMeta` is still the correct key for the
-  weapon-IMPACT question, and `ClassOverlay` (key X) deliberately uses neither tag — read both
-  overlays' doc comments before touching either. The two name spaces coexisting is the settled
-  design (`PLAN-crash-surface-id` Decision 3), not a leftover.
-  ⚠ The overlay reads the tag off the collider BODY, and A2 stamped the id at body granularity, not
-  per polygon: a mesh whose polygons carry different ids reports one id for the whole body
-  (`analysis/surface-classification/FINDINGS.md`, the A2 stranding table — up to 16.4 % of C1's
-  dirt-tagged ground). The overlay will therefore show what the engine will actually select, which is
-  the right thing, but it is not a picture of the source data. Say so wherever the legend is
-  documented.
-
 - `BL-347` `[Research]` `[Blocked: M4]` **The `ai_crash_<name>` family — a third registry-indexed
   choreography vector, unmodelled.** Found 2026-08-12 while decoding the weapon IMPACT lookup
   (`FUN_00478a00`), and deliberately left out of `PLAN-surface-id-weapons`, which modelled the

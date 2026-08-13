@@ -179,7 +179,7 @@ public static class EffectCatalogue
     /// def this install does not ship is empty and falls back to slot 0, which is the original's
     /// own mechanism rather than a list of exceptions (see <see cref="SurfaceDefTable"/>).</summary>
     public static SurfaceDefTable CrashDefTable(AnimProgram program) =>
-        new(CrashDefPrefix, CrashAnimRoot, name => program.ByAnimName(name).Count > 0);
+        new(CrashDefPrefix, CrashAnimRoot, DefExistsIn(program));
 
     /// <summary>Everything the per-player crash rig binds — every playable crash-vector slot (the
     /// struck surface is only known at impact, so the whole vector is bound), the four damage
@@ -202,7 +202,43 @@ public static class EffectCatalogue
     /// <b>No last resort:</b> where the crash cascade ends at a bare anim name, this one ends at
     /// "play nothing". <see cref="SurfaceDefTable"/>'s remarks carry the address.</summary>
     public static SurfaceDefTable TouchdownDefTable(AnimProgram program) =>
-        new(TouchdownDefPrefix, lastResort: null, name => program.ByAnimName(name).Count > 0);
+        new(TouchdownDefPrefix, lastResort: null, DefExistsIn(program));
+
+    /// <summary>The surface id a struck body of each registry id actually <b>resolves</b> to on
+    /// contact: itself where a touch cascade ships a def of its own for it, else slot 0, which is
+    /// the empty-slot arm <see cref="SurfaceDefTable"/> implements (<c>FUN_0048b920</c>
+    /// <c>0x0048bac5</c>–<c>0x0048bb00</c>). Index == surface id, length
+    /// <see cref="SurfaceRegistry.Names"/>; an id outside that range is the cascade's own
+    /// out-of-range arm and resolves slot 0 too, which is the caller's bounds test to make.
+    ///
+    /// <para>Both touch families are asked, because either one shipping a def for an id is enough
+    /// to make that id behave as itself; this install ships <c>default</c>/<c>dirt</c>/<c>water</c>
+    /// in each, so they agree. The weapon IMPACT table is deliberately NOT asked: an id it authors
+    /// no row for plays nothing rather than falling back to row 0 (<c>FUN_005ad100</c> gates on the
+    /// row's own variant count), so it has no resolved id to contribute.</para>
+    ///
+    /// <para>Written for the collider overlay's colour key (<c>BL-345</c>), which draws what a
+    /// touch will select rather than the raw stamp.</para></summary>
+    public static IReadOnlyList<int> ResolvedSurfaceIds(Func<string, bool> defExists)
+    {
+        var crash = new SurfaceDefTable(CrashDefPrefix, CrashAnimRoot, defExists);
+        var touchdown = new SurfaceDefTable(TouchdownDefPrefix, lastResort: null, defExists);
+        var resolved = new int[SurfaceRegistry.Names.Count];
+        for (int id = 0; id < resolved.Length; id++)
+        {
+            // The cascade itself answers "is this slot occupied": the registry names are pairwise
+            // distinct, so it returns prefix + this id's own name only when the slot is filled.
+            string name = SurfaceRegistry.Names[id];
+            bool ownDef = crash.DefForSurfaceId(id) == CrashDefPrefix + name
+                          || touchdown.DefForSurfaceId(id) == TouchdownDefPrefix + name;
+            resolved[id] = ownDef ? id : SurfaceRegistry.Default;
+        }
+        return resolved;
+    }
+
+    /// <inheritdoc cref="ResolvedSurfaceIds(Func{string, bool})"/>
+    public static IReadOnlyList<int> ResolvedSurfaceIds(AnimProgram program) =>
+        ResolvedSurfaceIds(DefExistsIn(program));
 
     /// <summary>Every effect animation the world-effects runtime binds: the fixed
     /// <see cref="EffectAnimNames"/> plus whichever <see cref="TouchdownDefTable"/> slots this
@@ -281,6 +317,12 @@ public static class EffectCatalogue
             throw new EffectAnchorException(missing);
         return staged;
     }
+
+    // "This program defines that anim" — the one existence test all three surface vectors are built
+    // on, so a def the runtime could not play can never count as a filled slot in one of them and
+    // not the others.
+    private static Func<string, bool> DefExistsIn(AnimProgram program) =>
+        name => program.ByAnimName(name).Count > 0;
 
     private static bool SuppliedElsewhere(string anchor)
     {
