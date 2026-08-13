@@ -221,7 +221,7 @@ tumble that is about to change.
 10. ☑ Delete `DebrisTune` entirely
 11. ☑ Pin a golden that shows debris coming to rest
 12. ☑ Land `docs/org/objectMotion.md`, and correct the records that carried the disproven readings
-13. ☐ Item bookkeeping: `BL-319`, `BL-245`, `PT-46` (d), and a fresh ID for the deleted tune
+13. ☑ Item bookkeeping: `BL-319`, `BL-245`, `PT-46` (d), and a fresh ID for the deleted tune
 
 ## Dependency and parallelism notes
 
@@ -1127,7 +1127,20 @@ something that was not there. ⚠ Do not delete the wrong readings outright; the
 table exists so nobody re-derives them. ⚠ `docs/HISTORY.md` is frozen; the narrative record goes in
 commit messages.
 
-## D13 ☐ Item bookkeeping: `BL-319`, `BL-245`, `PT-46` (d), and a fresh ID for the deleted tune
+## D13 ☑ Item bookkeeping: `BL-319`, `BL-245`, `PT-46` (d), and a fresh ID for the deleted tune
+
+**Landed 2026-08-13.** `BL-319` deleted as answered — `RUN_TIME` is a ceiling everywhere, `m_build03`'s
+cut arc traced to the linear-elevation decode (B4) and `genx12`'s underground landing to the missing
+default contact tier (C6), both settled. `BL-245` deleted per Decision 7 — `do_intersections: false`
+selects the cheap column tier rather than opting a body out, so its 379 falls simply land under C6/C7
+with no divergence decision left to make. `PT-46` (d) re-opened in `playtest.md` against a C1
+Devastator destruction sortie: the observation (pieces pass through terrain or vanish) stands, and the
+new check asks the same question against the corrected mechanism (default column test,
+`NO_ALTITUDE`'s opt-out, `DO_INTERSECTIONS`'s sweep) instead of the disproven "no test at all" reading.
+`./New-ItemId.ps1 -Kind BL` minted `BL-346` for the at-controls debris-arc judgement left behind by
+D10's deletion of `DebrisTune.LaunchScale`; the two other backlog entries that still cited the deleted
+0.65 constant (`BL-060`, `BL-122`) were rewritten to point at the executable decode and at `BL-346`
+instead.
 
 **Goal.** `backlog.md` and `playtest.md` reflect what this plan settled, with no stale caveat left
 restating a disproven reading.
