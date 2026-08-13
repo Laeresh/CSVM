@@ -88,36 +88,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     unflagged pass-through (faithful — `do_intersections: false` bodies keep sinking through terrain
     the original also sinks them through) from a flagged body that should now land.
 
-- `BL-349` `[Bug]` `[Owed-capture: CAP-36]` **C1 instant action draws both pose variants of every
-    dockside crowd figure at once, so a man stands and runs on the same spot.** User-observed at the
-    controls 2026-08-13 in C1 IA1. Under `mpoff` there are **28 crowd sites**, each a container node
-    holding exactly **two** variants, and the gamez marks both `active: true` with identical flags:
-    `bmanwalk1`–`4` hold `bman_walk` (model 221) + `bman_run` (222), and `bmanrun1`–`24` hold
-    `bman_stand` (223) + `bman_run` (224). The user's "running and standing on one point" is the 24
-    `bmanrun*` sites; the other 4 overlap walk with run.
-    **Nothing in the gamez picks a variant.** The pick is each site's own compiled anim def, in its
-    `RESET_STATE`: `ObjectActiveState bman_stand = true` / `bman_run = false` plus an
-    `ObjectTranslateState` placing the container, after which the def's sequence flips to running and
-    walks the figure down an `ObjectMotionFromTo` path.
-    **Those defs exist only in M02** (`extracted/C1/M02/mis_anim/bmanrun1-br1.json` and 27 siblings).
-    A search of the whole C1 extraction finds these names nowhere else: not in `IA1/`, not in the
-    chapter scope, not in the shared scope. And `ia1.gw` is the one C1 script that leaves `mpoff` on
-    without shipping the defs (M04/M05/MP1-3 all switch `mpoff` off; M02 leaves it on and poses it).
-    So **IA1 is the only exposed case in the install**, and our bootstrap has nothing to apply there:
-    pass 1 already walks `_program.Defs` unconditionally, so `OnCall` defs' reset states are applied
-    wherever they exist, and M02 is posed correctly (verified headless: 3,166 state ops, the four
-    walkers live and moving).
-    **Why it needs the original before anything is written:** the original loads the same gamez with
-    both variants active and has the same absent defs, so on the data alone it should show the same
-    doubled figures, which would make ours faithful and this item a close-with-no-change. The
-    alternative is an engine-side rule we have not found. `CAP-36` asks exactly this.
-    ⚠ **Traps.** (a) Judge it **only in instant action**: M02 poses the crowd and the other four
-    missions hide it, so neither can answer. (b) If a fix is ever warranted, it is a **deliberate
-    deviation**, not a port: there is no data to follow, so hiding the second variant is our
-    invention and must be labelled one. (c) These nodes are all `zone_id: 1`, a gate that is
-    parse-only today (`docs/formats/gamez.md`); it cannot separate the two variants (both carry it)
-    but it could hide the whole group, so rule it out before reading a fix as working.
-
 - `BL-348` `[Bug]` **C3's balloon-battery kill chain (`bontN`/`tbaseN`/`b_turretN`, M02) doesn't
     match the authored data on any of its four death paths — over-triggers, drags the wrong node,
     and drops calls silently.** Each of the six balloons is three independently-`WeaponHit`

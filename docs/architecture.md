@@ -976,8 +976,20 @@ frames resolve at build time while the TextureArchive is open — an incomplete 
 ⚠ `SceneBuilder.RegisterCycle` registers each BUILT material, not the source: the (material,
   priority, rank, sidedness) cache key yields several ShaderMaterials per cycling source.
 ⚠ Screenshots cannot verify open water (frames differ ~2/255); use `--debug-anim`'s flipbook log.
-⚠ The `EFFECTS` reader (`fire1`/`fire2`) is this mechanism bound to a NODE and is NOT wired up —
-  it needs OBJECT_ADD_CHILD (docs/formats/effects.md).
+⚠ Billboard materials register cycles too (`GetCylindricalMaterial`/`GetGlowMaterial` and the
+  by-texture billboard branch): every fire mesh is Facade/CylindricalY, so a fire cycle installs but
+  never plays if only the bias path registers.
+
+## src/Mech3/EffectCycles.cs
+The `EFFECTS` block of the shared `effects.zrd`: the second source of material flipbooks, and the one
+that lights C1's refinery vent. An entry names a node but animates that node's MATERIAL, so this pass
+resolves each entry (node → first mesh under it → surface 0's material) and writes the frame list
+onto that `GameZMaterial` before the world build, leaving `SceneBuilder.RegisterCycle` to pick it up
+unchanged. Two entries exist install-wide (`fire1.flt` 12@10, `fire2.flt` 6@5).
+⚠ Runs BEFORE `new WorldBuilder`: a material's frame list is part of what SceneBuilder registers as
+  it builds. Same ordering the engine uses (zeff_ini patches the material at load).
+⚠ `fire2`'s material installs but never registers: the world never builds its only user. Expected,
+  not a failure (docs/formats/effects.md).
 
 ## src/Mech3/WorldSounds.cs
 `SOUND_NODE` ambient looping 3D emitters: one pooled AudioStreamPlayer3D per live emitter,

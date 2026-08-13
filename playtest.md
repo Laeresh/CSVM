@@ -129,7 +129,6 @@ an upper bound, and the correction to the 137.9 mph equilibrium are on `BL-115` 
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-36` | **C1 instant action: does the dockside crowd double up?** | Fly **C1 instant action** (not a campaign mission) to the harbour/terminal area west of the refinery, around world `(-5325, 160, -6613)`, and film or photograph the little sprite people on the dock close enough to read one figure at a time. **The question is whether a single figure is TWO overlapping sprites:** a standing man and a running man on the same spot (24 of the 28 sites), or a walking man and a running man on the same spot (the other 4). If instant action shows only one pose per person, the original suppresses the second variant somehow and we are missing that mechanism; if it shows the same doubled figures, the artifact is the original's and ours is faithful. Any view that resolves an individual works, no HUD or gauges needed. ⚠ Do **not** film this in a campaign mission: M02 poses the crowd from its own animation defs and M04/M05/MP1-3 switch the whole `mpoff` group off, so **instant action is the only case that asks the question** | `BL-349` |
 
 ---
 
