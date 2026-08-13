@@ -24,15 +24,6 @@ public class AiModeMachineTests
     private static readonly Vector3 Astern600 = Home + new Vector3(0f, 0f, 600f);
     private static readonly Vector3 Chasing = new(0f, 0f, -80f);
 
-    /// <summary>Holds the pursued geometry through the sustain window plus one frame — the
-    /// entry now needs it CONTINUOUS, never one passing frame.</summary>
-    private static void SustainPursuit(AiModeMachine m, Vector3 target, Vector3 chase)
-    {
-        int frames = (int)(AiModeMachine.LayOffSustainS * 60f) + 2;
-        for (int i = 0; i < frames; i++)
-            m.Update(Home, Level, target, null, 1f / 60f, chase, targetIsHuman: true);
-    }
-
     [Fact]
     public void ModeNamesAreTheEngineVocabulary()
     {
@@ -408,6 +399,15 @@ public class AiModeMachineTests
     }
 
     private static AiModeMachine Machine(int seed = 1) => new(new Random(seed));
+
+    /// <summary>Holds the pursued geometry through the sustain window plus one frame — the
+    /// entry now needs it CONTINUOUS, never one passing frame.</summary>
+    private static void SustainPursuit(AiModeMachine m, Vector3 target, Vector3 chase)
+    {
+        int frames = (int)(AiModeMachine.LayOffSustainS * 60f) + 2;
+        for (int i = 0; i < frames; i++)
+            m.Update(Home, Level, target, null, 1f / 60f, chase, targetIsHuman: true);
+    }
 
     /// <summary>A one-step maneuver the executor finishes in a fraction of a second.</summary>
     private static Maneuver QuickManeuver(string name, int difficulty, float duration = 0.05f) =>

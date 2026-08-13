@@ -226,6 +226,14 @@ public static class Suites
             "through the F17 sqrt seam, and the survivor threshold kills with the decoded " +
             "polarity — dead at survivors 3 < required 4, NOT at the design's destroy count — " +
             "playing the authored all_pzep_gasbags death and stopping the motion", ZeppelinDamageSuite));
+        into.Add(new TestHarness.Suite("zeppelin-broadside",
+            "broadside cannons (F19) on C1/M04's flying piratezep: a player inside the port " +
+            "arc triggers the authored deploy anims (durations read from the defs, 4 s), the " +
+            "readied side volleys real unowned wep_28 rounds lead-solved at the player while " +
+            "the far side stays stowed, out-of-arc holds fire and retracts after the invented " +
+            "idle window, an F18-destroyed cannon thins the next volley to 5, a " +
+            "cannon_inaccuracy clone shows real scatter, and the zeppelin-vs-zeppelin arm " +
+            "rand()-picks only the target's IN-ARC gasbags on constructed geometry", ZeppelinBroadsideSuite));
         into.Add(new TestHarness.Suite("damage-stages",
             "each DAMAGE_SEQUENCE def fires its stage effects across an HP sweep", DamageStages));
         into.Add(new TestHarness.Suite("damage-hd",
@@ -5026,6 +5034,313 @@ public static class Suites
                 textures?.Dispose();
             }
         });
+    }
+
+    /// <summary>The F19 broadside chain on C1/M04's piratezep in its own mission world: arc-
+    /// gated deploy, a real wep_28 volley at a player stand-in, hold-fire-and-retract out of
+    /// arc, the F18 thinning, scatter on a cannon_inaccuracy clone, and the zeppelin-vs-
+    /// zeppelin gasbag pick on constructed geometry (no shipped mission puts two zeppelins in
+    /// one M04 world; C1/MP3's pair exercises the arm in a live session). The player stand-in
+    /// is REPOSITIONED through its flight model each step to hold the tested bearing on the
+    /// flying hull; rounds are asserted at the spawn seam (count + direction), never as hits —
+    /// INSTR-13, a moved body never re-enters the one-frame space queries.</summary>
+    private static void ZeppelinBroadsideSuite(TestContext ctx)
+    {
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "M04");
+        ctx.RequireData(missionZrdr, $"C1/M04 zrdr");
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var wep28 = weapons.Get(ZeppelinRuntime.BroadsideWeaponId);
+        ctx.Check(wep28 is { Velocity: not null },
+            $"the hardcoded {ZeppelinRuntime.BroadsideWeaponId} resolves in weapons.zrd v={wep28?.Velocity ?? 0f:0}");
+        if (wep28 == null)
+            return;
+
+        ctx.WithWorld("C1", collision: true, mission: "M04", world =>
+        {
+            var runtime = world.Session.Runtime;
+            var defs = Zeppelins.Load(missionZrdr);
+            var def = defs[0];
+            var host = runtime.FindNodes("piratezep").FirstOrDefault();
+            ctx.Check(defs.Count == 1 && host != null && def.CannonInaccuracyDeg == null,
+                $"C1/M04 authors piratezep (no cannon_inaccuracy), and its node resolves");
+            if (host == null)
+                return;
+
+            var nets = AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"));
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+            TextureArchive? textures = null;
+            ProjectilePool? pool = null;
+            ZeppelinRuntime? zeps = null;
+            ZeppelinRuntime? scatterZeps = null;
+            ZeppelinRuntime? zvz = null;
+            FlightController? player = null;
+            Node3D? attackerHost = null;
+            Node3D? targetHost = null;
+            var started = new List<string>();
+            try
+            {
+                textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C1"));
+                var live = new ProjectilePool(textures, null, null);
+                pool = live;
+                ctx.Host.AddChild(live);
+                runtime.OnInstanceStarted = (d, _) => { if (d.AnimName != null) started.Add(d.AnimName); };
+
+                zeps = new ZeppelinRuntime(defs,
+                    name => runtime.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null, nets);
+                zeps.WireDamage(runtime);
+                zeps.WireCannons(live, weapons);
+                var bs = zeps.BroadsideOf("piratezep");
+                ctx.Check(bs != null && bs.Cannons.Count == 12,
+                    $"the broadside wires 6+6 cannons count={bs?.Cannons.Count ?? 0}");
+                if (bs == null)
+                    return;
+                ctx.Check(bs.Cannons.All(c => Mathf.IsEqualApprox(c.DeploySeconds, 4f)),
+                    $"deploy durations are read from the authored anim defs (4 s run_time) first={bs.Cannons[0].DeploySeconds:0.##}");
+
+                // The player stand-in: a real registered aircraft whose flight-model position
+                // the suite steers to hold each phase's bearing on the FLYING hull.
+                var fm = new FlightModel(stats);
+                var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+                player = new FlightController
+                {
+                    PlaneModel = model,
+                    Collider = PlaneCollider.Build(model),
+                    PlayerIndex = 0,
+                    Projectiles = live,
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                };
+                player.AddChild(model);
+                player.Setup(fm, null, new CamParams(), host.GlobalPosition + Vector3.Right * 300f,
+                    host.GlobalPosition);
+                ctx.Host.AddChild(player);
+
+                var motion = zeps.MotionFor("piratezep")!;
+                const float dt = 1f / 60f;
+                Vector3 PortAbeam() => host.GlobalPosition + ZeppelinBroadside.SideNormal(
+                    motion.YawRad, motion.PitchRad, BroadsideSide.Left, bs.RightSign) * 300f;
+                void StepAt(System.Func<Vector3> where, int steps, ZeppelinRuntime target)
+                {
+                    for (int i = 0; i < steps; i++)
+                    {
+                        fm.Position = where();
+                        target.SimStep(dt);
+                        live.SimStep(dt);
+                    }
+                }
+
+                // 1. In the port arc: the port cannons deploy (authored anims), starboard
+                // stays stowed, and at 4 s the readied side volleys 6 real rounds.
+                StepAt(PortAbeam, 30, zeps);
+                ctx.Check(started.Count(a => a.StartsWith("deploy_pzep_lbroad")) == 6
+                          && !started.Any(a => a.StartsWith("deploy_pzep_rbroad")),
+                    $"the port six deploy, starboard stays stowed anims=[{string.Join(",", started)}]");
+                ctx.Same(0, zeps.BroadsideShotsOf("piratezep"),
+                    $"mid-deploy nothing fires (stowed cannons deploy INSTEAD of firing)");
+                StepAt(PortAbeam, (int)(4.5f / dt), zeps);
+                ctx.Same(6, zeps.BroadsideShotsOf("piratezep"),
+                    $"the readied port side volleys one round per live cannon");
+                // 30° bound: the hull flies on between volley and check and the muzzles sit
+                // ~100 m along it (22° seen from the hull origin at 300 m) — the solve's
+                // exactness is pinned engine-free (ZeppelinBroadsideTests); the in-engine
+                // claim is "at the player, out of the port side".
+                var volley = zeps.LastVolleyOf("piratezep");
+                var portNow = ZeppelinBroadside.SideNormal(
+                    motion.YawRad, motion.PitchRad, BroadsideSide.Left, bs.RightSign);
+                float worstOff = 0f;
+                float worstSide = 1f;
+                foreach (var dir in volley)
+                {
+                    worstOff = Mathf.Max(worstOff, dir.AngleTo(fm.Position - host.GlobalPosition));
+                    worstSide = Mathf.Min(worstSide, dir.Normalized().Dot(portNow));
+                }
+                ctx.Check(volley.Count == 6 && worstOff < 0.52f && worstSide > 0.5f,
+                    $"every round leaves lead-solved toward the player, out of the port side dirs={volley.Count} worstOff={Mathf.RadToDeg(worstOff):0.#}° minPortDot={worstSide:0.##}");
+
+                // 2. Out of arc: dead ahead. Fire holds through the 20 s re-fire horizon and
+                // the idle window retracts the port cannons.
+                started.Clear();
+                int shotsBefore = zeps.BroadsideShotsOf("piratezep");
+                Vector3 Ahead() => host.GlobalPosition + motion.Forward * 300f;
+                StepAt(Ahead, (int)(25f / dt), zeps);
+                ctx.Same(shotsBefore, zeps.BroadsideShotsOf("piratezep"),
+                    $"out of both arcs the broadside holds fire for 25 s");
+                ctx.Check(started.Count(a => a.StartsWith("retract_pzep_lbroad")) == 6,
+                    $"the idle port cannons retract (invented {ZeppelinBroadside.StowAfterIdleSeconds:0} s window) anims=[{string.Join(",", started.Where(a => a.Contains("retract")))}]");
+
+                // 3. F18 thinning: destroy one port cannon (its compiled def pool, HEALTH 60),
+                // return to the port arc — the redeployed volley is 5, not 6.
+                var lbroadNode = runtime.FindNodes(def.LeftCannons[0].Node, host).FirstOrDefault();
+                var lbroadPool = lbroadNode == null ? null : runtime.Destructibles.PoolsOn(lbroadNode).FirstOrDefault();
+                ctx.Check(lbroadPool != null,
+                    $"'{def.LeftCannons[0].Node}' carries its compiled def pool hp={lbroadPool?.MaxHealth ?? 0f:0}");
+                if (lbroadPool == null)
+                    return;
+                runtime.DamageAt(lbroadNode, lbroadPool.MaxHealth + 1f);
+                shotsBefore = zeps.BroadsideShotsOf("piratezep");
+                int guard = 0;
+                while (zeps.BroadsideShotsOf("piratezep") == shotsBefore && guard++ < (int)(30f / dt))
+                {
+                    fm.Position = PortAbeam();
+                    zeps.SimStep(dt);
+                    live.SimStep(dt);
+                }
+                ctx.Same(5, zeps.BroadsideShotsOf("piratezep") - shotsBefore,
+                    $"the destroyed cannon drops out — the volley thins to 5 after {guard * dt:0.#} s");
+
+                // 4. Scatter: a clone authoring cannon_inaccuracy 10° (the C2B/M04 value) on
+                // the same hull spreads a volley the exact solve would collapse to a point.
+                var scatterDef = CloneWithInaccuracy(def, 10f);
+                scatterZeps = new ZeppelinRuntime(new[] { scatterDef },
+                    name => runtime.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null, nets);
+                scatterZeps.WireCannons(live, weapons);
+                var sMotion = scatterZeps.MotionFor("piratezep")!;
+                var sBs = scatterZeps.BroadsideOf("piratezep")!;
+                Vector3 SPort() => host.GlobalPosition + ZeppelinBroadside.SideNormal(
+                    sMotion.YawRad, sMotion.PitchRad, BroadsideSide.Left, sBs.RightSign) * 300f;
+                StepAt(SPort, (int)(5f / dt), scatterZeps);
+                var scattered = scatterZeps.LastVolleyOf("piratezep");
+                float maxPair = 0f;
+                for (int i = 0; i < scattered.Count; i++)
+                    for (int j = i + 1; j < scattered.Count; j++)
+                        maxPair = Mathf.Max(maxPair, scattered[i].AngleTo(scattered[j]));
+                ctx.Check(scattered.Count == 6 && maxPair > Mathf.DegToRad(1f),
+                    $"cannon_inaccuracy 10° spreads the volley max pair angle {Mathf.RadToDeg(maxPair):0.##}° over {scattered.Count} rounds");
+
+                // 5. The zeppelin-vs-zeppelin arm, constructed geometry (see summary): a near-
+                // static attacker whose target zeppelin is deactivated abeam, one gasbag
+                // placed outside the 0.707 arc — every pick lands on an IN-ARC bag.
+                attackerHost = new Node3D { Name = "attackzep" };
+                var cb1 = new Node3D { Name = "cb1", Position = new Vector3(20f, 0f, -30f) };
+                var cb2 = new Node3D { Name = "cb2", Position = new Vector3(20f, 0f, 30f) };
+                attackerHost.AddChild(cb1);
+                attackerHost.AddChild(cb2);
+                targetHost = new Node3D { Name = "targetzep" };
+                var g1 = new Node3D { Name = "g1", Position = new Vector3(0f, 0f, -40f) };
+                var g2 = new Node3D { Name = "g2", Position = new Vector3(0f, 0f, 40f) };
+                var g3 = new Node3D { Name = "g3", Position = new Vector3(-290f, 0f, -290f) };
+                targetHost.AddChild(g1);
+                targetHost.AddChild(g2);
+                targetHost.AddChild(g3);
+                ctx.Host.AddChild(attackerHost);
+                ctx.Host.AddChild(targetHost);
+                var attacker = SyntheticZep("attackzep", new Vector3(0f, 4000f, 0f), nets[0].Name,
+                    targets: new[] { "targetzep" });
+                var target = SyntheticZep("targetzep", new Vector3(300f, 4000f, 0f), nets[0].Name,
+                    deactivated: true,
+                    healthy: new[] { "g1", "g2", "g3" });
+                var resolvedAtt = attackerHost;
+                var resolvedTgt = targetHost;
+                zvz = new ZeppelinRuntime(new[] { attacker, target }, name =>
+                    name == "attackzep" ? resolvedAtt : name == "targetzep" ? resolvedTgt : null, nets);
+                zvz.WireCannons(live, weapons);
+                for (int i = 0; i < (int)(6f / dt) && zvz.BroadsideShotsOf("attackzep") == 0; i++)
+                {
+                    zvz.SimStep(dt);
+                    live.SimStep(dt);
+                }
+                var picks = zvz.LastVolleyOf("attackzep");
+                ctx.Same(2, picks.Count, $"both starboard cannons fire at the target zeppelin");
+                bool onlyInArc = picks.Count > 0 && picks.All(dir =>
+                {
+                    var fromCb = dir.Normalized();
+                    float toG1 = fromCb.AngleTo(g1.GlobalPosition - attackerHost.GlobalPosition);
+                    float toG2 = fromCb.AngleTo(g2.GlobalPosition - attackerHost.GlobalPosition);
+                    float toG3 = fromCb.AngleTo(g3.GlobalPosition - attackerHost.GlobalPosition);
+                    return Mathf.Min(toG1, toG2) < toG3;
+                });
+                ctx.Check(onlyInArc,
+                    $"every rand()-picked aim point is an IN-ARC gasbag, never the out-of-arc g3");
+            }
+            finally
+            {
+                runtime.OnInstanceStarted = null;
+                pool?.Free();
+                zeps?.Free();
+                scatterZeps?.Free();
+                zvz?.Free();
+                player?.Free();
+                attackerHost?.Free();
+                targetHost?.Free();
+                textures?.Dispose();
+            }
+        });
+    }
+
+    /// <summary>A copy of a shipped record with <c>cannon_inaccuracy</c> authored — the scatter
+    /// phase's instrument (no C1 record authors one; C2B/M04's 10° is the shipped value).</summary>
+    private static ZeppelinDef CloneWithInaccuracy(ZeppelinDef def, float inaccuracyDeg) => new()
+    {
+        Node = def.Node,
+        Position = def.Position,
+        YawDeg = def.YawDeg,
+        PitchDeg = def.PitchDeg,
+        MaxSpeed = def.MaxSpeed,
+        MaxAccel = def.MaxAccel,
+        AccelPitchDeg = def.AccelPitchDeg,
+        AccelYawDeg = def.AccelYawDeg,
+        MaxRateYawDeg = def.MaxRateYawDeg,
+        MaxRatePitchDeg = def.MaxRatePitchDeg,
+        MinPitchDeg = def.MinPitchDeg,
+        MaxPitchDeg = def.MaxPitchDeg,
+        Net = def.Net,
+        Targets = def.Targets,
+        Healthy = def.Healthy,
+        NumHealthyRequired = def.NumHealthyRequired,
+        Engines = def.Engines,
+        Gasbags = def.Gasbags,
+        CannonFireDelay = def.CannonFireDelay,
+        CannonFireRange = def.CannonFireRange,
+        LeftCannons = def.LeftCannons,
+        RightCannons = def.RightCannons,
+        CannonHealth = def.CannonHealth,
+        CannonInaccuracyDeg = inaccuracyDeg,
+    };
+
+    /// <summary>A minimal constructed zeppelin record for the zeppelin-vs-zeppelin phase:
+    /// near-static (rates/speed floored) so the constructed bearings hold while cannons
+    /// deploy on the fallback timing.</summary>
+    private static ZeppelinDef SyntheticZep(string node, Vector3 pos, string net,
+        string[]? targets = null, string[]? healthy = null, bool deactivated = false)
+    {
+        var zones = new List<ZeppelinHealthyZone>();
+        foreach (var h in healthy ?? System.Array.Empty<string>())
+            zones.Add(new ZeppelinHealthyZone(h, "panels"));
+        return new ZeppelinDef
+        {
+            Node = node,
+            Position = pos,
+            YawDeg = 0f,
+            MaxSpeed = 0.1f,
+            MaxAccel = 4.47f,
+            AccelYawDeg = 0.1f,
+            AccelPitchDeg = 0.1f,
+            MaxRateYawDeg = 0.1f,
+            MaxRatePitchDeg = 0.1f,
+            MinPitchDeg = -30f,
+            MaxPitchDeg = 30f,
+            Net = net,
+            Targets = targets ?? System.Array.Empty<string>(),
+            Healthy = zones,
+            NumHealthyRequired = 1,
+            Engines = System.Array.Empty<string>(),
+            Gasbags = System.Array.Empty<ZeppelinGasbag>(),
+            CannonHealth = System.Array.Empty<ZeppelinCannonHealth>(),
+            LeftCannons = System.Array.Empty<ZeppelinCannon>(),
+            RightCannons = targets == null
+                ? (IReadOnlyList<ZeppelinCannon>)System.Array.Empty<ZeppelinCannon>()
+                : new[]
+                {
+                    new ZeppelinCannon("cb1", "deploy_cb1", "retract_cb1"),
+                    new ZeppelinCannon("cb2", "deploy_cb2", "retract_cb2"),
+                },
+            CannonFireDelay = 20f,
+            CannonFireRange = 500f,
+            Deactivated = deactivated,
+        };
     }
 
     private static void GltfExport(TestContext ctx)

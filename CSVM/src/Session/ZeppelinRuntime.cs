@@ -192,6 +192,10 @@ public sealed partial class ZeppelinRuntime : Node
                 }
             }
             PollDamage(zep);
+            if (!zep.Dead)
+            {
+                StepBroadside(zep, dt);   // F19: a dead zeppelin's cannons go quiet
+            }
         }
     }
 
@@ -471,6 +475,31 @@ public sealed partial class ZeppelinRuntime : Node
 
         /// <summary>Zones whose kill line has printed (one line per zone).</summary>
         public HashSet<string> DeadZones { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>The F19 broadside machine; null until <c>WireCannons</c>, or for a record
+        /// without cannons.</summary>
+        public ZeppelinBroadside? Broadside { get; set; }
+
+        /// <summary>Cannon node name → its world node (the muzzle). Unresolved cannons are
+        /// absent and out of the broadside.</summary>
+        public Dictionary<string, Node3D> CannonNodes { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Cannon node name → its F18 zone pool; a null/absent pool never dies.</summary>
+        public Dictionary<string, DestructibleRegistry.Instance?> CannonPools { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Gasbag aim nodes, resolved lazily when another zeppelin shoots at THIS one.</summary>
+        public Dictionary<string, Node3D?> GasbagNodes { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>The most recent volley's scattered fire directions (suite observability).</summary>
+        public List<Vector3> LastVolleyDirs { get; } = new();
+
+        public int BroadsideShots { get; set; }
+
+        /// <summary>No-solution skip lines printed (rate-limited like the gate log).</summary>
+        public int SkipLogged { get; set; }
 
         /// <summary>The aggregator's zone-aliveness view: a zone with no pool never dies.</summary>
         public Func<string, bool> ZoneAlive { get; }
