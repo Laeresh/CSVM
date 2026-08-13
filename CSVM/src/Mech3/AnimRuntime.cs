@@ -170,7 +170,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// behind it.
     ///
     /// <para>A hook rather than a call for the same reason as <see cref="ContactMask"/>: the one
-    /// surface classifier is <c>ProjectilePool.ClassifySurface</c>, in the flight layer. The session
+    /// surface-id read is <c>ProjectilePool.SurfaceIdOf</c>/<c>SurfaceIsWater</c>, in the flight layer. The session
     /// binds this to it, so a round, a wingtip graze and a landing piece cannot disagree about what
     /// they hit.</para></summary>
     public Func<GodotObject?, bool>? SurfaceIsWater;

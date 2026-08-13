@@ -1239,8 +1239,8 @@ public partial class FlightController : Node3D
     /// <summary>The struck body's numeric surface id (<see cref="SceneBuilder.SurfaceIdMeta"/>,
     /// stamped on every collider), or null when there is no struck body — the headless
     /// <c>--crash</c> force, which is the original's null-material arm and so resolves slot 0.
-    /// This is the crash/graze index space, NOT <see cref="ProjectilePool.ClassifySurface"/>'s
-    /// texture-derived class: that one keys the weapon IMPACT tables and stays where it is.</summary>
+    /// The weapon IMPACT table is read at this same id (<see cref="ProjectilePool.SurfaceIdOf"/>),
+    /// which answers <c>0</c> where this answers null, because that path has no null to carry.</summary>
     private static int? SurfaceIdOf(Node? hitBody) =>
         hitBody != null && hitBody.HasMeta(SceneBuilder.SurfaceIdMeta)
             ? hitBody.GetMeta(SceneBuilder.SurfaceIdMeta).AsInt32()

@@ -14,13 +14,16 @@ Two boundaries. This plan does not touch the crash or touchdown cascades, which 
 verified; `SurfaceDefTable` is read as the reference implementation of the id lookup, not modified.
 It also does not model the `ai_crash_<name>` family (a third registry-indexed vector found at
 `FUN_00478a00` while decoding `BL-344`, still unmodelled): that is a separate item and stays in
-`backlog.md`.
+`backlog.md`, where it is now `BL-347` (minted when B12 retired `BL-344`).
 
 **Backlog provenance.** `BL-344` and `BL-345` were both re-verified still-open **against the code**
 in this session: `Projectile.ClassifySurface` (`CSVM/src/Flight/Projectile.cs:456-469`) still reads
 the texture-derived `SceneBuilder.SurfaceMeta`, and `ColliderOverlay.ClassOf`
 (`CSVM/src/UI/ColliderOverlay.cs:182-203`) still does the same.
-<TODO: re-verify both against the record too (`git log --grep=BL-344`, `git log --grep=BL-345`) before starting Wave B.>
+Done before Wave B landed: `git log --all --grep=BL-344` and `--grep=BL-345` return only this
+plan's own commits plus the sibling plan's `B12` (which cites `BL-344` as out of scope) and the
+`BL-345` renumber, so neither had been quietly fixed under another item. `BL-344` was retired from
+`backlog.md` by this plan's `B12`; `BL-345` closes with `C21`.
 
 ## Milestone goal
 
@@ -135,7 +138,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — move the impact key onto the surface id
 
 11. ☑ Key the IMPACT table by surface id at parse time and at impact
-12. ☐ Retire `SurfaceClass` at its remaining call sites
+12. ☑ Retire `SurfaceClass` at its remaining call sites
 
 ### Wave C — the overlay
 
@@ -303,7 +306,7 @@ anyway: the stand-in ladder's arms are OURS, not the original's, and keying them
 narrowed the debris arm from "terrain" to id 0 alone — it now covers every id that is not water, a
 building or an aircraft, which is exactly the set the deleted `Default` class covered.
 
-## B12 ☐ Retire `SurfaceClass` at its remaining call sites
+## B12 ☑ Retire `SurfaceClass` at its remaining call sites
 
 **Goal.** The six-member enum no longer exists, and nothing reads
 `SceneBuilder.SurfaceMeta` to decide weapon behaviour.
@@ -326,11 +329,39 @@ test suite and two session-wiring sites, so it is not a blind find-and-replace.
 
 **Verify.** The suites at `Suites.cs:2091` and `:4383` pass with their assertions rewritten in id
 terms rather than deleted, plus the 8-chapter regression.
-<TODO: identify which named suites those two checks belong to; this session saw the line numbers only.>
+
+**Done, 2026-08-13.** The two suites are **`air-to-air`** (`:2091`, the two-rig kill-attribution
+suite) and **`ground-contact`** (`:4383`, whose `waterHook` stub stands in for the session binding;
+only its comment named the classifier, so nothing there was rewritten in id terms). `air-to-air`'s
+check became `SurfaceIdOf(target.Body) == SurfaceRegistry.Player`; both pass. `RunTests.ps1` green:
+964 units, 37 in-engine suites, errors clean, 13 goldens hash-identical, which carries the
+8-chapter `--freecam` regression.
+
+The flag `--weapon-surface` gained the whole registry, so it doubles as the in-engine check that
+the lab now reads ids (C4, `--weapon-lab=wep_00 --weapon-fire`, headless):
+
+| argument | before | after |
+|---|---|---|
+| `dirt` | the `Default` class, i.e. every untagged body | `nearest of 133 13/dirt bodies (1853 scanned)`, and the burst lands on one: `-> 13/dirt … fx=- snd=-` |
+| `lava` | rejected by `SessionSpec` as an unknown class | `this chapter has no collider carrying 4/lava among 1853 scanned` |
+| `nonsense` | `is not water/buildings/dirt` | `is not a surface-registry name (default/water/…/dirt)` |
+
+⚠ **`dirt` changed meaning** and any older capture recipe using it is now aiming somewhere else:
+it means id 13, real dirt-tagged ground, where it used to mean "everything untagged", which is
+`default`. `docs/cli.md`, `docs/controls.md` and the lab's own doc comments say so.
 
 **⚠ Traps.** Do not delete `SceneBuilder.SurfaceMeta` along with the enum. The tag has consumers
 outside the weapon path, and `ClassOverlay`'s doc comment explains why it uses neither tag. Read
 both overlays' doc comments before touching either.
+
+Done: `SceneBuilder.SurfaceMeta` and `SceneBuilder.ClassifySurface(string?)` both stay — the tag
+still splits colliders per texture class (which is what gives a coastal tile separate `col` and
+`col_water` bodies at all) and still feeds `MapEdgeExtender` and, until `C21`, `ColliderOverlay`.
+What went is the six-member `SurfaceClass` enum and `ProjectilePool.ClassifySurface`; the water
+predicate both session sites bound is now `ProjectilePool.SurfaceIsWater`, an id `== 1` test, which
+is `FUN_005ad330`'s own test. One consequence worth knowing before `C21` measures it: a body named
+`col_water` carrying soil `0` (C4's doubled water sheet) is no longer water to the world runtime's
+bounce branch either, which is the same body-granularity effect `C21` exists to make visible.
 
 # Wave C — the overlay
 

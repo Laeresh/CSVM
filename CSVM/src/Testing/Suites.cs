@@ -2088,8 +2088,8 @@ public static class Suites
                 $"both rigs derived collider boxes and built an AircraftBody");
             if (target.Body == null || shooter.Body == null)
                 return;
-            ctx.Check(ProjectilePool.ClassifySurface(target.Body) == SurfaceClass.Player,
-                $"an aircraft body classifies as the player IMPACT surface");
+            ctx.Check(ProjectilePool.SurfaceIdOf(target.Body) == SurfaceRegistry.Player,
+                $"an aircraft body reads as surface id {SurfaceRegistry.Player} (player), the IMPACT row 44 weapons author");
 
             // The kill-attribution seam, scored exactly the way GameSession does in --vs:
             // each rig's Downed report forwarded into a real (unlimited, untimed) VersusMatch —
@@ -4380,7 +4380,7 @@ public static class Suites
             });
 
             // Runs one body to a stop and reports what happened to it. `waterHook` stands in for
-            // the session's ProjectilePool.ClassifySurface binding — the classifier has its own
+            // the session's ProjectilePool.SurfaceIsWater binding — the surface-id read has its own
             // coverage, and stubbing it is what makes the branch choice assertable without needing
             // a chapter with reachable sea.
             (float Flight, float EndY, string? Bounce, bool ByContact) Run(uint mask, System.Func<GodotObject?, bool>? waterHook)

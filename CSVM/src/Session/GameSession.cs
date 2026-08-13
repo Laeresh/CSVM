@@ -722,10 +722,9 @@ public partial class GameSession : Node3D
         if (BuildsCollision)
         {
             session.Runtime.ContactMask = CollisionLayers.World;
-            // Bound to the ONE surface classifier, so a landing piece, a round's impact and a
+            // Bound to the ONE surface-id read, so a landing piece, a round's impact and a
             // wingtip graze cannot disagree about what they hit.
-            session.Runtime.SurfaceIsWater =
-                body => ProjectilePool.ClassifySurface(body as Node) == SurfaceClass.Water;
+            session.Runtime.SurfaceIsWater = body => ProjectilePool.SurfaceIsWater(body as Node);
         }
 
         // F13 / --debug-ainets: the chapter's AI patrol nets (ne0NNNNN + neindex — AI route

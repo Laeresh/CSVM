@@ -4,13 +4,6 @@ using CSVM.Mech3;
 
 namespace CSVM.Flight;
 
-/// <summary>The texture-derived surface class, on its way out. It no longer keys anything the
-/// weapons do: <see cref="WeaponDef.Impact"/> is indexed by <see cref="SurfaceRegistry"/> id since
-/// <c>PLAN-surface-id-weapons</c> B11, which is what the original indexes it by. What is left are
-/// the non-impact readers B12 retires (<c>WeaponLab</c>'s target picker, the two water predicates,
-/// two suite checks); do not key new behaviour off it.</summary>
-public enum SurfaceClass { Default, Water, Buildings, Player, Enemy, Quicksand }
-
 /// <summary>A muzzle (<c>FIRE</c>) or per-surface (<c>IMPACT</c>) effect binding: any slot may be
 /// null. <c>SurfaceAnimation</c> is the surface-oriented variant of <c>Animation</c> and is only
 /// present on <c>IMPACT</c> classes.</summary>

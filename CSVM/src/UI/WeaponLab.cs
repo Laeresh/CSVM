@@ -162,8 +162,8 @@ public sealed partial class WeaponLab : Node3D
     /// specific of the three.</summary>
     public Vector3? DebugTarget { get; init; }
 
-    /// <summary><c>--weapon-surface=water|buildings|dirt</c>: park facing the nearest collider of
-    /// that class to the spawn, on the first physics frame.</summary>
+    /// <summary><c>--weapon-surface=&lt;registry name&gt;</c>: park facing the nearest collider
+    /// carrying that surface id, on the first physics frame.</summary>
     public string? DebugSurface { get; init; }
 
     /// <summary><c>--weapon-standoff=&lt;m&gt;</c>: the parking distance every placement uses, and
@@ -512,14 +512,15 @@ public sealed partial class WeaponLab : Node3D
     }
 
     /// <summary>Fires the lab's own physics ray through <paramref name="screen"/>, reports what it
-    /// struck — its <c>cs_name</c>, its IMPACT surface class and its distance — and re-parks the
+    /// struck — its <c>cs_name</c>, its surface id and its distance — and re-parks the
     /// held aircraft on that same camera ray at the stand-off distance, nose on the struck point.
     /// <paramref name="aimOnly"/> (shift-click) turns the aircraft toward it without moving it.
     ///
-    /// <para>The class comes from <see cref="ProjectilePool.ClassifySurface"/> — the one classifier
-    /// the impact path itself uses, so the panel cannot disagree with what the round does — applied
+    /// <para>The id comes from <see cref="ProjectilePool.SurfaceIdOf"/> — the one read the impact
+    /// path itself makes, so the panel cannot disagree with what the round does — applied
     /// to <b>the body the ray returned and nothing else</b>: one mesh yields a separate body per
-    /// surface class present, so the sibling bodies of a coastal tile carry different classes.</para></summary>
+    /// texture-derived surface class present, and those siblings can carry different ids, so a
+    /// coastal tile's `col` and `col_water` bodies report separately.</para></summary>
     private void PickAt(Vector2 screen, bool aimOnly)
     {
         if (_camera == null || _host == null || !IsInsideTree())
@@ -555,13 +556,14 @@ public sealed partial class WeaponLab : Node3D
         {
             return;
         }
-        var surface = ProjectilePool.ClassifySurface(body);
+        int surfaceId = ProjectilePool.SurfaceIdOf(body);
+        string surface = $"{surfaceId}/{SurfaceRegistry.NameForId(surfaceId) ?? "?"}";
         float standoff = aimOnly ? (point - _plane.GlobalPosition).Length() : ClampedStandoff(point, dir);
-        _pickLine = $"target: {Trim(name, 22)} · {surface.ToString().ToLowerInvariant()} · {standoff:0} m";
-        // The body's own node name is in the line on purpose: one mesh yields a body per surface
+        _pickLine = $"target: {Trim(name, 22)} · {surface} · {standoff:0} m";
+        // The body's own node name is in the line on purpose: one mesh yields a body per texture
         // class present, so "col" vs "col_buildings" is what distinguishes a click that missed the
-        // tagged sibling from a genuinely untagged surface.
-        Log.Info("ui", $"weapon lab: picked name={name} body={body?.Name} surface={surface.ToString().ToLowerInvariant()} at=({point.X:0.0},{point.Y:0.0},{point.Z:0.0}) standoff={standoff:0}{(aimOnly ? " (aim only)" : "")}");
+        // tagged sibling from a genuinely untagged surface — and those siblings need not share an id.
+        Log.Info("ui", $"weapon lab: picked name={name} body={body?.Name} surface={surface} at=({point.X:0.0},{point.Y:0.0},{point.Z:0.0}) standoff={standoff:0}{(aimOnly ? " (aim only)" : "")}");
         ShowMarker(point);
         _host.PlaceHeld(aimOnly ? _plane.GlobalPosition : point - (dir * standoff), point);
         SyncState();
@@ -589,23 +591,29 @@ public sealed partial class WeaponLab : Node3D
         PlaceOn(point, dir, body, body != null ? NameOfStruck(body) : "(world point)", aimOnly: false);
     }
 
-    /// <summary><c>--weapon-surface=water|buildings|dirt</c>: park facing the NEAREST piece of that
-    /// class to the aircraft's spawn. The search walks the built world once for
-    /// <see cref="StaticBody3D"/>s, classifies each through the same
-    /// <see cref="ProjectilePool.ClassifySurface"/> the impact path uses, and measures to the
+    /// <summary><c>--weapon-surface=&lt;registry name&gt;</c>: park facing the NEAREST piece of that
+    /// surface id to the aircraft's spawn. The search walks the built world once for
+    /// <see cref="StaticBody3D"/>s, reads each one's id through the same
+    /// <see cref="ProjectilePool.SurfaceIdOf"/> the impact path uses, and measures to the
     /// nearest <b>vertex of its collision geometry</b> — not to the body's origin, which for a
     /// chapter's water is the world origin on every tile and would send the aircraft kilometres off
     /// to aim at (0,0,0). Ties fall to the earlier node in tree order (strictly-less), so a
-    /// <c>--det</c> capture is reproducible. A chapter with none of that class warns and leaves the
-    /// aircraft at spawn; it is not a failed launch.</summary>
+    /// <c>--det</c> capture is reproducible. A chapter with no collider carrying that id warns and
+    /// leaves the aircraft at spawn; it is not a failed launch.
+    ///
+    /// <para>Any of the registry's fourteen names is namable since B12, not just the three texture
+    /// classes this took before — <c>dirt</c> now means id 13 (real dirt-tagged ground), NOT "every
+    /// untagged surface", which is <c>default</c>. Six ids no shipped material carries at all, so
+    /// those legitimately report "this chapter has none" everywhere.</para></summary>
     private void PlaceOnNearestSurface(string want)
     {
-        var target = want.ToLowerInvariant() switch
+        if (SurfaceRegistry.IdForName(want) is not { } target)
         {
-            "water" => SurfaceClass.Water,
-            "buildings" => SurfaceClass.Buildings,
-            _ => SurfaceClass.Default,   // "dirt"/"default": everything untagged
-        };
+            Log.Warn("ui", $"--weapon-surface={want} is not a surface-registry name — leaving the aircraft at spawn");
+            _pickLine = $"target: '{want}' is not a surface name";
+            SyncState();
+            return;
+        }
         var origin = _plane.GlobalPosition;
         Node3D? best = null;
         var bestPoint = Vector3.Zero;
@@ -618,7 +626,7 @@ public sealed partial class WeaponLab : Node3D
                 if (child is StaticBody3D sb)
                 {
                     scanned++;
-                    if (ProjectilePool.ClassifySurface(sb) == target)
+                    if (ProjectilePool.SurfaceIdOf(sb) == target)
                     {
                         matched++;
                         if (NearestVertex(sb, origin) is { } near && near.Dist < bestDist)
@@ -635,12 +643,12 @@ public sealed partial class WeaponLab : Node3D
         Walk(GetParent() ?? this);
         if (best == null)
         {
-            Log.Warn("ui", $"--weapon-surface={want}: this chapter has no {want} collider among {scanned} scanned — leaving the aircraft at spawn");
-            _pickLine = $"target: no {want} collider in this chapter";
+            Log.Warn("ui", $"--weapon-surface={want}: this chapter has no collider carrying {target}/{want} among {scanned} scanned — leaving the aircraft at spawn");
+            _pickLine = $"target: no {target}/{want} collider in this chapter";
             SyncState();
             return;
         }
-        Log.Info("ui", $"--weapon-surface={want}: nearest of {matched} {want} bodies ({scanned} scanned) is {NameOfStruck(best)}/{best.Name} at {bestDist:0} m, point=({bestPoint.X:0.0},{bestPoint.Y:0.0},{bestPoint.Z:0.0})");
+        Log.Info("ui", $"--weapon-surface={want}: nearest of {matched} {target}/{want} bodies ({scanned} scanned) is {NameOfStruck(best)}/{best.Name} at {bestDist:0} m, point=({bestPoint.X:0.0},{bestPoint.Y:0.0},{bestPoint.Z:0.0})");
         // Take the FIRST thing the line to that point actually strikes: the readout must name the
         // surface a round fired down this aim would hit, which is not always the one searched for.
         var dir = (bestPoint - origin).Normalized();

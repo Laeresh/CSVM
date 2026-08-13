@@ -1896,9 +1896,12 @@ kill attribution run the direct-hit path. Planes never enter `DamageSink`; the d
 sphere stays world-masked.
 ⚠ `_ray` is a shared mutable query object: per-shot `Exclude` is set AND reset around every
   query — a leaked exclusion silently shields the next round's target.
-⚠ `ClassifySurface` (the texture-derived `SurfaceClass`) survives only for the readers
-  `PLAN-surface-id-weapons` B12 retires — the lab's target picker, the two water predicates, two
-  suite checks. No weapon impact reads it since B11; do not key new behaviour off it.
+⚠ `SurfaceIsWater` is the id `== 1` test the session binds to `AnimRuntime.SurfaceIsWater` (both
+  the world runtime and the crash rig's), so a round, a wingtip graze and a landing piece read the
+  same field. It is a SECOND read beside the IMPACT row, as it is in the original (`FUN_005ad330`),
+  not a lookup the table could carry. The texture-derived `SurfaceClass`/`ClassifySurface` pair is
+  gone as of B12; `SceneBuilder.SurfaceMeta` itself stays, because it still splits colliders per
+  texture class and feeds `MapEdgeExtender`/`ColliderOverlay`.
 `DamageSink` (→ `AnimRuntime.DamageAt`) turns a world hit into destructible damage;
 `EffectSink` (→ `AnimRuntime.PlayEffectAt`) plays the non-model impact effects — rockets on the
 runtime's own bound, gun hits under `GunEffectTtl` 0.3 s (the `*_gunhit` family's longest authored
@@ -3272,11 +3275,14 @@ as `--rocket=`/`--loadout=` left it, not as the file reads). Gun mounts are in `
 because that is the order `SelectGunGroup` indexes; a plane with no loadout at all falls back to the
 raw marker rig, which has nothing live to arm.
 **Click to place:** a left click casts the lab's OWN physics ray from the camera, names what it hit
-(`cs_name` ancestor via `SelectionService.NameOf`, class via `ProjectilePool.ClassifySurface`,
-distance) and re-parks the held plane on that same ray at the panel's stand-off through `PlaceHeld`;
+(`cs_name` ancestor via `SelectionService.NameOf`, surface id via `ProjectilePool.SurfaceIdOf`,
+reported as `id/name`, distance) and re-parks the held plane on that same ray at the panel's
+stand-off through `PlaceHeld`;
 shift-click aims without moving, and an orange ball marks the aim point. The scripted twins all fire
 on the first physics frame, most specific first — `--weapon-target=x,y,z`, then
-`--weapon-surface=water|buildings|dirt` (nearest collider of that class, measured to the nearest
+`--weapon-surface=<registry name>` (nearest collider carrying that surface id — any of the
+fourteen since B12, so `dirt` now means id 13 and NOT "everything untagged", which is `default` —
+measured to the nearest
 collision VERTEX, since a chapter's water tiles all sit at the world origin), then
 `--weapon-click=x,y[,aim]` — and every one of them ends in the same `PlaceOn` as a real click, at
 `--weapon-standoff=` metres. **V** hands the rig's camera to a `SpectatorCamera` and back

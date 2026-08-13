@@ -467,28 +467,12 @@ public sealed partial class ProjectilePool : Node3D
             : SurfaceRegistry.Default;
     }
 
-    /// <summary>Which weapons.json IMPACT surface class a struck collider belongs to, from the
-    /// per-mesh <see cref="SceneBuilder.SurfaceMeta"/> tag.
-    /// <para>⚠ Nothing about a weapon impact reads this any more: since
-    /// <c>PLAN-surface-id-weapons</c> B11 the IMPACT table is indexed by
-    /// <see cref="SurfaceIdOf"/>, the same surface id the crash and graze cascades use. What is
-    /// left are the non-impact readers B12 retires — the lab's target picker, the two water
-    /// predicates and two suite checks.</para></summary>
-    public static SurfaceClass ClassifySurface(Node? collider)
-    {
-        if (collider is AircraftBody)
-            return SurfaceClass.Player;
-        if (collider != null && collider.HasMeta(SceneBuilder.SurfaceMeta))
-        {
-            return collider.GetMeta(SceneBuilder.SurfaceMeta).AsString() switch
-            {
-                "water" => SurfaceClass.Water,
-                "buildings" => SurfaceClass.Buildings,
-                _ => SurfaceClass.Default,
-            };
-        }
-        return SurfaceClass.Default;
-    }
+    /// <summary>Whether a struck collider is water — <c>water</c>(1) and nothing else. Its own read
+    /// of the surface id rather than a table lookup, which is what the original does on the impact
+    /// path (<c>FUN_005ad330</c> tests <c>*(material + 0x20) == 1</c> beside the IMPACT row it
+    /// already resolved). The world runtime's <c>SurfaceIsWater</c> hook and the spark tint are
+    /// bound to this, so a landing piece, a round and a wingtip cannot disagree about the sea.</summary>
+    public static bool SurfaceIsWater(Node? collider) => SurfaceIdOf(collider) == SurfaceRegistry.Water;
 
     /// <summary>Registers a flying aircraft's body as a strikeable target: rounds from every
     /// OTHER identity can hit it, and this plane's own rounds exclude it per shot (the body's
@@ -1485,8 +1469,7 @@ public sealed partial class ProjectilePool : Node3D
                 break;
             case ImpactStandIn.Spark when _impact.Count < MaxFlashes:
                 // The water case is its own read of the struck id, as it is in the original
-                // (FUN_005ad330 tests `*(material + 0x20) == 1` on the impact path independently of
-                // the table lookup) — not a branch the table could carry.
+                // (FUN_005ad330, see SurfaceIsWater) — not a branch the table could carry.
                 var tint = surface == SurfaceRegistry.Water ? new Color(0.8f, 0.9f, 1.0f) : new Color(1f, 0.9f, 0.5f);
                 _impact.Add(new Sprite { Pos = point, Life = ImpactLife, Size = ImpactSize, Tint = tint, Orient = orient });
                 break;

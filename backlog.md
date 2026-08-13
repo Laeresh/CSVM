@@ -2813,43 +2813,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the right thing, but it is not a picture of the source data. Say so wherever the legend is
   documented.
 
-- `BL-344` `[Bug]` **The weapon IMPACT lookup is surface-id-driven in the original, and ours is not.**
-  **Decoded 2026-08-12** (read-only ghidra-mcp; full write-up in
-  `analysis/surface-classification/FINDINGS.md`, that date's second section). `PLAN-crash-surface-id`
-  scoped weapons out on the grounds that the IMPACT keys are "a different name space" and that
-  "`buildings` is not a surface-registry name at all". **Both halves are wrong.** `buildings` IS
-  registry id 11 (the plan's own data section says so), and the IMPACT table is not name-keyed at
-  runtime at all:
-  1. **Parse time** (`FUN_005ad630`, `0x005ae1cf`–`0x005ae24e`): on the `IMPACT` token the parser
-     matches the block's surface against `registry[0]` first, then loops `&registry[1]` to
-     `[0x00637b10]` (the count), and parses the block into **`weapon + 0x15c + i*100`**. So the
-     table is an array indexed by surface id, stride 100 bytes, and a block whose name is not a
-     registry name is parsed into nothing — which is exactly what happens to `fault`.
-  2. **Runtime** (`FUN_005acf60` → `FUN_005ad100`): `surfaceId = hit->material ? *(material+0x20) : 0`,
-     then `row = table + surfaceId*100`. The same soil-id field and the same null-material-to-0 arm
-     the crash and touchdown cascades use. `FUN_005ad330` independently tests `*(material+0x20) == 1`
-     (water) on the impact path.
-  So a round and a wingtip DO classify by the same tag in the original; today ours do not, since
-  B11/B12 moved the crash and graze onto `SurfaceIdMeta` while `Projectile.ClassifySurface` still
-  reads the texture-derived `SurfaceMeta`.
-  ⚠ **The fallback differs from the crash family, and this is the part with teeth.** `FUN_005ad100`
-  tests the row's own variant count (`row[0x2c]`) and, if it is zero, **plays nothing** — there is no
-  empty-slot-to-slot-0 arm here. The shipped weapons author `default`/`water`/`quicksand`/`player`/
-  `buildings` blocks (plus the dead `fault`), so under a faithful implementation a round striking
-  `dirt`(13), `fire`(5), `airstrip`(8) or `dzone`(12) geometry plays **no impact effect at all**,
-  where ours currently plays the `default` one. Confirm that against the extracted weapons data
-  before writing code, and treat it as a Decision-7-shaped question for the user, not an
-  implementation detail.
-  *Fix shape:* `ImpactOutcome`'s key comes off `SurfaceIdMeta`, `SurfaceClass` collapses into the
-  registry, and `BL-345`'s overlay question answers itself. Large, playtested, and it changes what
-  every gun and rocket draws on most of the ground — its own plan, with a before/after, not a
-  follow-on commit.
-  ⚠ Do not read `PLAN-crash-surface-id` Decision 3 ("keep the texture-name classifier, for weapons
-  only") as settling this. That decision was taken on the premise this entry disproves.
-  ⚠ Also found while looking, unmodelled: `FUN_00478a00` builds a third registry-indexed vector,
-  `ai_crash_<name>` — the AI planes' crash family. And `FUN_004c56c0` resolves a `soil_<name>`
-  substring (`0x0062bf98`) through `FUN_00559670` and writes the id onto the material with
-  `FUN_0055b0a0`, which is how surface ids are authored in the first place: by registry name.
+- `BL-347` `[Research]` `[Blocked: M4]` **The `ai_crash_<name>` family — a third registry-indexed
+  choreography vector, unmodelled.** Found 2026-08-12 while decoding the weapon IMPACT lookup
+  (`FUN_00478a00`), and deliberately left out of `PLAN-surface-id-weapons`, which modelled the
+  player crash, the `touchdown_*` graze and the weapon IMPACT and stopped there. Same shape as the
+  two that landed: a vector built by concatenating the surface registry's names onto a prefix and
+  indexed by the struck material's surface id. Needs AI aircraft to be reachable at all, so it is
+  M4 work; read `CSVM/src/Session/SurfaceDefTable.cs` first, which is the cascade already written
+  for the other two families and is probably reusable verbatim.
+  ⚠ Second finding from the same session, also unmodelled and NOT blocked on M4: `FUN_004c56c0`
+  resolves a `soil_<name>` substring (`0x0062bf98`) through `FUN_00559670` and writes the id onto
+  the material with `FUN_0055b0a0` — which is how surface ids are authored in the first place, by
+  registry name. We read the id out of the extracted material instead (`GameZMaterial.SoilId`), so
+  nothing depends on this today; it matters if a material's id ever looks wrong at runtime.
 
 ## Missions, modes & campaign
 

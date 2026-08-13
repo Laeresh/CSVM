@@ -389,8 +389,7 @@ public sealed class WorldEffectsFactory
             // separate def — so this changes nothing for them today. Bound anyway: the rig plays
             // every playable crash variant, and the hook is what keeps a piece's own BOUNCE branch
             // reading a real struck surface rather than a guess.
-            crashRuntime.SurfaceIsWater =
-                body => ProjectilePool.ClassifySurface(body as Node) == SurfaceClass.Water;
+            crashRuntime.SurfaceIsWater = body => ProjectilePool.SurfaceIsWater(body as Node);
         }
         // Bind only the named defs' transitive CALL_ANIMATION closures (Subset), never the whole
         // world program: the full 800+ defs include ~150 generic-named world defs that would

@@ -462,8 +462,9 @@ public sealed record SessionSpec
     public bool WeaponClickAimOnly { get; private set; }
     /// <summary><c>--weapon-target=x,y,z</c>: park the lab's aircraft facing that world point.</summary>
     public Vector3? WeaponTarget { get; private set; }
-    /// <summary><c>--weapon-surface=water|buildings|dirt</c>: park facing the nearest collider of
-    /// that class to the spawn. <b>Resolved</b> — an unknown class is warned about and dropped.</summary>
+    /// <summary><c>--weapon-surface=&lt;registry name&gt;</c>: park facing the nearest collider
+    /// carrying that surface id. <b>Resolved</b> — a name outside the registry is warned about and
+    /// dropped.</summary>
     public string? WeaponSurface { get; private set; }
     /// <summary><c>--weapon-standoff=&lt;m&gt;</c>: the lab's parking distance, 0 for the 90 m
     /// default.</summary>
@@ -1172,12 +1173,13 @@ public sealed record SessionSpec
         // The weapon lab is a flight-mode affair (it fires through a real FlightController) —
         // anything that forced a non-flight mode wins the arbitration above, but that would
         // silently leave the lab half-built, so it is reported instead.
-        // An unknown surface class would otherwise search for a class no collider can carry and
-        // report "this chapter has none", which reads as a map fact rather than a typo.
-        if (WeaponSurface is { } wantSurface
-            && wantSurface.ToLowerInvariant() is not ("water" or "buildings" or "dirt" or "default"))
+        // An unknown surface name would otherwise search for an id no collider can carry and
+        // report "this chapter has none", which reads as a map fact rather than a typo. The names
+        // are the surface registry's fourteen since B12, not the three texture classes.
+        if (WeaponSurface is { } wantSurface && Mech3.SurfaceRegistry.IdForName(wantSurface) == null)
         {
-            Warn("ui", $"--weapon-surface={wantSurface} is not water/buildings/dirt — ignoring it");
+            Warn("ui", $"--weapon-surface={wantSurface} is not a surface-registry name "
+                       + $"({string.Join('/', Mech3.SurfaceRegistry.Names)}) — ignoring it");
             WeaponSurface = null;
         }
         if ((WeaponLab || WeaponMount != null || WeaponFire || WeaponCycle > 0 || WeaponClick
