@@ -39,6 +39,14 @@ public sealed class AiPilot
     /// fixed-dt, fixed-seed run is still deterministic.</summary>
     public AiNetFollower? Patrol;
 
+    /// <summary>The forward-gun gunnery (D14), or null for an unarmed pilot. When its target is
+    /// live, each <see cref="Next"/> re-derives the heading/altitude orders from the target's
+    /// position — a plain pursuit through the placeholder law, taking precedence over
+    /// <see cref="Patrol"/> — so the plane turns onto its victim and the gunner's cones get
+    /// geometry to pass. The host <see cref="FlightController"/> drives the gunner's fire
+    /// decision itself; this class only steers. Mutable like every other order.</summary>
+    public AiGunner? Gunner;
+
     /// <summary>Ordered altitude, metres (world Y).</summary>
     public float TargetAltitude = 400f;
 
@@ -88,9 +96,21 @@ public sealed class AiPilot
     /// <see cref="Patrol"/>'s own seeded branch draw), so a fixed-dt run is deterministic.</summary>
     public FlightInput Next(FlightModel model, float dt)
     {
-        // Patrol first: the net follower turns the graph walk into this step's heading and
+        // A live gunner target outranks the patrol: plain pursuit — fly at the victim's
+        // position and altitude, and let the gunner's cones decide the trigger. Wave D's
+        // maneuver programs replace this steering through the same seam as the rest.
+        if (Gunner is { Target: { } quarry } && !quarry.Crashed)
+        {
+            var toQuarry = quarry.WorldPosition - model.Position;
+            if (new Vector2(toQuarry.X, toQuarry.Z).LengthSquared() > 1f)
+                TargetHeadingDeg = HeadingDegOf(toQuarry);
+            TargetAltitude = quarry.WorldPosition.Y;
+            Throttle = 1f; // a stern chase at cruise never closes; pursuit runs flat out
+        }
+
+        // Patrol next: the net follower turns the graph walk into this step's heading and
         // altitude orders, which the law below then flies like any other standing order.
-        if (Patrol is { } patrol)
+        else if (Patrol is { } patrol)
         {
             patrol.Update(model.Position);
             var toNode = patrol.CurrentTarget - model.Position;

@@ -147,7 +147,8 @@ public static class Suites
             "transform origin (BL-239)", BlastNeighborShape));
         into.Add(new TestHarness.Suite("air-to-air",
             "a round strikes the target plane's body, maps to the data part, moves armor/HP by the " +
-            "weapon's own values, downs it on a critical zero with the kill attributed through the " +
+            "weapon's own values, downs it when whole-vehicle health exhausts (a lone dead critical " +
+            "part no longer kills — the decoded rule, D14) with the kill attributed through the " +
             "Downed event — never hits the shooter's own geometry — and a rocket fuses on a passing " +
             "plane, blasting with falloff and attributing the kill", AirToAir));
         into.Add(new TestHarness.Suite("carried-turrets",
@@ -162,6 +163,13 @@ public static class Suites
             "camera/HUD/devices) spawned into an already-running sim flies its orders, takes a " +
             "mid-flight retarget, and is present, ticking, damageable by the weapon's own values " +
             "and killable with the kill attributed to the shooter through Downed", AiActor));
+        into.Add(new TestHarness.Suite("ai-gunnery",
+            "the D14 AI gunner: acquires the nearest hostile as mutable state, refuses the shot " +
+            "outside the ±11° forward gun cone and outside its quick-draw cone off the target's " +
+            "nose/tail, fires real rounds through the fire-control path under its own shooter id " +
+            "with dead-eye scatter (skill 1 hits measurably less than skill 9), downs the target " +
+            "with the kill attributed, and NEVER gets the human aim assist (the IsHumanPiloted " +
+            "gate, A/B'd in place)", AiGunnery));
         into.Add(new TestHarness.Suite("voice-runtime",
             "the B8 combat-voice runtime: the accent→voice.zrd→pilot-clip chain resolves against " +
             "the real archive, a roster-subset prewarm makes the lines playable after the loader " +
@@ -2543,7 +2551,9 @@ public static class Suites
     /// Pins: a physics ray at the fuselage returns the aircraft body and its struck shape maps to
     /// a Parts entry; a scripted round hits, `MapStruckPart` names the expected part (nose), and
     /// armor moves by the weapon's own ARMOR_DAMAGE while health waits behind it (armor-first);
-    /// sustained fire zeroes the critical nose and triggers the real Crash; a crashed plane soaks
+    /// the decoded kill rule (A4/D14): a zeroed nose alone does NOT down the plane — the old
+    /// any-critical-part kill is a retired divergence — and exhausting all four zones' health
+    /// triggers the real Crash; a crashed plane soaks
     /// no further rounds; and a burst fired through the shooter's OWN airframe registers zero
     /// self-hits — the regression that would otherwise arrive silently as "guns too strong".
     /// The Downed reports feed a real VersusMatch through the same forwarding GameSession
@@ -2716,20 +2726,61 @@ public static class Suites
                     p => p.Def == nose || (p.Hp >= p.Def.MaxHp && p.Armor >= p.Def.MaxArmor)),
                 $"no part but the nose moved");
 
-            // --- the kill: keep firing the same bearing until the critical nose zeroes. The
-            // round budget is derived from the data (armor + health over the per-round values),
-            // tripled for spread misses.
-            int budget = (int)(nose.MaxArmor / armorDmg + nose.MaxHp / healthDmg) * 3 + 20;
+            // --- the kill, under the decoded rule (A4/D14): whole-vehicle health exhausted, not
+            // one dead critical part. Fire each zone's own bearing until its health empties —
+            // nose from ahead, tail from astern, each wing from its own side (a dead part keeps
+            // its collider, so its box shields the far side; per-zone budgets are derived from
+            // that zone's own pools, tripled for misses).
             int fired = 0;
-            while (!target.Crashed && fired < budget)
+            void ExhaustPart(string partName, Transform3D muzzle)
             {
-                fired++;
-                FireOne(noseMuzzle, shooter.PlayerIndex, 8);
+                var st = target!.Damage!.Parts[partName];
+                int partBudget = (int)(st.Def.MaxArmor / armorDmg + st.Def.MaxHp / healthDmg) * 3 + 20;
+                int spent = 0;
+                while (st.Hp > 0f && spent < partBudget)
+                {
+                    spent++;
+                    FireOne(muzzle, shooter!.PlayerIndex, 8);
+                }
+                fired += spent;
+                ctx.Check(st.Hp <= 0f, $"sustained fire empties the {partName} pools rounds={spent}/{partBudget}");
             }
+
+            // A bearing straight through a named collider box's own centre (identity attitude:
+            // plane-local == world − pos), from 30 m outside it along the firing axis — so the
+            // wing rounds cross the wing at its real height/chord rather than the fuselage line.
+            Transform3D BoxMuzzle(string boxName, bool leftSide, Vector3 fireDir)
+            {
+                Vector3 centre = Vector3.Zero;
+                float best = -1f;
+                foreach (var p in target!.Collider!.Parts)
+                {
+                    if (p.Name != boxName || (boxName == "wing" && (p.Local.Origin.X < 0f) != leftSide))
+                        continue;
+                    float span = Mathf.Abs(p.Local.Origin.X);
+                    if (span > best)
+                    {
+                        best = span;
+                        centre = targetPos + p.Local.Origin;
+                    }
+                }
+                return new Transform3D(Basis.LookingAt(fireDir, Vector3.Up), centre - fireDir * 30f);
+            }
+
+            ExhaustPart("nose", noseMuzzle);
+            // The retirement's own pin: the nose is a `critical` part and it is DEAD — under the
+            // old any-critical-part rule this plane would be down. The decoded rule keeps it
+            // flying until the whole vehicle's health is gone.
+            ctx.Check(!target.Crashed,
+                $"a lone dead critical part no longer downs the plane (the retired divergence)");
+            ExhaustPart("tail", BoxMuzzle("tail", leftSide: false, Vector3.Forward));
+            ExhaustPart("leftwing", BoxMuzzle("wing", leftSide: true, Vector3.Right));
+            ctx.Check(!target.Crashed, $"three of four zones dead still flies");
+            ExhaustPart("rightwing", BoxMuzzle("wing", leftSide: false, Vector3.Left));
             ctx.Check(target.Crashed,
-                $"sustained fire zeroes the critical nose and triggers Crash rounds={fired}/{budget}");
+                $"exhausting the last zone's health downs the plane (whole-vehicle health ≤ 0) rounds={fired}");
             ctx.Check(noseState.Hp <= 0f, $"the nose health pool is empty hp={noseState.Hp:0.##}");
-            ctx.Note($"kill took {fired} rounds of {gun.Id} (armor {nose.MaxArmor:0}/{armorDmg:0.#}, hp {nose.MaxHp:0}/{healthDmg:0.#})");
+            ctx.Note($"kill took {fired} rounds of {gun.Id} across all four zones (nose armor {nose.MaxArmor:0}/{armorDmg:0.#}, hp {nose.MaxHp:0}/{healthDmg:0.#})");
             ctx.Check(match.KillsOf(0) == 1 && match.DeathsOf(1) == 1,
                 $"the weapon kill scored the shooter through the real Downed path kills(P1)={match.KillsOf(0)} deaths(P2)={match.DeathsOf(1)}");
             ctx.Check(match.KillsOf(1) == 0 && match.DeathsOf(0) == 0,
@@ -2752,15 +2803,29 @@ public static class Suites
                 $"a killer-less crash registers a death and no kill anywhere deaths(P2)={match.DeathsOf(1)}");
 
             // An unowned round (NoShooter — nobody's identity) that downs the plane is likewise
-            // a death with no killer, never a kill.
+            // a death with no killer, never a kill. Attribution scaffolding, not spend
+            // mechanics: the other three zones are pre-emptied directly so the nose burst is
+            // the finishing blow under the whole-vehicle rule (the spending itself is pinned
+            // above).
             target.Respawn();
+            void ExhaustAllButNose()
+            {
+                foreach (var p in target!.Damage!.Parts.Values)
+                {
+                    if (p.Def != nose)
+                        target.Damage.Apply(p.Def.Name, p.Def.MaxHp + p.Def.MaxArmor + 1f);
+                }
+            }
+
+            ExhaustAllButNose();
+            int noseBudget = (int)(nose.MaxArmor / armorDmg + nose.MaxHp / healthDmg) * 3 + 20;
             fired = 0;
-            while (!target.Crashed && fired < budget)
+            while (!target.Crashed && fired < noseBudget)
             {
                 fired++;
                 FireOne(noseMuzzle, ProjectilePool.NoShooter, 8);
             }
-            ctx.Check(target.Crashed, $"the unowned burst downed the plane rounds={fired}/{budget}");
+            ctx.Check(target.Crashed, $"the unowned burst downed the plane rounds={fired}/{noseBudget}");
             ctx.Check(match.DeathsOf(1) == 3 && match.KillsOf(0) == 1 && match.KillsOf(1) == 0,
                 $"an unowned round's kill is a death with no killer deaths(P2)={match.DeathsOf(1)} kills={match.KillsOf(0)}/{match.KillsOf(1)}");
 
@@ -2871,6 +2936,7 @@ public static class Suites
             // seam the gun kill used. Counters entering this phase: kills(P1)=1, deaths(P2)=4
             // (the gun kill, the killer-less crash, the unowned kill, the forced crash above).
             target.Respawn();
+            ExhaustAllButNose(); // attribution scaffolding again: the blast lands on the nose only
             int rockets = 0;
             int rocketBudget = (int)((nose.MaxArmor + nose.MaxHp) / expectedBlast) + 6;
             while (!target.Crashed && rockets < rocketBudget)
@@ -2879,7 +2945,7 @@ public static class Suites
                 FireRocket(crossMuzzle, shooter.PlayerIndex);
             }
             ctx.Check(target.Crashed,
-                $"sustained fused passes zero the critical nose rockets={rockets}/{rocketBudget}");
+                $"sustained fused passes exhaust the last zone rockets={rockets}/{rocketBudget}");
             ctx.Check(match.KillsOf(0) == 2 && match.DeathsOf(1) == 5,
                 $"the blast kill scored the shooter through Downed kills(P1)={match.KillsOf(0)} deaths(P2)={match.DeathsOf(1)}");
 
@@ -3096,7 +3162,8 @@ public static class Suites
     /// <c>player</c> surface id); it TICKS — displacement along its ordered course, altitude
     /// held; its orders are mutable mid-flight (a 90° retarget between steps is flown to);
     /// a round moves its part pools by the weapon's own ARMOR_DAMAGE; and sustained fire downs
-    /// it with the kill attributed to the human shooter's id through <c>Downed</c>.</summary>
+    /// it — under the whole-vehicle kill rule (D14), the other zones pre-emptied as scaffolding —
+    /// with the kill attributed to the human shooter's id through <c>Downed</c>.</summary>
     private static void AiActor(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -3216,8 +3283,15 @@ public static class Suites
             ctx.Check(Mathf.IsEqualApprox(beforeHit - Combined(), armorDmg),
                 $"a round moves the AI's pools by the weapon's ARMOR_DAMAGE moved={beforeHit - Combined():0.##} expected={armorDmg:0.##} (rounds={tries})");
 
-            // Killable, with the kill attributed: sustained fire on the same bearing zeroes the
-            // critical nose; Downed reports (AI shooter id, human killer id).
+            // Killable, with the kill attributed: pre-empty the other zones (attribution
+            // scaffolding — the whole-vehicle kill rule needs every zone's health gone, and the
+            // per-zone spending is the air-to-air suite's), then sustained fire on the same
+            // bearing exhausts the nose; Downed reports (AI shooter id, human killer id).
+            foreach (var p in ai.Damage!.Parts.Values)
+            {
+                if (p.Def != nose)
+                    ai.Damage.Apply(p.Def.Name, p.Def.MaxHp + p.Def.MaxArmor + 1f);
+            }
             int? downedVictim = null, downedKiller = null;
             ai.Downed += (victim, killer) => { downedVictim = victim; downedKiller = killer; };
             int budget = (int)(nose.MaxArmor / armorDmg + nose.MaxHp / healthDmg) * 3 + 20;
@@ -3269,6 +3343,243 @@ public static class Suites
         {
             pool?.Free();
             shooter?.Free();
+            ai?.Free();
+            textures.Dispose();
+        }
+    }
+
+    /// <summary>The D14 AI gunnery, on real engine state: an AI-piloted, stock-armed plane HELD
+    /// at fixed poses (the weapon-lab pin — held rigs fire through the normal path) against a
+    /// parked hostile target. Pins: nearest-hostile acquisition into the gunner's MUTABLE target
+    /// field; the quick-draw gate (a beam-ish bearing is refused at rating 1's 50° cone and
+    /// taken at rating 9's 89°); the ±11° forward gun cone as a hard fire gate (nose 30° off the
+    /// bearing = no fire, whatever quick draw says); dead-eye scatter as a per-shot cone whose
+    /// interpolated rating-1 angle (4.0°) lands measurably fewer hits than rating 9's (1.45°) at
+    /// fixed range, with the rounds under the AI's own shooter id and none on its own airframe;
+    /// the kill attributed to the AI id through Downed; and the IsHumanPiloted assist exclusion
+    /// A/B'd in place — the same off-boresight geometry misses as an AI and hits the moment the
+    /// same rig is flagged human (the assist snapping on).
+    ///
+    /// <para>⚠ INSTR-13: the target is parked at its spawn pose and never moved — a body moved
+    /// within the suite's single frame is invisible to the rounds' space queries.</para></summary>
+    private static void AiGunnery(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var skills = AiSkills.Load(ctx.ZrdrPath);
+        LoadoutDef? stock = null;
+        foreach (var def in StockLoadouts.Load().All.Values)
+        {
+            if (def.Model == ctx.PlaneName)
+            {
+                stock = def;
+                break;
+            }
+        }
+        ctx.Check(stock != null, $"stock loadout found for plane={ctx.PlaneName}");
+        if (stock == null)
+            return;
+
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightController? target = null;
+        FlightController? ai = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            // The parked target: a human-index rig at the origin column, PINNED at zero speed so
+            // the gunner's intercept sees a static target (a never-stepped rig would otherwise
+            // report its spawn speed and every lead would miss a plane that is not moving).
+            var targetPos = new Vector3(0f, 500f, 0f);
+            var targetModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+            target = new FlightController
+            {
+                PlaneModel = targetModel,
+                Collider = PlaneCollider.Build(targetModel),
+                Damage = new PlaneDamage(stats.DestroyableParts),
+                PlayerIndex = 0,
+                Projectiles = live,
+                UseKeyboard = false,
+                PadDevices = System.Array.Empty<int>(),
+                AllowPause = false,
+            };
+            target.AddChild(targetModel);
+            target.Setup(new FlightModel(stats), ctx.Camera, new CamParams(), targetPos, targetPos + Vector3.Forward);
+            ctx.Host.AddChild(target);
+            target.PlaceHeld(targetPos, targetPos + Vector3.Forward);
+
+            // The AI shooter: stock-armed (the gunner fires through FireControl, not scripted
+            // spawns), AiPilot + AiGunner, held at each phase's pose. Its own seeded scatter rng
+            // makes every volley reproducible.
+            var gunner = new AiGunner(new RandomNumberGenerator { Seed = 20260813 })
+            {
+                DeadEyeAngleDeg = skills.DeadEyeAngleDeg(9),
+                QuickDrawAngleDeg = skills.QuickDrawAngleDeg(1),
+            };
+            var aiPos = targetPos + new Vector3(0f, 0f, 500f); // dead astern of the target's tail
+            var pilot = AiPilot.HoldingCourse(aiPos, targetPos);
+            pilot.Gunner = gunner;
+            var aiModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+            ai = new FlightController
+            {
+                PlaneModel = aiModel,
+                Collider = PlaneCollider.Build(aiModel),
+                Damage = new PlaneDamage(stats.DestroyableParts),
+                PlayerIndex = AiAircraftSpawner.ShooterIdBase,
+                IsHumanPiloted = false,
+                Pilot = pilot,
+                Projectiles = live,
+                UseKeyboard = false,
+                PadDevices = System.Array.Empty<int>(),
+                AllowPause = false,
+            };
+            ai.AddChild(aiModel);
+            ai.Loadout = Loadout.Bind(stock, aiModel, weapons);
+            ai.Setup(new FlightModel(stats), null, new CamParams(), aiPos, targetPos);
+            ctx.Host.AddChild(ai);
+            ai.Held = true;
+            ai.PlaceHeld(aiPos, targetPos);
+
+            var gun = ai.Loadout.FirableGuns.First();
+            float armorDmg = gun.Weapon.ArmorDamage ?? 0f;
+            ctx.Check(armorDmg > 0f && Mathf.IsEqualApprox(armorDmg, gun.Weapon.HealthDamage ?? -1f),
+                $"the stock gun's two damage magnitudes are equal ({gun.Weapon.Id}, {armorDmg:0.#}) — the hit counter's precondition");
+            float Combined(FlightController rig) => rig.Damage!.Parts.Values.Sum(p => p.Hp + p.Armor);
+            bool Pristine(FlightController rig) => rig.Damage!.Parts.Values.All(
+                p => p.Hp >= p.Def.MaxHp && p.Armor >= p.Def.MaxArmor);
+            void Step(int frames)
+            {
+                for (int i = 0; i < frames; i++)
+                {
+                    ai!.SimStep(1f / 60f);
+                    live.SimStep(1f / 60f);
+                }
+            }
+
+            // --- acquisition: the nearest hostile lands in the gunner's mutable target field.
+            Step(1);
+            ctx.Check(ReferenceEquals(gunner.Target, target),
+                $"the gunner auto-acquires the nearest hostile aircraft");
+            // Mutable state: cleared orders re-acquire; an explicit assignment stands.
+            gunner.Target = null;
+            Step(1);
+            ctx.Check(ReferenceEquals(gunner.Target, target), $"a cleared target re-acquires next tick");
+
+            // --- the quick-draw gate: 80° off the target's tail axis (a beam-ish shot). At
+            // rating 1 the 50° cone refuses it; at rating 9 the 89° cone takes it.
+            var beamPos = targetPos + new Vector3(0.9848f, 0f, 0.1736f) * 500f; // 80° off +Z
+            ai.PlaceHeld(beamPos, targetPos);
+            int ammoAtBeam = gun.Ammo;
+            Step(60);
+            ctx.Check(!gunner.WantsFire && gun.Ammo == ammoAtBeam,
+                $"a beam-ish shot is refused at quick-draw rating 1 (50°) rounds={ammoAtBeam - gun.Ammo}");
+            gunner.QuickDrawAngleDeg = skills.QuickDrawAngleDeg(9);
+            Step(60);
+            ctx.Check(gun.Ammo < ammoAtBeam,
+                $"the same bearing is taken at rating 9 (89°) rounds={ammoAtBeam - gun.Ammo}");
+
+            // --- the forward gun cone is a hard gate: nose 30° off the bearing, quick draw
+            // willing — no fire.
+            ai.PlaceHeld(beamPos, beamPos + (targetPos - beamPos).Normalized()
+                .Rotated(Vector3.Up, Mathf.DegToRad(30f)) * 100f);
+            int ammoAtOffBore = gun.Ammo;
+            Step(60);
+            ctx.Check(!gunner.WantsFire && gun.Ammo == ammoAtOffBore,
+                $"outside the ±11° forward cone the AI holds fire (nose 30° off)");
+
+            // --- dead-eye scatter, skill 1 vs 9: same fixed geometry (the high rear quarter at
+            // ~212 m, where the planform presents real area — dead astern the airframe is
+            // edge-on and both cones mostly miss, drowning the difference), a fixed round
+            // budget each, hits counted off the damage ledger. The rating-1 cone (4.0°) must
+            // land measurably fewer than rating 9's (1.45°).
+            ai.PlaceHeld(targetPos + new Vector3(0f, 150f, 150f), targetPos);
+            (int Rounds, int Hits) Volley(float deadEyeDeg, int roundCap)
+            {
+                gunner!.DeadEyeAngleDeg = deadEyeDeg;
+                gunner.AutoTarget = true;
+                gunner.Target = target;
+                target!.Respawn();
+                target.PlaceHeld(targetPos, targetPos + Vector3.Forward);
+                live.Clear(); // no stragglers from an earlier phase land on this ledger
+                float before = Combined(target);
+                int ammoBefore = gun.Ammo;
+                for (int guard = 0; ammoBefore - gun.Ammo < roundCap && guard < 1800; guard++)
+                    Step(1);
+                gunner.AutoTarget = false;
+                gunner.Target = null; // cease fire; let the last rounds land
+                Step(90);
+                return (ammoBefore - gun.Ammo, (int)Mathf.Round((before - Combined(target)) / armorDmg));
+            }
+
+            var low = Volley(skills.DeadEyeAngleDeg(1), 30);
+            var high = Volley(skills.DeadEyeAngleDeg(9), 30);
+            ctx.Note($"dead-eye: skill 1 hit {low.Hits}/{low.Rounds}, skill 9 hit {high.Hits}/{high.Rounds} from the high rear quarter at ~212 m");
+            // Fixed seed, so the measured gap (13 vs 6 of 30) is exact; the +4 margin is what
+            // "measurably" means here, not a statistical bound.
+            ctx.Check(high.Hits >= low.Hits + 4,
+                $"skill 9's tighter cone out-hits skill 1 ({high.Hits}/{high.Rounds} vs {low.Hits}/{low.Rounds})");
+            ctx.Check(high.Hits >= 1 && low.Hits < low.Rounds,
+                $"both regimes are real: skill 9 lands rounds, skill 1 scatters some wide");
+            ctx.Check(Pristine(ai) && !ai.Crashed, $"the AI's own airframe took none of its own fire");
+
+            // --- the kill, attributed to the AI's shooter id, from dead astern at 150 m (the
+            // bearing whose first box is the tail). Scaffolding per the whole-vehicle rule: the
+            // zones this bearing cannot reach are pre-emptied; the AI's own fire finishes the
+            // plane.
+            gunner.AutoTarget = true;
+            gunner.DeadEyeAngleDeg = skills.DeadEyeAngleDeg(9);
+            ai.PlaceHeld(targetPos + new Vector3(0f, 0f, 150f), targetPos);
+            target.Respawn();
+            target.PlaceHeld(targetPos, targetPos + Vector3.Forward);
+            live.Clear();
+            foreach (var p in target.Damage!.Parts.Values)
+            {
+                if (!p.Def.Name.Equals("tail", System.StringComparison.OrdinalIgnoreCase))
+                    target.Damage.Apply(p.Def.Name, p.Def.MaxHp + p.Def.MaxArmor + 1f);
+            }
+            int? downedVictim = null, downedKiller = null;
+            target.Downed += (victim, killer) => { downedVictim = victim; downedKiller = killer; };
+            for (int guard = 0; !target.Crashed && guard < 3600; guard++)
+                Step(1);
+            ctx.Check(target.Crashed, $"the AI's own gunnery downs the target");
+            ctx.Check(downedVictim == target.PlayerIndex && downedKiller == ai.PlayerIndex,
+                $"the kill is attributed to the AI's shooter id killer={downedKiller?.ToString() ?? "-"}");
+
+            // --- the IsHumanPiloted assist exclusion, A/B'd in place: nose 3° off the bearing at
+            // 400 m, gunner disarmed, trigger held raw (--fire's AutoFire). As an AI the rounds
+            // leave along the muzzle axis and ALL miss; the same rig flagged human gets the
+            // assist, which snaps onto the target and lands hits. First testable here: before
+            // D14 no AI ever pulled a trigger.
+            pilot.Gunner = null;
+            ai.AutoFire = true;
+            target.Respawn();
+            target.PlaceHeld(targetPos, targetPos + Vector3.Forward);
+            live.Clear(); // the kill phase's last rounds must not land on this ledger
+            var nearPos = targetPos + new Vector3(0f, 0f, 400f);
+            var offDir = (targetPos - nearPos).Normalized().Rotated(Vector3.Up, Mathf.DegToRad(3f));
+            ai.PlaceHeld(nearPos, nearPos + offDir * 100f);
+            float pristineCombined = Combined(target);
+            Step(180);
+            ctx.Check(Mathf.IsEqualApprox(Combined(target), pristineCombined),
+                $"an AI plane gets NO aim assist: every off-boresight round misses");
+            ai.IsHumanPiloted = true;
+            Step(180);
+            ctx.Check(Combined(target) < pristineCombined,
+                $"the same geometry flagged human is assisted onto the target moved={pristineCombined - Combined(target):0.##}");
+        }
+        finally
+        {
+            pool?.Free();
+            target?.Free();
             ai?.Free();
             textures.Dispose();
         }

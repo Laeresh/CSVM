@@ -165,6 +165,7 @@ public partial class GameSession : Node3D
     // The AI actor seam (M4 A2): the spawner is built with the rigs; every AI aircraft it has
     // spawned is stepped in DriveSimSteps after the player rigs and freed with the world.
     private AiAircraftSpawner? _aiSpawner;
+    private AiSkills? _aiSkills; // ai_skill_parameters, loaded once on the first --ai-attack gunner
     // The egen enemy generators (M4 B6, --generators): loaded with the rigs, stepped in
     // DriveSimSteps before the AI planes it spawns into _aiPlanes, freed with the world subtree.
     private AiGeneratorRuntime? _generators;
@@ -263,6 +264,28 @@ public partial class GameSession : Node3D
         {
             GD.PushWarning($"ai: no spawner in this session mode — '{planeName}' not spawned");
             return null;
+        }
+        // --ai-attack arms every spawned pilot with a D14 gunner at the ordered skill rating:
+        // interpolated dead-eye/quick-draw cones, nearest-hostile auto-targeting, its own
+        // seeded scatter stream. A pilot armed by its caller keeps what it was given.
+        if (_spec.AiAttackSkill is { } skill && pilot.Gunner == null)
+        {
+            try
+            {
+                _aiSkills ??= AiSkills.Load(_zrdrPath);
+                var rng = new RandomNumberGenerator { Seed = (ulong)(uint)Rng.NewIntSeed(Rng.Ai) };
+                pilot.Gunner = new AiGunner(rng)
+                {
+                    DeadEyeAngleDeg = _aiSkills.DeadEyeAngleDeg(skill),
+                    QuickDrawAngleDeg = _aiSkills.QuickDrawAngleDeg(skill),
+                };
+                GD.Print($"ai: gunner armed at skill {skill} (dead-eye " +
+                         $"{pilot.Gunner.DeadEyeAngleDeg:0.00}°, quick-draw {pilot.Gunner.QuickDrawAngleDeg:0}°)");
+            }
+            catch (Exception e)
+            {
+                GD.PushWarning($"--ai-attack: cannot load ai_skill_parameters: {e.Message}");
+            }
         }
         var ai = _aiSpawner.Spawn(planeName, pos, lookAt, pilot);
         _aiPlanes.Add(ai);

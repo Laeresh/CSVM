@@ -32,6 +32,25 @@ public sealed class PlaneDamage
     /// loop).</summary>
     public float WorstFraction => _parts.Count == 0 ? 1f : _parts.Values.Min(p => p.Fraction);
 
+    /// <summary>The whole-vehicle health summary's fraction: current part health over summed
+    /// part health maxima (docs/org/vehicleDamage.md — the original recomputes a whole-vehicle
+    /// pair from the parts after every part-scoped spend; the remake keeps the fraction, which
+    /// is the same summary in the parts' own scale).</summary>
+    public float SummaryHealthFraction
+    {
+        get
+        {
+            float max = _parts.Values.Sum(p => p.Def.MaxHp);
+            return max > 0f ? _parts.Values.Sum(p => p.Hp) / max : 1f;
+        }
+    }
+
+    /// <summary>The decoded kill rule (the A4 decision, retired divergence D14): the vehicle is
+    /// destroyed when whole-vehicle health reaches zero — under the summary recompute, every
+    /// zone's health pool exhausted — never when one <c>critical</c> part dies (that flag stays
+    /// parsed; no code on the decoded death path reads it).</summary>
+    public bool IsDestroyed => _parts.Count > 0 && _parts.Values.Sum(p => p.Hp) <= 0f;
+
     /// <summary>Maps the struck collider box (fuselage/wing/canard/tail, or the
     /// backstop ray's "center") + the impact point in the PLANE's local frame to
     /// the data's part name: wings split by side (x &lt; 0 = left — verified against

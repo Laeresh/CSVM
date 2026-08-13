@@ -1363,7 +1363,13 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
 12. ☐ D12 — Target selection, ranking and ally deconfliction — ranking formula recovered
 13. ☐ D13 — The maneuver library — **shipped as `maneuvers.zrd`**, so this is a loader plus
     selection/culling, not an authoring job
-14. ☐ D14 — Gunnery: the lead-sphere accuracy model and the shot-angle cones
+14. ☑ D14 — Gunnery: the lead-sphere accuracy model and the shot-angle cones — **landed
+    2026-08-13**: `Mech3/AiSkills` (ai_skill_parameters endpoints, linear-by-assumption over 1–9,
+    roster slots 22–30 accessor) + `Flight/AiGunner` (TryIntercept lead consumed from AimAssist,
+    ±11° gun cone and quick-draw cone as fire gates, per-shot dead-eye scatter, mutable target)
+    behind `--ai-attack[=skill]`; the A4 kill divergence retired (whole-vehicle health ≤ 0 via
+    `PlaneDamage.IsDestroyed`, `critical` kept parsed); pinned by the `ai-gunnery` suite (skill 1
+    hit 6/30 vs skill 9 13/30, assist exclusion A/B'd) + `AiSkillsTests`/`AiGunnerTests`
 15. ☐ D15 — The rubber-band assist, behind a switch
 
 ### Wave E — Communication

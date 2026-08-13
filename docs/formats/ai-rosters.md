@@ -155,6 +155,9 @@ pair per stat**, the endpoints the rating interpolates between.
 
 Notes that matter to anyone implementing this:
 
+- **Only the two endpoints are decoded.** How the engine moves between value@1 and value@9 is not
+  traced; linear interpolation over the 1–9 scale is the working assumption (CSVM's `AiSkills`
+  reader implements exactly that, marked as an assumption).
 - **The scale is 1–9 and nothing else.** Ratings are an index into this table; there is no 0–100
   scale anywhere in the shipped data. (The original *design document* gives a Danger-Zone poll
   interval of `100 − DareDevil` seconds, which only type-checks on 0–100. That formula is design-era:

@@ -386,6 +386,7 @@ public partial class FlightController : Node3D
     private readonly List<float> _gunGaugeSlots = new();
     private readonly List<float> _missileGaugeSlots = new();
     private readonly AimCandidateSet _aimCandidates = new(); // rebuilt once per fire call (B4/B5)
+    private readonly AimCandidateSet _gunnerScan = new();    // the AI gunner's acquisition scan (D14)
     private readonly RandomNumberGenerator _aimRng = Rng.Stream(Rng.Weapons); // the assist's 1° launch scatter
 
     private FlightModel _model = null!;
@@ -422,6 +423,8 @@ public partial class FlightController : Node3D
     private float _reticleRate;                  // m/s the pipper's range is currently closing at
     private bool _aimLoggedFirst;                // verification breadcrumb: the assist's first snap logs once
     private bool _aimListsLogged;                // verification breadcrumb: the candidate list sizes log once
+    private bool _gunnerLoggedTarget;            // verification breadcrumb: the AI gunner's first acquisition
+    private bool _gunnerLoggedFire;              // verification breadcrumb: the AI gunner's first open fire
     private bool _gunLoopOn;                     // the firing loop sound is currently playing
     private bool[] _gunLoggedFirst = Array.Empty<bool>(); // verification breadcrumb: each group logs its first live round once
     private int _rocketsLaunched;                // verification breadcrumb: the first few launches log their pylon
@@ -495,6 +498,10 @@ public partial class FlightController : Node3D
     /// <summary>The flight model's world velocity, m/s — the assist's intercept solve needs it, and
     /// so does the shooter's own subtraction to relative velocity.</summary>
     public Vector3 WorldVelocity => _model.VelocityDir * _model.Speed;
+
+    /// <summary>The nose axis off the SIM attitude (the render half may hold an interpolated
+    /// frame) — what the AI gunner's quick-draw cones project fore and aft from.</summary>
+    public Vector3 NoseDirection => -_model.Attitude.Z;
 
     /// <summary>The weapon lab's free camera: while set, this controller writes NOTHING to the
     /// camera — no chase, no fixed view, no orbit, and <see cref="SnapCamera"/> is a no-op — because
@@ -799,8 +806,9 @@ public partial class FlightController : Node3D
     /// <summary>One projectile hit on this plane (the pool resolved the struck box already):
     /// maps the box + plane-local impact to the data part, spends the weapon's ARMOR_DAMAGE /
     /// HEALTH_DAMAGE through <see cref="PlaneDamage.Apply"/> (armor first), and drives the same
-    /// feedback a terrain graze does — part visuals, damage-dial blink, HUD flash line. A dead
-    /// critical part downs the plane through the existing <see cref="Crash"/> path, exactly as
+    /// feedback a terrain graze does — part visuals, damage-dial blink, HUD flash line. Exhausted
+    /// whole-vehicle health (<see cref="PlaneDamage.IsDestroyed"/>, the decoded kill rule) downs
+    /// the plane through the existing <see cref="Crash"/> path, exactly as
     /// <see cref="SurviveHit"/> does. No cooldown: weapon fire is discrete, every round counts.
     /// Ignored while crashed (the body is unhittable then anyway — belt and braces) and without
     /// damage data (no destroyable_parts: nothing to track, the round just sparks).
@@ -842,9 +850,12 @@ public partial class FlightController : Node3D
             GD.Print($"shot hit P{PlayerIndex + 1} ({colliderPart}→{dataPart}): {weapon.Id} " +
                      $"armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0}");
         }
-        if (state.Hp <= 0f && state.Def.Critical)
+        // The decoded kill rule (A4/D14): whole-vehicle health exhausted — every zone's health
+        // pool empty under the summary recompute — downs the plane. A single dead critical
+        // part no longer does: that was a recorded divergence, retired; the flag stays parsed.
+        if (Damage.IsDestroyed)
         {
-            GD.Print($"part destroyed: {dataPart} (critical) — shot down by {weapon.Id}");
+            GD.Print($"vehicle health exhausted ({dataPart} last) — shot down by {weapon.Id}");
             Crash(impact, $"gunfire ({weapon.Id})", colliderPart, null,
                 killer: shooter != ProjectilePool.NoShooter ? shooter : null);
             return;
@@ -1020,6 +1031,12 @@ public partial class FlightController : Node3D
         // SIM-time rate. A crash or halt stops the calls, freezing the radius too.
         _cam?.UpdateDynamics(dt, _model.Speed);
 
+        // The AI gunner (D14): acquire/hold the target and decide this tick's trigger and lead
+        // BEFORE the fire step reads them. Runs for AI pilots only; a gunner-less AI keeps the
+        // released trigger it always had.
+        if (!IsHumanPiloted && Pilot?.Gunner is { } aiGunner)
+            DriveAiGunner(aiGunner);
+
         // Weapons: poll the raw held controls, let FireControl decide (selector edges, fire
         // clocks, ammo draw-down, cues), then perform its outcome against the pool and audio.
         if (_fire != null)
@@ -1031,8 +1048,10 @@ public partial class FlightController : Node3D
             var fireInputs = new FireInputs
             {
                 // A null pool could spawn nothing — feed the triggers as released so no ammo is
-                // decided away on rounds that could never fire.
-                FireHeld = Projectiles != null && FirePressed(),
+                // decided away on rounds that could never fire. An AI pilot's gunner IS its
+                // trigger; without one the raw controls (--fire's AutoFire included) decide.
+                FireHeld = Projectiles != null
+                    && (!IsHumanPiloted && Pilot?.Gunner is { } g ? g.WantsFire : FirePressed()),
                 RocketHeld = Projectiles != null && RocketFirePressed(),
                 GunSelectHeld = GunSelectPressed(),
                 RocketSelectHeld = RocketSelectPressed(),
@@ -1580,14 +1599,21 @@ public partial class FlightController : Node3D
     ///
     /// <para>Gated on <see cref="IsHumanPiloted"/> (B6): the original's "local player" test is
     /// human-versus-AI, not pane 1 — every CSVM pane is a human pilot, so every pane is assisted
-    /// (Decision 7). An AI plane takes the muzzle axis here rather than the original's dead-eye
-    /// scatter, which arrives with D14's gunnery model.</para></summary>
+    /// (Decision 7). An AI plane never reaches the assist: its round leaves along the gunner's
+    /// lead perturbed inside the dead-eye cone (D14), one scatter draw per shot; a gunner-less
+    /// AI falls back to its muzzle axis.</para></summary>
     private Vector3 AssistedGunDirection(WeaponDef weapon, int gi, int mi, Node3D muzzle,
         Basis planeBasis, Vector3 inheritVel, double now)
     {
         var muzzleXf = muzzle.GlobalTransform;
+        if (!IsHumanPiloted)
+        {
+            return Pilot?.Gunner is { WantsFire: true } gunner
+                ? gunner.ShotDirection(muzzleXf.Origin)
+                : -muzzleXf.Basis.Z.Normalized();
+        }
         var slots = gi >= 0 && gi < _aimSlots.Length ? _aimSlots[gi] : null;
-        if (!IsHumanPiloted || slots == null || mi < 0 || mi >= slots.Length)
+        if (slots == null || mi < 0 || mi >= slots.Length)
         {
             return -muzzleXf.Basis.Z.Normalized();
         }
@@ -1947,6 +1973,79 @@ public partial class FlightController : Node3D
         return input;
     }
 
+    /// <summary>One AI-gunner tick (D14): keep the standing target while it lives (re-acquiring
+    /// the nearest hostile when it is gone and <see cref="AiGunner.AutoTarget"/> allows), then
+    /// hand the gunner this tick's fire geometry — the SELECTED gun group's weapon and muzzle
+    /// midpoint, the sim pose (never the render pose), and the target's state — so
+    /// <see cref="AiGunner.WantsFire"/> is current when the fire step reads it.</summary>
+    private void DriveAiGunner(AiGunner gunner)
+    {
+        gunner.HoldFire();
+        if (_fire == null || Projectiles == null)
+            return;
+        if (gunner.Target is not { } target || target.Crashed || !target.IsInsideTree())
+        {
+            gunner.Target = gunner.AutoTarget ? NearestHostileAircraft() : null;
+            if (gunner.Target is not { } acquired)
+                return;
+            target = acquired;
+            if (!_gunnerLoggedTarget)
+            {
+                _gunnerLoggedTarget = true; // verification breadcrumb: who the gunner went after
+                GD.Print($"ai gunner: shooter {PlayerIndex} targets P{target.PlayerIndex + 1} " +
+                         $"at {WorldPosition.DistanceTo(target.WorldPosition):0} m");
+            }
+        }
+        GunGroup? group = _fire.GunSel >= 0 && _fire.GunSel < _firableGuns.Length
+            ? _firableGuns[_fire.GunSel]
+            : null;
+        if (group == null || group.Muzzles.Count == 0)
+            return;
+        // The muzzle midpoint of the selected group — the same convergence point the reticle
+        // and the original's own barrel averaging use.
+        var muzzlePos = Vector3.Zero;
+        foreach (var m in group.Muzzles)
+            muzzlePos += m.GlobalPosition;
+        muzzlePos /= group.Muzzles.Count;
+        gunner.Solve(muzzlePos, WorldVelocity, _model.Attitude,
+            target.WorldPosition, target.WorldVelocity, target.NoseDirection,
+            group.Weapon.Velocity ?? ProjectilePool.DefaultVelocity, group.Weapon.Range ?? 0f);
+        if (gunner.WantsFire && !_gunnerLoggedFire)
+        {
+            _gunnerLoggedFire = true; // verification breadcrumb: the gates first opened
+            GD.Print($"ai gunner: shooter {PlayerIndex} opens fire on P{target.PlayerIndex + 1} " +
+                     $"at {WorldPosition.DistanceTo(target.WorldPosition):0} m ({group.Weapon.Id})");
+        }
+    }
+
+    /// <summary>The nearest live hostile aircraft — the minimal D14 targeting stand-in (the D12
+    /// ranking formula is its own later item). Same roster and team gate as the aim assist and
+    /// the turret gunners: the pool's registered aircraft, hostility via
+    /// <see cref="AimAssist.TeamOfPilot"/>.</summary>
+    private FlightController? NearestHostileAircraft()
+    {
+        if (Projectiles == null)
+            return null;
+        _gunnerScan.Clear();
+        Projectiles.CollectAircraft(_gunnerScan);
+        int ownTeam = AimAssist.TeamOfPilot(PlayerIndex);
+        FlightController? best = null;
+        float bestDist = float.MaxValue;
+        foreach (var c in _gunnerScan.Vehicles)
+        {
+            if (!c.Live || ReferenceEquals(c.Source, this))
+                continue;
+            if (c.Team == AimAssist.NeutralTeam || ownTeam == AimAssist.NeutralTeam || c.Team == ownTeam)
+                continue;
+            float d = WorldPosition.DistanceTo(c.Position);
+            if (d >= bestDist)
+                continue;
+            bestDist = d;
+            best = c.Source as FlightController;
+        }
+        return best;
+    }
+
     private FlightInput ReadKeyboard(float dt)
     {
         // this player's gamepad(s) fly the plane (see PadPressed/PadAxis);
@@ -1977,7 +2076,7 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>Decides a confirmed collision's outcome: false =
-    /// crash (severe impact, a critical part destroyed, or no damage data), true =
+    /// crash (severe impact, whole-vehicle health exhausted, or no damage data), true =
     /// survivable graze — the struck part takes severity-scaled damage, the plane is
     /// placed at the swept safe pose, its velocity deflects along the surface with
     /// some tangential loss, and the attitude takes a lever-arm kick.</summary>
@@ -2008,11 +2107,11 @@ public partial class FlightController : Node3D
             {
                 Visuals?.OnPartDamage(dataPart, state.Fraction);
                 Gauges?.OnPartDamage(dataPart); // damage dial: hit zone blinks 5 s
-                if (state.Hp <= 0f && state.Def.Critical)
+                if (Damage.IsDestroyed)
                 {
-                    GD.Print($"part destroyed: {dataPart} (critical) — " +
+                    GD.Print($"vehicle health exhausted ({dataPart} last) — " +
                              $"vn={vn:0.0} m/s into {hitName}");
-                    return false; // the data's meaning: a dead critical part downs the plane
+                    return false; // the decoded kill rule: whole-vehicle health at zero (A4/D14)
                 }
                 _damageFlashText = $"⚠ IMPACT {dataPart.ToUpperInvariant()} {state.Fraction * 100f:0}%";
                 _damageFlash = DamageFlashTime;

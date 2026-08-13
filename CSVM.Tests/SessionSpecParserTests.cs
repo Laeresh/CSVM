@@ -172,6 +172,18 @@ public class SessionSpecParserTests
         Assert.Equal(("edevast", null), s.AiPlanes[3]);
     }
 
+    /// <summary>The D14 gunnery arm: bare `--ai-attack` reads skill 5, a value clamps to the
+    /// 1–9 rating scale, and an absent flag stays null (no gunner armed).</summary>
+    [Fact]
+    public void AiAttackCarriesAClampedSkillRating()
+    {
+        Assert.Null(SessionSpec.Parse(new[] { "--fly" }).AiAttackSkill);
+        Assert.Equal(5, SessionSpec.Parse(new[] { "--ai-attack" }).AiAttackSkill);
+        Assert.Equal(9, SessionSpec.Parse(new[] { "--ai-attack=9" }).AiAttackSkill);
+        Assert.Equal(1, SessionSpec.Parse(new[] { "--ai-attack=0" }).AiAttackSkill);
+        Assert.Equal(9, SessionSpec.Parse(new[] { "--ai-attack=42" }).AiAttackSkill);
+    }
+
     [Fact]
     public void AMalformedDamagePresetIsReportedThroughTheSpecsWarnings()
     {
