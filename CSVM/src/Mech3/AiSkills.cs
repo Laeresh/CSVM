@@ -28,6 +28,65 @@ public readonly struct AiSkillVector
     public int? Constitution { get; init; }
 }
 
+/// <summary>One roster <c>rating_biases</c> entry (slot 33, docs/formats/ai-rosters.md): a
+/// node-name pattern with <c>*</c> wildcards and the bias it applies to target ranking. This
+/// install authors <c>[pattern, bias]</c> pairs only (measured: 0 triples across all 53 files);
+/// the exe's editor comment names a third element, so one is accepted defensively and preserved
+/// raw (<see cref="Third"/> — parse it, act on nothing).</summary>
+public sealed class AiRatingBias
+{
+    public AiRatingBias(string pattern, float bias, object? third)
+    {
+        Pattern = pattern;
+        Bias = bias;
+        Third = third;
+    }
+
+    /// <summary>The candidate-node-name pattern; <c>*</c> matches any run of characters.</summary>
+    public string Pattern { get; }
+
+    /// <summary>The authored bias (shipped values are −1.0); how it scales into the ranking is
+    /// <c>AiTargetRanking.BiasScale</c>'s documented assumption.</summary>
+    public float Bias { get; }
+
+    /// <summary>The undecoded third element, raw. Preserved, never interpreted.</summary>
+    public object? Third { get; }
+
+    /// <summary>Case-insensitive wildcard match of <paramref name="name"/> against
+    /// <see cref="Pattern"/>. Only <c>*</c> is special (any run, so <c>**</c> collapses to
+    /// <c>*</c>) — the shipped data authors nothing else.</summary>
+    public bool Matches(string name)
+    {
+        string p = Pattern;
+        int pi = 0, ni = 0, star = -1, mark = 0;
+        while (ni < name.Length)
+        {
+            if (pi < p.Length && (p[pi] == '*'))
+            {
+                star = pi++;
+                mark = ni;
+            }
+            else if (pi < p.Length && char.ToLowerInvariant(p[pi]) == char.ToLowerInvariant(name[ni]))
+            {
+                pi++;
+                ni++;
+            }
+            else if (star >= 0)
+            {
+                pi = star + 1;
+                ni = ++mark;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        while (pi < p.Length && p[pi] == '*')
+            pi++;
+        return pi == p.Length;
+    }
+}
+
 /// <summary>
 /// The AI pilot-skill constants (docs/formats/ai-rosters.md): the shared
 /// <c>player.json</c>'s <c>ai_skill_parameters</c> block, one <c>[value@1, value@9]</c> endpoint
@@ -46,6 +105,12 @@ public sealed class AiSkills
 {
     // The roster's nine consecutive skill slots (docs/formats/ai-rosters.md "The skill vector").
     private const int SkillSlotFirst = 22;
+
+    // Roster slot 6: primary_target, the assigned target node name ("Primary target: %s").
+    private const int PrimaryTargetSlot = 6;
+
+    // Roster slot 33: rating_biases, [pattern, bias, ?] triples feeding target ranking.
+    private const int RatingBiasesSlot = 33;
 
     private readonly Dictionary<string, (float At1, float At9)> _params =
         new(StringComparer.OrdinalIgnoreCase);
@@ -113,6 +178,32 @@ public sealed class AiSkills
             Talker = Slot(7),
             Constitution = Slot(8),
         };
+    }
+
+    /// <summary>Reads a roster block's assigned target (slot 6, <c>primary_target</c>): the
+    /// target node's name, or null when unset (<c>""</c> on 346 of 414 shipped blocks, or a
+    /// short block omitting the slot). <c>"player"</c> names the player's aircraft.</summary>
+    public static string? RosterPrimaryTarget(IReadOnlyList<object?> fields) =>
+        fields.Count > PrimaryTargetSlot && fields[PrimaryTargetSlot] is string { Length: > 0 } s
+            ? s
+            : null;
+
+    /// <summary>Reads a roster block's <c>rating_biases</c> (slot 33): the authored
+    /// [pattern, bias, ?] entries in order, or an empty list when the slot is null, omitted or
+    /// malformed. The third element is undecoded and kept raw on each entry.</summary>
+    public static List<AiRatingBias> RosterRatingBiases(IReadOnlyList<object?> fields)
+    {
+        var result = new List<AiRatingBias>();
+        if (fields.Count <= RatingBiasesSlot || fields[RatingBiasesSlot] is not List<object?> list)
+            return result;
+        foreach (var entry in list)
+        {
+            if (entry is List<object?> { Count: >= 2 } triple
+                && triple[0] is string pattern && triple[1] is float bias)
+                result.Add(new AiRatingBias(pattern, bias, triple.Count > 2 ? triple[2] : null));
+        }
+
+        return result;
     }
 
     /// <summary>Loads one mission's roster blocks (<c>aiv.json</c> in the mission zrdr scope):

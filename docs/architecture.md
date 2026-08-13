@@ -46,7 +46,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/AiNets.cs` — the chapter AI patrol nets: `ne0NNNNN` waypoint graphs + the `neindex` id→name table, raw tags/trailer included.
 - `src/Mech3/Maneuvers.cs` — the shared maneuver library (`zrdr/maneuvers.zrd`): 17 timed attitude-step programs with `natural_touch` difficulty gates, the eligibility cull, and the `signature_maneuvers` bitmask decode.
 - `src/Mech3/EnemyGenerators.cs` — the mission `egen.zrd.json` reader: the 23 enemy generators in their three shapes (zeppelin launch / plain / moving spawner), `[null]` files as empty.
-- `src/Mech3/AiSkills.cs` — the `ai_skill_parameters` endpoint pairs from player.json (1–9 ratings, linear between the decoded endpoints) + the roster skill-vector accessor (aiv slots 22–30 by stat name).
+- `src/Mech3/AiSkills.cs` — the `ai_skill_parameters` endpoint pairs from player.json (1–9 ratings, linear between the decoded endpoints) + the roster accessors: the skill vector (slots 22–30 by stat name), `primary_target` (slot 6) and `rating_biases` (slot 33, `AiRatingBias` wildcards).
 - `src/Mech3/Messages.cs` — the game's localized string table: the `messages.json` key→value map behind every `MSG_*` key.
 - `src/Mech3/MarkerRig.cs` — a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers`.
 - `src/Mech3/CompiledAnim.cs` — reader for the compiled `cam_anim`/`mis_anim` archives: anim defs, sequences/events, lazy SI-script pool.
@@ -88,7 +88,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/TurretController.cs` — one carried turret gunner (M4 C9a): acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
 - `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; a placeholder steering law.
 - `src/Flight/AiModeMachine.cs` — the nine-mode AI state machine (M4 D11), the engine's decoded mode vocabulary: patrol/pursue/lay off/evade/evasive maneuver/stunned/avoid crash + two enum-only danger-zone modes; steady-hand and sixth-sense reaction rolls on the shipped chances.
-- `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery (M4 D14): intercept lead via `AimAssist.TryIntercept`, the ±11° gun cone and the quick-draw cone as fire gates, per-shot dead-eye scatter; mutable target.
+- `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery (M4 D14): intercept lead via `AimAssist.TryIntercept`, the ±11° gun cone and the quick-draw cone as fire gates, per-shot dead-eye scatter; mutable target, primary-target name and rating biases (the D12 script seams).
+- `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula (M4 D12): rank = weight × 1200 + distance + objectiveBias, minimised; player base weight 0.7, ±0.2 bearing/altitude/facing terms, 1e21 beyond activation; rating-bias matching and the allied-attacker deconfliction pick.
 - `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints (M4 B5): nearest node first, then edge-list neighbours, seeded branch draws; aircraft-agnostic so F17's zeppelins reuse it.
 - `src/Flight/ManeuverExecutor.cs` — plays one maneuver's attitude-step program as `FlightInput` per sim step (M4 D13): the input source D11's state machine runs during `evasive maneuver`.
 - `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
@@ -902,9 +903,12 @@ Consumed by `Session/AiGeneratorRuntime`; golden counts in `CSVM.Tests/EnemyGene
 ## src/Mech3/AiSkills.cs
 The AI pilot-skill constants (M4 D14, docs/formats/ai-rosters.md): player.json's
 `ai_skill_parameters` block as `[value@1, value@9]` endpoint pairs indexed by the 1–9 rating
-(`At`, plus named helpers for D14's two angles), the roster skill-vector accessor
-(`RosterSkills`: aiv slots 22–30 by stat name, `-1`/omitted = null) and the thin per-mission
-roster loader (`LoadRoster`). Units + shipped-constant goldens in `AiSkillsTests`.
+(`At`, plus named helpers for D14's two angles), the roster accessors
+(`RosterSkills`: aiv slots 22–30 by stat name, `-1`/omitted = null; `RosterPrimaryTarget`:
+slot 6; `RosterRatingBiases`: slot 33 as `AiRatingBias` — wildcard `Matches`, shipped pairs,
+a third element accepted and preserved raw, never acted on) and the thin per-mission
+roster loader (`LoadRoster`). Units + shipped-constant goldens in `AiSkillsTests`;
+slot 6/33 census goldens in `AiTargetRankingTests`.
 ⚠ Between the endpoints the curve is LINEAR BY ASSUMPTION — only the two endpoints are decoded.
 ⚠ Two stats improve DOWNWARD (`dead_eye_angle`, `steady_hand_chance`); never normalise the
   direction. `natural_touch` has no entry by design and asking for it throws.
@@ -2268,12 +2272,29 @@ seeded draw per shot. Gates in order: an intercept reachable inside the weapon's
 (`AimAssist.TryIntercept`, consumed never re-derived), the airframe's ±11° `gun_pitch`/`gun_yaw`
 forward cone as a hard fire gate, and the quick-draw cone off the TARGET's nose/tail axis.
 Engine-free (`AiGunnerTests`); the live half is the `ai-gunnery` suite.
-⚠ `Target` is a plain mutable field BY DESIGN (the mission-script rule); `AutoTarget` re-acquires
-  the nearest hostile through the host, which is the minimal D14 stand-in — D12's ranking
-  formula is a separate item.
+⚠ `Target`, `PrimaryTargetName` and `RatingBiases` are plain mutable fields BY DESIGN (the
+  mission-script rule); `AutoTarget` re-acquires through the host's `SelectRankedTarget` —
+  D12's decoded ranking (`AiTargetRanking`), no longer the nearest hostile.
 ⚠ `DeadEyeAngleDeg`/`QuickDrawAngleDeg` are `ai_skill_parameters` values (`Mech3/AiSkills`),
   interpolated from the pilot's 1–9 rating — never invented constants. `quick_draw_chance` (the
   marginal-shot roll) is NOT modelled yet; the angle is the only quick-draw term wired.
+
+## src/Flight/AiTargetRanking.cs
+The decoded target-ranking formula (M4 D12, docs/formats/ai-rosters.md "AI modes, engine-side"):
+`rank = weight × 1200 + distance + objectiveBias`, MINIMISED; player base weight 0.7, others
+1.0, ±0.2 weight terms for bearing / altitude sign / target facing, `1e21` beyond the
+activation radius (never picked). Snapshots in, index + `TargetScore` out, engine-free
+(`AiTargetRankingTests`); `SelectBest` prefers the best candidate no ally already holds and
+falls back to the overall best when the pool is exhausted (the design's deconfliction, minimum
+reading); `ObjectiveBiasFor` matches `rating_biases` patterns, first match wins.
+⚠ Under minimisation the 0.7 constant prefers the PLAYER at comparable distance (360 rank
+  units) — the literal decoded arithmetic; the plan's "rank the player last" gloss does not
+  follow from it and was implemented as decoded, not as glossed.
+⚠ Assumptions, named in the module doc: the three terms' sign conventions (the design's
+  favourable arms), BiasScale = 1200 (raw metres would leave every shipped bias inert), the
+  +0.4 dynamics / −0.5 structure terms unmodelled (no non-aircraft candidates reach this path).
+⚠ Deconfliction is inert in current sessions: `TeamOfPilot` gives every pilot its own team, so
+  the allied-attacker count is always zero until a team model exists.
 
 ## src/Flight/IncomingFire.cs
 `--incoming[=metres[,wep_id]]` — the near-miss test rig: a phantom shooter 120 m on each player's
@@ -3274,8 +3295,11 @@ share for a splash hit, 1 for a direct round). ⚠ The weapon/graze kill test is
 `PlaneDamage.IsDestroyed` — whole-vehicle health at zero, the decoded rule (D14 retired the
 old any-critical-part kill; the `critical` flag stays parsed, nothing consults it). An AI
 pilot's trigger and lead are its `AiPilot.Gunner` (D14): `SimStep` drives the gunner before
-the fire step (`DriveAiGunner` — standing target kept while live, else nearest hostile; with a
-mode machine the target stays acquired in every mode but only pursue/lay off solve and shoot),
+the fire step (`DriveAiGunner` — standing target kept while live, else re-acquired through
+`SelectRankedTarget`, D12's decoded ranking over the pool roster with the same team gate:
+primary_target outranks, ranking otherwise, activation-cutoff candidates never picked, first
+acquisition logged with its rank inputs; with a
+mode machine a standing target is kept in every mode but only pursue/lay off solve and shoot),
 the fire inputs read `WantsFire` instead of the raw controls, and `AssistedGunDirection`'s
 non-human arm fires the gunner's per-shot dead-eye scatter — an AI plane NEVER ticks or reads
 the aim-assist slots (pinned by the `ai-gunnery` suite's A/B). `TakeProjectileHit` also rolls
