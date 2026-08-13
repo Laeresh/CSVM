@@ -171,6 +171,14 @@ public sealed class PlaneStats
     /// the kind_of chain). Empty when the def has none (damage model disabled).</summary>
     public List<DestroyablePart> DestroyableParts = new();
 
+    /// <summary>The def-authored whole-vehicle pair ('armor'/'health', nearest def in the
+    /// chain) — the AI base defs carry one (docs/formats/vehicle.md, fighters 64/64…100/100);
+    /// no player def resolves either, so both stay null there and <see cref="PlaneDamage"/>
+    /// seeds the whole pair as the sum over parts instead.</summary>
+    public float? VehicleArmor;
+
+    public float? VehicleHealth;
+
     /// <summary>The def-level 'injure_anims' (distinct from each part's): descending
     /// HP-fraction thresholds → whole-plane effect anims — [0.10 player_smoketrail]
     /// (the dying plane's dense_firetrail smoke) and [0.85 player_fuelleak]. Read as
@@ -281,6 +289,19 @@ public sealed class PlaneStats
             AiReturnRange = Prop("return_range", 1200f),
         };
         stats.EngineSound = PropStr("engine_sound", stats.EngineSound);
+
+        // The whole-vehicle pair, only when the chain actually authors it (AI defs do; player
+        // chains carry neither key, and Prop's fallback would invent a pool).
+        float? PropOpt(string key)
+        {
+            foreach (var d in chain)
+                if (d.TryFloat(key, out var f))
+                    return f;
+            return null;
+        }
+
+        stats.VehicleArmor = PropOpt("armor");
+        stats.VehicleHealth = PropOpt("health");
 
         // def-level injure_anims: [frac, animName] pairs (smoke trail / fuel leak)
         foreach (var d in chain)

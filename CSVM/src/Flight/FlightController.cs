@@ -824,11 +824,13 @@ public partial class FlightController : Node3D
 
     /// <summary>One projectile hit on this plane (the pool resolved the struck box already):
     /// maps the box + plane-local impact to the data part, spends the weapon's ARMOR_DAMAGE /
-    /// HEALTH_DAMAGE through <see cref="PlaneDamage.Apply"/> (armor first), and drives the same
-    /// feedback a terrain graze does — part visuals, damage-dial blink, HUD flash line. Exhausted
-    /// whole-vehicle health (<see cref="PlaneDamage.IsDestroyed"/>, the decoded kill rule) downs
-    /// the plane through the existing <see cref="Crash"/> path, exactly as
-    /// <see cref="SurviveHit"/> does. No cooldown: weapon fire is discrete, every round counts.
+    /// HEALTH_DAMAGE through <see cref="PlaneDamage.Apply"/> — the decoded flow: the zone
+    /// armor-first (a dead zone redirects to a survivor), then the unabsorbed leftover against
+    /// the whole-vehicle pair — and drives the same feedback a terrain graze does — part
+    /// visuals, damage-dial blink, HUD flash line. Exhausted whole-vehicle health
+    /// (<see cref="PlaneDamage.IsDestroyed"/>, the decoded kill rule) downs the plane through
+    /// the existing <see cref="Crash"/> path, exactly as <see cref="SurviveHit"/> does. No
+    /// cooldown: weapon fire is discrete, every round counts.
     /// Ignored while crashed (the body is unhittable then anyway — belt and braces) and without
     /// damage data (no destroyable_parts: nothing to track, the round just sparks).
     /// <paramref name="shooter"/> is the round's owner (<see cref="PlayerIndex"/> of who fired,
@@ -857,24 +859,34 @@ public partial class FlightController : Node3D
         var pose = new Transform3D(_model.Attitude, _model.Position);
         var localImpact = pose.AffineInverse() * impact;
         string dataPart = PlaneDamage.MapStruckPart(colliderPart, localImpact);
+        // The decoded flow (D14 corrected 2026-08-14, docs/org/vehicleDamage.md): the resolver
+        // may REDIRECT a hit on a dead zone to a surviving one, and the leftover the zone could
+        // not absorb drains the whole-vehicle pair — so the struck zone is Apply's answer, not
+        // the geometric guess, and the kill test runs even when the hit went zone-less.
         var state = Damage.Apply(dataPart,
             (weapon.HealthDamage ?? 0f) * damageScale, (weapon.ArmorDamage ?? 0f) * damageScale);
-        if (state == null)
-            return;
-        Visuals?.OnPartDamage(dataPart, state.Fraction);
-        Gauges?.OnPartDamage(dataPart); // damage dial: hit zone blinks 5 s
+        string struckPart = state?.Def.Name ?? dataPart;
+        if (state != null)
+        {
+            Visuals?.OnPartDamage(struckPart, state.Fraction);
+            Gauges?.OnPartDamage(struckPart); // damage dial: hit zone blinks 5 s
+        }
+
         if (_projectileHitsLogged < 6)
         {
             _projectileHitsLogged++;
-            GD.Print($"shot hit P{PlayerIndex + 1} ({colliderPart}→{dataPart}): {weapon.Id} " +
-                     $"armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0}");
+            GD.Print($"shot hit P{PlayerIndex + 1} ({colliderPart}→{struckPart}): {weapon.Id} "
+                + (state != null
+                    ? $"armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0} "
+                    : string.Empty)
+                + $"hull={Damage.WholeHealth:0.0}/{Damage.WholeHealthMax:0}");
         }
-        // The decoded kill rule (A4/D14): whole-vehicle health exhausted — every zone's health
-        // pool empty under the summary recompute — downs the plane. A single dead critical
-        // part no longer does: that was a recorded divergence, retired; the flag stays parsed.
+
+        // The decoded kill rule: whole-vehicle health current at or below zero (never a part
+        // flag) — reachable through the zone-less overflow, so it is tested on every hit.
         if (Damage.IsDestroyed)
         {
-            GD.Print($"vehicle health exhausted ({dataPart} last) — shot down by {weapon.Id}");
+            GD.Print($"vehicle health exhausted ({struckPart} last) — shot down by {weapon.Id}");
             Crash(impact, $"gunfire ({weapon.Id})", colliderPart, null,
                 killer: shooter != ProjectilePool.NoShooter ? shooter : null);
             return;
@@ -890,7 +902,9 @@ public partial class FlightController : Node3D
                 ((weapon.HealthDamage ?? 0f) + (weapon.ArmorDamage ?? 0f)) * damageScale,
                 impact - _model.Position);
         }
-        _damageFlashText = $"⚠ HIT {dataPart.ToUpperInvariant()} {state.Fraction * 100f:0}%";
+        _damageFlashText = state != null
+            ? $"⚠ HIT {struckPart.ToUpperInvariant()} {state.Fraction * 100f:0}%"
+            : $"⚠ HIT HULL {Damage.SummaryHealthFraction * 100f:0}%";
         _damageFlash = DamageFlashTime;
     }
 
@@ -2210,21 +2224,28 @@ public partial class FlightController : Node3D
             _damageCooldown = DamageCooldown;
             float dmg = GrazeMaxDamage * (vn / CrashSpeed) * (vn / CrashSpeed);
             var state = Damage.Apply(dataPart, dmg);
+            string struckPart = state?.Def.Name ?? dataPart; // the resolver may redirect
             if (state != null)
             {
-                Visuals?.OnPartDamage(dataPart, state.Fraction);
-                Gauges?.OnPartDamage(dataPart); // damage dial: hit zone blinks 5 s
-                if (Damage.IsDestroyed)
-                {
-                    GD.Print($"vehicle health exhausted ({dataPart} last) — " +
-                             $"vn={vn:0.0} m/s into {hitName}");
-                    return false; // the decoded kill rule: whole-vehicle health at zero (A4/D14)
-                }
-                _damageFlashText = $"⚠ IMPACT {dataPart.ToUpperInvariant()} {state.Fraction * 100f:0}%";
+                Visuals?.OnPartDamage(struckPart, state.Fraction);
+                Gauges?.OnPartDamage(struckPart); // damage dial: hit zone blinks 5 s
+            }
+
+            if (Damage.IsDestroyed)
+            {
+                GD.Print($"vehicle health exhausted ({struckPart} last) — " +
+                         $"vn={vn:0.0} m/s into {hitName}");
+                return false; // the decoded kill rule: whole-vehicle health at zero (A4/D14)
+            }
+
+            if (state != null)
+            {
+                _damageFlashText = $"⚠ IMPACT {struckPart.ToUpperInvariant()} {state.Fraction * 100f:0}%";
                 _damageFlash = DamageFlashTime;
-                GD.Print($"graze ({part}→{dataPart}): {hitName} " +
+                GD.Print($"graze ({part}→{struckPart}): {hitName} " +
                          $"vn={vn:0.0} m/s dmg={dmg:0.0} " +
-                         $"armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0}");
+                         $"armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0} " +
+                         $"hull={Damage.WholeHealth:0.0}/{Damage.WholeHealthMax:0}");
             }
         }
 

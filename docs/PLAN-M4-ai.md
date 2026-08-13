@@ -1411,7 +1411,16 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
     ±11° gun cone and quick-draw cone as fire gates, per-shot dead-eye scatter, mutable target)
     behind `--ai-attack[=skill]`; the A4 kill divergence retired (whole-vehicle health ≤ 0 via
     `PlaneDamage.IsDestroyed`, `critical` kept parsed); pinned by the `ai-gunnery` suite (skill 1
-    hit 6/30 vs skill 9 13/30, assist exclusion A/B'd) + `AiSkillsTests`/`AiGunnerTests`
+    hit 6/30 vs skill 9 13/30, assist exclusion A/B'd) + `AiSkillsTests`/`AiGunnerTests`.
+    *Delta 2026-08-14:* an at-the-controls report (an enemy Fury tanked 9 HE rockets) exposed a
+    porting gap in the kill rule as landed; the missing mechanism was decoded the next day
+    (`FUN_004b9b30`, the take-hit wrapper LOOP the 2026-08-13 pass missed —
+    `docs/org/vehicleDamage.md`'s 2026-08-14 correction). `PlaneDamage` now carries a real
+    whole-vehicle (armor, health) pair: a dead zone redirects to a random survivor, the
+    unabsorbed leftover drains the whole pair zone-less, and death is whole health ≤ 0 —
+    reachable with zones still healthy. A Fury now falls to 5 head-on wep_06 rockets and
+    one-bearing fire kills (both pinned in `air-to-air`); the HUD DMG line leads with the
+    hull pair
 15. ☑ D15 — The rubber-band assist, behind a switch — **landed 2026-08-13**: lay off is live
     inside the D11 seam — pursue eases into it when a chasing human target falls behind
     (invented 350 m enter / 250 m caught-up / rear+chase cones / 2 s dwell, named as such),

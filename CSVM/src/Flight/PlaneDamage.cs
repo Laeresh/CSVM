@@ -5,26 +5,61 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// Per-part armor and hit points for the flying aircraft, backed by the
-/// vehicle def's 'destroyable_parts' (see <see cref="DestroyablePart"/>): the
-/// player planes carry nose / tail / leftwing / rightwing, all 'critical' — the
-/// plane is destroyed when any reaches 0 HP. Armor at 0 is a stripped zone, not a
-/// dead one; it just takes the round's health magnitude from then on. FlightController
-/// applies severity-scaled damage on survivable collisions and crashes outright on hard
-/// ones; this class only owns the two pools and the collider-box → data-part
-/// mapping. Respawn calls <see cref="Reset"/>.
+/// The vehicle damage ledger for a flying aircraft: the per-part pools from the def's
+/// 'destroyable_parts' (see <see cref="DestroyablePart"/>) plus an independent whole-vehicle
+/// (armor, health) pair, ported instruction-for-instruction from the decoded take-hit wrapper
+/// (docs/org/vehicleDamage.md: FUN_004b9b30 the loop, FUN_004b7f80 the spend, FUN_004b3950 the
+/// zone resolver, FUN_004b3bf0 the part spend + recompute). One hit is a damage pair spent on
+/// the struck zone armor-first; a dead or unknown zone REDIRECTS to a random surviving zone
+/// (the resolver only returns parts with health left); after a part spend the whole pair is
+/// recomputed as the parts' fraction of their summed maxima times the whole maxima; the
+/// unabsorbed leftover then re-enters zone-less and spends against the whole pair directly,
+/// with no recompute. Death is whole-vehicle health at or below zero — never a part flag.
+/// The whole maxima are the def's authored armor/health pair where one exists (AI defs);
+/// player defs author none, so the pair seeds as the sum over parts (FUN_0047bd90's
+/// re-derivation is the decoded precedent for sum-over-parts as the whole pair).
+/// FlightController applies severity-scaled damage on survivable collisions and crashes
+/// outright on hard ones. Respawn calls <see cref="Reset"/>.
 /// </summary>
 public sealed class PlaneDamage
 {
-    private readonly Dictionary<string, PartState> _parts = new(System.StringComparer.OrdinalIgnoreCase);
+    // FUN_004b3b60 considers at most the first three surviving parts before rand() picks one.
+    private const int RedirectCandidates = 3;
+    private const uint RngSeed = 0x2545F491u;
 
-    public PlaneDamage(IEnumerable<DestroyablePart> defs)
+    private readonly Dictionary<string, PartState> _parts = new(System.StringComparer.OrdinalIgnoreCase);
+    private readonly List<PartState> _order = new(); // def order — the resolver walks it
+    private float _wholeArmor;
+    private float _wholeHealth;
+    private uint _rng = RngSeed;
+
+    public PlaneDamage(IEnumerable<DestroyablePart> defs,
+        float? wholeArmorMax = null, float? wholeHealthMax = null)
     {
         foreach (var def in defs)
-            _parts[def.Name] = new PartState { Def = def, Hp = def.MaxHp, Armor = def.MaxArmor };
+        {
+            var state = new PartState { Def = def, Hp = def.MaxHp, Armor = def.MaxArmor };
+            _parts[def.Name] = state;
+            _order.Add(state);
+        }
+
+        WholeArmorMax = wholeArmorMax ?? _order.Sum(p => p.Def.MaxArmor);
+        WholeHealthMax = wholeHealthMax ?? _order.Sum(p => p.Def.MaxHp);
+        _wholeArmor = WholeArmorMax;
+        _wholeHealth = WholeHealthMax;
     }
 
     public IReadOnlyDictionary<string, PartState> Parts => _parts;
+
+    /// <summary>The whole-vehicle maxima: the def's authored pair, or the sum over parts.</summary>
+    public float WholeArmorMax { get; }
+
+    public float WholeHealthMax { get; }
+
+    /// <summary>The whole-vehicle current pools — the pair the decoded death test reads.</summary>
+    public float WholeArmor => _wholeArmor;
+
+    public float WholeHealth => _wholeHealth;
 
     /// <summary>Worst (lowest) combined armor+HP fraction across all parts — 1f (pristine) when
     /// there are no parts or none has taken damage. Drives whole-plane damage feedback keyed to
@@ -32,24 +67,21 @@ public sealed class PlaneDamage
     /// loop).</summary>
     public float WorstFraction => _parts.Count == 0 ? 1f : _parts.Values.Min(p => p.Fraction);
 
-    /// <summary>The whole-vehicle health summary's fraction: current part health over summed
-    /// part health maxima (docs/org/vehicleDamage.md — the original recomputes a whole-vehicle
-    /// pair from the parts after every part-scoped spend; the remake keeps the fraction, which
-    /// is the same summary in the parts' own scale).</summary>
-    public float SummaryHealthFraction
-    {
-        get
-        {
-            float max = _parts.Values.Sum(p => p.Def.MaxHp);
-            return max > 0f ? _parts.Values.Sum(p => p.Hp) / max : 1f;
-        }
-    }
+    /// <summary>The whole-vehicle health fraction — the real pair's current over max, no longer
+    /// a parts-derived stand-in. Fed to the DI voice thresholds and any "how dead am I" reader;
+    /// the decoded death test is this pool reaching zero.</summary>
+    public float SummaryHealthFraction =>
+        WholeHealthMax > 0f ? _wholeHealth / WholeHealthMax : 1f;
 
-    /// <summary>The decoded kill rule (the A4 decision, retired divergence D14): the vehicle is
-    /// destroyed when whole-vehicle health reaches zero — under the summary recompute, every
-    /// zone's health pool exhausted — never when one <c>critical</c> part dies (that flag stays
-    /// parsed; no code on the decoded death path reads it).</summary>
-    public bool IsDestroyed => _parts.Count > 0 && _parts.Values.Sum(p => p.Hp) <= 0f;
+    /// <summary>The decoded kill rule (FUN_004b9bc0, the A4 decision as corrected 2026-08-14):
+    /// whole-vehicle health current at or below zero. The <c>critical</c> flag stays parsed and
+    /// is never consulted — no code on the decoded death path reads a part flag.</summary>
+    public bool IsDestroyed => WholeHealthMax > 0f && _wholeHealth <= 0f;
+
+    /// <summary>Seeds the ledger from a plane's stats: authored whole pair where the def chain
+    /// carries one, sum-over-parts otherwise.</summary>
+    public static PlaneDamage For(PlaneStats stats) =>
+        new(stats.DestroyableParts, stats.VehicleArmor, stats.VehicleHealth);
 
     /// <summary>Maps the struck collider box (fuselage/wing/canard/tail, or the
     /// backstop ray's "center") + the impact point in the PLANE's local frame to
@@ -69,44 +101,105 @@ public sealed class PlaneDamage
             p.Hp = p.Def.MaxHp;
             p.Armor = p.Def.MaxArmor;
         }
+
+        _wholeArmor = WholeArmorMax;
+        _wholeHealth = WholeHealthMax;
+        _rng = RngSeed; // a respawned plane redirects identically — suite determinism
     }
 
-    /// <summary>Spends one round's two damage magnitudes (the weapon data's ARMOR_DAMAGE /
-    /// HEALTH_DAMAGE) against a part: armor absorbs first, and the share of the round armor
-    /// could not absorb carries over into health within the same shot, so a nearly-stripped
-    /// zone never wastes a hit. Health takes the round's *health* magnitude, scaled by that
-    /// carried-over share — an unarmored zone therefore takes exactly HEALTH_DAMAGE, which is
-    /// what makes AP (armor-heavy, health-light) punch through armor and do little to bare
-    /// airframe. For a round whose two magnitudes are equal the carry-over is point-for-point.
-    /// Returns the state after (null if the data defines no such part — then nothing was
-    /// tracked).</summary>
+    /// <summary>Spends one hit's two damage magnitudes (the weapon data's HEALTH_DAMAGE /
+    /// ARMOR_DAMAGE) through the decoded take-hit flow. The named zone takes the spend
+    /// armor-first while it lives; a dead or unknown zone redirects to a random surviving zone
+    /// (the resolver rule — a dead zone never absorbs, and never soaks a hit either); the part
+    /// spend recomputes the whole pair from the parts; the leftover the part could not absorb
+    /// then drains the whole pair directly. With no surviving zone the hit is spent on the
+    /// whole pair alone. Returns the zone actually struck (null when the hit went zone-less) —
+    /// callers must test <see cref="IsDestroyed"/> regardless of the return.</summary>
     public PartState? Apply(string partName, float healthDamage, float armorDamage)
     {
-        if (!_parts.TryGetValue(partName, out var p))
-            return null;
-        float unabsorbed = 1f; // share of the round left over once armor took its bite
-        if (armorDamage > 0f)
+        if (healthDamage <= 0f && armorDamage <= 0f)
+            return _parts.TryGetValue(partName, out var known) ? known : null;
+
+        float dmgA = armorDamage;
+        float dmgH = healthDamage;
+        var struck = ResolveStruckPart(partName);
+        if (struck != null)
         {
-            float spent = Mathf.Min(p.Armor, armorDamage);
-            p.Armor = Mathf.Max(0f, p.Armor - spent);
-            unabsorbed = (armorDamage - spent) / armorDamage;
+            Spend(ref dmgA, ref dmgH, ref struck.Armor, ref struck.Hp);
+            RecomputeWhole();
         }
-        if (healthDamage > 0f)
-            p.Hp = Mathf.Max(0f, p.Hp - healthDamage * unabsorbed);
-        return p;
+        else
+        {
+            Spend(ref dmgA, ref dmgH, ref _wholeArmor, ref _wholeHealth);
+        }
+
+        // The wrapper loop (FUN_004b9b30): while BOTH leftovers remain and the vehicle lives,
+        // the pair re-enters zone-less and spends against the whole pools — no recompute, so
+        // these dents sit outside the parts until a later part spend overwrites them.
+        while (dmgA > 0f && dmgH > 0f && _wholeHealth > 0f)
+            Spend(ref dmgA, ref dmgH, ref _wholeArmor, ref _wholeHealth);
+        return struck;
     }
 
     /// <summary>Spends a single damage magnitude — a collision, which the data gives equal
-    /// armor and health ranges (player.json's 'crash' block). Armor still shields first, and
-    /// the total spent across both pools is exactly the magnitude.</summary>
+    /// armor and health ranges (player.json's 'crash' block).</summary>
     public PartState? Apply(string partName, float damage) => Apply(partName, damage, damage);
 
-    /// <summary>"nose a0% h85% · tail a60% · …" — parts below full only, armor pool then health
-    /// pool, each omitted while it is untouched; "" when pristine.</summary>
+    /// <summary>"hull a81% h90% · nose a0% h85% · …" — the whole-vehicle pair first (the pool
+    /// the kill reads, kept visible in flight), then parts below full, armor pool then health
+    /// pool; "" when pristine.</summary>
     public string Summary()
     {
         var hurt = _parts.Values.Where(p => p.Hp < p.Def.MaxHp || p.Armor < p.Def.MaxArmor).ToList();
-        return hurt.Count == 0 ? "" : string.Join(" · ", hurt.Select(PoolText));
+        bool wholeHurt = _wholeHealth < WholeHealthMax || _wholeArmor < WholeArmorMax;
+        if (hurt.Count == 0 && !wholeHurt)
+            return "";
+        string whole = "hull";
+        if (WholeArmorMax > 0f)
+            whole += $" a{_wholeArmor / WholeArmorMax * 100f:0}%";
+        if (WholeHealthMax > 0f)
+            whole += $" h{_wholeHealth / WholeHealthMax * 100f:0}%";
+        return hurt.Count == 0 ? whole : whole + " · " + string.Join(" · ", hurt.Select(PoolText));
+    }
+
+    /// <summary>FUN_004b7f80 verbatim: armor spends first and its covered share shields health
+    /// 1:1; the leftovers are written back into the damage pair. Quirks kept on purpose: armor
+    /// standing against a hit with NO armor damage nulls the health damage outright, and the
+    /// health leftover is measured against the full magnitude, so the armor-shielded share
+    /// re-enters the wrapper loop rather than vanishing.</summary>
+    private static void Spend(ref float dmgA, ref float dmgH, ref float poolA, ref float poolH)
+    {
+        float covered = 0f;
+        if (poolA > 0f)
+        {
+            if (dmgA <= 0f)
+            {
+                dmgH = 0f;
+                return;
+            }
+
+            covered = Mathf.Min(poolA / dmgA, 1f);
+            float spent = Mathf.Min(poolA, dmgA);
+            poolA -= spent;
+            dmgA -= spent;
+            if (covered >= 1f)
+            {
+                dmgH = 0f;
+                return;
+            }
+        }
+
+        if (dmgH > 0f)
+        {
+            float reaches = (1f - covered) * dmgH;
+            float absorbed = Mathf.Min(poolH, reaches);
+            poolH = Mathf.Max(0f, poolH - reaches);
+            dmgH = Mathf.Max(0f, dmgH - absorbed);
+        }
+        else
+        {
+            dmgH = 0f;
+        }
     }
 
     private static string PoolText(PartState p)
@@ -117,6 +210,55 @@ public sealed class PlaneDamage
         if (p.Hp < p.Def.MaxHp || p.Def.MaxArmor <= 0f)
             text += $" h{p.HealthFraction * 100f:0}%";
         return text;
+    }
+
+    /// <summary>FUN_004b3950 + FUN_004b3b60: the named zone while its health lasts; otherwise a
+    /// uniform pick among the first up-to-3 surviving zones in def order; null only when none
+    /// survives (or the vehicle has no parts).</summary>
+    private PartState? ResolveStruckPart(string partName)
+    {
+        if (_parts.TryGetValue(partName, out var named) && named.Hp > 0f)
+            return named;
+        var live = new List<PartState>(RedirectCandidates);
+        foreach (var p in _order)
+        {
+            if (p.Hp <= 0f)
+                continue;
+            live.Add(p);
+            if (live.Count == RedirectCandidates)
+                break;
+        }
+
+        return live.Count == 0 ? null : live[(int)(NextRand() % (uint)live.Count)];
+    }
+
+    /// <summary>FUN_004b3bf0's tail: after a part spend, whole current = parts' fraction of
+    /// their summed maxima × whole maxima, both pools. ⚠ The decoded quirk, reproduced on
+    /// purpose: this OVERWRITES any earlier zone-less overflow dent, partially healing the
+    /// whole pair back onto the parts' fraction. The engine's own arithmetic does this.</summary>
+    private void RecomputeWhole()
+    {
+        float hpCur = 0f, hpMax = 0f, armorCur = 0f, armorMax = 0f;
+        foreach (var p in _order)
+        {
+            hpCur += p.Hp;
+            hpMax += p.Def.MaxHp;
+            armorCur += p.Armor;
+            armorMax += p.Def.MaxArmor;
+        }
+
+        _wholeHealth = hpMax == 0f ? 0f : hpCur * WholeHealthMax / hpMax;
+        _wholeArmor = armorMax == 0f ? 0f : armorCur * WholeArmorMax / armorMax;
+    }
+
+    private uint NextRand()
+    {
+        uint x = _rng;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        _rng = x;
+        return x;
     }
 
     public sealed class PartState

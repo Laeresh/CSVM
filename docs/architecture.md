@@ -3381,7 +3381,11 @@ toggle the body's hittability; the sim half is `SimStep(dt)`, called by
 return silences them; `WorldBlocksLine` is their world-only line-of-sight ray. An AI aircraft
 (M4 A2) is this SAME node with `Pilot` (an `AiPilot`) as its input source, `IsHumanPiloted`
 false, `Setup(null)` for the camera (every camera write skipped, `_cam` null) and no HUD canvas
-built — flight, collision, weapons and damage are byte-for-byte the player's path. Collaborators:
+built — flight, collision, weapons and damage are byte-for-byte the player's path.
+`TakeProjectileHit`/`SurviveHit` run the decoded damage flow (PlaneDamage: dead-zone redirect +
+whole-pool overflow, 2026-08-14) — the struck zone is Apply's ANSWER, not the geometric guess,
+and `IsDestroyed` is tested on every hit, zone-less included; the HUD DMG line leads with the
+hull pair. Collaborators:
 FlightModel, CameraController + CamParams, SpeedCue, Loadout + ProjectilePool (guns/rockets),
 `CollideDamageSink` →
 `AnimRuntime.CollideDamageAt` (fly-through facades), CrashRuntime, every HUD widget and animator.
@@ -3505,20 +3509,22 @@ then `P1 snapped onto Structure (score 1.000, 288 m out)`.
   does, so a screenshot's K/D/leader/banner/board are real facts, not staged ones.
 
 ## src/Flight/PlaneDamage.cs
-Per-part armor + hit points from vehicle.json destroyable_parts (via PlaneStats). MapStruckPart
-maps a struck collider box + plane-local impact to the data part: wing/canard by impact X sign
-(left = −X), fuselage fore/aft of z 0 → nose/tail. Apply(part, healthDamage, armorDamage) spends
-armor first and carries the share armor could not absorb into health within the same shot, scaled
-by the round's health magnitude — so a bare zone takes exactly HEALTH_DAMAGE; the one-magnitude
-overload (collisions) spends that amount across both pools. Reset refills both on respawn, Summary
-feeds the HUD DMG line, Fraction/WorstFraction are the COMBINED armor+health progression (the scale
-the injure_anims thresholds are on), feeding whole-plane feedback like FlightAudio's damaged-engine
-loop.
+The decoded vehicle damage ledger (org/vehicleDamage.md, corrected 2026-08-14): per-part pools
+from destroyable_parts PLUS a real whole-vehicle (armor, health) pair — authored where the def
+chain carries one (AI defs), else the sum over parts (player defs; player_bhawk 80/80, Fury
+90/90). Apply is the decoded take-hit flow ported instruction-for-instruction: the named zone
+spends armor-first (a dead/unknown zone REDIRECTS to a random surviving zone — the resolver
+rule), the whole pair recomputes as parts' fraction × whole maxima after every part spend, then
+the unabsorbed leftover re-enters zone-less and drains the whole pair directly. IsDestroyed =
+whole health ≤ 0 (reachable with zones still healthy — the overflow kill). Summary leads with
+the hull pair for the HUD DMG line; SummaryHealthFraction reads the whole pool (DI voice);
+WorstFraction stays the worst PART (FlightAudio's damaged-engine loop).
+⚠ The recompute OVERWRITES earlier overflow dents (partial heal) — the decoded quirk, kept on
+  purpose; and armor standing against a hit with no armor damage nulls the health damage.
 ⚠ The "tail" arm ignores localImpact and is correct only because PlaneCollider.Relabel hands it
   no outboard boxes — do not fix tail sidedness here; widening the signature was rejected.
-⚠ The `engine` flag (power loss) is unwired **by design, not deferred** — the original states damage
-  never degrades performance; but the shipped data still sets the flag, so retail may have walked
-  that back (docs/formats/vehicle.md).
+⚠ Exact spends (armor strip, then bare-zone health) are the only way to pre-set a zone without
+  the leftover draining the whole pool — the suites' scaffolding pattern; an overkill Apply kills.
 ⚠ A stock zone's effective pool is DOUBLE its MaxHp (armor == hp on all 88 shipped entries, spent
   first) — faithful to the original, not a regression to tune away. Armor at 0 is a stripped zone,
   not a dead one. FlightController.Crash still never calls in

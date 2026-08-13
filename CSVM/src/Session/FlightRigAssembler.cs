@@ -88,7 +88,7 @@ public sealed class FlightRigAssembler
             Collider = PlaneCollider.Build(planeModel), // swept airframe boxes (wingtip/tail collision)
             // per-part HP from destroyable_parts — collisions below
             // the crash threshold damage the struck part instead of crashing
-            Damage = stats.DestroyableParts.Count > 0 ? new PlaneDamage(stats.DestroyableParts) : null,
+            Damage = stats.DestroyableParts.Count > 0 ? PlaneDamage.For(stats) : null,
             // Flying into a WeaponOrCollideHit object (the 44 facades/windows/agyrobus)
             // breaks it and passes through; every other collision stays solid.
             CollideDamageSink = _in.WorldRuntime != null ? _in.WorldRuntime.CollideDamageAt : null,
