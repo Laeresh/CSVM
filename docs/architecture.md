@@ -78,7 +78,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/Loadout.cs` — `stock_loadouts.json` reader + `Bind` to a built plane: gun groups + hardpoints, markers→muzzle nodes; `--dump-loadout`.
 - `src/Flight/WeaponBench.cs` — the world-less 48-weapon mount-and-fire pass check behind `--weapon-test` and `weapons-fire`; fires the whole `ForRig` rig, no lab node involved.
 - `src/Flight/FireControl.cs` — the engine-free fire-control state machine (BL-295): trigger edges, fire clocks, ammo draw-down, both selectors, dry cues; `FlightController` performs its `FireOutcome`.
-- `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the engine-free forget + catch-up pass (B2); B3/B4 add the intercept solver and candidate scorer.
+- `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the engine-free forget + catch-up pass (B2), plus the constant-velocity intercept solver (B3); B4 adds the candidate scorer.
 - `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
@@ -1647,6 +1647,26 @@ every pilot unconditionally today because every pilot in CSVM is human (Decision
 ⚠ `PlaneStats.StickyBulletCatchupRate`/`StickyBulletForgetInterval` are the two of the four
   `sticky_bullet_*` keys B2 consumes (shipped 5.0 / 1.5); `Inaccuracy`/`DistFactor` are B4/B5's and
   are not parsed yet — do not add them here ahead of the items that use them.
+
+`AimAssist.TryIntercept` (B3, `FUN_00460e30`) is the constant-velocity intercept solver: given a
+muzzle position, the round's speed, a target position, and the target's velocity RELATIVE to the
+shooter (the caller subtracts before calling), it returns the fire direction and time of flight, or
+false for no solution. Frame-agnostic — every input in one space (world or plane-local), the answer
+comes out in that space; B5 supplies plane-local inputs. Internally solves for `u = 1/t` rather than
+`t` directly: `t`'s own quadratic has `|relVel|² − speed²` as its leading coefficient, which sits
+near zero whenever the target's closing speed is close to the round's (the common case), while `u`'s
+leading coefficient is `|displacement|²`, essentially never near zero for a real separation — that
+substitution, not the quadratic formula's own cancellation avoidance, is the "numerically stable"
+part. Fails on near-zero separation, a negative discriminant, or both `u` roots non-positive (no
+forward-time solution — the case that catches a target receding faster than the round in a straight
+line, which can still leave the discriminant positive). Proven in the `aim-assist` suite's
+dead-ahead/crossing/receding cases.
+⚠ Do **not** "fix" the Citardauq (`q = -0.5·(b + sign(b)·√disc)`, roots `q/a` and `c/q`) form back
+  into the textbook `(-b±√disc)/2a` — it reintroduces the cancellation the substitution above exists
+  to avoid, and the difference only shows up at long range where it is hardest to notice.
+⚠ The original's square root is a bit-trick approximation (`(x>>1)+0x1fc00000`), accurate to roughly
+  a per cent — `TryIntercept` uses a real `Mathf.Sqrt`. Do not reproduce the approximation, and do
+  not read a sub-per-cent disagreement with a hand-computed reference as a bug in either.
 
 ## src/Flight/WeaponCursor.cs
 `FireControl`'s internal ammo-slot index math (an `internal` class — nothing else may call it):

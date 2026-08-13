@@ -130,7 +130,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Build the assist
 
 2. ☑ Per-muzzle slot state and the per-frame forget + catch-up update
-3. ☐ The constant-velocity intercept solver
+3. ☑ The constant-velocity intercept solver
 4. ☐ The candidate scan, rejection gates and scorer
 5. ☐ Wire the assist into the fire call, apply the 1° scatter, and decode what the reticle follows
 6. ☐ Who gets the assist (every human pilot, not just pane 1), and the shooter-authoritative invariant for later
@@ -263,7 +263,7 @@ held; a "time since lock lost" reading is wrong. The snap at `catchup_rate × dt
 frame longer than 200 ms fully snaps the gun line — that is real hitch behaviour, not a rounding
 detail to smooth away.
 
-## B3 ☐ The constant-velocity intercept solver
+## B3 ☑ The constant-velocity intercept solver
 
 **Goal.** Given a muzzle position, projectile speed, a target's position and the relative velocity,
 return the direction to fire and the time of flight, or "no solution".

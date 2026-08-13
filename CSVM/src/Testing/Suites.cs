@@ -123,8 +123,9 @@ public static class Suites
         into.Add(new TestHarness.Suite("aim-assist",
             "the gun aim assist's per-muzzle slot (B2): a ~0.2 s catch-up time constant that snaps "
             + "outright past 1/catchup_rate, and a forget timer keyed to the last SHOT, not to losing "
-            + "a lock — plus the shipped sticky_bullet_* values player.json actually carries",
-            AimAssistSlots));
+            + "a lock; plus the shipped sticky_bullet_* values player.json actually carries and B3's "
+            + "constant-velocity intercept solver (dead-ahead, crossing, and outrun-with-no-solution)",
+            AimAssistSuite));
         into.Add(new TestHarness.Suite("loadout-forrig",
             "Loadout.ForRig covers every firepoint/pylon on all 11 airframes, seeded from stock", LoadoutForRig));
         into.Add(new TestHarness.Suite("warning-shot",
@@ -1693,15 +1694,16 @@ public static class Suites
         }
     }
 
-    /// <summary>B2's per-muzzle slot state: the forget + catch-up pass in isolation (no plane, no
-    /// pool — <see cref="AimAssist"/> is engine-free by design), plus a golden check that the two
-    /// keys it consumes parse off the real player.json at their documented shipped values
-    /// (docs/PLAN-sticky-bullets.md "What the data actually ships").</summary>
-    private static void AimAssistSlots(TestContext ctx)
+    /// <summary>B2's per-muzzle slot state (the forget + catch-up pass) and B3's intercept solver,
+    /// both in isolation — no plane, no pool, <see cref="AimAssist"/> is engine-free by design —
+    /// plus a golden check that the two player.json keys B2 consumes parse at their documented
+    /// shipped values (docs/PLAN-sticky-bullets.md "What the data actually ships").</summary>
+    private static void AimAssistSuite(TestContext ctx)
     {
         AimAssistCatchup(ctx);
         AimAssistForgetTimer(ctx);
         AimAssistShippedData(ctx);
+        AimAssistIntercept(ctx);
     }
 
     /// <summary>The catch-up slerp: a ~0.2 s time constant at the shipped catchup_rate (5.0), full
@@ -1825,6 +1827,48 @@ public static class Suites
             $"sticky_bullet_catchup_rate parses as the shipped 5.0");
         ctx.Check(Mathf.IsEqualApprox(1.5f, stats.StickyBulletForgetInterval),
             $"sticky_bullet_forget_interval parses as the shipped 1.5");
+    }
+
+    /// <summary>B3's constant-velocity intercept solver (<see cref="AimAssist.TryIntercept"/>): a
+    /// stationary target dead ahead solves to the plain displacement direction with t =
+    /// distance/speed; a crossing target's solved direction and t place the round at exactly the
+    /// target's projected position (self-consistency, not an independent re-derivation of the
+    /// quadratic); a target receding faster than the round returns no solution rather than a
+    /// bogus direction.</summary>
+    private static void AimAssistIntercept(TestContext ctx)
+    {
+        var muzzle = Vector3.Zero;
+        const float speed = 300f;
+
+        var deadAhead = new Vector3(0f, 0f, -100f);
+        bool hit = AimAssist.TryIntercept(muzzle, speed, deadAhead, Vector3.Zero, out var aimDir, out float t);
+        ctx.Check(hit, $"aim-assist intercept: a stationary target dead ahead solves");
+        if (hit)
+        {
+            ctx.Check(aimDir.IsEqualApprox(deadAhead.Normalized()),
+                $"aim-assist intercept: dead-ahead aim direction equals the displacement direction");
+            ctx.Check(Mathf.IsEqualApprox(t, deadAhead.Length() / speed, 1e-4f),
+                $"aim-assist intercept: dead-ahead t equals distance/speed");
+        }
+
+        var crossingPos = new Vector3(0f, 0f, -200f);
+        var crossingRelVel = new Vector3(50f, 0f, 0f); // crosses left-to-right at 50 m/s
+        hit = AimAssist.TryIntercept(muzzle, speed, crossingPos, crossingRelVel, out aimDir, out t);
+        ctx.Check(hit, $"aim-assist intercept: a crossing target solves");
+        if (hit)
+        {
+            var roundAt = muzzle + aimDir * speed * t;
+            var targetAt = crossingPos + crossingRelVel * t;
+            ctx.Check((roundAt - targetAt).Length() < 1e-2f,
+                $"aim-assist intercept: the crossing target's solved direction and t meet at the same point");
+            ctx.Check(!aimDir.IsEqualApprox(crossingPos.Normalized()),
+                $"aim-assist intercept: a crossing target's aim leads it, not fired at its current position");
+        }
+
+        var recedingPos = new Vector3(0f, 0f, -100f);
+        var recedingRelVel = new Vector3(0f, 0f, -500f); // outruns the 300 m/s round in a straight line
+        hit = AimAssist.TryIntercept(muzzle, speed, recedingPos, recedingRelVel, out _, out _);
+        ctx.Check(!hit, $"aim-assist intercept: a target outrunning the round has no solution");
     }
 
     /// <summary><see cref="Loadout.ForRig"/> against all 11 player airframes — 4 gun groups
