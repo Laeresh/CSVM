@@ -58,7 +58,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         "ObjectActiveState", "ObjectTranslateState", "ObjectRotateState", "ObjectScaleState",
         "ObjectMotionFromTo", "ObjectOpacityState", "ObjectOpacityFromTo", "ObjectMotion",
         "ObjectMotionSiScript", "Loop", "If", "Elseif", "Else", "Endif", "CallSequence",
-        "StopSequence", "CallAnimation", "StopAnimation", "InvalidateAnimation", "PufferState",
+        "StopSequence", "CallAnimation", "StopAnimation", "InvalidateAnimation", "ResetAnimation",
+        "PufferState",
         "LightState", "LightAnimation", "SoundNode", "Sound", "ObjectAddChild",
     };
 
@@ -437,6 +438,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // CALL_ANIMATION stopping its CALLER (a different, real cross-instance case existing data
     // already relies on) is untouched even when protected.
     private readonly Stack<(AnimInstance Inst, bool Protect)> _startingInstances = new();
+
+    // Definitions an INVALIDATE_ANIMATION has latched off. The original keeps a state byte on each
+    // animation record (+0xa0): 2 = running, 6 = running-and-invalidated, 3 = ANIM_STATE_EXECUTED,
+    // 4 = ANIM_STATE_INVALID (both names are the exe's own log strings, zeff_anim.c:0x215/0x235).
+    // Its start (FUN_004ed8c0) refuses states 4 and 6 outright, its stop (FUN_004ebbb0) carries the
+    // invalidated mark into the terminal state (2->3, 6->4), and only RESET_ANIMATION clears it
+    // (FUN_004ed480: 6->2, 4->3). So the whole event is a one-shot latch, never a stop — this set
+    // is that latch. Keyed by DEFINITION, not (def, anchor), because the event resolves ONE
+    // animation record (FUN_004ebc80's ANIM_REFS/world-list lookup) and never walks the per-node
+    // copies chained off it.
+    private readonly HashSet<AnimDefinition> _invalidated = new();
 
     private readonly Dictionary<string, int> _unhandled = new(StringComparer.Ordinal);
 
@@ -864,8 +876,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 // (restores the healthy panels) and hides the wreck — the exact opposite of a crash —
                 // and it already ran at bind and re-runs on respawn (ResetToBaseState). So the crash
                 // passes applyReset:false and only the destruction sequences fire.
+                // Re-posing IS the reset, so it clears the invalidation latch the same way
+                // RESET_ANIMATION does — otherwise the debugger could replay a self-invalidating
+                // def exactly once per session, and bootstrap pass 3's startanims would be at the
+                // mercy of whatever ran before them.
                 if (applyReset && def.ResetState != null)
                 {
+                    _invalidated.Remove(def);
                     ApplyInstant(def.ResetState.Events, def, anchor);
                 }
                 Start(def, anchor);
@@ -1102,6 +1119,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             Count("CallAnimation(depth limit)");
             return;
         }
+        // A latched-off definition cannot be started, which is where INVALIDATE_ANIMATION's whole
+        // effect lands: the original's start refuses states 4 and 6 before it does anything else
+        // (FUN_004ed8c0's first two tests). Without this the latch would be inert and a def that
+        // invalidated itself would still re-run on the next call.
+        if (_invalidated.Contains(def))
+        {
+            Count("Start(invalidated)");
+            return;
+        }
         // Restart: drop any existing instance of this def on this anchor, but LEAVE its live
         // resources so the new instance re-establishes them idempotently (motions replaced by
         // target in MotionSet.Add, puffers/lights/sounds re-asserted as no-ops). Tearing them down
@@ -1150,6 +1176,36 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// (see <see cref="Start"/>).</summary>
     public void Stop(string? animName, Node3D? anchor = null) =>
         RemoveInstances(animName, anchor, tearDown: true);
+
+    /// <summary>INVALIDATE_ANIMATION: latches an animation off without touching what it is doing.
+    /// Whatever is running keeps running to its own end; what changes is that nothing can start it
+    /// again until a RESET_ANIMATION (or an explicit <see cref="Play"/>) clears the latch. See
+    /// <see cref="_invalidated"/> for the state machine this stands in for.</summary>
+    public void Invalidate(string? animName)
+    {
+        if (string.IsNullOrEmpty(animName))
+            return;
+        foreach (var def in _program.ByAnimName(animName))
+            _invalidated.Add(def);
+    }
+
+    /// <summary>RESET_ANIMATION: clears the invalidation latch and re-poses the definition's
+    /// RESET_STATE on each of its anchors. Does NOT start anything — the original's reset is
+    /// state-plus-pose only, and the one authored user (`turnoff_fliteN`) issues its own
+    /// STOP_ANIMATION first.</summary>
+    public void ResetAnimation(string? animName)
+    {
+        if (string.IsNullOrEmpty(animName))
+            return;
+        foreach (var def in _program.ByAnimName(animName))
+        {
+            _invalidated.Remove(def);
+            if (def.ResetState == null)
+                continue;
+            foreach (var anchor in Anchors(def))
+                ApplyInstant(def.ResetState.Events, def, anchor);
+        }
+    }
 
     // ---- world-effects runtime ----
     /// <summary>Does this runtime's program hold a definition for an effect animation name? The
@@ -2639,8 +2695,24 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 return true;
 
             case "StopAnimation":
-            case "InvalidateAnimation":
                 Stop(ev.Data.Str("name"));
+                return true;
+
+            case "InvalidateAnimation":
+                // NOT a stop. The original's handler (dispatch slot 27 -> FUN_004ed500) only moves
+                // the state byte, and the 2,756 events install-wide that name their OWN def are the
+                // "once started, never again" latch every `*_start` route relies on: hauler1_start
+                // opens `deploy_firetrucks` by invalidating itself and then drives the truck.
+                // Treating it as a stop killed the sequence at event 0. See _invalidated.
+                Invalidate(ev.Data.Str("name"));
+                return true;
+
+            case "ResetAnimation":
+                // Clears the latch and re-poses the def's RESET_STATE (FUN_004ed480 -> FUN_004ed4d0).
+                // Eleven sites install-wide: MP2's `turnoff_fliteN` in all five chapters, which stops
+                // `turnon_fliteN`'s endless light loop and then resets it so it can be turned on
+                // again, plus C1/M04's camera intro.
+                ResetAnimation(ev.Data.Str("name"));
                 return true;
 
             case "PufferState":
