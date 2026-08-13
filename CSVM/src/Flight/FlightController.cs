@@ -860,6 +860,16 @@ public partial class FlightController : Node3D
                 killer: shooter != ProjectilePool.NoShooter ? shooter : null);
             return;
         }
+        // The damage-reaction roll (D11): an AI pilot rolls the steady-hand test on the
+        // absorbed damage; a FAILED test breaks off (the decoded vocabulary). The round does
+        // not carry its shooter's position, so the impact offset stands in as the threat
+        // bearing for evade's turn-away.
+        if (!IsHumanPiloted && Pilot?.Machine is { } machine)
+        {
+            machine.NotifyDamage(
+                ((weapon.HealthDamage ?? 0f) + (weapon.ArmorDamage ?? 0f)) * damageScale,
+                impact - _model.Position);
+        }
         _damageFlashText = $"⚠ HIT {dataPart.ToUpperInvariant()} {state.Fraction * 100f:0}%";
         _damageFlash = DamageFlashTime;
     }
@@ -1968,6 +1978,11 @@ public partial class FlightController : Node3D
     /// telemetry) see the flown value exactly as the keyboard ramp path leaves it.</summary>
     private FlightInput NextPilotInput(float dt)
     {
+        // The mode machine's terrain probe (D11 avoid crash) is this node's world-only LOS ray;
+        // wired lazily so a machine assigned after spawn still gets it, and never overwriting a
+        // probe a test injected.
+        if (Pilot!.Machine is { ProbeBlocked: null } machine && IsInsideTree())
+            machine.ProbeBlocked = WorldBlocksLine;
         var input = Pilot!.Next(_model, dt);
         _throttle = input.Throttle;
         return input;
@@ -1996,6 +2011,10 @@ public partial class FlightController : Node3D
                          $"at {WorldPosition.DistanceTo(target.WorldPosition):0} m");
             }
         }
+        // The mode machine gates the trigger (D11): the target stays acquired in every mode —
+        // patrol needs its position for the activation test — but only pursue / lay off shoot.
+        if (Pilot?.Machine is { } modes && modes.Mode is not (AiMode.Pursue or AiMode.LayOff))
+            return;
         GunGroup? group = _fire.GunSel >= 0 && _fire.GunSel < _firableGuns.Length
             ? _firableGuns[_fire.GunSel]
             : null;

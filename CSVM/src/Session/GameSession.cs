@@ -165,7 +165,8 @@ public partial class GameSession : Node3D
     // The AI actor seam (M4 A2): the spawner is built with the rigs; every AI aircraft it has
     // spawned is stepped in DriveSimSteps after the player rigs and freed with the world.
     private AiAircraftSpawner? _aiSpawner;
-    private AiSkills? _aiSkills; // ai_skill_parameters, loaded once on the first --ai-attack gunner
+    private AiSkills? _aiSkills; // ai_skill_parameters, loaded once on the first AI spawn
+    private List<Maneuver>? _aiManeuvers; // the D13 library, loaded once for the D11 machines
     // The egen enemy generators (M4 B6, --generators): loaded with the rigs, stepped in
     // DriveSimSteps before the AI planes it spawns into _aiPlanes, freed with the world subtree.
     private AiGeneratorRuntime? _generators;
@@ -287,8 +288,44 @@ public partial class GameSession : Node3D
                 GD.PushWarning($"--ai-attack: cannot load ai_skill_parameters: {e.Message}");
             }
         }
+        // The D11 mode machine on every spawned pilot (a pilot given one by its caller keeps
+        // it): the decoded chances/intervals at the probe's skill rating (--ai-attack=,
+        // default 5 — the roster skill vector is later wiring), the D13 library for evasive
+        // maneuvers, and the shipped activation radius. The spawner adds the vehicle def's
+        // attack/return ranges; the controller wires the terrain probe.
+        if (pilot.Machine == null)
+        {
+            try
+            {
+                _aiSkills ??= AiSkills.Load(_zrdrPath);
+                _aiManeuvers ??= Maneuvers.Load(_zrdrPath);
+                int rating = _spec.AiAttackSkill ?? 5;
+                pilot.Machine = new AiModeMachine(Rng.NewSystemRandom(Rng.Ai))
+                {
+                    ActivationRange = _aiSkills.MinAiActiveDist,
+                    SteadyHandChance = _aiSkills.At("steady_hand_chance", rating),
+                    SixthSenseChance = _aiSkills.At("sixth_sense_chance", rating),
+                    StunRecoveryIntervalS = _aiSkills.At("stun_recovery_interval", rating),
+                    NaturalTouch = rating,
+                    Library = _aiManeuvers,
+                };
+            }
+            catch (Exception e)
+            {
+                GD.PushWarning($"ai: no mode machine — cannot load skills/maneuvers: {e.Message}");
+            }
+        }
         var ai = _aiSpawner.Spawn(planeName, pos, lookAt, pilot);
         _aiPlanes.Add(ai);
+        // Mode transitions and reaction rolls, in the engine's own vocabulary — the D11
+        // observability lines.
+        if (pilot.Machine is { } modes)
+        {
+            string tag = ai.Name;
+            modes.ModeChanged += (from, to, why) => GD.Print(
+                $"ai mode: {tag}: {AiModeMachine.NameOf(from)} -> {AiModeMachine.NameOf(to)} ({why})");
+            modes.RollLogged += line => GD.Print($"ai roll: {tag}: {line}");
+        }
         ai.Downed += (victim, killer) =>
             GD.Print($"ai: {ai.Name} downed (shooter id {victim}, killer {killer?.ToString() ?? "none"})");
         return ai;

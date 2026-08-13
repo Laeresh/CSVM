@@ -170,6 +170,14 @@ public static class Suites
             "with dead-eye scatter (skill 1 hits measurably less than skill 9), downs the target " +
             "with the kill attributed, and NEVER gets the human aim assist (the IsHumanPiloted " +
             "gate, A/B'd in place)", AiGunnery));
+        into.Add(new TestHarness.Suite("ai-modes",
+            "the D11 nine-mode machine on a live AI plane: patrol activates into pursue inside " +
+            "the shipped 2000 m radius, a scripted failed steady-hand roll on a real projectile " +
+            "hit breaks off into an evasive maneuver that plays to Done and returns, a failed " +
+            "sixth-sense roll stuns (gunner silent) and recovers after stun_recovery_interval, " +
+            "the avoid-crash override climbs out on a blocked probe and releases, and lay off " +
+            "stands in as pursue (D15's seam) — every transition in the engine's own mode " +
+            "vocabulary", AiModes));
         into.Add(new TestHarness.Suite("voice-runtime",
             "the B8 combat-voice runtime: the accent→voice.zrd→pilot-clip chain resolves against " +
             "the real archive, a roster-subset prewarm makes the lines playable after the loader " +
@@ -3575,6 +3583,219 @@ public static class Suites
             Step(180);
             ctx.Check(Combined(target) < pristineCombined,
                 $"the same geometry flagged human is assisted onto the target moved={pristineCombined - Combined(target):0.##}");
+        }
+        finally
+        {
+            pool?.Free();
+            target?.Free();
+            ai?.Free();
+            textures.Dispose();
+        }
+    }
+
+    /// <summary>The D11 mode machine on a real flying AI rig. The reaction rolls are scripted by
+    /// pinning the shipped chance fields to 0/1 (the machine's own rng stays seeded), and the
+    /// steady-hand entry rides a REAL projectile hit through <c>TakeProjectileHit</c> — the same
+    /// call the pool makes — so the hit-path wiring is what is exercised, not the machine API.
+    ///
+    /// <para>⚠ INSTR-13: no phase here queries physics at a flown-to position — the hit is
+    /// delivered by the direct pool entry point, and the terrain probe is an injected flag, so
+    /// the plane may genuinely fly between phases.</para></summary>
+    private static void AiModes(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var library = Maneuvers.Load(ctx.ZrdrPath);
+        WeaponDef? gun = weapons.All.FirstOrDefault(w =>
+            w.IsGun && w.ArmorDamage is > 0f && w.HealthDamage is > 0f);
+        ctx.Check(gun != null, $"a gun with authored damage exists in the data");
+        if (gun == null)
+            return;
+
+        // The shipped range gates the machine runs on.
+        ctx.Check(Mathf.IsEqualApprox(skills.MinAiActiveDist, 2000f),
+            $"player.json min_ai_active_dist is the decoded 2000 m got={skills.MinAiActiveDist:0}");
+        ctx.Check(Mathf.IsEqualApprox(stats.AiAttackRange, 2000f)
+            && Mathf.IsEqualApprox(stats.AiReturnRange, 1200f),
+            $"vehicle.json attack/return_range are the decoded 2000/1200 m got={stats.AiAttackRange:0}/{stats.AiReturnRange:0}");
+
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightController? target = null;
+        FlightController? ai = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            // The hostile: a parked human-index rig the machine can activate against.
+            var targetPos = new Vector3(0f, 500f, 0f);
+            var targetModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+            target = new FlightController
+            {
+                PlaneModel = targetModel,
+                Collider = PlaneCollider.Build(targetModel),
+                PlayerIndex = 0,
+                Projectiles = live,
+                UseKeyboard = false,
+                PadDevices = System.Array.Empty<int>(),
+                AllowPause = false,
+            };
+            target.AddChild(targetModel);
+            target.Setup(new FlightModel(stats), ctx.Camera, new CamParams(), targetPos,
+                targetPos + Vector3.Forward);
+            ctx.Host.AddChild(target);
+            target.PlaceHeld(targetPos, targetPos + Vector3.Forward);
+
+            // The AI: pilot + gunner + machine, spawned OUTSIDE the activation radius flying
+            // straight at the hostile. The terrain probe is injected before the controller can
+            // wire its own, so avoid-crash is a scripted flag here.
+            bool terrainBlocked = false;
+            var machine = new AiModeMachine(new System.Random(11))
+            {
+                ActivationRange = skills.MinAiActiveDist,
+                AttackRange = stats.AiAttackRange,
+                ReturnRange = stats.AiReturnRange,
+                SteadyHandChance = 0f, // scripted per phase; approach fire reactions off
+                SixthSenseChance = 1f,
+                StunRecoveryIntervalS = skills.At("stun_recovery_interval", 5),
+                NaturalTouch = 1,
+                Library = library,
+                ProbeBlocked = (_, _) => terrainBlocked,
+            };
+            var transitions = new List<string>();
+            machine.ModeChanged += (from, to, _) =>
+                transitions.Add($"{AiModeMachine.NameOf(from)}>{AiModeMachine.NameOf(to)}");
+            string? lastRoll = null;
+            machine.RollLogged += line => lastRoll = line;
+
+            var aiPos = targetPos + new Vector3(0f, 0f, 2600f); // outside the 2000 m radius
+            var pilot = AiPilot.HoldingCourse(aiPos, targetPos);
+            pilot.Gunner = new AiGunner(new RandomNumberGenerator { Seed = 20260813 })
+            {
+                DeadEyeAngleDeg = skills.DeadEyeAngleDeg(5),
+                QuickDrawAngleDeg = skills.QuickDrawAngleDeg(5),
+            };
+            pilot.Machine = machine;
+            var aiModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+            ai = new FlightController
+            {
+                PlaneModel = aiModel,
+                Collider = PlaneCollider.Build(aiModel),
+                Damage = new PlaneDamage(stats.DestroyableParts),
+                PlayerIndex = AiAircraftSpawner.ShooterIdBase,
+                IsHumanPiloted = false,
+                Pilot = pilot,
+                Projectiles = live,
+                UseKeyboard = false,
+                PadDevices = System.Array.Empty<int>(),
+                AllowPause = false,
+            };
+            ai.AddChild(aiModel);
+            ai.Loadout = Loadout.Bind(StockLoadouts.Load().All.Values
+                .First(d => d.Model == ctx.PlaneName), aiModel, weapons);
+            ai.Setup(new FlightModel(stats), null, new CamParams(), aiPos, targetPos);
+            ctx.Host.AddChild(ai);
+
+            void Step(int frames)
+            {
+                for (int i = 0; i < frames; i++)
+                {
+                    ai!.SimStep(1f / 60f);
+                    live.SimStep(1f / 60f);
+                }
+            }
+            float Dist() => ai!.WorldPosition.DistanceTo(targetPos);
+
+            // --- activation: patrol until the approach carries it inside the radius, then
+            // pursue, announced in the decoded vocabulary.
+            ctx.Check(machine.Mode == AiMode.Patrol, $"the machine starts on patrol");
+            Step(1);
+            ctx.Check(machine.Mode == AiMode.Patrol && Dist() > 2000f,
+                $"outside min_ai_active_dist it stays on patrol d={Dist():0} m");
+            int budget = 60 * 60;
+            while (machine.Mode == AiMode.Patrol && budget-- > 0)
+                Step(1);
+            ctx.Check(machine.Mode == AiMode.Pursue,
+                $"the approach activates it into pursue d={Dist():0} m");
+            ctx.Check(Dist() <= 2010f, $"…at the activation radius, not before d={Dist():0} m");
+            ctx.Check(transitions.Contains("patrol>pursue"),
+                $"…logged as patrol>pursue transitions=[{string.Join(" ", transitions)}]");
+
+            // --- a scripted FAILED steady-hand roll on a real projectile hit: the decoded
+            // reaction, through the same TakeProjectileHit the pool calls.
+            machine.SteadyHandChance = 1f;
+            ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
+            ctx.Check(lastRoll != null && lastRoll.Contains("steady hand test failed. Evading."),
+                $"the hit rolls steady hand in the engine's vocabulary roll={lastRoll}");
+            ctx.Check(machine.Mode == AiMode.EvasiveManeuver && machine.Executor != null,
+                $"the failed test breaks off into an evasive maneuver mode={AiModeMachine.NameOf(machine.Mode)}");
+            var flown = machine.Executor?.Maneuver;
+            ctx.Check(flown != null && flown.EligibleFor(machine.NaturalTouch),
+                $"…an eligible library entry name={flown?.Name} difficulty={flown?.Difficulty}/{machine.NaturalTouch}");
+            machine.SteadyHandChance = 0f; // stray hits must not re-trigger mid-phase
+
+            // --- the maneuver plays to Done and the machine returns to a flyable mode.
+            budget = 60 * 60;
+            while (machine.Mode == AiMode.EvasiveManeuver && budget-- > 0)
+                Step(1);
+            ctx.Check(machine.Mode is AiMode.Pursue or AiMode.Patrol,
+                $"the maneuver returns to the prior mode mode={AiModeMachine.NameOf(machine.Mode)}");
+            ctx.Check(machine.Executor == null, $"…and the executor is released");
+
+            // --- a scripted FAILED sixth-sense roll stuns: gunner silent, then recovery after
+            // stun_recovery_interval (the shipped value at rating 5).
+            machine.Enter(AiMode.Pursue, "test: rejoin");
+            machine.SixthSenseChance = 0f;
+            machine.NotifyTargetEvaded();
+            ctx.Check(machine.Mode == AiMode.Stunned,
+                $"a failed sixth-sense roll stuns roll={lastRoll}");
+            ctx.Check(lastRoll != null && lastRoll.Contains("Sixth sense test failed; AI now stunned."),
+                $"…in the engine's vocabulary");
+            Step(6);
+            ctx.Check(!pilot.Gunner.WantsFire, $"the gunner is silent while stunned");
+            float stunS = machine.StunRecoveryIntervalS;
+            Step((int)(stunS * 60f) - 30);
+            ctx.Check(machine.Mode == AiMode.Stunned,
+                $"still stunned inside stun_recovery_interval ({stunS:0.0} s)");
+            Step(60);
+            ctx.Check(machine.Mode == AiMode.Pursue,
+                $"…and recovered to the prior mode after it mode={AiModeMachine.NameOf(machine.Mode)}");
+
+            // --- avoid crash: a blocked probe overrides with a climb-out, a cleared one
+            // releases back.
+            machine.SixthSenseChance = 1f;
+            float yBefore = ai.WorldPosition.Y;
+            terrainBlocked = true;
+            Step(30);
+            ctx.Check(machine.Mode == AiMode.AvoidCrash,
+                $"a blocked terrain probe takes the mode mode={AiModeMachine.NameOf(machine.Mode)}");
+            ctx.Check(machine.ClimbOutAltitude > yBefore,
+                $"…ordering a climb-out to {machine.ClimbOutAltitude:0} m from {yBefore:0} m");
+            Step(240);
+            ctx.Check(ai.WorldPosition.Y > yBefore,
+                $"the plane is climbing out y={ai.WorldPosition.Y:0} from {yBefore:0}");
+            terrainBlocked = false;
+            Step(120);
+            ctx.Check(machine.Mode != AiMode.AvoidCrash,
+                $"a cleared probe releases the override mode={AiModeMachine.NameOf(machine.Mode)}");
+
+            // --- lay off: a first-class mode that stands in as pursue until D15 lands the
+            // rubber-band behaviour inside it.
+            machine.Enter(AiMode.LayOff, "test: D15 seam");
+            Step(120);
+            ctx.Check(machine.Mode == AiMode.LayOff && pilot.Gunner.Target != null,
+                $"lay off holds as a live mode with pursue's behaviour mode={AiModeMachine.NameOf(machine.Mode)}");
+
+            ctx.Note($"transitions: {string.Join(" ", transitions)}");
         }
         finally
         {
