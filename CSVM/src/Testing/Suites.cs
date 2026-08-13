@@ -149,8 +149,10 @@ public static class Suites
             "a round strikes the target plane's body, maps to the data part, moves armor/HP by the " +
             "weapon's own values, downs it when whole-vehicle health exhausts (a lone dead critical " +
             "part no longer kills — the decoded rule, D14) with the kill attributed through the " +
-            "Downed event — never hits the shooter's own geometry — and a rocket fuses on a passing " +
-            "plane, blasting with falloff and attributing the kill", AirToAir));
+            "Downed event — never hits the shooter's own geometry — a rocket fuses on a passing " +
+            "plane, blasting with falloff and attributing the kill, concentrated fire on ONE " +
+            "bearing kills through the decoded redirect + whole-pool overflow (the 2026-08-14 " +
+            "correction), and a Fury dies to a few HE rockets", AirToAir));
         into.Add(new TestHarness.Suite("world-turrets",
             "the world AA emplacements (C9b) place at their NODES patterns against the real C1 " +
             "world (census pinned, one entry many turrets, scoped multi-segment paths), honour " +
@@ -2599,9 +2601,12 @@ public static class Suites
     /// Pins: a physics ray at the fuselage returns the aircraft body and its struck shape maps to
     /// a Parts entry; a scripted round hits, `MapStruckPart` names the expected part (nose), and
     /// armor moves by the weapon's own ARMOR_DAMAGE while health waits behind it (armor-first);
-    /// the decoded kill rule (A4/D14): a zeroed nose alone does NOT down the plane — the old
-    /// any-critical-part kill is a retired divergence — and exhausting all four zones' health
-    /// triggers the real Crash; a crashed plane soaks
+    /// the decoded kill rule (A4/D14, corrected 2026-08-14): a zeroed nose alone does NOT down
+    /// the plane — the old any-critical-part kill is a retired divergence — and exhausting all
+    /// four zones' health triggers the real Crash; concentrated fire on ONE bearing also kills
+    /// (the resolver redirects hits on the dead zone to survivors and the unabsorbed leftover
+    /// drains the whole-vehicle pool — the fix for the 9-rocket sponge), and a Fury falls to a
+    /// few wep_06 HE rockets, the measured count noted; a crashed plane soaks
     /// no further rounds; and a burst fired through the shooter's OWN airframe registers zero
     /// self-hits — the regression that would otherwise arrive silently as "guns too strong".
     /// The Downed reports feed a real VersusMatch through the same forwarding GameSession
@@ -2647,6 +2652,7 @@ public static class Suites
         FlightController? target = null;
         FlightController? shooter = null;
         FlightController? bystander = null;
+        FlightController? fury = null;
         try
         {
             var live = new ProjectilePool(textures, null, null);
@@ -2852,16 +2858,19 @@ public static class Suites
 
             // An unowned round (NoShooter — nobody's identity) that downs the plane is likewise
             // a death with no killer, never a kill. Attribution scaffolding, not spend
-            // mechanics: the other three zones are pre-emptied directly so the nose burst is
-            // the finishing blow under the whole-vehicle rule (the spending itself is pinned
-            // above).
+            // mechanics: the other three zones are pre-emptied with EXACT spends (armor
+            // stripped, then the bare zone's health) so no leftover reaches the whole pool —
+            // an overkill spend would down the plane through the overflow before the burst.
             target.Respawn();
             void ExhaustAllButNose()
             {
                 foreach (var p in target!.Damage!.Parts.Values)
                 {
                     if (p.Def != nose)
-                        target.Damage.Apply(p.Def.Name, p.Def.MaxHp + p.Def.MaxArmor + 1f);
+                    {
+                        target.Damage.Apply(p.Def.Name, 0f, p.Armor);
+                        target.Damage.Apply(p.Def.Name, p.Hp, 0f);
+                    }
                 }
             }
 
@@ -3016,6 +3025,70 @@ public static class Suites
                 $"a rocket fired from inside its own airframe never self-fuses or self-damages");
             ctx.Check(Combined(target) < tBefore,
                 $"…and the same round flew on to fuse on the opponent moved={tBefore - Combined(target):0.##}");
+
+            // --- the D14 correction (2026-08-14, docs/org/vehicleDamage.md): concentrated fire
+            // on ONE bearing kills. Once the nose dies the resolver redirects its hits to
+            // surviving zones and every unabsorbed leftover drains the whole-vehicle pool, so
+            // nose-only fire downs the plane without any other bearing being flown — the
+            // at-the-controls sponge (a plane immortal to one-zone fire) is the regression.
+            target.Respawn();
+            int oneZoneBudget = (int)(stats.DestroyableParts.Sum(p => p.MaxArmor + p.MaxHp)
+                / Mathf.Min(armorDmg, healthDmg)) * 3 + 40;
+            int oneZone = 0;
+            while (!target.Crashed && oneZone < oneZoneBudget)
+            {
+                oneZone++;
+                FireOne(noseMuzzle, shooter.PlayerIndex, 8);
+            }
+
+            ctx.Check(target.Crashed,
+                $"concentrated fire on the nose bearing alone downs the plane rounds={oneZone}/{oneZoneBudget}");
+            ctx.Note($"one-bearing kill took {oneZone} rounds of {gun.Id} (redirect + whole-pool overflow)");
+
+            // --- the user-reported sponge, decode-confirmed fix: a Fury dies to a few HE
+            // rockets (wep_06 BOOM, 40 armor / 60 health), fired head-on from one bearing.
+            // Each detonation reaches the plane through the blast pass at its nearest box.
+            var he = weapons.Get("wep_06");
+            ctx.Check(he is { ArmorDamage: 40f, HealthDamage: 60f },
+                $"wep_06 carries the authored 40/60 damage pair");
+            if (he == null)
+                return;
+            var furyStats = PlaneStats.Load(ctx.ZrdrPath, "player_fury");
+            var furyPos = new Vector3(-900f, 500f, 0f);
+            var furyModel = new PlaneBuilder(planesGamez, textures).Build("player_fury");
+            fury = new FlightController
+            {
+                PlaneModel = furyModel,
+                Collider = PlaneCollider.Build(furyModel),
+                Damage = PlaneDamage.For(furyStats),
+                PlayerIndex = 3,
+                Projectiles = live,
+                UseKeyboard = false,
+                AllowPause = false,
+            };
+            fury.AddChild(furyModel);
+            fury.Setup(new FlightModel(furyStats), ctx.Camera, new CamParams(), furyPos,
+                furyPos + Vector3.Forward);
+            ctx.Host.AddChild(fury);
+            ctx.Check(Mathf.IsEqualApprox(fury.Damage!.WholeHealthMax, 90f),
+                $"the Fury's whole pool seeds as the sum over parts (25+25+20+20) max={fury.Damage.WholeHealthMax:0.#}");
+
+            var heMuzzle = new Transform3D(
+                Basis.LookingAt(Vector3.Back, Vector3.Up), furyPos + new Vector3(0f, 0f, -120f));
+            int heRockets = 0;
+            while (!fury.Crashed && heRockets < 12)
+            {
+                heRockets++;
+                live.Spawn(he, heMuzzle, Vector3.Zero, shooter.PlayerIndex);
+                for (int i = 0; i < 40; i++)
+                    live.SimStep(1f / 60f);
+                live.Clear();
+            }
+
+            ctx.Check(fury.Crashed && heRockets <= 8,
+                $"a few HE rockets down a Fury rockets={heRockets} (the reported 9-rocket sponge is the regression)");
+            ctx.Check(heRockets >= 2, $"…but not a single one rockets={heRockets}");
+            ctx.Note($"the Fury fell to {heRockets} head-on wep_06 rockets on one bearing");
         }
         finally
         {
@@ -3023,6 +3096,7 @@ public static class Suites
             target?.Free();
             shooter?.Free();
             bystander?.Free();
+            fury?.Free();
             textures.Dispose();
         }
     }
@@ -3549,14 +3623,18 @@ public static class Suites
             ctx.Check(Mathf.IsEqualApprox(beforeHit - Combined(), armorDmg),
                 $"a round moves the AI's pools by the weapon's ARMOR_DAMAGE moved={beforeHit - Combined():0.##} expected={armorDmg:0.##} (rounds={tries})");
 
-            // Killable, with the kill attributed: pre-empty the other zones (attribution
-            // scaffolding — the whole-vehicle kill rule needs every zone's health gone, and the
-            // per-zone spending is the air-to-air suite's), then sustained fire on the same
-            // bearing exhausts the nose; Downed reports (AI shooter id, human killer id).
+            // Killable, with the kill attributed: pre-empty the other zones with EXACT spends
+            // (attribution scaffolding — an overkill spend would down the plane through the
+            // whole-pool overflow before the AI's own burst; the spending itself is the
+            // air-to-air suite's), then sustained fire on the same bearing exhausts the nose;
+            // Downed reports (AI shooter id, human killer id).
             foreach (var p in ai.Damage!.Parts.Values)
             {
                 if (p.Def != nose)
-                    ai.Damage.Apply(p.Def.Name, p.Def.MaxHp + p.Def.MaxArmor + 1f);
+                {
+                    ai.Damage.Apply(p.Def.Name, 0f, p.Armor);
+                    ai.Damage.Apply(p.Def.Name, p.Hp, 0f);
+                }
             }
             int? downedVictim = null, downedKiller = null;
             ai.Downed += (victim, killer) => { downedVictim = victim; downedKiller = killer; };
@@ -3811,7 +3889,11 @@ public static class Suites
             foreach (var p in target.Damage!.Parts.Values)
             {
                 if (!p.Def.Name.Equals("tail", System.StringComparison.OrdinalIgnoreCase))
-                    target.Damage.Apply(p.Def.Name, p.Def.MaxHp + p.Def.MaxArmor + 1f);
+                {
+                    // Exact spends: an overkill spend would kill through the whole-pool overflow.
+                    target.Damage.Apply(p.Def.Name, 0f, p.Armor);
+                    target.Damage.Apply(p.Def.Name, p.Hp, 0f);
+                }
             }
             int? downedVictim = null, downedKiller = null;
             target.Downed += (victim, killer) => { downedVictim = victim; downedKiller = killer; };

@@ -80,7 +80,7 @@ public sealed class AiAircraftSpawner
             WingLights = WingLightBlinker.Build(planeBuilder.WingFlares, _spec.AnimLod),
             Surfaces = ControlSurfaceAnimator.Build(planeModel),
             Collider = PlaneCollider.Build(planeModel),
-            Damage = stats.DestroyableParts.Count > 0 ? new PlaneDamage(stats.DestroyableParts) : null,
+            Damage = stats.DestroyableParts.Count > 0 ? PlaneDamage.For(stats) : null,
             CollideDamageSink = _in.WorldRuntime != null ? _in.WorldRuntime.CollideDamageAt : null,
             GrazeEffectSink = _in.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
             TouchdownDefs = _in.TouchdownDefs,

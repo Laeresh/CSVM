@@ -354,7 +354,10 @@ directly, through the same armour-first helper. So the `armor 64 / health 64` on
 not a second, competing pool; it is the scale its four 20/20 zones are expressed in.
 
 Everything downstream reads the summary rather than the parts. **Death is one test: whole-vehicle
-health at or below zero**, which under that recompute means every zone exhausted, not one. The
+health at or below zero.** (Corrected 2026-08-14: the take-hit wrapper loops the unabsorbed
+leftover back into the whole pair zone-less, and a dead zone redirects to a surviving one, so the
+kill can arrive with zones still healthy — every zone exhausted is sufficient, not necessary;
+[`org/vehicleDamage.md`](../org/vehicleDamage.md)'s correction section has the full contract.) The
 def-level `injure_anims` stage off the same fraction (see below), as do the AI's damage reactions
 and the pilot radio lines. The one shipped datum that would invert this relationship, an `aiv`
 block's four per-zone `(armor, health)` pairs, would set the zones directly and then re-derive the

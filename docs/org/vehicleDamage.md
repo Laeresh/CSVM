@@ -25,6 +25,10 @@ consumed (`init_health`, the four zone pairs, `armor`).
 
 | Address | Role |
 |---|---|
+| `FUN_004b9b30` | **The take-hit entry point, a WRAPPER that LOOPS** (found 2026-08-14 — see the correction section) |
+| `FUN_004b3950` | The struck-zone resolver: matches hit geometry against parts **with health remaining only** |
+| `FUN_004b3b60` | The resolver's miss fallback: rand() over the first up-to-3 surviving parts |
+| `FUN_004b7f30` | Clamped pool subtract: pool -= damage floored at 0, returns the leftover |
 | `FUN_00479240` | The `vehicle.zrd` parser. `health` -> def`+0xb4`, `armor` -> def`+0xb8`, each written only if the key is present |
 | `FUN_00475820` | Def -> instance: the whole-vehicle pair, the `destroyable_parts` array, the death-anim reference, and the def pointer itself |
 | `FUN_00476250` | Spawn/reset: resolves model nodes, fills the per-part pools from the def, and applies the per-spawn jitter |
@@ -116,7 +120,11 @@ player plane is either.
 
 ## Taking a hit
 
-`FUN_004b9bc0` is the entry point. Ignoring the special cases it opens with (already dead, hit by
+⚠ *Corrected 2026-08-14: `FUN_004b9bc0` is NOT the entry point — `FUN_004b9b30` wraps it and
+loops the unabsorbed leftover back through. The section below stands for one pass; the
+correction section further down is the full contract.*
+
+`FUN_004b9bc0` is the per-pass body. Ignoring the special cases it opens with (already dead, hit by
 its own shooter, weapon classes that detonate or attach instead of damaging), it does this:
 
 1. It takes a **pair** of damage numbers, armour damage and health damage, not one figure.
@@ -132,7 +140,9 @@ its own shooter, weapon classes that detonate or attach instead of damaging), it
    max`, and armour the same way. The whole-vehicle pair is a running summary of the parts whenever
    parts exist, and it is what everything downstream reads.
 5. **Death is one test and one test only: whole-vehicle health current at or below zero**, which
-   sends it to `FUN_004b82d0`. Under (4) that means every part exhausted, not one.
+   sends it to `FUN_004b82d0`. *(Corrected 2026-08-14: under (4) every part exhausted is
+   SUFFICIENT, not necessary — the wrapper loop's zone-less overflow can drain the pool with
+   parts still alive.)*
 6. Along the way it prints the AI's steady-hand test (`Absorbed %f damage; steady hand test
    failed. Evading.`, `0062b1e8`) and picks a radio line by comparing combined
    `armour + health` current against 0.7, 0.5 and 0.3 of combined max.
@@ -264,7 +274,11 @@ are recomputed as the parts' fraction of their summed maxima times the whole-veh
 hit that names no zone spends against the summary directly. An AI airframe's `armor`/`health` pair
 is the scale that summary is expressed in, not a competing pool; player defs resolve none, so the
 open thread above (the initialiser) stands. Kill threshold: **whole-vehicle health current at or
-below zero**, which under the recompute means every zone exhausted, not one. ⚠ The remake today
+below zero** — *corrected 2026-08-14: NOT "every zone exhausted". The wrapper loop
+(`FUN_004b9b30`, the correction section above) re-enters the unabsorbed leftover zone-less and
+drains the whole pair directly, so the kill can arrive with zones still healthy; and a dead zone
+is never struck — the resolver redirects the hit to a surviving zone. The whole pair is a real,
+independent pool, not only a running summary.* ⚠ The remake today
 kills on any `critical` part reaching zero (`FlightController.cs:823`, `:1957`); no code on the
 decoded death path reads that flag (the open thread below), so the current rule is a recorded
 divergence. D14 retires it when it lands the damage routing, keeping the flag parsed; if a part
@@ -295,11 +309,13 @@ What each downstream item consumes:
 - **F18** takes (b) whole: the anchor change, the seeding, the aggregator and its survivor
   threshold, and the `WeaponDef.DamagesZeppelin` gate (parsed, never consumed today) as the
   routing flag for what may hurt a gasbag.
-- **D14** takes the hit contract from "Taking a hit": every hit is a pair (armour damage, health
-  damage) plus an optional zone; zone hits spend the part then recompute the summary, zone-less
-  hits spend the summary. The remake's zone supplier is `PlaneDamage.MapStruckPart` (the
-  original's supplier is untraced, an accepted stand-in). D14 also retires the `critical` kill
-  divergence above.
+- **D14** takes the hit contract from "Taking a hit" *as corrected 2026-08-14*: every hit is a
+  pair (armour damage, health damage) plus an optional zone; zone hits spend the part then
+  recompute the summary, THE LEFTOVER THEN RE-ENTERS ZONE-LESS and drains the whole pair
+  directly; a dead zone redirects to a surviving one. The remake's zone supplier is
+  `PlaneDamage.MapStruckPart` standing in for `FUN_004b3950`'s geometric half (untraced); the
+  resolver's live-only rule and random-survivor fallback are ported exactly. D14 also retires
+  the `critical` kill divergence above.
 - **A2's spawned aircraft** seed the ledger exactly as "Where the numbers come from at spawn":
   the `r*` def chain's `destroyable_parts` plus `armor`/`health`, then the roster's `init_health`
   (only if > 0) and `armor` (if >= 0). The eight per-zone roster slots are parsed for index
@@ -318,6 +334,57 @@ refuted by the decoded death path. `PLAN-M4-ai.md`'s "Damage zones" section and 
 architecture-constraints bullet proposing `(def, anchor, zone)` plus a threshold counter inside
 the registry are superseded by this note.
 
+## Correction (2026-08-14): the take-hit wrapper loop
+
+The 2026-08-13 pass read `FUN_004b9bc0` as the take-hit entry point. It is not: `FUN_004b9b30`
+wraps it, and the wrapper LOOPS. An at-the-controls report against the remake (an enemy Fury
+absorbing nine HE rockets) prompted the re-read; everything below is instruction-level, same
+method as the rest of this page. This section partially corrects "Taking a hit" step 5 and
+"The A4 decision" below.
+
+- **`FUN_004b9b30` loops the leftover.** First pass: a caller supplying no part id has the
+  struck zone resolved by `FUN_004b3950`, and `FUN_004b9bc0` runs with it. The wrapper then sets
+  part id := -1 and calls again while BOTH leftover damage values are still positive and
+  whole-vehicle health (`+0x2d0`) is above zero. Every later pass is therefore the zone-less
+  route — the whole-vehicle spend `FUN_004b8070`, with NO recompute behind it.
+- **The spend writes its leftovers back.** `FUN_004b7f80` takes the damage pair in/out. The
+  armour pool absorbs what it can of the armour damage (`FUN_004b7f30` clamps the pool at zero)
+  and the unabsorbed armour damage is written back. Armour covering the armour damage outright
+  ZEROES the health damage and ends the hit; so does armour standing against a hit that carries
+  no armour damage at all. Otherwise the uncovered share of the health damage reaches the health
+  pool, and the write-back is the full health magnitude minus what the pool absorbed — both the
+  pool's overflow AND the armour-shielded share re-enter the loop, where they meet the whole
+  pair.
+- **A dead zone is never struck.** `FUN_004b3950` matches the hit geometry only against parts
+  with health remaining, and its miss fallback `FUN_004b3b60` picks with `rand()` among the
+  first up to three surviving parts. A hit aimed at a dead zone is REDIRECTED to a surviving
+  one; only with no survivor does a hit run zone-less from the first pass — and by then the
+  recompute has already written whole health to zero.
+- **Net behaviour.** The struck zone absorbs what it can; the leftover drains the whole pair,
+  gated once per pass by whatever whole armour the last recompute left standing. Concentrated
+  one-bearing fire kills because the redirect walks the surviving zones down; a large warhead
+  kills through the overflow with zones still healthy. Death stays the single test — whole
+  health current at or below zero — but the overflow can reach it with parts alive, so
+  "every part exhausted" was sufficient, never necessary.
+- **The recompute quirk, kept.** A later part-scoped spend recomputes whole current from the
+  parts (`FUN_004b3bf0`) and OVERWRITES earlier zone-less dents — a partial heal. The engine's
+  own arithmetic does this; the remake reproduces it rather than fixing it
+  (`PlaneDamageTests.ALaterPartSpendOverwritesAnEarlierOverflowDent`).
+- **Whole-pair seeding in the remake.** Where the def chain authors `armor`/`health` (the AI
+  defs) that pair is the whole maxima; player defs author none, so the remake seeds the pair as
+  the sum over parts — `FUN_0047bd90`'s re-derivation is the decoded precedent for
+  sum-over-parts as the whole pair. The player-initialiser open thread below stands; this is a
+  documented stand-in, not a decode. Measured: player_bhawk seeds 80/80 (4×20/20), the Fury
+  90/90 (25+25+20+20 — equal to the AI `fury` def's authored 90/90; the AI `bloodhawk` authors
+  64/64 against its parts' 80/80, a difference the remake reaches only when AI spawns read the
+  `r*` def chain).
+
+What this landed as: `Flight/PlaneDamage.cs` carries the whole pair, the resolver redirect, the
+verbatim spend and the wrapper loop; the `air-to-air` suite pins the one-bearing kill (80 rounds
+of `wep_00`) and the rocket kill (a Fury falls to 5 head-on `wep_06` rockets against the
+reported 9-rocket sponge); `PlaneDamageTests` pins the arithmetic including the overflow kill
+with three zones healthy.
+
 ## Open threads
 
 - **Where a player plane's health max comes from.** No player def resolves a whole-vehicle pair, and
@@ -331,5 +398,7 @@ the registry are superseded by this note.
   Either the flag is consumed somewhere not yet found or the reading is wrong; it is not settled
   here.
 - **Who supplies the zone id** a hit is matched against (`FUN_004b9bc0`'s parameter, against part
-  `+0x34`) is on the hit-detection side and was not traced.
+  `+0x34`) is on the hit-detection side. Partially resolved 2026-08-14: a caller passing -1 has
+  it resolved by `FUN_004b3950` (live parts only, random-survivor fallback); that function's
+  geometric matchers (`FUN_004b39d0`/`FUN_004b3aa0`) remain untraced.
 - **What sets the surface-vehicle drain flags**, as above.
