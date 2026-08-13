@@ -43,6 +43,13 @@ public sealed partial class ProjectilePool : Node3D
     /// viewer, a chapter with no anim runtime), where impacts stay purely cosmetic.</summary>
     public System.Func<Node?, float, bool>? DamageSink;
 
+    /// <summary>The zeppelin routing gate (M4 F18): asked before weapon damage reaches
+    /// <see cref="DamageSink"/> for a struck body, with the firing weapon. False refuses the
+    /// DAMAGE only — the impact effect and sound still play. Wired to
+    /// <c>ZeppelinRuntime.GateWeaponDamage</c> (a weapon without <c>DAMAGES_ZEPPELIN</c> cannot
+    /// hurt a gasbag); null gates nothing.</summary>
+    public System.Func<Node?, WeaponDef, bool>? WorldDamageGate;
+
     /// <summary>Plays a named IMPACT effect (its puffer half) at a hit point through the world-effects
     /// runtime: the gun/rocket smoke and fireballs whose <c>ANIMATION</c> is an ON_CALL effect
     /// def rather than a gamez model. Null in views with no anim runtime. The third argument is the
@@ -1671,15 +1678,20 @@ public sealed partial class ProjectilePool : Node3D
         if (DamageSink == null || fullDamage <= 0f)
             return;
 
+        // The F18 zeppelin gate, per struck body: a refused body takes no damage while the
+        // impact effect/sound above played normally.
+        bool Gated(Node? body) => WorldDamageGate != null && !WorldDamageGate(body, weapon);
+
         if (!outcome.HasBlastDamage || GetWorld3D()?.DirectSpaceState is not { } space)
         {
-            DamageSink(struck, fullDamage);
+            if (!Gated(struck))
+                DamageSink(struck, fullDamage);
             return;
         }
 
         // The ray contact is the detonation centre even when the collider's transform origin is far
         // away (large chapter meshes), so preserve full direct-hit damage and exclude it below.
-        if (struck != null)
+        if (struck != null && !Gated(struck))
             DamageSink(struck, fullDamage);
 
         ConfigureSphereQuery(radius, point);
@@ -1695,7 +1707,7 @@ public sealed partial class ProjectilePool : Node3D
             int shapeIndex = hit["shape"].AsInt32();
             var nearPoint = NearestBlastPoint(space, point, radius, body3D, rid, hits, shapeIndex);
             float damage = BlastDamage(fullDamage, radius, nearPoint.DistanceTo(point));
-            if (damage > 0f)
+            if (damage > 0f && !Gated(body))
                 DamageSink(body, damage);
         }
 

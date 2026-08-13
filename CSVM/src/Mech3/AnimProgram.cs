@@ -43,8 +43,13 @@ public sealed class AnimProgram
     /// and the last write wins.</summary>
     public readonly List<string> StartAnims = new();
 
-    /// <summary>Mission-scope reader defs the mission's compiled manifest does not list, so
-    /// were not instantiated (diagnostics — this is the C1/IA1 zeppelin + parked train).</summary>
+    /// <summary>Reader defs a loaded compiled manifest supersedes, so were not instantiated
+    /// (diagnostics): mission-scope defs the manifest does not list (the C1/IA1 zeppelin +
+    /// parked train), and the shared/chapter NAME1 multi-target defs — the compiler expands
+    /// those per pair per instance into exactly the missions that show the zeppelin, so with a
+    /// manifest present the reader form is either redundant (its compiled twins loaded) or
+    /// content this mission does not author. They load, anchor and register only on a
+    /// reader-only extraction (no <c>mis_anim</c>), where no compiled form exists.</summary>
     public readonly List<string> MissionLibrarySkipped = new();
 
     private readonly Dictionary<string, List<AnimDefinition>> _byAnimName =
@@ -94,8 +99,20 @@ public sealed class AnimProgram
         // extraction without mis_anim degrades to the previous behaviour rather than to an
         // empty program.
         foreach (var zrdr in new[] { sharedZrdr, chapterZrdr })
+        {
             foreach (var def in AnimDefs.LoadArchive(zrdr))
+            {
+                // NAME1 multi-target defs are per-mission content the compiler expands into
+                // mis_anim (see MissionLibrarySkipped); with a manifest present the reader
+                // form must not anchor zeppelin sub-parts the loaded mission never authors.
+                if (haveMissionManifest && def.MultiTargets.Count > 0)
+                {
+                    program.MissionLibrarySkipped.Add($"{def.AnimName} (NAME1)");
+                    continue;
+                }
                 program.Add(def, compiled: false);
+            }
+        }
 
         foreach (var def in AnimDefs.LoadArchive(missionZrdr))
         {

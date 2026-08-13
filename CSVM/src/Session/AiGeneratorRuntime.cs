@@ -113,11 +113,11 @@ public sealed partial class AiGeneratorRuntime : Node
     /// <summary>Generators that survived the load drops.</summary>
     public int LiveCount => _live.Count;
 
-    /// <summary>THE F18 SEAM. The host died: permanently disable every generator whose host
-    /// node (or authored <c>healthy</c> node, the submarine's) carries this name — the decoded
-    /// rule (a zeppelin's own destroyed flag, or the <c>healthy</c> node going inactive). The
-    /// door keeps its last state: the decoded loop early-outs a disabled generator before any
-    /// door rule runs. Returns how many generators this disabled.</summary>
+    /// <summary>The named host died: permanently disable every generator whose host node (or
+    /// authored <c>healthy</c> node, the submarine's) carries this name — the decoded rule.
+    /// Fed by <c>ZeppelinRuntime.ZeppelinKilled</c> (F18); fixed-installation hosts still have
+    /// no death source. The door keeps its last state: the decoded loop early-outs a disabled
+    /// generator before any door rule runs. Returns how many generators this disabled.</summary>
     public int NotifyHostDied(string nodeName)
     {
         int disabled = 0;
@@ -152,8 +152,10 @@ public sealed partial class AiGeneratorRuntime : Node
     {
         foreach (var gen in _live)
         {
-            // The altitude read is live off the host node, so the min_altitude gate holds
-            // (not cancels) whenever F17's flown zeppelin sits below it.
+            // Host death arrives through NotifyHostDied (zeppelin hosts, via F18's kill
+            // event); fixed-installation hosts still have no death source. The altitude read
+            // is live off the host node, so the min_altitude gate holds (not cancels)
+            // whenever F17's flown zeppelin sits below it.
             bool spawned = gen.Cycle.Step(dt, gen.Host.GlobalPosition.Y);
             if (gen.Cycle.DoorOpen != gen.DoorOpen)
             {

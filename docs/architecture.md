@@ -93,6 +93,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AiVoiceDispatcher.cs` — the combat-voice trigger dispatch (M4 E16), engine-free: the talker roll, the 15 s per-slot cooldown armed on failure too, the bearing halving, the broadcast election, the DI tiers, the death cries with force, the computed bearing index.
 - `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula (M4 D12): rank = weight × 1200 + distance + objectiveBias, minimised; player base weight 0.7, ±0.2 bearing/altitude/facing terms, 1e21 beyond activation; rating-bias matching and the allied-attacker deconfliction pick.
 - `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints (M4 B5): nearest node first, then edge-list neighbours, seeded branch draws; aircraft-agnostic, shared by `AiPilot` and `ZeppelinMotion`.
+- `src/Flight/ZeppelinDamage.cs` — the pure zeppelin kill arithmetic (M4 F18): the decoded survivor threshold over the `healthy` list, the engine recount, the DAMAGES_ZEPPELIN gasbag gate, the record-stage crossing helper.
 - `src/Flight/ZeppelinMotion.cs` — the kinematic zeppelin motion law (M4 F17): forward-only flight along a net under the record's speed/accel/rate/pitch limits, plus the decoded sqrt engine-loss curve behind the `AliveEngines` seam.
 - `src/Flight/ManeuverExecutor.cs` — plays one maneuver's attitude-step program as `FlightInput` per sim step (M4 D13): the input source D11's state machine runs during `evasive maneuver`.
 - `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
@@ -220,7 +221,7 @@ clusters they delegate to.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in.
 - `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (M4 B6, `--generators`): load-time drop rules, per-cycle stepping, spawns through `GameSession.SpawnAiAircraft`.
 - `src/Session/AiVoiceRuntime.cs` — wires E16's dispatch into a session: the decoded event sources (hit-path DI, Downed death cries, acquisition call-outs, taunts) played through `CombatVoice` + `WorldSounds.PlayOneShot`.
-- `src/Session/ZeppelinRuntime.cs` — runs a mission's zeppelins (M4 F17, `--zeppelins`): places each record's world node at its authored pose and flies it along its net through `ZeppelinMotion`.
+- `src/Session/ZeppelinRuntime.cs` — runs a mission's zeppelins (M4 F17+F18, `--zeppelins`): places each record's world node at its authored pose, flies it along its net through `ZeppelinMotion`, and owns the multi-zone damage — per-part registry pools, the survivor-count kill, the authored hull death.
 - `src/Session/TurretEmplacementRuntime.cs` — the world AA emplacements (M4 C9b): the standalone `ai.zrd` family placed at its `NODES` patterns against the built chapter world, shipped `ACTIVATED` honoured, `--wake-turrets` the `WAKEUP_TURRETS` stand-in.
 
 ### Session root and tests
@@ -911,7 +912,8 @@ The mission `zeppelins.zrd.json` reader (docs/formats/mission-entities.md): the 
 instances typed as `ZeppelinDef` — motion limits, net name, targets, healthy zones +
 `num_healthy_required` (defaulted to 1 and clamped to the healthy count, the decoded load
 rule), engines, gasbags, cannons and `cannon_health`. Motion keys feed
-`Flight/ZeppelinMotion` (F17); the damage half is F18's input. Fixture units + install goldens
+`Flight/ZeppelinMotion` (F17); the damage half feeds `Flight/ZeppelinDamage` +
+`Session/ZeppelinRuntime.WireDamage` (F18). Fixture units + install goldens
 in `CSVM.Tests/ZeppelinsTests.cs`.
 ⚠ Every value stays in its AUTHORED unit (degrees). The original converts most angles to
   radians at load but leaves min_pitch/max_pitch in degrees, so its initial-pitch clamp never
@@ -1037,7 +1039,9 @@ Unit normalization happens HERE so handlers see one convention: reader rotations
 (ROTATE_STATE, FROM_TO rotate, XYZ_ROTATION → radians), PLAYER_RANGE metres (→ m²), ANIMATION_LOD
 tokens (→ numbers) — see docs/formats/anim-definitions.md.
 ⚠ `ParseDef` defaults `AnimName ??= Name` — without it a reader def misses its compiled twin in
-  AnimProgram's dedupe key and runs as a second, independently-anchored copy.
+  AnimProgram's dedupe key and runs as a second, independently-anchored copy. A `NAME1`
+  multi-target def (empty NAME; pairs parsed into `MultiTargets`, F18) takes its FIRST pair's
+  pattern as `AnimName` instead, so two such defs no longer collide on the ("", "") key.
 ⚠ `AddCallTarget` must NOT touch `data["node"]`/`data["name"]` — for CALL_ANIMATION those hold the CALLED animation's name.
 ⚠ `DAMAGE_SEQUENCE` parses into a sequence literally named `DAMAGE_SEQUENCE` — the magic name
   `AnimRuntime.ApplyDamageStages` invokes (docs/formats/destructibles.md).
@@ -1049,6 +1053,11 @@ keep the remainder — plus `StartAnims`; `ScriptFor` resolves an event slot to 
 ⚠ The mission zrdr scope is a LIBRARY, not a manifest: a mission-scope reader def applies only if
   the mission's compiled archive contains it (docs/formats/anim-definitions.md); the gate engages
   only when the manifest actually loaded, and skips are recorded in `MissionLibrarySkipped`.
+⚠ Shared/chapter-scope `NAME1` multi-target defs take the SAME manifest gate (F18): the compiler
+  expands them into exactly the missions that show the zeppelin, so with a manifest present the
+  reader form is redundant or unauthored content — anchoring it registered ~100–300 phantom
+  sub-part pools per chapter on mission-hidden zeppelins. They load (and anchor, and pool) only
+  on a reader-only extraction with no mis_anim.
 ⚠ Not what decides which world ENTITIES a mission shows — that is MissionSetup + interp.
 
 ## src/Mech3/TextureCycler.cs
@@ -1433,7 +1442,11 @@ builds; `NarrowToSymbolRoot` — the `air_gen`/`eairg31` cross-bind fix, tri-sta
 undecidable and leaves the name match standing, never conflate it with an empty narrowing),
 **`Anchors`** (NAME match → symbol narrowing → root lift, with
 `NameResolveFallback`/`SuppressRootLift`/`MaxRootLift` as its documented policy inputs — the
-runtime copies its flags over at `Bind`), and the **bind census** (`OpenCensus`/`CloseCensus`
+runtime copies its flags over at `Bind`; an empty-NAME def carrying parsed `NAME1`
+`MultiTargets` anchors through those authored paths instead — the deliberate F18 change, scoped
+to exactly the multi-target form: the old blanket refusal stands for an empty-NAME def with no
+recorded targets, because its generic ROOT name would root-lift onto every building; the paths
+never root-lift at all), and the **bind census** (`OpenCensus`/`CloseCensus`
 bracket the bootstrap; `--debug-anim`/`--node=` project `ResolutionLines` through
 `AnimRuntime.ResolutionLines`, never re-derive it). The by-index map obeys two refusals inside
 `Add`: empty under `NameResolveFallback` (colliding index spaces) and skipped for
@@ -1624,6 +1637,9 @@ bootstrap, read by `ANIM_HEALTH` eval, escalated by `ApplyDamageStages`, damaged
   `Resolve` does not name cannot be damaged at all.
 ⚠ `Resolve` walks the WHOLE parent chain and takes the nearest COMPILED anchor, not the first hit —
   a reader wildcard can grab an inner node while the compiled def owns the real DAMAGE_SEQUENCE.
+`Instance.Reseed(max)` re-seeds a pool from a mission record — the F18 zeppelin zones, where
+`zeppelins.json` hp beats the def's own `HEALTH` — and refuses once damaged, so a late wire-up
+cannot heal a fight in progress.
 
 ## src/Mech3/WavFile.cs
 Pure-C# WAV parser with an MS ADPCM→PCM16 decoder (`DecodeMsAdpcm`), no Godot dependencies —
@@ -2157,7 +2173,10 @@ sphere stays world-masked.
   not a lookup the table could carry. The texture-derived `SurfaceClass`/`ClassifySurface` pair is
   gone as of B12; `SceneBuilder.SurfaceMeta` itself stays, because it still splits colliders per
   texture class and feeds `MapEdgeExtender`/`ColliderOverlay`.
-`DamageSink` (→ `AnimRuntime.DamageAt`) turns a world hit into destructible damage;
+`DamageSink` (→ `AnimRuntime.DamageAt`) turns a world hit into destructible damage —
+`WorldDamageGate` (→ `ZeppelinRuntime.GateWeaponDamage`, F18) is asked per struck body first,
+so a weapon without `DAMAGES_ZEPPELIN` cannot hurt a gasbag while its impact effect/sound still
+play;
 `EffectSink` (→ `AnimRuntime.PlayEffectAt`) plays the non-model impact effects — rockets on the
 runtime's own bound, gun hits under `GunEffectTtl` 0.3 s (the `*_gunhit` family's longest authored
 stop, and the only bound the stop-less slug defs have) and one play per `GunEffectInterval` 0.1 s
@@ -2240,6 +2259,19 @@ positions in, target node out; its two consumers are `AiPilot.Patrol` (aircraft)
   work); per-node tags ride along raw. Stop-point vs segment id is still open (F17's remaining
   item; the discriminating instrument is locating the runtime net loader).
 
+## src/Flight/ZeppelinDamage.cs
+The pure zeppelin kill arithmetic (M4 F18), engine-free: `Survivors`/`IsDead` over the record's
+`healthy` list (counted literally, entry by entry — C5/M01 ships `gasbag5` twice), the
+`AliveEngines` recount, `MayDamageGasbag` (= `WeaponDef.DamagesZeppelin`, the gasbag-only
+routing gate) and `CrossedStages` (the `cannon_health` 0.6/0.3 stage list, injure_anims
+semantics: every crossed threshold fires, once). The zone pools live in `DestructibleRegistry`;
+`Session/ZeppelinRuntime` supplies the aliveness views. Pinned by `ZeppelinDamageTests` + the
+`zeppelin-damage` suite.
+⚠ POLARITY: `num_healthy_required` counts SURVIVORS — dead when `survivors < required` (decoded;
+  mission-entities.md). The design's destroy-count reading is the inverse and yields an
+  immortal zeppelin; the discriminating state (6 zones, required 4, exactly 3 destroyed → dead)
+  is pinned in `ZeppelinDamageTests` and in-engine by the suite.
+
 ## src/Flight/ZeppelinMotion.cs
 The kinematic zeppelin motion law (M4 F17): flies a `ZeppelinDef` along its net through
 `AiNetFollower`, forward-only along the facing (the design's "require forward motion to turn,
@@ -2249,7 +2281,8 @@ state — no Node, no flight model; `ZeppelinRuntime` writes the pose onto the w
 by `ZeppelinMotionTests` + the `zeppelin-motion` suite.
 ⚠ Engine loss is the decoded square root — `f = sqrt(alive/total)`, `max_speed' = f·max_speed`,
   `max_accel' = (0.8f+0.2)·max_accel` — NEVER the design's 10/40/50 bands. `AliveEngines` is
-  the mutable seam F18's damage aggregator writes; today nothing calls it.
+  the mutable seam F18's damage poll writes (`ZeppelinRuntime.PollDamage`, off the engine
+  zones' registry pools).
 ⚠ The authored initial `pitch` is taken verbatim: the original's load-time clamp compares
   radians against raw degrees and never fires (mission-entities.md) — do not re-add it.
 
@@ -4239,7 +4272,10 @@ verdicts and the suite's assertions cannot drift apart.
 
 ## src/Testing/TestHarness.cs
 `--run-tests[=filter]`: the suite registry, `TestContext` (assert verbs, resolved data paths, a
-scene-tree host, and `WithWorld` — the chapter-world builder over `WorldSession`), the
+scene-tree host, and `WithWorld` — the chapter-world builder over `WorldSession`; the
+mission-override form `WithWorld(chapter, collision, mission, body)` builds a chapter at another
+mission and never caches it, since the cache is keyed by chapter alone — `zeppelin-damage` wants
+C1 at M04), the
 PASS/FAIL/SKIP table, `.scratch/test-report.json`, and the process exit code. `TestContext.
 EmitterFactory` (mutable, default null) forwards straight into `WorldSession.Options.EmitterFactory`
 for the next `WithWorld` build — a suite sets it, on a chapter other than `Chapter` so a cached
@@ -4644,33 +4680,44 @@ F17's moving zeppelin) in the authored `rotation` drop attitude, each pilot patr
 net pick through `AiNetFollower` (`SpawnedNet`). Door transitions play the authored
 `open_anim`/`close_anim` through host-scoped hooks (`AnimRuntime.PlayWithin`/`StopWithin`);
 unauthored doors run the timing machine log-only. Every drop/live/door/spawn prints an `egen:`
-line, which is the flag's observability. `NotifyHostDied(node)` is THE F18 SEAM: the zeppelin
-death aggregator (or the submarine's `healthy` node) calls it and the matching cycles disable
-permanently — nothing calls it until F18 lands. Pinned by the `zeppelin-launch` suite.
+line, which is the flag's observability. `NotifyHostDied(node)`: the zeppelin death aggregator
+(`ZeppelinRuntime.ZeppelinKilled`, F18) calls it and the matching cycles disable permanently.
+Pinned by the `zeppelin-launch` suite.
 ⚠ Load drops are decoded semantics: an unresolved host node, or a nets list where NOTHING
   resolves, drops the generator at load. Never load one inert.
 ⚠ The zeppelin drop point is the origin node MINUS an invented 12 m clearance: the authored
   `cargobay` sits on the bay floor, so an airframe spawned exactly there dies into the hull on
   frame one (measured, C1B/M03). The binary's two untraced launch timers (BL-350 trap b) are
   deliberately NOT interpreted.
+⚠ Host DEATH is wired for ZEPPELIN hosts only (`NotifyHostDied`, fed by
+  `ZeppelinRuntime.ZeppelinKilled` — F18); fixed-installation hosts still have no death source.
 ⚠ The min_altitude gate reads the host node's live Y, so it is real only with `--zeppelins`
   (F17) placing/flying the host — and C1/IA1's own mission setup DEACTIVATES its zeppelin (IA
   wave logic would wake it; out of M4 scope), so IA1 doors swing hidden; demo on C1B/M03.
 
 ## src/Session/ZeppelinRuntime.cs
-Runs a mission's zeppelins (M4 F17, behind `--zeppelins`): each `ZeppelinDef` whose world node
-and net resolve gets a `ZeppelinMotion` on B5's `AiNetFollower` (arrival radius widened per
-record to clear the turning circle), is placed at its authored position/yaw/pitch, and the NODE
-is flown kinematically — no FlightController, zeppelins have no flight model. `MotionFor(node)`
-is F18's seam to the engine-loss curve. Observability is the `zep:` lines (place/skip/hold,
-node captures, a 10 s position heartbeat); `--debug-ainets=<net>` draws the route. Pinned by
-the `zeppelin-motion` suite.
+Runs a mission's zeppelins (M4 F17 motion + F18 damage, behind `--zeppelins`): each
+`ZeppelinDef` whose world node and net resolve gets a `ZeppelinMotion` on B5's `AiNetFollower`
+(arrival radius widened per record to clear the turning circle), is placed at its authored
+position/yaw/pitch, and the NODE is flown kinematically — no FlightController. `WireDamage`
+builds the F18 zones over the world registry: gasbags/`cannon_health` cannons seeded from the
+RECORD where authored (record hp beats a def pool via `Instance.Reseed`; a fresh pool registers
+on the record's destroy-anim def, so zero-HP death plays the authored destruction), engines and
+everything unauthored keep their compiled def `HEALTH`; a zone with neither is not damageable
+and logs so — never an invented default. `PollDamage` (per `SimStep`) drives
+`Motion.AliveEngines`, plays record cannon stages, and owns the kill (`ZeppelinDamage.IsDead`);
+the kill logs, stops the motion, plays the prerequisite-gated hull-death def
+(`all_pzep_gasbags`-shaped, found by data, never by name) and raises `ZeppelinKilled` (the
+generator disable). `GateWeaponDamage` is the pool's `WorldDamageGate`. Observability is the
+`zep:` lines (wired/zone kills/engines/DESTROYED). Pinned by `zeppelin-motion` +
+`zeppelin-damage` suites.
 ⚠ A `deactivated` record (value 1) is PLACED but held — mission-script wake-up is out of M4's
   scope. A record whose net misses neindex is also placed-not-flown (the pose is real data and
-  B6's altitude gate reads the node's Y).
-⚠ Stop nodes are NOT implemented: the per-node tags are preserved and acted on by nothing (two
-  readings survive; F17's open item). Effect templates snap to absolute world points and never
-  track a moving host — a hit effect on a flying zeppelin stays behind; F18/F19 inherit that.
+  B6's altitude gate reads the node's Y). Stop nodes are NOT implemented (F17's open item).
+⚠ Effect templates snap to absolute world points and never track a moving host — a hit effect
+  on a flying zeppelin stays behind, and the death choreography plays where the hull died. The
+  `cannon_health` gasbag binding is parsed and logged but no damage transfer is decoded, so
+  none is invented.
 
 ## src/Session/TurretEmplacementRuntime.cs
 The world AA emplacements (M4 C9b): `TurretController.BuildEmplacements` resolved against the

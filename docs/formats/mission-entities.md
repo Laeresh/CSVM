@@ -8,8 +8,9 @@ the player attacks or escorts, and the generators that feed fighters into the fi
 
 **The remake reads both**: `egen.json` via `CSVM/src/Mech3/EnemyGenerators.cs` (run by
 `Session/AiGeneratorRuntime.cs` behind `--generators`, M4 B6) and `zeppelins.json` via
-`CSVM/src/Mech3/Zeppelins.cs` (run by `Session/ZeppelinRuntime.cs` behind `--zeppelins`, M4 F17
-— the motion half; damage is F18). Both are documented because they are complete,
+`CSVM/src/Mech3/Zeppelins.cs` (run by `Session/ZeppelinRuntime.cs` behind `--zeppelins`: motion
+M4 F17, multi-zone damage M4 F18 — per-part pools, the survivor-count kill, the
+`DAMAGES_ZEPPELIN` gasbag gate). Both are documented because they are complete,
 self-contained definitions — the data
 half of the M4 combat work, and directly useful to the mech3ax fork. Which zeppelin *nodes* a
 mission shows at all is a separate mechanism, the per-mission `.gw` interp script — see
@@ -66,6 +67,26 @@ it that way gives a zeppelin that will not die — a failure mode that looks lik
 than an off-by-one, so assert the direction in a test. The design's worked example (four critical
 gasbags, threshold 3) is a *destroy* count; this install ships 5–6 gasbags with a *survivor*
 threshold of 2–5.
+
+**The data corroborates the polarity through the hull-death anim defs.** Each zeppelin ships an
+`ANIMATION_DEFINITION` on its own node gated by an `ACTIVATION_PREREQUISITE` counting the gasbag
+`finish_*` anims with a `MINIMUM_TO_SATISFY` — and that minimum is exactly
+`len(healthy) − num_healthy_required + 1`, the destroyed count at which survivors first drop
+below the threshold (piratezep: 3 of 6 finishes against required 4 of 6; multiplayer1zep: 3 of 5
+against required 3 of 5). The def pops the remaining gasbags and calls the hull's own
+`kill*zep` sink/breakup anim. The remake's kill (F18) is owned by the survivor count and then
+plays this prerequisite-gated def, selected by its prerequisite shape, never by name.
+
+**Where a per-part hp comes from, measured across the install**: the record and the mission's
+compiled anim defs are complementary. Gasbag defs carry `HEALTH 0` everywhere, so a gasbag's
+pool is always the record's `gasbags` hp. Cannon defs carry `HEALTH 60` exactly where the record
+authors no `cannon_health` (the campaign zeppelins), and `HEALTH 0` where it does (the IA1/MP3
+family, hp 200 in the record). Engines/turrets are def-only (`HEALTH 30–40`/`10`, no record
+key). The remake seeds record-first, def where unauthored. ⚠ One shipped gap: C5/M01's
+`piratezep` authors `healthy` (with `gasbag5` listed twice — count entries literally) but no
+`gasbags`, and its gasbag defs are `HEALTH 0` like all others, so no hp is authored anywhere;
+what the original does there is undecoded, and the remake leaves those zones undamageable and
+says so in a `zep:` line rather than inventing a default.
 
 ### Units and the load-time pitch clamp
 

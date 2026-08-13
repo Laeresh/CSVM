@@ -71,6 +71,30 @@
             ],
             "CALL_ANIMATION", ["NAME", ["probe_fire_template"], "WITH_NODE", ["probe_sign_root"]]
           ]
+        ],
+        "ANIMATION_DEFINITION",
+        [
+          "NAME1",
+          [
+            "probe_rtur*", ["probe_zep", "rtur*"],
+            "probe_ltur*", ["probe_zep", "ltur*"]
+          ],
+          "ANIMATION_ROOT_NAME", ["healthy"],
+          "ACTIVATION", ["ON_CALL"],
+          "HEALTH", [10],
+          "ACTIVATION_PREREQUISITE",
+          [
+            "OPTIONS",
+            [
+              "MINIMUM_TO_SATISFY", [3],
+              "ANIMATION_LIST", ["finish_bag1", "finish_bag2", "finish_bag3", "finish_bag4"]
+            ]
+          ],
+          "SEQUENCE_DEFINITION",
+          [
+            "NAME", ["probe_turret_pop"],
+            "OBJECT_ACTIVE_STATE", ["NAME", ["healthy"], "STATE", ["INACTIVE"]]
+          ]
         ]
       ]
     ]

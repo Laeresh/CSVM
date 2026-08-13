@@ -390,6 +390,50 @@ public class NameResolverTests
         Assert.Contains(trail, resolver.FindAll("fly_trail1", null));         // names still resolve
     }
 
+    // ---- multi-target NAME1 defs anchor through their authored paths (M4 F18) ----
+
+    [Fact]
+    public void MultiTargetDefAnchorsThroughItsOwnPathsOnly()
+    {
+        // The zeppelin sub-part shape: piratezep's rtur*/ltur* turrets. The path scoping is
+        // what keeps the def off ANOTHER zeppelin's same-named turrets — a bare "ltur*" name
+        // match would grab mp1zep's too.
+        var piratezep = Node("piratezep");
+        var rtur1 = Node("rtur1");
+        var ltur1 = Node("ltur1");
+        var mp1zep = Node("mp1zep");
+        var decoy = Node("ltur1");
+        var resolver = Build(
+            (piratezep, "piratezep", null),
+            (rtur1, "rtur1", piratezep),
+            (ltur1, "ltur1", piratezep),
+            (mp1zep, "mp1zep", null),
+            (decoy, "ltur1", mp1zep));
+        var def = Def(""); // NAME1 defs parse with an empty NAME
+        def.MultiTargets.Add(("pzrtur*", new[] { "piratezep", "rtur*" }));
+        def.MultiTargets.Add(("pzltur*", new[] { "piratezep", "ltur*" }));
+
+        var anchors = resolver.Anchors(def);
+
+        Assert.Equal(2, anchors.Count);
+        Assert.Contains(rtur1, anchors);
+        Assert.Contains(ltur1, anchors);
+        Assert.DoesNotContain(decoy, anchors);
+    }
+
+    [Fact]
+    public void EmptyNameWithoutTargetsStaysRefusedEvenWithAGenericRoot()
+    {
+        // The pre-F18 refusal survives for the defs it was written for: an empty-NAME def
+        // carrying only a generic ANIMATION_ROOT_NAME must not root-lift onto every instance.
+        var parent = Node("b0");
+        var resolver = new NameResolver<TestNode>();
+        resolver.Add(parent, "b0", null);
+        resolver.Add(Node("healthy"), "healthy", parent);
+
+        Assert.Empty(resolver.Anchors(Def("", rootName: "healthy")));
+    }
+
     private static TestNode Node(string label) => new() { Label = label };
 
     private static AnimDefinition Def(string name, string? rootName = null, bool localNodesOnly = false) =>

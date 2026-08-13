@@ -658,6 +658,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// Weapon damage and the death sequence act through it.</summary>
     public DestructibleRegistry Destructibles => _destructibles;
 
+    /// <summary>Every definition of the bound program, read-only — for a consumer that selects
+    /// defs by a rule <see cref="Play"/>'s name lookup cannot express (the zeppelin damage
+    /// runtime finding the hull-death def by its activation prerequisite, M4 F18).</summary>
+    public IReadOnlyList<AnimDefinition> ProgramDefs => _program.Defs;
+
     /// <summary>Pins the runtime's RNG for a reproducible run. Every session sets one, derived from
     /// the master seed (<see cref="Utils.Rng"/>); null leaves it drawn from .NET's own entropy. Set
     /// at construction through the object initializer, before <see cref="Bind"/>.</summary>
@@ -1196,6 +1201,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// world runtime tests this before routing a death's CALL_ANIMATION here, so only the curated
     /// impact/destruction effects are handed off (doors and other calls fall through).</summary>
     public bool Handles(string animName) => _program.ByAnimName(animName).Count > 0;
+
+    /// <summary>The definitions carrying one ANIMATION_NAME — the same lookup
+    /// <c>CALL_ANIMATION</c> dispatch uses, exposed so the zeppelin damage runtime can register
+    /// a record's destroy anim as a destructible pool (M4 F18).</summary>
+    public IReadOnlyList<AnimDefinition> DefsFor(string animName) => _program.ByAnimName(animName);
 
     /// <summary>Stages the named effect at an absolute world point: relocates each matching effect
     /// template's root onto the point (so its puffers, which ride that root, emit there) and starts
@@ -1851,8 +1861,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                      $"{_destructibles.DistinctAnchors} node group(s) registered " +
                      $"(mutable HP; inert until weapons land)");
         if (program.MissionLibrarySkipped.Count > 0)
-            GD.Print($"anim: {program.MissionLibrarySkipped.Count} mission-scope reader def(s) " +
-                     $"not in this mission's compiled manifest, so not instantiated: " +
+            GD.Print($"anim: {program.MissionLibrarySkipped.Count} reader def(s) superseded by " +
+                     $"this mission's compiled manifest (mission-scope + NAME1), not instantiated: " +
                      string.Join(", ", program.MissionLibrarySkipped.Take(8)) +
                      (program.MissionLibrarySkipped.Count > 8 ? ", …" : ""));
         if (ran.Count > 0 || missing.Count > 0)

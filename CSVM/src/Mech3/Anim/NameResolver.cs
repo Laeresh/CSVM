@@ -276,12 +276,22 @@ public sealed class NameResolver<TNode>
     /// the class remarks) — every other query stays census-free by construction.</para></summary>
     public List<TNode?> Anchors(AnimDefinition def)
     {
-        // Multi-target NAME1 definitions (zeppelin nacelles/turrets) parse with an empty
-        // NAME; they animate per-object sub-parts and are object-wiring scope — never anchor
-        // them (their generic ROOT names would anchor them onto every building in the world).
+        // Multi-target NAME1 definitions (zeppelin nacelles/turrets/gasbag wiring) parse with
+        // an empty NAME but carry their own explicit (pattern, anchor path) pairs. They anchor
+        // through THOSE paths — never the ANIMATION_ROOT_NAME lift, whose generic root names
+        // ('healthy') would anchor them onto every building in the world; that refusal was the
+        // pre-F18 rule and it still holds for an empty-NAME def with no recorded targets
+        // (compiled camera/eject defs). Deliberately scoped to the parsed NAME1 paths and
+        // nothing wider (M4 F18: each zeppelin sub-part becomes its own scalar destructible).
         if (string.IsNullOrEmpty(def.Name))
         {
-            return new List<TNode?>();
+            if (def.MultiTargets.Count == 0)
+            {
+                return new List<TNode?>();
+            }
+            var multi = MultiTargetAnchors(def);
+            RecordAnchoring(def, multi.Count > 0 ? AnchorKind.ByName : AnchorKind.None);
+            return multi;
         }
         var (anchors, how) = ComputeAnchors(def);
         RecordAnchoring(def, how);
@@ -456,6 +466,25 @@ public sealed class NameResolver<TNode>
             }
         }
         return false;
+    }
+
+    // The NAME1 anchor set: each pair's authored path resolved parent→child against the whole
+    // index, unioned in first-seen order. Census-free below Anchors, like ComputeAnchors.
+    private List<TNode?> MultiTargetAnchors(AnimDefinition def)
+    {
+        var seen = new HashSet<TNode>(_identity);
+        var anchors = new List<TNode?>();
+        foreach (var (_, path) in def.MultiTargets)
+        {
+            foreach (var node in ResolvePath(path, null, localOnly: true))
+            {
+                if (seen.Add(node))
+                {
+                    anchors.Add(node);
+                }
+            }
+        }
+        return anchors;
     }
 
     // The census-free anchor computation Anchors wraps — the internal path for anything that must

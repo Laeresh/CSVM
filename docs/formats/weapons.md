@@ -122,7 +122,7 @@ Each selects a special behaviour; most are one bare flag or a tiny struct.
 | `FLYOUT_HEALTH` | `wep_14` | `[10]` | HP of the flyout projectile (pairs with `TARGETABLE`) |
 | `PROJECTILE_BBOX` | `wep_14` | `[0]` | projectile bounding-box selector |
 | `DESTROY_ANIMATION` | `wep_14` | anim | effect played when the flyout is destroyed |
-| `DAMAGES_ZEPPELIN` | `wep_14`, `wep_28` | flag | may damage a zeppelin hull |
+| `DAMAGES_ZEPPELIN` | `wep_14`, `wep_28` | flag | may damage a zeppelin hull. The remake consumes it as the gasbag routing gate (M4 F18): a weapon without it cannot damage a zeppelin's critical `healthy` zones, while engines/turrets/cannons stay ordinary destructibles any weapon hurts |
 | `SHAKES_CAMERA` | `wep_26` | flag | the detonation shakes the camera. Sole carrier is the zero-damage scripted fake weapon, so it is NOT the player-gunfire shake mechanism — see [shakes.md](shakes.md) |
 
 **`TANGLER` — what it feels like in the original** (user recollection, 2026-08-02; **not decoded** —

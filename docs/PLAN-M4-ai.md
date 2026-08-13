@@ -1448,10 +1448,28 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
     nodes** — the per-node tags are parsed and preserved but acted on by neither surviving
     reading (stop-point id vs segment id); the discriminating instrument remains locating the
     runtime net loader (try the `SET_AI_NET` handler or the net-follower's node access)
-18. ☐ F18 — Multi-zone zeppelin damage — **the survivor threshold is decoded and its polarity
-    confirmed against the engine**; the design is decided (A4, 2026-08-13,
-    [`org/vehicleDamage.md`](org/vehicleDamage.md) closing section): no registry zone work;
-    anchor the sub-part defs, seed their scalar pools, build the survivor-count aggregator
+18. ☑ F18 — Multi-zone zeppelin damage — **landed 2026-08-14**, per the A4 design
+    ([`org/vehicleDamage.md`](org/vehicleDamage.md) closing section), no registry zone work:
+    `Flight/ZeppelinDamage.cs` (the pure survivor arithmetic — POLARITY pinned at the
+    discriminating state, dead at survivors 3 < required 4 of 6, the design's destroy-count
+    inverse refuted in test) + `ZeppelinRuntime.WireDamage`/`PollDamage` (per-part scalar
+    pools: record hp where authored via `Instance.Reseed`/a fresh pool on the record's
+    destroy-anim def, compiled def `HEALTH` where not, a zone with neither is logged
+    not-damageable — C5/M01's gasbag-less piratezep, never an invented default); engine
+    deaths drive F17's `AliveEngines` sqrt seam; the kill logs, stops the motion, plays the
+    prerequisite-gated hull death (`all_pzep_gasbags` → `killpzep`, selected by its
+    `ACTIVATION_PREREQUISITE` shape whose `MINIMUM_TO_SATISFY` = healthy − required + 1, a
+    data corroboration of the polarity) and disables the host's generator (B6's stub);
+    `WeaponDef.DamagesZeppelin` is finally consumed as `ProjectilePool.WorldDamageGate`
+    (gasbag zones only; effects still play). The deliberate `NameResolver.Anchors` change:
+    reader `NAME1` multi-target defs parse into `MultiTargets` and anchor through their OWN
+    authored paths (never the root lift — the old refusal stands for empty-NAME defs without
+    targets), and `AnimProgram` gates them behind the mission's compiled manifest exactly like
+    mission-scope readers, because blanket anchoring registered 100–300 phantom pools per
+    chapter on mission-hidden zeppelins the original never compiles. Pinned by
+    `ZeppelinDamageTests` + `AnimDefsTests`/`NameResolverTests` additions + the
+    `zeppelin-damage` suite (real rounds on C1/M04's piratezep in its own mission world, the
+    gate A/B'd with a struck-and-refused gun round)
 19. ☐ F19 — Broadside cannons: side-alternating volleys and the 90° arc — ⚠ **build it ballistic:
     the probabilistic hit curve is design-era and is not in the shipped engine**
 20. ☑ F20 — Zeppelin fighter launch — **landed 2026-08-14**: `GeneratorCycle.DoorOpen` runs the
