@@ -10,7 +10,8 @@ the player attacks or escorts, and the generators that feed fighters into the fi
 `Session/AiGeneratorRuntime.cs` behind `--generators`, M4 B6) and `zeppelins.json` via
 `CSVM/src/Mech3/Zeppelins.cs` (run by `Session/ZeppelinRuntime.cs` behind `--zeppelins`: motion
 M4 F17, multi-zone damage M4 F18 — per-part pools, the survivor-count kill, the
-`DAMAGES_ZEPPELIN` gasbag gate). Both are documented because they are complete,
+`DAMAGES_ZEPPELIN` gasbag gate — and the broadside cannons M4 F19, ballistic per the decode
+below). Both are documented because they are complete,
 self-contained definitions — the data
 half of the M4 combat work, and directly useful to the mech3ax fork. Which zeppelin *nodes* a
 mission shows at all is a separate mechanism, the per-mission `.gw` interp script — see
@@ -41,7 +42,7 @@ instances; the rest are conditional.
 | `cannon_fire_delay` / `cannon_fire_range` | s / m | broadside cadence (10/15/20 s) and reach (500–15000 m) |
 | `left_cannons` / `right_cannons` | `[[node, deployAnim, retractAnim], …]` | the broadside guns and the animations that run them out and back in |
 | `cannon_health` | see below | per-cannon damage record (24 of 58 instances) |
-| `cannon_inaccuracy` | ° | 10.0, on 3 instances |
+| `cannon_inaccuracy` | ° | on 3 instances: 10.0 on C2B/M04's pair, 6.0 on C4/M05's `blackhatzep` (re-measured 2026-08-14; an earlier census read all three as 10.0). An absent key scatters nothing — the remake reads it as 0 |
 | `team` | `enemy` / `ally` / `neutral` | 16 instances. The parser accepts all three names (case-insensitively) **and** a bare integer team id; this install only authors the names, and only two of the three |
 | `deactivated` | `[0]` / `[1]` | the KEY is on 9 instances but the VALUE decides: 7 author `1` (starts switched off, waiting on script), and C1/M04 + C2/M03 author `0` (active). Measured 2026-08-13; asserted in `CSVM.Tests/ZeppelinsTests.cs` |
 
@@ -124,6 +125,22 @@ binary rather than inferred:
   design document instead describes a rolled hit chance ramping from 20 % at maximum range to
   100 % near 200 m. **Nothing like that roll is in the shipped fire path** — treat the design's
   curve as design-era and do not implement it.
+
+What the remake's implementation (M4 F19, `Flight/ZeppelinBroadside.cs` +
+`Session/ZeppelinRuntime.Cannons.cs`) added to the picture:
+
+- **The deploy anims author their own timing.** Every `deployAnim`/`retractAnim` names a
+  compiled per-mission `mis_anim` def (`lbroad11-deploy_pzep_lbroad11`) whose longest
+  `OBJECT_MOTION_FROM_TO` `run_time` is 4 s (door swing) over a 3 s gun extension — the remake
+  reads the deploy duration from the def rather than inventing one. The decode names no STOW
+  trigger; the remake retracts after an invented, named 10 s without a bearing target.
+- **Side alternation is geometric.** The two 45°-half-angle cones sit on opposite normals, so
+  at most one side ever bears; the volley changes sides only when the target crosses the hull
+  axis. No alternation schedule exists to decode.
+- **Zeppelin-vs-zeppelin is live data.** Both records of a mutually-targeting pair are active
+  in C1B/M03 (`vostokzep` ↔ `piratezep`, range 500) and in every chapter's MP3
+  (`multiplayer1zep` ↔ `multiplayer2zep`, range 15000 — in range from spawn), so the
+  gasbag-pick arm is exercisable in a shipped session, not only in tests.
 
 ### Engine loss
 

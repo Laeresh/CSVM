@@ -2058,6 +2058,13 @@ public partial class GameSession : Node3D
                     _projectiles.WorldDamageGate = _zeppelins.GateWeaponDamage;
                 }
             }
+            // F19: the broadside cannons — real wep_28 rounds through the shared pool, the
+            // authored deploy/retract anims, targets from the record. After WireDamage so
+            // F18's cannon pools exist (a destroyed cannon thins the volley).
+            if (_projectiles != null)
+            {
+                _zeppelins.WireCannons(_projectiles, weaponDefs);
+            }
             GD.Print($"zep: {_zeppelins.LiveCount} of {zepDefs.Count} zeppelin(s) placed for " +
                      $"{_spec.Chapter}/{_spec.Mission}");
             state.What += $" + {_zeppelins.LiveCount} zeppelin(s)";

@@ -93,6 +93,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AiVoiceDispatcher.cs` — the combat-voice trigger dispatch (M4 E16), engine-free: the talker roll, the 15 s per-slot cooldown armed on failure too, the bearing halving, the broadcast election, the DI tiers, the death cries with force, the computed bearing index.
 - `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula (M4 D12): rank = weight × 1200 + distance + objectiveBias, minimised; player base weight 0.7, ±0.2 bearing/altitude/facing terms, 1e21 beyond activation; rating-bias matching and the allied-attacker deconfliction pick.
 - `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints (M4 B5): nearest node first, then edge-list neighbours, seeded branch draws; aircraft-agnostic, shared by `AiPilot` and `ZeppelinMotion`.
+- `src/Flight/ZeppelinBroadside.cs` — the pure broadside law (M4 F19): the decoded 90° side arc (dot > 0.707 on the moving hull's lateral axis), the per-cannon stowed→deploy→ready→fire machine with its own re-fire timer, the ballistic lead solve (skip on no solution) and the seeded gasbag pick.
 - `src/Flight/ZeppelinDamage.cs` — the pure zeppelin kill arithmetic (M4 F18): the decoded survivor threshold over the `healthy` list, the engine recount, the DAMAGES_ZEPPELIN gasbag gate, the record-stage crossing helper.
 - `src/Flight/ZeppelinMotion.cs` — the kinematic zeppelin motion law (M4 F17): forward-only flight along a net under the record's speed/accel/rate/pitch limits, plus the decoded sqrt engine-loss curve behind the `AliveEngines` seam.
 - `src/Flight/ManeuverExecutor.cs` — plays one maneuver's attitude-step program as `FlightInput` per sim step (M4 D13): the input source D11's state machine runs during `evasive maneuver`.
@@ -221,7 +222,7 @@ clusters they delegate to.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in.
 - `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (M4 B6, `--generators`): load-time drop rules, per-cycle stepping, spawns through `GameSession.SpawnAiAircraft`.
 - `src/Session/AiVoiceRuntime.cs` — wires E16's dispatch into a session: the decoded event sources (hit-path DI, Downed death cries, acquisition call-outs, taunts) played through `CombatVoice` + `WorldSounds.PlayOneShot`.
-- `src/Session/ZeppelinRuntime.cs` — runs a mission's zeppelins (M4 F17+F18, `--zeppelins`): places each record's world node at its authored pose, flies it along its net through `ZeppelinMotion`, and owns the multi-zone damage — per-part registry pools, the survivor-count kill, the authored hull death.
+- `src/Session/ZeppelinRuntime.cs` — runs a mission's zeppelins (M4 F17+F18+F19, `--zeppelins`): places each record's world node at its authored pose, flies it along its net through `ZeppelinMotion`, owns the multi-zone damage (per-part registry pools, the survivor-count kill, the authored hull death) and fires the broadside (`ZeppelinRuntime.Cannons.cs`: real unowned `wep_28` rounds through `ZeppelinBroadside`).
 - `src/Session/TurretEmplacementRuntime.cs` — the world AA emplacements (M4 C9b): the standalone `ai.zrd` family placed at its `NODES` patterns against the built chapter world, shipped `ACTIVATED` honoured, `--wake-turrets` the `WAKEUP_TURRETS` stand-in.
 
 ### Session root and tests
@@ -2258,6 +2259,21 @@ positions in, target node out; its two consumers are `AiPilot.Patrol` (aircraft)
 ⚠ The trailer is recorded and exposed, never acted on (target-relative motion is later-wave
   work); per-node tags ride along raw. Stop-point vs segment id is still open (F17's remaining
   item; the discriminating instrument is locating the runtime net loader).
+
+## src/Flight/ZeppelinBroadside.cs
+The pure zeppelin broadside law (M4 F19), engine-free: the decoded 90° arc
+(`dot(toTarget, sideNormal) > 0.707` against the MOVING hull's lateral axis, `SideNormal`/
+`TargetSide` — side alternation is geometric, the opposite cones never both bear, no cadence
+invented), the per-cannon stowed→deploy→ready→fire machine (`Step` emits deploy/retract/
+ready lists; deploy/retract durations come from the authored anim defs) with its own re-fire
+timer (`cannon_fire_delay`, armed by `Fired` per cannon), `TryAim` (the intercept solve,
+`AimAssist.TryIntercept` consumed) and `PickGasbag` (the zeppelin-vs-zeppelin rand() pick over
+the target's in-arc live gasbags). `Session/ZeppelinRuntime.Cannons.cs` wires it. Pinned by
+`ZeppelinBroadsideTests` + the `zeppelin-broadside` suite.
+⚠ BALLISTIC, never probabilistic: a target with no intercept solution is SKIPPED (timer not
+  armed) — the design's 20%→100% hit curve is design-era and refuted (mission-entities.md).
+⚠ Invented, named as such: `StowAfterIdleSeconds` (10 s idle → retract; the decode names no
+  stow trigger) and the two fallback timings no shipped record reaches.
 
 ## src/Flight/ZeppelinDamage.cs
 The pure zeppelin kill arithmetic (M4 F18), engine-free: `Survivors`/`IsDead` over the record's
@@ -4696,7 +4712,8 @@ Pinned by the `zeppelin-launch` suite.
   wave logic would wake it; out of M4 scope), so IA1 doors swing hidden; demo on C1B/M03.
 
 ## src/Session/ZeppelinRuntime.cs
-Runs a mission's zeppelins (M4 F17 motion + F18 damage, behind `--zeppelins`): each
+Runs a mission's zeppelins (M4 F17 motion + F18 damage + F19 broadside, behind
+`--zeppelins`): each
 `ZeppelinDef` whose world node and net resolve gets a `ZeppelinMotion` on B5's `AiNetFollower`
 (arrival radius widened per record to clear the turning circle), is placed at its authored
 position/yaw/pitch, and the NODE is flown kinematically — no FlightController. `WireDamage`
@@ -4709,8 +4726,15 @@ and logs so — never an invented default. `PollDamage` (per `SimStep`) drives
 the kill logs, stops the motion, plays the prerequisite-gated hull-death def
 (`all_pzep_gasbags`-shaped, found by data, never by name) and raises `ZeppelinKilled` (the
 generator disable). `GateWeaponDamage` is the pool's `WorldDamageGate`. Observability is the
-`zep:` lines (wired/zone kills/engines/DESTROYED). Pinned by `zeppelin-motion` +
-`zeppelin-damage` suites.
+`zep:` lines (wired/zone kills/engines/DESTROYED, plus F19's deploy/fire/skip). The broadside
+half is the `ZeppelinRuntime.Cannons.cs` partial: `WireCannons(pool, weapons)` resolves the
+HARDCODED `wep_28` and each cannon's node + F18 pool (a destroyed cannon thins the volley; the
+lateral sign is re-derived from the built cannon positions), and per step it resolves the
+record's `targets` ('player' = nearest human aircraft; any other name = a mission zeppelin,
+aimed at a rand()-picked in-arc gasbag), gates on `cannon_fire_range` + the arc, plays the
+authored deploy/retract anims scoped to the hull, and spawns unowned rounds
+(`ProjectilePool.NoShooter`, C9b's convention) scattered by `cannon_inaccuracy`. Pinned by
+`zeppelin-motion` + `zeppelin-damage` + `zeppelin-broadside` suites.
 ⚠ A `deactivated` record (value 1) is PLACED but held — mission-script wake-up is out of M4's
   scope. A record whose net misses neindex is also placed-not-flown (the pose is real data and
   B6's altitude gate reads the node's Y). Stop nodes are NOT implemented (F17's open item).

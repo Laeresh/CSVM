@@ -1470,8 +1470,22 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
     `ZeppelinDamageTests` + `AnimDefsTests`/`NameResolverTests` additions + the
     `zeppelin-damage` suite (real rounds on C1/M04's piratezep in its own mission world, the
     gate A/B'd with a struck-and-refused gun round)
-19. ☐ F19 — Broadside cannons: side-alternating volleys and the 90° arc — ⚠ **build it ballistic:
-    the probabilistic hit curve is design-era and is not in the shipped engine**
+19. ☑ F19 — Broadside cannons: side-alternating volleys and the 90° arc — **landed 2026-08-14,
+    ballistic as decoded**: `Flight/ZeppelinBroadside.cs` (the dot > 0.707 arc on the moving
+    hull's lateral axis — side alternation is geometric, the opposite cones never both bear;
+    the per-cannon stowed→deploy→ready→fire machine with its own `cannon_fire_delay` re-fire
+    timer; deploy/retract durations read from the authored anim defs, 4 s; the stow-after-10-s
+    idle window named invented) wired by the `ZeppelinRuntime.Cannons.cs` partial under
+    `--zeppelins`: hardcoded `wep_28` resolved from WeaponDefs at wire-up, fired as real
+    UNOWNED rounds (`ProjectilePool.NoShooter`, C9b's non-pilot convention) lead-solved via
+    `AimAssist.TryIntercept` (no solution = skipped, timer not armed — never a straight shot,
+    never a roll) and scattered by `cannon_inaccuracy` (re-measured: 10° ×2 + 6° ×1, absent =
+    0); F18's cannon pools thin the volley; the zeppelin-vs-zeppelin arm (target's in-arc live
+    gasbags, seeded rand pick) is live and EXERCISABLE in shipped sessions (C1B/M03's
+    vostokzep↔piratezep, every MP3 pair at range 15000). Pinned by `ZeppelinBroadsideTests` +
+    the `zeppelin-broadside` suite (C1/M04: deploy → 6-round port volley at a player stand-in,
+    starboard stowed, out-of-arc hold + retract, a destroyed cannon thins the volley to 5,
+    a cannon_inaccuracy clone shows real scatter, in-arc-only gasbag picks)
 20. ☑ F20 — Zeppelin fighter launch — **landed 2026-08-14**: `GeneratorCycle.DoorOpen` runs the
     decoded hardcoded door law inside `Step` (open 4 s before a due spawn, minimum 4 s open on
     the since-spawn timer, close early only past an 8 s gap; while blocked ONLY the door closes
