@@ -187,6 +187,12 @@ public static class Suites
             "is retired (a never-prewarmed def stays null), a source-following one-shot tracks a " +
             "moving node and survives its source's death, and the full-set prewarm cost is " +
             "measured and reported", VoiceRuntime));
+        into.Add(new TestHarness.Suite("ai-voice",
+            "the E16 trigger dispatch on a live AI plane against the real archive: a projectile "
+            + "hit crossing a DI threshold plays exactly ONE source-following line the pilot's "
+            + "accent owns (the 15 s slot cooldown swallowing the follow-up hits), and the kill "
+            + "plays the dead pilot's own death cry through the force flag while an unforced "
+            + "dispatch on the same dead speaker stays silent", AiVoice));
         into.Add(new TestHarness.Suite("ai-net-follow",
             "net following (B5): a real chapter net resolves by id and by name, its trailer and " +
             "tags ride along unacted-on, and an AI plane with a net-following pilot captures node " +
@@ -4000,6 +4006,151 @@ public static class Suites
                 sounds.FlushOneShots();
                 sounds.Free();
             }
+        }
+    }
+
+    /// <summary>The E16 dispatch on a live AI aircraft, over the same B8 lifecycle the session
+    /// runs (prewarm the accent's clips, retire the loader, play after the archive is closed).
+    /// The talker chance is pinned to 1 so the assertions are about the dispatch rules, not the
+    /// dice; audibility itself is the user's half (docs/verification.md, "What this project
+    /// cannot verify itself") — what IS assertable is the dispatch decision, the resolved clip
+    /// name and the PlayOneShot call.</summary>
+    private static void AiVoice(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var defs = SoundDefs.Load(ctx.ZrdrPath);
+        var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
+        var voice = new CombatVoice(defs, groups, CombatVoice.LoadAccents(ctx.ZrdrPath));
+        WeaponDef? gun = weapons.All.FirstOrDefault(w =>
+            w.IsGun && w.ArmorDamage is > 0f && w.HealthDamage is > 0f);
+        ctx.Check(gun != null && stats.DestroyableParts.Count > 0,
+            $"a damaging gun and destroyable parts exist in the data");
+        if (gun == null)
+            return;
+
+        var textures = new TextureArchive(texturesPath);
+        using var archive = new SoundArchive(ctx.SoundsPath);
+        WorldSounds? sounds = null;
+        Session.AiVoiceRuntime? runtime = null;
+        FlightController? ai = null;
+        try
+        {
+            // The session lifecycle: prewarm accent 12's pilot (VO id 2, the full clip set),
+            // then retire the loader as WorldSession.Build does.
+            sounds = new WorldSounds(defs, groups)
+            {
+                Loader = (d, warn) => archive.Find(d.WavName, d.Looped, warn),
+            };
+            ctx.Host.AddChild(sounds);
+            sounds.Prewarm(voice.PrewarmNames(new[] { 12 }));
+            sounds.Loader = null;
+
+            runtime = new Session.AiVoiceRuntime(voice, sounds, new System.Random(5));
+            ctx.Host.AddChild(runtime);
+
+            var aiModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+            ai = new FlightController
+            {
+                PlaneModel = aiModel,
+                Collider = PlaneCollider.Build(aiModel),
+                Damage = new PlaneDamage(stats.DestroyableParts),
+                PlayerIndex = AiAircraftSpawner.ShooterIdBase,
+                IsHumanPiloted = false,
+                Pilot = new AiPilot(),
+                UseKeyboard = false,
+                PadDevices = System.Array.Empty<int>(),
+                AllowPause = false,
+            };
+            ai.AddChild(aiModel);
+            var aiPos = new Vector3(0f, 500f, 0f);
+            ai.Setup(new FlightModel(stats), null, new CamParams(), aiPos, aiPos + Vector3.Forward);
+            ctx.Host.AddChild(ai);
+
+            // Talker chance pinned to 1: every roll passes, so a silent trigger is a GATE
+            // decision (cooldown, aliveness), never luck.
+            runtime.RegisterAi(ai, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+            var speaker = runtime.Dispatcher.Find(ai.PlayerIndex);
+            ctx.Check(speaker is { VoId: 2 },
+                $"accent 12 registers the AI as VO id 2 got={speaker?.VoId.ToString() ?? "none"}");
+            if (speaker == null)
+                return;
+
+            var played = new List<(int Trigger, string Clip)>();
+            runtime.LinePlayed += (_, trigger, clip) => played.Add((trigger, clip));
+            runtime.Step(3f); // past the decoded 2 s mute window
+
+            // --- DI: hits through the pool's own entry point until the summary crosses 70 %.
+            // The hits WALK the four zones (a single zone's exhausted pool floors the summary
+            // at 75 % on this airframe and could never cross the threshold).
+            var struck = new (string Part, Vector3 Offset)[]
+            {
+                ("wing", new Vector3(-2f, 0f, 0f)), ("wing", new Vector3(2f, 0f, 0f)),
+                ("fuselage", new Vector3(0f, 0f, -2f)), ("fuselage", new Vector3(0f, 0f, 2f)),
+            };
+            int budget = 400;
+            while (ai.Damage!.SummaryHealthFraction >= 0.7f && budget-- > 0)
+            {
+                var (part, offset) = struck[budget % struck.Length];
+                ai.TakeProjectileHit(gun, ai.WorldPosition + offset, part, 0);
+            }
+            float fraction = ai.Damage.SummaryHealthFraction;
+            ctx.Check(fraction is < 0.7f and > 0.3f,
+                $"the sweep stopped inside the DI band health={fraction * 100f:0}%");
+            ctx.Check(played.Count == 1 && played[0].Clip.StartsWith("snd_id2_DI-"),
+                $"crossing the threshold played exactly one DI line of the pilot's own played=[{string.Join(", ", played)}]");
+            var oneShot = LastOneShotPlayer(sounds);
+            ctx.Check(oneShot != null && oneShot.GlobalPosition.DistanceTo(ai.WorldPosition) < 1f,
+                $"…as a source-following one-shot at the aircraft pos={oneShot?.GlobalPosition}");
+
+            // Follow-up hits in the same tier stay silent: the slot cooldown swallowed them
+            // (armed by the PLAY here; the failed-roll arming is the unit suite's,
+            // AiVoiceDispatcherTests).
+            int before = played.Count;
+            static int Tier(float f) => f < 0.3f ? 3 : f < 0.5f ? 2 : f < 0.7f ? 1 : 0;
+            int tier = Tier(ai.Damage.SummaryHealthFraction);
+            ai.TakeProjectileHit(gun, ai.WorldPosition, "fuselage", 0, damageScale: 0.02f);
+            if (Tier(ai.Damage.SummaryHealthFraction) == tier)
+            {
+                ctx.Check(played.Count == before,
+                    $"a follow-up hit in the same tier is silent under the 15 s cooldown");
+            }
+
+            // --- the kill: the dying pilot's own cry, dispatched with force (the speaker is
+            // already dead when it plays).
+            ai.DebugForceCrash();
+            ctx.Check(!speaker.Alive, $"the Downed report marked the speaker dead");
+            ctx.Check(played.Count >= before + 1 && played[^1].Clip.StartsWith("snd_id2_DE-"),
+                $"…and the death cry played THROUGH the dead state (force) clip={(played.Count > 0 ? played[^1].Clip : "none")}");
+            ctx.Check(played[^1].Trigger == AiVoiceDispatcher.DeEnemy,
+                $"…as id 21 (DE): no team model puts an AI on the player's team, documented");
+
+            // The force flag is the death cry's alone: an ordinary dispatch on the same dead
+            // speaker is gated out before anything rolls.
+            var unforced = runtime.Dispatcher.Dispatch(ai.PlayerIndex,
+                AiVoiceDispatcher.TaSucShk, runtime.Now);
+            ctx.Check(unforced.Clip == null && unforced.Outcome == "speaker dead",
+                $"an unforced dispatch on the dead speaker is refused outcome={unforced.Outcome}");
+
+            ctx.Note($"lines: {string.Join(", ", played)}");
+        }
+        finally
+        {
+            ai?.Free();
+            runtime?.Free();
+            if (sounds != null)
+            {
+                sounds.FlushOneShots();
+                sounds.Free();
+            }
+            textures.Dispose();
         }
     }
 

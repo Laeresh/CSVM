@@ -139,12 +139,21 @@ public sealed class CombatVoice
 
     /// <summary>The session convenience: the voice prewarm set for one mission's roster, or empty
     /// when the mission authors no roster (21 of the 53 mission dirs author no accents at all).
-    /// The subset is chosen over prewarm-everything deliberately (see combat-voice.md).</summary>
+    /// The subset is chosen over prewarm-everything deliberately (see combat-voice.md).
+    /// <paramref name="extraAccents"/> joins accents the session assigns outside the roster
+    /// (the <c>--ai=…:accent=N</c> spawns) — a clip not in this set never plays (B8).</summary>
     public static IReadOnlyCollection<string> SessionPrewarmNames(string zrdrPath,
         string missionZrdrPath, IReadOnlyDictionary<string, SoundDef> defs,
-        IReadOnlyDictionary<string, SoundGroup> groups)
+        IReadOnlyDictionary<string, SoundGroup> groups, IEnumerable<int>? extraAccents = null)
     {
-        var accents = MissionAccentIds(missionZrdrPath);
+        var accents = new SortedSet<int>(MissionAccentIds(missionZrdrPath));
+        if (extraAccents != null)
+        {
+            foreach (int accent in extraAccents)
+            {
+                accents.Add(accent);
+            }
+        }
         if (accents.Count == 0)
         {
             return Array.Empty<string>();

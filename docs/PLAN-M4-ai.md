@@ -1413,11 +1413,16 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
 
 ### Wave E — Communication
 
-16. ☐ E16 — Trigger dispatch across the shipped taxonomy, gated by the talker stat — **spec complete
-    2026-08-10** in [`formats/combat-voice.md`](formats/combat-voice.md): 29 trigger ids named by the
-    binary, the `accentID`→`voice.zrd`→pilot chain traced, the `DI` thresholds at 70/50/30 %, the
-    computed bearing index, ⚠ the 15 s cooldown armed by a *failed* roll, ⚠ the hardcoded halving on
-    ids 1–12, and broadcasts as a speaker election rather than N rolls. Cost down; still needs B8
+16. ☑ E16 — Trigger dispatch across the shipped taxonomy, gated by the talker stat — **landed
+    2026-08-13**: `Flight/AiVoiceDispatcher.cs` (the decoded rules, engine-free: failure-armed
+    15 s cooldowns, the 1–12 halving, wrapping speaker election, DI 70/50/30 most-severe-first,
+    force = aliveness bypass only, the computed bearing index) wired by
+    `Session/AiVoiceRuntime.cs` over B8's seam; 21 of 29 ids wired (id 20 unreachable until a
+    team model exists), the rest unwired-with-reason
+    (combat-voice.md "The remake's dispatch sites" — gloat polarity, id 16's missing site, and
+    the turret/danger-zone/wingman gaps stay open as recorded); pilot identity via
+    `--ai=…:accent=N` joining the prewarm set (voiceless without it, documented); pinned by
+    `AiVoiceDispatcherTests` + the `ai-voice` suite
 
 ### Wave F — Zeppelins
 
