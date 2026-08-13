@@ -259,6 +259,12 @@ public partial class FlightController : Node3D
     /// identity a round it fired carries (<c>ProjectilePool.Spawn</c>'s shooter id).</summary>
     public int PlayerIndex;
 
+    /// <summary>The world's destructibles, when this session has a world runtime — the aim assist's
+    /// third candidate list (`BL-342`, an approximation of the original's `targets.zrd`
+    /// `MStructList`). Null in every build with no world (the weapon lab, the suites), which costs
+    /// the scan nothing: that pass simply iterates an empty list.</summary>
+    public DestructibleRegistry? Destructibles;
+
     /// <summary>Draw the collision probe — the swept ray plus the airframe boxes the
     /// crash test sweeps each physics frame — in green (red on the impact frame).</summary>
     public bool DebugCollision;
@@ -304,11 +310,17 @@ public partial class FlightController : Node3D
     private const float SpawnSpeed = 53.6f;     // m/s ≈ 120 mph. PLACEHOLDER: the original's spawn speed is
                                                 // plane-dependent (TODO — kept fixed for now per user); the
                                                 // plane accelerates from here toward its cruise
-    private const float GunConvergenceDist = 250f; // m — the range the gun reticle projects the
-                                                   // ballistic solution to (the sight's zero range).
-                                                   // NOT in the data (weapons.json carries no
-                                                   // convergence field; guns have RANGE 1000) — a
-                                                   // TUNE pending an original-game playtest.
+                                                // The gun pipper's own rule, decoded out of crimson.exe for B5 (docs/org/aim-assist.md "What
+                                                // the pipper follows", FUN_00426570 / FUN_004267f0) — no TUNE left in it. The sprite marks
+                                                // where a round fired NOW would be after ReticleFlightTime seconds, so its range is the
+                                                // weapon's own VELOCITY halved (430 m for the 860 m/s default), and its distance from the
+                                                // muzzle is rate-smoothed rather than snapping when the selected group changes.
+    private const float ReticleFlightTime = 0.5f;      // s of flight the pipper marks
+    private const float ReticleDefaultSpeed = 860f;    // m/s used when no weapon def resolves
+    private const float ReticleAccel = 894.07996f;     // m/s² the smoother's rate builds at
+    private const float ReticleRatePerGap = 1.9848576f; // rate ceiling per metre of remaining gap
+    private const float ReticleFarGap = 900f;          // m past which the ceiling is flat
+    private const float ReticleFarRate = 1788.1599f;   // m/s that flat ceiling
     private const float UnderMapY = 0f;        // C1 terrain sits at y≈100+; below this we're lost
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
     private const float AutoRespawnDelay = 1.5f; // s a HoldInput run stays crashed before auto-respawn
@@ -347,6 +359,8 @@ public partial class FlightController : Node3D
 
     private readonly List<float> _gunGaugeSlots = new();
     private readonly List<float> _missileGaugeSlots = new();
+    private readonly AimCandidateSet _aimCandidates = new(); // rebuilt once per fire call (B4/B5)
+    private readonly RandomNumberGenerator _aimRng = Rng.Stream(Rng.Weapons); // the assist's 1° launch scatter
 
     private FlightModel _model = null!;
     private CameraController _cam = null!;
@@ -377,6 +391,10 @@ public partial class FlightController : Node3D
     private FireControl? _fire;                  // the fire-control state machine; built in _Ready with the loadout
     private GunGroup[] _firableGuns = Array.Empty<GunGroup>(); // the firable gun groups in _fire's slot order (muzzle nodes, live ammo)
     private GunAimSlot[][] _aimSlots = Array.Empty<GunAimSlot[]>(); // per _firableGuns group, one slot per muzzle — B2's assist state
+    private float _reticleDist = ReticleDefaultSpeed * ReticleFlightTime; // m — the pipper's smoothed range
+    private float _reticleRate;                  // m/s the pipper's range is currently closing at
+    private bool _aimLoggedFirst;                // verification breadcrumb: the assist's first snap logs once
+    private bool _aimListsLogged;                // verification breadcrumb: the candidate list sizes log once
     private bool _gunLoopOn;                     // the firing loop sound is currently playing
     private bool[] _gunLoggedFirst = Array.Empty<bool>(); // verification breadcrumb: each group logs its first live round once
     private int _rocketsLaunched;                // verification breadcrumb: the first few launches log their pylon
@@ -442,6 +460,14 @@ public partial class FlightController : Node3D
     /// <summary>Whether this plane is crashed — frozen at the impact, airframe hidden, waiting
     /// for respawn. The fact the session (and the in-engine suites) read; only Respawn clears it.</summary>
     public bool Crashed => _crashed;
+
+    /// <summary>The flight model's world position — the plane as a SIM value, not a node transform
+    /// (the node lags it by the render interpolation). What another plane's aim assist aims at.</summary>
+    public Vector3 WorldPosition => _model.Position;
+
+    /// <summary>The flight model's world velocity, m/s — the assist's intercept solve needs it, and
+    /// so does the shooter's own subtraction to relative velocity.</summary>
+    public Vector3 WorldVelocity => _model.VelocityDir * _model.Speed;
 
     /// <summary>The weapon lab's free camera: while set, this controller writes NOTHING to the
     /// camera — no chase, no fixed view, no orbit, and <see cref="SnapCamera"/> is a no-op — because
@@ -1166,8 +1192,8 @@ public partial class FlightController : Node3D
         // Feeds the weapon gauges (if built) and the text readout (if built) — both draw from the live
         // loadout, so this runs whenever there is one, independent of the dial cluster.
         UpdateWeaponGauges();
-        // Points the gun reticle at the selected group's ballistic impact point (if built).
-        UpdateReticle();
+        // Points the gun pipper at 0.5 s of the selected group's flight, on the nose axis (if built).
+        UpdateReticle(simDt);
         // Splitscreen: the text block shrinks with the pane, like every other HUD element
         // (HudMetrics). PaneFactor is exactly 1 in single player, so the original 22 px at
         // (16,10) is untouched there; re-applied only when the factor actually changes.
@@ -1392,16 +1418,24 @@ public partial class FlightController : Node3D
         }
     }
 
-    /// <summary>Points the gun reticle at the SELECTED gun group's ballistic impact point at
-    /// the convergence distance. It integrates the round exactly as <see cref="ProjectilePool"/>
-    /// fires it — muzzle-forward × <c>VELOCITY</c> plus the plane's inherited velocity, stepped
-    /// through any <c>ACCELERATION</c>/<c>GRAVITY</c> — so the pipper and the rounds agree exactly
-    /// (A1 removed the only divergence, a wrongly-applied <c>CANNON_SPREAD</c> scatter). Once the
-    /// aim assist lands (`BL-342`/B5) a round leaves along the assist's smoothed line instead of the
-    /// muzzle axis this reads, and the two will disagree again — a real HUD question B5 decodes, not
-    /// solved here. Hidden while crashed or when the plane has no firable gun / no muzzle to fire
-    /// from. No-op without a reticle.</summary>
-    private void UpdateReticle()
+    /// <summary>Points the gun pipper where the original points it (decoded for `BL-342`/B5 —
+    /// <c>FUN_00426570</c> places it, <c>FUN_004267f0</c> smooths it; docs/org/aim-assist.md
+    /// "What the pipper follows"): at the selected gun group's muzzle MIDPOINT, offset by
+    /// <see cref="ReticleFlightTime"/> seconds of the round's flight — the weapon's <c>VELOCITY</c>
+    /// along the plane's NOSE plus the plane's own velocity. So its range is the weapon's own
+    /// (430 m for the 860 m/s fallback), and its distance from the muzzle is rate-smoothed, which
+    /// is what keeps it from snapping when the selected group changes.
+    ///
+    /// <para>⚠ It marks the plane's nose axis, NOT the aim assist's line and not the muzzle axes.
+    /// The original computes it from the airframe's forward row and never reads the assist slots'
+    /// directions (it reads those slots only for the muzzle attachment positions), so an assisted
+    /// round deliberately leaves along a line the pipper does not show. That is the answer to B5's
+    /// HUD question: the assist stays invisible, and "make the pipper follow the assisted line"
+    /// would be the wrong port.</para>
+    ///
+    /// <para>Hidden while crashed or when the plane has no firable gun / no muzzle to fire from.
+    /// No-op without a reticle.</para></summary>
+    private void UpdateReticle(float dt)
     {
         if (Reticle == null)
         {
@@ -1432,25 +1466,96 @@ public partial class FlightController : Node3D
             Reticle.Active = false;
             return;
         }
+        // The muzzle MIDPOINT of the selected group — the original averages that group's live
+        // barrel attachments (and falls back to the plane's own position when it has none).
         var origin = Vector3.Zero;
-        var forward = Vector3.Zero;
         foreach (var m in sel.Muzzles)
         {
-            var xf = m.GlobalTransform;
-            origin += xf.Origin;
-            forward += -xf.Basis.Z.Normalized(); // each muzzle's own aim (as ProjectilePool.Spawn)
+            origin += m.GlobalPosition;
         }
         origin /= sel.Muzzles.Count;
-        if (forward.LengthSquared() < 1e-6f)
+
+        // Where a round fired now would be after ReticleFlightTime: nose × VELOCITY + the plane's
+        // own velocity. No ballistic march — no weapon a gun group can resolve carries ACCELERATION
+        // or GRAVITY, so the straight line IS the round's path (see Ballistics.cs), and this is the
+        // original's own expression rather than a second derivation of it.
+        var inheritVel = _model.VelocityDir * _model.Speed;
+        var nose = -GlobalTransform.Basis.Orthonormalized().Z;
+        float speed = sel.Weapon.Velocity ?? ReticleDefaultSpeed;
+        var offset = (nose * speed + inheritVel) * ReticleFlightTime;
+        float target = offset.Length();
+        if (target < 1e-3f)
         {
+            _reticleRate = 0f;
             Reticle.Active = false;
             return;
         }
-        forward = forward.Normalized();
-        var inheritVel = _model.VelocityDir * _model.Speed;
-        Reticle.ImpactPoint = BallisticImpactPoint(sel.Weapon, origin, forward, inheritVel,
-            GunConvergenceDist);
+        // Marched through the shared integration rather than added on directly: for every weapon a
+        // gun group can resolve (no ACCELERATION, no GRAVITY) the march IS this straight line, so
+        // the two agree exactly — and the reticle keeps sharing one integration with the rounds
+        // instead of growing a second copy of it.
+        var marched = BallisticImpactPoint(sel.Weapon, origin, nose, inheritVel, target);
+        // The range smoother: the closing rate builds at ReticleAccel, capped by the gap that is
+        // left (so it eases in rather than overshooting), then the pipper sits at the smoothed
+        // range along the same direction.
+        var toward = marched - origin;
+        float reach = toward.Length();
+        if (reach < 1e-3f)
+        {
+            _reticleRate = 0f;
+            Reticle.Active = false;
+            return;
+        }
+        float gap = Mathf.Abs(_reticleDist - reach);
+        float cap = gap >= ReticleFarGap ? ReticleFarRate : gap * ReticleRatePerGap;
+        _reticleRate = Mathf.Min(_reticleRate + dt * ReticleAccel, cap);
+        _reticleDist = Mathf.MoveToward(_reticleDist, reach, _reticleRate * dt);
+        Reticle.ImpactPoint = origin + toward / reach * _reticleDist;
         Reticle.Active = true;
+    }
+
+    /// <summary>One gun round's launch direction: the per-muzzle aim assist (`BL-342`/B5,
+    /// <c>FUN_004b6530</c>) — scan, lead, plane-local smoothing, 1° scatter — through
+    /// <see cref="AimAssist.FireDirection"/>, which also restamps this barrel's slot so the forget
+    /// timer runs from the last SHOT. A barrel with no slot (a group built before the slot array,
+    /// which cannot happen in a bound loadout) falls back to its own muzzle axis.
+    ///
+    /// <para>Runs for every pilot, because every pilot in CSVM is human — the original's
+    /// "local player" test is human-versus-AI, not pane 1 (Decision 7); B6 adds the explicit gate
+    /// when M4 lands AI aircraft.</para></summary>
+    private Vector3 AssistedGunDirection(WeaponDef weapon, int gi, int mi, Node3D muzzle,
+        Basis planeBasis, Vector3 inheritVel, double now)
+    {
+        var muzzleXf = muzzle.GlobalTransform;
+        var slots = gi >= 0 && gi < _aimSlots.Length ? _aimSlots[gi] : null;
+        if (slots == null || mi < 0 || mi >= slots.Length)
+        {
+            return -muzzleXf.Basis.Z.Normalized();
+        }
+        float range = weapon.Range ?? 0f;
+        var scan = new AimScan
+        {
+            MuzzlePosition = muzzleXf.Origin,
+            ShooterVelocity = inheritVel,
+            // Alignment is measured against the PLANE's nose, not this muzzle's axis — the engine
+            // scores every candidate against the airframe's own forward row.
+            Forward = -planeBasis.Z,
+            Team = AimAssist.TeamOfPilot(PlayerIndex),
+            Speed = weapon.Velocity ?? ProjectilePool.DefaultVelocity,
+            RangeSquared = range * range,
+            ConeCos = AimAssist.WeaponConeCos(weapon),
+            DistFactor = _model.Stats.StickyBulletDistFactor,
+            Self = this,
+        };
+        var dir = AimAssist.FireDirection(ref slots[mi], scan, _aimCandidates, planeBasis, now,
+            _model.Stats.StickyBulletInaccuracy, _aimRng, out var found);
+        if (found.Found && !_aimLoggedFirst)
+        {
+            _aimLoggedFirst = true; // verification breadcrumb: the assist found something, once
+            GD.Print($"gun aim assist: P{PlayerIndex + 1} snapped onto {found.Kind} " +
+                     $"(score {found.Score:0.000}, {found.TimeOfFlight * (weapon.Velocity ?? ProjectilePool.DefaultVelocity):0} m out)");
+        }
+        return dir;
     }
 
     /// <summary>Performs one <see cref="FireControl.Step"/>'s decisions against the engine: spawns
@@ -1462,11 +1567,44 @@ public partial class FlightController : Node3D
     private void ApplyFireOutcome(FireOutcome outcome)
     {
         var inheritVel = _model.VelocityDir * _model.Speed;
+        // The aim assist's candidate set, built ONCE for this tick's rounds rather than per barrel:
+        // the four lists are the same for every muzzle firing this frame. Two of the four have real
+        // contents today (aircraft, live proximity-fused ordnance); structures need a world runtime,
+        // and turrets arrive with M4 (docs/PLAN-sticky-bullets.md B4).
+        if (outcome.GunShots.Count > 0 && Projectiles != null)
+        {
+            _aimCandidates.Clear();
+            Projectiles.CollectAircraft(_aimCandidates);
+            Projectiles.CollectFusedOrdnance(_aimCandidates);
+            if (Destructibles != null)
+            {
+                _aimCandidates.AddStructures(Destructibles);
+            }
+            if (!_aimListsLogged)
+            {
+                _aimListsLogged = true; // verification breadcrumb: WHICH lists this build actually feeds
+                // The nearest structure's range comes with the count on purpose: a registry whose
+                // anchors carried no world transform would report its full count and sit at the
+                // world origin, i.e. be silently untargetable, and the count alone would not show it.
+                float nearest = float.MaxValue;
+                foreach (var s in _aimCandidates.Structures)
+                {
+                    nearest = Mathf.Min(nearest, s.Position.DistanceTo(_model.Position));
+                }
+                GD.Print($"gun aim assist: candidates vehicles={_aimCandidates.Vehicles.Count} " +
+                         $"turrets={_aimCandidates.Turrets.Count} (M4) " +
+                         $"structures={_aimCandidates.Structures.Count} ordnance={_aimCandidates.Ordnance.Count}" +
+                         (_aimCandidates.Structures.Count > 0 ? $", nearest structure {nearest:0} m" : ""));
+            }
+        }
+        var planeBasis = GlobalTransform.Basis.Orthonormalized();
+        double aimNow = GameClock.Current?.Time ?? 0.0;
         foreach ((int gi, int mi) in outcome.GunShots)
         {
             var g = _firableGuns[gi];
             var muzzle = g.Muzzles[mi];
-            Projectiles!.Spawn(g.Weapon, muzzle.GlobalTransform, inheritVel, PlayerIndex, muzzle);
+            var aimDir = AssistedGunDirection(g.Weapon, gi, mi, muzzle, planeBasis, inheritVel, aimNow);
+            Projectiles!.Spawn(g.Weapon, muzzle.GlobalTransform, inheritVel, PlayerIndex, muzzle, aimDir);
             Shake?.FireBullet(g.Weapon.Caliber ?? 0f); // the firing buzz: factor × caliber (measured)
             if (!_gunLoggedFirst[gi])
             {
@@ -1478,6 +1616,8 @@ public partial class FlightController : Node3D
         if (outcome.RocketPylon >= 0)
         {
             var hp = Loadout!.Hardpoints[outcome.RocketPylon];
+            // No aim assist on a rocket: the original's assist is the GUN fire path's
+            // (`FUN_004b6530` is reached from the gun branch alone). It leaves along the pylon axis.
             Projectiles!.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel, PlayerIndex, hp.Pylon);
             if (_rocketsLaunched < 12)
             {

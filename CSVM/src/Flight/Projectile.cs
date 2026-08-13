@@ -495,6 +495,23 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
+    /// <summary>Appends every registered aircraft to the assist's candidate set (`BL-342` B5) — the
+    /// original's `VehicleList` pass, which is aircraft plus the AI ground/sea vehicles M4 will add.
+    /// The registered bodies are the one live roster of flying planes this pool already keeps (for
+    /// the hit ray and the fuse), so the assist reads the same list rather than a second one that
+    /// could drift. A crashed pilot is present but not live, which is the engine's own
+    /// dead-candidate rejection; the shooter excludes itself through
+    /// <see cref="AimScan.Self"/>.</summary>
+    public void CollectAircraft(AimCandidateSet into)
+    {
+        foreach (var body in _aircraft)
+        {
+            var rig = body.Rig;
+            into.AddVehicle(rig.WorldPosition, rig.WorldVelocity, AimAssist.TeamOfPilot(rig.PlayerIndex),
+                !rig.Crashed, rig);
+        }
+    }
+
     public override void _Ready()
     {
         // Tracers are velocity-aligned streaks (NOT billboarded — billboard would collapse the
@@ -538,23 +555,33 @@ public sealed partial class ProjectilePool : Node3D
     }
 
     /// <summary>Fires one round of <paramref name="weapon"/> from the world muzzle transform,
-    /// inheriting the launch platform's velocity, exactly along the muzzle axis — the original
-    /// applies no dispersion at the fire call; <c>CANNON_SPREAD</c> is the unbuilt aim assist's
-    /// acceptance cone, not a scatter (`BL-342`/A1). Also flashes the muzzle. Silently drops the
-    /// round if the pool is momentarily full (a soft cap, never a crash).
+    /// inheriting the launch platform's velocity, along <paramref name="aimDir"/> — or exactly
+    /// along the muzzle axis when none is given. The original applies no dispersion here;
+    /// <c>CANNON_SPREAD</c> is the aim assist's acceptance cone, not a scatter (`BL-342`/A1). Also
+    /// flashes the muzzle. Silently drops the round if the pool is momentarily full (a soft cap,
+    /// never a crash).
     ///
     /// <para><paramref name="shooterId"/> is who fired — a <c>FlightController.PlayerIndex</c>, or
     /// <see cref="NoShooter"/> for a round nobody owns (the weapon lab). It exists for the
     /// near-miss cue's self-exclusion, so a pilot flying through their own line of fire never
-    /// warns themselves; identity, not weapon, is what excludes.</para></summary>
-    public void Spawn(WeaponDef weapon, Transform3D muzzle, Vector3 inheritVel, int shooterId = NoShooter, Node3D? muzzleAnchor = null)
+    /// warns themselves; identity, not weapon, is what excludes.</para>
+    ///
+    /// <para><paramref name="aimDir"/> is a world direction the CALLER computed (the gun path's
+    /// aim-assist vector, `BL-342`/B5). ⚠ Keep it that way: an assisted direction is a value
+    /// produced at the fire call, never re-derived inside this method, so a networking milestone
+    /// can feed a received vector here and get the shooter's own answer rather than a locally
+    /// re-run scan that would diverge (`BL-342`/B6).</para></summary>
+    public void Spawn(WeaponDef weapon, Transform3D muzzle, Vector3 inheritVel, int shooterId = NoShooter,
+        Node3D? muzzleAnchor = null, Vector3? aimDir = null)
     {
         // The launch bark: only rockets/ordnance carry a FIRE.SOUND — every cannon's is
         // null in the data (LOOPED_SOUND_NAME covers continuous gunfire instead), so this is a
         // one-shot with no double-up risk.
         if (weapon.Fire?.Sound is { } fireSnd)
             PlaySound(fireSnd);
-        var forward = -muzzle.Basis.Z.Normalized();
+        var forward = aimDir is { } aim && aim.LengthSquared() > 1e-12f
+            ? aim.Normalized()
+            : -muzzle.Basis.Z.Normalized();
         float speed = weapon.Velocity ?? DefaultVelocity;
         float accel = weapon.Acceleration ?? 0f;
         // Rockets only: scale launch velocity and acceleration by the same dev factor. Guns stay

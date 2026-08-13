@@ -132,7 +132,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ Per-muzzle slot state and the per-frame forget + catch-up update
 3. ☑ The constant-velocity intercept solver
 4. ☑ The candidate scan, rejection gates and scorer
-5. ☐ Wire the assist into the fire call, apply the 1° scatter, and decode what the reticle follows
+5. ☑ Wire the assist into the fire call, apply the 1° scatter, and decode what the reticle follows
 6. ☐ Who gets the assist (every human pilot, not just pane 1), and the shooter-authoritative invariant for later
 
 ### Wave C — Judge it
@@ -360,7 +360,17 @@ override even though nothing ships a value (Decision 2), and note the sign conve
 tests `dot < coneCos` with both sides negated, which is the same relation as the positive-alignment
 form used in this plan — do not mix halves of the two conventions.
 
-## B5 ☐ Wire the assist into the fire call, apply the 1° scatter, and decode what the reticle follows
+## B5 ☑ Wire the assist into the fire call, apply the 1° scatter, and decode what the reticle follows
+
+**The reticle decode came back conclusive, and against the plausible answer.** The pipper does not
+follow the assist: `FUN_00426570` places it at the selected group's muzzle midpoint plus
+`0.5 × (VELOCITY × nose + planeVelocity)`, and `FUN_004267f0` rate-smooths its range; the assist
+slots at `+0x3a4` are read there for the muzzle attachment handles alone, never for their
+directions. So an assisted round deliberately leaves along a line the sight does not show. Recorded
+with its addresses in [`org/aim-assist.md`](org/aim-assist.md) ("What the pipper follows"), and the
+HUD now follows that rule — which retired the 250 m `GunConvergenceDist` TUNE. **Still owed at the
+controls:** the `--vs` gun-line/lag check in this item's Verify (it is a live-cockpit judgement, and
+it rides with C7).
 
 **Goal.** A round is fired along the slot's *smoothed* direction, scattered inside a 1° cone, and
 the scan result updates the *target* direction for later frames. The gun reticle agrees with where

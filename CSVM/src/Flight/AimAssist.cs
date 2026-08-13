@@ -316,6 +316,57 @@ public static class AimAssist
     /// leaves it untargetable.</summary>
     public static int TeamOfPilot(int shooterId) => shooterId >= 0 ? shooterId + 1 : NeutralTeam;
 
+    /// <summary>The launch scatter (<c>FUN_00460940</c> → <c>FUN_004608a0</c>), the ONLY scatter the
+    /// original applies to a player's round: build any perpendicular to the aim direction, roll it
+    /// about the aim axis by a uniform angle, then rotate the aim direction about that perpendicular
+    /// by <paramref name="inaccuracy"/> × a uniform [0,1).
+    ///
+    /// <para>⚠ The polar angle is uniform in <c>[0, inaccuracy]</c>, NOT uniform over the cone's
+    /// solid angle — sampling the cap (the reflex when porting, and what
+    /// <c>ProjectilePool.ApplySpread</c> does with its <c>sqrt(rand)</c>) puts noticeably more shots
+    /// near the rim. Do not merge the two.</para></summary>
+    public static Vector3 Scatter(Vector3 aimDir, float inaccuracy, RandomNumberGenerator rng)
+    {
+        if (inaccuracy <= 0f || aimDir.LengthSquared() < 1e-12f)
+        {
+            return aimDir;
+        }
+        Vector3 axis = aimDir.Normalized();
+        // "Any perpendicular": cross with whichever world axis this direction is least aligned
+        // with, so the cross never degenerates. Which one it is does not matter — the next line
+        // rolls it to a uniform angle about the aim axis anyway.
+        Vector3 seed = Mathf.Abs(axis.Y) < 0.9f ? Vector3.Up : Vector3.Right;
+        Vector3 perp = axis.Cross(seed).Normalized().Rotated(axis, rng.Randf() * Mathf.Tau);
+        return axis.Rotated(perp, rng.Randf() * inaccuracy).Normalized();
+    }
+
+    /// <summary>One round's launch direction, in world space — <c>FUN_004b6530</c>'s whole step
+    /// order, which is asymmetric on purpose:
+    /// <list type="number">
+    /// <item>seed the slot's target with the plane's own forward axis (the "no target found"
+    /// answer) and run the scan, whose winner replaces it;</item>
+    /// <item>rotate that world direction into the slot's plane-local <see cref="GunAimSlot.Target"/>
+    /// and restamp <see cref="GunAimSlot.LastUpdate"/> — which is why the forget timer measures time
+    /// since this barrel last FIRED;</item>
+    /// <item>rotate the slot's plane-local <see cref="GunAimSlot.Smoothed"/> back out to world as
+    /// the direction actually fired — <b>this frame's scan result is not what goes out</b>, the
+    /// smoothed value from previous frames is;</item>
+    /// <item>scatter it by <paramref name="inaccuracy"/>.</item>
+    /// </list>
+    /// Firing this frame's scan result instead would remove the lag entirely and read as an
+    /// aimbot; the lag is the feel.</summary>
+    public static Vector3 FireDirection(ref GunAimSlot slot, in AimScan scan,
+        AimCandidateSet candidates, Basis planeBasis, double now, float inaccuracy,
+        RandomNumberGenerator rng, out AimScanResult found)
+    {
+        Vector3 world = Scan(scan, candidates, out found) ? found.Direction : scan.Forward;
+        var toLocal = planeBasis.Orthonormalized().Transposed(); // inverse of a rotation basis
+        slot.Target = (toLocal * world).Normalized();
+        slot.LastUpdate = now;
+        Vector3 fired = (planeBasis.Orthonormalized() * slot.Smoothed).Normalized();
+        return Scatter(fired, inaccuracy, rng);
+    }
+
     /// <summary>The candidate scan (<c>FUN_004b6530</c>'s scan half): one scorer over all four of
     /// the original's candidate lists, in its own order, returning the highest-scoring survivor or
     /// false. Every gate is the engine's, in the engine's order — self, not live, same team (or

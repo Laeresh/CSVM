@@ -261,6 +261,44 @@ live handle and its flag byte set:
 With the shipped `catchup_rate 5.0` that is a ~0.2 s time constant — and a **full snap on any
 frame longer than 200 ms**, which is a real hitch-behaviour difference, not a rounding detail.
 
+## What the gun pipper follows — the assist stays invisible
+
+Decoded 2026-08-13 for `BL-342`/B5, which asked the question rather than assuming the answer. **The
+pipper does not follow the assist.** It marks where a round fired now would be after **half a
+second**, along the plane's **nose axis**, and it never reads the assist slots' directions at all.
+
+The sight is a world-space sprite object built once at startup in `FUN_00463f40`: the
+`impact_point` texture (string `0x00627280`) at `0x00464234` → `DAT_0064eef0`, beside a second
+sprite on `alignment_point` (`0x00627290`) → `DAT_0071d244`. Its constructor seeds the object's
+range field `+0x70` with **430.0** (`0x43d70000`) — the default muzzle speed below, halved. Its
+class overrides three vtable slots at `0x00607bec`:
+
+| Slot | Function | What it does |
+|---|---|---|
+| 1 | `FUN_00426570` | **Places it.** Position = the selected gun group's muzzle midpoint + `0.5 × (VELOCITY × nose + planeVelocity)` |
+| 0 | `FUN_004267f0` | **Smooths its range** toward that position's distance (rate-limited, below) |
+| 2 | `FUN_00426930` | Pushes the result to the 2D sprite |
+
+`FUN_00426570` in detail. The speed is the selected weapon group's `VELOCITY` — the def pointer at
+plane `+0x4f4 + group × 0xc`, where `FUN_004b2550` stores it as the group is armed — falling back to
+**860.0** when no def resolves. It multiplies that by the negated forward row of the plane's basis
+(`+0x198`–`+0x1a0`, the same row `FUN_004b6530` negates for its "no target found" seed), adds the
+plane's own velocity (vtable `+4`), and halves the sum. The muzzle midpoint comes from the **two
+barrel slots of the selected group** at plane `+0x3a4 + i × 0x24` — the assist's own slot array,
+read for the attachment **handle** (`+0x00`) and flag (`+0x20`) only, never for `+0x04`/`+0x10`.
+One live barrel is used alone; neither leaves the plane's own position as the origin.
+
+`FUN_004267f0` is a range smoother, not a direction one: with `gap = |range − targetRange|`, the
+closing rate at `+0x74` grows by `dt × 894.07996` and is capped at `gap × 1.9848576` (flat
+`1788.1599` once the gap reaches 900), then `FUN_00460530` moves the stored range toward the target
+by `rate × dt`. So the pipper slides out or in when the selected group changes rather than jumping,
+and its direction is re-derived from the nose every frame.
+
+⚠ **This is the answer to "should the pipper follow the assisted line".** It should not: the
+original computes the sight from the airframe's forward axis and the weapon's `VELOCITY`, while the
+rounds leave along the assist's smoothed per-muzzle line inside a 1° scatter. The two disagree by
+design, and the assist is meant to be felt, not seen.
+
 ## AI gunnery is a different system
 
 `FUN_004b6530`'s other branch — everything that is not the local player — reads the hardpoint's own
@@ -274,18 +312,21 @@ model is one per-plane scalar, and the sticky-bullet path is the human's.** That
 
 ## What CSVM would need
 
-`CSVM/src/Flight/Projectile.cs` fires straight down the muzzle axis with no assist at all, which is
-why `BL-301`/`PT-43` report gun kills as impractical in VS mode. `BL-342` carries the
-implementation. Deltas worth naming up front:
+CSVM fired straight down the muzzle axis with no assist at all, which is why `BL-301`/`PT-43`
+report gun kills as impractical in VS mode. `BL-342` carries the implementation, and as of
+2026-08-13 the mechanism is built: `CSVM/src/Flight/AimAssist.cs` holds it, and
+`FlightController.ApplyFireOutcome` computes each gun round's direction through it. Whether it
+FEELS right is `PT-43`'s call at the controls, not this page's. Deltas worth naming up front:
 
 | | Original | CSVM today |
 |---|---|---|
-| When it runs | at spawn, per round | n/a |
+| When it runs | at spawn, per round | built (B5, 2026-08-13) — `FlightController.ApplyFireOutcome` computes the direction per gun round and hands it to `ProjectilePool.Spawn`; rockets get none, as here |
 | Target set | vehicles + turrets + `MStruct` targets + **live proximity-fused ordnance**, cone- and range-gated, team-filtered | built (B4, 2026-08-13) — `AimAssist.Scan` over an `AimCandidateSet`'s four lists. Vehicles and ordnance (`ProjectilePool.CollectFusedOrdnance`) have real contents; turrets iterate nothing until M4; `MStruct` is approximated by `DestructibleRegistry`. No fire call feeds it yet (B5) |
 | Selection | most-aligned intercept (`dist_factor` off) | built (B4) — same score, on the shipped `dist_factor 0.0` now parsed into `PlaneStats.StickyBulletDistFactor` |
-| Lead | full constant-velocity intercept on **relative** velocity | built (B3, 2026-08-13) — `AimAssist.TryIntercept`; not yet fed a real target (B4) or driving a fired round (B5) |
-| Smoothing | slerp in **plane-local** space, ~0.2 s, snaps past 200 ms frames | built (B2, 2026-08-13) — `AimAssist.Tick`; not yet driving a fired round (B5) |
-| Forget | resets on time since **last shot**, not since lock loss | built (B2) — same caveat: the timer runs, but nothing restamps it on a shot until B5 |
-| Scatter | 1° cone, polar angle uniform in `[0, θ]` | none — the wrong `CANNON_SPREAD` scatter was removed (A1, 2026-08-13); the 1° `inaccuracy` cone this row describes is still unbuilt, landing with B5 |
+| Lead | full constant-velocity intercept on **relative** velocity | built (B3, 2026-08-13) — `AimAssist.TryIntercept`, fed by the scan (B4) and driving every gun round (B5) |
+| Smoothing | slerp in **plane-local** space, ~0.2 s, snaps past 200 ms frames | built (B2, 2026-08-13) — `AimAssist.Tick`; what leaves the muzzle is this smoothed value (B5) |
+| Forget | resets on time since **last shot**, not since lock loss | built (B2/B5) — every round through `AimAssist.FireDirection` restamps its barrel's slot |
+| Scatter | 1° cone, polar angle uniform in `[0, θ]` | built (B5, 2026-08-13) — `AimAssist.Scatter` off the shipped `sticky_bullet_inaccuracy`; the wrong `CANNON_SPREAD` scatter was removed in A1 and `ProjectilePool.ApplySpread` (solid-angle, effects only) is deliberately NOT reused |
+| Gun pipper | the nose axis at 0.5 s of flight, range-smoothed — never the assisted line | built (B5) — `FlightController.UpdateReticle`, same rule and the same smoother constants |
 | Cone gate | `CANNON_SPREAD` half-angle, per-target `+0x50` override | built (B4) — `AimAssist.WeaponConeCos`/`ConeCosFor`, the override branch included even though nothing ships a value |
 | Multiplayer | shooter-authoritative; the assisted vector is transmitted | n/a |

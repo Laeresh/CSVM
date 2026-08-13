@@ -134,7 +134,9 @@ public static class Suites
             + "constant-velocity intercept solver (dead-ahead, crossing, and outrun-with-no-solution) "
             + "and B4's candidate scan — every rejection gate proved able to fail, the most-aligned "
             + "selection the shipped dist_factor 0.0 produces, and a real fused round in a live pool "
-            + "outranking the aircraft behind it",
+            + "outranking the aircraft behind it; plus B5's 1° launch scatter (flat in the polar "
+            + "angle, not over the solid angle) and the fire call's asymmetric step order, which "
+            + "fires the SMOOTHED line while the scan updates the target",
             AimAssistSuite));
         into.Add(new TestHarness.Suite("loadout-forrig",
             "Loadout.ForRig covers every firepoint/pylon on all 11 airframes, seeded from stock", LoadoutForRig));
@@ -1719,6 +1721,8 @@ public static class Suites
         AimAssistScanGates(ctx);
         AimAssistSelection(ctx);
         AimAssistOrdnancePriority(ctx);
+        AimAssistScatter(ctx);
+        AimAssistFireDirection(ctx);
     }
 
     /// <summary>The catch-up slerp: a ~0.2 s time constant at the shipped catchup_rate (5.0), full
@@ -1847,6 +1851,8 @@ public static class Suites
             $"sticky_bullet_forget_interval parses as the shipped 1.5");
         ctx.Check(stats.StickyBulletDistFactor == 0f,
             $"sticky_bullet_dist_factor parses as the shipped 0.0 (compiled default 2.5e-4), so selection is purely most-aligned");
+        ctx.Check(Mathf.IsEqualApprox(1.0f, Mathf.RadToDeg(stats.StickyBulletInaccuracy), 1e-4f),
+            $"sticky_bullet_inaccuracy parses as the shipped 1.0 DEGREE, stored in radians as the original stores it");
 
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var gun = weapons.All.FirstOrDefault(w => w.IsGun && w.CannonSpread is > 0f);
@@ -2080,6 +2086,118 @@ public static class Suites
             pool?.Free();
             textures.Dispose();
         }
+    }
+
+    /// <summary>B5's launch scatter (<see cref="AimAssist.Scatter"/>): every round lands inside the
+    /// cone, the polar angle is UNIFORM IN THE ANGLE rather than over the cone's solid angle (the
+    /// reflex port, and what <c>ProjectilePool.ApplySpread</c>'s <c>sqrt(rand)</c> does, which would
+    /// pile shots at the rim), and the roll about the aim axis covers the full circle. The
+    /// able-to-fail control is the solid-angle sampling itself, computed alongside from the same
+    /// draws: it fails the flatness test this one passes.</summary>
+    private static void AimAssistScatter(TestContext ctx)
+    {
+        const int shots = 20000;
+        const int bins = 5;
+        float cone = Mathf.DegToRad(1f); // the shipped sticky_bullet_inaccuracy
+        var rng = new RandomNumberGenerator { Seed = 20260813 };
+        var aim = new Vector3(0.3f, -0.2f, -0.9f).Normalized(); // deliberately off every world axis
+        var flat = new int[bins];
+        var cap = new int[bins];
+        var rollQuadrants = new int[4];
+        float maxAngle = 0f;
+        // A frame to measure the roll in: any two axes perpendicular to the aim direction.
+        var right = aim.Cross(Vector3.Up).Normalized();
+        var up = right.Cross(aim).Normalized();
+        for (int i = 0; i < shots; i++)
+        {
+            var dir = AimAssist.Scatter(aim, cone, rng);
+            float angle = aim.AngleTo(dir);
+            maxAngle = Mathf.Max(maxAngle, angle);
+            flat[Mathf.Min(bins - 1, (int)(angle / cone * bins))]++;
+            // The same draw scored as a solid-angle sample would be: equal-AREA bands, which is
+            // what "uniform over the cap" means. A flat-in-angle sample fills these unevenly.
+            float band = 1f - Mathf.Cos(angle);
+            float bandMax = 1f - Mathf.Cos(cone);
+            cap[Mathf.Min(bins - 1, (int)(band / bandMax * bins))]++;
+            var off = dir - aim * dir.Dot(aim);
+            if (off.LengthSquared() > 0f)
+            {
+                float roll = Mathf.Atan2(off.Dot(up), off.Dot(right)) + Mathf.Pi;
+                rollQuadrants[Mathf.Min(3, (int)(roll / Mathf.Tau * 4f))]++;
+            }
+        }
+        ctx.Check(maxAngle <= cone + 1e-5f,
+            $"aim-assist scatter: every round is inside the {Mathf.RadToDeg(cone):0.0}° cone (worst {Mathf.RadToDeg(maxAngle):0.000}°)");
+        float lo = (float)flat[0] / shots * bins;
+        float hi = (float)flat[bins - 1] / shots * bins;
+        ctx.Check(lo is > 0.85f and < 1.15f && hi is > 0.85f and < 1.15f,
+            $"aim-assist scatter: the polar angle is flat across [0,θ] — innermost band {lo:0.00}× of even, outermost {hi:0.00}× (1.00 = flat)");
+        float capLo = (float)cap[0] / shots * bins;
+        ctx.Check(capLo > 1.5f,
+            $"able to fail: scored as equal-AREA bands the same draws are anything but flat ({capLo:0.00}× in the innermost) — a solid-angle port would have passed the check above and failed this one");
+        int rollMin = Mathf.Min(Mathf.Min(rollQuadrants[0], rollQuadrants[1]), Mathf.Min(rollQuadrants[2], rollQuadrants[3]));
+        ctx.Check(rollMin > shots / 4 * 9 / 10,
+            $"aim-assist scatter: the roll about the aim axis covers the whole circle (thinnest quadrant {rollMin} of {shots / 4} even)");
+    }
+
+    /// <summary>B5's fire-call step order (<c>FUN_004b6530</c>), which is asymmetric on purpose: the
+    /// scan updates the slot's TARGET, and what leaves the muzzle is the SMOOTHED direction from
+    /// previous frames. Run on a rolled plane basis, so a world/local mix-up cannot pass: the fired
+    /// direction must be the smoothed LOCAL vector rotated out to world (inside the scatter cone),
+    /// and the stored target must be the scan winner rotated INTO local. Firing this frame's scan
+    /// result instead would remove the lag entirely and read as an aimbot.</summary>
+    private static void AimAssistFireDirection(TestContext ctx)
+    {
+        var rng = new RandomNumberGenerator { Seed = 4242 };
+        float cone = Mathf.DegToRad(1f);
+        // A plane rolled 30° and yawed 40° — nothing lines up with the world axes.
+        var basis = new Basis(Vector3.Up, Mathf.DegToRad(40f)) * new Basis(Vector3.Forward, Mathf.DegToRad(30f));
+        var nose = -basis.Z;
+        var smoothedLocal = new Vector3(0.25f, 0.1f, -0.96f).Normalized(); // a gun line lagging off-centre
+        var slots = new[]
+        {
+            new GunAimSlot { Active = true, Smoothed = smoothedLocal, Target = AimAssist.LocalForward, LastUpdate = 0.0 },
+        };
+
+        // A target 8° off the nose, well inside a 20° cone, stationary — its intercept direction is
+        // just the displacement direction, so the expected local target is computable by hand.
+        var muzzle = new Vector3(0f, 500f, 0f);
+        var offAxis = (nose + basis.X * 0.14f).Normalized();
+        var targetPos = muzzle + offAxis * 400f;
+        var set = new AimCandidateSet();
+        set.AddVehicle(targetPos, Vector3.Zero, AimAssist.TeamOfPilot(1), live: true, source: null);
+        var scan = new AimScan
+        {
+            MuzzlePosition = muzzle,
+            ShooterVelocity = Vector3.Zero,
+            Forward = nose,
+            Team = AimAssist.TeamOfPilot(0),
+            Speed = ScanSpeed,
+            RangeSquared = ScanRange * ScanRange,
+            ConeCos = Mathf.Cos(Mathf.DegToRad(20f)),
+            DistFactor = 0f,
+            Self = null,
+        };
+
+        var fired = AimAssist.FireDirection(ref slots[0], scan, set, basis, now: 12.5, cone, rng, out var found);
+        ctx.Check(found.Found, $"aim-assist fire: the scan found the off-axis target");
+        var expectedFired = (basis * smoothedLocal).Normalized();
+        ctx.Check(fired.AngleTo(expectedFired) <= cone + 1e-5f,
+            $"aim-assist fire: the round leaves along the SMOOTHED line (off by {Mathf.RadToDeg(fired.AngleTo(expectedFired)):0.000}°, inside the {Mathf.RadToDeg(cone):0.0}° scatter) — not this frame's scan result");
+        ctx.Check(fired.AngleTo(offAxis) > cone,
+            $"able to fail: the scan winner is {Mathf.RadToDeg(fired.AngleTo(offAxis)):0.0}° away from what was fired, so firing it instead would have been visible here");
+        var expectedTarget = (basis.Transposed() * offAxis).Normalized();
+        ctx.Check(slots[0].Target.Dot(expectedTarget) > 1f - 1e-3f,
+            $"aim-assist fire: the winner is stored as the slot's plane-LOCAL target, ready for the next frame's catch-up");
+        ctx.Check(slots[0].LastUpdate == 12.5,
+            $"aim-assist fire: the shot restamps the slot, which is what makes the forget timer run from the last SHOT");
+
+        // No candidate at all: the target unwinds to the plane's own forward (local forward), which
+        // is the engine's "no target found" seed, and the fired direction is unchanged.
+        set.Clear();
+        AimAssist.FireDirection(ref slots[0], scan, set, basis, now: 13.0, cone, rng, out found);
+        ctx.Check(!found.Found && slots[0].Target.Dot(AimAssist.LocalForward) > 1f - 1e-4f,
+            $"aim-assist fire: with nothing to snap onto the slot's target is seeded with the plane's own forward axis");
     }
 
     /// <summary><see cref="Loadout.ForRig"/> against all 11 player airframes — 4 gun groups

@@ -78,21 +78,21 @@
     {
       "name": "empty-stage",
       "frame": 120,
-      "hash": "6edc1b0b92c6003e84dcac15ac96559e",
+      "hash": "7155ea3eef7e03714d7c39174d41e25b",
       "exercises": "the synthetic stage with no gamez at all — code-drawn grid, default sky and sun, flight model, HUD; frame-sensitive 12.21 %, and the one shot that still renders with extracted/ absent.",
       "args": ["--stage=empty", "--plane=player_bhawk", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "7be47c666ac71748788cb66e8d7a0b8c",
-      "exercises": "a flying plane, the only shaded surface in a flight: chase camera on the sim clock, prop and control-surface animators, the sun bearing, gauges, compass tape, weapon readout, a live exhaust-trail puffer and SpeedCue wisps; frame-sensitive.",
+      "hash": "b877166ecf2242346a1048f474196538",
+      "exercises": "a flying plane, the only shaded surface in a flight: chase camera on the sim clock, prop and surface animators, the sun bearing, gauges, compass tape, weapon readout, the gun pipper's range, an exhaust puffer, SpeedCue; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "5c8a15f7b4d4143edb1873da98c4850d",
+      "hash": "6a5fb1df741038b1d06b2aa65ddc1834",
       "exercises": "the world-effects runtime rendering a puffer: a kill of the single ap_radiotwr instance calls great_balls_of_fire onto the world-effects stage, plus that rig's SpeedCue; frame-sensitive, and moves off its Rng.Effects seed.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },

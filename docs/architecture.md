@@ -78,7 +78,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/Loadout.cs` — `stock_loadouts.json` reader + `Bind` to a built plane: gun groups + hardpoints, markers→muzzle nodes; `--dump-loadout`.
 - `src/Flight/WeaponBench.cs` — the world-less 48-weapon mount-and-fire pass check behind `--weapon-test` and `weapons-fire`; fires the whole `ForRig` rig, no lab node involved.
 - `src/Flight/FireControl.cs` — the engine-free fire-control state machine (BL-295): trigger edges, fire clocks, ammo draw-down, both selectors, dry cues; `FlightController` performs its `FireOutcome`.
-- `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the engine-free forget + catch-up pass (B2), the constant-velocity intercept solver (B3), and the four-list candidate scan with its rejection gates and scorer (B4).
+- `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the forget + catch-up pass (B2), the intercept solver (B3), the four-list candidate scan (B4), and the fire call's step order + 1° launch scatter (B5).
 - `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
@@ -93,7 +93,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/HudMetrics.cs` — the one rule for HUD sizing: window height / 1440, damped by `sqrt(paneH/windowH)` for splitscreen.
 - `src/Flight/HudFont.cs` — the game's own 5px HUD bitmap font, auto-segmented from `rimage/5pointhud*.png`; `--hud-font-test` proves it.
 - `src/Flight/WeaponReadout.cs` — the selected-weapon text readout: gun group + rocket type and live ammo, in the game's own HUD font.
-- `src/Flight/ImpactReticle.cs` — the gun aiming pipper: the selected group's ballistic impact point, projected each frame; trails the nose.
+- `src/Flight/ImpactReticle.cs` — the gun aiming pipper: 0.5 s of the selected group's flight along the nose (the original's own rule), projected each frame.
 - `src/Flight/MarkerHud.cs` — the stunt objective marker HUD: reticle, screen-edge arrow + o'clock bearing, run status, banners; one per player.
 - `src/Flight/StuntScoreboard.cs` — end-of-run results overlay: a Godot-UI panel of per-zone splits, total, and the persisted best time.
 - `src/Flight/StuntRace.cs` — splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
@@ -1644,10 +1644,11 @@ every pilot unconditionally today because every pilot in CSVM is human (Decision
   degenerates at 0°/180° separation (`FlightModel`'s `VelocityDir` slerp hits the identical crash
   and guards it the same way). `Tick` falls back to a normalized lerp near-parallel and snaps
   outright near-opposite; do not replace that branch with a bare `Slerp` call.
-⚠ `PlaneStats.StickyBulletCatchupRate`/`StickyBulletForgetInterval` are the two of the four
-  `sticky_bullet_*` keys B2 consumes (shipped 5.0 / 1.5); `StickyBulletDistFactor` (shipped 0.0) is
-  B4's, and `Inaccuracy` is B5's and is not parsed yet — do not add it here ahead of the item that
-  uses it.
+⚠ All four `sticky_bullet_*` keys are now parsed and consumed: `StickyBulletCatchupRate`/
+  `StickyBulletForgetInterval` (shipped 5.0 / 1.5) by B2's pass, `StickyBulletDistFactor`
+  (shipped 0.0) by B4's scoring, `StickyBulletInaccuracy` (shipped 1°, held in radians) by B5's
+  scatter. ⚠ Do not reproduce the executable's defaults bug — its missing-`inaccuracy` branch writes
+  into `catchup_rate`'s global; the shipped player.json always carries the key.
 
 `AimAssist.TryIntercept` (B3, `FUN_00460e30`) is the constant-velocity intercept solver: given a
 muzzle position, the round's speed, a target position, and the target's velocity RELATIVE to the
@@ -1702,6 +1703,19 @@ own).
   snap onto a live proximity-fused round by design (the engine's own priority query ranks that list
   above the other three), which is why the ordnance filter is here and not deferred.
 
+`AimAssist.FireDirection` (B5) is the whole fire call in one place (`FUN_004b6530`'s step order):
+seed the slot's target with the plane's forward axis, run `Scan`, rotate the winner world→local into
+`GunAimSlot.Target`, restamp `LastUpdate`, rotate the slot's `Smoothed` local→world as the direction
+actually fired, and scatter it. `AimAssist.Scatter` (`FUN_004608a0`) is that scatter: a uniform roll
+about the aim axis, then a polar angle **uniform in `[0, inaccuracy]`**.
+⚠ **What leaves the muzzle is the SMOOTHED direction from previous frames, not this frame's scan
+  result** — the asymmetry IS the feel. Firing the scan result removes the lag and reads as an
+  aimbot; the suite's fire-direction case pins it on a rolled basis so a world/local mix-up cannot
+  pass either.
+⚠ Do **not** reuse `ProjectilePool.ApplySpread` for this: it samples `half·sqrt(rand)` (disc-uniform,
+  so it piles shots near the rim) and treats its argument as a FULL angle. Both are wrong here, and
+  the suite's able-to-fail control is exactly that sampling scored alongside.
+
 ## src/Flight/WeaponCursor.cs
 `FireControl`'s internal ammo-slot index math (an `internal` class — nothing else may call it):
 `NextArmed` is the firing cursor — the selected slot while it has rounds, else the next armed slot
@@ -1715,7 +1729,8 @@ The VELOCITY/ACCELERATION/GRAVITY integration every round steps with: a static, 
 class with `Step` (one round's per-frame advance, mutating pos/vel in place — `ProjectilePool.SimStep`
 owns the surrounding raycast/fuse-test loop and its own `dt`) and `March` (the reticle's whole capped
 walk — range cap and 4096-iteration bound included — called once per frame by
-`FlightController.BallisticImpactPoint` with its own fixed `dt`). Extracted so the two callers cannot
+`FlightController.BallisticImpactPoint` with its own fixed `dt`, for the distance the decoded pipper
+rule asks for). Extracted so the two callers cannot
 silently diverge; each still owns its own step size.
 ⚠ Both callers integrate at a different `dt` — `SimStep` the caller's sim step, `March` a hard-coded
   `1/120 s` — and that is settled, not an oversight to "fix" in passing: of the 48 weapons only
@@ -1813,17 +1828,24 @@ deliberately differs — read it before retuning `TracerLength`/`TracerWidth`/`T
 `TracerMinPixels`. ⚠ Same siting rule as `org/puffer.md`: executable decodes live in `docs/org/`,
 never in the CC-BY `docs/formats/` tree.
 
-**Rounds leave the muzzle along the nose axis — the original's don't.** The retail engine runs a
-per-muzzle gun aim assist at spawn time (target scan → constant-velocity intercept → plane-local
-smoothing → scatter cone), decoded in [org/aim-assist.md](org/aim-assist.md) and built in
-`AimAssist.cs` (`BL-342`); `Spawn` is not wired to it yet (B5). ⚠ It is a **launch-direction**
-assist: nothing steers a round in flight, so it belongs at the fire call, not in this file's
-integrator.
-`CollectFusedOrdnance(AimCandidateSet)` is this file's one contribution to it: the assist's fourth
-candidate list is a FILTER over the live pool (every round whose def carries a proximity fuse longer
-than `AimAssist.MinFuseDistance`), so the guns can snap onto an incoming rocket the way the
-original's do. `DefaultVelocity` (500 m/s, the launch speed for a def with no `VELOCITY`) is shared
-with the scan so the lead it solves is solved for the speed the round actually leaves at.
+**A gun round leaves along the aim assist's line, not the muzzle axis.** The retail engine runs a
+per-muzzle assist at spawn time (target scan → constant-velocity intercept → plane-local smoothing →
+1° scatter), decoded in [org/aim-assist.md](org/aim-assist.md) and built in `AimAssist.cs`
+(`BL-342`). ⚠ It is a **launch-direction** assist: nothing steers a round in flight, so it belongs
+at the fire call, not in this file's integrator.
+`Spawn`'s optional `aimDir` is how it arrives — a world direction the CALLER computed
+(`FlightController.AssistedGunDirection`); omitted, `Spawn` still uses the muzzle axis, which is
+what every rig, the bench and the rockets pass. ⚠ Keep that shape: the assisted vector is a VALUE
+produced at the fire call and never re-derived inside `Spawn`, so a networking milestone can feed a
+received vector here and get the shooter's own answer instead of a locally re-run scan that would
+diverge (`BL-342`/B6). Only the round's velocity uses it — the muzzle flash still rides
+`muzzle.Basis`, because the barrel has not moved.
+`CollectFusedOrdnance`/`CollectAircraft` build two of the assist's four candidate lists off this
+pool's own state: the live proximity-fused rounds in flight (a FILTER, every def with a fuse longer
+than `AimAssist.MinFuseDistance`) and the registered aircraft — the same roster the hit ray and the
+fuse already use, so the assist cannot drift onto a second list. `DefaultVelocity` (500 m/s, the
+launch speed for a def with no `VELOCITY`) is shared with the scan so the lead is solved for the
+speed the round actually leaves at.
 
 `ProjectilePool` — the shared-world weapon-fire subsystem: a fixed pool of projectiles integrated
 with `Ballistics` (VELOCITY/ACCELERATION/GRAVITY, expiring at RANGE), plus tracer streaks,
@@ -2028,8 +2050,8 @@ maths.
 Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` def chain) +
 engines.json stock engine power + player.json globals (the flight constants, the near-miss cue's
 `warning_shot_*` block, the gun aim assist's `sticky_bullet_catchup_rate`/`_forget_interval`
-(`AimAssist.cs`'s B2) and `_dist_factor` (B4's scoring — `_inaccuracy` is B5's and is not parsed
-yet), plus the decoded model's
+(`AimAssist.cs`'s B2), `_dist_factor` (B4's scoring) and `_inaccuracy` (B5's launch scatter, stored
+in RADIANS as the original stores it), plus the decoded model's
 lift/AoA/G, turn/yaw-curve, pitch-fade and drag-fade-speed globals — docs/org/flightModel.md; converted
 exactly as the original does: MPH×0.44704, AoA/liftAOAs cosined, highGs/lowGs raw G — and as yet
 unread by FlightModel.cs), the `engine_sound` def name with its
@@ -2112,9 +2134,14 @@ The gun aiming reticle (E37): a viewport-filling `Control` drawing `impact_point
 pipper, from `extracted/rimage/`) at a world impact point fed each frame by FlightController,
 projected via `Camera3D.UnprojectPosition` at `_Draw` time (mirrors MarkerHud, never cached).
 Fixed screen size scaled by `HudMetrics`; one per player pane.
-⚠ NOT pinned to screen centre — the point is FlightController's `BallisticImpactPoint` of the
-  SELECTED gun group at `GunConvergenceDist` (a TUNE, 250 m — no data field), integrated exactly as
-  `ProjectilePool` fires, so it trails the nose in a hard turn and sits on the rounds level.
+⚠ NOT pinned to screen centre — the point is `FlightController.UpdateReticle`'s, and its rule is the
+  original's own, decoded for `BL-342`/B5 (docs/org/aim-assist.md "What the pipper follows"): the
+  selected group's muzzle MIDPOINT plus 0.5 s of the round's flight along the plane's NOSE, its
+  range rate-smoothed. The 250 m `GunConvergenceDist` TUNE it used to march to is gone — the range
+  is the weapon's own `VELOCITY` halved.
+⚠ It marks the nose axis, NOT the assist's line, so an assisted round deliberately does not go where
+  the pipper points. That is the original's behaviour, not drift to fix: the assist is meant to be
+  felt, not seen.
 ⚠ `Active=false` hides it (crashed / no firable gun / behind-camera); `_Draw` early-returns at zero
   height (can run before the pane is sized).
 ⚠ `LoadTexture` (the `rimage`/`impact_point.png` PNG loader) is static and loader-only — it does
@@ -3001,7 +3028,29 @@ free camera left the eye.
   backstop are explicitly exempt while held.
 ⚠ The reticle march (`BallisticImpactPoint`) calls `Ballistics.March`, the same integration
   `ProjectilePool.SimStep` steps real rounds with — see `Ballistics.cs`'s entry for the one thing
-  that still differs between them (`dt`).
+  that still differs between them (`dt`). `UpdateReticle` marches it exactly the decoded distance
+  (0.5 s of flight; see `ImpactReticle.cs`), so the two agree for every gun and the reticle does not
+  grow a second integration.
+
+`ApplyFireOutcome` is where the gun aim assist meets the world (`BL-342`/B5): it rebuilds
+`AimAssist`'s candidate set ONCE per tick (aircraft + fused ordnance off the pool, the world's
+destructibles off `Destructibles` when a world runtime wired one), then `AssistedGunDirection`
+runs each firing barrel's slot through `AimAssist.FireDirection` and hands the result to
+`ProjectilePool.Spawn`. The rocket call deliberately gets none — the original reaches its assist
+from the gun branch alone.
+⚠ Runs for EVERY pilot, splitscreen included, because every pilot in CSVM is human: the original's
+  `param_1 == DAT_0071c298` test is human-versus-AI, not pane 1 (Decision 7 in
+  `docs/PLAN-sticky-bullets.md`). Gating it on `PlayerIndex == 0` would silently leave panes 2–4
+  unassisted, which is very hard to notice from inside pane 1. B6 adds the human-piloted gate for
+  M4's AI planes.
+⚠ `WorldPosition`/`WorldVelocity` expose the flight MODEL's sim values, not the node transform (the
+  node lags by the render interpolation) — that is what another plane's assist aims at.
+Two one-shot breadcrumbs on the first gun round make the wiring visible in any flight log: the
+candidate counts per list **with the nearest structure's range** (a registry whose anchors carried
+no world transform would report its full count from the world origin — untargetable, and the count
+alone would not show it), and the first snap with its kind, score and range. Measured in C1 flying
+at the airfield: `vehicles=1 turrets=0 (M4) structures=210 ordnance=0, nearest structure 306 m`,
+then `P1 snapped onto Structure (score 1.000, 288 m out)`.
 ⚠ The stunt/race AllComplete freeze runs BEFORE the crash branch; Respawn never resets a mid-run stunt.
 ⚠ Dogfight's R-ownership gate (`Match is { Completed: true }`, C25) is ALSO checked before the
   crash branch, mirroring the stunt/race rule above, but does NOT freeze the sim like it — the
@@ -4096,7 +4145,9 @@ extraction) and as an `effects-census` condition on whatever chapter the run was
 
 ## src/Session/FlightRigAssembler.cs
 Assembles one player's flight rig: the painted plane model, the `FlightController` and everything hung
-on it — loadout/ordnance, compass, gauges, HUD font test/weapon readout/reticle, damage visuals,
+on it — loadout/ordnance (and, with them, the aim assist's structure candidates: the world runtime's
+`DestructibleRegistry`, when this session built a world), compass, gauges, HUD font test/weapon
+readout/reticle, damage visuals,
 audio, the throttle-slam exhaust smoke and chapter-authored `SpeedCue` (private visual layer per
 rig), this player's stunt run + marker/scoreboard/race entry
 (or, in `--vs`, its `VersusHud` bound to `Inputs.VersusMatch` + `Inputs.Rigs` for the opponent
