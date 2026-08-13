@@ -56,8 +56,7 @@ reference, not its subject.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | B11, B12, C21 | Confirm the trace, then implement. The decode is written up in `analysis/surface-classification/FINDINGS.md` (2026-08-12, second section) with every address. |
-| **Mechanism traced, the shipped data behind it not yet counted** | A1 | The decode states which blocks the shipped weapons author; nobody has counted them. A1 is that count, and B11's shape depends on it. |
+| **Traced to an exact mechanism in code, with the data that proves it** | A1, B11, B12, C21 | Confirm the trace, then implement. The decode is written up in `analysis/surface-classification/FINDINGS.md` (2026-08-12, second section, with the A1 count in the 2026-08-13 section) with every address. |
 | **A decision, not a finding** | A2 | Do not implement past it. It is the user's call. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees, so never use it in a
@@ -86,11 +85,17 @@ enum: `Default, Water, Buildings, Player, Enemy, Quicksand`. `WeaponDef.Impact`
 (`CSVM/src/Flight/ImpactOutcome.cs:52`) falls back to `SurfaceClass.Default` when the struck class
 has no entry (`ImpactOutcome.cs:57`). That fallback is the unfaithful arm Decision 3 covers.
 
-**What the shipped weapons author.** The `BL-344` decode states `default`, `water`, `quicksand`,
-`player` and `buildings` blocks, plus a dead `fault` block that matches no registry name and is
-therefore parsed into nothing. **That list has not been counted against the extracted data**, which
-is A1.
-<TODO: the path of the extracted weapons data (`weapons.json` per `WeaponDefs.cs`'s doc comment) was not established in this session; find it in A1.>
+**What the shipped weapons author (A1, counted).** Source: `extracted/zrdr/weapons.zrd.json` (48
+`BALLISTICS` entries; `CSVM.Tests/fixtures/zrdr/weapons.json` is a synthetic unit fixture, not this
+data). Six registry names appear as `IMPACT` keys anywhere in the data — `default`(0) and
+`water`(1) on 47/48 weapons, `buildings`(11) on 47/48, `player`(6) on 44/48, `quicksand`(3) on 3/48
+(`wep_04`/`wep_25`/`wep_27`), `enemy`(7) on 31/48 but populated (non-null) on only 3
+(`wep_01`/`wep_02`/`wep_03`) — the other 28 author an empty `enemy` row, which parses into nothing
+by both sides. **The claimed dead `fault` block does not exist in the shipped data at all** (zero
+occurrences of the literal, word-bounded); the eight ids no weapon authors in any form are
+`seafloor`(2), `lava`(4), `fire`(5), `airstrip`(8), `opensesame`(9), `death`(10), `dzone`(12),
+`dirt`(13). Full per-id and per-weapon tables, and the correction to the `fault` claim, are in
+`analysis/surface-classification/FINDINGS.md`'s 2026-08-13 section.
 
 **The blast radius of deleting `SurfaceClass`.** Beyond `Projectile` and `ImpactOutcome`, it is
 referenced by `WeaponLab` (`CSVM/src/UI/WeaponLab.cs:558, 595-621`, which has its own
@@ -124,7 +129,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — count the data, then take the decision
 
-1. ☐ Survey which IMPACT blocks the shipped weapons actually author, per id
+1. ☑ Survey which IMPACT blocks the shipped weapons actually author, per id
 2. ☐ Settle the empty-row rule with the user (plays nothing vs falls back to row 0)
 
 ### Wave B — move the impact key onto the surface id
@@ -150,37 +155,44 @@ helper B11 introduces, so it still runs last rather than concurrently.
 
 # Wave A — count the data, then take the decision
 
-## A1 ☐ Survey which IMPACT blocks the shipped weapons actually author, per id
+## A1 ☑ Survey which IMPACT blocks the shipped weapons actually author, per id
 
 **Goal.** A table, per weapon, of which registry ids have an authored IMPACT row, so the size of the
 "plays nothing" change is a number rather than a fear.
 
-**Evidence (confidence: mechanism traced, data not yet counted).** `FUN_005ad630`
+**Evidence (confidence: traced and counted).** `FUN_005ad630`
 `0x005ae1ea`–`0x005ae24e` parses each IMPACT block by matching its name against the registry and
 writing into `weapon + 0x15c + i*100`, so a block whose name is not a registry name is parsed into
 nothing. The decode write-up (`analysis/surface-classification/FINDINGS.md`, 2026-08-12, the second
-section) states the shipped set as `default`/`water`/`quicksand`/`player`/`buildings` plus a dead
-`fault`, and explicitly says to verify that against the extracted data before building on it. Our
-own parser already discards unmapped names the same way (`WeaponDefs.ParseImpact`,
-`CSVM/src/Flight/WeaponDefs.cs:333`), so the two agree on `fault` being dead.
+section) stated the shipped set as `default`/`water`/`quicksand`/`player`/`buildings` plus a dead
+`fault`, and explicitly said to verify that against the extracted data before building on it. Done:
+the extracted data (`extracted/zrdr/weapons.zrd.json`, 48 weapons) confirms `default`, `water`,
+`quicksand`, `player` and `buildings`, plus a sixth name (`enemy`) the decode's claim missed — and
+disproves the `fault` half: no weapon authors an `IMPACT` block by that name; it appears nowhere in
+the shipped data. Full tables in `FINDINGS.md`'s 2026-08-13 section.
 
 **Approach.** Read the extracted weapons data directly and count. Report per weapon and per id, and
 separately report the ids that are authored by **no** weapon: those are the ids where the faithful
 implementation goes silent. Cross-check against the A1 area measurement in
 `PLAN-crash-surface-id` (slot 0 at 63.9 to 96.8 % of collidable area) to convert "which ids" into
 "how much of the ground you actually shoot at".
-<TODO: establish the extracted weapons data path; `WeaponDefs.cs` names `weapons.json` but not its location.>
 
 **Model recommendation.** medium, low effort. It is a counting pass over one JSON file with a
 clearly stated question; the judgement is all in A2.
 
 **Verify.** The count is the deliverable, so the check is internal consistency: every name the data
-authors either maps to a registry id or is reported as dead, with no third category. `fault` must
-appear in the dead list, which is the known-good anchor.
+authors either maps to a registry id or is reported as dead, with no third category. Done: all six
+names the data uses (`default`/`water`/`quicksand`/`player`/`enemy`/`buildings`) map to registry
+ids, and there are zero unmapped names — so the planned "dead list" the `fault` anchor was meant to
+populate is empty by construction. `fault` does not appear anywhere in `weapons.zrd.json`; the known
+anchor for the counting pass is instead the eight ids with zero authoring weapons at all
+(`seafloor`, `lava`, `fire`, `airstrip`, `opensesame`, `death`, `dzone`, `dirt`), four of which
+(`fire`/`airstrip`/`dzone`/`dirt`) match the 2026-08-12 section's independent claim about where a
+faithful build goes silent.
 
 **⚠ Traps.** Do not stop at "which names appear". The question is which *ids* have rows, and a name
 that appears on only one weapon still leaves every other weapon silent on that id. Report per
-weapon, not as a union.
+weapon, not as a union. Done: both the per-id and per-weapon tables are in `FINDINGS.md`.
 
 ## A2 ☐ Settle the empty-row rule with the user (plays nothing vs falls back to row 0)
 

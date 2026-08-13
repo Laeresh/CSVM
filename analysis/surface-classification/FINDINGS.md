@@ -486,3 +486,130 @@ data before building on this.
 
 Not decoded: what the two variant lists at `+0x2c`/`+0x40` hold respectively, and whether any other
 path supplies a default when a row is empty.
+
+## 2026-08-13 — A1: what the shipped weapons actually author, counted (`PLAN-surface-id-weapons` A1)
+
+**Source established.** `WeaponDefs.cs`'s doc comment names `weapons.json`; the data is
+`extracted/zrdr/weapons.zrd.json` (48 `BALLISTICS` entries, matching `WeaponDefs.All.Count` and the
+`docs/architecture.md` line for the reader). `CSVM.Tests/fixtures/zrdr/weapons.json` is a 2-key
+synthetic unit fixture (`probegun`/`PROBE_FUTURE_KEY`) and is not this data.
+
+**Correction to the 2026-08-12 section above: `fault` is not in the shipped data.** That section
+says the parse-time name match is "the fate of `fault`, ... an authored row that can never be
+selected" — a literal `IMPACT` block named `fault`. It does not exist: zero occurrences of the
+string `fault` (word-bounded; `default` contains it as a substring, which is what an unanchored
+search finds) anywhere in `weapons.zrd.json`. Every `IMPACT` class name that any of the 48 weapons
+authors maps to a registry name — there are no unmapped/discarded names in the shipped data at all,
+so A1's planned "dead list of unmapped names" is empty by construction, not populated with `fault`
+as its anchor. Where this claim came from is not established; treat the `fault` literal as
+disproven rather than corrected to a different address.
+
+**Per-id summary, all 48 weapons.** Six registry names appear as `IMPACT` keys anywhere in the data;
+the other eight registry ids are authored by zero weapons.
+
+| id | name | authoring weapons | with an effect (`value`) | authored, no effect (`null` value) |
+|---|---|---|---|---|
+| 0 | `default` | 47/48 | 47 | 0 |
+| 1 | `water` | 47/48 | 47 | 0 |
+| 2 | `seafloor` | 0/48 | 0 | 0 |
+| 3 | `quicksand` | 3/48 (`wep_04`, `wep_25`, `wep_27`) | 3 | 0 |
+| 4 | `lava` | 0/48 | 0 | 0 |
+| 5 | `fire` | 0/48 | 0 | 0 |
+| 6 | `player` | 44/48 | 44 | 0 |
+| 7 | `enemy` | 31/48 | 3 (`wep_01`/`wep_02`/`wep_03`, the base 40/50/60-cal guns) | 28 |
+| 8 | `airstrip` | 0/48 | 0 | 0 |
+| 9 | `opensesame` | 0/48 | 0 | 0 |
+| 10 | `death` | 0/48 | 0 | 0 |
+| 11 | `buildings` | 47/48 | 47 | 0 |
+| 12 | `dzone` | 0/48 | 0 | 0 |
+| 13 | `dirt` | 0/48 | 0 | 0 |
+
+`wep_26` (`FW`) is the one weapon with no `IMPACT` block at all — not even a `default` row — so it
+is the "1/48" absence behind every `default`/`water`/`buildings` row above. `enemy`'s 28
+authored-but-`null` rows parse into nothing by both the original's name-match-then-body-parse and
+`WeaponDefs.ParseImpact` (`ZrdrDict.FromAlternating` on a null body never runs), so they are
+functionally identical to not being authored at all for effect purposes — listed separately here
+because the *name* is present in the data, unlike `fault`.
+
+**Per weapon, not as a union** (the per-id table above hides that any one weapon's silence on an id
+is universal — every weapon *except* the ones listed under "authoring weapons" above is silent on
+that id):
+
+| id | name | authored rows (value) | authored, empty | absent among the six used |
+|---|---|---|---|---|
+| wep_00 | 30slug | default, water, player, buildings | enemy | quicksand |
+| wep_01 | 40slug | default, water, enemy, player, buildings | - | quicksand |
+| wep_02 | 50slug | default, water, player, enemy, buildings | - | quicksand |
+| wep_03 | 60slug | default, water, enemy, player, buildings | - | quicksand |
+| wep_04 | 9M | default, water, quicksand, player, buildings | - | enemy |
+| wep_05 | ARMOR | default, water, buildings | - | quicksand, player, enemy |
+| wep_06 | BOOM | default, water, buildings | - | quicksand, player, enemy |
+| wep_07 | FLAK | player, default, water, buildings | - | quicksand, enemy |
+| wep_08 | SONIC | default, water, player, buildings | - | quicksand, enemy |
+| wep_09 | FLASH | default, water, player, buildings | - | quicksand, enemy |
+| wep_10 | BEEPER | default, water, player, buildings | - | quicksand, enemy |
+| wep_11 | SEEKER | default, water, player, buildings | - | quicksand, enemy |
+| wep_12 | CHOKER | default, water, player, buildings | - | quicksand, enemy |
+| wep_13 | SMOKER | default, water, player, buildings | - | quicksand, enemy |
+| wep_14 | TORPDO | default, water, player, buildings | - | quicksand, enemy |
+| wep_15 | FLARE | default, water, player, buildings | - | quicksand, enemy |
+| wep_23 | MPTUR | default, water, player, buildings | enemy | quicksand |
+| wep_24 | BOOM | default, water, buildings | - | quicksand, player, enemy |
+| wep_25 | gb | default, water, quicksand, player, buildings | - | enemy |
+| wep_26 | FW | (none) | - | default, water, quicksand, player, enemy, buildings |
+| wep_27 | FLAK | default, water, quicksand, player, buildings | - | enemy |
+| wep_28 | CB | default, water, player, buildings | - | quicksand, enemy |
+| wep_29 | TURRET | default, water, player, buildings | enemy | quicksand |
+| wep_30 | 30slug | default, water, player, buildings | enemy | quicksand |
+| wep_31 | 30 DD | default, water, player, buildings | enemy | quicksand |
+| wep_32 | 30 AP | default, water, player, buildings | enemy | quicksand |
+| wep_33 | 30 EX | default, water, player, buildings | enemy | quicksand |
+| wep_40 | 40slug | default, water, player, buildings | enemy | quicksand |
+| wep_41 | 40 DD | default, water, player, buildings | enemy | quicksand |
+| wep_42 | 40 AP | default, water, player, buildings | enemy | quicksand |
+| wep_43 | 40 EX | default, water, player, buildings | enemy | quicksand |
+| wep_50 | 50slug | default, water, player, buildings | enemy | quicksand |
+| wep_51 | 50 DD | default, water, player, buildings | enemy | quicksand |
+| wep_52 | 50 AP | default, water, player, buildings | enemy | quicksand |
+| wep_53 | 50 EX | default, water, player, buildings | enemy | quicksand |
+| wep_60 | 60slug | default, water, player, buildings | enemy | quicksand |
+| wep_61 | 60 DD | default, water, player, buildings | enemy | quicksand |
+| wep_62 | 60 AP | default, water, player, buildings | enemy | quicksand |
+| wep_63 | 60 EX | default, water, player, buildings | enemy | quicksand |
+| wep_70 | 70slug | default, water, player, buildings | enemy | quicksand |
+| wep_71 | 70 DD | default, water, player, buildings | enemy | quicksand |
+| wep_72 | 70 AP | default, water, player, buildings | enemy | quicksand |
+| wep_73 | 70 EX | default, water, player, buildings | enemy | quicksand |
+| wep_130 | 30slug | default, water, player, buildings | enemy | quicksand |
+| wep_140 | 40slug | default, water, player, buildings | enemy | quicksand |
+| wep_150 | 50slug | default, water, player, buildings | enemy | quicksand |
+| wep_160 | 60slug | default, water, player, buildings | enemy | quicksand |
+| wep_170 | 70slug | default, water, player, buildings | enemy | quicksand |
+
+**The dead ids — authored by no weapon — are `seafloor`(2), `lava`(4), `fire`(5), `airstrip`(8),
+`opensesame`(9), `death`(10), `dzone`(12), `dirt`(13): 8 of the registry's 14 ids.** Of those,
+`fire`/`airstrip`/`dzone`/`dirt` are also the four ids the 2026-08-12 section names as the ones
+where a faithful build "plays no impact effect at all" — that specific list is confirmed. The other
+four dead ids (`seafloor`, `lava`, `opensesame`, `death`) are outside that section's claim and are
+additional silent ids, not previously counted.
+
+**`quicksand` is authored but reaches no shipped material.** Three weapons author a populated
+`quicksand` row, but the crash-cascade material census (this file, 2026-08-12 section, "used by
+materials" row) shows no material in any of the 8 chapters ever carries soil id 3 — so those three
+rows are unreachable in this install regardless of the A2 decision, the same shape as `fault` was
+claimed to be, just reached a different way (unreachable by geometry, not by name mismatch).
+`player`(6) and `enemy`(7) are in the same position — no material carries either id — which is
+consistent with `WeaponDefs.cs`'s own doc comment that `Enemy` "has no meaning yet (nothing else
+flies)": these two ids most likely key off a struck aircraft body's own id, not terrain, and sit
+outside this file's material census either way.
+
+**Cross-check against `PLAN-crash-surface-id` A1's per-chapter area table** (this file, 2026-08-12
+section): summing the columns for the four ids a faithful build goes silent on
+(`fire`+`airstrip`+`dzone`+`dirt`, reading `—` as 0%) gives, per chapter: C1 6.39%, C1B 0.01%,
+C1C 0.00%, C2 10.58%, C2B 0.00%, C3 2.84%, C4 9.61%, C5 0.04%. This is the crash cascade's
+*material*-soil-id area share (body granularity, all collidable ground), used here as the closest
+available proxy for "how much of the ground a faithful weapon impact goes silent on" per the plan's
+own instruction to make this cross-check — it is not a direct measurement of impacts fired at that
+ground, and inherits that table's per-mesh/body granularity caveat (up to 16.4% of C1's `dirt`
+polygons strand to `default` at body granularity, so these are upper bounds on the affected share,
+not exact).
