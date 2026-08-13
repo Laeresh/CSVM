@@ -4,7 +4,7 @@ Instrument: `aiv_skill_slots.py` (read-only; run from the extraction root). It c
 per-mission AI vehicle table and histograms the candidate slots.
 
 The full AI data inventory this sits inside — patrol graphs, turret specs, generators, zeppelins,
-voice — is [`docs/SCOPING-M4-ai.md`](../../docs/SCOPING-M4-ai.md). This file answers one question.
+voice — is [`docs/PLAN-M4-ai.md`](../../docs/PLAN-M4-ai.md). This file answers one question.
 
 ## Verdict — the skill vector is slots 22..30, nine slots, and it is populated only for named pilots
 

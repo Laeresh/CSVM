@@ -1673,7 +1673,7 @@ immediately BEFORE performing `_fire.Step`'s outcome — the original restamps a
 on every round that goes out (B5's job), so the forget pass must see the pre-shot state. Gated on
 `FlightController.IsHumanPiloted` (B6, default true) — the original ticks this only for the local
 player, and an AI plane's dead-eye path has no slots at all. Every CSVM plane is human-piloted
-today (Decision 7 in `docs/PLAN-sticky-bullets.md`), so the gate is a no-op until M4 lands AI
+today (Decision 7 in `docs/plans/PLAN-sticky-bullets.md`), so the gate is a no-op until M4 lands AI
 aircraft; `AssistedGunDirection` falls back to the unassisted muzzle axis for a non-human pilot,
 the same fallback a barrel with no slot already takes.
 ⚠ **Godot's `Vector3.Slerp` throws "Argument is not normalized" when the two directions are
@@ -3126,7 +3126,7 @@ runs each firing barrel's slot through `AimAssist.FireDirection` and hands the r
 from the gun branch alone.
 ⚠ Runs for EVERY pilot, splitscreen included, because every pilot in CSVM is human: the original's
   `param_1 == DAT_0071c298` test is human-versus-AI, not pane 1 (Decision 7 in
-  `docs/PLAN-sticky-bullets.md`). Gating it on `PlayerIndex == 0` would silently leave panes 2–4
+  `docs/plans/PLAN-sticky-bullets.md`). Gating it on `PlayerIndex == 0` would silently leave panes 2–4
   unassisted, which is very hard to notice from inside pane 1. Gated instead on
   `IsHumanPiloted` (B6, default true) — a no-op today, since CSVM has no AI planes yet; it takes
   over once M4 lands them.

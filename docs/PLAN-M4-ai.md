@@ -1,17 +1,19 @@
-# Milestone 4 — Artificial Intelligence (scoping study)
+# Milestone 4 — Artificial Intelligence
 
-> **⚠ SCOPED, NOT STARTED, NOT SCHEDULED — written 2026-07-25; premises re-checked 2026-08-04;
-> roster/skill/maneuver half re-decoded from the binary 2026-08-10.**
-> This is **not** a live plan. The active plan is whatever PROJECT_CONTEXT.md's "Current status"
-> names (`PLAN-m3-polish-6.md` at re-check time). This file is deliberately **not** called
-> `PLAN-M4-ai.md`, because this repo's convention is that a `PLAN-*.md` sitting in `docs/` *is
-> live* — a second one here would read as scheduled work. It carries the plan **shape** (waves,
-> IDs, per-item Goal/Evidence/Approach/Verify) so that scheduling it is a rename to
-> `docs/PLAN-M4-ai.md`, a date, and a PROJECT_CONTEXT.md pointer swap — nothing else.
->
-> No *engine* work in here has been implemented, and none should be until M4 is scheduled. The
-> ticked checklist items are documentation and decode work that other sessions reached first —
-> read the dated Delta sections below before trusting any body text.
+**ACTIVE PLAN** (scheduled 2026-08-13; written as a scoping study 2026-07-25, premises re-checked
+2026-08-04, binary decode pass 2026-08-10, full premise + citation re-check on scheduling). It sits
+in `docs/`, which by this repo's convention makes it a live plan; PROJECT_CONTEXT.md's "Current
+status" names it. Move it to `docs/plans/` with a `COMPLETE` banner, and add its row to
+[`plans.md`](plans/plans.md), when every item lands.
+
+This plan keeps its scoping-study shape: the dated Delta sections are the correction history and
+win over older body text — read them before trusting any paragraph they name. Every code citation
+was re-verified and re-pointed to the tree at `0b2385e` on 2026-08-13; a cited line is current as
+of that commit. The ticked checklist items were front-loaded by other plans (A1 via PLAN-vs-mode,
+D10 and most of A3 via the 2026-08-10 decompile pass), not started here. On scheduling, backlog
+items `BL-068`, `BL-069` and `BL-347` were re-verified still-open and absorbed into this plan
+(deleted there); `BL-065`, `BL-222`, `BL-226`, `BL-233`, `BL-291` and `BL-343` stay in
+`backlog.md`, blocked on this plan's items — see the 2026-08-13 Delta.
 
 ## Why this document exists
 
@@ -37,18 +39,12 @@ Every claim below was re-verified against the tree at `04d2dfc` (~60 commits aft
 was written). **Every architectural premise and the wave ordering survive.** What follows is the
 complete list of deltas; the body text is left as written — read it through this lens.
 
-**Citation drift (mechanical — not tracked separately; re-point as part of rewriting this document
-when M4 is scheduled):**
-
-- `PlaneViewer.cs` no longer exists — PLAN-planeviewer-split (2026-07-30) moved it to
-  `Session/GameSession.cs`, `Launcher.cs`, `FlightRigAssembler.cs` and friends. Every
-  `PlaneViewer.cs:<line>` citation below is dead; the *claims* they anchor were all re-verified
-  true at the new sites. `DriveSimSteps` lives in `GameSession.cs`.
-- The source root is `CSVM/src/`, not `src/`; `AnimRuntime`'s motions moved to `Mech3/Anim/`
-  (`MotionRuntime.cs`, `EmitterDirector.cs`, …). All other cited files exist with line drift only.
-- Archive opening is centralised in `SessionArchives.OpenFor(intent)` — semantics unchanged, but
-  note `SoundsOutliveBuild` is true only for `ArchiveIntent.Lab`; B8's prewarm work happens under
-  whatever intent the flight session opens with.
+**Citation drift (mechanical):** discharged 2026-08-13 — the body text below was rewritten with
+current paths and line numbers when the plan was scheduled (the `PlaneViewer.cs` split into
+`Session/GameSession.cs` / `Launcher.cs` / `FlightRigAssembler.cs`, the `CSVM/src/` root, the
+`Mech3/Anim/` move, `SessionArchives.OpenFor`). One carried note: `SoundsOutliveBuild` is true only
+for `ArchiveIntent.Lab`; B8's prewarm work happens under whatever intent the flight session opens
+with (`Mech3/SessionArchives.cs:85`).
 
 **Premises that materially improved:**
 
@@ -447,6 +443,111 @@ worked example, and has a single named discriminating instrument — **locate th
 then: parse and preserve the tags, act on neither reading. F17's cost and ordering are unchanged.
 
 **Still not examined:** nothing in the wave list.
+
+## Delta — 2026-08-13: scheduled, with a full premise and citation re-check
+
+Scheduled as the active plan. Every claim and citation was re-verified against `main` at
+`0b2385e`; the body text now carries current paths and line numbers. What changed since
+2026-08-10, and what it does to the waves:
+
+**A1's landing is verified in place.** `Flight/CollisionLayers.cs:11-22` (`World` layer 1,
+`Aircraft` layer 2, `WorldAndAircraft`); `Flight/AircraftBody.cs:16` (an `AnimatableBody3D` per
+plane, built from the same `PlaneCollider.Parts` boxes, `CollisionMask = 0`); registered at
+`FlightController.cs:582-585`; hits routed at `Projectile.cs:1534`; kills attributed via
+`FlightController.Downed` (`:446`, raised `:1829`); all pinned by the `air-to-air` suite
+(`Testing/Suites.cs:148`, body `:2538`). Wrong-claim #12 is fully discharged: `Spawn` now carries
+`int shooterId = NoShooter` (plus `muzzleAnchor` and `aimDir`, `Projectile.cs:581`), and per-shot
+`Exclude` is set and reset around every ray (`:776`/`:778`).
+
+**Surface classes are gone; the id registry is in** (PLAN-surface-id-weapons, completed
+2026-08-13). The six-member `SurfaceClass` enum is deleted; the live scheme is the 14-id
+`SurfaceRegistry` (`Mech3/SurfaceRegistry.cs:61-65`), and weapon IMPACT tables are keyed by
+surface id (`WeaponDefs.cs:55`). `ProjectilePool.SurfaceIdOf` already answers `player` (id 6) for
+a struck `AircraftBody` (`Projectile.cs:465-471`), so the `player` IMPACT row — authored on 44 of
+48 weapons — fires the moment this plan fields a shooter; that is `BL-222`, which stays in backlog
+and closes as a side effect of A2 + D14. The `enemy` row (id 7) is non-null on only 3 of 48.
+
+**New item G21 — the `ai_crash_<name>` family (absorbs `BL-347`, minted 2026-08-12).** A third
+registry-indexed choreography vector found at `FUN_00478a00`: surface-registry names concatenated
+onto a prefix, indexed by the struck material's surface id — the AI-aircraft counterpart of the
+`player_crash_*` and `touchdown_*` families that PLAN-surface-id-weapons modelled.
+`Session/SurfaceDefTable.cs` is the cascade already written for those two (its `DefForSurfaceId`
+reproduces `FUN_0048b920` exactly) and is probably reusable verbatim. Needs AI aircraft to be
+reachable at all, so it runs after A2. ⚠ Carried with it from `BL-347`, adjacent but **not** M4
+work: `FUN_004c56c0` resolves a `soil_<name>` substring (`0x0062bf98`) through `FUN_00559670` and
+writes the id onto the material with `FUN_0055b0a0` — how surface ids are authored in the original,
+by registry name. We read `GameZMaterial.SoilId` instead, so nothing depends on it today; it
+matters only if a material's id ever looks wrong at runtime (also recorded in
+`analysis/surface-classification/FINDINGS.md`).
+
+**D14's gunnery gains landed scaffolding** (PLAN-sticky-bullets / `BL-342`). The player aim assist
+landed a constant-velocity intercept solver (`Flight/AimAssist.cs`) directly reusable for the AI's
+lead computation, and `FlightController.IsHumanPiloted` (default true) already carries the
+engine's human-vs-AI split — the original ticks the assist only for humans, and an AI plane's
+dead-eye path has no assist slots at all. A2's controller must set it false, which also makes the
+AI-exclusion half of that gate testable for the first time. Two data requalifications for D14:
+`CANNON_SPREAD` is an assist cone, not a dispersion term (`formats/turrets.md`, 2026-08-12), and
+`gun_pitch`/`gun_yaw` (±11°) sit on AI defs only — the AI's forward-gun aiming cone, not turret
+arcs (absorbed from `BL-069`).
+
+**C9 gains a ready integration seam and a live adjacent bug.** The aim-assist candidate scan
+already iterates an empty `AimCandidateSet.Turrets` (`AimAssist.cs:387`; filled via `AddTurret`,
+`:485`; census logged as `turrets=… (M4)` at `FlightController.cs:1611`) — C9a registers turrets
+there and the players' lock-on sees them for free. ⚠ Adjacent, and NOT C9's to fix silently:
+`BL-348` (filed 2026-08-13) is a live bug in the `CallAnimation`/`NameResolver` wiring under C3's
+slung balloon turrets (`b_turretN`) — verify C9 against a chapter without it, and keep its fix a
+separate change.
+
+**Wave F's destruction choreography got cheaper** (PLAN-object-motion-decode, completed
+2026-08-13). `BL-245` closed: the 379 apex-less `OBJECT_MOTION` falls — zeppelin gasbags,
+lifeboats, turret parts, chuteman descents — now simply land under the decoded contact model, so
+F18/F19 debris needs no divergence decision. Left in backlog, adjacent but not this plan's:
+`BL-343` (`IMPACT_FORCE` velocity inheritance, unmodelled; its 182 events are exclusively aircraft
+wreckage, so it becomes judgeable once AI planes crash — do not fold it silently into G21).
+
+**A2's "single biggest unknown" is now a documented contract, not a hazard.** The index comment no
+longer claims the node index is never added to: a post-bootstrap subtree may `Add` rows provided
+the caller also calls `ClearFindCache` (`Mech3/Anim/NameResolver.cs:25-34`, `:170-183`), with two
+working precedents (`AnimRuntime.IndexStage`, `:999-1004`; `IndexPooledCopy`, `:1019`). A2 still
+owns doing this correctly for a spawned aircraft; the risk grade drops.
+
+**Smaller re-check results:**
+
+- Effect templates: `PlaceTemplateAt` is now `TemplateStage.PlaceAt`
+  (`Mech3/Anim/TemplateStage.cs:374`, absolute write `:391`). Pooled per-call copies exist
+  (`BL-225`), but a placed effect still snaps to an absolute world point and does not track a
+  moving host — the zeppelin constraint stands.
+- `AnimRuntime.PlayerPositions` (`:117`) still has exactly one consumer (`EXECUTION_BY_RANGE`,
+  `:1909`); `PLAYER_RANGE` conditions (`:3268`) and the `WorldSounds` listener
+  (`WorldSession.cs:275`) are still player-one. `ProjectilePool.Listener` no longer exists — that
+  singleton is gone; near-miss self-exclusion rides the shooter id instead.
+- The voice-runtime blockers all still hold: `PlayOneShot` is positional-only
+  (`WorldSounds.cs:188`, position written once at `:220`), `Prewarm` (`:115`) / `Loader` (`:51`,
+  nulled at `WorldSession.cs:384` outside the Lab intent) unchanged, dialogue chains still
+  parsed-then-discarded (`SoundDefs.cs:106-122`). B8 is unchanged.
+- One correction: the session opens `extracted/soundsh.zip` (`Session/Launcher.cs:219`; `--sounds`
+  overrides). `SoundArchive` uses a directory only when the configured path *is* one — there is no
+  unzipped-preferred fallback for sounds, so the one-file case-collision caveat in §6 applies only
+  when `--sounds` points at the unpacked folder.
+- `DestructibleRegistry` is unchanged — single scalar `Health`, no zone concept
+  (`Mech3/DestructibleRegistry.cs:29`, `:161`) — A4 stands. `WeaponDef.DamagesZeppelin` is still
+  parsed-never-consumed (`WeaponDefs.cs:102`, `:255`).
+- Still nothing reads `aiv`, `maneuvers.zrd`, `ai_skill_parameters`, `ai.zrd`, `zeppelins` or
+  `egen`; `Mech3/AiNets.cs` (nets) remains the only AI-data reader, consumed only by the debug
+  overlay. `Mech3/MissionSetup.cs:26-30` documents `aiv.zrd.json` without reading it.
+- Stale in-code comments corrected in this change: `IncomingFire.cs`'s "no round can strike an
+  aircraft" remark and `PlaneCollider.cs`'s sweep-only header, both written before `AircraftBody`.
+
+**Absorbed from backlog on scheduling** (entries deleted there, facts preserved): `BL-068` (the
+schedule-M4 item itself) and `BL-069`, whose still-valid leads are: turrets are AI gunners, and
+the stock-loadout `W4` slot is filled on exactly the five turret airframes (`pavenger`,
+`pbalmoral` ×2, `pbrigand`, `pfirebrand`, `pkestrel`); the mesh-less `target` marker (one per
+plane root, 11 player + 11 AI) is the aim point for AI gunnery and air-to-air lock-on; air-to-air
+lock-on is a targeting change on the landed guided-missile flight model, not new flight code;
+`wep_14` (TORPDO) ships `FLYOUT_HEALTH 10` + `TARGETABLE`, shootable once something shoots; AI
+vehicle defs carry the `armor` + `health` pair `PlaneStats` ignores (armour-first — the same model
+the roster's four zones corroborate). `BL-069`'s "turret rotation limits stay undecoded" line is
+superseded by [`formats/turrets.md`](formats/turrets.md). `BL-347` became G21.
 
 ---
 
@@ -988,112 +1089,125 @@ These are places the source is ambiguous, self-contradictory, or contradicted by
 
 ### What is reusable exactly as it stands
 
-Verified against the tree at `CSVM/src/` on 2026-07-25.
+First verified 2026-07-25; re-verified and re-pointed 2026-08-13 against `0b2385e`.
 
-- **`FlightModel` is AI-ready.** `Flight/FlightModel.cs:110` is `public void Step(FlightInput input,
+- **`FlightModel` is AI-ready.** `Flight/FlightModel.cs:440` is `public void Step(FlightInput input,
   float dt)`; `FlightInput` (`:8-11`) is a plain struct of four floats — pitch, roll, yaw, throttle —
-  with no device, player or camera coupling. `FlightModel` (`:29`) is a plain sealed class, not a
+  with no device, player or camera coupling. `FlightModel` (`:49`) is a plain sealed class, not a
   Node; its only non-mathematical dependency is the `Config` tuning layer. **An AI pilot is an input
   generator and the entire flight half is free.**
-- **`ProjectilePool` is already a shared-world subsystem.** `Flight/Projectile.cs:209` —
-  `Spawn(WeaponDef, Transform3D muzzle, Vector3 inheritVel)`. Nothing about the firer is passed, and
-  it is already fed from three unrelated sources (flight guns, flight rockets, the viewer's weapon
-  lab, which has no player at all). AI fire needs no new subsystem.
+- **`ProjectilePool` is a shared-world subsystem and now carries the firer.** `Flight/Projectile.cs:581`
+  — `Spawn(WeaponDef, Transform3D muzzle, Vector3 inheritVel, int shooterId = NoShooter,
+  Node3D? muzzleAnchor = null, Vector3? aimDir = null)`. The shooter id reaches the physics query:
+  per-shot `Exclude` is set and reset (`:776`/`:778`) via the shooter's `AircraftBody.ExcludeSelf`
+  (`:2061-2071`). It is already fed from unrelated sources (flight guns, flight rockets, the weapon
+  lab, `IncomingFire`) — AI fire needs no new subsystem.
 - **`SpawnPoints` already reads mission zrdr.** `Flight/SpawnPoints.cs:28`/`:56` load `ia.json`
   `spawn_points` and `objectives.json` `PLAYER_INIT` into a `SpawnPoint(Vector3, float HeadingDeg)`.
   `aiv`'s position + heading are the same units and convention, and `Zrdr.CandidateNames`
-  (`Mech3/Zrdr.cs:22-28`) already resolves a logical `aiv.json` to the on-disk `aiv.zrd.json`. A
-  `LoadAiv` sibling is roughly thirty lines and changes nothing else.
+  (`Mech3/Zrdr.cs:169-175`) already resolves a logical `aiv.json` to the on-disk `aiv.zrd.json`. A
+  `LoadAiv` sibling is roughly thirty lines and changes nothing else (none exists yet —
+  `Mech3/MissionSetup.cs:26-30` documents the file but reads nothing).
 - **The sim clock is in place.** `Utils/GameClock.cs` gives fixed-dt stepping under `--det` with an
-  established consumer contract (`SimStep(float dt)` plus a `PhysicsDt`-returns-zero guard). An AI
-  controller slots into `PlaneViewer.DriveSimSteps` exactly like `FlightController` and
-  `ProjectilePool` already do.
-- **N aircraft in one world is normal.** Splitscreen already builds up to four `FlightController`s in
-  a shared `World3D` (`PlaneViewer.cs:1324-1343`), every aircraft renders in every pane, and there is
-  **no mutable static state in `src/Flight/`** — no `Instance`, no `Current`, only factory methods and
-  pure helpers.
-- **Voice playback has most of its plumbing.** `Mech3/WorldSounds.cs:185` —
+  established consumer contract (`SimStep(float dt)` plus a `PhysicsDt`-returns-zero guard,
+  `:23-28`). An AI controller slots into `GameSession.DriveSimSteps`
+  (`Session/GameSession.cs:2185`, consumers registered in order at `:2205-2217`) exactly like
+  `IncomingFire`, `ProjectilePool` and each rig's `FlightController` already do.
+- **N aircraft in one world is normal.** Splitscreen builds up to four `FlightController`s in a
+  shared `World3D` (`UI/SplitScreen.cs:118-161`; rigs assembled per player by
+  `Session/FlightRigAssembler.cs:55`), every aircraft renders in every pane, and there is **no
+  mutable static state in `CSVM/src/Flight/`** — no `Instance`, no `Current`, only factory methods
+  and pure helpers.
+- **Voice playback has most of its plumbing.** `Mech3/WorldSounds.cs:188` —
   `PlayOneShot(string name, Vector3 worldPos, Random rng)` — creates a positioned 3D one-shot with
-  correct attenuation and sweeps it when done. `SoundArchive` opens `extracted/soundsh/` today
-  (`PlaneViewer.cs:426`, unzipped-preferred at `:612`), so **every combat clip is already reachable**.
-  `Mech3/Messages.cs` resolves the `MSG_*_NAME` keys the rosters carry.
+  correct attenuation and sweeps it when done. The session opens `extracted/soundsh.zip`
+  (`Session/Launcher.cs:219`, `--sounds` overrides; archive opening centralised in
+  `SessionArchives.OpenFor`, `Mech3/SessionArchives.cs:53`), so **every combat clip is already
+  reachable**. `Mech3/Messages.cs` resolves the `MSG_*_NAME` keys the rosters carry.
+- **Aim maths for D14 and C9 is landed, not future.** `Flight/AimAssist.cs` carries a
+  constant-velocity intercept solver and a per-fire candidate scan whose `Turrets` list already
+  exists and iterates empty (`:387`; filled via `AddTurret`, `:485`);
+  `FlightController.IsHumanPiloted` is the human-vs-AI gate the assist already honours.
 - **`AnimRuntime` + `DestructibleRegistry` are the right shape for zeppelin parts.** Motions write
-  *local* transforms (`AnimRuntime.cs:2337`, `:3199`) and attached emitters, lights and sounds
-  re-sample their host's global pose every frame (`:1215-1227`, `:1583`, `:1393-1405`), so a
-  definition bound to a **moving** zeppelin animates correctly today — the existing compiled zeppelin
-  definitions already do this.
+  *local* transforms (`Mech3/Anim/MotionRuntime.cs:591`) and attached emitters, lights and sounds
+  re-sample their host's global pose every frame (`Mech3/Anim/EmitterDirector.cs:305-330`,
+  `AnimRuntime.cs:3079`), so a definition bound to a **moving** zeppelin animates correctly today —
+  the existing compiled zeppelin definitions already do this.
 
-### The hard prerequisite — state it plainly
+### The hard prerequisite — landed 2026-08-06
 
-**Nothing can shoot an aeroplane, because the flying aircraft has no physics body.**
+**When this study was written, nothing could shoot an aeroplane, because the flying aircraft had no
+physics body.** That gated the milestone, and it is A1 — front-loaded by PLAN-vs-mode (landed
+2026-08-06) and re-verified in place 2026-08-13:
 
-- `FlightController` is a `Node3D` (`Flight/FlightController.cs:37`); grepping it for every
-  `CollisionObject3D` subclass returns **zero hits**.
-- The aircraft model is built with `generateCollision` left at its `false` default
-  (`Mech3/PlaneBuilder.cs:83` vs `Mech3/WorldBuilder.cs:279-282`), so `SceneBuilder.AttachCollision`
-  never runs for a plane.
-- `PlaneCollider.Part` (`Flight/PlaneCollider.cs:44`) does hold real `BoxShape3D` resources — but they
-  are used **query-only**, as the *source* of `CastMotion` / `GetRestInfo` / `IntersectShape` calls in
-  `FlightController` (`:1370-1376`, `:1390`, `:1318-1327`), for terrain crash sweeps and
-  damage-part mapping. The plane participates in the physics world as a querier, never as a target.
-- Consequently `ProjectilePool`'s raycast (`Flight/Projectile.cs:424-431`) can never strike an
-  aircraft, and `ClassifySurface` (`:556-568`) can only ever return `Default`, `Water` or `Buildings`.
-  **Three** of the six shipped `IMPACT` surface classes are unreachable — `Player`, `Enemy` **and**
-  `Quicksand`.
-- There is no collision-layer scheme to extend: a repo-wide grep for `CollisionLayer` / `CollisionMask`
-  returns **zero assignments**. Everything sits on Godot's default layer 1 / mask 1.
+- `Flight/CollisionLayers.cs:11-22` defines the layer scheme: `World` (layer 1, everything
+  pre-aircraft) and `Aircraft` (layer 2), plus `WorldAndAircraft` for the queries that want both.
+- `Flight/AircraftBody.cs:16` — an `AnimatableBody3D` per plane, built from the **same**
+  `PlaneCollider.Parts` `BoxShape3D` resources (`:32-45`, single-sourced by design), on the
+  `Aircraft` layer with `CollisionMask = 0` (a query target, never a collider). Created and
+  registered at `FlightController.cs:582-585`.
+- Projectiles hit planes: `Projectile.cs:1534` routes an `AircraftBody` hit to its plane — direct
+  hits, the aircraft-only proximity fuse and blast falloff (`:1551`). Kills are attributed
+  (`FlightController.Downed`, `:446`, raised `:1829`; scored at `GameSession.cs:1767`).
+- The two consequences the study warned about were both handled there: plane-versus-plane
+  visibility went in with the layer scheme, and the shared `_ray` exclusion leak is prevented by
+  the per-shot set/reset pair (`Projectile.cs:776`/`:778`).
+- The `air-to-air` suite pins all of it (`Testing/Suites.cs:148`, body `:2538`): part mapping,
+  armour-first damage, self-hit zero, kill attribution, fuse + blast falloff.
 
-**Until air-to-air hit detection exists, Attack mode is unobservable, turret fire cannot damage the
-player, and no amount of pilot modelling can be verified.** This gates the milestone, and it is A1.
-
-Two consequences worth knowing before starting it:
-
-- Giving aircraft bodies **immediately** makes them visible to every *other* aircraft's `CastMotion`
-  sweep, so plane-versus-plane collision appears as a side effect whether or not it is wanted. Design
-  the layer scheme in the same change.
-- `ProjectilePool._ray` is a **shared mutable query object**. Per-shot `Exclude` must be set *and
-  reset* every round or one shooter's exclusion silently leaks into the next.
+What A1 did **not** deliver — and what stays open for this plan — is anything that *uses* the
+hittability: no non-player shooter exists (`IncomingFire` is a scripted test source, not an AI),
+so the `player` IMPACT row (`BL-222`) and the incoming-fire cues (`BL-226`) stay untriggerable
+until A2 and the D-wave field one.
 
 ### Architecture constraints worth recording now, before the code that trips on them exists
 
 - **`DestructibleRegistry` cannot express a multi-zone object.** It keys instances by
   `(AnimDefinition Def, ulong Anchor)` with a **single scalar `float Health`**
-  (`Mech3/DestructibleRegistry.cs:64`, `:38-58`); `DamageStage` is an index into descending absolute
-  thresholds **on that same single pool**, not a zone count. `Resolve` maps a struck node up to *one*
-  instance and stops. A zeppelin needing N of M gasbags — and, per the design's general model, a
-  battleship needing 2 of 3 hull sections — requires **`(def, anchor, zone)` plus a threshold counter
-  and a parent aggregator**. **Cheaper to design now than to retrofit after M4's other items have
-  added callers.** (`WeaponDef.DamagesZeppelin`, parsed at `Flight/WeaponDefs.cs:100` and dumped but
-  never consumed, is the surviving evidence that the original had a separate zeppelin damage channel.)
-- **Zeppelin sub-part definitions are deliberately un-anchorable today.** `AnimRuntime.Anchors`
-  (`:3041-3059`) refuses multi-target `NAME1` definitions and its comment names exactly this case —
-  zeppelin nacelles and turrets parse with an empty name and are treated as object-wiring scope. F18
-  must change that rule deliberately, not by accident.
-- **The world tree is immutable after bootstrap.** `AnimRuntime.FindAll` memoises on the stated
-  contract (`:3129-3141`, repeated as a `⚠` in `docs/architecture.md`) that `_index` is built once and
-  never added to, because the only runtime mutation is `SetSubtreeActive`. **Spawning an AI aircraft
-  as a new node at runtime silently breaks animation resolution** unless the index is invalidated and
-  rebuilt. This is the single biggest unknown in A2 and the reason A2 is in the first wave.
-- **Effect templates snap to an absolute world point and do not track.** `PlaceTemplateAt`
-  (`:1658-1668`) relocates one shared template, so a hit effect on a moving zeppelin stays where the
-  hit happened while the zeppelin flies on, and two simultaneous gasbag hits collapse onto one site.
-- **`AnimRuntime.PlayerPosition` and `ProjectilePool.Listener` are genuine player-one singletons**
-  (`PlaneViewer.cs:829-834`, `:1272`). Every `PLAYER_RANGE`-gated world effect measures from player
-  one's camera. With AI aircraft fighting across the map, range-gated effects will fire based on where
-  the human is looking rather than where the action is. It is a `Func<Vector3>` → nearest-of-a-set
-  change, and it is inherited free of charge the moment AI exists.
-- **A one-shot sound does not follow its source.** `PlayOneShot` takes a `Vector3`, not a node — a
-  voice line from a moving aircraft would be frozen at its firing coordinate. The host-following
-  emitter path exists but is reserved for ambient `SOUND_NODE` emitters.
-- **A clip that was not prewarmed silently never plays.** `WorldSounds.Loader` is valid only during
-  world build (`PlaneViewer.cs:793`); every voice name must join the prewarm set.
-- **The dialogue-chain sound groups are parsed and discarded.** `Mech3/SoundDefs.cs:129-131` records
+  (`Mech3/DestructibleRegistry.cs:29`, `:161`); `DamageStage` is an index into descending absolute
+  thresholds **on that same single pool** (`:168`), not a zone count. `Resolve` (`:123-135`) maps a
+  struck node up to *one* instance and stops. A zeppelin needing N of M gasbags — and, per the
+  design's general model, a battleship needing 2 of 3 hull sections — requires **`(def, anchor,
+  zone)` plus a threshold counter and a parent aggregator**. **Cheaper to design now than to
+  retrofit after M4's other items have added callers.** (`WeaponDef.DamagesZeppelin`, parsed at
+  `Flight/WeaponDefs.cs:102`/`:255` and dumped but never consumed, is the surviving evidence that
+  the original had a separate zeppelin damage channel.)
+- **Zeppelin sub-part definitions are deliberately un-anchorable today.** `NameResolver.Anchors`
+  (`Mech3/Anim/NameResolver.cs:277-285`) refuses multi-target `NAME1` definitions and its comment
+  names exactly this case — zeppelin nacelles and turrets parse with an empty name and are treated
+  as object-wiring scope. F18 must change that rule deliberately, not by accident.
+- **The world tree's node index is add-only, by documented contract.** `NameResolver.FindAll`
+  memoises `_index` (`Mech3/Anim/NameResolver.cs:195-216`); a post-bootstrap subtree may `Add`
+  rows provided the caller also calls `ClearFindCache` (`:25-34`, `:170-183`), with two working
+  precedents (`AnimRuntime.IndexStage`, `:999-1004`; `IndexPooledCopy`, `:1019`). **Spawning an AI
+  aircraft still silently breaks animation resolution if A2 skips that invalidation** — but as of
+  2026-08-13 it is a contract to follow, not an unknown to discover.
+- **Effect templates snap to an absolute world point and do not track.** `TemplateStage.PlaceAt`
+  (`Mech3/Anim/TemplateStage.cs:374`, absolute write `:391`) places a pooled per-call copy
+  (`BL-225` fixed the collapse-onto-one-site half), deliberately decoupled from a moving caller —
+  so a hit effect on a moving zeppelin still stays where the hit happened while the zeppelin flies
+  on.
+- **`AnimRuntime.PlayerPosition` and the sound listener are genuine player-one singletons.**
+  `PlayerPositions` (nearest-of-a-set, `AnimRuntime.cs:117`) exists but has exactly one consumer
+  (`EXECUTION_BY_RANGE`, `:1909`); `PLAYER_RANGE` conditions (`:3268`, fed from player one's
+  camera at `GameSession.cs:652-654`) and the `WorldSounds` listener (`WorldSession.cs:275`) still
+  measure from player one. With AI aircraft fighting across the map, range-gated effects will fire
+  based on where the human is looking rather than where the action is. It is a `Func<Vector3>` →
+  nearest-of-a-set change, and it is inherited free of charge the moment AI exists.
+- **A one-shot sound does not follow its source.** `PlayOneShot` takes a `Vector3`, written once
+  (`WorldSounds.cs:188`, `:220`) — a voice line from a moving aircraft would be frozen at its
+  firing coordinate. The host-following emitter path exists but is reserved for ambient
+  `SOUND_NODE` emitters (`:234`).
+- **A clip that was not prewarmed silently never plays.** `WorldSounds.Loader` (`:51`) is valid
+  only during world build (nulled at `WorldSession.cs:384` outside the Lab intent); every voice
+  name must join the prewarm set (`Prewarm`, `:115`).
+- **The dialogue-chain sound groups are parsed and discarded.** `Mech3/SoundDefs.cs:106-122` records
   that voice-over chains nest a list where a member's own name would be, contribute no weighted member,
   and are skipped — leaving the group unregistered. `LoadGroups` needs a second entry shape before any
   comms chain is addressable by name.
-- **There is no subtitle or voice-line display path at all.** The closest existing widget is
-  `Flight/MarkerHud.cs:120-135`'s one-shot banner rendering in the HUD bitmap font; that is the
-  template to copy.
+- **There is no subtitle or voice-line display path at all.** The templates to copy are
+  `Flight/MarkerHud.cs:114-120`'s one-shot banner in the HUD bitmap font and the newer dogfight
+  kill banner in `Flight/VersusHud.cs` (wired at `FlightRigAssembler.cs:329-341`).
 
 ---
 
@@ -1107,7 +1221,7 @@ Carried from every prior plan here; they apply unchanged.
 - **Evidence is a lead to verify, not a finding to implement.** Confirm every claim against the
   data/code before building on it; **a correct disproof that lands no code is a success here.** Every
   item's Evidence line carries its confidence.
-- **`CLAUDE.md` + `docs/architecture.md` / `docs/formats/` are updated in the same turn** as each
+- **`PROJECT_CONTEXT.md` + `docs/architecture.md` / `docs/formats/` are updated in the same turn** as each
   landed item; a landed item gets its record in the landing commit's message and is **deleted**
   from `backlog.md`. New decodes land with their `docs/formats/` page.
 - **Read `docs/verification.md` before measuring anything** — the instruments here mislead; cite the
@@ -1151,9 +1265,9 @@ implementation) belongs in wave A, before `DestructibleRegistry` grows more call
 
 ## Checklist
 
-Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **The milestone is still not
-scheduled** — the ticked items are ones other work reached first (A1 via PLAN-vs-mode, D10 and half
-of A3 via the 2026-08-10 decompile pass), not a started milestone.
+Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Keep this in sync as items
+land.** The already-ticked items are ones other work reached first (A1 via PLAN-vs-mode, D10 and
+most of A3 via the 2026-08-10 decompile pass), not items started under this plan.
 
 ### Wave A — Foundations (nothing downstream is verifiable without these)
 
@@ -1164,9 +1278,10 @@ of A3 via the 2026-08-10 decompile pass), not a started milestone.
 2. ☐ A2 — The AI actor seam: runtime spawn, a non-player `FlightModel` driver, `GameClock` wiring
 3. ◐ A3 — the AI format pages — **rosters, skills and maneuvers landed 2026-08-10**
    ([`formats/ai-rosters.md`](formats/ai-rosters.md)); nets already had
-   [`formats/ai-nets.md`](formats/ai-nets.md) and zeppelins/generators
-   [`formats/mission-entities.md`](formats/mission-entities.md). **Remaining: `ai.zrd` turrets
-   and `--dump-ai`**
+   [`formats/ai-nets.md`](formats/ai-nets.md), zeppelins/generators
+   [`formats/mission-entities.md`](formats/mission-entities.md), and the `ai.zrd` turrets landed
+   2026-08-10 as [`formats/turrets.md`](formats/turrets.md). **Remaining: `--dump-ai`, plus a
+   check that `formats/zrdr.md`'s family index rows exist for all five families**
 4. ☐ A4 — **Decision + design note only:** multi-zone destructibles and the kill threshold
 
 ### Wave B — Non-combat presence
@@ -1223,20 +1338,26 @@ of A3 via the 2026-08-10 decompile pass), not a started milestone.
     door timings hardcoded, `ind_period`+`wave_period` compose); ⚠ **carries the unresolved
     `capacity` discrepancy** — budget an investigation
 
+### Wave G — AI aircraft crash choreography (added 2026-08-13)
+
+21. ☐ G21 — The `ai_crash_<name>` surface family (ex-`BL-347`): locate the dispatch, model the
+    registry-indexed vector via `Session/SurfaceDefTable.cs` (probably reusable verbatim), and
+    wire it to AI aircraft terrain crashes. ⚠ Keep `BL-343` (`IMPACT_FORCE` wreckage velocity
+    inheritance) a separate change
+
 ## Dependency and parallelism notes
 
-**A1 and A2 are the only true blockers and they are independent of each other** — A1 is physics
-layers plus bodies, A2 is spawn plus a driver seam. Run them concurrently in separate worktrees;
-they contend on nothing (A1 owns `PlaneCollider.cs` / `Projectile.cs` / `SceneBuilder.cs`'s collision
-path, A2 owns `PlaneViewer.cs` / a new controller / `AnimRuntime.cs`'s index invalidation). **A3 and
-A4 are documentation and design, touch no engine code, and can run alongside anything.**
+**A1 landed 2026-08-06, so A2 is the sole remaining true blocker** — the spawn + driver seam
+(`GameSession.cs` / `FlightRigAssembler.cs` / a new AI controller / `NameResolver`'s index
+invalidation). **A3 and A4 are documentation and design, touch no engine code, and can run
+alongside anything.**
 
-B5–B8 all need A2. B5 blocks F17 (the same net-follower serves both). B8 blocks E16. C9 needs A1 only
-— it can run as soon as A1 lands, in parallel with all of wave B. **Amended 2026-08-10:** C9 splits.
-**C9a (carried turrets) needs A1 only** and has no activation dependency — all 16 ship awake — so it
-can run the moment A1 lands and is the half the zeppelin hunt needs. **C9b (world emplacements)**
-additionally needs a stand-in for `WAKEUP_TURRETS` for its 22 dormant entries; that is a decision,
-not a blocker, and it no longer gates anything playable.
+B5–B8 all need A2. B5 blocks F17 (the same net-follower serves both). B8 blocks E16. **C9a
+(carried turrets) needs only A1, which is landed — it is startable immediately**, in parallel with
+A2 and all of wave B, and has no activation dependency (all 16 ship awake); it is the half the
+zeppelin hunt needs, and its engine seam already exists (`AimAssist.AddTurret`). **C9b (world
+emplacements)** additionally needs a stand-in for `WAKEUP_TURRETS` for its 22 dormant entries;
+that is a decision, not a blocker, and it no longer gates anything playable.
 
 Within D: **D10 is settled, so it no longer blocks D11–D15** — they read the shipped skill vector and
 `ai_skill_parameters` directly and can all start at once. D11 blocks D12 and D15. D13 is independent
@@ -1245,7 +1366,11 @@ of D12 and can run alongside it. D14 needs A1 but not D11.
 Within F: A4's decision blocks F18. F17 needs B5. F19 needs F17 (the arc is relative to a moving
 hull) and F18 (destroyed cannons weaken the volley). F20 needs B6 and F17.
 
+G21 needs A2 (an AI aircraft must exist and be able to crash); it reuses `SurfaceDefTable` and
+contends with nobody.
+
 **File contention to watch.** D11–D15 all reach into whatever A2 creates as the AI controller — give
 each concurrent agent a named region. F18 and A4 both concern `DestructibleRegistry.cs`; A4 lands
-first as a note, F18 implements it. E16 and B8 both touch the voice runtime. C9 and D14 will both want
-the lead-and-scatter aiming maths — factor it once, in whichever lands first, and say so.
+first as a note, F18 implements it. E16 and B8 both touch the voice runtime. C9 and D14 both want
+lead-and-scatter aiming maths — the intercept solver already exists in `Flight/AimAssist.cs`;
+consume it rather than re-deriving it, and say so in whichever lands first.

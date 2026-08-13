@@ -516,40 +516,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   have to be invented. The mount names are data (`IDS_AIRFRAMEGUNGROUPNAMES`, ui_strings
   3060–3079) and the per-plane stock table is authored, so the *placing* half is real.
 
-- `BL-068` `[Feature]` **M4 (AI) is scoped but NOT scheduled** — [`docs/SCOPING-M4-ai.md`](docs/SCOPING-M4-ai.md)
-  (2026-07-25). The shipped AI data (patrol graphs, turret specs, AI vehicle rosters, generators,
-  zeppelin combat parameters, 1,309 combat voice clips) is already in the extraction and **nothing in
-  the engine reads any of it**; the document inventories it against the retail files, re-expresses the
-  original design's AI specification, and grades what the engine can reuse unchanged. **Its headline
-  blocker — the flying aircraft has no physics body, so nothing can shoot a plane — gates the whole
-  milestone.** It is a scoping study, not a plan: scheduling it means renaming it to
-  `docs/PLAN-M4-ai.md`. The per-pilot skill vector is located and bounded in
-  `analysis/m4-ai-data/FINDINGS.md`. `BL-069` records the M3-era leads it absorbs.
-
-- `BL-069` `[Research]` **M4 dependencies discovered while planning M3** (2026-07-22) — recorded so they are not
-  re-derived:
-  - **Turrets are AI gunners**, not player-aimed: they acquire and engage other aircraft
-    automatically (user-confirmed). This is why `extracted/zrdr/ai.zrd.json` contains nothing
-    but `TURRET` defs. Five player planes carry one — `pavenger`, `pbalmoral` (two: front +
-    rear), `pbrigand`, `pfirebrand`, `pkestrel` — and **W4 in the stock loadout table is filled
-    on exactly those five and no others**. `vehicle.json` `turrets` gives `firstp`/`thirdp` node
-    pairs (which mesh renders in which view, *not* a player camera mode) and **nothing else — turret
-    rotation limits are not in any reader and stay undecoded**. `gun_pitch`/`gun_yaw` (±11°) are
-    **not** the turret arc: they sit on AI aircraft defs including seven turret-less ones, on no
-    player def including all five turret airframes, so they are the AI's forward-gun aiming cone
-    (census in `docs/formats/vehicle.md`).
-  - **`target`** — a mesh-less marker, one per plane root (11 player + 11 AI). The aim point
-    for AI gunnery and air-to-air lock-on.
-  - **Air-to-air lock-on.** M3 implements the full guided-missile flight model but restricts
-    acquisition to ground destructibles, so air-to-air is a targeting change, not new flight
-    code.
-  - **Shootable ordnance.** `wep_14` (TORPDO) has `FLYOUT_HEALTH 10` and `TARGETABLE` — the
-    torpedo itself can be shot down. Inert in M3 because nothing else shoots.
-  - **AI vehicle armour/health.** `vehicle.json` carries an `armor` + `health` pair on AI defs
-    only (aircraft always `armor == health`, 60–100; `patrolboat` and `t_truck` `armor 0 /
-    health 40`). `PlaneStats` does not read either. The model is **armour-first, then health**
-    (see `docs/plans/PLAN-M3-weapons.md` C23 for the dominance argument that settles it).
-
 - `BL-141` `[Research]` **`shell1.png`/`shell2.png` — the doc's own listed "tracer" texture pair — are wired to
   nothing: not `gunshell`, not any reader def, not any engine code.**
   `docs/formats/weapon-effects.md:148` groups them under "Tracer" textures. Traced the actual
@@ -613,11 +579,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   orphans. The design's rule is that incoming-fire intensity is how the player reads a shooter's
   distance, calibre and ammo type; the accumulator that rates it is now decoded and running
   (`WarningShotCue`), so both cues can hang off it once their blockers clear.
-  ⚠ **Traps.** (a) **The blocker for `bullet_hit_sg` is that nothing can shoot an aircraft:** a plane
-  exists in physics only as a `CastMotion` query shape (`PlaneCollider`), never as a body, so a
-  projectile raycast can never strike one — own plane or another player's. Giving aircraft real
-  bodies is the prerequisite, and it is not a small change (every round currently passes through
-  every plane, including the firer's own). (b) `window_hit_sg` additionally needs a cockpit view —
+  ⚠ **Traps.** (a) **The blocker for `bullet_hit_sg` is a shooter, not hittability:** since
+  PLAN-vs-mode (2026-08-06) aircraft are real projectile targets (`AircraftBody`), so another
+  pilot's rounds already strike a plane in splitscreen — but solo play has nothing that fires on
+  the player until `PLAN-M4-ai.md` fields AI. Wireable early via a two-pilot test if wanted.
+  (b) `window_hit_sg` additionally needs a cockpit view —
   the bullet defs are `PlayerFirstPerson`-gated. (c) **Do not fake either off our collision path**:
   firing the hit cue on a wall scrape conflates "I was shot" with "I hit something", the trap
   `BL-222` records. (d) Only `snd_warningshot1-3` are true orphans (in no `SOUND_GROUPS` entry and
@@ -2703,20 +2669,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scripted `--det`/`--hold` runs; the polling *sites* are the seam, `FireControl` itself never
   changes (it consumes `FireInputs` booleans). Update `docs/controls.md` when this lands.
 
-- `BL-347` `[Research]` `[Blocked: M4]` **The `ai_crash_<name>` family — a third registry-indexed
-  choreography vector, unmodelled.** Found 2026-08-12 while decoding the weapon IMPACT lookup
-  (`FUN_00478a00`), and deliberately left out of `PLAN-surface-id-weapons`, which modelled the
-  player crash, the `touchdown_*` graze and the weapon IMPACT and stopped there. Same shape as the
-  two that landed: a vector built by concatenating the surface registry's names onto a prefix and
-  indexed by the struck material's surface id. Needs AI aircraft to be reachable at all, so it is
-  M4 work; read `CSVM/src/Session/SurfaceDefTable.cs` first, which is the cascade already written
-  for the other two families and is probably reusable verbatim.
-  ⚠ Second finding from the same session, also unmodelled and NOT blocked on M4: `FUN_004c56c0`
-  resolves a `soil_<name>` substring (`0x0062bf98`) through `FUN_00559670` and writes the id onto
-  the material with `FUN_0055b0a0` — which is how surface ids are authored in the first place, by
-  registry name. We read the id out of the extracted material instead (`GameZMaterial.SoilId`), so
-  nothing depends on this today; it matters if a material's id ever looks wrong at runtime.
-
 ## Missions, modes & campaign
 
 - `BL-074` `[Research]` **PLAYER_INIT fields [3]/[4] semantics + per-plane spawn speed** — story-mission spawns
@@ -2774,7 +2726,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-299` `[Research]` **Decode `net.zrd.json` as the multiplayer spawn table → the retail MP1–MP3 maps for
   Dogfight.** 45 files, one flat group each, node counts quantised by mission type (MP1→80,
   MP2/MP3→48, campaign→8), 23 distinct payloads shared across files — shape and distribution say
-  *spawn table*, not patrol route (`docs/SCOPING-M4-ai.md` survey; its "do not build patrol on it"
+  *spawn table*, not patrol route (`docs/PLAN-M4-ai.md` survey; its "do not build patrol on it"
   warning stands). Now there is a consumer to validate a decode against: Dogfight (`--vs`) plays
   the IA1 `dogfight_ace` list today; a confirmed spawn decode gives it the maps the original
   authored for exactly this mode. MP worlds already load (`--mission=MP1`); only their spawns fall

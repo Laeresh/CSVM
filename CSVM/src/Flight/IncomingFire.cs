@@ -19,10 +19,10 @@ namespace CSVM.Flight;
 /// along that aim (A1 — the original applies no dispersion at the fire call), so the achieved pass
 /// distance equals the requested one, modulo the swept-segment sampling.</para>
 ///
-/// <para><b>Near misses only.</b> A hit cannot be simulated this way: an aircraft exists to the
-/// projectile raycast as nothing at all (its collision is the swept <see cref="PlaneCollider"/>
-/// query boxes, not a body), so no round can strike one — the reason <c>bullet_hit_sg</c> stays
-/// unbuildable.</para>
+/// <para><b>Near misses by construction.</b> The offset parallel track keeps rounds clear of the
+/// airframe. The aircraft is a real projectile target (<see cref="AircraftBody"/>), so a round
+/// aimed at it would strike — this rig deliberately never aims at the plane; hit feedback needs a
+/// real shooter (another pilot today, AI once M4 lands one).</para>
 /// </summary>
 public sealed partial class IncomingFire : Node
 {

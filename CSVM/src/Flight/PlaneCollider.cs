@@ -12,6 +12,8 @@ namespace CSVM.Flight;
 /// along each physics frame's motion (PhysicsDirectSpaceState3D.CastMotion), so a
 /// wingtip or tail fin clips a building corner like the original. A single
 /// center-line ray alone would let everything but the nose pass through obstacles.
+/// The same boxes are mounted as the plane's <see cref="AircraftBody"/> collision
+/// shapes, so the sweep silhouette and the projectile target stay single-sourced.
 ///
 /// Built once from the plane model's actual mesh triangles (PropAnimator-style tree
 /// walk), transformed into the FlightController's frame. Hidden subtrees (the wing
