@@ -129,28 +129,46 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     yet another trigger path, and (b) is unproven to share any of their causes. Verify each
     independently before closing.
 
-- `BL-343` `[Research]` **`IMPACT_FORCE` is a real velocity-inheritance mechanism in the original, and
-    `BL-008` was closed without it.** The `OBJECT_MOTION` flag word's bit `0x2` is set by the parser's
-    `IMPACT_FORCE` token (`FUN_00508590` at `00508d03`), and the per-frame update gates a parent-velocity
-    add on it (`FUN_004e8fa0` at `004e925e`, reading the parent object's velocity at `param_1+0xc0..0xc8`).
-    The engine reads the extractor's `impact_force` boolean nowhere. A census
-    (`analysis/object-motion-flags/`) puts it on **182 events / 25 distinct shapes**, and the list is
-    exclusively aircraft wreckage: the eleven airframes' `MAIN_ROOT_NODE`, `player` and both
-    `player_crash_*` defs' four pieces, `agyrobus`, and `drop_smokescreen_canister`'s `smoker`.
-    *To settle:* read the update's gate in full — the bit is necessary but a condition on the parent also
-    has to hold, and which parent state that is decides whether this fires on a shot-down plane at all —
-    then decide whether to implement the add or record a reasoned divergence.
+- `BL-343` `[Feature]` **A shot-down plane's wreck should leave along the plane's own velocity, and
+    ours drops vertically.** `IMPACT_FORCE` is velocity inheritance, it fires in the original, and this
+    engine has neither half of it. The gate is fully decoded (2026-08-13); what is left is building it.
+    *Evidence:* [`docs/org/objectMotion.md`](docs/org/objectMotion.md), section "`IMPACT_FORCE` (bit
+    `0x2`), and the callback that feeds it". The update's first-tick init requires three things
+    (`FUN_004e8fa0`): the bit (`004e925e`), a velocity parked on the **anim instance** at `+0xc0..0xc8`
+    with `+0x9c` bit `0x80` set (`004e9268`), and the moving node having **exactly one parent**
+    (`004e9275`, the parent count `node+0x54` that `FUN_004cef20` reads). It then transforms that
+    world velocity into the body's parent frame through the transposed parent matrix and adds it to the
+    **live velocity** `+0x58..0x60`, once. The velocity gets there only when the animation runs a
+    **`CALLBACK 16`** event (kind 35, `FUN_004ec5e0`) whose handler reads the owning object's velocity
+    into the slot (`FUN_004ee0e0`, ignoring anything under 0.01). Census over 8 chapters: **182 events /
+    25 shapes / 15 defs**, of which **120 events / 15 shapes fire** (the eleven airframes'
+    `MAIN_ROOT_NODE`, `player`'s four pieces, all of which author `CALLBACK 16` in `destroy_craft`
+    before calling the motion's sequence) and **62 are inert** for lack of any `CALLBACK` event
+    (`player_crash_default`, `agyrobus`, `drop_smokescreen_canister`). ⚠ On all eleven airframes the
+    authored `translation.initial` and `delta` are **(0,0,0)**, so the inherited velocity is the wreck's
+    *only* horizontal motion. `CSVM/src/Mech3/` handles no `CALLBACK` event and reads `impact_force`
+    nowhere.
+    *Fix shape:* three pieces, in order. (1) A per-anim-instance velocity slot plus an "is set" flag,
+    cleared at anim start, set only when a component exceeds 0.01; (2) a `Callback` event handler that on
+    value 16 reads the owning object's world velocity into it (15 is the airframe-hide notification, 0 is
+    the anim-stop notification, 3 is `player`'s own unrelated code); (3) in the motion's first-tick init,
+    when the bit is set and the flag is set and the node has exactly one parent, add
+    `parentWorldBasis⁻¹ · v` to the live velocity.
     ⚠ **Traps.** (a) **`BL-008` is closed (`1f09c2d`) on "the original does not inherit velocity into world
-    debris", and that closure is still right — for world debris.** Not one world destructible authors this
+    debris", and that closure is still right for world debris.** Not one world destructible authors this
     flag; every carrier is aircraft wreckage, which is the population the closure never looked at. Do not
-    reopen `BL-008`; this is the part of the question it did not answer. (b) `PLAN-object-motion-decode`
-    deliberately left this out of scope, so do not fold it back in mid-plan — the launch decode's
-    verification is already wide, and a second mechanism landing in the same window makes a moved golden
-    impossible to attribute. (c) The engine already has a **judged** inheritance rule pointing the other
-    way: a motion that continues a contact landing inherits *none* of the aircraft's momentum
-    (`docs/formats/destructibles.md`, the `player_crash_dirt` `pNhit` case). If this lands, that rule and
-    this flag have to be reconciled, not stacked. (d) `BL-122`'s crash-debris look was signed off on
-    *direction* only (`CAP-16`), never magnitude — it is not evidence either way here.
+    reopen `BL-008`; this is the part of the question it did not answer. (b) **The flag alone is not the
+    trigger.** Building the add without the `CALLBACK` half gives every carrier inheritance, including the
+    62 events the original leaves inert. (c) **The feared conflict with the `pNhit` rule is resolved, not
+    open.** `player_crash_dirt` authors `impact_force: false` on all eight of its motions, so the judged "a motion
+    continuing a contact landing inherits none of the aircraft's momentum"
+    (`docs/formats/destructibles.md`) is a different def and does not collide. `player_crash_default`'s
+    `p1hit`/`p2hit` do carry the flag and are inert. (d) `BL-122`'s crash-debris look was signed off on
+    *direction* only (`CAP-16`), never magnitude, so it is not evidence either way here. (e) A replicated
+    anim start can carry a velocity directly (`FUN_004eddd0`, network path only); irrelevant single
+    player, remember it if network parity ever matters.
+    *Why now:* the Game AI milestone puts shot-down aircraft on screen in quantity, which is exactly the
+    population this fires on.
 
 - `BL-060` `[Feature]` **Improve on the original crash — the bespoke "breaking apart" (branch `bespoke-crash-animation`).**
   User's call (2026-07-23): the retired bespoke `CrashBreakup` wreck-scatter looked *better* than the

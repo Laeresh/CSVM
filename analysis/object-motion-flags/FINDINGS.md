@@ -128,12 +128,22 @@ gravity", and the other path is forty lines below in the same function: the worl
 form under a world-aligned parent and is why only wreckage authors it. Full write-up in
 [`docs/org/objectMotion.md`](../../docs/org/objectMotion.md).
 
-## `impact_force` (bit `0x2`) — censused, filed, not built
+## `impact_force` (bit `0x2`): censused, decoded, not built
 
 Out of scope for this plan, censused here only so the next reader does not re-derive it: **182
-events / 25 distinct shapes**, and the list is the same aircraft-wreckage family as `complex` (the
-eleven airframes, `player`, both `player_crash_*`, `agyrobus`, the smoke canister). The update
-gates the parent-velocity add on this bit at `004e925e`. `BL-008` was closed on the finding that
-the original does not inherit velocity into world debris — which the census confirms for *world*
-debris and leaves open for aircraft wreckage, where every carrier of this flag lives. Filed as
-`BL-343`.
+events / 25 distinct def+node shapes / 15 defs**, all aircraft wreckage. The carrier list is
+**narrower than `complex`'s**: the eleven airframes' `MAIN_ROOT_NODE`, `player`'s and
+`player_crash_default`'s four pieces, `agyrobus`, and the smoke canister. ⚠ **`player_crash_dirt`
+and `autogyro_loserotor` carry `complex` but not this.** An earlier version of this paragraph
+copied the `COMPLEX` list across, and `player_crash_dirt` authors `impact_force: false` on all
+eight of its motions.
+
+The update gates the add on this bit at `004e925e`, but the bit is not sufficient: it also needs a
+velocity parked on the anim instance by a **`CALLBACK 16`** event, which splits the 182 into **120
+that fire** (the airframes and `player`) and **62 that are inert** (`player_crash_default`,
+`agyrobus`, the canister, none of which author a `CALLBACK`). Full decode in
+[`docs/org/objectMotion.md`](../../docs/org/objectMotion.md); tracked as `BL-343`.
+
+`BL-008` was closed on the finding that the original does not inherit velocity into world debris,
+which the census confirms for *world* debris and leaves open for aircraft wreckage, where every
+carrier of this flag lives.
