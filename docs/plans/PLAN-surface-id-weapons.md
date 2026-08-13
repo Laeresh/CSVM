@@ -1,8 +1,7 @@
 # Surface id, part two — the weapon IMPACT table and the collision overlay
 
-**ACTIVE PLAN** (written 2026-08-13). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**✅ COMPLETE** (written 2026-08-13, completed 2026-08-13). All 5 items landed (A1/A2, B11/B12,
+C21); indexed in [`plans.md`](plans.md).
 
 `PLAN-crash-surface-id` moved the player crash and the `touchdown_*` graze onto the original's
 numeric surface id and closed on 2026-08-13. It deliberately scoped weapons out, on a premise that

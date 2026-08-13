@@ -192,14 +192,9 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt flying, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, world destructibles that take damage, die, lose collision, throw debris and reset — and planes shoot planes down (M4 A1, front-loaded). The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**Active plan: [`PLAN-surface-id-weapons.md`](docs/PLAN-surface-id-weapons.md)** (written
-2026-08-13; 5 items, 3 waves): part two of the surface-id work, moving the weapon `IMPACT` lookup
-onto the original's numeric surface id (decoded 2026-08-12; its empty row plays nothing rather than
-falling back) and colouring the collision overlay by the same id. Folds in `BL-344` and `BL-345`;
-disproves `PLAN-crash-surface-id` Decision 3. Strictly serial; no item left open. Next: its own
-close (`COMPLETE` banner, move to `docs/plans/`, `plans.md` row).
-[`PLAN-object-motion-decode.md`](docs/PLAN-object-motion-decode.md) is live in
-parallel on its own branch, at Wave C from `C6`.
+**Active plan: [`PLAN-object-motion-decode.md`](docs/PLAN-object-motion-decode.md)**, live on its
+own branch, at Wave C from `C6`. Nothing else is scheduled: pick the next run out of
+`backlog.md`, or start one with `/new-plan`.
 Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45` and `PT-47`
 ([`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read
