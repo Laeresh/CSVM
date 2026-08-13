@@ -202,6 +202,10 @@ timed control program plus a difficulty gate — the library is *data*, not code
   `[0.0, 0, 50, 0]`; `roll` is `[3.0, 0, 0, 90]`. A `0.0` duration reads as "advance as soon as the
   attitude is reached" rather than "hold for zero seconds" — every multi-step maneuver mixes zero
   and non-zero durations.
+- ⚠ **Two steps carry 7 elements, not 4**: `barrel_roll`'s single step and `spiral_dive`'s second
+  are `[duration, pitch, yaw, roll, 0.5, 0.0, 1.0]` — three extra numbers, identical on both, on
+  exactly the two corkscrew maneuvers. Undecoded (a rotating-input candidate); a reader must
+  accept them and should preserve them raw rather than interpret or drop them.
 - **`relative`** — the step attitudes are relative to the current orientation rather than absolute.
 - **`autogyro_allowed`** — the maneuver is legal for autogyros (5 of 17 are).
 - **`bias`** — a fixed adjustment to the maneuver's selection rating; only `climb`/`dive` carry it,

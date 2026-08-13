@@ -18,6 +18,7 @@ Byte-level fixtures (WAV/ADPCM) are not files at all: they are assembled field b
 | `zrdr/sounds.json` | `sounds.md` | `SETS` flags and value keys, `SOUND_GROUPS` weights and `DYNAMIC_WEIGHTS` recency |
 | `zrdr/targets.json` | `missions.md` | `targets.json` pair-list entries, multi-node entries |
 | `zrdr/demo_anims.json` | `anim-definitions.md` | reader→compiled normalization, the unit conversions, `DAMAGE_SEQUENCE` |
+| `zrdr/maneuvers.json` | `ai-rosters.md` | both step shapes (4- and 7-element), the flags (`relative`, `autogyro_allowed`, `nitro`, `bias`), a stub with no `steps`, the eligibility cull |
 | `zrdr/fogvol.json` | `fogvol.md` | the fog-volume header keys, a weighted `clutter` block, its two `far_fade_range` bands and the scatter ranges |
 | `zrdr/weather.json` | `weather.md` | `CLOUD_COVER`'s bare-scalar `TOP`/`BOTTOM`/`THICKNESS`, one `ZONE1` fog block, `WeatherState.CameraWeatherState`'s state-2 threshold |
 | `weather-no-cloud/weather.json` | `weather.md` | a mission with `ZONE1` fog and no `CLOUD_COVER` block at all — `CameraWeatherState` pinned to state 1 at any altitude |
