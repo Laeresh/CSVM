@@ -150,6 +150,13 @@ public static class Suites
             "weapon's own values, downs it on a critical zero with the kill attributed through the " +
             "Downed event — never hits the shooter's own geometry — and a rocket fuses on a passing " +
             "plane, blasting with falloff and attributing the kill", AirToAir));
+        into.Add(new TestHarness.Suite("carried-turrets",
+            "a carried turret gunner (C9a) builds from ai.zrd + the vehicle def's thirdp mount, " +
+            "poses at its arc centre, tracks and fires on a hostile plane inside DETECTION_RANGE " +
+            "with hits landing under the host's shooter id (never on the host's own airframe), " +
+            "holds fire while tracking through a bored window, parks at the NEARER yaw end stop " +
+            "out of arc, treats YAW [0,0] as unrestricted rather than locked, and goes quiet with " +
+            "a crashed host — plus the aim assist's turret candidate list is fed", CarriedTurrets));
         into.Add(new TestHarness.Suite("damage-stages",
             "each DAMAGE_SEQUENCE def fires its stage effects across an HP sweep", DamageStages));
         into.Add(new TestHarness.Suite("damage-hd",
@@ -2887,6 +2894,181 @@ public static class Suites
             target?.Free();
             shooter?.Free();
             bystander?.Free();
+            textures.Dispose();
+        }
+    }
+
+    private static void CarriedTurrets(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+        ctx.Check(turretDefs.All.Count(d => d.Carried) == 16,
+            $"the 16 carried ai.zrd entries parse carried={turretDefs.All.Count(d => d.Carried)}");
+
+        // The Kestrel: a single rear turret (thirdp MSG_TUR_PAC_G3 — PITCH [20,50], YAW
+        // [105,255], the directed rear arc through 180°, DETECTION_RANGE 450, FIRE_RATE 0.4,
+        // ATTACK 4 s / BORED 3 s scalars).
+        const string HostPlane = "player_kestrel";
+        var stats = PlaneStats.Load(ctx.ZrdrPath, HostPlane);
+        ctx.Check(stats.TurretMounts.Count(m => !m.FirstPerson) == 1,
+            $"{HostPlane} carries one thirdp turret mount");
+
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightController? host = null;
+        FlightController? target = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            FlightController BuildRig(string plane, PlaneStats st, int playerIndex, Vector3 pos)
+            {
+                var model = new PlaneBuilder(planesGamez, textures).Build(plane);
+                var rig = new FlightController
+                {
+                    PlaneModel = model,
+                    Collider = PlaneCollider.Build(model),
+                    Damage = new PlaneDamage(st.DestroyableParts),
+                    PlayerIndex = playerIndex,
+                    Projectiles = live,
+                    UseKeyboard = false,
+                    AllowPause = false,
+                };
+                rig.AddChild(model);
+                // Nose on world -Z (identity attitude): plane-local == world - pos.
+                rig.Setup(new FlightModel(st), ctx.Camera, new CamParams(), pos, pos + Vector3.Forward);
+                ctx.Host.AddChild(rig);
+                // Park at zero speed: Setup leaves the model at spawn speed, and a rig this
+                // suite never steps would otherwise REPORT that velocity while standing still —
+                // the turret then leads a phantom motion and every round misses.
+                rig.PlaceHeld(pos, pos + Vector3.Forward);
+                return rig;
+            }
+
+            var hostPos = new Vector3(0f, 500f, 0f);
+            host = BuildRig(HostPlane, stats, 0, hostPos);
+            host.Turrets = TurretController.BuildCarried(
+                turretDefs, stats, host.PlaneModel!, weapons, host, live);
+            ctx.Check(host.Turrets.Length == 1,
+                $"the mount resolves against the built model turrets={host.Turrets.Length}");
+            if (host.Turrets.Length != 1)
+                return;
+            var turret = host.Turrets[0];
+            ctx.Check(turret.YawNode != null && turret.Firepoints.Length == 1,
+                $"the PARTS chain resolved yaw={turret.YawNode?.Name} muzzles={turret.Firepoints.Length}");
+            ctx.Check(turret.Weapon.Id == turret.Def.WeaponName,
+                $"WEAPON.NAME resolved as a ballistics id ({turret.Weapon.Id})");
+
+            // Load pose: the centre of each arc — yaw 180 (rearward), pitch 35.
+            var (restYaw, restPitch) = TurretController.AnglesOfLocal(turret.BarrelLocal);
+            ctx.Check(Mathf.Abs(Mathf.Wrap(restYaw - 180f, -180f, 180f)) < 0.5f
+                      && Mathf.Abs(restPitch - 35f) < 0.5f,
+                $"the turret poses at its arc centre yaw={restYaw:0.#} pitch={restPitch:0.#}");
+
+            // The target: in-arc (behind and above the host — yaw ~180, elevation ~35°), inside
+            // DETECTION_RANGE, on a hostile team. INACCURACY is zeroed so every gated round flies
+            // the solved line — the scatter cone itself is covered by the aim-assist suite.
+            turret.Def.InaccuracyDeg = 0f;
+            var targetStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+            var targetPos = hostPos + new Vector3(0f, 105f, 150f);
+            target = BuildRig(ctx.PlaneName, targetStats, 1, targetPos);
+
+            float Combined(FlightController rig) => rig.Damage!.Parts.Values.Sum(p => p.Hp + p.Armor);
+            bool Pristine(FlightController rig) => rig.Damage!.Parts.Values.All(
+                p => p.Hp >= p.Def.MaxHp && p.Armor >= p.Def.MaxArmor);
+            void Step(int frames)
+            {
+                for (int i = 0; i < frames; i++)
+                {
+                    turret.SimStep(1f / 60f);
+                    live.SimStep(1f / 60f);
+                }
+            }
+
+            // The aim assist's turret candidate list is fed (the AimAssist.cs:387 seam).
+            var candidates = new AimCandidateSet();
+            live.CollectTurrets(candidates);
+            ctx.Check(candidates.Turrets.Count == 1
+                      && candidates.Turrets[0].Team == AimAssist.TeamOfPilot(host.PlayerIndex)
+                      && candidates.Turrets[0].Live,
+                $"CollectTurrets feeds the candidate scan count={candidates.Turrets.Count}");
+
+            // --- track and fire: two seconds inside the initial 4 s attack window. The barrel
+            // slews onto the target and the shots land — under the host's shooter id, so the
+            // rounds crossing the host's own tail (the rear arc points across it) exclude it.
+            float before = Combined(target);
+            Step(120);
+            var toTarget = (target.WorldPosition - turret.WorldPosition).Normalized();
+            ctx.Check(turret.BarrelWorldDir.Dot(toTarget) > TurretController.FireGateCos,
+                $"the barrel slewed onto the target dot={turret.BarrelWorldDir.Dot(toTarget):0.000}");
+            ctx.Check(turret.ShotsFired >= 3,
+                $"the turret fires through the 15° gate at its FIRE_RATE shots={turret.ShotsFired}");
+            ctx.Check(Combined(target) < before,
+                $"turret rounds strike the target moved={before - Combined(target):0.##}");
+            ctx.Check(Pristine(host) && !host.Crashed,
+                $"the host's own airframe took nothing from its own gunner");
+
+            // --- the duty cycle: run to the bored window (ATTACK 4 s from build), then move the
+            // target across the arc — firing stops, tracking does not.
+            int shotsAtBored = -1;
+            for (int i = 0; i < 600 && turret.Attacking; i++)
+            {
+                Step(1);
+            }
+            ctx.Check(!turret.Attacking, $"the attack window expires into bored");
+            shotsAtBored = turret.ShotsFired;
+            target.PlaceHeld(hostPos + new Vector3(90f, 105f, 120f), hostPos); // still in-arc, new bearing
+            Step(90); // 1.5 s of the 3 s bored window
+            var toMoved = (target.WorldPosition - turret.WorldPosition).Normalized();
+            ctx.Check(turret.ShotsFired == shotsAtBored,
+                $"bored suppresses firing shots={turret.ShotsFired} (was {shotsAtBored})");
+            ctx.Check(turret.BarrelWorldDir.Dot(toMoved) > TurretController.FireGateCos,
+                $"…but tracking continues through it dot={turret.BarrelWorldDir.Dot(toMoved):0.000}");
+
+            // --- out of arc: a target ahead of the host sits outside YAW [105,255]; the turret
+            // parks at the angularly NEARER end stop and never fires, whatever the duty cycle.
+            target.PlaceHeld(hostPos + new Vector3(-52f, 105f, -140f), hostPos); // yaw ≈ +20°, in reach
+            int shotsAtOutOfArc = turret.ShotsFired;
+            Step(300); // 5 s spans at least one full attack window
+            var (parkedYaw, _) = TurretController.AnglesOfLocal(turret.BarrelLocal);
+            ctx.Check(turret.ShotsFired == shotsAtOutOfArc,
+                $"an out-of-arc target draws no fire shots={turret.ShotsFired}");
+            ctx.Check(Mathf.Abs(parkedYaw - 105f) < 1.5f,
+                $"the barrel parks at the nearer end stop (105°, not 255°) yaw={parkedYaw:0.#}");
+
+            // --- YAW [0,0] means UNRESTRICTED: with the limit spelled that way the same ahead
+            // target becomes reachable and the turret opens fire — the misread ('locked forward')
+            // would keep it silent forever. Pitch stays authored, so keep the target elevated.
+            turret.Def.YawMinDeg = 0f;
+            turret.Def.YawMaxDeg = 0f;
+            Step(300);
+            ctx.Check(turret.ShotsFired > shotsAtOutOfArc,
+                $"YAW [0,0] removes the traverse limit shots={turret.ShotsFired} (was {shotsAtOutOfArc})");
+
+            // --- a crashed host silences its gunner, and the candidate list reports it dead.
+            host.DebugForceCrash();
+            int shotsAtCrash = turret.ShotsFired;
+            Step(120);
+            ctx.Check(!turret.Alive && turret.ShotsFired == shotsAtCrash,
+                $"a crashed host's turret goes quiet shots={turret.ShotsFired}");
+            candidates.Clear();
+            live.CollectTurrets(candidates);
+            ctx.Check(candidates.Turrets.Count == 1 && !candidates.Turrets[0].Live,
+                $"the dead turret stays listed but not live");
+        }
+        finally
+        {
+            pool?.Free();
+            host?.Free();
+            target?.Free();
             textures.Dispose();
         }
     }

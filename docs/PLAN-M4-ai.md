@@ -1319,8 +1319,13 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
    split, the `PARTS` kinematic chain, the wrap-aware yaw arc (⚠ `[0,0]` = unrestricted), the
    attack/bored duty cycle, rate-limited slew + the 15° fire gate, and geometric hit resolution.
    Cost is up — a tracking loop, not a table read. **Split 2026-08-10:**
-    - ☐ **C9a — carried turrets** (16 entries, all `ACTIVATED 1`, 8 AI + 8 player airframes). No
+    - ☑ **C9a — carried turrets** (16 entries, all `ACTIVATED 1`, 8 AI + 8 player airframes). No
       activation dependency; this is the turret-UI half and what the zeppelin hunt exercises
+      — **landed 2026-08-13**: `TurretDefs` + `TurretController` drive the five player airframes'
+      `thirdp` rigs as live gunners registered with `AimAssist` (the `carried-turrets` suite +
+      `TurretDefsTests` pin it); `_G1`/`_G3` turned out to be the `firstp`/`thirdp` viewpoint
+      rigs of vehicle.zrd's `turrets` block, not gun-group slots (turrets.md corrected); the
+      AI-carried half awaits A2's hosts
     - ☐ **C9b — world emplacements** (26 entries, 22 of them dormant). Needs an activation stand-in
       for `WAKEUP_TURRETS`; deferrable, since nothing on the playable path depends on it
 

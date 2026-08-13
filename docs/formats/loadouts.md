@@ -80,11 +80,15 @@ fill order is a permutation covering all eight positions either way.
 
 W4 (and the Balmoral's W3) is a **turret** on the five turret airframes (`pavenger`, `pbalmoral`,
 `pbrigand`, `pfirebrand`, `pkestrel` — the Balmoral is the only two-turret airframe: Nose + Rear).
-Turrets are AI gunners that engage other aircraft (decision 10), which nothing does in M3, so
-they are **deferred to M4**: those slots carry `"turret": true` and the loader will parse them but
-construct them inert. They are recorded — mount, caliber and binding-rule markers — so the M4
-work has somewhere to land. Note a turret's binding-rule firepoints are nominal (fp1,2 is a
-forward/wing point, not a rear one); its real barrels are the `fgun`/`rgun`/`bgun*` gun nodes.
+Those slots carry `"turret": true` and the loader parses them but constructs them inert — and
+**they stay inert even now that the gunner is live (M4 C9a)**: the running turret is built from
+the vehicle def's `turrets` block against `ai.zrd` (`TurretController`,
+[turrets.md](turrets.md)), so its weapon is the `ai.zrd` row's `WEAPON.NAME` (`wep_140` on every
+carried entry), **not** this file's caliber. The slot rows here remain the configurator-facing
+record of the mount — note the caliber the original's Ammo Selection UI shows (50/30/40 by
+plane) differs from the `wep_140` the gunner actually fires, an unreconciled original-data
+tension. A turret's binding-rule firepoints are nominal (fp1,2 is a forward/wing point, not a
+rear one); its real barrels are the `fgun`/`rgun`/`bgun*` gun nodes.
 
 ## The stock table
 
@@ -106,7 +110,8 @@ exists on that plane's model, every gun matches the binding rule, and every deri
 | Peacemaker | Center 50 | Right Fuselage 40 | — | — | 3 |
 | Warhawk | Inner Wing 70 | Inner Wing 2 50 | — | — | 8 |
 
-ᵀ = turret slot, inert in M3. Every pylon carries `wep_06` (HE) in stock fit.
+ᵀ = turret slot — inert as a gun group; the live gunner reads `ai.zrd` instead (above). Every
+pylon carries `wep_06` (HE) in stock fit.
 
 ## The uniform-HE stock load is an observation, and a schema limit
 

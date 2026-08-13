@@ -41,6 +41,18 @@ public sealed class DestroyablePart
     public List<(float Frac, string Anim)> InjureAnims = new();
 }
 
+/// <summary>One entry of a vehicle def's <c>turrets</c> block: which <c>ai.zrd</c> gunner row
+/// (<see cref="Title"/>, a <c>MSG_TUR_*</c> key) drives which turret-rig subtree
+/// (<see cref="Node"/>, e.g. <c>kestrel_turret1</c>). The block is keyed by VIEWPOINT —
+/// <c>firstp</c> is the cockpit-view rig (player defs only), <c>thirdp</c> the external one —
+/// which is what the titles' <c>_G1</c>/<c>_G3</c> suffixes select (docs/formats/turrets.md).</summary>
+public sealed class TurretMount
+{
+    public string Title = "";
+    public string Node = "";
+    public bool FirstPerson;
+}
+
 /// <summary>
 /// Flight parameters for one player aircraft, pulled from the zrdr extraction:
 /// vehicle.json (per-plane 'dynamics' block, resolved through the 'kind_of'
@@ -162,6 +174,11 @@ public sealed class PlaneStats
     /// critical part died at 75% total).</summary>
     public List<(float Frac, string Anim)> VehicleInjureAnims = new();
 
+    /// <summary>The def's <c>turrets</c> block — the host→gunner link the carried half of
+    /// <c>ai.zrd</c> is looked up through (empty on the six non-turret airframes). Both viewpoint
+    /// rigs are parsed; CSVM has no cockpit view, so only the <c>thirdp</c> entries are built.</summary>
+    public List<TurretMount> TurretMounts = new();
+
     public static PlaneStats Load(string zrdrPath, string planeNodeName)
     {
         var vehicleRoot = Zrdr.LoadFile(zrdrPath, "vehicle.json")[0] as List<object?>
@@ -280,6 +297,33 @@ public sealed class PlaneStats
             {
                 stats.DamagedEngineSound = dmgName;
                 stats.DamagedEngineGain = new SoundCurve(fadeStart, 0f, fadeEnd, 1f);
+            }
+            break;
+        }
+
+        // turrets: nearest def in the chain that has the block. Keyed by viewpoint
+        // (firstp/thirdp), each entry an alternating [title, [MSG_TUR_*], node, [turretNode]].
+        foreach (var d in chain)
+        {
+            if (d.Dict("turrets") is not { } turrets)
+                continue;
+            foreach (var (viewKey, firstPerson) in new[] { ("firstp", true), ("thirdp", false) })
+            {
+                if (turrets.List(viewKey) is not { } mounts)
+                    continue;
+                foreach (var item in mounts)
+                {
+                    if (item is not List<object?> entry)
+                        continue;
+                    var mount = ZrdrDict.FromAlternating(entry);
+                    if (mount.Str("title") is { } title && mount.Str("node") is { } node)
+                        stats.TurretMounts.Add(new TurretMount
+                        {
+                            Title = title,
+                            Node = node,
+                            FirstPerson = firstPerson,
+                        });
+                }
             }
             break;
         }

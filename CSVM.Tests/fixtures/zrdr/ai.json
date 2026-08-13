@@ -1,0 +1,80 @@
+[
+  [
+    "TURRET",
+    [
+      [
+        "CREATE_STANDALONE", [0],
+        "TITLE", ["MSG_TUR_TEST_REAR"],
+        "TEAM", [1],
+        "ACTIVATED", [1],
+        "HEALTHY_NODE", ["tturret"],
+        "PARTS", ["tturret", "tgun", ["tfire1", "tfire2"]],
+        "WEAPON", [
+          "NAME", ["wep_29"],
+          "AMMO", [500],
+          "FIRE_RATE", [0.5],
+          "DETECTION_RANGE", [600.0]
+        ],
+        "INACCURACY", [7.5],
+        "PITCH", [-40.0, 5.0],
+        "YAW", [105.0, 255.0],
+        "ATTACK_INTERVAL", [8.0],
+        "BORED_INTERVAL", [2.0, 4.0],
+        "SOUNDS", ["CANNON", ["snd_chaingun"]]
+      ],
+      [
+        "CREATE_STANDALONE", [0],
+        "TITLE", ["MSG_TUR_TEST_FREE"],
+        "ACTIVATED", [1],
+        "HEALTHY_NODE", ["fturret"],
+        "PARTS", ["fgun", "ffire"],
+        "DEACTIVATE", ["fring"],
+        "STICKINESS", [5.0],
+        "SHOOT_UP_ONLY", [1],
+        "WEAPON", [
+          "NAME", ["wep_29"],
+          "AMMO", [9999],
+          "FIRE_RATE", [1.0, 1.8],
+          "FIRE_LIMITS", [3.0, 2.0],
+          "DETECTION_RANGE", [450.0]
+        ],
+        "INACCURACY", [15.0],
+        "YAW", [0.0, 0.0],
+        "ATTACK_INTERVAL", [4.0],
+        "BORED_INTERVAL", [3.0]
+      ],
+      [
+        "NODES", [["aatest**"], ["testzep", "ttur*"]],
+        "TITLE", ["MSG_TUR_TEST_AAA"],
+        "ACTIVATED", [0],
+        "HEALTH", [8.0],
+        "PARTS", ["turret", "gun", "firepoint"],
+        "WEAPON", [
+          "NAME", ["wep_29"],
+          "AMMO", [12000],
+          "FIRE_RATE", [1.0, 1.8],
+          "DETECTION_RANGE", [500.0]
+        ],
+        "INACCURACY", [5.0],
+        "PITCH", [-60.0, 30.0],
+        "YAW", [-155.0, -5.0],
+        "ATTACK_INTERVAL", [2.0, 4.0],
+        "BORED_INTERVAL", [3.0, 5.0]
+      ],
+      [
+        "NODES", [["untitled**"]],
+        "ACTIVATED", [1],
+        "PARTS", ["turret", "gun", "firepoint"],
+        "WEAPON", [
+          "NAME", ["wep_29"],
+          "AMMO", [9999],
+          "FIRE_RATE", [2.5],
+          "DETECTION_RANGE", [500.0]
+        ],
+        "INACCURACY", [5.0],
+        "ATTACK_INTERVAL", [30.0],
+        "BORED_INTERVAL", [5.0]
+      ]
+    ]
+  ]
+]
