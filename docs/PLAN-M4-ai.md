@@ -1290,7 +1290,13 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
    — **front-loaded by PLAN-vs-mode (landed 2026-08-06)**: `CollisionLayers`, `AircraftBody` on
    the shared `PlaneCollider` boxes, per-shot owner exclusion, part-mapped damage, attributed
    kills, aircraft-only proximity fuse + blast falloff, all pinned by the `air-to-air` suite
-2. ☐ A2 — The AI actor seam: runtime spawn, a non-player `FlightModel` driver, `GameClock` wiring
+2. ☑ A2 — The AI actor seam: runtime spawn, a non-player `FlightModel` driver, `GameClock` wiring
+   — **landed 2026-08-13**: `Flight/AiPilot.cs` (mutable orders → `FlightInput`),
+   `Session/AiAircraftSpawner.cs` + `GameSession.SpawnAiAircraft` (+ the `--ai=` probe flag),
+   `FlightController.Pilot` with `IsHumanPiloted` false / null camera / no HUD; stepped in
+   `DriveSimSteps`; deliberately NOT indexed into the world `NameResolver` (planes.zbd indices
+   collide with the chapter map — `IndexStage` is the path when mission anims need AI nodes);
+   pinned by the `ai-actor` suite + `AiPilotTests`
 3. ☑ A3 — the AI format pages — **rosters, skills and maneuvers landed 2026-08-10**
    ([`formats/ai-rosters.md`](formats/ai-rosters.md)); nets already had
    [`formats/ai-nets.md`](formats/ai-nets.md), zeppelins/generators

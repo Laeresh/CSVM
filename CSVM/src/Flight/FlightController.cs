@@ -266,10 +266,10 @@ public partial class FlightController : Node3D
 
     /// <summary>Whether a person is flying this plane. Gates the gun aim assist
     /// (<c>BL-342</c>/B6): true runs <see cref="AimAssist"/> as normal, false takes the muzzle axis
-    /// unassisted, the same fallback a barrel with no slot already uses. Defaults true and every
-    /// CSVM plane is human-piloted today, so this is a no-op until M4 lands AI aircraft; it is the
-    /// original's human-versus-AI split (`FUN_004b6530`'s else-branch), not "pane 1 only" — see
-    /// Decision 7 in `docs/PLAN-sticky-bullets.md`.</summary>
+    /// unassisted, the same fallback a barrel with no slot already uses. Defaults true; the AI
+    /// spawner sets it false. It is the original's human-versus-AI split (`FUN_004b6530`'s
+    /// else-branch), not "pane 1 only" — see Decision 7 in
+    /// `docs/plans/PLAN-sticky-bullets.md`.</summary>
     public bool IsHumanPiloted = true;
 
     /// <summary>This plane's carried turret gunners (C9a): built by the rig assembler from the
@@ -277,6 +277,13 @@ public partial class FlightController : Node3D
     /// (so a crash silences them), and collected into every shooter's aim-assist candidate set
     /// through <see cref="ProjectilePool.CollectTurrets"/>. Empty on the six turretless airframes.</summary>
     public TurretController[] Turrets = Array.Empty<TurretController>();
+
+    /// <summary>The non-player input source: set (with <see cref="IsHumanPiloted"/> false), it
+    /// replaces the keyboard/pad read each sim step, the way <see cref="HoldSegments"/> does for
+    /// scripted runs — everything downstream of the input (flight model, collision, weapons,
+    /// damage, crash) is byte-for-byte the player's path. Its orders are mutable between steps;
+    /// see <see cref="AiPilot"/>.</summary>
+    public AiPilot? Pilot;
 
     /// <summary>The world's destructibles, when this session has a world runtime — the aim assist's
     /// third candidate list (`BL-342`, an approximation of the original's `targets.zrd`
@@ -382,11 +389,12 @@ public partial class FlightController : Node3D
     private readonly RandomNumberGenerator _aimRng = Rng.Stream(Rng.Weapons); // the assist's 1° launch scatter
 
     private FlightModel _model = null!;
-    private CameraController _cam = null!;
-    private Camera3D _viewCamera = null!;
-    private CanvasLayer _hudCanvas = null!;      // the whole HUD layer; hidden while crashed (the
-                                                 // original's crash camera shows no HUD — footage)
-    private Label _hud = null!;
+    private CameraController? _cam;              // null on an AI rig — no view rides this plane
+    private Camera3D? _viewCamera;
+    private CanvasLayer? _hudCanvas;             // the whole HUD layer; hidden while crashed (the
+                                                 // original's crash camera shows no HUD — footage);
+                                                 // never built on an AI rig
+    private Label? _hud;
     private float _hudPaneFactor = 1f;            // last applied splitscreen shrink (1 = single player)
     private Vector3 _spawnPos;
     private Basis _spawnAttitude;
@@ -506,12 +514,15 @@ public partial class FlightController : Node3D
         }
     }
 
-    public void Setup(FlightModel model, Camera3D camera, CamParams camParams,
+    /// <summary>Wires the flight model and (for a piloted view) the chase camera, then spawns.
+    /// <paramref name="camera"/> is null on an AI rig: no camera rides the plane and every camera
+    /// write below is skipped — the flight half is identical either way.</summary>
+    public void Setup(FlightModel model, Camera3D? camera, CamParams camParams,
         Vector3 spawnPos, Vector3 spawnLookAt)
     {
         _model = model;
         _viewCamera = camera;
-        _cam = new CameraController(camera, camParams, KeyDown, PinnedView);
+        _cam = camera != null ? new CameraController(camera, camParams, KeyDown, PinnedView) : null;
         _spawnPos = spawnPos;
         _spawnAttitude = Basis.LookingAt((spawnLookAt - spawnPos).Normalized(), Vector3.Up);
         _warningShots = new WarningShotCue(model.Stats.WarningShotMax,
@@ -533,36 +544,41 @@ public partial class FlightController : Node3D
 
     public override void _Ready()
     {
-        // Explicit rather than Godot's implicit default of 1: the sun wash draws just above this
-        // (UI.HudLayers.SunWash), so the HUD's own layer is load-bearing, not incidental.
-        var canvas = new CanvasLayer { Layer = UI.HudLayers.Hud };
-        _hudCanvas = canvas;
-        _hud = new Label { Position = HudMargin };
-        _hud.AddThemeFontSizeOverride("font_size", HudFontSize);
-        _hud.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.4f));
-        _hud.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.7f));
-        _hud.AddThemeConstantOverride("shadow_offset_y", 2);
-        canvas.Name = "hud";
-        canvas.AddChild(_hud);
-        if (Compass != null)
-            canvas.AddChild(Compass);
-        if (Gauges != null)
-            canvas.AddChild(Gauges);
-        if (Reticle != null)
-            canvas.AddChild(Reticle); // gun aiming pipper, over the dials, under the text/marker
-        if (WeaponReadout != null)
-            canvas.AddChild(WeaponReadout); // selected-weapon text readout, over the dials
-        if (Marker != null)
-            canvas.AddChild(Marker); // stunt objective marker, drawn on top of the dials
-        if (VersusHud != null)
-            canvas.AddChild(VersusHud); // dogfight timer/K-D/leader line + kill banner
-        if (Scoreboard != null)
-            canvas.AddChild(Scoreboard); // end-of-run results, drawn over everything
-        if (FontTest != null)
-            canvas.AddChild(FontTest); // --hud-font-test: the bitmap-font proof overlay
-        // Splitscreen parents the HUD into this player's SubViewport so it draws in that pane
-        // only (and scales off the pane's height); single player keeps it on this node.
-        (HudParent ?? this).AddChild(canvas);
+        // No HUD on an AI rig: a CanvasLayer draws over the whole window wherever its Node3D
+        // parent sits, so an AI plane building one would paint its telemetry over the player's view.
+        if (IsHumanPiloted)
+        {
+            // Explicit rather than Godot's implicit default of 1: the sun wash draws just above this
+            // (UI.HudLayers.SunWash), so the HUD's own layer is load-bearing, not incidental.
+            var canvas = new CanvasLayer { Layer = UI.HudLayers.Hud };
+            _hudCanvas = canvas;
+            _hud = new Label { Position = HudMargin };
+            _hud.AddThemeFontSizeOverride("font_size", HudFontSize);
+            _hud.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.4f));
+            _hud.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.7f));
+            _hud.AddThemeConstantOverride("shadow_offset_y", 2);
+            canvas.Name = "hud";
+            canvas.AddChild(_hud);
+            if (Compass != null)
+                canvas.AddChild(Compass);
+            if (Gauges != null)
+                canvas.AddChild(Gauges);
+            if (Reticle != null)
+                canvas.AddChild(Reticle); // gun aiming pipper, over the dials, under the text/marker
+            if (WeaponReadout != null)
+                canvas.AddChild(WeaponReadout); // selected-weapon text readout, over the dials
+            if (Marker != null)
+                canvas.AddChild(Marker); // stunt objective marker, drawn on top of the dials
+            if (VersusHud != null)
+                canvas.AddChild(VersusHud); // dogfight timer/K-D/leader line + kill banner
+            if (Scoreboard != null)
+                canvas.AddChild(Scoreboard); // end-of-run results, drawn over everything
+            if (FontTest != null)
+                canvas.AddChild(FontTest); // --hud-font-test: the bitmap-font proof overlay
+            // Splitscreen parents the HUD into this player's SubViewport so it draws in that pane
+            // only (and scales off the pane's height); single player keeps it on this node.
+            (HudParent ?? this).AddChild(canvas);
+        }
         if (DebugCollision)
         {
             _probe = new ImmediateMesh();
@@ -945,7 +961,9 @@ public partial class FlightController : Node3D
         else
         {
             var prev = _model.Position;          // committed position from last frame
-            var input = HoldSegments != null ? NextHoldInput(dt) : ReadKeyboard(dt);
+            var input = HoldSegments != null ? NextHoldInput(dt)
+                : Pilot != null ? NextPilotInput(dt)
+                : ReadKeyboard(dt);
             _lastInput = input;
             _damageCooldown -= dt;
             _grazeReactionCooldown -= dt;
@@ -1000,7 +1018,7 @@ public partial class FlightController : Node3D
         // The dynamic chase radius advances on the sim step, not the render frame: the
         // acceleration derivative needs the fixed dt, and the transient's relaxation is a
         // SIM-time rate. A crash or halt stops the calls, freezing the radius too.
-        _cam.UpdateDynamics(dt, _model.Speed);
+        _cam?.UpdateDynamics(dt, _model.Speed);
 
         // Weapons: poll the raw held controls, let FireControl decide (selector edges, fire
         // clocks, ammo draw-down, cues), then perform its outcome against the pool and audio.
@@ -1023,8 +1041,7 @@ public partial class FlightController : Node3D
             // on the PRE-shot state, since the original restamps a slot's last-update on every
             // round that goes out (B5's job) and this pass must run before that happens this
             // frame. Gated on IsHumanPiloted (B6): the original runs this only for the local
-            // player, and an AI plane's dead-eye path has no slots to tick at all. Every CSVM
-            // plane is human-piloted today, so this is a no-op until M4 lands AI aircraft.
+            // player, and an AI plane's dead-eye path has no slots to tick at all.
             if (IsHumanPiloted)
             {
                 double aimNow = GameClock.Current?.Time ?? 0.0;
@@ -1120,7 +1137,7 @@ public partial class FlightController : Node3D
         if ((orbiting && !_orbitPrev) || _reseedOrbit)
         {
             _reseedOrbit = false;
-            _cam.SeedOrbit(_model.Position);
+            _cam?.SeedOrbit(_model.Position);
         }
         _orbitPrev = orbiting;
         // Plane state — animators, audio ramps — is sim time, so it freezes and scales with it.
@@ -1136,9 +1153,10 @@ public partial class FlightController : Node3D
                 GlobalTransform = _renderPose;
             }
         }
-        if (CameraOwned)
+        if (CameraOwned || _cam == null)
         {
-            // The lab's free camera has the view — every camera write here would fight it.
+            // The lab's free camera has the view — every camera write here would fight it —
+            // and an AI rig has no camera at all.
         }
         else if (orbiting)
         {
@@ -1225,53 +1243,52 @@ public partial class FlightController : Node3D
         UpdateWeaponGauges();
         // Points the gun pipper at 0.5 s of the selected group's flight, on the nose axis (if built).
         UpdateReticle(simDt);
-        // Splitscreen: the text block shrinks with the pane, like every other HUD element
-        // (HudMetrics). PaneFactor is exactly 1 in single player, so the original 22 px at
-        // (16,10) is untouched there; re-applied only when the factor actually changes.
-        float paneFactor = HudMetrics.PaneFactor(_hud);
-        if (!Mathf.IsEqualApprox(paneFactor, _hudPaneFactor))
+        if (_hud != null)
         {
-            _hudPaneFactor = paneFactor;
-            _hud.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(HudFontSize * paneFactor)));
-            _hud.Position = new Vector2(HudMargin.X * paneFactor, HudMargin.Y * paneFactor);
+            // Splitscreen: the text block shrinks with the pane, like every other HUD element
+            // (HudMetrics). PaneFactor is exactly 1 in single player, so the original 22 px at
+            // (16,10) is untouched there; re-applied only when the factor actually changes.
+            float paneFactor = HudMetrics.PaneFactor(_hud);
+            if (!Mathf.IsEqualApprox(paneFactor, _hudPaneFactor))
+            {
+                _hudPaneFactor = paneFactor;
+                _hud.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(HudFontSize * paneFactor)));
+                _hud.Position = new Vector2(HudMargin.X * paneFactor, HudMargin.Y * paneFactor);
+            }
+            // A splitscreen pane is proportionally WIDER than it is tall, so a height-scaled single
+            // line would run into the top-centre compass tape in a 4P quarter pane — break the
+            // throttle onto its own line there. Full screen keeps the one-liner.
+            string speedAlt = $"SPD {mph,4:0} MPH   ALT {ft,5:0} FT";
+            string throttle = $"THR {_model.Throttle * 100,3:0}%";
+            _hud.Text = paneFactor < 1f ? $"{speedAlt}\n{throttle}" : $"{speedAlt}   {throttle}";
+            if (!_held && _model.isStalled())
+                _hud.Text += "\n⚠ STALLED - SPEED UP";
+            if (!halted && !_crashed && _damageFlash > 0f)
+            {
+                _damageFlash -= (float)delta;
+                _hud.Text += $"\n{_damageFlashText}";
+            }
+            if (Damage?.Summary() is { Length: > 0 } dmgSummary)
+                _hud.Text += $"\nDMG {dmgSummary}";
+            // The weapon ammo readout is the weapon gauges + the WeaponReadout (drawn in the game's
+            // own HUD font from MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES), not this text block.
+            // Stunt run status lives in the marker HUD; keep the compact text line only
+            // as a fallback if the marker somehow wasn't built.
+            if (Stunt != null && Marker == null)
+                _hud.Text += $"\n{Stunt.StatusLine()}";
+            if (halted)
+                _hud.Text += "\n⏸ PAUSED — orbit: WASD/arrows · zoom: Shift/Ctrl · P (gamepad Start) resume · . step one frame";
+            else if (_crashed)
+                _hud.Text += "\n⚠ CRASHED — PRESS R (GAMEPAD Y/A) TO RESPAWN";
         }
-        // A splitscreen pane is proportionally WIDER than it is tall, so a height-scaled single
-        // line would run into the top-centre compass tape in a 4P quarter pane — break the
-        // throttle onto its own line there. Full screen keeps the one-liner.
-        string speedAlt = $"SPD {mph,4:0} MPH   ALT {ft,5:0} FT";
-        string throttle = $"THR {_model.Throttle * 100,3:0}%";
-        _hud.Text = paneFactor < 1f ? $"{speedAlt}\n{throttle}" : $"{speedAlt}   {throttle}";
-        if (!_held && _model.isStalled())
-            _hud.Text += "\n⚠ STALLED - SPEED UP";
-        if (!halted && !_crashed && _damageFlash > 0f)
-        {
-            _damageFlash -= (float)delta;
-            _hud.Text += $"\n{_damageFlashText}";
-        }
-        if (Damage?.Summary() is { Length: > 0 } dmgSummary)
-            _hud.Text += $"\nDMG {dmgSummary}";
-        // The weapon ammo readout is the weapon gauges + the WeaponReadout (drawn in the game's
-        // own HUD font from MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES), not this text block.
-        // Stunt run status lives in the marker HUD; keep the compact text line only
-        // as a fallback if the marker somehow wasn't built.
-        if (Stunt != null && Marker == null)
-            _hud.Text += $"\n{Stunt.StatusLine()}";
-        if (halted)
-        {
-            _hud.Text += "\n⏸ PAUSED — orbit: WASD/arrows · zoom: Shift/Ctrl · P (gamepad Start) resume · . step one frame";
-        }
-        else if (_crashed)
-        {
-            _hud.Text += "\n⚠ CRASHED — PRESS R (GAMEPAD Y/A) TO RESPAWN";
-        }
-        else
+        if (!halted && !_crashed)
         {
             Audio?.Update(simDt, _model.Throttle, _model.Speed / _model.Stats.FdSpeed,
                 1f - (Damage?.WorstFraction ?? 1f));
             // The throttle-slam gate needs the live value every frame, not just while its plume
             // is active, so it can tell a fresh climb from one already in progress.
             ThrottleSmoke?.Update(simDt, _model.Throttle);
-            if (SpeedCue != null)
+            if (SpeedCue != null && _viewCamera != null)
             {
                 var cameraPos = _viewCamera.GlobalPosition;
                 SpeedCue.Update(simDt, _model.Position, _model.Attitude, cameraPos.Y,
@@ -1564,7 +1581,7 @@ public partial class FlightController : Node3D
     /// <para>Gated on <see cref="IsHumanPiloted"/> (B6): the original's "local player" test is
     /// human-versus-AI, not pane 1 — every CSVM pane is a human pilot, so every pane is assisted
     /// (Decision 7). An AI plane takes the muzzle axis here rather than the original's dead-eye
-    /// scatter, which is out of scope (Decision 3): nothing in CSVM shoots back yet.</para></summary>
+    /// scatter, which arrives with D14's gunnery model.</para></summary>
     private Vector3 AssistedGunDirection(WeaponDef weapon, int gi, int mi, Node3D muzzle,
         Basis planeBasis, Vector3 inheritVel, double now)
     {
@@ -1843,7 +1860,7 @@ public partial class FlightController : Node3D
         // the HUD — both straight off the original's crash footage. The pose is set once here
         // and _Process writes nothing to the camera while crashed, so it holds until respawn.
         if (!CameraOwned)
-            _cam.CrashView(impact, _model.VelocityDir);
+            _cam?.CrashView(impact, _model.VelocityDir);
         if (_hudCanvas != null)
             _hudCanvas.Visible = false;
         string surface = surfaceId is { } sid
@@ -1918,6 +1935,16 @@ public partial class FlightController : Node3D
             t -= segments[i].Duration;
         }
         return segments[^1].Input;
+    }
+
+    /// <summary>The AI pilot's step: ask <see cref="Pilot"/> for this frame's input and mirror its
+    /// throttle into the controller's own lever, so the readers of <c>_throttle</c> (spawn smoke,
+    /// telemetry) see the flown value exactly as the keyboard ramp path leaves it.</summary>
+    private FlightInput NextPilotInput(float dt)
+    {
+        var input = Pilot!.Next(_model, dt);
+        _throttle = input.Throttle;
+        return input;
     }
 
     private FlightInput ReadKeyboard(float dt)
@@ -2246,7 +2273,7 @@ public partial class FlightController : Node3D
     {
         if (!CameraOwned)
         {
-            _cam.Snap(_model.Position, _model.Attitude, _model.Speed, _renderPose);
+            _cam?.Snap(_model.Position, _model.Attitude, _model.Speed, _renderPose);
         }
     }
 

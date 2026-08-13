@@ -318,6 +318,12 @@ and leave gaps when retiring old ones.
   the residual reading after the stop is a different question from the peak, and it is the one that
   found a mesh lit at the impact point for the rest of the session.
 - **INSTR-7** — **"Not decidable from this data" is a fact about the instrument, not the question — when a census comes back uniform, ask what else varies the quantity.** A degenerate reading blocks the *inference*, not the *answer*. Measured: all 88 `destroyable_parts` pairs ship equal, which correctly made (armor, hp) undecidable from `extracted/`, and the reading sat blocked for nine days — the original's armory varies armor independently of health and settled it in one screen.
+- **INSTR-13** — **An in-engine suite runs inside ONE frame: a physics body MOVED after creation
+  never re-enters the space queries — aim at bodies where they were created.** Creation-time
+  insertion is queryable immediately, but a later `GlobalTransform` write reaches the physics
+  space only on a physics flush a synchronous suite never gets. Measured (`ai-actor`): the ray
+  that returns the aircraft body at its spawn pose returns nothing at the flown-to position
+  3.7 km away, and every scripted round missed — reading as broken hittability.
 - **INSTR-12** — **A straight-up billboard probe reads edge-on and reports nothing about
   altitude.** A `cloudsprite` card is a `Facade`/`SphericalY` billboard, so a zero-green-pixels
   result looking straight up is a fact about billboard orientation, not proof the field is absent

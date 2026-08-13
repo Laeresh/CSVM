@@ -82,6 +82,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the forget + catch-up pass (B2), the intercept solver (B3), the four-list candidate scan (B4), and the fire call's step order + 1° launch scatter (B5).
 - `src/Flight/TurretDefs.cs` — typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
 - `src/Flight/TurretController.cs` — one carried turret gunner (M4 C9a): acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
+- `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle) → one `FlightInput` per sim step; a placeholder hold-course law until wave D.
 - `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
@@ -203,6 +204,7 @@ clusters they delegate to.
 - `src/Session/SurfaceDefTable.cs` — one of the original's per-surface anim-def vectors (`player_crash_*` / `touchdown_*` over the surface registry) and the cascade that indexes it with a struck material's surface id.
 - `src/Session/EffectPools.cs` — the `data/effect_pools.json` reader: how many copies of each effect template the stage builds, per ROOT, scaled by player count.
 - `src/Session/FlightRigAssembler.cs` — assembles one player's flight rig: painted plane, `FlightController`, loadout/ordnance, HUD instruments, damage visuals, audio, stunt run, spawn, crash runtime.
+- `src/Session/AiAircraftSpawner.cs` — spawns an AI-piloted aircraft into a running session (M4 A2): the flight-essential subset of a rig, an `AiPilot` at the controls, shooter ids from 100.
 
 ### Session root and tests
 
@@ -2117,6 +2119,18 @@ cue re-triggers no faster than the interval.
 ⚠ The whole swept segment must be tested, never the endpoints: a gun round covers ~8 m per 60 Hz
   frame, so a per-frame point test misses most passes outright.
 
+## src/Flight/AiPilot.cs
+The non-player `FlightModel` driver (M4 A2): standing orders in (heading in the mission-data
+`SpawnPoint.HeadingDeg` convention, altitude, throttle), one `FlightInput` per sim step out, read
+by a `FlightController` whose `Pilot` is set. Pure over the model state and its own fields (no
+clocks, no randomness, no node reads), so a fixed-dt run is deterministic (`AiPilotTests`).
+⚠ Orders are plain mutable fields BY DESIGN — the original's mission script retargets/re-nets an
+  AI at runtime (`SET_AI_NET`, `ADD_OTHER_TARGET`, …), so nothing here may be read-once at spawn.
+⚠ The control law is a placeholder (bank-to-turn + path-angle altitude hold): in THIS flight model
+  bank alone yaws only at the coupling rate and gravity is auto-cancelled, so the turn is carried
+  by PULL while banked steeply — wave D replaces the law with the shipped maneuver programs, and
+  the seam it replaces it through is exactly this class.
+
 ## src/Flight/IncomingFire.cs
 `--incoming[=metres[,wep_id]]` — the near-miss test rig: a phantom shooter 120 m on each player's
 six, alternating sides, firing the target's own gun (or the named weapon) into the shared pool under
@@ -2124,9 +2138,10 @@ a shooter identity no player holds. Exists because nothing in the world shoots b
 the cue would otherwise need a second pilot in splitscreen. Aims along the target's own nose with a
 lateral offset, so the round overtakes on a parallel track and the pass distance holds without lead
 maths.
-⚠ **Near misses only — a hit cannot be simulated by any rig.** An aircraft exists to the projectile
-  raycast as nothing at all (collision is the swept `PlaneCollider` query boxes, not a body), which
-  is why `bullet_hit_sg` stays unbuildable (`BL-226`).
+⚠ **Near misses by construction, not by limitation.** Since A1 an aircraft IS a projectile target
+  (`AircraftBody`), so this rig deliberately never aims at the plane; hit feedback (`BL-226`)
+  needs a real shooter — another pilot, or an M4 AI plane once one fires (`--ai=` spawns them
+  unarmed-in-behaviour today).
 ⚠ Standoff (120 m) was originally kept short because `CANNON_SPREAD` was wrongly read as a dispersion
   cone that grows with range; A1 (`BL-342`) removed that scatter, so a round now leaves dead straight
   and the achieved pass distance equals the requested one at any standoff. No data-driven reason
@@ -3078,7 +3093,10 @@ is solid and a mid-air resolves through the same SurviveHit/Crash as terrain; `C
 toggle the body's hittability; the sim half is `SimStep(dt)`, called by
 `_PhysicsProcess` (realtime clock) or by `GameSession` (fixed/halted clock). `SimStep` also ticks
 `Turrets` (the carried gunners, M4 C9a) after the fire outcome, so the crash branch's early
-return silences them; `WorldBlocksLine` is their world-only line-of-sight ray. Collaborators:
+return silences them; `WorldBlocksLine` is their world-only line-of-sight ray. An AI aircraft
+(M4 A2) is this SAME node with `Pilot` (an `AiPilot`) as its input source, `IsHumanPiloted`
+false, `Setup(null)` for the camera (every camera write skipped, `_cam` null) and no HUD canvas
+built — flight, collision, weapons and damage are byte-for-byte the player's path. Collaborators:
 FlightModel, CameraController + CamParams, SpeedCue, Loadout + ProjectilePool (guns/rockets),
 `CollideDamageSink` →
 `AnimRuntime.CollideDamageAt` (fly-through facades), CrashRuntime, every HUD widget and animator.
@@ -3166,8 +3184,8 @@ from the gun branch alone.
   `param_1 == DAT_0071c298` test is human-versus-AI, not pane 1 (Decision 7 in
   `docs/plans/PLAN-sticky-bullets.md`). Gating it on `PlayerIndex == 0` would silently leave panes 2–4
   unassisted, which is very hard to notice from inside pane 1. Gated instead on
-  `IsHumanPiloted` (B6, default true) — a no-op today, since CSVM has no AI planes yet; it takes
-  over once M4 lands them.
+  `IsHumanPiloted` (B6, default true) — false on AI aircraft (A2), whose rounds take the muzzle
+  axis unassisted until D14 lands the dead-eye model.
 ⚠ `WorldPosition`/`WorldVelocity` expose the flight MODEL's sim values, not the node transform (the
   node lags by the render interpolation) — that is what another plane's assist aims at.
 Two one-shot breadcrumbs on the first gun round make the wiring visible in any flight log: the
@@ -3777,7 +3795,10 @@ when parent-driven), so a halt freezes the match with the sim. `DriveSimSteps` a
 `--debug-scoreboard --vs`'s one-shot forced kill (`_versusDebugKillFired`, same single-fire shape
 as `--crash`'s `_crashFired`): P1 downs P2 through the real `DebugForceCrash(killer)` → `Crash` →
 `Downed` path on the first sim step, so a scripted screenshot has a real, attributed kill without
-scripting an actual shot.
+scripting an actual shot. `BuildFlightRigs` also constructs `AiAircraftSpawner` over the same rig
+`Inputs`; `SpawnAiAircraft` (public — the M4 A2 actor seam, called by `--ai=` at build and by
+later waves mid-session) adds each AI plane to `_aiPlanes`, stepped in `DriveSimSteps` after the
+rigs (a realtime clock lets them tick themselves, like the rigs).
 ⚠ **It parses no args and resolves nothing** — the Launcher hands it the one `SessionSpec` its
   session is built from; **a new flag is a SessionSpec change**. `_menuPads` is the deliberate
   exception: join-flow session state riding the `LauncherContext`, never the spec.
@@ -4001,7 +4022,7 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/Suites.cs
-The registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
+The 41 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
 the full-rig `Loadout.ForRig`), live weapon fire, the carried turret gunners (`carried-turrets`:
 build from ai.zrd + the thirdp mount, arc-centre rest pose, track/fire/hit under the host's
 shooter id, bored-window fire suppression with live tracking, the nearer-end-stop park, YAW [0,0]
@@ -4012,6 +4033,11 @@ must stay non-optional, `Downed`-into-`VersusMatch` attribution: the weapon kill
 exactly the shooter, killer-less and unowned-round deaths score nobody, and the VS respawn loop:
 `AutoRespawnAfter` 3 s respawns at that mark in sim frames, respawn reports nothing, null waits
 for R),
+the AI actor seam (`ai-actor`: an `AiPilot`-driven plane spawned into an already-stepped sim —
+present, flying its orders, retargetable mid-flight, damageable and killable with the kill
+attributed; ⚠ its gunfire phases run at the SPAWN pose because a suite lives inside ONE frame
+and a body moved after creation is invisible to space queries until a physics flush — the same
+ray that hits it at spawn returns nothing at the flown-to position),
 destructible stages/death/census, animation
 stops and bounce-terminated launches, the full effects sweep (`effects-census`: every effect
 resolves, template meshes peak at the CALL SITE not the stage origin, none stays lit after its
@@ -4311,6 +4337,21 @@ extraction) and as an `effects-census` condition on whatever chapter the run was
 ⚠ The three gun-impact roots are sized **1** on purpose (C8 throttles the family to one play per
   0.1 s per name and bounds each to 0.3 s): pooling them buys copies nothing uses. Raising them
   belongs with removing that throttle, which is its own step with its own emitter-count check.
+
+## src/Session/AiAircraftSpawner.cs
+Spawns an AI-piloted aircraft into a RUNNING session (M4 A2), any time after the build: the
+flight-essential subset of a player rig — painted plane, `FlightController` with an `AiPilot`,
+`IsHumanPiloted` false, `Setup(null)` (no camera), no HUD/devices, collider/body/damage, stock
+loadout, the standard crash runtime — over the same `FlightRigAssembler.Inputs` the rigs used.
+`GameSession.SpawnAiAircraft` is the entry point (`--ai=` is its CLI probe); the session steps
+every spawned plane in `DriveSimSteps` after the rigs. Shooter ids run from `ShooterIdBase` (100),
+outside every player index and `IncomingFire.ShooterId`.
+⚠ Liveries draw from the session paint stream AFTER every player (players draw at build, AI at
+  spawn) — player paint is unchanged by AI existing; keep that ordering.
+⚠ The spawned subtree is deliberately NOT indexed into the world runtime's `NameResolver` (same
+  as a player's plane): planes.zbd gamez indices collide with the chapter's by-index map — the
+  `NameResolveFallback` case. A later item making AI aircraft addressable by mission animations
+  goes through `AnimRuntime.IndexStage`, which owns the find-cache invalidation.
 
 ## src/Session/FlightRigAssembler.cs
 Assembles one player's flight rig: the painted plane model, the `FlightController` and everything hung

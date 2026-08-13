@@ -71,6 +71,10 @@ public partial class GameSession : Node3D
     // sees (skydome / cloud deck / whiteout). Exactly one entry in single player,
     // wrapping the main-viewport _camera below — so the 1P render path is unchanged.
     private readonly List<PlayerRig> _rigs = new();
+
+    // Every AI aircraft spawned into this session (M4 A2) — stepped in DriveSimSteps after the
+    // player rigs, freed with the world subtree.
+    private readonly List<FlightController> _aiPlanes = new();
     // scratch: rig camera positions for the edge extender
     private readonly List<Vector3> _focusPoints = new();
     // Pickable subtrees that live beside the world content rather than under it — the anim lab's
@@ -158,6 +162,9 @@ public partial class GameSession : Node3D
     // the tree order Godot's physics tick would have used. Dropped by ReturnToMenu.
     private ProjectilePool? _projectiles;
     private IncomingFire? _incomingFire;   // --incoming: the near-miss test rig
+    // The AI actor seam (M4 A2): the spawner is built with the rigs; every AI aircraft it has
+    // spawned is stepped in DriveSimSteps after the player rigs and freed with the world.
+    private AiAircraftSpawner? _aiSpawner;
     // The dogfight scorekeeping (--vs): built with the rigs, fed their Downed reports, its clock
     // advanced on the sim dt (never wall time). Null outside Versus — the Downed events then
     // simply have no subscriber. Freed with this node; flight holds no match state.
@@ -239,6 +246,27 @@ public partial class GameSession : Node3D
     /// halts the shared world, so it is not one player's to press (the same rule
     /// <see cref="FlightController.AllowPause"/> applies to the in-flight binding).</summary>
     private bool HaltAllowed => !_spec.Fly || _rigs.Count == 1;
+
+    /// <summary>Spawns an AI-piloted aircraft into this session at runtime — the M4 actor seam.
+    /// Works any time after the flight build (the <c>--ai=</c> flag calls it there; generators
+    /// and the mission script call it mid-session): the plane joins the shared world, ticks on
+    /// the session clock like every rig, is hittable/damageable through the shared pool, and
+    /// reports its death through <c>Downed</c>. Null when this session built no flight rigs
+    /// (viewer/freecam/anim-lab have no spawner).</summary>
+    public FlightController? SpawnAiAircraft(string planeName, Vector3 pos, Vector3 lookAt,
+        AiPilot pilot)
+    {
+        if (_aiSpawner == null)
+        {
+            GD.PushWarning($"ai: no spawner in this session mode — '{planeName}' not spawned");
+            return null;
+        }
+        var ai = _aiSpawner.Spawn(planeName, pos, lookAt, pilot);
+        _aiPlanes.Add(ai);
+        ai.Downed += (victim, killer) =>
+            GD.Print($"ai: {ai.Name} downed (shooter id {victim}, killer {killer?.ToString() ?? "none"})");
+        return ai;
+    }
 
     /// <summary>Builds one flight/view session from the spec (mode, chapter, plane, spawn, …)
     /// into a fresh <see cref="_worldRoot"/> so Esc-to-menu can tear it all down and a new session
@@ -1608,46 +1636,47 @@ public partial class GameSession : Node3D
         IFlightStarts flightStarts = race != null && !_spec.Det
             ? new RaceGrid(_spawnPicker, GroundSampler())
             : _spawnPicker;
+        var rigInputs = new FlightRigAssembler.Inputs
+        {
+            Ambience = _ambience,
+            PlanesGamez = planesGamez,
+            StatsFor = StatsFor,
+            CamParamsFor = CamParamsFor,
+            RigCount = _rigs.Count,
+            MixGain = mixGain,
+            PadAssignment = padAssignment,
+            PaintRng = paintRng,
+            SpawnList = spawnList,
+            SpawnBase = spawnBase,
+            WeaponDefs = weaponDefs,
+            WeaponMessages = weaponMessages,
+            StockLoadouts = stockLoadouts,
+            TurretDefs = turretDefs,
+            Shakes = shakeDefs,
+            Projectiles = projectiles,
+            HudFont = hudFont,
+            ReticleTex = reticleTex,
+            StuntZones = stuntZones,
+            Race = race,
+            VersusMatch = versus,
+            Rigs = _rigs,
+            Textures = state.Textures,
+            ZrdrPath = state.ZrdrPath,
+            ChapterZrdrPath = SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter),
+            MissionZrdrPath = state.MissionZrdrPath,
+            Gamez = state.Gamez,
+            WorldScene = state.WorldScene,
+            WorldRuntime = state.WorldRuntime,
+            WorldEffects = worldEffects,
+            TouchdownDefs = _worldEffectsFactory.TouchdownDefs,
+            CrashProgram = state.CrashProgram,
+            Sounds = state.Sounds,
+            SoundDefs = state.SoundDefs,
+            SoundGroups = state.SoundGroups,
+            DebugCollision = state.DebugCollision,
+        };
         var assembler = new FlightRigAssembler(_spec, _liveryResolver, flightStarts,
-            _worldEffectsFactory, _worldRoot!, new FlightRigAssembler.Inputs
-            {
-                Ambience = _ambience,
-                PlanesGamez = planesGamez,
-                StatsFor = StatsFor,
-                CamParamsFor = CamParamsFor,
-                RigCount = _rigs.Count,
-                MixGain = mixGain,
-                PadAssignment = padAssignment,
-                PaintRng = paintRng,
-                SpawnList = spawnList,
-                SpawnBase = spawnBase,
-                WeaponDefs = weaponDefs,
-                WeaponMessages = weaponMessages,
-                StockLoadouts = stockLoadouts,
-                TurretDefs = turretDefs,
-                Shakes = shakeDefs,
-                Projectiles = projectiles,
-                HudFont = hudFont,
-                ReticleTex = reticleTex,
-                StuntZones = stuntZones,
-                Race = race,
-                VersusMatch = versus,
-                Rigs = _rigs,
-                Textures = state.Textures,
-                ZrdrPath = state.ZrdrPath,
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter),
-                MissionZrdrPath = state.MissionZrdrPath,
-                Gamez = state.Gamez,
-                WorldScene = state.WorldScene,
-                WorldRuntime = state.WorldRuntime,
-                WorldEffects = worldEffects,
-                TouchdownDefs = _worldEffectsFactory.TouchdownDefs,
-                CrashProgram = state.CrashProgram,
-                Sounds = state.Sounds,
-                SoundDefs = state.SoundDefs,
-                SoundGroups = state.SoundGroups,
-                DebugCollision = state.DebugCollision,
-            });
+            _worldEffectsFactory, _worldRoot!, rigInputs);
         for (int pi = 0; pi < _rigs.Count; pi++)
         {
             assembler.Assemble(pi, _rigs[pi]);
@@ -1812,6 +1841,27 @@ public partial class GameSession : Node3D
             _incomingFire = incoming;
             GD.Print($"--incoming: rounds passing {incomingPass:0.0} m from every player" +
                      (_spec.IncomingWeapon != null ? $" ({_spec.IncomingWeapon})" : " (their own gun)"));
+        }
+
+        // The AI actor seam (M4 A2): the spawner shares the session data the rigs were built
+        // from, and SpawnAiAircraft works from here on — at build (--ai=), or at any later sim
+        // step (generators, the mission script, the ai-actor suite's runtime-spawn case).
+        _aiSpawner = new AiAircraftSpawner(_spec, _liveryResolver, _worldEffectsFactory,
+            _worldRoot!, rigInputs);
+        if (_spec.AiPlanes is { Count: > 0 } aiPlanes && _rigs.Count > 0
+            && _rigs[0].Controller is { } lead)
+        {
+            // Ahead of P1 on its own spawn heading, fanned right/left, each holding that course.
+            var basis = lead.GlobalTransform.Basis;
+            var fwd = -basis.Z;
+            var right = basis.X;
+            for (int i = 0; i < aiPlanes.Count; i++)
+            {
+                float lateral = 60f * ((i + 1) / 2) * (i % 2 == 0 ? 1f : -1f);
+                var pos = lead.WorldPosition + fwd * 250f + right * lateral;
+                SpawnAiAircraft(aiPlanes[i], pos, pos + fwd, AiPilot.HoldingCourse(pos, pos + fwd));
+            }
+            state.What += $" + {aiPlanes.Count} AI";
         }
 
         if (_rigs.Count > 1)
@@ -2221,6 +2271,12 @@ public partial class GameSession : Node3D
             foreach (var rig in _rigs)
             {
                 rig.Controller?.SimStep(dt);
+            }
+            // AI aircraft step after the player rigs — the tree order their _PhysicsProcess
+            // callbacks take on a realtime clock, since they spawn after every rig is built.
+            foreach (var ai in _aiPlanes)
+            {
+                ai.SimStep(dt);
             }
             // The weapon lab has no sim step of its own: it is hosted by player 1's
             // FlightController, which owns the fire clock, and fires into _projectiles above.
