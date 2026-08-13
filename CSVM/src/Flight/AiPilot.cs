@@ -27,6 +27,14 @@ public sealed class AiPilot
     /// explicitly, so it stays a visible order rather than a hidden override.</summary>
     public const float PatrolThrottle = 0.5f;
 
+    /// <summary>Invented: how fast lay off walks the throttle toward the ease-off speed, per
+    /// second (the decoded constant is the speed factor, not a lever rate).</summary>
+    public const float LayOffThrottleRatePerS = 0.4f;
+
+    /// <summary>Invented: the throttle floor while laying off — the pilot slows down, it does
+    /// not park in mid-air.</summary>
+    public const float LayOffMinThrottle = 0.3f;
+
     /// <summary>Ordered heading, degrees — the mission-data convention
     /// (<c>SpawnPoint.HeadingDeg</c>): the nose (−Z) yawed about world up by this angle.</summary>
     public float TargetHeadingDeg;
@@ -49,10 +57,10 @@ public sealed class AiPilot
 
     /// <summary>The nine-mode state machine (D11), or null for the bare-orders pilot above.
     /// When set, each <see cref="Next"/> steps the machine and dispatches on its mode: patrol
-    /// flies <see cref="Patrol"/>, pursue / lay off chase the gunner's target, evade and avoid
-    /// crash fly the machine's own orders, an evasive maneuver plays its
-    /// <see cref="ManeuverExecutor"/> until done, and stunned holds the controls neutral.
-    /// Mutable like every other order.</summary>
+    /// flies <see cref="Patrol"/>, pursue chases the gunner's target, lay off holds its entry
+    /// course at eased throttle so the pursuer catches up (D15), evade and avoid crash fly the
+    /// machine's own orders, an evasive maneuver plays its <see cref="ManeuverExecutor"/> until
+    /// done, and stunned holds the controls neutral. Mutable like every other order.</summary>
     public AiModeMachine? Machine;
 
     /// <summary>Ordered altitude, metres (world Y).</summary>
@@ -111,7 +119,8 @@ public sealed class AiPilot
         if (Machine is { } machine)
         {
             var mode = machine.Update(model.Position, model.VelocityDir * model.Speed,
-                quarry?.WorldPosition, quarry?.Pilot?.Machine?.Mode, dt);
+                quarry?.WorldPosition, quarry?.Pilot?.Machine?.Mode, dt,
+                quarry?.WorldVelocity, quarry?.IsHumanPiloted ?? false);
             switch (mode)
             {
                 case AiMode.Stunned:
@@ -137,9 +146,13 @@ public sealed class AiPilot
                     break;
 
                 case AiMode.Pursue:
-                case AiMode.LayOff:
                     if (quarry != null)
                         SteerPursuit(model, quarry);
+                    break;
+
+                case AiMode.LayOff:
+                    if (quarry != null)
+                        SteerLayOff(model, machine, quarry, dt);
                     break;
 
                 default: // patrol and the never-entered danger-zone modes fly the net/orders
@@ -224,6 +237,25 @@ public sealed class AiPilot
             TargetHeadingDeg = HeadingDegOf(toQuarry);
         TargetAltitude = quarry.WorldPosition.Y;
         Throttle = 1f; // a stern chase at cruise never closes; pursuit runs flat out
+    }
+
+    /// <summary>Lay off (D15, the rubber-band assist): let the pursuer catch up. Holds the
+    /// course captured at mode entry — staying ahead of the pursuer instead of turning back
+    /// into a head-on — and walks the throttle toward a speed of
+    /// <see cref="AiModeMachine.SixthSenseFactor"/> × the pursuer's own speed. The factor is
+    /// the decoded <c>sixth_sense_factor</c> ("the ease-off while being pursued"); reading it
+    /// as a pursuer-speed match, and the lever rate/floor, are invented. Fire is held by the
+    /// host's mode gate — only pursue shoots.</summary>
+    private void SteerLayOff(FlightModel model, AiModeMachine machine, FlightController pursuer,
+        float dt)
+    {
+        TargetHeadingDeg = machine.LayOffHeadingDeg;
+        TargetAltitude = machine.LayOffAltitude;
+        float desired = machine.SixthSenseFactor * pursuer.WorldVelocity.Length();
+        float step = LayOffThrottleRatePerS * dt;
+        Throttle = model.Speed > desired
+            ? Mathf.Max(LayOffMinThrottle, Throttle - step)
+            : Mathf.Min(1f, Throttle + step);
     }
 
     /// <summary>Patrol: the net follower turns the graph walk into this step's heading and

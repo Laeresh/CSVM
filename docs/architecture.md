@@ -2213,11 +2213,13 @@ The non-player `FlightModel` driver (M4 A2): standing orders in (heading in the 
 `SpawnPoint.HeadingDeg` convention, altitude, throttle, optional `Patrol` net follower, optional
 `Gunner` whose live target is chased as a flat-out plain pursuit, optional `Machine` — D11's
 nine-mode state machine, which when set is stepped first and dispatches the input source per
-mode: patrol/danger-zone stubs fly the net, pursue and lay off chase the gunner's target, evade
-and avoid crash fly the machine's own orders, an evasive maneuver plays its `ManeuverExecutor`,
-stunned returns neutral sticks), one `FlightInput` per sim step out, read by a `FlightController`
-whose `Pilot` is set. Pure over the model state and its own fields, seeded randomness only, so a
-fixed-dt run is deterministic (`AiPilotTests`).
+mode: patrol/danger-zone stubs fly the net, pursue chases the gunner's target, lay off (D15)
+holds its entry course and walks the throttle toward `sixth_sense_factor` × the pursuer's speed
+so the human catches up (the factor is decoded; the speed-match application and the 0.4/s lever
+rate / 0.3 floor are invented), evade and avoid crash fly the machine's own orders, an evasive
+maneuver plays its `ManeuverExecutor`, stunned returns neutral sticks), one `FlightInput` per sim
+step out, read by a `FlightController` whose `Pilot` is set. Pure over the model state and its
+own fields, seeded randomness only, so a fixed-dt run is deterministic (`AiPilotTests`).
 ⚠ Orders are plain mutable fields BY DESIGN — the original's mission script retargets/re-nets an
   AI at runtime (`SET_AI_NET`, `ADD_OTHER_TARGET`, …), so nothing here may be read-once at spawn.
 ⚠ The steering law is a placeholder (bank-to-turn + turn pull + an altitude leash): in THIS
@@ -2237,17 +2239,22 @@ into pursue inside `min_ai_active_dist`/vehicle `attack` (both 2000 shipped, `Ai
 `FlightController.TakeProjectileHit` for AI planes) and a FAILED test breaks off; a pursued AI
 target entering an evasive state rolls sixth-sense and a FAILED test stuns for
 `stun_recovery_interval`; an evasive maneuver is an `EligibleFor`-culled, signature-weighted,
-seeded library draw played to `ManeuverExecutor.Done`, then back. Transitions raise `ModeChanged`
-(the session's `ai mode:` log lines); rolls raise `RollLogged` in the engine's pass/fail wording.
-Engine-free; pinned by `AiModeMachineTests` + the `ai-modes` suite.
+seeded library draw played to `ManeuverExecutor.Done`, then back; `lay off` is D15's rubber-band
+assist (decoded: the mode and `sixth_sense_factor` 0.994→1.07, "the ease-off while pursued") —
+pursue eases into it when a chasing HUMAN target has fallen behind, and it releases when the
+pursuer catches up or stops chasing; `AssistEnabled` false (`--no-assist`) never enters it.
+Transitions raise `ModeChanged` (the session's `ai mode:` log lines); rolls raise `RollLogged`
+in the engine's pass/fail wording. Engine-free; pinned by `AiModeMachineTests` + the `ai-modes`
+suite.
 ⚠ Named inventions: evade's timed scramble run, the avoid-crash probe/climb-out geometry, the
-  return_range-as-leash reading (anchor undecoded), the ×3 signature weight, and the flat
-  steady-hand roll (the design's damage weighting is undecoded).
+  return_range-as-leash reading (anchor undecoded), the ×3 signature weight, the flat
+  steady-hand roll (the design's damage weighting is undecoded), and lay off's entry/exit
+  geometry (rear/chase cones, 350 m enter / 250 m caught-up, 2 s hold). No condition on the
+  player's health is modelled: nothing decoded supports one. Splitscreen is an extension
+  decision: the assist follows whichever human the AI is engaging, not player one.
 ⚠ The two danger-zone modes are enum-only, never entered: their gate data is the undecoded
   4-extra net-tag system (F17), and `daredevil_chance` stays unwired until it exists. Do not
   invent an entry condition.
-⚠ `lay off` deliberately behaves as pursue: D15 lands the rubber-band behaviour INSIDE this
-  existing mode, not as a new machine.
 
 ## src/Flight/ManeuverExecutor.cs
 Plays one library maneuver's timed step program as `FlightInput` values (M4 D13) — `Next(model,

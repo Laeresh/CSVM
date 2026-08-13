@@ -2018,11 +2018,13 @@ public partial class FlightController : Node3D
                          $"bias {score.Bias:0} rank {score.Rank:0})");
             }
         }
-        // The mode machine gates the trigger (D11): a standing target is kept in every mode —
-        // patrol reads its position for the activation test — but only pursue / lay off shoot.
+        // The mode machine gates the trigger (D11/D15): the target stays acquired in every
+        // mode — patrol reads its position for the activation test — but only pursue shoots.
+        // Lay off holds fire: the mode exists to let the player catch up and recover (the
+        // design's rubber-band assist), and shooting the pursuer it is favouring defeats it.
         // Acquisition itself is bounded by the activation radius (D12's 1e21 cutoff), which is
         // the same 2000 m the machine activates at, so patrol still sees the approach.
-        if (Pilot?.Machine is { } modes && modes.Mode is not (AiMode.Pursue or AiMode.LayOff))
+        if (Pilot?.Machine is { } modes && modes.Mode != AiMode.Pursue)
             return;
         GunGroup? group = _fire.GunSel >= 0 && _fire.GunSel < _firableGuns.Length
             ? _firableGuns[_fire.GunSel]

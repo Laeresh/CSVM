@@ -1401,7 +1401,15 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
     behind `--ai-attack[=skill]`; the A4 kill divergence retired (whole-vehicle health ≤ 0 via
     `PlaneDamage.IsDestroyed`, `critical` kept parsed); pinned by the `ai-gunnery` suite (skill 1
     hit 6/30 vs skill 9 13/30, assist exclusion A/B'd) + `AiSkillsTests`/`AiGunnerTests`
-15. ☐ D15 — The rubber-band assist, behind a switch
+15. ☑ D15 — The rubber-band assist, behind a switch — **landed 2026-08-13**: lay off is live
+    inside the D11 seam — pursue eases into it when a chasing human target falls behind
+    (invented 350 m enter / 250 m caught-up / rear+chase cones / 2 s dwell, named as such),
+    the pilot holds its entry course at a throttle walked toward `sixth_sense_factor` × the
+    pursuer's speed (the decoded 0.994→1.07 constant; the speed-match application invented)
+    and HOLDS FIRE (only pursue shoots now); `--no-assist` (default: assist on) sets
+    `AssistEnabled` false so the machine never enters it; splitscreen follows whichever human
+    the AI is engaging (extension decision). Pinned by `AiModeMachineTests` + the `ai-modes`
+    suite's assist A/B
 
 ### Wave E — Communication
 
