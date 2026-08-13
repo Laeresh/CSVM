@@ -194,8 +194,8 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Active plan: [`PLAN-sticky-bullets.md`](docs/PLAN-sticky-bullets.md)** (written 2026-08-13; 7
 items, 3 waves) — builds `BL-342`, the original's per-muzzle gun aim assist, and removes a
-`CANNON_SPREAD` scatter CSVM wrongly applies that the original never did. Strictly ordered. Wave A
-(A1) complete, Wave B's `B2`–`B5` complete. Next: `B6`, then C7 at the controls.
+`CANNON_SPREAD` scatter CSVM wrongly applies that the original never did. Strictly ordered. Waves A
+and B complete. Next: `C7` at the controls.
 `PLAN-object-motion-decode.md` (written 2026-08-10) is paused mid-plan with Wave C (from `C6`) still
 open; resume it once sticky-bullets lands.
 Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45` and `PT-47`

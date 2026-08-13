@@ -1636,9 +1636,12 @@ B5 add their own cases to. `FlightController` owns one `GunAimSlot[]` per firabl
 exactly as `FireControl`'s own `(group, muzzle)` pairs — no re-derivation of the original's
 `weaponGroup·2+barrelToggle` index), built alongside `_firableGuns`, and ticks every group's array
 immediately BEFORE performing `_fire.Step`'s outcome — the original restamps a slot's `lastUpdate`
-on every round that goes out (B5's job), so the forget pass must see the pre-shot state. Runs for
-every pilot unconditionally today because every pilot in CSVM is human (Decision 7 in
-`docs/PLAN-sticky-bullets.md`); B6 adds the human-piloted gate once AI planes exist.
+on every round that goes out (B5's job), so the forget pass must see the pre-shot state. Gated on
+`FlightController.IsHumanPiloted` (B6, default true) — the original ticks this only for the local
+player, and an AI plane's dead-eye path has no slots at all. Every CSVM plane is human-piloted
+today (Decision 7 in `docs/PLAN-sticky-bullets.md`), so the gate is a no-op until M4 lands AI
+aircraft; `AssistedGunDirection` falls back to the unassisted muzzle axis for a non-human pilot,
+the same fallback a barrel with no slot already takes.
 ⚠ **Godot's `Vector3.Slerp` throws "Argument is not normalized" when the two directions are
   numerically parallel or opposite** — its rotation axis comes from a cross product that
   degenerates at 0°/180° separation (`FlightModel`'s `VelocityDir` slerp hits the identical crash
@@ -3041,8 +3044,9 @@ from the gun branch alone.
 ⚠ Runs for EVERY pilot, splitscreen included, because every pilot in CSVM is human: the original's
   `param_1 == DAT_0071c298` test is human-versus-AI, not pane 1 (Decision 7 in
   `docs/PLAN-sticky-bullets.md`). Gating it on `PlayerIndex == 0` would silently leave panes 2–4
-  unassisted, which is very hard to notice from inside pane 1. B6 adds the human-piloted gate for
-  M4's AI planes.
+  unassisted, which is very hard to notice from inside pane 1. Gated instead on
+  `IsHumanPiloted` (B6, default true) — a no-op today, since CSVM has no AI planes yet; it takes
+  over once M4 lands them.
 ⚠ `WorldPosition`/`WorldVelocity` expose the flight MODEL's sim values, not the node transform (the
   node lags by the render interpolation) — that is what another plane's assist aims at.
 Two one-shot breadcrumbs on the first gun round make the wiring visible in any flight log: the

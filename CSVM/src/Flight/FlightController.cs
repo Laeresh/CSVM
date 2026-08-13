@@ -259,6 +259,14 @@ public partial class FlightController : Node3D
     /// identity a round it fired carries (<c>ProjectilePool.Spawn</c>'s shooter id).</summary>
     public int PlayerIndex;
 
+    /// <summary>Whether a person is flying this plane. Gates the gun aim assist
+    /// (<c>BL-342</c>/B6): true runs <see cref="AimAssist"/> as normal, false takes the muzzle axis
+    /// unassisted, the same fallback a barrel with no slot already uses. Defaults true and every
+    /// CSVM plane is human-piloted today, so this is a no-op until M4 lands AI aircraft; it is the
+    /// original's human-versus-AI split (`FUN_004b6530`'s else-branch), not "pane 1 only" — see
+    /// Decision 7 in `docs/PLAN-sticky-bullets.md`.</summary>
+    public bool IsHumanPiloted = true;
+
     /// <summary>The world's destructibles, when this session has a world runtime — the aim assist's
     /// third candidate list (`BL-342`, an approximation of the original's `targets.zrd`
     /// `MStructList`). Null in every build with no world (the weapon lab, the suites), which costs
@@ -1003,13 +1011,17 @@ public partial class FlightController : Node3D
             // The assist's forget + catch-up pass (docs/org/aim-assist.md "Per frame") — ticked
             // on the PRE-shot state, since the original restamps a slot's last-update on every
             // round that goes out (B5's job) and this pass must run before that happens this
-            // frame. Runs for every pilot today because every pilot is human (Decision 7); B6
-            // adds the human-piloted gate once AI planes exist.
-            double aimNow = GameClock.Current?.Time ?? 0.0;
-            for (int gi = 0; gi < _aimSlots.Length; gi++)
+            // frame. Gated on IsHumanPiloted (B6): the original runs this only for the local
+            // player, and an AI plane's dead-eye path has no slots to tick at all. Every CSVM
+            // plane is human-piloted today, so this is a no-op until M4 lands AI aircraft.
+            if (IsHumanPiloted)
             {
-                AimAssist.Tick(_aimSlots[gi], aimNow, dt,
-                    _model.Stats.StickyBulletForgetInterval, _model.Stats.StickyBulletCatchupRate);
+                double aimNow = GameClock.Current?.Time ?? 0.0;
+                for (int gi = 0; gi < _aimSlots.Length; gi++)
+                {
+                    AimAssist.Tick(_aimSlots[gi], aimNow, dt,
+                        _model.Stats.StickyBulletForgetInterval, _model.Stats.StickyBulletCatchupRate);
+                }
             }
             ApplyFireOutcome(_fire.Step(dt, fireInputs));
         }
@@ -1518,17 +1530,19 @@ public partial class FlightController : Node3D
     /// <c>FUN_004b6530</c>) — scan, lead, plane-local smoothing, 1° scatter — through
     /// <see cref="AimAssist.FireDirection"/>, which also restamps this barrel's slot so the forget
     /// timer runs from the last SHOT. A barrel with no slot (a group built before the slot array,
-    /// which cannot happen in a bound loadout) falls back to its own muzzle axis.
+    /// which cannot happen in a bound loadout) falls back to its own muzzle axis, the same fallback
+    /// an AI-piloted plane takes (below).
     ///
-    /// <para>Runs for every pilot, because every pilot in CSVM is human — the original's
-    /// "local player" test is human-versus-AI, not pane 1 (Decision 7); B6 adds the explicit gate
-    /// when M4 lands AI aircraft.</para></summary>
+    /// <para>Gated on <see cref="IsHumanPiloted"/> (B6): the original's "local player" test is
+    /// human-versus-AI, not pane 1 — every CSVM pane is a human pilot, so every pane is assisted
+    /// (Decision 7). An AI plane takes the muzzle axis here rather than the original's dead-eye
+    /// scatter, which is out of scope (Decision 3): nothing in CSVM shoots back yet.</para></summary>
     private Vector3 AssistedGunDirection(WeaponDef weapon, int gi, int mi, Node3D muzzle,
         Basis planeBasis, Vector3 inheritVel, double now)
     {
         var muzzleXf = muzzle.GlobalTransform;
         var slots = gi >= 0 && gi < _aimSlots.Length ? _aimSlots[gi] : null;
-        if (slots == null || mi < 0 || mi >= slots.Length)
+        if (!IsHumanPiloted || slots == null || mi < 0 || mi >= slots.Length)
         {
             return -muzzleXf.Basis.Z.Normalized();
         }

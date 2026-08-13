@@ -133,7 +133,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☑ The constant-velocity intercept solver
 4. ☑ The candidate scan, rejection gates and scorer
 5. ☑ Wire the assist into the fire call, apply the 1° scatter, and decode what the reticle follows
-6. ☐ Who gets the assist (every human pilot, not just pane 1), and the shooter-authoritative invariant for later
+6. ☑ Who gets the assist (every human pilot, not just pane 1), and the shooter-authoritative invariant for later
 
 ### Wave C — Judge it
 
@@ -421,7 +421,7 @@ assist stays invisible. Decode it; do not pick it. And if the decode comes back 
 and leave the reticle alone rather than guessing, since a wrong pipper teaches the pilot to aim
 wrong.
 
-## B6 ☐ Who gets the assist, and the shooter-authoritative invariant for later
+## B6 ☑ Who gets the assist, and the shooter-authoritative invariant for later
 
 **Goal.** Every human pilot's guns are assisted, in splitscreen as in single player; AI planes will
 not be. When networking is built, the assist is already shaped so that a remote plane's rounds go
