@@ -129,7 +129,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Build the assist
 
-2. ☐ Per-muzzle slot state and the per-frame forget + catch-up update
+2. ☑ Per-muzzle slot state and the per-frame forget + catch-up update
 3. ☐ The constant-velocity intercept solver
 4. ☐ The candidate scan, rejection gates and scorer
 5. ☐ Wire the assist into the fire call, apply the 1° scatter, and decode what the reticle follows
@@ -221,7 +221,7 @@ integrator: this item is one line plus prose.
 
 # Wave B — Build the assist
 
-## B2 ☐ Per-muzzle slot state and the per-frame forget + catch-up update
+## B2 ☑ Per-muzzle slot state and the per-frame forget + catch-up update
 
 **Goal.** Each of the plane's gun barrels carries a plane-local gun line that lags behind a target
 direction, unwinds to centre when that barrel stops firing, and drags with the aircraft's own

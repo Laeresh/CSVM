@@ -78,6 +78,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/Loadout.cs` — `stock_loadouts.json` reader + `Bind` to a built plane: gun groups + hardpoints, markers→muzzle nodes; `--dump-loadout`.
 - `src/Flight/WeaponBench.cs` — the world-less 48-weapon mount-and-fire pass check behind `--weapon-test` and `weapons-fire`; fires the whole `ForRig` rig, no lab node involved.
 - `src/Flight/FireControl.cs` — the engine-free fire-control state machine (BL-295): trigger edges, fire clocks, ammo draw-down, both selectors, dry cues; `FlightController` performs its `FireOutcome`.
+- `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the engine-free forget + catch-up pass (B2); B3/B4 add the intercept solver and candidate scorer.
 - `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
@@ -1621,6 +1622,32 @@ lab flips them live on `FlightController`'s public fields (and `GameSession` set
 post-`_Ready`), so the adapter mirrors both into the machine every `Step`. `--fire` (guns) is just
 a forced held input, OR'd in by the adapter.
 
+## src/Flight/AimAssist.cs
+The gun aim assist (`BL-342`, decoded in `docs/org/aim-assist.md`). `GunAimSlot` is one gun
+barrel's plane-local state — `Smoothed` (what the round fires along), `Target` (what `Smoothed`
+chases), `LastUpdate` (game-time seconds) — mirroring the original's eight `0x24`-byte slots at
+plane `+0x3a4`. `AimAssist.Tick` (B2) is the per-frame forget + catch-up pass
+(`FUN_004b3e50`): past `forgetInterval` seconds since the slot was last touched the target unwinds
+to local forward; otherwise `Smoothed` slerps toward `Target` at `catchupRate` per second, snapping
+outright once a single frame covers the whole turn (`catchupRate·dt ≥ 1`). A plain, engine-free
+static class — no `GameClock` read inside it, `now`/`dt` are always passed in — so it unit-tests
+without a `FlightController`; proven in the in-engine `aim-assist` suite (`Suites.cs`), which B3/B4/
+B5 add their own cases to. `FlightController` owns one `GunAimSlot[]` per firable gun group (indexed
+exactly as `FireControl`'s own `(group, muzzle)` pairs — no re-derivation of the original's
+`weaponGroup·2+barrelToggle` index), built alongside `_firableGuns`, and ticks every group's array
+immediately BEFORE performing `_fire.Step`'s outcome — the original restamps a slot's `lastUpdate`
+on every round that goes out (B5's job), so the forget pass must see the pre-shot state. Runs for
+every pilot unconditionally today because every pilot in CSVM is human (Decision 7 in
+`docs/PLAN-sticky-bullets.md`); B6 adds the human-piloted gate once AI planes exist.
+⚠ **Godot's `Vector3.Slerp` throws "Argument is not normalized" when the two directions are
+  numerically parallel or opposite** — its rotation axis comes from a cross product that
+  degenerates at 0°/180° separation (`FlightModel`'s `VelocityDir` slerp hits the identical crash
+  and guards it the same way). `Tick` falls back to a normalized lerp near-parallel and snaps
+  outright near-opposite; do not replace that branch with a bare `Slerp` call.
+⚠ `PlaneStats.StickyBulletCatchupRate`/`StickyBulletForgetInterval` are the two of the four
+  `sticky_bullet_*` keys B2 consumes (shipped 5.0 / 1.5); `Inaccuracy`/`DistFactor` are B4/B5's and
+  are not parsed yet — do not add them here ahead of the items that use them.
+
 ## src/Flight/WeaponCursor.cs
 `FireControl`'s internal ammo-slot index math (an `internal` class — nothing else may call it):
 `NextArmed` is the firing cursor — the selected slot while it has rounds, else the next armed slot
@@ -1939,9 +1966,10 @@ maths.
 
 ## src/Flight/PlaneStats.cs
 Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` def chain) +
-engines.json stock engine power + player.json globals (the flight constants and the near-miss cue's
-`warning_shot_*` block, plus the decoded model's lift/AoA/G, turn/yaw-curve, pitch-fade and
-drag-fade-speed globals — docs/org/flightModel.md; converted
+engines.json stock engine power + player.json globals (the flight constants, the near-miss cue's
+`warning_shot_*` block, the gun aim assist's `sticky_bullet_catchup_rate`/`_forget_interval`
+(`AimAssist.cs`'s B2 — `_inaccuracy`/`_dist_factor` are not parsed yet), plus the decoded model's
+lift/AoA/G, turn/yaw-curve, pitch-fade and drag-fade-speed globals — docs/org/flightModel.md; converted
 exactly as the original does: MPH×0.44704, AoA/liftAOAs cosined, highGs/lowGs raw G — and as yet
 unread by FlightModel.cs), the `engine_sound` def name with its
 volume/pitch `SoundCurve`s (clamped two-point ramps), `destroyable_parts` → `DestroyablePart`

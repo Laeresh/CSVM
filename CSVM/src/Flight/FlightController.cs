@@ -376,6 +376,7 @@ public partial class FlightController : Node3D
     private int _projectileHitsLogged;           // verification breadcrumb: the first few hits log
     private FireControl? _fire;                  // the fire-control state machine; built in _Ready with the loadout
     private GunGroup[] _firableGuns = Array.Empty<GunGroup>(); // the firable gun groups in _fire's slot order (muzzle nodes, live ammo)
+    private GunAimSlot[][] _aimSlots = Array.Empty<GunAimSlot[]>(); // per _firableGuns group, one slot per muzzle — B2's assist state
     private bool _gunLoopOn;                     // the firing loop sound is currently playing
     private bool[] _gunLoggedFirst = Array.Empty<bool>(); // verification breadcrumb: each group logs its first live round once
     private int _rocketsLaunched;                // verification breadcrumb: the first few launches log their pylon
@@ -585,6 +586,27 @@ public partial class FlightController : Node3D
             _fire = new FireControl(_firableGuns, Loadout.Hardpoints,
                 AutoFireRockets, InfiniteAmmo, InitialGunSelect);
             _gunLoggedFirst = new bool[n];
+
+            // One aim-assist slot per muzzle, seeded to "no assist" (both directions local
+            // forward) — the original's slots start unused and the forget pass alone would reach
+            // the same state, this just skips the wait.
+            double aimNow = GameClock.Current?.Time ?? 0.0;
+            _aimSlots = new GunAimSlot[n][];
+            for (int gi = 0; gi < n; gi++)
+            {
+                var slots = new GunAimSlot[_firableGuns[gi].MuzzleCount];
+                for (int mi = 0; mi < slots.Length; mi++)
+                {
+                    slots[mi] = new GunAimSlot
+                    {
+                        Active = true,
+                        Smoothed = AimAssist.LocalForward,
+                        Target = AimAssist.LocalForward,
+                        LastUpdate = aimNow,
+                    };
+                }
+                _aimSlots[gi] = slots;
+            }
 
             // Bind the two weapon gauges — only for a system this plane actually carries.
             if (Gauges != null)
@@ -952,6 +974,17 @@ public partial class FlightController : Node3D
                 GunSelectHeld = GunSelectPressed(),
                 RocketSelectHeld = RocketSelectPressed(),
             };
+            // The assist's forget + catch-up pass (docs/org/aim-assist.md "Per frame") — ticked
+            // on the PRE-shot state, since the original restamps a slot's last-update on every
+            // round that goes out (B5's job) and this pass must run before that happens this
+            // frame. Runs for every pilot today because every pilot is human (Decision 7); B6
+            // adds the human-piloted gate once AI planes exist.
+            double aimNow = GameClock.Current?.Time ?? 0.0;
+            for (int gi = 0; gi < _aimSlots.Length; gi++)
+            {
+                AimAssist.Tick(_aimSlots[gi], aimNow, dt,
+                    _model.Stats.StickyBulletForgetInterval, _model.Stats.StickyBulletCatchupRate);
+            }
             ApplyFireOutcome(_fire.Step(dt, fireInputs));
         }
         Ordnance?.Update();   // hide a pylon's mounted rocket the moment it fired its last

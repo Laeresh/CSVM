@@ -120,6 +120,11 @@ public static class Suites
             "every stock loadout binds to its model with every marker resolved", LoadoutBind));
         into.Add(new TestHarness.Suite("weapons-fire",
             "all 48 weapons mount and fire from a built plane", WeaponsFire));
+        into.Add(new TestHarness.Suite("aim-assist",
+            "the gun aim assist's per-muzzle slot (B2): a ~0.2 s catch-up time constant that snaps "
+            + "outright past 1/catchup_rate, and a forget timer keyed to the last SHOT, not to losing "
+            + "a lock — plus the shipped sticky_bullet_* values player.json actually carries",
+            AimAssistSlots));
         into.Add(new TestHarness.Suite("loadout-forrig",
             "Loadout.ForRig covers every firepoint/pylon on all 11 airframes, seeded from stock", LoadoutForRig));
         into.Add(new TestHarness.Suite("warning-shot",
@@ -1686,6 +1691,140 @@ public static class Suites
             plane?.Free();
             textures.Dispose();
         }
+    }
+
+    /// <summary>B2's per-muzzle slot state: the forget + catch-up pass in isolation (no plane, no
+    /// pool — <see cref="AimAssist"/> is engine-free by design), plus a golden check that the two
+    /// keys it consumes parse off the real player.json at their documented shipped values
+    /// (docs/PLAN-sticky-bullets.md "What the data actually ships").</summary>
+    private static void AimAssistSlots(TestContext ctx)
+    {
+        AimAssistCatchup(ctx);
+        AimAssistForgetTimer(ctx);
+        AimAssistShippedData(ctx);
+    }
+
+    /// <summary>The catch-up slerp: a ~0.2 s time constant at the shipped catchup_rate (5.0), full
+    /// convergence given enough time, and an outright snap on a single frame at or past
+    /// 1/catchup_rate — the real hitch-behaviour difference docs/org/aim-assist.md flags, not a
+    /// rounding detail to smooth away.</summary>
+    private static void AimAssistCatchup(TestContext ctx)
+    {
+        const float catchupRate = 5f;       // shipped sticky_bullet_catchup_rate
+        const float forgetInterval = 100f;  // isolate this test from the forget pass
+        const float dt = 1f / 60f;
+        var target = new Vector3(0.5f, 0f, -0.8660254f); // 30° off local forward
+
+        var slot = new GunAimSlot
+        {
+            Active = true,
+            Smoothed = AimAssist.LocalForward,
+            Target = target,
+            LastUpdate = 0.0,
+        };
+        var slots = new[] { slot };
+        float initialAngle = AimAssist.LocalForward.AngleTo(target);
+        double now = 0.0;
+        int tauSteps = Mathf.RoundToInt(1f / catchupRate / dt); // 12 steps at 60 Hz
+        for (int i = 0; i < tauSteps; i++)
+        {
+            now += dt;
+            AimAssist.Tick(slots, now, dt, forgetInterval, catchupRate);
+        }
+        float remainingFrac = slots[0].Smoothed.AngleTo(target) / initialAngle;
+        ctx.Check(remainingFrac is > 0.25f and < 0.5f,
+            $"aim-assist catch-up: one time constant (~{1f / catchupRate:0.0}s) leaves {remainingFrac:0.000} of the initial angle (e^-1 approx 0.368)");
+
+        for (int i = 0; i < tauSteps * 8; i++)
+        {
+            now += dt;
+            AimAssist.Tick(slots, now, dt, forgetInterval, catchupRate);
+        }
+        ctx.Check(slots[0].Smoothed.Dot(target) > 1f - 1e-4f,
+            $"aim-assist catch-up: converges onto the target given enough time");
+
+        var snapSlot = new GunAimSlot
+        {
+            Active = true,
+            Smoothed = AimAssist.LocalForward,
+            Target = target,
+            LastUpdate = 0.0,
+        };
+        var snapSlots = new[] { snapSlot };
+        AimAssist.Tick(snapSlots, 1f / catchupRate, 1f / catchupRate, forgetInterval, catchupRate);
+        ctx.Check(snapSlots[0].Smoothed.IsEqualApprox(target),
+            $"aim-assist catch-up: a frame ≥ 1/catchup_rate snaps the gun line in one step");
+    }
+
+    /// <summary>The forget timer measures time since the barrel last FIRED, not time since a lock
+    /// was lost: stop restamping and the target unwinds to local forward exactly
+    /// forget_interval seconds later; keep restamping (as B5's fire call will) and it never does.</summary>
+    private static void AimAssistForgetTimer(TestContext ctx)
+    {
+        const float forgetInterval = 1.5f; // shipped sticky_bullet_forget_interval
+        const float dt = 1f / 60f;
+        var marker = new Vector3(0.5f, 0f, -0.8660254f); // 30° off forward — distinct from "forgotten"
+
+        var slot = new GunAimSlot
+        {
+            Active = true,
+            Smoothed = marker,
+            Target = marker,
+            LastUpdate = 0.0,
+        };
+        var slots = new[] { slot };
+        double now = 0.0;
+        int steps = Mathf.CeilToInt(forgetInterval / dt) + 2; // a couple past the threshold
+        bool unwoundEarly = false;
+        for (int i = 0; i < steps; i++)
+        {
+            now += dt;
+            AimAssist.Tick(slots, now, dt, forgetInterval, 0f); // catchupRate 0 isolates the forget check
+            if (now < forgetInterval && !slots[0].Target.IsEqualApprox(marker))
+            {
+                unwoundEarly = true;
+            }
+        }
+        ctx.Check(!unwoundEarly, $"aim-assist forget: target holds until forget_interval elapses");
+        ctx.Check(slots[0].Target.IsEqualApprox(AimAssist.LocalForward),
+            $"aim-assist forget: target unwinds to local forward {forgetInterval}s after the last shot");
+
+        var held = new GunAimSlot
+        {
+            Active = true,
+            Smoothed = marker,
+            Target = marker,
+            LastUpdate = 0.0,
+        };
+        var heldSlots = new[] { held };
+        now = 0.0;
+        float sinceShot = 0f;
+        float shotInterval = forgetInterval * 0.5f; // fires well inside the forget window
+        for (int i = 0; i < steps * 2; i++)
+        {
+            now += dt;
+            sinceShot += dt;
+            if (sinceShot >= shotInterval)
+            {
+                heldSlots[0].LastUpdate = now; // a round goes out this frame (B5's restamp, simulated)
+                sinceShot = 0f;
+            }
+            AimAssist.Tick(heldSlots, now, dt, forgetInterval, 0f);
+        }
+        ctx.Check(heldSlots[0].Target.IsEqualApprox(marker),
+            $"aim-assist forget: continuous fire never lets the target unwind");
+    }
+
+    /// <summary>Golden check: the two keys B2 consumes parse off the real player.json at their
+    /// documented shipped values, not just their compiled-in defaults.</summary>
+    private static void AimAssistShippedData(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        ctx.Check(Mathf.IsEqualApprox(5.0f, stats.StickyBulletCatchupRate),
+            $"sticky_bullet_catchup_rate parses as the shipped 5.0");
+        ctx.Check(Mathf.IsEqualApprox(1.5f, stats.StickyBulletForgetInterval),
+            $"sticky_bullet_forget_interval parses as the shipped 1.5");
     }
 
     /// <summary><see cref="Loadout.ForRig"/> against all 11 player airframes — 4 gun groups
