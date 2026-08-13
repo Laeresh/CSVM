@@ -276,10 +276,12 @@ public sealed record SessionSpec
     public float? IncomingPass { get; private set; }
     /// <summary>Which weapon <c>--incoming</c> fires; null takes the target's own first gun.</summary>
     public string? IncomingWeapon { get; private set; }
-    /// <summary><c>--ai=&lt;plane&gt;[,&lt;plane&gt;…]</c>: AI-piloted aircraft spawned into the
-    /// flight session through the runtime spawn seam (<c>GameSession.SpawnAiAircraft</c>), placed
-    /// ahead of player 1 and holding its course. Null when the flag was absent.</summary>
-    public IReadOnlyList<string>? AiPlanes { get; private set; }
+    /// <summary><c>--ai=&lt;plane&gt;[:&lt;net&gt;][,…]</c>: AI-piloted aircraft spawned into the
+    /// flight session through the runtime spawn seam (<c>GameSession.SpawnAiAircraft</c>).
+    /// Without a net the plane is placed ahead of player 1 holding its course; with one (a
+    /// chapter neindex id or name after <c>:</c>) it spawns on that net and patrols it (B5).
+    /// Null when the flag was absent.</summary>
+    public IReadOnlyList<(string Plane, string? Net)>? AiPlanes { get; private set; }
     public (FlightInput, float)[][]? HoldSets { get; private set; }
     /// <summary>The <c>--damage=</c> preset pairs (part, fraction 0–1); null when <c>--damage</c>
     /// carried no value.</summary>
@@ -734,9 +736,17 @@ public sealed record SessionSpec
             }
             else if (arg.StartsWith("--ai="))
             {
-                var names = arg["--ai=".Length..].Split(',', StringSplitOptions.RemoveEmptyEntries);
-                if (names.Length > 0)
-                    s.AiPlanes = names;
+                var entries = new List<(string Plane, string? Net)>();
+                foreach (var token in arg["--ai=".Length..].Split(',', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    int colon = token.IndexOf(':');
+                    string plane = colon >= 0 ? token[..colon] : token;
+                    string? net = colon >= 0 && colon + 1 < token.Length ? token[(colon + 1)..] : null;
+                    if (plane.Length > 0)
+                        entries.Add((plane, net));
+                }
+                if (entries.Count > 0)
+                    s.AiPlanes = entries;
             }
             else if (arg == "--fire") { s.AutoFire = true; }
             else if (arg == "--fire-rockets") { s.AutoFireRockets = true; }

@@ -1851,15 +1851,53 @@ public partial class GameSession : Node3D
         if (_spec.AiPlanes is { Count: > 0 } aiPlanes && _rigs.Count > 0
             && _rigs[0].Controller is { } lead)
         {
-            // Ahead of P1 on its own spawn heading, fanned right/left, each holding that course.
+            // Without a net: ahead of P1 on its own spawn heading, fanned right/left, holding
+            // that course. With one (B5): on the net's first node, patrolling the graph.
             var basis = lead.GlobalTransform.Basis;
             var fwd = -basis.Z;
             var right = basis.X;
+            List<AiNet>? nets = null;
+            bool netsTried = false;
             for (int i = 0; i < aiPlanes.Count; i++)
             {
+                var (planeName, netRef) = aiPlanes[i];
                 float lateral = 60f * ((i + 1) / 2) * (i % 2 == 0 ? 1f : -1f);
-                var pos = lead.WorldPosition + fwd * 250f + right * lateral;
-                SpawnAiAircraft(aiPlanes[i], pos, pos + fwd, AiPilot.HoldingCourse(pos, pos + fwd));
+                AiNet? net = null;
+                if (netRef != null)
+                {
+                    if (!netsTried)
+                    {
+                        netsTried = true;
+                        try
+                        {
+                            nets = AiNets.Load(SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter));
+                        }
+                        catch (Exception e)
+                        {
+                            GD.PushWarning($"--ai: cannot read {_spec.Chapter}'s patrol nets: {e.Message}");
+                        }
+                    }
+                    net = nets != null ? AiNets.Resolve(nets, netRef) : null;
+                    if (net == null)
+                        GD.PushWarning($"--ai: net '{netRef}' not in {_spec.Chapter}'s neindex; " +
+                                       $"'{planeName}' spawns without a patrol");
+                }
+                if (net != null)
+                {
+                    // On the net itself, so a scripted run sees it patrolling within seconds; the
+                    // follower flies first to the nearest node, per the design.
+                    var pos = net.Nodes[0].Position + right * lateral;
+                    var look = net.Nodes.Count > 1 ? net.Nodes[1].Position : pos + fwd;
+                    var pilot = AiPilot.HoldingCourse(pos, look);
+                    pilot.Throttle = AiPilot.PatrolThrottle;
+                    pilot.Patrol = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai));
+                    SpawnAiAircraft(planeName, pos, look, pilot);
+                }
+                else
+                {
+                    var pos = lead.WorldPosition + fwd * 250f + right * lateral;
+                    SpawnAiAircraft(planeName, pos, pos + fwd, AiPilot.HoldingCourse(pos, pos + fwd));
+                }
             }
             state.What += $" + {aiPlanes.Count} AI";
         }

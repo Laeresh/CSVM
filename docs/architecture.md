@@ -82,7 +82,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the forget + catch-up pass (B2), the intercept solver (B3), the four-list candidate scan (B4), and the fire call's step order + 1° launch scatter (B5).
 - `src/Flight/TurretDefs.cs` — typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
 - `src/Flight/TurretController.cs` — one carried turret gunner (M4 C9a): acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
-- `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle) → one `FlightInput` per sim step; a placeholder hold-course law until wave D.
+- `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle, optional patrol net) → one `FlightInput` per sim step; a placeholder hold-course law until wave D.
+- `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints (M4 B5): nearest node first, then edge-list neighbours, seeded branch draws; aircraft-agnostic so F17's zeppelins reuse it.
 - `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
@@ -853,8 +854,10 @@ Ids 0–5 are compiled into `crimson.exe`; ids 6–13 are the `LoadSoils`-loaded
 ## src/Mech3/AiNets.cs
 The chapter patrol-net reader (`docs/formats/ai-nets.md`): every `ne0NNNNN.zrd.json` in a chapter
 zrdr scope joined with its `neindex.zrd.json` name — nodes, the explicit edge list, raw per-node
-tags, and the trailer attach target. First consumer: `UI/AiNetsOverlay.cs`; M4's net-following
-(B5/F17) is the intended second. Golden counts asserted in `CSVM.Tests/AiNetsTests.cs`.
+tags, and the trailer attach target. Plus the lookups both ways the data references nets:
+`ById` (aiv field 0), `ByName` (egen/zeppelins/objectives, case-insensitive), `Resolve` (either
+spelling). Consumers: `UI/AiNetsOverlay.cs` and `Flight/AiNetFollower.cs` (B5). Golden counts
+asserted in `CSVM.Tests/AiNetsTests.cs`.
 ⚠ A net is a GRAPH: only `Edges` is connectivity — node order is not a route, loops are one
   authoring choice. Tags and the trailer are exposed raw, never interpreted (undecoded).
 ⚠ The `neindex` first element is NOT the pair count (C1: 46 over 29 pairs) — parse pairs to the
@@ -2119,17 +2122,36 @@ cue re-triggers no faster than the interval.
 ⚠ The whole swept segment must be tested, never the endpoints: a gun round covers ~8 m per 60 Hz
   frame, so a per-frame point test misses most passes outright.
 
+## src/Flight/AiNetFollower.cs
+Walks an `AiNet` patrol graph as a waypoint stream (M4 B5): first the nearest node, then
+edge-list neighbours, no immediate backtrack, branches drawn from its own seeded `Random` (per
+plane off the `Rng.Ai` stream at spawn, never Godot's global rng). Aircraft-agnostic on purpose:
+positions in, target node out; F17's zeppelin motion reuses it and only the consumer differs
+(`AiPilot.Patrol` is the aircraft one). Pinned by `AiNetFollowerTests` + the `ai-net-follow`
+suite.
+⚠ Traversal treats EDGES as undirected (our reading, not decoded: the worked C1 loop dead-ends
+  under a directed one). Never walk node order; only the edge list is connectivity.
+⚠ `DefaultArrivalRadius` (200 m, XZ-only) is INVENTED, sized to the placeholder law's tracking
+  error; wave D's real maneuvering shrinks it.
+⚠ The trailer is recorded and exposed, never acted on (target-relative motion is later-wave
+  work); per-node tags ride along raw. Stop-point vs segment id is still open, F17 owns it.
+
 ## src/Flight/AiPilot.cs
 The non-player `FlightModel` driver (M4 A2): standing orders in (heading in the mission-data
-`SpawnPoint.HeadingDeg` convention, altitude, throttle), one `FlightInput` per sim step out, read
-by a `FlightController` whose `Pilot` is set. Pure over the model state and its own fields (no
-clocks, no randomness, no node reads), so a fixed-dt run is deterministic (`AiPilotTests`).
+`SpawnPoint.HeadingDeg` convention, altitude, throttle, optional `Patrol` net follower whose
+current node re-derives the heading/altitude orders each step), one `FlightInput` per sim step
+out, read by a `FlightController` whose `Pilot` is set. Pure over the model state and its own
+fields (no clocks, no node reads; the only randomness is `Patrol`'s seeded branch draw), so a
+fixed-dt run is deterministic (`AiPilotTests`).
 ⚠ Orders are plain mutable fields BY DESIGN — the original's mission script retargets/re-nets an
   AI at runtime (`SET_AI_NET`, `ADD_OTHER_TARGET`, …), so nothing here may be read-once at spawn.
-⚠ The control law is a placeholder (bank-to-turn + path-angle altitude hold): in THIS flight model
-  bank alone yaws only at the coupling rate and gravity is auto-cancelled, so the turn is carried
-  by PULL while banked steeply — wave D replaces the law with the shipped maneuver programs, and
-  the seam it replaces it through is exactly this class.
+⚠ The control law is a placeholder (bank-to-turn + turn pull + an altitude leash): in THIS flight
+  model bank alone yaws only at the coupling rate, gravity is auto-cancelled and any sustained
+  pull climbs, so hard turns run at full pull inside a break-off/recover altitude leash. Wave D
+  replaces the law with the shipped maneuver programs through exactly this seam.
+⚠ `PatrolThrottle` (0.5) and the leash/gain constants are INVENTED placeholder-law values, never
+  original behaviour; at the 0.85 default the turn radius exceeds the tightest fighter rings and
+  the plane limit-cycles around a node forever (measured on C1's `M4ReinfAce`).
 
 ## src/Flight/IncomingFire.cs
 `--incoming[=metres[,wep_id]]` — the near-miss test rig: a phantom shooter 120 m on each player's

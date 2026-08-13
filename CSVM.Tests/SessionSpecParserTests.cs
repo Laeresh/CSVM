@@ -159,6 +159,19 @@ public class SessionSpecParserTests
         Assert.Equal(new Vector3(1, 2, 3), s.Pos);
     }
 
+    /// <summary>The B5 net grammar: `--ai=plane[:net],…` splits into (plane, net) entries, a
+    /// bare name has a null net, and an empty net after the colon reads as none.</summary>
+    [Fact]
+    public void AiEntriesCarryTheirOptionalNetReference()
+    {
+        var s = SessionSpec.Parse(new[] { "--ai=player_fury:M4ReinfAce,player_bhawk,ebrigand:10,edevast:" });
+        Assert.Equal(4, s.AiPlanes!.Count);
+        Assert.Equal(("player_fury", "M4ReinfAce"), s.AiPlanes[0]);
+        Assert.Equal(("player_bhawk", null), s.AiPlanes[1]);
+        Assert.Equal(("ebrigand", "10"), s.AiPlanes[2]);
+        Assert.Equal(("edevast", null), s.AiPlanes[3]);
+    }
+
     [Fact]
     public void AMalformedDamagePresetIsReportedThroughTheSpecsWarnings()
     {
