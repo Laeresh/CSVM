@@ -168,6 +168,9 @@ public partial class GameSession : Node3D
     private AiSkills? _aiSkills; // ai_skill_parameters, loaded once on the first AI spawn
     private List<Maneuver>? _aiManeuvers; // the D13 library, loaded once for the D11 machines
     private bool _noAssistLogged; // the one-per-session --no-assist breadcrumb
+    // The E16 voice dispatch (built with the rigs when the world has sounds; its mission clock
+    // steps in DriveSimSteps). Null in a soundless/world-less session — chatter simply off.
+    private AiVoiceRuntime? _aiVoice;
     // The egen enemy generators (M4 B6, --generators): loaded with the rigs, stepped in
     // DriveSimSteps before the AI planes it spawns into _aiPlanes, freed with the world subtree.
     private AiGeneratorRuntime? _generators;
@@ -744,8 +747,21 @@ public partial class GameSession : Node3D
         if (_spec.Fly && state.NodeSubtree == null
             && state.SoundDefs is { } voiceDefs && state.SoundGroups is { } voiceGroups)
         {
+            // CLI-assigned accents (--ai=…:accent=N) join the roster set: their clips are first
+            // reached at runtime too, so an unprewarmed accent would be a silent pilot.
+            List<int>? cliAccents = null;
+            if (_spec.AiPlanes is { } aiEntries)
+            {
+                foreach (var entry in aiEntries)
+                {
+                    if (entry.Accent is { } accent)
+                    {
+                        (cliAccents ??= new List<int>()).Add(accent);
+                    }
+                }
+            }
             voiceClips = CombatVoice.SessionPrewarmNames(
-                state.ZrdrPath, state.MissionZrdrPath, voiceDefs, voiceGroups);
+                state.ZrdrPath, state.MissionZrdrPath, voiceDefs, voiceGroups, cliAccents);
         }
         var session = WorldSession.Build(
             new WorldSession.Options
@@ -1932,6 +1948,23 @@ public partial class GameSession : Node3D
         // step (generators, the mission script, the ai-actor suite's runtime-spawn case).
         _aiSpawner = new AiAircraftSpawner(_spec, _liveryResolver, _worldEffectsFactory,
             _worldRoot!, rigInputs);
+        // The E16 voice dispatch, over B8's seam: needs the world's WorldSounds (prewarmed
+        // above) and the sound defs. Built before the --ai loop so spawns can register; the
+        // players register as damage sources only (WA-HighDmg's broadcast trigger).
+        if (state.WorldRuntime?.Sounds is { } worldSounds
+            && state.SoundDefs is { } vDefs && state.SoundGroups is { } vGroups)
+        {
+            var combatVoice = new CombatVoice(vDefs, vGroups, CombatVoice.LoadAccents(state.ZrdrPath));
+            _aiVoice = new AiVoiceRuntime(combatVoice, worldSounds, Rng.NewSystemRandom(Rng.Ai));
+            _worldRoot!.AddChild(_aiVoice); // its realtime tick; freed with the world subtree
+            foreach (var rig in _rigs)
+            {
+                if (rig.Controller is { } human)
+                {
+                    _aiVoice.RegisterPlayer(human);
+                }
+            }
+        }
         if (_spec.AiPlanes is { Count: > 0 } aiPlanes && _rigs.Count > 0
             && _rigs[0].Controller is { } lead)
         {
@@ -1944,7 +1977,7 @@ public partial class GameSession : Node3D
             bool netsTried = false;
             for (int i = 0; i < aiPlanes.Count; i++)
             {
-                var (planeName, netRef) = aiPlanes[i];
+                var (planeName, netRef, accentId) = aiPlanes[i];
                 float lateral = 60f * ((i + 1) / 2) * (i % 2 == 0 ? 1f : -1f);
                 AiNet? net = null;
                 if (netRef != null)
@@ -1975,12 +2008,14 @@ public partial class GameSession : Node3D
                     var pilot = AiPilot.HoldingCourse(pos, look);
                     pilot.Throttle = AiPilot.PatrolThrottle;
                     pilot.Patrol = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai));
-                    SpawnAiAircraft(planeName, pos, look, pilot);
+                    RegisterAiVoice(SpawnAiAircraft(planeName, pos, look, pilot), accentId);
                 }
                 else
                 {
                     var pos = lead.WorldPosition + fwd * 250f + right * lateral;
-                    SpawnAiAircraft(planeName, pos, pos + fwd, AiPilot.HoldingCourse(pos, pos + fwd));
+                    RegisterAiVoice(
+                        SpawnAiAircraft(planeName, pos, pos + fwd, AiPilot.HoldingCourse(pos, pos + fwd)),
+                        accentId);
                 }
             }
             state.What += $" + {aiPlanes.Count} AI";
@@ -2426,10 +2461,32 @@ public partial class GameSession : Node3D
             {
                 ai.SimStep(dt);
             }
+            // The voice dispatch's mission clock (E16): the 2 s mute window and every 15 s
+            // slot cooldown run on sim time, so a halted clock halts the chatter too.
+            _aiVoice?.Step(dt);
             // The weapon lab has no sim step of its own: it is hosted by player 1's
             // FlightController, which owns the fire clock, and fires into _projectiles above.
             _versus?.Advance(dt);
         }
+    }
+
+    /// <summary>Gives a spawned AI aircraft its voice (E16): the accent resolves through the
+    /// B8 chain, the talker/constitution chances come from <c>ai_skill_parameters</c> at the
+    /// session's skill rating (<c>--ai-attack=</c>, default 5 — roster skill vectors are later
+    /// wiring). No accent, no voice runtime or no skills = a silent pilot, never an error.</summary>
+    private void RegisterAiVoice(FlightController? ai, int? accentId)
+    {
+        if (ai == null || accentId is not { } accent || _aiVoice == null || _aiSkills == null)
+        {
+            if (accentId != null && (_aiVoice == null || _aiSkills == null))
+            {
+                GD.Print($"ai voice: accent {accentId} ignored — no voice runtime in this session");
+            }
+            return;
+        }
+        int rating = _spec.AiAttackSkill ?? 5;
+        _aiVoice.RegisterAi(ai, accent,
+            _aiSkills.At("talker_chance", rating), _aiSkills.At("constitution_chance", rating));
     }
 
     /// <summary>Per-build state threaded through StartSession's phase methods — the archives,

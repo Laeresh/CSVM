@@ -89,6 +89,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; a placeholder steering law.
 - `src/Flight/AiModeMachine.cs` — the nine-mode AI state machine (M4 D11), the engine's decoded mode vocabulary: patrol/pursue/lay off/evade/evasive maneuver/stunned/avoid crash + two enum-only danger-zone modes; steady-hand and sixth-sense reaction rolls on the shipped chances.
 - `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery (M4 D14): intercept lead via `AimAssist.TryIntercept`, the ±11° gun cone and the quick-draw cone as fire gates, per-shot dead-eye scatter; mutable target, primary-target name and rating biases (the D12 script seams).
+- `src/Flight/AiVoiceDispatcher.cs` — the combat-voice trigger dispatch (M4 E16), engine-free: the talker roll, the 15 s per-slot cooldown armed on failure too, the bearing halving, the broadcast election, the DI tiers, the death cries with force, the computed bearing index.
 - `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula (M4 D12): rank = weight × 1200 + distance + objectiveBias, minimised; player base weight 0.7, ±0.2 bearing/altitude/facing terms, 1e21 beyond activation; rating-bias matching and the allied-attacker deconfliction pick.
 - `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints (M4 B5): nearest node first, then edge-list neighbours, seeded branch draws; aircraft-agnostic so F17's zeppelins reuse it.
 - `src/Flight/ManeuverExecutor.cs` — plays one maneuver's attitude-step program as `FlightInput` per sim step (M4 D13): the input source D11's state machine runs during `evasive maneuver`.
@@ -216,6 +217,7 @@ clusters they delegate to.
 - `src/Session/AiAircraftSpawner.cs` — spawns an AI-piloted aircraft into a running session (M4 A2): the flight-essential subset of a rig, an `AiPilot` at the controls, shooter ids from 100.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in.
 - `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (M4 B6, `--generators`): load-time drop rules, per-cycle stepping, spawns through `GameSession.SpawnAiAircraft`.
+- `src/Session/AiVoiceRuntime.cs` — wires E16's dispatch into a session: the decoded event sources (hit-path DI, Downed death cries, acquisition call-outs, taunts) played through `CombatVoice` + `WorldSounds.PlayOneShot`.
 
 ### Session root and tests
 
@@ -1636,8 +1638,9 @@ The combat-voice resolver (`docs/formats/combat-voice.md`): roster `accentID` (s
 family)` returns the one name to hand `WorldSounds.PlayOneShot`: the shipped
 `snd_<FAMILY>-A_id<N>_random` variant group when authored (466 are), else the bare def (the 12
 bearing tokens). `SessionPrewarmNames` is the flight session's mission-roster prewarm set
-(`GameSession.BuildWorldStage` → `WorldSession.Options.VoiceClipNames`). E16's dispatch
-(cooldowns, talker roll, speaker election) sits above this seam, not in it.
+(`GameSession.BuildWorldStage` → `WorldSession.Options.VoiceClipNames`, CLI accents joined via
+`extraAccents`). E16's dispatch sits above this seam: `Flight/AiVoiceDispatcher.cs` (rules) +
+`Session/AiVoiceRuntime.cs` (wiring), never in it.
 ⚠ A clip def is not a playable clip: ids 13/15/17/35/36 ship def sets with no WAVs, id 44 has the
   12 bearing defs without their WAVs, and accent-mapped ids 5/40 have neither. Availability is
   `WorldSounds.HasStream` after the prewarm, never def presence.
@@ -2285,6 +2288,21 @@ Engine-free (`AiGunnerTests`); the live half is the `ai-gunnery` suite.
 ⚠ `DeadEyeAngleDeg`/`QuickDrawAngleDeg` are `ai_skill_parameters` values (`Mech3/AiSkills`),
   interpolated from the pilot's 1–9 rating — never invented constants. `quick_draw_chance` (the
   marginal-shot roll) is NOT modelled yet; the angle is the only quick-draw term wired.
+
+## src/Flight/AiVoiceDispatcher.cs
+The E16 trigger dispatch, engine-free (`docs/formats/combat-voice.md`): events in, (speaker,
+clip, outcome) decisions out — the talker roll, the hardcoded halving on bearing ids 1–12, the
+broadcast speaker election (one line per event, a failed roll passes to the NEXT candidate,
+wrapping), the DI tiers at 70/50/30 % most-severe-first, the death cries (20/21) with force, and
+`BearingTriggerId` = 1 + 3·bearing + band. Availability comes from the injected resolver
+(`CombatVoice.PlayableFor` + `HasStream`), never def presence. Pinned by
+`AiVoiceDispatcherTests` + the `ai-voice` suite.
+⚠ The 15 s per-slot cooldown is armed by a FAILED roll exactly as by a success — a quiet pilot
+  does not retry. Re-deriving `talker` as a plain chattiness chance loses this.
+⚠ The force flag bypasses ONLY the aliveness check (decoded), never the cooldown or the roll.
+⚠ Invented, named as such: the Bail/NoBail constitution roll (unconfirmed reading) and the
+  bearing quantisation constants (±45° quadrants, `LevelBandM` 100 m) — the formula is decoded,
+  the quantisation is not.
 
 ## src/Flight/AiTargetRanking.cs
 The decoded target-ranking formula (M4 D12, docs/formats/ai-rosters.md "AI modes, engine-side"):
@@ -4570,6 +4588,23 @@ is the flag's observability.
   resolves, drops the generator at load. Never load one inert.
 ⚠ Stand-ins/stubs, all named in the class comment: host DEATH is unwired until F18/F20
   (`GeneratorCycle.HostDied` has no caller); the door choreography is skipped (F20).
+
+## src/Session/AiVoiceRuntime.cs
+Wires E16's dispatch into a running flight session (built with the rigs when the world has a
+`WorldSounds`; ticks on the sim clock like every consumer): registers each `--ai=…:accent=N`
+spawn as a speaker (accent → `CombatVoice.PilotFor` → VO id, seeded), each human rig as a
+damage source, and subscribes the wired sites — hit-path DI tiers (`DamageApplied` summary),
+`Downed` death cries with force (always id 21: no team model puts an AI on the player's team),
+patrol→pursue vs a human = `WA-Attack` + the bearing broadcast in the player's frame (our chosen
+stand-in for the undecoded "enemy spotted"), sixth-sense stun = the AI evader's `TA-FailTail`,
+reaction complete = `TA-SucShk`. Plays through `WorldSounds.PlayOneShot(Node3D)` only; the
+wired/unwired table is combat-voice.md "The remake's dispatch sites". Observability: the
+`ai voice:` lines (resolution at spawn, every roll outcome, every played clip).
+⚠ Speakers register TEAMLESS for broadcast eligibility — a documented stand-in: under
+  `TeamOfPilot` (pilot N = team N+1) the decoded "caller's team or teamless" rule would never
+  elect anyone. A team model replaces this.
+⚠ A CLI accent must join the prewarm set (`SessionPrewarmNames`' extraAccents) — an unprewarmed
+  accent is a silent pilot with no error anywhere but the resolver's availability check.
 
 ## src/Session/FlightRigAssembler.cs
 Assembles one player's flight rig: the painted plane model, the `FlightController` and everything hung

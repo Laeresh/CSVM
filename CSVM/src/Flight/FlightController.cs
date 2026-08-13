@@ -464,6 +464,13 @@ public partial class FlightController : Node3D
     /// death was reported here.</summary>
     public event Action<int, int?>? Downed;
 
+    /// <summary>Raised on every projectile hit that moved this plane's damage state without
+    /// destroying it (the destroying hit reports through <see cref="Downed"/> instead) — the
+    /// E16 voice runtime reads the whole-vehicle summary off it for the DI distress tiers and
+    /// the player's WA-HighDmg crossing. Terrain grazes do not raise it; the decoded distress
+    /// sites are the combat hit path's.</summary>
+    public event Action<FlightController>? DamageApplied;
+
     /// <summary>The weapon lab's hold: the airframe holds the pose it had when this was set — it does
     /// not fly, stall, fall or collide — while everything else in the session keeps running. The
     /// props still spin, the guns still fire through the normal trigger, the rounds still fly and
@@ -862,6 +869,7 @@ public partial class FlightController : Node3D
                 killer: shooter != ProjectilePool.NoShooter ? shooter : null);
             return;
         }
+        DamageApplied?.Invoke(this);
         // The damage-reaction roll (D11): an AI pilot rolls the steady-hand test on the
         // absorbed damage; a FAILED test breaks off (the decoded vocabulary). The round does
         // not carry its shooter's position, so the impact offset stands in as the threat

@@ -276,12 +276,14 @@ public sealed record SessionSpec
     public float? IncomingPass { get; private set; }
     /// <summary>Which weapon <c>--incoming</c> fires; null takes the target's own first gun.</summary>
     public string? IncomingWeapon { get; private set; }
-    /// <summary><c>--ai=&lt;plane&gt;[:&lt;net&gt;][,…]</c>: AI-piloted aircraft spawned into the
-    /// flight session through the runtime spawn seam (<c>GameSession.SpawnAiAircraft</c>).
-    /// Without a net the plane is placed ahead of player 1 holding its course; with one (a
-    /// chapter neindex id or name after <c>:</c>) it spawns on that net and patrols it (B5).
-    /// Null when the flag was absent.</summary>
-    public IReadOnlyList<(string Plane, string? Net)>? AiPlanes { get; private set; }
+    /// <summary><c>--ai=&lt;plane&gt;[:&lt;net&gt;][:accent=&lt;id&gt;][,…]</c>: AI-piloted aircraft
+    /// spawned into the flight session through the runtime spawn seam
+    /// (<c>GameSession.SpawnAiAircraft</c>). Without a net the plane is placed ahead of player 1
+    /// holding its course; with one (a chapter neindex id or name after <c>:</c>) it spawns on
+    /// that net and patrols it (B5). <c>accent=</c> gives the pilot a voice (E16): the roster
+    /// slot-65 <c>accentID</c> chain resolves it to a pilot VO clip set; without it a CLI spawn
+    /// is voiceless (a roster spawn carries its own). Null when the flag was absent.</summary>
+    public IReadOnlyList<(string Plane, string? Net, int? Accent)>? AiPlanes { get; private set; }
     /// <summary><c>--ai-attack[=&lt;1-9&gt;]</c>: arm every AI plane this session spawns with the
     /// D14 forward-gun gunnery at the given skill rating (dead-eye/quick-draw interpolated from
     /// <c>ai_skill_parameters</c>; default 5), auto-targeting the nearest hostile aircraft.
@@ -752,14 +754,22 @@ public sealed record SessionSpec
             }
             else if (arg.StartsWith("--ai="))
             {
-                var entries = new List<(string Plane, string? Net)>();
+                var entries = new List<(string Plane, string? Net, int? Accent)>();
                 foreach (var token in arg["--ai=".Length..].Split(',', StringSplitOptions.RemoveEmptyEntries))
                 {
-                    int colon = token.IndexOf(':');
-                    string plane = colon >= 0 ? token[..colon] : token;
-                    string? net = colon >= 0 && colon + 1 < token.Length ? token[(colon + 1)..] : null;
+                    var segments = token.Split(':');
+                    string plane = segments[0];
+                    string? net = null;
+                    int? accent = null;
+                    for (int si = 1; si < segments.Length; si++)
+                    {
+                        if (segments[si].StartsWith("accent="))
+                            accent = int.Parse(segments[si]["accent=".Length..]);
+                        else if (segments[si].Length > 0 && net == null)
+                            net = segments[si];
+                    }
                     if (plane.Length > 0)
-                        entries.Add((plane, net));
+                        entries.Add((plane, net, accent));
                 }
                 if (entries.Count > 0)
                     s.AiPlanes = entries;

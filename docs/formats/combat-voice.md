@@ -161,6 +161,49 @@ So the flight speaks with one voice per event, and a quiet pilot passes the line
 swallowing it. Triggers 0, 13, 15, 24 and the bearing call-outs dispatch this way; the distress,
 death and taunt triggers address a specific aircraft.
 
+## The remake's dispatch sites (E16, 2026-08-13)
+
+The rules above are implemented in `CSVM/src/Flight/AiVoiceDispatcher.cs` (the gate, cooldowns,
+halving, election, DI tiers, bearing index — engine-free, seeded) and wired by
+`CSVM/src/Session/AiVoiceRuntime.cs` over the B8 seam. Where the original's dispatch site is
+decoded, the remake uses it; where only the trigger's meaning is decoded, the chosen stand-in
+site is recorded here:
+
+| ids | status | site / reason |
+|---|---|---|
+| 1–12, 14 | wired | our chosen site: the mode machine's patrol→pursue transition against a human target ("committing to an attack") — the attacker speaks `WA-Attack`, and the flight broadcasts the bearing call-out computed in the warned player's frame. The original's exact "enemy spotted" event is undecoded; this is the closest transition the machine has |
+| 13 | wired | a human rig's summary health crossing 30 % on the projectile hit path (decoded threshold) — broadcast |
+| 17–19 | wired | the speaker's own summary health on the projectile hit path, 70/50/30 % most-severe-first (decoded) |
+| 20–21 | wired | `FlightController.Downed`, with force. CSVM has no team model, so no AI sits on the player's team and id 20 (`DA`) is currently unreachable — every death cry is id 21 (`DE`) |
+| 25 | wired | a pursuer's failed sixth-sense (tail) check stunning it — its evading AI target speaks; a human evader stays silent (the player speaks no AI lines) |
+| 27 | wired | the speaker's own evade/evasive-maneuver reaction completing ("fires as the reaction flag clears", decoded) |
+| 0 | unwired | turret acquisition is `TurretController`'s event; owned by C9's thread, not wired from here |
+| 15 | unwired | the danger-zone modes are never entered (their gate data is undecoded — F17) |
+| 16 | unwired | no dispatch site located in the binary (above) |
+| 22–24 | unwired | the gloat attacker/victim polarity is open (above); wiring a guess would invert speakers silently |
+| 26 | unwired | the original's shake-attempt check is undecoded; no machine transition maps to it without force-fitting |
+| 28 | unwired | needs an allied-wingman roster ("only one of the player's wingmen left"); no ally concept exists yet |
+
+Stand-ins and inventions, named:
+
+- **Speakers register teamless** for broadcast eligibility. The combat convention
+  (`AimAssist.TeamOfPilot`, pilot N = team N+1) makes every aircraft its own team, under which
+  the decoded "caller's team or teamless" rule would never elect anyone; the decoded rule itself
+  admits teamless candidates, so teamless is the honest stand-in until a team model exists.
+- **`Bail`/`NoBail` is a constitution roll** (`constitution_chance`, 0.35→0.95) — the open
+  item's natural-candidate reading, implemented and marked unconfirmed.
+- **Bearing quantisation**: the four clock quadrants split at ±45° (the natural reading of a
+  nearest-quadrant index), and "level" is ±100 m (`AiVoiceDispatcher.LevelBandM`, invented).
+  Only the index formula itself is decoded.
+- **Pilot identity**: an `--ai=` spawn takes an optional `accent=<id>` segment
+  ([cli.md](../cli.md)); its accents join the mission roster's prewarm set. A spawn without one
+  is voiceless. Talker/constitution ratings come from the session's `--ai-attack=` skill
+  (default 5) until roster spawns carry their own slot 65 + skill vector.
+- The gate's "must not already be talking" is a hook (`AiVoiceDispatcher.IsTalking`), unwired:
+  the remake's one-shots carry no per-speaker playing state yet.
+- **Force bypasses only the aliveness check**, as decoded — a forced death cry still respects
+  the slot cooldown and still rolls talker (`AiVoiceDispatcherTests` pins this).
+
 ## What is not pinned down
 
 - **The exact attacker/victim polarity of triggers 22–24.** The three gloat triggers are selected
