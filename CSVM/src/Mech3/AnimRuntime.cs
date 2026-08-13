@@ -2424,7 +2424,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 // a stop naming a sequence that is not running leaves it stopped, which for a
                 // parked ON_CALL sequence means no later call can start it. Halting never
                 // retracts motions or puffers the sequence already launched; their lifetimes are
-                // authored independently. Decode in docs/formats/anim-definitions.md.
+                // authored independently. Decode in docs/org/sequences.md.
                 if (ev.Data.Str("name") is { } stopName)
                     StopSequence(def, anchor, stopName);
                 return true;

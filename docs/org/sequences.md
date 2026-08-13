@@ -11,7 +11,9 @@ the addresses are given so any claim can be re-checked at source.
 
 **Where the other halves live.** The authored side — the definition/sequence/event schema, the
 `START_TIME` encoding, `growth_factors`, the `ACTIVATION` values, the compiled-vs-reader
-divergences — is [`formats/anim-definitions.md`](../formats/anim-definitions.md). Our
+divergences — is [`formats/anim-definitions.md`](../formats/anim-definitions.md), which states the
+mechanisms this page decoded but does not repeat the decode: every address, struct offset and
+handler trace for the animation runtime belongs here. Our
 implementation is `CSVM/src/Mech3/SequenceRunner.cs` (the interpreter, engine-free behind a
 3-member host seam), `CSVM/src/Mech3/AnimRuntime.cs` (the host: event dispatch, condition
 evaluation, instance lifetime) and `CSVM/src/Mech3/AnimDefs.cs` (the reader-form normalizer). The
@@ -27,21 +29,69 @@ bottom rather than hidden.
 | Address | Role |
 |---|---|
 | `FUN_004ecbb0` | The sequence stepper — dispatches the event at the cursor, advances it, and returns a state code. A LOOP rewind always **returns** (state 4), so the rewound pass can only begin on the FOLLOWING tick |
+| `FUN_004ebfa0` | The sequence reset — rewind and re-arm: `state ← +0x21`, `event ptr ← +0x38`, both timers to 0 |
 | `FUN_004ebfd0` | The `LOOP` handler — the u16 pass counter at `+0x30`, the increment-then-compare termination test, the `-1` infinite special case, and the 86,400 s clamp on the instance clock |
-| `FUN_004ec080` | The **false-IF** branch scan — walks forward event by event and breaks on the first ELSE / ELSEIF / ENDIF, with **no depth counter** |
+| `DAT_00727de0` | The event dispatch table, 47 slots, index 1–0x2f, populated by `FUN_004ee1a0` |
+| `FUN_004ec080` | The `IF`/`ELSEIF` condition evaluator, and the **false-IF** branch scan — walks forward event by event and breaks on the first ELSE / ELSEIF / ENDIF, with **no depth counter** |
 | `004ec5a0` | The **ELSE/ELSEIF fall-through** scan — the same walk with the narrower stop set: ENDIF only |
+| `004ec5d0` | `ENDIF` — a bare `MOV EAX,2 / RET`, i.e. a no-op |
+| `004eb570` / `004eb610` | `CALL_SEQUENCE` / `STOP_SEQUENCE` |
+| `FUN_00516820` | The reader-side condition parser — one branch per keyword, writing the condition flag word |
 | `FUN_004ec6a0` | `FBFX_COLOR_FROM_TO`, dispatch slot 36 — the model for "a timed event reports STILL RUNNING until its run time is up" |
 | `004e82b0` | `LIGHT_ANIMATION`, dispatch slot 5 — advances one tick's worth of the authored delta per dispatch, clamps the last tick to the remainder, and returns still-running on the same test |
 | `FUN_004f7120` | `PUFFER_STATE` reader/parser — reached from a sequence's `PUFFER_STATE` event; decoded in [`org/puffer.md`](puffer.md) |
 
-Structure offsets the runtime reads:
+The interpreter was compiled from `D:\zipper\gamez\zEffect\zeff_ani*.c`; the image base is
+`0x400000`.
+
+**The live sequence struct is mech3ax's `SeqDefInfoC`** (64 bytes), mutated in place by the stepper
+on every tick. These are the offsets the runtime reads:
 
 | Offset | Meaning |
 |---|---|
 | `anim+0xb0` | The **instance** clock — one clock per running definition, shared by every sequence of it |
+| `seq+0x20` | Current state |
+| `seq+0x21` | Reset state (`SeqDefState`: `Initial`=0, `OnCall`=3) |
 | `seq+0x24` | The sequence's own start instant (origin `Sequence`) |
 | `seq+0x28` | The previous event's completion instant (origin `Event`) |
+| `seq+0x2c` | Accumulated loop time |
 | `seq+0x30` | The u16 LOOP pass counter |
+| `seq+0x34` / `+0x38` / `+0x3c` | Current event pointer / start pointer / byte size |
+
+⚠ mech3ax's own field-name guesses at offsets 36/40/44 (`loop_time` / `event_time` / `seq_time`)
+are mis-ordered against this layout — compare `+0x24`/`+0x28`/`+0x2c` above against offsets 36/40/44
+decimal. They are not load-bearing for round-tripping (nothing reads a compiled def by field name),
+so the fork's names were left alone; this paragraph is the correction, and renaming the fork's
+struct field is explicitly out of scope for this record (it is a round-trip-test surface and belongs
+in its own change).
+
+## The handler state machine
+
+Every handler returns one of four values, and the stepper writes the result into the state byte at
+`+0x20`:
+
+| Return | Meaning |
+|---|---|
+| **2** | event complete — advance to the next event |
+| **1** | still running — re-dispatch the SAME event next tick |
+| **4** | sequence rewound by `LOOP` — re-gate from the top of the sequence, and yield the rest of this tick |
+| *(state)* **3** | parked, awaiting a `CALL_SEQUENCE` (not a return value — a resting state) |
+
+The start-time gate is evaluated only when the stepper is in state 0 (freshly advanced past a
+completed event) or state 4 (freshly rewound), i.e. only once the previous event has actually
+reported completion, never mid-event. An `ON_CALL` sequence that runs off the end of its event list
+is rewound and re-parked at state 3, ready to be called again; an `Initial` sequence instead stops
+at state 2 and does not re-arm.
+
+## The opcode table
+
+The 47-slot dispatch table at `DAT_00727de0` (populated by `FUN_004ee1a0`, read directly rather
+than reconstructed from behaviour) matches mech3ax's `EventType` enum exactly, slot for slot,
+**including the null slot 29** (`FUN_004ee1a0` writes `_DAT_00727e54 = 0`), which mech3ax also marks
+as a gap. That agreement is an independent confirmation the fork's event numbering is correct, not
+an assumption inherited from it. The exe additionally has real handlers at slots 38, 43, 44 and 45
+(`LAB_004ecb70`, `LAB_004eac40`, `FUN_004eac90`, `FUN_004eadd0` respectively) that mech3ax leaves
+undecoded; no shipped def uses any of the four, so nothing downstream needs them yet.
 
 ## Three clocks, and which origin reads which
 
@@ -226,6 +276,58 @@ A malformed chain (an ELSE with no open IF) reads as "not taken" and its writes 
 data degrades to **running** the branch rather than faulting — the safe direction, since a skipped
 branch poses objects wrongly.
 
+## The condition flag word: fourteen kinds, ten authored
+
+A compiled condition record carries a bitmask at `+0xc`, a node index at `+0x10`, and one or two
+values at `+0x14`/`+0x18`. The bit for each token is written by the reader parser `FUN_00516820`,
+one branch per keyword, so this mapping is read off the parser rather than inferred from the
+evaluator's branch order:
+
+| Bit | Token | Evaluated as (`FUN_004ec080`) |
+|---|---|---|
+| `0x1` | `RANDOM_WEIGHT` | `table[i] <= value`, see the ring below |
+| `0x2` | `PLAYER_RANGE` | `dist²(anchor, player) <= value` (`FUN_004ec540`) |
+| `0x4` | `ANIMATION_LOD` | `value <= DAT_00727fc8` (the detail setting) |
+| `0x8` | `PLAYER_UNDERCOVER` | upward 50 m probe from the player (`FUN_004ec410`) |
+| `0x10` | `NODE_UNDERCOVER` | the same probe from the node |
+| `0x20` | `HW_RENDER` | `DAT_009be708` |
+| `0x40` | `PLAYER_1ST_PERSON` | `DAT_009fd17c` |
+| `0x80` | `PLAYER_BELOW_ALT` | `playerY < value` |
+| `0x100` | `NODE_BELOW_ALT` | `nodeY < value` |
+| `0x200` | `PLAYER_LINED_UP` | `θ² <= value`, see below |
+| `0x400` | `PLAYER_SPEED` | `min <= playerSpeed <= max` |
+| `0x800` | `ANIM_HEALTH` | `health <= value` |
+| `0x1000` | `ANIM_HEALTH` (two-value) | `min <= health <= max` |
+| `0x2000` | `NODE_ACTIVE` | node flag `0x4` at `+0x24` |
+
+**Four of the fourteen are never authored**: `PLAYER_UNDERCOVER`, `PLAYER_BELOW_ALT`,
+`PLAYER_LINED_UP` and `PLAYER_SPEED` appear nowhere in the install, which is why the condition
+census in [`formats/anim-definitions.md`](../formats/anim-definitions.md) finds ten kinds and not
+fourteen. They are engine features the level data never used.
+
+⚠ **`PLAYER_LINED_UP` owns the `* 4.0` that looked like a `PLAYER_RANGE` scale factor.** The
+evaluator's `local_18 * 4.0 <= value` sits in the `0x200` branch, and that branch is angular, not
+metric: `FUN_004cf380`/`FUN_0053df30` take the node's world matrix to Euler angles, `FUN_0053f610`
+builds a quaternion from them, `FUN_0053f9b0` multiplies it against the player quaternion at
+`DAT_009fd190` with conjugation, and `FUN_0053fca0` is the quaternion log map, whose `atan2(|v|, w)`
+is the **half**-angle. So `|out|² * 4.0` is θ², compared against a threshold the parser stores as
+`(degrees × 0.017453292)²`. Both sides are squared radians and the 4 is the half-angle cancelling,
+with nothing left over. `PLAYER_RANGE` is the separate `0x2` branch and carries no such factor: the
+parser squares its metres argument into `+0x14` (independently confirming the reader-270 ↔
+compiled-72900 relation in the format doc's condition table) and the evaluator compares
+`dist² <= m²`, which is what CSVM implements. No gate radius is scaled.
+
+**`RANDOM_WEIGHT` reads a 200-entry ring, and that ring is not reproducible.** Each evaluation reads
+`table[DAT_0072836c]` and advances that index modulo 200, with the index global across every
+definition in the world. The table at `DAT_009fce20` is not compiled data: `FUN_004ee380` fills it at
+anim-system init with 200 calls to `rand() * 3.051851e-05` (1/32767, MSVC's `RAND_MAX`), and the
+stream it draws from is reseeded `srand(time(NULL))` on ordinary startup and level-load paths, so
+two runs of the original produce two different tables. There is no fixed sequence to match, and
+CSVM's session-seeded `_rng` is the correct-shape answer rather than a divergence. Disproven in
+full, with the two `srand` call sites, in `analysis/anim-interpreter-decode/FINDINGS.md`
+(`PLAN-anim-original-match` B16); the comparison sense that came out of it, `draw <= weight`
+inclusive at both ends, is what CSVM runs.
+
 ## CALL_SEQUENCE and STOP_SEQUENCE: a sequence is a single instance
 
 The original keeps a sequence's execution state **inside the definition's own sequence array**, so
@@ -309,12 +411,142 @@ establish the pattern:
   toward `to` over the run time, clamps each channel to 0..1, packs RGB into one frame-buffer pixel
   value and hands it plus the alpha — **separately, as a blend weight, not a premultiplied
   component** — to the single global frame-buffer-effect object. It returns still running on the
-  same test.
+  same test. Full decode below.
 
 The consequence for the sequence is the same in both cases: **the ramp is the event's duration and
 the chain waits for it.** Reporting 0 collapses `he_light_seq`'s authored 0.41 s flicker — seven
 ramps — into a single frame, each tween overwriting the previous, and `he_ground_effect`'s six-step
 1.2 s white↔violet wash into one instant.
+
+## FBFX_COLOR_FROM_TO is a full-screen wash
+
+`FUN_004ec6a0`, dispatch slot 36, read in full (decompiled and disassembled). **152 events ship**,
+in four definitions and nowhere else: `he_ground_effect`, `ap_ground_effect` and `flak_effect`
+(6 events each × 8 chapters = 144) plus the intro cutscene's `gi_scene1` (1 × 8). Each of the three
+ordnance definitions carries the same shape — a sibling `Initial` sequence doing
+`If PlayerRange … → CallSequence frame_buffer_effects1 → Endif`, and an `OnCall`
+`frame_buffer_effects1` holding the chain.
+
+**The event struct**, from the handler's own offsets (`ECX` is the event, `EDX` the live sequence):
+
+| Offset | Field |
+|---|---|
+| `+0x0c` / `+0x10` / `+0x14` | red `from` / `to` / **delta** |
+| `+0x18` / `+0x1c` / `+0x20` | green `from` / `to` / delta |
+| `+0x24` / `+0x28` / `+0x2c` | blue `from` / `to` / delta |
+| `+0x30` / `+0x34` / `+0x38` | alpha `from` / `to` / delta |
+| `+0x3c` | `run_time` |
+
+**What it does, per tick.** With `t` = the sequence's **event timer** (`seq+0x28`) clamped to
+`run_time`, each channel is `from + t * delta` — the delta is the compiled
+`(to - from) / run_time`, so the interpolation is **linear in RGBA**. Once the event timer reaches
+`run_time` the value snaps to `to` outright and the handler returns **2** (complete); before that it
+returns **1** (still running, re-dispatch me next tick). Each channel is then clamped to `0…1`; RGB
+is scaled by 255 and packed into one frame-buffer pixel through the same mask/shift globals
+(`DAT_009c67fc`/`6800`/`6804`/`680c`) the weather particles' `COLOR` uses, and the alpha is passed
+**separately, as a scalar** — not premultiplied into the pixel. Colour plus a scalar weight is an
+alpha blend over the picture (`dst = dst·(1-a) + colour·a`); it cannot be a multiply or a screen,
+and the data agrees — `he_ground_effect`'s first step is white at α 0.3, which a multiply would
+render invisible. *(The blend state itself sits behind a virtual on the renderable and was not
+traced; the colour+weight pair and the white-step argument are the evidence.)*
+
+**One global state, last writer wins.** The pair goes to a single process-wide object
+(`FUN_005ca1f0` → `FUN_005ca0e0`, `this` hard-coded to `0x9c8a98`): packed colour at `+0x60`,
+alpha at `+0x68`, then a virtual call that arms the effect **for the current frame only**
+(`FUN_005c54a0` — sets the live bit and clears the persistent one). Nothing else in the exe writes
+those fields. So two bursts overlapping do not composite: the second simply overwrites the first,
+and when the last event completes nothing re-arms the object and the wash is gone on the next frame
+rather than holding its `to` colour.
+
+**`alpha_delta` in the extraction is a round-trip artefact, not a parameter.** mech3ax recomputes
+every delta as `(to - from) / run_time` and emits `alpha_delta` only when the file's stored value
+disagrees bit-for-bit. All 8 non-null values in this install are `flak_effect`'s `-0.99999994`
+against a computed `-1.0` — one ulp, about 2e-8 of alpha across the whole 0.3 s ramp, orders below
+one 8-bit level. CSVM does not read it.
+
+**How CSVM plays it.** `AnimRuntime`'s `FbfxColorFromTo` case pushes `(from, to, run_time)` to a
+session-level sink and reports `run_time` as the event's **duration**, which is the CSVM equivalent
+of the original's "return 1 until done": the sequence runner gates the next event on it, so
+`he_ground_effect`'s six steps space out over their authored 1.2 s instead of collapsing into one
+instant. The sink is `UI.ScreenFlash` (`docs/architecture.md`) — one ramp at a time, replaced
+outright by a later event, painted into every rendered view. Asserted by the `fbfx-flash`
+`--run-tests` suite.
+
+## The last four unhandled kinds — decoded and triaged, none built
+
+`Callback` (slot 35, `004ec5e0`), `ObjectCycleTexture` (slot 17, `004eabd0`), `ObjectDeleteChild`
+(slot 16, `004eab90`) and `CameraState` (slot 20, `004e85c0`) are the whole of what the census in
+`analysis/anim-interpreter-decode/FINDINGS.md` counts as shipped-but-unhandled. All four were
+missing from Ghidra's function list (reached only through the dispatch table, like `LOOP`) and were
+recovered by forcing a function at each dispatch address, then decompiled in full. None gets a
+handler: for each, either CSVM has no consumer of what the exe does, or the def(s) that carry it are
+never reached by anything CSVM plays. A def-census over all 3,015 compiled defs (ad hoc, same method
+as `anim_census.py`) located every occurrence of all four kinds to check reachability, not just count
+them.
+
+- **`Callback`** (288 events, 120 defs — e.g. `player-player.json`'s `destroy_craft` sequence,
+  `value: 15`/`16`). The handler calls the anim instance's own registered native function pointer
+  (`anim+0x74`) with a per-event code (`anim+0x78`, the event's own `+0xc`) if one is registered —
+  pure `has_callbacks`-gated mission-scripting plumbing, notifying a host that installed a callback.
+  CSVM's `AnimRuntime` never installs one; there is no consumer to notify.
+- **`ObjectCycleTexture`** (96 events, 96 defs — exactly the player's own
+  `<part>_damage_{green,yellow,red}` cockpit indicator lights for `leftwing`/`rightwing`/`nose`/
+  `tail`, one set per chapter, nothing else). The handler resets an object's per-mesh texture-cycle
+  list to frame 0 (`FUN_005642a0`) then jumps straight to a specific frame (`FUN_00564410`, index
+  from the event's `+0x12`) — i.e. "snap this object's cycling texture to state N", not "start a
+  cycle". `docs/architecture.md`'s `Flight/DamageVisuals.cs` entry already records these same defs as
+  deliberately unwired: CSVM has no first-person cockpit to show the indicator on, and
+  `GaugeCluster.OnPartDamage` covers the same information a different way. The decode confirms it is
+  the same mechanism, not a second consumer — nothing changes.
+- **`ObjectDeleteChild`** (48 events, 40 defs). The handler unconditionally detaches a named child
+  from a named parent (`FUN_004cd6d0`, dispatched by the child's own node type) — a pure scene-graph
+  reparent, no visibility or transform change of its own. Every shipped use is one of two shapes:
+  - `camera1-generic_intro.json`'s `check_warhawk`/`start_script` sequences detach `camera1` and
+    `player` from `world1` — cutscene camera rigging, `OnCall` and never reached by anything CSVM
+    plays (`docs/plans/PLAN-anim-rendering-followups.md` already logs `camera1`/`player`/`cpilot` as
+    cutscene machinery for cutscenes this project does not have), and `apassengers-rem_pas.json`'s
+    `remove_passenger` detaches `apassengers` from `pass_st` — `pass_st` is not a gamez node in any
+    chapter (confirmed earlier, `docs/HISTORY.md`), so the parent can never resolve even if a handler
+    were written.
+  - `player-cpeject1/2/cpejectstop.json` detach `cpilot` from `pilot_pos`. These ARE reached — they
+    are called from the player's own `destroy_it` crash sequence (`docs/plans/PLAN-M2-polish-4.md`)
+    — but in all three files the delete is the first of exactly two events, and the second is
+    `ObjectActiveState(cpilot, false)`: `cpilot` is hidden immediately after, whether or not it was
+    ever detached. Reached, and still a no-op to build: CSVM already renders the correct (invisible)
+    outcome without it.
+- **`CameraState`** (8 events, 8 defs — one `player-gi_1stperson.json` each). The handler writes a
+  camera node's clip near/far, LOD multiplier, FOV and zoom fields, each gated by its own bit in the
+  event's flags byte. `gi_1stperson` is `OnCall` and its only caller anywhere in the install is
+  `camera1-generic_intro.json`'s `check_warhawk` sequence — the same unreached intro-cutscene
+  machinery as `ObjectDeleteChild` above. CSVM has no scripted first-person camera to configure
+  either (`PlayerFirstPerson` reads `false` — no cockpit view — see the format doc's own condition
+  table).
+
+`AnimRuntime`'s `default:` case keeps counting all four by name (`Count(ev.Kind)`) exactly as
+before — this record is what makes that report legible, not a code change.
+
+## What this record could not confirm
+
+`FUN_004ecbb0` and `FUN_004ebfa0` were read in full and match the state machine and struct offsets
+above exactly, including the three `START_TIME` origin codes (1/2/3 → `anim+0xb0` / `seq+0x24` /
+`seq+0x28`) and the reset writing `state ← +0x21`, `event ptr ← +0x38`, both timers to 0. `LOOP`
+(`004ebfd0`) has no Ghidra-recognised function boundary — it is reached only through the dispatch
+table — but was disassembled directly: it folds the sequence timer into `+0x2c`, does
+`INC word ptr [+0x30]`, terminates on `counter == authored` (`-1` special-cased infinite) or, in its
+second form (`flags & 2`, `LOOP_RUN_TIME`), on the accumulated time reaching the authored float,
+then calls the reset routine and returns 4. **The exe has that second form; nothing shipped builds
+it** — of 3,015 compiled defs' 1,018 `Loop` events, all 1,018 carry `Count` and none carries
+`RunTime`. Disproven, not merely unimplemented: see the census in
+`analysis/anim-interpreter-decode/FINDINGS.md`.
+
+The struct offsets above are otherwise mech3ax's `SeqDefInfoC` layout, taken as given rather than
+independently re-derived field-by-field; only the offsets the stepper and `LOOP` actually touch have
+been seen in code.
+
+`WAIT_FOR_COMPLETION`'s hold is confirmed only at the general handler-return-value contract, not by
+reading a dedicated address, which is a weaker kind of confirmation than the rest of this page. The
+animation-frame tick keeps a hypothesis the decode cannot rule out (`min(render rate, 60)`) alongside
+its confirmation.
 
 ## Sequences of one definition run CONCURRENTLY
 

@@ -957,7 +957,7 @@ judging it. The plan's own lead ("`ObjectCycleTexture` is the most likely real g
 that read: it turned out to be the SAME `<part>_damage_{green,yellow,red}` cockpit indicator
 `docs/architecture.md`'s `Flight/DamageVisuals.cs` entry already records as deliberately unwired (no
 cockpit), not a second, unrelated mechanism — a disproof, not new code. Full per-kind decode, exe
-addresses and def census in `docs/formats/anim-definitions.md`'s "The last four unhandled kinds";
+addresses and def census in `docs/org/sequences.md`'s "The last four unhandled kinds";
 summary:
 
 - **`Callback`** (288, 120 defs) — calls a native callback the anim instance never has registered

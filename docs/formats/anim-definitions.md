@@ -337,7 +337,7 @@ so the runtime has a single convention.
 
 | Count | Condition | Reader spelling | Rule used |
 |---:|---|---|---|
-| 4537 | `RandomWeight` (0..1) | `RANDOM_WEIGHT [w]` | `draw <= w`, re-rolled per evaluation. The original draws from a 200-entry ring that is itself `rand()`-filled per run, so there is no sequence to match — see the flag-word subsection below. |
+| 4537 | `RandomWeight` (0..1) | `RANDOM_WEIGHT [w]` | `draw <= w`, re-rolled per evaluation. The original draws from a 200-entry ring that is itself `rand()`-filled per run, so there is no sequence to match — see [`org/sequences.md`](../org/sequences.md)'s condition flag word. |
 | 4007 | `AnimHealth` | `ANIM_HEALTH [n]` | `health <= n` — "worn down to n". Full health in a world build, so uniformly false. |
 | 1052 | `PlayerRange` | `PLAYER_RANGE [m]` | `dist²(anchor, player) <= value`. **Compiled is metres SQUARED** (reader 270 ↔ compiled 72900, exact across the install; the parser squares it, confirmed in the exe). No scale factor rides on the comparison. |
 | 717 | `NodeActive` | `NODE_ACTIVE [name]` | the node is visible. Compiled carries an INDEX, reader a name — see below. |
@@ -406,7 +406,8 @@ instantaneous base-state pass never has to interpret a branch.
 Playback ops seen and deferred: `OBJECT_DELETE_CHILD`,
 `SOUND` (the one-shot form — see below), `OBJECT_CYCLE_TEXTURE`, `CAMERA_STATE`,
 `CALLBACK`, `DETONATE_WEAPON`.
-(`FBFX_COLOR_FROM_TO` landed — see "FBFX_COLOR_FROM_TO is a full-screen wash";
+(`FBFX_COLOR_FROM_TO` landed — see [`org/sequences.md`](../org/sequences.md)'s
+"FBFX_COLOR_FROM_TO is a full-screen wash";
 `LIGHT_STATE`/`LIGHT_ANIMATION` landed 2026-07-21 — see below;
 `SOUND_NODE` + the sound half of `OBJECT_ADD_CHILD` landed 2026-07-22 — see "SOUND_NODE is a
 three-event triple"; `OBJECT_MOTION`'s rotation half landed 2026-07-22 and its
@@ -498,8 +499,8 @@ address.** A handler returning **1** ("still running") from the stepper `FUN_004
 caller re-dispatching the same event every tick without advancing — exactly the "gates the caller's
 next event, not a lifetime hold" behaviour this census derived independently from data. The
 `CALL_ANIMATION` dispatch slot's own handler address was not individually decoded (see the opcode
-table below), so this is confirmed by the general contract every handler obeys, not by reading the
-wait-specific code.
+table in [`org/sequences.md`](../org/sequences.md)), so this is confirmed by the general contract
+every handler obeys, not by reading the wait-specific code.
 
 All flagged compiled owners are `OnCall` (2,844) or `WeaponHit` (8 in these blocks), never
 `OnStartup`, so no ambient world boot arms one — measured: an 8-chapter `--freecam` regression arms
@@ -1240,7 +1241,8 @@ are not visible from the byte format alone, each measured against this install.
 
   **Decode status: confirmed by mechanism, not by a rate constant** — `004ebfd0` returns state 4
   unconditionally after completing a loop pass, and the stepper (`FUN_004ecbb0`) treats state 4 as
-  "re-gate from the top, then stop for this tick" (see the handler state machine below). That is
+  "re-gate from the top, then stop for this tick" (the handler state machine is in
+  [`org/sequences.md`](../org/sequences.md)). That is
   exactly the coupling this fps-doubling measurement inferred from outside the process: one pass per
   engine update, never more, regardless of render rate. The `1/60` figure itself is a measurement,
   not a constant read from the exe; nothing in the decode pins the update rate to a cited address.
@@ -1369,249 +1371,19 @@ are not visible from the byte format alone, each measured against this install.
   waypoint-motion primitive; no waypoint-path op exists in any C1 reader — path motion is
   SI scripts.
 
-### The decoded interpreter (traced in `crimson.exe`)
+### The runtime decode lives in [`org/sequences.md`](../org/sequences.md)
 
 Everything above this point in the section was inferred from the shipped data. The original's
-interpreter itself has since been located and read directly — `crimson.exe` (image base
-`0x400000`), compiled from `D:\zipper\gamez\zEffect\zeff_ani*.c`. Each paragraph above now states
-the mechanism the exe actually uses — where the decode corrected a stated mechanism (the null-
-`start` encoding, `LOOP 0`), the paragraph asserts the corrected one directly rather than carrying a
-bolted-on correction, and keeps the original census as corroborating measurement, never as the sole
-justification. Two paragraphs keep an explicit "Decode status" note instead of folding it in,
-because the note adds something the prose above it does not already say: `WAIT_FOR_COMPLETION`'s
-hold is confirmed only at the general handler-return-value contract, not by reading a dedicated
-address, which is worth flagging as a weaker kind of confirmation; the animation-frame tick's note
-records a hypothesis the decode cannot rule out (`min(render rate, 60)`) alongside the confirmation.
-What follows is the interpreter itself, cited by address so any of it can be re-found and
-re-checked.
+interpreter has since been located and read directly out of `crimson.exe` with Ghidra, and each
+paragraph above now states the mechanism the exe actually uses rather than the census that stood in
+for it. Where the decode corrected a stated mechanism (the null-`start` encoding, `LOOP 0`), the
+paragraph asserts the corrected one directly and keeps the census as corroborating measurement,
+never as the sole justification.
 
-**Where the code is.**
-
-| Piece | Address |
-|---|---|
-| Sequence stepper (one sequence, one tick) | `FUN_004ecbb0` |
-| Sequence reset (rewind + re-arm) | `FUN_004ebfa0` |
-| Event dispatch table, 47 slots, index 1–0x2f | `DAT_00727de0`, populated by `FUN_004ee1a0` |
-| `IF` / `ELSEIF` condition evaluator | `FUN_004ec080` |
-| `ELSE` / `ELSEIF` fall-through (scan to `ENDIF`) | `004ec5a0` |
-| `ENDIF` | `004ec5d0` (a bare `MOV EAX,2 / RET` — no-op) |
-| `LOOP` | `004ebfd0` |
-| `CALL_SEQUENCE` / `STOP_SEQUENCE` | `004eb570` / `004eb610` |
-| `FBFX_COLOR_FROM_TO` | `FUN_004ec6a0` |
-
-**The live sequence struct is mech3ax's `SeqDefInfoC`** (64 bytes), mutated in place by the
-stepper on every tick:
-
-| Offset | Meaning |
-|---|---|
-| `+0x20` | current state |
-| `+0x21` | reset state (`SeqDefState`: `Initial`=0, `OnCall`=3) |
-| `+0x24` | sequence timer — `START_TIME SEQUENCE` compares against this |
-| `+0x28` | event timer — `START_TIME EVENT` compares against this |
-| `+0x2c` | accumulated loop time |
-| `+0x30` | u16 loop counter (counts up) |
-| `+0x34` / `+0x38` / `+0x3c` | current event pointer / start pointer / byte size |
-
-⚠ mech3ax's own field-name guesses at offsets 36/40/44 (`loop_time` / `event_time` / `seq_time`)
-are mis-ordered against this layout — compare `+0x24`/`+0x28`/`+0x2c` above against offsets 36/40/44
-decimal. They are not load-bearing for round-tripping (nothing reads a compiled def by field name),
-so the fork's names were left alone; this paragraph is the correction, and renaming the fork's
-struct field is explicitly out of scope for this record (it is a round-trip-test surface and belongs
-in its own change).
-
-**The handler state machine.** Every handler returns one of four values, and the stepper writes the
-result into the state byte at `+0x20`:
-
-| Return | Meaning |
-|---|---|
-| **2** | event complete — advance to the next event |
-| **1** | still running — re-dispatch the SAME event next tick |
-| **4** | sequence rewound by `LOOP` — re-gate from the top of the sequence, and yield the rest of this tick |
-| *(state)* **3** | parked, awaiting a `CALL_SEQUENCE` (not a return value — a resting state) |
-
-The start-time gate is evaluated only when the stepper is in state 0 (freshly advanced past a
-completed event) or state 4 (freshly rewound) — i.e. only once the previous event has actually
-reported completion, never mid-event. An `ON_CALL` sequence that runs off the end of its event list
-is rewound and re-parked at state 3, ready to be called again; an `Initial` sequence instead stops
-at state 2 and does not re-arm.
-
-**The opcode table.** `crimson.exe`'s 47-slot dispatch table at `DAT_00727de0` (populated by
-`FUN_004ee1a0`, read directly rather than reconstructed from behaviour) matches mech3ax's
-`EventType` enum exactly, slot for slot — **including the null slot 29** (`FUN_004ee1a0` writes
-`_DAT_00727e54 = 0`), which mech3ax also marks as a gap. That agreement is an independent
-confirmation the fork's event numbering is correct, not an assumption inherited from it. The exe
-additionally has real handlers at slots 38, 43, 44 and 45 (`LAB_004ecb70`, `LAB_004eac40`,
-`FUN_004eac90`, `FUN_004eadd0` respectively) that mech3ax leaves undecoded; no shipped def uses any
-of the four, so nothing downstream needs them yet.
-
-**What this record could not confirm.** `FUN_004ecbb0` and `FUN_004ebfa0` were read in full while
-writing this and match the state machine and struct offsets above exactly, including the three
-`START_TIME` origin codes (1/2/3 → `anim+0xb0` / `seq+0x24` / `seq+0x28`) and the reset writing
-`state ← +0x21`, `event ptr ← +0x38`, both timers to 0. `LOOP` (`004ebfd0`) has no
-Ghidra-recognised function boundary — it is reached only through the dispatch table — but was
-disassembled directly: it folds the sequence timer into `+0x2c`, does `INC word ptr [+0x30]`,
-terminates on `counter == authored` (`-1` special-cased infinite) or, in its second form
-(`flags & 2`, `LOOP_RUN_TIME`), on the accumulated time reaching the authored float, then calls the
-reset routine and returns 4. **The exe has that second form; nothing shipped builds it** — of
-3,015 compiled defs' 1,018 `Loop` events, all 1,018 carry `Count` and none carries `RunTime`.
-Disproven, not merely unimplemented: see the census in `analysis/anim-interpreter-decode/FINDINGS.md`.
-
-The struct offsets above are otherwise mech3ax's `SeqDefInfoC` layout, taken as given rather than
-independently re-derived field-by-field; only the offsets the stepper and `LOOP` actually touch
-have been seen in code.
-
-**The condition flag word: fourteen kinds, ten authored.** A compiled condition record carries a
-bitmask at `+0xc`, a node index at `+0x10`, and one or two values at `+0x14`/`+0x18`. The bit for
-each token is written by the reader parser `FUN_00516820`, one branch per keyword, so this mapping
-is read off the parser rather than inferred from the evaluator's branch order:
-
-| Bit | Token | Evaluated as (`FUN_004ec080`) |
-|---|---|---|
-| `0x1` | `RANDOM_WEIGHT` | `table[i] <= value`, see the ring below |
-| `0x2` | `PLAYER_RANGE` | `dist²(anchor, player) <= value` (`FUN_004ec540`) |
-| `0x4` | `ANIMATION_LOD` | `value <= DAT_00727fc8` (the detail setting) |
-| `0x8` | `PLAYER_UNDERCOVER` | upward 50 m probe from the player (`FUN_004ec410`) |
-| `0x10` | `NODE_UNDERCOVER` | the same probe from the node |
-| `0x20` | `HW_RENDER` | `DAT_009be708` |
-| `0x40` | `PLAYER_1ST_PERSON` | `DAT_009fd17c` |
-| `0x80` | `PLAYER_BELOW_ALT` | `playerY < value` |
-| `0x100` | `NODE_BELOW_ALT` | `nodeY < value` |
-| `0x200` | `PLAYER_LINED_UP` | `θ² <= value`, see below |
-| `0x400` | `PLAYER_SPEED` | `min <= playerSpeed <= max` |
-| `0x800` | `ANIM_HEALTH` | `health <= value` |
-| `0x1000` | `ANIM_HEALTH` (two-value) | `min <= health <= max` |
-| `0x2000` | `NODE_ACTIVE` | node flag `0x4` at `+0x24` |
-
-**Four of the fourteen are never authored**: `PLAYER_UNDERCOVER`, `PLAYER_BELOW_ALT`,
-`PLAYER_LINED_UP` and `PLAYER_SPEED` appear nowhere in the install, which is why the condition
-census above finds ten kinds and not fourteen. They are engine features the level data never used.
-
-⚠ **`PLAYER_LINED_UP` owns the `* 4.0` that looked like a `PLAYER_RANGE` scale factor.** The
-evaluator's `local_18 * 4.0 <= value` sits in the `0x200` branch, and that branch is angular, not
-metric: `FUN_004cf380`/`FUN_0053df30` take the node's world matrix to Euler angles, `FUN_0053f610`
-builds a quaternion from them, `FUN_0053f9b0` multiplies it against the player quaternion at
-`DAT_009fd190` with conjugation, and `FUN_0053fca0` is the quaternion log map, whose `atan2(|v|, w)`
-is the **half**-angle. So `|out|² * 4.0` is θ², compared against a threshold the parser stores as
-`(degrees × 0.017453292)²`. Both sides are squared radians and the 4 is the half-angle cancelling,
-with nothing left over. `PLAYER_RANGE` is the separate `0x2` branch and carries no such factor: the
-parser squares its metres argument into `+0x14` (independently confirming the reader-270 ↔
-compiled-72900 relation in the condition table above) and the evaluator compares `dist² <= m²`,
-which is what CSVM implements. No gate radius is scaled.
-
-**`RANDOM_WEIGHT` reads a 200-entry ring, and that ring is not reproducible.** Each evaluation reads
-`table[DAT_0072836c]` and advances that index modulo 200, with the index global across every
-definition in the world. The table at `DAT_009fce20` is not compiled data: `FUN_004ee380` fills it at
-anim-system init with 200 calls to `rand() * 3.051851e-05` (1/32767, MSVC's `RAND_MAX`), and the
-stream it draws from is reseeded `srand(time(NULL))` on ordinary startup and level-load paths, so
-two runs of the original produce two different tables. There is no fixed sequence to match, and
-CSVM's session-seeded `_rng` is the correct-shape answer rather than a divergence. Disproven in
-full, with the two `srand` call sites, in `analysis/anim-interpreter-decode/FINDINGS.md`
-(`PLAN-anim-original-match` B16); the comparison sense that came out of it, `draw <= weight`
-inclusive at both ends, is what CSVM runs.
-
-## FBFX_COLOR_FROM_TO is a full-screen wash
-
-`FUN_004ec6a0`, dispatch slot 36, read in full (decompiled and disassembled). **152 events ship**,
-in four definitions and nowhere else: `he_ground_effect`, `ap_ground_effect` and `flak_effect`
-(6 events each × 8 chapters = 144) plus the intro cutscene's `gi_scene1` (1 × 8). Each of the three
-ordnance definitions carries the same shape — a sibling `Initial` sequence doing
-`If PlayerRange … → CallSequence frame_buffer_effects1 → Endif`, and an `OnCall`
-`frame_buffer_effects1` holding the chain.
-
-**The event struct**, from the handler's own offsets (`ECX` is the event, `EDX` the live sequence):
-
-| Offset | Field |
-|---|---|
-| `+0x0c` / `+0x10` / `+0x14` | red `from` / `to` / **delta** |
-| `+0x18` / `+0x1c` / `+0x20` | green `from` / `to` / delta |
-| `+0x24` / `+0x28` / `+0x2c` | blue `from` / `to` / delta |
-| `+0x30` / `+0x34` / `+0x38` | alpha `from` / `to` / delta |
-| `+0x3c` | `run_time` |
-
-**What it does, per tick.** With `t` = the sequence's **event timer** (`seq+0x28`) clamped to
-`run_time`, each channel is `from + t * delta` — the delta is the compiled
-`(to - from) / run_time`, so the interpolation is **linear in RGBA**. Once the event timer reaches
-`run_time` the value snaps to `to` outright and the handler returns **2** (complete); before that it
-returns **1** (still running, re-dispatch me next tick). Each channel is then clamped to `0…1`; RGB
-is scaled by 255 and packed into one frame-buffer pixel through the same mask/shift globals
-(`DAT_009c67fc`/`6800`/`6804`/`680c`) the weather particles' `COLOR` uses, and the alpha is passed
-**separately, as a scalar** — not premultiplied into the pixel. Colour plus a scalar weight is an
-alpha blend over the picture (`dst = dst·(1-a) + colour·a`); it cannot be a multiply or a screen,
-and the data agrees — `he_ground_effect`'s first step is white at α 0.3, which a multiply would
-render invisible. *(The blend state itself sits behind a virtual on the renderable and was not
-traced; the colour+weight pair and the white-step argument are the evidence.)*
-
-**One global state, last writer wins.** The pair goes to a single process-wide object
-(`FUN_005ca1f0` → `FUN_005ca0e0`, `this` hard-coded to `0x9c8a98`): packed colour at `+0x60`,
-alpha at `+0x68`, then a virtual call that arms the effect **for the current frame only**
-(`FUN_005c54a0` — sets the live bit and clears the persistent one). Nothing else in the exe writes
-those fields. So two bursts overlapping do not composite: the second simply overwrites the first,
-and when the last event completes nothing re-arms the object and the wash is gone on the next frame
-rather than holding its `to` colour.
-
-**`alpha_delta` in the extraction is a round-trip artefact, not a parameter.** mech3ax recomputes
-every delta as `(to - from) / run_time` and emits `alpha_delta` only when the file's stored value
-disagrees bit-for-bit. All 8 non-null values in this install are `flak_effect`'s `-0.99999994`
-against a computed `-1.0` — one ulp, about 2e-8 of alpha across the whole 0.3 s ramp, orders below
-one 8-bit level. CSVM does not read it.
-
-**How CSVM plays it.** `AnimRuntime`'s `FbfxColorFromTo` case pushes `(from, to, run_time)` to a
-session-level sink and reports `run_time` as the event's **duration**, which is the CSVM equivalent
-of the original's "return 1 until done": the sequence runner gates the next event on it, so
-`he_ground_effect`'s six steps space out over their authored 1.2 s instead of collapsing into one
-instant. The sink is `UI.ScreenFlash` (`docs/architecture.md`) — one ramp at a time, replaced
-outright by a later event, painted into every rendered view. Asserted by the `fbfx-flash`
-`--run-tests` suite.
-
-## The last four unhandled kinds — decoded and triaged, none built
-
-`Callback` (slot 35, `004ec5e0`), `ObjectCycleTexture` (slot 17, `004eabd0`), `ObjectDeleteChild`
-(slot 16, `004eab90`) and `CameraState` (slot 20, `004e85c0`) are the whole of what the census in
-`analysis/anim-interpreter-decode/FINDINGS.md` counts as shipped-but-unhandled. All four were
-missing from Ghidra's function list (reached only through the dispatch table, like `LOOP`) and were
-recovered by forcing a function at each dispatch address, then decompiled in full. None gets a
-handler: for each, either CSVM has no consumer of what the exe does, or the def(s) that carry it are
-never reached by anything CSVM plays. A def-census over all 3,015 compiled defs (ad hoc, same method
-as `anim_census.py`) located every occurrence of all four kinds to check reachability, not just count
-them.
-
-- **`Callback`** (288 events, 120 defs — e.g. `player-player.json`'s `destroy_craft` sequence,
-  `value: 15`/`16`). The handler calls the anim instance's own registered native function pointer
-  (`anim+0x74`) with a per-event code (`anim+0x78`, the event's own `+0xc`) if one is registered —
-  pure `has_callbacks`-gated mission-scripting plumbing, notifying a host that installed a callback.
-  CSVM's `AnimRuntime` never installs one; there is no consumer to notify.
-- **`ObjectCycleTexture`** (96 events, 96 defs — exactly the player's own
-  `<part>_damage_{green,yellow,red}` cockpit indicator lights for `leftwing`/`rightwing`/`nose`/
-  `tail`, one set per chapter, nothing else). The handler resets an object's per-mesh texture-cycle
-  list to frame 0 (`FUN_005642a0`) then jumps straight to a specific frame (`FUN_00564410`, index
-  from the event's `+0x12`) — i.e. "snap this object's cycling texture to state N", not "start a
-  cycle". `docs/architecture.md`'s `Flight/DamageVisuals.cs` entry already records these same defs as
-  deliberately unwired: CSVM has no first-person cockpit to show the indicator on, and
-  `GaugeCluster.OnPartDamage` covers the same information a different way. The decode confirms it is
-  the same mechanism, not a second consumer — nothing changes.
-- **`ObjectDeleteChild`** (48 events, 40 defs). The handler unconditionally detaches a named child
-  from a named parent (`FUN_004cd6d0`, dispatched by the child's own node type) — a pure scene-graph
-  reparent, no visibility or transform change of its own. Every shipped use is one of two shapes:
-  - `camera1-generic_intro.json`'s `check_warhawk`/`start_script` sequences detach `camera1` and
-    `player` from `world1` — cutscene camera rigging, `OnCall` and never reached by anything CSVM
-    plays (`docs/plans/PLAN-anim-rendering-followups.md` already logs `camera1`/`player`/`cpilot` as
-    cutscene machinery for cutscenes this project does not have), and `apassengers-rem_pas.json`'s
-    `remove_passenger` detaches `apassengers` from `pass_st` — `pass_st` is not a gamez node in any
-    chapter (confirmed earlier, `docs/HISTORY.md`), so the parent can never resolve even if a handler
-    were written.
-  - `player-cpeject1/2/cpejectstop.json` detach `cpilot` from `pilot_pos`. These ARE reached — they
-    are called from the player's own `destroy_it` crash sequence (`docs/plans/PLAN-M2-polish-4.md`)
-    — but in all three files the delete is the first of exactly two events, and the second is
-    `ObjectActiveState(cpilot, false)`: `cpilot` is hidden immediately after, whether or not it was
-    ever detached. Reached, and still a no-op to build: CSVM already renders the correct (invisible)
-    outcome without it.
-- **`CameraState`** (8 events, 8 defs — one `player-gi_1stperson.json` each). The handler writes a
-  camera node's clip near/far, LOD multiplier, FOV and zoom fields, each gated by its own bit in the
-  event's flags byte. `gi_1stperson` is `OnCall` and its only caller anywhere in the install is
-  `camera1-generic_intro.json`'s `check_warhawk` sequence — the same unreached intro-cutscene
-  machinery as `ObjectDeleteChild` above. CSVM has no scripted first-person camera to configure
-  either (`PlayerFirstPerson` reads `false` — no cockpit view — `docs/formats/anim-definitions.md`'s
-  own condition table).
-
-`AnimRuntime`'s `default:` case keeps counting all four by name (`Count(ev.Kind)`) exactly as
-before — this record is what makes that report legible, not a code change.
+**The decode itself is not repeated here.** It is one page,
+[`docs/org/sequences.md`](../org/sequences.md): the function map and the live `SeqDefInfoC` offsets,
+the handler state machine, the 47-slot opcode table, the three clocks, the LOOP and its remainder
+carry, the depth-free IF scan, the condition flag word (fourteen kinds, of which this install
+authors ten), `CALL_SEQUENCE`/`STOP_SEQUENCE`, `WAIT_FOR_COMPLETION`, `FBFX_COLOR_FROM_TO`, the four
+shipped event kinds with no handler, and the list of places CSVM deliberately differs. This file
+keeps the authored side: what the bytes mean and how the reader and compiled forms diverge.

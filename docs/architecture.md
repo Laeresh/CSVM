@@ -1428,7 +1428,7 @@ function map, the three START_TIME origins, the LOOP's pass counter and 60 Hz fr
 and the clock-carry a timed loop needs; the authored side stays in
 [formats/anim-definitions.md](formats/anim-definitions.md).
 `AnimInstance` holds a definition's concurrent runners and removes them as they finish, and carries
-the CALL_SEQUENCE/STOP_SEQUENCE semantics (decode in `docs/formats/anim-definitions.md`;
+the CALL_SEQUENCE/STOP_SEQUENCE semantics (decode in `docs/org/sequences.md`;
 `AnimRuntime`'s dispatch cases are thin shims over these). **One runner per sequence, keyed on the
 `AnimSequence` OBJECT and never on its name** — the original holds a sequence's state inside the
 definition's own sequence array (`004eb570`), so `CallSequence` starts a sequence only when nothing
