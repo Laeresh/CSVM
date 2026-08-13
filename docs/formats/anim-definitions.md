@@ -330,6 +330,13 @@ Ten condition kinds appear across the install. None of them is opaque gameplay s
 world build has no value for — an earlier reading, which led the runtime to skip every
 branch. **All ten are evaluated as of 2026-07-21** (`AnimRuntime.EvaluateCondition`).
 
+⚠ **The engine has fourteen, and the missing four are unused data, not unimplemented code.**
+`PLAYER_UNDERCOVER`, `PLAYER_BELOW_ALT`, `PLAYER_LINED_UP` and `PLAYER_SPEED` have parser branches
+and evaluator branches in `crimson.exe` and are authored nowhere in the install (swept 2026-08-13,
+0 occurrences against 1,097 for `PLAYER_RANGE`). The full bit-to-token table is in
+[`org/sequences.md`](../org/sequences.md); this table is the census of what ships, and the two do
+not disagree.
+
 The compiled payload is a one-key union under `data.If.condition`, e.g.
 `{"AnimationLod": 2}`; the reader spells the same conditions with its own vocabulary and, for
 two of them, **different units** — that conversion happens once, in `AnimDefs.ReaderCondition`,

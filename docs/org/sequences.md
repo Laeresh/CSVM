@@ -301,9 +301,14 @@ evaluator's branch order:
 | `0x2000` | `NODE_ACTIVE` | node flag `0x4` at `+0x24` |
 
 **Four of the fourteen are never authored**: `PLAYER_UNDERCOVER`, `PLAYER_BELOW_ALT`,
-`PLAYER_LINED_UP` and `PLAYER_SPEED` appear nowhere in the install, which is why the condition
-census in [`formats/anim-definitions.md`](../formats/anim-definitions.md) finds ten kinds and not
-fourteen. They are engine features the level data never used.
+`PLAYER_LINED_UP` and `PLAYER_SPEED` are engine features the level data never used, which is why
+the condition census in [`formats/anim-definitions.md`](../formats/anim-definitions.md) finds ten
+kinds and not fourteen. Swept 2026-08-13 over the whole extraction: **0 occurrences** of any of the
+four, in either the reader spelling or the compiled one, and 0 for the `PLAYER_NEAR_GROUND` alias
+the parser also accepts, against **1,097 occurrences of `PLAYER_RANGE`** on the same sweep as a
+control. The reader tokens are the parser's own literal keywords and the reader sources are what
+the compiled archives are built from, so that half is a direct test rather than an inference.
+Nothing here is a gap in CSVM: there is no shipped condition to evaluate.
 
 ⚠ **`PLAYER_LINED_UP` owns the `* 4.0` that looked like a `PLAYER_RANGE` scale factor.** The
 evaluator's `local_18 * 4.0 <= value` sits in the `0x200` branch, and that branch is angular, not
