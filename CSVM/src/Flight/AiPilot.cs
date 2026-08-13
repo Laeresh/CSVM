@@ -120,7 +120,8 @@ public sealed class AiPilot
         {
             var mode = machine.Update(model.Position, model.VelocityDir * model.Speed,
                 quarry?.WorldPosition, quarry?.Pilot?.Machine?.Mode, dt,
-                quarry?.WorldVelocity, quarry?.IsHumanPiloted ?? false);
+                quarry?.WorldVelocity, quarry?.IsHumanPiloted ?? false,
+                nose: -model.Attitude.Z);
             switch (mode)
             {
                 case AiMode.Stunned:

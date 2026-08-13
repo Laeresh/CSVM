@@ -2284,7 +2284,9 @@ suite.
 ⚠ Named inventions: evade's timed scramble run, the avoid-crash probe/climb-out geometry, the
   return_range-as-leash reading (anchor undecoded), the ×3 signature weight, the flat
   steady-hand roll (the design's damage weighting is undecoded), and lay off's entry/exit
-  geometry (rear/chase cones, 350 m enter / 250 m caught-up, 2 s hold). No condition on the
+  geometry (rear/chase cones on the NOSE axis with velocity as fallback, 350 m enter / 250 m
+  caught-up, 2 s hold, and a 1.5 s sustained-geometry window before entry — a single passing
+  frame mid-turn must never latch the mode, user-reported 2026-08-14). No condition on the
   player's health is modelled: nothing decoded supports one. Splitscreen is an extension
   decision: the assist follows whichever human the AI is engaging, not player one.
 ⚠ The two danger-zone modes are enum-only, never entered: their gate data is the undecoded

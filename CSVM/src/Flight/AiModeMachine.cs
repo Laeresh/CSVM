@@ -129,6 +129,12 @@ public sealed class AiModeMachine
     /// lay-off exit condition is honoured.</summary>
     public const float LayOffMinHoldS = 2f;
 
+    /// <summary>Invented: the pursued geometry must hold continuously this long before pursue
+    /// eases into lay off. Kills single-frame misfires in a turning fight, where the tail-axis
+    /// test can pass for a moment mid-maneuver and the dwell would then latch it (user-reported
+    /// 2026-08-14: an enemy behind the player appearing to slow down).</summary>
+    public const float LayOffSustainS = 1.5f;
+
     /// <summary>Activation radius, metres — player.json's <c>min_ai_active_dist</c> (2000 shipped),
     /// the fallback for every roster whose own volume slots are unauthored (all of them).
     /// A target outside it is not ranked at all (the engine scores it 1e21).</summary>
@@ -195,7 +201,9 @@ public sealed class AiModeMachine
     private Vector3 _pursuitAnchor;
     private Vector3 _lastPos;
     private Vector3 _lastVelocity;
+    private Vector3? _nose;
     private float _layOffHold;
+    private float _pursuedFor;
     private float _stunRemaining;
     private float _evadeRemaining;
     private float _evadeScramble;
@@ -271,10 +279,11 @@ public sealed class AiModeMachine
     /// splitscreen that is whichever human the AI is currently engaging, an extension decision
     /// (the original is single-player and its "the player" needs no choosing).</summary>
     public AiMode Update(Vector3 pos, Vector3 velocity, Vector3? targetPos, AiMode? targetMode,
-        float dt, Vector3? targetVelocity = null, bool targetIsHuman = false)
+        float dt, Vector3? targetVelocity = null, bool targetIsHuman = false, Vector3? nose = null)
     {
         _lastPos = pos;
         _lastVelocity = velocity;
+        _nose = nose;
         if (Mode == AiMode.Stunned)
         {
             // Nothing interrupts a stun: the pilot has no controls to react with.
@@ -451,10 +460,13 @@ public sealed class AiModeMachine
             && IsPursuedBy(pos, velocity, targetPos, targetVelocity);
         if (Mode == AiMode.Pursue)
         {
-            if (pursued && gap > LayOffEnterRangeM)
+            // Entry needs the geometry SUSTAINED, not one passing frame: a turning fight can
+            // satisfy the tail-axis test momentarily, and the dwell would latch the misfire.
+            _pursuedFor = pursued && gap > LayOffEnterRangeM ? _pursuedFor + dt : 0f;
+            if (_pursuedFor >= LayOffSustainS)
             {
                 Transition(AiMode.LayOff, FormattableString.Invariant(
-                    $"pursuer {gap:0} m behind; easing off x{SixthSenseFactor:0.00}"));
+                    $"pursuer {gap:0} m behind for {_pursuedFor:0.0} s; easing off x{SixthSenseFactor:0.00}"));
             }
         }
         else if (!AssistEnabled)
@@ -472,18 +484,22 @@ public sealed class AiModeMachine
 
     /// <summary>The pursued test (invented geometry): the target sits behind the AI — within
     /// <see cref="LayOffRearConeDeg"/> of the tail axis — and its velocity points at the AI
-    /// within <see cref="LayOffPursuerConeDeg"/>, i.e. it is actually giving chase. An unknown
-    /// target velocity can never read as pursuit.</summary>
+    /// within <see cref="LayOffPursuerConeDeg"/>, i.e. it is actually giving chase. The tail
+    /// axis is the NOSE attitude when the caller supplies one, the velocity only as a fallback:
+    /// mid-maneuver the two diverge, and the velocity reading let the test pass for a frame with
+    /// the enemy positionally behind the player (user-reported). An unknown target velocity can
+    /// never read as pursuit.</summary>
     private bool IsPursuedBy(Vector3 pos, Vector3 velocity, Vector3 targetPos,
         Vector3? targetVelocity)
     {
+        var axis = _nose is { } n && n.LengthSquared() > 1e-4f ? n : velocity;
         if (targetVelocity is not { } tv || tv.LengthSquared() < 1e-4f
-            || velocity.LengthSquared() < 1e-4f)
+            || axis.LengthSquared() < 1e-4f)
             return false;
         var toTarget = targetPos - pos;
         if (toTarget.LengthSquared() < 1e-4f)
             return false;
-        float behindCos = (-velocity.Normalized()).Dot(toTarget.Normalized());
+        float behindCos = (-axis.Normalized()).Dot(toTarget.Normalized());
         if (behindCos < Mathf.Cos(Mathf.DegToRad(LayOffRearConeDeg)))
             return false;
         float chaseCos = tv.Normalized().Dot((-toTarget).Normalized());
@@ -574,6 +590,7 @@ public sealed class AiModeMachine
                 LayOffHeadingDeg = AiPilot.HeadingDegOf(_lastVelocity);
             LayOffAltitude = _lastPos.Y;
         }
+        _pursuedFor = 0f; // any transition restarts the sustained-pursuit clock
         ModeChanged?.Invoke(from, to, reason);
     }
 }

@@ -3871,12 +3871,20 @@ public static class Suites
             var ownVel = new Vector3(0f, 0f, -100f);               // flying -Z
             var pursuerPos = aiPos2 + new Vector3(0f, 0f, 600f);   // 600 m dead astern
             var pursuerVel = new Vector3(0f, 0f, -80f);            // giving chase
+            // Entry needs the geometry SUSTAINED (LayOffSustainS), so both arms tick through
+            // the window; one passing frame must not enter (the misfire regression).
+            int sustainFrames = (int)(AiModeMachine.LayOffSustainS * 60f) + 2;
             machine.AssistEnabled = false;
-            machine.Update(aiPos2, ownVel, pursuerPos, null, 1f / 60f, pursuerVel, targetIsHuman: true);
+            for (int i = 0; i < sustainFrames; i++)
+                machine.Update(aiPos2, ownVel, pursuerPos, null, 1f / 60f, pursuerVel, targetIsHuman: true);
             ctx.Check(machine.Mode == AiMode.Pursue,
                 $"--no-assist: the same pursued geometry never enters lay off mode={AiModeMachine.NameOf(machine.Mode)}");
             machine.AssistEnabled = true;
             machine.Update(aiPos2, ownVel, pursuerPos, null, 1f / 60f, pursuerVel, targetIsHuman: true);
+            ctx.Check(machine.Mode == AiMode.Pursue,
+                $"one passing frame does not enter lay off mode={AiModeMachine.NameOf(machine.Mode)}");
+            for (int i = 0; i < sustainFrames; i++)
+                machine.Update(aiPos2, ownVel, pursuerPos, null, 1f / 60f, pursuerVel, targetIsHuman: true);
             ctx.Check(machine.Mode == AiMode.LayOff,
                 $"assist on: a chasing human fallen 600 m behind enters lay off mode={AiModeMachine.NameOf(machine.Mode)}");
             ctx.Check(transitions.Contains("pursue>lay off"),

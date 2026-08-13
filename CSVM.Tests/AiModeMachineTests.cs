@@ -24,6 +24,15 @@ public class AiModeMachineTests
     private static readonly Vector3 Astern600 = Home + new Vector3(0f, 0f, 600f);
     private static readonly Vector3 Chasing = new(0f, 0f, -80f);
 
+    /// <summary>Holds the pursued geometry through the sustain window plus one frame — the
+    /// entry now needs it CONTINUOUS, never one passing frame.</summary>
+    private static void SustainPursuit(AiModeMachine m, Vector3 target, Vector3 chase)
+    {
+        int frames = (int)(AiModeMachine.LayOffSustainS * 60f) + 2;
+        for (int i = 0; i < frames; i++)
+            m.Update(Home, Level, target, null, 1f / 60f, chase, targetIsHuman: true);
+    }
+
     [Fact]
     public void ModeNamesAreTheEngineVocabulary()
     {
@@ -250,8 +259,14 @@ public class AiModeMachineTests
     {
         var m = Machine();
         PursueFrom(m, Astern600);
-        Assert.Equal(AiMode.LayOff,
-            m.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true));
+
+        // One passing frame is NOT enough: the entry needs the geometry sustained (the
+        // user-reported misfire regression — a turning fight satisfying the test momentarily).
+        m.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true);
+        Assert.Equal(AiMode.Pursue, m.Mode);
+
+        SustainPursuit(m, Astern600, Chasing);
+        Assert.Equal(AiMode.LayOff, m.Mode);
 
         // The lay-off course is the entry velocity's heading at the entry altitude.
         Assert.Equal(AiPilot.HeadingDegOf(Level), m.LayOffHeadingDeg, 3);
@@ -261,8 +276,28 @@ public class AiModeMachineTests
         var m2 = Machine();
         var astern300 = Home + new Vector3(0f, 0f, 300f);
         PursueFrom(m2, astern300);
-        Assert.Equal(AiMode.Pursue,
-            m2.Update(Home, Level, astern300, null, 1f / 60f, Chasing, targetIsHuman: true));
+        SustainPursuit(m2, astern300, Chasing);
+        Assert.Equal(AiMode.Pursue, m2.Mode);
+
+        // An interrupted window restarts the clock: geometry, a break, geometry again.
+        var m3 = Machine();
+        PursueFrom(m3, Astern600);
+        for (int i = 0; i < 60; i++)
+            m3.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true);
+        m3.Update(Home, Level, Astern600, null, 1f / 60f, new Vector3(0f, 0f, 80f), targetIsHuman: true);
+        for (int i = 0; i < 60; i++)
+            m3.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true);
+        Assert.Equal(AiMode.Pursue, m3.Mode); // 1 s + 1 s with a break never reaches 1.5 s
+
+        // The nose axis outranks the velocity: nose pointed AT the target (a turn toward it)
+        // reads as not-pursued even while the velocity still points away.
+        var m4 = Machine();
+        PursueFrom(m4, Astern600);
+        int frames = (int)(AiModeMachine.LayOffSustainS * 60f) + 2;
+        for (int i = 0; i < frames; i++)
+            m4.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true,
+                nose: new Vector3(0f, 0f, 1f)); // nose toward the target astern
+        Assert.Equal(AiMode.Pursue, m4.Mode);
     }
 
     [Fact]
@@ -272,27 +307,29 @@ public class AiModeMachineTests
         var m = Machine();
         m.AssistEnabled = false;
         PursueFrom(m, Astern600);
-        Assert.Equal(AiMode.Pursue,
-            m.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true));
+        SustainPursuit(m, Astern600, Chasing);
+        Assert.Equal(AiMode.Pursue, m.Mode);
 
         // An AI pursuer gets no favours: the assist is for human players only.
         var m2 = Machine();
         PursueFrom(m2, Astern600);
-        Assert.Equal(AiMode.Pursue,
-            m2.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: false));
+        int frames = (int)(AiModeMachine.LayOffSustainS * 60f) + 2;
+        for (int i = 0; i < frames; i++)
+            m2.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: false);
+        Assert.Equal(AiMode.Pursue, m2.Mode);
 
         // A target astern but flying AWAY is not pursuing.
         var m3 = Machine();
         PursueFrom(m3, Astern600);
-        Assert.Equal(AiMode.Pursue,
-            m3.Update(Home, Level, Astern600, null, 1f / 60f, new Vector3(0f, 0f, 80f), targetIsHuman: true));
+        SustainPursuit(m3, Astern600, new Vector3(0f, 0f, 80f));
+        Assert.Equal(AiMode.Pursue, m3.Mode);
 
         // A chasing target abeam is outside the rear cone.
         var m4 = Machine();
         var abeam = Home + new Vector3(600f, 0f, 0f);
         PursueFrom(m4, abeam);
-        Assert.Equal(AiMode.Pursue,
-            m4.Update(Home, Level, abeam, null, 1f / 60f, new Vector3(-80f, 0f, 0f), targetIsHuman: true));
+        SustainPursuit(m4, abeam, new Vector3(-80f, 0f, 0f));
+        Assert.Equal(AiMode.Pursue, m4.Mode);
     }
 
     [Fact]
@@ -300,7 +337,7 @@ public class AiModeMachineTests
     {
         var m = Machine();
         PursueFrom(m, Astern600);
-        m.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true);
+        SustainPursuit(m, Astern600, Chasing);
         Assert.Equal(AiMode.LayOff, m.Mode);
 
         // The anti-chatter hold: a caught-up gap inside it does not exit yet.
@@ -316,7 +353,7 @@ public class AiModeMachineTests
             m.Update(Home, Level, astern200, null, 1f / 60f, Chasing, targetIsHuman: true));
 
         // Re-enter, hold out, then the chase ending (velocity away) also returns to pursue.
-        m.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true);
+        SustainPursuit(m, Astern600, Chasing);
         Assert.Equal(AiMode.LayOff, m.Mode);
         for (int i = 0; i < (int)(AiModeMachine.LayOffMinHoldS * 60f) + 5; i++)
             m.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true);
@@ -329,7 +366,7 @@ public class AiModeMachineTests
     {
         var m = Machine();
         PursueFrom(m, Astern600);
-        m.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true);
+        SustainPursuit(m, Astern600, Chasing);
         Assert.Equal(AiMode.LayOff, m.Mode);
         m.AssistEnabled = false;
         Assert.Equal(AiMode.Pursue,
