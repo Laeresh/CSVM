@@ -875,6 +875,46 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return started;
     }
 
+    /// <summary><see cref="Play"/>, scoped to one world subtree: starts only the instances
+    /// whose anchor sits at or under <paramref name="scope"/>. C1 carries three
+    /// <c>hangerdoors</c> nodes — the zeppelin's and two ground hangars' — so a generator's
+    /// door call must not swing every namesake in the chapter (the F20 case; ground hangar
+    /// doors are mission-animation territory, BL-350).</summary>
+    public List<(AnimDefinition Def, Node3D? Anchor)> PlayWithin(Node3D scope, string animName,
+        bool applyReset = true)
+    {
+        var started = new List<(AnimDefinition Def, Node3D? Anchor)>();
+        foreach (var def in _program.ByAnimName(animName))
+        {
+            foreach (var anchor in Anchors(def))
+            {
+                if (anchor == null || (anchor != scope && !scope.IsAncestorOf(anchor)))
+                    continue;
+                if (applyReset && def.ResetState != null)
+                    ApplyInstant(def.ResetState.Events, def, anchor);
+                Start(def, anchor);
+                started.Add((def, anchor));
+            }
+        }
+        return started;
+    }
+
+    /// <summary><see cref="Stop"/>, scoped like <see cref="PlayWithin"/>: tears down only the
+    /// named instances anchored at or under <paramref name="scope"/>.</summary>
+    public void StopWithin(Node3D scope, string animName)
+    {
+        // Collect first: RemoveInstances mutates _instances, one call per distinct anchor.
+        var anchors = new HashSet<Node3D>();
+        foreach (var inst in _instances)
+        {
+            if (string.Equals(inst.Def.AnimName, animName, StringComparison.OrdinalIgnoreCase)
+                && inst.Anchor is { } anchor && (anchor == scope || scope.IsAncestorOf(anchor)))
+                anchors.Add(anchor);
+        }
+        foreach (var anchor in anchors)
+            RemoveInstances(animName, anchor, tearDown: true);
+    }
+
     /// <summary>The world node the animation debugger frames its camera on for one started
     /// instance: the anchor itself when the instance has one, else the first of the def's own
     /// node names that resolves in this world (the unanchored global-resolution case). Null when

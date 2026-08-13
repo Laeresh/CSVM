@@ -210,6 +210,21 @@ Smaller loader findings: `open_anim`/`close_anim` **default from the node name**
 file authors; and the `vehicle` block additionally accepts **`primary_target`** and **`title`**,
 neither authored in this install.
 
+What the door names resolve to (measured 2026-08-14, M4 F20): every authored `open_anim`/
+`close_anim` is a **compiled `mis_anim` definition** — root `hangerdoors` under the host
+zeppelin, activation OnCall — whose sequences `OBJECT_MOTION_FROM_TO` the hull's `door_left`/
+`door_right` nodes 0 → ±90° about Z over **5 s** (close is the reverse), with the open's first
+event activating `cargobay`. No non-zeppelin host ships a def matching the node-name default, so
+that fallback resolves nothing in this install. Two placement facts that bite: the chapter can
+carry several `hangerdoors` namesakes (C1 has three — the zeppelin's and two ground hangars'),
+so a door call must be scoped to the host's subtree; and the `cargobay` origin node sits ON the
+bay floor inside the hull — an airframe spawned exactly there collides with the bay geometry on
+frame one (the remake drops fighters 12 m below it, an invented clearance; the binary's two
+untraced launch timers are not interpreted). C1/IA1's own mission setup **deactivates** its
+zeppelin at load (`support\c1\ia1.gw`) — the IA wave sequencer would wake it, so a remake session
+without that layer sees IA1's doors swing on a hidden hull; campaign missions (C1B/M03's
+`vostokzep`) show the visual.
+
 ### The capacity puzzle
 
 ⚠ **Unresolved, and it matters before anyone implements this.** `capacity` is `0` on all 23

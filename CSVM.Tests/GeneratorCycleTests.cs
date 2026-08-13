@@ -115,6 +115,106 @@ public class GeneratorCycleTests
     }
 
     [Fact]
+    public void TheDoorOpensFourSecondsBeforeADueSpawnAndSpawnsThroughIt()
+    {
+        // First spawn is due at ind + wave = 20 s, so the door opens at 16 s: closed through
+        // 15.9 s, open at 16.0, spawn at 20.0 with the door still open.
+        var cycle = new GeneratorCycle(capacity: 0, maxActive: 99, waveSize: 1,
+            wavePeriod: 10f, indPeriod: 10f, minAltitude: null);
+        float openedAt = -1f, spawnedAt = -1f;
+        for (float t = Dt; t <= 21f; t += Dt)
+        {
+            bool spawned = cycle.Step(Dt, HighAltitude);
+            if (openedAt < 0f && cycle.DoorOpen)
+            {
+                openedAt = t;
+            }
+            if (spawned && spawnedAt < 0f)
+            {
+                spawnedAt = t;
+                Assert.True(cycle.DoorOpen);   // the spawn drops through an open door
+            }
+        }
+        Assert.InRange(openedAt, 15.95f, 16.1f);
+        Assert.InRange(spawnedAt, 19.95f, 20.1f);
+    }
+
+    [Fact]
+    public void TheDoorClosesEarlyOnlyWhenTheNextSpawnIsMoreThanEightSecondsAway()
+    {
+        // Gap 20 s: after a spawn the door holds its 4 s minimum, then closes early
+        // (16 s still to go > 8) and reopens 4 s before the next spawn.
+        var cycle = new GeneratorCycle(capacity: 0, maxActive: 99, waveSize: 1,
+            wavePeriod: 10f, indPeriod: 10f, minAltitude: null);
+        RunUntilSpawn(cycle);
+        float closedAt = -1f, reopenedAt = -1f;
+        for (float t = Dt; t <= 20f; t += Dt)
+        {
+            bool spawned = cycle.Step(Dt, HighAltitude);
+            if (closedAt < 0f && !cycle.DoorOpen)
+            {
+                closedAt = t;
+            }
+            if (closedAt > 0f && reopenedAt < 0f && cycle.DoorOpen)
+            {
+                reopenedAt = t;
+            }
+            if (spawned)
+            {
+                break;
+            }
+        }
+        Assert.InRange(closedAt, 3.95f, 4.1f);      // the 4 s minimum open
+        Assert.InRange(reopenedAt, 15.95f, 16.1f);  // 4 s before the 20 s spawn
+    }
+
+    [Fact]
+    public void AFastCyclingGeneratorLeavesItsDoorOpen()
+    {
+        // Gap 7 s (C1/IA1's authored ind 5 + wave 2): at the 4 s minimum only 3 s remain to
+        // the next spawn — not more than 8 — so the door never closes between spawns.
+        var cycle = new GeneratorCycle(capacity: 0, maxActive: 99, waveSize: 1,
+            wavePeriod: 2f, indPeriod: 5f, minAltitude: null);
+        RunUntilSpawn(cycle);
+        for (float t = Dt; t <= 15f; t += Dt)
+        {
+            cycle.Step(Dt, HighAltitude);
+            Assert.True(cycle.DoorOpen);
+        }
+    }
+
+    [Fact]
+    public void ABlockedGeneratorClosesOnlyTheDoorAndReopensToSpawnOnRelease()
+    {
+        // Block right after a spawn, with the door open and the since-spawn timer under the
+        // 4 s minimum (the decoded rule measures the door's minimum on that same timer).
+        var cycle = new GeneratorCycle(capacity: 0, maxActive: 99, waveSize: 1,
+            wavePeriod: 10f, indPeriod: 10f, minAltitude: 150f);
+        RunUntilSpawn(cycle);
+        Assert.True(cycle.DoorOpen);        // spawns drop through an open door
+        for (float t = Dt; t <= 2f; t += Dt)
+        {
+            Assert.False(cycle.Step(Dt, hostAltitude: 100f));
+        }
+        Assert.True(cycle.DoorOpen);        // blocked 2 s in: still inside the 4 s minimum
+        for (float t = Dt; t <= 3f; t += Dt)
+        {
+            Assert.False(cycle.Step(Dt, hostAltitude: 100f));
+        }
+        Assert.False(cycle.DoorOpen);       // past the minimum: ONLY the door closed
+        // Stay blocked well past the 20 s due point: the timer ran on untouched (hold, not
+        // cancel) but nothing opens or spawns while blocked.
+        for (float t = Dt; t <= 16f; t += Dt)
+        {
+            Assert.False(cycle.Step(Dt, hostAltitude: 100f));
+        }
+        Assert.False(cycle.DoorOpen);
+        // Release: the door reopens and the held spawn fires in the same step.
+        Assert.True(cycle.Step(Dt, HighAltitude));
+        Assert.True(cycle.DoorOpen);
+    }
+
+    [Fact]
     public void HostDeathDisablesPermanently()
     {
         var cycle = new GeneratorCycle(capacity: 0, maxActive: 99, waveSize: 1,
@@ -122,6 +222,18 @@ public class GeneratorCycleTests
         cycle.HostDied();
         Assert.Empty(SpawnTimes(cycle, seconds: 30f));
         Assert.True(cycle.Disabled);
+    }
+
+    private static void RunUntilSpawn(GeneratorCycle cycle)
+    {
+        for (int i = 0; i < 10_000; i++)
+        {
+            if (cycle.Step(Dt, HighAltitude))
+            {
+                return;
+            }
+        }
+        Assert.Fail("no spawn within the budget");
     }
 
     private static List<float> SpawnTimes(GeneratorCycle cycle, float seconds)

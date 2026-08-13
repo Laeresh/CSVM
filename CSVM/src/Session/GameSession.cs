@@ -2063,8 +2063,13 @@ public partial class GameSession : Node3D
                 egenDefs = new List<EnemyGeneratorDef>();
             }
             var chapterNets = AiNets.Load(rigInputs.ChapterZrdrPath);
-            _generators = new AiGeneratorRuntime(egenDefs, rigInputs.WorldRuntime, chapterNets,
-                _spec.GeneratorsPlane, SpawnAiAircraft);
+            var wr = rigInputs.WorldRuntime;
+            _generators = new AiGeneratorRuntime(egenDefs,
+                wr == null ? null
+                    : (name, scope) => wr.FindNodes(name, scope) is { Count: > 0 } hits ? hits[0] : null,
+                chapterNets, _spec.GeneratorsPlane, SpawnAiAircraft,
+                wr == null ? null : (name, host) => wr.PlayWithin(host, name, applyReset: false).Count,
+                wr == null ? null : (name, host) => wr.StopWithin(host, name));
             _worldRoot!.AddChild(_generators);
             GD.Print($"egen: {_generators.LiveCount} of {egenDefs.Count} generator(s) live for " +
                      $"{_spec.Chapter}/{_spec.Mission}, spawning '{_spec.GeneratorsPlane}'");

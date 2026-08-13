@@ -1117,7 +1117,9 @@ crossing, never per frame; measures from `PlayerPositions` — the aircraft, not
 which trails ~25 m behind). Also hosts the destructible-damage entries (`DamageAt`/`CollideDamageAt`/
 `ApplyDamageStages`/`RunDeathSequence`/`ResetDestructible`, fed by `ProjectilePool.DamageSink` and
 `FlightController.CollideDamageSink`) and the world-effects runtime (`PlayEffectAt` over a hidden
-template stage). Second instances serve per-player crash rigs and the world-effects closure, built
+template stage). `Play(animName)` starts every namesake def once per anchor;
+`PlayWithin`/`StopWithin` (F20) scope that to one subtree — C1 carries three `hangerdoors`
+nodes, so a zeppelin's door call must not swing the ground hangars'. Second instances serve per-player crash rigs and the world-effects closure, built
 unbound via the `ForEffects`/`ForCrashRig` static factories (construction-only; the caller still
 `Bind`s + adds the returned node) — the world runtime stays a plain inline `new AnimRuntime`. Every
 construction site hands over a **sealed `TemplateStage`** as the constructor argument
@@ -4610,11 +4612,14 @@ too, so the split is readable off the `CRASH … def=` line headlessly.
   goes through `AnimRuntime.IndexStage`, which owns the find-cache invalidation.
 
 ## src/Session/GeneratorCycle.cs
-The decoded egen launch timing law for ONE generator (M4 B6), pure over `Step` calls (no clock,
-no randomness, no nodes), so `CSVM.Tests/GeneratorCycleTests.cs` pins it off-engine. The law:
-the timer always advances; blocking HOLDS (never cancels); `ind_period` gaps individuals inside a
-wave and `ind_period + wave_period` gaps waves (they compose). The hardcoded door timings sit here
-as constants for F20; the door itself is not modelled.
+The decoded egen launch timing law for ONE generator (M4 B6 + F20), pure over `Step` calls (no
+clock, no randomness, no nodes), so `CSVM.Tests/GeneratorCycleTests.cs` pins it off-engine. The
+law: the timer always advances; blocking HOLDS (never cancels); `ind_period` gaps individuals
+inside a wave and `ind_period + wave_period` gaps waves (they compose). `DoorOpen` runs the
+decoded hardcoded door timings inside the same `Step`: open 4 s before a due spawn, minimum 4 s
+open (measured on the same since-spawn timer), close early only when the next spawn is over 8 s
+away; while blocked ONLY the door closes, and a disabled (host-dead) generator's door keeps its
+last state (the decoded loop early-outs before any door rule).
 ⚠ The capacity check is a STAND-IN: the decoded rule applies only at `capacity > 0`, disabled at
   `<= 0` (the shipped value on all 23), pending the egen.zbd raw-byte read. See
   mission-entities.md's capacity-puzzle section. NOT a decode of "0 means unlimited".
@@ -4622,18 +4627,25 @@ as constants for F20; the door itself is not modelled.
   it, and F20 revisits.
 
 ## src/Session/AiGeneratorRuntime.cs
-Runs a mission's egen generators (M4 B6, behind `--generators[=plane]`): one `GeneratorCycle` per
-surviving `EnemyGeneratorDef`, host altitude read live off the resolved host node, spawns through
-`GameSession.SpawnAiAircraft`, each spawned pilot patrolling the cyclic net pick through
-`AiNetFollower` (recorded on `SpawnedNet`). Every drop/live/spawn prints an `egen:` line, which
-is the flag's observability.
+Runs a mission's egen generators (M4 B6 + F20, behind `--generators[=plane]`): one
+`GeneratorCycle` per surviving `EnemyGeneratorDef`, host altitude read live off the resolved host
+node, spawns through `GameSession.SpawnAiAircraft` at the origin node's LIVE position (it rides
+F17's moving zeppelin) in the authored `rotation` drop attitude, each pilot patrolling the cyclic
+net pick through `AiNetFollower` (`SpawnedNet`). Door transitions play the authored
+`open_anim`/`close_anim` through host-scoped hooks (`AnimRuntime.PlayWithin`/`StopWithin`);
+unauthored doors run the timing machine log-only. Every drop/live/door/spawn prints an `egen:`
+line, which is the flag's observability. `NotifyHostDied(node)` is THE F18 SEAM: the zeppelin
+death aggregator (or the submarine's `healthy` node) calls it and the matching cycles disable
+permanently — nothing calls it until F18 lands. Pinned by the `zeppelin-launch` suite.
 ⚠ Load drops are decoded semantics: an unresolved host node, or a nets list where NOTHING
   resolves, drops the generator at load. Never load one inert.
-⚠ Stand-ins/stubs, all named in the class comment: host DEATH is unwired until F18/F20
-  (`GeneratorCycle.HostDied` has no caller); the door choreography is skipped (F20).
+⚠ The zeppelin drop point is the origin node MINUS an invented 12 m clearance: the authored
+  `cargobay` sits on the bay floor, so an airframe spawned exactly there dies into the hull on
+  frame one (measured, C1B/M03). The binary's two untraced launch timers (BL-350 trap b) are
+  deliberately NOT interpreted.
 ⚠ The min_altitude gate reads the host node's live Y, so it is real only with `--zeppelins`
-  (F17) placing/flying the host: C1/IA1's generator holds forever without it (unplaced
-  zeppelin below the 100 m gate) and releases at t=7 s with it.
+  (F17) placing/flying the host — and C1/IA1's own mission setup DEACTIVATES its zeppelin (IA
+  wave logic would wake it; out of M4 scope), so IA1 doors swing hidden; demo on C1B/M03.
 
 ## src/Session/ZeppelinRuntime.cs
 Runs a mission's zeppelins (M4 F17, behind `--zeppelins`): each `ZeppelinDef` whose world node

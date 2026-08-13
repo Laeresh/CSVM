@@ -18,8 +18,12 @@ namespace CSVM.Session;
 /// <c>capacity ≤ 0</c>, pending the egen.zbd raw-byte read. That is NOT a decode of "0 means
 /// unlimited"; it is the only reading that lets shipped data fire at all.</para>
 ///
-/// <para>The hangar door is F20's (it needs a zeppelin model); its decoded HARDCODED timings are
-/// recorded here as constants so F20 finds them beside the cycle they choreograph.</para>
+/// <para>The hangar door (F20) runs on the decoded HARDCODED timings below, inside the same
+/// <c>Step</c>: open <see cref="DoorLeadSeconds"/> before a due spawn, hold at least
+/// <see cref="DoorMinOpenSeconds"/>, close early only when the next spawn is more than
+/// <see cref="DoorEarlyCloseGapSeconds"/> away — and while blocked ONLY the door closes (the
+/// hold-not-cancel decode's blocked branch). <see cref="DoorOpen"/> is the state; playing the
+/// authored door animations on it is the runtime's job.</para>
 /// </summary>
 public sealed class GeneratorCycle
 {
@@ -73,6 +77,11 @@ public sealed class GeneratorCycle
     /// <summary>Permanently off: the host's death disables its generator for good.</summary>
     public bool Disabled { get; private set; }
 
+    /// <summary>The hangar door, driven by <see cref="Step"/> under the decoded hardcoded
+    /// timings. Closed at load; on the host's death it keeps its last state (the decoded loop
+    /// early-outs a disabled generator before any door rule runs).</summary>
+    public bool DoorOpen { get; private set; }
+
     /// <summary>Seconds since the last spawn (or load); compared against <see cref="NextEvent"/>.</summary>
     public float Timer => _timer;
 
@@ -103,7 +112,27 @@ public sealed class GeneratorCycle
             return false;
         }
         _timer += dt;
-        if (Blocked(hostAltitude) || _timer < _nextEvent)
+        if (Blocked(hostAltitude))
+        {
+            // Hold, not cancel: the timer and the wave counter keep running untouched and
+            // ONLY the door closes (once it has been open its minimum) — the decoded
+            // blocked branch. The door does not reopen while blocked.
+            if (DoorOpen && _timer >= DoorMinOpenSeconds)
+            {
+                DoorOpen = false;
+            }
+            return false;
+        }
+        if (DoorOpen && _timer >= DoorMinOpenSeconds
+            && _timer + DoorEarlyCloseGapSeconds < _nextEvent)
+        {
+            DoorOpen = false;   // early close: the next spawn is more than 8 s away
+        }
+        if (!DoorOpen && _timer >= _nextEvent - DoorLeadSeconds)
+        {
+            DoorOpen = true;    // open 4 s ahead of the due spawn
+        }
+        if (!DoorOpen || _timer < _nextEvent)
         {
             return false;
         }
