@@ -47,13 +47,38 @@ The carried titles run `MSG_TUR_{AC,BRIGAND,FRONT,REAR}_{G1,G3}` and a `P`-prefi
 `pkestrel` — [loadouts.md](loadouts.md)); the unprefixed eight are their AI counterparts. So the
 player's own turret and an enemy's are the same system with different tuning rows.
 
-⚠ **`_G1` and `_G3` are gun-group slots, not difficulty tiers.** Measured across all eight pairs,
-a `_G1` entry and its `_G3` twin differ in **exactly two keys — `HEALTHY_NODE` and `PARTS`** — and
-in nothing else. Every behavioural field (`INACCURACY`, `FIRE_RATE`, `DETECTION_RANGE`, the arcs,
-the intervals, the weapon) is identical. The suffix picks which node set on the airframe the turret
-drives, matching the `IDS_AIRFRAMEGUNGROUPNAMES` gun-group enum ([markers.md](markers.md)); it does
-not make one gunner better than the other. Reading `G3` as "grade 3" and scaling accuracy off it
-invents a difficulty system the data does not have.
+⚠ **`_G1` and `_G3` are per-viewpoint rig selectors, not difficulty tiers.** Measured across all
+eight pairs, a `_G1` entry and its `_G3` twin differ in **exactly two keys — `HEALTHY_NODE` and
+`PARTS`** — and in nothing else. Every behavioural field (`INACCURACY`, `FIRE_RATE`,
+`DETECTION_RANGE`, the arcs, the intervals, the weapon) is identical. What the suffix selects is
+named by the host data itself: a vehicle def's `turrets` block ([vehicle.md](vehicle.md)) keys its
+mounts **`firstp`** / **`thirdp`**, and the `firstp` entries name the `_G1` titles while the
+`thirdp` entries name the `_G3` ones — the airframe models carry two turret rigs (e.g.
+`kestrel_turret2` with `hturret2`/`hgun2`/`hfirepoint2` beside `kestrel_turret1` with
+`hturret`/`hgun`/`hfirepoint`), one drawn in the cockpit view and one externally. The AI and
+remote-player models carry only the `thirdp` rig, which is why only the player defs reference a
+`_G1` row. (An earlier draft of this page read the suffix as an `IDS_AIRFRAMEGUNGROUPNAMES`
+gun-group slot; the `firstp`/`thirdp` keys refute that.) Reading `G3` as "grade 3" and scaling
+accuracy off it invents a difficulty system the data does not have.
+
+### How a host names its turrets
+
+The by-`TITLE` lookup's caller is the vehicle def's `turrets` block:
+
+```
+"turrets", [ "firstp", [ ["title", ["MSG_TUR_PAC_G1"], "node", ["kestrel_turret2"]] ],
+             "thirdp", [ ["title", ["MSG_TUR_PAC_G3"], "node", ["kestrel_turret1"]] ] ]
+```
+
+`title` is the `ai.zrd` row; `node` is the turret-rig subtree on the airframe model the row's
+`PARTS` names resolve **inside** — the same part names (`hturret`, `hgun`, …) repeat on the other
+viewpoint's rig and on every other plane of the type, so the lookup must be scoped to the mount's
+subtree, never global. 16 defs carry the block: the five player turret airframes (both rigs), their
+six AI variants and five `r*` remote-player variants (`thirdp` only).
+
+⚠ **One shipped model node name carries a trailing space** — the Brigand's first-person yaw ring is
+literally `"brigturret2 "` in `planes.zbd`, where `ai.zrd` names `brigturret2`. A reader that
+matches names exactly silently loses that rig; trim before comparing.
 
 `NODES` entries are **name patterns, not single names** (`["aagun**"]`, `["thug*"]`), resolved
 against the scene graph by the shared wildcard rule ([README.md](README.md#shared-conventions-zrdr-readers)).
@@ -74,7 +99,7 @@ times are seconds; distances metres.
 | `INACCURACY` | 42 | half-angle of the shot-scatter cone, degrees |
 | `ATTACK_INTERVAL` | 42 | scalar or `[min,max]` — how long a firing spell lasts |
 | `BORED_INTERVAL` | 42 | scalar or `[min,max]` — how long the pause between spells lasts |
-| `PITCH` | 38 | `[min,max]` elevation arc |
+| `PITCH` | 37 (+1 stray) | `[min,max]` elevation arc — see the mis-nesting note below |
 | `SOUNDS` | 37 | sub-block: `ON`, `START`, `STOP`, `CANNON` |
 | `YAW` | 36 | `[min,max]` traverse arc |
 | `NODES` | 26 | standalone placement patterns |
@@ -96,6 +121,11 @@ retail. A remake needs the fourteen that ship.
 
 The `SOUNDS` sub-block likewise ships only `CANNON` (37 entries, always `snd_chaingun`); `ON`,
 `START` and `STOP` parse and are never used.
+
+⚠ **`PITCH` is authored at top level on 37 entries, not the raw count of 38**: the train turret
+(`MSG_TUR_TRAIN`) nests its one `PITCH [20,80]` **inside its `WEAPON` block**, where the turret
+parser does not read it — that turret ships with no elevation arc at all. A census that greps the
+key counts 38 and hides the stray.
 
 ### `PARTS` is a kinematic chain, not a name list
 

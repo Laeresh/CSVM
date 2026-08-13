@@ -519,6 +519,28 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
+    /// <summary>Appends every registered aircraft's carried turrets to the assist's candidate
+    /// set — the original's `TurretList` pass (C9a). A turret rides its host, so it moves with
+    /// the host's velocity and sits on the host's team; the host's own scan rejects it through
+    /// that same team gate, never through Self (the turret is its own Source).</summary>
+    public void CollectTurrets(AimCandidateSet into)
+    {
+        foreach (var body in _aircraft)
+        {
+            var rig = body.Rig;
+            foreach (var turret in rig.Turrets)
+            {
+                into.AddTurret(turret.WorldPosition, rig.WorldVelocity,
+                    AimAssist.TeamOfPilot(rig.PlayerIndex), turret.Alive, turret);
+            }
+        }
+    }
+
+    /// <summary>A non-player fire source's launch bark (the turret gunners' <c>SOUNDS.CANNON</c>)
+    /// through the pool's own one-shot pool — the same resolve-through-groups path a weapon's
+    /// FIRE sound takes.</summary>
+    public void PlayShotSound(string sndName) => PlaySound(sndName);
+
     public override void _Ready()
     {
         // Tracers are velocity-aligned streaks (NOT billboarded — billboard would collapse the

@@ -272,6 +272,12 @@ public partial class FlightController : Node3D
     /// Decision 7 in `docs/PLAN-sticky-bullets.md`.</summary>
     public bool IsHumanPiloted = true;
 
+    /// <summary>This plane's carried turret gunners (C9a): built by the rig assembler from the
+    /// vehicle def's <c>turrets</c> block against <c>ai.zrd</c>, ticked from <see cref="SimStep"/>
+    /// (so a crash silences them), and collected into every shooter's aim-assist candidate set
+    /// through <see cref="ProjectilePool.CollectTurrets"/>. Empty on the six turretless airframes.</summary>
+    public TurretController[] Turrets = Array.Empty<TurretController>();
+
     /// <summary>The world's destructibles, when this session has a world runtime — the aim assist's
     /// third candidate list (`BL-342`, an approximation of the original's `targets.zrd`
     /// `MStructList`). Null in every build with no world (the weapon lab, the suites), which costs
@@ -1032,6 +1038,14 @@ public partial class FlightController : Node3D
         }
         Ordnance?.Update();   // hide a pylon's mounted rocket the moment it fired its last
 
+        // The carried turret gunners (C9a): each tracks and fires on its own, into the same
+        // shared pool, under this pilot's shooter id. The crash branch above already returned,
+        // so a downed host's gunners take no further ticks.
+        foreach (var turret in Turrets)
+        {
+            turret.SimStep(dt);
+        }
+
         // The plane wobble: overspeed drive plus this tick's fire/hit kicks, written as
         // visual-only roll to the pivot the model hangs under. Physics, aim and the camera
         // read this node's transform, which the pivot sits below — never the wobble.
@@ -1281,6 +1295,18 @@ public partial class FlightController : Node3D
             // damage-stage trails need no per-frame feed: the rig runtime's emitters follow
             // their pdpN/prop1 host nodes themselves
         }
+    }
+
+    /// <summary>Whether static world geometry blocks the segment — the turret gunners' cached
+    /// line-of-sight test. World layer only: another aircraft in the way is not cover, which is
+    /// also why <see cref="HitWorld"/> (world + aircraft) is not reused here.</summary>
+    internal bool WorldBlocksLine(Vector3 from, Vector3 to)
+    {
+        var space = GetWorld3D()?.DirectSpaceState;
+        if (space == null)
+            return false;
+        return space.IntersectRay(
+            PhysicsRayQueryParameters3D.Create(from, to, CollisionLayers.World)).Count > 0;
     }
 
     /// <summary>The rocket name the text readout shows: the resolved <c>MSG_WEAP_*</c> display name
@@ -1591,6 +1617,7 @@ public partial class FlightController : Node3D
         {
             _aimCandidates.Clear();
             Projectiles.CollectAircraft(_aimCandidates);
+            Projectiles.CollectTurrets(_aimCandidates);
             Projectiles.CollectFusedOrdnance(_aimCandidates);
             if (Destructibles != null)
             {
@@ -1608,7 +1635,7 @@ public partial class FlightController : Node3D
                     nearest = Mathf.Min(nearest, s.Position.DistanceTo(_model.Position));
                 }
                 GD.Print($"gun aim assist: candidates vehicles={_aimCandidates.Vehicles.Count} " +
-                         $"turrets={_aimCandidates.Turrets.Count} (M4) " +
+                         $"turrets={_aimCandidates.Turrets.Count} " +
                          $"structures={_aimCandidates.Structures.Count} ordnance={_aimCandidates.Ordnance.Count}" +
                          (_aimCandidates.Structures.Count > 0 ? $", nearest structure {nearest:0} m" : ""));
             }

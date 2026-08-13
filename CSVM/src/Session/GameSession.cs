@@ -1489,6 +1489,16 @@ public partial class GameSession : Node3D
         var weaponDefs = WeaponDefs.Load(state.ZrdrPath, weaponMessages);
         var stockLoadouts = StockLoadouts.Load();
         var shakeDefs = ShakeDefs.Load(state.ZrdrPath);
+        // The ai.zrd turret table (C9a). A missing/broken file costs the gunners, not the session.
+        TurretDefs? turretDefs = null;
+        try
+        {
+            turretDefs = TurretDefs.Load(state.ZrdrPath);
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"turrets: ai.zrd unavailable — no turret gunners: {e.Message}");
+        }
         StartupProfile.Record("zrdr", mark);
         // flyoutAnims: the world program also carries the rockets' FLYOUT MODEL_ANIMATION defs
         // (cam_anim / missile_puffers), from which the pool builds each type's smoke trail.
@@ -1614,6 +1624,7 @@ public partial class GameSession : Node3D
                 WeaponDefs = weaponDefs,
                 WeaponMessages = weaponMessages,
                 StockLoadouts = stockLoadouts,
+                TurretDefs = turretDefs,
                 Shakes = shakeDefs,
                 Projectiles = projectiles,
                 HudFont = hudFont,

@@ -175,6 +175,22 @@ public sealed class FlightRigAssembler
         {
             GD.Print($"weapons: no stock loadout for '{loadoutDefName}' — unarmed");
         }
+
+        // The carried turret gunners (C9a): the vehicle def's thirdp turrets block resolved
+        // by TITLE against ai.zrd and by node against this built model. Independent of the
+        // stock loadout — the gunner's weapon comes from its ai.zrd row, not from a gun slot.
+        if (_in.TurretDefs is { } turretDefs && stats.TurretMounts.Count > 0)
+        {
+            controller.Turrets = TurretController.BuildCarried(
+                turretDefs, stats, planeModel, _in.WeaponDefs, controller, _in.Projectiles);
+            if (verbose && controller.Turrets.Length > 0)
+            {
+                var descs = new List<string>();
+                foreach (var t in controller.Turrets)
+                    descs.Add($"{t.Def.Title} ({t.Weapon.Id}, {t.Firepoints.Length} muzzle(s))");
+                GD.Print($"turrets: {string.Join(", ", descs)}");
+            }
+        }
         if (verbose && controller.Props != null)
             GD.Print($"props: {controller.Props.Count} spinning blur nodes");
         if (verbose && controller.WingLights != null)
@@ -467,6 +483,9 @@ public sealed class FlightRigAssembler
         public WeaponDefs WeaponDefs = null!;
         public Messages WeaponMessages = null!;
         public StockLoadouts StockLoadouts = null!;
+        /// The ai.zrd turret table (C9a) — null when the archive lacks ai.zrd, which builds
+        /// every plane turretless rather than failing the session.
+        public TurretDefs? TurretDefs;
         /// The shake-oscillator sources (shakes.json) — one load, one PlaneShake per rig.
         public ShakeDefs Shakes = null!;
         /// The one shared projectile/effect pool every player's guns fire into.

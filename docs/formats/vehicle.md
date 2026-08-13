@@ -28,7 +28,7 @@ Keys the remake consumes (see `src/Flight/PlaneStats.cs`):
 | `injure_anims` | def-level damage thresholds (below) |
 | `destroyable_parts` | the damage model (below) |
 | `collision` | 6 collision probe points (below) |
-| `bullethole_anims`, `weapons`, `turrets`, `cannon_jam`, `armor`/`health`, AI tuning | not consumed yet — [Weapons, damage & AI keys](#weapons-damage--ai-keys) below |
+| `bullethole_anims`, `weapons`, `turrets`, `cannon_jam`, `armor`/`health`, AI tuning | only `turrets` consumed (M4 C9a) — [Weapons, damage & AI keys](#weapons-damage--ai-keys) below |
 
 ## Units, dynamics & engines
 
@@ -304,9 +304,10 @@ The effect emitters these anims call (`short_firetrail`, `dense_firetrail`,
 
 ## Weapons, damage & AI keys
 
-The airframe half of the combat data — none of it consumed by the remake yet. Player defs
-carry `weapons` (as a catalogue), `cannon_jam`, `turrets` and `bullethole_anims`; the
-`armor`/`health` pair and the AI-tuning keys live only on the AI variant defs.
+The airframe half of the combat data — of which only `turrets` is consumed by the remake so
+far (M4 C9a). Player defs carry `weapons` (as a catalogue), `cannon_jam`, `turrets` and
+`bullethole_anims`; the `armor`/`health` pair and the AI-tuning keys live only on the AI
+variant defs.
 
 **`weapons`** — a list of 5-tuples `[weapon_id, count, ?, ?, range]`, ids into
 [weapons.md](weapons.md). On `player_airplane` it is a **capability catalogue, not a
@@ -333,12 +334,14 @@ a whole-vehicle pair at all (`pbloodhawk → player_airplane → basic_airplane`
 chain), so for player planes the per-part pools are the whole model. Which of the two an AI
 combatant actually spends is undecided — `BL-102` for the same question on the patrol boat.
 
-**`turrets`** — on exactly the five turret airframes (`pavenger`, `pbalmoral`, `pbrigand`,
-`pfirebrand`, `pkestrel`). A viewpoint-keyed list (`firstp`/`thirdp`) of
+**`turrets`** — on 16 defs: the five player turret airframes (`pavenger`, `pbalmoral`,
+`pbrigand`, `pfirebrand`, `pkestrel`, both viewpoints), their six AI variants and five `r*`
+remote-player variants (`thirdp` only). A viewpoint-keyed list (`firstp`/`thirdp`) of
 `[title <MSG_TUR_*>, node <turretNode>]` entries; the Balmoral is the only two-turret plane
-(`balmoral_turret0`–`3`). Turrets are AI gunners that track other aircraft — **M4 scope**. A
-turret entry carries a title and a node and **nothing else: no rotation limits anywhere in the
-data.** Turret arcs remain undecoded.
+(`balmoral_turret0`–`3`). A turret entry carries a title and a node and nothing else — the
+gunner's whole behaviour, arcs included, lives in the `ai.zrd` row the title names
+([turrets.md](turrets.md)). **Consumed since M4 C9a**: `PlaneStats` parses the block and
+`TurretController` drives the `thirdp` rig as a live gunner.
 
 **`gun_pitch` / `gun_yaw` are the AI's forward-gun aiming cone, not a turret arc.** Both keys
 appear exactly 12 times, always together, always `[-11, 11]` (degrees), and always on an AI

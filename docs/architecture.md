@@ -80,6 +80,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/WeaponBench.cs` — the world-less 48-weapon mount-and-fire pass check behind `--weapon-test` and `weapons-fire`; fires the whole `ForRig` rig, no lab node involved.
 - `src/Flight/FireControl.cs` — the engine-free fire-control state machine (BL-295): trigger edges, fire clocks, ammo draw-down, both selectors, dry cues; `FlightController` performs its `FireOutcome`.
 - `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the forget + catch-up pass (B2), the intercept solver (B3), the four-list candidate scan (B4), and the fire call's step order + 1° launch scatter (B5).
+- `src/Flight/TurretDefs.cs` — typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
+- `src/Flight/TurretController.cs` — one carried turret gunner (M4 C9a): acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
 - `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
@@ -1721,8 +1723,8 @@ radians via `ConeCosFor`). Survivors rank by `alignment − distance × dist_fac
 B5 rotates the winner world→local into the slot's target field. Proven in the `aim-assist` suite,
 every gate with its able-to-fail baseline.
 `AimCandidateSet` keeps the four lists **separately** and deliberately: `Vehicles` (the live
-`FlightController`s), `Turrets` (**empty until M4** — the pass exists and iterates nothing, so
-wiring turrets in is an `AddTurret` call and not a rediscovery of this item), `Structures`
+`FlightController`s), `Turrets` (fed since M4 C9a by `ProjectilePool.CollectTurrets` — every
+registered aircraft's carried gunners, on their host's team), `Structures`
 (`AddStructures(DestructibleRegistry)` — an **approximation** of the original's `targets.zrd`
 `MStructList`, recorded as one; `MissionTargets` is not the analogue, it holds objective display
 strings and nothing damageable) and `Ordnance` (`ProjectilePool.CollectFusedOrdnance` — a FILTER
@@ -1752,6 +1754,36 @@ about the aim axis, then a polar angle **uniform in `[0, inaccuracy]`**.
 ⚠ Do **not** reuse `ProjectilePool.ApplySpread` for this: it samples `half·sqrt(rand)` (disc-uniform,
   so it piles shots near the rim) and treats its argument as a FULL angle. Both are wrong here, and
   the suite's able-to-fail control is exactly that sampling scored alongside.
+
+## src/Flight/TurretDefs.cs
+Typed reader over the shared `ai.zrd`'s `TURRET` section — 42 `TurretDef`s (docs/formats/turrets.md):
+the carried/standalone split (`CREATE_STANDALONE` present-and-zero = carried, looked up by `TITLE`
+from a host; `NODES` patterns = world emplacements, C9b), the `PARTS` kinematic chain (3-element
+`[yaw, pitch, firepoint(s)]` or 2-element with no traverse ring), the `WEAPON` sub-block
+(`NAME` is a BALLISTICS id), arcs, the attack/bored duty-cycle windows and `SOUNDS.CANNON`.
+Tolerates the eight engine-accepted never-authored keys. `FindByTitle` mirrors the engine's lookup:
+a titleless entry matches unconditionally.
+⚠ An absent arc key or **min == max is UNRESTRICTED, never locked** — `YawRestricted`/
+  `PitchRestricted` carry the engine's `min != max` gate; read them, never the raw pair.
+⚠ `MSG_TUR_TRAIN` mis-nests its `PITCH` inside `WEAPON`, so top-level `PITCH` is on 37 entries
+  and that turret has no elevation arc; do not "fix" the census back to the raw key count of 38.
+
+## src/Flight/TurretController.cs
+One carried turret gunner (M4 C9a): built per host by `BuildCarried` from the vehicle def's
+`thirdp` `TurretMount`s (PlaneStats) × `TurretDefs` × the built plane model, ticked from
+`FlightController.SimStep`. Per tick: nearest hostile aircraft inside `DETECTION_RANGE` (team
+gate = `AimAssist.TeamOfPilot`), `AimAssist.TryIntercept` lead (no solution ⇒ track, hold fire),
+wrap-aware directed yaw clamp + pitch clamp, bounded slew (3.0/s), pose written onto the PARTS
+nodes, then the fire gates: attack window, 15° barrel-on-solution cone, cached 1–2 s world-only
+line of sight, `FIRE_RATE` redraw — rounds spawn in the shared pool under the HOST's shooter id
+with `INACCURACY` as a uniform-polar scatter on the shot. Proven by the `carried-turrets` suite
+and `TurretDefsTests`.
+⚠ Out-of-arc yaw snaps to the angularly NEARER end stop, not the shortest-path one, and bored
+  suppresses firing ONLY — tracking runs through it. Both are visible original behaviour.
+⚠ PARTS names resolve inside the mount's subtree with TRIMMED cs_names (the shipped
+  `"brigturret2 "` carries a trailing space); a global or exact match drives the wrong rig or none.
+⚠ The gunner's weapon is its ai.zrd row (`wep_140` on every carried entry), NOT the stock-loadout
+  turret slot's caliber — those slots stay bound-but-inert (`GunGroup.IsTurret`).
 
 ## src/Flight/WeaponCursor.cs
 `FireControl`'s internal ammo-slot index math (an `internal` class — nothing else may call it):
@@ -1888,10 +1920,12 @@ produced at the fire call and never re-derived inside `Spawn`, so a networking m
 received vector here and get the shooter's own answer instead of a locally re-run scan that would
 diverge (`BL-342`/B6). Only the round's velocity uses it — the muzzle flash still rides
 `muzzle.Basis`, because the barrel has not moved.
-`CollectFusedOrdnance`/`CollectAircraft` build two of the assist's four candidate lists off this
-pool's own state: the live proximity-fused rounds in flight (a FILTER, every def with a fuse longer
-than `AimAssist.MinFuseDistance`) and the registered aircraft — the same roster the hit ray and the
-fuse already use, so the assist cannot drift onto a second list. `DefaultVelocity` (500 m/s, the
+`CollectFusedOrdnance`/`CollectAircraft`/`CollectTurrets` build three of the assist's four
+candidate lists off this pool's own state: the live proximity-fused rounds in flight (a FILTER,
+every def with a fuse longer than `AimAssist.MinFuseDistance`), the registered aircraft, and each
+registered aircraft's carried turret gunners (C9a) — the same roster the hit ray and the fuse
+already use, so the assist cannot drift onto a second list. `PlayShotSound` is the turret gunners'
+launch bark through the pool's own one-shot pool. `DefaultVelocity` (500 m/s, the
 launch speed for a def with no `VELOCITY`) is shared with the scan so the lead is solved for the
 speed the round actually leaves at.
 
@@ -2103,7 +2137,9 @@ maths.
 `PlaneStats.Gravity`'s default and `ProjectilePool.WorldGravity` so the two can't drift apart.
 
 ## src/Flight/PlaneStats.cs
-Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` def chain) +
+Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` def chain), the
+def's `turrets` block as `TurretMount`s (title + node per viewpoint rig — the host→`ai.zrd`
+gunner link, C9a) +
 engines.json stock engine power + player.json globals (the flight constants, the near-miss cue's
 `warning_shot_*` block, the gun aim assist's `sticky_bullet_catchup_rate`/`_forget_interval`
 (`AimAssist.cs`'s B2), `_dist_factor` (B4's scoring) and `_inaccuracy` (B5's launch scatter, stored
@@ -3040,7 +3076,9 @@ PlaneCollider boxes via CastMotion each physics frame — mask world+aircraft wi
 `Body` (`AircraftBody`, built in `_Ready` from the same boxes) excluded by RID, so another plane
 is solid and a mid-air resolves through the same SurviveHit/Crash as terrain; `Crash`/`Respawn`
 toggle the body's hittability; the sim half is `SimStep(dt)`, called by
-`_PhysicsProcess` (realtime clock) or by `GameSession` (fixed/halted clock). Collaborators:
+`_PhysicsProcess` (realtime clock) or by `GameSession` (fixed/halted clock). `SimStep` also ticks
+`Turrets` (the carried gunners, M4 C9a) after the fire outcome, so the crash branch's early
+return silences them; `WorldBlocksLine` is their world-only line-of-sight ray. Collaborators:
 FlightModel, CameraController + CamParams, SpeedCue, Loadout + ProjectilePool (guns/rockets),
 `CollideDamageSink` →
 `AnimRuntime.CollideDamageAt` (fly-through facades), CrashRuntime, every HUD widget and animator.
@@ -3963,8 +4001,11 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/Suites.cs
-The 32 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
-the full-rig `Loadout.ForRig`), live weapon fire, the air-to-air hit chain (`air-to-air`: two real
+The registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
+the full-rig `Loadout.ForRig`), live weapon fire, the carried turret gunners (`carried-turrets`:
+build from ai.zrd + the thirdp mount, arc-centre rest pose, track/fire/hit under the host's
+shooter id, bored-window fire suppression with live tracking, the nearer-end-stop park, YAW [0,0]
+as unrestricted, a crashed host going quiet), the air-to-air hit chain (`air-to-air`: two real
 flight rigs on manual sim steps — body strike, struck-shape→part mapping, armor-first data-value
 damage, critical-zero Crash, crashed-plane immunity, the zero-self-hits negative case, which
 must stay non-optional, `Downed`-into-`VersusMatch` attribution: the weapon kill scores
@@ -4274,7 +4315,8 @@ extraction) and as an `effects-census` condition on whatever chapter the run was
 ## src/Session/FlightRigAssembler.cs
 Assembles one player's flight rig: the painted plane model, the `FlightController` and everything hung
 on it — loadout/ordnance (and, with them, the aim assist's structure candidates: the world runtime's
-`DestructibleRegistry`, when this session built a world), compass, gauges, HUD font test/weapon
+`DestructibleRegistry`, when this session built a world), the carried turret gunners
+(`TurretController.BuildCarried` off `Inputs.TurretDefs`, independent of the loadout bind), compass, gauges, HUD font test/weapon
 readout/reticle, damage visuals,
 audio, the throttle-slam exhaust smoke and chapter-authored `SpeedCue` (private visual layer per
 rig), this player's stunt run + marker/scoreboard/race entry
