@@ -86,6 +86,21 @@ public sealed partial class AiGeneratorRuntime : Node
     /// <summary>Generators that survived the load drops.</summary>
     public int LiveCount => _live.Count;
 
+    /// <summary>The named host died: its generator(s) go permanently off (the decoded rule).
+    /// Fed by <c>ZeppelinRuntime.ZeppelinKilled</c> (F18); non-zeppelin hosts still have no
+    /// death source (F20's remainder).</summary>
+    public void HostDied(string hostNode)
+    {
+        foreach (var gen in _live)
+        {
+            if (gen.Def.Node.Equals(hostNode, System.StringComparison.OrdinalIgnoreCase))
+            {
+                gen.Cycle.HostDied();
+                GD.Print($"egen: '{gen.Def.Node}' disabled — host destroyed");
+            }
+        }
+    }
+
     public override void _PhysicsProcess(double delta)
     {
         float dt = GameClock.Current?.PhysicsDt(delta) ?? (float)delta;
@@ -102,9 +117,9 @@ public sealed partial class AiGeneratorRuntime : Node
     {
         foreach (var gen in _live)
         {
-            // Host death is a stub: no death source exists for these hosts until F18/F20, so
-            // gen.Cycle.HostDied() is never called yet. The altitude read is live, though;
-            // the min_altitude gate holds (not cancels) whenever the host node sits below it.
+            // Host death arrives through HostDied (zeppelin hosts, via F18's kill event);
+            // fixed-installation hosts still have no death source (F20's remainder). The
+            // altitude read is live; the min_altitude gate holds (not cancels) below it.
             if (gen.Cycle.Step(dt, gen.Host.GlobalPosition.Y))
             {
                 Spawn(gen);

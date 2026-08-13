@@ -2043,6 +2043,16 @@ public partial class GameSession : Node3D
                 name => rigInputs.WorldRuntime?.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null,
                 zepNets);
             _worldRoot!.AddChild(_zeppelins);
+            // F18: the multi-zone damage half — per-part pools over the world registry, the
+            // survivor-count kill, and the DAMAGES_ZEPPELIN gate on the shared pool.
+            if (rigInputs.WorldRuntime is { } zepRuntime)
+            {
+                _zeppelins.WireDamage(zepRuntime);
+                if (_projectiles != null)
+                {
+                    _projectiles.WorldDamageGate = _zeppelins.GateWeaponDamage;
+                }
+            }
             GD.Print($"zep: {_zeppelins.LiveCount} of {zepDefs.Count} zeppelin(s) placed for " +
                      $"{_spec.Chapter}/{_spec.Mission}");
             state.What += $" + {_zeppelins.LiveCount} zeppelin(s)";
@@ -2066,6 +2076,13 @@ public partial class GameSession : Node3D
             _generators = new AiGeneratorRuntime(egenDefs, rigInputs.WorldRuntime, chapterNets,
                 _spec.GeneratorsPlane, SpawnAiAircraft);
             _worldRoot!.AddChild(_generators);
+            // A dead zeppelin permanently disables its generator (the decoded rule; F18
+            // supplies the death the B6 stub waited on).
+            if (_zeppelins != null)
+            {
+                var generators = _generators;
+                _zeppelins.ZeppelinKilled += node => generators.HostDied(node);
+            }
             GD.Print($"egen: {_generators.LiveCount} of {egenDefs.Count} generator(s) live for " +
                      $"{_spec.Chapter}/{_spec.Mission}, spawning '{_spec.GeneratorsPlane}'");
             state.What += $" + {_generators.LiveCount} generator(s)";

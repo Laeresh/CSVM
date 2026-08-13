@@ -27,7 +27,7 @@ public class AnimDefsTests
     public void DefinitionsAreReadWithTheirSourceFileAndHeaderFields()
     {
         var defs = Load();
-        Assert.Equal(2, defs.Count);
+        Assert.Equal(3, defs.Count);
         var tower = Def("probe_tower");
         Assert.Equal("demo_anims.json", tower.SourceFile);
         Assert.Equal("probe_tower_root", tower.RootName);
@@ -211,6 +211,33 @@ public class AnimDefsTests
     {
         var motion = Event(Sequence(Def("probe_tower"), "probe_spin"), "ObjectMotion").Data;
         Assert.NotNull(motion.List("raw"));
+    }
+
+    [Fact]
+    public void Name1PairsParseIntoMultiTargetsWithAnEmptyName()
+    {
+        // The multi-target zeppelin sub-part form (M4 F18): NAME stays empty (the def has no
+        // single anchor name), each (pattern, path) pair is preserved, and the first pattern
+        // becomes the dedupe AnimName so two NAME1 defs no longer collide on ("", "").
+        var def = Load().Find(d => d.MultiTargets.Count > 0)!;
+        Assert.Equal("", def.Name);
+        Assert.Equal("probe_rtur*", def.AnimName);
+        Assert.Equal(2, def.MultiTargets.Count);
+        Assert.Equal("probe_rtur*", def.MultiTargets[0].AnimName);
+        Assert.Equal(new[] { "probe_zep", "rtur*" }, def.MultiTargets[0].Path);
+        Assert.Equal(new[] { "probe_zep", "ltur*" }, def.MultiTargets[1].Path);
+        Assert.Equal(10f, def.Health);
+    }
+
+    [Fact]
+    public void ActivationPrerequisiteParsesMinToSatisfyAndTheAnimList()
+    {
+        // The zeppelin hull-death gate shape (all_pzep_gasbags: 3 of the finish anims).
+        var def = Load().Find(d => d.PrereqAnims.Count > 0)!;
+        Assert.Equal(3, def.PrereqMinToSatisfy);
+        Assert.Equal(
+            new[] { "finish_bag1", "finish_bag2", "finish_bag3", "finish_bag4" },
+            def.PrereqAnims);
     }
 
     private static List<AnimDefinition> Load() => AnimDefs.LoadArchive(TestData.Fixture("zrdr"));

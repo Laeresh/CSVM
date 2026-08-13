@@ -200,9 +200,27 @@ public sealed class AnimDefinition
     /// <c>AnimRuntime.ConditionNode</c>.</summary>
     public readonly List<string> NodeList = new();
 
+    /// <summary>The reader <c>NAME1</c> multi-target form: (animation-name pattern, anchor node
+    /// path) pairs, one per sub-part family — the zeppelin nacelle/turret/gasbag wiring defs
+    /// (<c>"pzrtur*" → [piratezep, rtur*]</c>). The compiler expands each pair × instance into
+    /// its own single-NAME def, so this list is populated only on reader-sourced defs; such a
+    /// def keeps an empty <see cref="Name"/> and anchors through these paths instead
+    /// (<c>NameResolver.Anchors</c>, the F18 change). Empty on compiled defs.</summary>
+    public readonly List<(string AnimName, IReadOnlyList<string> Path)> MultiTargets = new();
+
+    /// <summary>The ACTIVATION_PREREQUISITE ANIMATION_LIST names (see
+    /// <see cref="PrereqMinToSatisfy"/>).</summary>
+    public readonly List<string> PrereqAnims = new();
+
     public string Name = "";              // the world node(s) this def anchors to
     public string? AnimName;              // ANIMATION_NAME — what startanims/CALL_ANIMATION use
     public string? RootName;              // ANIMATION_ROOT_NAME — attach node inside each instance
+
+    /// <summary>ACTIVATION_PREREQUISITE OPTIONS: how many of <see cref="PrereqAnims"/> must have
+    /// run before this definition may activate. 0 when the def authors no prerequisite. The
+    /// zeppelin hull deaths are the shipped carriers (<c>all_pzep_gasbags</c>: 3 of the 6
+    /// <c>finish_pzepgasbag*</c>), which is how F18 finds a zeppelin's authored death def.</summary>
+    public int PrereqMinToSatisfy;
     public bool LocalNodesOnly;
     public string Activation = "OnCall";  // OnCall / OnStartup / WeaponHit / WeaponOrCollideHit
     public float Health;
@@ -280,6 +298,11 @@ public sealed class AnimDefinition
                     def.NodeRefs.TryAdd(refName, (int)ptr);
         foreach (var r in d.Objects("nodes"))
             def.NodeList.Add(r.Str("name") ?? "");
+        // The activation prerequisite (zeppelin hull deaths): min-to-satisfy over an anim list.
+        def.PrereqMinToSatisfy = (int)(d.Num("activ_prereq_min_to_satisfy") ?? 0f);
+        foreach (var prereq in d.Objects("activ_prereqs"))
+            if (prereq.Obj("Animation")?.Str("name") is { } prereqName)
+                def.PrereqAnims.Add(prereqName);
         if (d.Obj("reset_state") is { } reset)
             def.ResetState = AnimSequence.Parse(reset);
         foreach (var seq in d.Objects("sequences"))

@@ -8,7 +8,7 @@ using Godot;
 namespace CSVM.Session;
 
 /// <summary>
-/// Runs a mission's zeppelins (M4 F17, behind <c>--zeppelins</c>): each
+/// Runs a mission's zeppelins (M4 F17 motion + F18 damage, behind <c>--zeppelins</c>): each
 /// <see cref="ZeppelinDef"/> whose world node and net resolve gets a
 /// <see cref="ZeppelinMotion"/> on B5's <see cref="AiNetFollower"/>, is placed at its authored
 /// position/yaw/pitch, and the NODE is flown along the net under the record's limits — an
@@ -16,18 +16,35 @@ namespace CSVM.Session;
 /// model). Every place/skip/hold and every node capture prints a <c>zep:</c> line, which is
 /// the flag's observability; <c>--debug-ainets=&lt;net&gt;</c> draws the route it flies.
 ///
+/// <para><b>Damage (F18, wired by <see cref="WireDamage"/>):</b> per-part scalar pools in the
+/// world's <see cref="DestructibleRegistry"/> — gasbags and <c>cannon_health</c> cannons seeded
+/// from the mission record where authored (the record beats a def pool via
+/// <c>Instance.Reseed</c>), everything else keeping its compiled def's own <c>HEALTH</c>
+/// (engines 30–40, turrets 10, cannons 60 in this install). A healthy zone with neither an
+/// authored hp nor a destructible def is NOT damageable and says so in a <c>zep:</c> line —
+/// never an invented default. The per-zeppelin <see cref="ZeppelinDamage"/> aggregator owns the
+/// kill (<c>survivors &lt; num_healthy_required</c>, the decoded polarity), engine deaths drive
+/// <see cref="ZeppelinMotion.AliveEngines"/> (F17's sqrt curve), and the kill plays the
+/// authored hull death — the def anchored on the zeppelin node whose ACTIVATION_PREREQUISITE
+/// counts the gasbag finish anims (<c>all_pzep_gasbags</c>, which itself calls
+/// <c>killpzep</c>). <see cref="GateWeaponDamage"/> is the <c>DAMAGES_ZEPPELIN</c> routing
+/// gate the projectile pool consults: gasbag zones only.</para>
+///
 /// <para>⚠ Deliberately unwired, each named at its site: a <c>deactivated</c> record is placed
-/// but HELD (mission script would activate it; out of M4's scope); engine loss is live through
-/// <see cref="ZeppelinMotion.AliveEngines"/> but has no caller until F18's damage aggregator;
-/// stop nodes are NOT implemented — the per-node tags ride along raw because their encoding is
-/// still undecoded (F17's open item). Effect templates snap to absolute world points and do not
-/// track a moving host, so a hit effect on a flying zeppelin stays where the hit happened —
-/// F18/F19 inherit that constraint; nothing here fights it.</para>
+/// but HELD (mission script would activate it; out of M4's scope); stop nodes are NOT
+/// implemented — the per-node tags ride along raw because their encoding is still undecoded
+/// (F17's open item); a <c>cannon_health</c> record's gasbag binding (a hatch hit taking out
+/// its section) is parsed and kept, but no damage transfer is decoded, so none is invented.
+/// Effect templates snap to absolute world points and do not track a moving host, so a hit
+/// effect on a flying zeppelin stays where the hit happened — the death choreography plays
+/// where the hull died for the same reason; nothing here fights it.</para>
 /// </summary>
 public sealed partial class ZeppelinRuntime : Node
 {
     private readonly List<LiveZeppelin> _live = new();
+    private AnimRuntime? _runtime;
     private float _sinceLog;
+    private int _gateLogged;
 
     public ZeppelinRuntime(IReadOnlyList<ZeppelinDef> defs, Func<string, Node3D?> resolveNode,
         IReadOnlyList<AiNet> chapterNets)
@@ -66,22 +83,67 @@ public sealed partial class ZeppelinRuntime : Node
         }
     }
 
+    /// <summary>Raised once when a zeppelin's survivor count crosses the threshold — the
+    /// generator runtime disables the dead host's generator off this (decoded rule).</summary>
+    public event Action<string>? ZeppelinKilled;
+
     /// <summary>Zeppelins placed on a resolved net (a held <c>deactivated</c> one counts — it
     /// is placed and would fly when a script layer wakes it).</summary>
     public int LiveCount => _live.Count;
 
     /// <summary>The live motions by node name, the F18 seam's lookup (damage writes
     /// <see cref="ZeppelinMotion.AliveEngines"/>).</summary>
-    public ZeppelinMotion? MotionFor(string node)
+    public ZeppelinMotion? MotionFor(string node) => Find(node)?.Motion;
+
+    /// <summary>Whether this zeppelin's kill has fired (false for an unknown node).</summary>
+    public bool IsDead(string node) => Find(node)?.Dead ?? false;
+
+    /// <summary>Current surviving healthy-entry count, or -1 for an unknown/unwired node.</summary>
+    public int SurvivorsOf(string node) =>
+        Find(node) is { Damage: { } damage } zep ? damage.Survivors(zep.ZoneAlive) : -1;
+
+    /// <summary>Builds every zeppelin's damage zones over the world's destructible registry
+    /// (the class summary's seeding rules) and starts the per-step damage poll. Idempotent.</summary>
+    public void WireDamage(AnimRuntime runtime)
     {
+        if (_runtime != null)
+        {
+            return;
+        }
+        _runtime = runtime;
         foreach (var zep in _live)
         {
-            if (zep.Def.Node.Equals(node, StringComparison.OrdinalIgnoreCase))
+            WireZones(zep, runtime);
+        }
+    }
+
+    /// <summary>The DAMAGES_ZEPPELIN routing gate (<c>ProjectilePool.WorldDamageGate</c>): a
+    /// weapon without the flag cannot damage a GASBAG zone; every other target passes. The
+    /// impact effect/sound still play — only the damage is refused.</summary>
+    public bool GateWeaponDamage(Node? struck, WeaponDef weapon)
+    {
+        if (_runtime == null || ZeppelinDamage.MayDamageGasbag(weapon))
+        {
+            return true;
+        }
+        if (_runtime.Destructibles.Resolve(struck) is not { } inst)
+        {
+            return true;
+        }
+        foreach (var zep in _live)
+        {
+            if (zep.GasbagInstances.Contains(inst))
             {
-                return zep.Motion;
+                if (_gateLogged < 8)
+                {
+                    _gateLogged++;
+                    GD.Print($"zep: gasbag hit by {weapon.Id} ({weapon.Name}) blocked — " +
+                             $"no DAMAGES_ZEPPELIN");
+                }
+                return false;
             }
         }
-        return null;
+        return true;
     }
 
     public override void _PhysicsProcess(double delta)
@@ -94,8 +156,9 @@ public sealed partial class ZeppelinRuntime : Node
         SimStep(dt);
     }
 
-    /// <summary>One step of every active motion, written onto the world nodes. Public for the
-    /// same reason the generators' is: a fixed or halted clock has the session drive it.</summary>
+    /// <summary>One step of every active motion, written onto the world nodes, then the damage
+    /// poll. Public for the same reason the generators' is: a fixed or halted clock has the
+    /// session drive it.</summary>
     public void SimStep(float dt)
     {
         _sinceLog += dt;
@@ -110,29 +173,267 @@ public sealed partial class ZeppelinRuntime : Node
             {
                 continue;   // placed, holding for a mission-script wake-up (out of M4 scope)
             }
-            int before = zep.Motion.Follower.CurrentIndex;
-            zep.Motion.Step(dt);
-            Place(zep.Host, zep.Motion.Position, zep.Motion.YawRad, zep.Motion.PitchRad);
-            if (zep.Motion.Follower.CurrentIndex != before && before >= 0)
+            if (!zep.Dead)
             {
-                GD.Print($"zep: '{zep.Def.Node}' captured node {before}, next " +
-                         $"{zep.Motion.Follower.CurrentIndex} of '{zep.Motion.Follower.Net.Name}'");
+                int before = zep.Motion.Follower.CurrentIndex;
+                zep.Motion.Step(dt);
+                Place(zep.Host, zep.Motion.Position, zep.Motion.YawRad, zep.Motion.PitchRad);
+                if (zep.Motion.Follower.CurrentIndex != before && before >= 0)
+                {
+                    GD.Print($"zep: '{zep.Def.Node}' captured node {before}, next " +
+                             $"{zep.Motion.Follower.CurrentIndex} of '{zep.Motion.Follower.Net.Name}'");
+                }
+                if (log)
+                {
+                    var p = zep.Motion.Position;
+                    GD.Print($"zep: '{zep.Def.Node}' at ({p.X:0},{p.Y:0},{p.Z:0}) " +
+                             $"speed {zep.Motion.Speed:0.#}/{zep.Motion.EffectiveMaxSpeed:0.#} m/s " +
+                             $"toward node {zep.Motion.Follower.CurrentIndex}");
+                }
             }
-            if (log)
-            {
-                var p = zep.Motion.Position;
-                GD.Print($"zep: '{zep.Def.Node}' at ({p.X:0},{p.Y:0},{p.Z:0}) " +
-                         $"speed {zep.Motion.Speed:0.#}/{zep.Motion.EffectiveMaxSpeed:0.#} m/s " +
-                         $"toward node {zep.Motion.Follower.CurrentIndex}");
-            }
+            PollDamage(zep);
         }
     }
+
+    // ---- the F18 damage half (static helpers first, per ordering rules) ----
 
     // Yaw about Y (mission convention, 0 = −Z) then pitch about X; zeppelins never bank.
     private static void Place(Node3D host, Vector3 position, float yawRad, float pitchRad)
     {
         host.GlobalTransform = new Transform3D(
             Basis.FromEuler(new Vector3(pitchRad, yawRad, 0f)), position);
+    }
+
+    // The zone-pool seeding rule: an authored record hp re-seeds an existing def pool or
+    // registers a fresh one on the record's destroy-anim def; no record hp falls back to the
+    // def pool alone; neither yields null (the caller logs it).
+    private static DestructibleRegistry.Instance? ZonePool(AnimRuntime runtime, Node3D host,
+        string nodeName, float? recordHp, string? destroyAnim)
+    {
+        var existing = ExistingPool(runtime, host, nodeName);
+        if (recordHp is not { } hp)
+        {
+            return existing;
+        }
+        if (existing != null)
+        {
+            existing.Reseed(hp);
+            return existing;
+        }
+        var node = ZoneNode(runtime, host, nodeName);
+        if (node == null)
+        {
+            return null;
+        }
+        // The record's destroy anim def doubles as the pool's def, so DamageAt's zero-HP death
+        // plays exactly the authored destruction (gasbag1's pzep_gasbagtorpedo1). Prefer the
+        // compiled form, the same preference the registry's Resolve applies.
+        AnimDefinition? poolDef = null;
+        if (destroyAnim != null)
+        {
+            foreach (var candidate in runtime.DefsFor(destroyAnim))
+            {
+                if (poolDef == null || (poolDef.Archive == null && candidate.Archive != null))
+                {
+                    poolDef = candidate;
+                }
+            }
+        }
+        if (poolDef == null)
+        {
+            // The record authored hp but its anim resolves to no def (degraded extraction):
+            // the pool still exists so the zone can die; the death plays nothing.
+            GD.Print($"zep: zone '{nodeName}' destroy anim '{destroyAnim ?? "-"}' resolves to " +
+                     $"no def — pool registered without choreography");
+            poolDef = new AnimDefinition { Name = nodeName, AnimName = $"zep_zone_{nodeName}" };
+        }
+        return runtime.Destructibles.Register(poolDef, node, hp);
+    }
+
+    private static DestructibleRegistry.Instance? ExistingPool(AnimRuntime runtime, Node3D host,
+        string nodeName)
+    {
+        var node = ZoneNode(runtime, host, nodeName);
+        if (node == null)
+        {
+            return null;
+        }
+        DestructibleRegistry.Instance? best = null;
+        foreach (var pool in runtime.Destructibles.PoolsOn(node))
+        {
+            if (best == null || (best.Def.Archive == null && pool.Def.Archive != null))
+            {
+                best = pool;   // compiled def preferred, same rule as Resolve
+            }
+        }
+        return best;
+    }
+
+    private static Node3D? ZoneNode(AnimRuntime runtime, Node3D host, string nodeName) =>
+        runtime.FindNodes(nodeName, host) is { Count: > 0 } hits ? hits[0] : null;
+
+    private static bool ZoneIsAlive(DestructibleRegistry.Instance? inst) =>
+        inst == null || inst.Status != DestructibleRegistry.State.Destroyed;
+
+    private LiveZeppelin? Find(string node)
+    {
+        foreach (var zep in _live)
+        {
+            if (zep.Def.Node.Equals(node, StringComparison.OrdinalIgnoreCase))
+            {
+                return zep;
+            }
+        }
+        return null;
+    }
+
+    // Builds one zeppelin's zone pools: gasbags (record hp where authored), engines (def
+    // pools), cannon_health cannons (record hp 200 over/instead of the def pool).
+    private void WireZones(LiveZeppelin zep, AnimRuntime runtime)
+    {
+        var def = zep.Def;
+        zep.Damage = new ZeppelinDamage(def);
+
+        // Record hp per gasbag node, where authored (57 of 58 records).
+        var recordHp = new Dictionary<string, ZeppelinGasbag>(StringComparer.OrdinalIgnoreCase);
+        foreach (var bag in def.Gasbags)
+        {
+            recordHp[bag.Node] = bag;
+        }
+
+        // The critical zones: one pool per DISTINCT healthy node (duplicate healthy entries
+        // share the node's one pool and are counted per entry by the aggregator).
+        foreach (var zone in def.Healthy)
+        {
+            if (zep.GasbagZones.ContainsKey(zone.Node))
+            {
+                continue;
+            }
+            ZeppelinGasbag? bag = recordHp.TryGetValue(zone.Node, out var b) ? b : null;
+            var inst = ZonePool(runtime, zep.Host, zone.Node, bag?.Hp, bag?.DestroyAnim);
+            zep.GasbagZones[zone.Node] = inst;
+            if (inst != null)
+            {
+                zep.GasbagInstances.Add(inst);
+            }
+            else
+            {
+                GD.Print($"zep: '{def.Node}' zone '{zone.Node}' has no authored hp and no " +
+                         $"destructible def — not damageable");
+            }
+        }
+
+        // Engines: def-pooled destructibles only (no record key authors engine hp); an engine
+        // without a pool never dies and stays in the alive count.
+        int pooled = 0;
+        foreach (var engine in def.Engines)
+        {
+            var inst = ExistingPool(runtime, zep.Host, engine);
+            zep.EngineZones[engine] = inst;
+            if (inst != null)
+            {
+                pooled++;
+            }
+        }
+
+        // cannon_health cannons: record hp beats the def pool (Reseed); the record's stages
+        // (0.6/0.3) play through the aggregator, mirroring the def-pooled DAMAGE_SEQUENCE path.
+        foreach (var cannon in def.CannonHealth)
+        {
+            var inst = ZonePool(runtime, zep.Host, cannon.Cannon, cannon.Hp, cannon.DestroyAnim);
+            if (inst != null)
+            {
+                zep.CannonZones.Add(new CannonZone(cannon, inst));
+            }
+        }
+
+        GD.Print($"zep: '{def.Node}' damage wired — {zep.GasbagInstances.Count}/" +
+                 $"{zep.GasbagZones.Count} gasbag zones pooled, {pooled}/{def.Engines.Count} " +
+                 $"engines, {zep.CannonZones.Count}/{def.CannonHealth.Count} cannons, " +
+                 $"kill at survivors < {def.NumHealthyRequired} of {def.Healthy.Count}");
+    }
+
+    private void PollDamage(LiveZeppelin zep)
+    {
+        if (zep.Damage is not { } damage)
+        {
+            return;
+        }
+
+        // Engine deaths drive the decoded sqrt curve through F17's seam.
+        int engines = damage.AliveEngines(
+            name => zep.EngineZones.TryGetValue(name, out var e) ? ZoneIsAlive(e) : true);
+        if (engines != zep.Motion.AliveEngines)
+        {
+            zep.Motion.AliveEngines = engines;
+            GD.Print($"zep: '{zep.Def.Node}' engines {engines}/{zep.Motion.TotalEngines} — " +
+                     $"max speed now {zep.Motion.EffectiveMaxSpeed:0.#} m/s");
+        }
+
+        // Per-zone kill lines, once each.
+        foreach (var (node, inst) in zep.GasbagZones)
+        {
+            if (inst is { Status: DestructibleRegistry.State.Destroyed } && zep.DeadZones.Add(node))
+            {
+                GD.Print($"zep: '{zep.Def.Node}' gasbag '{node}' destroyed — survivors " +
+                         $"{damage.Survivors(zep.ZoneAlive)}/{damage.Required} required");
+            }
+        }
+
+        // Record-authored cannon stages and kill lines (def-pooled cannons stage through
+        // their own DAMAGE_SEQUENCE instead).
+        foreach (var cannon in zep.CannonZones)
+        {
+            float fraction = cannon.Instance.MaxHealth > 0f
+                ? cannon.Instance.Health / cannon.Instance.MaxHealth : 0f;
+            int fired = cannon.StagesFired;
+            foreach (var anim in ZeppelinDamage.CrossedStages(cannon.Record.Stages, fraction, ref fired))
+            {
+                _runtime?.Play(anim);
+            }
+            cannon.StagesFired = fired;
+            if (cannon.Instance.Status == DestructibleRegistry.State.Destroyed
+                && zep.DeadZones.Add(cannon.Record.Cannon))
+            {
+                GD.Print($"zep: '{zep.Def.Node}' cannon '{cannon.Record.Cannon}' destroyed" +
+                         $" (bound gasbag '{cannon.Record.Gasbag}' — binding recorded, no " +
+                         $"decoded damage transfer)");
+            }
+        }
+
+        // The kill, once: survivors < num_healthy_required (the decoded polarity).
+        if (!zep.Dead && damage.IsDead(zep.ZoneAlive))
+        {
+            zep.Dead = true;
+            int survivors = damage.Survivors(zep.ZoneAlive);
+            GD.Print($"zep: '{zep.Def.Node}' DESTROYED — survivors {survivors} < required " +
+                     $"{damage.Required}");
+            PlayHullDeath(zep);
+            ZeppelinKilled?.Invoke(zep.Def.Node);
+        }
+    }
+
+    // The authored hull death: the def anchored on the zeppelin node whose activation
+    // prerequisite counts anims (all_pzep_gasbags — pops the remaining bags and calls
+    // killpzep). Data-selected, never a hardcoded name; a zeppelin shipping none logs so.
+    private void PlayHullDeath(LiveZeppelin zep)
+    {
+        if (_runtime == null)
+        {
+            return;
+        }
+        foreach (var def in _runtime.ProgramDefs)
+        {
+            if (def.PrereqAnims.Count > 0 && def.AnimName != null
+                && def.Name.Equals(zep.Def.Node, StringComparison.OrdinalIgnoreCase))
+            {
+                GD.Print($"zep: '{zep.Def.Node}' death plays '{def.AnimName}'");
+                _runtime.Play(def.AnimName);
+                return;
+            }
+        }
+        GD.Print($"zep: '{zep.Def.Node}' ships no prerequisite-gated hull death def — kill " +
+                 $"recorded without choreography");
     }
 
     private sealed class LiveZeppelin
@@ -142,6 +443,8 @@ public sealed partial class ZeppelinRuntime : Node
             Def = def;
             Motion = motion;
             Host = host;
+            ZoneAlive = node => ZoneIsAlive(
+                GasbagZones.TryGetValue(node, out var inst) ? inst : null);
         }
 
         public ZeppelinDef Def { get; }
@@ -149,5 +452,42 @@ public sealed partial class ZeppelinRuntime : Node
         public ZeppelinMotion Motion { get; }
 
         public Node3D Host { get; }
+
+        public ZeppelinDamage? Damage { get; set; }
+
+        public bool Dead { get; set; }
+
+        /// <summary>Pool per distinct healthy node; null = zone not damageable (logged).</summary>
+        public Dictionary<string, DestructibleRegistry.Instance?> GasbagZones { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>The gasbag pools as a set — what the DAMAGES_ZEPPELIN gate protects.</summary>
+        public HashSet<DestructibleRegistry.Instance> GasbagInstances { get; } = new();
+
+        public Dictionary<string, DestructibleRegistry.Instance?> EngineZones { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        public List<CannonZone> CannonZones { get; } = new();
+
+        /// <summary>Zones whose kill line has printed (one line per zone).</summary>
+        public HashSet<string> DeadZones { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>The aggregator's zone-aliveness view: a zone with no pool never dies.</summary>
+        public Func<string, bool> ZoneAlive { get; }
+    }
+
+    private sealed class CannonZone
+    {
+        public CannonZone(ZeppelinCannonHealth record, DestructibleRegistry.Instance instance)
+        {
+            Record = record;
+            Instance = instance;
+        }
+
+        public ZeppelinCannonHealth Record { get; }
+
+        public DestructibleRegistry.Instance Instance { get; }
+
+        public int StagesFired { get; set; }
     }
 }

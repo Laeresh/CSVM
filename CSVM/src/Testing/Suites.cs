@@ -203,6 +203,14 @@ public static class Suites
             "EDGE, displacement never over max_speed·dt, the route's raw shape-A tags acted on by " +
             "NOTHING (stop nodes undecoded) — total engine loss decelerates it to a stop through " +
             "the decoded sqrt curve, and a deactivated record is placed but held", ZeppelinMotionSuite));
+        into.Add(new TestHarness.Suite("zeppelin-damage",
+            "multi-zone zeppelin damage (F18) on C1/M04's piratezep in its own mission world: " +
+            "gasbag pools seeded from the record (120 over the def-less 0), engines from their " +
+            "compiled defs (40), a no-DAMAGES_ZEPPELIN gun round strikes a gasbag and is refused " +
+            "while a DAMAGES_ZEPPELIN round spends real hp, an engine kill slows the zeppelin " +
+            "through the F17 sqrt seam, and the survivor threshold kills with the decoded " +
+            "polarity — dead at survivors 3 < required 4, NOT at the design's destroy count — " +
+            "playing the authored all_pzep_gasbags death and stopping the motion", ZeppelinDamageSuite));
         into.Add(new TestHarness.Suite("damage-stages",
             "each DAMAGE_SEQUENCE def fires its stage effects across an HP sweep", DamageStages));
         into.Add(new TestHarness.Suite("damage-hd",
@@ -4414,6 +4422,161 @@ public static class Suites
             host?.Free();
             heldHost?.Free();
         }
+    }
+
+    /// <summary>The F18 multi-zone damage chain on a real mission zeppelin, in the mission's
+    /// own world (C1/M04, where piratezep is live — the run's default IA1 switches it off).
+    /// Real rounds prove the pipeline (raycast → gate → DamageAt → pool); the bulk gasbag
+    /// kills then go through runtime.DamageAt directly, the same sink minus the flight time.
+    /// ⚠ INSTR-13: rounds are aimed at the gasbag collider's BUILT pose, captured before
+    /// ZeppelinRuntime places the node at its authored position — a moved physics body never
+    /// re-enters the space queries inside one frame.</summary>
+    private static void ZeppelinDamageSuite(TestContext ctx)
+    {
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "M04");
+        ctx.RequireData(missionZrdr, $"C1/M04 zrdr");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        // Data-driven picks: the first flagged weapon (wep_14/wep_28 ship the flag) — a
+        // blast-less one preferred so its damage lands on exactly the struck pool — and the
+        // first unflagged gun.
+        WeaponDef? zepWeapon = weapons.All.FirstOrDefault(w =>
+                w.DamagesZeppelin && w.HealthDamage is > 0f && w.ImpactProximity is not > 0f)
+            ?? weapons.All.FirstOrDefault(w => w.DamagesZeppelin && w.HealthDamage is > 0f);
+        WeaponDef? gun = weapons.All.FirstOrDefault(w =>
+            w.IsGun && !w.DamagesZeppelin && w.HealthDamage is > 0f);
+        ctx.Check(zepWeapon != null, $"a DAMAGES_ZEPPELIN weapon with HEALTH_DAMAGE ships");
+        ctx.Check(gun != null, $"a gun without DAMAGES_ZEPPELIN ships");
+        if (zepWeapon == null || gun == null)
+            return;
+
+        ctx.WithWorld("C1", collision: true, mission: "M04", world =>
+        {
+            var runtime = world.Session.Runtime;
+            var defs = Zeppelins.Load(missionZrdr);
+            ctx.Check(defs.Count == 1 && defs[0].Node == "piratezep",
+                $"C1/M04 authors one zeppelin, piratezep count={defs.Count}");
+            if (defs.Count != 1)
+                return;
+            var def = defs[0];
+            var host = runtime.FindNodes("piratezep").FirstOrDefault();
+            ctx.Check(host != null, $"the piratezep world node resolves in the M04 world");
+            if (host == null)
+                return;
+
+            // The built pose, BEFORE ZeppelinRuntime moves the node (INSTR-13 — see summary).
+            var bagNode = runtime.FindNodes("gasbag1", host).FirstOrDefault();
+            var engNode = runtime.FindNodes(def.Engines[0], host).FirstOrDefault();
+            ctx.Check(bagNode != null && engNode != null,
+                $"gasbag1 and {def.Engines[0]} resolve under the piratezep subtree");
+            if (bagNode == null || engNode == null)
+                return;
+            var builtBagPos = bagNode.GlobalPosition;
+
+            var nets = AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"));
+            ZeppelinRuntime? zeps = null;
+            ProjectilePool? pool = null;
+            TextureArchive? textures = null;
+            var started = new List<string>();
+            try
+            {
+                zeps = new ZeppelinRuntime(defs,
+                    name => runtime.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null, nets);
+                zeps.WireDamage(runtime);
+                var motion = zeps.MotionFor("piratezep")!;
+
+                // Seeding: the gasbag pool carries the RECORD's 120 hp (its def has HEALTH 0),
+                // the engine pool its compiled def's 40 — record where authored, def where not.
+                var bagPool = runtime.Destructibles.PoolsOn(bagNode).FirstOrDefault();
+                var engPool = runtime.Destructibles.PoolsOn(engNode).FirstOrDefault();
+                ctx.Check(bagPool != null && Mathf.IsEqualApprox(bagPool.MaxHealth, 120f),
+                    $"gasbag1's pool is seeded from the record hp={bagPool?.MaxHealth ?? -1f} (authored 120)");
+                ctx.Check(engPool != null && Mathf.IsEqualApprox(engPool.MaxHealth, 40f),
+                    $"{def.Engines[0]}'s pool keeps its compiled def HEALTH hp={engPool?.MaxHealth ?? -1f} (authored 40)");
+                ctx.Same(def.Healthy.Count, zeps.SurvivorsOf("piratezep"),
+                    $"all {def.Healthy.Count} healthy entries start alive");
+                if (bagPool == null || engPool == null)
+                    return;
+
+                // A live pool with the gate wired, damage routed exactly as flight wires it.
+                int gateRefusals = 0;
+                textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, "C1"));
+                pool = new ProjectilePool(textures, null, null)
+                {
+                    DamageSink = runtime.DamageAt,
+                };
+                pool.WorldDamageGate = (struckNode, weapon) =>
+                {
+                    bool allowed = zeps.GateWeaponDamage(struckNode, weapon);
+                    if (!allowed)
+                        gateRefusals++;
+                    return allowed;
+                };
+                ctx.Host.AddChild(pool);
+
+                // The muzzle 80 m from the gasbag's BUILT pose, aimed straight at it.
+                var muzzlePos = builtBagPos + new Vector3(0f, 80f, 0f);
+                var aim = (builtBagPos - muzzlePos).Normalized();
+                var muzzle = new Transform3D(Basis.LookingAt(aim, Vector3.Right), muzzlePos);
+
+                // 1. The unflagged gun: the round strikes the gasbag, the gate refuses the
+                // damage, the pool is untouched.
+                float before = bagPool.Health;
+                pool.Spawn(gun, muzzle, Vector3.Zero);
+                for (int i = 0; i < 180 && gateRefusals == 0; i++)
+                    pool.SimStep(1f / 60f);
+                ctx.Check(gateRefusals > 0,
+                    $"the {gun.Id} round STRUCK the gasbag and was refused by the gate refusals={gateRefusals}");
+                ctx.Check(Mathf.IsEqualApprox(bagPool.Health, before),
+                    $"…and gasbag hp is untouched hp={bagPool.Health:0.##}");
+
+                // 2. The DAMAGES_ZEPPELIN weapon: the same geometry spends real hp.
+                pool.Spawn(zepWeapon, muzzle, Vector3.Zero);
+                for (int i = 0; i < 180 && Mathf.IsEqualApprox(bagPool.Health, before); i++)
+                    pool.SimStep(1f / 60f);
+                ctx.Check(bagPool.Health <= before - zepWeapon.HealthDamage!.Value + 0.01f,
+                    $"the {zepWeapon.Id} round spends its HEALTH_DAMAGE hp {before:0.##}→{bagPool.Health:0.##}");
+
+                // 3. An engine kill drives the F17 sqrt seam: fewer alive engines, lower cap.
+                runtime.OnInstanceStarted = (d, _) => { if (d.AnimName != null) started.Add(d.AnimName); };
+                float capBefore = motion.EffectiveMaxSpeed;
+                runtime.DamageAt(engNode, engPool.MaxHealth + 1f);
+                zeps.SimStep(1f / 60f);
+                ctx.Same(motion.TotalEngines - 1, motion.AliveEngines,
+                    $"the destroyed engine leaves the alive count");
+                ctx.Check(motion.EffectiveMaxSpeed < capBefore,
+                    $"…and the sqrt curve lowers the speed cap {capBefore:0.##}→{motion.EffectiveMaxSpeed:0.##} m/s");
+
+                // 4. The survivor threshold, in the engine: required 4 of 6. Two gasbags dead
+                // (survivors 4) lives; the third (survivors 3 < 4) kills — the decoded
+                // polarity. The design's destroy-count reading would still be alive here.
+                runtime.DamageAt(bagNode, 10_000f); // finishes gasbag1
+                runtime.DamageAt(runtime.FindNodes("gasbag2", host).FirstOrDefault(), 10_000f);
+                zeps.SimStep(1f / 60f);
+                ctx.Same(4, zeps.SurvivorsOf("piratezep"), $"two gasbags down leaves 4 survivors");
+                ctx.Check(!zeps.IsDead("piratezep"),
+                    $"survivors 4 >= required {def.NumHealthyRequired}: alive");
+                runtime.DamageAt(runtime.FindNodes("gasbag3", host).FirstOrDefault(), 10_000f);
+                zeps.SimStep(1f / 60f);
+                ctx.Same(3, zeps.SurvivorsOf("piratezep"), $"the third leaves 3 survivors");
+                ctx.Check(zeps.IsDead("piratezep"),
+                    $"survivors 3 < required {def.NumHealthyRequired}: the zeppelin DIES (the decoded polarity)");
+                ctx.Check(started.Contains("all_pzep_gasbags"),
+                    $"the kill plays the authored hull death started=[{string.Join(", ", started)}]");
+
+                // The dead hull stops flying: the node no longer moves.
+                var restingPos = host.GlobalPosition;
+                zeps.SimStep(1f);
+                ctx.Check(restingPos.DistanceTo(host.GlobalPosition) < 1e-3f,
+                    $"the dead zeppelin's motion is stopped");
+            }
+            finally
+            {
+                runtime.OnInstanceStarted = null;
+                pool?.Free();
+                zeps?.Free();
+                textures?.Dispose();
+            }
+        });
     }
 
     private static void GltfExport(TestContext ctx)

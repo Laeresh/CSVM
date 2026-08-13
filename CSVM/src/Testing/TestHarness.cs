@@ -544,9 +544,17 @@ public sealed class TestContext
     /// <para>The world subtree is in the scene tree with <see cref="AnimRuntime.ManualAdvance"/>
     /// set, which is the pair a suite ticking the clock needs: an out-of-tree global-transform read
     /// returns identity, and <c>_Process</c> must not also drive the runtime.</para></summary>
-    public void WithWorld(string chapter, bool collision, Action<TestWorld> body)
+    public void WithWorld(string chapter, bool collision, Action<TestWorld> body) =>
+        WithWorld(chapter, collision, mission: null, body);
+
+    /// <summary>The mission-override form: builds the chapter at a mission other than the
+    /// run's own (the zeppelin damage suite wants C1 at M04, where <c>piratezep</c> is live).
+    /// An overridden-mission world is never cached — the cache is keyed by chapter alone, so
+    /// storing it would hand the wrong mission to every later same-chapter suite.</summary>
+    public void WithWorld(string chapter, bool collision, string? mission, Action<TestWorld> body)
     {
-        if (_worlds.TryGetValue(chapter, out var cached))
+        bool defaultMission = mission == null || mission == Mission;
+        if (defaultMission && _worlds.TryGetValue(chapter, out var cached))
         {
             if (!collision || cached.Collision)
             {
@@ -556,8 +564,8 @@ public sealed class TestContext
             _worlds.Remove(chapter);
             cached.Destroy();
         }
-        var world = BuildWorld(chapter, collision);
-        if (chapter == Chapter)
+        var world = BuildWorld(chapter, collision, mission ?? Mission);
+        if (defaultMission && chapter == Chapter)
         {
             _worlds[chapter] = world;
             body(world);
@@ -582,7 +590,7 @@ public sealed class TestContext
         _worlds.Clear();
     }
 
-    private TestWorld BuildWorld(string chapter, bool collision)
+    private TestWorld BuildWorld(string chapter, bool collision, string mission)
     {
         string gamezPath = SessionPaths.ChapterGamez(DataRoot, chapter);
         string texturesPath = SessionPaths.ChapterTextures(DataRoot, chapter);
@@ -603,10 +611,10 @@ public sealed class TestContext
             {
                 DataRoot = DataRoot,
                 Chapter = chapter,
-                Mission = Mission,
+                Mission = mission,
                 ZrdrPath = ZrdrPath,
                 InterpPath = InterpPath,
-                MissionZrdrPath = SessionPaths.MissionZrdr(DataRoot, chapter, Mission),
+                MissionZrdrPath = SessionPaths.MissionZrdr(DataRoot, chapter, mission),
                 EffectsParent = stage,
                 PlayerPosition = () => Camera.GlobalPosition,
                 Collision = collision,

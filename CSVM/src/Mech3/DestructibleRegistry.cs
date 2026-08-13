@@ -157,7 +157,7 @@ public sealed class DestructibleRegistry
 
         public AnimDefinition Def { get; }
         public Node3D Anchor { get; }
-        public float MaxHealth { get; }
+        public float MaxHealth { get; private set; }
         public float Health { get; set; }
         public State Status { get; set; } = State.Healthy;
 
@@ -185,5 +185,18 @@ public sealed class DestructibleRegistry
         /// reset stops and restores each of these too, or a called def's own motions (a
         /// flying debris piece still mid-flight) can outlive the reset.</summary>
         public HashSet<(AnimDefinition Def, Node3D Anchor)> LocalCallTargets { get; } = new();
+
+        /// <summary>Re-seeds this pool from a mission record — the zeppelin case (M4 F18):
+        /// <c>zeppelins.json</c> authors per-part hp (<c>gasbags</c> 80–400,
+        /// <c>cannon_health</c> 200) that overrides the def's own <c>HEALTH</c> where present.
+        /// Wire-up time only: refuses once the instance has been damaged, so a late re-seed
+        /// cannot silently heal a fight in progress.</summary>
+        public void Reseed(float maxHealth)
+        {
+            if (Status != State.Healthy || Health < MaxHealth)
+                return;
+            MaxHealth = maxHealth;
+            Health = maxHealth;
+        }
     }
 }

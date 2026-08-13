@@ -117,6 +117,40 @@ public static class AnimDefs
             switch (key.ToUpperInvariant())
             {
                 case "NAME": def.Name = FirstString(value) ?? def.Name; break;
+                // The multi-target form: alternating (anim-name pattern, anchor node path)
+                // pairs — the zeppelin sub-part wiring/destructible defs. Name stays empty;
+                // NameResolver.Anchors resolves the recorded paths instead (M4 F18).
+                case "NAME1":
+                    if (value != null)
+                        for (int i = 0; i + 1 < value.Count; i++)
+                            if (value[i] is string pattern && value[i + 1] is List<object?> pathList)
+                            {
+                                var path = new List<string>();
+                                foreach (var seg in pathList)
+                                    if (seg is string s)
+                                        path.Add(s);
+                                if (path.Count > 0)
+                                    def.MultiTargets.Add((pattern, path));
+                            }
+                    break;
+                // The zeppelin hull-death gate: OPTIONS [MINIMUM_TO_SATISFY n,
+                // ANIMATION_LIST names] — parsed into the same fields the compiled form fills.
+                case "ACTIVATION_PREREQUISITE":
+                    if (value != null)
+                        foreach (var (optKey, optValue) in Pairs(value))
+                            if (optKey.Equals("OPTIONS", StringComparison.OrdinalIgnoreCase)
+                                && optValue != null)
+                                foreach (var (k, v) in Pairs(optValue))
+                                {
+                                    if (k.Equals("MINIMUM_TO_SATISFY", StringComparison.OrdinalIgnoreCase))
+                                        def.PrereqMinToSatisfy = (int)(FirstNumber(v) ?? 0f);
+                                    else if (k.Equals("ANIMATION_LIST", StringComparison.OrdinalIgnoreCase)
+                                        && v != null)
+                                        foreach (var entry in v)
+                                            if (entry is string anim)
+                                                def.PrereqAnims.Add(anim);
+                                }
+                    break;
                 case "ANIMATION_NAME": def.AnimName = FirstString(value); break;
                 case "ANIMATION_ROOT_NAME": def.RootName = FirstString(value); break;
                 // Reader activation values are ON_STARTUP / ON_CALL; the compiled archives
@@ -170,6 +204,12 @@ public static class AnimDefs
         // ⚠ Without the collision, a reader duplicate whose PUFFER_STATE events parse as OFF
         // (see below) tears down the compiled instance's puffers moments after they spawn —
         // silently, every frame; that is what kills C1's waterfall splash.
+        // A NAME1 def has no NAME/ANIMATION_NAME of its own; keying it on its first pair's
+        // pattern gives every such def a distinct dedupe identity in AnimProgram (a shared
+        // ("", "") key silently dropped all but the first NAME1 def program-wide) without
+        // colliding with the compiler's per-instance expansions ("pzctur*" vs "pzctur1").
+        if (def.AnimName == null && def.MultiTargets.Count > 0)
+            def.AnimName = def.MultiTargets[0].AnimName;
         def.AnimName ??= def.Name;
         return def;
     }
