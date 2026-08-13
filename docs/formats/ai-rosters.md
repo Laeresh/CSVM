@@ -49,7 +49,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 22–30 | **the skill vector** | `dare_devil natural_touch sixth_sense dead_eye quick_draw steady_hand stun_recovery talker constitution` — see [below](#the-skill-vector) |
 | 31 | `pref_engage_alt` | **preferred engagement altitude in metres**, not a radius; `-1.0` on 384, else 350 / 1100 / 1500 / 1550 / 1600 |
 | 32 | `signature_maneuvers` | **bitmask over the maneuver library** — see [below](#signature_maneuvers-is-a-bitmask) |
-| 33 | `rating_biases` | target-selection weights: a list of `[nodeNamePattern, bias, ?]` triples, wildcards allowed (`["tcargun*", -1, 0]`). List on 321 blocks, null on 93; 1–9 entries |
+| 33 | `rating_biases` | target-selection weights: a list of `[nodeNamePattern, bias]` pairs, wildcards allowed (`["fuel_truck*", -1.0]`). List on 321 blocks, null on 93; 1–9 entries (697 total); biases run `-1.0`…`1.0`, both signs, `-1.0` on 389. ⚠ The exe's comment admits a third element per entry, but this install authors none (0 across all 414 blocks, measured 2026-08-13) — read defensively, preserve a third raw if one ever appears |
 | 34 | `nitro` | |
 | 35 | `engine` | engines.json row id ([vehicle.md](vehicle.md)) |
 | 36 | `otherTarget` | |

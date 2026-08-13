@@ -29,12 +29,26 @@ public sealed class AiGunner
     public const float GunConeHalfAngleDeg = 11f;
 
     /// <summary>The standing target — mutable at any time (the mission-script seam). Null with
-    /// <see cref="AutoTarget"/> set lets the host re-acquire the nearest hostile aircraft.</summary>
+    /// <see cref="AutoTarget"/> set lets the host re-acquire through the D12 target ranking
+    /// (<see cref="AiTargetRanking"/>).</summary>
     public FlightController? Target;
 
-    /// <summary>Re-acquire the nearest hostile when <see cref="Target"/> is null or dead. Off,
-    /// a cleared target simply holds fire — an explicitly ordered gunner.</summary>
+    /// <summary>Re-acquire through the D12 ranking when <see cref="Target"/> is null or dead.
+    /// Off, a cleared target simply holds fire — an explicitly ordered gunner.</summary>
     public bool AutoTarget = true;
+
+    /// <summary>The roster's assigned target (slot 6, <c>primary_target</c>), by node name —
+    /// mutable, the mission-script seam. While it resolves to a live hostile inside the
+    /// activation radius it is picked outright; ranking takes over when it dies or leaves
+    /// (the reading is assumed — see <c>FlightController.SelectRankedTarget</c>).
+    /// <c>"player"</c> resolves to any human-piloted aircraft. Null/empty = none.</summary>
+    public string? PrimaryTargetName;
+
+    /// <summary>The roster's <c>rating_biases</c> (slot 33), mutable; null = none. Matched
+    /// against candidate node names by <see cref="AiTargetRanking.ObjectiveBiasFor"/>. An
+    /// <c>--ai</c>/egen spawn carries no roster block and so no biases — the documented gap
+    /// until mission spawns attach roster identities.</summary>
+    public System.Collections.Generic.IReadOnlyList<Mech3.AiRatingBias>? RatingBiases;
 
     /// <summary>Dead-eye aim-error cone half-angle, degrees — <c>ai_skill_parameters</c>'s
     /// <c>dead_eye_angle</c> at the pilot's rating (4.0° at 1, 1.45° at 9; the default is the

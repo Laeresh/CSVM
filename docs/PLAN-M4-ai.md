@@ -1376,7 +1376,18 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
     (failed sixth-sense roll, `stun_recovery_interval`), avoid crash (invented probe/climb-out),
     danger zones enum-only (gate data undecoded, F17); activation 2000 m / attack 2000 /
     return_range 1200 loaded from data; pinned by `AiModeMachineTests` + the `ai-modes` suite
-12. ☐ D12 — Target selection, ranking and ally deconfliction — ranking formula recovered
+12. ☑ D12 — Target selection, ranking and ally deconfliction — **landed 2026-08-13**:
+    `Flight/AiTargetRanking.cs` (the recovered formula exactly: weight × 1200 + distance +
+    objectiveBias minimised, player 0.7, ±0.2 terms with design-supported sign conventions
+    marked assumed, 1e21 activation cutoff) + `AiSkills` slot 6/33 accessors (`AiRatingBias`
+    wildcards; measured correction: shipped entries are `[pattern, bias]` PAIRS, 697 install-wide,
+    biases −1.0…1.0 — the third element is never authored, parsed defensively) feeding
+    `FlightController.SelectRankedTarget` (replaces `NearestHostileAircraft`; primary_target
+    picked outright while live+in-activation, deconfliction as best-unheld-else-best, inert
+    until a team model exists; first acquisition logs its rank inputs). ⚠ Under minimisation
+    the 0.7 weight PREFERS the player at comparable distance — the literal decoded arithmetic
+    was implemented; the "rank the player last" gloss does not follow from it. Pinned by
+    `AiTargetRankingTests` + the extended `ai-gunnery` suite
 13. ☑ D13 — The maneuver library — **landed 2026-08-13**: `Mech3/Maneuvers.cs` (17 entries, the
     high_yo_yo stub parsed-never-flown, `EligibleFor` cull, `SignatureNames` over the exe-order
     bitmask) + `Flight/ManeuverExecutor.cs` (steps are TARGET ATTITUDES in degrees; plays a

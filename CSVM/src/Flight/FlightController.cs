@@ -387,6 +387,8 @@ public partial class FlightController : Node3D
     private readonly List<float> _missileGaugeSlots = new();
     private readonly AimCandidateSet _aimCandidates = new(); // rebuilt once per fire call (B4/B5)
     private readonly AimCandidateSet _gunnerScan = new();    // the AI gunner's acquisition scan (D14)
+    private readonly List<RankedTargetCandidate> _rankCandidates = new(); // the D12 ranking snapshots
+    private readonly List<FlightController> _rankSources = new();         // …and their controllers, by index
     private readonly RandomNumberGenerator _aimRng = Rng.Stream(Rng.Weapons); // the assist's 1° launch scatter
 
     private FlightModel _model = null!;
@@ -1989,7 +1991,7 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>One AI-gunner tick (D14): keep the standing target while it lives (re-acquiring
-    /// the nearest hostile when it is gone and <see cref="AiGunner.AutoTarget"/> allows), then
+    /// through the D12 ranking when it is gone and <see cref="AiGunner.AutoTarget"/> allows), then
     /// hand the gunner this tick's fire geometry — the SELECTED gun group's weapon and muzzle
     /// midpoint, the sim pose (never the render pose), and the target's state — so
     /// <see cref="AiGunner.WantsFire"/> is current when the fire step reads it.</summary>
@@ -2000,7 +2002,11 @@ public partial class FlightController : Node3D
             return;
         if (gunner.Target is not { } target || target.Crashed || !target.IsInsideTree())
         {
-            gunner.Target = gunner.AutoTarget ? NearestHostileAircraft() : null;
+            TargetScore score = default;
+            string how = "ranked";
+            gunner.Target = gunner.AutoTarget
+                ? SelectRankedTarget(gunner, out score, out how)
+                : null;
             if (gunner.Target is not { } acquired)
                 return;
             target = acquired;
@@ -2008,11 +2014,14 @@ public partial class FlightController : Node3D
             {
                 _gunnerLoggedTarget = true; // verification breadcrumb: who the gunner went after
                 GD.Print($"ai gunner: shooter {PlayerIndex} targets P{target.PlayerIndex + 1} " +
-                         $"at {WorldPosition.DistanceTo(target.WorldPosition):0} m");
+                         $"at {score.Distance:0} m ({how}: weight {score.Weight:0.0#} " +
+                         $"bias {score.Bias:0} rank {score.Rank:0})");
             }
         }
-        // The mode machine gates the trigger (D11): the target stays acquired in every mode —
-        // patrol needs its position for the activation test — but only pursue / lay off shoot.
+        // The mode machine gates the trigger (D11): a standing target is kept in every mode —
+        // patrol reads its position for the activation test — but only pursue / lay off shoot.
+        // Acquisition itself is bounded by the activation radius (D12's 1e21 cutoff), which is
+        // the same 2000 m the machine activates at, so patrol still sees the approach.
         if (Pilot?.Machine is { } modes && modes.Mode is not (AiMode.Pursue or AiMode.LayOff))
             return;
         GunGroup? group = _fire.GunSel >= 0 && _fire.GunSel < _firableGuns.Length
@@ -2037,32 +2046,86 @@ public partial class FlightController : Node3D
         }
     }
 
-    /// <summary>The nearest live hostile aircraft — the minimal D14 targeting stand-in (the D12
-    /// ranking formula is its own later item). Same roster and team gate as the aim assist and
-    /// the turret gunners: the pool's registered aircraft, hostility via
-    /// <see cref="AimAssist.TeamOfPilot"/>.</summary>
-    private FlightController? NearestHostileAircraft()
+    /// <summary>The D12 acquisition: the decoded ranking formula over the pool's registered
+    /// aircraft, same roster and team gate as the aim assist and the turret gunners
+    /// (<see cref="AimAssist.TeamOfPilot"/>). An assigned <see cref="AiGunner.PrimaryTargetName"/>
+    /// that resolves to a live hostile inside the activation radius is picked outright —
+    /// the assumed reading of the decoded "Primary target: %s" semantics: the assignment holds
+    /// while valid, ranking takes over when it dies or leaves. The activation radius is the
+    /// machine's (<c>min_ai_active_dist</c>, 2000 m shipped) — a candidate beyond it never
+    /// ranks, but a STANDING target is kept regardless (disengagement is the mode machine's
+    /// return-range rule, not acquisition's).
+    ///
+    /// <para>Deconfliction counts allied gunners already holding each candidate (invented
+    /// minimum, see <see cref="AiTargetRanking"/>). ⚠ Under <see cref="AimAssist.TeamOfPilot"/>
+    /// every pilot is its own team, so the count is zero in every current session — it becomes
+    /// live the moment a team model puts two AI on one side.</para></summary>
+    private FlightController? SelectRankedTarget(AiGunner gunner, out TargetScore score,
+        out string how)
     {
+        score = default;
+        how = "ranked";
         if (Projectiles == null)
             return null;
         _gunnerScan.Clear();
         Projectiles.CollectAircraft(_gunnerScan);
         int ownTeam = AimAssist.TeamOfPilot(PlayerIndex);
-        FlightController? best = null;
-        float bestDist = float.MaxValue;
+        float activation = Pilot?.Machine?.ActivationRange ?? 2000f; // min_ai_active_dist fallback
+        var ownPos = WorldPosition;
+        var ownFwd = NoseDirection;
+        _rankCandidates.Clear();
+        _rankSources.Clear();
+        FlightController? primary = null;
         foreach (var c in _gunnerScan.Vehicles)
         {
             if (!c.Live || ReferenceEquals(c.Source, this))
                 continue;
             if (c.Team == AimAssist.NeutralTeam || ownTeam == AimAssist.NeutralTeam || c.Team == ownTeam)
                 continue;
-            float d = WorldPosition.DistanceTo(c.Position);
-            if (d >= bestDist)
+            if (c.Source is not FlightController fc)
                 continue;
-            bestDist = d;
-            best = c.Source as FlightController;
+            if (primary == null && gunner.PrimaryTargetName is { Length: > 0 } wanted
+                && ownPos.DistanceTo(c.Position) <= activation
+                && (string.Equals(fc.Name, wanted, StringComparison.OrdinalIgnoreCase)
+                    || (fc.IsHumanPiloted
+                        && wanted.Equals("player", StringComparison.OrdinalIgnoreCase))))
+            {
+                primary = fc;
+            }
+
+            // Allied gunners already on this candidate (the deconfliction input).
+            int attackers = 0;
+            foreach (var a in _gunnerScan.Vehicles)
+            {
+                if (a.Team == ownTeam && a.Source is FlightController ally
+                    && !ReferenceEquals(ally, this)
+                    && ReferenceEquals(ally.Pilot?.Gunner?.Target, fc))
+                    attackers++;
+            }
+
+            _rankCandidates.Add(new RankedTargetCandidate
+            {
+                Position = c.Position,
+                Forward = fc.NoseDirection,
+                IsPlayer = fc.IsHumanPiloted,
+                ObjectiveBias = AiTargetRanking.ObjectiveBiasFor(fc.Name, gunner.RatingBiases),
+                AlliedAttackers = attackers,
+            });
+            _rankSources.Add(fc);
         }
-        return best;
+
+        if (primary != null)
+        {
+            // Log the assigned pick with its own rank inputs (informational — rank not consulted).
+            int idx = _rankSources.IndexOf(primary);
+            if (idx >= 0)
+                score = AiTargetRanking.Score(ownPos, ownFwd, activation, _rankCandidates[idx]);
+            how = "primary target";
+            return primary;
+        }
+
+        int best = AiTargetRanking.SelectBest(ownPos, ownFwd, activation, _rankCandidates, out score);
+        return best >= 0 ? _rankSources[best] : null;
     }
 
     private FlightInput ReadKeyboard(float dt)

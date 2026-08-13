@@ -164,7 +164,9 @@ public static class Suites
             "mid-flight retarget, and is present, ticking, damageable by the weapon's own values " +
             "and killable with the kill attributed to the shooter through Downed", AiActor));
         into.Add(new TestHarness.Suite("ai-gunnery",
-            "the D14 AI gunner: acquires the nearest hostile as mutable state, refuses the shot " +
+            "the D14 AI gunner + D12 acquisition: acquires through the decoded target ranking " +
+            "as mutable state (0.7 player weight, primary_target override, 1e21 activation " +
+            "cutoff, all live in the engine), refuses the shot " +
             "outside the ±11° forward gun cone and outside its quick-draw cone off the target's " +
             "nose/tail, fires real rounds through the fire-control path under its own shooter id " +
             "with dead-eye scatter (skill 1 hits measurably less than skill 9), downs the target " +
@@ -3398,6 +3400,7 @@ public static class Suites
         ProjectilePool? pool = null;
         FlightController? target = null;
         FlightController? ai = null;
+        FlightController? rival = null;
         try
         {
             var live = new ProjectilePool(textures, null, null);
@@ -3583,12 +3586,69 @@ public static class Suites
             Step(180);
             ctx.Check(Combined(target) < pristineCombined,
                 $"the same geometry flagged human is assisted onto the target moved={pristineCombined - Combined(target):0.##}");
+
+            // --- D12 ranked acquisition: a hostile pair at equal geometry (same distance,
+            // same bearing/altitude/facing arms). The human-piloted target carries the decoded
+            // 0.7 base weight and out-ranks the AI rival; a primary_target assignment
+            // overrides the ranking; a candidate beyond the activation radius scores the
+            // engine's 1e21 and is never picked.
+            ai.IsHumanPiloted = false;
+            ai.AutoFire = false;
+            pilot.Gunner = gunner;
+            gunner.AutoTarget = true;
+            gunner.Target = null;
+            target.Respawn();
+            target.PlaceHeld(targetPos, targetPos + Vector3.Forward);
+            var shooterPos = targetPos + new Vector3(0f, 0f, 800f);
+            ai.PlaceHeld(shooterPos, targetPos);
+            // Same 800 m ring, 14.5° off the shooter's nose, same altitude, nose away.
+            var rivalPos = targetPos + new Vector3(200f, 0f, 800f - Mathf.Sqrt(800f * 800f - 200f * 200f));
+            var rivalModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+            rival = new FlightController
+            {
+                PlaneModel = rivalModel,
+                Collider = PlaneCollider.Build(rivalModel),
+                PlayerIndex = AiAircraftSpawner.ShooterIdBase + 1,
+                IsHumanPiloted = false,
+                Projectiles = live,
+                UseKeyboard = false,
+                PadDevices = System.Array.Empty<int>(),
+                AllowPause = false,
+            };
+            rival.AddChild(rivalModel);
+            rival.Setup(new FlightModel(stats), null, new CamParams(), rivalPos,
+                rivalPos + Vector3.Forward);
+            rival.Name = "rival_hostile";
+            ctx.Host.AddChild(rival);
+            rival.PlaceHeld(rivalPos, rivalPos + Vector3.Forward);
+
+            Step(1);
+            ctx.Check(ReferenceEquals(gunner.Target, target),
+                $"equal geometry: the player's 0.7 weight out-ranks the AI rival (360 rank units)");
+            gunner.Target = null;
+            gunner.PrimaryTargetName = "rival_hostile";
+            Step(1);
+            ctx.Check(ReferenceEquals(gunner.Target, rival),
+                $"an assigned primary_target overrides the ranking");
+            gunner.Target = null;
+            gunner.PrimaryTargetName = "player";
+            Step(1);
+            ctx.Check(ReferenceEquals(gunner.Target, target),
+                $"primary_target 'player' resolves to the human-piloted aircraft");
+            gunner.PrimaryTargetName = null;
+            gunner.Target = null;
+            target.PlaceHeld(targetPos + new Vector3(0f, 0f, -2500f),
+                targetPos + new Vector3(0f, 0f, -2600f));
+            Step(1);
+            ctx.Check(ReferenceEquals(gunner.Target, rival),
+                $"beyond the activation radius the player scores 1e21 and the rival is picked");
         }
         finally
         {
             pool?.Free();
             target?.Free();
             ai?.Free();
+            rival?.Free();
             textures.Dispose();
         }
     }
