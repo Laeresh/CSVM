@@ -165,6 +165,9 @@ public partial class GameSession : Node3D
     // The AI actor seam (M4 A2): the spawner is built with the rigs; every AI aircraft it has
     // spawned is stepped in DriveSimSteps after the player rigs and freed with the world.
     private AiAircraftSpawner? _aiSpawner;
+    // The egen enemy generators (M4 B6, --generators): loaded with the rigs, stepped in
+    // DriveSimSteps before the AI planes it spawns into _aiPlanes, freed with the world subtree.
+    private AiGeneratorRuntime? _generators;
     // The dogfight scorekeeping (--vs): built with the rigs, fed their Downed reports, its clock
     // advanced on the sim dt (never wall time). Null outside Versus — the Downed events then
     // simply have no subscriber. Freed with this node; flight holds no match state.
@@ -1864,6 +1867,31 @@ public partial class GameSession : Node3D
             state.What += $" + {aiPlanes.Count} AI";
         }
 
+        // --generators: the mission's egen enemy generators (M4 B6), spawning through the seam
+        // above. Loaded here because the drop rules need the built world (host-node resolution).
+        if (_spec.Generators)
+        {
+            List<EnemyGeneratorDef> egenDefs;
+            try
+            {
+                egenDefs = EnemyGenerators.Load(state.MissionZrdrPath);
+            }
+            catch (IOException e)
+            {
+                GD.Print($"egen: no generator file for {_spec.Chapter}/{_spec.Mission}: {e.Message}");
+                egenDefs = new List<EnemyGeneratorDef>();
+            }
+            var netNames = new HashSet<string>(
+                AiNets.LoadIndex(rigInputs.ChapterZrdrPath).Values,
+                StringComparer.OrdinalIgnoreCase);
+            _generators = new AiGeneratorRuntime(egenDefs, rigInputs.WorldRuntime, netNames,
+                _spec.GeneratorsPlane, SpawnAiAircraft);
+            _worldRoot!.AddChild(_generators);
+            GD.Print($"egen: {_generators.LiveCount} of {egenDefs.Count} generator(s) live for " +
+                     $"{_spec.Chapter}/{_spec.Mission}, spawning '{_spec.GeneratorsPlane}'");
+            state.What += $" + {_generators.LiveCount} generator(s)";
+        }
+
         if (_rigs.Count > 1)
         {
             var flown = new List<string>(_rigs.Count);
@@ -2272,6 +2300,9 @@ public partial class GameSession : Node3D
             {
                 rig.Controller?.SimStep(dt);
             }
+            // Generators step before the AI-plane loop below: a spawn appends to _aiPlanes, which
+            // must not happen while that list is being enumerated (the new plane ticks next step).
+            _generators?.SimStep(dt);
             // AI aircraft step after the player rigs — the tree order their _PhysicsProcess
             // callbacks take on a realtime clock, since they spawn after every rig is built.
             foreach (var ai in _aiPlanes)

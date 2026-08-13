@@ -280,6 +280,13 @@ public sealed record SessionSpec
     /// flight session through the runtime spawn seam (<c>GameSession.SpawnAiAircraft</c>), placed
     /// ahead of player 1 and holding its course. Null when the flag was absent.</summary>
     public IReadOnlyList<string>? AiPlanes { get; private set; }
+    /// <summary><c>--generators[=plane]</c>: run the mission's egen enemy generators (M4 B6);
+    /// each surviving generator spawns AI aircraft on its decoded wave/period cycle through the
+    /// same runtime spawn seam <c>--ai=</c> uses. The optional value picks the spawned airframe
+    /// (a stand-in until the roster's <c>vehicle.params</c> chain resolves one).</summary>
+    public bool Generators { get; private set; }
+    /// <summary>Which plane <c>--generators</c> spawns; the default is the default flight plane.</summary>
+    public string GeneratorsPlane { get; private set; } = "player_bhawk";
     public (FlightInput, float)[][]? HoldSets { get; private set; }
     /// <summary>The <c>--damage=</c> preset pairs (part, fraction 0–1); null when <c>--damage</c>
     /// carried no value.</summary>
@@ -738,6 +745,8 @@ public sealed record SessionSpec
                 if (names.Length > 0)
                     s.AiPlanes = names;
             }
+            else if (arg == "--generators") { s.Generators = true; }
+            else if (arg.StartsWith("--generators=")) { s.Generators = true; s.GeneratorsPlane = arg["--generators=".Length..]; }
             else if (arg == "--fire") { s.AutoFire = true; }
             else if (arg == "--fire-rockets") { s.AutoFireRockets = true; }
             else if (arg.StartsWith("--gun-select=")) { s.GunSelect = int.Parse(arg["--gun-select=".Length..]); }

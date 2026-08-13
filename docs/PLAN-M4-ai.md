@@ -1313,7 +1313,14 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
 ### Wave B — Non-combat presence
 
 5. ☐ B5 — Net following: the `ne`/`neindex` graph as a patrol behaviour
-6. ☐ B6 — Generators: `egen` waves, capacity and periods
+6. ☑ B6 — Generators: `egen` waves, capacity and periods — **landed 2026-08-13**:
+   `Mech3/EnemyGenerators.cs` (typed reader, three shapes + `[null]`),
+   `Session/GeneratorCycle.cs` (the pure decoded timing law; capacity ≤ 0 disables the capacity
+   check as a DOCUMENTED stand-in pending the egen.zbd raw-byte read, recorded in
+   mission-entities.md's capacity-puzzle section) and `Session/AiGeneratorRuntime.cs` behind
+   `--generators[=plane]`, spawning held-course planes through `SpawnAiAircraft` (net pick logged
+   for B5; host death and doors stubbed for F18/F20). Found shipped-data typo: C1/M04's
+   `Eairg32_params` vs the aiv header's `Earig32_params`
 7. ☐ B7 — Formation flying — ⚠ **premise refuted 2026-08-10: there is no leader field** (slot 6 is
    `primary_target`). Re-scope onto `group` (slot 4) or drop
 8. ☐ B8 — The voice runtime: prewarm, source-following one-shots, the `aiv`→voice→clip chain

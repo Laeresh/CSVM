@@ -6,10 +6,12 @@ the player attacks or escorts, and the generators that feed fighters into the fi
 2026-07-25 from a census over the whole install (50 `zeppelins.json` → 58 instances; 53
 `egen.json` → 23 generators, the other 33 files being an empty `[null]`).
 
-**Neither is consumed by the remake.** They are documented because they are complete,
-self-contained definitions — the data half of the M4 combat work, and directly useful to the
-mech3ax fork. Which zeppelin *nodes* a mission shows at all is a separate mechanism, the
-per-mission `.gw` interp script — see [interp.md](interp.md).
+**The remake reads `egen.json`** (`CSVM/src/Mech3/EnemyGenerators.cs`, run by
+`Session/AiGeneratorRuntime.cs` behind the `--generators` flag, M4 B6); `zeppelins.json` is still
+unconsumed. Both are documented because they are complete, self-contained definitions — the data
+half of the M4 combat work, and directly useful to the mech3ax fork. Which zeppelin *nodes* a
+mission shows at all is a separate mechanism, the per-mission `.gw` interp script — see
+[interp.md](interp.md).
 
 Both files use the standard flat alternating `KEY, [values…]` shape
 ([shared conventions](README.md#shared-conventions-zrdr-readers)); all numbers arrive as floats.
@@ -126,7 +128,7 @@ has ground airfields `eairg31`/`eairg32`, a ship `eshipg31`, and a submarine `ba
 | Key | On | Meaning |
 |---|---|---|
 | `node` | 23/23 | the host world node |
-| `vehicle` | 23/23 | nested: `params` (an `aiv.json` roster entry, e.g. `Eairg31_params`), `nets` (one or more AI net names), `choose_nets` (`cyclic` throughout) |
+| `vehicle` | 23/23 | nested: `params` (a designer label in the `aiv.json` HEADER's `(slotId, label)` pairs, e.g. `Eairg31_params`; authored on 15 of 23, see the typo note below), `nets` (one or more AI net names), `choose_nets` (`cyclic` throughout) |
 | `capacity` | 23/23 | `0` throughout — a lifetime spawn budget, decremented per launch. ⚠ **`0` does not obviously mean "unbounded"** — see [the capacity puzzle](#the-capacity-puzzle) |
 | `max_active` | 23/23 | concurrent live spawns (1/4/5/6/10) |
 | `wave_size` | 23/23 | planes per wave (1, once 3) |
@@ -148,6 +150,12 @@ altitude is reached; and it names the file — `egen.zrd`. The `open_anim` → s
 design document and the shipped data agree field-for-field.
 
 33 of the 53 `egen.json` files are an empty `[null]` — most multiplayer maps have no generator.
+
+**One authored `params` label is a shipped typo.** The linkage is by exact label: an egen
+`vehicle.params` value names a designer label in the same mission's `aiv.json` header. 14 of the
+15 authored labels resolve; C1/M04's egen says `Eairg32_params` while the header spells it
+`Earig32_params` (a transposition), so that generator's roster lookup cannot succeed as authored.
+Measured 2026-08-13; asserted in `CSVM.Tests/EnemyGeneratorsTests.cs`.
 
 ### The generator cycle
 
@@ -183,6 +191,10 @@ Three things that reading pins down:
 - **The altitude gate holds, it does not cancel** — exactly as the design document says. The wave
   counter and the timer are untouched while blocked; only the door closes. The gate is skipped
   entirely when `min_altitude` is unset (a `-1.0` sentinel).
+
+One value the decode does not pin: the FIRST `nextEvent` threshold after load. The remake's
+implementation (`Session/GeneratorCycle.cs`) assumes the full inter-wave gap
+(`ind_period + wave_period`), the conservative reading, and says so where F20 will revisit it.
 
 **The host's death disables the generator.** For a fixed installation that is the `healthy` node
 going inactive; for a zeppelin it is the zeppelin's own destroyed flag. Two further load-time
@@ -253,3 +265,17 @@ for `wave_period`, so the reader format distinguishes the two and the extractor 
 which makes this less likely, not impossible. **The discriminating step is now to read `capacity`'s
 raw bytes out of the un-extracted `egen.zbd` rather than the JSON.** Until then the guidance above
 stands unchanged: do not implement "0 means unlimited".
+
+#### The remake's stand-in, 2026-08-13 (M4 B6)
+
+The generator runtime had to ship before the raw-byte read, so
+`Session/GeneratorCycle.cs` carries an explicit, documented stand-in rather than a silent
+reading: **the capacity check applies the decoded rule only when `capacity > 0`, and is disabled
+entirely at `capacity <= 0`.** A positive value (none ship, but a fixture authors one) gets the
+decoded budget: `capacityRemaining` initialised from `capacity`, decremented per spawn, blocking
+when `wave_size − spawnedThisWave > capacityRemaining`. The shipped `0` therefore neither blocks
+forever (the decoded rule taken literally) nor claims to mean "unlimited" (the guess this page
+forbids); the stand-in is named in the class comment and asserted as such in
+`CSVM.Tests/GeneratorCycleTests.cs`. **Open follow-up, unchanged:** the raw-byte read of
+`capacity` out of the un-extracted `egen.zbd` is the discriminating instrument, and the stand-in
+is to be replaced by whatever it shows.
