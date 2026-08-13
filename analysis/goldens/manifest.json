@@ -36,8 +36,8 @@
     {
       "name": "c2-city",
       "frame": 120,
-      "hash": "0af0605b56a172f51b06ef096822759f",
-      "exercises": "C2's solid 3D city blocks, billboard clutter, backlot geometry, daylight fog; near-static, 51 px at 120 vs 121.",
+      "hash": "3905d9e1df99b209c19316429fb153e2",
+      "exercises": "C2's solid 3D city blocks, billboard clutter, backlot geometry, daylight fog, and the harbour wake spray the boat start anims emit; near-static, 51 px at 120 vs 121.",
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
     {

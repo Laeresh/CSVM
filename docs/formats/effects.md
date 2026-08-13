@@ -206,7 +206,8 @@ because they share the same frame sets (`fire101-112` etc.), so:
    @4 and the `bmanwalk`/`bmanrun` x6 @9 crowd sprites. `ObjectCycleTexture{name, reset}` (144
    events, carrying no frame list of its own) is the anim-side trigger for these - still
    unimplemented, so cycles currently run free rather than being started/reset by animation.
-3. **The `EFFECTS` reader** - `extracted/zrdr/effects.zrd.json`, the same idea bound to a NODE:
+3. **The `EFFECTS` reader** - `extracted/zrdr/effects.zrd.json`, the same idea reached through a
+   proxy NODE:
 
    ```
    ["fire1.flt", "NAME", ["fire1"], "SPEED", [10.0], "LOOPING", ["ON"],
@@ -216,14 +217,25 @@ because they share the same frame sets (`fire101-112` etc.), so:
    ```
 
    Exactly two entries exist, and no compiled anim definition anywhere has a non-null `effects`
-   array, so the binding is by node name from this reader alone. `fire1`/`fire2` are single
-   `Facade`/`CylindricalY` quads (`fire101.tif`/`fire102.tif`) under **parentless template
-   nodes** - `fire.zrd.json` activates and scales `fire2.flt` wherever something burns. Not
-   wired up: the templates only reach a burn site through `OBJECT_ADD_CHILD` reparenting, which
-   is unimplemented, so EFFECTS belongs with that work rather than before it.
+   array, so this reader is the only source. `fire1`/`fire2` are single `Facade`/`CylindricalY`
+   quads (`fire101.tif`/`fire102.tif`) under **parentless template nodes** loaded from
+   `common\effects\models\` by `support\load.gw`.
 
-**What is NOT a flipbook:** C1's refinery gas flare. `flame01` is a static `fire101.tif`
-billboard; its only animation is `refinery_fire.zrd.json`'s `LIGHT_STATE` flicker, cycling
-`orange_light`'s range 2->11, 3->15, 1.5->10, 2.5->14 in a tight loop. The flame's apparent
-flickering is the *light* flickering. (Checked because the fire textures' existence makes a
-texture cycle the intuitive guess; the reader is explicit that it is not.)
+   **The entry names a node, but what it animates is that node's MATERIAL** (decoded out of
+   `crimson.exe` 2026-08-13, see [`anim-definitions.md`](anim-definitions.md#fire-a-texture-cycle-on-a-material-and-behaviours-nothing-calls)).
+   The engine resolves the node, walks to the first mesh under it, and installs the frame list on
+   surface 0's material record, which is the same per-material cycle block as (2); the draw loop
+   then tests the material's own cycled bit per polygon. Materials are one record per texture, so
+   `fire1.flt` is a **proxy** exactly like the interp's `watersetup`/`surfsetup`, and the cycle
+   reaches every polygon on that material. Implemented 2026-08-13 (`src/Mech3/EffectCycles.cs`),
+   which applies both entries to their gamez materials before the world build so the existing
+   `TextureCycler` picks them up. It needs no `OBJECT_ADD_CHILD` and no burn site.
+
+**C1's refinery gas flare IS a flipbook.** `flame01` shares material 88 (`fire101.tif`) with the
+`fire1` template, so the EFFECTS cycle installed on that material animates it: 12 frames at 10 fps,
+looping, from load, with no trigger. `mb1` and `mb_spinflame` are on the same material and flip in
+lockstep with it. Its `LIGHT_STATE` flicker is real and separate - `refinery_fire.zrd.json` cycles
+`orange_light`'s range 2->11, 3->15, 1.5->10, 2.5->14 in a tight loop - so the flare both animates
+its texture and pulses its spill. ⚠ This entry previously claimed `flame01` was a static billboard
+whose apparent motion was only the light; that was wrong, and the muzzle-flash observation behind it
+did not survive the draw-loop decode.
