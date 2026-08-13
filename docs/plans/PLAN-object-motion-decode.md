@@ -1,8 +1,7 @@
 # OBJECT_MOTION — the original's launch, contact and run-time model, decoded
 
-**ACTIVE PLAN** (written 2026-08-10). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**✅ COMPLETE** — written 2026-08-10, landed 2026-08-13, all 13 items (Waves A–D). `C10` was minted
+mid-plan from a controls report, not from the original scope, and landed with Wave C.
 
 This plan replaces the engine's `OBJECT_MOTION` launch and termination model with the one decoded
 from the original's own per-frame update, `FUN_004e8fa0` in `crimson.exe`. Three shipped readings

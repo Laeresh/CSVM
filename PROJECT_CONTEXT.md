@@ -192,12 +192,8 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt flying, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, world destructibles that take damage, die, lose collision, throw debris and reset — and planes shoot planes down (M4 A1, front-loaded). The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**Active plan: [`PLAN-object-motion-decode.md`](docs/PLAN-object-motion-decode.md)** (written
-2026-08-10; 13 items, 4 waves) — the original's `OBJECT_MOTION` launch, contact and run-time model,
-decoded from `crimson.exe`: the ground-contact test is the DEFAULT rather than `do_intersections`-
-gated, the `translation_range` elevation is linear (`elev/90`) rather than spherical, and `RUN_TIME`
-is a ceiling rather than a duration. Folds in `BL-319` and `BL-245`, re-opens `PT-46` (d), and
-deletes `DebrisTune`. All 13 items are complete. Next: archive the plan.
+**No active plan.** `PLAN-object-motion-decode.md` completed all 13 items 2026-08-13 and moved to
+[`docs/plans/`](docs/plans/plans.md). Next: pick the next backlog item to plan.
 Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45`, `PT-46` and `PT-47`
 ([`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read
