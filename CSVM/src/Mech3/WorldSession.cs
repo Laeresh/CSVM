@@ -376,6 +376,15 @@ public sealed class WorldSession
             // from a death or damage sequence, always after this scope closes. Prewarm expands a
             // SOUND_GROUPS name to its members.
             prewarmed += builtSounds.Prewarm(animProgram.OneShotSoundNames());
+            // The mission's combat-voice clips (CombatVoice.SessionPrewarmNames): every line an AI
+            // pilot could speak is first reached at runtime, so it must decode now or stay silent.
+            if (o.VoiceClipNames is { Count: > 0 } voiceNames)
+            {
+                int voiced = builtSounds.Prewarm(voiceNames);
+                prewarmed += voiced;
+                GD.Print($"anim: prewarmed {voiced} combat-voice stream(s) "
+                         + $"of {voiceNames.Count} roster clip def(s)");
+            }
             StartupProfile.Record("prewarm", mark);
             if (prewarmed > 0)
             {
@@ -489,6 +498,13 @@ public sealed class WorldSession
         /// bootstrap, where most <c>PUFFER_STATE</c>s fire, so this is read once, here, not assigned
         /// after <see cref="Build"/> returns.</summary>
         public Anim.IEmitterFactory? EmitterFactory { get; init; }
+
+        /// <summary>The mission's combat-voice clip defs (<see cref="CombatVoice.SessionPrewarmNames"/>),
+        /// prewarmed with the animation program's own sound names so a pilot's line still decodes
+        /// after the archive closes. Null or empty (the default) prewarms no voice: a viewer or
+        /// lab session hosts no talking pilots. The caller computes the set because which pilots
+        /// talk is session policy, not world-build mechanics.</summary>
+        public IReadOnlyCollection<string>? VoiceClipNames { get; init; }
 
         /// <summary>The caller's <see cref="SoundArchive"/> outlives this build, so
         /// <c>WorldSounds.Loader</c> stays live for names the prewarm did not reach. Separate from

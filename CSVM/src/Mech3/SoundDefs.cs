@@ -60,9 +60,10 @@ public static class SoundDefs
     /// Loads the <c>SOUND_GROUPS</c> block: the weighted random sound groups a one-shot SOUND event
     /// resolves through. Entry shape is <c>[groupName, ("MUSIC"?), ("DYNAMIC_WEIGHTS", factor)?,
     /// member, member, …]</c> where a member is <c>[snd_name]</c> (weight 1) or
-    /// <c>[snd_name, "WEIGHT", w]</c>. The voice-over dialogue chains (<c>snd_assignments</c>,
-    /// <c>snd_HI1*</c>) nest a list where a member's own name would be and so contribute no weighted
-    /// member — they are skipped, and a group left with none is not registered.
+    /// <c>[snd_name, "WEIGHT", w]</c>. A dialogue-chain member (<c>snd_assignments</c>,
+    /// <c>snd_HI1*</c>; 222 groups in retail) is <c>[firstLine, [line], [line], …]</c>: an ordered
+    /// sequence of snd names, kept as <see cref="SoundGroup.Chains"/> for the mission/comms layer
+    /// rather than as a weighted member. A group with neither members nor chains is not registered.
     /// </summary>
     public static Dictionary<string, SoundGroup> LoadGroups(string zrdrPath)
     {
@@ -113,10 +114,22 @@ public static class SoundDefs
                     {
                         group.Members.Add((memberName, w));
                     }
-                    // else: a nested dialogue chain — not a weighted member, skipped.
+                    else if (member[1] is List<object?>)
+                    {
+                        // A dialogue chain: the first line bare, each further line in its own list.
+                        var chain = new List<string> { memberName };
+                        for (int k = 1; k < member.Count; k++)
+                        {
+                            if (member[k] is List<object?> { Count: >= 1 } line && line[0] is string lineName)
+                            {
+                                chain.Add(lineName);
+                            }
+                        }
+                        group.Chains.Add(chain);
+                    }
                 }
             }
-            if (group.Members.Count > 0)
+            if (group.Members.Count > 0 || group.Chains.Count > 0)
             {
                 groups[name] = group;
             }
@@ -152,6 +165,13 @@ public sealed class SoundDef
 public sealed class SoundGroup
 {
     public readonly List<(string Name, float Weight)> Members = new();
+
+    /// <summary>The group's dialogue chains: each an ordered list of snd names (the mission VO
+    /// sequences; <c>snd_HI1Start</c> plays five lines in order). Not weighted members and never
+    /// returned by <see cref="Pick"/>; kept so the comms/mission layer can consume them, and so
+    /// <c>WorldSounds.Prewarm</c> can decode the lines. Playback wiring is that layer's, not
+    /// this parser's.</summary>
+    public readonly List<IReadOnlyList<string>> Chains = new();
     public string Name = "";
     public float RecencyFactor = 1f;   // DYNAMIC_WEIGHTS scalar on the last-picked member; 1 = none
     private int _last = -1;             // index Pick last returned (the recency memory)

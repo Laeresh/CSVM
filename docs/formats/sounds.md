@@ -17,6 +17,12 @@ definitions and curve blocks, and the audio container format. Consumed by
 - **Valued keys:** `RANGE [fullVolumeDist, audibleDist]` (meters), `VOLUME [gain]`,
   `QUEUE [...]`.
 
+Beside the effect/UI sets (`COMMON`, the per-mission `c<x>m<nn>` sets, the `brief_*` and `DIALOG`
+sets), 35 sets named `id<N>` carry the combat-voice clips: `snd_id<N>_<TYPE>` →
+`VO_id<N>_<TYPE>.wav`, 1,414 defs. Their runtime chain and caveats (defs without WAVs, the
+announcer id without defs) are [combat-voice.md](combat-voice.md); the reader is
+`CSVM/src/Mech3/CombatVoice.cs`.
+
 Each plane def names its own engine loop via `engine_sound` / `cockpit_engine_sound`
 (see [vehicle.md](vehicle.md)) — e.g. `engine_sound snd_bloodhawkengine` → bloodhawk.wav.
 `damaged_engine_sound` is a second, vehicle.json-only loop (`snd_damagedengine`) blended in as
@@ -43,10 +49,16 @@ Entry shapes (all start with the group name):
   less likely to repeat back-to-back. Members are single-element lists, each weight 1.
 - **Explicit `WEIGHT`** — `snd_plane_die`/`snd_plane_dmg` give each member its own weight and no
   recency decay; their `snd_nothing` at 0.7 is a 70% chance of silence.
-- **VO dialogue chains** (`snd_assignments`, `snd_HI1*`) nest a list where a weighted member's name
-  would be. They contribute no weighted member and are skipped; a group left with none is not
-  registered. Music `*_sg` groups parse but no `SOUND` event names them (music is triggered
-  elsewhere).
+- **VO dialogue chains** (`snd_assignments`, `snd_HI1*`; 222 groups) nest a list where a weighted
+  member's name would be: `[firstLine, [line], [line], …]`, an ordered sequence of snd names.
+  They contribute no weighted member; the parser keeps them as `SoundGroup.Chains` for the
+  comms/mission layer, and `WorldSounds.Prewarm` decodes their lines. No chain group mixes chains
+  with weighted members, and each holds exactly one chain (2–13 lines). A group with neither
+  members nor chains is not registered. Music `*_sg` groups parse but no `SOUND` event names them
+  (music is triggered elsewhere).
+- **Combat-voice variant groups**: 466 entries named `snd_<FAMILY>-A_id<N>_random`
+  (`DYNAMIC_WEIGHTS 0.5` over one pilot's `-A/-B/-C` takes of one family), the data's own answer
+  to how a take is picked; see [combat-voice.md](combat-voice.md).
 
 A `SOUND` event's NAME is resolved against `SETS` first, then `SOUND_GROUPS`: `air_mixed_exp_sg`
 picks one of `snd_exp_hit1/2/3/3a/5`, each of which is an ordinary `SETS` entry

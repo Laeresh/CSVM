@@ -66,7 +66,7 @@ public sealed partial class WorldSounds : Node3D
     // Live one-shot players (PlayOneShot). Fire-and-forget, so nothing holds them but this list —
     // swept in Tick once they stop. The grace lets Play() take effect before a not-yet-playing one
     // is mistaken for finished. FlushOneShots frees them for a harness that pumps no frames.
-    private readonly List<(AudioStreamPlayer3D Player, float Age)> _oneShots = new();
+    private readonly List<OneShot> _oneShots = new();
 
     private float _logClock;
     private Func<Vector3>? _listener;
@@ -122,18 +122,45 @@ public sealed partial class WorldSounds : Node3D
         foreach (var name in names)
         {
             // A one-shot SOUND may name a SOUND_GROUPS group rather than a definition; prewarm each
-            // of the group's members, since any of them may be the one Pick returns at runtime.
+            // of the group's members, since any of them may be the one Pick returns at runtime,
+            // and each dialogue-chain line, since a chain plays its members by name later too.
             if (_groups.TryGetValue(name, out var group))
             {
                 foreach (var (member, _) in group.Members)
                 {
                     decoded += PrewarmOne(member);
                 }
+                foreach (var chain in group.Chains)
+                {
+                    foreach (var line in chain)
+                    {
+                        decoded += PrewarmOne(line);
+                    }
+                }
                 continue;
             }
             decoded += PrewarmOne(name);
         }
         return decoded;
+    }
+
+    /// <summary>Whether a definition name has a decoded, playable stream: the availability check
+    /// the voice dispatch needs (a def is not proof of a WAV: see <see cref="CombatVoice"/>).
+    /// Reads the prewarm cache; while the <see cref="Loader"/> is still open it decodes on demand,
+    /// so the answer is the same before and after the build scope closes.</summary>
+    public bool HasStream(string name)
+    {
+        if (_streams.TryGetValue(name, out var cached))
+        {
+            return cached != null;
+        }
+        if (Loader != null && _defs.TryGetValue(name, out var def))
+        {
+            var stream = Loader(def, false);
+            _streams[name] = stream;
+            return stream != null;
+        }
+        return false;
     }
 
     /// <summary>
@@ -185,48 +212,21 @@ public sealed partial class WorldSounds : Node3D
     /// unknown to sounds.json / SOUND_GROUPS or its stream was never prewarmed (the archive is shut by
     /// the time most one-shots fire — see <see cref="Prewarm"/>).</para>
     /// </summary>
-    public string? PlayOneShot(string name, Vector3 worldPos, Random rng)
-    {
-        string resolved = _groups.TryGetValue(name, out var group)
-            ? group.Pick(rng) ?? name
-            : name;
-        if (!_defs.TryGetValue(resolved, out var def))
-        {
-            return null;
-        }
-        if (!_streams.TryGetValue(resolved, out var stream))
-        {
-            if (Loader == null)
-            {
-                return null;
-            }
-            stream = Loader(def, true);
-            _streams[resolved] = stream;
-        }
-        if (stream == null)
-        {
-            return null;
-        }
+    public string? PlayOneShot(string name, Vector3 worldPos, Random rng) =>
+        Spawn(name, worldPos, null, rng);
 
-        var player = new AudioStreamPlayer3D
-        {
-            Stream = stream,
-            UnitSize = def.RangeMin,
-            MaxDistance = def.RangeMax,
-            VolumeDb = Mathf.LinearToDb(Mathf.Max(def.Volume, 0.0001f)),
-            AttenuationModel = AudioStreamPlayer3D.AttenuationModelEnum.InverseDistance,
-        };
-        AddChild(player);
-        player.GlobalPosition = worldPos;
-        _oneShots.Add((player, 0f));   // swept when it stops (Tick) — no reliance on the Finished signal
-        player.Play();
-        if (Debug)
-        {
-            GD.Print($"sound one-shot: {name}"
-                     + (resolved != name ? $" → {resolved}" : "")
-                     + $" @ {worldPos.Snapped(Vector3.One)}");
-        }
-        return resolved;
+    /// <summary>The source-following variant of <see cref="PlayOneShot(string, Vector3, Random)"/>:
+    /// the one-shot rides <paramref name="source"/>'s world pose each <see cref="Tick"/>. For a
+    /// voice line from a moving aircraft, where a once-written position would fall behind within a
+    /// second. When the source is freed mid-clip the sound holds its last position and finishes
+    /// there. ⚠ The listener is still player one only (the known <c>WorldSession</c> limitation);
+    /// following the source does not change who hears it from where.</summary>
+    public string? PlayOneShot(string name, Node3D source, Random rng)
+    {
+        var pos = IsInstanceValid(source) && source.IsInsideTree()
+            ? source.GlobalPosition
+            : Vector3.Zero;
+        return Spawn(name, pos, source, rng);
     }
 
     /// <summary>Attaches an emitter to the world node that gives it its position — the reader's
@@ -255,15 +255,15 @@ public sealed partial class WorldSounds : Node3D
     /// <c>QueueFree</c> ever runs, and the players would otherwise leak at process exit.</summary>
     public void FlushOneShots()
     {
-        foreach (var (player, _) in _oneShots)
+        foreach (var shot in _oneShots)
         {
-            if (IsInstanceValid(player))
+            if (IsInstanceValid(shot.Player))
             {
-                if (player.Playing)
+                if (shot.Player.Playing)
                 {
-                    player.Stop();
+                    shot.Player.Stop();
                 }
-                player.Free();
+                shot.Player.Free();
             }
         }
         _oneShots.Clear();
@@ -280,23 +280,34 @@ public sealed partial class WorldSounds : Node3D
     /// </summary>
     public void Tick()
     {
-        // Sweep finished one-shots. A stopped player past the start grace is done; free it.
+        // Sweep finished one-shots. A stopped player past the start grace is done; free it. A
+        // source-following one rides its source's pose; a freed source leaves it at its last spot.
         for (int i = _oneShots.Count - 1; i >= 0; i--)
         {
-            var (player, age) = _oneShots[i];
-            if (!IsInstanceValid(player))
+            var shot = _oneShots[i];
+            if (!IsInstanceValid(shot.Player))
             {
                 _oneShots.RemoveAt(i);
                 continue;
             }
-            age += 1f / 60f;
-            if (!player.Playing && age > OneShotGrace)
+            shot.Age += 1f / 60f;
+            if (!shot.Player.Playing && shot.Age > OneShotGrace)
             {
-                player.QueueFree();
+                shot.Player.QueueFree();
                 _oneShots.RemoveAt(i);
                 continue;
             }
-            _oneShots[i] = (player, age);
+            if (shot.Source is { } src)
+            {
+                if (IsInstanceValid(src) && src.IsInsideTree())
+                {
+                    shot.Player.GlobalPosition = src.GlobalPosition;
+                }
+                else
+                {
+                    shot.Source = null;   // finish where the source last was
+                }
+            }
         }
 
         for (int i = _emitters.Count - 1; i >= 0; i--)
@@ -344,6 +355,52 @@ public sealed partial class WorldSounds : Node3D
         LogOnce();
     }
 
+    private string? Spawn(string name, Vector3 worldPos, Node3D? source, Random rng)
+    {
+        string resolved = _groups.TryGetValue(name, out var group)
+            ? group.Pick(rng) ?? name
+            : name;
+        if (!_defs.TryGetValue(resolved, out var def))
+        {
+            return null;
+        }
+        if (!_streams.TryGetValue(resolved, out var stream))
+        {
+            if (Loader == null)
+            {
+                return null;
+            }
+            stream = Loader(def, true);
+            _streams[resolved] = stream;
+        }
+        if (stream == null)
+        {
+            return null;
+        }
+
+        var player = new AudioStreamPlayer3D
+        {
+            Stream = stream,
+            UnitSize = def.RangeMin,
+            MaxDistance = def.RangeMax,
+            VolumeDb = Mathf.LinearToDb(Mathf.Max(def.Volume, 0.0001f)),
+            AttenuationModel = AudioStreamPlayer3D.AttenuationModelEnum.InverseDistance,
+        };
+        AddChild(player);
+        player.GlobalPosition = worldPos;
+        // Swept when it stops (Tick), no reliance on the Finished signal.
+        _oneShots.Add(new OneShot { Player = player, Source = source });
+        player.Play();
+        if (Debug)
+        {
+            GD.Print($"sound one-shot: {name}"
+                     + (resolved != name ? $" → {resolved}" : "")
+                     + $" @ {worldPos.Snapped(Vector3.One)}"
+                     + (source != null ? " (following)" : ""));
+        }
+        return resolved;
+    }
+
     private int PrewarmOne(string name)
     {
         if (_streams.ContainsKey(name) || !_defs.TryGetValue(name, out var def))
@@ -375,6 +432,15 @@ public sealed partial class WorldSounds : Node3D
                      + $"max {e.Player.MaxDistance:0} m "
                      + (e.Player.Playing ? "PLAYING" : e.Active ? "silent" : "off"));
         }
+    }
+
+    /// <summary>One live fire-and-forget one-shot; <see cref="Source"/> non-null makes it follow
+    /// that node's pose until the clip ends or the node dies.</summary>
+    private sealed class OneShot
+    {
+        public AudioStreamPlayer3D Player = null!;
+        public float Age;
+        public Node3D? Source;
     }
 
     /// <summary>One live emitter: the player plus the world node whose pose it rides.</summary>
