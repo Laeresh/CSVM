@@ -1,6 +1,6 @@
 """One-off census over the compiled anim defs, for PLAN-anim-original-match.
 
-Reads Z:/CSVM/extracted/<chapter>/{cam_anim,mis_anim,...}/*.json (git-ignored install data)
+Reads <data root>/extracted/<chapter>/{cam_anim,mis_anim,...}/*.json (git-ignored install data)
 and counts the shapes the plan's items depend on. Read-only.
 """
 import json
@@ -8,7 +8,11 @@ import os
 import sys
 from collections import Counter, defaultdict
 
-ROOT = r"Z:\CSVM\extracted"
+# extracted/ is git-ignored, so a worktree has none: CSVM_DATA_ROOT names the tree that does
+# (the same env var the engine reads), defaulting to this checkout.
+DATA_ROOT = os.environ.get("CSVM_DATA_ROOT") or os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT = os.path.join(DATA_ROOT, "extracted")
 
 kind_counts = Counter()
 loop_forms = Counter()

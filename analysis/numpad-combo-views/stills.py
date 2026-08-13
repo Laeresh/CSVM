@@ -20,7 +20,11 @@ import numpy as np
 import sync
 
 OUT = os.environ.get("CAP08_OUT", ".scratch/cap08")
-VIDEO = "Z:/CSVM/playtest/CAP-08/CAP-08.mp4"
+# playtest/ is git-ignored, so a worktree has none: CSVM_DATA_ROOT names the tree that does
+# (the same env var the engine reads), defaulting to this checkout.
+DATA_ROOT = os.environ.get("CSVM_DATA_ROOT") or os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+VIDEO = os.path.join(DATA_ROOT, "playtest", "CAP-08", "CAP-08.mp4")
 STILLS = f"{OUT}/stills"
 LEAD = 0.4          # s before the edge = inside the settled tail
 # Crop to the aircraft's neighbourhood: the gauges and the empty sky waste

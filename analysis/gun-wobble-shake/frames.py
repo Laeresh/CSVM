@@ -7,7 +7,11 @@ import zlib
 import imageio_ffmpeg as iio
 import numpy as np
 
-VIDEO = r"Z:\CSVM\OriginalScreenshots\Videos\Gun Wobble and animation.mp4"
+# OriginalScreenshots/ is git-ignored, so a worktree has none: CSVM_DATA_ROOT names the tree
+# that does (the same env var the engine reads), defaulting to this checkout.
+DATA_ROOT = os.environ.get("CSVM_DATA_ROOT") or os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+VIDEO = os.path.join(DATA_ROOT, "OriginalScreenshots", "Videos", "Gun Wobble and animation.mp4")
 OUT = os.path.join(".scratch", "gun-wobble")
 X0, X1 = 640, 1920
 

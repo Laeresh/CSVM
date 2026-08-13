@@ -12,9 +12,9 @@ Reads the extracted originals and prints the tables B11's prediction matrix is b
      fog struct, the `fvol*` volumes' altitude band and their `zone_id` values;
   3. per chapter : `fogvol.zrd`'s `fog_zone`, `distance` and (C5 only) interior-fog keys.
 
-NOTHING here writes. Nothing here is game data - it reads `Z:\\CSVM\\extracted` in place.
+NOTHING here writes. Nothing here is game data - it reads the extracted/ tree in place.
 
-Usage:  python survey_zones.py [--root Z:\\CSVM\\extracted] [--mission IA1]
+Usage:  python survey_zones.py [--root <path to extracted>] [--mission IA1]
 """
 
 from __future__ import annotations
@@ -26,6 +26,13 @@ import re
 import sys
 
 CHAPTERS = ["C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5"]
+
+# extracted/ is git-ignored, so a worktree has none: CSVM_DATA_ROOT names the tree that does
+# (the same env var the engine reads), defaulting to this checkout.
+DEFAULT_ROOT = os.path.join(
+    os.environ.get("CSVM_DATA_ROOT")
+    or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "extracted")
 
 
 # ---------------------------------------------------------------- zrdr helpers
@@ -243,7 +250,8 @@ def survey_gamez(chapter, root):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--root", default=r"Z:\CSVM\extracted")
+    ap.add_argument("--root", default=DEFAULT_ROOT,
+                    help="the extracted/ tree (default: $CSVM_DATA_ROOT/extracted, else this checkout's)")
     ap.add_argument("--mission", default="IA1")
     args = ap.parse_args()
 
