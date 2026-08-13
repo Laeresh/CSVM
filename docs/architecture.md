@@ -1206,35 +1206,37 @@ rate, no `AnimRuntime`/`MotionSet` state, so the reach-in is inert to everything
 `MotionSet`, `EmitterDirector`,
 `NameResolver` and `TemplateStage` share the namespace but ARE independently owned — their own
 entries below.
-`MotionRuntime`'s `translation_range` is a POLAR launch — `xz` azimuth, `y` elevation, both in
-degrees, `initial` the speed (`analysis/object-motion-range/`, decoded 2026-08-01) — and a launch
-seeds from the node's authored rest pose, since a shared effect template's children are re-homed by
-nothing between calls. `RangeLaunchDirection` is that decode's ONE expression; `ProjectilePool`'s
-gun-casing ejection reads the same `gunshell` event through it (INSTR-3).
-⚠ The elevation is LINEAR, not spherical, and the direction is deliberately NOT unit length:
-`FUN_004e8fa0`'s `flags & 8` block computes `dirY = elev · 0.011111111` (1/90 written out) and gives
-the horizontal the L1 remainder `1 − |elev|/90`, so the length dips to 0.707 at 45°; only the
-AZIMUTH is converted deg→rad and passed to the sincos at `FUN_0053c6c0`. **Do not normalise it** —
-the unit-sphere reading that shipped until 2026-08-11 launched 60–70° debris 20–25 % too fast and is
-what cut `m_build03` part1 at ~70 % of its authored 5.0 s `RUN_TIME`. Which world bearing azimuth 0
-points along (+X) remains a choice, and `FUN_0053c6c0`'s output order is unchecked — the cos-on-X /
-sin-on-Z assignment is inherited, not decoded. Its `scale` channel is an
-OFFSET from unit scale (`1 + initial + delta·u`), unlike the absolute `PoseScale`/`OBJECT_SCALE_STATE`
-— 30 of the 45 distinct SCALE events carry a bare `-0.1`, which absolute is a negative scale.
-`gravity.complex` picks between two forms of the same fold: plain drops the value into the parent
-frame's Y, `complex` converts world-down INTO that frame — identical under a world-aligned parent,
-which is why the install authors it on aircraft wreckage alone (254 events / 25 shapes, all with a
-`RUN_TIME`).
-`MotionRuntime`'s flight solve is admitted by an **absent `RUN_TIME` plus an apex**, never by the
-`BOUNCE_SEQUENCE` — `BL-257`'s census (`analysis/bl-257-nulled-launch/`) found 167 events / 119
-distinct defs naming NEITHER field, which end instead with the flying piece's own null-start
-`ACTIVE_STATE 0`; gated on the bounce they all reported duration 0 and were hidden on the tick they
-launched. `PendingBounce` still arms only where a bounce IS named, so the second shape flies and
-owes nothing.
-⚠ Do NOT re-narrow that gate to the bounce, and do not widen it past the apex. `FlightToLaunchHeight`
-  returning 0 for `v0y <= 0` is what keeps `BL-245`'s falls out — including 8 of those 167 (a level
-  `bridge_truck01`, `rope1burn`'s five rope ends, two `fuelbox` rockerarms whose speed range is
-  −45…45, so `sin(elevation)·speed` inverts). A `chuteman` parabola solve divides by zero.
+**The original's `OBJECT_MOTION` update is written up in [org/objectMotion.md](org/objectMotion.md)**
+— the function map, the flag word, the linear elevation, `delta` as an acceleration, both contact
+tiers and how they pick a surface, the landing response, the termination model, and the retired
+readings (the spherical elevation, the ÷`run_time` tumble, `DebrisTune`, `no_altitude` as a second
+terrain test). Read it before changing a mechanism here; only what this engine adds is below.
+`MotionRuntime`'s launch seeds from the node's authored rest pose, since a shared effect template's
+children are re-homed by nothing between calls. `RangeLaunchDirection` is the launch decode's ONE
+expression and `TumbleAxis` the tumble's; `ProjectilePool`'s gun-casing ejection reads the same
+`gunshell` event through both (INSTR-3), because two spellings of the maths is how they disagree.
+⚠ Do not normalise the launch direction — its length is `1 − |elev|/90` on the horizontal with
+  `elev/90` on Y, and that non-unit length is the decode. Which world bearing azimuth 0 points along
+  (+X) remains a CHOICE, and the sincos' output order is unchecked: the cos-on-X / sin-on-Z
+  assignment is inherited, not decoded.
+Contact is the DEFAULT and comes in the original's two tiers: `TryGroundColumn`, a vertical column
+under the body, unless `do_intersections` upgrades it to `TryContact`'s trajectory sweep (166 events
+install-wide); `no_altitude` vetoes the column only, and `gunshell` alone authors it. No mask wired
+means neither tier, which is the structural fallback every lab and 9 of the 14 goldens take;
+`c1-debris-rest` is the one golden that wires a mask and reaches the column tier, a killed
+`m_build03` piece resting with its landing's own spark puffer as the pixel-level tell. Both
+end on one shared response.
+`MotionRuntime` separates the duration it REPORTS from the ceiling that ENDS it. `RunTime` is the
+authored `RUN_TIME` or the parabola's return to launch height, and it drives the sequence's wait and
+the scale ramp's parameter (the tumble is a rate and no longer divides by it) — `BL-257`'s census (`analysis/bl-257-nulled-launch/`)
+found 167 events / 119 distinct defs naming neither a run time nor a bounce, which end with the
+flying piece's own null-start `ACTIVE_STATE 0`, so a wrong number here hides them mid-air or leaves
+them on screen. The ceiling is that same `RUN_TIME`, or the original's watchdog (15 s column / 35 s
+sweep), charged only by a contact query that ran and found nothing.
+⚠ Do not feed the watchdog into `RunTime`, and do not re-narrow the untimed gate to the bounce.
+  `BL-245`'s falls and the 8 no-apex oddities among those 167 (a level `bridge_truck01`,
+  `rope1burn`'s five rope ends, two `fuelbox` rockerarms whose speed range is −45…45) report no
+  duration and are admitted by their contact tier instead.
 ⚠ `RestOf`, `_rng`, `SetSubtreeOpacity` and `NonSingularScale` on `AnimRuntime` are `internal`
   (not `private`) specifically so these motion types can reach them — same-assembly only, no wider
   exposure intended; don't widen further without a reason. `NameOf`/`VisualOriginOf` joined them for

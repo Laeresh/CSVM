@@ -529,21 +529,6 @@ public sealed record SessionSpec
     /// At volume 0 every sound still loads, plays, counts and logs; it is simply inaudible.</para></summary>
     public float? Volume { get; private set; }
 
-    /// <summary>Multiplier on launched debris' authored launch speed. Null when
-    /// <c>--debris-launch=</c> was not given, which lets the <c>debris.launchScale</c> config key
-    /// supply it instead — an explicit flag always beats the tuning file.
-    ///
-    /// <para>The flag exists as well as the key because <c>--det</c> drops every config override
-    /// (so a golden cannot bake in whatever someone was tuning), and <c>--screenshot</c> implies
-    /// <c>--det</c>: without a flag, a value matched at the controls would silently not apply to
-    /// any probe rendered to check it.</para></summary>
-    public float? DebrisLaunchScale { get; private set; }
-
-    /// <summary>Multiplier on launched debris' authored <c>gravity.value</c>.
-    /// Same flag-beats-config, flag-survives-<c>--det</c> rule as
-    /// <see cref="DebrisLaunchScale"/>.</summary>
-    public float? DebrisGravityScale { get; private set; }
-
     public bool NoVsync { get; private set; }
     public bool Perf { get; private set; }
     public bool NoFocus { get; private set; }
@@ -842,34 +827,6 @@ public sealed record SessionSpec
                 else
                 {
                     s.Volume = volume;
-                }
-            }
-            else if (arg.StartsWith("--debris-launch=") || arg.StartsWith("--debris-gravity="))
-            {
-                // Same tolerance as --volume: a typo in a tuning knob must not take the launch
-                // down, and the run is still usable at the authored arc. Range is generous because
-                // the point is to bracket an unknown — 0 pins pieces in place, which is a
-                // legitimate thing to look at.
-                bool isLaunch = arg.StartsWith("--debris-launch=");
-                string flag = isLaunch ? "--debris-launch" : "--debris-gravity";
-                string want = arg[(flag.Length + 1)..];
-                if (!float.TryParse(want, NumberStyles.Float, CultureInfo.InvariantCulture, out float scale))
-                {
-                    notes.Add(new Note("core", $"{flag}={want} is not a number — leaving the authored arc alone"));
-                }
-                else if (scale is < 0f or > 100f || !float.IsFinite(scale))
-                {
-                    float clamped = Math.Clamp(scale, 0f, 100f);
-                    notes.Add(new Note("core", $"{flag}={want} is outside 0-100 — using {clamped}"));
-                    if (isLaunch) { s.DebrisLaunchScale = clamped; } else { s.DebrisGravityScale = clamped; }
-                }
-                else if (isLaunch)
-                {
-                    s.DebrisLaunchScale = scale;
-                }
-                else
-                {
-                    s.DebrisGravityScale = scale;
                 }
             }
             else if (arg == "--debug-collision") { s.DebugCollision = true; }

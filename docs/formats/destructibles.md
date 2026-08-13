@@ -179,7 +179,8 @@ bodies via `OBJECT_MOTION` (the ballistic form; channels documented in
 [10, 70, 4.5, 0]`, `FORWARD_ROTATION [TIME 60, 0]`, `SCALE [-0.1, -0.1, -0.1]`, `RUN_TIME 5`, then
 `OBJECT_ACTIVE_STATE h2twr_middle INACTIVE`. `h2twr_upper` is the same with `START_TIME` +2.0 s
 and `FORWARD_ROTATION [TIME 70, 0]`. (The negative `SCALE` is the section shrinking to nothing as
-it tumbles clear.)
+it tumbles clear. `TIME 60` is 60°/s — a rate, not a total angle — turned about the horizontal
+perpendicular of that draw's own 30–70° launch, so the section turns at 0.22–0.7 rad/s.)
 
 **Puffers** — two `ON_CALL` sequences (`h2twr_puffer`, `h2twr_puffer2`), each a `PUFFER_STATE`
 loop of 13 iterations on the `splashbase` texture (`PUFFER_STATE` schema in
@@ -190,13 +191,14 @@ loop of 13 iterations on the `splashbase` texture (`PUFFER_STATE` schema in
 **Wave C (destruction) is complete.** The engine drives the whole destructible model: live per-instance
 HP (C21), the progressive damage stages (C22), weapon fire that spends that HP (C23), the death
 sequence at zero (C24), the collision that goes with it (C25), the debris **tumble** (C26), the
-**`WeaponOrCollideHit` collision path** (C27), and **reset/restore** (C28). Two pieces are deliberately
-deferred out of Wave C: the death **audio** (the one-shot `Sound` events — D31) and the **no-apex
-falls** that author no collider test (`BL-245`). Two slices have since closed:
-`PLAN-bounce-launch` made a bounce-terminated launch with an apex fly its own parabola and land for
-real, and `PLAN-ground-contact` (2026-08-08) gave the 166 `do_intersections: true` bodies the
-original's own collider test instead of letting them run their clock out below the terrain — see
-the "Debris tumbles" bullet below for which pieces each covers. A format reader should know the current wiring:
+**`WeaponOrCollideHit` collision path** (C27), and **reset/restore** (C28). One piece is deliberately
+deferred out of Wave C: the death **audio** (the one-shot `Sound` events — D31). Three slices have
+since closed: `PLAN-bounce-launch` made a bounce-terminated launch with an apex fly its own parabola
+and land for real; `PLAN-ground-contact` gave the 166 `do_intersections: true` bodies the original's
+own collider test instead of letting them run their clock out below the terrain; and
+`PLAN-object-motion-decode` found that test to be the *upgrade* rather than the switch, so every
+gravity-bearing body is contact-tested now and the deferred no-apex falls land with the rest — see
+the "Debris tumbles" bullet below. A format reader should know the current wiring:
 
 - **Both source forms of `DAMAGE_SEQUENCE` are read.** The compiled archives deliver it as an
   ordinary sequence literally named `DAMAGE_SEQUENCE`; `AnimDefs.cs`'s reader front-end now parses
@@ -277,48 +279,42 @@ the "Debris tumbles" bullet below for which pieces each covers. A format reader 
   water tower launches **2** visible pieces (`h2twr_middle` arcs from y≈5 to y≈19 in 0.8 s, tumbling,
   `run_time` 5 s), C1 buildings **7** each, passenger planes **2**; deaths that author no
   `OBJECT_MOTION` (the AA guns, `air_gen`) correctly launch **0**.
-  - **⚠ The shipped arc is the authored one scaled by `0.65` (`BL-022`, 2026-08-08).** Every launch
-    speed above is multiplied by `DebrisTune.LaunchScale`, default **0.65**; gravity is unscaled.
-    That is a **judged look, not a decode** — the authored speeds are censused and correct as read,
-    and the scalar is the gap between what the data says and what the original renders, settled at
-    the controls against `OriginalScreenshots/Videos/m_build03 destruction.mp4`. A frame comparison
-    of that kill put our debris' rise at roughly **3×** the original's; the authored data alone
-    would throw `m_build03`'s pieces to a **34–60 m apex** and **63–128 m** downrange. So a reader
-    computing an expected arc from the extracted numbers must apply the scale, or use
-    `DebrisTune.UseAuthored()` (what the `bounce-launch`/`nulled-launch` suites do) to assert the
-    decode instead. The tune is **global**, so `player_crash_dirt`'s pieces tightened with it —
-    `CAP-16` signed off the crash debris' *direction*, never its magnitude (`BL-122`).
-    ⚠ It also silently absorbs the `run_time` behaviour below: six of `m_build03`'s nine pieces are
-    cut at 67–72 % of their arc while still climbing, and `genx12`'s twelve run 3.7–5.2 s past
-    their landing. Until that is settled the scalar will not generalise to defs with different
-    authored run times.
-  - **Ground-rest is split, `PLAN-bounce-launch` (2026-08-03).** A census over all 17,568 extracted
-    defs found 733 `OBJECT_MOTION` events naming a `bounce_sequence`, 529 of those with no authored
-    `RUN_TIME` (217 def files) — the shape that means "fly until you land." Those 529 are two
-    populations, not one. ⚠ **A third population omits the `bounce_sequence` too** and was found
-    only by `BL-257`'s later census — see the "no `RUN_TIME`, no `BOUNCE_SEQUENCE`" bullet below;
-    what admits a launch to the solve is the **apex**, not the bounce.
-    - **152 (150 reachable in an executed `sequences`) are upward launches** — positive launch speed,
-      negative gravity, so the parabola has an apex. For these, `MotionRuntime.FlightToLaunchHeight`
-      solves `t = 2·v0.y / |accel.y|` and ends the flight there instead of holding the final pose: a
-      **⚠ CHOICE, not a decode** — the original tested real collision via `do_intersections`;
-      a down-ray would only approximate it, and agrees with the launch-height solve wherever the
-      ground under the piece is flat, which is every one of the 150 measured (debris off a
-      ground-sitting structure). **All 120 of this shape author `do_intersections: false`, so the
-      original was not collision-testing them either** — the launch-height solve stands, and
-      `PT-46` (d) confirmed at the controls that the original's debris sinks through terrain the
-      same way. Landing then dispatches the named `BOUNCE_SEQUENCE` (`default` only — none of the
-      150 carry a `water`/`lava` branch), which runs the piece's own `OBJECT_ACTIVE_STATE …
-      INACTIVE` and stops its trail puffer.
-    - **Where `do_intersections` IS authored, the engine now runs the original's own test
-      (`PLAN-ground-contact`, 2026-08-08).** 166 events install-wide carry it — 150
-      `RUN_TIME`+bounce, 16 `RUN_TIME` — and they are exactly the bodies that used to run their
-      clock out and finish below the terrain: `player_crash_dirt`'s `piece1`–`4`, the eleven C1B
-      airframes' `MAIN_ROOT_NODE`, and every `agyrobus` motion. `MotionRuntime.TryContact` sweeps a
-      **segment along the trajectory** (last origin → next origin, in world space) each frame and
-      ends the body at the first collider, arming the `BOUNCE_SEQUENCE` there. A segment, not a
-      down-ray, and the difference is the point: it can rest a piece on a rooftop or stop it
-      against a wall. `RUN_TIME` becomes a ceiling rather than a duration.
+  - **The authored arc is what flies — there is no global scale on it.** A reader computing an
+    expected arc from the extracted numbers gets what the engine launches, with one catch worth
+    knowing: the `translation_range` elevation is **linear**, not spherical, so the launch direction
+    is `dirY = elev/90` with the horizontal taking the remainder `1 − |elev|/90` and the vector is
+    deliberately not unit length (0.707 at 45°). Multiply that by the drawn speed.
+    ⚠ **A `LaunchScale` of 0.65 shipped here until 2026-08-13 and was DELETED, not re-judged.** It
+    was a judged look standing in for that elevation reading — the linear form is 0.745–0.81 of the
+    spherical one across `m_build03`'s own 60–70° band — and the ~3× rise a frame comparison of
+    `OriginalScreenshots/Videos/m_build03 destruction.mp4` reported was the compounded error, not a
+    magnitude the data needs corrected. The tumble it was partly compensating for was wrong too (see
+    the `forward_rotation` bullet in [anim-definitions.md](anim-definitions.md)); `CAP-16` signed off
+    the crash debris' *direction*, never its magnitude (`BL-122`). The full retirement, with what
+    replaced it, is in [`../org/objectMotion.md`](../org/objectMotion.md).
+  - **Ground-rest: a landing test is the DEFAULT, and it comes in two tiers.** The original tests
+    every gravity-bearing ballistic body for contact. `do_intersections` does not switch that test
+    on — it **upgrades** it from the cheap tier to the expensive one, and `no_altitude` is the
+    opt-out. Which tier a body takes, install-wide over the 1,640 gravity blocks: **1,466** the
+    cheap tier, **166** the sweep, **8** (`gunshell`, one per chapter) neither. Full mechanism —
+    both tiers, the surface pick, the landing response and the termination model — in
+    [`../org/objectMotion.md`](../org/objectMotion.md).
+    - **The default tier is a vertical column under the body** (`MotionRuntime.TryGroundColumn`),
+      which lands a piece on the ground it is falling toward and lets a fast piece pass over a ledge
+      between frames. **The `do_intersections` tier sweeps a segment along the trajectory** (last
+      origin → next origin, in world space) and ends the body at the first collider —
+      `MotionRuntime.TryContact`. A segment, not a down-ray, and the difference is the point: it can
+      rest a piece on a rooftop or stop it against a wall, which the column drops straight past.
+      Both end on one shared response, and `RUN_TIME` is a ceiling for both.
+      ⚠ The two tiers are deliberately NOT unified: sweeping everything would rest debris on walls
+      and rooftops the original drops past, which is divergence dressed as fidelity.
+    - The 166 sweep-tier events are 150 `RUN_TIME`+bounce and 16 `RUN_TIME`: `player_crash_dirt`'s
+      `piece1`–`4`, the eleven C1B airframes' `MAIN_ROOT_NODE`, and every `agyrobus` motion.
+    - ⚠ **A launch that authors no `RUN_TIME` still REPORTS a duration**, solved as the parabola's
+      return to launch height (`MotionRuntime.FlightToLaunchHeight`, a **CHOICE, not a decode**).
+      That number is what the sequence's own downstream `ACTIVE_STATE 0` is timed against; it no
+      longer ends the body, which now flies until it lands or until the original's watchdog fires.
+      A body with no apex reports nothing and is simply landed by its tier.
       - The branch is chosen from the **struck surface** — water where the block authors one
         (`agyrobus`' `pN_wtr_hit` vs `pNgrndhit`), `default` otherwise, through the same
         `ProjectilePool.ClassifySurface` a round's impact reads. ⚠ **`lava` is dead data**: 0 of the
@@ -339,32 +335,32 @@ the "Debris tumbles" bullet below for which pieces each covers. A format reader 
         `Targets` now applies `IsSelfNodeRef` the way `PufferState`'s `AT_NODE` and the condition
         nodes always did, which also un-drops `genx12`'s two `ACTIVE_STATE`s and the `map` prop's
         four pose ops (154 events in all, 13/13 goldens unmoved).
-      - ⚠ **A motion that CONTINUES a contact landing is treated as the same body settling**, and
-        that means three things at once: it inherits the contact test whatever its own flag says, it
+      - ⚠ **A motion that CONTINUES a contact landing is treated as the same body settling**: it
         keeps the live pose instead of re-homing, and it inherits **none** of the aircraft's
-        momentum. `player_crash_dirt`'s `pNhit` hop is the case — authored `+3 m/s` up with
-        `do_intersections: false` over a 5–7 s `RUN_TIME`, it was handed the dive's ~45 m/s downward,
-        crossed the 2 m arming epsilon in 0.044 s and was under the terrain before the sweep armed,
-        burying the four pieces a player can actually walk up to. The test inheritance is a **judged
-        divergence** from Decision 3, kept narrow by the mark being one-shot and set only by a
-        contact landing: a false-flagged launch that continues nothing still declines the sweep.
+        momentum. `player_crash_dirt`'s `pNhit` hop is the case — authored `+3 m/s` up over a 5–7 s
+        `RUN_TIME`, it was handed the dive's ~45 m/s downward, crossed the 2 m arming epsilon in
+        0.044 s and was under the terrain before the sweep armed, burying the four pieces a player
+        can actually walk up to. ⚠ It used to inherit the *contact test* too, a judged divergence
+        against `do_intersections: false`; that is deleted, because a `pNhit` follow-up authors a
+        gravity block and so now selects the column tier like every other unflagged body.
       - A launch onto a node **another live motion is driving** starts from the live pose, not the
         authored rest: it is a takeover, and `MotionSet.Add` evicts the incumbent on the transform
         channel. `agyrobus` is why — it has no placement of its own, so its "rest" is the map origin
         and re-homing threw the wreck 13.9 km away.
-      - **The three `gravity` flags take only four combinations install-wide**, which is what makes
-        `do_intersections` legible as the whole of the question
-        (re-derived 2026-08-10, `analysis/object-motion-flags/`):
+      - **The three `gravity` flags take only four combinations install-wide** — which is what made
+        `do_intersections` *look* like the whole of the question, and is not
+        (re-derived 2026-08-10, corrected 2026-08-12, `analysis/object-motion-flags/`):
 
         | `complex` | `no_altitude` | `do_intersections` | events | distinct shapes |
         |---|---|---|---|---|
-        | false | false | false | 1,363 | 854 |
+        | false | false | false | 1,378 | 867 |
         | **true** | false | **true** | **166** | 25 |
         | true | false | false | 88 | 11 |
         | false | **true** | false | 8 (`gunshell`, one per chapter) | 1 |
 
-        The all-false row read 1,378 until 2026-08-10; that was an arithmetic slip against this
-        page's own `do_intersections`×shape table, not a data change. ⚠ **The three booleans are all
+        The all-false row read 1,363 between 2026-08-10 and 2026-08-12, when a census that walked
+        `sequences` only missed the 15 `ObjectMotion` events sitting in `unknown_seq`, the compiled
+        destruction slot the runtime does dispatch. ⚠ **The three booleans are all
         the compiled data can carry.** The original's `GRAVITY` block parses five tokens —
         `DEFAULT`, `LOCAL <value>`, `COMPLEX [<value>]`, `NO_ALTITUDE`, `DO_INTERSECTIONS` — but
         `DEFAULT` and `LOCAL` only choose where the gravity number comes from and set no flag bit,
@@ -378,22 +374,20 @@ the "Debris tumbles" bullet below for which pieces each covers. A format reader 
         wreckage hangs off a frame at whatever attitude the aircraft died in. It also widens the
         default landing test from descending steps to every step.
 
-        `do_intersections: true` is a strict subset of `complex: true`. ⚠ **`no_altitude` is NOT a
-        second, default terrain test** — a tempting reading, since the 8 events carrying it are
-        exactly the spent-shell casings you would opt out of one. It dies on the same evidence: if
-        the other 1,617 events ground-tested, the original's debris would not sink, and `PT-46` (d)
-        says it does. It most likely means gravity or spawn positioning reckoned relative to terrain
-        altitude, which is precisely what a casing ejected at height would skip.
-    - **The other 379 have no apex and are still deferred (Layer-1.5, `BL-245`).** 335 free-falling
-      zeppelin `gasbag1`/`crashnode1` pieces start from rest, ~17 lifeboats
-      and turret parts are thrown downward, and 8 zero-gravity `chuteman` descents fall at a constant
-      rate — none has a parabola to solve. ⚠ **Not blocked on a ground ray, whatever the older
-      framing said**: the ray exists now, and these author `do_intersections: false` (8 for 8 across
-      `gasbag`/`cargozep`/`chuteman`/`lifesaver`), so the data says do not test them. What they are
-      blocked on is a *decision* to diverge from that — a zeppelin hanging in the air looks broken
-      to a player, which is a playability argument, not a faithfulness one. `MotionRuntime` still integrates these freely over the run time and then
-      holds the final pose; the pieces arc/fall and are then hidden by the sequence's own
-      `OBJECT_ACTIVE_STATE`, so they read fine without it.
+        `do_intersections: true` is a strict subset of `complex: true`, and **`no_altitude` is the
+        OPT-OUT from the default landing test** — it vetoes the cheap tier and nothing else, which
+        is exactly what you would author on a spent shell casing ejected at height, and `gunshell`
+        is the only def in the install that does. ⚠ It was read here as "NOT a second terrain test
+        … most likely gravity or spawn positioning reckoned relative to terrain altitude" until
+        2026-08-13. That was exactly inverted, and the reasoning behind it is the retired `PT-46`
+        (d) attribution below.
+    - **The no-apex falls land now (`BL-245`, closed here).** 335 free-falling zeppelin
+      `gasbag1`/`crashnode1` pieces start from rest, ~17 lifeboats and turret parts are thrown
+      downward, and 8 zero-gravity `chuteman` descents fall at a constant rate — none has a parabola
+      to solve, which is why the launch-height solve declined them. ⚠ They were recorded as
+      "blocked on a *decision to diverge*", on the reading that `do_intersections: false` meant the
+      data was asking for no test. It was not: `false` means *test with the cheap tier*, so these
+      simply land, and the blocker dissolved rather than being decided.
   - **No `RUN_TIME`, no `BOUNCE_SEQUENCE` — the third launch shape, `BL-257` (2026-08-06).** A
     census of every ballistic `ObjectMotion` in all 8 chapters' `cam_anim`
     (`analysis/bl-257-nulled-launch/`) found **167 events / 119 distinct defs** that name *neither*
@@ -407,13 +401,14 @@ the "Debris tumbles" bullet below for which pieces each covers. A format reader 
       **on the launch tick** and the piece is hidden before it moves. The solve gate is therefore
       the **absent `RUN_TIME`**, not the bounce; `PendingBounce` still arms only where a
       `BOUNCE_SEQUENCE` is named, so this shape flies and owes nothing.
-    - All 167 carry gravity (−9.8 on 161, −10 on 6) and author `do_intersections` **false**. **159
-      always launch upward** and solve. The other **8 are `BL-245` falls wearing this shape** and
-      are declined by the same no-apex guard: `bridge_destroy01`'s truck (level), `rope1burn`'s five
-      burning rope ends (−0.44…−1.0 m/s ± ~1), and both `fuelboxbreaks` rockerarms (elevation 90°
-      but speed **−45…45**, so half the draws point down). ⚠ For the spherical `translation_range`
-      form the vertical speed is `sin(elevation)·speed` — **a negative speed inverts an upward
-      elevation**, which is the only reason the rockerarms are not in the solved 159.
+    - All 167 carry gravity (−9.8 on 161, −10 on 6) and author `do_intersections` **false**, so all
+      167 take the default column tier. **159 always launch upward** and report a solved duration.
+      The other **8 have no apex**: `bridge_destroy01`'s truck (level), `rope1burn`'s five burning
+      rope ends (−0.44…−1.0 m/s ± ~1), and both `fuelboxbreaks` rockerarms (elevation 90° but speed
+      **−45…45**, so half the draws point down). ⚠ The `translation_range` vertical speed is
+      `(elevation/90)·speed` — **a negative speed inverts an upward elevation**, which is the only
+      reason the rockerarms are not among the 159. They report no duration and are landed by their
+      tier instead.
     - 159 of the 167 are switched off downstream with every intervening event null-start
       (`destroy_pwr_station` puts three `CALL_ANIMATION`s between launch and hide); the other 8 are
       the last event of their sequence and nothing hides them at all.

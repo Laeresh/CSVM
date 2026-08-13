@@ -157,11 +157,18 @@ live pose walked every repeat explosion's debris further from the blast than the
 
 - `TRANSLATION.initial` is the launch **velocity** (a crash piece leaves at y=10 m/s); `rnd_xz` a
   per-axis random spread added to it (through the runtime's **seedable** `_rng`, so a lab replay
-  is deterministic); `delta` a velocity ramp over `RUN_TIME`, 0 on every reachable piece.
-- `TRANSLATION_RANGE` is a ballistic launch in **spherical form** — **`xz` is an AZIMUTH and `y` an
-  ELEVATION, both in DEGREES, and `initial` is the launch SPEED in m/s** (`delta` a speed ramp over
-  `RUN_TIME`). **Decoded 2026-08-01**, replacing a distance reading that threw debris hundreds of
-  metres; census + evidence in `analysis/object-motion-range/`. Over all 1,217 events install-wide
+  is deterministic); `delta` a constant **acceleration** along the launch, in m/s² — **not** a ramp
+  divided by `RUN_TIME`, which is how it was read until 2026-08-11 (non-zero on 92 of the 757
+  vector-form events).
+- `TRANSLATION_RANGE` is a ballistic launch in **polar form** — **`xz` is an AZIMUTH and `y` an
+  ELEVATION, both in DEGREES, and `initial` is the launch SPEED in m/s** (`delta` the same constant
+  acceleration, non-zero on 233 of 1,226). **Decoded 2026-08-01**, replacing a distance reading that
+  threw debris hundreds of metres; census + evidence in `analysis/object-motion-range/`.
+  ⚠ **The elevation is LINEAR, not spherical**, and that was corrected on 2026-08-13: the direction
+  is `dirY = elevation/90` with the horizontal taking the remainder `1 − |elevation|/90`, so it is
+  deliberately **not unit length** (0.707 at 45°) and only the azimuth goes through trigonometry. Do
+  not normalise it — the unit-sphere reading launches 60–70° debris 20–25 % too fast. The mechanism
+  is in [`../org/objectMotion.md`](../org/objectMotion.md). Over all 1,217 events install-wide
   every `xz` lies in [−170, 359] and every `y` but one in [−90, 90]; `y` goes negative exactly where
   the thing falls (a balloon turret's parts at −70…−90 against a collapsing dock platform's +70…+80);
   the five `fly_trailN` of one explosion carry evenly spaced azimuth bands (35–55, 85–105, 135–165,
@@ -174,27 +181,34 @@ live pose walked every repeat explosion's debris further from the blast than the
 - `GRAVITY.value` (negative) accelerates the launch, and is an **absolute m/s², not an offset to the
   aircraft's arcade `nom_gravity` of 20** — the census carries a literal −9.8 on 173 events (and −10
   on 400); the weak −1/−2/−3 values sit on smoke trails, where floating is the authored look.
-  `DO_INTERSECTIONS` ground-rest and the `BOUNCE_SEQUENCE` re-launch (need a physics query — ⚠ most
-  likely a *collider* intersection, not a terrain ray, so a rooftop landing or a bounce off a wall
-  is in scope and a down-ray is only the cheap first cut) are a
-  **Layer-1.5 follow-up (`BL-245`) only for events that FALL rather than launch** — 379 of the 529
-  bounce-terminated, no-`RUN_TIME` events install-wide, which the body still integrates freely over
-  the run time and then holds at rest. The other 152 (150 reachable) LAUNCH upward with an apex, and
-  `PLAN-bounce-launch` gave those an analytic landing instead — see `docs/formats/destructibles.md`'s
-  "Debris tumbles" bullet for the split and the ⚠ choice it records.
-  A third shape sits next to those two: **neither `RUN_TIME` nor `BOUNCE_SEQUENCE`**, where the
+  ⚠ **A ground-contact test is the DEFAULT, and `DO_INTERSECTIONS` only upgrades it** — from a
+  vertical column under the body to a full geometry sweep, which is what lands a piece on a rooftop
+  or stops it against a wall. `NO_ALTITUDE` is the opt-out and `gunshell` alone authors it. This was
+  read the other way round — the test gated on `DO_INTERSECTIONS`, `NO_ALTITUDE` as something about
+  spawn altitude — until 2026-08-13; the corrected mechanism is in
+  [`../org/objectMotion.md`](../org/objectMotion.md). Every gravity-bearing body therefore lands,
+  including the free-falling shapes (zeppelin gasbags, lifeboats, `chuteman` descents) that had been
+  deferred as `BL-245` on the older reading.
+  A third launch shape is worth knowing: **neither `RUN_TIME` nor `BOUNCE_SEQUENCE`**, where the
   event's duration is what the sequence's NEXT (null-start) event waits on — in 159 of 167 cases
-  install-wide, the flying piece's own `ACTIVE_STATE 0`. Censused and fixed 2026-08-06 (`BL-257`,
-  `analysis/bl-257-nulled-launch/`): the flight solve is admitted by the **absent `RUN_TIME` plus an
-  apex**, not by a named bounce, so these fly too. `dblcannon_flying_parts` is the reachable case —
-  eight parts at elevation 10–70°, 17–25 m/s, each switched off by its own following event, which a
-  duration of 0 fired on the launch tick. ⚠ 8 of the 167 have no apex and stay `BL-245`'s; the
-  vertical speed is `sin(elevation)·speed`, so **a negative speed range inverts an upward
-  elevation** (`fuelboxbreaks`' rockerarm, elevation 90° at speed −45…45).
-- `FORWARD_ROTATION.Time.initial` is a tumble **total angle over `RUN_TIME`**, not a rate: divide
-  by `RUN_TIME` before integrating (read as rad/s, the crash pieces spin ~15 rad/s, visibly wrong;
-  the ÷`RUN_TIME` reading passed the crash A/B playtest and remains a TUNE handle, not a decode).
-  ⚠ the axis is a reasoned choice (local X): the data carries a scalar, not an axis.
+  install-wide, the flying piece's own `ACTIVE_STATE 0`. Censused 2026-08-06 (`BL-257`,
+  `analysis/bl-257-nulled-launch/`): a body with no `RUN_TIME` reports the parabola's return to
+  launch height as its duration, so these are hidden when they land rather than on the launch tick.
+  `dblcannon_flying_parts` is the reachable case — eight parts at elevation 10–70°, 17–25 m/s, each
+  switched off by its own following event. ⚠ 8 of the 167 have no apex and report no duration; the
+  vertical speed is `(elevation/90)·speed`, so **a negative speed range inverts an upward elevation**
+  (`fuelboxbreaks`' rockerarm, elevation 90° at speed −45…45).
+- `FORWARD_ROTATION.Time.initial` is a tumble **RATE in rad/s** and `delta` its acceleration, so
+  `RUN_TIME` never enters the derivation. The compiled numbers fly as they are — the reader's
+  authored `initial` is converted deg→rad at parse and `delta` stored raw. **The axis is decoded,
+  not chosen**: the body turns about the horizontal perpendicular of its own `TRANSLATION_RANGE`
+  launch direction, unnormalised, so its length is that launch's `1 − |elevation|/90` and a steep
+  throw turns slowly off the same number.
+  ⚠ A `TRANSLATION` (vector) launch never fills that direction, so those bodies **do not tumble at
+  all** — 495 of the install's 1,399 tumbles, the `player_crash_dirt` pieces among them. ⚠
+  `FORWARD_ROTATION DISTANCE` (the same shape driven by the step rather than by time) is authored
+  **nowhere** in this install: all 1,399 author `Time`. Mechanism and addresses in
+  [`../org/objectMotion.md`](../org/objectMotion.md).
 - `SCALE.initial`/`delta` a linear scale ramp that is an **OFFSET from unit scale, not an absolute
   size**: `scale = 1 + initial + delta·u`. Unlike `OBJECT_SCALE_STATE`/`OBJECT_SCALE_FROM_TO`, which
   are absolute. **Settled 2026-08-01** by the install's commonest value — a bare `(-0.1, -0.1, -0.1)`
@@ -209,7 +223,8 @@ live pose walked every repeat explosion's debris further from the blast than the
 
 Verified 2026-07-23 in `--anim-lab --play-anim=player_crash_dirt` (seeded, fixed-dt): the five
 `fly_trail*` debris anchors integrate outward and the two carrying `FORWARD_ROTATION` tumble while
-the others do not, `dust` runs a scale ramp and an `OpacityFade` at once, `flydirt` sinks on its
+the others do not (those two are `TRANSLATION_RANGE` launches; the crash's own `pieceN`, which fly
+the vector form, stopped tumbling on 2026-08-13), `dust` runs a scale ramp and an `OpacityFade` at once, `flydirt` sinks on its
 `TRANSLATION`. An 8-chapter ambient regression is byte-identical bar C3's one reachable opacity
 fade — because nothing ambient fires the ballistic half (see the reachability boundary above).
 

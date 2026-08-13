@@ -1743,9 +1743,12 @@ public sealed partial class ProjectilePool : Node3D
             // out sideways, not at the ground.
             slot.Basis = muzzle.Basis.Orthonormalized();
             slot.Start = muzzle.Origin;
-            slot.V0 = slot.Basis * (Mech3.Anim.MotionRuntime.RangeLaunchDirection(
-                          RandRange(spec.XzMin, spec.XzMax), RandRange(spec.YMin, spec.YMax))
-                      * RandRange(spec.SpeedMin, spec.SpeedMax));
+            var dir = Mech3.Anim.MotionRuntime.RangeLaunchDirection(
+                RandRange(spec.XzMin, spec.XzMax), RandRange(spec.YMin, spec.YMax));
+            // The tumble turns about THIS draw's horizontal perpendicular, in the same muzzle frame
+            // the direction was drawn in — MotionRuntime.TumbleAxis, so the two cannot drift.
+            slot.TumbleAxis = Mech3.Anim.MotionRuntime.TumbleAxis(dir);
+            slot.V0 = slot.Basis * (dir * RandRange(spec.SpeedMin, spec.SpeedMax));
             slot.Age = 0f;
             slot.InUse = true;
             slot.Node.Visible = true;
@@ -1858,10 +1861,13 @@ public sealed partial class ProjectilePool : Node3D
                 continue;
             }
             // Closed-form ballistic + tumble, exactly MotionRuntime's Seek: origin = start + v0·t
-            // + ½·g·t², basis rotated about its own local X by the tumble rate.
+            // + ½·g·t², and the euler tumble composed onto the muzzle frame the launch was drawn
+            // in, about that draw's own horizontal perpendicular.
             float t = c.Age;
             var origin = c.Start + c.V0 * t + new Vector3(0f, 0.5f * spec.Gravity * t * t, 0f);
-            var basis = c.Basis.Rotated(c.Basis.X.Normalized(), spec.TumbleRate * t);
+            var basis = c.Basis * Basis.FromEuler(
+                c.TumbleAxis * Mech3.Anim.MotionRuntime.TumbleAngle(spec.TumbleRate, spec.TumbleAccel, t),
+                EulerOrder.Yxz);
             c.Node.GlobalTransform = new Transform3D(basis, origin);
         }
     }
@@ -1923,8 +1929,9 @@ public sealed partial class ProjectilePool : Node3D
     }
 
     /// <summary>Resolves the gunshell def's OBJECT_MOTION out of the anim program, once — gravity,
-    /// the ranged launch, the tumble (its <c>Time</c> value is a TOTAL angle over run_time, the
-    /// MotionRuntime decode: 20.94 rad = 1200° over 2 s) and the run time. Null without a program
+    /// the ranged launch, the tumble (its <c>Time</c> value is a RATE, the MotionRuntime decode:
+    /// 20.94 rad/s about the launch's own perpendicular, whose length at gunshell's −75…−85° of
+    /// elevation is 0.06–0.17, so the casing turns at 1.3–3.6 rad/s) and the run time. Null without a program
     /// or when the def is absent; the miss is cached and logged once.</summary>
     private CasingSpec? CasingSpecResolve()
     {
@@ -1942,7 +1949,7 @@ public sealed partial class ProjectilePool : Node3D
                     if (ev.Kind != "ObjectMotion" || ev.Data.Obj("translation_range") is not { } range)
                         continue;
                     float runTime = ev.Data.Num("run_time") ?? 2f;
-                    float fwdTotal = ev.Data.Obj("forward_rotation")?.Obj("Time")?.Num("initial") ?? 0f;
+                    var fwd = ev.Data.Obj("forward_rotation")?.Obj("Time");
                     _casingSpec = new CasingSpec
                     {
                         Gravity = ev.Data.Obj("gravity")?.Num("value") ?? 0f,
@@ -1953,11 +1960,12 @@ public sealed partial class ProjectilePool : Node3D
                         SpeedMin = range.Obj("initial")?.Num("min") ?? 0f,
                         SpeedMax = range.Obj("initial")?.Num("max") ?? 0f,
                         RunTime = runTime,
-                        TumbleRate = runTime > 0f ? fwdTotal / runTime : 0f,
+                        TumbleRate = fwd?.Num("initial") ?? 0f,
+                        TumbleAccel = fwd?.Num("delta") ?? 0f,
                     };
                     GD.Print($"gun casing spec: gravity {_casingSpec.Gravity}, azimuth [{_casingSpec.XzMin},{_casingSpec.XzMax}]deg, " +
                              $"elevation [{_casingSpec.YMin},{_casingSpec.YMax}]deg, speed [{_casingSpec.SpeedMin},{_casingSpec.SpeedMax}] m/s, " +
-                             $"tumble {_casingSpec.TumbleRate:0.##} rad/s over {runTime} s");
+                             $"tumble {_casingSpec.TumbleRate:0.##} rad/s (+{_casingSpec.TumbleAccel:0.##} rad/s²) over {runTime} s");
                     return _casingSpec;
                 }
             }
@@ -2228,7 +2236,7 @@ public sealed partial class ProjectilePool : Node3D
         public float YMin, YMax;   // launch ELEVATION range, degrees (negative = downward)
         public float SpeedMin, SpeedMax; // launch speed range, m/s (translation_range.initial)
         public float RunTime;     // s the casing lives
-        public float TumbleRate;  // rad/s about local X (forward_rotation Time ÷ run_time)
+        public float TumbleRate, TumbleAccel;  // forward_rotation.Time, rad/s and rad/s²
     }
 
     // One pooled casing: a gunshell subtree instance lent to one ejection at a time.
@@ -2237,7 +2245,8 @@ public sealed partial class ProjectilePool : Node3D
         public Node3D Node = null!;
         public Vector3 Start;   // launch position (world)
         public Vector3 V0;      // launch velocity (world), m/s
-        public Basis Basis;     // launch orientation — the tumble rotates it about its local X
+        public Basis Basis;     // launch orientation (the muzzle frame the direction was drawn in)
+        public Vector3 TumbleAxis;  // this draw's own perpendicular — MotionRuntime.TumbleAxis
         public float Age;
         public bool InUse;
     }

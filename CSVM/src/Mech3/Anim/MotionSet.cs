@@ -33,16 +33,28 @@ internal sealed class MotionSet
     /// event, so zeroing it here would make a crash respawn read as a negative launch count.</summary>
     public int LaunchCount { get; private set; }
 
-    /// <summary>How many <c>do_intersections</c> bodies ended on a collider, and how many ran their
-    /// authored clock out instead. Only bodies that actually TEST contact are counted, so the pair
-    /// answers one question: is the sweep doing anything? A <c>--fly</c> session that launched
-    /// flagged bodies and reports <see cref="ContactLandings"/> 0 is the failure mode worth
-    /// catching — the query silently finding nothing looks exactly like no sweep at all.
+    /// <summary>How many contact-tested bodies ended on a collider, and how many ran their clock
+    /// out instead. Only bodies that actually TEST contact are counted, so the pair answers one
+    /// question: is contact doing anything? A <c>--fly</c> session that launched tested bodies and
+    /// reports <see cref="ContactLandings"/> 0 is the failure mode worth catching, since a query
+    /// silently finding nothing looks exactly like no test at all.
     /// ⚠ Left standing by <see cref="Reset"/>, the same rule (and for the same reason) as
     /// <see cref="LaunchCount"/>: every reader takes a delta across an event.</summary>
     public int ContactLandings { get; private set; }
 
     public int ClockEndings { get; private set; }
+
+    /// <summary>The same tally split by tier, the default ground column against the authored
+    /// <c>do_intersections</c> sweep. ⚠ The split is what makes the pair readable: the sweep's 166
+    /// events can report a healthy-looking total on their own, so a combined counter cannot tell a
+    /// working default tier from an inert one. Same <see cref="Reset"/> rule as the totals.</summary>
+    public int ColumnLandings { get; private set; }
+
+    public int ColumnClockEndings { get; private set; }
+
+    public int SweepLandings { get; private set; }
+
+    public int SweepClockEndings { get; private set; }
 
     /// <summary>Registers a motion, replacing any motion already driving the same node's channel. An
     /// object has exactly one motion in the original, and the data relies on it: C1/IA1's
@@ -77,10 +89,23 @@ internal sealed class MotionSet
             _motions.RemoveAt(i);
             if (done is MotionRuntime { TestsContact: true } tested)
             {
+                bool column = tested.ContactTier == MotionContactTier.Column;
                 if (tested.LandedByContact)
+                {
                     ContactLandings++;
+                    if (column)
+                        ColumnLandings++;
+                    else
+                        SweepLandings++;
+                }
                 else
+                {
                     ClockEndings++;
+                    if (column)
+                        ColumnClockEndings++;
+                    else
+                        SweepClockEndings++;
+                }
             }
 
             // BOUNCE_SEQUENCE: the piece has come back down, which for a bounce-terminated
