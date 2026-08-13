@@ -282,6 +282,11 @@ public sealed record SessionSpec
     /// chapter neindex id or name after <c>:</c>) it spawns on that net and patrols it (B5).
     /// Null when the flag was absent.</summary>
     public IReadOnlyList<(string Plane, string? Net)>? AiPlanes { get; private set; }
+    /// <summary><c>--ai-attack[=&lt;1-9&gt;]</c>: arm every AI plane this session spawns with the
+    /// D14 forward-gun gunnery at the given skill rating (dead-eye/quick-draw interpolated from
+    /// <c>ai_skill_parameters</c>; default 5), auto-targeting the nearest hostile aircraft.
+    /// Null when the flag was absent.</summary>
+    public int? AiAttackSkill { get; private set; }
     /// <summary><c>--generators[=plane]</c>: run the mission's egen enemy generators (M4 B6);
     /// each surviving generator spawns AI aircraft on its decoded wave/period cycle through the
     /// same runtime spawn seam <c>--ai=</c> uses. The optional value picks the spawned airframe
@@ -755,6 +760,8 @@ public sealed record SessionSpec
                 if (entries.Count > 0)
                     s.AiPlanes = entries;
             }
+            else if (arg == "--ai-attack") { s.AiAttackSkill = 5; }
+            else if (arg.StartsWith("--ai-attack=")) { s.AiAttackSkill = Math.Clamp(int.Parse(arg["--ai-attack=".Length..]), 1, 9); }
             else if (arg == "--generators") { s.Generators = true; }
             else if (arg.StartsWith("--generators=")) { s.Generators = true; s.GeneratorsPlane = arg["--generators=".Length..]; }
             else if (arg == "--fire") { s.AutoFire = true; }

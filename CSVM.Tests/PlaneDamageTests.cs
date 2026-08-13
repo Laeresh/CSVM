@@ -95,8 +95,8 @@ public class PlaneDamageTests
         Assert.Equal(0f, nose.Fraction, 4);
     }
 
-    /// <summary>Armor at 0 is a stripped zone, not a dead one — only Hp at 0 downs a critical
-    /// part, which is what FlightController tests.</summary>
+    /// <summary>Armor at 0 is a stripped zone, not a dead one — only exhausted health counts
+    /// toward the kill, which is what FlightController tests.</summary>
     [Fact]
     public void StrippingArmorDoesNotEmptyHealth()
     {
@@ -104,6 +104,24 @@ public class PlaneDamageTests
         var nose = damage.Apply("nose", 1.5f, 100f)!;
         Assert.Equal(0f, nose.Armor);
         Assert.True(nose.Hp > 0f);
+    }
+
+    /// <summary>The decoded kill rule (A4/D14): the vehicle dies when whole-vehicle health —
+    /// the summary recompute over the parts — reaches zero, never when one critical part does.
+    /// The flag stays parsed and is deliberately not consulted here.</summary>
+    [Fact]
+    public void OneDeadCriticalPartIsNotDestroyedButAllHealthGoneIs()
+    {
+        var damage = Bloodhawk();
+        damage.Apply("nose", 500f, 500f); // the critical nose, dead
+        Assert.False(damage.IsDestroyed);
+        Assert.Equal(0.5f, damage.SummaryHealthFraction, 4);
+        damage.Apply("tail", 500f, 500f); // the last zone's health
+        Assert.True(damage.IsDestroyed);
+        Assert.Equal(0f, damage.SummaryHealthFraction, 4);
+        damage.Reset();
+        Assert.False(damage.IsDestroyed);
+        Assert.Equal(1f, damage.SummaryHealthFraction, 4);
     }
 
     [Fact]

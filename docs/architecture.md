@@ -46,6 +46,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/AiNets.cs` — the chapter AI patrol nets: `ne0NNNNN` waypoint graphs + the `neindex` id→name table, raw tags/trailer included.
 - `src/Mech3/Maneuvers.cs` — the shared maneuver library (`zrdr/maneuvers.zrd`): 17 timed attitude-step programs with `natural_touch` difficulty gates, the eligibility cull, and the `signature_maneuvers` bitmask decode.
 - `src/Mech3/EnemyGenerators.cs` — the mission `egen.zrd.json` reader: the 23 enemy generators in their three shapes (zeppelin launch / plain / moving spawner), `[null]` files as empty.
+- `src/Mech3/AiSkills.cs` — the `ai_skill_parameters` endpoint pairs from player.json (1–9 ratings, linear between the decoded endpoints) + the roster skill-vector accessor (aiv slots 22–30 by stat name).
 - `src/Mech3/Messages.cs` — the game's localized string table: the `messages.json` key→value map behind every `MSG_*` key.
 - `src/Mech3/MarkerRig.cs` — a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers`.
 - `src/Mech3/CompiledAnim.cs` — reader for the compiled `cam_anim`/`mis_anim` archives: anim defs, sequences/events, lazy SI-script pool.
@@ -85,7 +86,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the forget + catch-up pass (B2), the intercept solver (B3), the four-list candidate scan (B4), and the fire call's step order + 1° launch scatter (B5).
 - `src/Flight/TurretDefs.cs` — typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
 - `src/Flight/TurretController.cs` — one carried turret gunner (M4 C9a): acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
-- `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle, optional patrol net) → one `FlightInput` per sim step; a placeholder hold-course law until wave D.
+- `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued) → one `FlightInput` per sim step; a placeholder hold-course law until wave D.
+- `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery (M4 D14): intercept lead via `AimAssist.TryIntercept`, the ±11° gun cone and the quick-draw cone as fire gates, per-shot dead-eye scatter; mutable target.
 - `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints (M4 B5): nearest node first, then edge-list neighbours, seeded branch draws; aircraft-agnostic so F17's zeppelins reuse it.
 - `src/Flight/ManeuverExecutor.cs` — plays one maneuver's attitude-step program as `FlightInput` per sim step (M4 D13): the input source D11's state machine runs during `evasive maneuver`.
 - `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
@@ -123,7 +125,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/PlaneCollider.cs` — derives 5–8 plane-frame collision boxes from the built model's triangles, with no per-plane data.
 - `src/Flight/CollisionLayers.cs` — the named physics layers (world / aircraft): the one place a layer bit is assigned a meaning.
 - `src/Flight/AircraftBody.cs` — the flying plane's physics body: the shared `PlaneCollider` boxes on the aircraft layer; struck shape → part name.
-- `src/Flight/PlaneDamage.cs` — per-part HP model from vehicle.json `destroyable_parts`; maps struck box + impact point to a data part.
+- `src/Flight/PlaneDamage.cs` — per-part HP model from vehicle.json `destroyable_parts`; maps struck box + impact point to a data part; owns the whole-vehicle kill rule (`IsDestroyed`).
 - `src/Flight/DamageVisuals.cs` — flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
 - `src/Flight/DamageLab.cs` — the `--damage`/F5 slider UI: one HP slider per part, driving the parked plane's DamageVisuals or the flown plane's real PlaneDamage.
 - `src/Flight/CompassTape.cs` — the top-centre heading tape from the game's own HUD textures, drawn as a cylindrical drum seen edge-on.
@@ -895,6 +897,20 @@ Consumed by `Session/AiGeneratorRuntime`; golden counts in `CSVM.Tests/EnemyGene
 ⚠ `capacity` is 0 on all 23 and its decoded blocking rule is unresolved (the capacity puzzle,
   mission-entities.md); the stand-in lives in `Session/GeneratorCycle.cs`, not here. The reader
   reports the value verbatim.
+
+## src/Mech3/AiSkills.cs
+The AI pilot-skill constants (M4 D14, docs/formats/ai-rosters.md): player.json's
+`ai_skill_parameters` block as `[value@1, value@9]` endpoint pairs indexed by the 1–9 rating
+(`At`, plus named helpers for D14's two angles), the roster skill-vector accessor
+(`RosterSkills`: aiv slots 22–30 by stat name, `-1`/omitted = null) and the thin per-mission
+roster loader (`LoadRoster`). Units + shipped-constant goldens in `AiSkillsTests`.
+⚠ Between the endpoints the curve is LINEAR BY ASSUMPTION — only the two endpoints are decoded.
+⚠ Two stats improve DOWNWARD (`dead_eye_angle`, `steady_hand_chance`); never normalise the
+  direction. `natural_touch` has no entry by design and asking for it throws.
+⚠ A null roster slot means "fall back to the airframe def's own stat keys"
+  (docs/formats/vehicle.md "AI-combatant tuning") — inventing a default here is wrong; the two
+  slots designers habitually author at 5 are `talker`/`constitution`, an authored value, not an
+  engine default.
 
 ## src/Mech3/FogVolumes.cs
 The chapter's `fogvol.zrd` (`FogVolumeSpec.Load`/`Parse`) plus `VolumesOf`, the gamez census of
@@ -2190,9 +2206,11 @@ suite.
 ## src/Flight/AiPilot.cs
 The non-player `FlightModel` driver (M4 A2): standing orders in (heading in the mission-data
 `SpawnPoint.HeadingDeg` convention, altitude, throttle, optional `Patrol` net follower whose
-current node re-derives the heading/altitude orders each step), one `FlightInput` per sim step
-out, read by a `FlightController` whose `Pilot` is set. Pure over the model state and its own
-fields (no clocks, no node reads; the only randomness is `Patrol`'s seeded branch draw), so a
+current node re-derives the heading/altitude orders each step, optional `Gunner` whose live
+target re-derives them as a flat-out plain pursuit that outranks the patrol — D14's stand-in
+until the maneuver waves), one `FlightInput` per sim step out, read by a `FlightController`
+whose `Pilot` is set. Pure over the model state and its own fields (no clocks, no node reads
+beyond the target's sim pose; the only randomness is `Patrol`'s seeded branch draw), so a
 fixed-dt run is deterministic (`AiPilotTests`).
 ⚠ Orders are plain mutable fields BY DESIGN — the original's mission script retargets/re-nets an
   AI at runtime (`SET_AI_NET`, `ADD_OTHER_TARGET`, …), so nothing here may be read-once at spawn.
@@ -2217,6 +2235,22 @@ flying the shipped dive and split_s).
   are placeholder/invented values, not original behaviour — same status as `AiPilot`'s law.
 ⚠ A positive-yaw step turns LEFT (FlightInput's sign). Whether the original mirrors maneuvers
   left/right at selection time is undecided — D11's question, do not bake a side in here.
+
+## src/Flight/AiGunner.cs
+The AI's forward-gun gunnery (M4 D14): per sim tick the host `FlightController` hands it the
+fire geometry (`Solve`), it answers with the trigger (`WantsFire`) and the intercept, and each
+round leaves along `ShotDirection(muzzlePos)` — the line from THAT barrel to the intercept point
+(wing guns converge; parallel lines straddle a fuselage) perturbed inside the dead-eye cone, one
+seeded draw per shot. Gates in order: an intercept reachable inside the weapon's RANGE
+(`AimAssist.TryIntercept`, consumed never re-derived), the airframe's ±11° `gun_pitch`/`gun_yaw`
+forward cone as a hard fire gate, and the quick-draw cone off the TARGET's nose/tail axis.
+Engine-free (`AiGunnerTests`); the live half is the `ai-gunnery` suite.
+⚠ `Target` is a plain mutable field BY DESIGN (the mission-script rule); `AutoTarget` re-acquires
+  the nearest hostile through the host, which is the minimal D14 stand-in — D12's ranking
+  formula is a separate item.
+⚠ `DeadEyeAngleDeg`/`QuickDrawAngleDeg` are `ai_skill_parameters` values (`Mech3/AiSkills`),
+  interpolated from the pilot's 1–9 rating — never invented constants. `quick_draw_chance` (the
+  marginal-shot roll) is NOT modelled yet; the angle is the only quick-draw term wired.
 
 ## src/Flight/IncomingFire.cs
 `--incoming[=metres[,wep_id]]` — the near-miss test rig: a phantom shooter 120 m on each player's
@@ -3210,11 +3244,18 @@ arm — is future work for when the player becomes killable; `this+0x19f ∈ {0,
 `FUN_004b82d0` is undecoded and stays unmodelled.
 It also fires `Audio.OnEngineStop` (the wind-down cue, layered over the explosion) and plays
 `stopprops` on `CrashRuntime` — the one call site every engine-death path shares, whether the
-collision resolver called it for a full-speed impact, for a critical part reaching 0 HP on a
+collision resolver called it for a full-speed impact, for whole-vehicle health exhausting on a
 survivable-speed graze (`SurviveHit` returning false), or for a projectile kill
 (`TakeProjectileHit`: the pool-resolved hit — part-mapped armor-first damage plus the graze's
 feedback triple, no cooldown since rounds are discrete; its `damageScale` is the blast falloff
-share for a splash hit, 1 for a direct round). Every `Crash` raises `Downed` exactly
+share for a splash hit, 1 for a direct round). ⚠ The weapon/graze kill test is
+`PlaneDamage.IsDestroyed` — whole-vehicle health at zero, the decoded rule (D14 retired the
+old any-critical-part kill; the `critical` flag stays parsed, nothing consults it). An AI
+pilot's trigger and lead are its `AiPilot.Gunner` (D14): `SimStep` drives the gunner before
+the fire step (`DriveAiGunner` — standing target kept while live, else nearest hostile), the
+fire inputs read `WantsFire` instead of the raw controls, and `AssistedGunDirection`'s
+non-human arm fires the gunner's per-shot dead-eye scatter — an AI plane NEVER ticks or reads
+the aim-assist slots (pinned by the `ai-gunnery` suite's A/B). Every `Crash` raises `Downed` exactly
 once — (victim `PlayerIndex`, killer: the killing round's shooter id; null for terrain, mid-air,
 an unowned `NoShooter` round and every other cause) — a fact report the session scores in `--vs`;
 flight holds no match state, and `Respawn` emits nothing. `AutoRespawnAfter` (session-armed —
@@ -3306,8 +3347,13 @@ loop.
   that back (docs/formats/vehicle.md).
 ⚠ A stock zone's effective pool is DOUBLE its MaxHp (armor == hp on all 88 shipped entries, spent
   first) — faithful to the original, not a regression to tune away. Armor at 0 is a stripped zone,
-  not a dead one: only Hp ≤ 0 downs a critical part. FlightController.Crash still never calls in
+  not a dead one. FlightController.Crash still never calls in
   (a hard hit is a boolean destroy) and player.json's crash block is still unbound (`BL-172`).
+⚠ The kill is `IsDestroyed` — whole-vehicle health at zero via the summary recompute over the
+  parts (docs/org/vehicleDamage.md "The A4 decision"), i.e. EVERY zone's health exhausted. The
+  old any-critical-part kill was a recorded divergence D14 retired; `Critical` stays parsed and
+  deliberately unconsulted. The summary is kept as the parts' fraction (`SummaryHealthFraction`)
+  rather than a rescaled pair — player defs resolve no whole-vehicle maxima.
 
 ## src/Flight/DamageVisuals.cs
 Visible damage driven purely by data thresholds: as a part's combined armor+HP fraction crosses an
@@ -4109,13 +4155,15 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/Suites.cs
-The 41 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
+The 44 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
 the full-rig `Loadout.ForRig`), live weapon fire, the carried turret gunners (`carried-turrets`:
 build from ai.zrd + the thirdp mount, arc-centre rest pose, track/fire/hit under the host's
 shooter id, bored-window fire suppression with live tracking, the nearer-end-stop park, YAW [0,0]
 as unrestricted, a crashed host going quiet), the air-to-air hit chain (`air-to-air`: two real
 flight rigs on manual sim steps — body strike, struck-shape→part mapping, armor-first data-value
-damage, critical-zero Crash, crashed-plane immunity, the zero-self-hits negative case, which
+damage, the whole-vehicle kill rule (a dead critical nose alone does NOT crash — the retired
+divergence's own pin — and exhausting the fourth zone does), crashed-plane immunity, the
+zero-self-hits negative case, which
 must stay non-optional, `Downed`-into-`VersusMatch` attribution: the weapon kill scores
 exactly the shooter, killer-less and unowned-round deaths score nobody, and the VS respawn loop:
 `AutoRespawnAfter` 3 s respawns at that mark in sim frames, respawn reports nothing, null waits
@@ -4124,7 +4172,11 @@ the AI actor seam (`ai-actor`: an `AiPilot`-driven plane spawned into an already
 present, flying its orders, retargetable mid-flight, damageable and killable with the kill
 attributed; ⚠ its gunfire phases run at the SPAWN pose because a suite lives inside ONE frame
 and a body moved after creation is invisible to space queries until a physics flush — the same
-ray that hits it at spawn returns nothing at the flown-to position),
+ray that hits it at spawn returns nothing at the flown-to position), the AI gunnery
+(`ai-gunnery`: held rigs firing through the real fire-control path — nearest-hostile
+acquisition as mutable state, the quick-draw and ±11° cone gates, dead-eye skill 1 vs 9 hit
+rates on a fixed seed, the kill under the AI's shooter id, and the IsHumanPiloted assist
+exclusion A/B'd on one rig),
 destructible stages/death/census, animation
 stops and bounce-terminated launches, the full effects sweep (`effects-census`: every effect
 resolves, template meshes peak at the CALL SITE not the stage origin, none stays lit after its
