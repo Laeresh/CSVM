@@ -1368,8 +1368,14 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
 
 10. ☑ D10 — Skill-slot mapping and scale — **settled 2026-08-10** from the binary + the shipped
     `ai_skill_parameters` curves; no longer blocks D11–D15, which now load constants
-11. ☐ D11 — The state machine — **nine modes, not five** (and no `flee`/`inactive` in the dispatch);
-    activation radius is `min_ai_active_dist` 2000 m
+11. ☑ D11 — The state machine — **landed 2026-08-13**: `Flight/AiModeMachine.cs` on
+    `AiPilot.Machine`, all nine decoded modes in the engine's own vocabulary — patrol (B5),
+    pursue/lay off (D14 steering + fire gate; lay off is D15's seam, behaviour = pursue),
+    evade (failed steady-hand roll on the hit path, invented scramble run), evasive maneuver
+    (eligible/signature-weighted seeded draw through `ManeuverExecutor` to `Done`), stunned
+    (failed sixth-sense roll, `stun_recovery_interval`), avoid crash (invented probe/climb-out),
+    danger zones enum-only (gate data undecoded, F17); activation 2000 m / attack 2000 /
+    return_range 1200 loaded from data; pinned by `AiModeMachineTests` + the `ai-modes` suite
 12. ☐ D12 — Target selection, ranking and ally deconfliction — ranking formula recovered
 13. ☑ D13 — The maneuver library — **landed 2026-08-13**: `Mech3/Maneuvers.cs` (17 entries, the
     high_yo_yo stub parsed-never-flown, `EligibleFor` cull, `SignatureNames` over the exe-order

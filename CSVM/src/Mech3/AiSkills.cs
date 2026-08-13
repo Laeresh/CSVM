@@ -58,6 +58,11 @@ public sealed class AiSkills
     /// (<c>dead_eye_angle</c>, <c>quick_draw_angle</c>, …).</summary>
     public IReadOnlyDictionary<string, (float At1, float At9)> Parameters => _params;
 
+    /// <summary>player.json's <c>min_ai_active_dist</c> (2000 m shipped) — the AI activation
+    /// radius, and the fallback for every roster whose own volume slots are unauthored (all of
+    /// them; docs/formats/ai-rosters.md "The three unnamed slots").</summary>
+    public float MinAiActiveDist { get; private set; } = 2000f;
+
     /// <summary>Loads the <c>ai_skill_parameters</c> block from the shared zrdr scope's
     /// <c>player.json</c>. Throws when the block is absent — the shipped install always
     /// carries it, so a miss is a wrong path, not a default to paper over.</summary>
@@ -75,6 +80,8 @@ public sealed class AiSkills
                 && pair[0] is float at1 && pair[1] is float at9)
                 skills._params[name] = (at1, at9);
         }
+        if (player.TryFloat("min_ai_active_dist", out float activeDist))
+            skills.MinAiActiveDist = activeDist;
         return skills;
     }
 

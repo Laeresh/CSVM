@@ -58,6 +58,12 @@ public sealed class AiAircraftSpawner
     {
         int index = _spawned++;
         var stats = _in.StatsFor(planeName);
+        if (pilot.Machine is { } machine)
+        {
+            // The airframe's shipped range gates (vehicle.json attack / return_range).
+            machine.AttackRange = stats.AiAttackRange;
+            machine.ReturnRange = stats.AiReturnRange;
+        }
         var planeBuilder = new PlaneBuilder(_in.PlanesGamez, _in.Textures, spinningProps: true,
             scheme: _liveries.SchemeFor(_in.RigCount + index, _in.ZrdrPath, randomByDefault: false,
                 _in.PaintRng, _liveries.PatternsForPlane(_in.PlanesGamez, planeName)),

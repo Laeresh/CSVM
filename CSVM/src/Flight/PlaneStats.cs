@@ -81,6 +81,11 @@ public sealed class PlaneStats
     public float EnginePower = 1f;       // engines.json factor for the plane's stock engine
     public float FlightCeiling = 2500f;
 
+    // The AI mode machine's range gates (D11): vehicle.json 'attack' / 'return_range', both
+    // authored once on basic_airplane and inherited install-wide (2000 / 1200).
+    public float AiAttackRange = 2000f;
+    public float AiReturnRange = 1200f;
+
     // player.json globals
     public float Gravity = PhysicsConstants.NomGravity; // nom_gravity — the game's arcade gravity, m/s²
     public float StallMag = 1.25f;
@@ -272,6 +277,8 @@ public sealed class PlaneStats
             VehWeight = Dyn("veh_weight", 3500f),
             RefArea = Dyn("ref_area", 335f),
             FlightCeiling = Prop("flight_ceiling", 2500f),
+            AiAttackRange = Prop("attack", 2000f),
+            AiReturnRange = Prop("return_range", 1200f),
         };
         stats.EngineSound = PropStr("engine_sound", stats.EngineSound);
 

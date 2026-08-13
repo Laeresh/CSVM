@@ -47,6 +47,14 @@ public sealed class AiPilot
     /// decision itself; this class only steers. Mutable like every other order.</summary>
     public AiGunner? Gunner;
 
+    /// <summary>The nine-mode state machine (D11), or null for the bare-orders pilot above.
+    /// When set, each <see cref="Next"/> steps the machine and dispatches on its mode: patrol
+    /// flies <see cref="Patrol"/>, pursue / lay off chase the gunner's target, evade and avoid
+    /// crash fly the machine's own orders, an evasive maneuver plays its
+    /// <see cref="ManeuverExecutor"/> until done, and stunned holds the controls neutral.
+    /// Mutable like every other order.</summary>
+    public AiModeMachine? Machine;
+
     /// <summary>Ordered altitude, metres (world Y).</summary>
     public float TargetAltitude = 400f;
 
@@ -96,27 +104,56 @@ public sealed class AiPilot
     /// <see cref="Patrol"/>'s own seeded branch draw), so a fixed-dt run is deterministic.</summary>
     public FlightInput Next(FlightModel model, float dt)
     {
-        // A live gunner target outranks the patrol: plain pursuit — fly at the victim's
-        // position and altitude, and let the gunner's cones decide the trigger. Wave D's
-        // maneuver programs replace this steering through the same seam as the rest.
-        if (Gunner is { Target: { } quarry } && !quarry.Crashed)
-        {
-            var toQuarry = quarry.WorldPosition - model.Position;
-            if (new Vector2(toQuarry.X, toQuarry.Z).LengthSquared() > 1f)
-                TargetHeadingDeg = HeadingDegOf(toQuarry);
-            TargetAltitude = quarry.WorldPosition.Y;
-            Throttle = 1f; // a stern chase at cruise never closes; pursuit runs flat out
-        }
+        var quarry = Gunner is { Target: { } t } && !t.Crashed ? t : null;
 
-        // Patrol next: the net follower turns the graph walk into this step's heading and
-        // altitude orders, which the law below then flies like any other standing order.
-        else if (Patrol is { } patrol)
+        // The mode machine (D11), when present, decides which input source flies this step;
+        // without one the pre-D11 priority stands (gunner target, then patrol, then orders).
+        if (Machine is { } machine)
         {
-            patrol.Update(model.Position);
-            var toNode = patrol.CurrentTarget - model.Position;
-            if (new Vector2(toNode.X, toNode.Z).LengthSquared() > 1f)
-                TargetHeadingDeg = HeadingDegOf(toNode);
-            TargetAltitude = patrol.CurrentTarget.Y;
+            var mode = machine.Update(model.Position, model.VelocityDir * model.Speed,
+                quarry?.WorldPosition, quarry?.Pilot?.Machine?.Mode, dt);
+            switch (mode)
+            {
+                case AiMode.Stunned:
+                    // Controls neutral for the stun (the throttle lever is not a control
+                    // surface and stays where it was).
+                    return new FlightInput { Throttle = Mathf.Clamp(Throttle, 0f, 1f) };
+
+                case AiMode.EvasiveManeuver when machine.Executor is { } executor:
+                    return executor.Next(model, dt);
+
+                case AiMode.Evade:
+                    TargetHeadingDeg = machine.EvadeHeadingDeg;
+                    TargetAltitude = machine.EvadeAltitude;
+                    Throttle = 1f;
+                    break;
+
+                case AiMode.AvoidCrash:
+                    // Climb out on the current heading, flat out; the law's leash is what
+                    // levels the wings for the pull.
+                    TargetHeadingDeg = HeadingDegOf(-model.Attitude.Z);
+                    TargetAltitude = machine.ClimbOutAltitude;
+                    Throttle = 1f;
+                    break;
+
+                case AiMode.Pursue:
+                case AiMode.LayOff:
+                    if (quarry != null)
+                        SteerPursuit(model, quarry);
+                    break;
+
+                default: // patrol and the never-entered danger-zone modes fly the net/orders
+                    SteerPatrol(model);
+                    break;
+            }
+        }
+        else if (quarry != null)
+        {
+            SteerPursuit(model, quarry);
+        }
+        else
+        {
+            SteerPatrol(model);
         }
 
         var att = model.Attitude;
@@ -175,5 +212,30 @@ public sealed class AiPilot
             Yaw = 0f, // bank carries the turn; the placeholder law never uses rudder
             Throttle = Mathf.Clamp(Throttle, 0f, 1f),
         };
+    }
+
+    /// <summary>Plain pursuit: fly at the victim's position and altitude, flat out, and let the
+    /// gunner's cones decide the trigger. Wave D's real maneuvering replaces this steering
+    /// through the same seam as the rest of the law.</summary>
+    private void SteerPursuit(FlightModel model, FlightController quarry)
+    {
+        var toQuarry = quarry.WorldPosition - model.Position;
+        if (new Vector2(toQuarry.X, toQuarry.Z).LengthSquared() > 1f)
+            TargetHeadingDeg = HeadingDegOf(toQuarry);
+        TargetAltitude = quarry.WorldPosition.Y;
+        Throttle = 1f; // a stern chase at cruise never closes; pursuit runs flat out
+    }
+
+    /// <summary>Patrol: the net follower turns the graph walk into this step's heading and
+    /// altitude orders; without a net the standing orders fly unchanged.</summary>
+    private void SteerPatrol(FlightModel model)
+    {
+        if (Patrol is not { } patrol)
+            return;
+        patrol.Update(model.Position);
+        var toNode = patrol.CurrentTarget - model.Position;
+        if (new Vector2(toNode.X, toNode.Z).LengthSquared() > 1f)
+            TargetHeadingDeg = HeadingDegOf(toNode);
+        TargetAltitude = patrol.CurrentTarget.Y;
     }
 }

@@ -86,7 +86,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the forget + catch-up pass (B2), the intercept solver (B3), the four-list candidate scan (B4), and the fire call's step order + 1° launch scatter (B5).
 - `src/Flight/TurretDefs.cs` — typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
 - `src/Flight/TurretController.cs` — one carried turret gunner (M4 C9a): acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
-- `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued) → one `FlightInput` per sim step; a placeholder hold-course law until wave D.
+- `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; a placeholder steering law.
+- `src/Flight/AiModeMachine.cs` — the nine-mode AI state machine (M4 D11), the engine's decoded mode vocabulary: patrol/pursue/lay off/evade/evasive maneuver/stunned/avoid crash + two enum-only danger-zone modes; steady-hand and sixth-sense reaction rolls on the shipped chances.
 - `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery (M4 D14): intercept lead via `AimAssist.TryIntercept`, the ±11° gun cone and the quick-draw cone as fire gates, per-shot dead-eye scatter; mutable target.
 - `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints (M4 B5): nearest node first, then edge-list neighbours, seeded branch draws; aircraft-agnostic so F17's zeppelins reuse it.
 - `src/Flight/ManeuverExecutor.cs` — plays one maneuver's attitude-step program as `FlightInput` per sim step (M4 D13): the input source D11's state machine runs during `evasive maneuver`.
@@ -2205,22 +2206,44 @@ suite.
 
 ## src/Flight/AiPilot.cs
 The non-player `FlightModel` driver (M4 A2): standing orders in (heading in the mission-data
-`SpawnPoint.HeadingDeg` convention, altitude, throttle, optional `Patrol` net follower whose
-current node re-derives the heading/altitude orders each step, optional `Gunner` whose live
-target re-derives them as a flat-out plain pursuit that outranks the patrol — D14's stand-in
-until the maneuver waves), one `FlightInput` per sim step out, read by a `FlightController`
-whose `Pilot` is set. Pure over the model state and its own fields (no clocks, no node reads
-beyond the target's sim pose; the only randomness is `Patrol`'s seeded branch draw), so a
+`SpawnPoint.HeadingDeg` convention, altitude, throttle, optional `Patrol` net follower, optional
+`Gunner` whose live target is chased as a flat-out plain pursuit, optional `Machine` — D11's
+nine-mode state machine, which when set is stepped first and dispatches the input source per
+mode: patrol/danger-zone stubs fly the net, pursue and lay off chase the gunner's target, evade
+and avoid crash fly the machine's own orders, an evasive maneuver plays its `ManeuverExecutor`,
+stunned returns neutral sticks), one `FlightInput` per sim step out, read by a `FlightController`
+whose `Pilot` is set. Pure over the model state and its own fields, seeded randomness only, so a
 fixed-dt run is deterministic (`AiPilotTests`).
 ⚠ Orders are plain mutable fields BY DESIGN — the original's mission script retargets/re-nets an
   AI at runtime (`SET_AI_NET`, `ADD_OTHER_TARGET`, …), so nothing here may be read-once at spawn.
-⚠ The control law is a placeholder (bank-to-turn + turn pull + an altitude leash): in THIS flight
-  model bank alone yaws only at the coupling rate, gravity is auto-cancelled and any sustained
-  pull climbs, so hard turns run at full pull inside a break-off/recover altitude leash. Wave D
-  replaces the law with the shipped maneuver programs through exactly this seam.
+⚠ The steering law is a placeholder (bank-to-turn + turn pull + an altitude leash): in THIS
+  flight model bank alone yaws only at the coupling rate and any sustained pull climbs. D11's
+  machine dispatches WHICH orders it flies; the shipped maneuver programs play through
+  `ManeuverExecutor` only during `evasive maneuver` — the law itself is still not original.
 ⚠ `PatrolThrottle` (0.5) and the leash/gain constants are INVENTED placeholder-law values, never
   original behaviour; at the 0.85 default the turn radius exceeds the tightest fighter rings and
   the plane limit-cycles around a node forever (measured on C1's `M4ReinfAce`).
+
+## src/Flight/AiModeMachine.cs
+The nine-mode AI state machine (M4 D11), owned by `AiPilot.Machine` and stepped from its `Next`:
+the mode list and vocabulary are the engine's own debug-readout dispatch (`NameOf` returns them
+verbatim; docs/formats/ai-rosters.md "AI modes, engine-side"). Decoded and wired: activation
+into pursue inside `min_ai_active_dist`/vehicle `attack` (both 2000 shipped, `AiSkills`/
+`PlaneStats`); a hit rolls steady-hand (`NotifyDamage`, called from
+`FlightController.TakeProjectileHit` for AI planes) and a FAILED test breaks off; a pursued AI
+target entering an evasive state rolls sixth-sense and a FAILED test stuns for
+`stun_recovery_interval`; an evasive maneuver is an `EligibleFor`-culled, signature-weighted,
+seeded library draw played to `ManeuverExecutor.Done`, then back. Transitions raise `ModeChanged`
+(the session's `ai mode:` log lines); rolls raise `RollLogged` in the engine's pass/fail wording.
+Engine-free; pinned by `AiModeMachineTests` + the `ai-modes` suite.
+⚠ Named inventions: evade's timed scramble run, the avoid-crash probe/climb-out geometry, the
+  return_range-as-leash reading (anchor undecoded), the ×3 signature weight, and the flat
+  steady-hand roll (the design's damage weighting is undecoded).
+⚠ The two danger-zone modes are enum-only, never entered: their gate data is the undecoded
+  4-extra net-tag system (F17), and `daredevil_chance` stays unwired until it exists. Do not
+  invent an entry condition.
+⚠ `lay off` deliberately behaves as pursue: D15 lands the rubber-band behaviour INSIDE this
+  existing mode, not as a new machine.
 
 ## src/Flight/ManeuverExecutor.cs
 Plays one library maneuver's timed step program as `FlightInput` values (M4 D13) — `Next(model,
@@ -3251,10 +3274,13 @@ share for a splash hit, 1 for a direct round). ⚠ The weapon/graze kill test is
 `PlaneDamage.IsDestroyed` — whole-vehicle health at zero, the decoded rule (D14 retired the
 old any-critical-part kill; the `critical` flag stays parsed, nothing consults it). An AI
 pilot's trigger and lead are its `AiPilot.Gunner` (D14): `SimStep` drives the gunner before
-the fire step (`DriveAiGunner` — standing target kept while live, else nearest hostile), the
-fire inputs read `WantsFire` instead of the raw controls, and `AssistedGunDirection`'s
+the fire step (`DriveAiGunner` — standing target kept while live, else nearest hostile; with a
+mode machine the target stays acquired in every mode but only pursue/lay off solve and shoot),
+the fire inputs read `WantsFire` instead of the raw controls, and `AssistedGunDirection`'s
 non-human arm fires the gunner's per-shot dead-eye scatter — an AI plane NEVER ticks or reads
-the aim-assist slots (pinned by the `ai-gunnery` suite's A/B). Every `Crash` raises `Downed` exactly
+the aim-assist slots (pinned by the `ai-gunnery` suite's A/B). `TakeProjectileHit` also rolls
+the D11 damage reaction for AI planes (`AiModeMachine.NotifyDamage` — the steady-hand test),
+and `NextPilotInput` lazily wires `WorldBlocksLine` as the machine's terrain probe. Every `Crash` raises `Downed` exactly
 once — (victim `PlayerIndex`, killer: the killing round's shooter id; null for terrain, mid-air,
 an unowned `NoShooter` round and every other cause) — a fact report the session scores in `--vs`;
 flight holds no match state, and `Respawn` emits nothing. `AutoRespawnAfter` (session-armed —
