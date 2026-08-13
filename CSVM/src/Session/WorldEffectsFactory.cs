@@ -171,8 +171,9 @@ public sealed class WorldEffectsFactory
     /// can ask it on a replica rig (the wreck and part names vary by airframe, so the answer is
     /// per-plane).</summary>
     public static IReadOnlyList<string> CrashStageRootNames(AnimProgram program, GameZ gamez,
-        Node3D rigScope) =>
-        EffectCatalogue.CrashStageRoots(program, StageRootResolver(gamez, rigScope));
+        Node3D rigScope, SurfaceDefTable? crashDefs = null) =>
+        EffectCatalogue.CrashStageRoots(program, StageRootResolver(gamez, rigScope),
+            crashDefs ?? EffectCatalogue.CrashDefTable(program));
 
     /// <summary>Stages the crash rig's pooled effect-template copies under
     /// <paramref name="crashRoot"/> — one <c>poolN</c> slot container per depth level, every copy
@@ -277,7 +278,9 @@ public sealed class WorldEffectsFactory
         return effects;
     }
 
-    /// <summary>Builds the per-player crash runtime.
+    /// <summary>Builds the per-plane crash runtime — the <c>player_crash_*</c> family for a human
+    /// rig, the <c>ai_crash_*</c> family for an AI plane (<c>IsHumanPiloted</c> false), which is
+    /// the original's own vehicle split (see <see cref="EffectCatalogue.CrashDefTableFor"/>).
     /// Under a <c>player</c> crash root parented to the controller it builds the
     /// effect-template roots (from the world gamez) and the plane's real <c>destroyed</c> wreck
     /// subtree, then binds a NON-auto-start <see cref="AnimRuntime"/> to the <b>controller</b> — so
@@ -302,6 +305,21 @@ public sealed class WorldEffectsFactory
         if (controller.PlaneModel != null)
             crashRoot.Transform = controller.PlaneModel.Transform;
 
+        // The family this plane's crash indexes: player_crash_* for a human rig, ai_crash_* for an
+        // AI plane — the original's own vehicle split (EffectCatalogue.CrashDefTableFor). Built
+        // before the stage derivation, because the root closure is over THIS family's defs.
+        var crashDefs = EffectCatalogue.CrashDefTableFor(crashProgram, controller.IsHumanPiloted,
+            planeName);
+        if (!controller.IsHumanPiloted)
+        {
+            // The ai_crash_* defs' authored NAME is `kestrel` (the AI airframe they were written
+            // against); a meshless scaffold of that name under the crash root anchors them on
+            // every airframe. Place-exempt via CrashScaffoldAnchors, like `player`.
+            var aiScaffold = new Node3D { Name = EffectCatalogue.AiCrashScaffoldName };
+            aiScaffold.SetMeta(AnimRuntime.NameMeta, EffectCatalogue.AiCrashScaffoldName);
+            crashRoot.AddChild(aiScaffold);
+        }
+
         // Effect-template roots (world gamez nodes WorldBuilder skips) — one instance per player, so
         // splitscreen crashes do not collide. Staged hidden below, revealed per call. Derived from
         // the defs this rig is about to bind, against this aircraft's own scope: an anchor that
@@ -314,7 +332,7 @@ public sealed class WorldEffectsFactory
         // the wreck leaves both subtrees' child order untouched — the templates still go in before
         // the wreck, and the crash root still sits between the plane model and the runtime.
         controller.AddChild(crashRoot);
-        var rootNames = CrashStageRootNames(crashProgram, gamez, controller);
+        var rootNames = CrashStageRootNames(crashProgram, gamez, controller, crashDefs);
         // Staged in pool slots like the world-effects stage: the
         // damage-stage menu CALLs one template from up to eight distinct anchors (each pdpanelN
         // onto its own pdpN, the crash defs onto their four pieceN), and a single shared copy
@@ -398,7 +416,6 @@ public sealed class WorldEffectsFactory
         // choreography and the authored damage-stage menu — every def that plays ON this aircraft.
         // EVERY playable slot of the crash vector is bound because the struck surface is only known
         // at the moment of impact; FlightController.Crash then indexes the table below with it.
-        var crashDefs = EffectCatalogue.CrashDefTable(crashProgram);
         crashRuntime.Bind(controller, crashProgram.Subset(EffectCatalogue.CrashRigAnimNames(crashDefs)));
         controller.AddChild(crashRuntime);
         controller.CrashRuntime = crashRuntime;

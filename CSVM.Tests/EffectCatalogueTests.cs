@@ -92,6 +92,77 @@ public class EffectCatalogueTests
         Assert.Empty(table.PlayableDefs);
     }
 
+    /// <summary>The AI aircraft family (G21) rides the same cascade as the player's: against the
+    /// trio this install ships, <c>dirt</c>(13) and <c>water</c>(1) resolve their own def and
+    /// every other arm — ordinary terrain, the def-less ids, out-of-range, null material — falls
+    /// to slot 0, <c>ai_crash_default</c>.</summary>
+    [Fact]
+    public void TheAiCrashCascadeMirrorsThePlayerFamilys()
+    {
+        var shipped = new HashSet<string>(
+            new[] { "ai_crash_default", "ai_crash_dirt", "ai_crash_water" }, StringComparer.Ordinal);
+        var table = new SurfaceDefTable(
+            EffectCatalogue.AiCrashDefPrefix, lastResort: "bloodhawk", shipped.Contains);
+
+        Assert.Equal("ai_crash_dirt", table.DefForSurfaceId(13));
+        Assert.Equal("ai_crash_water", table.DefForSurfaceId(1));
+        foreach (int? id in new int?[] { 0, 5, 8, 11, 12, -1, 14, null })
+            Assert.Equal("ai_crash_default", table.DefForSurfaceId(id));
+        Assert.Equal(3, table.PlayableDefs.Count);
+    }
+
+    /// <summary>The AI family's last-resort arm is the crash family's, not touchdown's: a vector
+    /// that cannot answer resolves the bare vehicle name (<c>FUN_00479240</c> interns the params
+    /// NAME into the slot <c>FUN_0048b920</c> falls to), never "play nothing". Unreachable in this
+    /// install — all eight chapters ship <c>ai_crash_default</c> — but it is where the AI family
+    /// and the graze family part, so it is pinned rather than assumed.</summary>
+    [Fact]
+    public void AnEmptyAiCrashVectorFallsToTheBarePlaneName()
+    {
+        var table = new SurfaceDefTable(
+            EffectCatalogue.AiCrashDefPrefix, lastResort: "bloodhawk", _ => false);
+
+        Assert.Equal("bloodhawk", table.DefForSurfaceId(13));
+        Assert.Equal("bloodhawk", table.DefForSurfaceId(null));
+        Assert.Empty(table.PlayableDefs);
+    }
+
+    /// <summary>The per-chapter census, as a golden: every chapter's compiled anim program defines
+    /// exactly the three <c>ai_crash_*</c> defs (<c>default</c>/<c>dirt</c>/<c>water</c>) — the
+    /// same trio as the player and touchdown families — anchored on the shared <c>kestrel</c>
+    /// scaffold NAME, and the family pick follows the pilot: a human rig binds
+    /// <c>player_crash_*</c>, an AI plane <c>ai_crash_*</c> off the same program.</summary>
+    [ExtractedDataFact]
+    public void EveryChapterShipsExactlyTheThreeAiCrashDefs()
+    {
+        string dataRoot = TestData.DataRoot!;
+        string shared = SharedZrdr;
+        foreach (var chapter in new[] { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" })
+        {
+            var (chapterAnim, missionAnim) = AnimProgram.ArchivePaths(dataRoot, chapter, "IA1");
+            var program = AnimProgram.Load(shared, SessionPaths.ChapterZrdr(dataRoot, chapter),
+                SessionPaths.MissionZrdr(dataRoot, chapter, "IA1"), chapterAnim, missionAnim);
+
+            var ai = EffectCatalogue.CrashDefTableFor(program, humanPiloted: false, "bloodhawk");
+            Assert.Equal(
+                new[] { "ai_crash_default", "ai_crash_water", "ai_crash_dirt" },
+                ai.PlayableDefs);
+            Assert.Equal("ai_crash_dirt", ai.DefForSurfaceId(13));
+            Assert.Equal("ai_crash_water", ai.DefForSurfaceId(1));
+            Assert.Equal("ai_crash_default", ai.DefForSurfaceId(0));
+            Assert.Equal("ai_crash_default", ai.DefForSurfaceId(null));
+            foreach (var def in ai.PlayableDefs)
+            {
+                Assert.All(program.ByAnimName(def),
+                    d => Assert.Equal(EffectCatalogue.AiCrashScaffoldName, d.Name));
+            }
+
+            var human = EffectCatalogue.CrashDefTableFor(program, humanPiloted: true, "bloodhawk");
+            Assert.All(human.PlayableDefs,
+                def => Assert.StartsWith(EffectCatalogue.CrashDefPrefix, def, StringComparison.Ordinal));
+        }
+    }
+
     /// <summary>What the collider overlay colours by (<c>BL-345</c>): against the three defs per
     /// family this install ships, only <c>default</c>(0), <c>water</c>(1) and <c>dirt</c>(13)
     /// resolve to themselves — every other id resolves slot 0, because that is the def a touch

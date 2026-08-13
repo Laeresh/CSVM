@@ -2454,11 +2454,15 @@ public partial class GameSession : Node3D
     {
         // --crash[=frame]: force every player's crash rig at a fixed sim frame — the only
         // headless trigger for FlightController.Crash(), which a live collision otherwise gates.
+        // Spawned AI planes crash too, taking the same null-material arm into THEIR family's
+        // slot 0 (ai_crash_default) — the headless demo of the G21 split, read off the CRASH line.
         if (_spec.CrashFrame is int crashFrame && !_crashFired && clock.Frame >= crashFrame)
         {
             _crashFired = true;
             foreach (var rig in _rigs)
                 rig.Controller?.DebugForceCrash();
+            foreach (var plane in _aiPlanes)
+                plane.DebugForceCrash();
         }
         // --debug-scoreboard --vs: one scripted, ATTRIBUTED kill (P1 downs P2) on the first sim
         // step, through the same Downed path a real kill takes — so a screenshot has a real K/D,
