@@ -192,13 +192,13 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt flying, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, world destructibles that take damage, die, lose collision, throw debris and reset — and planes shoot planes down (M4 A1, front-loaded). The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**Active plan: [`PLAN-object-motion-decode.md`](docs/PLAN-object-motion-decode.md)** (written
-2026-08-10; 13 items, 4 waves) — the original's `OBJECT_MOTION` launch, contact and run-time model,
-decoded from `crimson.exe`: the ground-contact test is the DEFAULT rather than `do_intersections`-
-gated, the `translation_range` elevation is linear (`elev/90`) rather than spherical, and `RUN_TIME`
-is a ceiling rather than a duration. Folds in `BL-319` and `BL-245`, re-opens `PT-46` (d), and
-deletes `DebrisTune`. Wave A complete, Wave B (`B4`, `B5`) landed; Waves B and C must run strictly
-serially. Next: Wave C from `C6`.
+**Active plan: [`PLAN-surface-id-weapons.md`](docs/PLAN-surface-id-weapons.md)** (written
+2026-08-13; 5 items, 3 waves): part two of the surface-id work, moving the weapon `IMPACT` lookup
+onto the original's numeric surface id (decoded 2026-08-12; its empty row plays nothing rather than
+falling back) and colouring the collision overlay by the same id. Folds in `BL-344` and `BL-345`;
+disproves `PLAN-crash-surface-id` Decision 3. Strictly serial. Next: `A1`, then the `A2` decision
+gates the rest. [`PLAN-object-motion-decode.md`](docs/PLAN-object-motion-decode.md) is live in
+parallel on its own branch, at Wave C from `C6`.
 Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45` and `PT-47`
 ([`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read
