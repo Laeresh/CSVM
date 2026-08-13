@@ -91,7 +91,7 @@ Census over **3,015 compiled defs** (all 8 chapters' `cam_anim` + `mis_anim`):
 | `START_TIME ANIMATION` | compares the *animation instance's* clock (`anim+0xb0`), shared across sequences | *(fixed — CSVM now resolves it against `AnimInstance.Clock`)* | **191** events name `Animation` with a non-zero time inside an `OnCall` sequence, the only case where the two clocks can disagree; 900 more sit in `Initial` sequences, where the bootstrap starts the sequence with the instance |
 | `LOOP` rewind | hard-zeroes both timers | carries the overshoot (`BL-237`) | deliberate — the original paces on its own fixed tick, we must pace on sim time at any step |
 | `RANDOM_WEIGHT` comparison sense | `draw <= threshold` | *(fixed — CSVM now uses `<=`, was `<`)* | 4,537 conditions |
-| `PLAYER_RANGE` | compares `dist² * 4.0 <= value` — **unresolved** whether the transform chain (`FUN_0053f9b0`, `DAT_009fd190`) already halves the vector | `dist² <= value` | 1,052 conditions; if unhalved, every gate radius is 2× too large |
+| `PLAYER_RANGE` | *(no divergence — the `dist² * 4.0` read here was a misattribution: that comparison is the `0x200` `PLAYER_LINED_UP` branch, an angle test where the 4 cancels a quaternion half-angle. `PLAYER_RANGE` is the `0x2` branch and compares `dist² <= m²`. Traced 2026-08-13; flag-word table in `docs/formats/anim-definitions.md`)* | `dist² <= value` | 1,052 conditions, all gating at the authored radius |
 
 ## Event kinds present in the data with no CSVM handler
 

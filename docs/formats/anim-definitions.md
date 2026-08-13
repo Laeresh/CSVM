@@ -322,9 +322,9 @@ so the runtime has a single convention.
 
 | Count | Condition | Reader spelling | Rule used |
 |---:|---|---|---|
-| 4537 | `RandomWeight` (0..1) | `RANDOM_WEIGHT [w]` | `rand() < w`, re-rolled per evaluation. |
+| 4537 | `RandomWeight` (0..1) | `RANDOM_WEIGHT [w]` | `draw <= w`, re-rolled per evaluation. The original draws from a 200-entry ring that is itself `rand()`-filled per run, so there is no sequence to match — see the flag-word subsection below. |
 | 4007 | `AnimHealth` | `ANIM_HEALTH [n]` | `health <= n` — "worn down to n". Full health in a world build, so uniformly false. |
-| 1052 | `PlayerRange` | `PLAYER_RANGE [m]` | `dist²(anchor, player) <= value`. **Compiled is metres SQUARED** (reader 270 ↔ compiled 72900, exact across the install). |
+| 1052 | `PlayerRange` | `PLAYER_RANGE [m]` | `dist²(anchor, player) <= value`. **Compiled is metres SQUARED** (reader 270 ↔ compiled 72900, exact across the install; the parser squares it, confirmed in the exe). No scale factor rides on the comparison. |
 | 717 | `NodeActive` | `NODE_ACTIVE [name]` | the node is visible. Compiled carries an INDEX, reader a name — see below. |
 | 473 | `NodeUndercover` | `NODE_NEAR_GROUND [name, d]` | **stubbed false** — needs a ground/occlusion probe. All 473 sit in `ON_CALL` defs the bootstrap never reaches. |
 | 124 | `AnimHealthRange` | — | `min <= health <= max`. Same as `AnimHealth`: false at full health. |
@@ -1444,6 +1444,55 @@ Disproven, not merely unimplemented: see the census in `analysis/anim-interprete
 The struct offsets above are otherwise mech3ax's `SeqDefInfoC` layout, taken as given rather than
 independently re-derived field-by-field; only the offsets the stepper and `LOOP` actually touch
 have been seen in code.
+
+**The condition flag word: fourteen kinds, ten authored.** A compiled condition record carries a
+bitmask at `+0xc`, a node index at `+0x10`, and one or two values at `+0x14`/`+0x18`. The bit for
+each token is written by the reader parser `FUN_00516820`, one branch per keyword, so this mapping
+is read off the parser rather than inferred from the evaluator's branch order:
+
+| Bit | Token | Evaluated as (`FUN_004ec080`) |
+|---|---|---|
+| `0x1` | `RANDOM_WEIGHT` | `table[i] <= value`, see the ring below |
+| `0x2` | `PLAYER_RANGE` | `dist²(anchor, player) <= value` (`FUN_004ec540`) |
+| `0x4` | `ANIMATION_LOD` | `value <= DAT_00727fc8` (the detail setting) |
+| `0x8` | `PLAYER_UNDERCOVER` | upward 50 m probe from the player (`FUN_004ec410`) |
+| `0x10` | `NODE_UNDERCOVER` | the same probe from the node |
+| `0x20` | `HW_RENDER` | `DAT_009be708` |
+| `0x40` | `PLAYER_1ST_PERSON` | `DAT_009fd17c` |
+| `0x80` | `PLAYER_BELOW_ALT` | `playerY < value` |
+| `0x100` | `NODE_BELOW_ALT` | `nodeY < value` |
+| `0x200` | `PLAYER_LINED_UP` | `θ² <= value`, see below |
+| `0x400` | `PLAYER_SPEED` | `min <= playerSpeed <= max` |
+| `0x800` | `ANIM_HEALTH` | `health <= value` |
+| `0x1000` | `ANIM_HEALTH` (two-value) | `min <= health <= max` |
+| `0x2000` | `NODE_ACTIVE` | node flag `0x4` at `+0x24` |
+
+**Four of the fourteen are never authored**: `PLAYER_UNDERCOVER`, `PLAYER_BELOW_ALT`,
+`PLAYER_LINED_UP` and `PLAYER_SPEED` appear nowhere in the install, which is why the condition
+census above finds ten kinds and not fourteen. They are engine features the level data never used.
+
+⚠ **`PLAYER_LINED_UP` owns the `* 4.0` that looked like a `PLAYER_RANGE` scale factor.** The
+evaluator's `local_18 * 4.0 <= value` sits in the `0x200` branch, and that branch is angular, not
+metric: `FUN_004cf380`/`FUN_0053df30` take the node's world matrix to Euler angles, `FUN_0053f610`
+builds a quaternion from them, `FUN_0053f9b0` multiplies it against the player quaternion at
+`DAT_009fd190` with conjugation, and `FUN_0053fca0` is the quaternion log map, whose `atan2(|v|, w)`
+is the **half**-angle. So `|out|² * 4.0` is θ², compared against a threshold the parser stores as
+`(degrees × 0.017453292)²`. Both sides are squared radians and the 4 is the half-angle cancelling,
+with nothing left over. `PLAYER_RANGE` is the separate `0x2` branch and carries no such factor: the
+parser squares its metres argument into `+0x14` (independently confirming the reader-270 ↔
+compiled-72900 relation in the condition table above) and the evaluator compares `dist² <= m²`,
+which is what CSVM implements. No gate radius is scaled.
+
+**`RANDOM_WEIGHT` reads a 200-entry ring, and that ring is not reproducible.** Each evaluation reads
+`table[DAT_0072836c]` and advances that index modulo 200, with the index global across every
+definition in the world. The table at `DAT_009fce20` is not compiled data: `FUN_004ee380` fills it at
+anim-system init with 200 calls to `rand() * 3.051851e-05` (1/32767, MSVC's `RAND_MAX`), and the
+stream it draws from is reseeded `srand(time(NULL))` on ordinary startup and level-load paths, so
+two runs of the original produce two different tables. There is no fixed sequence to match, and
+CSVM's session-seeded `_rng` is the correct-shape answer rather than a divergence. Disproven in
+full, with the two `srand` call sites, in `analysis/anim-interpreter-decode/FINDINGS.md`
+(`PLAN-anim-original-match` B16); the comparison sense that came out of it, `draw <= weight`
+inclusive at both ends, is what CSVM runs.
 
 ## FBFX_COLOR_FROM_TO is a full-screen wash
 
