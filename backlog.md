@@ -669,7 +669,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   |---|---|
   | `yaw_low_speed 0.0625` / `yaw_high_speed 0.17` / `yaw_fade_in 10` / `yaw_max 50` / `yaw_fade_out 400` | Decoded and **implemented** (`PLAN-flight-model-rewrite` C21), retiring `BL-108`'s interim `eff` |
   | `turn_fade_in 10` / `turn_fade_out 50` | Decoded: the roll/pitch base ramp from airspeed alone. **Unimplemented, owned by `BL-330`** |
-  | `maxAOA 46.0` / `liftAOAs [5,9]` / `lift_accel_rate 0.75` | Decoded. `liftAOAs` is an airflow blend, **not** a load-factor ramp. Consumed by `PLAN-flight-drag-lift` B12 as a **hypothesis under test, not a decode**; exponent question on `BL-307` |
+  | `maxAOA 46.0` / `liftAOAs [5,9]` / `lift_accel_rate 0.75` | Decoded. `liftAOAs` is an airflow blend, **not** a load-factor ramp. Consumed by `PLAN-flight-drag-lift` B12 as a **hypothesis under test, not a decode**. ⚠ That plan justifies its lift re-key partly on "the aircraft must hold 100° of bank, which needs `1/\|cos 100°\|` = 5.8 g" (`PLAN-flight-drag-lift.md:486-487`, `:7`, `:32`, `:200`, `:549`). `CAP-33` showed the ADI reads airframe **attitude**, not the turn's bank, so the ~100° attitude is real but the load factor does not follow from it that way — `CAP-01`'s turn banked 58.7°, ~2 g. The re-key is not challenged; its stated arithmetic is |
   | `high_speed_pitch_fade [1000,1001]` / `highGs [9,15]` / `lowGs [-6,-9]` | Decoded as **authored unreachable** (`C24`, `D33`). Nothing implemented, which is the correct outcome |
   | `drag_factor 1.5` (global) / `drag_fade_speed 40` | **Dead in the executable** (B14): parsed, then read by nothing. The per-plane `drag_factor` is the only drag scale |
   | `groundblow_elev 400` / `groundblow_mag 10` / `ai_groundblow 0.5` | Decoded 2026-08-14. **Unimplemented and unowned** |
@@ -723,10 +723,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   wrong way by construction (`C22`), `highGs` is a limiter that never fires (`D33`), and
   `turn_fade_*` is an airspeed ramp that is saturated at 1 everywhere the gap appears (`C21` era
   correction, 2026-08-09). What remains is the measurement's own interpretation: `CAP-01`'s
-  18.95 °/sim-s at 222.94 mph implies **58.7° of bank**, and `CAP-33` (2026-08-15) settled that the
-  ~100° its ADI shows is not a bank at all: with the pilot holding a known 60–70°, the implied bank
-  tracked it to within a few degrees while the ADI over-read by ~40° and swung with the pitch cycle.
-  So the "measured bank" half of this disagreement was never real. Evidence on `BL-307`.
+  18.95 °/sim-s at 222.94 mph implies **58.7° of bank** (`atan(V·ω / nom_gravity)`, and it is
+  `nom_gravity` 20 m/s² in that formula, not 9.81). `CAP-33` (2026-08-15) settled that the ~100° its
+  ADI shows is not a bank at all: flown with the pilot holding a known 60–70°, the ADI sky centroid
+  read a mean 105.1° while `V·ω / nom_gravity` read 62.2°, and the ADI's 46° swing tracked the pitch
+  cycle (`r = +0.886` against climb rate) rather than the heading rate (`r = −0.091`). An ADI shows
+  airframe attitude, which in a high-α pull sits tens of degrees off the bank of the turn. So the
+  "measured bank" half of this disagreement was never real, the original **is** flying coordinated,
+  and 58.7° is `CAP-01`'s actual bank. The rate gap itself is untouched by this and stays open.
+  (`git log --grep=BL-307` for the closing record.)
   ⚠ **Do not fill the hole by inventing a rate limiter from field names.** A naive speed/bank
   coupling that quietly costs pitch authority is exactly the wrong-mechanism fix `BL-124`'s history
   warns about, and `maxAOA`/`liftAOAs` were consumed as a hypothesis under test rather than as a
@@ -1179,81 +1184,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   wings level, no visible attitude kick at that severity. Judge the kick and the stop rule
   against that footage and `BL-120`'s corner feel item before tuning further.
 
-- `BL-307` `[Research]` **ANSWERED, both halves (2026-08-15).** The `CAP-01` bank half by `CAP-33`
-  (the ADI does not read the pilot's bank); the induced-drag exponent half by the decode (the
-  original has no induced-drag term, so there is no exponent), which retired `CAP-32` as both
-  unfilmable and unnecessary and minted `BL-360`.
-  *Evidence (`CAP-33`, `OriginalScreenshots/Videos/CAP-33.mp4`, 33.76 s, 2560×720, decoded this
-  session; head-turn gate **OK**, `corr dx(ALT), dx(MPH) = +1.00`, dial translation 0 px).* The
-  pilot held a **60–70° bank** with full back stick and full throttle and reported it at the
-  controls, so the bank is known independently of any instrument. Over the sustained turn
-  (10.0–33.7 s wall = 32.9 s sim, 702 frames) the two estimators disagree completely:
-
-  | Estimator | Mean | Range | Swing |
-  |---|---|---|---|
-  | ADI sky centroid (the method `CAP-01`'s "~100°" used) | **105.1°** | 79.5–125.4° | 45.9° |
-  | `V·ω / nom_gravity` (implied bank) | **62.2°** | 56.0–69.9° | 13.9° |
-
-  (All four columns are over the 23 one-second bins of the sustained turn. Fitting the whole span in
-  one regression instead gives 22.95 °/sim-s at 218.55 mph, `V·ω` = 39.14 m/s², implied bank
-  **62.9°** — the same answer.)
-  The implied bank sits **inside the pilot's stated band and stays there through the whole
-  manoeuvre**; the ADI over-reads by ~40° and swings 46°. What the ADI's swing tracks is the pitch
-  cycle, not any input: binned per second, `r(ADI roll, climb rate) = **+0.886**` and
-  `r(ADI roll, speed) = **−0.914**`, while `r(ADI roll, heading rate) = **−0.091**`. The same ball's
-  own pitch (sky-area fraction, `adi.py`) swings 39.5° and correlates `+0.520` with its roll,
-  frame by frame, which is the instrument-internal version of the same statement.
-  **So BL-307's dilemma resolves on its first horn: the ADI reading is not bank. The original's
-  turn IS coordinated closely enough that `V·ω / nom_gravity` recovers the flown bank**, and
-  `CAP-01`'s 58.7° implied bank is the good number while its "~100° ADI" is an artifact of reading
-  airframe attitude in a high-α pull. There was never a contradiction; the two figures were
-  different quantities.
-  ⚠ **`nom_gravity` (20 m/s²), not 9.81, is the constant in the implied-bank formula.** `atan(32.96
-  / 20) = 58.7°` is how `CAP-01`'s figure was derived (`PLAN-flight-drag-lift.md:521`); using Earth
-  gravity gives 73.4° and silently breaks every comparison in this entry.
-  ⚠ **This does not give a bank/rate curve, and no cockpit capture can.** Implied bank is computed
-  *from* the rate, so the two are not independent measurements — `CAP-33`'s value is that an
-  independently-known bank validated the estimator. Reading bank off an ADI in a pulling turn is the
-  thing that does not work; do not re-file that as a capture request.
-  ⚠ **The clip never settles**, so its numbers are cycle means and not a plateau: altitude
-  oscillates 1804–2486 ft on an ~11 s cycle, speed 180–253 mph in antiphase, heading rate
-  19.8–28.4 °/sim-s. Mean over the turn is 22.95 °/sim-s at 218.55 mph. Quoted to no better than
-  ±0.33 s in time (the sidecar's `pts_short` note).
-  **The exponent half is ANSWERED too, by the decode rather than by a capture (2026-08-15), and
-  `CAP-32` is retired unfilmable.** The controls are keyboard, so back stick is 100 % or 0 % and a
-  "deliberately part-deflected pull" cannot be flown at all. It is also unnecessary: the original
-  has **no induced-drag term of any kind**, so there is no exponent to choose between.
-  `docs/org/flightModel.md` enumerated every use of the `C_L` slot in `FUN_0048fc40` (the lift-force
-  product, an optional load-factor out-param, and a dead push) and found no `C_L²`, AOA-keyed or
-  load-factor-keyed contribution to drag; the drag polar's variable is **Mach**. A pull costs the
-  original speed only through the lift vector's own tilt.
-  ⚠ **That answer is bigger than this entry, and it is not comfortable: it says our landed `sin²α`
-  term models a mechanism the original does not have.** C21 fitted `InducedDragCoef` 10.75 on
-  2026-08-07; the decode that found no induced-drag term is 2026-08-09, two days later, and the two
-  were never reconciled. Minted as `BL-360` rather than settled here.
-  **The original two-point framing, for the record:** `PLAN-flight-drag-lift` C21 fitted `InducedDragCoef`
-  10.75 to `CAP-01`'s single sustained-turn plateau — a real fit, but the *functional form* (`sin²α`
-  vs `n` vs `n²` vs `ω²`) is a choice (Decision 8), not a measurement, because both segments of that
-  clip sit at essentially the same load factor (`V·ω` 32.96 vs 34.02 m/s², 3% apart). B12 also found
-  `CAP-01`'s own numbers are not those of a coordinated level turn: 18.95 °/sim-s at 222.94 mph is
-  `V·ω` = 32.96 m/s² lateral, which for a level turn implies **58.7°** of bank — not the **100°** the
-  ADI sky-centroid reads (trusted only to ±4°). "Either the ADI reading is not bank, or the original
-  is not flying coordinated" was the standing dilemma; `CAP-33` answered it above, and the 100°
-  should not be quoted as a bank again.
-  ⚠ The old note here said "neither blocks anything currently asserted — `InducedDragCoef` and the
-  landed lift re-key both stand regardless". The bank half's resolution leaves the lift re-key's
-  *premise* in question (below) and the exponent half's resolution leaves `InducedDragCoef` itself
-  in question (`BL-360`), so that reassurance no longer holds and is retracted.
-  ⚠ **But the 100° bank is relied on elsewhere, and it is now known to be an instrument artifact.**
-  `PLAN-flight-drag-lift` motivates its lift re-key partly on "the aircraft must hold 100° of bank,
-  which needs `1/|cos 100°|` = 5.8 g" (`docs/plans/PLAN-flight-drag-lift.md:486-487`, and the same
-  premise at `:7`, `:32`, `:200`, `:549`). At the flown bank of 60–70° that demand is ~2–3 g, a
-  different problem. The landed code is not being challenged here and nothing is asserted against
-  it; what is recorded is that the premise quoted in that plan came from the ADI. Re-checking it is
-  its own piece of work.
-  *Both halves are now answered; what they surfaced is on `BL-360`. This entry is a
-  `/close-backlog-item` candidate.*
-
 - `BL-309` `[Feature]` **Engine torque is a designed, one-sided turn assist — unmodelled.** GDD §4.1.8
   ("Engine Torque", Motion Model/Flight Dynamics → Simulated Elements; restated, no prose): torque
   is simulated selectively so the player never fights it — no effect in straight-and-level flight,
@@ -1345,36 +1275,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-095` (the decode and the authored values), `BL-172` (the collision impulse from
   the same neighbourhood of the flight loop), `CAP-02` (closed; footage staged under
   `playtest/CAP-02/`).
-
-- `BL-360` `[Research]` **We model induced drag; the original has none. The landed `sin²α` term
-  reproduces a real speed loss by a mechanism the executable does not contain.**
-  *Evidence:* `PLAN-flight-drag-lift` C21 landed `dragAccel += A · C_i · sin²(min(α, maxAOA))` with
-  `InducedDragCoef` **10.75** on 2026-08-07, fitted to `CAP-01`'s single sustained-turn plateau, to
-  close `BL-092` ("a hard pull costs us no speed"). Two days later the Ghidra pass found the
-  opposite in `crimson.exe`: **no induced-drag term exists anywhere in `FUN_0048fc40`**. Every use
-  of the `C_L` slot was enumerated (the lift-force product, an optional load-factor out-param, a
-  dead push) and there is no `C_L²`, AOA-keyed or load-factor-keyed contribution to drag; the drag
-  polar's variable is **Mach**, not `C_L`. The original loses speed in a pull **only through the
-  lift vector's own tilt** (`docs/org/flightModel.md`, "Drag — the polar is in MACH" and the `C_L`
-  note above it). The two findings have never been reconciled; C21 predates the decode.
-  *The question:* is our `sin²α` term standing in for lift-vector tilt we do not fully model? If so
-  it is a wrong-mechanism fix in exactly the class `BL-124`'s history warns about, and it will be
-  right at the fitted point and wrong away from it. If our tilt term is already faithful, then the
-  original's own speed loss in `CAP-01` should be reproducible with `InducedDragCoef` at **zero**,
-  and the coefficient is absorbing an error somewhere else.
-  *Fix shape:* an ablation, not a rewrite. Run the `flight-envelope` suite with `InducedDragCoef` at
-  0 and at 10.75 and compare both against `CAP-01`'s plateau and `CAP-05`'s zero-thrust points;
-  where the zeroed model diverges is where the missing tilt (or the real error) lives.
-  ⚠ **Traps.** (a) This is not licence to delete the term. It was fitted against a measured plateau
-  and removing it blind re-opens `BL-092`; the deliverable is knowing what it stands for.
-  (b) The remaining `+25 %` climb residual (`BL-115`) and the force-scale conflict
-  (`docs/org/flightModel.md`, "The force scale — settled") are both live candidates for what a
-  non-zero `C_i` is absorbing — check them before concluding the tilt model is at fault.
-  (c) `CAP-01` cannot arbitrate the functional form and no capture can: both its segments sit at the
-  same load factor, and partial stick deflection is unfilmable on keyboard controls (`BL-307`,
-  where `CAP-32` was retired for exactly this).
-  *Cross-refs:* `BL-307` (which surfaced this and is otherwise answered), `BL-115`,
-  `docs/plans/PLAN-flight-drag-lift.md` (C21, Decision 8), `docs/org/flightModel.md`.
 
 ## Environment & world
 
