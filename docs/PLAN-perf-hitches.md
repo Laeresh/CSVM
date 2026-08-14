@@ -122,7 +122,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — The readout
 
-10. ☐ D10 — `PerfHud` on `F14` and `--debug-fps`: the compact tier, once for the window
+10. ☑ D10 — `PerfHud` on `F14` and `--debug-fps`: the compact tier, once for the window
 11. ☐ D11 — The verbose tier and the rolling frame-time strip
 
 ### Wave E — The A/B rig
@@ -601,7 +601,7 @@ happened here than the named sites show," not as noise.
 
 # Wave D — The readout
 
-## D10 ☐ `PerfHud` on `F14` and `--debug-fps`: the compact tier, once for the window
+## D10 ☑ `PerfHud` on `F14` and `--debug-fps`: the compact tier, once for the window
 
 **Goal.** `F14` cycles a readout showing frames per second, current frame cost, and the worst frame
 in the last few seconds. It is off by default, drawn once for the window rather than per splitscreen

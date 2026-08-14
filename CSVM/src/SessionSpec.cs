@@ -483,6 +483,10 @@ public sealed record SessionSpec
     public int? DebugLivery { get; private set; }
     public string? DebugMesh { get; private set; }
     public string? DebugNames { get; private set; }
+    /// <summary><c>--debug-fps[=compact|full]</c> (PLAN-perf-hitches D10): start the frame-cost
+    /// readout (<c>F14</c>) at launch, the scripted twin for a deterministic screenshot of it.
+    /// Null = flag absent (off); no value = compact.</summary>
+    public string? DebugFps { get; private set; }
     /// <summary><b>Resolved.</b> Null outside <c>--freecam</c>/<c>--anim-lab</c>: the shared
     /// selection lives in the two world-observation modes, the viewer's LMB is already the orbit
     /// drag, and flight has no cursor.</summary>
@@ -687,6 +691,8 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--debug-mesh=")) { s.DebugMesh = arg["--debug-mesh=".Length..]; }
             else if (arg == "--debug-names") { s.DebugNames ??= "meshes"; }
             else if (arg.StartsWith("--debug-names=")) { s.DebugNames = arg["--debug-names=".Length..]; }
+            else if (arg == "--debug-fps") { s.DebugFps ??= "compact"; }
+            else if (arg.StartsWith("--debug-fps=")) { s.DebugFps = arg["--debug-fps=".Length..]; }
             else if (arg == "--debug-select") { s.DebugSelect ??= ""; }
             else if (arg.StartsWith("--debug-select=")) { s.DebugSelect = arg["--debug-select=".Length..]; }
             else if (arg == "--debug-nodelab") { s.DebugNodeLab ??= ""; }

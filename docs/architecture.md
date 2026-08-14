@@ -166,6 +166,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/PanelFocus.cs` — the one-line rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
 - `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels.
+- `src/UI/PerfHud.cs` — the frame-cost readout (F14, `--debug-fps=`): fps/current-frame-cost/worst-recent-frame, once for the window, drawn above the launchscreen too.
 - `src/UI/SelectionService.cs` — the shared `--freecam`/`--anim-lab` selection: click-pick + the `cs_name` ancestor ladder, breadcrumb + highlight box.
 - `src/UI/NodeLab.cs` — the `--freecam`/`--anim-lab` node lab (N, `--debug-nodelab`): lazy `cs_name` tree, search, frame/hide, dependencies, destructibles.
 - `src/UI/WorldDamageLab.cs` — the `--freecam`/`--anim-lab` world damage lab (F5, `--debug-damage`): HP slider + kill/reset on the selection's destructible pool.
@@ -3789,6 +3790,33 @@ magenta, pylons cyan, target green); `--markers` opens it at launch. Reuses `Mar
   `NodeLabels` reads; a co-located pair's labels are stacked up the airframe so both survive.
 ⚠ Gizmo dots always show (no mount position is ever lost); only the LABELS de-clutter, nearest-
   first with firepoints prioritised over pylons — the full named table stays in `--dump-markers`.
+
+## src/UI/PerfHud.cs
+The frame-cost readout (PLAN-perf-hitches D10, key **F14**): fps, current frame cost and the
+worst recent frame, cycling Off → Compact → Full → Off; `--debug-fps[=compact|full]` presets the
+mode at launch. Built once by `Launcher` (never per `GameSession`, never per splitscreen pane) —
+fps/frame-cost/GC are process-wide facts, so one readout for the whole window is correct and a
+per-pane copy would just be four identical readouts at four times the layout cost. That hosting
+is also what makes it work at the launchscreen, in `--viewer`/`--freecam` and in flight for free.
+Fed the same raw `Stopwatch` `frameMs` `HitchMonitor` ticks on (never Godot's `delta`), every
+frame, unconditionally — the worst-frame peak has to already be warm the instant F14 is pressed,
+or it would have nothing to say about the hitch that made someone look. Off by default and builds
+nothing until switched on, so the 11 golden screenshots stay byte-identical.
+On `HudLayers.PerfReadout` (11), **above `HudLayers.Board`**: the launchscreen's background is a
+full-screen opaque `ColorRect` on `Board`, and this readout has to read there too. Sized off
+`HudMetrics.ReferenceHeight` through the plain window-height ratio, not `HudMetrics.Scale` —
+that method's `PaneFactor` damping is exactly wrong for a control that isn't per-pane.
+⚠ **D10 lands Compact's content only.** Full is a real, selectable third mode (so
+  `--debug-fps=full` parses and F14 cycles through it) but renders the same panel as Compact for
+  now; PLAN-perf-hitches D11 fills it with the per-frame split/count/memory/GC terms, the
+  breadcrumbs, and the rolling frame-time strip.
+⚠ **The worst-frame peak spikes and decays**, held for `WorstHoldMs` (3 s, TUNE, a plain
+  `const` — UI cosmetic, not a measurement threshold like `HitchMonitor`'s `Config`-backed
+  constants) then replaced by the current frame, rather than being a windowed max recomputed from
+  a ring buffer. `Rearm()` (called alongside `HitchMonitor.Rearm()` from `LaunchSession`/
+  `ReturnToMenu`) drops the peak and skips one frame of tracking, so a session build's own stall —
+  which inflates the very next `_Process` frame's wall cost the same way it does for
+  `HitchMonitor` — never reads as the worst recent frame.
 
 ## src/UI/MeshLab.cs
 The geometry/shading lab (key M): normal lines, smoothing-seam wireframe, collider boxes, light

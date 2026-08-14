@@ -53,4 +53,10 @@ internal static class HudLayers
 
     /// <summary>Scoreboards and the launchscreen — always on top of everything.</summary>
     public const int Board = 10;
+
+    /// <summary>The frame-cost readout (<c>F14</c>, PLAN-perf-hitches D10). Above
+    /// <see cref="Board"/> on purpose: the launchscreen's background is a full-screen opaque
+    /// <c>ColorRect</c> on that layer, and the readout has to read there too — fps/frame cost/GC
+    /// are process-wide facts, not something a mode screen should be able to hide.</summary>
+    public const int PerfReadout = 11;
 }

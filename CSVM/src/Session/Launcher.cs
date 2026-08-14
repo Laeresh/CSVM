@@ -123,6 +123,9 @@ public partial class Launcher : Node3D
     // and measured render time is opt-in per viewport, so both have to happen before the first
     // frame rather than lazily on one.
     private HitchMonitor _hitchMonitor = null!;
+    // PLAN-perf-hitches D10: the F14 / --debug-fps frame-cost readout, ticked every frame like
+    // the instrument above it, but drawing (if switched on) is its own concern, not this class's.
+    private UI.PerfHud _perfHud = null!;
     private Rid _viewportRid;
     // The previous frame's QPC stamp, so the monitor is fed a raw wall cost rather than Godot's
     // post-processed `delta`. 0 on the first frame, which reports 0 ms and trips nothing.
@@ -546,6 +549,16 @@ public partial class Launcher : Node3D
             return;
         }
 
+        // PLAN-perf-hitches D10: the F14 / --debug-fps readout, a child of this node rather than
+        // of any GameSession — process-wide like the camera above it, so it works at the
+        // launchscreen too. Built after the --run-tests/--dump-* early exits, since none of them
+        // renders a frame it would have anything to show.
+        _perfHud = new UI.PerfHud
+        {
+            InitialMode = _spec.DebugFps == null ? UI.PerfHud.Mode.Off : UI.PerfHud.ParseMode(_spec.DebugFps),
+        };
+        AddChild(_perfHud);
+
         // No content-selecting arg (or an explicit --menu): show the in-game launchscreen
         // (Mode → Chapter → Plane). Its selection derives the session's spec and calls
         // LaunchSession, so there is exactly one downstream build path. Esc from a menu-launched
@@ -681,6 +694,9 @@ public partial class Launcher : Node3D
             _hitchSidecar.Enqueue(_hitchMonitor.Last);
         }
         _hitchSidecar.Tick(frameMs);
+        // PLAN-perf-hitches D10: same raw frameMs HitchMonitor just judged, fed to the readout
+        // regardless of whether it is currently drawn — see PerfHud.Tick's own doc comment.
+        _perfHud.Tick(frameMs);
         if (_spec.Perf)
             ReportPerf(delta, counters);
 
@@ -727,6 +743,9 @@ public partial class Launcher : Node3D
         // C8: the build's own scopes (loads, material creation) belong to no frame, and the frame
         // that closes over the build would otherwise report them all at once.
         PerfSample.Reset();
+        // D10: same reasoning as HitchMonitor.Rearm above — the build's own stall must never read
+        // as the readout's worst recent frame.
+        _perfHud.Rearm();
         return built;
     }
 
@@ -836,6 +855,7 @@ public partial class Launcher : Node3D
         _hitchSidecar.Flush();
         _hitchMonitor.Rearm();
         PerfSample.Reset();
+        _perfHud.Rearm();
         ShowLaunchMenu();
     }
 
