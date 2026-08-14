@@ -73,8 +73,9 @@ Most of the items below and a large part of `backlog.md` are blocked on one of t
 them in a batch unblocks far more than doing them one at a time.
 
 ⚠ **Validity gate for every cockpit-gauge clip: auto head turn must be OFF, or the clip is
-unusable.** This already cost two takes. The capture spec and the clip-validity rules are in
-`analysis/video-flight-calibration/FINDINGS.md`.
+unusable.** This already cost two takes. The capture spec and the clip-validity rules were in
+`analysis/video-flight-calibration/FINDINGS.md`, deleted 2026-08-14; recover them with
+`git log -p -- analysis/video-flight-calibration/FINDINGS.md`.
 
 ### Flight model — cockpit gauges in frame, head turn off
 
@@ -90,8 +91,7 @@ prediction was recorded here before the capture so it could fail, and it did, in
 neither branch offered: **13.94 sim s over 290 → 150 mph against the model's 12.10**, so the original
 coasts *longer* than we do rather than markedly shorter, and the standing unmodelled-airbrake
 hypothesis has no support in the footage. Full numbers, the throttle-chop transient that makes 13.94
-an upper bound, and the correction to the 137.9 mph equilibrium are on `BL-115` and in
-`analysis/video-flight-calibration/FINDINGS.md`. `BL-115` stays open on `StallNoseRate`,
+an upper bound, and the correction to the 137.9 mph equilibrium are on `BL-115`. `BL-115` stays open on `StallNoseRate`,
 `ClimbGravityScale` and `KnifeAlignFloor`, none of which a level deceleration can reach.
 
 ### HUD — ammo gauge in frame

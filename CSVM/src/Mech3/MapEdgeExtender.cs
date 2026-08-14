@@ -30,7 +30,8 @@ namespace CSVM.Mech3;
 /// <para>⚠ <b>Do not size a map-edge block from a video-derived period</b> — those metre figures
 /// come out wrong (~3.2 cells for a C2 edge that measures 2), and a signal of period P correlates
 /// at 2P for free, so a reflection scan reports "seams" at half the true spacing wherever the
-/// coast zigzags. See `analysis/video-flight-calibration/FINDINGS.md`. Fly it and look.</para>
+/// coast zigzags. Post-mortem in the deleted `analysis/video-flight-calibration/FINDINGS.md`
+/// (<c>git log -p</c> on that path). Fly it and look.</para>
 ///
 /// <para><b>Deliberately not offered: repetition that shares the map-edge vertex row</b>
 /// (floated in `docs/formats/world-structure.md`), which would repeat without stepping. Mirror

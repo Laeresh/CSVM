@@ -669,8 +669,9 @@ clutter (grown from `ClutterBuilder.ExportedKinds`) continuing the world past th
   reduces exactly to the pre-2026-08-08 clamp, which `MapEdgeFoldTests` pins.
 ⚠ **It REPEATS, it does not mirror** — A/B'd against the original at the controls 2026-08-08,
   matching exactly on C1/C2/C4/C5 with no seam gaps. This REVERSED the earlier `CAP-17` strip
-  reading, which got both the fold and the distance wrong (post-mortem in
-  `analysis/video-flight-calibration/FINDINGS.md`). `--map-edge-mode=mirror` keeps the old
+  reading, which got both the fold and the distance wrong (post-mortem in the deleted
+  `analysis/video-flight-calibration/FINDINGS.md`, via `git log -p` on that path).
+  `--map-edge-mode=mirror` keeps the old
   behaviour to look at. ⚠ Do not size a block from a video-derived period — fly it.
 ⚠ **`BlockCells` is per chapter** — `DefaultBlockCells`: 2 on C1/C2/C4, 1 on C5 and on the four
   water-bordered chapters (C1B/C1C/C2B/C3), whose borders were measured to be water-only, which

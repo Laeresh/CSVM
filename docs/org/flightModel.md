@@ -1,10 +1,12 @@
 # The original flight model, decoded from `crimson.exe`
 
 Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
-`crimson.exe`, 2 580 480 bytes, `language x86:LE:32:default`), 2026-08-09. This supersedes
-figures reconstructed from video in
-[`analysis/video-flight-calibration/FINDINGS.md`](../../analysis/video-flight-calibration/FINDINGS.md)
-wherever the two disagree — the executable is the authority, video calibration was a proxy.
+`crimson.exe`, 2 580 480 bytes, `language x86:LE:32:default`), 2026-08-09, extended 2026-08-14 with
+ground blow, the collision impulse, and the live-versus-debug integrator correction. This superseded
+the figures reconstructed from video in `analysis/video-flight-calibration/FINDINGS.md`, which was
+**deleted 2026-08-14** for that reason; the executable is the authority and video calibration was a
+proxy. The scripts that produced it are still in that directory, and the file itself is recoverable
+with `git log -p -- analysis/video-flight-calibration/FINDINGS.md`.
 
 Everything below is a description of *behaviour and constants*. No decompiler output is
 reproduced; the function addresses are given so any claim can be re-checked at source.
@@ -29,18 +31,69 @@ never appear in the data files.
 
 | Address | Role |
 |---|---|
-| `FUN_00445090` | Dynamics tuner dialog — writes `dynamics.txt` |
-| `FUN_00492040` | Measurement harness — simulates to find top/stall speed, accel & decel times, climb/dive speeds, turn rates |
-| `FUN_00491820` | Per-tick integrator |
-| `FUN_00490f70` | Torque accumulation, control limiters, stall flag |
-| `FUN_0048fc40` | Force accumulation — thrust, drag, lift, gravity |
+| `FUN_004897c0` | World tick: advances the clock, iterates the vehicle list |
+| `FUN_00489ea0` | Vehicle-class dispatch on `obj+0x67c`; the flyable aeroplane classes are 0 and 4 |
+| `FUN_0048e580` | Per-tick integrator |
+| `FUN_0048c470` | Torque accumulation, control limiters, stall flag |
+| `FUN_0048bdd0` | Control authority vs speed |
+| `FUN_0048c220` | Ground blow, the proximity control bias |
+| `FUN_0048bf60` | Ground-blow probe: the nose ray, its falloff and its axis |
+| `FUN_0048d7f0` | Collision sweep and the `bounce_factor` restitution |
+| `FUN_0048fc40` | Force accumulation: thrust, drag, lift, gravity |
 | `FUN_0041abd0` | Lift coefficient |
 | `FUN_0041ada0` | Drag coefficient (drag polar) |
 | `FUN_0041acf0` | Thrust available |
 | `FUN_0041aca0` / `FUN_0041ac80` | Atmosphere / dynamic pressure |
-| `FUN_00490e10` | Control authority vs speed |
+| `FUN_004c8ec0` / `FUN_004c8f70` | World segment query: terrain grid walk plus per-cell object test |
+| `FUN_005388d0` / `FUN_00538880` | Two-point distance / squared distance |
 | `FUN_004735b0` | `player.json` global parser (token → constant, with fallbacks) |
 | `FUN_00479240` | Per-plane `dynamics` block parser |
+
+### ⚠ There are two integrators, and this table named the wrong one until 2026-08-14
+
+There is **one** flight model. What exists twice is the integrator, and the second copy is the
+offline measurement harness described under "The measurement harness" below. Four of this table's
+addresses used to name that copy:
+
+| Debug copy | Live counterpart | What the copy drops |
+|---|---|---|
+| `FUN_00491820` | `FUN_0048e580` | collision (`FUN_0048d7f0`), impact (`FUN_0048d2c0`), per-part update, view smoothing |
+| `FUN_00490f70` | `FUN_0048c470` | **ground blow (`FUN_0048c220`)** and seven other world-facing calls |
+| `FUN_00490e10` | `FUN_0048bdd0` | the fifth output, a reverse-authority factor (below) |
+| `FUN_00445090` | none | the Dynamics tuner dialog itself, which has **no callers at all** |
+
+`FUN_0048fc40` is genuinely shared, called from `FUN_0048c470` (live) and `FUN_00490f70` (debug),
+which is the whole of the connection between the two families. The debug copy reads the same
+globals and computes the same curves, so **every aerodynamic constant and formula in this document
+stands**; what the copy cannot show is anything it strips. Ground blow and the collision impulse
+were invisible from that branch, which is why the 2026-08-09 pass found neither.
+
+The live chain for one frame of the player's aeroplane, each call site verified:
+
+```
+FUN_004897c0  clock += dt, iterate the vehicle list
+ └ FUN_00489ea0            @0x00489bb6   dispatch; obj+0x67c == 0 for a player plane
+    └ FUN_0048e580         @0x00489ef3   integrator
+       ├ FUN_0048c470      @0x0048e6da   aero force + control torque
+       │  ├ FUN_0048bdd0                 airspeed authority ramp
+       │  ├ FUN_0048fc40                 thrust, drag, lift, weight
+       │  └ FUN_0048c220   @0x0048cf95   GROUND BLOW
+       ├ (orientation write)             @0x0048e880-0x0048e8ae
+       ├ FUN_0048d7f0      @0x0048ea17   COLLISION SWEEP + bounce_factor
+       └ (position write)                @0x0048ea81
+```
+
+The other dispatch classes are not aeroplanes: class 1 (`FUN_0048ffe0`) resolves collision but runs
+no aerodynamics and reads no controls, and classes 2, 3 and 5 (`FUN_0048a880`, `FUN_0048b480`) call
+neither, being animated movers. The token that names each class in the data files was not found.
+
+⚠ **The rest of this document still cites the debug copy's addresses for the shared physics** (the
+integrator ordering, the weathervane at `0x4916fe`-`0x4917f0`, the throttle slew, the limiters).
+Those citations are still re-checkable at those addresses and the behaviour they describe is the
+behaviour the game runs, because the two copies are the same code over the same globals. They were
+left alone deliberately: mapping each one to its live-copy address is a separate mechanical pass,
+and inventing the mapping without tracing it would be worse than the inconsistency. When reading an
+address out of this document, check which family it belongs to first.
 
 ## Units and conventions
 
@@ -411,8 +464,9 @@ recovers; while stalled the nose additionally cannot be raised over the horizon 
 
 ## Control authority vs speed
 
-`FUN_00490e10` derives three independent scalars from airspeed alone. Fallback values shown as
-authored (MPH):
+`FUN_0048bdd0` derives three independent scalars from airspeed alone, reading nine globals at
+`0x0071c3f8`-`0x0071c418`. (The debug copy `FUN_00490e10`, which this section used to name, reads
+the same nine and computes the same curves.) Fallback values shown as authored (MPH):
 
 - **Base ramp** `f` — 0 below `turn_fade_in` (**10**), rising linearly to 1 at `turn_fade_out`
   (**40**), then held at 1.
@@ -431,9 +485,20 @@ authored (MPH):
   The rudder is at full authority only in a 22.5–45 mph window and sits at **10 %** for all of
   normal flight. It is a ground-handling and low-speed control, not a flight control.
 
+- **Reverse-authority factor** (decoded 2026-08-14, UNIMPLEMENTED and unowned). `FUN_0048bdd0` has a
+  fifth output the debug copy lacks: above `yaw_max` (`0x0071c414`, authored **50 mph**) it returns
+  `max(yawAuthority, 0.2)`, and **1.0** at or below it. `FUN_0048c470` uses it to soften control
+  forces that oppose the current velocity vector. Because `yaw_max` is the speed at which the yaw
+  curve peaks, this engages across the whole of normal flight: it tracks the declining yaw curve
+  from 1.0 at 50 mph down to the **0.2** floor, which the curve reaches at ≈345 mph. At the
+  Bloodhawk's 302 mph cruise it is ≈0.40. Nothing in `FlightModel` carries it.
+  ⚠ Which axes it reaches, and what "opposing the velocity vector" is tested against, were not
+  traced. Do not implement it from this paragraph without reading `FUN_0048c470`'s use of the fifth
+  output.
+
 ### The low-speed ramp is decoded and UNIMPLEMENTED (`BL-330`)
 
-The base ramp `f` is the one part of `FUN_00490e10` the remake does not carry: `FlightModel.Step`
+The base ramp `f` is the one part of `FUN_0048bdd0` the remake does not carry: `FlightModel.Step`
 applies the authored yaw curve and **no speed term at all** to pitch or roll, so both hold full
 authority down to zero airspeed. The original fades them to **0 at `turn_fade_in`** (10 mph),
 reaching full only at `turn_fade_out` (fallback 40, **authored 50**). Traced, corroborated from the
@@ -1011,10 +1076,20 @@ its own performance envelope:
 - **Turn rates** — maximum sustained yaw rate at **100 / 75 / 50 / 25 %** of top speed and at
   stall speed, reported in deg/s.
 
-⚠ **The tuner shipped in the retail executable.** If the dialog can be reached, it dumps all 18
-measured figures per aircraft as ground truth — which would validate a reimplementation in one
-pass rather than by flying it. Whether it is reachable in a retail build is untested; the entry
-point is gated on several flags.
+⚠ **The tuner shipped in the retail executable, but the dialog is dead code.** Resolved 2026-08-14:
+`FUN_00445090`, the dialog that writes `dynamics.txt`, has **no callers anywhere in the image**. The
+harness itself is still reachable, from `FUN_004897c0`'s tail via `FUN_00493dc0`, gated on the debug
+flags `DAT_0071c78a` and `DAT_00628a00` being set with `DAT_0071c788`, `DAT_0071c789` and
+`DAT_00654120` clear; it reports through `sprintf` plus `FUN_00458770` ("Top speed = %5.1f MPH",
+`0x00628a6c`) rather than to a file. So the 18 figures are obtainable by flipping flags in a
+debugger, not by finding a menu.
+
+**What the harness does to the world, and why it found no ground blow.** It saves the aircraft's
+orientation, position, throttle, velocity, angular rates and all six stick inputs; **overrides the
+global timestep to a fixed 0.01 s**; zeroes the stick and resets position and orientation each
+iteration; steps its own stripped integrator (`FUN_00491820`) in closed loops of up to 10 000 and
+30 000 iterations; then restores everything. That stripped integrator is the second copy documented
+under "There are two integrators" above, and it has collision and ground blow removed.
 
 ## ⚠ Authored values vs the executable's fallbacks
 
@@ -1033,8 +1108,12 @@ only.
 | `lift_accel_rate` | 1.2 | **0.75** | |
 | `turn_fade_in` / `_out` | 10 / 40 mph | **10 / 50 mph** | |
 | `maxAOA` | 31.8° | **46.0°** | |
-| `drag_factor` (global) | 3.0 | **1.5** | |
+| `drag_factor` (global) | 3.0 | **1.5** | Dead in the executable either way (see below) |
 | `stall_mag` | 0.45 | **1.25** | |
+| `groundblow_elev` | 100 m | **400 m** | A four-times-longer nose ray, and a four-times-flatter falloff |
+| `groundblow_mag` | 1.5 | **10** | 11× amplification of an away-from-surface command at contact, against 2.5× |
+| `ai_groundblow` | 0.9 | **0.5** | The AI's fixed push is 5.0·S authored, against 1.35·S under both fallbacks |
+| `bounce_factor` | 0.8 | **0.6** | The ceiling on effective normal restitution |
 
 **Corrected — the yaw curve declines, it does not go flat.** With the authored numbers, rudder
 authority is 0.0625 up to 10 mph, ramps to **1.0 at 50 mph**, then falls linearly to **0.17 at
@@ -1171,6 +1250,195 @@ terminal speed — a cap that binds replaces a measured terminal with a guess. I
 Bloodhawk's full-throttle 71° dive terminates at **1.11 × `fd_speed`** on the aerodynamics alone.
 It is also the ceiling the `high_speed_pitch_fade` unreachability table below is computed from,
 precisely because it is the most generous "could this airframe ever get there" test available.
+
+## Ground blow — a control bias, not a force (`FUN_0048bf60`, `FUN_0048c220`)
+
+Decoded 2026-08-14. All three keys are **raw scalars**: plain dword stores, no `× 0.44704`, no
+cosine.
+
+| Key | Global | Parser store | Fallback | **Authored** |
+|---|---|---|---|---|
+| `groundblow_elev` | `0x0071c420` | `0x00474320` | 100.0 | **400** |
+| `groundblow_mag` | `0x0071c424` | `0x0047434a` | 1.5 | **10** |
+| `ai_groundblow` | `0x0071c428` | `0x00474373` | 0.9 | **0.5** |
+
+⚠ **`groundblow_elev` is a length in METRES, and it is not a threshold.** It is the length of a ray,
+not an altitude, not a range that anything is compared against, and not feet. World units are metres
+(see "Units and conventions"; the identification is positive, from `nom_gravity`'s 9.82 reference
+divisor at `0x006080d4`, not from the absence of a conversion).
+
+**The probe.** `FUN_0048bf60` casts a ray from the aircraft origin along the **nose**, of length
+`groundblow_elev` metres, into the world segment query `FUN_004c8ec0` at `0x0048c01f`. The direction
+is `−(obj+0x198)`, and `obj+0x198` is the +Z body axis, so this is `−Z`, matching the nose convention
+above. A hit qualifies only if the surface faces back toward the aircraft (`dot(b, n) > 0` strictly,
+`0x0048c0ff`). One threshold, no hysteresis, no latch. The same value is the falloff's denominator,
+so raising it both lengthens the ray and flattens the ramp.
+
+With `n` the hit normal, `b` the backward body axis, `d` the straight-line distance to the hit point
+(`FUN_005388d0`), `c = dot(b, n)`:
+
+```
+S = sqrt(c) · (elev − d) / elev     proximity: 1 at contact, falling to 0 at the ray's end
+A = normalize(n × b)                unit axis rotating the nose away from the surface
+```
+
+**Where it goes, which is the whole question.** `FUN_0048c220` writes into the same accumulator the
+three stick channels were summed into one call earlier in `FUN_0048c470`; `FUN_0048e580` then adds
+that accumulator to `obj+0x160`, the persistent angular-velocity state. The linear acceleration is a
+**different argument** of `FUN_0048c470`, reaching velocity separately. Ground blow is therefore a
+bias on **control response**, not an applied force, which is what the GDD's §4.1.7 describes and what
+`CAP-02` inferred.
+
+Player path (`0x0048c30f`), with `p = dot(accum, A·S)`:
+
+```
+p ≥ 0 (commanding away):   accum += A · S² · |p| · groundblow_mag
+p < 0 (commanding into):   accum += A · S² · 0.05·|p| · groundblow_mag,  and S is zeroed
+```
+
+Both push along `+A`, away from the surface. Three consequences, each matching a design claim:
+
+- **It cannot overpower the stick.** An into-obstacle command is met with `0.05 × 10 = 0.5` of its
+  own magnitude, so the offending rotation is halved and never reversed.
+- **It cannot save a head-on.** As the approach becomes perpendicular, `n → b`, so `n × b → 0` and
+  the whole term vanishes (`FUN_00422690` leaves a zero vector untouched).
+- **Commanding away is amplified** by up to `1 + 10·S²`, i.e. 11× at contact with the authored 10.
+
+**A second, smaller effect.** After the accumulator write, the velocity *direction* is steered
+exponentially toward the nose at `DAT_00622bbc · S` per second (`FUN_00460700`, speed preserved,
+writing `obj+0x924`/`obj+0x934`). `DAT_00622bbc` is **2.0** and its only writer is the debug console
+command `gbc` (string `0x00622c84`, handler `0x0043db9d`), so it is not a data key. It is suppressed
+on the player path whenever the pilot is commanding into the obstacle, because `S` is zeroed there.
+
+**The AI path is a different law, not a scaled one** (`0x0048c317`):
+
+```
+accum += A · S · (ai_groundblow · groundblow_mag)        = A · S · 5.0 as authored
+```
+
+It is independent of the AI's own command (a fixed push, where the player's is proportional to what
+the pilot asked for), **linear** in proximity rather than quadratic, and **not multiplied by `dt`**
+anywhere in the chain, so it is frame-rate dependent. Both the factor and `S` are cut to **0.15**
+while the clock is inside `obj+0xB4` (below).
+
+**Gates on the whole effect.** `obj[0xd6] != 4`; for non-player objects the clock must be past
+`obj+0xAC`; and `FUN_0048c470` skips the call entirely when the player is flagged crashed
+(`obj[0xe1] != 0`).
+
+`obj+0x358` (dword `0xd6`) is the **AI mode enum**, read off the debug HUD's jump table at
+`0x0041d1b8` in `FUN_0041c470` and the string each target pushes:
+
+| Value | Meaning |
+|---|---|
+| 0 | patrol / evade / pursue / lay off, chosen by `obj+0x948`, `obj+0xBA`, `obj+0x2F0` |
+| 1 | evasive maneuver |
+| 2 | approaching danger zone |
+| 3 | avoid crash |
+| **4** | **stunned** |
+| 5 | navigating danger zone |
+
+State 4 is set by `FUN_004200d0` ("Stunned for %f seconds based on stun recovery", `0x00620518`),
+which zeroes the control inputs and sets `obj+0xC0 = clock + duration`; the related tokens are
+`stun_recovery`, `stun_recovery_interval` and the smokescreen weapon's `smokescreen_stun_*`, so it
+is a weapon effect. A stunned AI therefore has its controls zeroed **and** its ground blow
+suppressed, so it flies into terrain. That reads as deliberate.
+
+**Emitters.** `FUN_004c8f70` walks the terrain grid and tests, per cell, the terrain geometry and
+every scene node whose flag word at `node+0x24` carries both bits `0x4` and `0x10`; `FUN_004c8ec0`
+keeps the nearest hit. Terrain and unregistered scenery always qualify.
+
+⚠ **Zeppelins as emitters is still NOT confirmed from the binary.** There is a player-only extra
+filter at `0x0048c05d`: a node flagged `0x40000000` at `node+0x28` is resolved through the vehicle
+registry at `0x0071dab8` and must carry a non-zero byte at `+0xcc`. That byte is a **"placed but not
+yet simulated" transient**, set by the placement paths and cleared every frame by `FUN_0048a110` for
+anything running a flight update, so an ordinary flying aeroplane does not repel you. Which registry
+entities keep it set permanently was not determined, so the GDD's naming of zeppelins is a design
+statement this decode neither confirms nor refutes.
+
+**Nothing in `CSVM/src` implements any of this** (a grep for `groundblow` returns no hits). The
+implementation is unowned follow-on work.
+
+## Collision response and `bounce_factor` (`FUN_0048d7f0`)
+
+Decoded 2026-08-14. `bounce_factor` lives in `player.json`'s `crash` block, is a **raw scalar**, and
+lands in global `0x0071c35c` from the parser store at `0x00473c38`. Its default is pre-set at
+`0x00473bb5` *before* the block is looked up, so an absent `crash` block leaves the fallback
+standing. Fallback **0.8**, this install authors **0.6**.
+
+`FUN_0048d7f0` sweeps the aircraft's contact spheres (`obj[0x1a9]..obj[0x1aa]`, stride `0x24`)
+through the world and resolves the **single deepest** contact. On a contact frame it **replaces** the
+frame's translation with a placement at the contact point plus a fixed **0.03** along the normal,
+rather than moving by `v·dt`. One resolution per aircraft per tick, no sub-stepping.
+
+⚠ **Only the player bounces.** The impulse branch is entered only when `obj == DAT_0071c298` and the
+player is not already crashed. AI aircraft get position correction and an impact cosine, and no
+impulse at all.
+
+With `r` the contact point minus `obj+0x204`, `ω` the body rates at `obj+0x16c`, and
+`I⁻¹ = (obj[0x197], obj[0x198], obj[0x199])`:
+
+```
+vp    = v + 2·(ω × r)                        contact-point velocity, rotational term DOUBLED
+J     = −(n · vp) · n                        normal only; no tangential or friction term
+Δω    = R · I⁻¹ · Rᵀ · [ (r × J) / |r|² ]    zero vector if |r|² == 0
+L     = 2.25 · |J|   (literal at 0x00608108, hardcoded, no data origin)
+A     = |Δω|
+f_lin = L/(L+A) ,  f_ang = A/(L+A)           L == 0 → 0/1 ;  A == 0 → 1/0
+
+v          += J  · (1 + f_lin · bounce_factor)                    0x0048e429
+obj+0x160  += Δω · (1 + f_ang · bounce_factor) · 0.5              0x0048e4bc
+```
+
+The `0.5` is the shared literal at `0x006032e0`, also hardcoded. The angular impulse goes into
+`obj+0x160`, the same accumulator the stick and ground blow write to.
+
+Effective normal restitution for a non-rotating contact is **`f_lin · bounce_factor`**, bounded by
+`[0, 0.6]` as authored.
+
+⚠ **The impulse is not a rigid-body impulse, and that defect is the mechanism behind `CAP-14`'s
+split.** It is computed from the *contact point's* velocity, with the rotational term doubled, then
+applied in full to the *centre of mass* with no reaction term removing the rotational share. Taking
+the normal component with `k = f_lin · bounce_factor`:
+
+> `n·v_after = −k·(n·v) − (1 + k)·2·n·(ω × r)`
+
+The first term is the bounded restitution. The second is unbounded and is not restitution at all:
+whenever the contact point closes faster than the centre of mass, which is the normal case for a
+belly or nose contact carrying any nose-down pitch rate, the aircraft leaves the surface faster than
+`bounce_factor` permits.
+
+⚠ **There is no surface dependence anywhere in the code.** No test on the normal's verticality, no
+per-surface-type table, no material lookup, no friction term. `CAP-14`'s measured split (0.75–0.86
+on flat ground against 0.06–0.18 on vertical faces, `BL-172`) is reproduced by the geometry alone: on
+flat ground `r` is long and roughly horizontal against a vertical `n`, so `n·(ω × r)` is large and
+negative while `f_lin` stays high; against a wall `r × J` is large, `f_ang` dominates, `f_lin → 0`,
+and the impact converts to spin instead of rebound. The direction of that split is confirmed; the
+flat-ground magnitude comes from the doubled rotational term, not from `bounce_factor`, which cannot
+produce it.
+
+**Ruled out as sources of the excess, each traced:** multiple resolutions per frame (one per aircraft
+per tick, `FUN_004897c0`'s head); successive-frame stacking (once the contact velocity is outgoing
+`J` points back *into* the surface, so repeats damp rather than compound); a separate ground-support,
+landing or gear path (a whole-image scan for float stores to `[reg+0x160]` returns exactly one site,
+inside `FUN_0048d7f0` itself; the `Landing` classes at `0x00625790` are mission landing-zone volumes
+and `touchdown_` is only a name prefix); and gravity ordering (the resolver is the **last writer of
+velocity in the frame**, so lift and weight cannot add to the rebound within the contact frame). The
+0.03 push-out is real but is a position placement, worth roughly 0.9 m/s of spurious upward velocity
+in a single inter-frame interval at 30 fps, and it does not accumulate.
+
+**Two per-object timers**, both absolute seconds against the game clock at `0x0071c470`:
+
+- **`obj+0xAC`, a collision grace window.** `FUN_0048d7f0` returns immediately while the clock is
+  inside it (`0x0048d7fd`), so the object has **no collision at all**, and the AI's ground blow is
+  skipped too. Set to clock + **1.5** at spawn (**5.0** on the alternate placement path,
+  `0x0045243c`), and to clock + **1.0** on **both** parties after an entity-versus-entity impact
+  (`0x0048d383`, `0x0048d395`), the same branch that cuts that impact's damage terms to 20 %.
+- **`obj+0xB4`, a post-drop settling window.** Clock + **2.5**, written on the spawn paths only.
+  `FUN_00452450` gives the context: the entity is repositioned, yawed to −π/2, and given the launch
+  velocity minus 22.352 m/s vertically, which is a drop from a carrier at 50 mph. Inside it, an AI's
+  ground blow runs at 15 %.
+
+Neither is a damage-invulnerability timer; `obj+0xAC` disables collision itself.
 
 ## The three `*Tune` rates — what they are pinned to
 
@@ -1317,4 +1585,14 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
   — now also proven from the bytes for the player path; `ThrustFactor` = engine power, via a
   perfect rank correlation with `fd_speed` across all eleven player airframes and an absolute
   solve landing nine of eleven inside 1 %.
-- **Untested:** whether the shipped Dynamics tuner is reachable in a retail build.
+- **Resolved 2026-08-14 (was "untested"):** the shipped Dynamics tuner **dialog** is dead code, with
+  no callers; the measurement harness behind it is reachable from the world tick behind five debug
+  flags and prints rather than writing `dynamics.txt`.
+- **Read directly from the executable, 2026-08-14:** the ground-blow probe, its falloff, its axis and
+  both application paths; the `bounce_factor` impulse and its doubled rotational term; the two
+  per-object timers; the AI mode enum; the live-versus-debug integrator split. World units are
+  metres, identified positively from `nom_gravity`'s 9.82 reference divisor rather than from the
+  absence of a conversion.
+- **Not determined:** which registry entities keep the `+0xcc` emitter flag set permanently, so the
+  GDD's naming of zeppelins as ground-blow emitters is neither confirmed nor refuted; the data-file
+  token naming each `obj+0x67c` vehicle class; which axes the reverse-authority factor reaches.

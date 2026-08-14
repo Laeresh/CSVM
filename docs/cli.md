@@ -179,13 +179,14 @@ reconciliation on 2026-08-14 re-measuring the counts whole).
   (2026-08-08). An unknown chapter falls back to 1. Clamped to the chapter's grid, at which point
   the continuation repeats the whole map. ⚠ **Do not size this from a video-derived period** — the
   `CAP-17` strip analysis read C2 as ~3.2 cells against the 2 that actually matches; post-mortem in
-  `analysis/video-flight-calibration/FINDINGS.md`)
+  the deleted `analysis/video-flight-calibration/FINDINGS.md`, via `git log -p` on that path)
 - `--map-edge-mode=mirror|repeat` (**default `repeat`: translate the block, which is what the
   original does** — A/B'd at the controls on C1/C2/C4/C5, matching exactly with no seam gaps.
   `mirror` alternately reflects it instead, so every seam is a shared mirror plane; that was the
   shipped behaviour until 2026-08-08 and is now kept only to look at. **F16** toggles it live. ⚠
-  This reversed what the `CAP-17` strip analysis was read as showing; that post-mortem is in
-  `analysis/video-flight-calibration/FINDINGS.md`. Repetition that shares the map-edge vertex row is
+  This reversed what the `CAP-17` strip analysis was read as showing; that post-mortem is in the
+  deleted `analysis/video-flight-calibration/FINDINGS.md`, via `git log -p` on that path.
+  Repetition that shares the map-edge vertex row is
   deliberately not offered:
   it is mesh surgery rather than a per-cell transform, and plain repeat shows no step at the
   measured block depths anyway)
