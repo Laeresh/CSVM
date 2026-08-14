@@ -2742,11 +2742,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   firepoint and every pylon from the stock fit, which is what the weapon lab uses to arm a mount the
   stock file never names, and `PylonOrdnance` already builds the mounted bodies. The missing half is
   the UI and the persistence of a chosen fit into `InstantActionDef`.
+  **Raised 2026-08-15: this is no longer cosmetic on one mission type.** The `zeppelin_run` win
+  condition decode (`PLAN-instant-action.md` G13's correction) established that the mode has two
+  winning paths, the engines and the gasbag hull kill. Gasbags are behind the `DAMAGES_ZEPPELIN`
+  gate, which in this install only `wep_14` (the aerial torpedo) and `wep_28` (the broadside
+  cannonball) pass, and all 11 stock loadouts carry HE `wep_06`. So without this screen a
+  menu-launched zeppelin run can only ever be won on engines: the hull path is unreachable by any
+  route a player has, and `--rocket=wep_14` is a testing flag, not one. The original has no such
+  restriction, because its own Weapon Loadout screen is where you fit the torpedo. The mode is
+  fully playable meanwhile, which is why this stays a `[Feature]` rather than a `[Bug]`.
   ⚠ **Traps.** (a) The loadout is bound **before** the controller enters the tree, because
   `FlightController._Ready` builds the fire state and the ordnance-type list from it
   (`Session/FlightRigAssembler`); a fit chosen in a menu has to reach the assembler, not be applied
   after. (b) The pilot/wingman radio means one chosen fit covers all wingmen, not one each; do not
-  build a per-wingman editor without checking that against the original.
+  build a per-wingman editor without checking that against the original. (c) The torpedo is not an
+  ordinary rocket: `wep_14` carries `TARGETABLE` + `FLYOUT_HEALTH [10]`, so its in-flight
+  projectile can itself be shot down ([`docs/formats/weapons.md`](docs/formats/weapons.md)). Offering
+  it from a menu is the first time that path is reachable in normal play.
 
 - `BL-354` `[Feature]` **The hangar: Build Custom Plane.** Split out of
   [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) at writing (2026-08-14) as a milestone
