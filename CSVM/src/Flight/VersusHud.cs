@@ -24,6 +24,15 @@ namespace CSVM.Flight;
 /// Opponent positions are read straight off <see cref="Rigs"/> each frame — never
 /// <c>AnimRuntime.PlayerPosition</c>, a P1-only singleton — and projected through THIS pane's own
 /// camera, exactly like MarkerHud projects a danger zone.</para>
+///
+/// <para>H22: the same marker also tracks this pane's current AI hostile in EVERY flight
+/// session, not only <c>--vs</c>. <see cref="BuildHostileTracker"/> builds the HUD with no match
+/// (no status line, no banner, no opponent list); <see cref="HostilePool"/> is scanned each
+/// frame through the pool's one live aircraft roster (<c>CollectAircraft</c>, the same list the
+/// AI gunners read) and the NEAREST live AI aircraft becomes the tracked hostile. Humans carry
+/// no gunner, so there is no D12 "the target" to mirror; nearest-hostile is the shipped rule,
+/// re-evaluated per frame, which is VS mode's own no-lock behaviour. The hostile draws through
+/// <see cref="DrawOpponent"/> unchanged, in the HUD's hostile red.</para>
 /// </summary>
 public sealed partial class VersusHud : Control
 {
@@ -35,6 +44,12 @@ public sealed partial class VersusHud : Control
     /// markers), set once the whole field is built. Null in a solo <c>--vs --players=1</c>
     /// session — nothing to mark.</summary>
     public IReadOnlyList<PlayerRig>? Rigs;
+
+    /// <summary>The pool whose registered aircraft the hostile tracker scans (H22). Null leaves
+    /// the tracker off (a VS-only HUD); set, <see cref="UpdateHostile"/> re-selects the nearest
+    /// live AI aircraft every frame, so a runtime spawn (generators) is picked up and a downed
+    /// hostile drops without extra plumbing.</summary>
+    public ProjectilePool? HostilePool;
 
     // 1440p reference metrics (scaled by HudMetrics — matches MarkerHud's calibration).
     private const int RefStatusFont = 19;
@@ -54,11 +69,15 @@ public sealed partial class VersusHud : Control
     private static readonly Color HudRed = new(1f, 0.55f, 0.55f);
     private static readonly Color Shadow = new(0f, 0f, 0f, 0.75f);
 
-    private VersusMatch _match = null!;
+    private readonly AimCandidateSet _hostileScan = new(); // rebuilt per frame, aircraft list only
+
+    private VersusMatch? _match;
     private Camera3D _camera = null!;
     private float _bannerTime;
     private string _bannerText = "";
     private Color _bannerColor = HudBlue;
+    private FlightController? _hostile;
+    private string _hostileTag = "AI";
 
     /// <summary>This pane's own world pose, fed every frame by FlightController — opponent clock
     /// bearings read off it, exactly like MarkerHud's PlanePos/HeadingDeg.</summary>
@@ -66,6 +85,10 @@ public sealed partial class VersusHud : Control
 
     /// <summary>This pane's own nose heading, 0 = north (−Z) — see <see cref="PlanePos"/>.</summary>
     public float HeadingDeg { get; set; }
+
+    /// <summary>This pane's tracked AI hostile, or null with none in the pool. Read by the
+    /// suite; the marker draws off the same field.</summary>
+    public FlightController? TrackedHostile => _hostile;
 
     /// <summary>Binds the match + this pane's own camera (opponent markers project through it).
     /// Add to the HUD canvas; <see cref="Rigs"/> is attached once the whole field is built, and
@@ -81,6 +104,58 @@ public sealed partial class VersusHud : Control
             MouseFilter = MouseFilterEnum.Ignore,
             FocusMode = FocusModeEnum.None,
         };
+    }
+
+    /// <summary>The matchless build (H22): no status line, no banner, no opponent list, only the
+    /// nearest-AI-hostile marker off <paramref name="pool"/>. One per human pane in every non-VS
+    /// flight session; it draws nothing until a hostile exists, so an AI-free session's HUD
+    /// output is unchanged.</summary>
+    public static VersusHud BuildHostileTracker(int playerIndex, Camera3D camera, ProjectilePool pool)
+    {
+        return new VersusHud
+        {
+            PlayerIndex = playerIndex,
+            _camera = camera,
+            HostilePool = pool,
+            MouseFilter = MouseFilterEnum.Ignore,
+            FocusMode = FocusModeEnum.None,
+        };
+    }
+
+    /// <summary>The nearest live hostile AI aircraft in <paramref name="scan"/>, or null. Pure
+    /// over the candidate snapshot: live (a crashed plane is listed but not live), an
+    /// AI-piloted <see cref="FlightController"/> (the human pane's hostile class: another
+    /// human is a VS opponent, never a hostile here), and the engine's team gate (either side
+    /// neutral rejects the pair).</summary>
+    public static FlightController? NearestHostile(Vector3 ownPos, int ownTeam, AimCandidateSet scan)
+    {
+        FlightController? best = null;
+        float bestD2 = float.MaxValue;
+        foreach (var c in scan.Vehicles)
+        {
+            if (!c.Live || c.Team == AimAssist.NeutralTeam || ownTeam == AimAssist.NeutralTeam
+                || c.Team == ownTeam)
+                continue;
+            if (c.Source is not FlightController { IsHumanPiloted: false } fc)
+                continue;
+            float d2 = ownPos.DistanceSquaredTo(c.Position);
+            if (d2 < bestD2)
+            {
+                bestD2 = d2;
+                best = fc;
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>The marker tag for a hostile: the controller name's first '_'-segment,
+    /// uppercased ("ai1_player_fury" reads "AI1"), "AI" when the name yields nothing.</summary>
+    public static string HostileTag(string name)
+    {
+        int cut = name.IndexOf('_');
+        string head = cut > 0 ? name.Substring(0, cut) : name;
+        return head.Length > 0 ? head.ToUpperInvariant() : "AI";
     }
 
     /// <summary>A Downed report anywhere in the match: killer named when it was a weapon kill, a
@@ -108,7 +183,37 @@ public sealed partial class VersusHud : Control
         Size = GetViewportRect().Size;
         if (_bannerTime > 0f)
             _bannerTime -= (float)delta;
+        UpdateHostile();
         QueueRedraw();
+    }
+
+    /// <summary>Re-selects this pane's tracked hostile from the pool's live aircraft roster:
+    /// nearest live AI aircraft to <see cref="PlanePos"/>, null with none. Called every
+    /// <see cref="_Process"/>; public so the suite drives it without pumping frames. Logs the
+    /// acquire/lose transitions only, so a steady chase stays quiet.</summary>
+    public void UpdateHostile()
+    {
+        FlightController? next = null;
+        if (HostilePool != null)
+        {
+            _hostileScan.Clear();
+            HostilePool.CollectAircraft(_hostileScan);
+            next = NearestHostile(PlanePos, AimAssist.TeamOfPilot(PlayerIndex), _hostileScan);
+        }
+        if (ReferenceEquals(next, _hostile))
+            return;
+        if (next != null)
+        {
+            _hostileTag = HostileTag(next.Name);
+            Utils.Log.Info("flight",
+                $"targeting hud: P{PlayerIndex + 1} tracking {next.Name} at {PlanePos.DistanceTo(next.WorldPosition):0} m");
+        }
+        else
+        {
+            // The tag was cached at acquire, so a freed hostile is never dereferenced here.
+            Utils.Log.Info("flight", $"targeting hud: P{PlayerIndex + 1} lost {_hostileTag}");
+        }
+        _hostile = next;
     }
 
     public override void _Draw()
@@ -121,7 +226,8 @@ public sealed partial class VersusHud : Control
         int statusFont = Mathf.Max(1, Mathf.RoundToInt(RefStatusFont * s));
         float cx = Size.X / 2f;
 
-        DrawCentered(font, new Vector2(cx, RefStatusY * s), StatusLine(), statusFont, HudBlue);
+        if (_match is { } match)
+            DrawCentered(font, new Vector2(cx, RefStatusY * s), StatusLine(match), statusFont, HudBlue);
 
         if (_bannerTime > 0f)
         {
@@ -131,9 +237,17 @@ public sealed partial class VersusHud : Control
                 new Color(_bannerColor, alpha));
         }
 
+        int markerFont = Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s));
+
+        // The tracked AI hostile (H22): the same marker as a VS opponent, in the hostile red.
+        // UpdateHostile ran this frame, so the reference is at most one scan old; the validity
+        // guard covers a hostile freed between the scan and this draw.
+        if (GodotObject.IsInstanceValid(_hostile) && _hostile is { Crashed: false } hostile
+            && hostile.IsInsideTree())
+            DrawOpponent(font, hostile.GlobalPosition, HudRed, _hostileTag, s, markerFont);
+
         if (Rigs == null)
             return;
-        int markerFont = Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s));
         foreach (var opp in Rigs)
         {
             if (opp.Index == PlayerIndex || opp.Controller is not { Crashed: false } c)
@@ -159,18 +273,18 @@ public sealed partial class VersusHud : Control
         return center + dir * Mathf.Min(tx, ty);
     }
 
-    private string StatusLine()
+    private string StatusLine(VersusMatch match)
     {
-        string time = _match.TimeLimit > 0f ? $"{FormatTime(_match.TimeRemaining)}   " : "";
-        string kd = $"K/D {_match.KillsOf(PlayerIndex)}/{_match.DeathsOf(PlayerIndex)}";
-        return $"{time}{kd}   {LeaderText()}";
+        string time = match.TimeLimit > 0f ? $"{FormatTime(match.TimeRemaining)}   " : "";
+        string kd = $"K/D {match.KillsOf(PlayerIndex)}/{match.DeathsOf(PlayerIndex)}";
+        return $"{time}{kd}   {LeaderText(match)}";
     }
 
     /// <summary>The sole rank-1 player's tag, or "—" while tied (including 0-0 before the first
     /// kill — nobody leads yet).</summary>
-    private string LeaderText()
+    private string LeaderText(VersusMatch match)
     {
-        var leaders = _match.Standings().Where(st => st.Rank == 1).ToList();
+        var leaders = match.Standings().Where(st => st.Rank == 1).ToList();
         return leaders.Count == 1 ? $"LEADER {SplitScreen.PlayerTag(leaders[0].PlayerIndex)}" : "LEADER —";
     }
 

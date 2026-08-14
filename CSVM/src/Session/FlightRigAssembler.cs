@@ -353,8 +353,21 @@ public sealed class FlightRigAssembler
             // player assembles, so by the time this pane draws, every opponent's is populated.
             controller.VersusHud = VersusHud.Build(versus, pi, rig.Camera);
             controller.VersusHud.Rigs = _in.Rigs;
+            // AI hostiles spawned into a dogfight get the same marker (H22); the scan is empty
+            // (and the draw unchanged) until one exists.
+            controller.VersusHud.HostilePool = _in.Projectiles;
             if (verbose)
                 GD.Print("dogfight HUD: match timer/K-D/leader line + kill banner + opponent markers");
+        }
+        else
+        {
+            // No match: the same HUD tracks this pane's nearest AI hostile (H22), so an
+            // --ai / --generators enemy stays findable in ANY flight session. Built
+            // unconditionally because generators spawn hostiles mid-session; with none in the
+            // pool it draws nothing.
+            controller.VersusHud = VersusHud.BuildHostileTracker(pi, rig.Camera, _in.Projectiles);
+            if (verbose)
+                GD.Print("targeting HUD: nearest-AI-hostile marker (edge arrow + clock bearing)");
         }
 
         // Every player's start comes from ONE call, because a grid start is not decomposable: the
