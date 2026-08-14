@@ -330,7 +330,7 @@ design's unified damage-zone model (every object divides into critical/non-criti
 when a threshold count of critical zones dies) is design-era. The shipped engine has **two kill
 rules and no shared zone vocabulary**: vehicles die by sum-exhaustion of their zones, zeppelins by
 the survivor count, and the design's own aircraft example (1 of {tail, nose, wings} critical) is
-refuted by the decoded death path. `PLAN-M4-ai.md`'s "Damage zones" section and its
+refuted by the decoded death path. `plans/PLAN-M4-ai.md`'s "Damage zones" section and its
 architecture-constraints bullet proposing `(def, anchor, zone)` plus a threshold counter inside
 the registry are superseded by this note.
 

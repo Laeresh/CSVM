@@ -2,7 +2,7 @@
 
 Part of the [format documentation](README.md). The AI's radio chatter: which events make a pilot
 speak, which pilot's voice they speak in, and the rules that decide whether the line plays at all.
-The clip inventory and its naming are surveyed in `docs/PLAN-M4-ai.md` § 6; this page covers the
+The clip inventory and its naming are surveyed in `docs/plans/PLAN-M4-ai.md` § 6; this page covers the
 dispatch, read from `crimson.exe`. Claims name the evidence at the point of use; no code is
 reproduced.
 
@@ -42,7 +42,7 @@ Two entries in the table settle questions the clip survey could only guess at:
 
 - **`DA` is the ally counterpart of `DE`, and the split is by team, not by outcome.** Both are the
   dying pilot's own death cry; id 20 fires if the dying aircraft is on the player's team and id 21
-  if it is not. `docs/PLAN-M4-ai.md`'s open question 6 recorded this as inference — it is now
+  if it is not. `docs/plans/PLAN-M4-ai.md`'s open question 6 recorded this as inference — it is now
   read from the dispatch, along with its polarity.
 - **`TA-FailTail` is a real engine trigger with a real dispatch site**, not an orphan clip family.
   The survey noted the design's taunt table omits it; the engine does not.
@@ -220,7 +220,7 @@ Stand-ins and inventions, named:
 ## What this is not
 
 - The **clip inventory** — 2,520 files, 31 pilot ids, the 11 `TYPE` families and their counts — is
-  `docs/PLAN-M4-ai.md` § 6. This page covers only what the engine does with them.
+  `docs/plans/PLAN-M4-ai.md` § 6. This page covers only what the engine does with them.
 - **Mission-scripted dialogue** (`VO_<chapter>-<faction>-<mission>_<Character>_<n>.wav`, 990 clips)
   is a different system, driven by objectives scripting, and does not go through the trigger table.
 - The **sound format and the SETS table** are [sounds.md](sounds.md).

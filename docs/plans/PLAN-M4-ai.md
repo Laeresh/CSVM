@@ -1,10 +1,11 @@
 # Milestone 4 — Artificial Intelligence
 
-**ACTIVE PLAN** (scheduled 2026-08-13; written as a scoping study 2026-07-25, premises re-checked
-2026-08-04, binary decode pass 2026-08-10, full premise + citation re-check on scheduling). It sits
-in `docs/`, which by this repo's convention makes it a live plan; PROJECT_CONTEXT.md's "Current
-status" names it. Move it to `docs/plans/` with a `COMPLETE` banner, and add its row to
-[`plans.md`](plans/plans.md), when every item lands.
+**COMPLETE 2026-08-14** (scheduled 2026-08-13; written as a scoping study 2026-07-25, premises
+re-checked 2026-08-04, binary decode pass 2026-08-10, full premise + citation re-check on
+scheduling; executed 2026-08-13/14 as orchestrated worktree subagents, one per item). All 22
+checklist items are ☑: waves A–G (B7 closed disproven) plus the user-requested wave H added at
+the controls mid-run. Indexed in [`plans.md`](plans.md); read as history — the dated Delta
+sections win over older body text.
 
 This plan keeps its scoping-study shape: the dated Delta sections are the correction history and
 win over older body text — read them before trusting any paragraph they name. Every code citation
@@ -123,7 +124,7 @@ A Ghidra pass over `crimson.exe` answered more of this document's open questions
 data survey did. **The single find that does it: the retail binary embeds its editor's own text
 format comment for the roster file** (`.rdata:0x00622508`), naming **every `aiv` field in order**.
 Everything below follows from that plus the shipped files it points at. The decode is now a format
-page — [`docs/formats/ai-rosters.md`](formats/ai-rosters.md) — and this section is only the
+page — [`docs/formats/ai-rosters.md`](../formats/ai-rosters.md) — and this section is only the
 milestone consequences. Read §2 ("AI vehicle rosters") and the D-wave items through this lens.
 
 **Three items stop being reverse-engineering and become reading a file:**
@@ -197,13 +198,13 @@ hard constant — then takes ±0.2 terms for bearing, altitude sign and target f
 **Also worth knowing:** `player.zrd`'s `min_ai_active_dist` (2000 m) is the activation radius this
 document was guessing at, and the roster's own volume slots (8–19) are `0.0` in all 414 blocks, so
 every AI falls back to it and to `vehicle.zrd`'s `attack` / `return_range`. `vehicle.zrd`'s AI keys
-were already documented in [`formats/vehicle.md`](formats/vehicle.md) — this document's §2 simply
+were already documented in [`formats/vehicle.md`](../formats/vehicle.md) — this document's §2 simply
 never cross-referenced them.
 
 ### Wave F — the zeppelin half, same pass
 
 The zeppelin loader, kill check, broadside fire routine and engine-loss curve are all decoded. The
-format consequences are in [`formats/mission-entities.md`](formats/mission-entities.md); the
+format consequences are in [`formats/mission-entities.md`](../formats/mission-entities.md); the
 milestone consequences:
 
 - **F18's threshold question (open question #5) is closed in code.** The engine counts `healthy`
@@ -249,7 +250,7 @@ milestone consequences:
   blocking rule reads `(wave_size - spawned) > capacityRemaining`, which would hold every generator
   in this install forever — yet zeppelins visibly launch in the original. **Budget an investigation
   item**, do not assume "0 means unlimited"; the `zep_rearm_node_%d` string is the strongest lead.
-  Written up in [`formats/mission-entities.md`](formats/mission-entities.md#the-capacity-puzzle).
+  Written up in [`formats/mission-entities.md`](../formats/mission-entities.md#the-capacity-puzzle).
 
 ### The mission-script surface, and what it means for M4's boundary
 
@@ -278,7 +279,7 @@ here for two reasons:
 ### Wave C — the turrets are not self-describing after all
 
 Decoded from `turret.cpp` in the binary; written up in full as a new page,
-[`formats/turrets.md`](formats/turrets.md). The study's §3 called `ai.zrd` "fully self-describing,
+[`formats/turrets.md`](../formats/turrets.md). The study's §3 called `ai.zrd` "fully self-describing,
 needs no reverse engineering — the cheapest deliverable in the milestone." **The file is
 self-describing; the behaviour it configures is not**, and four of the findings change what C9 has
 to build. C9's cost goes up, from "read a table" to "read a table and implement a tracking loop",
@@ -321,7 +322,7 @@ should tolerate them, an implementation needs the fourteen that ship.
 
 ### Wave E — the trigger taxonomy is 29 ids, and the binary names all of them
 
-Decoded and written up as [`formats/combat-voice.md`](formats/combat-voice.md). E16 was graded
+Decoded and written up as [`formats/combat-voice.md`](../formats/combat-voice.md). E16 was graded
 *"direction sound, magnitude a judgement call"* — the direction was right and **the magnitude is no
 longer a judgement call**. `crimson.exe` carries the trigger table as a contiguous ordered array of
 `TYPE` tokens, and the loop that fills a pilot's voice slots is bounded at `0x1d`: **29 triggers,
@@ -381,7 +382,7 @@ with their host and need no `WAKEUP_TURRETS`, no stand-in and no decision. So C9
 the half that matters for the next playable mission is unblocked:
 
 - **C9a — carried turrets.** The aircraft/zeppelin gunners, including the player's own turret slots
-  that M3 left parsed-but-inert ([`formats/loadouts.md`](formats/loadouts.md)). Zero activation
+  that M3 left parsed-but-inert ([`formats/loadouts.md`](../formats/loadouts.md)). Zero activation
   dependency. This is the half the zeppelin hunt exercises, and it is where the turret UI lands.
 - **C9b — world emplacements.** Still wants an activation path for the 22 dormant entries. Now
   *deferrable* rather than blocking, because nothing on the playable path depends on it.
@@ -549,10 +550,10 @@ lock-on is a targeting change on the landed guided-missile flight model, not new
 `wep_14` (TORPDO) ships `FLYOUT_HEALTH 10` + `TARGETABLE`, shootable once something shoots; AI
 vehicle defs carry the `armor` + `health` pair `PlaneStats` ignores (armour-first — the same model
 the roster's four zones corroborate). `BL-069`'s "turret rotation limits stay undecoded" line is
-superseded by [`formats/turrets.md`](formats/turrets.md). `BL-347` became G21.
+superseded by [`formats/turrets.md`](../formats/turrets.md). `BL-347` became G21.
 
 **A4 is decided (landed under this plan the same day), on the strength of the
-[`org/vehicleDamage.md`](org/vehicleDamage.md) executable decode; the design note is that page's
+[`org/vehicleDamage.md`](../org/vehicleDamage.md) executable decode; the design note is that page's
 closing section ("The A4 decision").** Summary for the downstream items: `DestructibleRegistry`
 stays scalar and keeps the static destructibles only; aircraft damage stays in
 `Flight/PlaneDamage.cs`, which gains the decoded whole-vehicle summary pair; zeppelins become an
@@ -748,7 +749,7 @@ engineering.** This is the cheapest deliverable in the milestone.
 *behaviour* is not, and four of the decoded semantics are counter-intuitive enough to get C9
 visibly wrong — `YAW [0,0]` meaning unrestricted chief among them. Superseded by
 [Delta § Wave C](#wave-c--the-turrets-are-not-self-describing-after-all) and
-[`formats/turrets.md`](formats/turrets.md); the family split and the value ranges below survive
+[`formats/turrets.md`](../formats/turrets.md); the family split and the value ranges below survive
 intact.
 
 Key coverage across the 42: `TITLE` 42, `ACTIVATED` 42, `PARTS` 42, `WEAPON` 42, `INACCURACY` 42,
@@ -890,7 +891,7 @@ selected pilot's clips are loaded into 29 per-trigger slots at spawn. The table 
 engine's own taxonomy: `crimson.exe` carries all 29 `TYPE` tokens as an ordered array, so the
 families and their order are read, not derived. See
 [Delta § Wave E](#wave-e--the-trigger-taxonomy-is-29-ids-and-the-binary-names-all-of-them) and
-[`formats/combat-voice.md`](formats/combat-voice.md) — which also settles `DA` vs `DE` (open
+[`formats/combat-voice.md`](../formats/combat-voice.md) — which also settles `DA` vs `DE` (open
 question 6), gives the `DI` tiers their 70/50/30 % thresholds, and confirms `TA-FailTail`.
 
 ---
@@ -1095,7 +1096,7 @@ These are places the source is ambiguous, self-contradictory, or contradicted by
    *dying pilot's own* death cry, split by **team**, not by self-vs-ally: id 20 if the aircraft is
    on the player's team, id 21 if not. `DI` is the speaker's own damage (ids 17–19 at 70/50/30 %)
    and `DS` is ally distress (id 28). See
-   [`formats/combat-voice.md`](formats/combat-voice.md). No listening required.
+   [`formats/combat-voice.md`](../formats/combat-voice.md). No listening required.
 7. **What `<Cx>/<mission>/zrdr/net.zrd.json` actually is.** Undecoded. Shape says spawn table. It is
    *not* needed for patrol, so this is a curiosity, not a blocker — but do not let a future session
    waste a day on it assuming it is the route data.
@@ -1300,16 +1301,16 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
    collide with the chapter map — `IndexStage` is the path when mission anims need AI nodes);
    pinned by the `ai-actor` suite + `AiPilotTests`
 3. ☑ A3 — the AI format pages — **rosters, skills and maneuvers landed 2026-08-10**
-   ([`formats/ai-rosters.md`](formats/ai-rosters.md)); nets already had
-   [`formats/ai-nets.md`](formats/ai-nets.md), zeppelins/generators
-   [`formats/mission-entities.md`](formats/mission-entities.md), and the `ai.zrd` turrets landed
-   2026-08-10 as [`formats/turrets.md`](formats/turrets.md). **Closed:** `--dump-ai`
+   ([`formats/ai-rosters.md`](../formats/ai-rosters.md)); nets already had
+   [`formats/ai-nets.md`](../formats/ai-nets.md), zeppelins/generators
+   [`formats/mission-entities.md`](../formats/mission-entities.md), and the `ai.zrd` turrets landed
+   2026-08-10 as [`formats/turrets.md`](../formats/turrets.md). **Closed:** `--dump-ai`
    (`Testing/Probes.cs`) sweeps every chapter/mission dir and reproduces the plan's golden counts
    verbatim (222 nets, 414 aiv blocks/53 files, 42 turrets, 58 zeppelins, 23 generators);
    `formats/zrdr.md`'s family index already carried a row for all five families
 4. ☑ A4 — **Decision + design note only:** multi-zone destructibles and the kill threshold.
    **Decided 2026-08-13**, recorded as the closing section of
-   [`org/vehicleDamage.md`](org/vehicleDamage.md) ("The A4 decision"): the registry stays scalar,
+   [`org/vehicleDamage.md`](../org/vehicleDamage.md) ("The A4 decision"): the registry stays scalar,
    vehicles keep `PlaneDamage` plus the decoded summary pair, zeppelins get an F18 aggregator
 
 ### Wave B — Non-combat presence
@@ -1350,7 +1351,7 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
 ### Wave C — Emplacements
 
 9. ☑ C9 — Turret and AA AI from `ai.zrd.json`, both structural families — **spec complete
-   2026-08-10** in [`formats/turrets.md`](formats/turrets.md): the `CREATE_STANDALONE` placement
+   2026-08-10** in [`formats/turrets.md`](../formats/turrets.md): the `CREATE_STANDALONE` placement
    split, the `PARTS` kinematic chain, the wrap-aware yaw arc (⚠ `[0,0]` = unrestricted), the
    attack/bored duty cycle, rate-limited slew + the 15° fire gate, and geometric hit resolution.
    Cost is up — a tracking loop, not a table read. **Split 2026-08-10:**
@@ -1458,7 +1459,7 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
     reading (stop-point id vs segment id); the discriminating instrument remains locating the
     runtime net loader (try the `SET_AI_NET` handler or the net-follower's node access)
 18. ☑ F18 — Multi-zone zeppelin damage — **landed 2026-08-14**, per the A4 design
-    ([`org/vehicleDamage.md`](org/vehicleDamage.md) closing section), no registry zone work:
+    ([`org/vehicleDamage.md`](../org/vehicleDamage.md) closing section), no registry zone work:
     `Flight/ZeppelinDamage.cs` (the pure survivor arithmetic — POLARITY pinned at the
     discriminating state, dead at survivors 3 < required 4 of 6, the design's destroy-count
     inverse refuted in test) + `ZeppelinRuntime.WireDamage`/`PollDamage` (per-part scalar

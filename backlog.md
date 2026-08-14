@@ -2739,7 +2739,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-299` `[Research]` **Decode `net.zrd.json` as the multiplayer spawn table → the retail MP1–MP3 maps for
   Dogfight.** 45 files, one flat group each, node counts quantised by mission type (MP1→80,
   MP2/MP3→48, campaign→8), 23 distinct payloads shared across files — shape and distribution say
-  *spawn table*, not patrol route (`docs/PLAN-M4-ai.md` survey; its "do not build patrol on it"
+  *spawn table*, not patrol route (`docs/plans/PLAN-M4-ai.md` survey; its "do not build patrol on it"
   warning stands). Now there is a consumer to validate a decode against: Dogfight (`--vs`) plays
   the IA1 `dogfight_ace` list today; a confirmed spawn decode gives it the maps the original
   authored for exactly this mode. MP worlds already load (`--mission=MP1`); only their spawns fall
