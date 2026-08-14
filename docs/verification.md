@@ -228,6 +228,11 @@ and leave gaps when retiring old ones.
 - **PERF-9** — **Use two unchanged pairs for noise, then measure A/B back to back.**
 - **PERF-10** — **Check exact workload counts before noisy timings.**
 - **PERF-11** — **Use `--no-vsync` and metrics valid for the clock mode.**
+- **PERF-12** — **A frame ordinal does not convert to wall time at an assumed refresh rate.**
+  `HitchMonitor`'s grace window is milliseconds; a `--hitch-inject=` frame chosen assuming a 60 Hz
+  cap can land well inside it on a faster box — measured on the dev machine, vsync's *actual*
+  refresh is 120 Hz (~8.33 ms/frame, same as `--no-vsync` there), so frame 120 is ~1000 ms, half
+  the default 2000 ms grace, and neither a 50 ms nor an 80 ms stall tripped until past ~frame 240.
 
 ## LOG — logs, error censuses, and exit codes
 

@@ -66,6 +66,7 @@ changes whose effect cannot be evaluated until the instrument exists and a basel
 | 2 | `--perf` can already show a hitch. | Arithmetic. `ReportPerf` reports means over a 60-frame window (`Launcher.cs:801-843`), and its own doc comment says the averaging is deliberate *"so a single hitch doesn't read as a regression"*. One 47 ms frame among fifty-nine 16.7 ms frames moves the mean by about 0.5 ms. |
 | 3 | A trigger relative to a rolling median adapts to whatever the machine is doing. | Only with vsync off. Under vsync every frame is padded up to the refresh interval, so the median sits pinned at 16.67 ms and `K × median` degenerates into a fixed threshold. Worse, the whole sub-cap range is invisible: a frame whose real work went from 4 ms to 14 ms is a 3.5× spike that vsync flattens. This is why A3 exists. |
 | 4 | Godot's `_Process(delta)` is the frame's wall cost. | Measured while landing B4. `delta` is post-processed (`OS.delta_smoothing`, on by default) and reads as a quantised constant: an `--det --perf --no-vsync --mute --stage=empty` run reported `delta_ms=8.333` on every one of 200 frames, and exactly `wall_ms=500.00` per 60-frame window, while a raw `Stopwatch.GetTimestamp` pair over the same frames varied 8.25–8.42 ms. `HitchMonitor` is therefore fed QPC. **A2's `max_ms`/`p95_ms` still come from `delta`** and so resolve a big hitch but not a small one. E12 must not read them as raw frame costs. |
+| 5 | Under vsync, `medianMultiple × refresh_interval` always lands below the 40 ms floor, so vsync mode always falls back to the floor (HitchMonitor.cs's own shipped doc comment claimed this). | Arithmetic, at the 60 Hz cap this plan's defaults elsewhere assume: 4 × 16.67 ms = 66.7 ms, ABOVE the 40 ms floor — the RELATIVE term wins there, not the floor; only a refresh ≥ 100 Hz brings it under the floor. Found verifying B5's `--hitch-inject=`: the dev machine's *actual* vsync refresh is 120 Hz (~8.33 ms/frame, same pace as `--no-vsync` there), not the 60 Hz this plan assumes throughout — and since `HitchMonitor`'s 2000 ms grace window is wall-clock, not frame count, that same pace also meant frame 120 was only ~1000 ms in, still inside grace (PERF-12). Both a 50 ms and an 80 ms stall needed past ~frame 240 to trip. Doc comment fixed in `HitchMonitor.cs` and its `architecture.md` mirror. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -110,7 +111,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — The instrument
 
 4. ☑ B4 — `HitchMonitor`: rolling baseline, trigger, grace window, ring buffer, GC and counter deltas
-5. ☐ B5 — `--hitch-inject=<ms>[@frame]`: a synthetic stall of known magnitude
+5. ☑ B5 — `--hitch-inject=<ms>[@frame]`: a synthetic stall of known magnitude
 6. ☐ B6 — The sidecar: `perf` summary line plus `.scratch/logs/<mode>-<stamp>.hitches.jsonl`
 7. ☐ B7 — In-engine suite: a record fires, and carries its ring buffer, breadcrumbs and sidecar
 
@@ -163,8 +164,10 @@ not run those in parallel worktrees. C9 fans out across `src/Flight/`, `src/Mech
 item ids `F14`–`F16` would read as key names in a plan that discusses both constantly.
 
 **Flag count.** The parser's accepted-flag count and `docs/cli.md`'s flag-index count are kept equal
-on purpose (117 today). This plan adds `--debug-fps` (D10) and `--hitch-inject=` (B5) and removes
-nothing, so both move to 119. Keep them in step in the same edit.
+on purpose — 117 when this plan was written, but other work landed flags in the meantime, so
+re-measure rather than trust a number written in conversation (`docs/cli.md`'s own reconciliation
+line is the source of truth). This plan adds `--debug-fps` (D10) and `--hitch-inject=` (B5, landed
+at 127) and removes nothing; D10 moves both counts to 128. Keep them in step in the same edit.
 
 ---
 
@@ -303,7 +306,7 @@ the floor is what actually fires and that is expected, not a bug. `GC.GetTotalAl
 is the cheap imprecise overload and is the right one here; the precise one is not free. The grace
 window exists because startup legitimately hitches and `StartupProfile` already covers that ground.
 
-## B5 ☐ `--hitch-inject=<ms>[@frame]`: a synthetic stall of known magnitude
+## B5 ☑ `--hitch-inject=[alloc:]<ms>[@frame]`: a synthetic stall of known magnitude
 
 **Goal.** A stall of a stated duration happens on a stated frame, on demand, so every downstream item
 has something deterministic to verify against.
@@ -315,18 +318,37 @@ rather than a wall-clock delay.
 **Approach.** Parse in `SessionSpec.cs`, apply in `Launcher._Process` before `HitchMonitor` ticks.
 Offer both a busy-wait and an allocation-burst form if it is cheap to do so: a busy-wait proves the
 timing path, while an allocation burst is the only way to prove the GC columns move. Document in
-`docs/cli.md` (this is one of the two flags moving the count to 119).
+`docs/cli.md` (this is one of the two flags this plan adds — see "Flag count" above).
 
 **Model recommendation.** medium.
 
-**Verify.** `--hitch-inject=50@120` produces exactly one record at sim frame 120 with `frame_ms`
-around 50. `--hitch-inject=5` produces none under the default floor. The allocation form moves
-`GC.CollectionCount(0)`.
+**Verify.** `--hitch-inject=50@120` did NOT reliably produce a record — the worked example above
+sits right on `HitchMonitor`'s grace-window boundary (see the ⚠ Traps addendum below); landed with
+`DefaultHitchInjectFrame = 300` and verified there instead. `--hitch-inject=50@300` produced exactly
+one record at frame 300 (`HitchMonitor.FrameCount` space) with `frame_ms` 59.38 (the 50 ms injected
+plus ~9 ms of normal frame cost, "around 50" as intended); `--hitch-inject=5` (bare, default frame)
+produced none, well under the 40 ms floor even with grace long past; `--hitch-inject=alloc:50@300`
+tripped once with `Gc0Delta=18` and `AllocatedBytesDelta≈860 MB` where the busy-wait form's same run
+moved neither (`Gc0Delta=0`). All three confirmed via a temporary, reverted `GD.Print` in
+`Launcher._Process` (`git diff` empty on it afterward) reading `HitchMonitor.Last`/`FrameCount`
+directly — B6's sidecar does not exist yet to confirm through the normal path. Unit tests cover the
+grammar (`SessionSpecParserTests.HitchInjectParsesMagnitudeFormAndFrame`/
+`TheHitchInjectFlagReachesTheSpec`) and the new `HitchMonitor.FrameCount` invariant
+(`HitchMonitorTests.FrameCountIsOneAheadOfTheNextTicksFrame`). `.\RunTests.ps1` green throughout,
+goldens unchanged (no `--hitch-inject=` flag rides in any golden scenario).
 
 **⚠ Traps.** The injector must sit outside anything `HitchMonitor` measures as attributable, or it
 will be reported as its own breadcrumb and mask the thing being tested. Keep it out of `--det`'s
 implied set: it is a fault injector, and a run that silently stalls is worse than one that does not
 measure.
+
+**⚠ A frame ordinal is not a wall-clock delay, and `HitchMonitor`'s grace window IS one.** This
+plan's own worked example, `--hitch-inject=50@120`, was written assuming the 60 Hz cap the plan's
+other defaults assume — 120 frames ≈ 2000 ms, exactly the grace window, at that pace. It does not
+trip on the dev machine: vsync's own refresh there is 120 Hz, not 60 (~8.33 ms/frame, same as
+`--no-vsync`), so frame 120 is only ~1000 ms into the 2000 ms grace, whatever the injected magnitude
+(disproven-claim 5, PERF-12). Pick `@frame` for the machine you are actually running on — 300 was
+verified clear on the dev box, with margin, at both vsync settings.
 
 ## B6 ☐ The sidecar: `perf` summary line plus `.scratch/logs/<mode>-<stamp>.hitches.jsonl`
 
@@ -466,8 +488,8 @@ pane is not something a screenshot settles, hence the playtest item below.
 **Approach.** `CSVM/src/UI/PerfHud.cs`, alongside `NodeLabels`, `MarkerOverlay` and
 `TileGridOverlay`. Size through `HudMetrics.Scale`, but note that `HudMetrics`' damping is per-pane
 and this control is not, so it takes the window ratio rather than `PaneFactor`. Cycle
-off → compact → full → off. Add `--debug-fps[=compact|full]` as the scripted twin (the second of the
-two flags moving the count to 119), and rows in `docs/controls.md`.
+off → compact → full → off. Add `--debug-fps[=compact|full]` as the scripted twin (the second of this
+plan's two flags — see "Flag count" above for the current number), and rows in `docs/controls.md`.
 
 The worst-frame term is the one that matters: it spikes and decays, so a hitch you felt leaves
 readable evidence a second later, which an instantaneous counter does not.
@@ -570,17 +592,21 @@ and it will also manufacture hitches that have nothing to do with the case being
 **Evidence (confidence: traced).** Vsync off changes frames per wall second, therefore allocations
 per wall second, therefore hitch frequency. Per-frame cost is comparable across modes; frequency is
 not. Separately, under vsync the rolling median is pinned at the refresh interval, so the relative
-trigger degenerates to the floor.
+trigger degenerates into a FIXED threshold — which of it or the floor actually fires then depends on
+the refresh rate, not on the defaults alone (B5 found this the hard way, PERF-12/HitchMonitor.cs):
+at the 60 Hz cap this plan's own defaults assume elsewhere, that fixed threshold (66.7 ms) is ABOVE
+the 40 ms floor, so the relative term wins there, not the floor as originally believed.
 
 **Approach.** One new `PERF` rule in the established shape: a bold one-or-two-line imperative plus at
 most one sentence of measured evidence, no narrative. Sweep the docs this plan has changed:
-`docs/cli.md` (two new flags, index count to 119), `docs/controls.md` (`F14` rebound, `F15`/`F16`
+`docs/cli.md` (two new flags — re-measure the index count rather than trust a number written in
+conversation, see "Flag count" above), `docs/controls.md` (`F14` rebound, `F15`/`F16`
 removed), `docs/architecture.md` (entries for `HitchMonitor`, `PerfSample`, `PerfHud`; amend
 `TileGridOverlay` to note it is flag-only), `docs/tooling.md` (the new perf-stage fields).
 
 **Model recommendation.** medium.
 
-**Verify.** The parser's accepted-flag count and `cli.md`'s index count are both 119. Each new module
+**Verify.** The parser's accepted-flag count and `cli.md`'s index count agree. Each new module
 has an architecture entry within the length budget and at most three `⚠` lines.
 
 **⚠ Traps.** `docs/architecture.md` is about 110 KB: read only the specific `##` entry being edited,

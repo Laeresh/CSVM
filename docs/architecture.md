@@ -4271,13 +4271,18 @@ It only detects: nothing is logged from here, so a clean run is silent (B6 owns 
 Godot-free by construction (the caller samples the engine counters into a `FrameCounters` and hands
 them in), so the trigger, both wraparounds and the grace window are unit-tested off-engine in
 `CSVM.Tests/HitchMonitorTests.cs`. Five `hitchMonitor.*` config keys over `const` defaults, read in
-the constructor (which is what registers them for `--dump-config`).
+the constructor (which is what registers them for `--dump-config`). `FrameCount` exposes the same
+counter `HitchRecord.Frame` reports, one call early, so `--hitch-inject=` (B5) can fire on a stated
+ordinal in this monitor's own frame space rather than the sim frame.
 ⚠ **Every default here is TUNE**, named in conversation on 2026-08-14 and evidenced by nothing:
   `medianMultiple` 4, `floorMs` 40, `baselineFrames`/`ringFrames` 120, `graceMs` 2000. Do not cite
   one as a measured value.
 ⚠ The baseline is a **true median**, not a mean, and the hitching frame is judged against the
   window BEFORE it joins. A mean would be dragged up by the hitch it just saw and would hide the
-  next. Under vsync the median pins at the refresh interval, so the floor is what fires; expected.
+  next. Under vsync the median pins at the refresh interval, degenerating the relative term into a
+  FIXED threshold — at the 60 Hz cap these defaults assume, 4 × 16.67 ms = 66.7 ms is ABOVE the
+  40 ms floor, so the RELATIVE term fires there, not the floor; only ≥100 Hz brings it under
+  (PERF-12 — found verifying B5 on a 120 Hz dev box, where the floor genuinely did decide).
 ⚠ Fed a raw `Stopwatch.GetTimestamp` pair, **never Godot's `delta`**: `delta` is post-processed
   (`OS.delta_smoothing`) and measures as a quantised constant here, 8.333 ms on every frame of a
   `--no-vsync --det` empty-stage run while the real cost varied 8.25–8.42 ms.
@@ -4567,6 +4572,9 @@ them, and the two `TIME_*` monitors are converted from seconds to ms at that sin
 monitor is constructed alongside the other process-scoped services (ahead of every probe's early
 quit and of `--dump-config`, which is what registers its five keys) and `Rearm`ed by
 `LaunchSession`/`ReturnToMenu`, since a build or a teardown legitimately stalls the loop.
+`--hitch-inject=` (PLAN-perf-hitches B5) fires right before the QPC stamp, on the `_Process` call
+where `HitchMonitor.FrameCount + 1` matches the flag's frame — so the injected stall counts as that
+call's own frame cost instead of the next one's.
 Measured render time is enabled once in `_Ready` (`ViewportSetMeasureRenderTime`) rather than per
 frame from `ReportPerf`, because the hitch record needs the CPU/GPU split on every run, not only a
 `--perf` one.

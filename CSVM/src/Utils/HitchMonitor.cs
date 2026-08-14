@@ -35,9 +35,14 @@ public readonly record struct FrameSample(
 /// a relative term so the instrument adapts to whatever the machine is doing, and an absolute
 /// floor so a fast machine's small absolute jitter cannot trip it. Under vsync the rolling median
 /// sits pinned at the refresh interval (every frame is padded up to it), so the relative term
-/// degenerates and the floor is what actually fires. That is expected, not a fault: the whole
-/// sub-cap range is invisible under vsync, which is what <c>display.vsync</c>/<c>--no-vsync</c>
-/// exist for.</para>
+/// degenerates into a FIXED threshold of <c>medianMultiple x refresh_interval</c> — which of the
+/// two terms then actually decides depends on the refresh rate, not on the defaults alone. At the
+/// 60 Hz cap this plan's defaults elsewhere assume, that fixed threshold is 4 x 16.67 ms = 66.7 ms,
+/// ABOVE the 40 ms floor, so the RELATIVE term is what fires there, not the floor — only a refresh
+/// at or above 100 Hz brings <c>medianMultiple x refresh_interval</c> under the floor and hands it
+/// the job (PLAN-perf-hitches B5's <c>--hitch-inject=</c> verification ran on a 120 Hz box, where
+/// the floor did decide). Either way this is expected, not a fault: the whole sub-cap range is
+/// invisible under vsync, which is what <c>display.vsync</c>/<c>--no-vsync</c> exist for.</para>
 ///
 /// <para><b>The baseline is a true median</b>, kept as a sorted mirror of the rolling window so
 /// each frame costs one binary search and one shift rather than a sort. A mean would be dragged up
@@ -139,6 +144,13 @@ public sealed class HitchMonitor
 
     /// <summary>How many frames have tripped the trigger since the process started.</summary>
     public int HitchCount { get; private set; }
+
+    /// <summary>How many frames <see cref="Tick"/> has been fed so far — the same counter
+    /// <see cref="HitchRecord.Frame"/> reports, exposed one call early so a caller can act on
+    /// "the next <see cref="Tick"/> will be frame N" (the <c>--hitch-inject=</c> synthetic stall,
+    /// PLAN-perf-hitches B5). Never reset by <see cref="Rearm"/>: it counts from process start,
+    /// same as <see cref="HitchRecord.Frame"/> itself.</summary>
+    public long FrameCount => _frames;
 
     /// <summary>The rolling median in milliseconds, or 0 while the window is still filling.</summary>
     public double BaselineMs { get; private set; }

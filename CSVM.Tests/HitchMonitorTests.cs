@@ -220,6 +220,26 @@ public class HitchMonitorTests
         Assert.Equal(2.0, mon.Last.PhysicsMs, 6);
     }
 
+    // ---- FrameCount is exposed one call early, for --hitch-inject= (B5) to act on ----
+
+    [Fact]
+    public void FrameCountIsOneAheadOfTheNextTicksFrame()
+    {
+        var mon = NewMonitor();
+        Assert.Equal(0L, mon.FrameCount);
+
+        mon.Tick(1, Idle);
+        mon.Tick(1, Idle);
+        Assert.Equal(2L, mon.FrameCount);
+
+        // A caller reading FrameCount before this Tick sees 2, and Tick's own record agrees the
+        // frame it just stamped was FrameCount + 1 — the invariant --hitch-inject= relies on to
+        // fire on the stated frame rather than the one before or after it.
+        Assert.True(mon.Tick(500, Idle));
+        Assert.Equal(3L, mon.FrameCount);
+        Assert.Equal(mon.FrameCount, mon.Last.Frame);
+    }
+
     // ---- a nonsense frame time cannot poison the sorted mirror for the rest of the run ----
 
     [Fact]

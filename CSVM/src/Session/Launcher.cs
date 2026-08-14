@@ -629,6 +629,16 @@ public partial class Launcher : Node3D
         // reports nothing. One counter read per frame feeds both: the hitch monitor wants them
         // unaveraged and the --perf window wants them summed, but they are the same eight numbers.
         var counters = ReadFrameCounters();
+        // PLAN-perf-hitches B5: --hitch-inject= fires here, one QPC read before the stamp below, so
+        // the stall inflates THIS frame's wall cost rather than leaking into the next one. The
+        // frame ordinal it matches is HitchMonitor's own counter (FrameCount + 1 — the value this
+        // Tick call is about to stamp its record with), never the sim frame: the injector has to
+        // work with no session built at all, the same as the monitor it is testing.
+        if (_spec.HitchInjectMs is float injectMs
+            && _hitchMonitor.FrameCount + 1 == _spec.HitchInjectFrame)
+        {
+            InjectHitch(injectMs, _spec.HitchInjectAlloc);
+        }
         // Detection is unconditional, logging (B6) is not: a hitch nobody was watching for is the
         // case this exists to catch, so it cannot sit behind --perf. The frame cost it is fed is
         // our OWN QPC pair rather than Godot's `delta`, which is post-processed (OS.delta_smoothing,
@@ -861,6 +871,29 @@ public partial class Launcher : Node3D
         Prims: (long)Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame),
         Nodes: (long)Performance.GetMonitor(Performance.Monitor.ObjectNodeCount),
         MemBytes: (long)Performance.GetMonitor(Performance.Monitor.MemoryStatic));
+
+    /// <summary><c>--hitch-inject=</c> (PLAN-perf-hitches B5): burns wall time synchronously for
+    /// about <paramref name="ms"/> milliseconds, so every later item in the plan has a stall of
+    /// known magnitude to verify against instead of an incidental one. The busy-wait form (default)
+    /// proves the timing path; <paramref name="alloc"/> burns the same wall time allocating and
+    /// discarding 4 KB buffers instead of spinning, which is the only way to move the GC/
+    /// allocated-bytes columns on demand. Never wrapped in a profiling scope: an injected fault
+    /// must show as unattributed time, not as a breadcrumb that could be mistaken for the thing
+    /// under test (C8, not yet landed).</summary>
+    private void InjectHitch(float ms, bool alloc)
+    {
+        long start = System.Diagnostics.Stopwatch.GetTimestamp();
+        double freq = System.Diagnostics.Stopwatch.Frequency;
+        long sink = 0;
+        while ((System.Diagnostics.Stopwatch.GetTimestamp() - start) * 1000.0 / freq < ms)
+        {
+            if (alloc)
+            {
+                sink += new byte[4096].Length;
+            }
+        }
+        Log.Info("perf", $"hitch-inject fired ms={ms:0.0} alloc={alloc} bytes={sink}");
+    }
 
     /// <summary>
     /// --perf: the headless stand-in for the editor's profiler. Godot's visual profiler needs
