@@ -28,6 +28,7 @@ be scanned across all three:
 |---|---|
 | `vehicle.json`, `engines.json`, `player.json` globals | [vehicle.md](vehicle.md) |
 | `ia.json` (spawns, mission type, enemy groups, the ace), `objectives.json` `PLAYER_INIT` + mission map | [spawns.md](spawns.md) |
+| `ia.json`'s setup/wrap-up **UI** surface (`INSTANTACTION.SCRIPT`/`IA_WRAPUP.SCRIPT`, `LAYOUT.CSV`, `langui` option strings) | [instant-action.md](instant-action.md) |
 | `dzones.json` (per-mission zone overrides) | [missions.md](missions.md) |
 | `zeppelins.json`, `egen.json` (mission entities) | [mission-entities.md](mission-entities.md) |
 | `ne0NNNNN.zrd` patrol nets + `neindex.zrd` (the chapter AI waypoint graphs) | [ai-nets.md](ai-nets.md) |

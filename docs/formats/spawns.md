@@ -25,6 +25,10 @@ identical across scenarios (analysis in [anim-definitions.md](anim-definitions.m
 
 ## `ia.json` is the whole Instant Action configuration
 
+The setup and wrap-up **UI** built around this data — the screen's dropdowns and their option
+strings, environment ↔ chapter, the thirteen militias' aircraft lists, and which wrap-up rows are
+actually wired — is [instant-action.md](instant-action.md), not this page.
+
 `spawn_points` and `dzones` are two keys of many. Every chapter's `IA1/zrdr/ia.json` is a
 complete, data-driven definition of that chapter's instant-action mission: which scenario it
 runs, what the player flies, how many wingmen, four enemy waves, and a named ace with a full

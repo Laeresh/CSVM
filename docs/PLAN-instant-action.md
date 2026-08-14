@@ -30,7 +30,8 @@ that voice trigger id 20 is unreachable until a team model exists (B7).
   one build path: read from a chapter's shipped `ia.zrd.json`, read from a hand-authored JSON file
   via `--ia=<path>`, or built by the in-game wizard.
 - All four mission types are flyable, completable and loseable, solo or in splitscreen, with a
-  scored wrap-up carrying the five rows the original shows.
+  scored wrap-up carrying the four rows the original actually wires (A1 found a fifth title
+  string, "Total Kills", that no script or layout row uses).
 - CSVM gains a real team model, replacing `AimAssist.TeamOfPilot`'s documented stand-in.
 - The launch menu's top level becomes Free Flight / Instant Action / Dogfight, with Stunt Flying
   moving inside Instant Action as a mission type.
@@ -52,7 +53,7 @@ plus the words "marked INVENTED" if the decode comes back empty.
 | 7 | Militia to aircraft list | **The `.BM` pattern coverage** (`PatternLibrary.PatternsFor` inverted), not `vehicle.json` defs. Settled by `LAYOUT.CSV`: `IA_D_PLANEE0` is an eleven-row dropdown and only pattern coverage reaches eleven. |
 | 8 | Splitscreen | **Humans join team 1 in addition to the wingmen**, so `num_wingmen` keeps meaning exactly what the data says. The sequencer's "500 m from the player" becomes "500 m from the nearest human", named as the extension it is. |
 | 8a | Splitscreen and the flight size cap | **The friendly flight is capped at 6 aircraft** (the data's own maximum: 1 pilot plus 5 wingmen), and wingmen are the ones that give. Flown wingmen = `min(num_wingmen, 6 - humans)`, so 2 humans with 5 configured wingmen fly 4 of them and 4 humans fly 2. Below the cap the configured count is honoured untouched. The cap is derived from the shipped 0-to-5 range; the clamp rule itself is INVENTED. |
-| 9 | Mission end and the wrap-up | **Both in scope.** Per-mode end conditions plus the wrap-up board with the five decoded rows. |
+| 9 | Mission end and the wrap-up | **Both in scope.** Per-mode end conditions plus the wrap-up board with the four decoded rows (A1 found the shipped screen wires four of the six `langui` wrap-up strings, not five). |
 | 10 | Stunt flying with several pilots | **Every player flies their own zone set and the mission ends when all of them have finished**, which is what `StuntRace` already does. Not first past the post. |
 | 11 | Zeppelin mode's wave source | **Re-read `FUN_0045b9d0` (A4), then match.** The `mission-type-2` branch tops up a generator's capacity, and whether that replaces or supplements the teleport is not established. |
 | 12 | Adjacent original features | **Out of scope, filed as `BL-352` / `BL-353` / `BL-354`.** |
@@ -128,8 +129,11 @@ From the `langui` table, read out of `extracted/rof/ui_strings.json`.
 | Skills | 3695 | novice, veteran, ace |
 | Aircraft (plural forms) | 3700 | Hoplites, Hellhounds, Balmorals, Bloodhawks, Brigands, Devastators, Firebrands, Furys, Kestrels, Peacemakers, Warhawks |
 
-The wrap-up screen's own strings are at 1133 to 1138: *Instant Action*, *Time to Complete Mission*,
-*Enemies Shot Down*, *Danger Zones Completed*, *Shot %*, *Total Kills*.
+The wrap-up screen's own strings are at 1133 to 1138: *Instant Action* (the screen title), *Time to
+Complete Mission*, *Enemies Shot Down*, *Danger Zones Completed*, *Shot %*, *Total Kills*. Of the
+five row-title strings, only the first four are wired to a row (A1 traced this in
+`docs/formats/instant-action.md`) — *Total Kills* has no line in `LAYOUT.CSV`, no text object in
+`IA_WRAPUP.SCRIPT`, and no format id in `RESOURCE.H`.
 
 Note that the aircraft plural list calls the autogyro a **Hoplite**, while `ia.json`'s
 `enemy_plane` / `player_plane` values use the singular vehicle display names and call it
@@ -252,11 +256,11 @@ is M4's formation disproof, `B7` is the team model below.
 
 ### Wave A — Decode
 
-1. ☐ A1 The Instant Action format page: the whole configurable surface, written down
+1. ☑ A1 The Instant Action format page: the whole configurable surface, written down
 2. ☐ A2 Does the original refuse friendly damage, or only friendly targeting?
 3. ☐ A3 The Instant Action setup path: what a wingman is given, and what `enemy_skill` becomes
 4. ☐ A4 Re-read `FUN_0045b9d0`: the zeppelin branch, the mission-type ids, the spawn-point source
-5. ☐ A5 The wrap-up screen's five counters: what each one actually counts
+5. ☐ A5 The wrap-up screen's four counters: what each one actually counts
 
 ### Wave B — The primitives
 
@@ -312,7 +316,7 @@ H16 only. The menu items H15 and H16 own `UI/LaunchMenu.cs` alone.
 
 # Wave A — Decode
 
-## A1 ☐ The Instant Action format page: the whole configurable surface, written down
+## A1 ☑ The Instant Action format page: the whole configurable surface, written down
 
 **Goal.** `docs/formats/instant-action.md` exists and is the description of record for what an
 Instant Action mission can be configured to: the seven environments and the chapter each names, the
@@ -449,21 +453,22 @@ that way. (c) The spawn-point source may be a separate stored list rather than `
 confirm rather than assume, because Instant Action's four `zeppelin_run` entries are a different
 count from the other scenarios' eight.
 
-## A5 ☐ The wrap-up screen's five counters: what each one actually counts
+## A5 ☐ The wrap-up screen's four counters: what each one actually counts
 
-**Goal.** A sourced definition of each of the wrap-up screen's five numbers, so G14 renders the
+**Goal.** A sourced definition of each of the wrap-up screen's four numbers, so G14 renders the
 original's arithmetic rather than a plausible reimplementation of it. The one that genuinely needs
 settling is **Shot %**: its numerator and denominator are unknown, and the difference between "rounds
 that hit over rounds fired" and "rounds that hit over rounds fired excluding ordnance" is a number
 the player reads and compares.
 
-**Evidence (confidence: lead-only).** The rows themselves are traced: `langui` ids 1133 to 1138 give
-*Instant Action*, *Time to Complete Mission*, *Enemies Shot Down*, *Danger Zones Completed*, *Shot %*
-and *Total Kills*, with their formats (`IDS_IAWU_TIME` is `%02d:%02d`, `IDS_IAWU_PERCENTAGE` is
-`%d%%`, the rest plain `%d`). What no source yet gives is what feeds them. Two of the five are also
-not obviously distinct: *Enemies Shot Down* and *Total Kills* are separate rows, so they must count
-different things, and the likeliest reading is that one is the player's own and the other includes
-the wingmen. That is a guess and is exactly what this item is for.
+**Evidence (confidence: lead-only for the counters, traced for the row count).** A1
+(`docs/formats/instant-action.md`) found that only **four** of the six `langui` ids 1133-1138 are
+wired to a row: *Time to Complete Mission*, *Enemies Shot Down*, *Danger Zones Completed*, *Shot %*.
+*Total Kills* (`IDS_IAWU_KILLS_TITLE`, 1138) is a defined string with no line in `LAYOUT.CSV`, no
+text object in `IA_WRAPUP.SCRIPT`, and no `IDS_IAWU_KILLS` format id in `RESOURCE.H` — it does not
+render, so this item does not need a definition for it. The four wired rows have their formats
+(`IDS_IAWU_TIME` is `%02d:%02d`, `IDS_IAWU_PERCENTAGE` is `%d%%`, the other two plain `%d`). What no
+source yet gives is what feeds them.
 
 **Approach.** `ASSETS/SCRIPTS/IA_WRAPUP.SCRIPT` is already extracted and is the cheap half: read its
 `object` declarations and the callback ids they fill from, the same way `INSTANTACTION.SCRIPT` was
@@ -812,15 +817,16 @@ that follows a live aircraft rather than free-flying.
 
 ## G14 ☐ The wrap-up board
 
-**Goal.** A completed or failed mission shows the original's five rows: Time to Complete Mission,
-Enemies Shot Down, Danger Zones Completed, Shot %, Total Kills.
+**Goal.** A completed or failed mission shows the original's four rows: Time to Complete Mission,
+Enemies Shot Down, Danger Zones Completed, Shot %.
 
 **Evidence (confidence: direction-sound).** The strings are decoded at `langui` ids 1133 to 1138,
 with their formats (`IDS_IAWU_TIME` is `%02d:%02d`, `IDS_IAWU_PERCENTAGE` is `%d%%`), and
-`IA_WRAPUP.SCRIPT` holds the screen's layout. **What each row counts is A5's decode**, which is why
-that question is a Wave A item and not a note here: Shot %'s numerator and denominator are unknown,
-and *Enemies Shot Down* and *Total Kills* being separate rows means they count different things.
-This item builds the board; A5 supplies its arithmetic.
+`IA_WRAPUP.SCRIPT` holds the screen's layout. A1 (`docs/formats/instant-action.md`) found that the
+sixth string, *Total Kills*, is defined but never wired to a row by `LAYOUT.CSV` or
+`IA_WRAPUP.SCRIPT`, so this board has four rows, not five. **What each row counts is A5's decode**,
+which is why that question is a Wave A item and not a note here: Shot %'s numerator and denominator
+are unknown. This item builds the board; A5 supplies its arithmetic.
 
 **Approach.** A `CanvasLayer` board in the shape of `Flight/StuntScoreboard` and `Flight/VersusBoard`,
 built by `GameSession` on its own layer as those two are. The counters come from existing sources
@@ -833,7 +839,7 @@ choice at render time.
 A5 has already taken the judgement out of the arithmetic.
 
 **Verify.** A `--screenshot` of the board in each mission type with `--det`, so the layout is pinned;
-the numeric assertions ride G13's per-mode end tests, checking that the board's five values match the
+the numeric assertions ride G13's per-mode end tests, checking that the board's four values match the
 session's own counters rather than checking the board can be drawn.
 
 **⚠ Traps.** (a) `--debug-scoreboard` is the existing convention for forcing a board visible in a
