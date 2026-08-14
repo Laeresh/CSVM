@@ -160,6 +160,14 @@ public static class Suites
             "scan reads Team and snaps onto the enemy while refusing the teammate, and a real " +
             "fired round that reaches the teammate still costs it HP (Decision 3/A2: targeting is " +
             "gated, damage never is)", TeamModel));
+        into.Add(new TestHarness.Suite("instant-action",
+            "the C8 Instant Action runtime: an Instant Action display name (\"Warhawk\") " +
+            "resolves to its gamez node and an unrecognised one resolves to null rather than a " +
+            "guess, the ace's own spawn draw substitutes the LITERAL last index on a collision " +
+            "with the player's (never a re-roll), a mixed ace_stats vector averages to one " +
+            "representative AI rating, and AiAircraftSpawner.Spawn given an authored team/livery " +
+            "wears them as-is — the ace lands on team 2 flying its configured airframe",
+            InstantActionAce));
         into.Add(new TestHarness.Suite("world-turrets",
             "the world AA emplacements (C9b) place at their NODES patterns against the real C1 " +
             "world (census pinned, one entry many turrets, scoped multi-segment paths), honour " +
@@ -3229,6 +3237,108 @@ public static class Suites
             human?.Free();
             wingman?.Free();
             enemy?.Free();
+            textures.Dispose();
+        }
+    }
+
+    private static void InstantActionAce(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        // The display-name -> gamez-node table (docs/formats/instant-action.md's IDS_IA_PLANES
+        // order): a real entry resolves, a typo/invention does not.
+        ctx.Check(InstantAction.PlaneNodeFor("Warhawk") == "player_warhawk",
+            $"'Warhawk' resolves to its gamez node: {InstantAction.PlaneNodeFor("Warhawk")}");
+        ctx.Check(InstantAction.PlaneNodeFor("Warhawk Mk2") == null,
+            $"an unrecognised display name resolves to null, not a guess");
+
+        // RepresentativeRating: every shipped chapter's ace_stats is a uniform 9 (spawns.md), but
+        // a hand-authored --ia= file could differ — eight 9s and one 7 must average (and round)
+        // to 9, not silently pick one arbitrary slot.
+        var mixedStats = new AiSkillVector
+        {
+            DareDevil = 9,
+            NaturalTouch = 9,
+            SixthSense = 9,
+            DeadEye = 7,
+            QuickDraw = 9,
+            SteadyHand = 9,
+            StunRecovery = 9,
+            Talker = 9,
+            Constitution = 9,
+        };
+        int rating = InstantActionRuntime.RepresentativeRating(mixedStats);
+        ctx.Check(rating == 9, $"eight 9s and one 7 average (rounded) to 9: rating={rating}");
+        ctx.Check(InstantActionRuntime.RepresentativeRating(default) == 5,
+            $"every slot unset falls back to 5, the same default --ai-attack= takes");
+
+        // ChooseAceSpawn: a draw landing on the player's own index substitutes the LITERAL last
+        // index (never a re-roll); a non-colliding draw is used as-is.
+        var spawns = new List<SpawnPoint>
+        {
+            new(new Vector3(0f, 500f, 0f), 0f),
+            new(new Vector3(100f, 500f, 0f), 0f),
+            new(new Vector3(200f, 500f, 0f), 90f),
+        };
+        var (collided, _) = InstantActionRuntime.ChooseAceSpawn(spawns, playerSpawnIndex: 0, draw: 0);
+        ctx.Check(collided == spawns.Count - 1,
+            $"a draw colliding with the player's index substitutes the literal last index: idx={collided}");
+        var (clean, _) = InstantActionRuntime.ChooseAceSpawn(spawns, playerSpawnIndex: 1, draw: 0);
+        ctx.Check(clean == 0, $"a non-colliding draw is used as-is: idx={clean}");
+
+        // The actual spawn integration: AiAircraftSpawner.Spawn given an authored scheme/team
+        // (the C8 extension) wears them as-is — the ace lands on team 2 flying the configured
+        // airframe, not a pilot-index-derived team.
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var stockLoadouts = StockLoadouts.Load();
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightController? ace = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            var spec = SessionSpec.Parse(System.Array.Empty<string>());
+            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var inputs = new FlightRigAssembler.Inputs
+            {
+                PlanesGamez = planesGamez,
+                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                RigCount = 0,
+                PaintRng = new RandomNumberGenerator(),
+                ZrdrPath = ctx.ZrdrPath,
+                StockLoadouts = stockLoadouts,
+                WeaponDefs = weaponDefs,
+                Textures = textures,
+                Projectiles = live,
+                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            };
+            // worldEffects null!: never dereferenced — Inputs.CrashProgram/WorldScene stay null,
+            // so Spawn's crash-runtime block (the only reader) is skipped.
+            var spawner = new AiAircraftSpawner(spec, liveries, null!, ctx.Host, inputs);
+
+            string aceNode = InstantAction.PlaneNodeFor("Warhawk")!;
+            var aceLivery = new PaintScheme { Pattern = "cccp", Color1 = PaintScheme.FromBytes(200, 10, 10) };
+            var pos = new Vector3(0f, 500f, 0f);
+            var pilot = AiPilot.HoldingCourse(pos, pos + Vector3.Forward);
+            ace = spawner.Spawn(aceNode, pos, pos + Vector3.Forward, pilot,
+                scheme: aceLivery, team: InstantActionRuntime.EnemyTeam);
+
+            ctx.Check(ace.Team == InstantActionRuntime.EnemyTeam,
+                $"the spawned ace carries the authored team, not a pilot-index default: team={ace.Team}");
+            ctx.Check(ace.Name.ToString().Contains(aceNode),
+                $"the ace flies its configured airframe: {ace.Name}");
+        }
+        finally
+        {
+            pool?.Free();
+            ace?.Free();
             textures.Dispose();
         }
     }

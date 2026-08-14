@@ -12,6 +12,12 @@ namespace CSVM.Session;
 /// answer: every pilot simply takes the next entry in the list.</summary>
 public sealed class SpawnPicker : IFlightStarts
 {
+    /// <summary>An active Instant Action mission's own scenario (PLAN-instant-action.md C8),
+    /// which <c>BuildFlightRigs</c> already draws <see cref="ChooseSpawn"/>'s spawn LIST from —
+    /// this only keeps <see cref="LogSpawn"/>'s printed tag truthful about which list that was,
+    /// rather than the stale <c>_spec.Scenario</c>. Null outside one.</summary>
+    public string? ScenarioOverride;
+
     /// <summary>Splitscreen: fan the players out abreast so they don't spawn inside each other.</summary>
     private const float SpawnAbreast = 60f;
 
@@ -78,7 +84,7 @@ public sealed class SpawnPicker : IFlightStarts
         if (spawns is { Count: > 0 })
         {
             int i = (spawnBase + playerIndex) % spawns.Count;
-            return LogSpawn($"{tag}{_spec.Scenario} #{i} of {spawns.Count}", spawns[i]);
+            return LogSpawn($"{tag}{ScenarioOverride ?? _spec.Scenario} #{i} of {spawns.Count}", spawns[i]);
         }
         // No instant-action spawns (only IA1 folders have ia.json) — use the story-mission
         // spawn from objectives.json PLAYER_INIT (position + heading).

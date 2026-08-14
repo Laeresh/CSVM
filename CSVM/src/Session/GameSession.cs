@@ -175,6 +175,10 @@ public partial class GameSession : Node3D
     // DriveSimSteps before the AI planes it spawns into _aiPlanes, freed with the world subtree.
     private AiGeneratorRuntime? _generators;
     private ZeppelinRuntime? _zeppelins;
+    // The active Instant Action mission (PLAN-instant-action.md C8), loaded once at the top of
+    // StartSession from --ia=<path> — null outside one, which is what keeps every other session
+    // mode (free flight, Dogfight) untouched by its existence.
+    private InstantActionRuntime? _instantAction;
     // The world AA emplacements (M4 C9b): built with the rigs whenever a chapter world and the
     // shared pool exist, stepped in DriveSimSteps after the zeppelins (slung mounts read the
     // moved pose). Shipped ACTIVATED honoured; --wake-turrets is the WAKEUP_TURRETS stand-in.
@@ -266,9 +270,24 @@ public partial class GameSession : Node3D
     /// and the mission script call it mid-session): the plane joins the shared world, ticks on
     /// the session clock like every rig, is hittable/damageable through the shared pool, and
     /// reports its death through <c>Downed</c>. Null when this session built no flight rigs
-    /// (viewer/freecam/anim-lab have no spawner).</summary>
+    /// (viewer/freecam/anim-lab have no spawner).
+    ///
+    /// <para>Kept at exactly this arity (no optional parameters) so the method GROUP still
+    /// converts to <c>AiGeneratorRuntime</c>'s spawn delegate — C# does not extend that
+    /// conversion over a method's optional trailing parameters. <see cref="SpawnAiAircraft(string,
+    /// Vector3, Vector3, AiPilot, PaintScheme?, int?, int?)"/> is the actor-authoring overload
+    /// (PLAN-instant-action.md C8).</para></summary>
+    public FlightController? SpawnAiAircraft(string planeName, Vector3 pos, Vector3 lookAt, AiPilot pilot) =>
+        SpawnAiAircraft(planeName, pos, lookAt, pilot, scheme: null, team: null, attackRating: null);
+
+    /// <summary>As <see cref="SpawnAiAircraft(string, Vector3, Vector3, AiPilot)"/>, plus an
+    /// authored actor's own identity: <paramref name="scheme"/>/<paramref name="team"/> forward to
+    /// <see cref="AiAircraftSpawner.Spawn"/> unchanged (an authored livery is worn as-is, no RNG
+    /// draw); <paramref name="attackRating"/>, given, arms the D14 gunner/mode machine at that
+    /// rating regardless of <c>--ai-attack=</c> (PLAN-instant-action.md C8: the ace fights at its
+    /// own authored rating, not the session's).</summary>
     public FlightController? SpawnAiAircraft(string planeName, Vector3 pos, Vector3 lookAt,
-        AiPilot pilot)
+        AiPilot pilot, PaintScheme? scheme, int? team, int? attackRating)
     {
         if (_aiSpawner == null)
         {
@@ -278,7 +297,7 @@ public partial class GameSession : Node3D
         // --ai-attack arms every spawned pilot with a D14 gunner at the ordered skill rating:
         // interpolated dead-eye/quick-draw cones, nearest-hostile auto-targeting, its own
         // seeded scatter stream. A pilot armed by its caller keeps what it was given.
-        if (_spec.AiAttackSkill is { } skill && pilot.Gunner == null)
+        if ((attackRating ?? _spec.AiAttackSkill) is { } skill && pilot.Gunner == null)
         {
             try
             {
@@ -308,7 +327,7 @@ public partial class GameSession : Node3D
             {
                 _aiSkills ??= AiSkills.Load(_zrdrPath);
                 _aiManeuvers ??= Maneuvers.Load(_zrdrPath);
-                int rating = _spec.AiAttackSkill ?? 5;
+                int rating = attackRating ?? _spec.AiAttackSkill ?? 5;
                 pilot.Machine = new AiModeMachine(Rng.NewSystemRandom(Rng.Ai))
                 {
                     ActivationRange = _aiSkills.MinAiActiveDist,
@@ -331,7 +350,7 @@ public partial class GameSession : Node3D
                 GD.PushWarning($"ai: no mode machine — cannot load skills/maneuvers: {e.Message}");
             }
         }
-        var ai = _aiSpawner.Spawn(planeName, pos, lookAt, pilot);
+        var ai = _aiSpawner.Spawn(planeName, pos, lookAt, pilot, scheme, team);
         _aiPlanes.Add(ai);
         // Mode transitions and reaction rolls, in the engine's own vocabulary — the D11
         // observability lines. Through Log (not GD.Print) so a play session's file sink
@@ -422,6 +441,26 @@ public partial class GameSession : Node3D
         state.GamezPath = _spec.Gamez
             ?? (_spec.WorldMode ? SessionPaths.ChapterGamez(_dataRoot, _spec.Chapter) : _planesGamezPath);
         state.MissionZrdrPath = SessionPaths.MissionZrdr(_dataRoot, _spec.Chapter, _spec.Mission);
+
+        // --ia=<path>: load the hand-authored mission def before anything chapter-dependent
+        // builds (PLAN-instant-action.md C8) — no archives needed, so this can run first. Fails
+        // soft (a warning, no def) rather than aborting the launch, the same policy every other
+        // optional CLI-driven feature in this build follows.
+        _instantAction = null;
+        if (_spec.IaPath != null)
+        {
+            try
+            {
+                var def = InstantAction.LoadFromJson(_spec.IaPath);
+                _instantAction = new InstantActionRuntime(def);
+                GD.Print($"ia: '{_spec.IaPath}' mission_type={def.MissionType} " +
+                         $"player='{def.PlayerPlane}' ace='{def.AceName}' ({def.AcePlane})");
+            }
+            catch (Exception e)
+            {
+                GD.PushWarning($"--ia={_spec.IaPath}: cannot load ({e.Message}) — flying without a mission");
+            }
+        }
 
         Stopwatch sw;
         try
@@ -1606,10 +1645,23 @@ public partial class GameSession : Node3D
         // One livery RNG for the session, so P1..P4 draw distinct colours from one
         // stream and --paint-seed reproduces the whole field.
         var paintRng = _liveryResolver.NewPaintRng();
+        // Instant Action (PLAN-instant-action.md C8): the mission's own mission_type IS the
+        // scenario key (the same string domain --scenario= already uses — "--vs forces
+        // dogfight_ace"), and the mission's player_plane overrides whichever --plane= was given,
+        // so a --ia= launch does not also need a redundant --scenario=/--plane= pair.
+        string iaScenario = _instantAction?.Def.MissionType ?? _spec.Scenario;
+        string? iaPlayerNode = _instantAction != null
+            ? InstantAction.PlaneNodeFor(_instantAction.Def.PlayerPlane) : null;
+        if (_instantAction != null && iaPlayerNode == null)
+        {
+            GD.PushWarning($"ia: player plane '{_instantAction.Def.PlayerPlane}' is not one of " +
+                            $"the eleven airframes — flying '{_spec.PlaneName}' instead");
+        }
         // One spawn list for the session; each player takes the next index (wrapping).
         // The empty stage has no mission, so nothing to read: ChooseSpawn takes the
         // --pos/default override placed over the grid origin.
-        var spawnList = _spec.EmptyStage ? null : SpawnPoints.LoadIa(state.MissionZrdrPath, _spec.Scenario);
+        _spawnPicker.ScenarioOverride = _instantAction != null ? iaScenario : null;
+        var spawnList = _spec.EmptyStage ? null : SpawnPoints.LoadIa(state.MissionZrdrPath, iaScenario);
         int spawnBase = _spawnPicker.ChooseSpawnBase(spawnList);
 
         // Weapons: the typed weapons.json catalogue + the stock loadouts, loaded
@@ -1766,6 +1818,8 @@ public partial class GameSession : Node3D
             Race = race,
             VersusMatch = versus,
             Rigs = _rigs,
+            InstantActionPlayerPlaneNode = iaPlayerNode,
+            InstantActionActive = _instantAction != null,
             Textures = state.Textures,
             ZrdrPath = state.ZrdrPath,
             ChapterZrdrPath = SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter),
@@ -1797,7 +1851,7 @@ public partial class GameSession : Node3D
         // binds P1 only: the panel is one overlay, not one per pane.
         if (_rigs.Count > 0 && _rigs[0].Controller is { Damage: not null } p1)
         {
-            var p1Stats = StatsFor(PlaneRoster.PlaneFor(_spec, 0));
+            var p1Stats = StatsFor(iaPlayerNode ?? PlaneRoster.PlaneFor(_spec, 0));
             _damageLab = new DamageLab(p1Stats,
                 new FlightDamageTarget(p1, _rigs.Count > 1 ? "P1" : null), _spec.DamagePreset)
             {
@@ -1971,6 +2025,42 @@ public partial class GameSession : Node3D
                 }
             }
         }
+        // Instant Action's authored ace (PLAN-instant-action.md C8) — dogfight_ace only; the
+        // wave sequencer (D9/E11) and the zeppelin arm (F12) are later items, so any other
+        // mission_type spawns no actor yet.
+        if (_instantAction is { } ia
+            && string.Equals(ia.Def.MissionType, "dogfight_ace", StringComparison.OrdinalIgnoreCase))
+        {
+            string? aceNode = InstantAction.PlaneNodeFor(ia.Def.AcePlane);
+            if (aceNode == null)
+            {
+                GD.PushWarning($"ia: ace plane '{ia.Def.AcePlane}' is not one of the eleven " +
+                                "airframes — no ace spawned");
+            }
+            else if (SpawnPoints.LoadIa(state.MissionZrdrPath, ia.Def.MissionType) is not { Count: > 0 } aceSpawns)
+            {
+                GD.PushWarning($"ia: no '{ia.Def.MissionType}' spawn points for " +
+                                $"{_spec.Chapter}/{_spec.Mission} — no ace spawned");
+            }
+            else
+            {
+                int playerSpawnIndex = spawnBase % aceSpawns.Count;
+                uint draw = Rng.Stream(Rng.Spawn).Randi();
+                var (spIndex, sp) = InstantActionRuntime.ChooseAceSpawn(aceSpawns, playerSpawnIndex, draw);
+                var fwd = new Basis(Vector3.Up, Mathf.DegToRad(sp.HeadingDeg)) * Vector3.Forward;
+                var pilot = AiPilot.HoldingCourse(sp.Position, sp.Position + fwd);
+                int rating = InstantActionRuntime.RepresentativeRating(ia.Def.AceStats);
+                var ace = SpawnAiAircraft(aceNode, sp.Position, sp.Position + fwd, pilot,
+                    scheme: ia.Def.AceLivery, team: InstantActionRuntime.EnemyTeam, attackRating: rating);
+                RegisterAiVoice(ace, ia.Def.AceAccentId, rating);
+                if (ace != null)
+                {
+                    GD.Print($"ia: ace '{ia.Def.AceName}' ({aceNode}) rating={rating} " +
+                              $"team={InstantActionRuntime.EnemyTeam} spawn #{spIndex} of {aceSpawns.Count}");
+                    state.What += " + IA ace";
+                }
+            }
+        }
         if (_spec.AiPlanes is { Count: > 0 } aiPlanes && _rigs.Count > 0
             && _rigs[0].Controller is { } lead)
         {
@@ -2131,12 +2221,12 @@ public partial class GameSession : Node3D
         {
             var flown = new List<string>(_rigs.Count);
             for (int pi = 0; pi < _rigs.Count; pi++)
-                flown.Add($"P{pi + 1} '{PlaneRoster.PlaneFor(_spec, pi)}'");
+                flown.Add($"P{pi + 1} '{iaPlayerNode ?? PlaneRoster.PlaneFor(_spec, pi)}'");
             state.What += $" + splitscreen {string.Join(", ", flown)}";
         }
         else
         {
-            state.What += $" + '{_spec.PlaneName}' flying";
+            state.What += $" + '{iaPlayerNode ?? _spec.PlaneName}' flying";
         }
     }
 
@@ -2562,10 +2652,11 @@ public partial class GameSession : Node3D
     }
 
     /// <summary>Gives a spawned AI aircraft its voice (E16): the accent resolves through the
-    /// B8 chain, the talker/constitution chances come from <c>ai_skill_parameters</c> at the
-    /// session's skill rating (<c>--ai-attack=</c>, default 5 — roster skill vectors are later
-    /// wiring). No accent, no voice runtime or no skills = a silent pilot, never an error.</summary>
-    private void RegisterAiVoice(FlightController? ai, int? accentId)
+    /// B8 chain, the talker/constitution chances come from <c>ai_skill_parameters</c> at
+    /// <paramref name="ratingOverride"/> when given, else the session's skill rating
+    /// (<c>--ai-attack=</c>, default 5). No accent, no voice runtime or no skills = a silent
+    /// pilot, never an error.</summary>
+    private void RegisterAiVoice(FlightController? ai, int? accentId, int? ratingOverride = null)
     {
         if (ai == null || accentId is not { } accent || _aiVoice == null || _aiSkills == null)
         {
@@ -2575,7 +2666,7 @@ public partial class GameSession : Node3D
             }
             return;
         }
-        int rating = _spec.AiAttackSkill ?? 5;
+        int rating = ratingOverride ?? _spec.AiAttackSkill ?? 5;
         _aiVoice.RegisterAi(ai, accent,
             _aiSkills.At("talker_chance", rating), _aiSkills.At("constitution_chance", rating));
     }

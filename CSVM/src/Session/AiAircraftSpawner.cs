@@ -53,8 +53,14 @@ public sealed class AiAircraftSpawner
     /// <summary>Builds one AI aircraft at <paramref name="pos"/> with its nose on
     /// <paramref name="lookAt"/>, flown by <paramref name="pilot"/>, and adds it to the world.
     /// Callable at any point in the session's life; the returned controller is live (ticking,
-    /// hittable, damageable) as soon as its <c>_Ready</c> has run.</summary>
-    public FlightController Spawn(string planeName, Vector3 pos, Vector3 lookAt, AiPilot pilot)
+    /// hittable, damageable) as soon as its <c>_Ready</c> has run. <paramref name="scheme"/>,
+    /// given, is worn AS-IS instead of a resolver draw — no RNG consumed, so an authored livery
+    /// (PLAN-instant-action.md C8's ace) never shifts another spawn's pinned paint under
+    /// <c>--det</c>. <paramref name="team"/>, given, overrides
+    /// <see cref="FlightController.Team"/>'s pilot-index-derived default (PLAN-instant-action.md
+    /// B7/C8: an Instant Action actor's side is authored, not derived from its shooter id).</summary>
+    public FlightController Spawn(string planeName, Vector3 pos, Vector3 lookAt, AiPilot pilot,
+        PaintScheme? scheme = null, int? team = null)
     {
         int index = _spawned++;
         var stats = _in.StatsFor(planeName);
@@ -65,7 +71,7 @@ public sealed class AiAircraftSpawner
             machine.ReturnRange = stats.AiReturnRange;
         }
         var planeBuilder = new PlaneBuilder(_in.PlanesGamez, _in.Textures, spinningProps: true,
-            scheme: _liveries.SchemeFor(_in.RigCount + index, _in.ZrdrPath, randomByDefault: false,
+            scheme: scheme ?? _liveries.SchemeFor(_in.RigCount + index, _in.ZrdrPath, randomByDefault: false,
                 _in.PaintRng, _liveries.PatternsForPlane(_in.PlanesGamez, planeName)),
             patterns: _liveries.Patterns);
         var planeModel = planeBuilder.Build(planeName);
@@ -93,6 +99,8 @@ public sealed class AiAircraftSpawner
             PadDevices = Array.Empty<int>(),
             AllowPause = false,
         };
+        if (team is { } t)
+            controller.Team = t;
         controller.Shake = new PlaneShake(_in.Shakes);
         var shakePivot = new Node3D { Name = "ShakePivot" };
         controller.ShakePivot = shakePivot;

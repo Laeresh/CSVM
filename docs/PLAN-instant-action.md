@@ -278,7 +278,7 @@ is M4's formation disproof, `B7` is the team model below.
 
 ### Wave C — Dogfighting an ace
 
-8. ☐ C8 The Instant Action runtime and the authored ace
+8. ☑ C8 The Instant Action runtime and the authored ace
 
 ### Wave D — Wingmen
 
@@ -705,7 +705,38 @@ roster; that is deliberate and must survive.
 
 # Wave C — Dogfighting an ace
 
-## C8 ☐ The Instant Action runtime and the authored ace
+## C8 ☑ The Instant Action runtime and the authored ace
+
+**Landed 2026-08-14.** `Session/InstantActionRuntime.cs` is new: it holds the loaded
+`InstantActionDef` plus two engine-free static helpers, `ChooseAceSpawn` (the setup path's own
+`rand() % (count-1)`-with-last-index-substitution draw) and `RepresentativeRating` (an
+`AiSkillVector` collapsed to the one flat rating CSVM's AI tuning takes — every shipped
+`ace_stats` is a uniform 9, so this is an averaging policy for a hand-authored `--ia=` file, not a
+decode). `GameSession.StartSession` loads `--ia=<path>` via `InstantAction.LoadFromJson` before any
+archive opens (fails soft — a warning, no mission — on a bad path); `BuildFlightRigs` then reads
+the def directly: `MissionType` is the scenario key `SpawnPoints.LoadIa`/`SpawnPicker` already draw
+from (no redundant `--scenario=` needed), `PlayerPlane` (via `InstantAction.PlaneNodeFor`'s new
+eleven-entry display-name table) overrides `--plane=` for every human alike, and every human takes
+`AimAssist.PlayerTeam` (Decision 8) regardless of pilot index. For `dogfight_ace` the ace itself is
+spawned through a new non-optional-parameter `GameSession.SpawnAiAircraft` overload — kept separate
+from the original 4-parameter one because C# does not extend a method-group-to-delegate conversion
+(`AiGeneratorRuntime`'s spawn callback) over trailing optional parameters — carrying its authored
+`PaintScheme` (worn as-is, no RNG draw, so a pinned golden's livery cannot move) and
+`InstantActionRuntime.EnemyTeam` (2), armed at its averaged rating regardless of `--ai-attack=`, and
+voiced through its `ace_accentID`. D9/E10/E11/F12 are the remaining mission types and the wave
+sequencer; this item wires `dogfight_ace` alone. Verification: the new `instant-action` in-engine
+suite (the plane-node table, `ChooseAceSpawn`'s collision substitution, `RepresentativeRating`'s
+averaging, and a real `AiAircraftSpawner.Spawn` call proving the ace lands on team 2 flying its
+configured airframe with its authored `PaintScheme` passed straight through) plus a manual
+`--det --ia=<path> --chapter=C1 --frames=120 --screenshot=` run, whose log lines confirm the whole
+build path fired for real (`ia: ace 'MSG_TEST_ACE' (player_warhawk) rating=9 team=2 spawn #5 of 8`,
+`[flight] spawn [C1/IA1 dogfight_ace #0 of 8]` — the latter only reads correctly because of the
+`SpawnPicker.ScenarioOverride` fix that rode along, see trap (d)). **Not done: the item's own
+pixel-sample check** — the ace spawned 1803 m out at frame 120, too far to sample; the suite's
+direct `Spawn(..., scheme: ...)` assertion is the livery evidence this session has, and a closer
+`--det` framing is left for whoever next needs the screenshot.
+`.\RunTests.ps1`: build clean, 1181/1181 unit tests, 55/55 engine suites (the new one included),
+all 14 golden hashes unchanged.
 
 **Goal.** `--ia=<path>` with `mission_type: dogfight_ace` builds and flies a complete mission: the
 right chapter, a spawn from the right scenario list, the player's configured aircraft, and one
@@ -741,7 +772,12 @@ existing session path should move.
 authored scheme must **not** consume a draw, or every pinned livery in the goldens moves. (b) The
 spawned subtree is deliberately not indexed into the world runtime's `NameResolver`; keep it that
 way. (c) `--pos` beats the mission spawn list by a deliberate ordering in `SpawnPicker`; a mission
-must not undo that.
+must not undo that. (d) **Found while landing:** `SpawnPicker.LogSpawn`'s printed tag names
+`_spec.Scenario` directly, so overriding the spawn LIST's scenario key (the def's `MissionType`)
+without also telling `SpawnPicker` left the `[flight] spawn […]` line printing the CLI's stale
+scenario while the list itself was already correct — a log lie, not a functional bug, but the kind
+that misleads whoever reads that line next. Fixed with `SpawnPicker.ScenarioOverride`, set once in
+`BuildFlightRigs`.
 
 ---
 

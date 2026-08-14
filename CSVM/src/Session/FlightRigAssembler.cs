@@ -57,8 +57,10 @@ public sealed class FlightRigAssembler
         bool verbose = pi == 0; // the per-plane detail lines are identical for every player
         string tag = _in.RigCount > 1 ? $"P{pi + 1} " : "";
         // Each player flies their own pick (the launchscreen's join flow / a --plane= list);
-        // with one name given, that is the same plane for everyone as before.
-        string planeName = PlaneRoster.PlaneFor(_spec, pi);
+        // with one name given, that is the same plane for everyone as before. An active Instant
+        // Action mission (PLAN-instant-action.md C8) overrides this for every human alike — the
+        // def carries one player_plane, not a per-player list.
+        string planeName = _in.InstantActionPlayerPlaneNode ?? PlaneRoster.PlaneFor(_spec, pi);
         var stats = _in.StatsFor(planeName);
 
         // Flight repaints the field on every map load: each player draws their
@@ -105,6 +107,12 @@ public sealed class FlightRigAssembler
             HudParent = rig.Viewport,
             AllowPause = _in.RigCount == 1,
         };
+        // Every human joins team 1 in an Instant Action mission (PLAN-instant-action.md Decision
+        // 8), splitscreen included — humans 2-4 would otherwise default to their own team
+        // (Team's fallback is AimAssist.TeamOfPilot(PlayerIndex), one team per pilot index) and
+        // collide with an enemy's.
+        if (_in.InstantActionActive)
+            controller.Team = AimAssist.PlayerTeam;
         // The wobble pivot: the plane model and everything resolved inside it — muzzle nodes,
         // puffer anchors, mounted ordnance — rides the shake, while the controller's own
         // transform (physics, aim, chase camera) never sees it. In the original the plane
@@ -516,6 +524,12 @@ public sealed class FlightRigAssembler
         /// Every rig in the session (--vs opponent markers) — the same list GameSession
         /// keeps live for the whole session, not a snapshot; see the Assemble call site.
         public IReadOnlyList<PlayerRig>? Rigs;
+        /// The active Instant Action mission's player_plane node (PLAN-instant-action.md C8),
+        /// overriding --plane= for every human alike; null outside one.
+        public string? InstantActionPlayerPlaneNode;
+        /// Whether an Instant Action mission is active — every human takes team 1 (Decision 8)
+        /// regardless of pilot index when this is set.
+        public bool InstantActionActive;
 
         /// The session's wind and active camera (see Effects/WorldWind.cs), for the throttle-slam
         /// exhaust and speed-cue puffers assembled here. Still air unless the session hands its own over.

@@ -220,6 +220,7 @@ clusters they delegate to.
 - `src/Session/EffectPools.cs` — the `data/effect_pools.json` reader: how many copies of each effect template the stage builds, per ROOT, scaled by player count.
 - `src/Session/FlightRigAssembler.cs` — assembles one player's flight rig: painted plane, `FlightController`, loadout/ordnance, HUD instruments, damage visuals, audio, stunt run, spawn, crash runtime.
 - `src/Session/AiAircraftSpawner.cs` — spawns an AI-piloted aircraft into a running session (M4 A2): the flight-essential subset of a rig, an `AiPilot` at the controls, shooter ids from 100.
+- `src/Session/InstantActionRuntime.cs` — owns one Instant Action mission's actor set (PLAN-instant-action.md C8): the loaded `InstantActionDef`, the ace's own spawn draw, and its team/rating.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in.
 - `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (M4 B6, `--generators`): load-time drop rules, per-cycle stepping, spawns through `GameSession.SpawnAiAircraft`.
 - `src/Session/AiVoiceRuntime.cs` — wires E16's dispatch into a session: the decoded event sources (hit-path DI, Downed death cries, acquisition call-outs, taunts) played through `CombatVoice` + `WorldSounds.PlayOneShot`.
@@ -933,7 +934,10 @@ only job is `FromJsonObject`, the small mapping from a JSON object onto the same
 shape `ZrdrDict` already wraps (a nested `group1`…`group4` object flattens the same way), so a
 JSON-authored mission parses through exactly the same field-population path a real chapter's
 does. `spawn_points` and `dzones` stay where they already were (`Flight/SpawnPoints.LoadIa`,
-`Flight/StuntMission`) — this def does not repeat either. Fixture units + install goldens in
+`Flight/StuntMission`) — this def does not repeat either. `PlaneNodeFor` (PLAN-instant-action.md
+C8) is the eleven-entry display-name → gamez-node table (`"Bloodhawk"` → `"player_bhawk"`), a
+deliberate duplicate of `UI.LaunchMenu.Planes` rather than a shared one — the plan's file-contention
+notes reserve `LaunchMenu.cs` for H15/H16 alone. Fixture units + install goldens in
 `CSVM.Tests/InstantActionTests.cs`.
 ⚠ Every optional key is resolved to the original's own reset-then-overlay default
   (`FUN_00458ff0`/`FUN_00459390`/`FUN_00458d00`), not left null — `PlayerPlane` reads
@@ -4165,7 +4169,19 @@ as `--crash`'s `_crashFired`): P1 downs P2 through the real `DebugForceCrash(kil
 scripting an actual shot. `BuildFlightRigs` also constructs `AiAircraftSpawner` over the same rig
 `Inputs`; `SpawnAiAircraft` (public — the M4 A2 actor seam, called by `--ai=` at build and by
 later waves mid-session) adds each AI plane to `_aiPlanes`, stepped in `DriveSimSteps` after the
-rigs (a realtime clock lets them tick themselves, like the rigs).
+rigs (a realtime clock lets them tick themselves, like the rigs). `_instantAction`
+(`InstantActionRuntime?`, PLAN-instant-action.md C8) loads `--ia=<path>` at the very top of
+`StartSession` — before any archive, since it is a bare JSON read — and stays null on a load
+failure or absent flag, which is what keeps every other mode untouched by its existence.
+`SpawnAiAircraft` has a second, non-optional-parameter overload
+(`string, Vector3, Vector3, AiPilot, PaintScheme?, int?, int?`) for this: the method GROUP passed
+to `AiGeneratorRuntime`'s constructor must stay at exactly four parameters, since C# does not
+extend a method-group-to-delegate conversion over trailing optional ones. `BuildFlightRigs` spawns
+the ace (`dogfight_ace` only; D9/E11/F12 add the rest) right after the player voice registration,
+through that overload, with the authored `PaintScheme`/`InstantActionRuntime.EnemyTeam`/rating —
+the ace's own spawn-point draw is `InstantActionRuntime.ChooseAceSpawn` over
+`Rng.Stream(Rng.Spawn)`, one call after the player's own `ChooseSpawnBase` draw in the same
+stream, so a `--det` run reproduces it.
 ⚠ **It parses no args and resolves nothing** — the Launcher hands it the one `SessionSpec` its
   session is built from; **a new flag is a SessionSpec change**. `_menuPads` is the deliberate
   exception: join-flow session state riding the `LauncherContext`, never the spec.
@@ -4614,6 +4630,10 @@ type stays the single owner of spawn resolution.
 ⚠ **The `_spec.SpawnAt` override branch is tested BEFORE the list branch** — that ordering is the
   whole reason `--pos` beats the mission spawn list, and `RaceGrid` inherits the override for free
   by delegating rather than reimplementing. Do not move it.
+⚠ **`ScenarioOverride` (PLAN-instant-action.md C8) is display-only** — `BuildFlightRigs` already
+  reads the mission's own `mission_type` for the spawn LIST (`SpawnPoints.LoadIa`'s own argument);
+  this only keeps `LogSpawn`'s printed tag naming the right one instead of the stale
+  `_spec.Scenario`. Set once in `BuildFlightRigs`, read by `LogSpawn` alone.
 
 ## src/Session/IFlightStarts.cs
 Where every pilot in a session starts: `ChooseStarts(spawns, missionZrdrPath, spawnBase,
@@ -4735,6 +4755,25 @@ too, so the split is readable off the `CRASH … def=` line headlessly.
   as a player's plane): planes.zbd gamez indices collide with the chapter's by-index map — the
   `NameResolveFallback` case. A later item making AI aircraft addressable by mission animations
   goes through `AnimRuntime.IndexStage`, which owns the find-cache invalidation.
+⚠ `Spawn`'s `scheme`/`team` (PLAN-instant-action.md C8) are worn/set exactly as given, never
+  re-derived — `scheme ?? _liveries.SchemeFor(…)` short-circuits the resolver call entirely on a
+  non-null scheme, so an authored livery (the Instant Action ace) consumes NO RNG draw and cannot
+  reshuffle another spawn's pinned paint under `--det`.
+
+## src/Session/InstantActionRuntime.cs
+Owns one Instant Action mission's actor set (PLAN-instant-action.md), as it grows across the
+plan's later waves — this item (C8) wires only `dogfight_ace`. Holds the loaded `InstantActionDef`
+plus two static, engine-free helpers `GameSession.BuildFlightRigs` calls: `ChooseAceSpawn` (the
+setup path's own draw — `rand() % (count - 1)` over the scenario's spawn list, the LITERAL last
+index substituted, never a re-roll, on a collision with the player's own chosen index) takes the
+caller's `rand()` pull as a plain `uint` rather than touching an RNG itself, so it stays pure and
+unit-testable; `RepresentativeRating` collapses an `AiSkillVector` into the one flat 1–9 rating
+CSVM's own AI tuning takes (every shipped `ace_stats` is a uniform 9, so this is an averaging
+policy for a hand-authored non-uniform `--ia=` file, not a decode). `EnemyTeam` (`AimAssist.PlayerTeam
++ 1` = 2) is Decision 4's team id for every Instant Action enemy — waves (E11) are cohorts inside
+this one team, not teams of their own.
+⚠ **Environment→chapter resolution is the launch MENU's job (H15), not this class's** — a
+  `--ia=<path>` CLI launch already names its chapter via `--chapter=`; nothing here derives one.
 
 ## src/Session/GeneratorCycle.cs
 The decoded egen launch timing law for ONE generator (M4 B6 + F20), pure over `Step` calls (no
@@ -4852,7 +4891,11 @@ rig), this player's stunt run + marker/scoreboard/race entry
 markers — C23/C24; outside `--vs` the matchless `VersusHud.BuildHostileTracker` over
 `Inputs.Projectiles` instead, so every human pane tracks its nearest AI hostile in any flight
 session, H22; and the `--vs` build gets `HostilePool` too), the spawn placement, and the crash
-runtime built after the controller joins the tree. Constructed
+runtime built after the controller joins the tree. An active Instant Action mission
+(PLAN-instant-action.md C8) overrides two things here: `Inputs.InstantActionPlayerPlaneNode`, when
+set, replaces `PlaneRoster.PlaneFor` for every human alike (the def carries one `player_plane`,
+not a per-player list), and `Inputs.InstantActionActive` puts every human on
+`AimAssist.PlayerTeam` (Decision 8) regardless of pilot index. Constructed
 once per session build from
 `(SessionSpec, LiveryResolver, SpawnPicker, WorldEffectsFactory, worldRoot, Inputs)`, then
 `Assemble(pi, rig)` once per rig; `MeshInstances`/`WhatSuffix` accumulate across the rigs for the

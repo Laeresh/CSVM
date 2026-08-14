@@ -45,6 +45,34 @@ public static class InstantAction
     private const string DefaultWaveEnemySkill = "veteran";
     private static readonly int[] DefaultAceStats = { 5, 6, 6, 8, 9, 6, 7, 6, 9 };
 
+    // Display name -> planes.zbd root node (docs/formats/instant-action.md "The built-in
+    // defaults": the IDS_IA_PLANES order). Deliberately duplicates UI.LaunchMenu.Planes rather
+    // than sharing it — PLAN-instant-action.md's file-contention notes reserve LaunchMenu.cs for
+    // H15/H16 alone. CSVM ships one gamez node per airframe (extracted/planes/nodes.json carries
+    // no bare "bhawk", only "player_bhawk"), reused for the player and every AI/generator spawn
+    // alike, so there is no separate "plain" or wingman model to pick between.
+    private static readonly Dictionary<string, string> PlaneNodes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Devastator"] = "player_pfighter",
+        ["Bloodhawk"] = "player_bhawk",
+        ["Firebrand"] = "player_fbrand",
+        ["Brigand"] = "player_brigand",
+        ["Fury"] = "player_fury",
+        ["Autogyro"] = "player_autogyro",
+        ["Hellhound"] = "player_avenger",
+        ["Kestrel"] = "player_kestrel",
+        ["Peacemaker"] = "player_peacemaker",
+        ["Balmoral"] = "player_balmoral",
+        ["Warhawk"] = "player_warhawk",
+    };
+
+    /// <summary>The gamez node an Instant Action display name (an
+    /// <see cref="InstantActionDef.PlayerPlane"/>/<see cref="InstantActionDef.AcePlane"/> value,
+    /// e.g. <c>"Bloodhawk"</c>) builds — null when the name matches none of the eleven airframes
+    /// (a malformed <c>--ia=</c> file).</summary>
+    public static string? PlaneNodeFor(string displayName) =>
+        PlaneNodes.TryGetValue(displayName, out var node) ? node : null;
+
     /// <summary>Loads one chapter's shipped <c>ia.zrd.json</c> (the mission's own zrdr scope,
     /// e.g. <c>&lt;chapter&gt;/IA1/zrdr</c> — only IA1 folders carry one). Throws
     /// <see cref="FileNotFoundException"/> when the mission has no such file.</summary>
