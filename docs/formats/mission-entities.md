@@ -56,8 +56,10 @@ the same shape as `injure_anims` in [vehicle.md](vehicle.md).
 ### The kill threshold counts survivors
 
 `healthy` + `num_healthy_required` is the design's critical-zone threshold model, with the gasbags
-as the zones. **The polarity is settled**: the engine walks the `healthy` node list, counts the
-entries still flagged active, and kills the zeppelin when
+as the zones. It is the HULL's death and nothing more: on an Instant Action zeppelin run it is the
+second of two ways to win, behind destroying every engine ([instant-action.md](instant-action.md),
+"The zeppelin run is won on the ENGINES"). **The polarity is settled**: the engine walks the
+`healthy` node list, counts the entries still flagged active, and kills the zeppelin when
 
 ```
 survivors < num_healthy_required
@@ -158,6 +160,16 @@ document describes a three-band model instead (the first 30 % of engines costing
 performance, the next 40 % band a further 40 %, the last 30 % the remaining 50 %). The *qualitative*
 claim survives — a concave curve, so each further engine lost hurts more than the last — but the
 arithmetic is the square root above, not the bands.
+
+**The mechanism is a shrinking list, and one other system reads it.** `FUN_004bf150` holds the
+engines as a vector at `+0x4c`…`+0x50` and, every frame the zeppelin is alive and active, **erases**
+each entry whose node has lost its active bit; `alive` is then the vector's size and `total` the
+load-time count kept at `+0x98`. Because the vector is compacted rather than flagged, "the engine
+vector is empty" is a directly testable "every engine is destroyed" — and that is exactly what
+Instant Action's `zeppelin_run` wins on, ahead of the hull's own death byte. See
+[instant-action.md](instant-action.md), "The zeppelin run is won on the ENGINES". Nothing else in
+the zeppelin module reads the vector, so a mission that is not an Instant Action zeppelin run feels
+engine loss only as the curve above.
 
 ## `egen.json` — enemy generators
 

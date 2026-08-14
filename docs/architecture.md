@@ -4418,8 +4418,9 @@ G13 closes the mission. One block near the end of `BuildFlightRigs` routes each 
 into `_instantAction` — the ace's `Downed`, each pilot's own `StuntMission.RunCompleted` into
 `CheckInstantActionZoneSets` (which asks `InstantActionRuntime.ZoneSetsFlown`, and is called again
 whenever a pilot goes out — the only other event that can make it true, so nothing is polled),
-`ZeppelinRuntime.ZeppelinKilled` filtered to the OBJECTIVE node, and the wave
-sequencer's exhausted counter from `StepInstantAction` — then registers every human seat on the
+`ZeppelinRuntime.ZeppelinEnginesDisabled` **and** `ZeppelinKilled`, both filtered to the OBJECTIVE
+node and both reporting the one objective (the decoded mode wins on either, engines first), and the
+wave sequencer's exhausted counter from `StepInstantAction` — then registers every human seat on the
 lives ledger, arms the same 3 s `VersusRespawnDelay`, and subscribes one `Downed` handler per rig
 that either logs the lives left or calls `BeginInstantActionSpectate`. A mission whose win signal
 cannot arrive is disabled and WARNS at build rather than silently never ending.
@@ -5250,7 +5251,7 @@ wave is effectively "veteran", 1.0) until H15/H16 gives Instant Action a setup s
 it directly.
 G13 adds the mission's END, and it is the class's first instance state: `Objective` /
 `ObjectiveFor(missionType)` (the per-type win condition — ace down, waves cleared, zones flown,
-zeppelin destroyed; null for `ground_target` and any unrecognised hand-authored type, which can
+zeppelin DISABLED; null for `ground_target` and any unrecognised hand-authored type, which can
 then only be LOST), `ReportObjective` (each signal source reports what it satisfied and the
 runtime DROPS what this type does not run on, so one subscription per source is safe everywhere
 and a zeppelin run clearing its waves is not a win), `DisableObjective` for a win signal that can
@@ -5384,7 +5385,11 @@ and logs so — never an invented default. `PollDamage` (per `SimStep`) drives
 `Motion.AliveEngines`, plays record cannon stages, and owns the kill (`ZeppelinDamage.IsDead`);
 the kill logs, stops the motion, plays the prerequisite-gated hull-death def
 (`all_pzep_gasbags`-shaped, found by data, never by name) and raises `ZeppelinKilled` (the
-generator disable). `GateWeaponDamage` is the pool's `WorldDamageGate`. Observability is the
+generator disable). The same recount raises `ZeppelinEnginesDisabled` once the LAST engine dies
+(gated on the hull, since the original's list compaction stops at death): that is Instant Action's
+own `zeppelin_run` win, ahead of the hull kill, and `WireZones` warns outright about an engine with
+no pool because such an engine can never die and would leave the mode unwinnable on its own
+objective. `GateWeaponDamage` is the pool's `WorldDamageGate`. Observability is the
 `zep:` lines (wired/zone kills/engines/DESTROYED, plus F19's deploy/fire/skip). The broadside
 half is the `ZeppelinRuntime.Cannons.cs` partial: `WireCannons(pool, weapons)` resolves the
 HARDCODED `wep_28` and each cannon's node + F18 pool (a destroyed cannon thins the volley; the
