@@ -4335,6 +4335,15 @@ entries when handed a shorter destination than the ring holds, oldest of those f
 ⚠ Fed a raw `Stopwatch.GetTimestamp` pair, **never Godot's `delta`**: `delta` is post-processed
   (`OS.delta_smoothing`) and measures as a quantised constant here, 8.333 ms on every frame of a
   `--no-vsync --det` empty-stage run while the real cost varied 8.25–8.42 ms.
+⚠ **Nothing applied during `Launcher.LaunchSession`'s build can ever trip this monitor, at any
+  magnitude.** `Rearm()` fires the instant `StartSession()` returns (`Launcher.cs:743-744`, by
+  design — see that method's own comment), so anything that runs earlier in the same build, like a
+  `--damage=` preset's `DamageLab._Ready()` cascade, is always finished before grace starts counting.
+  Measured (PLAN-perf-hitches E13, disproven): a real 18x single-frame spike from a maximal
+  four-part debris burst (`max_ms` 150.00 vs an 8.33 ms baseline) produced zero `[perf] hitch` lines
+  over a 600-frame run — the spike lands ~700 ms after `Rearm()`, a third of the 2000 ms grace, and
+  never recurs. A scenario wanting HitchMonitor to see an event needs that event live, mid-run, after
+  the build — a CLI preset applied at construction time cannot reach it.
 
 ## src/Utils/HitchSidecar.cs
 `HitchMonitor`'s write path (PLAN-perf-hitches B6): a tripped `HitchRecord` is copied — never

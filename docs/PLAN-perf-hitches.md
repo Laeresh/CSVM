@@ -70,9 +70,9 @@ changes whose effect cannot be evaluated until the instrument exists and a basel
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, A3, B5, B6, B7, E14 | Confirm the trace, then implement. |
+| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, A3, B5, B6, B7, E13, E14 | Confirm the trace, then implement. |
 | **Direction sound, magnitude a judgement call** | B4, D10, D11 | The *what* is settled; every threshold, window length and buffer depth is TUNE. Do not promote a guessed constant to fact. |
-| **Leads only — no mechanism yet** | C8, C9, E12, E13, G15, G16 | Budget for investigation. C9's site list is a hypothesis, and G15/G16 may end in a disproof of the GC theory. |
+| **Leads only — no mechanism yet** | C8, C9, E12, G15, G16 | Budget for investigation. C9's site list is a hypothesis, and G15/G16 may end in a disproof of the GC theory. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
 worktree session here; use a local commit or a file copy.
@@ -128,7 +128,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave E — The A/B rig
 
 12. ☑ E12 — Hitch fields in `perf-history.jsonl` and in `-PerfCompare` output
-13. ☐ E13 — A debris-burst scenario in `analysis/perf/scenarios.json`
+13. ❌ E13 — A debris-burst scenario in `analysis/perf/scenarios.json` — disproven
 14. ☐ E14 — `docs/verification.md`: a PERF rule on hitch comparability, plus the doc sweep
 
 ### Wave G — Diagnosis (the instrument's first customer)
@@ -720,7 +720,52 @@ it is the last metric that should ever gate anything — confirmed structurally 
 argued: `verdictMetrics` in the manifest was left untouched, so `hitch_count` cannot flag a row even
 if `-PerfCompare` is misread; it only ever prints under the `(awareness only)` note.
 
-## E13 ☐ A debris-burst scenario in `analysis/perf/scenarios.json`
+## E13 ❌ A debris-burst scenario in `analysis/perf/scenarios.json` — disproven: the burst and the reset that would let it be seen are the same line of code, on opposite sides
+
+**Closed as a disproof — no scenario was added, and none should be: it would report `hitch_count: 0`
+forever, indistinguishable from "measured clean" for a case the instrument structurally cannot see.**
+The item's own Verify said so in advance: *"If it produces zero, this item has failed and must say
+so, rather than being tuned until it reports something."* It produced zero, twice, at two different
+burst sizes, and the reason is not noise — it is `Launcher.LaunchSession`'s own ordering.
+
+**The mechanism.** `LaunchSession` (`Launcher.cs:714-751`) builds the whole session tree via
+`_session.StartSession()`, then immediately calls `_hitchMonitor.Rearm()` (`Launcher.cs:743-744`) —
+by design, per the method's own comment: *"A build stalls the frame loop for as long as it takes...
+the hitch monitor starts its grace window and drops its baseline here rather than reporting the build
+as the session's first hitch."* `DamageLab`'s `--damage=` preset is applied inside that same build,
+synchronously in its `_Ready()` (`GameSession.cs:1387` for the parked-viewer host, `:1807` for the
+flown one), which calls `Reapply` → `_target.Apply` (`DamageLab.cs:201-217, 445-471`) and fires every
+crossed panel's `gimmeflakes`/`yellow_sparks_follow`/`small_fireball_follow`/fire-trail cascade before
+`StartSession()` returns. So the entire debris burst is always finished before `Rearm()` even runs,
+and grace (2000 ms wall-clock, TUNE) counts from that same `Rearm()` — the burst and the reset that
+would let it register are ordered by the same two lines, with the burst permanently on the wrong side.
+No `--damage=` value changes this: there is no CLI-reachable way to delay the preset past session
+build, and building one would be a fix to the damage lab, not an item this instrument-only plan owns.
+
+**Verified against two real launches, not assumed.** Both against `pbloodhawk` (`nodename
+player_bhawk`), thresholds read from the actual extraction, not the doc's example prose
+(`extracted/zrdr/vehicle.zrd.json:1025-1068`: leftwing crosses `pdpanel5`@0.5/`pdpanel4`@0.3/
+`pdpanel3`@0.15, all three at once below 0.15):
+- `--viewer --plane=player_bhawk --damage=leftwing:0.05 --det --mute --perf --no-vsync --frames=180`:
+  the first window (`sim_frame=60`, `wall_ms=699.91`) reads `max_ms=150.00` against an 8.33 ms
+  baseline — a real, 18x single-frame spike, visible exactly where A2's own field should show it —
+  and **zero** `[perf] hitch` lines anywhere in the log. 700 ms is a third of the 2000 ms grace.
+- Maximised the burst — all four parts (`nose`/`tail`/`leftwing`/`rightwing`) driven to 0.05, every
+  `pdpanelN` on the airframe plus both def-level `player_smoketrail`(0.10)/`player_fuelleak`(0.85)
+  entries crossed at once — over `--frames=600` (10 windows): identical first-window `max_ms=150.00`,
+  and every one of the other nine windows reads the clean baseline exactly (`max_ms=8.33`). Making the
+  burst four times bigger changed neither its timing nor its duration enough to matter, and it leaves
+  nothing behind to trip a later window — a one-time construction cost, not a recurring one.
+
+**What this settles.** E12's `max_ms` genuinely sees this spike; `hitch_count` genuinely cannot, and
+not from an undertuned threshold — the event and the counter's own arming are mutually exclusive by
+construction. A future fix to the real interactive hitch (Wave G) will need a live in-flight hit, not
+a `--damage=` preset, if it wants HitchMonitor to see it happen; this item's job was to establish that
+distinction, not to work around it.
+
+### Original approach (kept for reference)
+
+## E13 (original) A debris-burst scenario in `analysis/perf/scenarios.json`
 
 **Goal.** The known hitch is under continuous measurement, so a fix cannot silently regress later.
 
