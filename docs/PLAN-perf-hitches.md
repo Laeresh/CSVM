@@ -113,7 +113,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 4. ☑ B4 — `HitchMonitor`: rolling baseline, trigger, grace window, ring buffer, GC and counter deltas
 5. ☑ B5 — `--hitch-inject=<ms>[@frame]`: a synthetic stall of known magnitude
 6. ☐ B6 — The sidecar: `perf` summary line plus `.scratch/logs/<mode>-<stamp>.hitches.jsonl`
-7. ☐ B7 — In-engine suite: a record fires, and carries its ring buffer, breadcrumbs and sidecar
+7. ☑ B7 — In-engine suite: a record fires, and carries its ring buffer, breadcrumbs and sidecar
 
 ### Wave C — Attribution
 
@@ -393,29 +393,51 @@ all flush before `HitchMonitor.Rearm`, so only an actual kill/crash can lose any
 ordinary quit or relaunch. A signal handler racing the crash it is meant to survive was considered
 and rejected as more mechanism than the bound it would buy.
 
-## B7 ☐ In-engine suite: a record fires, and carries its ring buffer, breadcrumbs and sidecar
+## B7 ☑ In-engine suite: a record fires, and carries its ring buffer, breadcrumbs and sidecar
 
 **Goal.** `RunTests.ps1` fails if the hitch detector stops detecting.
 
 **Evidence (confidence: traced).** `src/Testing/` plus `--run-tests[=filter]` is the existing harness
 and already exits nonzero on failure; `Suites.cs` is where the assertions live.
 
-**Approach.** A suite that runs with `--hitch-inject=`, then asserts: exactly one record, `frame_ms`
-within tolerance of the injected duration, the ring buffer populated to depth, at least one
-breadcrumb present once C9 has landed, and the sidecar written and parseable. Add the suite to
-whatever `RunTests.ps1` already drives.
+**Approach — settled, not as first written.** `HitchMonitor` only trips on a real rendered frame
+measured over wall time (`Launcher._Process`), and `--run-tests` runs every suite to completion
+inside one `_Ready` call without ever yielding a frame — the same reason goldens is a scripted pass
+rather than a suite. So this is **not** a `Suites.cs` entry: it is a new `hitch` stage in
+`RunTests.ps1`, in the goldens/perf shape — two scripted Godot launches, each read back through its
+own `--log-file` plus the `.hitches.jsonl` sidecar B6 writes. A clean `--frames=180` launch must
+stay silent (decision 13: silent-when-clean is the whole point, and a detector that fires on
+nothing would read as one that fires on everything with nobody the wiser). A
+`--hitch-inject=50@300 --frames=310` launch (B5's own verified-safe pair — `@120` sits inside the
+grace window on this machine, disproven-claim 5) must trip exactly once, on frame 300, with a full
+120-entry ring, and a sidecar record whose `frame`/`frame_ms` match the printed `[perf] hitch …`
+line. Breadcrumbs are C9's, not yet landed — the assertion list below is everything B4/B5/B6 already
+give this suite something to check; C9 extends it, it does not need to re-architect it.
 
 **Model recommendation.** medium.
 
-**Verify.** `.\RunTests.ps1` green. Then deliberately break the trigger locally and confirm the suite
-goes red: a test that has never been seen to fail is not evidence.
+**Verify.** `.\RunTests.ps1` green — 173.7s total (build 1.7s, units 12.6s/1198 passed, engine
+69.5s/53 suites clean, goldens 74.0s/14 shots hash-identical, the new `hitch` stage 15.9s:
+`clean: 0 hitch line(s); inject: 1 hitch line(s), frame_ms=62.52`). Then
+deliberately broke the trigger locally (`HitchMonitor.Tick`'s `tripped` forced `false`) and reran —
+`FAIL hitch … inject: expected exactly 1 hitch line, saw 0` — confirming the stage is actually able
+to fail before reverting the change (`git diff` empty on it afterward): a test that has never been
+seen to fail is not evidence.
 
-**⚠ Traps.** The harness completes inside one `_Ready` call and never yields a frame (this is why
-goldens are a separate pass, per `RunTests.ps1:21-24`). A hitch is by definition a per-frame
-phenomenon, so this suite cannot be a plain `--run-tests` assertion unless it is fed synthesised
-frame data. <TODO: settle whether this lands as a `--run-tests` suite over synthetic input, or as a
-separate frame-yielding probe pass in the shape of the golden stage.> This is the item most likely to
-need its approach revised on contact.
+**⚠ Traps — the one this item hit, for the next stage that launches Godot from a PowerShell script.**
+`--frames=N` alone never quits the process: the only quit is `CaptureDirector`'s, gated on a pending
+`--screenshot=` (`CaptureDirector.cs:126`). Landing this stage without `--screenshot=` (as first
+written) launched Godot into an unbounded run that outlived the calling shell — the frame counter in
+its own log climbed past 200,000 with nothing to stop it. Every scripted launch in `RunTests.ps1`
+now pairs `--frames=` with `--screenshot=`, same as goldens/perf; a launch that doesn't care what
+gets drawn can point it at a throwaway PNG in the same scratch dir.
+
+Also: `[System.IO.Path]::ChangeExtension($path, $null)` in PowerShell is **not** the same call as
+`Path.ChangeExtension(logPath, null)` in C# — `HitchSidecar.cs`'s own derivation. PowerShell coerces
+`$null` to `""` on the way into a `[string]` parameter, and `ChangeExtension` treats an empty-string
+extension as "replace with a bare dot", leaving a double dot (`…stamp..hitches.jsonl`) rather than
+the single one the C# side writes. Pass the compound extension directly instead —
+`ChangeExtension($path, "hitches.jsonl")` — which sidesteps the coercion rather than fighting it.
 
 ---
 

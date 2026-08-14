@@ -151,12 +151,13 @@ Stages, in order, each reported `PASS` / `FAIL` / `SKIP` / `TODO`:
 | `units` | `dotnet test CSVM/CSVM.sln` (the `CSVM.Tests` xUnit project), `--no-build` since the build stage just produced the binaries. Counts are read from a TRX log in `.scratch/testresults/`, never scraped from the localized console summary |
 | `engine` | Godot with `--run-tests` — windowed (never `--headless`: no shaders compile there, so a clean error screen would prove nothing — LOG-8) and with `--log-file .scratch/run-tests-engine.log`, which is what lets the harness screen native engine `ERROR:` lines. `--run-tests` implies `--det` by itself. Verdict from the process exit code; counts and the failing suite names from `.scratch/test-report.json`, which is deleted before the run so a dead run cannot be scored from the last one's numbers |
 | `goldens` | The golden-image tripwire: one Godot per shot in `analysis/goldens/manifest.json`, each a pinned `--det` capture with `--screenshot=` and `--log-file=` appended, compared as **md5 of the raw pixel buffer** the engine prints on its `[core] shot pixmd5=… size=… gpu=…` line (never the PNG's encoded bytes — SHOT-6). ~53 s for 11 shots |
+| `hitch` | Two scripted Godot launches proving `HitchMonitor`/`HitchSidecar` (PLAN-perf-hitches B4/B6) still work: a clean `--frames=180` run that must stay silent, and a `--hitch-inject=50@300 --frames=310` run that must trip exactly once, on frame 300, with a full 120-entry ring and a sidecar record matching the printed line |
 | `perf` | `-Perf` only: every scenario in `analysis/perf/scenarios.json` under `--det --perf --no-vsync --mute`, medians appended to the git-ignored `perf-history.jsonl`. ~88 s for 5 scenarios. It measures and records; it never judges (below) |
 
 Switches: **`-Filter <substring>`** (engine suite names only — `-Filter weapons` runs `weapons-defs`
 + `weapons-fire`; the unit tests are unaffected), **`-SkipUnits`**, **`-SkipEngine`**,
-**`-SkipGoldens`**, **`-RegenGoldens`**, **`-Perf`** (+ `-PerfLabel`, `-PerfCompare`, `-PerfFilter`,
-`-PerfIterations`, `-PerfFrames`).
+**`-SkipGoldens`**, **`-RegenGoldens`**, **`-SkipHitch`**, **`-Perf`** (+ `-PerfLabel`, `-PerfCompare`,
+`-PerfFilter`, `-PerfIterations`, `-PerfFrames`).
 
 **The golden stage is a scripted pass, not an in-engine suite, and that is structural**: the
 `--run-tests` harness runs every suite to completion inside one `_Ready` call and never yields a
@@ -169,6 +170,16 @@ re-renders every shot and rewrites `manifest.json` in place; the emitter round-t
 byte-identically, so the diff is exactly the hash lines that moved. Regeneration is deliberate and
 never automatic — see `docs/verification.md` GOLD-1 for when it is the right answer and when it is
 covering up a defect, and `analysis/goldens/README.md` for the shot set.
+
+**The hitch stage is a scripted pass for the same structural reason the golden stage is one**:
+`HitchMonitor` only trips on a real rendered frame measured over wall time (ticked from
+`Launcher._Process`), and `--run-tests` runs every suite to completion inside one `_Ready` call
+without ever yielding a frame — this is PLAN-perf-hitches B7 settling its own open question, not a
+new exception. Each launch's sidecar path is recovered from the `"[core] log file=…"` line every
+session prints once at `Log.Open` (`Log.SinkPath`, the PROJECT's own log — a different file from
+Godot's own `--log-file` this stage also passes), then read back as `<that path minus .log>.hitches.jsonl`.
+A `FAIL` here means the detector stopped detecting (or started firing on nothing) with nobody
+watching, which is exactly the failure mode an always-on, silent-when-clean instrument invites.
 
 ### The perf stage (`-Perf`)
 
@@ -223,11 +234,12 @@ to the primary tree. Without it a worktree still builds and runs the units; the 
 the engine suites but *not* the data-dependent units — from the primary tree they still find
 `extracted/`.
 
-Stray Godots are killed before the engine, golden and perf stages, **filtered to this tree's project
-dir AND an argument only that stage's own launches carry** (SHELL-2) — `--run-tests` for the engine
-stage, the `.scratch\goldens\` / `.scratch\perf\` output paths for the other two. All always quit by themselves, so one
-still alive is stuck and ours, while any other Godot on this tree — a live playtest, another agent,
-a hand-run capture to any other path — is reported and left alone.
+Stray Godots are killed before the engine, golden, hitch and perf stages, **filtered to this tree's
+project dir AND an argument only that stage's own launches carry** (SHELL-2) — `--run-tests` for the
+engine stage, the `.scratch\goldens\` / `.scratch\hitchcheck\` / `.scratch\perf\` output paths for
+the other three. All always quit by themselves, so one still alive is stuck and ours, while any
+other Godot on this tree — a live playtest, another agent, a hand-run capture to any other path —
+is reported and left alone.
 
 **All three scripts set `SDL_JOYSTICK_DIRECTINPUT=0`**, respecting a pre-set value — the
 controller-disconnect freeze workaround (2026-07-19). Godot's bundled SDL hangs the main thread
