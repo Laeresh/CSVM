@@ -43,6 +43,9 @@ list-adjacency near the target node, not the JSON's actual parent pointers, and 
 "no relation to `gunshell` by … parentage" conclusion does not hold: node 204 (`g1`,
 model 60) *is* `gunshell`'s only child by the data's own `parent_indices`. Flagged in
 `backlog.md`'s `BL-141` entry; not re-investigated further here — out of `BL-140`'s scope.
+(`BL-141` was closed on this correction, 2026-08-14: `shell1`/`shell2` are model 60's own
+materials, so the casing's skin, and `rabbit_blur` is the tracer streak child decoded in
+`docs/org/tracers.md`. See `git log --grep=BL-141`.)
 
 **Confidence:** measured — every number above read directly from each chapter's
 `nodes.json` / `models.json`, not inferred.

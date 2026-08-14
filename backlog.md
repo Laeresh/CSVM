@@ -487,35 +487,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   have to be invented. The mount names are data (`IDS_AIRFRAMEGUNGROUPNAMES`, ui_strings
   3060–3079) and the per-plane stock table is authored, so the *placing* half is real.
 
-- `BL-141` `[Research]` **`shell1.png`/`shell2.png` — the doc's own listed "tracer" texture pair — are wired to
-  nothing: not `gunshell`, not any reader def, not any engine code.**
-  `docs/formats/weapon-effects.md:148` groups them under "Tracer" textures. Traced the actual
-  consumer: `extracted/C1/gamez/textures.json` indices 104/105 → `materials.json` indices 108/109
-  (`Textured`, `texture_index: 104`/`105`) → `models.json` model 60 → `nodes.json` node 205 (`g1`),
-  whose parent chain is `rabbit_blur` (203) → `g11` (200) → `rabbit_blur` (198) → … — a recurring
-  generic-named mesh chain with **no relation to `gunshell` or any weapon node by name or parentage**.
-  Grepped `CSVM/src` and every `extracted/*/cam_anim/*.json` / `extracted/*/*/zrdr/*.json` for
-  `shell1`/`shell2`/`rabbit_blur`/`gunshell`: only the texture files and this one material/model pair
-  exist; nothing calls, anchors, or names them from any weapon-effect def.
-  ⚠ **Correction (`BL-140`'s 8-chapter sweep, `analysis/weapon-effects-node-shape/`).** The node
-  numbers above are off by the `+1` anim-def-ptr convention (`analysis/weapon-effects-node-shape/`) — raw
-  `nodes.json` index 204, not 205, is the `g1`/model-60 node — and at the raw index, its
-  `parent_indices` is `[203]` (`gunshell`) only, not the `rabbit_blur`/`g11`/`rabbit_blur` chain
-  this entry describes (those names sit at nearby *list positions*, not as this node's actual
-  parents). Model 60's node **is** `gunshell`'s own only child, contradicting "no relation to
-  `gunshell` … by parentage" above. The `shell1`/`shell2` textures are still unmatched to it — that
-  part of this entry stands — but "the data gives no mesh" is no longer true for `gunshell`
-  specifically; see the corrected footnote in `docs/formats/weapon-effects.md`. Not re-investigated
-  further here — whether `rabbit_blur` itself is real terrain-effect geometry, model 60's actual
-  visual shape, and the `rabbit_blur`/`g11` chain's true relationship to model 60's node are still
-  open.
-  *Fix shape:* none — a "confirm before assuming" flag. `BL-013`/`BL-137` landed (C22, 2026-07-31)
-  by **instancing the authored `gunshell` subtree**, so model 60 renders with its own materials (the
-  ones whose texture indices are `shell1`/`shell2`) and no texture was hand-repurposed — the trap
-  this entry guards never fired. Still open here: whether `rabbit_blur` is itself a real, unrelated
-  visual effect (a motion-blur streak), model 60's actual visual shape, and the `rabbit_blur`/`g11`
-  chain's true relationship to model 60's node.
-
 - `BL-213` `[Research]` **Does the original splash when gun rounds range-expire over water?** Needs a CAP of the
   original (fire out to sea from altitude, watch the 1000 m expiry point). Until answered, our rounds
   expire silently, which METHOD-18 documents as correct-per-data.
