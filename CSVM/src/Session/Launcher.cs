@@ -286,16 +286,28 @@ public partial class Launcher : Node3D
             ScriptedWindow.Hide();
         }
 
-        // --no-vsync: let the loop run as fast as it can. A measurement flag, not a display one —
-        // with the presentation wait gone, `frame`, `fps` and `script` stop being floors pinned at
-        // the refresh rate and start reporting the work actually done. Safe to combine with the
-        // fixed clock precisely because that clock advances one sim step per RENDERED frame: the
-        // simulation is identical frame for frame, only the wall time it takes changes.
-        if (_spec.NoVsync)
+        // display.vsync / --no-vsync: let the loop run as fast as it can. With the presentation
+        // wait gone, `frame`, `fps` and `script` stop being floors pinned at the refresh rate and
+        // start reporting the work actually done. Safe to combine with the fixed clock precisely
+        // because that clock advances one sim step per RENDERED frame: the simulation is identical
+        // frame for frame, only the wall time it takes changes.
+        //
+        // The config read is unconditional even when --no-vsync already decided the outcome,
+        // because the read is what registers the key — skipping it would drop display.vsync from
+        // --dump-config on exactly the runs that pass the flag. --no-vsync always beats the config
+        // key (it is the measurement flag; the config key is the ordinary-play one).
+        bool vsyncOnByConfig = Config.GetBool("display.vsync", true);
+        bool vsyncOff = _spec.NoVsync || !vsyncOnByConfig;
+        if (vsyncOff)
         {
             DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
             Engine.MaxFps = 0;
-            Log.Info("perf", $"vsync off max_fps=0 — frame/fps/script report work done, not a refresh cap");
+            string source = _spec.NoVsync ? "--no-vsync" : "display.vsync";
+            Log.Info("perf", $"vsync off source={source} max_fps=0 — frame/fps/script report work done, not a refresh cap");
+        }
+        else
+        {
+            Log.Info("perf", $"vsync on — frame/fps/script are floored at the refresh interval");
         }
 
         // --debug-anim opens the call-site gates of the anim and sound families, so it is also the

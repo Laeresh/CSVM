@@ -104,7 +104,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ A1 — Unbind the three map-edge debug keys, freeing `F14`
 2. ☑ A2 — `ReportPerf` reports max and p95 next to its means (no p99 — it would equal max by
    construction at the 60-frame window; see the item's ⚠ Traps)
-3. ☐ A3 — `display.vsync` config key, so the cap can come off without a rebuild
+3. ☑ A3 — `display.vsync` config key, so the cap can come off without a rebuild
 
 ### Wave B — The instrument
 
@@ -230,7 +230,7 @@ have seen it able to fail.**
 by construction. Either widen the percentile window beyond the report window or report only `max` and
 `p95` and say why. Do not ship a p99 column that is a duplicate of `max` by definition.
 
-## A3 ☐ `display.vsync` config key, so the cap can come off without a rebuild
+## A3 ☑ `display.vsync` config key, so the cap can come off without a rebuild
 
 **Goal.** Vsync can be turned off for an ordinary interactive session by editing the git-ignored
 `res://config.json`, with no rebuild and no flag on the command line. `--no-vsync` still wins over

@@ -4540,6 +4540,12 @@ launch; `ReturnToMenu` `QueueFree`s it; a menu launch derives its spec via
 `ReportPerf`'s window line carries `max_ms`/`p95_ms` beside its means (PLAN-perf-hitches A2):
 a preallocated `_perfFrameMs` ring holds each frame's unaveraged wall cost, sorted into scratch
 at window close. No `p99_ms` — at `PerfWindowFrames` = 60 it would equal `max_ms` by construction.
+Vsync resolves at the same `_Ready` site as the shader clock / `--perf` tick: `display.vsync`
+config key (default true) or `--no-vsync`, the flag always beating the key (PLAN-perf-hitches A3).
+The config read is unconditional even when the flag already decided, so the key still registers
+into `--dump-config` on a `--no-vsync` run — the same reason `ApplyMasterVolume` reads
+`audio.volume` unconditionally. The resolved state logs either way (`vsync on` / `vsync off
+source=…`), so a session's log always says which mode it ran in.
 ⚠ `GlobalShaderParameterAdd` runs in `_Ready` ONCE — a session rebuild must never double-Add
   (that errors; `WeatherRig.Build` only `Set`s).
 ⚠ **A scripted session HIDES its window** (`ScriptedWindow.Hide()` = `ShowWindow(SW_HIDE)`) —
