@@ -473,21 +473,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Weapons & combat
 
-- `BL-062` `[Research]` **Rocket firing order — the H-selector fidelity question.** Settle from the original
-  whether the player selects an individual **hardpoint** or the game just drains them in pylon
-  order. Our build drains the selected pylon fully before advancing, and since `BL-025` landed
-  (2026-07-30) H / D-pad Right cycles individual pylons even on a uniform-ammo loadout
-  (`WeaponCursor.NextSelectable` — the old `_ordnanceTypes.Length > 1` gate is gone). Meaningful
-  mixed-ordnance cycling arrives with the M4 configurator (mixed loadouts).
-
-- `BL-065` `[Feature]` `[Blocked: M4]` **M3-deferred gun mechanics — firing heat and cannon jam** (scoped out of
-  `docs/plans/PLAN-M3-weapons.md` 2026-07-22, decision 4: friction with no combat pressure to justify
-  it while nothing shoots back). **The constants are exact, so nobody needs to re-derive them:**
-  `weapons.json` `FIRING_HEAT` on 4 entries (30-cal = 5.0); `vehicle.json` `cannon_jam` on
-  `player_airplane` = `heat_safe_limit 1000`, `heat_dissipation_rate 50`, `jam_chance 0.1`.
-  Heat accumulates per shot, dissipates at 50/s, and past the safe limit each shot has a 10 %
-  jam chance. Pick this up when there is combat pressure — i.e. alongside or after M4 AI.
-
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
   (`messages.json` 126–129), implying world pickups that restore ammo. **Carries research
   risk:** the pickup entities have not been located, and they may be mission-scripted rather
@@ -501,35 +486,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   counts, weapon costs and the economy are all executable-resident, so the *buying* half would
   have to be invented. The mount names are data (`IDS_AIRFRAMEGUNGROUPNAMES`, ui_strings
   3060–3079) and the per-plane stock table is authored, so the *placing* half is real.
-
-- `BL-141` `[Research]` **`shell1.png`/`shell2.png` — the doc's own listed "tracer" texture pair — are wired to
-  nothing: not `gunshell`, not any reader def, not any engine code.**
-  `docs/formats/weapon-effects.md:148` groups them under "Tracer" textures. Traced the actual
-  consumer: `extracted/C1/gamez/textures.json` indices 104/105 → `materials.json` indices 108/109
-  (`Textured`, `texture_index: 104`/`105`) → `models.json` model 60 → `nodes.json` node 205 (`g1`),
-  whose parent chain is `rabbit_blur` (203) → `g11` (200) → `rabbit_blur` (198) → … — a recurring
-  generic-named mesh chain with **no relation to `gunshell` or any weapon node by name or parentage**.
-  Grepped `CSVM/src` and every `extracted/*/cam_anim/*.json` / `extracted/*/*/zrdr/*.json` for
-  `shell1`/`shell2`/`rabbit_blur`/`gunshell`: only the texture files and this one material/model pair
-  exist; nothing calls, anchors, or names them from any weapon-effect def.
-  ⚠ **Correction (`BL-140`'s 8-chapter sweep, `analysis/weapon-effects-node-shape/`).** The node
-  numbers above are off by the `+1` anim-def-ptr convention (`analysis/weapon-effects-node-shape/`) — raw
-  `nodes.json` index 204, not 205, is the `g1`/model-60 node — and at the raw index, its
-  `parent_indices` is `[203]` (`gunshell`) only, not the `rabbit_blur`/`g11`/`rabbit_blur` chain
-  this entry describes (those names sit at nearby *list positions*, not as this node's actual
-  parents). Model 60's node **is** `gunshell`'s own only child, contradicting "no relation to
-  `gunshell` … by parentage" above. The `shell1`/`shell2` textures are still unmatched to it — that
-  part of this entry stands — but "the data gives no mesh" is no longer true for `gunshell`
-  specifically; see the corrected footnote in `docs/formats/weapon-effects.md`. Not re-investigated
-  further here — whether `rabbit_blur` itself is real terrain-effect geometry, model 60's actual
-  visual shape, and the `rabbit_blur`/`g11` chain's true relationship to model 60's node are still
-  open.
-  *Fix shape:* none — a "confirm before assuming" flag. `BL-013`/`BL-137` landed (C22, 2026-07-31)
-  by **instancing the authored `gunshell` subtree**, so model 60 renders with its own materials (the
-  ones whose texture indices are `shell1`/`shell2`) and no texture was hand-repurposed — the trap
-  this entry guards never fired. Still open here: whether `rabbit_blur` is itself a real, unrelated
-  visual effect (a motion-blur streak), model 60's actual visual shape, and the `rabbit_blur`/`g11`
-  chain's true relationship to model 60's node.
 
 - `BL-213` `[Research]` **Does the original splash when gun rounds range-expire over water?** Needs a CAP of the
   original (fire out to sea from altitude, watch the 1000 m expiry point). Until answered, our rounds
@@ -660,6 +616,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   films it; measurement can reuse `analysis/video-flight-calibration` if the HUD is in frame.
   `wep_14` is mountable via `--rocket=wep_14` (no stock loadout carries it).
 
+- `BL-357` `[Feature]` **The hardpoint selector steps one way only; the original cycles in both
+  directions.** *Evidence:* the user at the controls of the original, 2026-08-14: the player selects
+  an individual hardpoint (the half that settled `BL-062`, closed the same day), and the selection
+  can be stepped clockwise *and* counter-clockwise. Ours has exactly one selector input per weapon,
+  `H` / D-pad Right for pylons and `G` / D-pad Left for gun groups
+  (`FlightController.cs:1456`, `docs/controls.md`), and `WeaponCursor.NextSelectable`
+  (`WeaponCursor.cs:34`) only ever scans forward. *Fix shape:* a `PrevSelectable` backward scan
+  with the same empty-slot skipping, plus a second binding per selector, which is where this stops
+  being a two-line change: the flight keymap has no spare paired keys and the pad's D-pad is
+  already spent on the two forward steps. `BL-296`'s per-player ActionMap is the natural home for
+  the four named actions if it lands first.
+  ⚠ Traps: (a) **The cycle order itself is right and must not be touched** (user, 2026-08-14: ours
+  walks the pylons in the same order the original does). What is missing is the second direction,
+  nothing else, so a reverse step is `NextSelectable` walked backwards over the same sequence, not
+  a re-derivation of the order. (b) The observation is about hardpoints. The gun-group selector is
+  the analogous case but was not observed, so do not assume it cycles both ways either.
+  (c) Empty-slot skipping is not in question and must survive the change: both directions land on
+  an armed slot.
+  *Cross-refs:* `BL-067` (the configurator, where mixed loadouts finally make the direction
+  matter), `BL-296` (ActionMap/rebinding seam), `git log --grep=BL-062` for what settled the
+  per-hardpoint half.
+
 ## Flight model & collision physics
 
 - `BL-089` `[Feature]` **Nitro booster — scoped, low priority (the user's standing call).** Recorded because the data is
@@ -678,165 +656,96 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   data port. (`rof/ui_strings.json` carries "NITRO-BOOST: %4!s!" on the purchase screen and the
   buyable engines come in plain and "… nitro" variants, so the engine choice is what grants it.)
 
-- `BL-095` `[Research]` **`player.json` ships a physics block we consume almost none of.** Alongside the used
-  `nom_gravity 20.0` / `stall_mag 1.25`: `maxAOA 46.0`, `liftAOAs [5,9]`, `lift_accel_rate 0.75`,
-  `highGs [9,15]`, `lowGs [-6,-9]`, `drag_factor 1.5`, `drag_fade_speed 40`, `turn_fade_in 10`,
-  `turn_fade_out 50`, `high_speed_pitch_fade [1000,1001]`, `yaw_low_speed 0.0625`,
-  `yaw_high_speed 0.17`, `yaw_fade_in 10`, `yaw_max 50`, `yaw_fade_out 400`, `groundblow_elev 400`,
-  `groundblow_mag 10`, `ai_groundblow 0.5`, and the `crash` block's `bounce_factor 0.6`. Units are
-  unverified; decoding it deserves its own pass, and it is the upstream of other entries here:
-  the `yaw_*` fade set is the original's own speed-dependent yaw authority, decoded and implemented
-  by `PLAN-flight-model-rewrite` C21 in place of the interim `eff` (`1.4 − clamp(v/fd)`, retired
-  2026-08-09), and the AoA/G block (`maxAOA`, `liftAOAs`, `highGs`/`lowGs`, `lift_accel_rate`) is
-  now partially consumed by the landed lift re-key — as a hypothesis under test, not a decode
-  (`docs/plans/PLAN-flight-drag-lift.md` B12) — with the induced-drag exponent question owned by
-  `BL-307`.
+- `BL-095` `[Research]` **`player.json`'s physics block — DECODED END TO END. What is left is
+  implementation, not research.** Every key is now read out of `crimson.exe`, with the write-up in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md): the flight block on 2026-08-09, ground blow
+  and `bounce_factor` on 2026-08-14. Units come off the conversion the parser applies, never from
+  inference: **speeds are MPH** (`× 0.44704` on load), **`liftAOAs`/`maxAOA` are degrees** (the
+  parser takes their cosine), and **`highGs`/`lowGs`, `groundblow_*`, `ai_groundblow` and
+  `bounce_factor` are raw scalars**. World lengths are **metres**, identified positively from
+  `nom_gravity`'s 9.82 reference divisor.
 
-  **Units: PARTLY DECODED — settled 2026-08-09 from `crimson.exe` (Ghidra), write-up in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md); consumed by
-  [`docs/plans/PLAN-flight-model-rewrite.md`](docs/plans/PLAN-flight-model-rewrite.md), complete
-  2026-08-09.** The parser reads each
-  key by name, so the units are read off the conversion it applies, not inferred:
-  **speeds are MPH** (`× 0.44704` on load — so `turn_fade_in 10`, `yaw_max 50`, `yaw_fade_out 400`
-  and `drag_fade_speed 40` are all mph); **`liftAOAs` and `maxAOA` are degrees** (the parser takes
-  their cosine); **`highGs`/`lowGs` are stored raw and are plain G**. That closes the units half of
-  this entry for the flight block. What each key *does* is in the write-up — and two of the readings
-  standing here are now wrong: **`liftAOAs` is not a load-factor ramp**, it is the window over which
-  the relative wind is blended toward the nose; and the `yaw_*` set is not a simple fade but a
-  ramp to 1.0 at 50 mph then a decline to 0.17 at 400 mph — implemented by the plan's `C21`
-  (landed 2026-08-09), which retired `BL-108`'s interim `eff`.
+  | Key (authored) | Where it stands |
+  |---|---|
+  | `yaw_low_speed 0.0625` / `yaw_high_speed 0.17` / `yaw_fade_in 10` / `yaw_max 50` / `yaw_fade_out 400` | Decoded and **implemented** (`PLAN-flight-model-rewrite` C21), retiring `BL-108`'s interim `eff` |
+  | `turn_fade_in 10` / `turn_fade_out 50` | Decoded: the roll/pitch base ramp from airspeed alone. **Unimplemented, owned by `BL-330`** |
+  | `maxAOA 46.0` / `liftAOAs [5,9]` / `lift_accel_rate 0.75` | Decoded. `liftAOAs` is an airflow blend, **not** a load-factor ramp. Consumed by `PLAN-flight-drag-lift` B12 as a **hypothesis under test, not a decode**; exponent question on `BL-307` |
+  | `high_speed_pitch_fade [1000,1001]` / `highGs [9,15]` / `lowGs [-6,-9]` | Decoded as **authored unreachable** (`C24`, `D33`). Nothing implemented, which is the correct outcome |
+  | `drag_factor 1.5` (global) / `drag_fade_speed 40` | **Dead in the executable** (B14): parsed, then read by nothing. The per-plane `drag_factor` is the only drag scale |
+  | `groundblow_elev 400` / `groundblow_mag 10` / `ai_groundblow 0.5` | Decoded 2026-08-14. **Unimplemented and unowned** |
+  | `bounce_factor 0.6` | Decoded 2026-08-14. Units settled; implementation owned by `BL-172` |
+  | `nom_gravity 20.0` / `stall_mag 1.25` | Already consumed |
 
-  ⚠ **Three keys here are authored so the feature they gate never fires**, which is a finding, not a
-  gap to fill: `high_speed_pitch_fade [1000,1001]` is beyond any attainable dive speed, and
-  `highGs [9,15]` / `lowGs [-6,-9]` sit past the executable's hard ±5/9 G lift clamp. Do not
-  implement them as missing features. **`high_speed_pitch_fade`: CLOSED 2026-08-09 by plan `C24`** —
-  confirmed unreachable for all eleven player airframes against `MaxDiveSpeedFrac` (1.75 × `fd_speed`,
-  the model's own hard dive ceiling, more generous than any airframe's settled terminal dive): the
-  Bloodhawk's own ceiling, the highest of the eleven, is 528.5 mph, little over half the authored
-  1000 mph threshold. Table in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md#control-authority-vs-speed) and
-  [`POST-B14.md`](analysis/flight-model-baseline/POST-B14.md)'s C24 section. Nothing was
-  implemented — that is the correct outcome.
-  **`highGs`/`lowGs`: CLOSED 2026-08-09 by plan `D33`, the same way and with the same outcome.**
-  Measured through the real model on all eleven airframes (five max-performance manoeuvres each;
-  the demanded load factor read BEFORE both lift clamps, so it over-reads what the wings deliver):
-  peak **2.13–5.01 G** against `highGs[0]` **9**, margins 3.99–6.87 G; and peak α **8.9–25.6°**
-  against `maxAOA` **46°**, margins 20.4–37.1°. `lowGs [−6,−9]` is unreachable twice over — past the
-  −5 G clamp, and the demand is a vector LENGTH that never goes negative. Tables in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md) and
-  [`POST-B14.md`](analysis/flight-model-baseline/POST-B14.md)'s D33 section; pinned by
-  `CSVM.Tests/ControlLimiterTests.cs`, which asserts each airframe against its OWN loaded
-  thresholds, so a per-plane override or a data edit that brings either into reach fails the suite.
-  ⚠ The Bloodhawk's 5.01 G peak is 0.2 % **past** the executable's fallback `highGs[0] = 5` — under
+  ⚠ **Three keys are authored so the feature they gate never fires. That is a finding, not a gap to
+  fill: do not implement them as missing features.** `high_speed_pitch_fade` is beyond any attainable
+  dive speed (the highest of the eleven ceilings is the Bloodhawk's 528.5 mph against an authored
+  1000, `C24`), and `highGs`/`lowGs` sit past the hard ±5/9 G lift clamp (peak demand 2.13–5.01 G
+  against a threshold of 9, peak α 8.9–25.6° against `maxAOA` 46°, all eleven airframes, `D33`).
+  `lowGs` is unreachable twice over, since the demand is a vector LENGTH that never goes negative.
+  Tables in [`docs/org/flightModel.md`](docs/org/flightModel.md) and
+  [`POST-B14.md`](analysis/flight-model-baseline/POST-B14.md); pinned by
+  `CSVM.Tests/ControlLimiterTests.cs`, which asserts each airframe against its OWN loaded thresholds,
+  so a per-plane override or a data edit that brings either into reach fails the suite.
+  ⚠ The Bloodhawk's 5.01 G peak is 0.2 % **past** the executable's fallback `highGs[0] = 5`, so under
   the fallbacks the limiter would fire, barely. The disproof rests on the authored 9.
-  `groundblow_*`, `ai_groundblow` and `crash.bounce_factor` are **not** covered by the decode and
-  keep this entry open alongside the ground-blow work below.
 
-  **Ground blow: DECODED — settled 2026-08-07 by the design document plus `CAP-02` (five batches),
-  and `CAP-02` is closed.** It is a *designed* feature, not a shipped-only one: the GDD has a
-  section on exactly this — §4.1.7 "Ground Blow", under Motion Model/Flight Dynamics → Simulated
-  Elements (`tools/cs_gdd_extracted/cs_gdd.txt`, git-ignored; restated here, no prose). Ground blow
-  is a proximity repulsion exerted by large dangerous objects — the named emitters are the ground,
-  **cliff walls, and zeppelins** — that never overpowers the controls and never saves a head-on
-  collision; the closer the plane edges toward an emitter, the more stick it takes to keep closing.
-  So the design's mechanism is a bias on *control response* pointed away from the object, scaled by
-  proximity — not an applied force, and not specifically about terrain below. Everything `CAP-02`
-  measured and everything the pilot reported fits that shape:
+  **Ground blow: DECODED from the binary 2026-08-14.** Mechanism, constants and gates are in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md); `CAP-02` closed 2026-08-07 and the GDD's
+  §4.1.7 *mechanism* is confirmed by the code, though its emitter list is not (below). In short:
+  `FUN_0048bf60` casts a ray of
+  `groundblow_elev` **metres** along the nose, and `FUN_0048c220` adds a rotation away from the hit
+  surface into the **same accumulator the stick writes to**, one call after the stick terms in
+  `FUN_0048c470`. It is a bias on control response, not an applied force. A command *into* the
+  obstacle is met with `0.05 × groundblow_mag`, so it is halved and never reversed; a command *away*
+  is amplified by up to `1 + 10·S²`; and on a dead-on approach the bias axis `n × b` collapses to
+  zero, so a head-on gets no help at all. The AI path is a different law, not a scaled one: a fixed
+  push of `ai_groundblow × groundblow_mag × S`, independent of what the AI commanded, linear in
+  proximity, and not `dt`-scaled.
 
-  - **Lateral, away from the object.** A wings-level full pull straight at a cliff steps the
-    heading **17° away at up to 34 °/s** (`Run4 Clip3`, level 250 ft at the cliff), while matched
-    free-air controls flying the identical held pull — at 1,113 ft and at **90 ft over water** —
-    move under 1°. Deliberate ~45° banked turns at the same speed (`Run 5`) peak ~3× faster, run
-    ~10× faster sustained, and keep turning; the cliff event is a one-off heading *offset* that
-    then holds. Displacement away from the obstacle, not a commanded turn.
-  - **Nothing in the vertical plane.** Path-normal acceleration 0.91–1.03× free air and ADI body
-    pitch rate 0.91–1.10× across every controlled comparison, including the same held full-pull
-    loop flown at 1,113 ft and at 90 ft. (An earlier "1.95× pitch authority" claim here was
-    retracted as a borrowed yardstick — the record is in `git log --grep=CAP-02`, and the
-    measurement methodology and its traps live in `analysis/video-flight-calibration/FINDINGS.md`.)
-  - **Keyed to closure with the object, not height.** The one shallow water dive starts its pull
-    where along-path *range* crosses ≈400 (`groundblow_elev` 400) while altitude 399 ft shows
-    nothing; a level run held at 165–336 ft for 7.9 s never trips it; canyon runs tripping
-    `LOW ALT` continuously never trip it either — nothing is close *ahead* however near the walls
-    are beside you.
-  - **The cockpit reports match the design text point for point**: it only exists while pitch is
-    held (hands off is a crash — "never overpowers the controls"); elevator only; body-frame
-    (inverted, pulling *down* works the same — impossible for a world-frame force); an assist, not
-    a clamp (`pull up to cras` still ends in the water — "never saves a head-on").
+  ⚠ **`groundblow_elev` 400 is 400 METRES of ray length, not a 400 ft trigger range, and the
+  footage agreement was a coincidence of digits.** The `CAP-02` onset bracketed at 427 → 376 ft sits
+  well inside a 1,312 ft ray at roughly 70 % strength, so the ray never explains an onset there and
+  whatever timed that pull was not this threshold. The footage record that carried this reading,
+  `analysis/video-flight-calibration/FINDINGS.md`, was deleted 2026-08-14 as superseded.
+  ⚠ **`groundblow_mag` 10 is not a TUNE** and must not be fitted to the cliff clip's 17° step. It is
+  an authored constant with a traced consumer, 6.7× the engine's own fallback of 1.5.
+  ⚠ **Zeppelins as emitters is still unconfirmed.** Terrain and unregistered scenery always qualify,
+  but registered entities are filtered on a byte that is a "placed but not yet simulated" transient,
+  cleared every frame for anything running a flight update. Which entities keep it set permanently
+  was not determined, so the GDD's emitter list is neither confirmed nor refuted. A free check
+  whenever a zeppelin mission is flown.
+  One `CAP-02` anomaly stands unexplained and is now moot for implementing: `Up Down` recovery #1
+  reads 2.30× free air with 28–30 % of samples gated at γ ≈ −63°, suspected estimator artifact, and
+  every clip designed to reproduce it came back flat.
 
-  **Why `CAP-02` closed without the owed re-film.** The last measurement gap was that a ~15°
-  *transient* roll would be indistinguishable from a yaw step in a daylight clip (no daylight roll
-  readout exists). The design text supplies the mechanism — a control-response bias away from the
-  emitter — and the pilot flew the cliff pull wings-level with pitch the only input; read together,
-  the heading step is that bias acting on the one input held, and a re-film would only re-measure
-  what is now known. Footage stays staged under `playtest/CAP-02/` (git-ignored, main checkout),
-  clip registry in `analysis/video-flight-calibration/extract.py`.
-
-  ⚠ **Still open on ground blow — none of it blocks implementing.** (a) `groundblow_mag 10` units
-  are unverified: magnitude is a TUNE, and the calibration target is the cliff clip's 17° step at
-  ~300 mph. (b) `groundblow_elev 400` read as trigger *range* fits the one clean onset (bracket
-  427 → 376 ft) but pilot timing is not excluded — a working reading, not a confirmation. (c) One
-  anomaly stands: `Up Down` recovery #1 reads 2.30× free air with 28–30% of samples gated at
-  γ ≈ −63°, suspected estimator artifact; every clip designed to reproduce it came back flat.
-  (d) The design names **zeppelins** as emitters and `ai_groundblow 0.5` plausibly scales the AI's
-  version — both untested, both free checks whenever a zeppelin mission is flown.
-  Implementing ground blow itself is unowned follow-on work — mint a `[Feature]` item when it is
-  scheduled.
-
-  **`turn_fade_in 10` / `turn_fade_out 50` now have a measurement waiting for
-  them (2026-08-07; `highGs [9,15]` was the third of this trio until `D33` took it out — see
-  below).** The original pulls **1.6× slower when banked**: 30.16 °/sim-s round a
-  wings-level 360° loop against 18.95 °/sim-s in `CAP-01`'s 100°-banked turn, same aircraft, same
-  full back stick, same full throttle — and not a speed effect, since the loop passes through the
-  turn's 222.94 mph on its way round (`analysis/video-flight-calibration/FINDINGS.md`). Our model
-  has no such asymmetry and is 71% fast in the banked case while being right to ~11% in the loop.
-  ⚠ **CORRECTED 2026-08-09 — `turn_fade_*` is decoded, it is NOT a bank or load-factor fade, and
-  with it out the trio is empty: the banked asymmetry has no authored candidate left.** The decode of
-  record already carried the answer (`docs/org/flightModel.md`, "Control authority vs speed"):
-  `FUN_00490e10` derives one **base ramp from AIRSPEED ALONE** — 0 below `turn_fade_in` (10), rising
-  linearly to 1 at `turn_fade_out` (**50** as authored here), **held at 1 above it** — scaling roll
-  and pitch authority. Bank never enters it, and above 50 mph it is identically 1. The banked turn
-  settles at 222–260 mph and the knife-edge takes are at 143 and 300 mph, so the ramp is saturated
-  everywhere the 1.6× appears and **cannot produce it**. What it does describe is a real
-  unimplemented behaviour at the bottom of the envelope — minted as `BL-330`.
-  All three candidates are now dead. (a) The original's own hardcoded bank coupling — 0.205 into
-  yaw, 0.165 into pitch, plus the inverted term — is decoded and implemented
-  (`PLAN-flight-model-rewrite` C22, 2026-08-09) and moves the banked rate **away** from the original
-  (32.35 → 34.71 °/s, up on ten of eleven airframes): both terms add heading rate in the direction of
-  bank by construction, so no sign or scale of them can subtract one. Do not re-open the coupling
-  looking for the missing slowdown. (b) **`highGs` (`D33`, 2026-08-09):** the G limiter is inert on
-  every airframe (peak demand 2.13–5.01 G against a threshold of 9), and a limiter that never fires
-  cannot slow a turn. (c) `turn_fade_*`, above.
-  ⚠ **Do not fill the hole by inventing a rate limiter from field names** — a naive speed/bank
+  **The original's 1.6×-slower banked turn has no authored candidate left, and this block is not
+  where it will be found.** All three died: the hardcoded bank coupling moves the banked rate the
+  wrong way by construction (`C22`), `highGs` is a limiter that never fires (`D33`), and
+  `turn_fade_*` is an airspeed ramp that is saturated at 1 everywhere the gap appears (`C21` era
+  correction, 2026-08-09). What remains is the measurement's own interpretation: `CAP-01`'s
+  18.95 °/sim-s at 222.94 mph implies **58.7° of bank**, and `CAP-33` (2026-08-15) settled that the
+  ~100° its ADI shows is not a bank at all: with the pilot holding a known 60–70°, the implied bank
+  tracked it to within a few degrees while the ADI over-read by ~40° and swung with the pitch cycle.
+  So the "measured bank" half of this disagreement was never real. Evidence on `BL-307`.
+  ⚠ **Do not fill the hole by inventing a rate limiter from field names.** A naive speed/bank
   coupling that quietly costs pitch authority is exactly the wrong-mechanism fix `BL-124`'s history
   warns about, and `maxAOA`/`liftAOAs` were consumed as a hypothesis under test rather than as a
   decode (`docs/plans/PLAN-flight-drag-lift.md` B12).
-  **Where to look now that the authored data is exhausted: the measurement's own interpretation.**
-  `Probes.FlightEnvelope` already records that the original's turn is not internally consistent with
-  a coordinated level turn — 18.95 °/sim-s at 222.94 mph is `V·ω` = 32.96 m/s² lateral, implying
-  **58.7° of bank**, not the ~100° its ADI shows. A model reproducing the measured *rate* would then
-  disagree with the measured *bank*. `CAP-33` (a sustained turn held at a clearly different bank,
-  ~60–70°) is the capture that discriminates: two banks and two rates say whether the original's turn
-  is rate-limited, bank-limited, or being mis-read off the ADI. A capture question, not a decode one.
+  ⚠ **Do not re-open `drag_factor` as a name collision.** The global one is dead in the executable,
+  so `vehicle.json`'s per-plane `drag_factor` is the only drag scale and there is nothing to
+  reconcile.
 
-  Still to decode/implement in the block: `turn_*` (the roll/pitch base ramp — above; exponent on
-  `BL-307`), `groundblow_*`/`ai_groundblow`, and `bounce_factor`'s units (`BL-172`). The `yaw_*` set
-  is decoded and implemented (`PLAN-flight-model-rewrite` C21); `high_speed_pitch_fade`,
-  `highGs`/`lowGs`/`maxAOA` and `drag_fade_speed` are decoded as
-  authored-unreachable/authored-unreachable/dead respectively (`C24`'s pitch fade, `D33`'s G and AOA
-  limiters, B14's dead-key finding for `drag_fade_speed`).
-  One GDD lead for the AoA/G set, and `D33` bears it out: the design's "Elements not Simulated" list
-  explicitly excludes red-outs, so `highGs [9,15]` / `lowGs [-6,-9]` are the lift model's
-  load-factor envelope rather than pilot-physiology thresholds — and as an envelope they sit outside
-  everything the aircraft can actually reach.
-  ⚠ **Traps.** (a) `yaw_max 50` and `yaw_fade_out 400` are not in the same units as our `eff`
-  — do not map names onto our terms without deriving the units, because our yaw 360° currently
-  matches the original to 4% and a mis-scaled substitution would break a passing suite check.
-  (b) `drag_factor 1.5` here **collides with** `vehicle.json`'s per-plane `drag_factor` (0.37 on the
-  Bloodhawk), so at least one of the two is not what its name suggests; our drag uses neither.
+  **Still to do, all of it downstream of this entry:**
+  1. **Implement ground blow** (`BL-359`, minted 2026-08-14). Nothing blocks it.
+  2. **Implement the roll/pitch base ramp** (`BL-330`) and **the `bounce_factor` restitution**
+     (`BL-172`).
+  3. **Confirm the zeppelin emitter** on any zeppelin mission (free). (`CAP-33` was flown
+     2026-08-15; it settled the ADI-vs-implied-bank question, not the banked-turn rate gap.)
+
+  When those are homed elsewhere or done, this entry retires: there is no research left in it.
 
 - `BL-330` `[Feature]` **The low-speed control-authority ramp — decoded, corroborated at the
-  controls, and not implemented.** `FUN_00490e10` scales **roll and pitch** authority by a base ramp
+  controls, and not implemented.** `FUN_0048bdd0` scales **roll and pitch** authority by a base ramp
   taken from airspeed alone: 0 below `turn_fade_in` (**10 mph**), rising linearly to 1 at
   `turn_fade_out` (**50 mph** as authored here), flat at 1 above. So the slower the aircraft gets,
   the mushier it gets — and at 10 mph roll and pitch are gone entirely. Our `FlightModel` applies no
@@ -1171,11 +1080,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`GrazeKick`), and a fixed `GrazePushOut` (0.15 m) off the surface — there is no
   restitution/repulsion term along the normal at all. Meanwhile `player.json`'s `crash` block ships
   **`bounce_factor 0.6`** alongside `armor_damage_range [50,300]` / `health_damage_range [50,300]`
-  (`docs/formats/vehicle.md:65,90-149`), and nothing in `CSVM/src` reads any of the three (`BL-095`
-  flags the block's units as undecoded — grep confirms zero hits for `bounce_factor` under `CSVM/src`).
+  (`docs/formats/vehicle.md:65,90-149`), and nothing in `CSVM/src` reads any of the three (grep
+  confirms zero hits for `bounce_factor` under `CSVM/src`; `BL-095` has the block's decode status).
   *Fix shape:* add a restitution impulse along the contact normal scaled by `bounce_factor`, alongside
   the existing tangential slide — this turns "invent a pushback mechanic" into "bind the shipped
   constant." *Blocks:* the collision-feel sign-off.
+
+  **DECODED 2026-08-14 from `crimson.exe`; units settled and the fix shape confirmed.**
+  `bounce_factor` is a **raw scalar** (global `0x0071c35c`, parser store `0x00473c38`, fallback 0.8),
+  applied in the collision resolver `FUN_0048d7f0` as a normal-only impulse with no tangential or
+  friction term. Write-up in [`docs/org/flightModel.md`](docs/org/flightModel.md), "Collision response
+  and `bounce_factor`". Three things it changes here:
+  - **Effective normal restitution is `f_lin × bounce_factor`, not `bounce_factor`**, where
+    `f_lin = L/(L+A)` splits the impact between linear rebound and spin (`L = 2.25·|J|`,
+    `A = |Δω|`). A short lever arm rebounds at up to 0.6; a wingtip or nose into a wall throws
+    almost everything into rotation instead.
+  - **There is no surface dependence in the code at all** — no verticality test, no per-surface
+    table, no material lookup. The measured vertical-versus-flat split below is a lever-arm
+    partition, and reading it as a per-surface coefficient would be wrong.
+  - **Only the player bounces.** The impulse branch is entered only for the local player and only
+    while not already crashed; AI aircraft get position correction and nothing else.
+  ⚠ **The measured 0.75–0.86 on flat ground is above what `bounce_factor` can produce**, and the
+  decode found why: the impulse is computed from the *contact point's* velocity with the rotational
+  term **doubled**, then applied in full to the centre of mass with no reaction term
+  (`n·v_after = −k·(n·v) − (1+k)·2·n·(ω × r)`, `k = f_lin·bounce_factor`). The second term is
+  unbounded and is not restitution. Reproducing the original's feel needs that term, not a larger
+  `bounce_factor`. Ruled out as sources, each traced: multiple contacts per frame, successive-frame
+  stacking, a separate ground-support path, and gravity ordering.
   ⚠ **`bounce_factor` 0.6 IS a restitution along the contact normal — measured 2026-08-04 from
   `CAP-14`** (eight clips, `playtest/CAP-14/`; two airframes, Bloodhawk and a max-armour Balmoral;
   **seven** contacts, three surface orientations, 139–302 mph; every clip's altimeter and speedometer
@@ -1211,9 +1142,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   impulse.
   *Playtest after fix:* grazes vs crashes should feel fair against the original, including behaviour
   against building corners (`CAP-14`).
-  ⚠ **Traps.** (a) `bounce_factor`'s units are unverified — `BL-095` flags the whole `player.json`
-  physics block as needing its own decode pass. `CAP-14` now supports reading it as a plain
-  coefficient of restitution on the contact normal, but **0.6 is *consistent with* that footage, not
+  ⚠ **Traps.** (a) `bounce_factor`'s units are settled (raw scalar, decode above); what remains
+  unverified is the footage. `CAP-14` supports reading it as a coefficient of restitution on the
+  contact normal, but **0.6 is *consistent with* that footage, not
   measured from it.** Only two of five flat-ground contacts are readable at all; of those, the belly
   slide's `v0` still walks with the fit window (+3.2/+11.8/+17.5/+21.9 at N = 5/7/9/12, so e is really
   0.07–0.49) and only wingtip #1 is window-stable (+10.6…+12.3 over N = 7–15, residual 0.07–0.09 ft
@@ -1248,22 +1179,80 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   wings level, no visible attitude kick at that severity. Judge the kick and the stop rule
   against that footage and `BL-120`'s corner feel item before tuning further.
 
-- `BL-307` `[Research]` `[Blocked: CAP-32, CAP-33]` **The induced-drag exponent and the `CAP-01` turn's
-  bank are each pinned by one data point.** `PLAN-flight-drag-lift` C21 fitted `InducedDragCoef`
+- `BL-307` `[Research]` **ANSWERED, both halves (2026-08-15).** The `CAP-01` bank half by `CAP-33`
+  (the ADI does not read the pilot's bank); the induced-drag exponent half by the decode (the
+  original has no induced-drag term, so there is no exponent), which retired `CAP-32` as both
+  unfilmable and unnecessary and minted `BL-360`.
+  *Evidence (`CAP-33`, `OriginalScreenshots/Videos/CAP-33.mp4`, 33.76 s, 2560×720, decoded this
+  session; head-turn gate **OK**, `corr dx(ALT), dx(MPH) = +1.00`, dial translation 0 px).* The
+  pilot held a **60–70° bank** with full back stick and full throttle and reported it at the
+  controls, so the bank is known independently of any instrument. Over the sustained turn
+  (10.0–33.7 s wall = 32.9 s sim, 702 frames) the two estimators disagree completely:
+
+  | Estimator | Mean | Range | Swing |
+  |---|---|---|---|
+  | ADI sky centroid (the method `CAP-01`'s "~100°" used) | **105.1°** | 79.5–125.4° | 45.9° |
+  | `V·ω / nom_gravity` (implied bank) | **62.2°** | 56.0–69.9° | 13.9° |
+
+  (All four columns are over the 23 one-second bins of the sustained turn. Fitting the whole span in
+  one regression instead gives 22.95 °/sim-s at 218.55 mph, `V·ω` = 39.14 m/s², implied bank
+  **62.9°** — the same answer.)
+  The implied bank sits **inside the pilot's stated band and stays there through the whole
+  manoeuvre**; the ADI over-reads by ~40° and swings 46°. What the ADI's swing tracks is the pitch
+  cycle, not any input: binned per second, `r(ADI roll, climb rate) = **+0.886**` and
+  `r(ADI roll, speed) = **−0.914**`, while `r(ADI roll, heading rate) = **−0.091**`. The same ball's
+  own pitch (sky-area fraction, `adi.py`) swings 39.5° and correlates `+0.520` with its roll,
+  frame by frame, which is the instrument-internal version of the same statement.
+  **So BL-307's dilemma resolves on its first horn: the ADI reading is not bank. The original's
+  turn IS coordinated closely enough that `V·ω / nom_gravity` recovers the flown bank**, and
+  `CAP-01`'s 58.7° implied bank is the good number while its "~100° ADI" is an artifact of reading
+  airframe attitude in a high-α pull. There was never a contradiction; the two figures were
+  different quantities.
+  ⚠ **`nom_gravity` (20 m/s²), not 9.81, is the constant in the implied-bank formula.** `atan(32.96
+  / 20) = 58.7°` is how `CAP-01`'s figure was derived (`PLAN-flight-drag-lift.md:521`); using Earth
+  gravity gives 73.4° and silently breaks every comparison in this entry.
+  ⚠ **This does not give a bank/rate curve, and no cockpit capture can.** Implied bank is computed
+  *from* the rate, so the two are not independent measurements — `CAP-33`'s value is that an
+  independently-known bank validated the estimator. Reading bank off an ADI in a pulling turn is the
+  thing that does not work; do not re-file that as a capture request.
+  ⚠ **The clip never settles**, so its numbers are cycle means and not a plateau: altitude
+  oscillates 1804–2486 ft on an ~11 s cycle, speed 180–253 mph in antiphase, heading rate
+  19.8–28.4 °/sim-s. Mean over the turn is 22.95 °/sim-s at 218.55 mph. Quoted to no better than
+  ±0.33 s in time (the sidecar's `pts_short` note).
+  **The exponent half is ANSWERED too, by the decode rather than by a capture (2026-08-15), and
+  `CAP-32` is retired unfilmable.** The controls are keyboard, so back stick is 100 % or 0 % and a
+  "deliberately part-deflected pull" cannot be flown at all. It is also unnecessary: the original
+  has **no induced-drag term of any kind**, so there is no exponent to choose between.
+  `docs/org/flightModel.md` enumerated every use of the `C_L` slot in `FUN_0048fc40` (the lift-force
+  product, an optional load-factor out-param, and a dead push) and found no `C_L²`, AOA-keyed or
+  load-factor-keyed contribution to drag; the drag polar's variable is **Mach**. A pull costs the
+  original speed only through the lift vector's own tilt.
+  ⚠ **That answer is bigger than this entry, and it is not comfortable: it says our landed `sin²α`
+  term models a mechanism the original does not have.** C21 fitted `InducedDragCoef` 10.75 on
+  2026-08-07; the decode that found no induced-drag term is 2026-08-09, two days later, and the two
+  were never reconciled. Minted as `BL-360` rather than settled here.
+  **The original two-point framing, for the record:** `PLAN-flight-drag-lift` C21 fitted `InducedDragCoef`
   10.75 to `CAP-01`'s single sustained-turn plateau — a real fit, but the *functional form* (`sin²α`
   vs `n` vs `n²` vs `ω²`) is a choice (Decision 8), not a measurement, because both segments of that
   clip sit at essentially the same load factor (`V·ω` 32.96 vs 34.02 m/s², 3% apart). B12 also found
   `CAP-01`'s own numbers are not those of a coordinated level turn: 18.95 °/sim-s at 222.94 mph is
   `V·ω` = 32.96 m/s² lateral, which for a level turn implies **58.7°** of bank — not the **100°** the
-  ADI sky-centroid reads (trusted only to ±4°). Either the ADI reading is not bank, or the original
-  is not flying coordinated; nothing measured so far says which.
-  **What would settle it.** A capture at a *deliberately part-deflected* pull (`CAP-32`) gives a
-  second load-factor point, separating the candidate exponents. A capture of a sustained turn at a
-  bank other than ~100° (`CAP-33`) gives a second point on the bank/rate curve and an independent
-  read on the 58.7°-vs-100° question.
-  ⚠ Neither blocks anything currently asserted — `InducedDragCoef` and the landed lift re-key both
-  stand regardless of how this resolves; this is about confidence in the fit, not a known defect.
-  *Blocked on `CAP-32`, `CAP-33`* (`playtest.md` §0).
+  ADI sky-centroid reads (trusted only to ±4°). "Either the ADI reading is not bank, or the original
+  is not flying coordinated" was the standing dilemma; `CAP-33` answered it above, and the 100°
+  should not be quoted as a bank again.
+  ⚠ The old note here said "neither blocks anything currently asserted — `InducedDragCoef` and the
+  landed lift re-key both stand regardless". The bank half's resolution leaves the lift re-key's
+  *premise* in question (below) and the exponent half's resolution leaves `InducedDragCoef` itself
+  in question (`BL-360`), so that reassurance no longer holds and is retracted.
+  ⚠ **But the 100° bank is relied on elsewhere, and it is now known to be an instrument artifact.**
+  `PLAN-flight-drag-lift` motivates its lift re-key partly on "the aircraft must hold 100° of bank,
+  which needs `1/|cos 100°|` = 5.8 g" (`docs/plans/PLAN-flight-drag-lift.md:486-487`, and the same
+  premise at `:7`, `:32`, `:200`, `:549`). At the flown bank of 60–70° that demand is ~2–3 g, a
+  different problem. The landed code is not being challenged here and nothing is asserted against
+  it; what is recorded is that the premise quoted in that plan came from the ADI. Re-checking it is
+  its own piece of work.
+  *Both halves are now answered; what they surfaced is on `BL-360`. This entry is a
+  `/close-backlog-item` candidate.*
 
 - `BL-309` `[Feature]` **Engine torque is a designed, one-sided turn assist — unmodelled.** GDD §4.1.8
   ("Engine Torque", Motion Model/Flight Dynamics → Simulated Elements; restated, no prose): torque
@@ -1296,6 +1285,96 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   source. Check `shakes.zrd.json`/`docs/formats/shakes.md` for an ambient source before inventing
   one; if no data carries it, magnitude and cadence are a TUNE against feel. Low priority; pairs
   with `BL-266`'s open shake data questions.
+
+- `BL-359` `[Feature]` **Ground blow is decoded and entirely unmodelled — the original biases your
+  controls away from anything large you are closing on.**
+  *Evidence:* decoded from `crimson.exe` 2026-08-14, write-up in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow". `FUN_0048bf60` casts a ray
+  of `groundblow_elev` metres (authored **400 m**) along the nose; `FUN_0048c220` adds a rotation
+  away from the hit surface into the same accumulator the stick fills, one call after the stick
+  terms in `FUN_0048c470`, on the player's aeroplane every frame. Nothing in `CSVM/src` carries it
+  (grep for `groundblow` returns no hits) and `FlightModel.Step` has no such term. The design side
+  is GDD §4.1.7, and `CAP-02` (closed 2026-08-07) saw the behaviour at the controls: a wings-level
+  full pull at a cliff steps heading 17° away with nothing in the vertical plane.
+  *The rule*, with `n` the hit normal, `b` the backward body axis (`Attitude.Z`), `d` the distance
+  to the hit point, `c = dot(b, n)`:
+
+      require c > 0                     the surface must face back at you
+      S = sqrt(c) · (elev − d) / elev   1 at contact, 0 at the ray's end
+      V = normalize(n × b) · S          world axis rotating the nose away, scaled by proximity
+      p = dot(cmd, V)
+      cmd += V · (p ≥ 0 ? p : −0.05·p) · groundblow_mag
+
+  With `groundblow_mag` authored **10**, commanding away is amplified by up to `1 + 10·S²` and
+  commanding into the obstacle is met with `0.05 × 10`, halved and never reversed.
+  *Fix shape:* the probe belongs in `FlightController`, which has the world
+  (`IntersectRay` with `CollisionLayers.World`, `FlightController.cs:1830,1851`), and its result is
+  handed to `FlightModel`, which has no world access at all. Add the term to `cmd` in
+  `FlightModel.Step` (`FlightModel.cs:475-495`) after the bank coupling and the weathervane, which
+  is the original's ordering, and before `BodyRates += cmd * dt`.
+  ⚠ *Traps:*
+  (a) **Add it to `cmd`, not to `BodyRates`, and do not introduce a `dt` of your own.** The
+  original's accumulator already carries `dt` when the term is formed, so the effect is linear in
+  `dt`; ours lands in the same place because `FlightModel.cs:507` multiplies `cmd` by `dt`
+  afterwards. A second `dt` makes it vanish at small steps.
+  (b) **Frame mismatch.** The axis is built from a world normal and `Attitude.Z`, so it is a world
+  axis, while `cmd` is body-frame (X pitch, Y yaw, Z roll). Project it onto the body axes before
+  the dot and the add. Mixing frames gives a term that is right wings-level and wrong everywhere
+  else, which is the hardest version of this bug to see.
+  (c) **It is not a force and not a terrain-altitude effect.** No push on velocity, and no
+  `HeightAboveWorldGround` gate. A world-frame force is refuted by the original behaving the same
+  inverted, and canyon runs held at 165–336 ft never trip it because nothing is close *ahead*.
+  (d) **`groundblow_elev` 400 is a ray LENGTH in metres.** Not feet, not a trigger altitude, and it
+  is also the falloff's denominator, so shortening it steepens the ramp rather than just shrinking
+  the reach (`BL-095`).
+  (e) **Do not calibrate `groundblow_mag` against the cliff clip's 17° step.** It is an authored
+  constant with a traced consumer, not a TUNE.
+  (f) **The AI path is a different law, not a scaled one:** a fixed push of
+  `ai_groundblow × groundblow_mag × S` independent of what the AI commanded, linear in `S`, cut to
+  15 % for 2.5 s after a drop, and suppressed entirely while the AI is stunned. Only relevant if AI
+  aircraft get ground avoidance; do not reuse the player term scaled by `ai_groundblow`.
+  (g) **A dead-on approach must get nothing.** As `n → b` the axis `n × b` collapses and the whole
+  term goes to zero. That is the original's "never saves a head-on collision", so special-casing or
+  renormalising the degenerate case would break the behaviour it is there to produce.
+  (h) **Emitters:** terrain and scenery qualify, ordinary flying aircraft do not. Whether zeppelins
+  do is unconfirmed in the binary (`BL-095`); the GDD names them.
+  *Playtest after fix:* fly a wings-level full pull straight at a cliff at ~300 mph and look for a
+  one-off heading offset away from the wall that then holds, with no change in pitch rate. Hands off
+  must still end in a crash, and inverted must behave the same. The smaller second effect (the
+  velocity direction steered toward the nose at `2.0 · S` per second) rides along with it.
+  *Cross-refs:* `BL-095` (the decode and the authored values), `BL-172` (the collision impulse from
+  the same neighbourhood of the flight loop), `CAP-02` (closed; footage staged under
+  `playtest/CAP-02/`).
+
+- `BL-360` `[Research]` **We model induced drag; the original has none. The landed `sin²α` term
+  reproduces a real speed loss by a mechanism the executable does not contain.**
+  *Evidence:* `PLAN-flight-drag-lift` C21 landed `dragAccel += A · C_i · sin²(min(α, maxAOA))` with
+  `InducedDragCoef` **10.75** on 2026-08-07, fitted to `CAP-01`'s single sustained-turn plateau, to
+  close `BL-092` ("a hard pull costs us no speed"). Two days later the Ghidra pass found the
+  opposite in `crimson.exe`: **no induced-drag term exists anywhere in `FUN_0048fc40`**. Every use
+  of the `C_L` slot was enumerated (the lift-force product, an optional load-factor out-param, a
+  dead push) and there is no `C_L²`, AOA-keyed or load-factor-keyed contribution to drag; the drag
+  polar's variable is **Mach**, not `C_L`. The original loses speed in a pull **only through the
+  lift vector's own tilt** (`docs/org/flightModel.md`, "Drag — the polar is in MACH" and the `C_L`
+  note above it). The two findings have never been reconciled; C21 predates the decode.
+  *The question:* is our `sin²α` term standing in for lift-vector tilt we do not fully model? If so
+  it is a wrong-mechanism fix in exactly the class `BL-124`'s history warns about, and it will be
+  right at the fitted point and wrong away from it. If our tilt term is already faithful, then the
+  original's own speed loss in `CAP-01` should be reproducible with `InducedDragCoef` at **zero**,
+  and the coefficient is absorbing an error somewhere else.
+  *Fix shape:* an ablation, not a rewrite. Run the `flight-envelope` suite with `InducedDragCoef` at
+  0 and at 10.75 and compare both against `CAP-01`'s plateau and `CAP-05`'s zero-thrust points;
+  where the zeroed model diverges is where the missing tilt (or the real error) lives.
+  ⚠ **Traps.** (a) This is not licence to delete the term. It was fitted against a measured plateau
+  and removing it blind re-opens `BL-092`; the deliverable is knowing what it stands for.
+  (b) The remaining `+25 %` climb residual (`BL-115`) and the force-scale conflict
+  (`docs/org/flightModel.md`, "The force scale — settled") are both live candidates for what a
+  non-zero `C_i` is absorbing — check them before concluding the tilt model is at fault.
+  (c) `CAP-01` cannot arbitrate the functional form and no capture can: both its segments sit at the
+  same load factor, and partial stick deflection is unfilmable on keyboard controls (`BL-307`,
+  where `CAP-32` was retired for exactly this).
+  *Cross-refs:* `BL-307` (which surfaced this and is otherwise answered), `BL-115`,
+  `docs/plans/PLAN-flight-drag-lift.md` (C21, Decision 8), `docs/org/flightModel.md`.
 
 ## Environment & world
 
@@ -2034,6 +2113,69 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `docs/formats/anim-definitions.md` (the decoded `CALL_SEQUENCE`/`STOP_SEQUENCE`
   state rules). The `PLAYER_RANGE` `* 4.0` divergence the same decode opened is closed as a
   disproof — the `* 4.0` is on `PLAYER_LINED_UP`, not `PLAYER_RANGE` (`git log --grep=BL-333`).
+
+- `BL-355` `[Bug]` **The damage/crash effect cascade hitches on first use — synchronous emitter
+  construction (shader material + particle system), not GC and not allocation volume.** Diagnosed
+  under the frame-hitch instrument (`PLAN-perf-hitches` G15/G16), via the scripted proxy G15 landed
+  since the aircraft `DamageLab`'s own burst has no CLI repro (E13): `--crash=300 --no-vsync` (`--fly
+  --chapter=C1 --plane=player_bhawk`) tripped `HitchMonitor` twice, frame 300 `frame_ms=48.43`
+  (`samples=part_detach:1x33.01`) and frame 301 `frame_ms=62.11`
+  (`samples=effect_pool_miss:7x54.36`), sidecar `.scratch/logs/fly-20260814-203733.hitches.jsonl`.
+  **Ruled out, from the record itself:** GC — `gc0_delta`/`gc1_delta`/`gc2_delta` are **0** on both
+  hitching frames, no collection of any generation fired. Allocation volume —
+  `allocated_bytes_delta` is 300-350 KB on each hitching frame, three orders of magnitude under the
+  ~860 MB burst `PLAN-perf-hitches` B5 needed to move the GC/alloc columns at all. GPU/render —
+  `render_cpu_ms`/`gpu_ms` stay at their normal ~0.5/0.2 ms on both frames; the cost is entirely
+  inside the CPU/script span `HitchMonitor`'s `frame_ms` measures.
+  **Mechanism, traced live** (a temporary, reverted `GD.Print` in `EmitterDirector.Assert`'s miss
+  branch — `git diff` empty afterward): the crash's own dispatch names ten distinct first-time
+  misses in the same one-two frames — `lgpuffer` on `piece1`/`piece3`/`piece4` (`large_firetrail`),
+  `spurtpuffer1`..`5` on `fly_trail1`..`5` (`call_crash_trails`), `fierypuffer` on `flame_ball_01`
+  (`large_fireball`), `trailpuffer2` on `yellow_spark_01` (`small_yellow_sparks`) — every one a
+  `(name, host, def)` key `EmitterDirector.Assert` has never seen before, each paying
+  `_factory.Create`'s full build (a `Puffer` plus, nested inside the same scope per the code's own
+  comment, `EmitterRenderer.Attach`'s `MaterialCreate`) synchronously, inline in the frame the crash
+  fires.
+  **This is NOT pool exhaustion — raising `effect_pools.json`'s `crashRoots` sizes will not fix
+  it.** `large_firetrail` is sized 6 and only 3 concurrent pieces were in flight; no
+  `AnimRuntime.PoolRecycles` wrap occurred. The pool avoids RELOCATING an already-built emitter onto
+  a new call; it does nothing for the first build of a distinct key, which is what costs here.
+  *Fix shape:* pre-warm the crash rig's (and, by the same mechanism, `DamageLab`'s) effect
+  templates — construct each `crashRoots`/damage-stage emitter once, off the frame that needs it
+  (plane spawn, session build, or a loading beat), the idea `StartupProfile`'s `prewarm` phase
+  already applies elsewhere — rather than leaving the first assert to build synchronously.
+  Alternatively, spread a compound event's misses across several frames instead of one dispatch
+  batch.
+  **Confirmed at the controls, 2026-08-14** (interactive `--fly`, vsync on, real play — not the
+  `--crash=` proxy): `.scratch/logs/fly-20260814-210336.{log,hitches.jsonl}`, a session working
+  through the `DamageLab` panel, tripped `HitchMonitor` 31 times in ~7 s (frames 3373-4243; 6 of
+  those records lost to a sidecar-queue overflow, filed separately as `BL-356`) — **24 of the 25
+  that survived carry `effect_pool_miss`** as their named site, in the same paired-consecutive-frame
+  shape the `--crash=` proxy showed, spaced roughly every 40-90 frames as different parts/thresholds
+  were dragged for the first time. **This answers the open recurrence question below: yes,
+  repeatedly** — not a one-time session cost. It recurs because there are enough distinct
+  `(name, host, def)` keys (8 parts x armor+health x several `injure_anims` thresholds each) that a
+  real sweep through the panel keeps finding new, never-before-built ones; it is not that any single
+  key re-triggers construction on a repeat. The 25th trip (frame 4243) is a genuine outlier worth
+  naming separately: `frame_ms=79.91` with `samples=[]` — nothing in `PerfSample` claims any of it,
+  and every counter (`draws`/`prims`/`nodes`/`gc*`/`alloc`) sits at baseline. Unexplained by this
+  item's mechanism and not chased further here; possibly an OS-level stall rather than a CSVM one.
+  ⚠ **Traps.** The original diagnosis was the `--crash=` proxy alone (`FlightController.Crash()` →
+  `CrashRuntime`), not a captured aircraft `DamageLab` slider-drag session — `DamageLab.Reapply()`
+  still has no *scripted* repro (E13/G15). The 2026-08-14 controls capture above closes that gap
+  with a real one: the two share the same `EmitterDirector.Assert`/`WorldEffectsFactory`
+  construction path, and the crash rig plays the same damage-stage template family
+  (`crashRoots`'s `planeflakes`/`yellow_spark_02`/etc. are the `pdpanelN` effects `DamageLab`
+  triggers) — no longer inference alone.
+  ⚠ **Formerly-open question, now answered: does the cost recur across a session, or only once?**
+  Recurs — see the 2026-08-14 capture above (24 separate trips, not one). Still open: whether any
+  SINGLE `(name, host, def)` key re-triggers construction on its own repeat (a second drag of the
+  SAME slider back past the SAME threshold) — the capture shows many DIFFERENT keys firing once
+  each, not one key firing twice, so that narrower question is untested either way.
+  *Cross-refs:* `PLAN-perf-hitches` G15/G16 (the diagnosis), `BL-356` (the sidecar losing 6 of this
+  session's 31 trips), `BL-231` (the pool-size tuning item
+  this is explicitly NOT — a size increase would not touch this cost), `docs/verification.md`
+  PERF-14.
 
 ## Audio
 
@@ -2972,6 +3114,32 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   hand-killed silently corrupts unattended runs.
   *Workaround on record:* kill the lingering Godot process for that shot; the hash it printed
   is still valid.
+
+- `BL-356` `[Bug]` **`HitchSidecar`'s queue (default depth 8, 3 s flush) loses records under a real
+  hitch storm — confirmed at the controls, not just a theoretical TUNE gap.** A user session
+  dragging the `DamageLab` sliders repeatedly (`.scratch/logs/fly-20260814-210336.{log,hitches.jsonl}`,
+  see `BL-355` for the mechanism these hitches share) tripped `HitchMonitor` **31 times** in ~7 s
+  (frames 3373-4243) but only **25 reached the sidecar/log** — three separate
+  `hitch sidecar queue overflowed dropped=N` warnings (`N` = 1, 2, 3; the counter resets after each
+  report per `HitchSidecar.Flush`, so the drops are additive: **6 records lost**, not 3). Both the
+  human-readable `[perf] hitch …` line and the JSON sidecar entry are written together at flush time
+  (`HitchSidecar.Flush`'s `WriteLogLine`+`WriteJsonLine` pair), so a dropped record vanishes from
+  *both* — not silently (the warning fires, per the module's own design intent), but a diagnosis
+  session reading the sidecar for "every hitch this session" is missing up to a fifth of them, and
+  exactly during the busiest, most interesting stretch.
+  *Fix shape:* `hitchSidecar.queueDepth`/`hitchSidecar.flushSeconds` are already `Config` keys
+  (TUNE) — raising depth or lowering the flush interval is a one-line config change with no code
+  risk, and is probably enough on its own for a solo-player session. Whether the DEFAULTS should
+  move, or whether a compound event (BL-355 alone can produce 6-7 trips in two frames) needs a
+  different policy (e.g. an immediate out-of-band flush the moment the queue nears full, rather than
+  waiting the full interval), is the open design question — the constant fix is cheap, the policy
+  question is not.
+  ⚠ **Traps.** Do not read this as evidence the instrument is unreliable in general: every drop was
+  reported (no silent gap), and the 25 records that DID land are exactly what diagnosed `BL-355` —
+  this is a capacity tuning gap under a specific heavy workload, not a correctness defect in the
+  detection or attribution logic.
+  *Cross-refs:* `BL-355` (the hitches this session's queue couldn't keep up with),
+  `PLAN-perf-hitches` B6 (`HitchSidecar`'s own design, `docs/architecture.md`).
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
   RunGame.ps1/RunDev.ps1) once tools/godot ships a Godot bundling **SDL ≥ 3.4.4**: the bundled

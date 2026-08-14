@@ -78,6 +78,16 @@ public sealed record SessionSpec
     /// the default <c>--frames=</c> screenshot lands mid-break-up rather than pre-impact.</summary>
     private const int DefaultCrashFrame = 5;
 
+    /// <summary>The frame a bare <c>--hitch-inject=</c> (no <c>@frame</c>) fires at, in
+    /// <see cref="Utils.HitchMonitor.FrameCount"/>'s own space. The grace window is wall-clock ms,
+    /// not a frame count, so how many frames it takes to clear depends on how fast this MACHINE
+    /// renders a frame — 120 frames is NOT "2 seconds" the way the 60 Hz-cap assumption elsewhere in
+    /// this plan implies: measured on the dev box, both vsync on (its actual refresh is 120 Hz, not
+    /// 60) and <c>--no-vsync</c> pace the empty stage at ~8.3 ms/frame, so the default 2000 ms grace
+    /// window does not clear until ~frame 240. 300 leaves a margin verified on that box; a slower
+    /// machine or a heavier stage still needs its own <c>@frame</c>, explicit.</summary>
+    private const int DefaultHitchInjectFrame = 300;
+
     private List<Note> _notes = new();
 
     // What the command line asked for. Private, because a vote is not an outcome: several flags
@@ -488,6 +498,10 @@ public sealed record SessionSpec
     public int? DebugLivery { get; private set; }
     public string? DebugMesh { get; private set; }
     public string? DebugNames { get; private set; }
+    /// <summary><c>--debug-fps[=compact|full]</c> (PLAN-perf-hitches D10): start the frame-cost
+    /// readout (<c>F14</c>) at launch, the scripted twin for a deterministic screenshot of it.
+    /// Null = flag absent (off); no value = compact.</summary>
+    public string? DebugFps { get; private set; }
     /// <summary><b>Resolved.</b> Null outside <c>--freecam</c>/<c>--anim-lab</c>: the shared
     /// selection lives in the two world-observation modes, the viewer's LMB is already the orbit
     /// drag, and flight has no cursor.</summary>
@@ -601,6 +615,19 @@ public sealed record SessionSpec
     public bool NoVsync { get; private set; }
     public bool Perf { get; private set; }
     public bool NoFocus { get; private set; }
+
+    /// <summary><c>--hitch-inject=</c> (PLAN-perf-hitches B5): a synthetic stall of known
+    /// magnitude, in milliseconds, so every later item in the plan has something deterministic to
+    /// verify against instead of an incidental hitch. Null when the flag was absent.</summary>
+    public float? HitchInjectMs { get; private set; }
+    /// <summary>Whether the stall burns its time allocating and discarding 4 KB buffers (moves the
+    /// GC/allocated-bytes columns) rather than spinning the CPU (proves only the timing path) — the
+    /// <c>alloc:</c> value prefix. Meaningless when <see cref="HitchInjectMs"/> is null.</summary>
+    public bool HitchInjectAlloc { get; private set; }
+    /// <summary>The <see cref="Utils.HitchMonitor.FrameCount"/>-space frame ordinal the stall fires
+    /// on — never the sim frame, since the injector has to work with no session built at all (the
+    /// launchscreen, <c>--viewer</c>). Meaningless when <see cref="HitchInjectMs"/> is null.</summary>
+    public int HitchInjectFrame { get; private set; } = DefaultHitchInjectFrame;
     /// <summary>The <c>--log=</c> specs in command-line order. <c>--debug-anim</c>'s implied
     /// "anim:debug,sound:debug" is not one of them — that is resolution.</summary>
     public IReadOnlyList<string> LogSpecs { get; private set; } = Array.Empty<string>();
@@ -690,6 +717,8 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--debug-mesh=")) { s.DebugMesh = arg["--debug-mesh=".Length..]; }
             else if (arg == "--debug-names") { s.DebugNames ??= "meshes"; }
             else if (arg.StartsWith("--debug-names=")) { s.DebugNames = arg["--debug-names=".Length..]; }
+            else if (arg == "--debug-fps") { s.DebugFps ??= "compact"; }
+            else if (arg.StartsWith("--debug-fps=")) { s.DebugFps = arg["--debug-fps=".Length..]; }
             else if (arg == "--debug-select") { s.DebugSelect ??= ""; }
             else if (arg.StartsWith("--debug-select=")) { s.DebugSelect = arg["--debug-select=".Length..]; }
             else if (arg == "--debug-nodelab") { s.DebugNodeLab ??= ""; }
@@ -912,6 +941,11 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--tex-census=")) { s.TexCensus = true; s.TexCensusFilter = arg["--tex-census=".Length..]; }
             else if (arg == "--no-focus") { s.NoFocus = true; }
             else if (arg == "--no-vsync") { s.NoVsync = true; }
+            else if (arg.StartsWith("--hitch-inject="))
+            {
+                (s.HitchInjectMs, s.HitchInjectAlloc, s.HitchInjectFrame) =
+                    ParseHitchInject(arg["--hitch-inject=".Length..]);
+            }
             else if (arg == "--mute") { s.Mute = true; }
             else if (arg.StartsWith("--volume="))
             {
@@ -1125,6 +1159,27 @@ public sealed record SessionSpec
             }
         }
         return list;
+    }
+
+    /// <summary>Parse <c>--hitch-inject=</c>: <c>[alloc:]&lt;ms&gt;[@frame]</c>. The <c>alloc:</c>
+    /// prefix is the allocation-burst form (moves the GC/allocated-bytes columns); its absence is
+    /// the busy-wait form (proves only the timing path). <paramref name="defaultFrame"/> is what a
+    /// bare <c>&lt;ms&gt;</c> with no <c>@frame</c> resolves to.</summary>
+    public static (float Ms, bool Alloc, int Frame) ParseHitchInject(string s, int defaultFrame = DefaultHitchInjectFrame)
+    {
+        bool alloc = s.StartsWith("alloc:", StringComparison.Ordinal);
+        if (alloc)
+        {
+            s = s["alloc:".Length..];
+        }
+        int at = s.IndexOf('@');
+        int frame = defaultFrame;
+        if (at >= 0)
+        {
+            frame = int.Parse(s[(at + 1)..], CultureInfo.InvariantCulture);
+            s = s[..at];
+        }
+        return (Flt(s), alloc, frame);
     }
 
     private static float Flt(string s) => float.Parse(s, CultureInfo.InvariantCulture);

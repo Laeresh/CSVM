@@ -162,11 +162,12 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/ColliderOverlay.cs` — the collider wireframes (C): every built collision shape drawn, coloured by the surface id it resolves to; needs `--collision` outside flight.
 - `src/UI/ClassOverlay.cs` — the colour-by-class overlay (X): every drawn mesh tinted destructible/facade/clutter/scenery, a findable-targets view.
 - `src/UI/AiNetsOverlay.cs` — the AI patrol-net overlay (F13, `--debug-ainets`): the chapter's nets as coloured graphs with labels + census log.
-- `src/UI/TileGridOverlay.cs` — the map-edge tile-grid overlay (F14, `--debug-tilegrid`): every ground tile tinted 20 % by repetition band, so one colour band is one block; F15 steps the block depth, F16 swaps repeat/mirror. The instrument that settled the map-edge fold.
+- `src/UI/TileGridOverlay.cs` — the map-edge tile-grid overlay, **flag-only** (`--debug-tilegrid`; no key is bound — `F14`/`F15`/`F16` were freed by `PLAN-perf-hitches` A1): every ground tile tinted 20 % by repetition band, so one colour band is one block; `--map-edge-block=`/`--map-edge-mode=` set the depth/fold once at launch. The instrument that settled the map-edge fold.
 - `src/UI/WeaponLab.cs` — the weapon lab panel (B): steppers that arm the held plane's live loadout, click-to-place on a real world surface. Fires nothing itself.
 - `src/UI/PanelFocus.cs` — the one-line rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
 - `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels.
+- `src/UI/PerfHud.cs` — the frame-cost readout (F14, `--debug-fps=`): fps/current-frame-cost/worst-recent-frame, once for the window, drawn above the launchscreen too.
 - `src/UI/SelectionService.cs` — the shared `--freecam`/`--anim-lab` selection: click-pick + the `cs_name` ancestor ladder, breadcrumb + highlight box.
 - `src/UI/NodeLab.cs` — the `--freecam`/`--anim-lab` node lab (N, `--debug-nodelab`): lazy `cs_name` tree, search, frame/hide, dependencies, destructibles.
 - `src/UI/WorldDamageLab.cs` — the `--freecam`/`--anim-lab` world damage lab (F5, `--debug-damage`): HP slider + kill/reset on the selection's destructible pool.
@@ -184,6 +185,9 @@ determinism repo-wide — read `docs/verification.md` first.
 - `src/Utils/Log.cs` — the diagnostic log: 9 categories × 4 levels, `--log=` console filter, always-on full-detail `.scratch/logs/` file sink.
 - `src/Utils/ShaderTime.cs` — the `csky_time` global uniform: the clock's GPU twin, replacing `TIME` in every generated shader; wraps at 3600 s.
 - `src/Utils/StartupProfile.cs` — the always-on `[perf] startup …` line: every session build split by phase, `total = boot + Σphases + rest + first_frame`.
+- `src/Utils/HitchMonitor.cs` — the always-on frame-hitch detector: `frame_ms > max(medianMultiple × rolling_median, floorMs)`, a `HitchRecord` per trip.
+- `src/Utils/HitchSidecar.cs` — the hitch detector's write path: queues a tripped record and drains it a few seconds later to one `[perf] hitch …` line plus one JSON line in `.scratch/logs/<mode>-<stamp>.hitches.jsonl`.
+- `src/Utils/PerfSample.cs` — ambient timed leaf scopes: `using (PerfSample.Scope(PerfSite.X))` accumulates per site per frame, and every hitch record carries the sites plus the remainder no site claimed.
 - `src/Utils/Rng.cs` — the session's one master seed and the ten named subsystem generators every random draw derives from.
 - `src/Utils/ScriptedWindow.cs` — Win32-only window hiding for scripted runs; `ScriptedWindow.Hide()` uses `ShowWindow(SW_HIDE)` on the native window.
 
@@ -668,8 +672,9 @@ clutter (grown from `ClutterBuilder.ExportedKinds`) continuing the world past th
   reduces exactly to the pre-2026-08-08 clamp, which `MapEdgeFoldTests` pins.
 ⚠ **It REPEATS, it does not mirror** — A/B'd against the original at the controls 2026-08-08,
   matching exactly on C1/C2/C4/C5 with no seam gaps. This REVERSED the earlier `CAP-17` strip
-  reading, which got both the fold and the distance wrong (post-mortem in
-  `analysis/video-flight-calibration/FINDINGS.md`). `--map-edge-mode=mirror` keeps the old
+  reading, which got both the fold and the distance wrong (post-mortem in the deleted
+  `analysis/video-flight-calibration/FINDINGS.md`, via `git log -p` on that path).
+  `--map-edge-mode=mirror` keeps the old
   behaviour to look at. ⚠ Do not size a block from a video-derived period — fly it.
 ⚠ **`BlockCells` is per chapter** — `DefaultBlockCells`: 2 on C1/C2/C4, 1 on C5 and on the four
   water-bordered chapters (C1B/C1C/C2B/C3), whose borders were measured to be water-only, which
@@ -1993,8 +1998,15 @@ nodes, then the fire gates: `Activated`, attack window, 15° barrel-on-solution 
 `NextArmed` is the firing cursor — the selected slot while it has rounds, else the next armed slot
 forward-wrapping (`-1` when all empty); `NextSelectable` is where the manual G/H step lands — the
 next armed slot strictly after the cursor, skipping empties. Each slot is its own position
-regardless of ordnance/weapon type, so H cycles even a uniform loadout. Stateless; proven through
+regardless of ordnance/weapon type, so H cycles even a uniform loadout. That per-hardpoint reading
+is confirmed against the original (user at the controls, 2026-08-14): the player picks a hardpoint,
+the game does not merely drain them in pylon order. Stateless; proven through
 `FireControl`'s interface (`FireControlTests`), not its own.
+The order it walks matches the original's (same observation), so the sequence is settled and not a
+knob.
+⚠ Both cursors scan **forward only**. The original steps its hardpoint selection in either
+direction, so a backward `PrevSelectable` over that same sequence and a second binding per selector
+are a known gap, not a decision (`BL-357`).
 
 ## src/Flight/Ballistics.cs
 The VELOCITY/ACCELERATION/GRAVITY integration every round steps with: a static, Godot-`Node`-free
@@ -3954,6 +3966,46 @@ magenta, pylons cyan, target green); `--markers` opens it at launch. Reuses `Mar
 ⚠ Gizmo dots always show (no mount position is ever lost); only the LABELS de-clutter, nearest-
   first with firepoints prioritised over pylons — the full named table stays in `--dump-markers`.
 
+## src/UI/PerfHud.cs
+The frame-cost readout (PLAN-perf-hitches D10, key **F14**): fps, current frame cost and the
+worst recent frame, cycling Off → Compact → Full → Off; `--debug-fps[=compact|full]` presets the
+mode at launch. Built once by `Launcher` (never per `GameSession`, never per splitscreen pane) —
+fps/frame-cost/GC are process-wide facts, so one readout for the whole window is correct and a
+per-pane copy would just be four identical readouts at four times the layout cost. That hosting
+is also what makes it work at the launchscreen, in `--viewer`/`--freecam` and in flight for free.
+Fed the same raw `Stopwatch` `frameMs` `HitchMonitor` ticks on (never Godot's `delta`), every
+frame, unconditionally — the worst-frame peak has to already be warm the instant F14 is pressed,
+or it would have nothing to say about the hitch that made someone look. Off by default and builds
+nothing until switched on, so the 11 golden screenshots stay byte-identical.
+On `HudLayers.PerfReadout` (11), **above `HudLayers.Board`**: the launchscreen's background is a
+full-screen opaque `ColorRect` on `Board`, and this readout has to read there too. Sized off
+`HudMetrics.ReferenceHeight` through the plain window-height ratio, not `HudMetrics.Scale` —
+that method's `PaneFactor` damping is exactly wrong for a control that isn't per-pane.
+**Full (PLAN-perf-hitches D11)** adds four lines under Compact's fps/frame/worst headline — the
+current frame's `FrameCounters` split (script/render-cpu/gpu/physics ms), its draws/prims/nodes/
+mem terms, `GC.CollectionCount` per generation (raw counts, not deltas — a live readout reads
+better as "gc2 has fired 3 times" than as an almost-always-zero per-refresh delta), and C8's
+breadcrumbs (`PerfSample.SnapshotInto`, the same `site:callsxms` grammar `HitchSidecar`'s log line
+uses) — plus `PerfHudStrip`, a second top-level `Control` in the same file (the `PerfSample.cs`
+precedent for more than one type per file) drawing a rolling bar graph of recent frame times with
+the trigger threshold marked as a line. Every Full term is a SECOND VIEW of data collected
+elsewhere, never a new sample: the split/count/memory terms are the same `FrameCounters` read
+`HitchMonitor.Tick` was just handed, and the strip reads `HitchMonitor.CopyRing` — a new accessor
+onto the monitor's own always-live ring buffer (distinct from `Last.Ring`, which only advances on
+a trigger) — every draw, so the display and a hitch record can never disagree about the same
+frame. `perfHud.stripFrames` (TUNE, default 120) sizes the strip, clamped to
+`HitchMonitor.RingFrames` since asking for more than the ring keeps is meaningless.
+⚠ **The strip redraws every frame, unthrottled, while Full is showing** (`QueueRedraw()` from
+  `Tick`) — a rolling strip that only advanced a few times a second would not look rolling — but
+  only then: Compact never calls it, so cycling past Full costs nothing extra.
+⚠ **The worst-frame peak spikes and decays**, held for `WorstHoldMs` (3 s, TUNE, a plain
+  `const` — UI cosmetic, not a measurement threshold like `HitchMonitor`'s `Config`-backed
+  constants) then replaced by the current frame, rather than being a windowed max recomputed from
+  a ring buffer. `Rearm()` (called alongside `HitchMonitor.Rearm()` from `LaunchSession`/
+  `ReturnToMenu`) drops the peak and skips one frame of tracking, so a session build's own stall —
+  which inflates the very next `_Process` frame's wall cost the same way it does for
+  `HitchMonitor` — never reads as the worst recent frame.
+
 ## src/UI/MeshLab.cs
 The geometry/shading lab (key M): normal lines, smoothing-seam wireframe, collider boxes, light
 sliders + headlight, cull × normal-source override cyclers (`--debug-mesh=` scripts them). Two
@@ -4541,6 +4593,104 @@ rest=… first_frame=…` line per session build. `Mark()`/`Record(phase, mark)`
 ⚠ `boot` is engine start → build start, so on a launchscreen-driven rebuild it also holds however
   long the menu was up.
 
+## src/Utils/HitchMonitor.cs
+The always-on frame-hitch detector (PLAN-perf-hitches B4), ticked from `Launcher._Process` in every
+mode: a frame trips when `frame_ms > max(medianMultiple × rolling_median, floorMs)`, and a
+`HitchRecord` is assembled describing it: unaveraged script/render-CPU/GPU/physics, draws/prims/
+nodes/mem as absolutes AND as deltas against the frame before, `GC.CollectionCount` per generation
+plus allocated bytes, a ring buffer of the preceding frames ending with the hitching one, and (C8)
+the frame's named work from `PerfSample` plus the remainder no scope claimed.
+It only detects: nothing is logged from here, so a clean run is silent (B6 owns the sidecar).
+Godot-free by construction (the caller samples the engine counters into a `FrameCounters` and hands
+them in), so the trigger, both wraparounds and the grace window are unit-tested off-engine in
+`CSVM.Tests/HitchMonitorTests.cs`; `PerfSample` is the one thing read ambiently rather than handed
+in, and it is engine-free too. Five `hitchMonitor.*` config keys over `const` defaults, read in
+the constructor (which is what registers them for `--dump-config`). `FrameCount` exposes the same
+counter `HitchRecord.Frame` reports, one call early, so `--hitch-inject=` (B5) can fire on a stated
+ordinal in this monitor's own frame space rather than the sim frame. `RingFrames`/`CopyRing`
+(PLAN-perf-hitches D11) expose the ring buffer itself, live — every `Tick`, not just on a trigger
+like `Last.Ring` — for `PerfHud`'s Full-tier frame-time strip; `CopyRing` returns the MOST RECENT
+entries when handed a shorter destination than the ring holds, oldest of those first.
+⚠ **Every default here is TUNE**, named in conversation on 2026-08-14 and evidenced by nothing:
+  `medianMultiple` 4, `floorMs` 40, `baselineFrames`/`ringFrames` 120, `graceMs` 2000. Do not cite
+  one as a measured value. Fed a raw `Stopwatch.GetTimestamp` pair, **never Godot's `delta`**:
+  `delta` is post-processed (`OS.delta_smoothing`) and measures as a quantised constant here,
+  8.333 ms on every frame of a `--no-vsync --det` empty-stage run while the real cost varied
+  8.25–8.42 ms.
+⚠ The baseline is a **true median**, not a mean, and the hitching frame is judged against the
+  window BEFORE it joins. A mean would be dragged up by the hitch it just saw and would hide the
+  next. Under vsync the median pins at the refresh interval, degenerating the relative term into a
+  FIXED threshold — at the 60 Hz cap these defaults assume, 4 × 16.67 ms = 66.7 ms is ABOVE the
+  40 ms floor, so the RELATIVE term fires there, not the floor; only ≥100 Hz brings it under
+  (PERF-12 — found verifying B5 on a 120 Hz dev box, where the floor genuinely did decide). A hitch
+  count is therefore only comparable to another run in the same vsync mode (PERF-13).
+⚠ **Nothing applied during `Launcher.LaunchSession`'s build can ever trip this monitor, at any
+  magnitude**, because `Rearm()` fires the instant `StartSession()` returns (`Launcher.cs:743-744`,
+  by design), so anything earlier in the same build is always finished before grace starts counting.
+  Measured (PLAN-perf-hitches E13, disproven): a maximal four-part debris burst (`max_ms` 150.00 vs
+  an 8.33 ms baseline) produced zero `[perf] hitch` lines over 600 frames — the spike lands ~700 ms
+  after `Rearm()`, a third of the 2000 ms grace, and never recurs; a scenario wanting this monitor to
+  see an event needs that event live, mid-run, after the build, not a CLI preset applied at
+  construction time.
+
+## src/Utils/HitchSidecar.cs
+`HitchMonitor`'s write path (PLAN-perf-hitches B6): a tripped `HitchRecord` is copied — never
+referenced, since `Last` is overwritten on the next trip — into a small preallocated queue, then
+drained a few seconds later to one `[perf] hitch …` line (`ReportPerf`'s own flat key=value grammar,
+ms terms as-is, byte counts as MB) plus one JSON line in `.scratch/logs/<mode>-<stamp>.hitches.jsonl`,
+sharing the main log's stem. Both carry C8's attribution at the end: `samples=site:callsxms,…`
+(`none` when nothing declared) with `attributed_ms`/`unattributed_ms`/`sample_violations` beside it,
+and a `"samples":[{"site","ms","calls"}]` array in the JSON. All-numeric record apart from those
+site names — compile-time `[a-z_]` constants from a closed enum — so the JSON is hand-written
+(no library) via
+`string.Create(CultureInfo.InvariantCulture, …)`, never plain `$"..."` interpolation, which would
+format under `CurrentCulture` instead. The file opens once for the process's whole life with `Log`'s
+own recipe (UTF-8 WITH a BOM, `AutoFlush`) — a line reaches disk the instant it is written.
+⚠ **Crash durability is bounded by the flush interval, not by the trip.** A record survives a crash
+  only once FLUSHED; `hitchSidecar.flushSeconds` (TUNE, default 3) is the loss window on an abnormal
+  exit. `Launcher` flushes before every `HitchMonitor.Rearm` and from its own `_ExitTree`, so only a
+  kill/crash — never an ordinary quit or relaunch — can lose anything, and only the queued tail.
+⚠ Drop-oldest on overflow (`hitchSidecar.queueDepth`, TUNE, default 8), reported as a `perf` warning
+  with a count — a hitch burst faster than the flush interval is itself worth knowing about, not
+  something to buffer around silently.
+
+## src/Utils/PerfSample.cs
+Ambient timed leaf scopes (PLAN-perf-hitches C8): `using (PerfSample.Scope(PerfSite.DebrisSpawn))`
+adds its wall time to that site's total for the frame in progress, and any code path can do it
+without knowing the monitor, the readout, or whether anything is listening — statics over a
+preallocated per-site array, the same ambient shape `StartupProfile` uses and for the same reason
+(a scope several call layers down cannot be handed an accumulator). `Launcher._Process` calls
+`EndFrame()` at the instant it stamps the frame's wall cost, so the scopes and the `frame_ms` they
+ran inside describe the same span, and `HitchMonitor.Fill` snapshots that closed frame into
+`HitchRecord.Samples` — its one ambient read, taken there rather than by the caller so a record can
+never carry a stale frame's attribution. `Reset()` on a build or teardown, beside `Rearm`. Sites are
+a closed enum (`debris_spawn` · `part_detach` · `ai_spawn` · `effect_checkout` · `effect_pool_miss` ·
+`material_create` · `resource_load` · `audio_load`); a site nothing called is ABSENT from the record
+rather than reported as zero.
+All eight sites are seeded (PLAN-perf-hitches C9): `AnimRuntime.RunDeathSequence` (debris_spawn),
+`FlightController.Crash` (part_detach), `AiAircraftSpawner.Spawn` (ai_spawn),
+`AnimRuntime.PlayEffectAt` (effect_checkout), `EmitterDirector.Assert`'s miss branch
+(effect_pool_miss), `EmitterRenderer.Attach` (material_create), `TextureArchive.FindImage`
+(resource_load), `WorldSounds.Spawn`/`Create`'s decode-on-miss (audio_load). Confirmed live on two
+real (non-injected) scenarios — `--destroy=` and `--crash=5` — with a temporarily grace-bypassed
+`HitchMonitor` writing genuine `.hitches.jsonl` records carrying real `samples` (both reverted).
+⚠ **`Σ(sites) + unattributed = frame_ms` on every frame.** `unattributed` is real work with no
+  stopwatch on it, never an error term — the same reading as `StartupProfile`'s `rest`. It is NOT
+  clamped: negative means a scope spanned the `EndFrame` boundary, which is a defect to see.
+⚠ **FLAT LEAVES ONLY.** A scope opened inside another is suppressed (measures nothing) and counted
+  in the record's `sample_violations`. A partially instrumented TREE would attribute
+  un-instrumented time to whatever parent encloses it, and it is never fully instrumented, because
+  the next feature to land will not add its scope. **Cross-site nesting is routine, not a defect
+  to chase**: C9's own sites call into each other on the plan's reproducible case (a death's event
+  dispatch reaches effect/audio sites; a pool miss always reaches its own material create), so the
+  outer site's record legitimately absorbs the inner ones' cost — a high `sample_violations` on a
+  dominant site means "more happened here than the named sites show," not instrument failure.
+⚠ **Coarse granularity is a rule, not a preference**: a debris burst, not one chunk; a spawn, not
+  one node. A scope costs ~60 ns (58.8/59.3/62.7 ns over three 200k-iteration runs of
+  `PerfSampleTests.AScopeCostsFarLessThanTheFrameItMeasures`, allocating exactly 0 bytes), so a
+  per-particle scope is 60 µs of instrument on the frame it was meant to explain. Main thread only,
+  unsynchronised by design — a lock on the frame path would cost more than the measurement.
+
 ## src/Utils/Rng.cs
 The session's randomness policy: one master seed and ten named subsystem generators derived from it
 (`weapons`, `flightaudio`, `spawn`, `paint`, `anim`, `crash`, `effects`, `puffer`, `clouds`,
@@ -4844,12 +4994,45 @@ exe's own directory; `CSVM_DATA_ROOT`/`--data-root=` override either.
 `LaunchSession()` instantiates a `GameSession` per
 launch; `ReturnToMenu` `QueueFree`s it; a menu launch derives its spec via
 `SessionSpec.FromMenu(_cli, …)`, never from the outgoing spec.
+`ReportPerf`'s window line carries `max_ms`/`p95_ms` beside its means (PLAN-perf-hitches A2):
+a preallocated `_perfFrameMs` ring holds each frame's unaveraged wall cost, sorted into scratch
+at window close. No `p99_ms` — at `PerfWindowFrames` = 60 it would equal `max_ms` by construction.
+One `ReadFrameCounters()` per frame samples the eight engine counters once and feeds both
+instruments (PLAN-perf-hitches B4): `HitchMonitor.Tick` wants them unaveraged, `ReportPerf` sums
+them, and the two `TIME_*` monitors are converted from seconds to ms at that single read. The
+monitor is constructed alongside the other process-scoped services (ahead of every probe's early
+quit and of `--dump-config`, which is what registers its five keys) and `Rearm`ed by
+`LaunchSession`/`ReturnToMenu`, since a build or a teardown legitimately stalls the loop.
+`--hitch-inject=` (PLAN-perf-hitches B5) fires right before the QPC stamp, on the `_Process` call
+where `HitchMonitor.FrameCount + 1` matches the flag's frame — so the injected stall counts as that
+call's own frame cost instead of the next one's.
+`PerfSample.EndFrame()` (C8) is called on the same line as that stamp, so a frame's scopes and its
+wall cost cover the same span — the session node processes at priority -1000, one notch ahead of
+this one, so the work it declared is already in — and `PerfSample.Reset()` sits beside every
+`Rearm`, since a build's own loads belong to no frame.
+`_hitchSidecar` (B6) is built one step later than the monitor, right after `Log.Open` (its path
+derives from `Log.SinkPath`): a trip queues into it from `_Process`, and `LaunchSession`/
+`ReturnToMenu`/`_ExitTree` all flush it before `HitchMonitor.Rearm` — a build, a teardown and an
+ordinary quit all legitimately stall or end the loop, and none of them should wait out the sidecar's
+own flush interval to write down what it already has queued.
+Measured render time is enabled once in `_Ready` (`ViewportSetMeasureRenderTime`) rather than per
+frame from `ReportPerf`, because the hitch record needs the CPU/GPU split on every run, not only a
+`--perf` one.
+Vsync resolves at the same `_Ready` site as the shader clock / `--perf` tick: `display.vsync`
+config key (default true) or `--no-vsync`, the flag always beating the key (PLAN-perf-hitches A3).
+The config read is unconditional even when the flag already decided, so the key still registers
+into `--dump-config` on a `--no-vsync` run — the same reason `ApplyMasterVolume` reads
+`audio.volume` unconditionally. The resolved state logs either way (`vsync on` / `vsync off
+source=…`), so a session's log always says which mode it ran in.
 ⚠ `GlobalShaderParameterAdd` runs in `_Ready` ONCE — a session rebuild must never double-Add
   (that errors; `WeatherRig.Build` only `Set`s).
 ⚠ **A scripted session HIDES its window** (`ScriptedWindow.Hide()` = `ShowWindow(SW_HIDE)`) —
   **never swap that for minimize**, which stops rendering and blanks every capture (SHOT-16).
 ⚠ F11 prints the SUBJECT, per mode (flight: player 1's plane pose, not the chase camera);
   directions print to 5 decimals — 3 would quantise a unit vector's aim to ~0.03°.
+⚠ `max_ms`/`p95_ms` are built from Godot's `delta`, which is post-processed and reads as a
+  quantised constant (see `HitchMonitor`'s entry), so they resolve a big hitch but not a small one.
+  `HitchMonitor` is fed a raw QPC pair instead; the two do not measure the same thing.
 
 ## src/Session/LiveryResolver.cs
 

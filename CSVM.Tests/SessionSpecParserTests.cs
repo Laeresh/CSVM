@@ -198,4 +198,36 @@ public class SessionSpecParserTests
         // An empty category means a bare console line rather than a log category.
         Assert.Contains(s.Warnings, w => w.Category.Length == 0);
     }
+
+    /// <summary>PLAN-perf-hitches B5: `[alloc:]&lt;ms&gt;[@frame]` — a bare `&lt;ms&gt;` is the
+    /// busy-wait form at the default frame, `@frame` overrides it, and `alloc:` switches to the
+    /// allocation-burst form without disturbing either the magnitude or the frame.</summary>
+    [Fact]
+    public void HitchInjectParsesMagnitudeFormAndFrame()
+    {
+        Assert.Equal((50f, false, SessionSpec.Parse(new[] { "--hitch-inject=50" }).HitchInjectFrame),
+            SessionSpec.ParseHitchInject("50"));
+        Assert.Equal((50f, false, 120), SessionSpec.ParseHitchInject("50@120"));
+        Assert.Equal((50f, true, 120), SessionSpec.ParseHitchInject("alloc:50@120"));
+        Assert.Equal((5f, true, SessionSpec.Parse(new[] { "--hitch-inject=alloc:5" }).HitchInjectFrame),
+            SessionSpec.ParseHitchInject("alloc:5"));
+    }
+
+    /// <summary>The same grammar reaching the spec through its flag: absent by default (so B4's
+    /// detector runs unperturbed), and each field lands where the injector call site reads it.</summary>
+    [Fact]
+    public void TheHitchInjectFlagReachesTheSpec()
+    {
+        Assert.Null(SessionSpec.Parse(new[] { "--fly" }).HitchInjectMs);
+
+        var s = SessionSpec.Parse(new[] { "--hitch-inject=50@120" });
+        Assert.Equal(50f, s.HitchInjectMs);
+        Assert.False(s.HitchInjectAlloc);
+        Assert.Equal(120, s.HitchInjectFrame);
+
+        var a = SessionSpec.Parse(new[] { "--hitch-inject=alloc:5@30" });
+        Assert.Equal(5f, a.HitchInjectMs);
+        Assert.True(a.HitchInjectAlloc);
+        Assert.Equal(30, a.HitchInjectFrame);
+    }
 }

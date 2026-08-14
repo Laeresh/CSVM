@@ -73,26 +73,22 @@ Most of the items below and a large part of `backlog.md` are blocked on one of t
 them in a batch unblocks far more than doing them one at a time.
 
 ⚠ **Validity gate for every cockpit-gauge clip: auto head turn must be OFF, or the clip is
-unusable.** This already cost two takes. The capture spec and the clip-validity rules are in
-`analysis/video-flight-calibration/FINDINGS.md`.
+unusable.** This already cost two takes. The capture spec and the clip-validity rules were in
+`analysis/video-flight-calibration/FINDINGS.md`, deleted 2026-08-14; recover them with
+`git log -p -- analysis/video-flight-calibration/FINDINGS.md`.
 
 ### Flight model — cockpit gauges in frame, head turn off
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
 | `CAP-20` | Throttle equilibria + a shallow held climb | Two level runs held to equilibrium at **1/4** and **1/2** throttle (the thrust-vs-throttle curve), then a **shallow, steady climb** at fixed throttle — shallow enough that the ADI does **not** saturate, i.e. keep the nose under ~+25°, and hold it 10 s+. `CAP-05`'s 50%-throttle clip failed on exactly this: it was a zoom, the ADI pinned at sky fraction 0.730, and the nose angle became unreadable. ⚠ Still owed after D32, and now the ONLY thing that can settle the climb residual: the 90° climb clip gives a clean speed plateau (163.05 mph at a 56.3° path) but its ADI saturates too, so the nose angle — and with it α, the leading candidate for the model's remaining +25% — is unreadable in every climb capture taken so far | `BL-115` (the sustained-climb residual; `ClimbGravityScale` itself is retired) |
-| `CAP-32` | A deliberately **part-deflected** pull, level entry | Full throttle, level cruise, then a held **partial** back-stick pull (clearly less than full deflection — a light, steady pull, not a tap), sustained long enough for speed to settle. Speedo, altimeter and ADI in frame. Gives a second load-factor point below `CAP-01`'s max-pull plateau, so the induced-drag exponent (`n`, `n²` or `ω²` in the pull) stops being a free choice | `BL-307` |
-| `CAP-33` | A sustained turn at a bank other than ~100° | Full throttle, full back stick, banked turn held to a settled equilibrium (speed and heading rate both flat) at a bank clearly different from `CAP-01`'s ~100° — a ~60–70° bank is the useful target. ADI, speedo, altimeter, compass tape all in frame throughout | `BL-307` |
 
-**`CAP-31` was flown and decoded on 2026-08-07, and its row is retired.** It was the 1/8-throttle
-deceleration — the case `CAP-05`'s clip never covered, since 0/8 has no equilibrium to approach. The
-prediction was recorded here before the capture so it could fail, and it did, in the direction
-neither branch offered: **13.94 sim s over 290 → 150 mph against the model's 12.10**, so the original
-coasts *longer* than we do rather than markedly shorter, and the standing unmodelled-airbrake
-hypothesis has no support in the footage. Full numbers, the throttle-chop transient that makes 13.94
-an upper bound, and the correction to the 137.9 mph equilibrium are on `BL-115` and in
-`analysis/video-flight-calibration/FINDINGS.md`. `BL-115` stays open on `StallNoseRate`,
-`ClimbGravityScale` and `KnifeAlignFloor`, none of which a level deceleration can reach.
+⚠ **Partial STICK deflection cannot be captured: the controls are keyboard, so pitch, roll and
+yaw are 100 % or 0 %.** Any capture asking for "a light, steady pull" or any other intermediate
+*axis* position is unfilmable by construction, not merely unflown — do not file one, ask the binary
+instead. This retired `CAP-32` (2026-08-15). **Throttle is not affected**: it is a stepped setting
+and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 and `CAP-05` flew
+50 %, so `CAP-20`'s 1/4 and 1/2 runs above remain perfectly filmable.
 
 ### HUD — ammo gauge in frame
 
@@ -243,6 +239,21 @@ an upper bound, and the correction to the 137.9 mph equilibrium are on `BL-115` 
   *Blocks:* the `BL-301` tuning decisions; a structural fail mints its own `BL` item.
   *Variations:* `--players=4` for pane-size readability; `--vs-kills=1` for a fast board check;
   `--scenario=zeppelin_run` to judge whether `dogfight_ace` spawns are actually the better pick.
+
+- `PT-49` `[Own]` **`PerfHud` legibility in a 4-player pane (PLAN-perf-hitches D10/D11).** The
+  frame-cost readout (F14, `--debug-fps=`) sizes off the whole window's height, not the pane it
+  happens to be drawn over — it draws once for the window, not once per pane — so a full-window
+  screenshot at 1P cannot say whether it is still readable once the window is quartered. Full's
+  five-line panel plus the frame-time strip below it is taller than Compact's single line, so it
+  is the one more likely to run into a pane edge. No original reference; this is a judgement call
+  on our own instrument.
+  *Look for:* Compact's `perf [F14]: compact — … fps  frame … ms  worst … ms` line, and Full's
+  five lines plus its bar-graph strip, top-left of the window, both stay legible (not too small to
+  read at a glance, not clipped by a pane edge) with `--players=4`.
+  *Blocks:* nothing existing tracks this; a fail mints a new `BL` item against `PerfHud`'s
+  `ReferenceFontSize`/`WindowScale`/strip sizing.
+  *Variations:* `--debug-fps --players=4 --vs --chapter=C1`; `--debug-fps=full --players=4` for the
+  taller panel specifically; also worth a glance at `--players=2`.
 
 ### C1 · two pilots — stunt race (splitscreen starting grid)
 

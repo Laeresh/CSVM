@@ -269,13 +269,13 @@ public class AiTargetRankingTests
     /// peers: in the front arc, above the shooter (level counts as above), nose pointing away.</summary>
     private static RankedTargetCandidate Ahead(float distance, bool isPlayer = false,
         float bias = 0f, int attackers = 0, float xOffset = 0f) => new()
-    {
-        Position = OwnPos + new Vector3(xOffset, 0f, -Mathf.Sqrt(distance * distance - xOffset * xOffset)),
-        Forward = new Vector3(0f, 0f, -1f),
-        IsPlayer = isPlayer,
-        ObjectiveBias = bias,
-        AlliedAttackers = attackers,
-    };
+        {
+            Position = OwnPos + new Vector3(xOffset, 0f, -Mathf.Sqrt(distance * distance - xOffset * xOffset)),
+            Forward = new Vector3(0f, 0f, -1f),
+            IsPlayer = isPlayer,
+            ObjectiveBias = bias,
+            AlliedAttackers = attackers,
+        };
 
     private static float RankOf(in RankedTargetCandidate c) =>
         AiTargetRanking.Score(OwnPos, OwnFwd, Activation, c).Rank;

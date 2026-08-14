@@ -104,9 +104,13 @@ gauges decoded from the same frames.
 
 ## 4. Gauge-decode path
 
-Read `analysis/video-flight-calibration/FINDINGS.md` first — its **traps** section is the accumulated
-cost of getting this wrong, and its "Running it" block is the current cold-start order. Do not
-re-derive the method.
+⚠ `analysis/video-flight-calibration/FINDINGS.md` was **deleted 2026-08-14**, superseded by the
+`crimson.exe` decode in `docs/org/flightModel.md` after its flight measurements were contradicted at
+source. The scripts it documented are still here and still the way to decode gauges. Its **traps**
+section and its "Running it" cold-start order remain the accumulated cost of getting this wrong, so
+recover them with `git log -p -- analysis/video-flight-calibration/FINDINGS.md` before decoding
+rather than re-deriving the method. Treat every *number* in that file as superseded and every
+*method trap* in it as live.
 
 `.scratch/` is swept, so a cold start rebuilds the cache:
 

@@ -366,8 +366,18 @@ ammo types**. In each chapter's `texture/`:
 
 - **Muzzle flash:** `{slug,dum,ap,mag}_muzzle1` / `_muzzle2` — a two-frame flipbook per ammo
   (the `1`/`2` frame pair, see [anim-definitions.md](anim-definitions.md)).
-- **Tracer:** `tracer_slug` / `tracer_dumdum` / `tracer_armorpierce` / `tracer_magnesium`, plus
-  the generic `tracer1`; `slugtip`, `shell1` / `shell2`, `atorp`.
+- **Tracer:** `tracer_slug` / `tracer_dumdum` / `tracer_armorpierce` / `tracer_magnesium` on the
+  crossed streak quads, and `slugtip` / `dumdumtip` / `armourpiercetip` / `magnesiumtip` on the tip
+  disc just past the streak's leading end. The generic `tracer1` is bound by no gun prototype (the
+  four ammo types cover every gun in the install). Per-prototype model indices and the streak's
+  measured geometry are decoded in [`org/tracers.md`](../org/tracers.md).
+- **Not tracer textures**, despite sitting in the same texture range: `shell1` / `shell2` are the
+  **ejected casing's**, and `atorp` is the aerial torpedo's, neither on the ammo axis. The casing
+  pair traces `textures.json` 104/105 → `materials.json` 108/109 (`Textured`) → `models.json`
+  model 60 → the `g1` node, whose `parent_indices` names `gunshell` as its only parent, so they are
+  the skin of the very casing mesh the C22 ejection wiring instances per shot (see the footnote
+  under [Projectile prototypes](#projectile-prototypes-gamez-roots)). The `rabbit_blur` nodes near
+  `g1` in the node list are neighbouring ammo prototypes' streak children, not its parents.
 
 ### Engine wiring (M3, C24; A3) — flash shape + ammo texture
 

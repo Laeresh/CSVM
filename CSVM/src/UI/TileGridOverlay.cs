@@ -7,7 +7,7 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The map-edge tile-grid overlay (key F14, flag <c>--debug-tilegrid</c>): tints every ground tile
+/// The map-edge tile-grid overlay (flag <c>--debug-tilegrid</c>): tints every ground tile
 /// — the map's own and <see cref="MapEdgeExtender"/>'s continuation cells alike — by which cell it
 /// is and how it was folded, so the shape of the continuation can be read at the controls instead
 /// of only out of a spatio-temporal strip.
@@ -38,12 +38,14 @@ namespace CSVM.UI;
 ///
 /// <para><b>What it settled.</b> F15/F16 answered the map-edge fold: A/B against the original at
 /// the controls found that the continuation <b>repeats</b> — it does not mirror — over a block of
-/// 2 cells on C1/C2/C4 and 1 on C5, with no seam gaps. Both are the defaults, and F16's `mirror` is
-/// the mode kept only to look at. The keys stay because that question is re-checkable at the
-/// controls in minutes, where measuring it off footage is neither fast nor reliable.</para>
+/// 2 cells on C1/C2/C4 and 1 on C5, with no seam gaps. Both are the defaults, and `mirror` is
+/// the mode kept only to look at. <c>--map-edge-block=</c>/<c>--map-edge-mode=</c> stay because that
+/// question is re-checkable in minutes by relaunching with a different value, where measuring it off
+/// footage is neither fast nor reliable.</para>
 ///
-/// <para>F14/F15/F16 sit in the F13–F24 range reserved for debug overlays (docs/controls.md);
-/// F13 is the patrol nets.</para>
+/// <para>Flag-only: <c>--debug-tilegrid</c> opens it, <c>--map-edge-block=</c>/
+/// <c>--map-edge-mode=</c> set the fold, all resolved once at launch. No key is bound to any of the
+/// three.</para>
 /// </summary>
 public sealed partial class TileGridOverlay : Node
 {
@@ -79,8 +81,8 @@ public sealed partial class TileGridOverlay : Node
         Name = "tilegrid_overlay";
     }
 
-    /// <summary><c>--debug-tilegrid</c>: open the overlay on the first frame, the scripted
-    /// stand-in for the F14 press.</summary>
+    /// <summary><c>--debug-tilegrid</c>: open the overlay on the first frame. The only way to open
+    /// it — no key is bound.</summary>
     public bool DebugShow { get; init; }
 
     public override void _Process(double delta)
@@ -94,30 +96,7 @@ public sealed partial class TileGridOverlay : Node
         }
     }
 
-    public override void _UnhandledKeyInput(InputEvent @event)
-    {
-        if (@event is not InputEventKey { Pressed: true, Echo: false } key)
-        {
-            return;
-        }
-        switch (key.Keycode)
-        {
-            case Key.F14:
-                Toggle();
-                break;
-            case Key.F15:
-                StepBlock();
-                break;
-            case Key.F16:
-                ToggleMode();
-                break;
-            default:
-                return;
-        }
-        GetViewport().SetInputAsHandled();
-    }
-
-    /// <summary>F14: show or hide the tile-grid tints.</summary>
+    /// <summary>Show or hide the tile-grid tints.</summary>
     public void Toggle()
     {
         if (_extender == null)
@@ -221,8 +200,7 @@ public sealed partial class TileGridOverlay : Node
         // The rebuild cost is only known after the first fold change, so it appears rather than
         // sitting at a meaningless zero.
         string cost = ext.LastRebuildMs > 0 ? $" · rebuild {ext.LastRebuildMs:F0} ms" : "";
-        return $"map edge: block {ext.BlockCells} cell(s) · {mode} · {ext.LiveCellCount} ext cells{cost}"
-            + $"   [F15 block · F16 mode]";
+        return $"map edge: block {ext.BlockCells} cell(s) · {mode} · {ext.LiveCellCount} ext cells{cost}";
     }
 
     // The map's own ground tiles. Identified through AnimRuntime.IndexMeta — the gamez-node-index

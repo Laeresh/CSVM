@@ -228,6 +228,25 @@ and leave gaps when retiring old ones.
 - **PERF-9** — **Use two unchanged pairs for noise, then measure A/B back to back.**
 - **PERF-10** — **Check exact workload counts before noisy timings.**
 - **PERF-11** — **Use `--no-vsync` and metrics valid for the clock mode.**
+- **PERF-12** — **A frame ordinal does not convert to wall time at an assumed refresh rate.**
+  `HitchMonitor`'s grace window is milliseconds; a `--hitch-inject=` frame chosen assuming a 60 Hz
+  cap can land well inside it on a faster box — measured on the dev machine, vsync's *actual*
+  refresh is 120 Hz (~8.33 ms/frame, same as `--no-vsync` there), so frame 120 is ~1000 ms, half
+  the default 2000 ms grace, and neither a 50 ms nor an 80 ms stall tripped until past ~frame 240.
+- **PERF-13** — **A hitch count only compares across runs in the same vsync mode; per-frame cost
+  transfers, frequency does not.** Vsync paces frames per wall second, which paces hitch frequency
+  directly; it also pins the rolling median at the refresh interval, collapsing `HitchMonitor`'s
+  relative trigger into a fixed threshold whose winner against the floor depends on the refresh
+  rate, not the defaults alone — at the 60 Hz cap this plan's defaults assume,
+  `medianMultiple × refresh_interval` is 66.7 ms, ABOVE the 40 ms floor, so the relative term
+  decides there, not the floor (`HitchMonitor.cs`, PERF-12).
+- **PERF-14** — **A build-time CLI preset can never trip `HitchMonitor`; verify with a live,
+  post-grace event instead.** `--damage=`/`--destroy=`-style presets apply inside
+  `Launcher.LaunchSession`'s build, always finished before `Rearm()` starts the grace window
+  (`HitchMonitor.cs`, `PLAN-perf-hitches` E13, disproven). `--crash=<frame>` picked past grace
+  (PERF-12) is a live, scriptable event that does trip it — measured (G15): `--crash=300` under
+  `--no-vsync` produced two real sidecar records, `part_detach` 48.4 ms and `effect_pool_miss`
+  62.1 ms, both ~500 ms clear of the 2000 ms grace.
 
 ## LOG — logs, error censuses, and exit codes
 

@@ -2805,19 +2805,17 @@ public partial class GameSession : Node3D
             Log.Info("world", $"--collision built the world's colliders, but the C overlay is not bound in this mode (C is the mesh lab's cull cycler) — use --freecam to see them");
         }
 
-        // Map-edge tile grid (F14, with F15/F16 stepping the fold). Gated on
+        // Map-edge tile grid (--debug-tilegrid; flag-only, no key bound). Gated on
         // the extender rather than on a mode list, because "there is a continuation to colour" is
         // exactly the precondition: the extender is built for --fly/--freecam and for a --sky-zone
-        // viewer, and those are the sessions where the overlay has anything to say. Its keys are in
-        // the reserved F13-F24 debug range, so binding it in the viewer too cannot collide with a
-        // lab key the way a letter would.
+        // viewer, and those are the sessions where the overlay has anything to say.
         if (_edgeExtender != null && _worldRoot != null && _plane != null)
         {
             _worldRoot.AddChild(new UI.TileGridOverlay(_plane, _edgeExtender)
             {
                 DebugShow = _spec.ShowTileGrid,
             });
-            Log.Info("world", $"tile-grid overlay ready (F14; F15 block depth, F16 mirror/repeat)");
+            Log.Info("world", $"tile-grid overlay ready (--debug-tilegrid)");
         }
         else if (_spec.ShowTileGrid)
         {

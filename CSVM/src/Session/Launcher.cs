@@ -32,6 +32,13 @@ public partial class Launcher : Node3D
     /// still one report a second, so an interactive run reads as it always did.</summary>
     private const int PerfWindowFrames = 60;
 
+    /// <summary>Nearest-rank p95 index into the sorted window (0-based): <c>ceil(0.95 x
+    /// PerfWindowFrames) - 1</c>. At 60 samples this is index 56, leaving 3 samples above it. p99
+    /// is deliberately not reported — nearest-rank p99 over 60 samples resolves to index 59, the
+    /// same slot as max, so it would just be max under another name (see <see cref="ReportPerf"/>).
+    /// </summary>
+    private const int Perf95Index = (PerfWindowFrames * 95 + 99) / 100 - 1;
+
     /// <summary>Master-bus index. This project ships no bus layout, so Master is the only bus
     /// and everything (both audio paths) is on it by default.</summary>
     private const int MasterBus = 0;
@@ -54,6 +61,12 @@ public partial class Launcher : Node3D
     // What F11's placement print receives at the launchscreen, where no session (and no rigs)
     // exists — the same empty list the pre-split root held after a teardown.
     private static readonly List<PlayerRig> NoRigs = new();
+
+    // This window's unaveraged per-frame wall cost, for the max/p95 that ReportPerf reports
+    // alongside its means — fully overwritten every window, so it needs no reset. _perfFrameMsSorted
+    // is scratch for the sort at window close, kept off the frame path so no window allocates.
+    private readonly double[] _perfFrameMs = new double[PerfWindowFrames];
+    private readonly double[] _perfFrameMsSorted = new double[PerfWindowFrames];
 
     // Everything the command line settled, parsed and resolved once (see SessionSpec). _cli is what
     // the user typed; _spec is what the LIVE session was built from — the launchscreen's pick
@@ -107,6 +120,23 @@ public partial class Launcher : Node3D
     private int _perfFrames;
     private double _perfProcess, _perfGpu, _perfCpuRender, _perfPhysics;
     private double _perfDraws, _perfPrims, _perfNodes, _perfMem;
+
+    // The always-on frame-hitch instrument and the viewport whose render times feed it. Both are
+    // settled in _Ready: the monitor's constructor is what registers its hitchMonitor.* config keys,
+    // and measured render time is opt-in per viewport, so both have to happen before the first
+    // frame rather than lazily on one.
+    private HitchMonitor _hitchMonitor = null!;
+    // PLAN-perf-hitches D10: the F14 / --debug-fps frame-cost readout, ticked every frame like
+    // the instrument above it, but drawing (if switched on) is its own concern, not this class's.
+    private UI.PerfHud _perfHud = null!;
+    private Rid _viewportRid;
+    // The previous frame's QPC stamp, so the monitor is fed a raw wall cost rather than Godot's
+    // post-processed `delta`. 0 on the first frame, which reports 0 ms and trips nothing.
+    private long _lastFrameStamp;
+    // B6's write path for the monitor above: queues a tripped record and drains it a few seconds
+    // later, never inline on the hitching frame. Built after Log.Open (its path derives from
+    // Log.SinkPath), so it lives a step later in _Ready than _hitchMonitor does.
+    private HitchSidecar _hitchSidecar = null!;
 
     // Base (chapter-independent) paths + parse state, set once in _Ready; each session node
     // receives them via LauncherContext and recomputes the chapter-dependent gamez/texture/mission
@@ -254,6 +284,17 @@ public partial class Launcher : Node3D
         _pendingJoin = _spec.DebugJoin;
         _pendingWaves = _spec.DebugWaves;
         _pendingWingmen = _spec.DebugWingmen;
+        // The frame-hitch instrument, live from here on in every mode (PLAN-perf-hitches B4). Built
+        // alongside the other process-scoped services, which is ahead of every probe's early quit
+        // (a quit takes effect at the end of the iteration, so _Process can still run once) and
+        // ahead of --dump-config: its constructor is what reads, and therefore registers, the five
+        // hitchMonitor.* keys.
+        _hitchMonitor = new HitchMonitor();
+        // Measured render time is opt-in per viewport and reads 0 until it is, so it is enabled once
+        // here rather than per frame from ReportPerf (which used to own the call): the hitch record
+        // needs the CPU/GPU split on every frame, not only on a --perf run.
+        _viewportRid = GetViewport().GetViewportRid();
+        RenderingServer.ViewportSetMeasureRenderTime(_viewportRid, true);
 
 
         // The window is CREATED without focus (`display/window/size/no_focus` in project.godot), so
@@ -278,16 +319,28 @@ public partial class Launcher : Node3D
             ScriptedWindow.Hide();
         }
 
-        // --no-vsync: let the loop run as fast as it can. A measurement flag, not a display one —
-        // with the presentation wait gone, `frame`, `fps` and `script` stop being floors pinned at
-        // the refresh rate and start reporting the work actually done. Safe to combine with the
-        // fixed clock precisely because that clock advances one sim step per RENDERED frame: the
-        // simulation is identical frame for frame, only the wall time it takes changes.
-        if (_spec.NoVsync)
+        // display.vsync / --no-vsync: let the loop run as fast as it can. With the presentation
+        // wait gone, `frame`, `fps` and `script` stop being floors pinned at the refresh rate and
+        // start reporting the work actually done. Safe to combine with the fixed clock precisely
+        // because that clock advances one sim step per RENDERED frame: the simulation is identical
+        // frame for frame, only the wall time it takes changes.
+        //
+        // The config read is unconditional even when --no-vsync already decided the outcome,
+        // because the read is what registers the key — skipping it would drop display.vsync from
+        // --dump-config on exactly the runs that pass the flag. --no-vsync always beats the config
+        // key (it is the measurement flag; the config key is the ordinary-play one).
+        bool vsyncOnByConfig = Config.GetBool("display.vsync", true);
+        bool vsyncOff = _spec.NoVsync || !vsyncOnByConfig;
+        if (vsyncOff)
         {
             DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
             Engine.MaxFps = 0;
-            Log.Info("perf", $"vsync off max_fps=0 — frame/fps/script report work done, not a refresh cap");
+            string source = _spec.NoVsync ? "--no-vsync" : "display.vsync";
+            Log.Info("perf", $"vsync off source={source} max_fps=0 — frame/fps/script report work done, not a refresh cap");
+        }
+        else
+        {
+            Log.Info("perf", $"vsync on — frame/fps/script are floored at the refresh interval");
         }
 
         // --debug-anim opens the call-site gates of the anim and sound families, so it is also the
@@ -309,6 +362,13 @@ public partial class Launcher : Node3D
         {
             Log.Warn("core", $"deprecated flag={old} use={replacement}");
         }
+        // PLAN-perf-hitches B6: ahead of --dump-config, same reason as _hitchMonitor above — this
+        // constructor is what registers the two hitchSidecar.* keys. Log.SinkPath is set by the
+        // Open() call just above; the synthetic fallback only matters on the rare run where that
+        // open itself failed (Log.Open already degrades gracefully rather than crashing the launch).
+        string hitchLogPath = Log.SinkPath
+            ?? Path.Combine(_repoRoot, ".scratch", "logs", $"{_spec.ModeName}-nolog.hitches.jsonl");
+        _hitchSidecar = new HitchSidecar(hitchLogPath, _hitchMonitor.Last.Ring.Length);
 
         // --headless + --screenshot can never produce a frame: the dummy renderer's GetImage()
         // comes back null forever, so the capture loop never counts down and the process never
@@ -494,6 +554,17 @@ public partial class Launcher : Node3D
             return;
         }
 
+        // PLAN-perf-hitches D10: the F14 / --debug-fps readout, a child of this node rather than
+        // of any GameSession — process-wide like the camera above it, so it works at the
+        // launchscreen too. Built after the --run-tests/--dump-* early exits, since none of them
+        // renders a frame it would have anything to show.
+        _perfHud = new UI.PerfHud
+        {
+            InitialMode = _spec.DebugFps == null ? UI.PerfHud.Mode.Off : UI.PerfHud.ParseMode(_spec.DebugFps),
+            Monitor = _hitchMonitor,
+        };
+        AddChild(_perfHud);
+
         // No content-selecting arg (or an explicit --menu): show the in-game launchscreen
         // (Mode → Chapter → Plane). Its selection derives the session's spec and calls
         // LaunchSession, so there is exactly one downstream build path. Esc from a menu-launched
@@ -524,6 +595,14 @@ public partial class Launcher : Node3D
         {
             SetFocusMuted(false);
         }
+    }
+
+    // PLAN-perf-hitches B6: the root node's own teardown, reached on an ordinary quit
+    // (GetTree().Quit() or the window's close button) — never on a kill/crash, which is what the
+    // sidecar's flush-interval loss bound (HitchSidecar's own doc) covers instead.
+    public override void _ExitTree()
+    {
+        _hitchSidecar.Flush();
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -584,10 +663,49 @@ public partial class Launcher : Node3D
         // with no session clock — the launchscreen, or the frame after a teardown — it keeps
         // running on wall time so nothing on screen stalls behind the menu.
         ShaderTime.Advance(ClockNow, delta);
-        // The frame-budget report stays on wall time: it is an instrument, and an instrument that
-        // freezes with the thing it measures reports nothing.
+        // Both instruments stay on wall time: an instrument that freezes with the thing it measures
+        // reports nothing. One counter read per frame feeds both: the hitch monitor wants them
+        // unaveraged and the --perf window wants them summed, but they are the same eight numbers.
+        var counters = ReadFrameCounters();
+        // PLAN-perf-hitches B5: --hitch-inject= fires here, one QPC read before the stamp below, so
+        // the stall inflates THIS frame's wall cost rather than leaking into the next one. The
+        // frame ordinal it matches is HitchMonitor's own counter (FrameCount + 1 — the value this
+        // Tick call is about to stamp its record with), never the sim frame: the injector has to
+        // work with no session built at all, the same as the monitor it is testing.
+        if (_spec.HitchInjectMs is float injectMs
+            && _hitchMonitor.FrameCount + 1 == _spec.HitchInjectFrame)
+        {
+            InjectHitch(injectMs, _spec.HitchInjectAlloc);
+        }
+        // Detection is unconditional, logging (B6) is not: a hitch nobody was watching for is the
+        // case this exists to catch, so it cannot sit behind --perf. The frame cost it is fed is
+        // our OWN QPC pair rather than Godot's `delta`, which is post-processed (OS.delta_smoothing,
+        // on by default) and measures here as a quantised constant: an --no-vsync --det empty-stage
+        // run reports 8.33 ms for every frame and exactly 500.00 ms per 60-frame window, which no
+        // real frame sequence does. The same primitive StartupProfile times its phases with.
+        long stamp = System.Diagnostics.Stopwatch.GetTimestamp();
+        double frameMs = _lastFrameStamp == 0
+            ? 0
+            : (stamp - _lastFrameStamp) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        _lastFrameStamp = stamp;
+        // C8: close the attribution window at the same instant the wall cost is stamped, so the
+        // scopes that ran and the frame_ms they ran inside describe the same span. The session node
+        // processes at ProcessPriority -1000, one notch ahead of this one, so the work it declared
+        // this frame is already in — and lands on the record whose frameMs covers it.
+        PerfSample.EndFrame();
+        // B6: a trip queues its record (a cheap, preallocated copy) rather than writing anything
+        // here — the sidecar's own Tick below drains the queue a few quiet frames later.
+        if (_hitchMonitor.Tick(frameMs, counters))
+        {
+            _hitchSidecar.Enqueue(_hitchMonitor.Last);
+        }
+        _hitchSidecar.Tick(frameMs);
+        // PLAN-perf-hitches D10/D11: same raw frameMs and the same counters read HitchMonitor
+        // just judged, fed to the readout regardless of whether it is currently drawn — see
+        // PerfHud.Tick's own doc comment.
+        _perfHud.Tick(frameMs, counters);
         if (_spec.Perf)
-            ReportPerf(delta);
+            ReportPerf(delta, counters);
 
         _captureDirector.Tick(GetViewport(), GetTree(), _spec, ClockNow, _orbit, _camera,
             _session?.Plane, _menu is { Visible: true });
@@ -621,7 +739,21 @@ public partial class Launcher : Node3D
             MenuPads = _menuPads,
         });
         AddChild(_session);
-        return _session.StartSession();
+        bool built = _session.StartSession();
+        // A build stalls the frame loop for as long as it takes, and the frames either side of it
+        // are not each other's neighbours, so the hitch monitor starts its grace window and drops
+        // its baseline here rather than reporting the build as the session's first hitch. Flush
+        // first: whatever B6 still had queued from before the build is one B4 does not want held
+        // through it.
+        _hitchSidecar.Flush();
+        _hitchMonitor.Rearm();
+        // C8: the build's own scopes (loads, material creation) belong to no frame, and the frame
+        // that closes over the build would otherwise report them all at once.
+        PerfSample.Reset();
+        // D10: same reasoning as HitchMonitor.Rearm above — the build's own stall must never read
+        // as the readout's worst recent frame.
+        _perfHud.Rearm();
+        return built;
     }
 
     private void SetupLighting()
@@ -738,6 +870,11 @@ public partial class Launcher : Node3D
             _session.QueueFree();
             _session = null;
         }
+        // Same reason as the build in LaunchSession: a teardown legitimately stalls the loop.
+        _hitchSidecar.Flush();
+        _hitchMonitor.Rearm();
+        PerfSample.Reset();
+        _perfHud.Rearm();
         ShowLaunchMenu();
     }
 
@@ -797,6 +934,45 @@ public partial class Launcher : Node3D
             : "focus: regained — audio restored, pad reads live");
     }
 
+    /// <summary>Samples the engine's eight per-frame counters once, for both instruments. The two
+    /// <c>TIME_*</c> monitors are seconds and are converted here, so everything downstream of this
+    /// is in milliseconds. Read at priority -999, so (like <c>delta</c> itself) these describe the
+    /// frame that just ended rather than the one being built; the two agree with each other, which
+    /// is what a hitch record needs.</summary>
+    private FrameCounters ReadFrameCounters() => new(
+        ScriptMs: 1000 * Performance.GetMonitor(Performance.Monitor.TimeProcess),
+        RenderCpuMs: RenderingServer.ViewportGetMeasuredRenderTimeCpu(_viewportRid),
+        GpuMs: RenderingServer.ViewportGetMeasuredRenderTimeGpu(_viewportRid),
+        PhysicsMs: 1000 * Performance.GetMonitor(Performance.Monitor.TimePhysicsProcess),
+        Draws: (long)Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame),
+        Prims: (long)Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame),
+        Nodes: (long)Performance.GetMonitor(Performance.Monitor.ObjectNodeCount),
+        MemBytes: (long)Performance.GetMonitor(Performance.Monitor.MemoryStatic));
+
+    /// <summary><c>--hitch-inject=</c> (PLAN-perf-hitches B5): burns wall time synchronously for
+    /// about <paramref name="ms"/> milliseconds, so every later item in the plan has a stall of
+    /// known magnitude to verify against instead of an incidental one. The busy-wait form (default)
+    /// proves the timing path; <paramref name="alloc"/> burns the same wall time allocating and
+    /// discarding 4 KB buffers instead of spinning, which is the only way to move the GC/
+    /// allocated-bytes columns on demand. Never wrapped in a <see cref="PerfSample"/> scope: an
+    /// injected fault must show as unattributed time, not as a breadcrumb that could be mistaken
+    /// for the thing under test. What the hitch stage checks instead is C8's identity — the
+    /// record's attributed and unattributed terms closing over its own frame cost.</summary>
+    private void InjectHitch(float ms, bool alloc)
+    {
+        long start = System.Diagnostics.Stopwatch.GetTimestamp();
+        double freq = System.Diagnostics.Stopwatch.Frequency;
+        long sink = 0;
+        while ((System.Diagnostics.Stopwatch.GetTimestamp() - start) * 1000.0 / freq < ms)
+        {
+            if (alloc)
+            {
+                sink += new byte[4096].Length;
+            }
+        }
+        Log.Info("perf", $"hitch-inject fired ms={ms:0.0} alloc={alloc} bytes={sink}");
+    }
+
     /// <summary>
     /// --perf: the headless stand-in for the editor's profiler. Godot's visual profiler needs
     /// the editor GUI, but the same numbers are available at runtime — and the one that settles
@@ -814,26 +990,32 @@ public partial class Launcher : Node3D
     /// <para>The line carries <c>sim_frame=</c> so a parser can pin each window to the run's
     /// simulation state instead of to a wall moment, and its grammar is flat
     /// <c>key=value</c> — <c>RunTests.ps1 -Perf</c> reads it.</para>
+    ///
+    /// <para><c>max_ms</c>/<c>p95_ms</c> sit beside the means: a mean over 60 frames buries a
+    /// single hitch (one 47 ms frame among fifty-nine 16.7 ms ones moves it by about 0.5 ms), so
+    /// these two answer "how bad did it get" rather than "how bad on average". Both come from the
+    /// same unaveraged per-frame wall cost the means are built from — nothing new is measured.
+    /// No <c>p99_ms</c>: nearest-rank p99 over a 60-sample window is the single worst sample, so it
+    /// would be identical to <c>max_ms</c> by construction (see <see cref="Perf95Index"/>).</para>
     /// </summary>
-    private void ReportPerf(double delta)
+    private void ReportPerf(double delta, in FrameCounters counters)
     {
-        var vp = GetViewport().GetViewportRid();
-        RenderingServer.ViewportSetMeasureRenderTime(vp, true);
         _perfFrames++;
+        _perfFrameMs[_perfFrames - 1] = delta * 1000;
         _perfClock += delta;
-        _perfProcess += Performance.GetMonitor(Performance.Monitor.TimeProcess);
-        _perfPhysics += Performance.GetMonitor(Performance.Monitor.TimePhysicsProcess);
-        _perfCpuRender += RenderingServer.ViewportGetMeasuredRenderTimeCpu(vp);
-        _perfGpu += RenderingServer.ViewportGetMeasuredRenderTimeGpu(vp);
+        _perfProcess += counters.ScriptMs;
+        _perfPhysics += counters.PhysicsMs;
+        _perfCpuRender += counters.RenderCpuMs;
+        _perfGpu += counters.GpuMs;
         // Counts, and averaged like every other term: a single frame's draw-call count is whatever
         // was in view at the instant the window closed, which moves under a flying camera. These
         // four are the sharp end of the report — a count has no timing noise in it, so a scene that
         // starts drawing (or holding) more says so exactly, while every ms term has to clear a
         // noise band first.
-        _perfDraws += Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame);
-        _perfPrims += Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame);
-        _perfNodes += Performance.GetMonitor(Performance.Monitor.ObjectNodeCount);
-        _perfMem += Performance.GetMonitor(Performance.Monitor.MemoryStatic);
+        _perfDraws += counters.Draws;
+        _perfPrims += counters.Prims;
+        _perfNodes += counters.Nodes;
+        _perfMem += counters.MemBytes;
         if (_perfFrames < PerfWindowFrames)
         {
             return;
@@ -846,15 +1028,21 @@ public partial class Launcher : Node3D
         double wallMs = 1000 * _perfClock;
         double fps = n / _perfClock;
         double frameMs = wallMs / n;
-        double scriptMs = 1000 * _perfProcess / n;
+        // Every ms term is already in milliseconds here: ReadFrameCounters does the seconds-to-ms
+        // conversion on Godot's two TIME_* monitors once, at the read.
+        double scriptMs = _perfProcess / n;
         double renderCpuMs = _perfCpuRender / n;
         double gpuMs = _perfGpu / n;
-        double physicsMs = 1000 * _perfPhysics / n;
+        double physicsMs = _perfPhysics / n;
         double draws = _perfDraws / n;
         double prims = _perfPrims / n;
         double nodes = _perfNodes / n;
         double memMb = _perfMem / n / (1024 * 1024);
-        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} render_cpu_ms={renderCpuMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00}");
+        System.Array.Copy(_perfFrameMs, _perfFrameMsSorted, PerfWindowFrames);
+        System.Array.Sort(_perfFrameMsSorted);
+        double maxMs = _perfFrameMsSorted[PerfWindowFrames - 1];
+        double p95Ms = _perfFrameMsSorted[Perf95Index];
+        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} render_cpu_ms={renderCpuMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00}");
         _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = 0;
         _perfDraws = _perfPrims = _perfNodes = _perfMem = 0;
     }

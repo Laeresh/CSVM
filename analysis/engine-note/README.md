@@ -50,4 +50,5 @@ next to it in `analysis/video-flight-calibration/` and imports `decode`/`extract
 - `recovery.py`, `recoveryplot.py` — the dive-recovery take and its figure
 
 Findings and traps: `docs/HISTORY.md` 2026-08-04 entries (a)–(e), `playtest/CAP-10/README.md`, and
-`analysis/video-flight-calibration/FINDINGS.md` for the chase-HUD decode rules.
+the deleted `analysis/video-flight-calibration/FINDINGS.md` for the chase-HUD decode rules
+(`git log -p` on that path).

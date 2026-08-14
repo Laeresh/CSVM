@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -175,6 +176,9 @@ public sealed partial class WorldSounds : Node3D
             return null;
         if (!_streams.TryGetValue(name, out var stream))
         {
+            // PLAN-perf-hitches C9: decode-on-miss for a SOUND_NODE emitter — most names are
+            // prewarmed, but not all (see this file's own Prewarm doc), so this is a live path.
+            using var _ = PerfSample.Scope(PerfSite.AudioLoad);
             if (Loader == null)
                 return null;
             stream = Loader(def, true);
@@ -366,6 +370,9 @@ public sealed partial class WorldSounds : Node3D
         }
         if (!_streams.TryGetValue(resolved, out var stream))
         {
+            // PLAN-perf-hitches C9: decode-on-miss for a one-shot SOUND — reachable from
+            // RunDeathSequence's own Sound events, same as SOUND_NODE's Create above.
+            using var _ = PerfSample.Scope(PerfSite.AudioLoad);
             if (Loader == null)
             {
                 return null;

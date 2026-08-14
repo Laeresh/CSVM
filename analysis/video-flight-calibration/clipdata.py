@@ -270,8 +270,10 @@ def stale_columns(head, cols):
     # --- the pooled reference / dial geometry
     hud = next((h.split("hud=")[1].strip() for h in _hdr_get(head, "# clipdata ")
                 if "hud=" in h), hudlib.DEFAULT_HUD)
-    was = next((h.split("fp=")[1].strip() for h in _hdr_get(head, "# artifacts ")
-                if "fp=" in h), None)
+    # first token only: the artifacts line appends "   (governs ...)" after the
+    # hash, and keeping it made every sidecar read STALE POOL against itself.
+    was = next((h.split("fp=")[1].strip().split()[0]
+                for h in _hdr_get(head, "# artifacts ") if "fp=" in h), None)
     isnow = artifact_fp(hud)
     if was is None:
         note = ("pool/dial fingerprint not recorded (sidecar pre-dates artifact "

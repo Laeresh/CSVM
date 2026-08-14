@@ -15,7 +15,7 @@ Flags are specified in [`cli.md`](cli.md).
 | `Space` | B | fire guns |
 | `F` | A | fire rockets — one per pull |
 | `G` | D-pad ← | select gun group (one at a time) |
-| `H` | D-pad → | select ordnance |
+| `H` | D-pad → | select ordnance (steps forward only; the original also steps back, `BL-357`) |
 | `F5` | | damage lab on the flown plane — `--damage=` |
 | `B` | | weapon lab panel — `--weapon-lab` sessions only; its steppers arm the plane's live loadout and Space/`F` then fire it (`--weapon-lab=` picks the weapon, `--weapon-mount=` the mount, `--weapon-cycle=` steps the list) |
 | click | | weapon lab: park the held plane on the surface under the cursor, at the panel's stand-off, nose on it — `--weapon-click=x,y`, or `--weapon-target=x,y,z` / `--weapon-surface=<registry name>` (any of the fourteen surface ids; `dirt` means id 13, not "untagged") to place without a mouse at all |
@@ -39,9 +39,7 @@ Flags are specified in [`cli.md`](cli.md).
 | `T` | node-name labels |
 | `F12` | screenshot |
 | `F13` | AI patrol-net overlay (chapter worlds only) — `--debug-ainets`. First tenant of the F13–F24 range reserved for debug overlays; the letter-key overlays (`C`/`X`/`T`/…) are to migrate there |
-| `F14` | map-edge tile-grid overlay — `--debug-tilegrid`. Colours every ground tile by how it was folded past the map edge; the width of one colour band is the block depth. Only where a continuation exists (`--fly`, `--freecam`, a `--sky-zone` viewer). ⚠ pair with `--no-fog` |
-| `F15` | step the map-edge block depth: 1 → 2 → 3 → 4 → 12 → 1, plus whatever `--map-edge-block=` asked for. Rebuilds the whole window, so it hitches (4–34 ms, one frame); the HUD reports how long it took. No-op while F14 is hidden |
-| `F16` | swap the map-edge fold between `repeat` (the default — what the original does) and `mirror` (the pre-2026-08-08 behaviour, kept to be looked at) — `--map-edge-mode=`. No-op while F14 is hidden |
+| `F14` | frame-cost readout: fps / current frame cost / worst recent frame, cycling Off → Compact → Full — `--debug-fps=`. Works at the launchscreen too |
 | `F11` | print the mode's subject placement as ready-to-paste `--pos=` / `--direction=` (in `--viewer`: `--pos=` / `--lookat=`, the orbit pivot) |
 | `F10` | export the plane on screen (current livery + damage) to a timestamped `.glb` under `Exports/` — the `--export-gltf=` twin |
 | `Esc` | quit |

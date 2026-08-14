@@ -1,6 +1,7 @@
 using System;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Session;
@@ -74,78 +75,87 @@ public sealed class AiAircraftSpawner
             machine.AttackRange = stats.AiAttackRange;
             machine.ReturnRange = stats.AiReturnRange;
         }
-        var planeBuilder = new PlaneBuilder(_in.PlanesGamez, _in.Textures, spinningProps: true,
-            scheme: scheme ?? _liveries.SchemeFor(_in.RigCount + index, _in.ZrdrPath, randomByDefault: false,
-                _in.PaintRng, _liveries.PatternsForPlane(_in.PlanesGamez, planeName)),
-            patterns: _liveries.Patterns);
-        var planeModel = planeBuilder.Build(planeName);
-
-        var controller = new FlightController
+        FlightController controller;
+        Node3D planeModel;
+        // PLAN-perf-hitches C9: the whole build — model, controller, loadout, crash runtime and
+        // adding it to the tree. Includes the plane's own decal paint (ResourceLoad), reached
+        // deeper in PlaneBuilder.Build — a nested scope there is suppressed and folded into this
+        // one, per PerfSample's flat-leaves rule.
+        using (PerfSample.Scope(PerfSite.AiSpawn))
         {
-            PlayerIndex = ShooterIdBase + index,
-            IsHumanPiloted = false,
-            Pilot = pilot,
-            PlaneModel = planeModel,
-            Props = PropAnimator.Build(planeModel),
-            WingLights = WingLightBlinker.Build(planeBuilder.WingFlares, _spec.AnimLod),
-            Surfaces = ControlSurfaceAnimator.Build(planeModel),
-            Collider = PlaneCollider.Build(planeModel),
-            Damage = stats.DestroyableParts.Count > 0 ? PlaneDamage.For(stats) : null,
-            CollideDamageSink = _in.WorldRuntime != null ? _in.WorldRuntime.CollideDamageAt : null,
-            GrazeEffectSink = _in.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
-            TouchdownDefs = _in.TouchdownDefs,
-            // Set outside the loadout bind below: the pool registration in _Ready is what makes
-            // this plane a hit target, loadout or not.
-            Projectiles = _in.Projectiles,
-            // No person at these controls: no keyboard, no pads (an empty list, not null — null
-            // means "every connected pad"), no pause, and no HUD (gated on IsHumanPiloted).
-            UseKeyboard = false,
-            PadDevices = Array.Empty<int>(),
-            AllowPause = false,
-            // Set here, before Setup and before the node joins the tree, so an inert airframe is
-            // never stepped, drawn or hittable for even one frame (E10): both Setup's Respawn and
-            // _Ready re-assert the state as the pieces that carry it come into existence.
-            Inert = inert,
-        };
-        if (team is { } t)
-            controller.Team = t;
-        controller.Shake = new PlaneShake(_in.Shakes);
-        var shakePivot = new Node3D { Name = "ShakePivot" };
-        controller.ShakePivot = shakePivot;
-        controller.AddChild(shakePivot);
-        shakePivot.AddChild(planeModel);
+            var planeBuilder = new PlaneBuilder(_in.PlanesGamez, _in.Textures, spinningProps: true,
+                scheme: scheme ?? _liveries.SchemeFor(_in.RigCount + index, _in.ZrdrPath, randomByDefault: false,
+                    _in.PaintRng, _liveries.PatternsForPlane(_in.PlanesGamez, planeName)),
+                patterns: _liveries.Patterns);
+            planeModel = planeBuilder.Build(planeName);
 
-        // The stock fit, so the airframe carries its real guns/ordnance (mounted rocket bodies
-        // included) — nothing pulls a trigger until a later wave gives the pilot one.
-        if (_in.StockLoadouts.For(stats.DefName) is { } ldef)
-        {
-            try
+            controller = new FlightController
             {
-                controller.Loadout = Loadout.Bind(ldef, planeModel, _in.WeaponDefs);
-                controller.Destructibles = _in.WorldRuntime?.Destructibles;
-                controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _in.Projectiles);
-            }
-            catch (Exception e)
+                PlayerIndex = ShooterIdBase + index,
+                IsHumanPiloted = false,
+                Pilot = pilot,
+                PlaneModel = planeModel,
+                Props = PropAnimator.Build(planeModel),
+                WingLights = WingLightBlinker.Build(planeBuilder.WingFlares, _spec.AnimLod),
+                Surfaces = ControlSurfaceAnimator.Build(planeModel),
+                Collider = PlaneCollider.Build(planeModel),
+                Damage = stats.DestroyableParts.Count > 0 ? PlaneDamage.For(stats) : null,
+                CollideDamageSink = _in.WorldRuntime != null ? _in.WorldRuntime.CollideDamageAt : null,
+                GrazeEffectSink = _in.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
+                TouchdownDefs = _in.TouchdownDefs,
+                // Set outside the loadout bind below: the pool registration in _Ready is what makes
+                // this plane a hit target, loadout or not.
+                Projectiles = _in.Projectiles,
+                // No person at these controls: no keyboard, no pads (an empty list, not null — null
+                // means "every connected pad"), no pause, and no HUD (gated on IsHumanPiloted).
+                UseKeyboard = false,
+                PadDevices = Array.Empty<int>(),
+                AllowPause = false,
+                // Set here, before Setup and before the node joins the tree, so an inert airframe is
+                // never stepped, drawn or hittable for even one frame (E10): both Setup's Respawn and
+                // _Ready re-assert the state as the pieces that carry it come into existence.
+                Inert = inert,
+            };
+            if (team is { } t)
+                controller.Team = t;
+            controller.Shake = new PlaneShake(_in.Shakes);
+            var shakePivot = new Node3D { Name = "ShakePivot" };
+            controller.ShakePivot = shakePivot;
+            controller.AddChild(shakePivot);
+            shakePivot.AddChild(planeModel);
+
+            // The stock fit, so the airframe carries its real guns/ordnance (mounted rocket bodies
+            // included) — nothing pulls a trigger until a later wave gives the pilot one.
+            if (_in.StockLoadouts.For(stats.DefName) is { } ldef)
             {
-                GD.PushWarning($"ai: loadout bind failed for '{stats.DefName}': {e.Message}");
+                try
+                {
+                    controller.Loadout = Loadout.Bind(ldef, planeModel, _in.WeaponDefs);
+                    controller.Destructibles = _in.WorldRuntime?.Destructibles;
+                    controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _in.Projectiles);
+                }
+                catch (Exception e)
+                {
+                    GD.PushWarning($"ai: loadout bind failed for '{stats.DefName}': {e.Message}");
+                }
             }
-        }
 
-        // No camera rides an AI plane — Setup(null) skips the whole camera half — and CamParams
-        // is camera tuning, so the default is passed rather than loading the plane's block.
-        controller.Setup(new FlightModel(stats), null, new CamParams(), pos, lookAt);
-        controller.Name = $"ai{index + 1}_{planeName}";
-        _worldRoot.AddChild(controller);
+            // No camera rides an AI plane — Setup(null) skips the whole camera half — and CamParams
+            // is camera tuning, so the default is passed rather than loading the plane's block.
+            controller.Setup(new FlightModel(stats), null, new CamParams(), pos, lookAt);
+            controller.Name = $"ai{index + 1}_{planeName}";
+            _worldRoot.AddChild(controller);
 
-        // The standard per-plane crash choreography, built after the controller joins the tree
-        // (its reset states read global transforms) — same call as a player rig; the factory keys
-        // this controller (IsHumanPiloted false) onto the ai_crash_<surface> vector, the
-        // original's own AI family.
-        if (_in.CrashProgram != null && _in.WorldScene != null)
-        {
-            _worldEffects.BuildFlightCrashRuntime(controller, planeBuilder, planeName, _in.Gamez,
-                _in.WorldScene, _in.Textures, _in.CrashProgram, verbose: false);
-            controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
+            // The standard per-plane crash choreography, built after the controller joins the tree
+            // (its reset states read global transforms) — same call as a player rig; the factory keys
+            // this controller (IsHumanPiloted false) onto the ai_crash_<surface> vector, the
+            // original's own AI family.
+            if (_in.CrashProgram != null && _in.WorldScene != null)
+            {
+                _worldEffects.BuildFlightCrashRuntime(controller, planeBuilder, planeName, _in.Gamez,
+                    _in.WorldScene, _in.Textures, _in.CrashProgram, verbose: false);
+                controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
+            }
         }
 
         GD.Print($"ai: spawned '{planeName}' as {controller.Name} (shooter id " +
