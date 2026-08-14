@@ -339,6 +339,13 @@ public partial class FlightController : Node3D
     /// <see cref="AutoRespawnDelay"/> unless this says otherwise.</summary>
     public float? AutoRespawnAfter;
 
+    /// <summary>Out of lives (PLAN-instant-action.md G13): this pilot stays crashed for the rest of
+    /// the mission — neither R nor <see cref="AutoRespawnAfter"/>'s timer brings it back — while
+    /// the session hands its pane to a <see cref="SpectatorCamera"/> and the others fly on. Set by
+    /// the session's own lives ledger (<c>InstantActionRuntime.NotifyPilotDown</c>), never from
+    /// here; this node holds no mission state and decides no rule.</summary>
+    public bool Spectating;
+
     private const float ThrottleRate = 0.5f;    // full sweep in 2 s
     private const float SpawnThrottle = 0.5f;   // the original always spawns at half throttle (confirmed in-game, all planes)
     private const float SpawnSpeed = 53.6f;     // m/s ≈ 120 mph. PLACEHOLDER: the original's spawn speed is
@@ -1083,6 +1090,12 @@ public partial class FlightController : Node3D
             // crash catches the wreck mid-break-up. The airframe stays frozen at the impact point
             // until the pilot respawns (R / gamepad Y or A); unattended HoldSegments runs and
             // AutoRespawnAfter sessions (Versus) respawn on the timer armed at Crash instead
+            //
+            // Out of lives (G13): neither trigger applies — the wreck stays and the pane watches,
+            // so this is checked ahead of both rather than by clearing AutoRespawnAfter, which R
+            // would still override.
+            if (Spectating)
+                return;
             if (RespawnPressed()
                 || ((HoldSegments != null || AutoRespawnAfter != null) && (_autoRespawnIn -= dt) <= 0f))
                 Respawn();

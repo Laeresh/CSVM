@@ -297,7 +297,7 @@ is M4's formation disproof, `B7` is the team model below.
 
 ### Wave G — Ends
 
-13. ☐ G13 End conditions, lives and spectating
+13. ☑ G13 End conditions, lives and spectating
 14. ☐ G14 The wrap-up board
 
 ### Wave H — The menu
@@ -1161,7 +1161,71 @@ flying zeppelin stays behind; that is known and is not this item's bug.
 
 # Wave G — Ends
 
-## G13 ☐ End conditions, lives and spectating
+## G13 ☑ End conditions, lives and spectating
+
+**Landed 2026-08-14. All four mission types now end, and one bug fell out of writing the fourth.**
+The end state lives on `InstantActionRuntime` as its first instance state: `ObjectiveFor(missionType)`
+maps a mission type to the one thing that wins it, `ReportObjective` drops what the mission does not
+run on (so every source can be subscribed unconditionally and a zeppelin run clearing its waves is
+not a win), `DisableObjective` records a win signal that can never arrive, and the lives ledger is
+per pilot with the mission LOST only once every registered human is out. `Elapsed` runs on sim dt
+and freezes at the outcome, which is the clock row G14 renders. The whole half is engine-free by
+construction, `VersusMatch`'s rule, so `CSVM.Tests/InstantActionEndTests.cs` pins it off-engine.
+In `GameSession` one block routes the four signals, registers each seat, arms the decoded 3 s
+`VersusRespawnDelay` and hands a pilot out of lives to `BeginInstantActionSpectate`; in
+`FlightController`, `Spectating` is checked at the top of the crash branch so neither R nor the
+armed timer can fly a wreck again (clearing the timer alone would have left R working).
+
+One divergence from this item's own Approach line, taken deliberately. "`StuntRace`'s all-finished
+path is reused rather than reimplemented" deadlocks once lives exist: a pilot out of lives can never
+clear another gate, so `AllFinished` would never come true and a splitscreen stunt mission the
+survivors HAD finished could only ever be lost. The board still wakes on `StuntRace`'s own rule,
+untouched; the mission's end asks `InstantActionRuntime.ZoneSetsFlown` instead — every pilot who can
+still fly has finished — evaluated on the only two events that can make it true (a run completing, a
+pilot going out), never polled.
+
+⚠ **E11's sequencer never stepped at the controls.** `InstantActionWaves.Step` was called only from
+`GameSession.DriveSimSteps`, which a REALTIME session never enters — every consumer paces itself off
+Godot's physics tick there — so waves 2 to 4 could not arrive in interactive play and the squadron
+mode could never have been won. The per-step work is now one `StepInstantAction` called from both
+paths, exactly as the match clock already was. Two smaller things landed with it: an `--ia=`
+`stunt_flying` mission loads its danger zones off the mission type rather than waiting for
+`--stunt` (without them that mode has no end condition at all), and the spectator camera's existing
+`FollowNode` orbit turned out to be exactly what trap (d) asked for, so nothing was added to it.
+
+Every mission type but `dogfight_ace` carries enemies, and the mapping is what keeps that from
+ending the wrong mission: all four shipped stunt chapters author four full waves (C4/C5 at 6/5/4/3;
+the setup screen hides the enemy controls on `dogfight_ace` alone), so a stunt run shooting its last
+wave down reports `WavesCleared` into a mission whose objective is `ZonesFlown` and is dropped —
+the same drop a zeppelin run's cleared waves take. Pinned both ways: the same `--ia=` file with
+`mission_type` swapped between `stunt_flying` and `dogfight_squadron` ends on the wave's last kill
+in one and flies on in the other.
+
+Verification: `RunTests.ps1` clean — 1203 unit tests (12 new), 58/58 engine suites, engine errors
+clean, 14/14 goldens hash-identical. New `instant-action-end` suite: each mission type driven to its
+end through the real signal (a spawned ace's own `Downed`; `InstantActionWaves` stepped over real
+aircraft, which does NOT end with a wave still flying; two real `StuntMission` runs over C1/IA1's
+5 authored zones, where the FIRST pilot in does not end it — decision 10 — and a third pair where
+the second pilot is out of lives and the first finishing DOES; C1/M04's piratezep really destroyed
+through the F18 survivor threshold), each paired with a second runtime of another mission
+type on the same signal staying Running, plus a hull that is not the objective leaving it running;
+and the lives ledger on one real aircraft — a life left, the armed crash cam respawns it 3 s later;
+`Spectating`, still a wreck 10 s later. That last check was watched failing with the pin removed.
+Live `--ia=` runs on C1, `--crash` as the scripted death: `lives 1` prints `ia: mission FAILED` +
+`P1 is out of lives — spectating from the crash camera` (screenshot: the crash vantage on the burning
+wreck, no HUD); `lives 0` survives its own crash and the ace's death prints `ia: mission COMPLETE`;
+a one-wave squadron completes on the wave's last kill and a two-wave one advances to wave 2 instead;
+`--debug-scoreboard` on a `stunt_flying` `--ia=` file completes the zones and the mission with it,
+solo and at `--players=2`, where the mission ends after the SECOND pilot's finish and not the first;
+`--players=2` prints `P1 … spectating, following P2` and only fails the mission on the second death,
+both panes rendering. 8-chapter `--freecam` regression: 0 errors, census unchanged (C1 7064/3425,
+C1B 5603/3099, C1C 5644/2965, C2 4956/1616, C2B 4901/2708, C3 5408/2331, C4 8289/4204,
+C5 11438/4722 nodes/meshes).
+
+Not verified here, and owed at the controls: how the spectator camera FEELS on a mid-mission death
+(rates, the orbit distance, whether following a teammate reads as intended) — an input-flow
+judgement no headless run can make. In splitscreen it also polls raw keyboard/pad, so two downed
+pilots watching at once move together; named in `docs/architecture.md`, not worked around.
 
 **Goal.** Every mission type can be won and lost. Dogfighting an ace ends when the ace is down.
 Dogfighting a squadron ends when all configured waves are cleared. Stunt flying ends when every

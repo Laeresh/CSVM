@@ -5,18 +5,46 @@ using CSVM.Mech3;
 
 namespace CSVM.Session;
 
+/// <summary>How an Instant Action mission finished (PLAN-instant-action.md G13). One-way: the
+/// first outcome reached stands, so a win and the last human's death landing in the same sim step
+/// cannot overwrite each other.</summary>
+public enum InstantActionOutcome
+{
+    Running,
+    Won,
+    Lost,
+}
+
+/// <summary>The one thing that has to happen for a mission to be WON — one per mission type
+/// (PLAN-instant-action.md G13). Every signal source reports the objective it has just satisfied
+/// and <see cref="InstantActionRuntime.ReportObjective"/> drops the ones this mission does not run
+/// on, which is what lets a zeppelin run clear all four of its waves (F12 credits them either way)
+/// without that counting as the win.</summary>
+public enum InstantActionObjective
+{
+    AceDown,
+    WavesCleared,
+    ZonesFlown,
+    ZeppelinDestroyed,
+}
+
 /// <summary>Owns one Instant Action mission's actor set, as it grows across the plan's later
 /// waves (PLAN-instant-action.md: E11 the wave sequencer, F12 the zeppelin arm). C8 wired
 /// <c>dogfight_ace</c>'s authored ace; D9 added the wingmen; E11 adds the two per-wave-member
 /// draws (<see cref="RandomPilotStats"/>, <see cref="ResolveWaveAccentId"/>) that the actual
 /// selection/trigger/geometry logic (<see cref="InstantActionWaves"/>, a separate engine-free
 /// class) does not own; F12 adds the objective-zeppelin selection
-/// (<see cref="IsZeppelinRun"/>, <see cref="SelectedZeppelinNode"/>).
+/// (<see cref="IsZeppelinRun"/>, <see cref="SelectedZeppelinNode"/>); G13 adds the mission's end
+/// — its <see cref="Objective"/>, its per-pilot lives ledger and its <see cref="Outcome"/>.
 /// <c>GameSession.BuildFlightRigs</c> reads <see cref="Def"/> directly to
 /// steer the player's own aircraft and spawn scenario, and calls the helpers below to place the
 /// ace, the wingmen and (with <see cref="InstantActionWaves"/>) each wave. Environment→chapter
 /// resolution is the launch MENU's job (H15), not this class's — a <c>--ia=&lt;path&gt;</c> CLI
-/// launch already names its chapter via <c>--chapter=</c>.</summary>
+/// launch already names its chapter via <c>--chapter=</c>.
+///
+/// <para>The end half holds no engine type and calls no <c>GD.*</c>, the same construction rule
+/// <see cref="Flight.VersusMatch"/> follows: the session pushes facts in (a signal, a death, a sim
+/// dt) and reads the verdict back, and every log line about it is the session's.</para></summary>
 public sealed class InstantActionRuntime
 {
     /// <summary>Every Instant Action enemy's team (PLAN-instant-action.md Decision 4: "the
@@ -45,12 +73,54 @@ public sealed class InstantActionRuntime
         new[] { 4, 4, 4, 4, 4, 4, 4, 4, 4 },
     };
 
+    // The lives ledger (G13, decision 15 — INVENTED, no ia.json key carries one): one counter per
+    // human seat, plus the seats that have run out and are watching. Both keyed by the pilot's own
+    // FlightController.PlayerIndex, never by a synthetic index.
+    private readonly Dictionary<int, int> _lives = new();
+    private readonly HashSet<int> _spectators = new();
+
     public InstantActionRuntime(InstantActionDef def)
     {
         Def = def;
     }
 
+    /// <summary>Raised once, with the outcome, the instant the mission ends. The wrap-up board
+    /// (G14) is the subscriber this exists for; G13's own subscriber is the session's log line.
+    /// </summary>
+    public event Action<InstantActionOutcome>? MissionEnded;
+
     public InstantActionDef Def { get; }
+
+    /// <summary>What this mission must achieve to be won, or null for a mission type with no end
+    /// condition here: <c>ground_target</c> (which every shipped map's <c>disallow_missions</c>
+    /// bars and this milestone does not implement) and any unrecognised hand-authored value. Such
+    /// a mission can still be LOST — it simply cannot be won, which is a deliberate disable in
+    /// <see cref="Flight.VersusMatch"/>'s shape rather than an error.</summary>
+    public InstantActionObjective? Objective => ObjectiveFor(Def.MissionType);
+
+    /// <summary><see cref="InstantActionOutcome.Running"/> until the objective is reported or
+    /// every human is out of lives; then the outcome that stands, forever.</summary>
+    public InstantActionOutcome Outcome { get; private set; }
+
+    public bool Ended => Outcome != InstantActionOutcome.Running;
+
+    /// <summary>Mission time in seconds, advanced by <see cref="Advance"/> on SIM dt alone (never
+    /// wall time — a halt freezes it with the simulation, the rule the match clock already
+    /// follows) and frozen the moment the mission ends. It is the value the wrap-up's "Time to
+    /// Complete Mission" row renders (G14); its stopping point is this item's, because the end is
+    /// the only place it can be stopped.</summary>
+    public float Elapsed { get; private set; }
+
+    /// <summary>False once <see cref="DisableObjective"/> has recorded that this mission's win
+    /// signal can never arrive (a squadron with no wave enemy configured, a stunt mission on a
+    /// chapter shipping no <c>dzones</c>, a zeppelin run with no zeppelin runtime). The mission
+    /// then runs on and can still be lost. Its caller must say so out loud — a mission that cannot
+    /// be won and does not report it reads as a broken end condition.</summary>
+    public bool ObjectiveEnabled { get; private set; } = true;
+
+    /// <summary>How many human seats are in this mission's lives ledger
+    /// (<see cref="RegisterPilot"/>).</summary>
+    public int PilotCount => _lives.Count;
 
     /// <summary>Whether this mission is the zeppelin run (F12). The mode is exclusive in the
     /// decode rather than additive: its waves take the generator arm and the teleport arm never
@@ -58,6 +128,20 @@ public sealed class InstantActionRuntime
     /// the builder switches ON rather than off (<see cref="SelectedZeppelinNode"/>).</summary>
     public bool IsZeppelinRun =>
         string.Equals(Def.MissionType, ZeppelinRunMissionType, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The mission type's own win condition (PLAN-instant-action.md G13's goal): the ace
+    /// down, every configured wave cleared, every player's zone set flown, or the zeppelin
+    /// destroyed. Null for a type with no end condition here — see <see cref="Objective"/>.</summary>
+    public static InstantActionObjective? ObjectiveFor(string missionType) =>
+        string.Equals(missionType, "dogfight_ace", StringComparison.OrdinalIgnoreCase)
+            ? InstantActionObjective.AceDown
+        : string.Equals(missionType, "dogfight_squadron", StringComparison.OrdinalIgnoreCase)
+            ? InstantActionObjective.WavesCleared
+        : string.Equals(missionType, "stunt_flying", StringComparison.OrdinalIgnoreCase)
+            ? InstantActionObjective.ZonesFlown
+        : string.Equals(missionType, ZeppelinRunMissionType, StringComparison.OrdinalIgnoreCase)
+            ? InstantActionObjective.ZeppelinDestroyed
+        : (InstantActionObjective?)null;
 
     /// <summary>The three <c>*_zeppelin</c> node names in <c>zeppelin_type</c> order — 0 cargo,
     /// 1 passenger, 2 military (docs/formats/instant-action.md "Which zeppelin, and which spawn
@@ -180,6 +264,106 @@ public sealed class InstantActionRuntime
     /// through unchanged.</summary>
     public static int ResolveWaveAccentId(int accentId, uint draw) =>
         accentId == 12 ? 12 + (int)(draw % 5) : accentId;
+
+    /// <summary>Decision 10's "every player has completed their zone set", with lives folded in:
+    /// a pilot out of lives can never clear another gate, so the zone sets are flown once every
+    /// pilot who can STILL FLY has finished. Counting a downed-out pilot would deadlock a
+    /// splitscreen stunt mission the survivors have actually finished — <c>StuntRace</c>'s own
+    /// all-finished rule (which still raises the results board) has no notion of a pilot who
+    /// cannot come back. False when nobody is left flying: that case is a LOSS, decided by the
+    /// lives ledger, and never a win.</summary>
+    public static bool ZoneSetsFlown(IReadOnlyList<(bool OutOfLives, bool Finished)> pilots)
+    {
+        bool anyFlying = false;
+        foreach (var (outOfLives, finished) in pilots)
+        {
+            if (outOfLives)
+            {
+                continue;
+            }
+            if (!finished)
+            {
+                return false;
+            }
+            anyFlying = true;
+        }
+        return anyFlying;
+    }
+
+    /// <summary>One sim step of the mission clock. A no-op once the mission has ended, which is
+    /// what freezes <see cref="Elapsed"/> at the outcome.</summary>
+    public void Advance(float dt)
+    {
+        if (!Ended)
+        {
+            Elapsed += dt;
+        }
+    }
+
+    /// <summary>Records that this mission's win signal can never arrive; see
+    /// <see cref="ObjectiveEnabled"/>.</summary>
+    public void DisableObjective() => ObjectiveEnabled = false;
+
+    /// <summary>A signal source reporting what it has just satisfied. The mission is WON only if
+    /// this is the objective its own type runs on — every other report is dropped, so one
+    /// subscription per source is safe on every mission type.</summary>
+    public void ReportObjective(InstantActionObjective objective)
+    {
+        if (Ended || !ObjectiveEnabled || Objective != objective)
+        {
+            return;
+        }
+        End(InstantActionOutcome.Won);
+    }
+
+    /// <summary>Puts one human seat on the ledger with a full set of lives. Splitscreen registers
+    /// every pane; an unregistered pilot keeps its ordinary respawn behaviour untouched.</summary>
+    public void RegisterPilot(int playerIndex) => _lives[playerIndex] = Def.Lives;
+
+    /// <summary>One human death: spends a life and answers whether that pilot flies again. False
+    /// means it is out, and the session hands its pane to the spectator camera; the mission is LOST
+    /// once every registered pilot is out, which is what keeps a splitscreen mission running while
+    /// any one human is still alive (decision 14).
+    ///
+    /// <para><c>lives 0</c> is unlimited and always answers true — a deliberately disabled end
+    /// condition in the shape <see cref="Flight.VersusMatch"/>'s 0 kill target already has, not an
+    /// oversight. An unregistered pilot also answers true, so nothing outside a mission is
+    /// changed.</para></summary>
+    public bool NotifyPilotDown(int playerIndex)
+    {
+        if (Def.Lives == 0 || !_lives.TryGetValue(playerIndex, out int left))
+        {
+            return true;
+        }
+        left = Math.Max(0, left - 1);
+        _lives[playerIndex] = left;
+        if (left > 0)
+        {
+            return true;
+        }
+        _spectators.Add(playerIndex);
+        if (_spectators.Count >= _lives.Count)
+        {
+            End(InstantActionOutcome.Lost);
+        }
+        return false;
+    }
+
+    /// <summary>Lives left for a registered pilot (0 = out and spectating); -1 for an unregistered
+    /// one, which is distinct from 0 on purpose.</summary>
+    public int LivesLeft(int playerIndex) => _lives.TryGetValue(playerIndex, out int n) ? n : -1;
+
+    public bool IsSpectating(int playerIndex) => _spectators.Contains(playerIndex);
+
+    private void End(InstantActionOutcome outcome)
+    {
+        if (Ended)
+        {
+            return;
+        }
+        Outcome = outcome;
+        MissionEnded?.Invoke(outcome);
+    }
 
     /// <summary>One wingman's standing order (docs/formats/instant-action.md "The player and the
     /// wingmen", PLAN-instant-action.md D9): its fan placement off the player's spawn heading —

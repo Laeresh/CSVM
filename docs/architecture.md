@@ -3212,6 +3212,11 @@ The `--freecam`/`--anim-lab` observation camera: WASD move, RMB-held mouse look 
 while held), wheel speed, pads via `Pads.For(null)`; lab additions `Frame(Aabb)`, the
 `FollowNode` orbit-lock (released by any translation input; `ExitFollow` keeps orientation) and
 a public `Camera` accessor — all inert in plain `--freecam`. Rates TUNE.
+It is also the pane an Instant Action pilot out of lives watches from (PLAN-instant-action G13,
+`GameSession.BeginInstantActionSpectate`): the lab's own `FollowNode` orbit is what "follow a live
+aircraft" needed, so nothing was added for it. In splitscreen it reads raw keyboard/any-pad input,
+so two downed pilots watching at once move together — there is no per-seat device split here, the
+way `FlightController.PadDevices`/`UseKeyboard` gives the flying panes one.
 ⚠ Default start is the mission spawn — RANDOM per launch; pass `--pos`/`--direction` for comparisons.
 ⚠ `KeyboardCaptured` zeroes keyboard axes while a text field owns focus — raw key polls bypass GUI focus.
 ⚠ Vertical is Q/E plus the **Z/U** alternate — not C/Space: C toggles the collider overlay and
@@ -3547,6 +3552,12 @@ inverse — re-home, clear the flag, `Respawn` — the original's teleport-then-
 ⚠ Inert is NOT "parked far away", a shape considered and rejected: a parked plane still ticks,
 still collides and still costs a frame. Where an inert aircraft sits is nobody's business (the
 original's own world-origin parking is incidental).
+`Spectating` (PLAN-instant-action G13) is the third lifecycle flag and the narrowest: a pilot out
+of lives stays crashed for the rest of the mission. Checked at the TOP of the crash branch, ahead
+of both respawn triggers, so neither R nor the armed `AutoRespawnAfter` timer can fly it again —
+clearing the timer instead would leave R working. The session sets it from its own lives ledger and
+hands the pane to a `SpectatorCamera` through `CameraOwned`; this node holds no mission state and
+decides no rule, exactly as it holds none for `--vs`.
 `Held` (the weapon lab) pins this ONE airframe while the session runs on: the sim step skips input,
 `FlightModel.Step` and the whole collision sweep and re-applies the pinned pose through
 `FlightModel.Reset(pos, attitude, 0, 0)` instead — everything from the pose commit down (weapon
@@ -4262,6 +4273,25 @@ point, and `ReleaseInstantActionWaveMember` — handed to the generator at build
 still-inert member of that wave at the generator's own bay drop point. Because the credit needs the
 generator to exist, `InstantActionWaves.Start()` is called after the generator block on that mode
 rather than inside the wave block.
+G13 closes the mission. One block near the end of `BuildFlightRigs` routes each mode's own signal
+into `_instantAction` — the ace's `Downed`, each pilot's own `StuntMission.RunCompleted` into
+`CheckInstantActionZoneSets` (which asks `InstantActionRuntime.ZoneSetsFlown`, and is called again
+whenever a pilot goes out — the only other event that can make it true, so nothing is polled),
+`ZeppelinRuntime.ZeppelinKilled` filtered to the OBJECTIVE node, and the wave
+sequencer's exhausted counter from `StepInstantAction` — then registers every human seat on the
+lives ledger, arms the same 3 s `VersusRespawnDelay`, and subscribes one `Downed` handler per rig
+that either logs the lives left or calls `BeginInstantActionSpectate`. A mission whose win signal
+cannot arrive is disabled and WARNS at build rather than silently never ending.
+`BeginInstantActionSpectate` pins the wreck (`FlightController.Spectating`), takes the pane with
+`CameraOwned` and gives it a `SpectatorCamera` locked onto a still-flying human where there is one;
+the target is picked once, so if that pilot later goes out too (3+ players) the watcher orbits a
+wreck until any movement input releases the lock. An `--ia=` `stunt_flying` mission also loads the
+danger zones itself, `--stunt` or not — the mission type is what asks for them, the way a zeppelin
+run asks for the zeppelin and generator runtimes.
+⚠ **`StepInstantAction` runs from BOTH drive paths** — `DriveSimSteps` and `_PhysicsProcess`, like
+  the match clock — because a realtime session never enters `DriveSimSteps` at all. E11 stepped the
+  sequencer only in the first, so before G13 no wave advanced at the controls; it is one method now
+  precisely so the two cannot drift apart again.
 ⚠ **A zeppelin run whose objective carries no `egen` generator launches nothing, ever** — the
   original burns through all four waves the same way (its counter advances whether or not the
   top-up lands), so this warns and does not invent a fallback spawn path. ⚠ **`BL-350` is in this
@@ -4493,7 +4523,7 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/Suites.cs
-The 56 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
+The 58 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
 the full-rig `Loadout.ForRig`), live weapon fire, the carried turret gunners (`carried-turrets`:
 build from ai.zrd + the thirdp mount, arc-centre rest pose, track/fire/hit under the host's
 shooter id, bored-window fire suppression with live tracking, the nearer-end-stop park, YAW [0,0]
@@ -4533,6 +4563,15 @@ synchronous suite does not re-enter the physics space either, the same one-frame
 and the round path is `zeppelin-damage`'s. ⚠ It is read-only against the SHARED cached world —
 registering a pool or leaving the node switched on there is handed to every later C1 suite, which
 showed up as an inflated `destructible-census` while this was being written),
+the Instant Action mission end (`instant-action-end`, PLAN-instant-action G13: one mission type at
+a time, each driven to its end through the SAME signal `GameSession` subscribes to — a spawned
+ace's own `Downed`, `InstantActionWaves` stepped over real aircraft, `StuntRace`'s all-finished
+path over C1/IA1's authored zones, and C1/M04's piratezep really destroyed through the F18 damage
+path — every win check paired with a SECOND runtime of another mission type on the same signal that
+must stay Running, plus the lives ledger's two ends on one real `FlightController`: with a life
+left the armed 3 s crash cam respawns it, with `Spectating` set it is still a wreck 10 s later.
+Its M04 world is mission-overridden and therefore never cached, so the gasbag kills cannot reach
+another suite),
 destructible stages/death/census, animation
 stops and bounce-terminated launches, the full effects sweep (`effects-census`: every effect
 resolves, template meshes peak at the CALL SITE not the stage origin, none stays lit after its
@@ -4918,6 +4957,22 @@ shape: it is decoded but not wired, because `enemy_skill` is confirmed unread by
 alone — wiring the multiplier today would be a no-op with no way to test it (every file-launched
 wave is effectively "veteran", 1.0) until H15/H16 gives Instant Action a setup screen that can set
 it directly.
+G13 adds the mission's END, and it is the class's first instance state: `Objective` /
+`ObjectiveFor(missionType)` (the per-type win condition — ace down, waves cleared, zones flown,
+zeppelin destroyed; null for `ground_target` and any unrecognised hand-authored type, which can
+then only be LOST), `ReportObjective` (each signal source reports what it satisfied and the
+runtime DROPS what this type does not run on, so one subscription per source is safe everywhere
+and a zeppelin run clearing its waves is not a win), `DisableObjective` for a win signal that can
+never arrive (VersusMatch's deliberate-disable shape — the caller must log why), `ZoneSetsFlown`
+(decision 10 with lives folded in: the zone sets are flown once every pilot who can STILL FLY has
+finished — counting a downed-out one would deadlock a splitscreen stunt mission the survivors have
+finished, since `StuntRace.AllFinished` has no notion of a pilot who cannot come back), the per-pilot
+lives ledger (`RegisterPilot`/`NotifyPilotDown`/`LivesLeft`/`IsSpectating`: decision 15's INVENTED
+`lives`, default 1, `0` unlimited and always "fly again", LOST only once EVERY registered pilot is
+out), the one-way `Outcome` + `MissionEnded`, and `Elapsed`, advanced by `Advance(dt)` on sim dt
+alone and frozen at the outcome for G14's clock row. This half holds no engine type and prints
+nothing — `VersusMatch`'s construction rule — so `CSVM.Tests/InstantActionEndTests.cs` pins every
+rule off-engine and `GameSession` owns every log line about it.
 F12 adds the objective-zeppelin selection, all pure: `IsZeppelinRun` (the one mission type whose
 waves take the generator arm), `ZeppelinNodes(def)` (the three `*_zeppelin` names in
 `zeppelin_type` order) and `SelectedZeppelinNode(def)` over `ZeppelinTypeIndex` — ⚠ **cargo is the

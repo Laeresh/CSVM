@@ -330,6 +330,15 @@ and leave gaps when retiring old ones.
   below that altitude — a compound-thing narrowness in INSTR-11's shape (`PLAN-overcast-match` A6,
   the A3 probe it corrects).
 
+- **INSTR-14** — **Every automated check here runs on a PARENT-DRIVEN clock, so a consumer stepped
+  only from `GameSession.DriveSimSteps` is invisible to all of them.** `--det` — implied by
+  `--run-tests`, `--screenshot=` and every other flag that drives a session by itself — makes
+  `GameClock.ParentDriven` true, and a realtime (interactive) session never enters that method at
+  all: it paces each consumer from its own `_PhysicsProcess`. Measured: E11's wave sequencer was
+  stepped only there, so waves 2 to 4 could never arrive at the controls, while its suite and its
+  scripted probes were both green (`PLAN-instant-action` G13). A per-step consumer belongs in one
+  method called from both paths, the way the match clock already was.
+
 ## SRC — sources and documents
 
 - **SRC-1** — **Validate whether bytes are meaningful before numeric sanity checks.**

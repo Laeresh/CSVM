@@ -674,15 +674,17 @@ public partial class GameSession : Node3D
         }
     }
 
-    /// <summary>The match clock on a realtime session: like every physics-stepped consumer,
-    /// advance on Godot's tick unless the clock is parent-driven — then
-    /// <see cref="DriveSimSteps"/> advances the match itself, on the same dt as the rigs.</summary>
+    /// <summary>The match clock and the Instant Action mission's own step on a realtime session:
+    /// like every physics-stepped consumer, advance on Godot's tick unless the clock is
+    /// parent-driven — then <see cref="DriveSimSteps"/> advances both itself, on the same dt as
+    /// the rigs.</summary>
     public override void _PhysicsProcess(double delta)
     {
         float dt = _clock?.PhysicsDt(delta) ?? (float)delta;
         if (dt <= 0f)
             return;
         _versus?.Advance(dt);
+        StepInstantAction(dt);
     }
 
     private static void CopyInstanceShaderParams(Node source, Node copy)
@@ -1758,11 +1760,18 @@ public partial class GameSession : Node3D
         // archives are read once no matter how many pilots are in.
         StuntMission? stuntZones = null;
         StuntRace? race = null;
-        if (_spec.Stunt && _spec.EmptyStage)
+        // An Instant Action stunt_flying mission IS a stunt run — the mission type is what asks
+        // for the zones, the way a zeppelin run asks for the zeppelin and generator runtimes
+        // itself (F12), so --stunt is not the tester's flag to remember on an --ia= launch. The
+        // spawn list is already the mission type's own (_spawnPicker.ScenarioOverride, C8).
+        bool iaStunt = _instantAction is { } iaStuntMission
+            && string.Equals(iaStuntMission.Def.MissionType, "stunt_flying", StringComparison.OrdinalIgnoreCase);
+        bool wantStunt = _spec.Stunt || iaStunt;
+        if (wantStunt && _spec.EmptyStage)
         {
             GD.Print("--stunt has no danger zones on the empty stage (no mission, no world) — flying free");
         }
-        else if (_spec.Stunt)
+        else if (wantStunt)
         {
             stuntZones = StuntMission.Load(state.Gamez, state.MissionZrdrPath, Messages.Load(state.MessagesPath));
             if (stuntZones == null)
@@ -1771,6 +1780,9 @@ public partial class GameSession : Node3D
                 GD.Print($"--stunt: no danger zones for {_spec.Chapter}/{_spec.Mission} — flying free");
             else if (_rigs.Count > 1)
                 race = new StuntRace(); // splitscreen: a race, ranked on the shared board
+            if (stuntZones != null && iaStunt && !_spec.Stunt)
+                GD.Print($"ia: stunt_flying — {stuntZones.TotalCount} danger zone(s) from " +
+                          $"{_spec.Chapter}/{_spec.Mission}, the mission type's own objective");
         }
 
         // Dogfight (--vs): built here, before the rigs — same reason Race is (FlightRigAssembler
@@ -2046,7 +2058,10 @@ public partial class GameSession : Node3D
         }
         // Instant Action's authored ace (PLAN-instant-action.md C8) — dogfight_ace only; the
         // wave sequencer (D9/E11) and the zeppelin arm (F12) are later items, so any other
-        // mission_type spawns no actor yet.
+        // mission_type spawns no actor yet. Kept as a local so the end-condition block at the
+        // bottom of this method can hang the mode's win signal on it (G13).
+        FlightController? iaAce = null;
+        int iaWaveEnemies = 0;
         if (_instantAction is { } ia
             && string.Equals(ia.Def.MissionType, "dogfight_ace", StringComparison.OrdinalIgnoreCase))
         {
@@ -2072,6 +2087,7 @@ public partial class GameSession : Node3D
                 var ace = SpawnAiAircraft(aceNode, sp.Position, sp.Position + fwd, pilot,
                     scheme: ia.Def.AceLivery, team: InstantActionRuntime.EnemyTeam, attackRating: rating);
                 RegisterAiVoice(ace, ia.Def.AceAccentId, rating);
+                iaAce = ace;
                 if (ace != null)
                 {
                     GD.Print($"ia: ace '{ia.Def.AceName}' ({aceNode}) rating={rating} " +
@@ -2237,13 +2253,13 @@ public partial class GameSession : Node3D
                     ActivateInstantActionWave(firstWave);
                 }
             }
-            int totalWaveEnemies = rosters.Sum(r => r.Count);
-            if (totalWaveEnemies > 0)
+            iaWaveEnemies = rosters.Sum(r => r.Count);
+            if (iaWaveEnemies > 0)
             {
-                GD.Print($"ia: {totalWaveEnemies} wave enemies across " +
+                GD.Print($"ia: {iaWaveEnemies} wave enemies across " +
                           $"{rosters.Count(r => r.Count > 0)} wave(s), built inert, " +
                           $"team={InstantActionRuntime.EnemyTeam}");
-                state.What += $" + {totalWaveEnemies} IA wave enemies";
+                state.What += $" + {iaWaveEnemies} IA wave enemies";
             }
         }
         if (_spec.AiPlanes is { Count: > 0 } aiPlanes && _rigs.Count > 0
@@ -2454,6 +2470,100 @@ public partial class GameSession : Node3D
             {
                 ActivateInstantActionWave(firstZepWave);
             }
+        }
+
+        // Instant Action's end conditions, lives and spectating (PLAN-instant-action.md G13).
+        // Every signal this needs already exists and is built by the blocks above — the ace's own
+        // Downed report, the wave sequencer's exhausted counter (StepInstantAction), the stunt
+        // run's all-finished path and ZeppelinRuntime.ZeppelinKilled — so this only routes them
+        // into the one runtime that decides the outcome. Each source reports the objective it has
+        // satisfied and the runtime drops what this mission type does not run on, which is why a
+        // zeppelin run clearing all four of its waves is not a win.
+        if (_instantAction is { } iaEnd)
+        {
+            var objective = iaEnd.Objective;
+            if (objective == InstantActionObjective.AceDown && iaAce != null)
+            {
+                iaAce.Downed += (_, _) => iaEnd.ReportObjective(InstantActionObjective.AceDown);
+            }
+            else if (objective == InstantActionObjective.WavesCleared && iaWaveEnemies > 0)
+            {
+                // Reported by StepInstantAction off InstantActionWaves.Finished — the sequencer
+                // owns "every configured wave is cleared" and nothing here re-derives it.
+            }
+            else if (objective == InstantActionObjective.ZonesFlown && stuntZones != null)
+            {
+                // Decision 10: all-finished, never first past the post — the rule StuntRace's own
+                // board already runs on, evaluated here over the pilots who can still fly
+                // (InstantActionRuntime.ZoneSetsFlown) so a pilot out of lives cannot deadlock a
+                // mission the survivors have finished. Checked on the only two events that can
+                // make it true — a run completing, and a pilot going out — never polled.
+                foreach (var rig in _rigs)
+                {
+                    if (rig.Controller?.Stunt is { } run)
+                    {
+                        run.RunCompleted += CheckInstantActionZoneSets;
+                    }
+                }
+            }
+            else if (objective == InstantActionObjective.ZeppelinDestroyed && _zeppelins != null)
+            {
+                string endZep = InstantActionRuntime.SelectedZeppelinNode(iaEnd.Def);
+                _zeppelins.ZeppelinKilled += node =>
+                {
+                    // The OBJECTIVE's death only: a mission world may fly other zeppelins, and
+                    // shooting one of those down is not this mission's win.
+                    if (string.Equals(node, endZep, StringComparison.OrdinalIgnoreCase))
+                    {
+                        iaEnd.ReportObjective(InstantActionObjective.ZeppelinDestroyed);
+                    }
+                };
+            }
+            else
+            {
+                // A mission that cannot be won says so at build. Deliberate, in the shape
+                // VersusMatch's disabled kill target/time limit already has — the mission still
+                // flies and can still be lost.
+                iaEnd.DisableObjective();
+                GD.PushWarning("ia: this mission has NO win condition — " + (objective switch
+                {
+                    null => $"mission type '{iaEnd.Def.MissionType}' has none in this build",
+                    InstantActionObjective.AceDown => "no ace was spawned",
+                    InstantActionObjective.WavesCleared => "no wave enemy is configured",
+                    InstantActionObjective.ZonesFlown => "this mission ships no danger zones",
+                    _ => "no zeppelin runtime was built",
+                }) + " (it can still be lost)");
+            }
+            // Lives (decision 15, INVENTED — no ia.json key carries one). Every human seat joins
+            // the ledger and takes the decoded Versus respawn arming; NotifyPilotDown decides
+            // whether the crash cam ends in a respawn or in the spectator camera.
+            foreach (var rig in _rigs)
+            {
+                if (rig.Controller is not { } pilot)
+                {
+                    continue;
+                }
+                iaEnd.RegisterPilot(pilot.PlayerIndex);
+                pilot.AutoRespawnAfter = VersusRespawnDelay; // crash cam, then back in — R skips
+                pilot.Downed += (victim, _) =>
+                {
+                    if (iaEnd.NotifyPilotDown(victim))
+                    {
+                        GD.Print($"ia: P{victim + 1} down — " + (iaEnd.Def.Lives == 0
+                            ? "unlimited lives" : $"{iaEnd.LivesLeft(victim)} life/lives left") +
+                            $", respawning in {VersusRespawnDelay:0.#} s");
+                        return;
+                    }
+                    BeginInstantActionSpectate(rig);
+                };
+            }
+            iaEnd.MissionEnded += outcome => GD.Print(
+                $"ia: mission {(outcome == InstantActionOutcome.Won ? "COMPLETE" : "FAILED")} — " +
+                $"{iaEnd.Def.MissionType} after {iaEnd.Elapsed:0.0} s");
+            GD.Print($"ia: {iaEnd.Def.MissionType} — win: " +
+                     (iaEnd.ObjectiveEnabled ? objective!.Value.ToString() : "none") +
+                     $", loss: every human out of lives ({(iaEnd.Def.Lives == 0 ? "unlimited" : iaEnd.Def.Lives.ToString())} " +
+                     $"per pilot), {iaEnd.PilotCount} human seat(s)");
         }
 
         // World AA emplacements (M4 C9b): the standalone ai.zrd family, placed at its NODES
@@ -2909,6 +3019,117 @@ public partial class GameSession : Node3D
                   $"of {spawns.Count}");
     }
 
+    /// <summary>G13: a pilot has spent its last life. The wreck stays where it fell — the
+    /// <c>Spectating</c> flag pins it, so neither R nor the armed respawn timer flies it again —
+    /// and this pane's camera goes to a <see cref="SpectatorCamera"/>, locked onto a still-flying
+    /// human where there is one and left at the crash vantage where there is not. The lock is the
+    /// same one the anim lab uses and it releases on any translation input, so the watcher can fly
+    /// off rather than being stuck on one aircraft.
+    ///
+    /// <para>⚠ The spectator camera polls raw keyboard/any-pad input, so in splitscreen two
+    /// downed pilots watching at once move together — one keyboard, no per-seat binding. Named
+    /// rather than worked around: the per-device split is <see cref="FlightController"/>'s
+    /// (<c>PadDevices</c>/<c>UseKeyboard</c>) and this camera has no equivalent.</para></summary>
+    private void BeginInstantActionSpectate(PlayerRig rig)
+    {
+        if (rig.Controller is not { Spectating: false } pilot)
+        {
+            return;
+        }
+        pilot.Spectating = true;
+        pilot.CameraOwned = true;   // D8's seam: this node writes nothing to the camera from here
+        FlightController? follow = null;
+        foreach (var other in _rigs)
+        {
+            if (other.Controller is { InPlay: true } live && live != pilot)
+            {
+                follow = live;
+                break;
+            }
+        }
+        var eye = rig.Camera.Position;   // where Crash's own cut left it (CameraController.CrashView)
+        var spectator = new SpectatorCamera(rig.Camera, eye,
+            follow != null ? follow.WorldPosition : eye - rig.Camera.Basis.Z)
+        {
+            ShowReadout = false,   // the freecam's own label would sit over a splitscreen pane
+        };
+        _worldRoot!.AddChild(spectator);
+        if (follow != null)
+        {
+            spectator.FollowNode(follow);
+        }
+        GD.Print($"ia: P{pilot.PlayerIndex + 1} is out of lives — spectating" +
+                 (follow != null ? $", following P{follow.PlayerIndex + 1}" : " from the crash camera"));
+        // One of the two events that can complete a stunt mission's zone sets: this pilot has
+        // stopped being one the mission waits for.
+        CheckInstantActionZoneSets();
+    }
+
+    /// <summary>G13's stunt-flying end test: the zone sets are flown once every pilot who can
+    /// still fly has finished (<see cref="InstantActionRuntime.ZoneSetsFlown"/> owns the rule, so
+    /// the suites test the same predicate the session runs). A no-op on every other mission type,
+    /// since <c>ReportObjective</c> drops what this mission does not run on.</summary>
+    private void CheckInstantActionZoneSets()
+    {
+        if (_instantAction is not { } ia)
+        {
+            return;
+        }
+        var pilots = new List<(bool OutOfLives, bool Finished)>(_rigs.Count);
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller is { } pilot)
+            {
+                pilots.Add((pilot.Spectating, pilot.Stunt is { AllComplete: true }));
+            }
+        }
+        if (InstantActionRuntime.ZoneSetsFlown(pilots))
+        {
+            ia.ReportObjective(InstantActionObjective.ZonesFlown);
+        }
+    }
+
+    /// <summary>One sim step of the Instant Action mission: the wave sequencer's own tick
+    /// (E11/F12) plus the mission clock and the wave-cleared win signal (G13). Called from BOTH
+    /// drive paths for the same reason the match clock is — a realtime session never enters
+    /// <see cref="DriveSimSteps"/>, because every consumer paces itself off Godot's physics tick
+    /// there, and a sequencer stepped only in the fixed-clock path would advance no wave at the
+    /// controls.</summary>
+    private void StepInstantAction(float dt)
+    {
+        if (_instantAction is not { } ia)
+        {
+            return;
+        }
+        ia.Advance(dt);
+        if (_iaWaves is not { Finished: false, CurrentWave: >= 1 } waves)
+        {
+            return;
+        }
+        var waveRoster = _iaWaveRosters![waves.CurrentWave - 1];
+        // A wave member still waiting in the zeppelin's bay COUNTS as present, exactly as the
+        // decoded walk counts a still-deactivated enemy (byte +0x945, docs/formats/
+        // instant-action.md "Who still counts as an enemy") — otherwise a credited wave would read
+        // as cleared in the frames before its first launch. On every other mode the whole wave is
+        // airborne the instant it becomes current, so InPlay and "not crashed" agree and the E11
+        // reading stands.
+        int alive = ia.IsZeppelinRun
+            ? waveRoster.Count(fc => !fc.Crashed)
+            : waveRoster.Count(fc => fc.InPlay);
+        int next = waves.Step(alive);
+        if (next != 0)
+        {
+            ActivateInstantActionWave(next);
+        }
+        else if (waves.Finished)
+        {
+            // Every configured wave cleared — the squadron mode's win. Reported on every mode;
+            // the runtime drops it on the ones that do not run on it (a zeppelin run's waves all
+            // clear too, and the zeppelin is what decides that mission).
+            ia.ReportObjective(InstantActionObjective.WavesCleared);
+        }
+    }
+
     /// <summary>F12's launch hook, handed to the objective zeppelin's generator: releases the next
     /// still-parked member of the CURRENT wave (<c>_iaLaunchWave</c>, the decoded group stamp) at
     /// the generator's own drop point and attitude — the bay origin node's live position minus
@@ -2986,26 +3207,10 @@ public partial class GameSession : Node3D
             {
                 ai.SimStep(dt);
             }
-            // E11: one sequencer tick per sim step, after the AI planes above have taken this
-            // step's crashes — the alive count InstantActionWaves.Step reads must reflect them.
-            if (_iaWaves is { Finished: false, CurrentWave: >= 1 } waves)
-            {
-                var waveRoster = _iaWaveRosters![waves.CurrentWave - 1];
-                // A wave member still waiting in the zeppelin's bay COUNTS as present, exactly
-                // as the decoded walk counts a still-deactivated enemy (byte +0x945,
-                // docs/formats/instant-action.md "Who still counts as an enemy") — otherwise a
-                // credited wave would read as cleared in the frames before its first launch.
-                // On every other mode the whole wave is airborne the instant it becomes
-                // current, so InPlay and "not crashed" agree and the E11 reading stands.
-                int alive = _instantAction is { IsZeppelinRun: true }
-                    ? waveRoster.Count(fc => !fc.Crashed)
-                    : waveRoster.Count(fc => fc.InPlay);
-                int next = waves.Step(alive);
-                if (next != 0)
-                {
-                    ActivateInstantActionWave(next);
-                }
-            }
+            // E11/G13: one sequencer tick and one mission-clock step per sim step, after the AI
+            // planes above have taken this step's crashes — the alive count
+            // InstantActionWaves.Step reads must reflect them.
+            StepInstantAction(dt);
             // The voice dispatch's mission clock (E16): the 2 s mute window and every 15 s
             // slot cooldown run on sim time, so a halted clock halts the chatter too.
             _aiVoice?.Step(dt);

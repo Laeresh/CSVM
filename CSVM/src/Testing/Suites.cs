@@ -189,6 +189,18 @@ public static class Suites
             "switched off, and the activation brings the hull and those colliders back together " +
             "(leaving off only the descendants that are themselves deactivated)",
             InstantActionZeppelin));
+        into.Add(new TestHarness.Suite("instant-action-end",
+            "the G13 mission end, one mission type at a time and each through the real signal: an " +
+            "ace's own Downed report wins the duel, the wave sequencer's last kill wins the " +
+            "squadron (with a wave still flying it does not), the LAST pilot in wins the stunt run " +
+            "over C1/IA1's authored zones while the first does not — and the last still-flying one " +
+            "does when the other is out of lives — and really destroying C1/M04's piratezep wins " +
+            "the zeppelin run; each with a second mission of another type subscribed to the same " +
+            "signal and staying Running, plus a hull that is not the objective leaving it running; " +
+            "and the lives ledger on a real aircraft: with a life left the armed 3 s crash cam " +
+            "respawns it, out of lives the wreck is still there 10 s later and the solo mission " +
+            "is LOST",
+            InstantActionEnd));
         into.Add(new TestHarness.Suite("inert-aircraft",
             "the E10 inert state, each claim watched passing on a live aircraft first and on the " +
             "inert one AFTER activation: a plane built inert is not returned by a raycast, is " +
@@ -3773,6 +3785,317 @@ public static class Suites
             disabled += d;
         }
         return (total, disabled);
+    }
+
+    /// <summary>The G13 mission end: one assertion per mission type, each driven to its end
+    /// through the SAME signal <c>GameSession</c> subscribes to — the ace's own <c>Downed</c>
+    /// report, <c>InstantActionWaves.Finished</c> over real spawned aircraft, two real
+    /// <c>StuntMission</c> runs over C1/IA1's authored danger zones through
+    /// <c>InstantActionRuntime.ZoneSetsFlown</c> (the predicate the session itself calls), and
+    /// <c>ZeppelinRuntime.ZeppelinKilled</c> raised by really destroying C1/M04's piratezep —
+    /// plus the lives ledger's two ends on a real <see cref="FlightController"/>: with a life
+    /// left the armed crash cam ends in a respawn, out of lives it never does.
+    ///
+    /// <para>Every win check carries its own able-to-fail control, and they are the cheap kind:
+    /// a SECOND runtime of a different mission type subscribed to the same signal must stay
+    /// Running, which is the one mistake this design could make (reporting an objective the
+    /// mission does not run on).</para></summary>
+    private static void InstantActionEnd(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
+        ctx.RequireData(ctx.MessagesPath, $"messages.json");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        var spawned = new List<FlightController>();
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+            var spec = SessionSpec.Parse(System.Array.Empty<string>());
+            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var inputs = new FlightRigAssembler.Inputs
+            {
+                PlanesGamez = planesGamez,
+                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                RigCount = 0,
+                PaintRng = new RandomNumberGenerator(),
+                ZrdrPath = ctx.ZrdrPath,
+                StockLoadouts = StockLoadouts.Load(),
+                WeaponDefs = weaponDefs,
+                Textures = textures,
+                Projectiles = live,
+                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            };
+            var spawner = new AiAircraftSpawner(spec, liveries, null!, ctx.Host, inputs);
+            string enemyNode = InstantAction.PlaneNodeFor("Warhawk")!;
+
+            FlightController SpawnAt(Vector3 pos, int team, bool inert = false)
+            {
+                var pilot = AiPilot.HoldingCourse(pos, pos + Vector3.Forward);
+                var fc = spawner.Spawn(enemyNode, pos, pos + Vector3.Forward, pilot,
+                    scheme: null, team: team, inert: inert);
+                spawned.Add(fc);
+                return fc;
+            }
+
+            // ---- dogfight_ace: the ace's own Downed report ----------------------------------
+            var aceMission = new InstantActionRuntime(EndDef(ctx, "ace", "dogfight_ace"));
+            var notAceMission = new InstantActionRuntime(EndDef(ctx, "squadron", "dogfight_squadron"));
+            var ace = SpawnAt(new Vector3(0f, 500f, 0f), InstantActionRuntime.EnemyTeam);
+            ace.Downed += (_, _) =>
+            {
+                aceMission.ReportObjective(InstantActionObjective.AceDown);
+                notAceMission.ReportObjective(InstantActionObjective.AceDown);
+            };
+            ctx.Check(!aceMission.Ended, $"the ace duel is running before the ace goes down");
+            ace.DebugForceCrash();
+            ctx.Check(aceMission.Outcome == InstantActionOutcome.Won,
+                $"the ace's own Downed report WINS a dogfight_ace mission: {aceMission.Outcome}");
+            ctx.Check(!notAceMission.Ended,
+                $"…and the same report leaves a dogfight_squadron mission running: {notAceMission.Outcome}");
+
+            // ---- dogfight_squadron: the sequencer's exhausted counter ------------------------
+            var squadron = new InstantActionRuntime(EndDef(ctx, "squadron2", "dogfight_squadron"));
+            var notSquadron = new InstantActionRuntime(EndDef(ctx, "zeppelin0", "zeppelin_run"));
+            var waves = new InstantActionWaves(new[] { 2, 1, 0, 0 });
+            var wave1 = new List<FlightController>
+            {
+                SpawnAt(new Vector3(200f, 500f, 0f), InstantActionRuntime.EnemyTeam),
+                SpawnAt(new Vector3(220f, 500f, 0f), InstantActionRuntime.EnemyTeam),
+            };
+            var wave2 = new List<FlightController>
+            {
+                SpawnAt(new Vector3(240f, 500f, 0f), InstantActionRuntime.EnemyTeam, inert: true),
+            };
+            ctx.Same(1, waves.Start(), $"wave 1 is current at mission start");
+
+            // GameSession.StepInstantAction's own loop body, over the real rosters.
+            void StepWaves(List<FlightController> roster)
+            {
+                int next = waves.Step(roster.Count(m => m.InPlay));
+                if (next == 2)
+                {
+                    wave2[0].Activate(new Vector3(2000f, 500f, 0f), new Vector3(2000f, 500f, 100f));
+                }
+                else if (next == 0 && waves.Finished)
+                {
+                    squadron.ReportObjective(InstantActionObjective.WavesCleared);
+                    notSquadron.ReportObjective(InstantActionObjective.WavesCleared);
+                }
+            }
+
+            foreach (var m in wave1)
+            {
+                m.DebugForceCrash();
+            }
+            StepWaves(wave1);
+            ctx.Check(waves.CurrentWave == 2 && wave2[0].InPlay,
+                $"wave 1 cleared: wave 2 is current and flying — the mission is NOT over yet");
+            ctx.Check(!squadron.Ended, $"…and the squadron mission is still running with a wave left");
+            wave2[0].DebugForceCrash();
+            StepWaves(wave2);
+            ctx.Check(waves.Finished && squadron.Outcome == InstantActionOutcome.Won,
+                $"the last wave's last kill WINS a dogfight_squadron mission: {squadron.Outcome}");
+            ctx.Check(!notSquadron.Ended,
+                $"…and a zeppelin run clearing its waves the same way is NOT won: {notSquadron.Outcome}");
+
+            // ---- lives: the two ends of the ledger, on a real aircraft -----------------------
+            // The mechanism is FlightController's own crash/respawn path, which an AI-piloted
+            // aircraft takes byte-for-byte (M4 A2), so the probe is a spawned plane rather than a
+            // rig: what is under test is the arming and the Spectating pin, not who is at the
+            // controls.
+            var lifeLedger = new InstantActionRuntime(EndDef(ctx, "lives3", "dogfight_squadron", lives: 3));
+            var probe = SpawnAt(new Vector3(-400f, 500f, 0f), AimAssist.PlayerTeam);
+            lifeLedger.RegisterPilot(probe.PlayerIndex);
+            probe.AutoRespawnAfter = 3f;
+            probe.DebugForceCrash();
+            ctx.Check(probe.Crashed && lifeLedger.NotifyPilotDown(probe.PlayerIndex),
+                $"3 lives, first death: the ledger says fly again ({lifeLedger.LivesLeft(probe.PlayerIndex)} left)");
+            for (int i = 0; i < 300; i++)
+            {
+                probe.SimStep(1f / 60f);
+            }
+            ctx.Check(!probe.Crashed,
+                $"…and 5 s later the armed 3 s crash cam has respawned it — the able-to-fail control");
+
+            var lastLife = new InstantActionRuntime(EndDef(ctx, "lives1", "dogfight_squadron"));
+            lastLife.RegisterPilot(probe.PlayerIndex);
+            probe.DebugForceCrash();
+            bool fliesAgain = lastLife.NotifyPilotDown(probe.PlayerIndex);
+            probe.Spectating = !fliesAgain;
+            ctx.Check(!fliesAgain && lastLife.IsSpectating(probe.PlayerIndex),
+                $"the default 1 life sends the same pilot straight to spectate on its first death");
+            ctx.Check(lastLife.Outcome == InstantActionOutcome.Lost,
+                $"…and with no other human alive the mission is LOST: {lastLife.Outcome}");
+            for (int i = 0; i < 600; i++)
+            {
+                probe.SimStep(1f / 60f);
+            }
+            ctx.Check(probe.Crashed,
+                $"…and 10 s later the wreck is still there: Spectating outranks the armed timer");
+        }
+        finally
+        {
+            pool?.Free();
+            foreach (var fc in spawned)
+            {
+                fc.Free();
+            }
+            textures.Dispose();
+        }
+
+        // ---- stunt_flying: StuntRace's all-finished path over the authored zones -------------
+        ctx.WithWorld("C1", collision: false, mission: "IA1", world =>
+        {
+            var zones = StuntMission.Load(world.Gamez, missionZrdr, Messages.Load(ctx.MessagesPath));
+            ctx.Check(zones != null, $"C1/IA1 ships danger zones for a stunt_flying mission");
+            if (zones == null)
+            {
+                return;
+            }
+            var stunt = new InstantActionRuntime(EndDef(ctx, "stunt", "stunt_flying"));
+            var notStunt = new InstantActionRuntime(EndDef(ctx, "ace2", "dogfight_ace"));
+            var race = new StuntRace();
+            var second = zones.ForAnotherPlayer();
+            race.Add(0, zones, "P1");
+            race.Add(1, second, "P2");
+            // GameSession.CheckInstantActionZoneSets, over the same predicate it calls: the two
+            // pilots' runs, with P2's out-of-lives state under the suite's control.
+            bool p2OutOfLives = false;
+            void CheckZoneSets()
+            {
+                var pilots = new[] { (false, zones.AllComplete), (p2OutOfLives, second.AllComplete) };
+                if (InstantActionRuntime.ZoneSetsFlown(pilots))
+                {
+                    stunt.ReportObjective(InstantActionObjective.ZonesFlown);
+                    notStunt.ReportObjective(InstantActionObjective.ZonesFlown);
+                }
+            }
+
+            zones.RunCompleted += CheckZoneSets;
+            second.RunCompleted += CheckZoneSets;
+
+            // Decision 10: all-finished, never first past the post.
+            zones.DebugCompleteAll();
+            ctx.Check(zones.AllComplete && !race.AllFinished && !stunt.Ended,
+                $"the FIRST pilot's zone set is flown and the mission runs on ({race.FinishedCount} of 2 in)");
+            second.DebugCompleteAll();
+            ctx.Check(race.AllFinished && stunt.Outcome == InstantActionOutcome.Won,
+                $"the last pilot in WINS a stunt_flying mission: {stunt.Outcome}");
+            ctx.Check(!notStunt.Ended,
+                $"…and the same report leaves a dogfight_ace mission running: {notStunt.Outcome}");
+
+            // The same field with P2 out of lives instead: a pilot who can never clear another
+            // gate must not hold the mission open, which is what StuntRace's own all-finished
+            // rule alone would do (AllFinished is still false here).
+            var outOfLives = new InstantActionRuntime(EndDef(ctx, "stunt-out", "stunt_flying"));
+            var rerun = zones.ForAnotherPlayer();
+            var stranded = zones.ForAnotherPlayer();
+            rerun.RunCompleted += () =>
+            {
+                if (InstantActionRuntime.ZoneSetsFlown(new[] { (false, rerun.AllComplete), (true, stranded.AllComplete) }))
+                {
+                    outOfLives.ReportObjective(InstantActionObjective.ZonesFlown);
+                }
+            };
+            rerun.DebugCompleteAll();
+            ctx.Check(!stranded.AllComplete && outOfLives.Outcome == InstantActionOutcome.Won,
+                $"the last FLYING pilot's zone set wins it with the other out of lives: {outOfLives.Outcome}");
+        });
+
+        // ---- zeppelin_run: the objective's real death ----------------------------------------
+        string m04Zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "M04");
+        ctx.RequireData(m04Zrdr, $"C1/M04 zrdr");
+        var zepDefs = Zeppelins.Load(m04Zrdr);
+        ctx.Check(zepDefs.Count == 1 && zepDefs[0].Node == "piratezep",
+            $"C1/M04 authors the one zeppelin this mission is built around count={zepDefs.Count}");
+        if (zepDefs.Count != 1)
+        {
+            return;
+        }
+        var zepNets = AiNets.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"));
+        ctx.WithWorld("C1", collision: true, mission: "M04", world =>
+        {
+            var runtime = world.Session.Runtime;
+            var host = runtime.FindNodes("piratezep").FirstOrDefault();
+            ctx.Check(host != null, $"the piratezep world node resolves");
+            if (host == null)
+            {
+                return;
+            }
+            ZeppelinRuntime? zeps = null;
+            try
+            {
+                zeps = new ZeppelinRuntime(zepDefs,
+                    name => runtime.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null, zepNets);
+                zeps.WireDamage(runtime);
+
+                // A hand-authored --ia= zeppelin run whose objective IS this world's zeppelin,
+                // and a second one naming a different node: the same kill must win one and not
+                // the other, which is the node filter GameSession puts on the subscription.
+                var mission = new InstantActionRuntime(EndDef(ctx, "zep-objective", "zeppelin_run",
+                    cargoZeppelin: "piratezep"));
+                var otherHull = new InstantActionRuntime(EndDef(ctx, "zep-other", "zeppelin_run",
+                    cargoZeppelin: "someotherzep"));
+                zeps.ZeppelinKilled += node =>
+                {
+                    foreach (var ia in new[] { mission, otherHull })
+                    {
+                        if (string.Equals(node, InstantActionRuntime.SelectedZeppelinNode(ia.Def),
+                                System.StringComparison.OrdinalIgnoreCase))
+                        {
+                            ia.ReportObjective(InstantActionObjective.ZeppelinDestroyed);
+                        }
+                    }
+                };
+                ctx.Check(InstantActionRuntime.SelectedZeppelinNode(mission.Def) == "piratezep",
+                    $"the mission's objective resolves to the world's zeppelin");
+
+                // The decoded survivor threshold does the killing (4 of 6 required): two gasbags
+                // down is not enough, the third is.
+                runtime.DamageAt(runtime.FindNodes("gasbag1", host).FirstOrDefault(), 10_000f);
+                runtime.DamageAt(runtime.FindNodes("gasbag2", host).FirstOrDefault(), 10_000f);
+                zeps.SimStep(1f / 60f);
+                ctx.Check(!zeps.IsDead("piratezep") && !mission.Ended,
+                    $"two gasbags down: the hull lives and the mission runs on");
+                runtime.DamageAt(runtime.FindNodes("gasbag3", host).FirstOrDefault(), 10_000f);
+                zeps.SimStep(1f / 60f);
+                ctx.Check(zeps.IsDead("piratezep")
+                    && mission.Outcome == InstantActionOutcome.Won,
+                    $"the objective's real death WINS a zeppelin_run mission: {mission.Outcome}");
+                ctx.Check(!otherHull.Ended,
+                    $"…and a mission whose objective is another hull is untouched by it: {otherHull.Outcome}");
+            }
+            finally
+            {
+                zeps?.Free();
+            }
+        });
+    }
+
+    /// <summary>A hand-authored <c>--ia=</c> file for one end-condition case, written to the
+    /// scratch folder and read back through the REAL reader — so a change to how
+    /// <c>mission_type</c>/<c>lives</c> parse moves this suite too, and no test builds an
+    /// <c>InstantActionDef</c> the CLI could not produce.</summary>
+    private static InstantActionDef EndDef(TestContext ctx, string tag, string missionType,
+        int? lives = null, string? cargoZeppelin = null)
+    {
+        string json = $"{{\"mission_type\": \"{missionType}\""
+            + (lives is { } n ? $", \"lives\": {n}" : string.Empty)
+            + (cargoZeppelin != null ? $", \"cargo_zeppelin\": \"{cargoZeppelin}\"" : string.Empty)
+            + "}";
+        string name = $"ia-end-{tag}.json";
+        ctx.WriteArtifact(name, json);
+        return InstantAction.LoadFromJson(Path.Combine(ctx.ScratchDir, name));
     }
 
     /// <summary>The E10 inert state (PLAN-instant-action.md): an aircraft built complete and then
