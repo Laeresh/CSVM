@@ -384,9 +384,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   C1 shows damage registering on the zeppelin, so `BL-239`'s one unverified picture — a gasbag
   taking blast damage from a hit well off its centre — still has nowhere to be seen. Wanted: a
   `--damage-test`-style spawn of a damageable `hk_zep`, or a debug damage readout on the existing
-  C1 one — just enough to watch blast numbers score to the gasbag. Acceptance test: a rocket into
-  one END of a gasbag, away from dead centre, damages it (the nearest-collision-shape falloff,
-  landed 2026-08-05). Explicitly out of scope: the authored destruction sequence (`breakupzep` →
+  C1 one — just enough to watch blast numbers score to the gasbag. Acceptance test: a TORPEDO
+  (`wep_14`) into one END of a gasbag, away from dead centre, damages it (the
+  nearest-collision-shape falloff, landed 2026-08-05). Reworded 2026-08-14 from "a rocket": the
+  decoded `DAMAGES_ZEPPELIN` gate (M4 F18) admits only `wep_14` (the aerial torpedo, the designed
+  zeppelin killer) and `wep_28` (the broadside cannonball) — rockets bounce off gasbags by
+  design. ⚠ Check first whether any current loadout carries `wep_14`; if not, the test needs a
+  loadout knob before it can fly. Explicitly out of scope: the authored destruction sequence (`breakupzep` →
   13 `break*`, the crash-sink motions) — that is its own M4-sized feature for when zeppelins
   matter to gameplay, not this item.
 
