@@ -4261,6 +4261,27 @@ rest=… first_frame=…` line per session build. `Mark()`/`Record(phase, mark)`
 ⚠ `boot` is engine start → build start, so on a launchscreen-driven rebuild it also holds however
   long the menu was up.
 
+## src/Utils/HitchMonitor.cs
+The always-on frame-hitch detector (PLAN-perf-hitches B4), ticked from `Launcher._Process` in every
+mode: a frame trips when `frame_ms > max(medianMultiple × rolling_median, floorMs)`, and a
+`HitchRecord` is assembled describing it: unaveraged script/render-CPU/GPU/physics, draws/prims/
+nodes/mem as absolutes AND as deltas against the frame before, `GC.CollectionCount` per generation
+plus allocated bytes, and a ring buffer of the preceding frames ending with the hitching one.
+It only detects: nothing is logged from here, so a clean run is silent (B6 owns the sidecar).
+Godot-free by construction (the caller samples the engine counters into a `FrameCounters` and hands
+them in), so the trigger, both wraparounds and the grace window are unit-tested off-engine in
+`CSVM.Tests/HitchMonitorTests.cs`. Five `hitchMonitor.*` config keys over `const` defaults, read in
+the constructor (which is what registers them for `--dump-config`).
+⚠ **Every default here is TUNE**, named in conversation on 2026-08-14 and evidenced by nothing:
+  `medianMultiple` 4, `floorMs` 40, `baselineFrames`/`ringFrames` 120, `graceMs` 2000. Do not cite
+  one as a measured value.
+⚠ The baseline is a **true median**, not a mean, and the hitching frame is judged against the
+  window BEFORE it joins. A mean would be dragged up by the hitch it just saw and would hide the
+  next. Under vsync the median pins at the refresh interval, so the floor is what fires; expected.
+⚠ Fed a raw `Stopwatch.GetTimestamp` pair, **never Godot's `delta`**: `delta` is post-processed
+  (`OS.delta_smoothing`) and measures as a quantised constant here, 8.333 ms on every frame of a
+  `--no-vsync --det` empty-stage run while the real cost varied 8.25–8.42 ms.
+
 ## src/Utils/Rng.cs
 The session's randomness policy: one master seed and ten named subsystem generators derived from it
 (`weapons`, `flightaudio`, `spawn`, `paint`, `anim`, `crash`, `effects`, `puffer`, `clouds`,
@@ -4540,6 +4561,15 @@ launch; `ReturnToMenu` `QueueFree`s it; a menu launch derives its spec via
 `ReportPerf`'s window line carries `max_ms`/`p95_ms` beside its means (PLAN-perf-hitches A2):
 a preallocated `_perfFrameMs` ring holds each frame's unaveraged wall cost, sorted into scratch
 at window close. No `p99_ms` — at `PerfWindowFrames` = 60 it would equal `max_ms` by construction.
+One `ReadFrameCounters()` per frame samples the eight engine counters once and feeds both
+instruments (PLAN-perf-hitches B4): `HitchMonitor.Tick` wants them unaveraged, `ReportPerf` sums
+them, and the two `TIME_*` monitors are converted from seconds to ms at that single read. The
+monitor is constructed alongside the other process-scoped services (ahead of every probe's early
+quit and of `--dump-config`, which is what registers its five keys) and `Rearm`ed by
+`LaunchSession`/`ReturnToMenu`, since a build or a teardown legitimately stalls the loop.
+Measured render time is enabled once in `_Ready` (`ViewportSetMeasureRenderTime`) rather than per
+frame from `ReportPerf`, because the hitch record needs the CPU/GPU split on every run, not only a
+`--perf` one.
 Vsync resolves at the same `_Ready` site as the shader clock / `--perf` tick: `display.vsync`
 config key (default true) or `--no-vsync`, the flag always beating the key (PLAN-perf-hitches A3).
 The config read is unconditional even when the flag already decided, so the key still registers
@@ -4552,6 +4582,9 @@ source=…`), so a session's log always says which mode it ran in.
   **never swap that for minimize**, which stops rendering and blanks every capture (SHOT-16).
 ⚠ F11 prints the SUBJECT, per mode (flight: player 1's plane pose, not the chase camera);
   directions print to 5 decimals — 3 would quantise a unit vector's aim to ~0.03°.
+⚠ `max_ms`/`p95_ms` are built from Godot's `delta`, which is post-processed and reads as a
+  quantised constant (see `HitchMonitor`'s entry), so they resolve a big hitch but not a small one.
+  `HitchMonitor` is fed a raw QPC pair instead; the two do not measure the same thing.
 
 ## src/Session/LiveryResolver.cs
 

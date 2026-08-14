@@ -65,6 +65,7 @@ changes whose effect cannot be evaluated until the instrument exists and a basel
 | 1 | Godot has a runtime equivalent of Unity's `Profiler.BeginSample`/`EndSample`. | The 4.7-stable class reference (now at `tools/godot-docs/doc/classes/`). `EngineProfiler` is *"custom profilers that are able to interact with the engine and editor debugger"* and surfaces only through `EditorDebuggerPlugin`. `Performance.AddCustomMonitor` is editor-only too and documents *"a delay of up to 1 second"*, so it cannot resolve a single frame. Build our own on `Stopwatch.GetTimestamp` pairs, the idiom `StartupProfile.cs:41` already uses. |
 | 2 | `--perf` can already show a hitch. | Arithmetic. `ReportPerf` reports means over a 60-frame window (`Launcher.cs:801-843`), and its own doc comment says the averaging is deliberate *"so a single hitch doesn't read as a regression"*. One 47 ms frame among fifty-nine 16.7 ms frames moves the mean by about 0.5 ms. |
 | 3 | A trigger relative to a rolling median adapts to whatever the machine is doing. | Only with vsync off. Under vsync every frame is padded up to the refresh interval, so the median sits pinned at 16.67 ms and `K × median` degenerates into a fixed threshold. Worse, the whole sub-cap range is invisible: a frame whose real work went from 4 ms to 14 ms is a 3.5× spike that vsync flattens. This is why A3 exists. |
+| 4 | Godot's `_Process(delta)` is the frame's wall cost. | Measured while landing B4. `delta` is post-processed (`OS.delta_smoothing`, on by default) and reads as a quantised constant: an `--det --perf --no-vsync --mute --stage=empty` run reported `delta_ms=8.333` on every one of 200 frames, and exactly `wall_ms=500.00` per 60-frame window, while a raw `Stopwatch.GetTimestamp` pair over the same frames varied 8.25–8.42 ms. `HitchMonitor` is therefore fed QPC. **A2's `max_ms`/`p95_ms` still come from `delta`** and so resolve a big hitch but not a small one. E12 must not read them as raw frame costs. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -108,7 +109,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — The instrument
 
-4. ☐ B4 — `HitchMonitor`: rolling baseline, trigger, grace window, ring buffer, GC and counter deltas
+4. ☑ B4 — `HitchMonitor`: rolling baseline, trigger, grace window, ring buffer, GC and counter deltas
 5. ☐ B5 — `--hitch-inject=<ms>[@frame]`: a synthetic stall of known magnitude
 6. ☐ B6 — The sidecar: `perf` summary line plus `.scratch/logs/<mode>-<stamp>.hitches.jsonl`
 7. ☐ B7 — In-engine suite: a record fires, and carries its ring buffer, breadcrumbs and sidecar
@@ -261,7 +262,7 @@ permanently. Vsync state changes timing only, never what is drawn.
 
 # Wave B — The instrument
 
-## B4 ☐ `HitchMonitor`: rolling baseline, trigger, grace window, ring buffer, GC and counter deltas
+## B4 ☑ `HitchMonitor`: rolling baseline, trigger, grace window, ring buffer, GC and counter deltas
 
 **Goal.** Any frame costing far more than its recent neighbours is detected as it happens, and a
 record is assembled describing it: unaveraged `script`/`render_cpu`/`gpu`/`physics`, deltas in
