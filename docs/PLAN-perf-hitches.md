@@ -101,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Groundwork (measurable ground before anything is built on it)
 
-1. ☐ A1 — Unbind the three map-edge debug keys, freeing `F14`
+1. ☑ A1 — Unbind the three map-edge debug keys, freeing `F14`
 2. ☐ A2 — `ReportPerf` reports max, p95 and p99 next to its means
 3. ☐ A3 — `display.vsync` config key, so the cap can come off without a rebuild
 
@@ -168,7 +168,7 @@ nothing, so both move to 119. Keep them in step in the same edit.
 
 # Wave A — Groundwork
 
-## A1 ☐ Unbind the three map-edge debug keys, freeing `F14`
+## A1 ☑ Unbind the three map-edge debug keys, freeing `F14`
 
 **Goal.** `F14`, `F15` and `F16` do nothing. The tile-grid overlay is still reachable via
 `--debug-tilegrid`, and block depth and fold mode are still settable via `--map-edge-block=` and

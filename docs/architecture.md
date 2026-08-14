@@ -161,7 +161,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/ColliderOverlay.cs` — the collider wireframes (C): every built collision shape drawn, coloured by the surface id it resolves to; needs `--collision` outside flight.
 - `src/UI/ClassOverlay.cs` — the colour-by-class overlay (X): every drawn mesh tinted destructible/facade/clutter/scenery, a findable-targets view.
 - `src/UI/AiNetsOverlay.cs` — the AI patrol-net overlay (F13, `--debug-ainets`): the chapter's nets as coloured graphs with labels + census log.
-- `src/UI/TileGridOverlay.cs` — the map-edge tile-grid overlay (F14, `--debug-tilegrid`): every ground tile tinted 20 % by repetition band, so one colour band is one block; F15 steps the block depth, F16 swaps repeat/mirror. The instrument that settled the map-edge fold.
+- `src/UI/TileGridOverlay.cs` — the map-edge tile-grid overlay, **flag-only** (`--debug-tilegrid`; no key is bound — `F14`/`F15`/`F16` were freed by `PLAN-perf-hitches` A1): every ground tile tinted 20 % by repetition band, so one colour band is one block; `--map-edge-block=`/`--map-edge-mode=` set the depth/fold once at launch. The instrument that settled the map-edge fold.
 - `src/UI/WeaponLab.cs` — the weapon lab panel (B): steppers that arm the held plane's live loadout, click-to-place on a real world surface. Fires nothing itself.
 - `src/UI/PanelFocus.cs` — the one-line rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.

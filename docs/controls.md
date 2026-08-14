@@ -39,9 +39,6 @@ Flags are specified in [`cli.md`](cli.md).
 | `T` | node-name labels |
 | `F12` | screenshot |
 | `F13` | AI patrol-net overlay (chapter worlds only) — `--debug-ainets`. First tenant of the F13–F24 range reserved for debug overlays; the letter-key overlays (`C`/`X`/`T`/…) are to migrate there |
-| `F14` | map-edge tile-grid overlay — `--debug-tilegrid`. Colours every ground tile by how it was folded past the map edge; the width of one colour band is the block depth. Only where a continuation exists (`--fly`, `--freecam`, a `--sky-zone` viewer). ⚠ pair with `--no-fog` |
-| `F15` | step the map-edge block depth: 1 → 2 → 3 → 4 → 12 → 1, plus whatever `--map-edge-block=` asked for. Rebuilds the whole window, so it hitches (4–34 ms, one frame); the HUD reports how long it took. No-op while F14 is hidden |
-| `F16` | swap the map-edge fold between `repeat` (the default — what the original does) and `mirror` (the pre-2026-08-08 behaviour, kept to be looked at) — `--map-edge-mode=`. No-op while F14 is hidden |
 | `F11` | print the mode's subject placement as ready-to-paste `--pos=` / `--direction=` (in `--viewer`: `--pos=` / `--lookat=`, the orbit pivot) |
 | `F10` | export the plane on screen (current livery + damage) to a timestamped `.glb` under `Exports/` — the `--export-gltf=` twin |
 | `Esc` | quit |

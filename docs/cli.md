@@ -122,11 +122,10 @@ last reconciled 2026-08-14 adding `--wake-turrets`; the reconciliations before i
   prints the same kind of "nothing to draw" notice as the C overlay's "no collision built", rather
   than a silently empty overlay. Debug-only material swap: mesh/node counts and goldens are
   unaffected)
-- `--debug-tilegrid` (open the **F14** map-edge tile-grid overlay at launch — the scripted twin of
-  the F14 press. Bound wherever a map-edge continuation exists (`--fly`, `--freecam`, and a
-  `--sky-zone` viewer), which is the same thing as "there is a grid to colour"; F14/F15/F16 sit in
-  the F13–F24 debug range so binding it in the viewer cannot collide with a lab key. Tints every
-  ground tile at 20 % by how it was folded: **in-map** neutral, then one hue per fold parity —
+- `--debug-tilegrid` (open the map-edge tile-grid overlay at launch. Flag-only — no key is bound.
+  Built wherever a map-edge continuation exists (`--fly`, `--freecam`, and a `--sky-zone` viewer),
+  which is the same thing as "there is a grid to colour". Tints every ground tile at 20 % by how
+  it was folded: **in-map** neutral, then one hue per fold parity —
   `copied` (a straight copy of the block), `x-mirrored`, `z-mirrored`, `xz-mirrored` for the corner
   regions folded on both axes. **The width of one colour band is the block depth**, and a per-cell
   light/dark checker inside the band makes the cells countable rather than estimated. Ground only;
