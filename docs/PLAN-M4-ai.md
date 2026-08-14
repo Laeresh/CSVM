@@ -1527,14 +1527,26 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
 
 ### Wave H — Combat HUD (added 2026-08-14, user-requested at the controls)
 
-22. ☐ H22 — The VS-mode targeting HUD works on AI enemy planes in every flight session. The
+22. ☑ H22 — The VS-mode targeting HUD works on AI enemy planes in every flight session. The
     Dogfight HUD already tracks opponent aircraft (leader line and the off-screen/edge
     indication that keeps a target findable); against M4's AI enemies a plain flight session
     shows nothing, and the user reports it is really easy to lose the enemy. Extend the
     existing VS targeting elements to AI aircraft: track the pilot's current hostile (the D12
     gunner/ranking notion of "the target" where one exists, else nearest hostile), per pane in
     splitscreen, with the same look as VS mode. No new HUD language is being invented — this
-    reuses the shipped VS elements against a new target class.
+    reuses the shipped VS elements against a new target class. **Landed 2026-08-14**:
+    `VersusHud.BuildHostileTracker` is the matchless build (no status line/banner/opponent
+    list) `FlightRigAssembler` hangs on every human pane outside `--vs`, and the `--vs` build
+    gets `HostilePool` too; `UpdateHostile` rescans `ProjectilePool.CollectAircraft` (the AI
+    gunners' own roster) every frame and `NearestHostile` picks the nearest LIVE AI-piloted
+    plane past the engine team gate, drawn through the unchanged `DrawOpponent` marker in the
+    HUD red, tagged "AI1" off the spawner's name. Humans carry no `AiGunner`, so no D12 "the
+    target" exists for them; nearest-hostile per frame is the shipped rule (VS's own no-lock
+    behaviour), which also picks up generator spawns and drops crashed hostiles for free;
+    acquire/lose transitions log one breadcrumb each. Pinned by the `hostile-marker-hud` suite
+    + `HostileTagTests`; a hud built without a pool never tracks, so the golden VS path is
+    untouched (14/14 hash-identical). Demo: `--stage=empty --plane=player_bhawk
+    --ai=player_fury --ai-attack=5`
 
 ## Dependency and parallelism notes
 

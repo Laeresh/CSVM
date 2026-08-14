@@ -290,6 +290,11 @@ public static class Suites
             "binding the crash rig leaves the airframe model under the controller — even the Devastator, whose model root shares the crash defs' authored NAME — and stages every pooled copy in the same reset pose", CrashRigAnchors));
         into.Add(new TestHarness.Suite("ai-crash-defs",
             "an AI plane's crash rig binds the ai_crash_* family and its crash indexes it by the struck surface id — dirt(13) plays ai_crash_dirt, no material plays ai_crash_default — while a human rig off the same factory keeps player_crash_* (G21)", AiCrashDefs));
+        into.Add(new TestHarness.Suite("hostile-marker-hud",
+            "the H22 targeting HUD outside --vs: the matchless VersusHud tracks the pane's " +
+            "nearest LIVE AI hostile off the pool's own aircraft roster (a closer human, dead " +
+            "plane or neutral is never picked), switches to a closer hostile, drops a crashed " +
+            "one, and a hud built without a pool (the VS default) never tracks", HostileMarkerHud));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------
@@ -3696,6 +3701,138 @@ public static class Suites
             pool?.Free();
             shooter?.Free();
             ai?.Free();
+            textures.Dispose();
+        }
+    }
+
+    /// <summary>The H22 targeting HUD on AI hostiles. Two halves: the pure selection
+    /// (<see cref="VersusHud.NearestHostile"/> over a constructed candidate set, no scene) pins
+    /// the filters (live only, AI-piloted only, the engine's either-side-neutral rejection,
+    /// nearest wins) plus <see cref="VersusHud.HostileTag"/>; the in-engine half runs the
+    /// matchless tracker against real spawned AI planes registered in a live pool: acquisition,
+    /// the switch to a closer hostile, the crash drop (a crashed plane is listed but not live),
+    /// and the empty-pool null. A hud built WITHOUT a pool (the VS constructor's default) never
+    /// tracks, which is the seam keeping the golden VS output untouched.</summary>
+    private static void HostileMarkerHud(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        // --- the pure selection, over a constructed candidate set (no tree, no pool) ---
+        var pureNear = new FlightController { IsHumanPiloted = false };
+        var pureFar = new FlightController { IsHumanPiloted = false };
+        var pureDead = new FlightController { IsHumanPiloted = false };
+        var pureHuman = new FlightController();
+        try
+        {
+            int ownTeam = AimAssist.TeamOfPilot(0);
+            var set = new AimCandidateSet();
+            set.AddVehicle(new Vector3(0f, 0f, -50f), Vector3.Zero,
+                AimAssist.TeamOfPilot(1), live: true, pureHuman); // a human: an opponent, never a hostile
+            set.AddVehicle(new Vector3(0f, 0f, -100f), Vector3.Zero,
+                AimAssist.TeamOfPilot(101), live: false, pureDead); // listed but not live (crashed)
+            set.AddVehicle(new Vector3(0f, 0f, -10f), Vector3.Zero,
+                AimAssist.NeutralTeam, live: true, pureNear); // neutral side rejects the pair
+            set.AddVehicle(new Vector3(0f, 0f, -500f), Vector3.Zero,
+                AimAssist.TeamOfPilot(100), live: true, pureNear);
+            set.AddVehicle(new Vector3(0f, 0f, -2000f), Vector3.Zero,
+                AimAssist.TeamOfPilot(102), live: true, pureFar);
+            ctx.Check(ReferenceEquals(VersusHud.NearestHostile(Vector3.Zero, ownTeam, set), pureNear),
+                $"the nearest LIVE AI hostile wins over a closer human, a closer dead plane and a closer neutral");
+            ctx.Check(VersusHud.NearestHostile(Vector3.Zero, AimAssist.NeutralTeam, set) == null,
+                $"a neutral own side targets nothing (the engine's either-side-0 rule)");
+            ctx.Check(VersusHud.NearestHostile(Vector3.Zero, ownTeam, new AimCandidateSet()) == null,
+                $"an empty scan tracks nothing");
+            ctx.Check(VersusHud.HostileTag("ai1_player_fury") == "AI1"
+                && VersusHud.HostileTag("bandit") == "BANDIT" && VersusHud.HostileTag("") == "AI",
+                $"the marker tag is the name's first segment uppercased, 'AI' as the fallback");
+        }
+        finally
+        {
+            pureNear.Free();
+            pureFar.Free();
+            pureDead.Free();
+            pureHuman.Free();
+        }
+
+        // --- the live tracker, against real AI planes registered in a real pool ---
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightController? ai1 = null, ai2 = null;
+        VersusHud? hud = null, vsHud = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            FlightController SpawnAi(int index, Vector3 pos)
+            {
+                var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+                var fc = new FlightController
+                {
+                    PlaneModel = model,
+                    Collider = PlaneCollider.Build(model),
+                    PlayerIndex = AiAircraftSpawner.ShooterIdBase + index,
+                    IsHumanPiloted = false,
+                    Pilot = AiPilot.HoldingCourse(pos, pos + Vector3.Forward),
+                    Projectiles = live,
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                };
+                fc.AddChild(model);
+                fc.Setup(new FlightModel(stats), null, new CamParams(), pos, pos + Vector3.Forward);
+                fc.Name = $"ai{index + 1}_{ctx.PlaneName}";
+                ctx.Host.AddChild(fc);
+                return fc;
+            }
+
+            ai1 = SpawnAi(0, new Vector3(0f, 500f, -800f));
+            hud = VersusHud.BuildHostileTracker(0, ctx.Camera, live);
+            hud.PlanePos = new Vector3(0f, 500f, 0f);
+            hud.UpdateHostile();
+            ctx.Check(ReferenceEquals(hud.TrackedHostile, ai1),
+                $"a plain-session pane acquires the spawned AI plane tracked={hud.TrackedHostile?.Name ?? "-"}");
+
+            // A closer hostile joining the pool takes the marker over on the next update; the
+            // per-frame nearest re-select is also how generators' runtime spawns appear.
+            ai2 = SpawnAi(1, new Vector3(0f, 500f, -300f));
+            hud.UpdateHostile();
+            ctx.Check(ReferenceEquals(hud.TrackedHostile, ai2),
+                $"a closer hostile takes the marker over tracked={hud.TrackedHostile?.Name ?? "-"}");
+
+            // A crashed hostile is still registered but no longer live: it drops cleanly and
+            // the next nearest takes over; with every hostile down the pane tracks nothing.
+            ai2.DebugForceCrash();
+            hud.UpdateHostile();
+            ctx.Check(ReferenceEquals(hud.TrackedHostile, ai1),
+                $"a crashed hostile drops and the next nearest takes over tracked={hud.TrackedHostile?.Name ?? "-"}");
+            ai1.DebugForceCrash();
+            hud.UpdateHostile();
+            ctx.Check(hud.TrackedHostile == null,
+                $"with every hostile down the pane tracks nothing");
+
+            // The VS constructor leaves HostilePool null (the rig assembler opts it in), so a
+            // bare VS hud never tracks whatever the pool holds, which is the golden shots' path.
+            ai1.Respawn();
+            vsHud = VersusHud.Build(new VersusMatch(2, killTarget: 0, timeLimit: 0f), 0, ctx.Camera);
+            vsHud.PlanePos = hud.PlanePos;
+            vsHud.UpdateHostile();
+            ctx.Check(vsHud.TrackedHostile == null,
+                $"a hud built without a pool (the VS default) never tracks");
+        }
+        finally
+        {
+            hud?.Free();
+            vsHud?.Free();
+            ai1?.Free();
+            ai2?.Free();
+            pool?.Free();
             textures.Dispose();
         }
     }

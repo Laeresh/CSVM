@@ -2635,6 +2635,19 @@ happened to.
 ⚠ Opponent positions come off `PlayerRig.Controller.GlobalPosition` directly, never
   `AnimRuntime.PlayerPosition` (a P1-only singleton) — the same rule MarkerHud/FlightController
   already follow.
+H22 extends the same marker to AI hostiles in EVERY flight session: `BuildHostileTracker(pi,
+camera, pool)` is the matchless build (no status line, no banner, no `Rigs`) the rig assembler
+hangs on every human pane outside `--vs`, and in `--vs` the normal build additionally gets
+`HostilePool`. `UpdateHostile` (every `_Process`) rescans the pool's one live aircraft roster
+(`ProjectilePool.CollectAircraft`, the same list the AI gunners read) and `NearestHostile` picks
+the nearest LIVE AI-piloted `FlightController` past the engine's team gate; the winner draws
+through `DrawOpponent` unchanged, in the HUD red, tagged `HostileTag(name)` ("ai1_player_fury"
+reads "AI1"). Humans carry no `AiGunner`, so there is no D12 "the target" to mirror;
+nearest-hostile re-selected per frame is the shipped rule, which also picks up generator spawns
+and drops a crashed hostile (listed but not live) with no extra plumbing. Acquire/lose
+transitions log one `targeting hud:` breadcrumb each. Pinned by the `hostile-marker-hud` suite +
+`HostileTagTests`; a hud built without a pool never tracks, which keeps the golden VS path
+byte-identical.
 
 ## src/Flight/VersusBoard.cs
 The dogfight's shared results overlay (`PLAN-vs-mode.md` C25) — `StuntRaceBoard`'s construction
@@ -4794,8 +4807,10 @@ readout/reticle, damage visuals,
 audio, the throttle-slam exhaust smoke and chapter-authored `SpeedCue` (private visual layer per
 rig), this player's stunt run + marker/scoreboard/race entry
 (or, in `--vs`, its `VersusHud` bound to `Inputs.VersusMatch` + `Inputs.Rigs` for the opponent
-markers — C23/C24), the spawn placement, and the crash runtime built after the controller joins
-the tree. Constructed
+markers — C23/C24; outside `--vs` the matchless `VersusHud.BuildHostileTracker` over
+`Inputs.Projectiles` instead, so every human pane tracks its nearest AI hostile in any flight
+session, H22; and the `--vs` build gets `HostilePool` too), the spawn placement, and the crash
+runtime built after the controller joins the tree. Constructed
 once per session build from
 `(SessionSpec, LiveryResolver, SpawnPicker, WorldEffectsFactory, worldRoot, Inputs)`, then
 `Assemble(pi, rig)` once per rig; `MeshInstances`/`WhatSuffix` accumulate across the rigs for the

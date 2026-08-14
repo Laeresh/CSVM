@@ -241,8 +241,9 @@ public partial class FlightController : Node3D
 
     /// <summary>The Dogfight per-pane HUD: the match timer/K-D/leader line and
     /// the kill banner. Added to the HUD canvas; fed nothing per frame (it pulls VersusMatch's own
-    /// live state) beyond the kill facts GameSession pushes through its OnKill. Null outside
-    /// <c>--vs</c>.</summary>
+    /// live state) beyond the kill facts GameSession pushes through its OnKill. Outside
+    /// <c>--vs</c> it is the matchless hostile tracker (H22): the same marker on this pane's
+    /// nearest AI hostile, built for every human pane by the rig assembler.</summary>
     public VersusHud? VersusHud;
 
     /// <summary>The splitscreen stunt race this plane is one seat of, or null when
@@ -593,7 +594,7 @@ public partial class FlightController : Node3D
             if (Marker != null)
                 canvas.AddChild(Marker); // stunt objective marker, drawn on top of the dials
             if (VersusHud != null)
-                canvas.AddChild(VersusHud); // dogfight timer/K-D/leader line + kill banner
+                canvas.AddChild(VersusHud); // dogfight HUD, or the matchless hostile tracker (H22)
             if (Scoreboard != null)
                 canvas.AddChild(Scoreboard); // end-of-run results, drawn over everything
             if (FontTest != null)
@@ -1282,8 +1283,8 @@ public partial class FlightController : Node3D
             Marker.PlanePos = _model.Position;
             Marker.HeadingDeg = headingDeg;
         }
-        // Dogfight opponent markers: this pane's own pose, so the HUD can compute each
-        // opponent's clock bearing off it — same feed Marker gets, for the same reason.
+        // Dogfight opponent / AI hostile markers: this pane's own pose, so the HUD can compute
+        // each target's clock bearing off it (the same feed Marker gets, for the same reason).
         if (VersusHud != null)
         {
             VersusHud.PlanePos = _model.Position;
