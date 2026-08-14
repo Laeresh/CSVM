@@ -1927,11 +1927,16 @@ public partial class FlightController : Node3D
             // splash, its ripple and the steam spray over the crash trails instead of the dirt
             // burst and the fireball cluster.
             CrashRuntime.InheritedWorldVelocity = _model.VelocityDir * _model.Speed * WreckMomentum;
-            CrashRuntime.Play(crashDef, CrashAnchor, applyReset: false);
-            // The prop wind-down (staticpropN fades back in as prop1..3 fade out) — inert the
-            // instant PlaneModel above hides, but keeps the def's own state consistent for
-            // whatever plays next, and matters once a shutdown can leave the airframe visible.
-            CrashRuntime.Play("stopprops", PlaneModel, applyReset: false);
+            // PLAN-perf-hitches C9: the wreck-piece launch — "the other half" of the debris case,
+            // this plane's own parts detaching rather than a world destructible's.
+            using (PerfSample.Scope(PerfSite.PartDetach))
+            {
+                CrashRuntime.Play(crashDef, CrashAnchor, applyReset: false);
+                // The prop wind-down (staticpropN fades back in as prop1..3 fade out) — inert the
+                // instant PlaneModel above hides, but keeps the def's own state consistent for
+                // whatever plays next, and matters once a shutdown can leave the airframe visible.
+                CrashRuntime.Play("stopprops", PlaneModel, applyReset: false);
+            }
         }
         // The authored crash camera: hard-cut to the static elevated vantage and hide
         // the HUD — both straight off the original's crash footage. The pose is set once here

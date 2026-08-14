@@ -1,3 +1,4 @@
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Effects;
@@ -118,6 +119,11 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 
     public void Attach(Node3D owner, int capacity, float cullMargin)
     {
+        // PLAN-perf-hitches C9: the ShaderMaterial/Shader built here is the runtime one — a new
+        // Puffer's first draw, never a load-time material. Usually reached from
+        // EmitterDirector's EffectPoolMiss scope, which suppresses this one (flat leaves); it
+        // fires on its own only when a Puffer is built with nothing else already open.
+        using var _ = PerfSample.Scope(PerfSite.MaterialCreate);
         var code = ShaderCode
             .Replace("BLEND_MODE", _blendMix ? "blend_mix" : "blend_add")
             .Replace("SOFT_EXPR", _softParticles ? "clamp((VERTEX.z - scene_z) / 1.5, 0.0, 1.0)" : "1.0");

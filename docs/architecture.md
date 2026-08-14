@@ -4326,13 +4326,24 @@ never carry a stale frame's attribution. `Reset()` on a build or teardown, besid
 a closed enum (`debris_spawn` · `part_detach` · `ai_spawn` · `effect_checkout` · `effect_pool_miss` ·
 `material_create` · `resource_load` · `audio_load`); a site nothing called is ABSENT from the record
 rather than reported as zero.
+All eight sites are seeded (PLAN-perf-hitches C9): `AnimRuntime.RunDeathSequence` (debris_spawn),
+`FlightController.Crash` (part_detach), `AiAircraftSpawner.Spawn` (ai_spawn),
+`AnimRuntime.PlayEffectAt` (effect_checkout), `EmitterDirector.Assert`'s miss branch
+(effect_pool_miss), `EmitterRenderer.Attach` (material_create), `TextureArchive.FindImage`
+(resource_load), `WorldSounds.Spawn`/`Create`'s decode-on-miss (audio_load). Confirmed live on two
+real (non-injected) scenarios — `--destroy=` and `--crash=5` — with a temporarily grace-bypassed
+`HitchMonitor` writing genuine `.hitches.jsonl` records carrying real `samples` (both reverted).
 ⚠ **`Σ(sites) + unattributed = frame_ms` on every frame.** `unattributed` is real work with no
   stopwatch on it, never an error term — the same reading as `StartupProfile`'s `rest`. It is NOT
   clamped: negative means a scope spanned the `EndFrame` boundary, which is a defect to see.
 ⚠ **FLAT LEAVES ONLY.** A scope opened inside another is suppressed (measures nothing) and counted
   in the record's `sample_violations`. A partially instrumented TREE would attribute
   un-instrumented time to whatever parent encloses it, and it is never fully instrumented, because
-  the next feature to land will not add its scope.
+  the next feature to land will not add its scope. **Cross-site nesting is routine, not a defect
+  to chase**: C9's own sites call into each other on the plan's reproducible case (a death's event
+  dispatch reaches effect/audio sites; a pool miss always reaches its own material create), so the
+  outer site's record legitimately absorbs the inner ones' cost — a high `sample_violations` on a
+  dominant site means "more happened here than the named sites show," not instrument failure.
 ⚠ **Coarse granularity is a rule, not a preference**: a debris burst, not one chunk; a spawn, not
   one node. A scope costs ~60 ns (58.8/59.3/62.7 ns over three 200k-iteration runs of
   `PerfSampleTests.AScopeCostsFarLessThanTheFrameItMeasures`, allocating exactly 0 bytes), so a

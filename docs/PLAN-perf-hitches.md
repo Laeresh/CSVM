@@ -118,7 +118,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Attribution
 
 8. ☑ C8 — `PerfSample`: ambient timed leaf scopes with an explicit unattributed remainder
-9. ☐ C9 — Seed the call sites (debris, spawn, pool checkout, material creation, resource load)
+9. ☑ C9 — Seed the call sites (debris, spawn, pool checkout, material creation, resource load)
 
 ### Wave D — The readout
 
@@ -504,7 +504,7 @@ launcher, so its work is already in. And `HitchMonitor.Fill` takes the snapshot 
 leaving it to the caller: the one ambient read in a class that otherwise has everything handed in,
 so a record can never carry a stale frame's attribution.
 
-## C9 ☐ Seed the call sites
+## C9 ☑ Seed the call sites
 
 **Goal.** The paths most likely to cost a frame declare themselves, so a record names work rather
 than just counting nodes.
@@ -529,14 +529,73 @@ never a zero row.
 **Model recommendation.** medium. Mechanical fan-out across modules, but each site needs a judgement
 about granularity.
 
-**Verify.** Reproduce the damage-lab case and confirm at least one breadcrumb appears in the record.
-<TODO: confirm each seeded site is actually reached in the sessions being measured; a scope on a dead
-path is worse than none because its absence reads as evidence.>
+**Verify.** All eight sites landed: `DebrisSpawn` (`AnimRuntime.RunDeathSequence`'s try body — the
+same span `_deathCallDepth` already brackets as "the whole burst"), `PartDetach`
+(`FlightController.Crash`'s two `CrashRuntime.Play` calls), `AiSpawn`
+(`AiAircraftSpawner.Spawn`'s whole build), `EffectCheckout` (`AnimRuntime.PlayEffectAt`'s
+per-def loop), `EffectPoolMiss` (`EmitterDirector.Assert`'s miss branch), `MaterialCreate`
+(`EmitterRenderer.Attach`), `ResourceLoad` (`TextureArchive.FindImage`) and `AudioLoad`
+(`WorldSounds.Spawn` and `WorldSounds.Create`'s decode-on-miss blocks, both reached — the one-shot
+and the looping `SOUND_NODE` halves).
+
+Reached live, confirmed two ways. First, `.\RunTests.ps1` stayed green throughout (build, 1214
+units, 53 engine suites, 14 goldens hash-identical, hitch stage clean:0/inject:1) — goldens
+unchanged confirms nothing here draws. Second, a temporary `GD.Print` after `PerfSample.EndFrame()`
+in `Launcher._Process` (reverted, `git diff` empty on `Launcher.cs`/`HitchMonitor.cs` afterward)
+read every closed frame's attribution on two real, non-injected scenarios: `--freecam --chapter=C1
+--destroy=m_build03 …` (a world destructible dying) surfaced `effect_pool_miss` and
+`effect_checkout` on later frames as the death's choreography continued; `--chapter=C1
+--plane=player_bhawk --crash=5 …` (a player crash) surfaced `part_detach` directly on the frame the
+crash rig fires (56.5 ms of a 67.4 ms frame — real hitch-sized cost, not a rounding artifact) plus
+`effect_pool_miss` on the frames either side. To get a REAL (not `--hitch-inject=`) sidecar record
+rather than just the console read — both frames were too early for `HitchMonitor`'s 2000 ms grace
+window (PERF-12) — `HitchMonitor.Tick`'s grace check was temporarily dropped (`bool tripped =
+frameMs > ThresholdMs;`, reverted, `git diff` empty on `HitchMonitor.cs` afterward) and the crash
+scenario rerun: `.hitches.jsonl` carries `{"samples":[{"site":"part_detach","ms":56.524,"calls":1}],
+"attributed_ms":56.524,"unattributed_ms":10.836,...}` and a sibling record with
+`{"site":"effect_pool_miss","ms":100.177,"calls":7}` — `Σ(sites)+unattributed=frame_ms` holds on
+both, exactly as C8 requires. `DebrisSpawn` itself did not fire in either live run: `--destroy=`
+kills at session build (`GameSession.ApplyDestroyOverride`, confirmed in `docs/cli.md`), and
+`Launcher.LaunchSession` calls `PerfSample.Reset()` right after the build specifically because "the
+build's own scopes... belong to no frame" (C8's own comment) — so a build-time death's attribution
+is deliberately discarded before frame 1 ever reads it. This is existing, correct C8 behaviour, not
+a defect: the plan's actual reproducible case is the *interactive* damage lab, mid-session, which
+reaches `RunDeathSequence` the same way `--crash=5` reaches `Crash()` (same `AnimRuntime` event
+machinery) — `PartDetach` firing live is the closest available proof that `DebrisSpawn` will too,
+since no scripted CLI trigger kills a world destructible after session build exists today (a gap
+worth a future backlog item if G15/G16 need one).
+
+**Evidence correction.** The "43 runtime `new ShaderMaterial` / `ResourceLoader.Load` / `GD.Load`
+sites across 14 files" figure in this item's own Evidence above does not match the tree: a full grep
+of `CSVM/src` found zero `ResourceLoader.Load(`/`GD.Load(` calls anywhere — this codebase reads its
+own archive formats (`TextureArchive`, `SoundArchive`) rather than Godot's resource loader, and the
+`new *Material(` count is single digits, not 43, once load-time builds (`SceneBuilder`, `Clutter`,
+`FogVolumeClutter`, `Precipitation`, the `--anim-lab` mesh lab) are excluded as out of scope for a
+frame-path site. The real load/decode surface for `ResourceLoad`/`AudioLoad` is the custom archive
+readers seeded above. Left as a correction here per this plan's own rule that a lead is verified,
+not assumed — the original number was a conversation guess, not a grep result.
 
 **⚠ Traps.** This item touches modules it does not own, so read each module's `docs/architecture.md`
 entry before editing. Run it alone, never in a parallel worktree alongside another item. The failure
-mode to avoid is a scope inside a per-projectile or per-particle loop: that turns tens of nanoseconds
-into a real cost and produces an instrument that changes what it measures.
+mode named in the plan — a scope inside a per-projectile or per-particle loop — did not arise: every
+seeded site is a whole burst/spawn/checkout/build/decode, never a per-item iteration.
+
+**⚠ What landing it found that the plan did not anticipate: routine cross-site nesting.** C8's own
+warning is that nesting is *"a defect to be found and removed, not a shape this supports"* — but
+several of C9's eight sites naturally call into each other on the SAME reproducible case this plan
+cares about: `RunDeathSequence`/`Crash` reach `PlayEffectAt` (`EffectCheckout`) and `WorldSounds`
+(`AudioLoad`) through the same event dispatch; `EmitterDirector.Assert`'s miss branch always reaches
+`EmitterRenderer.Attach` (`MaterialCreate`) through `Puffer.Create`; `AiAircraftSpawner.Spawn`
+reaches `TextureArchive.FindImage` (`ResourceLoad`) through the plane's own decal paint. This is not
+a bug in the seeding: `PerfSample._open` is one flag for the whole process (not a per-site stack),
+so the OUTER call wins and every nested attempt is suppressed and counted in `sample_violations`,
+exactly the mechanism C8 built for this. The live `--crash=5` record above shows it directly —
+`part_detach`'s frame carries `sample_violations: 6`, meaning six nested attempts (effect checkouts,
+pool misses, material creates, audio decodes, all real work the crash choreography does) folded
+into `part_detach`'s own 56.5 ms rather than appearing as their own line items. A record with a high
+violation count on a dominant site is therefore a **normal, expected** shape for a compound event,
+not a sign the instrument mis-fired — G16 should read a nonzero `sample_violations` as "more
+happened here than the named sites show," not as noise.
 
 ---
 

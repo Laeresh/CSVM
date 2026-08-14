@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM.Effects;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3.Anim;
@@ -134,6 +135,10 @@ public sealed class EmitterDirector
             return;
         }
 
+        // PLAN-perf-hitches C9: no pre-built emitter for this key — something had to be made.
+        // MaterialCreate (EmitterRenderer.Attach, reached through _factory.Create below) is
+        // nested inside this scope and is suppressed by it — its cost is folded into this one.
+        using var _ = PerfSample.Scope(PerfSite.EffectPoolMiss);
         if (_factory.Create(PufferState.FromAnimEvent(data), out var miss) is not { } emitter)
         {
             if (miss != null)

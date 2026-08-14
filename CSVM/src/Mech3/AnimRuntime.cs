@@ -1290,34 +1290,39 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         float bound = ttl > 0f ? ttl : EffectTtl;
         bool matched = false;
-        foreach (var def in _program.ByAnimName(animName))
+        // PLAN-perf-hitches C9: the checkout (TakeNextSlot) plus the Start it feeds, coarse over
+        // the (usually one) def this anim name resolves to — not per particle.
+        using (PerfSample.Scope(PerfSite.EffectCheckout))
         {
-            // Anchor the instance on the def's own template root when it resolves (its at_node/
-            // motion targets live under that root); fall back to null (global name resolution).
-            // Pooled, that root is the NEXT copy in the pool — this call's own — and only that
-            // copy is moved onto the site.
-            var roots = _templateStage.TakeNextSlot(def);
-            _templateStage.PlaceOn(roots, worldPoint, LevelsTemplate(def));
-            var anchor = roots.FirstOrDefault();
-            bool governed = inputNode != null && IsInstanceValid(inputNode)
-                            && DefConditionsOnInputNode(def);
-            if (governed)
+            foreach (var def in _program.ByAnimName(animName))
             {
-                Stop(def.AnimName, anchor);
-                _inputNodes[(def, anchor)] = inputNode!;
-            }
-            Start(def, anchor);
-            // After Start, not with the placement: a governed def's Stop above hides the root
-            // again, and this must be the last word on it for the instance now running.
-            _templateStage.Reveal(def, anchor, visible: true);
-            matched = true;
-            if (!governed && bound > 0f)
-            {
-                // One deadline per (def, anchor): a replay restarts the instance, so an older
-                // entry left in place would stop the NEW instance at the OLD deadline — a second
-                // gun hit 0.2 s after the first would emit for 0.1 s.
-                _effectTtls.RemoveAll(t => t.Def == def && t.Anchor == anchor);
-                _effectTtls.Add((def, anchor, _effectClock + bound));
+                // Anchor the instance on the def's own template root when it resolves (its at_node/
+                // motion targets live under that root); fall back to null (global name resolution).
+                // Pooled, that root is the NEXT copy in the pool — this call's own — and only that
+                // copy is moved onto the site.
+                var roots = _templateStage.TakeNextSlot(def);
+                _templateStage.PlaceOn(roots, worldPoint, LevelsTemplate(def));
+                var anchor = roots.FirstOrDefault();
+                bool governed = inputNode != null && IsInstanceValid(inputNode)
+                                && DefConditionsOnInputNode(def);
+                if (governed)
+                {
+                    Stop(def.AnimName, anchor);
+                    _inputNodes[(def, anchor)] = inputNode!;
+                }
+                Start(def, anchor);
+                // After Start, not with the placement: a governed def's Stop above hides the root
+                // again, and this must be the last word on it for the instance now running.
+                _templateStage.Reveal(def, anchor, visible: true);
+                matched = true;
+                if (!governed && bound > 0f)
+                {
+                    // One deadline per (def, anchor): a replay restarts the instance, so an older
+                    // entry left in place would stop the NEW instance at the OLD deadline — a second
+                    // gun hit 0.2 s after the first would emit for 0.1 s.
+                    _effectTtls.RemoveAll(t => t.Def == def && t.Anchor == anchor);
+                    _effectTtls.Add((def, anchor, _effectClock + bound));
+                }
             }
         }
         return matched;
@@ -3500,8 +3505,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         _dyingInstances.Push(inst);
         try
         {
-            Start(inst.Def, inst.Anchor, protectSelfInvalidate: true);
-            RunDeathSlot(inst.Def, inst.Anchor);
+            // PLAN-perf-hitches C9: the same span _deathCallDepth already brackets as "the whole
+            // burst" — the damage lab's reproducible case.
+            using (PerfSample.Scope(PerfSite.DebrisSpawn))
+            {
+                Start(inst.Def, inst.Anchor, protectSelfInvalidate: true);
+                RunDeathSlot(inst.Def, inst.Anchor);
+            }
         }
         finally
         {
