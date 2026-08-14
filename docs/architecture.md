@@ -4537,6 +4537,9 @@ exe's own directory; `CSVM_DATA_ROOT`/`--data-root=` override either.
 `LaunchSession()` instantiates a `GameSession` per
 launch; `ReturnToMenu` `QueueFree`s it; a menu launch derives its spec via
 `SessionSpec.FromMenu(_cli, …)`, never from the outgoing spec.
+`ReportPerf`'s window line carries `max_ms`/`p95_ms` beside its means (PLAN-perf-hitches A2):
+a preallocated `_perfFrameMs` ring holds each frame's unaveraged wall cost, sorted into scratch
+at window close. No `p99_ms` — at `PerfWindowFrames` = 60 it would equal `max_ms` by construction.
 ⚠ `GlobalShaderParameterAdd` runs in `_Ready` ONCE — a session rebuild must never double-Add
   (that errors; `WeatherRig.Build` only `Set`s).
 ⚠ **A scripted session HIDES its window** (`ScriptedWindow.Hide()` = `ShowWindow(SW_HIDE)`) —

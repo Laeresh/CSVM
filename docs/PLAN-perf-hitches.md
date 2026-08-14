@@ -102,7 +102,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Groundwork (measurable ground before anything is built on it)
 
 1. ☑ A1 — Unbind the three map-edge debug keys, freeing `F14`
-2. ☐ A2 — `ReportPerf` reports max, p95 and p99 next to its means
+2. ☑ A2 — `ReportPerf` reports max and p95 next to its means (no p99 — it would equal max by
+   construction at the 60-frame window; see the item's ⚠ Traps)
 3. ☐ A3 — `display.vsync` config key, so the cap can come off without a rebuild
 
 ### Wave B — The instrument

@@ -32,6 +32,13 @@ public partial class Launcher : Node3D
     /// still one report a second, so an interactive run reads as it always did.</summary>
     private const int PerfWindowFrames = 60;
 
+    /// <summary>Nearest-rank p95 index into the sorted window (0-based): <c>ceil(0.95 x
+    /// PerfWindowFrames) - 1</c>. At 60 samples this is index 56, leaving 3 samples above it. p99
+    /// is deliberately not reported — nearest-rank p99 over 60 samples resolves to index 59, the
+    /// same slot as max, so it would just be max under another name (see <see cref="ReportPerf"/>).
+    /// </summary>
+    private const int Perf95Index = (PerfWindowFrames * 95 + 99) / 100 - 1;
+
     /// <summary>Master-bus index. This project ships no bus layout, so Master is the only bus
     /// and everything (both audio paths) is on it by default.</summary>
     private const int MasterBus = 0;
@@ -54,6 +61,12 @@ public partial class Launcher : Node3D
     // What F11's placement print receives at the launchscreen, where no session (and no rigs)
     // exists — the same empty list the pre-split root held after a teardown.
     private static readonly List<PlayerRig> NoRigs = new();
+
+    // This window's unaveraged per-frame wall cost, for the max/p95 that ReportPerf reports
+    // alongside its means — fully overwritten every window, so it needs no reset. _perfFrameMsSorted
+    // is scratch for the sort at window close, kept off the frame path so no window allocates.
+    private readonly double[] _perfFrameMs = new double[PerfWindowFrames];
+    private readonly double[] _perfFrameMsSorted = new double[PerfWindowFrames];
 
     // Everything the command line settled, parsed and resolved once (see SessionSpec). _cli is what
     // the user typed; _spec is what the LIVE session was built from — the launchscreen's pick
@@ -797,12 +810,20 @@ public partial class Launcher : Node3D
     /// <para>The line carries <c>sim_frame=</c> so a parser can pin each window to the run's
     /// simulation state instead of to a wall moment, and its grammar is flat
     /// <c>key=value</c> — <c>RunTests.ps1 -Perf</c> reads it.</para>
+    ///
+    /// <para><c>max_ms</c>/<c>p95_ms</c> sit beside the means: a mean over 60 frames buries a
+    /// single hitch (one 47 ms frame among fifty-nine 16.7 ms ones moves it by about 0.5 ms), so
+    /// these two answer "how bad did it get" rather than "how bad on average". Both come from the
+    /// same unaveraged per-frame wall cost the means are built from — nothing new is measured.
+    /// No <c>p99_ms</c>: nearest-rank p99 over a 60-sample window is the single worst sample, so it
+    /// would be identical to <c>max_ms</c> by construction (see <see cref="Perf95Index"/>).</para>
     /// </summary>
     private void ReportPerf(double delta)
     {
         var vp = GetViewport().GetViewportRid();
         RenderingServer.ViewportSetMeasureRenderTime(vp, true);
         _perfFrames++;
+        _perfFrameMs[_perfFrames - 1] = delta * 1000;
         _perfClock += delta;
         _perfProcess += Performance.GetMonitor(Performance.Monitor.TimeProcess);
         _perfPhysics += Performance.GetMonitor(Performance.Monitor.TimePhysicsProcess);
@@ -837,7 +858,11 @@ public partial class Launcher : Node3D
         double prims = _perfPrims / n;
         double nodes = _perfNodes / n;
         double memMb = _perfMem / n / (1024 * 1024);
-        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} render_cpu_ms={renderCpuMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00}");
+        System.Array.Copy(_perfFrameMs, _perfFrameMsSorted, PerfWindowFrames);
+        System.Array.Sort(_perfFrameMsSorted);
+        double maxMs = _perfFrameMsSorted[PerfWindowFrames - 1];
+        double p95Ms = _perfFrameMsSorted[Perf95Index];
+        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} render_cpu_ms={renderCpuMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00}");
         _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = 0;
         _perfDraws = _perfPrims = _perfNodes = _perfMem = 0;
     }
