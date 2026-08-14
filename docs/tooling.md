@@ -218,9 +218,28 @@ Nothing in this stage can fail a build, and **a history trend is awareness, not 
 with its reason: `fps` and `frame_ms` (paced — floors, PERF-2), `script_ms` (`TIME_PROCESS`,
 ~2.2× real per PERF-1, and it collapses onto the frame cap when the loop is paced), `physics_ms`
 (`--det` makes the clock parent-driven, so `_PhysicsProcess` consumers no-op and the term is empty),
-`mem_mb` (managed-heap high-water, monotonic inside a run). A row is marked `*` only when it clears
-**both** a relative band and an absolute floor, both measured as this machine's same-build noise —
-see `docs/verification.md` PERF-9…PERF-11 and the manifest's `notes`.
+`mem_mb` (managed-heap high-water, monotonic inside a run), `max_ms`/`p95_ms` (PLAN-perf-hitches A2:
+the worst frame and the 95th percentile within each 60-frame window, then MEDIANED across windows —
+a population too small to hold a ratio, and the median actively hides a single bad window: a real
+50 ms injected stall moved one window's own `max_ms` from 8.33 to 48.96 while the scenario's reported
+`max_ms` stayed 8.33, three clean windows outvoting the hit one), `hitch_count` (PLAN-perf-hitches
+E12, below). A row is marked `*` only when it clears **both** a relative band and an absolute floor,
+both measured as this machine's same-build noise — see `docs/verification.md` PERF-9…PERF-11 and the
+manifest's `notes`.
+
+**`hitch_count`** (PLAN-perf-hitches E12) is `HitchMonitor`'s own trip count for the launch — the
+`[perf] hitch …` lines B6 writes — median over the same kept-launch population as every other metric
+here, riding inside the record's `metrics` object rather than a section of its own so it flows
+through the existing ratio machinery for free. It is what actually survives a single hitching frame:
+`max_ms`/`p95_ms` above are a median of per-window extremes and a lone spike gets outvoted, but a trip
+either happened or it did not. **Awareness only, never a verdict** — the run-to-run spread of hitch
+count on an unchanged build is not yet measured, and a count this bursty is the last thing that
+should gate anything (`docs/verification.md` PERF-5, METHOD-3). Every record also carries `"vsync"`
+(`"off"`/`"on"`, read back from each launch's own `[perf] vsync …` line): hitch counts, and `max_ms`/
+`p95_ms`, are not comparable across vsync modes, since a padded frame changes what a hitch even means
+(PERF-12). Every scenario here runs `--no-vsync`, so today every record reads `"vsync":"off"`; the
+field is carried (not yet checked — `-PerfCompare` does not refuse a mismatched pair) so a future
+vsync-on scenario at least leaves the mode visible in both records being read side by side.
 
 **Exit-code contract: 1 if any stage FAILED, 0 otherwise — and a skip is not a failure.** No game
 data, no Godot, `-SkipUnits`/`-SkipEngine` all report `SKIP` and keep the run at 0, but every one of

@@ -127,7 +127,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E — The A/B rig
 
-12. ☐ E12 — Hitch fields in `perf-history.jsonl` and in `-PerfCompare` output
+12. ☑ E12 — Hitch fields in `perf-history.jsonl` and in `-PerfCompare` output
 13. ☐ E13 — A debris-burst scenario in `analysis/perf/scenarios.json`
 14. ☐ E14 — `docs/verification.md`: a PERF rule on hitch comparability, plus the doc sweep
 
@@ -663,7 +663,7 @@ itself work: measure it with `--perf` and confirm the readout is not what is cau
 
 # Wave E — The A/B rig
 
-## E12 ☐ Hitch fields in `perf-history.jsonl` and in `-PerfCompare` output
+## E12 ☑ Hitch fields in `perf-history.jsonl` and in `-PerfCompare` output
 
 **Goal.** Every `-Perf` run records hitch count, worst frame and p95 per scenario, and `-PerfCompare`
 prints their ratios beside the existing terms.
@@ -679,15 +679,46 @@ awareness metrics already carry.
 
 **Model recommendation.** medium.
 
-**Verify.** Two labelled runs of the same unchanged build produce hitch fields, and `-PerfCompare`
-pairs them. `-PerfCompare` still catches identical `CSVM.dll` hashes as a noise floor rather than an
-A/B (METHOD-6). <TODO: measure the run-to-run spread of hitch count on an unchanged build, and record
-it as the noise floor; without that number the field cannot be read at all.>
+**Verify.** `hitch_count` rides inside the existing per-scenario `metrics` object (median over the
+same kept-launch population as every other metric there), so it flows through `-PerfCompare`'s
+existing ratio loop for free rather than needing a new section; `vsync` (`"off"`/`"on"`, read back
+per launch from its own `[perf] vsync …` line) lands as a new top-level field beside `gpu`.
+`RunTests.ps1 -Perf -PerfFilter empty-stage -PerfIterations 2 -PerfLabel e12-base`, then
+`-PerfLabel e12-change -PerfCompare e12-base` (same unchanged build, `dll_md5` identical both times):
+both records carried `"vsync":"off"` and `"metrics":{…,"hitch_count":0}`, and the printed A/B showed
+`hitch_count 0 -> 0 x n/a (awareness only)` plus `SAME BINARY: …noise floor, not an A/B (METHOD-6)` —
+the existing same-build guard is untouched by this item's additions. `max_ms`/`p95_ms` (A2) also now
+carry a `why` line, closing a gap A2 itself left open (they rode into `metrics` automatically the
+whole time — the generic `[perf] window` parser already reads any numeric field — but were never
+added to the manifest's `awarenessMetrics`, so they printed with no reason attached).
+
+Then, proving the count can move at all (a check that has never been seen to move is not evidence,
+METHOD-9): `analysis/perf/scenarios.json`'s `empty-stage` args temporarily carried
+`--hitch-inject=50@280` (reverted after, `git diff` clean on the manifest) and
+`-PerfFilter empty-stage -PerfIterations 1` reran. The launch's log carried exactly one
+`[perf] hitch frame=280 frame_ms=60.77 …` line, and the history record read
+`"metrics":{…,"max_ms":8.33,"p95_ms":8.33,"hitch_count":1}`. **`hitch_count` is the metric that
+actually survives a lone hitch, and this run proves why the other two do not**: the `[perf] window
+sim_frame=300 …` line covering frame 280 read `max_ms=48.96` on its own (moved, and — per A2's own
+disproven-claim 4 — a `delta`-smoothed 48.96 against `HitchMonitor`'s raw-QPC 60.77 for the identical
+frame, the exact gap that claim warned E12 not to read as a raw cost), but the scenario's *reported*
+`max_ms` stayed `8.33`: the median over the 4 kept windows (`8.33, 8.33, 8.33, 48.96`) is dragged back
+to `8.33` by the three clean windows outvoting the one that saw the stall. A single-frame hitch is
+structurally invisible to a median-of-per-window-maxima; `hitch_count` is not built the same way and
+caught it. The run-to-run spread of hitch count on an unchanged build remains unmeasured — it needs
+many repeated runs on a quiet machine to characterise, which is beyond what this landing session can
+do, and is future work rather than a blocker for the field existing: a `0 -> 0` same-build ratio has
+been observed (above) but a single pair is not a noise band (METHOD-2, METHOD-3), so read `hitch_count`
+qualitatively (it moved, or it did not) until that measurement exists, same as every other TUNE
+constant this plan has landed undocumented-in-`backlog.md` by design (Wave G is where this plan's
+diagnosis work, and any backlog entry it needs, lands).
 
 **⚠ Traps.** **It records; it never judges.** No threshold gates a build. `docs/verification.md`
 PERF-5 and METHOD-3 hold that a verdict comes from a paired A/B and never from a committed number,
 because machine drift makes a fixed threshold lie. Hitch count is noisier than any mean term here, so
-it is the last metric that should ever gate anything.
+it is the last metric that should ever gate anything — confirmed structurally rather than just
+argued: `verdictMetrics` in the manifest was left untouched, so `hitch_count` cannot flag a row even
+if `-PerfCompare` is misread; it only ever prints under the `(awareness only)` note.
 
 ## E13 ☐ A debris-burst scenario in `analysis/perf/scenarios.json`
 

@@ -30,7 +30,10 @@
     { "metric": "frame_ms", "why": "the same floor as fps; only a value ABOVE the cap means anything" },
     { "metric": "script_ms", "why": "Godot's TIME_PROCESS, ~2.2x real (PERF-1), and it collapses onto the frame cap when the loop is paced" },
     { "metric": "physics_ms", "why": "--det makes the clock parent-driven, so _PhysicsProcess consumers no-op and this term is empty by construction" },
-    { "metric": "mem_mb", "why": "the managed heap high-water, which climbs monotonically inside a run -- read a big step, never a ratio" }
+    { "metric": "mem_mb", "why": "the managed heap high-water, which climbs monotonically inside a run -- read a big step, never a ratio" },
+    { "metric": "max_ms", "why": "the worst single frame in a 60-frame window (A2); a median-of-per-window-maxima across a handful of windows is not a distribution with a meaningful ratio" },
+    { "metric": "p95_ms", "why": "same population as max_ms (A2), same caveat" },
+    { "metric": "hitch_count", "why": "HitchMonitor trips (PLAN-perf-hitches B4) are rare and bursty by nature, and the run-to-run spread on an unchanged build is not yet measured -- awareness only, per PLAN-perf-hitches E12's own Trap: it records, it never judges (PERF-5, METHOD-3)" }
   ],
   "scenarios": [
     {

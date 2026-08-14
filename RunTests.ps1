@@ -1083,6 +1083,8 @@ if (-not $Perf) {
         $startupOrder = @()
         $windowOrder = @()
         $gpuName = ""
+        $vsyncMode = ""
+        $hitchCounts = New-Object System.Collections.ArrayList  # HitchMonitor trips, one entry per kept launch
         $launchOk = 0
         for ($iter = 1; $iter -le $perfIters; $iter++) {
             $tag = "$($scenario.name)-$iter"
@@ -1109,6 +1111,7 @@ if (-not $Perf) {
             $windows = @()
             $startup = $null
             $simFrame = -1
+            $hitchLineCount = 0
             foreach ($line in (Get-Content -Path $log)) {
                 if ($line -match '\[perf\] window ') {
                     $windows += ,(Read-PerfLine $line)
@@ -1118,6 +1121,14 @@ if (-not $Perf) {
                     $simFrame = [int]$Matches[1]
                 } elseif ($line -match 'shot pixmd5=\w+ size=\S+ gpu=(.*)$') {
                     $gpuName = $Matches[1].Trim()
+                } elseif ($line -match '\[perf\] hitch ') {
+                    # HitchMonitor tripped during this launch (PLAN-perf-hitches B4). Counted, never
+                    # judged (E12's own Trap): no threshold here can fail a build.
+                    $hitchLineCount++
+                } elseif ($line -match '\[perf\] vsync (on|off)') {
+                    # Carried per E14's comparability rule: hitch counts (and this stage's own
+                    # max_ms/p95_ms) are not comparable across vsync modes.
+                    $vsyncMode = $Matches[1]
                 }
             }
             if ($simFrame -ne $perfFrameCount) {
@@ -1139,6 +1150,7 @@ if (-not $Perf) {
             if ($iter -le $perfWarmups) {
                 continue   # cache warm-up: it ran, and that is all it was for
             }
+            $null = $hitchCounts.Add([double]$hitchLineCount)
             foreach ($w in $windows) {
                 foreach ($key in $w.Keys) {
                     if ($key -eq "sim_frame" -or $key -eq "frames" -or $key -eq "wall_ms") {
@@ -1168,6 +1180,11 @@ if (-not $Perf) {
         foreach ($key in $windowOrder) {
             $metrics[$key] = Get-Median @($windowSamples[$key].ToArray())
         }
+        # E12: HitchMonitor trips this launch, median over the same kept-launch population as every
+        # other metric here -- not a window metric (a trip is launch-wide, not per-60-frame-window),
+        # but riding in $metrics is what makes it flow through -PerfCompare's existing ratio loop and
+        # into the JSON "metrics" object for free.
+        $metrics["hitch_count"] = Get-Median @($hitchCounts.ToArray())
         $startMetrics = New-Object System.Collections.Specialized.OrderedDictionary
         foreach ($key in $startupOrder) {
             $startMetrics[$key] = Get-Median @($startupSamples[$key].ToArray())
@@ -1183,11 +1200,13 @@ if (-not $Perf) {
             metrics  = $metrics
             startup  = $startMetrics
             gpu      = $gpuName
+            vsync    = $vsyncMode
         }
-        Write-Host ("  ok   {0,-12} windows {1}  render_cpu {2} ms  gpu {3} ms  draws {4}  startup total {5} ms" -f `
+        Write-Host ("  ok   {0,-12} windows {1}  render_cpu {2} ms  gpu {3} ms  draws {4}  startup total {5} ms  hitches {6}" -f `
             $scenario.name, $windowCount,
             (Format-PerfNumber $metrics["render_cpu_ms"]), (Format-PerfNumber $metrics["gpu_ms"]),
-            (Format-PerfNumber $metrics["draws"]), (Format-PerfNumber $startMetrics["total"])) -ForegroundColor DarkGray
+            (Format-PerfNumber $metrics["draws"]), (Format-PerfNumber $startMetrics["total"]),
+            (Format-PerfNumber $metrics["hitch_count"])) -ForegroundColor DarkGray
     }
     $watch.Stop()
 
@@ -1205,6 +1224,9 @@ if (-not $Perf) {
         $null = $sb.Append('"dirty":').Append($(if ($gitDirty) { "true" } else { "false" })).Append(',')
         $null = $sb.Append('"dll_md5":').Append((ConvertTo-JsonString $dllMd5)).Append(',')
         $null = $sb.Append('"gpu":').Append((ConvertTo-JsonString $rec.gpu)).Append(',')
+        # E12: carried explicitly (E14) -- hitch counts, and this stage's own max_ms/p95_ms, are not
+        # comparable across vsync modes (a padded frame changes what a hitch even means).
+        $null = $sb.Append('"vsync":').Append((ConvertTo-JsonString $rec.vsync)).Append(',')
         $null = $sb.Append('"frames":').Append($perfFrameCount).Append(',')
         $null = $sb.Append('"launches":').Append($rec.launches).Append(',')
         $null = $sb.Append('"warmups":').Append($perfWarmups).Append(',')
