@@ -3806,10 +3806,23 @@ On `HudLayers.PerfReadout` (11), **above `HudLayers.Board`**: the launchscreen's
 full-screen opaque `ColorRect` on `Board`, and this readout has to read there too. Sized off
 `HudMetrics.ReferenceHeight` through the plain window-height ratio, not `HudMetrics.Scale` —
 that method's `PaneFactor` damping is exactly wrong for a control that isn't per-pane.
-⚠ **D10 lands Compact's content only.** Full is a real, selectable third mode (so
-  `--debug-fps=full` parses and F14 cycles through it) but renders the same panel as Compact for
-  now; PLAN-perf-hitches D11 fills it with the per-frame split/count/memory/GC terms, the
-  breadcrumbs, and the rolling frame-time strip.
+**Full (PLAN-perf-hitches D11)** adds four lines under Compact's fps/frame/worst headline — the
+current frame's `FrameCounters` split (script/render-cpu/gpu/physics ms), its draws/prims/nodes/
+mem terms, `GC.CollectionCount` per generation (raw counts, not deltas — a live readout reads
+better as "gc2 has fired 3 times" than as an almost-always-zero per-refresh delta), and C8's
+breadcrumbs (`PerfSample.SnapshotInto`, the same `site:callsxms` grammar `HitchSidecar`'s log line
+uses) — plus `PerfHudStrip`, a second top-level `Control` in the same file (the `PerfSample.cs`
+precedent for more than one type per file) drawing a rolling bar graph of recent frame times with
+the trigger threshold marked as a line. Every Full term is a SECOND VIEW of data collected
+elsewhere, never a new sample: the split/count/memory terms are the same `FrameCounters` read
+`HitchMonitor.Tick` was just handed, and the strip reads `HitchMonitor.CopyRing` — a new accessor
+onto the monitor's own always-live ring buffer (distinct from `Last.Ring`, which only advances on
+a trigger) — every draw, so the display and a hitch record can never disagree about the same
+frame. `perfHud.stripFrames` (TUNE, default 120) sizes the strip, clamped to
+`HitchMonitor.RingFrames` since asking for more than the ring keeps is meaningless.
+⚠ **The strip redraws every frame, unthrottled, while Full is showing** (`QueueRedraw()` from
+  `Tick`) — a rolling strip that only advanced a few times a second would not look rolling — but
+  only then: Compact never calls it, so cycling past Full costs nothing extra.
 ⚠ **The worst-frame peak spikes and decays**, held for `WorstHoldMs` (3 s, TUNE, a plain
   `const` — UI cosmetic, not a measurement threshold like `HitchMonitor`'s `Config`-backed
   constants) then replaced by the current frame, rather than being a windowed max recomputed from
@@ -4306,7 +4319,10 @@ them in), so the trigger, both wraparounds and the grace window are unit-tested 
 in, and it is engine-free too. Five `hitchMonitor.*` config keys over `const` defaults, read in
 the constructor (which is what registers them for `--dump-config`). `FrameCount` exposes the same
 counter `HitchRecord.Frame` reports, one call early, so `--hitch-inject=` (B5) can fire on a stated
-ordinal in this monitor's own frame space rather than the sim frame.
+ordinal in this monitor's own frame space rather than the sim frame. `RingFrames`/`CopyRing`
+(PLAN-perf-hitches D11) expose the ring buffer itself, live — every `Tick`, not just on a trigger
+like `Last.Ring` — for `PerfHud`'s Full-tier frame-time strip; `CopyRing` returns the MOST RECENT
+entries when handed a shorter destination than the ring holds, oldest of those first.
 ⚠ **Every default here is TUNE**, named in conversation on 2026-08-14 and evidenced by nothing:
   `medianMultiple` 4, `floorMs` 40, `baselineFrames`/`ringFrames` 120, `graceMs` 2000. Do not cite
   one as a measured value.

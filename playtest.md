@@ -244,17 +244,20 @@ an upper bound, and the correction to the 137.9 mph equilibrium are on `BL-115` 
   *Variations:* `--players=4` for pane-size readability; `--vs-kills=1` for a fast board check;
   `--scenario=zeppelin_run` to judge whether `dogfight_ace` spawns are actually the better pick.
 
-- `PT-49` `[Own]` **`PerfHud` legibility in a 4-player pane (PLAN-perf-hitches D10).** The
+- `PT-49` `[Own]` **`PerfHud` legibility in a 4-player pane (PLAN-perf-hitches D10/D11).** The
   frame-cost readout (F14, `--debug-fps=`) sizes off the whole window's height, not the pane it
   happens to be drawn over — it draws once for the window, not once per pane — so a full-window
-  screenshot at 1P cannot say whether it is still readable once the window is quartered. No
-  original reference; this is a judgement call on our own instrument.
-  *Look for:* the `perf [F14]: compact — … fps  frame … ms  worst … ms` line, top-left of the
-  window, stays legible (not too small to read at a glance, not clipped by a pane edge) with
-  `--players=4`.
+  screenshot at 1P cannot say whether it is still readable once the window is quartered. Full's
+  five-line panel plus the frame-time strip below it is taller than Compact's single line, so it
+  is the one more likely to run into a pane edge. No original reference; this is a judgement call
+  on our own instrument.
+  *Look for:* Compact's `perf [F14]: compact — … fps  frame … ms  worst … ms` line, and Full's
+  five lines plus its bar-graph strip, top-left of the window, both stay legible (not too small to
+  read at a glance, not clipped by a pane edge) with `--players=4`.
   *Blocks:* nothing existing tracks this; a fail mints a new `BL` item against `PerfHud`'s
-  `ReferenceFontSize`/`WindowScale`.
-  *Variations:* `--debug-fps --players=4 --vs --chapter=C1`; also worth a glance at `--players=2`.
+  `ReferenceFontSize`/`WindowScale`/strip sizing.
+  *Variations:* `--debug-fps --players=4 --vs --chapter=C1`; `--debug-fps=full --players=4` for the
+  taller panel specifically; also worth a glance at `--players=2`.
 
 ### C1 · two pilots — stunt race (splitscreen starting grid)
 

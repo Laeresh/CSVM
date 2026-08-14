@@ -556,6 +556,7 @@ public partial class Launcher : Node3D
         _perfHud = new UI.PerfHud
         {
             InitialMode = _spec.DebugFps == null ? UI.PerfHud.Mode.Off : UI.PerfHud.ParseMode(_spec.DebugFps),
+            Monitor = _hitchMonitor,
         };
         AddChild(_perfHud);
 
@@ -694,9 +695,10 @@ public partial class Launcher : Node3D
             _hitchSidecar.Enqueue(_hitchMonitor.Last);
         }
         _hitchSidecar.Tick(frameMs);
-        // PLAN-perf-hitches D10: same raw frameMs HitchMonitor just judged, fed to the readout
-        // regardless of whether it is currently drawn — see PerfHud.Tick's own doc comment.
-        _perfHud.Tick(frameMs);
+        // PLAN-perf-hitches D10/D11: same raw frameMs and the same counters read HitchMonitor
+        // just judged, fed to the readout regardless of whether it is currently drawn — see
+        // PerfHud.Tick's own doc comment.
+        _perfHud.Tick(frameMs, counters);
         if (_spec.Perf)
             ReportPerf(delta, counters);
 

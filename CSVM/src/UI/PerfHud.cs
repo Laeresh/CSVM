@@ -1,4 +1,7 @@
+using System;
 using System.Globalization;
+using System.Text;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.UI;
@@ -8,7 +11,9 @@ namespace CSVM.UI;
 /// frame's wall cost, and the worst frame in the last few seconds — a peak that spikes and
 /// decays, so a hitch you felt leaves readable evidence on screen a moment later rather than
 /// only an instantaneous number nobody was watching at the right instant
-/// (PLAN-perf-hitches D10).
+/// (PLAN-perf-hitches D10). The Full tier (D11) adds the per-frame cost split, count and memory
+/// terms, GC counts by generation, the last few named breadcrumbs, and a rolling bar graph of
+/// recent frame times.
 ///
 /// <para>Built once by <see cref="CSVM.Session.Launcher"/> — never per <c>GameSession</c> and
 /// never per splitscreen pane, since fps/frame cost/GC are process-wide facts, not a per-pane
@@ -23,11 +28,13 @@ namespace CSVM.UI;
 /// instrument's own ethos: it is exactly this frame's cost, not a windowed mean that would bury
 /// the hitch this readout exists to show.</para>
 ///
-/// <para><b>Cycle: Off → Compact → Full → Off.</b> D10 lands Compact's actual content — the
-/// fps/frame-cost/worst-frame trio above. Full is landed here as a distinct, selectable mode
-/// (so <c>--debug-fps=full</c> parses and F14 cycles through it) but renders the same panel as
-/// Compact for now; PLAN-perf-hitches D11 is what fills it with the per-frame split/count/
-/// memory/GC terms, the breadcrumbs, and the rolling frame-time strip.</para>
+/// <para><b>Cycle: Off → Compact → Full → Off.</b> D10 landed Compact's content — the
+/// fps/frame-cost/worst-frame trio above, still the whole of Compact and the first line of
+/// Full. D11's Full-only lines and the <see cref="PerfHudStrip"/> read from <see cref="Monitor"/>
+/// directly (the split/count/memory terms off the same <see cref="FrameCounters"/> Tick is fed,
+/// GC generation counts off <c>GC.CollectionCount</c>, breadcrumbs off <see cref="PerfSample"/>,
+/// the strip off <see cref="Utils.HitchMonitor.CopyRing"/>) — no history of its own, so nothing
+/// here can ever disagree with what a hitch record says about the same frame.</para>
 /// </summary>
 public sealed partial class PerfHud : Node
 {
@@ -45,11 +52,29 @@ public sealed partial class PerfHud : Node
     // stay legible at a glance during ordinary play, not just be read up close while debugging.
     private const float ReferenceFontSize = 26f;
 
+    // Label's own line_spacing theme default (see tools/godot-docs/doc/classes/Label.xml) — not
+    // scaled by our font-size override, so it stays a small constant rather than something the
+    // WindowScale ratio applies to.
+    private const float LabelLineSpacingPx = 3f;
+
+    // perfHud.stripFrames' in-code default: the strip shows HitchMonitor's whole ring by default
+    // (matches its own RingFramesDefault) rather than an arbitrary independent span.
+    private const int StripFramesDefault = 120;
+
+    private const float StripReferenceWidth = 360f;
+    private const float StripReferenceHeight = 60f;
+    private const float StripReferenceGapY = 6f;
+
+    private readonly PerfSampleFrame _samples = new();
+
     private CanvasLayer? _hudLayer;
+    private Control? _root;
     private Label? _hud;
+    private PerfHudStrip? _strip;
     private Mode _mode = Mode.Off;
     private double _sinceRefreshMs;
     private double _lastFrameMs;
+    private FrameCounters _lastCounters;
     private double _worstMs;
     private double _worstAgeMs;
     private bool _justRearmed;
@@ -63,6 +88,11 @@ public sealed partial class PerfHud : Node
 
     /// <summary>--debug-fps[=compact|full]: start switched on, for a scripted screenshot.</summary>
     public Mode InitialMode { get; init; } = Mode.Off;
+
+    /// <summary>The hitch detector Full's per-frame terms and the strip read from directly — never
+    /// a history of its own, per this class's own Trap (PLAN-perf-hitches D11). Set once, before
+    /// the first <see cref="SetMode"/> that could need it.</summary>
+    public HitchMonitor Monitor { get; init; } = null!;
 
     /// <summary>Parses the --debug-fps value. Absent value = Compact, the useful default.</summary>
     public static Mode ParseMode(string value) => value.Trim().ToLowerInvariant() switch
@@ -91,12 +121,12 @@ public sealed partial class PerfHud : Node
         }
     }
 
-    /// <summary>Feeds one rendered frame's wall cost — the same raw value
-    /// <see cref="Utils.HitchMonitor"/> ticks on, never Godot's <c>delta</c>. Runs
-    /// unconditionally, Off or not: the worst-frame peak has to already be warm the instant
-    /// someone presses F14, or the readout would have nothing to say about the hitch that made
-    /// them look.</summary>
-    public void Tick(double frameMs)
+    /// <summary>Feeds one rendered frame's wall cost and the same <see cref="FrameCounters"/>
+    /// <see cref="Utils.HitchMonitor.Tick"/> was just handed — one counters read serves both
+    /// instruments, per <c>Launcher._Process</c>'s own comment. Runs unconditionally, Off or not:
+    /// the worst-frame peak has to already be warm the instant someone presses F14, or the readout
+    /// would have nothing to say about the hitch that made them look.</summary>
+    public void Tick(double frameMs, in FrameCounters counters)
     {
         if (double.IsNaN(frameMs) || frameMs < 0)
             frameMs = 0;
@@ -107,10 +137,12 @@ public sealed partial class PerfHud : Node
             // reason HitchMonitor drops its own baseline here. Seed the display only.
             _justRearmed = false;
             _lastFrameMs = frameMs;
+            _lastCounters = counters;
             return;
         }
 
         _lastFrameMs = frameMs;
+        _lastCounters = counters;
         if (frameMs >= _worstMs)
         {
             _worstMs = frameMs;
@@ -128,6 +160,11 @@ public sealed partial class PerfHud : Node
 
         if (_mode == Mode.Off)
             return;
+        // D11: the strip redraws every frame, unthrottled — a "rolling" strip that only advanced
+        // a few times a second would not look rolling. Only while Full is actually shown, so
+        // Compact costs nothing extra (PLAN-perf-hitches D11's own Trap about redraw cost).
+        if (_mode == Mode.Full)
+            _strip?.QueueRedraw();
         _sinceRefreshMs += frameMs;
         if (_sinceRefreshMs < RefreshIntervalMs)
             return;
@@ -151,6 +188,25 @@ public sealed partial class PerfHud : Node
         Mode.Full => "full",
         _ => "compact",
     };
+
+    // Mirrors HitchSidecar.FormatSamples' exact grammar (site:callsxms, comma-separated, PerfSite
+    // order, "none" when nothing ran) so a breadcrumb reads the same in the readout as in the
+    // sidecar's log line — duplicated rather than shared, since the two live in different modules
+    // for unrelated reasons (a sidecar log line vs. a live label) and the format is ten lines.
+    private static string FormatSamples(PerfSampleFrame s)
+    {
+        var sb = new StringBuilder();
+        for (int i = 0; i < s.Calls.Length; i++)
+        {
+            if (s.Calls[i] == 0)
+                continue;
+            if (sb.Length > 0)
+                sb.Append(',');
+            sb.Append(PerfSample.NameOf((PerfSite)i)).Append(':').Append(s.Calls[i]).Append('x')
+                .Append(s.Ms[i].ToString("0.00", CultureInfo.InvariantCulture));
+        }
+        return sb.Length == 0 ? "none" : sb.ToString();
+    }
 
     private void SetMode(Mode mode)
     {
@@ -180,10 +236,26 @@ public sealed partial class PerfHud : Node
         _hud = new Label { Text = "" };
         _hud.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
         _hud.OffsetLeft = 10;
-        _hud.OffsetTop = 0;
+        _hud.OffsetTop = 2;
         root.AddChild(_hud);
         _hudLayer.AddChild(root);
         AddChild(_hudLayer);
+        _root = root;
+    }
+
+    /// <summary>Built lazily on first entry into Full — a session that only ever cycles to Compact
+    /// never pays for the strip's own buffer or control. Sizes the buffer off <c>perfHud.stripFrames</c>
+    /// (clamped to <see cref="Utils.HitchMonitor.RingFrames"/>, since asking for more than the ring
+    /// keeps is meaningless) once, rather than on every refresh.</summary>
+    private void EnsureStrip()
+    {
+        if (_strip != null)
+            return;
+        int span = Math.Clamp(Config.GetInt("perfHud.stripFrames", StripFramesDefault), 1, Monitor.RingFrames);
+        _strip = new PerfHudStrip { MouseFilter = Control.MouseFilterEnum.Ignore, Monitor = Monitor };
+        _strip.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
+        _strip.SetSpan(span);
+        _root!.AddChild(_strip);
     }
 
     private void Refresh()
@@ -193,8 +265,44 @@ public sealed partial class PerfHud : Node
         float scale = WindowScale();
         _hud.AddThemeFontSizeOverride("font_size", Mathf.Max(1, Mathf.RoundToInt(ReferenceFontSize * scale)));
         double fps = _lastFrameMs > 0 ? 1000.0 / _lastFrameMs : 0;
-        _hud.Text = string.Create(CultureInfo.InvariantCulture,
+        string headline = string.Create(CultureInfo.InvariantCulture,
             $"perf [F14]: {ModeLabel(_mode)} — {fps:0.0} fps  frame {_lastFrameMs:0.00} ms  worst {_worstMs:0.00} ms");
+
+        if (_mode != Mode.Full)
+        {
+            _hud.Text = headline;
+            if (_strip != null)
+                _strip.Visible = false;
+            return;
+        }
+
+        // D11: the current frame's own split/count/memory terms — the same FrameCounters read
+        // HitchMonitor.Tick was just handed, never a second sample of the engine.
+        var c = _lastCounters;
+        string split = string.Create(CultureInfo.InvariantCulture,
+            $"split: script {c.ScriptMs:0.00}  render {c.RenderCpuMs:0.00}  gpu {c.GpuMs:0.00}  physics {c.PhysicsMs:0.00} ms");
+        string counts = string.Create(CultureInfo.InvariantCulture,
+            $"draws {c.Draws}  prims {c.Prims}  nodes {c.Nodes}  mem {c.MemBytes / (1024.0 * 1024.0):0.0} MB");
+        // Raw generation counts, not deltas: a live readout reads better as "gc2 has fired 3 times
+        // this run" than as a per-refresh delta that is almost always 0 between two 150 ms ticks.
+        string gc = string.Create(CultureInfo.InvariantCulture,
+            $"gc0 {GC.CollectionCount(0)}  gc1 {GC.CollectionCount(1)}  gc2 {GC.CollectionCount(2)}");
+        // PerfSample.SnapshotInto reads the last CLOSED frame, which Launcher._Process ends in the
+        // same call that feeds this Tick — so _lastFrameMs and this snapshot describe one frame.
+        PerfSample.SnapshotInto(_samples, _lastFrameMs);
+        string samples = string.Create(CultureInfo.InvariantCulture,
+            $"samples={FormatSamples(_samples)}  attributed {_samples.AttributedMs:0.00}  unattributed {_samples.UnattributedMs:0.00} ms");
+        _hud.Text = string.Join("\n", headline, split, counts, gc, samples);
+
+        EnsureStrip();
+        _strip!.Visible = true;
+        _strip.OffsetLeft = _hud.OffsetLeft;
+        // GetLineHeight/GetLineCount read the font metrics Godot itself just laid the text out
+        // with (post the font-size override above), rather than a guessed line pitch — the strip
+        // sits exactly under the label whatever its line count, at any window size.
+        float textHeight = (_hud.GetLineHeight() + LabelLineSpacingPx) * _hud.GetLineCount();
+        _strip.OffsetTop = _hud.OffsetTop + textHeight + (StripReferenceGapY * scale);
+        _strip.Size = new Vector2(StripReferenceWidth * scale, StripReferenceHeight * scale);
     }
 
     // HudMetrics.Scale damps by PaneFactor (sqrt of the pane's share of the window), which is
@@ -204,5 +312,68 @@ public sealed partial class PerfHud : Node
     {
         float windowH = GetTree()?.Root?.Size.Y ?? Flight.HudMetrics.ReferenceHeight;
         return windowH / Flight.HudMetrics.ReferenceHeight;
+    }
+}
+
+/// <summary>
+/// D11's rolling frame-time strip: one bar per recent frame, read fresh from
+/// <see cref="Utils.HitchMonitor.CopyRing"/> on every draw — never its own history, so it can
+/// never disagree with what a hitch record says about the same frame (the item's own Trap).
+/// Redrawn every <see cref="PerfHud.Tick"/> while <see cref="PerfHud.Mode.Full"/> is showing,
+/// unthrottled — a rolling strip that only advanced a few times a second would not look rolling.
+///
+/// <para>Vertical scale is <c>max(threshold, worst bar in the buffer) × 1.1</c>, recomputed every
+/// draw: the trigger threshold is therefore always on screen (never scrolled off the top by a
+/// tall bar), which is the point — the Approach calls for the threshold to be a visible line so
+/// the relationship between what is drawn and what fires a record is legible.</para>
+/// </summary>
+public sealed partial class PerfHudStrip : Control
+{
+    internal HitchMonitor? Monitor;
+
+    private static readonly Color StripBgColor = new(0f, 0f, 0f, 0.35f);
+    private static readonly Color StripBarColor = new(0.4f, 0.9f, 0.5f, 0.9f);
+    private static readonly Color StripBarHitchColor = new(1f, 0.3f, 0.25f, 0.95f);
+    private static readonly Color StripThresholdColor = new(1f, 0.85f, 0.2f, 0.6f);
+
+    private FrameSample[] _buf = Array.Empty<FrameSample>();
+
+    public override void _Draw()
+    {
+        var size = Size;
+        DrawRect(new Rect2(Vector2.Zero, size), StripBgColor);
+        if (Monitor == null || _buf.Length == 0)
+            return;
+        int count = Monitor.CopyRing(_buf);
+        if (count == 0)
+            return;
+
+        double thresholdMs = Monitor.ThresholdMs;
+        double maxMs = thresholdMs;
+        for (int i = 0; i < count; i++)
+            maxMs = Math.Max(maxMs, _buf[i].FrameMs);
+        double scaleMs = Math.Max(maxMs * 1.1, 20.0);
+
+        // Most recent frame always at the right edge: while the ring is still filling (just after
+        // a Rearm) the bars appear from the right and fill leftward, rather than stretching wide.
+        float barW = size.X / _buf.Length;
+        int offset = _buf.Length - count;
+        for (int i = 0; i < count; i++)
+        {
+            double ms = _buf[i].FrameMs;
+            float h = (float)Mathf.Clamp(ms / scaleMs * size.Y, 0.0, size.Y);
+            float x = (offset + i) * barW;
+            var color = ms > thresholdMs ? StripBarHitchColor : StripBarColor;
+            DrawRect(new Rect2(x, size.Y - h, Mathf.Max(1f, barW - 1f), h), color);
+        }
+
+        float ty = size.Y - (float)Mathf.Clamp(thresholdMs / scaleMs * size.Y, 0.0, size.Y);
+        DrawLine(new Vector2(0, ty), new Vector2(size.X, ty), StripThresholdColor, 1f);
+    }
+
+    internal void SetSpan(int frames)
+    {
+        if (_buf.Length != frames)
+            _buf = new FrameSample[frames];
     }
 }

@@ -123,7 +123,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — The readout
 
 10. ☑ D10 — `PerfHud` on `F14` and `--debug-fps`: the compact tier, once for the window
-11. ☐ D11 — The verbose tier and the rolling frame-time strip
+11. ☑ D11 — The verbose tier and the rolling frame-time strip
 
 ### Wave E — The A/B rig
 
@@ -636,7 +636,7 @@ that could switch it on implicitly breaks all of them permanently. `RunGame.ps1`
 `--debug-fps` if you want it on during ordinary play; goldens do not go through `RunGame.ps1`, so
 that path is safe.
 
-## D11 ☐ The verbose tier and the rolling frame-time strip
+## D11 ☑ The verbose tier and the rolling frame-time strip
 
 **Goal.** The second tier adds the per-frame cost split, count and memory terms, GC counts by
 generation, and the last few breadcrumbs, plus a rolling bar graph of recent frame times where a

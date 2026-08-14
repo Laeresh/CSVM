@@ -166,6 +166,30 @@ public sealed class HitchMonitor
     /// ⚠ One preallocated instance, overwritten by the next trigger, so copy what you need.</summary>
     public HitchRecord Last => _last;
 
+    /// <summary>Ring capacity: how many entries <see cref="CopyRing"/> can return at most, the same
+    /// depth <see cref="Fill"/> copies into a triggered record's <see cref="HitchRecord.Ring"/>.
+    /// PLAN-perf-hitches D11's frame-time strip sizes its own buffer off this once, at build.</summary>
+    public int RingFrames => _ringFrames;
+
+    /// <summary>Copies the LIVE ring buffer into <paramref name="destination"/>, oldest first —
+    /// unlike <see cref="Last"/>'s <c>Ring</c>, which only advances on a trigger, this reflects every
+    /// <see cref="Tick"/> regardless of whether anything has ever tripped (PLAN-perf-hitches D11: the
+    /// frame-time strip reads this directly rather than keeping its own history, so the display and a
+    /// hitch record can never disagree about the same frame). A <paramref name="destination"/> shorter
+    /// than what has been collected gets the MOST RECENT that many entries, not the oldest. Returns
+    /// how many entries were written.</summary>
+    public int CopyRing(Span<FrameSample> destination)
+    {
+        int count = Math.Min(_ringCount, destination.Length);
+        int oldest = _ringCount == _ringFrames ? _ringNext : 0;
+        int skip = _ringCount - count;
+        for (int i = 0; i < count; i++)
+        {
+            destination[i] = _ring[(oldest + skip + i) % _ringFrames];
+        }
+        return count;
+    }
+
     /// <summary>Restarts the grace window and drops the rolling baseline and the ring. Called after
     /// anything that legitimately stalls the frame loop and leaves the frames on either side
     /// incomparable: a session build, a teardown back to the launchscreen.</summary>
