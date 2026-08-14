@@ -354,6 +354,15 @@ and leave gaps when retiring old ones.
   parser reads four keys and that is not one of them, so every file-launched wave takes the
   built-in default instead. Second instance of the same shape as `formats/turrets.md`'s unread
   `HEALTH` (`PLAN-instant-action` A3).
+- **SRC-8** — **A branch's effect is only half its meaning; the other half is what it is an
+  alternative to.** Recording what an arm *does* without recording which arm it excludes reads as
+  an addition when it may be a replacement, and the two produce opposite implementations. Measured:
+  the M4 B7 pass noted that `FUN_0045b9d0`'s mission-type-2 arm tops up a generator's capacity, and
+  a plan was written around that being one contribution among several. Reading the function whole
+  showed the discriminator at `0x0045ba9b` is an `if`/`else` whose other arm is the entire wave
+  teleport, so on `zeppelin_run` the generator is not a supplement but the only route into the air
+  (`PLAN-instant-action` A4, `formats/instant-action.md`). When you record a branch, record the
+  jump it skips.
 
 ## What this project cannot verify itself
 

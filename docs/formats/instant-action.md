@@ -254,9 +254,9 @@ origin**, which is the inert state `FUN_0045b9d0` later teleports and reactivate
 
 ⚠ **On `zeppelin_run` (id 2) even wave 1 is built deactivated at the origin**, and the wave block
 runs whether or not the scenario has spawn points, whereas every other mission type needs a
-non-empty list to build waves at all. So on that mode no enemy is airborne at mission start and
-every one of them waits on something else to release it. Which release that is (the sequencer's
-teleport, the generator branch, or both) is `FUN_0045b9d0`'s question, still open.
+non-empty list to build waves at all. So on that mode no enemy is airborne at mission start, and
+every one of them waits on the zeppelin's own generator to launch it: the sequencer's teleport does
+not run on that mode at all (below).
 
 Each wave member takes its wave's militia livery (pattern, three decals,
 nine colour components, set by the setup screen rather than by the file) and the wave's
@@ -298,6 +298,143 @@ difficulty(saved)
 and health maxima multiplied by **0.875 / 1.0 / 1.25** on difficulty 0 / 1 / 2
 ([`org/vehicleDamage.md`](../org/vehicleDamage.md)). So the skill names are a **hit-point** scale in
 Instant Action, and nothing else. Nothing on this path converts them to a 1-to-9 rating.
+
+## The wave sequencer and the mission end: `FUN_0045b9d0`
+
+One function, ticked every frame, does two jobs. It advances the wave counter when the current wave
+is gone, and it decides whether the mission is over. M4 B7 traced its main path
+(`analysis/m4-b7-group-slot/FINDINGS.md`); it was read whole on 2026-08-14 (A4), which is what
+settled the three questions that pass left open.
+
+Two globals drive it. `DAT_00718cd8` is the setup record's first dword, the **`mission_type` id**,
+and `DAT_00718cd0` is the **current-group counter**. Both arms below are reached only after the
+counter has already been incremented.
+
+### Who still counts as an enemy
+
+Walking the global vehicle list at `DAT_0071dabc`, a vehicle is an enemy when its team (`+0x08`) is
+**greater than 1**, and it still counts if any one of three bytes says so:
+
+| byte | meaning | how it was read |
+|---|---|---|
+| `+0x945` ≠ 0 | `deactivated` | `FUN_004b0f61` sets it to 1, and `FUN_00452450`, the generator launch, reads it to find a parked airframe |
+| `+0x91d` = 0 | not destroyed | cleared together with `+0x91e`/`+0x91f` when `FUN_0047fd50` moves the player into a new airframe |
+| `+0x91f` ≠ 0 | death sequence still running | same site |
+
+So a wave still parked at the world origin **counts as present**, which is what stops the mission
+ending the moment wave 1 dies.
+
+### Mission type 0 has no sequencer at all
+
+Dogfighting an ace takes an early branch of its own: it returns while any enemy is alive or still
+exploding, and otherwise goes straight to the end. The counter is never incremented and `+0x945` is
+never consulted, which agrees with the parser forcing every wave count to 0 on that mode.
+
+### Advancing a wave
+
+On every other mode the walk clears a "no enemies left" flag for each enemy that still counts, and
+**bails out at the first one whose group (`+0x388`) equals the current counter**: that wave is still
+alive, so nothing advances and the tick falls through to the end checks. If the walk finishes having
+seen no enemy at all, the same thing happens. Only when live enemies exist and none of them is in
+the current group does `DAT_00718cd0` increment, and then **exactly one of two arms runs**.
+
+⚠ **The two arms are exclusive: on `zeppelin_run` the generator feed replaces the teleport, it does
+not supplement it.** The test is `CMP EBX,0x2` / `JNZ` at `0x0045ba9b` on the mission-type id, and
+the type-2 arm ends `JMP 0x0045bd83`, past the whole teleport block. So on that one mode the
+sequencer never picks a spawn point, never moves an aircraft, and never calls `FUN_004b0f40(0)`.
+Every enemy on a zeppelin run reaches the air out of the zeppelin's bay or not at all.
+
+### The teleport arm: mission types 1, 3 and 4
+
+The spawn point is drawn in two steps. First every entry of the current mission type's spawn list is
+tested against the **local player's** position, via vtable slot 0 of `DAT_0071c298`, and those at
+squared distance ≥ `250000.0` (the float at `0x006036c0`, so **500 m**) are collected into a vector
+of indices. Then one of those indices is taken as `rand() % n`.
+
+⚠ **If no spawn point is 500 m away the index falls back to a literal 0**, the first entry of the
+list, not a random one. With Instant Action's 4-to-8 entry lists that is reachable, and it is the
+one case where two consecutive waves are guaranteed to arrive in the same place.
+
+Every member of the new group is then reactivated with `FUN_004b0f40(0)` and written to that point:
+position at `+0x204`/`+0x208`/`+0x20c`, attitude at `+0x1f8`/`+0x1fc`/`+0x200` with pitch and roll
+zeroed and the yaw taken from the spawn entry's own heading. The members fan out in the **same 100 m
+/ 45° pattern the wingmen use**: the first member sits exactly on the point, and member `k` after it
+(`k` from 0) is placed `100 · ((k >> 1) + 1)` metres away at `±π/4` off the spawn heading, the sign
+being `+` when `k & 3` is 1 or 2 (constants `100.0` at `0x00607af0` and `0.7853982` at
+`0x00607af4`). For six aircraft that is 0, 100, 100, 200, 200 and 300 m on sides −, +, +, −, −. The
+teleport writes position and orientation only; the three writes that follow (the `+0x6a4`…`+0x6a8`
+list collapsed onto the new position, and the vec3 at `+0x6b0` zeroed from `DAT_0075d1b8`) are the
+same trio the player's own airframe swap performs, so they read as a teleport artefact reset rather
+than anything mission-specific.
+
+### The generator arm: mission type 2
+
+The wave is not moved. Instead the sequencer takes the **selected zeppelin**,
+`(&DAT_00718fd0)[DAT_00718f2c]`, finds the generator hosted on that zeppelin's node, and
+
+- adds the **new group's member count** to the generator's `capacityRemaining` (`+0x80`), and
+- stamps the generator's group (`+0x64`) with the new counter value.
+
+That is the whole arm. The generator's own launch path (`FUN_00452450`) then finds the parked
+airframes whose group matches, reactivates them and drops them from the bay, one wave's worth of
+capacity at a time. It is what makes `capacity 0` workable in Instant Action; see
+[mission-entities.md](mission-entities.md)'s capacity section.
+
+`FUN_00451780` is the lookup, over the generator manager at `0x00654170`, matching the generator's
+host node (`+0x08`) against the zeppelin's node (`+0x1c`). It is a single-node match, not a subtree
+walk (`FUN_004532a0` is the walking variant, used elsewhere).
+
+⚠ **The counter advances whether or not the top-up lands.** Both writes sit behind "a generator was
+found", but `DAT_00718cd0` was already incremented and the tick jumps to the end checks either way.
+A `zeppelin_run` scenario whose selected zeppelin carries no `egen` generator therefore burns
+through all four waves with nothing ever released.
+
+### Which zeppelin, and which spawn list
+
+`DAT_00718f2c` is setup record `+0x254`, written from **`zeppelin_type`** through `FUN_00458f60`:
+`cargo` → 0, `passenger` → 1, `military` → 2, anything else → 3, and 3 is rejected rather than
+stored. All 8 chapters author `cargo`, so slot 0 is the one in play throughout this install.
+`DAT_00718fd0[0..2]` are the three world nodes the mission builder resolved from the
+`cargo_zeppelin` / `passenger_zeppelin` / `military_zeppelin` values (the parser builds those keys by
+appending the literal `_zeppelin` at `0x00625688` to each type name), all `multiplayer1zep` here.
+
+⚠ **The builder deactivates all three zeppelins, except the selected one on `zeppelin_run`.** After
+the wave loop, `FUN_0045a390` resolves each of the three nodes and deactivates it; the only skip is
+`mission_type == 2` **and** this node being the `zeppelin_type` pick. So on the other four modes
+every zeppelin on the map is switched off by Instant Action itself, and on a zeppelin run the target
+is simply never switched off. Nothing here is a wake-up, and **the sequencer contains no zeppelin
+wake-up either** (it touches the generator's counters and nothing else), which corrects the standing
+note in [mission-entities.md](mission-entities.md) and `Session/AiGeneratorRuntime`. How this
+interacts with the mission script's own deactivation list (`support\c1\ia1.gw` names zeppelin nodes
+too, see [interp.md](interp.md)) was not traced and belongs to F12.
+
+The spawn list is `ia.json`'s own **`spawn_points`**, not a separate stored list. `FUN_0045a150`
+walks that dict, maps each scenario key to a mission-type id through `FUN_00458c20`, and appends the
+entries to the vector at `0x00718fe0 + id·0x14 + 8`; `FUN_00459ef0` writes them as 16-byte
+`[x, y, z, heading]` records with the heading converted to radians (`× 0.017453292`). The sequencer
+reads the same entry's `+8`/`+0xc` for the same mission type, so a wave can only ever land on a
+spawn point of the scenario it is running. The table at `0x00718fe0` is five 20-byte entries indexed
+by mission-type id, byte 0 being the availability flag `disallow_missions` clears.
+
+`zeppelin_run`'s four entries, the one scenario with fewer than eight, are therefore never read by
+the sequencer at all: that mode takes the other arm.
+
+### The end conditions
+
+Whatever the arm, the tick finishes by deciding whether the mission is over, and ends it with
+`+0xc58 = 1` and a **3-second** timer on the object at `0x0071b480`. The per-mode predicates:
+
+| mode | over when |
+|---|---|
+| 0 ace | every team-2 vehicle is destroyed and finished exploding |
+| 1 squadron | the same walk found no enemy that still counts |
+| 3 ground target | the object at `DAT_00718f50` reports through vtable slot `+0x14`, or there is no such object |
+| 4 stunt | every entry of the danger-zone list at `DAT_00718f78`…`DAT_00718f7c` reports done (`+0x48` clear or `+0x40` set), clearing byte `+0x4d` of the parallel list at `DAT_00718f88` as it goes |
+| 2 zeppelin | the selected zeppelin is gone, or its list at `+0x4c`…`+0x50` is empty, or its byte `+0x6` is set |
+
+The mode 2 row is also where the type-2 arm lands when the zeppelin pointer is null. The field
+meanings in the last three rows are read from their use here only, not from their own modules, so
+treat them as pointers for G13 rather than as a decoded end-condition model.
 
 ### Keys parsed but never authored, and authored but never parsed
 

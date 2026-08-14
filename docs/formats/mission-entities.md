@@ -259,9 +259,13 @@ so a door call must be scoped to the host's subtree; and the `cargobay` origin n
 bay floor inside the hull — an airframe spawned exactly there collides with the bay geometry on
 frame one (the remake drops fighters 12 m below it, an invented clearance; the binary's two
 untraced launch timers are not interpreted). C1/IA1's own mission setup **deactivates** its
-zeppelin at load (`support\c1\ia1.gw`) — the IA wave sequencer would wake it, so a remake session
-without that layer sees IA1's doors swing on a hidden hull; campaign missions (C1B/M03's
-`vostokzep`) show the visual.
+zeppelin at load (`support\c1\ia1.gw`), so a remake session without that layer sees IA1's doors
+swing on a hidden hull; campaign missions (C1B/M03's `vostokzep`) show the visual. ⚠ **Correction
+2026-08-14 (A4): the IA wave sequencer does not wake it.** `FUN_0045b9d0` touches only the
+generator's counters. What Instant Action does to zeppelins is the opposite: its mission builder
+deactivates all three of them, and on a `zeppelin_run` it merely declines to deactivate the one
+`zeppelin_type` selects ([instant-action.md](instant-action.md)). C1's `ia.json` runs
+`dogfight_squadron`, so its zeppelin is switched off by that path as well as by the script.
 
 ### The capacity puzzle
 
@@ -325,6 +329,17 @@ this does not settle: whether campaign missions have an equivalent feed (the scr
 generator lookup in `FUN_00465910` reads `capacityRemaining` but was not seen writing it), so the
 raw-byte read below is still worth having for the campaign case. Mechanism details:
 `analysis/m4-b7-group-slot/FINDINGS.md`.
+
+**Read in full 2026-08-14 (A4), and the branch is stronger evidence than it looked.** It is not one
+effect among several: on `mission_type` 2 it **replaces** the wave teleport outright, so the
+generator is the only way a `zeppelin_run` enemy ever gets airborne. The generator it feeds is the
+one whose host node (`+0x08`) is the node of the zeppelin `zeppelin_type` selects, found through
+`FUN_00451780` over the manager at `0x00654170`; the amount is the member count of the group just
+becoming current; and the feed happens once per wave change, not per tick. So on this one mode a
+zeppelin generator runs its whole life on a budget that arrives in wave-sized instalments, which is
+exactly the shape `capacity 0` plus a live top-up produces. Full reading:
+[instant-action.md](instant-action.md). This still says nothing about the campaign case, and the
+guidance below is unchanged.
 
 **Where that leaves it.** Every explanation that lives in the engine has been eliminated, which
 points the remaining suspicion at the *value*: what the engine reads for `capacity` may not be the

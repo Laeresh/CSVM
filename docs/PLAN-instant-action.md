@@ -21,8 +21,9 @@ Each needs a decode of its own and none of them blocks a flyable mission. Multip
 No item here is drawn from `backlog.md`, so the re-verification requirement does not apply. Two
 standing notes elsewhere in the record are closed by this plan as a side effect and are named in the
 items that close them: `Session/AiGeneratorRuntime`'s note that C1/IA1's mission setup deactivates
-its own zeppelin and that the Instant Action wave logic is what wakes it (F12), and M4 E16's note
-that voice trigger id 20 is unreachable until a team model exists (B7).
+its own zeppelin and that the Instant Action wave logic is what wakes it (F12; A4 has since
+disproved the second half, so what F12 closes is the corrected note), and M4 E16's note that voice
+trigger id 20 is unreachable until a team model exists (B7).
 
 ## Milestone goal
 
@@ -55,7 +56,7 @@ plus the words "marked INVENTED" if the decode comes back empty.
 | 8a | Splitscreen and the flight size cap | **The friendly flight is capped at 6 aircraft** (the data's own maximum: 1 pilot plus 5 wingmen), and wingmen are the ones that give. Flown wingmen = `min(num_wingmen, 6 - humans)`, so 2 humans with 5 configured wingmen fly 4 of them and 4 humans fly 2. Below the cap the configured count is honoured untouched. The cap is derived from the shipped 0-to-5 range; the clamp rule itself is INVENTED. |
 | 9 | Mission end and the wrap-up | **Both in scope.** Per-mode end conditions plus the wrap-up board with the four decoded rows (A1 found the shipped screen wires four of the six `langui` wrap-up strings, not five). |
 | 10 | Stunt flying with several pilots | **Every player flies their own zone set and the mission ends when all of them have finished**, which is what `StuntRace` already does. Not first past the post. |
-| 11 | Zeppelin mode's wave source | **Re-read `FUN_0045b9d0` (A4), then match.** The `mission-type-2` branch tops up a generator's capacity, and whether that replaces or supplements the teleport is not established. |
+| 11 | Zeppelin mode's wave source | **Decoded (A4, 2026-08-14): the generator, and only the generator.** The `mission-type-2` branch **replaces** the teleport, so on `zeppelin_run` every enemy launches out of the selected zeppelin's bay and none is ever moved by the sequencer. CSVM matches: zeppelin mode feeds `AiGeneratorRuntime` a wave's worth of capacity per wave change and runs no teleport at all. |
 | 12 | Adjacent original features | **Out of scope, filed as `BL-352` / `BL-353` / `BL-354`.** |
 | 13 | First playable slice | **Dogfighting an ace**, before any wave machinery exists. It is the smallest complete mission and it gives the later waves something working to land against. |
 | 14 | Player death | **One life by default; a downed pilot spectates.** The mission runs while any human is alive and the wrap-up shows the loss when the last one goes down. |
@@ -78,9 +79,9 @@ plus the words "marked INVENTED" if the decode comes back empty.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, A3, B6, D9, E11 | The option sets, the `ia.json` key census, the damage path, the whole setup path and the wave sequencer's spawn law are read out of the shipped data and out of `crimson.exe`. Confirm the trace, then implement. |
+| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, A3, A4, B6, D9, E11 | The option sets, the `ia.json` key census, the damage path, the whole setup path and both of the wave sequencer's arms are read out of the shipped data and out of `crimson.exe`. Confirm the trace, then implement. |
 | **Direction sound, magnitude a judgement call** | E10, G13, G14, H15, H16 | The behaviour is settled; the numbers and the presentation are not. Anything numeric here is TUNE, not fact. |
-| **Leads only, no mechanism yet** | A4, A5, B7, C8, F12 | These rest on decodes that have not happened. A4 and A5 exist to convert the rest of this row into the row above; budget for at least one of them ending in a disproof. A2 and A3 both already did, against the "block it" and "3 / 6 / 9" fallbacks. |
+| **Leads only, no mechanism yet** | A5, B7, C8, F12 | These rest on decodes that have not happened. A5 is the last of the four and converts G14; A4 settled F12's wave source (the generator, exclusively) but not how Instant Action's own zeppelin deactivation composes with the mission script's, so F12 stays here. Budget for a decode ending in a disproof: A2, A3 and A4 each did, against the "block it" and "3 / 6 / 9" fallbacks and against the standing "the wave logic wakes the zeppelin" note. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees, and other sessions may
 push or pop it concurrently. Never use a bare `git stash` in a worktree session here; use a local WIP
@@ -223,10 +224,14 @@ Traced by M4 B7 (`analysis/m4-b7-group-slot/FINDINGS.md`), function `FUN_0045b9d
 So wave members exist from mission start, deactivated, and are teleported in rather than spawned.
 The same function's `mission-type-2` branch adds the new group's member count to a generator's
 remaining capacity (`+0x80`) and stamps the generator's group (`+0x64`), which is how zeppelins launch
-fighters in Instant Action with `capacity 0`. Whether that branch replaces or supplements the
-teleport is A4's question, as is which internal id "mission type 2" is: the UI dropdown order puts
-stunt flying at 2 and the zeppelin run at 3, while the branch's behaviour only makes sense for the
-zeppelin run.
+fighters in Instant Action with `capacity 0`.
+
+A4 read the function whole on 2026-08-14 and the branch turns out to be **the `else` of the
+teleport, not an addition to it** (`CMP EBX,0x2` / `JNZ` at `0x0045ba9b`, the type-2 arm ending
+`JMP 0x0045bd83` past the whole teleport block). Mission type 2 is the zeppelin run, as A3 had
+already established from the parser. The spawn list the teleport draws from is `ia.json`'s own
+`spawn_points`, keyed by mission-type id, and the full reading is in
+[`formats/instant-action.md`](formats/instant-action.md).
 
 ## Ground rules
 
@@ -261,7 +266,7 @@ is M4's formation disproof, `B7` is the team model below.
 1. ☑ A1 The Instant Action format page: the whole configurable surface, written down
 2. ☑ A2 Does the original refuse friendly damage, or only friendly targeting?
 3. ☑ A3 The Instant Action setup path: what a wingman is given, and what `enemy_skill` becomes
-4. ☐ A4 Re-read `FUN_0045b9d0`: the zeppelin branch, the mission-type ids, the spawn-point source
+4. ☑ A4 Re-read `FUN_0045b9d0`: the zeppelin branch, the mission-type ids, the spawn-point source
 5. ☐ A5 The wrap-up screen's four counters: what each one actually counts
 
 ### Wave B — The primitives
@@ -442,7 +447,23 @@ rating-to-stat mapping read as "higher is better" everywhere will be wrong in tw
 (`Mech3/AiSkills.cs` carries the warning). (c) `natural_touch` deliberately has no
 `ai_skill_parameters` entry and asking for it throws.
 
-## A4 ☐ Re-read `FUN_0045b9d0`: the zeppelin branch, the mission-type ids, the spawn-point source
+## A4 ☑ Re-read `FUN_0045b9d0`: the zeppelin branch, the mission-type ids, the spawn-point source
+
+**Landed 2026-08-14. All three questions answered; the record is the "wave sequencer and the mission
+end" section of [`formats/instant-action.md`](formats/instant-action.md).** (1) The branch
+**replaces** the teleport: the discriminator at `0x0045ba9b` is an `if`/`else` on the mission-type
+id and the type-2 arm jumps past the entire teleport block, so on `zeppelin_run` the sequencer never
+picks a spawn point, never moves an aircraft and never reactivates one. Every enemy reaches the air
+out of the zeppelin's bay. (2) The ids were already A3's, and this read corroborates them from the
+other side: `FUN_0045a150` uses `FUN_00458c20`'s return directly as the index into the 20-byte
+per-mission-type table. (3) The spawn source is `ia.json`'s own `spawn_points`, appended per
+scenario by `FUN_00459ef0` as 16-byte `[x, y, z, heading-in-radians]` records into the very vector
+the sequencer reads, so trap (c) is answered: not a separate list. The reference point for the
+500 m test is the local player's vehicle (`DAT_0071c298`), and ⚠ **when nothing is 500 m away the
+index falls back to a literal 0 rather than a random pick**. A fourth thing fell out: the mission
+builder deactivates all three zeppelins and merely declines to deactivate the selected one on a
+zeppelin run, and the sequencer contains no zeppelin wake-up at all, which disproves the standing
+note this plan set out to close (see F12).
 
 **Goal.** Two answers left out of one function. Whether the `mission-type-2` branch replaces the
 teleport for that mode or runs alongside it. And which list the "at least 500 m from the player"
@@ -761,6 +782,17 @@ A3 settled the rest of a wave member: **team 2, group N, `primary_target player`
 rather than derived from a skill. The wave's skill is a **hit-point** tier (0.875/1.0/1.25) applied
 around the spawn, and an `accentID` of exactly 12 is re-rolled as `12 + rand() % 5`.
 
+A4 read the sequencer whole and tightened three details this item must honour.
+(a) **This teleport arm does not run on `zeppelin_run`** at all; that mode is F12's generator path
+and E11 should not try to serve both. (b) The draw is two-step and not a rejection loop: collect
+every spawn point at or beyond 500 m, then take `rand() % n` of that collection, and ⚠ **fall back
+to index 0, not to a random index, when the collection is empty**. (c) The fan places the **first**
+member exactly on the point and offsets only the rest, member `k` after it going
+`100 · ((k >> 1) + 1)` m at `±π/4` off the spawn heading with the sign `+` when `k & 3` is 1 or 2,
+so six aircraft sit at 0, 100, 100, 200, 200 and 300 m on sides −, +, +, −, −. One more rule that the
+degenerate cases turn on: the original's "is this wave clear" walk treats a **deactivated** aircraft
+as still present, so a wave parked inert never reads as cleared.
+
 **Approach.** An engine-free `Session/InstantActionWaves.cs` holding the selection and trigger logic,
 in the shape of `Session/GeneratorCycle.cs`, `Flight/VersusMatch.cs` and `Flight/ZeppelinDamage.cs`:
 no `GD.*`, no `Godot.` type, no `Node`, so it is unit-testable off-engine. `InstantActionRuntime`
@@ -792,31 +824,43 @@ TUNE; do not adjust them because the formation looks wide.
 **Goal.** `mission_type: zeppelin_run` flies a mission whose objective is a live zeppelin, destroyed
 through the existing M4 F18 damage path, with its waves arriving by whatever route A4 establishes.
 
-**Evidence (confidence: lead-only, pending A4).** The zeppelin runtime already exists in full:
-`Session/ZeppelinRuntime` places and flies records under `--zeppelins`, M4 F18 wires per-part damage
-and owns the kill, and M4 F19 fires the broadside. `ia.json` carries `zeppelin_type` (`cargo` in all eight)
-and the three `*_zeppelin` node names, all resolving to `multiplayer1zep` in this install.
-`Session/AiGeneratorRuntime` carries the standing note that **C1/IA1's own mission setup deactivates
-its zeppelin and the Instant Action wave logic would wake it**, which was out of M4's scope and is in
-this plan's. `ZeppelinRuntime.ZeppelinKilled` is the existing kill signal.
+**Evidence (confidence: the wave source traced by A4, the deactivation composition still lead-only).**
+The zeppelin runtime already exists in full: `Session/ZeppelinRuntime` places and flies records under
+`--zeppelins`, M4 F18 wires per-part damage and owns the kill, and M4 F19 fires the broadside.
+`ia.json` carries `zeppelin_type` (`cargo` in all eight) and the three `*_zeppelin` node names, all
+resolving to `multiplayer1zep` in this install; `zeppelin_type` parses to 0 cargo / 1 passenger /
+2 military and indexes the three resolved nodes. `ZeppelinRuntime.ZeppelinKilled` is the existing
+kill signal.
+
+⚠ **A4 disproved the standing note this item was written to close.** `Session/AiGeneratorRuntime`
+and `formats/mission-entities.md` said C1/IA1's setup deactivates its zeppelin and *the Instant
+Action wave logic would wake it*. The first half holds and has two independent causes (the mission
+script `support\c1\ia1.gw`, and Instant Action's own builder, which deactivates all three zeppelins
+on every mode but `zeppelin_run`). The second half is wrong: `FUN_0045b9d0` touches the generator's
+`capacityRemaining` and group and nothing else, and there is no wake-up anywhere in it. On a zeppelin
+run the target is simply **never deactivated by the builder** in the first place. What is still
+untraced, and is this item's, is how that skip composes with the mission script's own deactivation
+list, which names zeppelin nodes independently.
 
 **Approach.** Have `InstantActionRuntime` request the zeppelin runtime for this mission rather than
-requiring `--zeppelins`, resolve the objective node through `zeppelin_type`, and override the
-`deactivated` flag for the Instant Action zeppelin specifically (which is the wake-up the note
-describes). Route waves per A4. Subscribe `ZeppelinKilled` as the mode's win condition, handed to
-G13.
+requiring `--zeppelins`, and resolve the objective node through `zeppelin_type`. Rather than "waking"
+the zeppelin, match the builder: on `zeppelin_run`, **suppress the deactivation of the selected node**
+and let every other zeppelin stay off. Route waves per A4, which means the generator path only:
+on each wave change, add the new group's member count to the selected zeppelin's generator and stamp
+its group, and run no teleport. Subscribe `ZeppelinKilled` as the mode's win condition, handed to G13.
 
-**Model recommendation.** High if A4 says the branch replaces the teleport, because that is a second
-spawn path; medium if it supplements, because then E11 already does the work.
+**Model recommendation.** High. A4 settled that this is a second spawn path rather than a reuse of
+E11's, so the wave routing is this item's own work.
 
 **Verify.** A run on C1/IA1 in which the zeppelin flies (it does not today without `--zeppelins`) and
 is destroyable, with the `zep:` and `egen:` lines accounting for every enemy that appears. The
 `zeppelin-motion`, `zeppelin-damage`, `zeppelin-broadside` and `zeppelin-launch` suites unchanged,
 since none of their behaviour should move.
 
-**⚠ Traps.** (a) A `deactivated` record is placed but held for a mission-script wake-up; waking it
-here must be scoped to the Instant Action objective zeppelin and must not wake every deactivated
-record in the world. (b) The generator drop point is the origin node minus an invented 12 m
+**⚠ Traps.** (a) A `deactivated` record is placed but held for a mission-script wake-up. Whatever
+this item does about that must be scoped to the Instant Action objective zeppelin and must not
+touch every deactivated record in the world. Prefer the original's shape (do not deactivate it)
+over a wake-up, because per A4 no wake-up exists in the binary to copy. (b) The generator drop point is the origin node minus an invented 12 m
 clearance, because the authored `cargobay` sits on the bay floor and an airframe spawned exactly
 there dies into the hull on frame one; that value is already in `AiGeneratorRuntime` and must not be
 re-derived. (c) `BL-350` is open and blocked: generator-spawned planes crash inside closed hangars
