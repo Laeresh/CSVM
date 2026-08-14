@@ -2067,20 +2067,34 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   already applies elsewhere — rather than leaving the first assert to build synchronously.
   Alternatively, spread a compound event's misses across several frames instead of one dispatch
   batch.
-  ⚠ **Traps.** This evidence is the `--crash=` proxy (`FlightController.Crash()` → `CrashRuntime`),
-  not a captured aircraft `DamageLab` slider-drag session — `DamageLab.Reapply()` has no scripted
-  repro (E13/G15). The two share the same `EmitterDirector.Assert`/`WorldEffectsFactory`
+  **Confirmed at the controls, 2026-08-14** (interactive `--fly`, vsync on, real play — not the
+  `--crash=` proxy): `.scratch/logs/fly-20260814-210336.{log,hitches.jsonl}`, a session working
+  through the `DamageLab` panel, tripped `HitchMonitor` 31 times in ~7 s (frames 3373-4243; 6 of
+  those records lost to a sidecar-queue overflow, filed separately as `BL-356`) — **24 of the 25
+  that survived carry `effect_pool_miss`** as their named site, in the same paired-consecutive-frame
+  shape the `--crash=` proxy showed, spaced roughly every 40-90 frames as different parts/thresholds
+  were dragged for the first time. **This answers the open recurrence question below: yes,
+  repeatedly** — not a one-time session cost. It recurs because there are enough distinct
+  `(name, host, def)` keys (8 parts x armor+health x several `injure_anims` thresholds each) that a
+  real sweep through the panel keeps finding new, never-before-built ones; it is not that any single
+  key re-triggers construction on a repeat. The 25th trip (frame 4243) is a genuine outlier worth
+  naming separately: `frame_ms=79.91` with `samples=[]` — nothing in `PerfSample` claims any of it,
+  and every counter (`draws`/`prims`/`nodes`/`gc*`/`alloc`) sits at baseline. Unexplained by this
+  item's mechanism and not chased further here; possibly an OS-level stall rather than a CSVM one.
+  ⚠ **Traps.** The original diagnosis was the `--crash=` proxy alone (`FlightController.Crash()` →
+  `CrashRuntime`), not a captured aircraft `DamageLab` slider-drag session — `DamageLab.Reapply()`
+  still has no *scripted* repro (E13/G15). The 2026-08-14 controls capture above closes that gap
+  with a real one: the two share the same `EmitterDirector.Assert`/`WorldEffectsFactory`
   construction path, and the crash rig plays the same damage-stage template family
   (`crashRoots`'s `planeflakes`/`yellow_spark_02`/etc. are the `pdpanelN` effects `DamageLab`
-  triggers), so the mechanism should generalise — but that is inference, not a second measurement.
-  ⚠ **Open question this record does not answer: does the same cost recur on a second crash/damage
-  event in one session, or only the first?** `EmitterDirector`'s key includes the host `Node3D`, so
-  if a respawn or a fresh crash-piece spawn hands out new node instances, every repeat pays full
-  construction again — which would match the user's "reproducible" report better than a true
-  one-time cost would. `--crash=` cannot re-fire on an already-crashed plane (`docs/cli.md`), so
-  this needs either an interactive respawn-then-crash-again capture or a scripted twin for one,
-  neither of which exists today.
-  *Cross-refs:* `PLAN-perf-hitches` G15/G16 (the diagnosis), `BL-231` (the pool-size tuning item
+  triggers) — no longer inference alone.
+  ⚠ **Formerly-open question, now answered: does the cost recur across a session, or only once?**
+  Recurs — see the 2026-08-14 capture above (24 separate trips, not one). Still open: whether any
+  SINGLE `(name, host, def)` key re-triggers construction on its own repeat (a second drag of the
+  SAME slider back past the SAME threshold) — the capture shows many DIFFERENT keys firing once
+  each, not one key firing twice, so that narrower question is untested either way.
+  *Cross-refs:* `PLAN-perf-hitches` G15/G16 (the diagnosis), `BL-356` (the sidecar losing 6 of this
+  session's 31 trips), `BL-231` (the pool-size tuning item
   this is explicitly NOT — a size increase would not touch this cost), `docs/verification.md`
   PERF-14.
 
@@ -2951,6 +2965,32 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   hand-killed silently corrupts unattended runs.
   *Workaround on record:* kill the lingering Godot process for that shot; the hash it printed
   is still valid.
+
+- `BL-356` `[Bug]` **`HitchSidecar`'s queue (default depth 8, 3 s flush) loses records under a real
+  hitch storm — confirmed at the controls, not just a theoretical TUNE gap.** A user session
+  dragging the `DamageLab` sliders repeatedly (`.scratch/logs/fly-20260814-210336.{log,hitches.jsonl}`,
+  see `BL-355` for the mechanism these hitches share) tripped `HitchMonitor` **31 times** in ~7 s
+  (frames 3373-4243) but only **25 reached the sidecar/log** — three separate
+  `hitch sidecar queue overflowed dropped=N` warnings (`N` = 1, 2, 3; the counter resets after each
+  report per `HitchSidecar.Flush`, so the drops are additive: **6 records lost**, not 3). Both the
+  human-readable `[perf] hitch …` line and the JSON sidecar entry are written together at flush time
+  (`HitchSidecar.Flush`'s `WriteLogLine`+`WriteJsonLine` pair), so a dropped record vanishes from
+  *both* — not silently (the warning fires, per the module's own design intent), but a diagnosis
+  session reading the sidecar for "every hitch this session" is missing up to a fifth of them, and
+  exactly during the busiest, most interesting stretch.
+  *Fix shape:* `hitchSidecar.queueDepth`/`hitchSidecar.flushSeconds` are already `Config` keys
+  (TUNE) — raising depth or lowering the flush interval is a one-line config change with no code
+  risk, and is probably enough on its own for a solo-player session. Whether the DEFAULTS should
+  move, or whether a compound event (BL-355 alone can produce 6-7 trips in two frames) needs a
+  different policy (e.g. an immediate out-of-band flush the moment the queue nears full, rather than
+  waiting the full interval), is the open design question — the constant fix is cheap, the policy
+  question is not.
+  ⚠ **Traps.** Do not read this as evidence the instrument is unreliable in general: every drop was
+  reported (no silent gap), and the 25 records that DID land are exactly what diagnosed `BL-355` —
+  this is a capacity tuning gap under a specific heavy workload, not a correctness defect in the
+  detection or attribution logic.
+  *Cross-refs:* `BL-355` (the hitches this session's queue couldn't keep up with),
+  `PLAN-perf-hitches` B6 (`HitchSidecar`'s own design, `docs/architecture.md`).
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
   RunGame.ps1/RunDev.ps1) once tools/godot ships a Godot bundling **SDL ≥ 3.4.4**: the bundled
