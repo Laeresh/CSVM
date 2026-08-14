@@ -473,13 +473,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Weapons & combat
 
-- `BL-062` `[Research]` **Rocket firing order — the H-selector fidelity question.** Settle from the original
-  whether the player selects an individual **hardpoint** or the game just drains them in pylon
-  order. Our build drains the selected pylon fully before advancing, and since `BL-025` landed
-  (2026-07-30) H / D-pad Right cycles individual pylons even on a uniform-ammo loadout
-  (`WeaponCursor.NextSelectable` — the old `_ordnanceTypes.Length > 1` gate is gone). Meaningful
-  mixed-ordnance cycling arrives with the M4 configurator (mixed loadouts).
-
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
   (`messages.json` 126–129), implying world pickups that restore ammo. **Carries research
   risk:** the pickup entities have not been located, and they may be mission-scripted rather
@@ -651,6 +644,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `VELOCITY`; a fast launch would then visibly slow, as a drop-torpedo physically should. `CAP-28`
   films it; measurement can reuse `analysis/video-flight-calibration` if the HUD is in frame.
   `wep_14` is mountable via `--rocket=wep_14` (no stock loadout carries it).
+
+- `BL-357` `[Feature]` **The hardpoint selector steps one way only; the original cycles in both
+  directions.** *Evidence:* the user at the controls of the original, 2026-08-14: the player selects
+  an individual hardpoint (the half that settled `BL-062`, closed the same day), and the selection
+  can be stepped clockwise *and* counter-clockwise. Ours has exactly one selector input per weapon,
+  `H` / D-pad Right for pylons and `G` / D-pad Left for gun groups
+  (`FlightController.cs:1456`, `docs/controls.md`), and `WeaponCursor.NextSelectable`
+  (`WeaponCursor.cs:34`) only ever scans forward. *Fix shape:* a `PrevSelectable` backward scan
+  with the same empty-slot skipping, plus a second binding per selector, which is where this stops
+  being a two-line change: the flight keymap has no spare paired keys and the pad's D-pad is
+  already spent on the two forward steps. `BL-296`'s per-player ActionMap is the natural home for
+  the four named actions if it lands first.
+  ⚠ Traps: (a) **The cycle order itself is right and must not be touched** (user, 2026-08-14: ours
+  walks the pylons in the same order the original does). What is missing is the second direction,
+  nothing else, so a reverse step is `NextSelectable` walked backwards over the same sequence, not
+  a re-derivation of the order. (b) The observation is about hardpoints. The gun-group selector is
+  the analogous case but was not observed, so do not assume it cycles both ways either.
+  (c) Empty-slot skipping is not in question and must survive the change: both directions land on
+  an armed slot.
+  *Cross-refs:* `BL-067` (the configurator, where mixed loadouts finally make the direction
+  matter), `BL-296` (ActionMap/rebinding seam), `git log --grep=BL-062` for what settled the
+  per-hardpoint half.
 
 ## Flight model & collision physics
 

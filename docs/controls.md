@@ -15,7 +15,7 @@ Flags are specified in [`cli.md`](cli.md).
 | `Space` | B | fire guns |
 | `F` | A | fire rockets — one per pull |
 | `G` | D-pad ← | select gun group (one at a time) |
-| `H` | D-pad → | select ordnance |
+| `H` | D-pad → | select ordnance (steps forward only; the original also steps back, `BL-357`) |
 | `F5` | | damage lab on the flown plane — `--damage=` |
 | `B` | | weapon lab panel — `--weapon-lab` sessions only; its steppers arm the plane's live loadout and Space/`F` then fire it (`--weapon-lab=` picks the weapon, `--weapon-mount=` the mount, `--weapon-cycle=` steps the list) |
 | click | | weapon lab: park the held plane on the surface under the cursor, at the panel's stand-off, nose on it — `--weapon-click=x,y`, or `--weapon-target=x,y,z` / `--weapon-surface=<registry name>` (any of the fourteen surface ids; `dirt` means id 13, not "untagged") to place without a mouse at all |

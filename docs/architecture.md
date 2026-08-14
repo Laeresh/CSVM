@@ -1935,8 +1935,15 @@ nodes, then the fire gates: `Activated`, attack window, 15° barrel-on-solution 
 `NextArmed` is the firing cursor — the selected slot while it has rounds, else the next armed slot
 forward-wrapping (`-1` when all empty); `NextSelectable` is where the manual G/H step lands — the
 next armed slot strictly after the cursor, skipping empties. Each slot is its own position
-regardless of ordnance/weapon type, so H cycles even a uniform loadout. Stateless; proven through
+regardless of ordnance/weapon type, so H cycles even a uniform loadout. That per-hardpoint reading
+is confirmed against the original (user at the controls, 2026-08-14): the player picks a hardpoint,
+the game does not merely drain them in pylon order. Stateless; proven through
 `FireControl`'s interface (`FireControlTests`), not its own.
+The order it walks matches the original's (same observation), so the sequence is settled and not a
+knob.
+⚠ Both cursors scan **forward only**. The original steps its hardpoint selection in either
+direction, so a backward `PrevSelectable` over that same sequence and a second binding per selector
+are a known gap, not a decision (`BL-357`).
 
 ## src/Flight/Ballistics.cs
 The VELOCITY/ACCELERATION/GRAVITY integration every round steps with: a static, Godot-`Node`-free
