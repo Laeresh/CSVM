@@ -141,7 +141,7 @@ reading is wrong. `TanglerData` is parsed and unused — nothing is choked in M3
 
 | Key | n | Meaning |
 |---|---|---|
-| `CANNON` | 31 | flag: hitscan-style gun (pairs with `LOOPED_SOUND_NAME`) |
+| `CANNON` | 31 | flag: hitscan-style gun (pairs with `LOOPED_SOUND_NAME`). It is bit `0x40` of the parsed flags dword (`FUN_004ba6f0` at `0x004ba9ba`), and it is also **the filter on both halves of the Instant Action wrap-up's Shot %**, which counts cannon hits over cannon rounds fired and ignores ordnance ([instant-action.md](instant-action.md)) |
 | `LOOPED_SOUND_NAME` | 31 | looped firing sound def (`snd_30cal`, `snd_turretgun`) |
 | `FIRE` | 47 | muzzle event (below) |
 | `FLYOUT` | 48 | projectile model / anim / sound (below) |

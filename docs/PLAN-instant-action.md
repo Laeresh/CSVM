@@ -72,16 +72,17 @@ plus the words "marked INVENTED" if the decode comes back empty.
 | 1 | "The Instant Action ace is picked at random." | Every chapter's `ia.zrd.json` names one ace in full: `ace_name`, `ace_plane`, `ace_skill`, `ace_stats`, `ace_accentID` and a complete `ace_pattern` / `ace_colorN` / `ace_decalN` livery. Authored in 8 of 8, censused 2026-08-14. |
 | 2 | "A militia's aircraft list comes from the `vehicle.json` defs carrying its `paint_pattern`." | `LAYOUT.CSV`'s `IA_D_PLANEE0` is an eleven-row dropdown. Under the def reading the largest militia has three aircraft; under `.BM` pattern coverage Fortune Hunter covers exactly eleven. The two readings also disagree on Sacred Trust (defs give Hellhound alone, coverage gives Warhawk and Hellhound). |
 | 3 | "The original has formation or wingman AI to copy." | M4 B7, closed disproven 2026-08-13 (`analysis/m4-b7-group-slot/FINDINGS.md`): `group` is a mission-logic cohort id, nothing in steering, targeting or the mode machine reads it, and the nine-mode dispatch has no formation or wingman mode. Escort-looking behaviour rides `player`-trailer nets, which are authored per story mission. |
-| 4 | "Instant Action offers one environment per chapter, so eight." | The `langui` string block at 3650 holds seven. C2B is the omitted one, and independently it is the only chapter whose `ia.json` omits `player_plane` and `num_wingmen`. |
+| 4 | "Instant Action offers one environment per chapter, so eight." | The `langui` string block at 3650 holds seven, so one chapter is omitted, and it is **C1C**. The launcher `FUN_004174d0` maps the seven dropdown rows to chapter ids 1, 5, 6, 8, 2, 7, 4 and never 3 (A5). |
+| 4a | "C2B is the chapter Instant Action omits, and 'the clouds' is C1C." | ⚠ **This plan's own A1 got this backwards and it stood for part of a day.** The correct pairing is **the clouds = C2B**, with **C1C** not offered, which `CSVM/src/UI/LaunchMenu.cs` had already carried before this plan started. A1 reached the wrong answer by elimination: the world content never discriminated between C1C and C2B (both bar stunt flying, both ship no `dzones`, both run `zeppelin_run`), and the tiebreak used, C2B's missing `player_plane`/`num_wingmen`, means only that the setup screen supplies them, which A3 later showed it does for every chapter. A5 decoded the launcher and it agrees with `LaunchMenu.cs`. |
 | 5 | "CSVM already has a team model to hang this on." | `AimAssist.TeamOfPilot` is a documented stand-in: pilot index plus one, which makes every pane hostile to every other and every AI hostile to every other AI. `AimAssist.cs:310-317` says so in its own comment. |
 | 6 | "`enemy_skill` sets a wave's AI skill." | A3, 2026-08-14. The string `enemy_skill` does not exist in `crimson.exe` and the wave parser `FUN_00458e00` reads four keys, none of them that one. It is authored in all 8 chapters and read by nothing; a wave's nine pilot stats are rolled from a five-row table instead. |
 | 7 | "The mission-type ids follow the UI dropdown order." | A3, 2026-08-14. `FUN_00458c20` gives 0 ace, 1 squadron, **2 zeppelin run**, 3 ground target, **4 stunt flying**; the dropdown shows ace, squadron, stunt, zeppelin. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, A3, A4, B6, D9, E11 | The option sets, the `ia.json` key census, the damage path, the whole setup path and both of the wave sequencer's arms are read out of the shipped data and out of `crimson.exe`. Confirm the trace, then implement. |
+| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, A3, A4, A5, B6, D9, E11, G14 | The option sets, the `ia.json` key census, the damage path, the whole setup path, both of the wave sequencer's arms and all four wrap-up counters are read out of the shipped data and out of `crimson.exe`. Confirm the trace, then implement. |
 | **Direction sound, magnitude a judgement call** | E10, G13, G14, H15, H16 | The behaviour is settled; the numbers and the presentation are not. Anything numeric here is TUNE, not fact. |
-| **Leads only, no mechanism yet** | A5, B7, C8, F12 | These rest on decodes that have not happened. A5 is the last of the four and converts G14; A4 settled F12's wave source (the generator, exclusively) but not how Instant Action's own zeppelin deactivation composes with the mission script's, so F12 stays here. Budget for a decode ending in a disproof: A2, A3 and A4 each did, against the "block it" and "3 / 6 / 9" fallbacks and against the standing "the wave logic wakes the zeppelin" note. |
+| **Leads only, no mechanism yet** | B7, C8, F12 | All four Wave A decodes have landed, so what is left here rests on implementation choices rather than on unread code. A4 settled F12's wave source (the generator, exclusively) but not how Instant Action's own zeppelin deactivation composes with the mission script's, so F12 stays here. Budget for a decode ending in a disproof: A2, A3 and A4 each did, against the "block it" and "3 / 6 / 9" fallbacks and against the standing "the wave logic wakes the zeppelin" note. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees, and other sessions may
 push or pop it concurrently. Never use a bare `git stash` in a worktree session here; use a local WIP
@@ -145,22 +146,23 @@ renders the plural.
 
 ### Environment to chapter
 
-Seven strings, eight chapters. C2B is the excluded one, corroborated independently: it is the only
-chapter whose `ia.json` omits `player_plane` and `num_wingmen`. The rest map by content.
+Seven strings, eight chapters, and both the pairing and the row order are **decoded**: the launcher
+`FUN_004174d0` switches on the dropdown index and writes a chapter id (A5). **C1C is the omitted
+chapter.**
 
-| Environment | Chapter | Why |
+| Row | Environment | Chapter |
 |---|---|---|
-| an airfield | C1 | the Sea Haven airfield nodes (`ap_radiotwr`, `aphngr01.flt`) live only in C1 |
-| the clouds | C1C | high-altitude spawns (y 1230 to 1677), no `dz*` markers, `disallow_missions` bars stunt flying |
-| Hawaii | C3 | region code `HA`, confirmed in [`formats/spawns.md`](formats/spawns.md) |
-| Manhattan | C5 | region code `NY` |
-| the ocean | C1B | the coast of natural arches and sea caves (Rock Archway, Mermaid's/Pirate's Tunnel) |
-| Sky Haven | C4 | confirmed by the user 2026-08-14; C4 is the `RM` Rockies map, which elimination also reached |
-| a movie studio | C2 | the studio backlot landmarks `ramses` and `sghangar` |
+| 0 | an airfield | C1 |
+| 1 | the clouds | C2B |
+| 2 | Hawaii | C3 |
+| 3 | Manhattan | C5 |
+| 4 | the ocean | C1B |
+| 5 | Sky Haven | C4 |
+| 6 | a movie studio | C2 |
 
-Six of the seven are settled by content. Sky Haven was reached by elimination and **confirmed by the
-user on 2026-08-14** as C4. What remains assumed is the dropdown's *order*, taken to be the string-id
-order; A1 records that as open, and it is cheaply settled by flying each chapter against the label.
+This matches `CSVM/src/UI/LaunchMenu.cs`, which carried the same mapping before this plan started.
+⚠ A1 originally wrote this table with "the clouds" as C1C and C2B excluded; see wrong-claim 4a
+above for why that reasoning failed, and do not reintroduce it.
 
 ### The militia aircraft lists
 
@@ -267,7 +269,7 @@ is M4's formation disproof, `B7` is the team model below.
 2. ☑ A2 Does the original refuse friendly damage, or only friendly targeting?
 3. ☑ A3 The Instant Action setup path: what a wingman is given, and what `enemy_skill` becomes
 4. ☑ A4 Re-read `FUN_0045b9d0`: the zeppelin branch, the mission-type ids, the spawn-point source
-5. ☐ A5 The wrap-up screen's four counters: what each one actually counts
+5. ☑ A5 The wrap-up screen's four counters: what each one actually counts
 
 ### Wave B — The primitives
 
@@ -508,7 +510,28 @@ that way. (c) The spawn-point source may be a separate stored list rather than `
 confirm rather than assume, because Instant Action's four `zeppelin_run` entries are a different
 count from the other scenarios' eight.
 
-## A5 ☐ The wrap-up screen's four counters: what each one actually counts
+## A5 ☑ The wrap-up screen's four counters: what each one actually counts
+
+**Landed 2026-08-14. All four defined; the record is the "What the four numbers count" section of
+[`formats/instant-action.md`](formats/instant-action.md).** Callback 2352 resolves to
+`0x0040c644`, which formats all four rows from a snapshot block at `0x0064ad8c` that
+`FUN_00419630` fills at mission end from one live counter object at `0x0071d2a0`.
+**Shot % is cannon hits over cannon rounds fired, both by the local player**, so of the item's two
+candidate readings it is the one that excludes ordnance, and it is symmetric: bit `0x40` on the
+weapon def is the `CANNON` flag, the three hit sites test it directly, and the fire site is inside
+the arm the same bit selects. **Time** is a truncating elapsed clock in milliseconds. **Enemies Shot
+Down** sums two per-aircraft kill tables over the eleven types and counts only victims whose team is
+greater than 1, which silently excludes non-aircraft kills (they go to a bucket the wrap-up never
+reads) and, given A2, excludes wingmen you shoot down. **Danger Zones Completed** counts distinct
+zones, latched so a second run of the same zone does not count, and shows `0` rather than hiding on
+a non-stunt mission, which answers trap (b). Two edges are read from the instructions and not
+observed: a zero denominator is unguarded and would print a large negative number, and both shot
+counters are 32-bit but snapshotted as 16-bit. A bonus fell out of the launcher `FUN_004174d0`:
+it confirms the mission-type dropdown map (0/1/4/2) from the launcher side, and its
+environment-to-chapter-id map settles the environment table, including its row order. ⚠ **That map
+corrects A1: "the clouds" is C2B and the omitted chapter is C1C**, which is what
+`CSVM/src/UI/LaunchMenu.cs` already carried and what A1 contradicted by reasoning from world content
+that never discriminated between the two. Recorded as wrong-claim 4a.
 
 **Goal.** A sourced definition of each of the wrap-up screen's four numbers, so G14 renders the
 original's arithmetic rather than a plausible reimplementation of it. The one that genuinely needs
@@ -915,23 +938,39 @@ that follows a live aircraft rather than free-flying.
 **Goal.** A completed or failed mission shows the original's four rows: Time to Complete Mission,
 Enemies Shot Down, Danger Zones Completed, Shot %.
 
-**Evidence (confidence: direction-sound).** The strings are decoded at `langui` ids 1133 to 1138,
-with their formats (`IDS_IAWU_TIME` is `%02d:%02d`, `IDS_IAWU_PERCENTAGE` is `%d%%`), and
-`IA_WRAPUP.SCRIPT` holds the screen's layout. A1 (`docs/formats/instant-action.md`) found that the
-sixth string, *Total Kills*, is defined but never wired to a row by `LAYOUT.CSV` or
-`IA_WRAPUP.SCRIPT`, so this board has four rows, not five. **What each row counts is A5's decode**,
-which is why that question is a Wave A item and not a note here: Shot %'s numerator and denominator
-are unknown. This item builds the board; A5 supplies its arithmetic.
+**Evidence (confidence: traced).** The strings are decoded at `langui` ids 1133 to 1138, with their
+formats (`IDS_IAWU_TIME` is `%02d:%02d`, `IDS_IAWU_PERCENTAGE` is `%d%%`), and `IA_WRAPUP.SCRIPT`
+holds the screen's layout. A1 (`docs/formats/instant-action.md`) found that the sixth string,
+*Total Kills*, is defined but never wired to a row by `LAYOUT.CSV` or `IA_WRAPUP.SCRIPT`, so this
+board has four rows, not five. **A5 landed the arithmetic**, so nothing here is a judgement call any
+more:
+
+- **Time to Complete Mission** is elapsed mission time in milliseconds, rendered `ms / 60000` and
+  `(ms / 1000) % 60`, both truncating.
+- **Enemies Shot Down** counts only victims on a hostile team (team > 1) that are one of the eleven
+  aircraft types. Non-aircraft kills go to a bucket the screen never reads, and a wingman the player
+  shoots down does not count, which matters because A2 established the original lets you shoot one.
+- **Danger Zones Completed** counts **distinct** zones, latched, so a repeat run of the same zone
+  does not increment it. The row renders `0` on a mission with no zones rather than hiding.
+- **Shot %** is `100 × cannon hits / cannon rounds fired`, both by the local player. Ordnance is
+  excluded from **both** halves, so the ratio is over guns only.
+
+⚠ Two edges A5 read from the instructions but did not observe in the original, both of which this
+item must decide deliberately rather than reproduce blindly: the original does not guard a zero
+denominator (fire no cannon round and the row would print a large negative number), and its two shot
+counters are 32-bit but truncated to 16-bit at the snapshot. Neither is behaviour worth copying;
+name whichever choice is made as a divergence.
 
 **Approach.** A `CanvasLayer` board in the shape of `Flight/StuntScoreboard` and `Flight/VersusBoard`,
 built by `GameSession` on its own layer as those two are. The counters come from existing sources
 where they exist: `StuntMission` for zones, the kill accounting G13 already needs for the mission end,
 and the mission clock. Shot % needs a shots-fired and shots-hit counter, which `FireControl` and the
 projectile pool are the natural homes for; wire the counters A5's definition names, not both and a
-choice at render time.
+choice at render time. Two of the four counters need a `CANNON`-class filter on the weapon, matching
+the original's `0x40` flag; `WeaponDef` already carries the parsed key.
 
 **Model recommendation.** Medium. It is the third instance of a board shape that exists twice, and
-A5 has already taken the judgement out of the arithmetic.
+A5 has taken the judgement out of the arithmetic.
 
 **Verify.** A `--screenshot` of the board in each mission type with `--det`, so the layout is pinned;
 the numeric assertions ride G13's per-mode end tests, checking that the board's four values match the
@@ -940,9 +979,10 @@ session's own counters rather than checking the board can be drawn.
 **⚠ Traps.** (a) `--debug-scoreboard` is the existing convention for forcing a board visible in a
 scripted shot; follow it rather than inventing a new flag. (b) Race totals are deliberately not
 persisted as best times while stunt solo runs are; do not change either rule while adding a board
-that shows both. (c) Do not invent a Shot % definition to unblock the layout. If A5 has not landed,
-render the row as unavailable rather than picking a plausible formula, because a wrong percentage is
-indistinguishable from a right one on screen and will never be revisited.
+that shows both. (c) A5 has landed, so Shot % has one definition and it is not negotiable: cannon
+hits over cannon rounds fired. A wrong percentage is indistinguishable from a right one on screen
+and would never be revisited, so do not let a convenient counter that already exists stand in for
+the filtered one.
 
 ---
 
@@ -958,8 +998,10 @@ can host, with the lives setting beside them.
 rows mapping 1:1 onto `SessionSpec.MenuMode`'s ordinals, with input polled per frame through one
 `MenuInput` per player. The filtering rule is data: `disallow_missions` bars a scenario outright (C1C
 and C2B bar stunt flying), and a chapter with no `dzones` cannot host a stunt run (C1C and C2B again,
-per [`formats/missions.md`](formats/missions.md)). The environment ordering is the string-id order,
-which A1 records as an assumption.
+per [`formats/missions.md`](formats/missions.md)). The environment list and its order are decoded
+(A5, from the launcher `FUN_004174d0`) and match `LaunchMenu.cs`'s existing `Chapters` table:
+**C1, C2B, C3, C5, C1B, C4, C2**, with C1C not offered. The screen's environment step is therefore a
+filter over the existing roster, not a new mapping to invent.
 
 **Approach.** Extend `MenuMode` and the screen sequence rather than rewriting the menu; the existing
 re-entrancy rules (`ShowMenu` resets to Mode, clears locks, primes input edges from the current raw

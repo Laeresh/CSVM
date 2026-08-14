@@ -363,6 +363,15 @@ and leave gaps when retiring old ones.
   teleport, so on `zeppelin_run` the generator is not a supplement but the only route into the air
   (`PLAN-instant-action` A4, `formats/instant-action.md`). When you record a branch, record the
   jump it skips.
+- **SRC-9** — **Searching a function for a flag's bitmask does not prove the flag is not tested
+  there; compilers hoist a bit test into a shifted boolean.** Measured: `_DAT_0071d2fc` (the
+  wrap-up's Shot % denominator) increments inside `FUN_004b6820`, and searching that function for
+  the immediate `0x40` returns only stack offsets, which reads as "the fire counter has no weapon
+  filter" and would have made Shot % asymmetric. The function actually computes
+  `(weaponFlags >> 6) & 1` once at the top of each station loop and keeps it in a register, and the
+  increment sits inside that arm, so both halves of the ratio are `CANNON`-only after all. Confirm a
+  negative by reading the control flow around the site, not by failing to find the constant
+  (`PLAN-instant-action` A5, `formats/instant-action.md`).
 
 ## What this project cannot verify itself
 

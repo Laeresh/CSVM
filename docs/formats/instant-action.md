@@ -71,32 +71,35 @@ which is why the UI offers only four.
 
 ## Environment → chapter
 
-Seven strings, eight chapters. `mission_type` and `disallow_missions` are the two `ia.json` keys
-that decide what a chapter's Instant Action can host; they are reproduced here (not duplicating
-[spawns.md](spawns.md)'s key-meaning census, which does not carry per-chapter values) because
-they are direct evidence for the mapping below.
+Seven strings, eight chapters. **The mapping is decoded, and so is the dropdown's order**: the
+launcher `FUN_004174d0` switches on the environment dropdown index and writes a chapter id, so the
+row order below is the executable's own (see "What the launcher maps"). `mission_type` and
+`disallow_missions` are the two `ia.json` keys that decide what a chapter's Instant Action can host;
+they are reproduced here (not duplicating [spawns.md](spawns.md)'s key-meaning census, which does
+not carry per-chapter values) because they are what each row can then be *offered*.
 
-| Environment | Chapter | `mission_type` | `disallow_missions` | Why the chapter |
+| Row | Environment | Chapter | `mission_type` | `disallow_missions` |
 |---|---|---|---|---|
-| an airfield | C1 | dogfight_squadron | ground_target | the Sea Haven airfield nodes (`ap_radiotwr`, `aphngr01.flt`) live only in C1 |
-| the clouds | C1C | zeppelin_run | ground_target, stunt_flying | high-altitude spawns (y 1230 to 1677), no `dz*` markers |
-| Hawaii | C3 | dogfight_squadron | ground_target | region code `HA` |
-| Manhattan | C5 | stunt_flying | ground_target | region code `NY` |
-| the ocean | C1B | stunt_flying | ground_target | the coast of natural arches and sea caves (Rock Archway, Mermaid's/Pirate's Tunnel) |
-| Sky Haven | C4 | stunt_flying | ground_target | confirmed by the user 2026-08-14; the `RM` Rockies map |
-| a movie studio | C2 | stunt_flying | ground_target | the studio backlot landmarks `ramses` and `sghangar` |
-| *(none — excluded)* | C2B | zeppelin_run | ground_target, stunt_flying | the only chapter whose `ia.json` omits `player_plane` and `num_wingmen` |
+| 0 | an airfield | C1 | dogfight_squadron | ground_target |
+| 1 | the clouds | C2B | zeppelin_run | ground_target, stunt_flying |
+| 2 | Hawaii | C3 | dogfight_squadron | ground_target |
+| 3 | Manhattan | C5 | stunt_flying | ground_target |
+| 4 | the ocean | C1B | stunt_flying | ground_target |
+| 5 | Sky Haven | C4 | stunt_flying | ground_target |
+| 6 | a movie studio | C2 | stunt_flying | ground_target |
+| *(none)* | *(not offered)* | C1C | zeppelin_run | ground_target, stunt_flying |
 
-Six of the seven environments are settled by world content; Sky Haven was reached by elimination
-(the one environment string left once the other six were placed) and confirmed by the user as C4
-on 2026-08-14. C2B is excluded independently by its missing `player_plane`/`num_wingmen` keys, not
-only by being the leftover chapter.
+⚠ **C1C is the chapter Instant Action omits, not C2B.** The launcher's map covers chapter ids
+1, 5, 6, 8, 2, 7, 4 and never 3, and `CSVM/src/UI/LaunchMenu.cs` has carried this mapping
+(`c1, c2b, c3, c5, c1b, c4, c2`, C1C campaign/MP only) since before this page existed.
 
-**Open — the dropdown's *order* is assumed, not decoded.** The table above lists environments in
-the `langui` string-id order (3650 to 3656) and pairs each with its chapter by content, but
-nothing in the data states which chapter the *first* dropdown row launches. The cheap instrument
-that settles it is flying each chapter's Instant Action from the menu and reading the label
-against what is out the window; it needs no further decode.
+**This page originally had two of these rows wrong**, pairing "the clouds" with C1C and calling C2B
+the excluded chapter, on the strength of C2B being the only chapter whose `ia.json` omits
+`player_plane` and `num_wingmen`. That argument does not hold: the world-content evidence never
+discriminated between C1C and C2B in the first place (both bar stunt flying, both ship no `dzones`,
+both run `zeppelin_run`), so the pairing rested on elimination, and the missing keys mean only that
+the setup screen supplies them, which A3 showed it does for every chapter anyway. Do not
+reintroduce either claim.
 
 `num_wingmen` is `3` in all seven chapters that carry it (the eighth, C2B, carries neither
 `player_plane` nor `num_wingmen`); the wingman range is 0 to 5 per `ia_d_nwing`'s row count above.
@@ -492,6 +495,105 @@ four (Shot %'s numerator/denominator remains the open question).
 | Danger Zones Completed | `IDS_IAWU_DANGERZONES` (1187) | `%d` |
 | Shot % | `IDS_IAWU_PERCENTAGE` (1188) | `%d%%` |
 
+### What the four numbers count
+
+Decoded 2026-08-14 (A5). `gui_init` makes exactly one engine call, `callback($$E$$, 2352, GT, HT,
+IT, JT)`, and its arm in `crimson.exe` is `0x0040c644`-`0x0040c749`. That arm formats all four
+strings and writes them back through the four out-pointers, so the whole board is one function
+reading one record.
+
+**The wrap-up reads a frozen snapshot, not the live counters.** `FUN_00443090` is the mission-end
+handler: when the mode global `DAT_0071bb80` is **3** (Instant Action, set by the launcher
+`FUN_004174d0`) it calls `FUN_00419700`, which calls `FUN_00419630(&DAT_0064ad8c)` to copy the live
+counters into the snapshot block at `0x0064ad8c`. Every other mode takes `FUN_004194e0` and a
+different layout, which is why the snapshot has two shapes and only the mode-3 one is a set of four
+scalars.
+
+The live counters are all fields of **one object at `0x0071d2a0`**, zeroed together by
+`FUN_004a22a0` off the mission-load path:
+
+| Object offset | Snapshot offset | Field |
+|---|---|---|
+| `+0x00`…`+0x2b` | `+0x08` (summed) | kill table A, one dword per aircraft type 0 to 10 |
+| `+0x2c` | not read | kills of anything that is not one of the eleven aircraft |
+| `+0x30`…`+0x5b` | `+0x08` (summed) | kill table B, same indexing |
+| `+0x5c` | `+0x20` | cannon rounds the local player fired |
+| `+0x60` | `+0x22` | cannon rounds the local player hit with |
+| `+0x88` | `+0x14` | danger zones completed |
+
+**Time to Complete Mission** is snapshot `+4`, `ftol(clock × 1000.0)` over the mission clock at
+`0x0071b468`, so it is a straight elapsed time in milliseconds. The row renders
+`minutes = ms / 60000` and `seconds = (ms / 1000) % 60` (reciprocal multiplies `0x10624dd3 >> 6`
+and `0x45e7b273 >> 14`), both truncating rather than rounding.
+
+**Enemies Shot Down** is the sum of **both** per-aircraft kill tables over types 0 to 10. A kill is
+recorded in `FUN_004b9bc0` only when the victim's team (`+0x08`) is **greater than 1**, which is the
+decoded team space again, so a friendly or neutral kill never counts. Since the original applies
+friendly damage (below), a wingman you shoot down is a kill that this row will not show.
+
+⚠ **Two things are silently excluded.** The victim's category field `+0x67c` must be 0 or 4 to reach
+the per-aircraft tables at all; everything else lands in the object's `+0x2c` bucket, and the
+wrap-up never reads `+0x2c`. And `FUN_00426e30`, which turns the victim's def name into an aircraft
+index, returns **11** for a name it does not recognise, which is one past the summed range. So
+ground targets, zeppelins and anything off the eleven-aircraft list do not appear in "Enemies Shot
+Down". Which of the two tables a kill lands in is decided by a byte on the victim (`+0x988`, copied
+at spawn from roster-block byte `+0xa4`); because this row sums both, that split does not change it
+and was not chased.
+
+**Danger Zones Completed** is the object's `+0x88`, incremented by `FUN_00446990`. A zone completes
+when **more than one** of its gates has been flown (gate records from `+0x34` to `+0x38`, stride
+`0x14`, with a passed byte at `+0x10`), and the increment then happens only if the zone's own latch
+byte `+0x40` is still clear. The latch is set immediately afterwards.
+
+⚠ **So this counts distinct zones completed, once each. Flying the same zone a second time does not
+increment it.** The row is also present on every mission type; on a mission with no zones nothing
+completes one, so it renders `0` rather than being hidden.
+
+**Shot %** is `ftol(100.0 × snapshot+0x22 / snapshot+0x20)`, that is **hits over rounds fired**, and
+both halves carry the **same** filter:
+
+- The denominator increments in `FUN_004b6820`, the per-station fire loop, once per round that is
+  actually created (`FUN_005aef40` returned non-zero) and only when the firing vehicle is the local
+  player (`DAT_0071c298`).
+- The numerator increments at three sites (`0x004ba04e` in `FUN_004b9bc0`, `0x004bad0c` in
+  `FUN_004bab50`, `0x004c08c1` in `FUN_004c0880`, covering three kinds of thing hit), each guarded
+  by the shooter being the local player and by `TEST byte ptr [weaponDef], 0x40`.
+- Bit `0x40` is the **`CANNON`** flag. `FUN_004ba6f0` is the weapon-flags parser and its
+  `OR dword ptr [ESI], 0x40` at `0x004ba9ba` follows the `CANNON` key string at `0x0062b320`
+  ([weapons.md](weapons.md) lists `CANNON` on 31 entries).
+- The fire side carries the same filter even though no `0x40` immediate appears in `FUN_004b6820`:
+  the function hoists the bit to `(weaponFlags >> 6) & 1` at the top of each station and the
+  increment sits inside that arm. The ordnance arms of the same function create their rounds
+  through `FUN_005aef40` without ever touching the counter.
+
+⚠ **So Shot % is cannon hits over cannon rounds fired, both by the local player, and ordnance is
+excluded from both halves.** Of the two readings this could have had, it is the one that excludes
+ordnance, and it is symmetric. Corroboration that the pair belongs together: `FUN_00499490` packs
+exactly these two globals into one network message.
+
+Two edges G14 has to decide about rather than inherit. **Nothing guards a zero denominator**: fire
+no cannon round and the x87 divide yields infinity, which `ftol` turns into `0x80000000`, so the row
+would print a large negative number. That is read from the instructions, not observed in the
+original, and it should be handled deliberately. And **both counters are incremented as 32-bit
+dwords but snapshotted as 16-bit words**, so past 65535 the row wraps.
+
+### What the launcher maps
+
+`FUN_004174d0` is the Instant Action launcher and carries two dropdown-to-internal maps worth
+having. The mission-type dropdown index becomes the internal id **0 → 0, 1 → 1, 2 → 4, 3 → 2**,
+which reproduces the ace / squadron / stunt / zeppelin ordering settled from the parser side above,
+now confirmed from the launcher as well. The environment dropdown index becomes a chapter id
+**0 → 1, 1 → 5, 2 → 6, 3 → 8, 4 → 2, 5 → 7, 6 → 4**, and the chapter is then loaded as mission **1**
+(`FUN_004638f0(chapterId, 1)`), matching `<chapter>/IA1/`.
+
+No chapter folder name exists anywhere in `crimson.exe` (searched: no `c1b`, `c1c` or `c2b`
+string), so the executable never spells out which folder an id names. The ids are the eight chapter
+folders in alphabetical order, C1 = 1 through C5 = 8, which resolves the map to **C1, C2B, C3, C5,
+C1B, C4, C2** and leaves id 3 (C1C) unreferenced. That is the mapping `CSVM/src/UI/LaunchMenu.cs`
+has carried all along, decoded before this plan and restated in its `Chapters` comment, so this
+read is a second source for it rather than a new finding. It corrects the "Environment → chapter"
+table above, which A5 had wrong on two rows.
+
 ## Friendly fire
 
 **The original applies friendly damage.** A round from one aircraft damages another whatever the
@@ -504,7 +606,8 @@ on [turrets.md](turrets.md).
 
 ## Open
 
-- **The environment dropdown's order** is assumed to be the `langui` string-id order; settled
-  cheaply in-engine, not by further decode (see "Environment → chapter" above).
+- *(The environment dropdown's order and its chapter mapping were open here until A5 decoded the
+  launcher's own index-to-chapter-id switch; both are now settled in "Environment → chapter" above,
+  with C1C as the omitted chapter.)*
 - **"Total Kills" is defined but unwired** in the shipped UI (see "The wrap-up screen" above); G14
   should not build a fifth row for it.
