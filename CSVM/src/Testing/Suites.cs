@@ -161,12 +161,16 @@ public static class Suites
             "fired round that reaches the teammate still costs it HP (Decision 3/A2: targeting is " +
             "gated, damage never is)", TeamModel));
         into.Add(new TestHarness.Suite("instant-action",
-            "the C8 Instant Action runtime: an Instant Action display name (\"Warhawk\") " +
+            "the C8/D9 Instant Action runtime: an Instant Action display name (\"Warhawk\") " +
             "resolves to its gamez node and an unrecognised one resolves to null rather than a " +
             "guess, the ace's own spawn draw substitutes the LITERAL last index on a collision " +
             "with the player's (never a re-roll), a mixed ace_stats vector averages to one " +
-            "representative AI rating, and AiAircraftSpawner.Spawn given an authored team/livery " +
-            "wears them as-is — the ace lands on team 2 flying its configured airframe",
+            "representative AI rating, AiAircraftSpawner.Spawn given an authored team/livery " +
+            "wears them as-is (the ace lands on team 2 flying its configured airframe), the " +
+            "wingman fan/escort-chain/accent-id table and the decision-8a flight-size clamp are " +
+            "pure over their inputs, and a real spawn census puts N wingmen on team 1 flying the " +
+            "configured airframe with wingmen 2/4's PrimaryTargetName resolving to wingmen 1/3's " +
+            "own spawned name",
             InstantActionAce));
         into.Add(new TestHarness.Suite("world-turrets",
             "the world AA emplacements (C9b) place at their NODES patterns against the real C1 " +
@@ -3289,6 +3293,35 @@ public static class Suites
         var (clean, _) = InstantActionRuntime.ChooseAceSpawn(spawns, playerSpawnIndex: 1, draw: 0);
         ctx.Check(clean == 0, $"a non-colliding draw is used as-is: idx={clean}");
 
+        // D9: the wingman standing-order table (docs/formats/instant-action.md "The player and
+        // the wingmen") is pure over its 0-based index — fan placement, the escort chain (0/1/3
+        // escort the player; 2/4 escort wingmen 1/3), and the authored accent ids.
+        var slot0 = InstantActionRuntime.WingmanSlotFor(0);
+        ctx.Check(slot0 is { MetresOut: 100f, OffsetDeg: -45f, PrimaryTargetIsWingman: null, AccentId: 12 },
+            $"wingman 0: 100 m / -45°, escorts the player, accent 12: {slot0}");
+        var slot1 = InstantActionRuntime.WingmanSlotFor(1);
+        ctx.Check(slot1 is { MetresOut: 100f, OffsetDeg: 45f, PrimaryTargetIsWingman: null, AccentId: 14 },
+            $"wingman 1: 100 m / +45°, escorts the player, accent 14: {slot1}");
+        var slot2 = InstantActionRuntime.WingmanSlotFor(2);
+        ctx.Check(slot2 is { MetresOut: 200f, OffsetDeg: 45f, PrimaryTargetIsWingman: 1, AccentId: 15 },
+            $"wingman 2: 200 m / +45°, escorts wingman 1, accent 15: {slot2}");
+        var slot3 = InstantActionRuntime.WingmanSlotFor(3);
+        ctx.Check(slot3 is { MetresOut: 200f, OffsetDeg: -45f, PrimaryTargetIsWingman: null, AccentId: 13 },
+            $"wingman 3: 200 m / -45°, escorts the player, accent 13: {slot3}");
+        var slot4 = InstantActionRuntime.WingmanSlotFor(4);
+        ctx.Check(slot4 is { MetresOut: 300f, OffsetDeg: -45f, PrimaryTargetIsWingman: 3, AccentId: 16 },
+            $"wingman 4: 300 m / -45°, escorts wingman 3, accent 16: {slot4}");
+
+        // Decision 8a's flight-size clamp: 1-4 humans against 5 configured wingmen expects
+        // 5/4/3/2, and a below-cap case (2 humans, 2 configured) proves the configured count
+        // stands untouched. 0 configured always flies none.
+        ctx.Check(InstantActionRuntime.FlownWingmen(5, humans: 1) == 5, $"1 human, 5 configured: flies all 5");
+        ctx.Check(InstantActionRuntime.FlownWingmen(5, humans: 2) == 4, $"2 humans, 5 configured: clamped to 4");
+        ctx.Check(InstantActionRuntime.FlownWingmen(5, humans: 3) == 3, $"3 humans, 5 configured: clamped to 3");
+        ctx.Check(InstantActionRuntime.FlownWingmen(5, humans: 4) == 2, $"4 humans, 5 configured: clamped to 2");
+        ctx.Check(InstantActionRuntime.FlownWingmen(2, humans: 2) == 2, $"below the cap: 2 humans/2 configured stays 2");
+        ctx.Check(InstantActionRuntime.FlownWingmen(0, humans: 1) == 0, $"0 configured flies none");
+
         // The actual spawn integration: AiAircraftSpawner.Spawn given an authored scheme/team
         // (the C8 extension) wears them as-is — the ace lands on team 2 flying the configured
         // airframe, not a pilot-index-derived team.
@@ -3298,6 +3331,7 @@ public static class Suites
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         FlightController? ace = null;
+        var wingmen = new List<FlightController>();
         try
         {
             var live = new ProjectilePool(textures, null, null);
@@ -3334,11 +3368,31 @@ public static class Suites
                 $"the spawned ace carries the authored team, not a pilot-index default: team={ace.Team}");
             ctx.Check(ace.Name.ToString().Contains(aceNode),
                 $"the ace flies its configured airframe: {ace.Name}");
+
+            // D9's wingman census: N aircraft on team 1 (Decision 8: humans + wingmen share the
+            // player's side), flying the configured airframe. Spawned through the same
+            // AiAircraftSpawner.Spawn seam as the ace above, on AimAssist.PlayerTeam instead of
+            // InstantActionRuntime.EnemyTeam.
+            string wingmanNode = InstantAction.PlaneNodeFor("Fury")!;
+            for (int i = 0; i < 3; i++)
+            {
+                var wPos = new Vector3(500f + i * 10f, 500f, 0f);
+                var wPilot = AiPilot.HoldingCourse(wPos, wPos + Vector3.Forward);
+                wingmen.Add(spawner.Spawn(wingmanNode, wPos, wPos + Vector3.Forward, wPilot,
+                    scheme: null, team: AimAssist.PlayerTeam));
+            }
+            ctx.Check(wingmen.Count == 3, $"3 wingmen spawned: {wingmen.Count}");
+            ctx.Check(wingmen.All(w => w.Team == AimAssist.PlayerTeam),
+                $"every wingman carries team 1, not a pilot-index default: teams={string.Join(",", wingmen.Select(w => w.Team))}");
+            ctx.Check(wingmen.All(w => w.Name.ToString().Contains(wingmanNode)),
+                $"every wingman flies the configured airframe: {string.Join(",", wingmen.Select(w => w.Name))}");
         }
         finally
         {
             pool?.Free();
             ace?.Free();
+            foreach (var w in wingmen)
+                w.Free();
             textures.Dispose();
         }
     }

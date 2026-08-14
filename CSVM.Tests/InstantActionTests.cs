@@ -5,12 +5,12 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The Instant Action reader (docs/formats/instant-action.md, PLAN-instant-action.md B6):
-/// fixture units for the full record, the built-in defaults every optional key falls back to
-/// (matching the original's own <c>FUN_00458ff0</c>/<c>FUN_00459390</c> reset-then-overlay),
-/// the <c>dogfight_ace</c> zero-forcing rule, and the <c>--ia=</c> plain-JSON-object path — plus
-/// golden counts over the install's 8 shipped chapters so a reader change moves a test instead
-/// of silently drifting.
+/// The Instant Action reader (docs/formats/instant-action.md, PLAN-instant-action.md B6/D9):
+/// fixture units for the full record (including D9's <c>WingmanPlane</c>), the built-in defaults
+/// every optional key falls back to (matching the original's own
+/// <c>FUN_00458ff0</c>/<c>FUN_00459390</c> reset-then-overlay), the <c>dogfight_ace</c>
+/// zero-forcing rule, and the <c>--ia=</c> plain-JSON-object path — plus golden counts over the
+/// install's 8 shipped chapters so a reader change moves a test instead of silently drifting.
 /// </summary>
 public class InstantActionTests
 {
@@ -26,6 +26,7 @@ public class InstantActionTests
         Assert.Equal(new[] { "ground_target" }, def.DisallowMissions);
         Assert.Equal("Bloodhawk", def.PlayerPlane);
         Assert.Equal(4, def.NumWingmen);
+        Assert.Equal("Warhawk", def.WingmanPlane);
         Assert.Equal("cargo", def.ZeppelinType);
         Assert.Equal("probezep", def.CargoZeppelinNode);
         Assert.Equal("probezep", def.PassengerZeppelinNode);
@@ -70,6 +71,7 @@ public class InstantActionTests
         Assert.Empty(def.DisallowMissions);
         Assert.Equal("Devastator", def.PlayerPlane);   // player_plane/wingman_plane/ace_plane default
         Assert.Equal(0, def.NumWingmen);                // forced to 0 on dogfight_ace
+        Assert.Equal("Devastator", def.WingmanPlane);
         Assert.Null(def.ZeppelinType);                  // no decoded default for this key
         Assert.Equal("vostokzep", def.CargoZeppelinNode);
         Assert.Equal("vostokzep", def.PassengerZeppelinNode);
@@ -116,6 +118,7 @@ public class InstantActionTests
         Assert.Equal(new[] { "ground_target", "stunt_flying" }, def.DisallowMissions);
         Assert.Equal("Kestrel", def.PlayerPlane);
         Assert.Equal(2, def.NumWingmen);
+        Assert.Equal("Devastator", def.WingmanPlane); // unauthored in this fixture — the default
         Assert.Equal("cargo", def.ZeppelinType);
         Assert.Equal("probezep", def.CargoZeppelinNode);
 
@@ -174,6 +177,9 @@ public class InstantActionTests
             Assert.Equal(row.MissionType, def.MissionType);
             Assert.Equal(row.PlayerPlane, def.PlayerPlane);
             Assert.Equal(row.NumWingmen, def.NumWingmen);
+            // wingman_plane is authored by no shipped chapter (docs/formats/instant-action.md
+            // "Keys parsed but never authored"), so every chapter reads the built-in default.
+            Assert.Equal("Devastator", def.WingmanPlane);
             Assert.Equal(4, def.Waves.Count);
             for (int i = 0; i < 4; i++)
             {

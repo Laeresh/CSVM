@@ -2061,6 +2061,83 @@ public partial class GameSession : Node3D
                 }
             }
         }
+        // Instant Action's wingmen (PLAN-instant-action.md D9). NumWingmen is forced to 0 on
+        // dogfight_ace by InstantAction.BuildDef's own parse-time rule, so this and the ace block
+        // above are mutually exclusive without an extra mission-type test.
+        if (_instantAction is { } iaWingmen && iaWingmen.Def.NumWingmen > 0
+            && _rigs.Count > 0 && _rigs[0].Controller is { } leadForWingmen)
+        {
+            string? wingmanNode = InstantAction.PlaneNodeFor(iaWingmen.Def.WingmanPlane);
+            if (wingmanNode == null)
+            {
+                GD.PushWarning($"ia: wingman plane '{iaWingmen.Def.WingmanPlane}' is not one of " +
+                                "the eleven airframes — no wingmen spawned");
+            }
+            else
+            {
+                int humans = _rigs.Count;
+                int flown = InstantActionRuntime.FlownWingmen(iaWingmen.Def.NumWingmen, humans);
+                if (flown < iaWingmen.Def.NumWingmen)
+                {
+                    GD.Print($"ia: wingmen clamped to {flown} of {iaWingmen.Def.NumWingmen} " +
+                              $"configured ({humans} human(s), flight cap 6 — decision 8a)");
+                }
+                // player_fortune (A3/D9): the wingmen's shared livery. The six colour/decal
+                // values ride the setup SCREEN in the original, not ia.json, so the catalog's own
+                // inferred red/black/white (docs/formats/paint.md) stands in for every wingman.
+                var wingmanScheme = _liveryResolver.PaintCatalog(_zrdrPath)
+                    .Find(s => string.Equals(s.Pattern, "player_fortune", StringComparison.OrdinalIgnoreCase));
+                if (wingmanScheme == null)
+                {
+                    GD.PushWarning("ia: no 'player_fortune' entry in the paint catalog — wingmen " +
+                                    "fly unpainted/random");
+                }
+                var wmBasis = leadForWingmen.GlobalTransform.Basis;
+                var wmFwd = -wmBasis.Z;
+                var wmLeadPos = leadForWingmen.WorldPosition;
+                var wingmen = new FlightController?[flown];
+                for (int i = 0; i < flown; i++)
+                {
+                    var slot = InstantActionRuntime.WingmanSlotFor(i);
+                    var offsetDir = wmFwd.Rotated(Vector3.Up, Mathf.DegToRad(slot.OffsetDeg));
+                    var pos = wmLeadPos + offsetDir * slot.MetresOut;
+                    var pilot = AiPilot.HoldingCourse(pos, pos + wmFwd);
+                    // attackRating: 5, not null/--ai-attack= — the roster's skill vector is left
+                    // UNSET in the original (docs/formats/instant-action.md "The player and the
+                    // wingmen"), but a wingman still needs its own Gunner/Machine armed
+                    // unconditionally (like the ace, C8) so PrimaryTargetName/ActivationRange
+                    // below have something to set; leaving it null would only arm one when a CLI
+                    // launch happened to also carry --ai-attack=.
+                    var wingman = SpawnAiAircraft(wingmanNode, pos, pos + wmFwd, pilot,
+                        scheme: wingmanScheme, team: AimAssist.PlayerTeam, attackRating: 5);
+                    wingmen[i] = wingman;
+                    if (wingman == null)
+                        continue;
+                    // primary_target (A3/D9): 0, 1 and 3 escort the player; 2 and 4 escort
+                    // wingmen 1 and 3 — FlightController.SelectRankedTarget's own by-name/"player"
+                    // match, the same seam the D12 ranking already reads.
+                    if (pilot.Gunner != null)
+                    {
+                        pilot.Gunner.PrimaryTargetName = slot.PrimaryTargetIsWingman is { } escortIdx
+                            ? wingmen[escortIdx]?.Name.ToString()
+                            : "player";
+                    }
+                    // Every Instant Action actor's activation volumes are authored ±10000 m
+                    // (docs/formats/instant-action.md "Every actor is a synthetic aiv roster
+                    // block"), not the shipped min_ai_active_dist (2000 m) SpawnAiAircraft arms
+                    // by default.
+                    if (pilot.Machine != null)
+                        pilot.Machine.ActivationRange = 10000f;
+                    RegisterAiVoice(wingman, slot.AccentId);
+                }
+                int wmSpawned = wingmen.Count(w => w != null);
+                if (wmSpawned > 0)
+                {
+                    GD.Print($"ia: {wmSpawned} wingman(s) ({wingmanNode}) team={AimAssist.PlayerTeam}");
+                    state.What += $" + {wmSpawned} IA wingmen";
+                }
+            }
+        }
         if (_spec.AiPlanes is { Count: > 0 } aiPlanes && _rigs.Count > 0
             && _rigs[0].Controller is { } lead)
         {

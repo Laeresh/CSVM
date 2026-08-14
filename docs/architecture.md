@@ -220,7 +220,7 @@ clusters they delegate to.
 - `src/Session/EffectPools.cs` — the `data/effect_pools.json` reader: how many copies of each effect template the stage builds, per ROOT, scaled by player count.
 - `src/Session/FlightRigAssembler.cs` — assembles one player's flight rig: painted plane, `FlightController`, loadout/ordnance, HUD instruments, damage visuals, audio, stunt run, spawn, crash runtime.
 - `src/Session/AiAircraftSpawner.cs` — spawns an AI-piloted aircraft into a running session (M4 A2): the flight-essential subset of a rig, an `AiPilot` at the controls, shooter ids from 100.
-- `src/Session/InstantActionRuntime.cs` — owns one Instant Action mission's actor set (PLAN-instant-action.md C8): the loaded `InstantActionDef`, the ace's own spawn draw, and its team/rating.
+- `src/Session/InstantActionRuntime.cs` — owns one Instant Action mission's actor set (PLAN-instant-action.md C8/D9): the loaded `InstantActionDef`, the ace's own spawn draw and team/rating, and the wingmen's fan placement/escort chain/flight-size clamp.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in.
 - `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (M4 B6, `--generators`): load-time drop rules, per-cycle stepping, spawns through `GameSession.SpawnAiAircraft`.
 - `src/Session/AiVoiceRuntime.cs` — wires E16's dispatch into a session: the decoded event sources (hit-path DI, Downed death cries, acquisition call-outs, taunts) played through `CombatVoice` + `WorldSounds.PlayOneShot`.
@@ -949,9 +949,11 @@ notes reserve `LaunchMenu.cs` for H15/H16 alone. Fixture units + install goldens
   `dogfight_ace` — a decoded PARSE-time rule (not a spawn-time one), so it fires even on an
   authored non-zero wave count; none of the 8 shipped chapters' own `mission_type` is
   `dogfight_ace`, so this only exercises on a `--ia=`/wizard-built ace mission.
-⚠ `wingman_plane`, the wave-only `enemy_accentID`, and `ground_target_name`/`ground_target_node`
-  are decoded but deliberately not modelled here (D9's field to add / a mode nothing can reach);
-  do not add them speculatively — see the class doc comment for why each is out.
+⚠ `WingmanPlane` (D9) reads `wingman_plane`, defaulting to `"Devastator"` like `PlayerPlane`/
+  `AcePlane` — the same built-in-defaults table, since the parser resets all three plane fields
+  together. The wave-only `enemy_accentID` and `ground_target_name`/`ground_target_node` are
+  decoded but deliberately not modelled here (E11's field to add / a mode nothing can reach); do
+  not add them speculatively — see the class doc comment for why each is out.
 ⚠ `AceStats` reuses `Mech3.AiSkillVector` (the roster skill-slot type), not a new type — the
   field order is INFERRED (every shipped chapter carries nine 9s, so nothing in the data can
   settle it).
@@ -4177,11 +4179,23 @@ failure or absent flag, which is what keeps every other mode untouched by its ex
 (`string, Vector3, Vector3, AiPilot, PaintScheme?, int?, int?`) for this: the method GROUP passed
 to `AiGeneratorRuntime`'s constructor must stay at exactly four parameters, since C# does not
 extend a method-group-to-delegate conversion over trailing optional ones. `BuildFlightRigs` spawns
-the ace (`dogfight_ace` only; D9/E11/F12 add the rest) right after the player voice registration,
+the ace (`dogfight_ace` only; E11/F12 add the rest) right after the player voice registration,
 through that overload, with the authored `PaintScheme`/`InstantActionRuntime.EnemyTeam`/rating —
 the ace's own spawn-point draw is `InstantActionRuntime.ChooseAceSpawn` over
 `Rng.Stream(Rng.Spawn)`, one call after the player's own `ChooseSpawnBase` draw in the same
-stream, so a `--det` run reproduces it.
+stream, so a `--det` run reproduces it. Right after the ace block, D9's wingman block spawns
+`InstantActionRuntime.FlownWingmen(NumWingmen, _rigs.Count)` wingmen (`NumWingmen` is 0 on
+`dogfight_ace`, so the two blocks never both fire) on `AimAssist.PlayerTeam`, fanned off
+`_rigs[0]`'s pose by `WingmanSlotFor`, wearing the paint catalog's `player_fortune` entry (no
+RNG draw, same reason the ace's scheme is worn as-is), armed at a fixed `attackRating: 5` (the
+roster skill vector is UNSET in the original, but `SpawnAiAircraft` only builds a `Gunner`/
+`Machine` at all when `attackRating ?? _spec.AiAttackSkill` resolves to something — passing 5
+explicitly, rather than null, is what keeps a wingman armed on a CLI launch that carries no
+`--ai-attack=`). Each wingman's `AiPilot` is kept as a local so its `Gunner.PrimaryTargetName`/
+`Machine.ActivationRange` can be set AFTER `SpawnAiAircraft` has populated them — wingmen 2 and
+4's target is the ALREADY-SPAWNED `FlightController` for wingmen 1/3's own `.Name` (ascending
+spawn order is load-bearing here, not just cosmetic), read off the real spawned node rather than
+reconstructing the original's `<plane>_ia1`-style roster name.
 ⚠ **It parses no args and resolves nothing** — the Launcher hands it the one `SessionSpec` its
   session is built from; **a new flag is a SessionSpec change**. `_menuPads` is the deliberate
   exception: join-flow session state riding the `LauncherContext`, never the spec.
@@ -4762,18 +4776,29 @@ too, so the split is readable off the `CRASH … def=` line headlessly.
 
 ## src/Session/InstantActionRuntime.cs
 Owns one Instant Action mission's actor set (PLAN-instant-action.md), as it grows across the
-plan's later waves — this item (C8) wires only `dogfight_ace`. Holds the loaded `InstantActionDef`
-plus two static, engine-free helpers `GameSession.BuildFlightRigs` calls: `ChooseAceSpawn` (the
-setup path's own draw — `rand() % (count - 1)` over the scenario's spawn list, the LITERAL last
-index substituted, never a re-roll, on a collision with the player's own chosen index) takes the
-caller's `rand()` pull as a plain `uint` rather than touching an RNG itself, so it stays pure and
-unit-testable; `RepresentativeRating` collapses an `AiSkillVector` into the one flat 1–9 rating
-CSVM's own AI tuning takes (every shipped `ace_stats` is a uniform 9, so this is an averaging
-policy for a hand-authored non-uniform `--ia=` file, not a decode). `EnemyTeam` (`AimAssist.PlayerTeam
-+ 1` = 2) is Decision 4's team id for every Instant Action enemy — waves (E11) are cohorts inside
-this one team, not teams of their own.
+plan's later waves — C8 wired `dogfight_ace`'s ace, D9 adds the wingmen. Holds the loaded
+`InstantActionDef` plus static, engine-free helpers `GameSession.BuildFlightRigs` calls:
+`ChooseAceSpawn` (the setup path's own draw — `rand() % (count - 1)` over the scenario's spawn
+list, the LITERAL last index substituted, never a re-roll, on a collision with the player's own
+chosen index) takes the caller's `rand()` pull as a plain `uint` rather than touching an RNG
+itself, so it stays pure and unit-testable; `RepresentativeRating` collapses an `AiSkillVector`
+into the one flat 1–9 rating CSVM's own AI tuning takes (every shipped `ace_stats` is a uniform 9,
+so this is an averaging policy for a hand-authored non-uniform `--ia=` file, not a decode).
+`EnemyTeam` (`AimAssist.PlayerTeam + 1` = 2) is Decision 4's team id for every Instant Action
+enemy — waves (E11) are cohorts inside this one team, not teams of their own. `WingmanSlotFor(i)`
+(D9, docs/formats/instant-action.md "The player and the wingmen") is the decoded per-wingman
+record: the `100 · ((i >> 1) + 1)` m / ±45° fan offset off the player's spawn heading (the same
+pattern the wave sequencer's own teleport uses), which of wingmen 1/3 wingmen 2/4 escort (null =
+escorts the player), and the authored accent id (12/14/15/13/16). `FlownWingmen(configured,
+humans)` is decision 8a's flight-size clamp — `min(configured, 6 - humans)`, INVENTED, never
+applied silently (the caller must log it).
 ⚠ **Environment→chapter resolution is the launch MENU's job (H15), not this class's** — a
   `--ia=<path>` CLI launch already names its chapter via `--chapter=`; nothing here derives one.
+⚠ **`WingmanSlotFor`/`FlownWingmen` place and clamp only** — they say nothing about livery, team,
+  or the actual `AiGunner`/`AiModeMachine` wiring; `GameSession.BuildFlightRigs` sets
+  `PrimaryTargetName` and `ActivationRange` itself, after `SpawnAiAircraft` has populated the
+  pilot's `Gunner`/`Machine` (both start null on a fresh `AiPilot`), because a helper here has no
+  spawned `FlightController` to name.
 
 ## src/Session/GeneratorCycle.cs
 The decoded egen launch timing law for ONE generator (M4 B6 + F20), pure over `Step` calls (no

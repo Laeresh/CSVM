@@ -119,6 +119,7 @@ public static class InstantAction
             DisallowMissions = Strings(d.List("disallow_missions")),
             PlayerPlane = d.Str("player_plane") ?? DefaultPlaneName,
             NumWingmen = numWingmen,
+            WingmanPlane = d.Str("wingman_plane") ?? DefaultPlaneName,
             Waves = waves,
             ZeppelinType = d.Str("zeppelin_type"),
             CargoZeppelinNode = d.Str("cargo_zeppelin") ?? DefaultZeppelinNode,
@@ -279,12 +280,11 @@ public static class InstantAction
 /// not repeat either, by design (PLAN-instant-action.md B6: "keep both where they are and have
 /// the def carry the rest").</para>
 ///
-/// <para><c>wingman_plane</c> and the wave-only <c>enemy_accentID</c> are decoded (both parsed
-/// by the original, both authored by no shipped chapter) but not modelled here; they are D9's
-/// field to add when the wingman/wave spawn needs them. <c>ground_target_name</c>/
-/// <c>ground_target_node</c> belong to the <c>ground_target</c> mission type, which every
-/// chapter's own <c>disallow_missions</c> bars and this milestone does not implement, so they
-/// are left out entirely rather than modelled for a mode nothing can reach.</para>
+/// <para>The wave-only <c>enemy_accentID</c> is decoded (parsed by the original, authored by no
+/// shipped chapter) but not modelled here; it is E11's field to add when the wave spawn needs it.
+/// <c>ground_target_name</c>/<c>ground_target_node</c> belong to the <c>ground_target</c> mission
+/// type, which every chapter's own <c>disallow_missions</c> bars and this milestone does not
+/// implement, so they are left out entirely rather than modelled for a mode nothing can reach.</para>
 /// </summary>
 public sealed class InstantActionDef
 {
@@ -301,6 +301,11 @@ public sealed class InstantActionDef
     /// <summary>Clamped to 0–5, and forced to 0 whenever <see cref="MissionType"/> is
     /// <c>dogfight_ace</c> — the ace duel is solo in the data, not only in the UI.</summary>
     public required int NumWingmen { get; init; }
+
+    /// <summary>The wingmen's aircraft, the UI's singular display name — defaults to
+    /// <c>"Devastator"</c> when unauthored, same as <see cref="PlayerPlane"/>/<see cref="AcePlane"/>
+    /// (PLAN-instant-action.md D9).</summary>
+    public required string WingmanPlane { get; init; }
 
     /// <summary>Waves 1 to 4, in order (<c>group1</c>…<c>group4</c>) — always 4 entries; a wave
     /// with no <c>groupN</c> key at all (or an authored <c>null</c>) reads as the built-in

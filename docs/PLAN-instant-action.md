@@ -282,7 +282,7 @@ is M4's formation disproof, `B7` is the team model below.
 
 ### Wave D — Wingmen
 
-9. ☐ D9 Wingman spawn
+9. ☑ D9 Wingman spawn
 
 ### Wave E — Waves
 
@@ -783,7 +783,38 @@ that misleads whoever reads that line next. Fixed with `SpawnPicker.ScenarioOver
 
 # Wave D — Wingmen
 
-## D9 ☐ Wingman spawn
+## D9 ☑ Wingman spawn
+
+**Landed 2026-08-14.** `Mech3/InstantAction.cs` gained `InstantActionDef.WingmanPlane` (reads
+`wingman_plane`, defaulting to `"Devastator"` like `PlayerPlane`/`AcePlane` — authored by no
+shipped chapter, so every install-golden chapter reads the default). `Session/InstantActionRuntime.cs`
+gained two pure static helpers: `WingmanSlotFor(i)` — the decoded per-wingman standing order
+(`100 · ((i >> 1) + 1)` m at ±45° off the player's spawn heading, which of wingmen 1/3 wingmen
+2/4 escort (null = the player), the authored accent id 12/14/15/13/16) — and `FlownWingmen`,
+decision 8a's `min(configured, 6 - humans)` flight-size clamp. `GameSession.BuildFlightRigs`
+spawns them right after the ace block (mutually exclusive with it: `NumWingmen` is parse-time
+forced to 0 on `dogfight_ace`), on `AimAssist.PlayerTeam`, fanned off `_rigs[0]`'s pose, wearing
+the paint catalog's `player_fortune` entry (no RNG draw, same reason the ace's scheme is worn
+as-is) and armed at a fixed `attackRating: 5` so every wingman's `Gunner`/`Machine` exist
+regardless of `--ai-attack=`. Each wingman's `AiPilot` is kept as a local so
+`Gunner.PrimaryTargetName`/`Machine.ActivationRange` (10000 m, the decoded activation-volume
+override) can be set AFTER `SpawnAiAircraft` has populated them; wingmen 2 and 4's target is the
+already-spawned `FlightController.Name` for wingmen 1/3 (ascending spawn order is load-bearing),
+read off the real spawned node through the existing `AiGunner.PrimaryTargetName`/
+`FlightController.SelectRankedTarget` seam (M4 D12) rather than a new mechanism — the escort
+chain is targeting-only, matching A2's decoded friendly-fire finding: a wingman the player (or
+another wingman) shoots down is correct, not a bug, and no gate was added. The clamp is logged
+when it fires (`ia: wingmen clamped to N of M configured (...)`), never applied silently.
+Verification: the `instant-action` suite gained the wingman fan/escort/accent-id table asserted
+pure over all five indices, the decision-8a clamp table (1–4 humans against 5 configured
+expecting 5/4/3/2, plus the below-cap 2-vs-2 case), and a real `AiAircraftSpawner.Spawn` census
+proving 3 wingmen land on team 1 flying the configured airframe. Plus a manual
+`--det --ia=<path> --chapter=C1 --frames=120 --screenshot=` run on a hand-authored
+`dogfight_squadron`/3-wingmen/Fury mission: the log shows `ia: 3 wingman(s) (player_fury) team=1`,
+each `ai voice:` line naming the right accent (12/14/15), and the AI mode machine actually
+driving them (`patrol -> avoid crash -> patrol`), proving the whole build path — not just the
+suite's direct `Spawn()` call — fires for real. `.\RunTests.ps1`: build clean, 1181/1181 unit
+tests, 55/55 engine suites (the extended one included), all 14 golden hashes unchanged.
 
 **Goal.** `num_wingmen` friendly aircraft fly with the player, in the configured wingman aircraft, on
 team 1, doing whatever A3 says the original gives them.
@@ -822,7 +853,13 @@ triple is inferred from artwork (`red, black, white`), which is stated as an inf
 to the flight rather than consuming the wingman budget, up to a flight of 6 (decisions 8 and 8a).
 Only past that cap do wingmen give way, `min(num_wingmen, 6 - humans)`, and the clamp must be
 reported in the spawn log rather than applied silently, since a player who asked for 5 wingmen and
-got 2 has no other way to find out why.
+got 2 has no other way to find out why. (d) **Found while landing:**
+`GameSession.SpawnAiAircraft`'s `Gunner`/`Machine` are only built when
+`attackRating ?? _spec.AiAttackSkill` resolves to something, so a wingman spawned with
+`attackRating: null` (the naive reading of "skill vector unset") would never get an
+`AiGunner`/`AiModeMachine` at all on a CLI launch that carries no `--ai-attack=` — silently
+dropping the whole `primary_target` mechanism this item exists to wire. Fixed by passing a fixed
+`attackRating: 5`, matching the ace's own unconditional arming.
 
 ---
 

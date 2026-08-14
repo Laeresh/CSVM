@@ -347,6 +347,45 @@ an upper bound, and the correction to the 137.9 mph equilibrium are on `BL-115` 
   *Variations:* one flight each — repeat with `--chapter=C3`, then `--chapter=C2`; (d)'s four
   untouched chapters need only a glance in each.
 
+### C1 · Bloodhawk — Instant Action wingmen (`--ia=`)
+
+Save this as `ia-wingmen-test.json` next to the repo, then:
+
+```powershell
+./RunGame.ps1 --ia=ia-wingmen-test.json --chapter=C1
+```
+```json
+{
+  "mission_type": "dogfight_squadron",
+  "player_plane": "Bloodhawk",
+  "num_wingmen": 3,
+  "wingman_plane": "Fury"
+}
+```
+
+- `PT-50` `[Own]` **D9's wingman flight (`docs/PLAN-instant-action.md` D9, landed 2026-08-14).**
+  Three Fury wingmen spawn on team 1 alongside the player's Bloodhawk, fanned 100/100/200 m off
+  its spawn heading at ±45°, escorting per the decoded `primary_target` chain (0/1 escort the
+  player directly; 2 escorts wingman 1). No original splitscreen/Instant Action reference exists
+  for this — every call here is a judgement on our own remake, and this is not a thing a suite can
+  answer (the suite only proves the count/team/airframe/pure math). *Look for:*
+  - (a) **does it read as a flight** — do the three Fury wingmen sit in a plausible formation
+    around the Bloodhawk at spawn, or does the fan look wrong (too tight, too spread, overlapping,
+    behind rather than beside);
+  - (b) **do they actually fly** — watch a minute or two: do the wingmen hold a sensible course
+    near the player rather than drifting off alone or diving into terrain (the D11 mode machine is
+    driving them, not a scripted formation, so some independent movement is expected and correct);
+  - (c) **A2's decoded friendly fire** — shoot a wingman down. This is supposed to be possible
+    (Decision 3/A2: the original applies friendly damage) — confirm it feels like a bug in the
+    HUD/feedback (no distinguishing "friendly" cue) rather than in the mechanic itself, since no
+    gate was added on purpose.
+
+  *Blocks:* nothing open yet — a fail on (a)/(b) is fresh evidence for the placeholder `AiPilot`
+  law (Wave D/E's own open scope, not this item's decode) or a new `BL` item; (c) reads confirm
+  Decision 3/A2 rather than opening anything.
+  *Variations:* `"num_wingmen": 5` with 1–2 `--players=` to see decision 8a's clamp in the spawn
+  log; any other `mission_type` besides `dogfight_ace` (which forces wingmen to 0).
+
 ---
 
 ## Everything else
