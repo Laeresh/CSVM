@@ -480,14 +480,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`WeaponCursor.NextSelectable` — the old `_ordnanceTypes.Length > 1` gate is gone). Meaningful
   mixed-ordnance cycling arrives with the M4 configurator (mixed loadouts).
 
-- `BL-065` `[Feature]` `[Blocked: M4]` **M3-deferred gun mechanics — firing heat and cannon jam** (scoped out of
-  `docs/plans/PLAN-M3-weapons.md` 2026-07-22, decision 4: friction with no combat pressure to justify
-  it while nothing shoots back). **The constants are exact, so nobody needs to re-derive them:**
-  `weapons.json` `FIRING_HEAT` on 4 entries (30-cal = 5.0); `vehicle.json` `cannon_jam` on
-  `player_airplane` = `heat_safe_limit 1000`, `heat_dissipation_rate 50`, `jam_chance 0.1`.
-  Heat accumulates per shot, dissipates at 50/s, and past the safe limit each shot has a 10 %
-  jam chance. Pick this up when there is combat pressure — i.e. alongside or after M4 AI.
-
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
   (`messages.json` 126–129), implying world pickups that restore ammo. **Carries research
   risk:** the pickup entities have not been located, and they may be mission-scripted rather

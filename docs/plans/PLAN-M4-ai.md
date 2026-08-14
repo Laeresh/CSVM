@@ -14,8 +14,9 @@ of that commit. The ticked checklist items were front-loaded by other plans (A1 
 D10 and most of A3 via the 2026-08-10 decompile pass), not started here. On scheduling, backlog
 items `BL-068`, `BL-069` and `BL-347` were re-verified still-open and absorbed into this plan
 (deleted there); `BL-065`, `BL-222`, `BL-226`, `BL-233`, `BL-291` and `BL-343` stayed in
-`backlog.md`, blocked on this plan's items — see the 2026-08-13 Delta. (`BL-222` has since
-closed: D14 fielded the shooter it waited on, same day.)
+`backlog.md`, blocked on this plan's items — see the 2026-08-13 Delta. (Two have since closed:
+`BL-222`, when D14 fielded the shooter it waited on, same day; and `BL-065` on 2026-08-14, decoded
+away rather than built, `git log --grep=BL-065`.)
 
 ## Why this document exists
 

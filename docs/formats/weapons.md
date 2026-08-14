@@ -66,7 +66,7 @@ See [CLUSTER_SIZE vs AMMO_LIMIT](#cluster_size-vs-ammo_limit) for which entries 
 | `RANGE_MINIMUM` | 1 | `[300, 0]` | minimum arming range (torpedo) |
 | `GRAVITY` | 5 | 0.0 | projectile-gravity scale (0 throughout this install) |
 | `CANNON_SPREAD` | 31 | 6.0 | **not a dispersion cone** — the gun aim assist's acceptance-cone half-angle, degrees (constant). Consumer decoded 2026-08-12, see [`org/aim-assist.md`](../org/aim-assist.md) |
-| `FIRING_HEAT` | 4 | 5.0 | heat added per shot; only the base guns `wep_00`–`03` |
+| `FIRING_HEAT` | 4 | 5.0 | nominally heat added per shot; only the base guns `wep_00`–`03`. **Parsed but never consumed by the original** (decoded 2026-08-14): `FUN_004ba6f0` stores it at `+0x14` of the game-side weapon-extension struct (0x38 bytes, hung off the ZWEP record at `+0x210`), defaulting to 0 when the key is absent, and no consumer of that struct reads the field. Its partner `cannon_jam` is dead data too, see [vehicle.md](vehicle.md) |
 | `TURN_RATE` | 14 | 0.001–1.25 | guidance turn rate; 0.001 is effectively straight-flying — only the Seeker's 1.25 actually homes |
 
 ### Damage

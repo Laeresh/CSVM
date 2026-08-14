@@ -329,8 +329,14 @@ count, two undecoded factors, then an **engagement range** in metres (800–900 
 fighters, 500 for the boat/truck). Positions 3–4 are inferred, not confirmed.
 
 **`cannon_jam`** (`player_airplane`) — `heat_safe_limit 1000`, `heat_dissipation_rate 50`,
-`jam_chance 0.1`; pairs with `FIRING_HEAT` in [weapons.md](weapons.md) to model gun
-overheating. Backlogged, deliberately not implemented.
+`jam_chance 0.1`; reads as a gun-overheating model paired with `FIRING_HEAT` in
+[weapons.md](weapons.md). ⚠ **Dead data: the original executable has no reader for it**
+(decoded 2026-08-14). None of `cannon_jam`, `heat_safe_limit`, `heat_dissipation_rate` or
+`jam_chance` exists as a string in `crimson.exe`, and the zrdr readers look keys up by string
+(`FUN_0057a090(dict, "KEY")`), so no lookup is possible. Sibling keys `bullethole_anims`
+(`0x00627ec4`) and `destroyable_parts` (`0x00627d7c`) are present, which is the calibration
+that makes the absence meaningful. Not implemented here either, and reproducing it would be
+invention rather than restoration.
 
 **`armor` / `health`** — the AI two-pool damage model (fighters `64/64`…`100/100`, always
 equal; `patrolboat`/`t_truck` `0/40`, unarmoured soft targets). Carried by the 12 base aircraft
