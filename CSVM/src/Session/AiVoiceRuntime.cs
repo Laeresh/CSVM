@@ -95,6 +95,12 @@ public sealed partial class AiVoiceRuntime : Node
         var speaker = _dispatcher.Register(ai.PlayerIndex, vo, ai.Team,
             isPlayer: false, talkerChance, constitutionChance);
         _bySpeaker[ai.PlayerIndex] = ai;
+        // An INERT aircraft (E10) is not in the session yet, so it neither speaks nor is elected
+        // for a broadcast: the dispatcher's own aliveness gate carries it, mirrored here because
+        // nothing in the dispatcher can see a FlightController. Registration order is unchanged —
+        // the speaker is listed from the start, just not eligible until its wave launches.
+        speaker.Alive = ai.InPlay;
+        ai.InertChanged += plane => speaker.Alive = plane.InPlay;
         GD.Print($"ai voice: {ai.Name}: accent {accentId} -> VO id {vo} " +
                  $"(talker {talkerChance:0.00})");
 

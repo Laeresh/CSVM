@@ -172,6 +172,14 @@ public static class Suites
             "configured airframe with wingmen 2/4's PrimaryTargetName resolving to wingmen 1/3's " +
             "own spawned name",
             InstantActionAce));
+        into.Add(new TestHarness.Suite("inert-aircraft",
+            "the E10 inert state, each claim watched passing on a live aircraft first and on the " +
+            "inert one AFTER activation: a plane built inert is not returned by a raycast, is " +
+            "listed by the aim assist's candidate collector but not as LIVE (so a scan pointed " +
+            "straight at it finds nothing), takes no damage from a round fired through it, does " +
+            "not move under a sim step and is not drawn — then Activate re-homes it and every one " +
+            "of those flips back",
+            InertAircraft));
         into.Add(new TestHarness.Suite("world-turrets",
             "the world AA emplacements (C9b) place at their NODES patterns against the real C1 " +
             "world (census pinned, one entry many turrets, scoped multi-segment paths), honour " +
@@ -3397,6 +3405,199 @@ public static class Suites
         }
     }
 
+    /// <summary>The E10 inert state (PLAN-instant-action.md): an aircraft built complete and then
+    /// held out of the session until it is activated. Every claim is measured by ONE instrument run
+    /// over three subjects — a live control, the inert aircraft, and that same aircraft after
+    /// <c>Activate</c> — because "did not appear in the list" is precisely the check that passes for
+    /// the wrong reason (verification.md METHOD-9/METHOD-10: the perturbation must be watched
+    /// flipping every observation, in both directions). The instruments are the real ones: a
+    /// physics raycast on the shared space state, <c>ProjectilePool.CollectAircraft</c> into a real
+    /// <see cref="AimAssist.Scan"/>, a real round fired through the pool, and
+    /// <c>FlightController.SimStep</c>.</summary>
+    private static void InertAircraft(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
+        WeaponDef? gun = weaponDefs.All.FirstOrDefault(w => w.IsGun && w.ArmorDamage is > 0f);
+        ctx.Check(gun != null, $"a gun with ARMOR_DAMAGE exists in the data");
+        if (gun == null)
+            return;
+
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightController? control = null;
+        FlightController? subject = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            var spec = SessionSpec.Parse(System.Array.Empty<string>());
+            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var inputs = new FlightRigAssembler.Inputs
+            {
+                PlanesGamez = planesGamez,
+                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                RigCount = 0,
+                PaintRng = new RandomNumberGenerator(),
+                ZrdrPath = ctx.ZrdrPath,
+                StockLoadouts = StockLoadouts.Load(),
+                WeaponDefs = weaponDefs,
+                Textures = textures,
+                Projectiles = live,
+                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            };
+            // worldEffects null!: never dereferenced — CrashProgram/WorldScene stay null, so the
+            // spawner's crash-runtime block (its only reader) is skipped.
+            var spawner = new AiAircraftSpawner(spec, liveries, null!, ctx.Host, inputs);
+
+            // One scan origin, the control dead ahead on −Z, the subject 90° off it on +X, so a
+            // scan aimed at either sits well outside the other's acceptance cone.
+            var origin = new Vector3(0f, 500f, 0f);
+            var controlPos = origin + new Vector3(0f, 0f, -300f);
+            var subjectPos = origin + new Vector3(300f, 0f, 0f);
+            control = spawner.Spawn(ctx.PlaneName, controlPos, controlPos + Vector3.Forward,
+                AiPilot.HoldingCourse(controlPos, controlPos + Vector3.Forward),
+                scheme: null, team: InstantActionRuntime.EnemyTeam);
+            subject = spawner.Spawn(ctx.PlaneName, subjectPos, subjectPos + Vector3.Forward,
+                AiPilot.HoldingCourse(subjectPos, subjectPos + Vector3.Forward),
+                scheme: null, team: InstantActionRuntime.EnemyTeam, inert: true);
+            ctx.Check(control.Body != null && subject.Body != null && control.Damage != null
+                      && subject.Damage != null,
+                $"both aircraft built a collision body and per-part damage");
+            if (control.Body == null || subject.Body == null
+                || control.Damage == null || subject.Damage == null)
+                return;
+            ctx.Check(control.InPlay && !subject.InPlay,
+                $"the control is in play and the inert one is not: control={control.InPlay} subject={subject.InPlay}");
+
+            // --- the four instruments. Each takes the aircraft it is measuring and reads its LIVE
+            // position, so a subject that has moved (activation re-homes it) is still measured
+            // where it actually is.
+            var space = live.GetWorld3D().DirectSpaceState;
+            bool RayFinds(FlightController rig)
+            {
+                var at = rig.WorldPosition;
+                var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                    at + new Vector3(0f, 0f, -30f), at, CollisionLayers.WorldAndAircraft));
+                return hit.Count > 0 && ReferenceEquals(hit["collider"].Obj, rig.Body);
+            }
+
+            var candidates = new AimCandidateSet();
+            bool ScanFinds(FlightController rig)
+            {
+                candidates.Clear();
+                live.CollectAircraft(candidates);
+                var scan = new AimScan
+                {
+                    MuzzlePosition = origin,
+                    Forward = (rig.WorldPosition - origin).Normalized(),
+                    Team = AimAssist.PlayerTeam,   // hostile to both aircraft (team 2)
+                    Speed = 500f,
+                    RangeSquared = 2000f * 2000f,
+                    ConeCos = Mathf.Cos(Mathf.DegToRad(10f)),
+                };
+                return AimAssist.Scan(scan, candidates, out var result)
+                       && ReferenceEquals(result.Source, rig);
+            }
+
+            float Combined(FlightController rig) => rig.Damage!.Parts.Values.Sum(p => p.Hp + p.Armor);
+            bool RoundBites(FlightController rig)
+            {
+                float before = Combined(rig);
+                var at = rig.WorldPosition;
+                var muzzle = new Transform3D(
+                    Basis.LookingAt(Vector3.Back, Vector3.Up), at + new Vector3(0f, 0f, -20f));
+                for (int tries = 0; tries < 6 && Combined(rig) >= before; tries++)
+                {
+                    live.Spawn(gun, muzzle, Vector3.Zero, shooterId: 0);
+                    for (int i = 0; i < 20; i++)
+                        live.SimStep(1f / 60f);
+                    live.Clear();
+                }
+                return Combined(rig) < before;
+            }
+
+            bool StepMoves(FlightController rig)
+            {
+                var before = rig.WorldPosition;
+                for (int i = 0; i < 10; i++)
+                    rig.SimStep(1f / 60f);
+                return rig.WorldPosition.DistanceTo(before) > 1f;
+            }
+
+            // --- the able-to-fail baseline: the live control answers YES to all four, so a NO
+            // below is the inert flag and not a broken instrument.
+            ctx.Check(RayFinds(control), $"baseline: a raycast returns the live control's body");
+            ctx.Check(ScanFinds(control), $"baseline: an aim-assist scan returns the live control");
+            ctx.Check(RoundBites(control), $"baseline: a round fired through the live control costs it HP");
+            ctx.Check(StepMoves(control), $"baseline: a sim step moves the live control");
+            ctx.Check(control.PlaneModel!.Visible, $"baseline: the live control is drawn");
+
+            // --- the inert aircraft: the same four instruments, same session, all NO.
+            ctx.Check(!RayFinds(subject), $"a raycast does not return the inert aircraft");
+            ctx.Check(!ScanFinds(subject), $"an aim-assist scan does not return the inert aircraft");
+            float inertBefore = Combined(subject);
+            ctx.Check(!RoundBites(subject), $"a round fired through the inert aircraft passes through it");
+            ctx.Check(Mathf.IsEqualApprox(Combined(subject), inertBefore),
+                $"…and its damage pools are untouched: {Combined(subject):0.##} vs {inertBefore:0.##}");
+            ctx.Check(!StepMoves(subject), $"a sim step does not move the inert aircraft");
+            ctx.Check(!subject.PlaneModel!.Visible, $"the inert aircraft is not drawn");
+
+            // Trap (b): inert is NOT "left off the pool's roster". The plane reached
+            // RegisterAircraft in _Ready like any other, so the fuse/blast passes (which walk that
+            // roster, not the physics layers) can see it at all — and are the reason InPlay is
+            // read there. It is LISTED as a candidate and simply not live, which is also what lets
+            // E11's wave walk count a parked wave as still present.
+            candidates.Clear();
+            live.CollectAircraft(candidates);
+            var listed = candidates.Vehicles.FirstOrDefault(c => ReferenceEquals(c.Source, subject));
+            ctx.Check(listed.Source != null && !listed.Live,
+                $"the inert aircraft is on the pool's candidate roster but not live: listed={listed.Source != null} live={listed.Live}");
+
+            // --- activation: the same aircraft answers YES to all four again. This is the
+            // perturbation run backwards, and it is what proves the checks above were not passing
+            // because the aircraft was simply broken.
+            // ⚠ Activated AT ITS BUILD POSE on purpose. Godot flushes transform notifications at
+            // the end of a frame, and this harness completes inside one _Ready and never yields
+            // one — so a body MOVED here keeps its build-pose transform on the physics server and
+            // no raycast can find it at the new spot. Measured, not assumed: the live control also
+            // stops answering RayFinds once a sim step has moved it. The re-home is therefore
+            // asserted below off the flight model, which is the truth either way.
+            subject.Activate(subjectPos, subjectPos + Vector3.Forward);
+            ctx.Check(subject.InPlay && !subject.Inert, $"Activate cleared the inert flag");
+            ctx.Check(RayFinds(subject), $"the activated aircraft is returned by a raycast");
+            ctx.Check(ScanFinds(subject), $"the activated aircraft is returned by an aim-assist scan");
+            ctx.Check(RoundBites(subject), $"a round fired through the activated aircraft costs it HP");
+            ctx.Check(StepMoves(subject), $"a sim step moves the activated aircraft");
+            ctx.Check(subject.PlaneModel.Visible, $"the activated aircraft is drawn");
+
+            // Activation's other half: it re-homes the aircraft at the pose it is given, which is
+            // how E11's wave teleport will arrive. Read off the flight model (WorldPosition is the
+            // sim value) rather than the node, for the frame-flush reason above.
+            var elsewhere = subjectPos + new Vector3(0f, 0f, -900f);
+            subject.Activate(elsewhere, elsewhere + Vector3.Forward);
+            ctx.Check(subject.WorldPosition.DistanceTo(elsewhere) < 1f,
+                $"Activate re-homes the aircraft at the pose it is given pos={subject.WorldPosition}");
+            float pristine = subject.Damage.Parts.Values.Sum(p => p.Def.MaxHp + p.Def.MaxArmor);
+            ctx.Check(Mathf.IsEqualApprox(Combined(subject), pristine),
+                $"…with a repaired airframe, the respawn it rides on top of: {Combined(subject):0.##}/{pristine:0.##}");
+        }
+        finally
+        {
+            pool?.Free();
+            control?.Free();
+            subject?.Free();
+            textures.Dispose();
+        }
+    }
+
     private static void CarriedTurrets(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -4849,6 +5050,16 @@ public static class Suites
                 $"accent 12 registers the AI as VO id 2 got={speaker?.VoId.ToString() ?? "none"}");
             if (speaker == null)
                 return;
+
+            // E10: an inert aircraft is registered as a speaker (registration order is unchanged)
+            // but is not eligible — the runtime mirrors InPlay into the dispatcher's own aliveness
+            // gate, which is the only thing here that can see a FlightController. Checked in both
+            // directions so "not eligible" cannot be the flag's resting state.
+            ctx.Check(speaker.Alive, $"baseline: a live AI is an eligible speaker");
+            ai.Inert = true;
+            ctx.Check(!speaker.Alive, $"going inert takes the speaker out of the broadcast election");
+            ai.Inert = false;
+            ctx.Check(speaker.Alive, $"…and activation puts it back");
 
             var played = new List<(int Trigger, string Clip)>();
             runtime.LinePlayed += (_, trigger, clip) => played.Add((trigger, clip));

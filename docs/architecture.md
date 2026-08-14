@@ -1953,6 +1953,9 @@ wrap-aware directed yaw clamp + pitch clamp, bounded slew (3.0/s), pose written 
 nodes, then the fire gates: `Activated`, attack window, 15° barrel-on-solution cone, cached
 1–2 s world-only line of sight, `FIRE_RATE` redraw. Proven by the `carried-turrets` +
 `world-turrets` suites and `TurretDefsTests`.
+⚠ A carried gunner's `Alive` is its host's `FlightController.InPlay` (E10), not `!Crashed`: a
+  turret riding an INERT airframe must not fire, be fired at, or reach the aim assist's turret
+  candidate list — which is fed straight off `Alive`.
 ⚠ Out-of-arc yaw snaps to the angularly NEARER end stop, not the shortest-path one, and bored
   suppresses firing ONLY — tracking runs through it; a DORMANT emplacement does neither
   (`ACTIVATED` gates the tick, but the load pose still writes). All visible original behaviour.
@@ -2193,7 +2196,13 @@ the round so the near-miss cue can exclude its own. `NearMissTargets` is that cu
 each step measures the round's ACTUAL travelled segment — hit/fuse point included — against every
 registered aircraft but its shooter's, and reports the pass distance (`WarningShotCue`).
 `RegisterAircraft` is the hittability half: the hit ray runs world+aircraft with each round
-excluding its own shooter's registered `AircraftBody` by RID; a struck plane classifies `Player`
+excluding its own shooter's registered `AircraftBody` by RID.
+⚠ **The roster is not the physics layers.** `CollectAircraft`, `ProximityFuseTriggered` and
+`BlastAircraftPass` walk this registered list directly rather than issuing a query, so the
+collision layer that hides a crashed or INERT plane from the hit ray does not reach them — all
+three read `FlightController.InPlay` (E10) instead, and an inert plane stays LISTED (as a
+not-live candidate) precisely so a wave parked out of play still counts as present.
+A struck plane classifies `Player`
 and routes to `FlightController.TakeProjectileHit` (struck shape → part, armor-first damage),
 carrying the round's `Shooter` id through so a kill is attributable — never the destructible
 pipeline. A missing round may still fuse (B14): the `DETONATION_DISTANCE` proximity fuse arms
@@ -3518,6 +3527,23 @@ candidate scan, `SelectRankedTarget`, carried `TurretController`s and `AiVoiceDi
 registration all read it, none re-derives one from `PlayerIndex` — and defaults to
 `AimAssist.TeamOfPilot(PlayerIndex)` until a mission sets it explicitly, so free flight and `--vs`
 are unchanged.
+`Inert` (PLAN-instant-action E10) is this aircraft's other lifecycle state: BUILT but held
+completely out of the session — not stepped (`SimStep` and `_Process` return at once), not drawn,
+not on the aircraft collision layer, not hittable, not a targeting candidate, and not counted as
+living. `InPlay` (`!Crashed && !Inert`) is the one "is it there" question every roster asks; a
+consumer that still tests `Crashed` alone silently sees inert aircraft. Only two things are pushed
+as state, by the private `ApplyPresence()` — the model's `Visible` and `Body.SetHittable` — and it
+runs from `Respawn` AND `_Ready`, because `Setup` calls `Respawn` before `_Ready` has built the
+body. Everything else consults the flag: `TakeProjectileHit`/`DebugForceCrash` refuse,
+`DriveAiGunner` drops a standing target that leaves play, and outside this class
+`ProjectilePool.CollectAircraft` (which carries the aim assist, `SelectRankedTarget` and the H22
+tracker with it), the pool's fuse/blast passes, `TurretController.Alive`, `AiPilot.Next`'s quarry
+test and `VersusHud`'s hostile draw all read `InPlay`. `InertChanged` is the event a session-level
+roster mirrors it into (`AiVoiceRuntime` → `Speaker.Alive`). `Activate(pos, lookAt)` is the
+inverse — re-home, clear the flag, `Respawn` — the original's teleport-then-reactivate in one call.
+⚠ Inert is NOT "parked far away", a shape considered and rejected: a parked plane still ticks,
+still collides and still costs a frame. Where an inert aircraft sits is nobody's business (the
+original's own world-origin parking is incidental).
 `Held` (the weapon lab) pins this ONE airframe while the session runs on: the sim step skips input,
 `FlightModel.Step` and the whole collision sweep and re-applies the pinned pose through
 `FlightModel.Reset(pos, attitude, 0, 0)` instead — everything from the pose commit down (weapon
@@ -4175,10 +4201,14 @@ rigs (a realtime clock lets them tick themselves, like the rigs). `_instantActio
 (`InstantActionRuntime?`, PLAN-instant-action.md C8) loads `--ia=<path>` at the very top of
 `StartSession` — before any archive, since it is a bare JSON read — and stays null on a load
 failure or absent flag, which is what keeps every other mode untouched by its existence.
-`SpawnAiAircraft` has a second, non-optional-parameter overload
-(`string, Vector3, Vector3, AiPilot, PaintScheme?, int?, int?`) for this: the method GROUP passed
+`SpawnAiAircraft` has a second overload
+(`string, Vector3, Vector3, AiPilot, PaintScheme?, int?, int?, bool inert = false`) for this: the
+four-parameter one must keep NO optional parameters, because the method GROUP passed
 to `AiGeneratorRuntime`'s constructor must stay at exactly four parameters, since C# does not
-extend a method-group-to-delegate conversion over trailing optional ones. `BuildFlightRigs` spawns
+extend a method-group-to-delegate conversion over trailing optional ones. That overload's `inert:`
+(E10) forwards to `AiAircraftSpawner.Spawn` and is how a wave is built at session time and arrives
+later; `--crash`'s sweep over `_aiPlanes` leaves an inert plane alone, since `DebugForceCrash` is
+gated on `InPlay`. `BuildFlightRigs` spawns
 the ace (`dogfight_ace` only; E11/F12 add the rest) right after the player voice registration,
 through that overload, with the authored `PaintScheme`/`InstantActionRuntime.EnemyTeam`/rating —
 the ace's own spawn-point draw is `InstantActionRuntime.ChooseAceSpawn` over
@@ -4422,7 +4452,7 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/Suites.cs
-The 44 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
+The 56 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
 the full-rig `Loadout.ForRig`), live weapon fire, the carried turret gunners (`carried-turrets`:
 build from ai.zrd + the thirdp mount, arc-centre rest pose, track/fire/hit under the host's
 shooter id, bored-window fire suppression with live tracking, the nearer-end-stop park, YAW [0,0]
@@ -4444,6 +4474,13 @@ ray that hits it at spawn returns nothing at the flown-to position), the AI gunn
 acquisition as mutable state, the quick-draw and ±11° cone gates, dead-eye skill 1 vs 9 hit
 rates on a fixed seed, the kill under the AI's shooter id, and the IsHumanPiloted assist
 exclusion A/B'd on one rig),
+the inert aircraft state (`inert-aircraft`, PLAN-instant-action E10: four REAL instruments — a
+physics raycast, `CollectAircraft` into an `AimAssist.Scan`, a round fired through the pool, and
+`SimStep` — run over a live control, an aircraft built inert, and that same aircraft after
+`Activate`, so every observation is watched flipping in both directions rather than only being
+absent; plus the roster check that an inert plane is listed as a not-live candidate. ⚠ It
+activates its subject AT ITS BUILD POSE for exactly the `ai-actor` reason above, and re-measured
+that constraint on its own live control before working around it),
 destructible stages/death/census, animation
 stops and bounce-terminated launches, the full effects sweep (`effects-census`: every effect
 resolves, template meshes peak at the CALL SITE not the stage origin, none stays lit after its
@@ -4769,6 +4806,11 @@ too, so the split is readable off the `CRASH … def=` line headlessly.
   as a player's plane): planes.zbd gamez indices collide with the chapter's by-index map — the
   `NameResolveFallback` case. A later item making AI aircraft addressable by mission animations
   goes through `AnimRuntime.IndexStage`, which owns the find-cache invalidation.
+`Spawn`'s `inert:` (E10) sets `FlightController.Inert` in the object initializer — before `Setup`,
+before the node joins the tree — so an aircraft built inert never has one live frame; the spawn
+log says `INERT`, and the caller puts it in play with `FlightController.Activate`. Everything else
+is built exactly as a live plane's: pilot, gunner and mode machine are all wired, they simply
+never step.
 ⚠ `Spawn`'s `scheme`/`team` (PLAN-instant-action.md C8) are worn/set exactly as given, never
   re-derived — `scheme ?? _liveries.SchemeFor(…)` short-circuits the resolver call entirely on a
   non-null scheme, so an authored livery (the Instant Action ace) consumes NO RNG draw and cannot
@@ -4898,6 +4940,10 @@ aircraft's `Team` is `AimAssist.PlayerTeam`, id 21 `DE` otherwise), patrol→pur
 `TA-SucShk`. Plays through `WorldSounds.PlayOneShot(Node3D)` only; the wired/unwired table is
 combat-voice.md "The remake's dispatch sites". Observability: the `ai voice:` lines (resolution at
 spawn, every roll outcome, every played clip).
+`RegisterAi` also mirrors `FlightController.InPlay` into the dispatcher's `Speaker.Alive` and
+subscribes `InertChanged` (E10) — the dispatcher is engine-free and can see no controller, so this
+is the only place the two meet. An INERT aircraft is registered in speaker order like any other and
+is simply not eligible until its wave launches.
 ⚠ Free flight and `--vs` still give every pilot its own default `Team`, so a broadcast still only
   ever elects a "teamless" match there in practice — the B7 wiring goes live the moment a mission
   (Instant Action, Wave C on) puts two AI, or an AI and the player, on the same explicit team.
@@ -5497,7 +5543,8 @@ The flying aircraft's physics body: one `AnimatableBody3D` child of `FlightContr
 terrain sweep casts, on the aircraft layer. Rides the controller's transform; `PartName(shapeIdx)`
 maps a query's struck shape back to the part (shapes added in `Parts` order); `ExcludeSelf` is the
 cached one-entry RID list the owner's own queries pass; `SetHittable` drops it to layer 0 while
-crashed, back at respawn. Also the fuse/blast geometry oracle (B14), answering from the same box
+the plane is out of play — crashed, or INERT (E10) — and back when it is in play again, both
+driven from `FlightController.ApplyPresence`. Also the fuse/blast geometry oracle (B14), answering from the same box
 set without a physics query: `NearestShape(point)` (nearest box, its skin distance + surface
 point — blast falloff), `SegmentDistance(from,to)` (closest approach of a swept round, ternary
 search per box — distance to a box is convex along the segment), `BoundRadius` for the cheap

@@ -286,7 +286,7 @@ is M4's formation disproof, `B7` is the team model below.
 
 ### Wave E — Waves
 
-10. ☐ E10 The inert aircraft state
+10. ☑ E10 The inert aircraft state
 11. ☐ E11 The wave sequencer
 
 ### Wave F — Attacking a zeppelin
@@ -865,7 +865,54 @@ dropping the whole `primary_target` mechanism this item exists to wire. Fixed by
 
 # Wave E — Waves
 
-## E10 ☐ The inert aircraft state
+## E10 ☑ The inert aircraft state
+
+**Landed 2026-08-14.** `Flight/FlightController.cs` gained one flag, `Inert`, and one derived
+question, `InPlay` (`!Crashed && !Inert`), which is now the single "is this aircraft present"
+test every roster asks. The flag itself pushes only the two facts the engine can hold no other
+way — the airframe's visibility and its body's collision layer — through a private
+`ApplyPresence()` called from `Respawn` and `_Ready` (the two points where those pieces come
+into existence; `Setup` runs `Respawn` before `_Ready` has built the body, which is why both are
+needed). Everything else CONSULTS the flag rather than being torn down: `SimStep` and `_Process`
+return immediately, `TakeProjectileHit` and `DebugForceCrash` refuse, `DriveAiGunner` drops a
+standing target that leaves play, and outside the class `ProjectilePool.CollectAircraft` (so the
+aim assist, `SelectRankedTarget` and the H22 hostile tracker all follow from one edit),
+`ProximityFuseTriggered`, `BlastAircraftPass`, `TurretController.Alive` (a carried gunner on an
+inert host), `AiPilot.Next`'s quarry test and `VersusHud`'s hostile draw read `InPlay`.
+⚠ The pool's fuse and blast passes walk the pool's OWN roster rather than issuing a physics
+query, so the collision layer that hides an inert plane from the hit ray never reaches them —
+that is exactly why they read the flag. `AiVoiceRuntime.RegisterAi` mirrors `InPlay` into the
+dispatcher's `Speaker.Alive`, the only thing there that can see a `FlightController`, so an
+unlaunched wave is registered in speaker order but never elected for a broadcast.
+`FlightController.Activate(pos, lookAt)` is the inverse: re-home, clear the flag, `Respawn` —
+the original's teleport-then-reactivate in one call, and the seam E11 will drive.
+`AiAircraftSpawner.Spawn` and `GameSession.SpawnAiAircraft` take `inert:`, set in the object
+initializer before `Setup` and before the node joins the tree, so an aircraft built inert never
+has a live frame; the spawn log says `INERT`.
+Verification: a new `inert-aircraft` engine suite runs FOUR real instruments (a physics raycast
+on the shared space state, `CollectAircraft` into a real `AimAssist.Scan`, a real round fired
+through the pool, and `SimStep`) over three subjects — a live control, the inert aircraft, and
+that same aircraft after `Activate` — because "did not appear in the list" is the check that
+passes for the wrong reason (verification.md METHOD-9/METHOD-10). Each instrument is watched
+answering YES on the control, NO on the inert plane, and YES again after activation, plus the
+roster check that an inert plane is LISTED as a candidate and simply not live (trap (b): inert is
+not "left off the roster", and E11 needs it listed to count a parked wave as present). Three
+single-line perturbations were run and each one failed exactly the check it should:
+dropping `ApplyPresence()` from `_Ready` failed the raycast (and NOTHING else — the round check
+still passed, which is the two damage layers being independent), reverting `CollectAircraft` to
+`!rig.Crashed` failed the scan and the roster check, and disabling `SimStep`'s guard failed the
+sim-step check. The `ai-voice` suite gained the speaker-eligibility flip in both directions.
+`.\RunTests.ps1`: build clean, 1181/1181 unit tests, 56/56 engine suites, all 14 golden hashes
+unchanged. Plus a full 8-chapter `--freecam` sweep (zero errors, standing node/mesh counts) and
+the D9 `--det --ia=<path> --chapter=C1 --frames=120` re-run, which still prints
+`ia: 3 wingman(s) (player_fury) team=1` with the same accents and the same
+`patrol -> avoid crash -> patrol` mode trace — the live path is untouched.
+⚠ **Hit while landing, and `ai-actor` already carries the same warning:** a suite lives inside ONE
+frame, so a body moved after creation stays invisible to space queries until a physics flush, and
+no raycast finds it at the new spot. Re-measured here rather than taken on faith — the LIVE control
+also stops answering the raycast once a sim step has moved it — so the suite activates its subject
+at its build pose for the instrument flip and asserts the re-home separately off the flight model.
+Nothing in the shipped code is affected; it is a constraint on how these suites are written.
 
 **Goal.** An aircraft can be built and then held completely out of the session until it is activated:
 not stepped, not collidable, not targetable by anything, not drawn, and not counted as living by

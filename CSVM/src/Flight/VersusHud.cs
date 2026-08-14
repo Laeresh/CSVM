@@ -242,7 +242,7 @@ public sealed partial class VersusHud : Control
         // The tracked AI hostile (H22): the same marker as a VS opponent, in the hostile red.
         // UpdateHostile ran this frame, so the reference is at most one scan old; the validity
         // guard covers a hostile freed between the scan and this draw.
-        if (GodotObject.IsInstanceValid(_hostile) && _hostile is { Crashed: false } hostile
+        if (GodotObject.IsInstanceValid(_hostile) && _hostile is { InPlay: true } hostile
             && hostile.IsInsideTree())
             DrawOpponent(font, hostile.GlobalPosition, HudRed, _hostileTag, s, markerFont);
 

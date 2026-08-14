@@ -112,7 +112,7 @@ public sealed class AiPilot
     /// <see cref="Patrol"/>'s own seeded branch draw), so a fixed-dt run is deterministic.</summary>
     public FlightInput Next(FlightModel model, float dt)
     {
-        var quarry = Gunner is { Target: { } t } && !t.Crashed ? t : null;
+        var quarry = Gunner is { Target: { InPlay: true } t } ? t : null;
 
         // The mode machine (D11), when present, decides which input source flies this step;
         // without one the pre-D11 priority stands (gunner target, then patrol, then orders).

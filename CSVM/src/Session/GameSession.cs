@@ -285,9 +285,12 @@ public partial class GameSession : Node3D
     /// <see cref="AiAircraftSpawner.Spawn"/> unchanged (an authored livery is worn as-is, no RNG
     /// draw); <paramref name="attackRating"/>, given, arms the D14 gunner/mode machine at that
     /// rating regardless of <c>--ai-attack=</c> (PLAN-instant-action.md C8: the ace fights at its
-    /// own authored rating, not the session's).</summary>
+    /// own authored rating, not the session's). <paramref name="inert"/> builds the aircraft held
+    /// out of the session (E10) — its pilot, gunner and mode machine are wired exactly as a live
+    /// one's, it simply takes no step until <see cref="FlightController.Activate"/> puts it in
+    /// play, which is how a wave can be built at session time and arrive later.</summary>
     public FlightController? SpawnAiAircraft(string planeName, Vector3 pos, Vector3 lookAt,
-        AiPilot pilot, PaintScheme? scheme, int? team, int? attackRating)
+        AiPilot pilot, PaintScheme? scheme, int? team, int? attackRating, bool inert = false)
     {
         if (_aiSpawner == null)
         {
@@ -350,7 +353,7 @@ public partial class GameSession : Node3D
                 GD.PushWarning($"ai: no mode machine — cannot load skills/maneuvers: {e.Message}");
             }
         }
-        var ai = _aiSpawner.Spawn(planeName, pos, lookAt, pilot, scheme, team);
+        var ai = _aiSpawner.Spawn(planeName, pos, lookAt, pilot, scheme, team, inert);
         _aiPlanes.Add(ai);
         // Mode transitions and reaction rolls, in the engine's own vocabulary — the D11
         // observability lines. Through Log (not GD.Print) so a play session's file sink
@@ -2679,6 +2682,8 @@ public partial class GameSession : Node3D
         // headless trigger for FlightController.Crash(), which a live collision otherwise gates.
         // Spawned AI planes crash too, taking the same null-material arm into THEIR family's
         // slot 0 (ai_crash_default) — the headless demo of the G21 split, read off the CRASH line.
+        // An inert plane (E10) declines: DebugForceCrash is gated on InPlay, so an unflown wave
+        // does not answer this flag with a wreck at its parking pose.
         if (_spec.CrashFrame is int crashFrame && !_crashFired && clock.Frame >= crashFrame)
         {
             _crashFired = true;

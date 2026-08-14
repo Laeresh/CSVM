@@ -143,14 +143,16 @@ public sealed class TurretController
     /// what the pose writes and the fire gate read.</summary>
     public Vector3 BarrelLocal { get; private set; }
 
-    /// <summary>Carried: alive while the host flies (the carried family's <c>HEALTHY_NODE</c> is
-    /// a model node the plane damage model does not track individually, so host death is the
-    /// kill condition CSVM can express today). Emplacement: alive while its healthy node is —
+    /// <summary>Carried: alive while the host is in play (the carried family's <c>HEALTHY_NODE</c>
+    /// is a model node the plane damage model does not track individually, so host death is the
+    /// kill condition CSVM can express today). ⚠ <see cref="FlightController.InPlay"/>, not
+    /// <c>Crashed</c>: a gunner carried by an INERT airframe (E10) must not fire, be fired at, or
+    /// join the aim assist's turret candidate list either. Emplacement: alive while its healthy node is —
     /// the destroy sequence's healthy→destroyed swap hides it, which is the decoded permanent
     /// kill switch (the retail loaders read no HEALTH key; the emplacement's real hit points are
     /// its own gamez destroy def's).</summary>
     public bool Alive => _host != null
-        ? !_host.Crashed
+        ? _host.InPlay
         : _healthyNode == null || (GodotObject.IsInstanceValid(_healthyNode) && _healthyNode.Visible);
 
     /// <summary>Where the turret is, for the aim assist's candidate list and the detection gate.</summary>

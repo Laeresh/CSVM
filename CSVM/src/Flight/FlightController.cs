@@ -439,6 +439,7 @@ public partial class FlightController : Node3D
     private bool[] _gunLoggedFirst = Array.Empty<bool>(); // verification breadcrumb: each group logs its first live round once
     private int _rocketsLaunched;                // verification breadcrumb: the first few launches log their pylon
     private int? _team;                          // Team's backing field — null until overridden (B7)
+    private bool _inert;                         // Inert's backing field — built but out of the session (E10)
     private bool _held;                          // Held's backing field — the airframe is pinned (weapon lab)
     private bool _cameraOwned;                   // CameraOwned's backing field — the lab's free camera has the view
     private bool _orbitPrev;                     // edge detection for entering the orbit (halt or hold)
@@ -472,6 +473,11 @@ public partial class FlightController : Node3D
     /// <see cref="IncomingFire.ShooterId"/> is a plain death there). Respawn emits nothing; the
     /// death was reported here.</summary>
     public event Action<int, int?>? Downed;
+
+    /// <summary>Raised whenever <see cref="Inert"/> flips, with this aircraft — the seam a
+    /// session-level roster (the E16 voice dispatch's speaker list) mirrors the state into, since
+    /// nothing outside this node polls it.</summary>
+    public event Action<FlightController>? InertChanged;
 
     /// <summary>Raised on every projectile hit that moved this plane's damage state without
     /// destroying it (the destroying hit reports through <see cref="Downed"/> instead) — the
@@ -524,6 +530,41 @@ public partial class FlightController : Node3D
     /// <summary>Whether this plane is crashed — frozen at the impact, airframe hidden, waiting
     /// for respawn. The fact the session (and the in-engine suites) read; only Respawn clears it.</summary>
     public bool Crashed => _crashed;
+
+    /// <summary>The inert state (PLAN-instant-action.md E10): an aircraft that has been BUILT but
+    /// is held completely out of the session — not stepped, not drawn, not collidable, not
+    /// hittable, not a targeting candidate for anything, and not counted as living by whatever
+    /// asks "is this wave clear". The original's own wave sequencer builds waves 2 to 4 this way
+    /// and reactivates them through <c>FUN_004b0f40(0)</c>
+    /// (docs/formats/instant-action.md "The ace and the waves"); CSVM's inverse is
+    /// <see cref="Activate"/>, which re-homes the aircraft and clears this in one call.
+    ///
+    /// <para>ONE flag, consulted everywhere, rather than a teardown per system — the failure mode
+    /// of the teardown shape is a system nobody remembered to switch off. The two facts the engine
+    /// can only hold as state (the airframe's visibility and its body's collision layer) are
+    /// pushed by <see cref="ApplyPresence"/>; every other consumer reads <see cref="InPlay"/>.
+    /// ⚠ Where the aircraft SITS while inert is nobody's business: the original parks waves at the
+    /// world origin, which is incidental, and parking a plane far away is explicitly NOT how this
+    /// is implemented (it would still tick, still collide and still cost a frame).</para></summary>
+    public bool Inert
+    {
+        get => _inert;
+        set
+        {
+            if (_inert == value)
+                return;
+            _inert = value;
+            ApplyPresence();
+            InertChanged?.Invoke(this);
+        }
+    }
+
+    /// <summary>Whether this aircraft is present in the session as a real object: neither crashed
+    /// nor <see cref="Inert"/>. The single "is it there" test every roster reads — the aim assist's
+    /// vehicle/turret candidate lists, the projectile pool's proximity fuse and blast pass, the D12
+    /// ranking's standing-target check, the HUD hostile tracker and the E11 wave-clear walk. A
+    /// consumer that tests <see cref="Crashed"/> alone silently sees inert aircraft.</summary>
+    public bool InPlay => !_crashed && !_inert;
 
     /// <summary>The flight model's world position — the plane as a SIM value, not a node transform
     /// (the node lags it by the render interpolation). What another plane's aim assist aims at.</summary>
@@ -645,8 +686,15 @@ public partial class FlightController : Node3D
             Body = new AircraftBody(this, Collider);
             AddChild(Body);
             // Strikeable by every other identity's rounds; this pilot's own rounds exclude it.
+            // ⚠ The registration is what makes a plane a hit target at all, independently of its
+            // loadout — an INERT plane still reaches it, and is kept off the aircraft layer by
+            // ApplyPresence below instead of by being left out of the roster (the pool's own fuse
+            // and blast passes walk that roster and read InPlay).
             Projectiles?.RegisterAircraft(Body);
         }
+        // Setup's Respawn ran before this node was in the tree, so Body did not exist to switch
+        // off then: re-assert an inert airframe's presence now that it does (E10).
+        ApplyPresence();
         SnapCamera();
 
         // One firing-state slot per firable gun group (turrets excluded — built inert).
@@ -765,9 +813,11 @@ public partial class FlightController : Node3D
         _damageFlash = 0f;
         if (_hudCanvas != null)
             _hudCanvas.Visible = true;  // the crash camera hid it (footage); flying again
-        if (PlaneModel != null)
-            PlaneModel.Visible = true;
-        Body?.SetHittable(true);
+        // Drawn and hittable again — unless this airframe is INERT, in which case a respawn must
+        // not put it back on screen or back on the aircraft layer (E10). Setup() calls Respawn
+        // before _Ready has built the body, so this is also where a plane built inert first
+        // asserts the state; _Ready re-asserts it once Body exists.
+        ApplyPresence();
         _throttle = SpawnThrottle;
         // The start choreography (snd_propstart already re-fires from FlightAudio's own
         // loop-restart hook): the static blade prop cross-fades to its spinning blur disc with
@@ -784,6 +834,23 @@ public partial class FlightController : Node3D
         GlobalTransform = _simCurr;
         if (_cam != null && IsInsideTree())
             SnapCamera();
+    }
+
+    /// <summary>The inverse of building inert (E10): re-home this aircraft at <paramref name="pos"/>
+    /// with its nose on <paramref name="lookAt"/>, put it back in play and respawn it there — the
+    /// original's teleport-then-reactivate, in one call. <see cref="Respawn"/> does the rest of the
+    /// work it always does (spawn speed and throttle, a healthy repaired airframe, full ammo, the
+    /// start choreography), so a wave arrives flying rather than parked. Calling this on an
+    /// aircraft already in play is simply that teleport-and-reset.</summary>
+    public void Activate(Vector3 pos, Vector3 lookAt)
+    {
+        var dir = lookAt - pos;
+        _spawnPos = pos;
+        // A zero-length aim keeps the attitude it has, the same guard PlaceHeld makes.
+        if (dir.LengthSquared() > 1e-6f)
+            _spawnAttitude = Basis.LookingAt(dir.Normalized(), Vector3.Up);
+        Inert = false;
+        Respawn();
     }
 
     /// <summary>Weapon lab: pin the held airframe at <paramref name="pos"/> with its nose on
@@ -836,7 +903,10 @@ public partial class FlightController : Node3D
     /// arm above.</summary>
     public void DebugForceCrash(int? killer = null, Node? struckBody = null)
     {
-        if (!_crashed)
+        // An INERT airframe is not in the fight and cannot be crashed out of it either (E10):
+        // --crash sweeps every spawned AI plane, and a wreck at an unflown wave's parking pose is
+        // not what that flag is for.
+        if (InPlay)
             Crash(_model.Position, "debug-crash", "test", struckBody, killer);
     }
 
@@ -849,7 +919,8 @@ public partial class FlightController : Node3D
     /// (<see cref="PlaneDamage.IsDestroyed"/>, the decoded kill rule) downs the plane through
     /// the existing <see cref="Crash"/> path, exactly as <see cref="SurviveHit"/> does. No
     /// cooldown: weapon fire is discrete, every round counts.
-    /// Ignored while crashed (the body is unhittable then anyway — belt and braces) and without
+    /// Ignored while out of play — crashed or inert (the body is off the aircraft layer either
+    /// way, so this is belt and braces for a direct caller) — and without
     /// damage data (no destroyable_parts: nothing to track, the round just sparks).
     /// <paramref name="shooter"/> is the round's owner (<see cref="PlayerIndex"/> of who fired,
     /// <see cref="ProjectilePool.NoShooter"/> for an unowned round) — carried into
@@ -859,7 +930,7 @@ public partial class FlightController : Node3D
     public void TakeProjectileHit(WeaponDef weapon, Vector3 impact, string colliderPart, int shooter,
         float damageScale = 1f)
     {
-        if (_crashed)
+        if (!InPlay)
             return;
         // The being-hit rock: a gun round reuses the measured caliber law; a rocket's armor
         // damage stands in for the unauthored quantity (he_factor doubles HE); a splash hit
@@ -941,6 +1012,12 @@ public partial class FlightController : Node3D
     /// tick — the halt (P / gamepad Start) simply stops the calls.</summary>
     public void SimStep(float dt)
     {
+        // An inert airframe takes no step at all (E10) — no stunt clock, no input, no flight
+        // model, no collision sweep, no weapons. Guarded here rather than in the session's loop so
+        // every caller (the loop, this node's own _PhysicsProcess, a suite) honours it in one place.
+        if (_inert)
+            return;
+
         // Advance the stunt clock every physics frame — including through the crash freeze so the
         // clock never stops (a deliberate rule); it stops only at AllComplete (inside Tick). A
         // halted GameClock stops the calls entirely, so the timer freezes with the rest of the sim.
@@ -1191,6 +1268,11 @@ public partial class FlightController : Node3D
 
     public override void _Process(double delta)
     {
+        // Nothing to draw, animate, interpolate or point a camera at while inert (E10). Only an
+        // AI aircraft is ever inert, so no human's pause key is swallowed by this return.
+        if (_inert)
+            return;
+
         var clock = GameClock.Current;
         // Debug screenshot freeze: toggle with P / gamepad Start, then hold the whole simulation
         // in place (physics, input, collision, audio, props) so successive screenshots frame the
@@ -1471,6 +1553,18 @@ public partial class FlightController : Node3D
     /// one uniform ordnance type). The rocket trigger then launches from the selected pylon. Caller
     /// edge-detects.</summary>
     private bool RocketSelectPressed() => KeyDown(Key.H) || PadPressed(JoyButton.DpadRight);
+
+    /// <summary>Pushes <see cref="InPlay"/> into the two facts the engine can only hold as state:
+    /// whether the airframe is drawn, and whether its body sits on the aircraft collision layer
+    /// (so a ray, a sweep or a hit test can find it). Everything else consults the flag. Called by
+    /// <see cref="Respawn"/> and by <see cref="_Ready"/>, the two points where the pieces that
+    /// carry the state come (back) into existence.</summary>
+    private void ApplyPresence()
+    {
+        if (PlaneModel != null)
+            PlaneModel.Visible = InPlay;
+        Body?.SetHittable(InPlay);
+    }
 
     /// <summary>Feeds the two cockpit weapon gauges from the same live ammo the firing code
     /// draws down. The gun gauge shows the SELECTED group (its rounds, its short NAME, and one belt
@@ -2046,7 +2140,7 @@ public partial class FlightController : Node3D
         return input;
     }
 
-    /// <summary>One AI-gunner tick (D14): keep the standing target while it lives (re-acquiring
+    /// <summary>One AI-gunner tick (D14): keep the standing target while it is in play (re-acquiring
     /// through the D12 ranking when it is gone and <see cref="AiGunner.AutoTarget"/> allows), then
     /// hand the gunner this tick's fire geometry — the SELECTED gun group's weapon and muzzle
     /// midpoint, the sim pose (never the render pose), and the target's state — so
@@ -2056,7 +2150,7 @@ public partial class FlightController : Node3D
         gunner.HoldFire();
         if (_fire == null || Projectiles == null)
             return;
-        if (gunner.Target is not { } target || target.Crashed || !target.IsInsideTree())
+        if (gunner.Target is not { } target || !target.InPlay || !target.IsInsideTree())
         {
             TargetScore score = default;
             string how = "ranked";

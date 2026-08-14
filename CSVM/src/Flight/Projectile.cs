@@ -517,7 +517,8 @@ public sealed partial class ProjectilePool : Node3D
     /// The registered bodies are the one live roster of flying planes this pool already keeps (for
     /// the hit ray and the fuse), so the assist reads the same list rather than a second one that
     /// could drift. Reads each rig's own <see cref="FlightController.Team"/> (B7), never re-derives
-    /// one from its <c>PlayerIndex</c>. A crashed pilot is present but not live, which is the engine's
+    /// one from its <c>PlayerIndex</c>. A pilot that is not in play — crashed, or INERT
+    /// (<see cref="FlightController.InPlay"/>, E10) — is present but not live, which is the engine's
     /// own dead-candidate rejection; the shooter excludes itself through
     /// <see cref="AimScan.Self"/>.</summary>
     public void CollectAircraft(AimCandidateSet into)
@@ -525,7 +526,7 @@ public sealed partial class ProjectilePool : Node3D
         foreach (var body in _aircraft)
         {
             var rig = body.Rig;
-            into.AddVehicle(rig.WorldPosition, rig.WorldVelocity, rig.Team, !rig.Crashed, rig);
+            into.AddVehicle(rig.WorldPosition, rig.WorldVelocity, rig.Team, rig.InPlay, rig);
         }
     }
 
@@ -1599,7 +1600,10 @@ public sealed partial class ProjectilePool : Node3D
     /// so a first-entry fuse would always detonate exactly where the linear blast falls to zero
     /// and no rocket could ever hurt a plane. While the round is still closing at the step's end
     /// the fuse holds (<see cref="StillClosingFraction"/>). The shooter's own plane is never a
-    /// candidate — a rocket leaves the muzzle INSIDE its own boxes — and neither is a wreck.</summary>
+    /// candidate — a rocket leaves the muzzle INSIDE its own boxes — and neither is one out of
+    /// play: a wreck, or an INERT airframe (E10). ⚠ This walk is the pool's OWN roster, not a
+    /// physics query, so the collision layer that hides an inert plane from the hit ray never
+    /// reaches it — <see cref="FlightController.InPlay"/> does.</summary>
     private bool ProximityFuseTriggered(WeaponDef weapon, int shooter, Vector3 from, Vector3 to,
         Vector3 velocity, out Vector3 detonationPoint, out AircraftBody? fused, out Vector3 towardHull)
     {
@@ -1611,7 +1615,7 @@ public sealed partial class ProjectilePool : Node3D
         float best = float.PositiveInfinity;
         foreach (var plane in _aircraft)
         {
-            if (plane.PlayerIndex == shooter || plane.Rig.Crashed)
+            if (plane.PlayerIndex == shooter || !plane.Rig.InPlay)
                 continue;
             // Cheap reject: the segment cannot come within fuse range of any box while it stays
             // outside the plane's bounding sphere by more than that range.
@@ -1731,7 +1735,10 @@ public sealed partial class ProjectilePool : Node3D
 
     /// <summary>The blast's aircraft pass: every registered flying plane inside the weapon's
     /// IMPACT_PROXIMITY radius — never the shooter's own (the guns invariant applied
-    /// consistently, not a balance opinion) and never a wreck — takes the weapon's own
+    /// consistently, not a balance opinion) and never one out of play, a wreck or an INERT
+    /// airframe (<see cref="FlightController.InPlay"/>, E10 — the same roster-walk caveat as the
+    /// fuse above: no physics query is involved, so the collision layer alone would not shield
+    /// it) — takes the weapon's own
     /// ARMOR/HEALTH damage scaled by the same linear falloff the destructible sink applies,
     /// measured to the nearest point on the plane's OWN collision boxes (the
     /// blast-neighbor-shape rule) and struck at that box, so part mapping and kill attribution
@@ -1740,7 +1747,7 @@ public sealed partial class ProjectilePool : Node3D
     {
         foreach (var plane in _aircraft)
         {
-            if (plane.PlayerIndex == shooter || plane.Rig.Crashed)
+            if (plane.PlayerIndex == shooter || !plane.Rig.InPlay)
                 continue;
             int shapeIdx = plane.NearestShape(point, out float distance, out var nearPoint);
             if (shapeIdx < 0 || distance >= radius)

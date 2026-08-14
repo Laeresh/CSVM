@@ -58,9 +58,13 @@ public sealed class AiAircraftSpawner
     /// (PLAN-instant-action.md C8's ace) never shifts another spawn's pinned paint under
     /// <c>--det</c>. <paramref name="team"/>, given, overrides
     /// <see cref="FlightController.Team"/>'s pilot-index-derived default (PLAN-instant-action.md
-    /// B7/C8: an Instant Action actor's side is authored, not derived from its shooter id).</summary>
+    /// B7/C8: an Instant Action actor's side is authored, not derived from its shooter id).
+    /// <paramref name="inert"/> builds the aircraft straight into
+    /// <see cref="FlightController.Inert"/> (PLAN-instant-action.md E10) — complete but held out of
+    /// the session, so it never has a live frame between construction and its own activation; the
+    /// caller puts it in play with <see cref="FlightController.Activate"/>.</summary>
     public FlightController Spawn(string planeName, Vector3 pos, Vector3 lookAt, AiPilot pilot,
-        PaintScheme? scheme = null, int? team = null)
+        PaintScheme? scheme = null, int? team = null, bool inert = false)
     {
         int index = _spawned++;
         var stats = _in.StatsFor(planeName);
@@ -98,6 +102,10 @@ public sealed class AiAircraftSpawner
             UseKeyboard = false,
             PadDevices = Array.Empty<int>(),
             AllowPause = false,
+            // Set here, before Setup and before the node joins the tree, so an inert airframe is
+            // never stepped, drawn or hittable for even one frame (E10): both Setup's Respawn and
+            // _Ready re-assert the state as the pieces that carry it come into existence.
+            Inert = inert,
         };
         if (team is { } t)
             controller.Team = t;
@@ -142,6 +150,7 @@ public sealed class AiAircraftSpawner
 
         GD.Print($"ai: spawned '{planeName}' as {controller.Name} (shooter id " +
                  $"{controller.PlayerIndex}) pos=({pos.X:0},{pos.Y:0},{pos.Z:0}) " +
+                 (inert ? "INERT " : "") +
                  (pilot.Patrol is { } patrol
                      ? $"net='{patrol.Net.Name}#{patrol.Net.Id}' ({patrol.Net.Nodes.Count} nodes)"
                      : $"heading={pilot.TargetHeadingDeg:0}° alt={pilot.TargetAltitude:0} m"));
