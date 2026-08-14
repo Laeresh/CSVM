@@ -1,0 +1,30 @@
+{
+  "mission_type": "zeppelin_run",
+  "disallow_missions": ["ground_target", "stunt_flying"],
+  "player_plane": "Kestrel",
+  "num_wingmen": 2,
+  "zeppelin_type": "cargo",
+  "cargo_zeppelin": "probezep",
+  "passenger_zeppelin": "probezep",
+  "military_zeppelin": "probezep",
+  "group1": {
+    "num_enemies": 3,
+    "enemy_name": "MSG_PROBE_CLI_G1",
+    "enemy_plane": "Brigand",
+    "enemy_skill": "veteran"
+  },
+  "group2": null,
+  "ace_name": "MSG_PROBE_CLI_ACE",
+  "ace_plane": "Hellhound",
+  "ace_skill": "ace",
+  "ace_stats": [9, 9, 9, 9, 9, 9, 9, 9, 9],
+  "ace_accentID": 30,
+  "ace_pattern": "probepattern",
+  "ace_decal1": 5,
+  "ace_decal2": 6,
+  "ace_decal3": 7,
+  "ace_color1": [10, 20, 30],
+  "ace_color2": [40, 50, 60],
+  "ace_color3": [70, 80, 90],
+  "lives": 2
+}

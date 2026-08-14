@@ -47,6 +47,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/Maneuvers.cs` — the shared maneuver library (`zrdr/maneuvers.zrd`): 17 timed attitude-step programs with `natural_touch` difficulty gates, the eligibility cull, and the `signature_maneuvers` bitmask decode.
 - `src/Mech3/EnemyGenerators.cs` — the mission `egen.zrd.json` reader: the 23 enemy generators in their three shapes (zeppelin launch / plain / moving spawner), `[null]` files as empty.
 - `src/Mech3/Zeppelins.cs` — the mission `zeppelins.zrd.json` reader: the 58 zeppelin instances (motion limits, net, gasbags/healthy/engines, cannons), all values in authored units.
+- `src/Mech3/InstantAction.cs` — `InstantActionDef` + the `ia.zrd.json`/`--ia=` readers: mission type, wingmen, four waves, ace, with every optional key resolved to the original's own built-in default.
 - `src/Mech3/AiSkills.cs` — the `ai_skill_parameters` endpoint pairs from player.json (1–9 ratings, linear between the decoded endpoints) + the roster accessors: the skill vector (slots 22–30 by stat name), `primary_target` (slot 6) and `rating_biases` (slot 33, `AiRatingBias` wildcards).
 - `src/Mech3/Messages.cs` — the game's localized string table: the `messages.json` key→value map behind every `MSG_*` key.
 - `src/Mech3/MarkerRig.cs` — a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers`.
@@ -922,6 +923,34 @@ in `CSVM.Tests/ZeppelinsTests.cs`.
 ⚠ `deactivated` is decided by the VALUE, not key presence (9 keys, 7 author 1, C1/M04 and
   C2/M03 author 0); `targets` can be an authored `null` (the 8 IA1 files), which reads as
   present-but-empty; `team` accepts three names case-insensitively AND a bare integer id.
+
+## src/Mech3/InstantAction.cs
+`InstantActionDef` (docs/formats/instant-action.md, PLAN-instant-action.md B6) plus two readers
+onto it: `Load` for a chapter's shipped `ia.zrd.json`, `LoadFromJson` for a hand-authored
+`--ia=<path>` file — a plain JSON object using the same field names, not the zrdr archive's
+flat-alternating shape. Both funnel through one private `BuildDef(ZrdrDict)`; `LoadFromJson`'s
+only job is `FromJsonObject`, the small mapping from a JSON object onto the same key/[values…]
+shape `ZrdrDict` already wraps (a nested `group1`…`group4` object flattens the same way), so a
+JSON-authored mission parses through exactly the same field-population path a real chapter's
+does. `spawn_points` and `dzones` stay where they already were (`Flight/SpawnPoints.LoadIa`,
+`Flight/StuntMission`) — this def does not repeat either. Fixture units + install goldens in
+`CSVM.Tests/InstantActionTests.cs`.
+⚠ Every optional key is resolved to the original's own reset-then-overlay default
+  (`FUN_00458ff0`/`FUN_00459390`/`FUN_00458d00`), not left null — `PlayerPlane` reads
+  `"Devastator"` when unauthored (C2B), a wave with no `groupN` key reads 0 enemies with the
+  built-in "Blake Firebrand"/Firebrand/veteran fallback, and the ace defaults to "Marshall Bill
+  Redmann" flying a Devastator. `ZeppelinType` is the one key with no decoded default and stays
+  null when absent.
+⚠ `NumWingmen` and every wave's `NumEnemies` are forced to 0 when `MissionType` resolves to
+  `dogfight_ace` — a decoded PARSE-time rule (not a spawn-time one), so it fires even on an
+  authored non-zero wave count; none of the 8 shipped chapters' own `mission_type` is
+  `dogfight_ace`, so this only exercises on a `--ia=`/wizard-built ace mission.
+⚠ `wingman_plane`, the wave-only `enemy_accentID`, and `ground_target_name`/`ground_target_node`
+  are decoded but deliberately not modelled here (D9's field to add / a mode nothing can reach);
+  do not add them speculatively — see the class doc comment for why each is out.
+⚠ `AceStats` reuses `Mech3.AiSkillVector` (the roster skill-slot type), not a new type — the
+  field order is INFERRED (every shipped chapter carries nine 9s, so nothing in the data can
+  settle it).
 
 ## src/Mech3/AiSkills.cs
 The AI pilot-skill constants (M4 D14, docs/formats/ai-rosters.md): player.json's

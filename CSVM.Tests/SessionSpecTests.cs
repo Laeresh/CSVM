@@ -806,6 +806,16 @@ public class SessionSpecTests
         Assert.Equal("/somewhere", s.DataRoot);
     }
 
+    /// <summary>`--ia=` is a path VALUE only — loading the file into an `InstantActionDef` is the
+    /// runtime's job (PLAN-instant-action.md B6/C8), which is what keeps this type free of file
+    /// I/O.</summary>
+    [Fact]
+    public void IaIsAPathValueOnly()
+    {
+        Assert.Null(S("--fly").IaPath);
+        Assert.Equal("my-mission.json", S("--ia=my-mission.json").IaPath);
+    }
+
     /// <summary>Globals are recorded, never applied — that is what keeps the type reachable from
     /// here, with no engine under it.</summary>
     [Fact]

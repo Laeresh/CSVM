@@ -194,6 +194,12 @@ public sealed record SessionSpec
     /// another one for a specific spawn.</summary>
     public string Scenario { get; private set; } = "zeppelin_run";
     public bool ScenarioExplicit { get; private set; }
+    /// <summary><c>--ia=&lt;path&gt;</c>: fly a mission described by a hand-authored
+    /// <c>InstantActionDef</c> JSON file (<c>Mech3.InstantAction.LoadFromJson</c>) instead of the
+    /// chapter's own shipped <c>ia.zrd.json</c>. Null when the flag was absent — the value is only
+    /// the path; loading it is the runtime's job (PLAN-instant-action.md B6/C8), which keeps this
+    /// type free of file I/O.</summary>
+    public string? IaPath { get; private set; }
     /// <summary>The <c>--stage=</c> value as given, unvalidated — only "empty" names a stage.
     /// Whether it survived is <see cref="EmptyStage"/>.</summary>
     public string? Stage { get; private set; }
@@ -858,6 +864,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--run-tests=")) { s.RunTests = true; s.RunTestsFilter = arg["--run-tests=".Length..]; }
             else if (arg.StartsWith("--mission=")) { s.Mission = arg["--mission=".Length..]; }
             else if (arg.StartsWith("--scenario=")) { s.Scenario = arg["--scenario=".Length..]; s.ScenarioExplicit = true; }
+            else if (arg.StartsWith("--ia=")) { s.IaPath = arg["--ia=".Length..]; }
             else if (arg.StartsWith("--spawn=")) { s.SpawnIndex = int.Parse(arg["--spawn=".Length..]); }
             else if (arg.StartsWith("--spawn-at=")) { s.SpawnAt = ParseVec3(arg["--spawn-at=".Length..]); Deprecate("--spawn-at", "--pos"); }
             else if (arg.StartsWith("--spawn-dir=")) { s.SpawnDir = ParseVec3(arg["--spawn-dir=".Length..]); Deprecate("--spawn-dir", "--direction"); }

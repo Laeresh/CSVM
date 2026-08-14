@@ -24,3 +24,6 @@ Byte-level fixtures (WAV/ADPCM) are not files at all: they are assembled field b
 | `weather-no-cloud/weather.json` | `weather.md` | a mission with `ZONE1` fog and no `CLOUD_COVER` block at all — `CameraWeatherState` pinned to state 1 at any altitude |
 | `gamez-plane/` | `gamez.md`, `markers.md` | node tree parse, the Yxz Euler order, marker rig extraction |
 | `messages.json` | `missions.md` | the message table and its `%1`/`!d!` placeholder grammar |
+| `ia/ia.zrd.json` | `instant-action.md` | the full `InstantActionDef` record, the `num_enemies` clamp to 6, a bare `groupN, null` wave |
+| `ia-minimal/ia.zrd.json` | `instant-action.md` | every optional key's built-in default, and the `dogfight_ace` wingmen/wave zero-forcing rule |
+| `ia-cli.json` | `instant-action.md` | the `--ia=` plain-JSON-object shape (not the zrdr flat-alternating one), a JSON-`null` wave |

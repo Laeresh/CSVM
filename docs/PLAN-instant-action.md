@@ -273,7 +273,7 @@ is M4's formation disproof, `B7` is the team model below.
 
 ### Wave B — The primitives
 
-6. ☐ B6 `InstantActionDef`, its `ia.zrd.json` reader, and `--ia=<path>`
+6. ☑ B6 `InstantActionDef`, its `ia.zrd.json` reader, and `--ia=<path>`
 7. ☐ B7 The team model, replacing `AimAssist.TeamOfPilot`'s stand-in
 
 ### Wave C — Dogfighting an ace
@@ -577,7 +577,27 @@ board.
 
 # Wave B — The primitives
 
-## B6 ☐ `InstantActionDef`, its `ia.zrd.json` reader, and `--ia=<path>`
+## B6 ☑ `InstantActionDef`, its `ia.zrd.json` reader, and `--ia=<path>`
+
+**Landed 2026-08-14.** `Mech3/InstantAction.cs` holds `InstantActionDef` and one shared
+`BuildDef(ZrdrDict)` field-population path reached two ways: `Load` for a chapter's shipped
+`ia.zrd.json`, `LoadFromJson` for a hand-authored `--ia=<path>` plain JSON object (mapped onto
+the same `ZrdrDict` shape, not a second schema). Every optional key resolves to the original's
+own decoded default (`FUN_00458ff0`/`FUN_00459390`/`FUN_00458d00`) rather than to null —
+`PlayerPlane` reads "Devastator" on C2B, a wave with no `groupN` reads the built-in "Blake
+Firebrand" wave, the ace defaults to "Marshall Bill Redmann" — and `NumWingmen`/every wave's
+`NumEnemies` are forced to 0 on `dogfight_ace`, the decoded parse-time rule (confirmed: none of
+the 8 shipped chapters' own `mission_type` is `dogfight_ace`, so this only exercises via
+`--ia=`). `wingman_plane`, the wave-only `enemy_accentID`, and `ground_target_name`/
+`ground_target_node` are decoded but deliberately left out (D9's field to add / an unreachable
+mode). `--ia=<path>` is `SessionSpec.IaPath`, a path value only — no file I/O in the spec, per
+its own purity contract; loading it is the runtime's job (C8). Verification:
+`CSVM.Tests/InstantActionTests.cs` (6 facts: the full-record fixture including the
+num_enemies-clamped-to-6 and bare-`groupN,null`-wave cases, the built-in-defaults-plus-ace-zeroing
+fixture, the `--ia=` JSON-object path including a JSON-`null` wave, a non-object-root rejection,
+and an 8-chapter install golden re-read directly from `extracted/<chapter>/IA1/zrdr/ia.zrd.json`
+this session) plus two `SessionSpecTests` facts for the new flag — 138/138 passed, 0 skipped,
+`CSVM_DATA_ROOT` set. `.\RunTests.ps1` run in full (build/units/engine/goldens).
 
 **Goal.** One typed record describes a whole mission, and two of its three producers exist: the
 shipped-file reader and the CLI. `--ia=<path>` flies a mission described by a hand-authored JSON

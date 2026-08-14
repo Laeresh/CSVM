@@ -1,0 +1,25 @@
+[
+  "mission_type",
+  [
+    "dogfight_ace"
+  ],
+  "group1",
+  [
+    "num_enemies",
+    [
+      6
+    ],
+    "enemy_name",
+    [
+      "MSG_PROBE_G1"
+    ],
+    "enemy_plane",
+    [
+      "Firebrand"
+    ],
+    "enemy_skill",
+    [
+      "novice"
+    ]
+  ]
+]

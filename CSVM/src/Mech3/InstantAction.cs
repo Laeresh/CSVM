@@ -1,0 +1,315 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text.Json;
+using Godot;
+
+namespace CSVM.Mech3;
+
+/// <summary>One <c>groupN</c> wave: how many enemies, and the militia/aircraft/skill they are
+/// authored with. <c>EnemySkill</c> is decoded but read by nothing on this path — a wave's
+/// actual pilot stats are rolled from a 5-row table instead, and the skill string's only real
+/// effect is a global difficulty multiplier for the one spawn that used it, sourced from the
+/// SETUP SCREEN rather than this key (docs/formats/instant-action.md "What novice/veteran/ace
+/// becomes"). This reports the authored value verbatim, the same treatment
+/// <see cref="EnemyGeneratorDef.Capacity"/> gives its own unresolved key.</summary>
+public readonly record struct InstantActionWave(
+    int NumEnemies, string EnemyName, string EnemyPlane, string EnemySkill);
+
+/// <summary>
+/// Reads a chapter's Instant Action configuration two ways onto the same
+/// <see cref="InstantActionDef"/>: the shipped <c>ia.zrd.json</c> (<see cref="Load"/>), and a
+/// hand-authored <c>--ia=&lt;path&gt;</c> file using the same field names as an ordinary JSON
+/// object rather than the zrdr archive's flat-alternating shape (<see cref="LoadFromJson"/>).
+/// The two share one field-population path (<c>BuildDef</c>, over <see cref="ZrdrDict"/>) —
+/// <see cref="LoadFromJson"/>'s only job is the small mapping from a plain JSON object onto the
+/// same key/[values…] shape <see cref="ZrdrDict"/> already wraps (PLAN-instant-action.md B6:
+/// "a small hand-written mapping and not a second schema"), so a JSON object's nested
+/// <c>group1</c>…<c>group4</c> records parse through exactly the same <c>ZrdrDict.Dict</c> call
+/// a real reader's does.
+/// </summary>
+public static class InstantAction
+{
+    // "The built-in defaults" (docs/formats/instant-action.md), decoded from FUN_00458ff0's
+    // record reset and FUN_00458d00's per-wave reset.
+    private const string DefaultMissionType = "dogfight_ace";
+    private const string DefaultPlaneName = "Devastator"; // player_plane / wingman_plane / ace_plane
+    private const string DefaultZeppelinNode = "vostokzep";
+    private const string DefaultAceName = "Marshall Bill Redmann";
+    private const string DefaultAceSkill = "veteran";
+    private const int DefaultAceAccentId = -1;
+    private const int DefaultAceDecal = -2;
+    private const int DefaultAceColorComponent = -1;
+    private const string DefaultWaveEnemyName = "Blake Firebrand";
+    private const string DefaultWaveEnemyPlane = "Firebrand";
+    private const string DefaultWaveEnemySkill = "veteran";
+    private static readonly int[] DefaultAceStats = { 5, 6, 6, 8, 9, 6, 7, 6, 9 };
+
+    /// <summary>Loads one chapter's shipped <c>ia.zrd.json</c> (the mission's own zrdr scope,
+    /// e.g. <c>&lt;chapter&gt;/IA1/zrdr</c> — only IA1 folders carry one). Throws
+    /// <see cref="FileNotFoundException"/> when the mission has no such file.</summary>
+    public static InstantActionDef Load(string missionZrdrPath)
+    {
+        var root = Zrdr.LoadFile(missionZrdrPath, "ia.json");
+        return BuildDef(ZrdrDict.FromAlternating(root));
+    }
+
+    /// <summary>Loads a hand-authored <c>--ia=&lt;path&gt;</c> file: a plain JSON object using
+    /// the same field names as <c>ia.zrd.json</c> (<c>{"mission_type": "dogfight_squadron",
+    /// "num_wingmen": 3, "group1": {"num_enemies": 6, …}, …}</c>), not the zrdr archive's
+    /// flat-alternating list shape.</summary>
+    public static InstantActionDef LoadFromJson(string jsonPath)
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(jsonPath));
+        if (doc.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidDataException($"'{jsonPath}': not a JSON object");
+        }
+        return BuildDef(FromJsonObject(doc.RootElement));
+    }
+
+    private static InstantActionDef BuildDef(ZrdrDict d)
+    {
+        string missionType = d.Str("mission_type") ?? DefaultMissionType;
+        bool ace = string.Equals(missionType, "dogfight_ace", StringComparison.OrdinalIgnoreCase);
+
+        int numWingmen = Math.Clamp(d.TryFloat("num_wingmen", out float nw) ? (int)nw : 0, 0, 5);
+        if (ace)
+        {
+            numWingmen = 0;
+        }
+
+        var waves = new List<InstantActionWave>(4);
+        for (int i = 1; i <= 4; i++)
+        {
+            waves.Add(MakeWave(d.Dict($"group{i}"), ace));
+        }
+
+        return new InstantActionDef
+        {
+            MissionType = missionType,
+            DisallowMissions = Strings(d.List("disallow_missions")),
+            PlayerPlane = d.Str("player_plane") ?? DefaultPlaneName,
+            NumWingmen = numWingmen,
+            Waves = waves,
+            ZeppelinType = d.Str("zeppelin_type"),
+            CargoZeppelinNode = d.Str("cargo_zeppelin") ?? DefaultZeppelinNode,
+            PassengerZeppelinNode = d.Str("passenger_zeppelin") ?? DefaultZeppelinNode,
+            MilitaryZeppelinNode = d.Str("military_zeppelin") ?? DefaultZeppelinNode,
+            AceName = d.Str("ace_name") ?? DefaultAceName,
+            AcePlane = d.Str("ace_plane") ?? DefaultPlaneName,
+            AceSkill = d.Str("ace_skill") ?? DefaultAceSkill,
+            AceStats = MakeAceStats(d.List("ace_stats")),
+            AceAccentId = d.TryFloat("ace_accentID", out float aid) ? (int)aid : DefaultAceAccentId,
+            AceLivery = MakeAceLivery(d),
+            Lives = d.TryFloat("lives", out float lv) ? Math.Max(0, (int)lv) : 1,
+        };
+    }
+
+    private static InstantActionWave MakeWave(ZrdrDict? g, bool forceZero)
+    {
+        int numEnemies = forceZero ? 0
+            : Math.Clamp(g != null && g.TryFloat("num_enemies", out float n) ? (int)n : 0, 0, 6);
+        return new InstantActionWave(
+            numEnemies,
+            g?.Str("enemy_name") ?? DefaultWaveEnemyName,
+            g?.Str("enemy_plane") ?? DefaultWaveEnemyPlane,
+            g?.Str("enemy_skill") ?? DefaultWaveEnemySkill);
+    }
+
+    private static AiSkillVector MakeAceStats(List<object?>? list)
+    {
+        int? At(int i)
+        {
+            if (list == null)
+            {
+                return DefaultAceStats[i];
+            }
+            if (i < list.Count && list[i] is float f)
+            {
+                int v = (int)f;
+                return v is >= 1 and <= 9 ? v : (int?)null;
+            }
+            return null; // an authored-but-malformed single slot — left unset, not guessed
+        }
+
+        return new AiSkillVector
+        {
+            DareDevil = At(0),
+            NaturalTouch = At(1),
+            SixthSense = At(2),
+            DeadEye = At(3),
+            QuickDraw = At(4),
+            SteadyHand = At(5),
+            StunRecovery = At(6),
+            Talker = At(7),
+            Constitution = At(8),
+        };
+    }
+
+    private static PaintScheme? MakeAceLivery(ZrdrDict d)
+    {
+        string? pattern = d.Str("ace_pattern");
+        if (pattern == null)
+        {
+            return null;
+        }
+        return new PaintScheme
+        {
+            Pattern = pattern,
+            Color1 = ReadAceColor(d, "ace_color1"),
+            Color2 = ReadAceColor(d, "ace_color2"),
+            Color3 = ReadAceColor(d, "ace_color3"),
+            NoseDecal = d.TryFloat("ace_decal1", out float d1) ? (int)d1 : DefaultAceDecal,
+            TailDecal = d.TryFloat("ace_decal2", out float d2) ? (int)d2 : DefaultAceDecal,
+            WingDecal = d.TryFloat("ace_decal3", out float d3) ? (int)d3 : DefaultAceDecal,
+        };
+    }
+
+    private static Color ReadAceColor(ZrdrDict d, string key)
+    {
+        var l = d.List(key);
+        if (l is { Count: >= 3 } && l[0] is float r && l[1] is float g && l[2] is float b)
+        {
+            return PaintScheme.FromBytes((int)r, (int)g, (int)b);
+        }
+        return PaintScheme.FromBytes(DefaultAceColorComponent, DefaultAceColorComponent, DefaultAceColorComponent);
+    }
+
+    private static List<string> Strings(List<object?>? list)
+    {
+        var result = new List<string>();
+        foreach (var v in list ?? new List<object?>())
+        {
+            if (v is string s)
+            {
+                result.Add(s);
+            }
+        }
+        return result;
+    }
+
+    // The --ia= plain-object mapping: each property becomes a "key", [values…] pair in the same
+    // shape a zrd reader's alternating list already carries, so BuildDef reads both through one
+    // ZrdrDict. A nested object (group1..group4) flattens to its own key/[values…] pairs the same
+    // way, which is what lets ZrdrDict.Dict("group1") parse it identically either way.
+    private static ZrdrDict FromJsonObject(JsonElement obj)
+    {
+        var list = new List<object?>();
+        foreach (var prop in obj.EnumerateObject())
+        {
+            list.Add(prop.Name);
+            list.Add(JsonToValues(prop.Value));
+        }
+        return ZrdrDict.FromAlternating(list);
+    }
+
+    private static List<object?> JsonToValues(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Object)
+        {
+            var flat = new List<object?>();
+            foreach (var prop in value.EnumerateObject())
+            {
+                flat.Add(prop.Name);
+                flat.Add(JsonToValues(prop.Value));
+            }
+            return flat;
+        }
+        if (value.ValueKind == JsonValueKind.Array)
+        {
+            var items = new List<object?>();
+            foreach (var e in value.EnumerateArray())
+            {
+                items.Add(JsonScalar(e));
+            }
+            return items;
+        }
+        return new List<object?> { JsonScalar(value) };
+    }
+
+    private static object? JsonScalar(JsonElement e) => e.ValueKind switch
+    {
+        JsonValueKind.String => e.GetString(),
+        JsonValueKind.Number => e.GetSingle(),
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        _ => null,
+    };
+}
+
+/// <summary>
+/// One Instant Action mission, fully resolved: everything a chapter's <c>ia.zrd.json</c>
+/// configures, with every optional key filled from the original's own reset defaults
+/// (docs/formats/instant-action.md "The built-in defaults") rather than left blank — the same
+/// reset-then-overlay the game's own parser performs (<c>FUN_00458ff0</c> then
+/// <c>FUN_00459390</c>), which is what lets a hand-authored <c>--ia=&lt;path&gt;</c> file omit
+/// anything the tester does not care about and still get the original's own fallback.
+///
+/// <para><see cref="Flight.SpawnPoints.LoadIa"/> and <see cref="Flight.StuntMission"/> already
+/// read this same file's <c>spawn_points</c> and <c>dzones</c> keys directly — this record does
+/// not repeat either, by design (PLAN-instant-action.md B6: "keep both where they are and have
+/// the def carry the rest").</para>
+///
+/// <para><c>wingman_plane</c> and the wave-only <c>enemy_accentID</c> are decoded (both parsed
+/// by the original, both authored by no shipped chapter) but not modelled here; they are D9's
+/// field to add when the wingman/wave spawn needs them. <c>ground_target_name</c>/
+/// <c>ground_target_node</c> belong to the <c>ground_target</c> mission type, which every
+/// chapter's own <c>disallow_missions</c> bars and this milestone does not implement, so they
+/// are left out entirely rather than modelled for a mode nothing can reach.</para>
+/// </summary>
+public sealed class InstantActionDef
+{
+    public required string MissionType { get; init; }
+
+    public required IReadOnlyList<string> DisallowMissions { get; init; }
+
+    /// <summary>The player's aircraft, the UI's singular display name (<c>"Bloodhawk"</c>, not
+    /// <c>vehicle.json</c>'s def name) — defaults to <c>"Devastator"</c> when unauthored (C2B
+    /// ships neither this nor <see cref="NumWingmen"/>; the setup screen supplies both at retail
+    /// runtime, which this reader does not model).</summary>
+    public required string PlayerPlane { get; init; }
+
+    /// <summary>Clamped to 0–5, and forced to 0 whenever <see cref="MissionType"/> is
+    /// <c>dogfight_ace</c> — the ace duel is solo in the data, not only in the UI.</summary>
+    public required int NumWingmen { get; init; }
+
+    /// <summary>Waves 1 to 4, in order (<c>group1</c>…<c>group4</c>) — always 4 entries; a wave
+    /// with no <c>groupN</c> key at all (or an authored <c>null</c>) reads as the built-in
+    /// per-wave defaults with 0 enemies. Every <see cref="InstantActionWave.NumEnemies"/> is
+    /// forced to 0 alongside <see cref="NumWingmen"/> on <c>dogfight_ace</c>.</summary>
+    public required IReadOnlyList<InstantActionWave> Waves { get; init; }
+
+    /// <summary>Which of the three <c>*_zeppelin</c> node names below is in play
+    /// (<c>cargo</c>/<c>passenger</c>/<c>military</c>); null when unauthored — the built-in
+    /// defaults table gives no decoded fallback for this key, unlike the node names themselves.</summary>
+    public string? ZeppelinType { get; init; }
+
+    public required string CargoZeppelinNode { get; init; }
+
+    public required string PassengerZeppelinNode { get; init; }
+
+    public required string MilitaryZeppelinNode { get; init; }
+
+    public required string AceName { get; init; }
+
+    public required string AcePlane { get; init; }
+
+    public required string AceSkill { get; init; }
+
+    /// <summary>The ace's nine pilot-skill modifiers, in <c>vehicle.json</c>'s stat order — an
+    /// INFERRED field order (docs/formats/spawns.md "ace_stats"): every shipped chapter carries
+    /// nine 9s, so nothing in the data can settle it.</summary>
+    public required AiSkillVector AceStats { get; init; }
+
+    public required int AceAccentId { get; init; }
+
+    /// <summary>Null only when <c>ace_pattern</c> itself is unauthored (every shipped chapter
+    /// carries one; only reachable via a hand-authored <c>--ia=</c> file).</summary>
+    public PaintScheme? AceLivery { get; init; }
+
+    /// <summary>INVENTED — no <c>ia.json</c> key carries this (decision 15,
+    /// PLAN-instant-action.md). Default 1 is the faithful one-life run; N gives N-1 respawns on
+    /// the existing 3s <c>VersusRespawnDelay</c> path; 0 is unlimited. Per pilot, not shared.</summary>
+    public int Lives { get; init; } = 1;
+}

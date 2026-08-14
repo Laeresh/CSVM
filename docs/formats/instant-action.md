@@ -13,6 +13,11 @@ latter's full key census — every field an `ia.json` carries, including the ace
 already lives in [spawns.md](spawns.md); this page does not restate it, only what feeds the
 **setup UI** and the **wrap-up UI** around that data. Decoded 2026-08-14.
 
+The "setup path" and "built-in defaults" sections below are what `Mech3.InstantActionDef` and
+its two readers (`Mech3/InstantAction.cs`, PLAN-instant-action.md B6) implement — every optional
+key resolves to the defaults recorded here rather than to a null, matching the original's own
+reset-then-overlay parse.
+
 ## The screen's controls
 
 `INSTANTACTION.SCRIPT` declares every widget and the engine callback that fills and reads it.
