@@ -191,6 +191,12 @@ public partial class GameSession : Node3D
     // decoded group stamp (FUN_0045b9d0 writes the new counter to the generator's +0x64). 0
     // outside a zeppelin run, or before the first wave becomes current.
     private int _iaLaunchWave;
+    // G14: the authored ace, kept as a field (not just BuildFlightRigs' own local) so
+    // --debug-scoreboard can force it down from DriveSimSteps, well after every Downed
+    // subscription the end-condition block wires is in place. Null outside dogfight_ace.
+    private FlightController? _iaAce;
+    // --debug-scoreboard (IA): single-fire, same shape as _crashFired/_versusDebugKillFired.
+    private bool _iaDebugForceFired;
     // The world AA emplacements (M4 C9b): built with the rigs whenever a chapter world and the
     // shared pool exist, stepped in DriveSimSteps after the zeppelins (slung mounts read the
     // moved pose). Shipped ACTIVATED honoured; --wake-turrets is the WAKEUP_TURRETS stand-in.
@@ -466,6 +472,8 @@ public partial class GameSession : Node3D
         _iaWaveRosters = null;
         _iaWaveSpawnList = null;
         _iaLaunchWave = 0;
+        _iaAce = null;
+        _iaDebugForceFired = false;
         if (_spec.IaPath != null)
         {
             try
@@ -2088,6 +2096,7 @@ public partial class GameSession : Node3D
                     scheme: ia.Def.AceLivery, team: InstantActionRuntime.EnemyTeam, attackRating: rating);
                 RegisterAiVoice(ace, ia.Def.AceAccentId, rating);
                 iaAce = ace;
+                _iaAce = ace;
                 if (ace != null)
                 {
                     GD.Print($"ia: ace '{ia.Def.AceName}' ({aceNode}) rating={rating} " +
@@ -2481,6 +2490,31 @@ public partial class GameSession : Node3D
         // zeppelin run clearing all four of its waves is not a win.
         if (_instantAction is { } iaEnd)
         {
+            // G14's "Enemies Shot Down": every EnemyTeam actor that goes down to an attributed
+            // shooter counts (docs/formats/instant-action.md "What the four numbers count") —
+            // regardless of which objective this mission type actually ends on, since a stunt
+            // chapter still authors its four waves (G13) even though ZonesFlown, not
+            // WavesCleared, is what wins it. `killer != null` is the decode's own filter: a bare
+            // terrain/mid-air crash (FlightController.Downed's other causes) never reached the
+            // take-hit body the original counts in, so it must not reach this counter either. The
+            // ace and every wave roster are the only actors ever built on EnemyTeam, so nothing
+            // else needs a team test here.
+            int enemiesShotDown = 0;
+            if (iaAce != null)
+            {
+                iaAce.Downed += (_, killer) => { if (killer != null) enemiesShotDown++; };
+            }
+            if (_iaWaveRosters != null)
+            {
+                foreach (var roster in _iaWaveRosters)
+                {
+                    foreach (var member in roster)
+                    {
+                        member.Downed += (_, killer) => { if (killer != null) enemiesShotDown++; };
+                    }
+                }
+            }
+
             var objective = iaEnd.Objective;
             if (objective == InstantActionObjective.AceDown && iaAce != null)
             {
@@ -2544,6 +2578,9 @@ public partial class GameSession : Node3D
                     continue;
                 }
                 iaEnd.RegisterPilot(pilot.PlayerIndex);
+                // G14's "Shot %": the decode's "the local player" filter, generalised to every
+                // human seat for splitscreen (ProjectilePool.ScoredShooters).
+                _projectiles?.ScoredShooters.Add(pilot.PlayerIndex);
                 pilot.AutoRespawnAfter = VersusRespawnDelay; // crash cam, then back in — R skips
                 pilot.Downed += (victim, _) =>
                 {
@@ -2564,6 +2601,26 @@ public partial class GameSession : Node3D
                      (iaEnd.ObjectiveEnabled ? objective!.Value.ToString() : "none") +
                      $", loss: every human out of lives ({(iaEnd.Def.Lives == 0 ? "unlimited" : iaEnd.Def.Lives.ToString())} " +
                      $"per pilot), {iaEnd.PilotCount} human seat(s)");
+
+            // G14: the wrap-up board — shared over the WHOLE window like VersusBoard/
+            // StuntRaceBoard (the mission ends for every human at once, decisions 10/14), not a
+            // per-pane overlay. Danger Zones Completed sums every pilot's own live
+            // StuntMission.CompletedCount at the instant the mission ends (null/no zones on a
+            // non-stunt mission reads 0, matching the decode's own "present on every mission
+            // type"); Shot % comes off the ScoredShooters-filtered counters above.
+            var wrapupBoard = IaWrapupBoard.Build(
+                $"{_spec.Chapter}   ·   {iaEnd.Def.MissionType}", exitsToMenu: _menuDriven);
+            var wrapupLayer = new CanvasLayer { Name = "ia_wrapup_board", Layer = UI.HudLayers.Board };
+            wrapupLayer.AddChild(wrapupBoard);
+            _worldRoot!.AddChild(wrapupLayer);
+            iaEnd.MissionEnded += outcome =>
+            {
+                int zonesCompleted = _rigs.Sum(r => r.Controller?.Stunt?.CompletedCount ?? 0);
+                int shotPercent = InstantActionRuntime.ShotPercent(
+                    _projectiles?.CannonHits ?? 0, _projectiles?.CannonRoundsFired ?? 0);
+                wrapupBoard.Present(outcome == InstantActionOutcome.Won, iaEnd.Elapsed,
+                    enemiesShotDown, zonesCompleted, shotPercent);
+            };
         }
 
         // World AA emplacements (M4 C9b): the standalone ai.zrd family, placed at its NODES
@@ -3184,6 +3241,31 @@ public partial class GameSession : Node3D
         {
             _versusDebugKillFired = true;
             _rigs[1].Controller?.DebugForceCrash(_rigs[0].Controller?.PlayerIndex);
+        }
+        // --debug-scoreboard (IA, G14): force this mission's own win signal on the first sim step,
+        // the same single-fire shape as --crash/--debug-scoreboard --vs above — dogfight_ace and
+        // dogfight_squadron through the very DebugForceCrash path a real kill takes, attributed to
+        // P1 so the wrap-up board's "Enemies Shot Down" reads non-zero on a scripted screenshot
+        // too. stunt_flying is already forced unconditionally by FlightRigAssembler's own
+        // DebugCompleteStunt wiring, so it needs nothing here. zeppelin_run has no debug force —
+        // G13's own verification drove that one through real damage instead (F18's survivor
+        // threshold), and this item does not add a new one.
+        if (_instantAction is { } iaDebug && _spec.DebugScoreboard && !_iaDebugForceFired)
+        {
+            _iaDebugForceFired = true;
+            int? attributedTo = _rigs.Count > 0 ? _rigs[0].Controller?.PlayerIndex : null;
+            if (iaDebug.Objective == InstantActionObjective.AceDown)
+            {
+                _iaAce?.DebugForceCrash(attributedTo);
+            }
+            else if (iaDebug.Objective == InstantActionObjective.WavesCleared && _iaWaveRosters != null)
+            {
+                // DebugForceCrash self-gates on InPlay (E10), so this reaches only whatever wave
+                // is currently active — the rest are still parked inert awaiting their own turn.
+                foreach (var roster in _iaWaveRosters)
+                    foreach (var member in roster)
+                        member.DebugForceCrash(attributedTo);
+            }
         }
         for (int i = 0; i < clock.Steps; i++)
         {

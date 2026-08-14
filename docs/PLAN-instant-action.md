@@ -298,7 +298,7 @@ is M4's formation disproof, `B7` is the team model below.
 ### Wave G — Ends
 
 13. ☑ G13 End conditions, lives and spectating
-14. ☐ G14 The wrap-up board
+14. ☑ G14 The wrap-up board
 
 ### Wave H — The menu
 
@@ -1262,7 +1262,50 @@ mission clock this item adds should follow that rule rather than wall time. (d) 
 exists for `--freecam` and has never been driven from a mid-session death; expect it to need a mode
 that follows a live aircraft rather than free-flying.
 
-## G14 ☐ The wrap-up board
+## G14 ☑ The wrap-up board
+
+**Landed 2026-08-14.** `Flight/IaWrapupBoard` renders the shipped screen's four rows — `VersusBoard`'s
+shared whole-window construction, since decisions 10/14 already end an Instant Action mission for
+every human at once, not `StuntScoreboard`'s per-pane shape. Every value is a snapshot `GameSession`
+hands to `Present` from `InstantActionRuntime.MissionEnded`, never read live off the board itself.
+Time to Complete Mission and Shot % are `InstantActionRuntime.FormatElapsed`/`ShotPercent`, two new
+pure static helpers (A5's `%02d:%02d` and `100 × hits / fired`, both truncating). Enemies Shot Down
+is a plain `Downed`-event tally on the ace and every `_iaWaveRosters` member — the only actors ever
+built on `EnemyTeam` — filtered on `killer != null` so a bare terrain/mid-air crash never counts,
+matching A5's finding that the original's counter lives in the take-hit body rather than in every
+`Downed` cause. Shot % rides two new `ProjectilePool` counters, `CannonRoundsFired`/`CannonHits`,
+gated on `WeaponDef.IsCannon` and on the shooter's id being in a new `ScoredShooters` set that
+`GameSession` populates with every human seat — the decode's "the local player" filter, generalised
+to splitscreen. Danger Zones Completed is `_rigs.Sum(r => r.Controller?.Stunt?.CompletedCount ?? 0)`,
+read live rather than accumulated (0 on every non-stunt mission, matching A5's "present on every
+mission type"). Two deliberate divergences, both named at the site: a zero-denominator Shot% reads
+0 rather than the original's unguarded x87 divide (a large negative number), and the 32-bit-vs-16-bit
+snapshot wraparound is not reproduced — neither is "behaviour worth copying" per A5's own words.
+`--debug-scoreboard` now also forces `dogfight_ace`/`dogfight_squadron` to their win signal on the
+first sim step (`DebugForceCrash`, attributed to P1 so the board's kill row reads non-zero on a
+scripted screenshot); `stunt_flying` needed nothing new (`FlightRigAssembler`'s existing
+`DebugCompleteStunt` wiring already forces it); `zeppelin_run` gets no debug force here, matching
+G13's own choice to verify that mode through real damage instead of inventing one.
+
+Verification: `.\RunTests.ps1` clean — build, 1212/1212 unit tests (9 new: `FormatElapsed`'s 5
+truncation cases and `ShotPercent`'s 4, including the zero-denominator one), 59/59 engine suites (new `instant-action-wrapup`:
+a real cannon round fired at a real target through the real pool counts as both fired and hit for a
+`ScoredShooters` id and moves neither counter for an unscored shooter or a non-cannon round — each
+assertion paired with an able-to-fail control per METHOD-9/10), engine errors clean, 14/14 goldens
+hash-identical. 159.7s total. `--screenshot=` proof over three real `--ia=` runs on C1: `dogfight_ace`
+and a one-wave `dogfight_squadron`, each `--debug-scoreboard`-forced, show MISSION COMPLETE with
+Enemies Shot Down 1 and Shot % 0% (`DebugForceCrash` bypasses the projectile pool, so no cannon
+round is ever fired — a correct 0, not a missing counter); the same `dogfight_ace` file under
+`--crash` (the player's own forced death, `lives` defaulting to 1) shows MISSION FAILED from the
+spectator camera, all four rows zeroed; `stunt_flying`'s own `--debug-scoreboard` path (already
+unconditional via `FlightRigAssembler`) shows Danger Zones Completed 5, matching C1/IA1's authored
+zones. That last shot also surfaced `BL-358`: `Flight/StuntScoreboard`, built unconditionally for
+any completed stunt run, wakes on the same event and stacks visibly behind the wrap-up board —
+correctly layered (drawn under it) and every number on both boards is right, but cosmetically busy;
+filed rather than fixed here, since resolving the interaction between two already-separate boards is
+a design call this item's own scope (the four rows) does not make. `zeppelin_run` was not
+screenshotted — this item adds no debug force for it, matching G13's own choice to verify that mode
+through real damage instead, and it already has engine-suite coverage.
 
 **Goal.** A completed or failed mission shows the original's four rows: Time to Complete Mission,
 Enemies Shot Down, Danger Zones Completed, Shot %.

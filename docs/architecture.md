@@ -2200,6 +2200,14 @@ each step measures the round's ACTUAL travelled segment — hit/fuse point inclu
 registered aircraft but its shooter's, and reports the pass distance (`WarningShotCue`).
 `RegisterAircraft` is the hittability half: the hit ray runs world+aircraft with each round
 excluding its own shooter's registered `AircraftBody` by RID.
+`ScoredShooters`/`CannonRoundsFired`/`CannonHits` (PLAN-instant-action.md G14) are the wrap-up
+board's "Shot %" counters: `Spawn` increments the fired side once per round actually created (the
+pool was not full) and `Impact` increments the hit side, both gated on `weapon.IsCannon` and the
+shooter's id being in `ScoredShooters` — `GameSession` populates that set with every human seat's
+`PlayerIndex` on an Instant Action mission and leaves it empty otherwise, so the counters cost
+nothing outside one. `Impact` is CSVM's single choke point for all three of the decode's hit sites:
+a cannon round only ever reaches it through `SimStep`'s direct-hit ray, since the fuse/range-expiry
+call sites below are both gated to rockets.
 ⚠ **The roster is not the physics layers.** `CollectAircraft`, `ProximityFuseTriggered` and
 `BlastAircraftPass` walk this registered list directly rather than issuing a query, so the
 collision layer that hides a crashed or INERT plane from the hit ray does not reach them — all
@@ -2719,6 +2727,24 @@ every rig respawns), owned only while the board is visible via `FlightController
 `RestartRace` already use.
 ⚠ Scales on raw window height / 720, NOT HudMetrics — same reason `StuntRaceBoard` does: pane
   damping would shrink a full-window overlay for no reason.
+
+## src/Flight/IaWrapupBoard.cs
+Instant Action's wrap-up board (`PLAN-instant-action.md` G14) — `VersusBoard`'s WHOLE-window
+construction, since the mission ends for every human at once (decisions 10/14), not
+`StuntScoreboard`'s per-pane shape. Four label/value rows (Time to Complete Mission, Enemies Shot
+Down, Danger Zones Completed, Shot %) — the langui titles at ids 1134-1137, kept as literal
+strings rather than read off `ui_strings.json` at runtime, since that table is a build-time
+extraction artifact of the `.rof` archive and not one of the five archives `SessionArchives.OpenFor`
+loads. Unlike `VersusBoard`/`StuntRaceBoard` it takes no live match object at all: `Present(won,
+elapsedSeconds, enemiesShotDown, zonesCompleted, shotPercent)` is the caller's own snapshot, handed
+in once from `InstantActionRuntime.MissionEnded` — `GameSession` owns every source (the mission
+clock, the kill tally, `ProjectilePool`'s shot counters, the summed `StuntMission.CompletedCount`)
+and this class only draws what it is given.
+⚠ No rematch, unlike its two siblings — once a mission has ended it stays ended — so `_Process`
+  never re-hides the board; there is no `Completed`/`AllComplete` flag to watch for one.
+⚠ The outcome headline ("MISSION COMPLETE"/"MISSION FAILED") is not on the shipped screen at all —
+  the original never lost a mission with lives to run out (decisions 14/15) — so it is CSVM's own,
+  in the shape `VersusBoard`'s winner-name headline already takes.
 
 ## src/Flight/Weather.cs
 `WeatherState`: per-mission atmosphere from the flown mission's own weather.json — per-zone
@@ -4288,6 +4314,25 @@ the target is picked once, so if that pilot later goes out too (3+ players) the 
 wreck until any movement input releases the lock. An `--ia=` `stunt_flying` mission also loads the
 danger zones itself, `--stunt` or not — the mission type is what asks for them, the way a zeppelin
 run asks for the zeppelin and generator runtimes.
+G14 adds the wrap-up board, built once right after G13's own block (same `_instantAction is { }
+iaEnd` guard) and shown from a second `MissionEnded` subscriber. `enemiesShotDown` is a plain local
+int, incremented from a `Downed` handler on the ace and every `_iaWaveRosters` member — the only
+actors ever built on `InstantActionRuntime.EnemyTeam` — filtered on `killer != null` so a bare
+terrain/mid-air crash never counts (docs/formats/instant-action.md: the original's counter lives in
+the take-hit body, not in every `Downed` cause). Every human seat's `PlayerIndex` also joins
+`ProjectilePool.ScoredShooters` in the same lives-registration loop, which is what lets
+`_projectiles.CannonRoundsFired`/`CannonHits` answer `InstantActionRuntime.ShotPercent` at
+`MissionEnded` time; `zonesCompleted` is `_rigs.Sum(r => r.Controller?.Stunt?.CompletedCount ?? 0)`,
+read live rather than accumulated (0 on every non-stunt mission, matching the decode's "present on
+every mission type"). ⚠ **Danger Zones Completed and Shot % are both a decoded "the local player"
+counter, generalised to every human for splitscreen — summed, never picked from one pane** — an
+extension named as one, the same shape decisions 8/8a/10 already take, not a decode.
+`--debug-scoreboard` forces this mission's own win signal on the first sim step (`DriveSimSteps`,
+mirroring the `--vs` block just above it): `dogfight_ace`/`dogfight_squadron` through
+`DebugForceCrash`, attributed to P1 so the board's kill row reads non-zero on a scripted
+screenshot too; `stunt_flying` needs nothing here, already forced unconditionally by
+`FlightRigAssembler`'s own `DebugCompleteStunt` wiring; `zeppelin_run` has no debug force — this
+item does not add one, since G13's own verification drove that mode through real damage instead.
 ⚠ **`StepInstantAction` runs from BOTH drive paths** — `DriveSimSteps` and `_PhysicsProcess`, like
   the match clock — because a realtime session never enters `DriveSimSteps` at all. E11 stepped the
   sequencer only in the first, so before G13 no wave advanced at the controls; it is one method now
@@ -4981,6 +5026,15 @@ record whose reset wrote `+0x254 = 0` (`FUN_00458ff0`'s `param_1[0x95] = 0`), so
 misspelled `zeppelin_type` resolves to cargo. All eight shipped chapters name `multiplayer1zep` for
 all three types, so the three names collapse to one in every real case and only a hand-authored
 `--ia=` file can distinguish them.
+G14 adds the wrap-up board's two formatting formulas, both pure: `FormatElapsed(seconds)`
+(`minutes = ms / 60000`, `seconds = (ms / 1000) % 60`, both truncating — the decoded `%02d:%02d`)
+and `ShotPercent(hits, fired)` (`100 × hits / fired`, truncating). ⚠ **`ShotPercent` reads 0 at a
+zero denominator, a deliberate divergence** — the original's unguarded x87 divide prints a large
+negative number there (docs/formats/instant-action.md), which is not behaviour worth copying.
+`GameSession` computes every other input (the kill tally, the summed zone count, the
+`ProjectilePool` shot counters) and hands the four finished values straight to
+`Flight/IaWrapupBoard.Present` — this class owns none of that engine-side plumbing, the same
+division C8's `Objective`/`Outcome` half already draws against `GameSession`.
 
 ## src/Session/InstantActionWaves.cs
 The decoded wave sequencer's own selection, trigger and geometry logic (PLAN-instant-action.md

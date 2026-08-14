@@ -201,6 +201,12 @@ public static class Suites
             "respawns it, out of lives the wreck is still there 10 s later and the solo mission " +
             "is LOST",
             InstantActionEnd));
+        into.Add(new TestHarness.Suite("instant-action-wrapup",
+            "the G14 wrap-up board's two shot counters, ScoredShooters-filtered exactly as the " +
+            "decode's own 'the local player' is: a scored shooter's cannon round counts as both " +
+            "fired and hit, an unscored (AI) shooter's identical shot moves neither counter, and " +
+            "a scored shooter's ROCKET (not CANNON) round is excluded from both",
+            InstantActionWrapup));
         into.Add(new TestHarness.Suite("inert-aircraft",
             "the E10 inert state, each claim watched passing on a live aircraft first and on the " +
             "inert one AFTER activation: a plane built inert is not returned by a raycast, is " +
@@ -4096,6 +4102,97 @@ public static class Suites
         string name = $"ia-end-{tag}.json";
         ctx.WriteArtifact(name, json);
         return InstantAction.LoadFromJson(Path.Combine(ctx.ScratchDir, name));
+    }
+
+    /// <summary>The G14 wrap-up board's two shot counters (PLAN-instant-action.md,
+    /// docs/formats/instant-action.md "What the four numbers count"): <c>ProjectilePool</c> is the
+    /// single choke point for both, so this fires real rounds through the real pool at a real
+    /// target rather than asserting on the arithmetic in isolation. The board's other two rows —
+    /// Danger Zones Completed (a live read of <c>StuntMission.CompletedCount</c>) and Enemies Shot
+    /// Down (a plain <c>Downed</c>-event tally already exercised by every other Downed-driven
+    /// assertion in <see cref="InstantActionEnd"/>) — need no dedicated instrument here.</summary>
+    private static void InstantActionWrapup(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
+        WeaponDef? cannon = weaponDefs.All.FirstOrDefault(w => w.IsCannon && w.ArmorDamage is > 0f);
+        WeaponDef? rocket = weaponDefs.All.FirstOrDefault(w => w.IsRocket);
+        ctx.Check(cannon != null && rocket != null,
+            $"a CANNON gun and a rocket both exist in the data (cannon={cannon != null} rocket={rocket != null})");
+        if (cannon == null || rocket == null)
+            return;
+
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightController? target = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            var spec = SessionSpec.Parse(System.Array.Empty<string>());
+            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var inputs = new FlightRigAssembler.Inputs
+            {
+                PlanesGamez = planesGamez,
+                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                RigCount = 0,
+                PaintRng = new RandomNumberGenerator(),
+                ZrdrPath = ctx.ZrdrPath,
+                StockLoadouts = StockLoadouts.Load(),
+                WeaponDefs = weaponDefs,
+                Textures = textures,
+                Projectiles = live,
+                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            };
+            var spawner = new AiAircraftSpawner(spec, liveries, null!, ctx.Host, inputs);
+
+            var pos = new Vector3(0f, 500f, 0f);
+            target = spawner.Spawn(ctx.PlaneName, pos, pos + Vector3.Forward,
+                AiPilot.HoldingCourse(pos, pos + Vector3.Forward),
+                scheme: null, team: InstantActionRuntime.EnemyTeam);
+            ctx.Check(target?.Body != null, $"the target built a collision body");
+            if (target?.Body == null)
+                return;
+
+            // ScoredShooters (G14): shooter 0 stands in for a registered human seat, 999 for an
+            // AI's shooter id, which a mission never adds to the set.
+            live.ScoredShooters.Add(0);
+
+            var muzzle = new Transform3D(
+                Basis.LookingAt(Vector3.Back, Vector3.Up), pos + new Vector3(0f, 0f, -20f));
+            void FireOnce(WeaponDef weapon, int shooterId)
+            {
+                live.Spawn(weapon, muzzle, Vector3.Zero, shooterId: shooterId);
+                for (int i = 0; i < 20; i++)
+                    live.SimStep(1f / 60f);
+                live.Clear();
+            }
+
+            FireOnce(cannon, shooterId: 0);
+            ctx.Check(live.CannonRoundsFired == 1 && live.CannonHits == 1,
+                $"a scored shooter's cannon round counts as both fired and hit: fired={live.CannonRoundsFired} hits={live.CannonHits}");
+
+            FireOnce(cannon, shooterId: 999);
+            ctx.Check(live.CannonRoundsFired == 1 && live.CannonHits == 1,
+                $"an unscored shooter's identical shot moves neither counter: fired={live.CannonRoundsFired} hits={live.CannonHits}");
+
+            FireOnce(rocket, shooterId: 0);
+            ctx.Check(live.CannonRoundsFired == 1 && live.CannonHits == 1,
+                $"a scored shooter's ROCKET is excluded from the cannon-only counters: fired={live.CannonRoundsFired} hits={live.CannonHits}");
+        }
+        finally
+        {
+            pool?.Free();
+            target?.Free();
+            textures.Dispose();
+        }
     }
 
     /// <summary>The E10 inert state (PLAN-instant-action.md): an aircraft built complete and then

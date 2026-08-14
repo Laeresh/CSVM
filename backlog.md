@@ -2725,6 +2725,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   does not, and the two should not be conflated. (b) `PURCHASE` implies an economy, which belongs to
   the campaign and not to Instant Action.
 
+- `BL-358` `[Polish]` **The Instant Action wrap-up board stacks on top of the stunt scoreboard on a
+  `stunt_flying` mission.** Landed alongside `PLAN-instant-action.md` G14 (2026-08-14), screenshot-
+  observed (`--ia=` a `stunt_flying` file, `--debug-scoreboard`): `FlightRigAssembler` already builds
+  a per-pane `Flight/StuntScoreboard` unconditionally for any completed stunt run, and G14's own
+  `Flight/IaWrapupBoard` wakes on the SAME event, so both render at once — the wrap-up board correctly
+  drawn on top (`CanvasLayer` 10 over the pane's own HUD canvas), but the stunt board's zone-split
+  table shows through behind it. Cosmetic only: every number both boards show is correct. Whether the
+  fix is hiding `StuntScoreboard` for the duration of an Instant Action mission, sequencing the two
+  (splits first, then the wrap-up), or leaving both (the original may have shown an analogous
+  sequence of screens) is a design call this item did not make, since G14's own scope was the four
+  rows, not the interaction between two already-separate boards — `docs/PLAN-instant-action.md`'s own
+  trap (b) on this item says not to change either board's persistence rule while adding one that
+  shows both, which this leaves untouched.
+
 - `BL-350` `[Bug]` `[Blocked: mission animations]` **Generator-spawned planes crash inside closed hangars
   (C1/M04 `--generators`, user-reported 2026-08-13).** The spawn position is decoded-correct: the
   original's launch routine (`FUN_00452450`) teleports the launched vehicle to the same generator

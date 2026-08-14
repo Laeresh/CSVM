@@ -439,6 +439,24 @@ public sealed partial class ProjectilePool : Node3D
     /// lab, the dump probes), which costs the scan nothing.</summary>
     public List<NearMissTarget> NearMissTargets { get; } = new();
 
+    /// <summary>Instant Action's wrap-up "Shot %" (PLAN-instant-action.md G14,
+    /// docs/formats/instant-action.md "What the four numbers count"): the decode counts a cannon
+    /// round fired/hit only when the shooter is <c>the local player</c>; a shooter id in this set
+    /// is that filter generalised to every human pilot for splitscreen (empty — nothing scored —
+    /// outside Instant Action). <see cref="CannonRoundsFired"/>/<see cref="CannonHits"/> below are
+    /// the two counters, both filtered on <see cref="WeaponDef.IsCannon"/> exactly as the decode's
+    /// <c>0x40</c> bit test is.</summary>
+    public HashSet<int> ScoredShooters { get; } = new();
+
+    /// <summary>Cannon rounds a scored shooter fired that actually created a round (the pool was not
+    /// full) — the decode's denominator, <c>FUN_004b6820</c>'s per-station fire loop.</summary>
+    public int CannonRoundsFired { get; private set; }
+
+    /// <summary>Cannon rounds a scored shooter hit something with — the decode's numerator, summed
+    /// over its three hit sites (<see cref="Impact"/> is CSVM's single choke point for all three: a
+    /// cannon round never reaches the rocket-only fuse/range-expiry arms below).</summary>
+    public int CannonHits { get; private set; }
+
     /// <summary>Whether an authored effect radius is also a positive-health damage blast — the
     /// weapon-level spelling of <see cref="ImpactOutcome.HasBlastDamage"/>, where the rule lives.
     /// The surface never changes the answer, so any resolves it.</summary>
@@ -675,6 +693,10 @@ public sealed partial class ProjectilePool : Node3D
         }
         if (slot >= 0)
         {
+            // G14's fired-side counter: once per round actually created (this arm), never per
+            // trigger pull — matching the decode's "only when a round is actually created".
+            if (weapon.IsCannon && ScoredShooters.Contains(shooterId))
+                CannonRoundsFired++;
             var vel = forward * speed + inheritVel;
             var model = weapon.IsRocket ? BuildFlyoutModel(weapon) : null;
             if (model != null)
@@ -1512,6 +1534,12 @@ public sealed partial class ProjectilePool : Node3D
     private void Impact(WeaponDef weapon, Vector3 point, Node? collider, Vector3 normal, int shapeIdx = -1,
         int shooter = NoShooter)
     {
+        // G14's hit-side counter. A cannon round only ever reaches Impact through the direct-hit
+        // ray (SimStep's first call site) — the fuse/range-expiry call sites below are gated to
+        // rockets — so this one guard covers the decode's three hit sites without distinguishing
+        // them, exactly as the decode's own filter (shooter + the CANNON bit) does.
+        if (weapon.IsCannon && ScoredShooters.Contains(shooter))
+            CannonHits++;
         int surface = SurfaceIdOf(collider);
         bool hasEffectsRuntime = EffectSink != null;
         // The decision, taken once and read twice. `modelResolved` cannot be known before the
