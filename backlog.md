@@ -2669,6 +2669,62 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Missions, modes & campaign
 
+- `BL-352` `[Feature]` **Instant Action's Table of Contents: the 19 preset scenarios and their View
+  Story page.** Split out of [`docs/PLAN-instant-action.md`](docs/PLAN-instant-action.md) at writing
+  (2026-08-14) as deliberately out of that plan's scope. The original's Instant Action screen is not
+  primarily a form: down its left side sits `ia_tl_contents`, a 14-row list of 19 named preset
+  scenarios (`langui` ids 3600 to 3618: *Girl Trouble*, *Sour Grapes*, *Black Hats and Hoplites*,
+  *Swan's Gauntlet*, *Manhattan Tea Party*, …). Selecting one fills every dropdown, and *View Story*
+  (`IDS_IA_B_VIEWSTORY`) opens its written setup. `IDS_IA_TABLE_INSTRUCTIONS` says so outright:
+  "Select a mission below and click View Story to see its details on the next page." Most players
+  never touched the dropdowns at all, so this is the mode's real front door.
+  **What it needs.** The preset table is not in any shipped data file; `INSTANTACTION.SCRIPT` reaches
+  it through engine callbacks 2301 (initial index plus mission type), 2302 (index to mission type)
+  and 2353 (push the whole form), so it lives in `crimson.exe`. Decode those four callbacks and the
+  table they read, then render the presets as a first screen ahead of the wizard's step 1. The story
+  prose is a second question: it may be `langui` strings, or it may be `crimson.rof` artwork.
+  ⚠ **Traps.** (a) `ia_tl_contents`'s selection sets the mission type, which then re-enables or hides
+  the whole enemy-wave block (`if (0 == WT)`), so a preset is not just a set of dropdown values; it
+  drives the screen's own state machine. (b) 19 presets against 7 environments means presets are not
+  per-environment; do not assume a mapping. (c) Blocked on nothing, but pointless before
+  `PLAN-instant-action` lands the configurable mission the presets would fill in.
+
+- `BL-353` `[Feature]` **Weapon Loadout before an Instant Action flight.** Split out of
+  [`docs/PLAN-instant-action.md`](docs/PLAN-instant-action.md) at writing (2026-08-14). The original's
+  Instant Action screen carries a *Weapon Loadout* button (`IA_B_CHANGEWEAPONS`, `IDS_IA_B_WEAPONLOADOUT`)
+  that opens `ORDINANCELAYOUT.SCRIPT` for either the pilot or the wingmen, selected by the
+  `IA_B_PLAYER` / `IA_B_WINGMAN` radio pair beside it (`@globals@ZQ` is -1 for the pilot, -2 for the
+  wingmen). We fly the stock fit and offer no way to change it outside `--loadout=` and the weapon
+  lab.
+  **Why it is cheap-ish.** The runtime half largely exists: `Loadout.ForRig` already binds every
+  firepoint and every pylon from the stock fit, which is what the weapon lab uses to arm a mount the
+  stock file never names, and `PylonOrdnance` already builds the mounted bodies. The missing half is
+  the UI and the persistence of a chosen fit into `InstantActionDef`.
+  ⚠ **Traps.** (a) The loadout is bound **before** the controller enters the tree, because
+  `FlightController._Ready` builds the fire state and the ordnance-type list from it
+  (`Session/FlightRigAssembler`); a fit chosen in a menu has to reach the assembler, not be applied
+  after. (b) The pilot/wingman radio means one chosen fit covers all wingmen, not one each; do not
+  build a per-wingman editor without checking that against the original.
+
+- `BL-354` `[Feature]` **The hangar: Build Custom Plane.** Split out of
+  [`docs/PLAN-instant-action.md`](docs/PLAN-instant-action.md) at writing (2026-08-14) as a milestone
+  of its own rather than a wave of that plan. `IA_B_BUILD` opens the customisation flow, which
+  `crimson.rof` ships whole: `PLANESELECTION`, `PLANECONSTRUCTION`, `AIRFRAME`, `ARMOR`, `ENGINE`,
+  `GUNS`, `HARDPOINTS`, `PAINT`, `PLANENAME`, `PURCHASE`. Instant Action's pilot-plane dropdown is
+  sized `callback(1024) + 11`, the eleven stock airframes plus however many custom planes the player
+  has saved, and `gui_continue` selects index 11 (the first custom plane) after a build returns.
+  **What already exists here.** The paint half is decoded and implemented: the `.BM` region masks,
+  the three-slot colour formula, the decal set and the per-aircraft pattern lists all live in
+  [`docs/formats/paint.md`](docs/formats/paint.md) and `Mech3/PatternLibrary` + `Mech3/PlanePainter`,
+  and the livery lab already steps them. The armour, engine, guns and hardpoints screens have no
+  decode yet.
+  ⚠ **Traps.** (a) Saved custom planes are 204-byte files in the install's `Planes/` directory and
+  are only **partly** decoded: the name at 0x04 and the three colours at 0x68 as RGBA, with the
+  pattern and decal indices immediately before them unread ([`docs/formats/paint.md`](docs/formats/paint.md),
+  "Saved custom planes"). Importing a player's existing planes needs that finished; creating our own
+  does not, and the two should not be conflated. (b) `PURCHASE` implies an economy, which belongs to
+  the campaign and not to Instant Action.
+
 - `BL-350` `[Bug]` `[Blocked: mission animations]` **Generator-spawned planes crash inside closed hangars
   (C1/M04 `--generators`, user-reported 2026-08-13).** The spawn position is decoded-correct: the
   original's launch routine (`FUN_00452450`) teleports the launched vehicle to the same generator
