@@ -133,7 +133,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave G — Diagnosis (the instrument's first customer)
 
-15. ☐ G15 — Label a baseline and reproduce the damage-lab hitch under the instrument
+15. ☑ G15 — Label a baseline and reproduce the damage-lab hitch under the instrument
 16. ☐ G16 — Read the record, name the cause, mint the fix as a `backlog.md` entry
 
 ## Dependency and parallelism notes
@@ -842,7 +842,7 @@ description of what landed, and must not be longer after the edit than before it
 
 # Wave G — Diagnosis
 
-## G15 ☐ Label a baseline and reproduce the damage-lab hitch under the instrument
+## G15 ☑ Label a baseline and reproduce the damage-lab hitch under the instrument
 
 **Goal.** A labelled `perf-history.jsonl` baseline exists for the current build, and the reproducible
 hitch has been captured with a full record.
@@ -850,19 +850,42 @@ hitch has been captured with a full record.
 **Evidence (confidence: lead-only).** This wave is the investigation, so it has no findings yet by
 construction.
 
-**Approach.** `.\RunTests.ps1 -Perf -PerfLabel <baseline>` on the landed instrument. Then reproduce
-interactively with the damage lab and capture the sidecar, and separately via E13's scripted
-scenario. Keep both: the interactive one is the phenomenon as experienced, the scripted one is what
-future A/Bs will actually compare.
+**Approach — reconciled against E13, not as first written.** The original Approach's second half
+("separately via E13's scripted scenario") named a scenario that does not exist: E13 disproved the
+only CLI path to the aircraft `DamageLab`'s burst (`--damage=`, applied inside
+`Launcher.LaunchSession`'s build, always finished before `Rearm()` starts the grace window) and found
+no CLI-reachable way to delay it. Reading `DamageLab.cs` directly closes the other half too:
+`Reapply()` fires only from `HSlider.ValueChanged` (a hand drag) or that same build-time preset —
+nothing calls it post-`Rearm()`. **The literal aircraft-DamageLab burst has no scripted repro today**,
+only an interactive one (a human dragging a slider after grace has cleared), which this item did not
+attempt (see Verify — the user chose the scripted proxy below over sitting at the controls).
+`.\RunTests.ps1 -Perf -PerfLabel g15-baseline` labelled the baseline. For the hitch itself, `--crash=`
+stood in as the live, scriptable proxy C9 already called "the closest available proof": a real,
+post-`Rearm()` `FlightController.Crash()` that detaches parts and throws debris, picked past
+`HitchMonitor`'s grace window the same way B5/E13 tuned `--hitch-inject=`/`--damage=` (PERF-12):
+frame 300 at this machine's ~8.33 ms/frame pace lands ~2500 ms in, ~500 ms past the 2000 ms grace.
 
 **Model recommendation.** medium. Execution is mechanical; the judgement is in G16.
 
-**Verify.** A labelled record exists for the current `CSVM.dll` hash. At least one sidecar record
-exists for the damage-lab case, with breadcrumbs populated.
+**Verify.** `.\RunTests.ps1 -Perf -PerfLabel g15-baseline -SkipUnits -SkipEngine -SkipGoldens` — PASS,
+119.6 s total, `dll_md5=9dec2111b119d6798600d432aa6d52a0` (commit `1dfe02f`, `dirty=False`) — 5
+scenario records landed in `perf-history.jsonl`, all labelled `g15-baseline`, all `hitch_count=0` (a
+clean instrument on an unmodified build, not yet the reproduction).
+`.\RunProbe.ps1 --fly --chapter=C1 --plane=player_bhawk --crash=300 --no-vsync --perf --frames=320
+--screenshot=.scratch\g15-crash-proxy.png` tripped twice, both well clear of grace: frame 300
+`frame_ms=48.43` (threshold 40.00, `samples=part_detach:1x33.01`) and frame 301 `frame_ms=62.11`
+(`samples=effect_pool_miss:7x54.36`). The sidecar `.scratch/logs/fly-20260814-203733.hitches.jsonl`
+carries both full records — a 120-entry ring each, breadcrumbs populated, `sample_violations` 6 and 7
+respectively (C9's compound-event shape, not a mis-fire).
 
 **⚠ Traps.** Interactive and scripted runs differ in vsync mode, so their hitch counts are not
-comparable (E14). Take the baseline **before** touching anything else, or there is nothing to compare
-a later fix against, which is the whole reason this plan lands no fix.
+comparable (E14) — moot here, since this item landed only the scripted half; an interactive
+`DamageLab` capture, if taken later, is a separate, non-comparable data point, not a replacement for
+one. Take the baseline **before** touching anything else, or there is nothing to compare a later fix
+against, which is the whole reason this plan lands no fix. **The reconciliation is itself a finding to
+carry into G16**: `part_detach`/`effect_pool_miss` from a scripted plane crash are evidence for the
+debris/effects-cascade hypothesis in general, not for the aircraft `DamageLab` specifically — read
+them as the closest available proxy, not as a capture of the literal reported phenomenon.
 
 ## G16 ☐ Read the record, name the cause, mint the fix as a `backlog.md` entry
 

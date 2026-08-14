@@ -240,6 +240,13 @@ and leave gaps when retiring old ones.
   rate, not the defaults alone — at the 60 Hz cap this plan's defaults assume,
   `medianMultiple × refresh_interval` is 66.7 ms, ABOVE the 40 ms floor, so the relative term
   decides there, not the floor (`HitchMonitor.cs`, PERF-12).
+- **PERF-14** — **A build-time CLI preset can never trip `HitchMonitor`; verify with a live,
+  post-grace event instead.** `--damage=`/`--destroy=`-style presets apply inside
+  `Launcher.LaunchSession`'s build, always finished before `Rearm()` starts the grace window
+  (`HitchMonitor.cs`, `PLAN-perf-hitches` E13, disproven). `--crash=<frame>` picked past grace
+  (PERF-12) is a live, scriptable event that does trip it — measured (G15): `--crash=300` under
+  `--no-vsync` produced two real sidecar records, `part_detach` 48.4 ms and `effect_pool_miss`
+  62.1 ms, both ~500 ms clear of the 2000 ms grace.
 
 ## LOG — logs, error censuses, and exit codes
 
