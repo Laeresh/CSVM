@@ -1,8 +1,7 @@
 # Frame hitches — an always-on instrument, and the FPS readout on the front of it
 
-**ACTIVE PLAN** (written 2026-08-14). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE 2026-08-14** (written 2026-08-14; landed same day). All 16 checklist items are ☑ except
+E13, closed ❌ disproven (waves A–E, G). Indexed in [`plans.md`](plans.md); read as history.
 
 Short freezes are visible at the controls (reproducibly when the damage lab detaches parts and they
 fly away) and nothing in the repo can currently see them. This plan builds a permanent instrument
@@ -134,7 +133,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave G — Diagnosis (the instrument's first customer)
 
 15. ☑ G15 — Label a baseline and reproduce the damage-lab hitch under the instrument
-16. ☐ G16 — Read the record, name the cause, mint the fix as a `backlog.md` entry
+16. ☑ G16 — Read the record, name the cause, mint the fix as a `backlog.md` entry
 
 ## Dependency and parallelism notes
 
@@ -887,7 +886,7 @@ carry into G16**: `part_detach`/`effect_pool_miss` from a scripted plane crash a
 debris/effects-cascade hypothesis in general, not for the aircraft `DamageLab` specifically — read
 them as the closest available proxy, not as a capture of the literal reported phenomenon.
 
-## G16 ☐ Read the record, name the cause, mint the fix as a `backlog.md` entry
+## G16 ☑ Read the record, name the cause, mint the fix as a `backlog.md` entry
 
 **Goal.** The damage-lab hitch has a stated, evidenced cause, and the fix exists as a `backlog.md`
 item with its traps recorded. No fix is implemented.
@@ -899,19 +898,31 @@ so the process is on .NET 8 Workstation background GC, which is already the low-
 turns out to be the cause, **there is no setting to flip**, and the fix is allocating less. This
 hypothesis may be wrong, and a disproof that lands no code is a success here.
 
-**Approach.** Read the record: which term dominates the frame (script, render CPU, GPU), which
-breadcrumbs are present, whether a generation-2 collection lands on the same frame, what the run-up
-in the ring buffer looks like. Mint the item with `.\New-ItemId.ps1 -Kind BL` and write it with a
-`⚠ Traps` section naming what was ruled out, so the next session does not re-chase it.
+**Approach — as written, plus one confirmatory trace.** G15's own two sidecar records already settle
+the allocation/GC half of the leading hypothesis: `gc0_delta`/`gc1_delta`/`gc2_delta` are **zero on
+both hitching frames** and `allocated_bytes_delta` is 300-350 KB, three orders of magnitude under the
+~860 MB burst B5 needed to move those columns at all. What actually dominates is `attributed_ms`
+(`part_detach`/`effect_pool_miss`), so a temporary, reverted `GD.Print` in `EmitterDirector.Assert`'s
+miss branch (`git diff` empty afterward) named exactly which effects it built during the same
+`--crash=300` run, settling "first-use construction" against "pool exhaustion" with real names
+rather than a guess.
 
 **Model recommendation.** high. This is judgement over evidence, and the failure mode is a
 confident wrong attribution.
 
-**Verify.** The backlog entry names a specific mechanism with the record that supports it, and states
-what was ruled out. If the record is inconclusive, **say so and name what the instrument would need
-to settle it** rather than picking the most plausible suspect.
+**Verify.** `BL-355` minted (`.\New-ItemId.ps1 -Kind BL`) and written with the traced mechanism: ten
+distinct first-time `EmitterDirector.Assert` misses (`lgpuffer` x3, `spurtpuffer1`-`5`,
+`fierypuffer`, `trailpuffer2`) each synchronously building a `Puffer` + shader material + particle
+system in the crash's own dispatch frame. GC, allocation volume and GPU/render are all ruled out
+with the record's own numbers; pool-size exhaustion is ruled out separately (`large_firetrail` sized
+6, only 3 pieces in flight, no `PoolRecycles` wrap). Its `⚠ Traps` names what the record cannot yet
+answer — whether the cost recurs on a second crash/damage event in the same session — as an open
+question with a concrete next step, per this Verify's own instruction, rather than a guessed
+suspect.
 
 **⚠ Traps.** The reflex will be to fix it immediately, and decision 12 says no: the baseline from G15
 is what makes the fix provable, and a fix landed in the same breath as the diagnosis cannot be
 A/B'd. Correlation between a breadcrumb and a hitch is not causation: the same frame that spawns
-debris also draws them, and the CPU/GPU split is what separates those two.
+debris also draws them, and the CPU/GPU split is what separates those two — confirmed here, not just
+argued: `render_cpu_ms`/`gpu_ms` sat at their normal ~0.5/0.2 ms on both hitching frames, so the cost
+is CPU-script-side, matching the `PerfSample` attribution rather than contradicting it.

@@ -2035,6 +2035,55 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   state rules). The `PLAYER_RANGE` `* 4.0` divergence the same decode opened is closed as a
   disproof — the `* 4.0` is on `PLAYER_LINED_UP`, not `PLAYER_RANGE` (`git log --grep=BL-333`).
 
+- `BL-355` `[Bug]` **The damage/crash effect cascade hitches on first use — synchronous emitter
+  construction (shader material + particle system), not GC and not allocation volume.** Diagnosed
+  under the frame-hitch instrument (`PLAN-perf-hitches` G15/G16), via the scripted proxy G15 landed
+  since the aircraft `DamageLab`'s own burst has no CLI repro (E13): `--crash=300 --no-vsync` (`--fly
+  --chapter=C1 --plane=player_bhawk`) tripped `HitchMonitor` twice, frame 300 `frame_ms=48.43`
+  (`samples=part_detach:1x33.01`) and frame 301 `frame_ms=62.11`
+  (`samples=effect_pool_miss:7x54.36`), sidecar `.scratch/logs/fly-20260814-203733.hitches.jsonl`.
+  **Ruled out, from the record itself:** GC — `gc0_delta`/`gc1_delta`/`gc2_delta` are **0** on both
+  hitching frames, no collection of any generation fired. Allocation volume —
+  `allocated_bytes_delta` is 300-350 KB on each hitching frame, three orders of magnitude under the
+  ~860 MB burst `PLAN-perf-hitches` B5 needed to move the GC/alloc columns at all. GPU/render —
+  `render_cpu_ms`/`gpu_ms` stay at their normal ~0.5/0.2 ms on both frames; the cost is entirely
+  inside the CPU/script span `HitchMonitor`'s `frame_ms` measures.
+  **Mechanism, traced live** (a temporary, reverted `GD.Print` in `EmitterDirector.Assert`'s miss
+  branch — `git diff` empty afterward): the crash's own dispatch names ten distinct first-time
+  misses in the same one-two frames — `lgpuffer` on `piece1`/`piece3`/`piece4` (`large_firetrail`),
+  `spurtpuffer1`..`5` on `fly_trail1`..`5` (`call_crash_trails`), `fierypuffer` on `flame_ball_01`
+  (`large_fireball`), `trailpuffer2` on `yellow_spark_01` (`small_yellow_sparks`) — every one a
+  `(name, host, def)` key `EmitterDirector.Assert` has never seen before, each paying
+  `_factory.Create`'s full build (a `Puffer` plus, nested inside the same scope per the code's own
+  comment, `EmitterRenderer.Attach`'s `MaterialCreate`) synchronously, inline in the frame the crash
+  fires.
+  **This is NOT pool exhaustion — raising `effect_pools.json`'s `crashRoots` sizes will not fix
+  it.** `large_firetrail` is sized 6 and only 3 concurrent pieces were in flight; no
+  `AnimRuntime.PoolRecycles` wrap occurred. The pool avoids RELOCATING an already-built emitter onto
+  a new call; it does nothing for the first build of a distinct key, which is what costs here.
+  *Fix shape:* pre-warm the crash rig's (and, by the same mechanism, `DamageLab`'s) effect
+  templates — construct each `crashRoots`/damage-stage emitter once, off the frame that needs it
+  (plane spawn, session build, or a loading beat), the idea `StartupProfile`'s `prewarm` phase
+  already applies elsewhere — rather than leaving the first assert to build synchronously.
+  Alternatively, spread a compound event's misses across several frames instead of one dispatch
+  batch.
+  ⚠ **Traps.** This evidence is the `--crash=` proxy (`FlightController.Crash()` → `CrashRuntime`),
+  not a captured aircraft `DamageLab` slider-drag session — `DamageLab.Reapply()` has no scripted
+  repro (E13/G15). The two share the same `EmitterDirector.Assert`/`WorldEffectsFactory`
+  construction path, and the crash rig plays the same damage-stage template family
+  (`crashRoots`'s `planeflakes`/`yellow_spark_02`/etc. are the `pdpanelN` effects `DamageLab`
+  triggers), so the mechanism should generalise — but that is inference, not a second measurement.
+  ⚠ **Open question this record does not answer: does the same cost recur on a second crash/damage
+  event in one session, or only the first?** `EmitterDirector`'s key includes the host `Node3D`, so
+  if a respawn or a fresh crash-piece spawn hands out new node instances, every repeat pays full
+  construction again — which would match the user's "reproducible" report better than a true
+  one-time cost would. `--crash=` cannot re-fire on an already-crashed plane (`docs/cli.md`), so
+  this needs either an interactive respawn-then-crash-again capture or a scripted twin for one,
+  neither of which exists today.
+  *Cross-refs:* `PLAN-perf-hitches` G15/G16 (the diagnosis), `BL-231` (the pool-size tuning item
+  this is explicitly NOT — a size increase would not touch this cost), `docs/verification.md`
+  PERF-14.
+
 ## Audio
 
 - `BL-079` `[Feature]` **Positional 3D audio for other aircraft** — all sound is own-plane non-positional today;
