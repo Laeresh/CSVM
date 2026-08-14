@@ -21,6 +21,13 @@ namespace CSVM.Session;
 /// is the documented stand-in behind <c>--wake-turrets</c> — explicit, logged per emplacement,
 /// never a silent default. A plain class, not a Node: the controllers write onto world nodes
 /// the runtime does not own.</para>
+///
+/// <para>The one non-script activation the binary itself performs is
+/// <see cref="SetActivatedUnder"/>: the Instant Action mission builder walks the subtree of each
+/// <c>*_zeppelin</c> node and writes <c>ACTIVATED</c> on every turret standing in it: 0 for the
+/// zeppelins it switches off, 1 for the <c>zeppelin_run</c> objective. That is what puts guns on
+/// the Instant Action zeppelin, whose four <c>ai.zrd</c> entries all ship dormant
+/// (docs/formats/turrets.md "Waking a whole subtree").</para>
 /// </summary>
 public sealed class TurretEmplacementRuntime
 {
@@ -68,6 +75,34 @@ public sealed class TurretEmplacementRuntime
             }
         }
         return woken;
+    }
+
+    /// <summary>Writes <c>ACTIVATED</c> on every emplacement standing on
+    /// <paramref name="root"/> or anywhere under it, and reports how many changed state. The
+    /// engine's own primitive: a recursive walk of the node's children that looks each node up in
+    /// the turret list and stores the flag, reached both by the Instant Action builder's zeppelin
+    /// arm and by the objectives script's zeppelin-turret wake.</summary>
+    public int SetActivatedUnder(Node3D root, bool activated)
+    {
+        int changed = 0;
+        foreach (var t in _turrets)
+        {
+            if (t.Site is not { } site || !GodotObject.IsInstanceValid(site))
+            {
+                continue;
+            }
+            if (site != root && !root.IsAncestorOf(site))
+            {
+                continue;
+            }
+            if (t.Activated == activated)
+            {
+                continue;
+            }
+            t.SetActivated(activated);
+            changed++;
+        }
+        return changed;
     }
 
     public void SimStep(float dt)

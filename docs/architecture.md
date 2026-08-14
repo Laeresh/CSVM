@@ -230,7 +230,7 @@ clusters they delegate to.
 - `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (M4 B6, `--generators`): load-time drop rules, per-cycle stepping, spawns through `GameSession.SpawnAiAircraft` — or, on an Instant Action zeppelin run (F12), releases an already-built wave member instead.
 - `src/Session/AiVoiceRuntime.cs` — wires E16's dispatch into a session: the decoded event sources (hit-path DI, Downed death cries, acquisition call-outs, taunts) played through `CombatVoice` + `WorldSounds.PlayOneShot`.
 - `src/Session/ZeppelinRuntime.cs` — runs a mission's zeppelins (M4 F17+F18+F19, `--zeppelins`): places each record's world node at its authored pose, flies it along its net through `ZeppelinMotion`, owns the multi-zone damage (per-part registry pools, the survivor-count kill, the authored hull death) and fires the broadside (`ZeppelinRuntime.Cannons.cs`: real unowned `wep_28` rounds through `ZeppelinBroadside`).
-- `src/Session/TurretEmplacementRuntime.cs` — the world AA emplacements (M4 C9b): the standalone `ai.zrd` family placed at its `NODES` patterns against the built chapter world, shipped `ACTIVATED` honoured, `--wake-turrets` the `WAKEUP_TURRETS` stand-in.
+- `src/Session/TurretEmplacementRuntime.cs` — the world AA emplacements (M4 C9b): the standalone `ai.zrd` family placed at its `NODES` patterns against the built chapter world, shipped `ACTIVATED` honoured, `SetActivatedUnder` the Instant Action builder's subtree activation (what arms the objective zeppelin's rings), `--wake-turrets` the `WAKEUP_TURRETS` stand-in.
 
 ### Session root and tests
 
@@ -1982,6 +1982,10 @@ nodes, then the fire gates: `Activated`, attack window, 15° barrel-on-solution 
 ⚠ Out-of-arc yaw snaps to the angularly NEARER end stop, not the shortest-path one, and bored
   suppresses firing ONLY — tracking runs through it; a DORMANT emplacement does neither
   (`ACTIVATED` gates the tick, but the load pose still writes). All visible original behaviour.
+⚠ `Site` (the emplacement's own matched `NODES` node, null on a carried turret) is what lets a
+  caller scope an activation to one hull's subtree, the shape of the engine's own node-keyed
+  turret lookup; `SetActivated` writes the gate both ways, because the engine's walk stores a flag
+  rather than only ever setting it.
 ⚠ PARTS names resolve inside the mount's/matched node's subtree with TRIMMED cs_names (the
   shipped `"brigturret2 "` carries a trailing space); a global or exact match drives the wrong
   rig or none. An emplacement's kill switch is its healthy node's visibility — ai.zrd HEALTH is
@@ -4407,7 +4411,11 @@ generator is the only way an enemy gets airborne, so neither is the tester's fla
 `Visible = objective`, which is the decoded `gwNodeSetActive`, with `ZeppelinRuntime.Hold` on the
 ones switched off. ⚠ **`Visible` is the WHOLE write**: world colliders derive their `Disabled` flag
 from it (`Mech3/WorldCollision`), so the activation restores shootability with the picture and
-there is no second flag to keep in step. (3) `ActivateInstantActionWave` branches at the top: on
+there is no second flag to keep in step. ⚠ The same switch carries the builder's TURRET arm: each
+switched node is remembered and handed to `TurretEmplacementRuntime.SetActivatedUnder` once the
+emplacements are built further down, which is what arms the objective hull's 14 dormant rings (and
+stows a switched-off hull's). Without it the zeppelin you are sent to kill never shoots back.
+(3) `ActivateInstantActionWave` branches at the top: on
 `zeppelin_run` it stamps `_iaLaunchWave` (the generator's decoded `+0x64` group) and calls
 `AiGeneratorRuntime.GrantWaveCapacity` with the wave's member count instead of drawing a spawn
 point, and `ReleaseInstantActionWaveMember` — handed to the generator at build — activates the next
@@ -5417,9 +5425,16 @@ after the zeppelins so a slung mount reads its ride's moved pose. Built uncondit
 chapter flight — the original's world placement pass is unconditional too. Observability: the
 `turrets: N world emplacement(s) placed…` census line plus per-turret `woken`/`engaging`
 breadcrumbs. Pinned by the `world-turrets` suite (C1 census 74, C4 census 92).
-⚠ Shipped `ACTIVATED` is the default: dormant emplacements stay dormant (the real mechanism is
-  the mission script's `WAKEUP_TURRETS`, out of M4's scope). `WakeAll` — the `--wake-turrets`
-  stand-in — is the ONLY wake path, explicit and logged per turret; never wake them silently.
+⚠ Shipped `ACTIVATED` is the default: dormant emplacements stay dormant (the mission-script
+  mechanism, `WAKEUP_TURRETS`, is out of M4's scope). Two explicit, logged wake paths and no
+  others: `WakeAll` (the `--wake-turrets` stand-in) and `SetActivatedUnder` (the Instant Action
+  builder's own subtree write, below). Never wake a turret silently.
+⚠ `SetActivatedUnder(node, flag)` is the binary's `FUN_004bef70` walk: every emplacement standing
+  on that node or under it takes the flag. `GameSession` runs it from the Instant Action zeppelin
+  switch (the objective hull's 14 rings come up armed, a switched-off hull's go quiet) BEFORE
+  `--wake-turrets`, which stands in for a mission script and therefore wins, the order the binary
+  has. All four `multiplayer1zep` entries ship dormant, so without this the Instant Action
+  zeppelin flies unarmed (docs/formats/turrets.md "Waking a whole subtree").
 ⚠ The awake-by-data set is world-model dependent, not per-chapter authored: the piratezep model
   (and its allied TEAM-1 rings) is part of EVERY chapter's world, so C1 and C4 both census 15
   awake; C5 adds the hostile `thug*` boats.

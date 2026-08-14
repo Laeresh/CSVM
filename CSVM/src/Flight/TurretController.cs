@@ -61,6 +61,7 @@ public sealed class TurretController
     private readonly Transform3D _pitchRest;
     private readonly int _team;            // engine-space team (AimAssist convention)
     private readonly Node3D? _healthyNode; // emplacement kill switch; null on a carried turret
+    private readonly Node3D? _site;        // emplacement placement node; null on a carried turret
 
     private float _windowLeft;   // s left in the current attack/bored window
     private float _fireIn;       // s until the next shot is allowed
@@ -74,7 +75,8 @@ public sealed class TurretController
 
     private TurretController(TurretDef def, WeaponDef weapon, FlightController? host,
         ProjectilePool pool, Node3D? yawNode, Node3D pitchNode, Node3D[] firepoints,
-        RandomNumberGenerator rng, int team, bool activated, Node3D? healthyNode, string label)
+        RandomNumberGenerator rng, int team, bool activated, Node3D? healthyNode, Node3D? site,
+        string label)
     {
         Def = def;
         Weapon = weapon;
@@ -87,6 +89,7 @@ public sealed class TurretController
         _team = team;
         Activated = activated;
         _healthyNode = healthyNode;
+        _site = site;
         Label = label;
         _yawRest = yawNode?.Transform ?? Transform3D.Identity;
         _pitchRest = pitchNode.Transform;
@@ -128,6 +131,12 @@ public sealed class TurretController
     /// <summary>Who this gunner is in a log line — the entry's TITLE plus, for an emplacement,
     /// the world node it stands on.</summary>
     public string Label { get; }
+
+    /// <summary>The world node this emplacement was placed at (its <c>NODES</c> match); null on
+    /// a carried turret. What a subtree-scoped activation walks against, the engine's own
+    /// per-node lookup of the turret standing on a node
+    /// (docs/formats/turrets.md "Waking a whole subtree").</summary>
+    public Node3D? Site => _site;
 
     /// <summary>The engine-space team the acquisition gate and the aim-assist candidate list
     /// run on (<see cref="EngineTeamFor"/> for an emplacement, the host's pilot team for a
@@ -229,7 +238,7 @@ public sealed class TurretController
             }
             var rng = new RandomNumberGenerator { Seed = (ulong)(uint)Utils.Rng.NewIntSeed(Utils.Rng.Weapons) };
             built.Add(new TurretController(def, weapon, host, pool, yaw, pitch, fps.ToArray(), rng,
-                host.Team, activated: true, healthyNode: null,
+                host.Team, activated: true, healthyNode: null, site: null,
                 label: mount.Title));
         }
         return built.ToArray();
@@ -329,7 +338,7 @@ public sealed class TurretController
                     var rng = new RandomNumberGenerator { Seed = (ulong)(uint)Utils.Rng.NewIntSeed(Utils.Rng.Weapons) };
                     built.Add(new TurretController(def, weapon, host: null, pool, yaw, pitch,
                         fps.ToArray(), rng, EngineTeamFor(def.TeamId),
-                        def.Activated, healthy, label));
+                        def.Activated, healthy, site, label));
                 }
             }
         }
@@ -386,7 +395,12 @@ public sealed class TurretController
 
     /// <summary>The activation stand-in's hook (and, later, the real <c>WAKEUP_TURRETS</c>'):
     /// wakes a dormant emplacement. Logged by the caller, never silent.</summary>
-    public void Wake() => Activated = true;
+    public void Wake() => SetActivated(true);
+
+    /// <summary>Writes the awake gate directly, both ways, which is what the engine's subtree
+    /// walk does to every turret standing on a node it visits (<c>ACTIVATED</c> is a plain byte
+    /// on the turret, set to the walk's flag, so the same call both wakes and stows).</summary>
+    public void SetActivated(bool activated) => Activated = activated;
 
     /// <summary>One gunner tick: duty cycle, acquire, aim, slew, pose, fire. A dormant
     /// emplacement takes no tick at all — <c>ACTIVATED</c> gates tracking as well as fire.</summary>

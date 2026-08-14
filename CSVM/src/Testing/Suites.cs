@@ -220,8 +220,11 @@ public static class Suites
             "world (census pinned, one entry many turrets, scoped multi-segment paths), honour " +
             "shipped ACTIVATED (a dormant aagun holds fire with a hostile plane in range until " +
             "the --wake-turrets stand-in wakes it, then acquires and fires under its own " +
-            "enemy-default team), skip same-team targets, join the aim-assist candidate list, " +
-            "and go permanently quiet when the emplacement's own destructible dies", WorldTurrets));
+            "enemy-default team), take the Instant Action builder's subtree-scoped ACTIVATED " +
+            "write on the objective zeppelin (14 rings armed and shooting back, nothing outside " +
+            "the hull touched, the same call with the flag cleared stowing them again), skip " +
+            "same-team targets, join the aim-assist candidate list, and go permanently quiet " +
+            "when the emplacement's own destructible dies", WorldTurrets));
         into.Add(new TestHarness.Suite("carried-turrets",
             "a carried turret gunner (C9a) builds from ai.zrd + the vehicle def's thirdp mount, " +
             "poses at its arc centre, tracks and fires on a hostile plane inside DETECTION_RANGE " +
@@ -4566,8 +4569,9 @@ public static class Suites
     /// <summary>The world AA emplacements (M4 C9b) against the real C1 chapter world: the NODES
     /// placement census, the shipped-ACTIVATED default, the --wake-turrets stand-in, the
     /// enemy-default/ally team split, the aim-assist candidate list, and the healthy-node kill
-    /// switch. Zeppelin-slung entries are placed (they are world nodes) but the firing checks run
-    /// on the GROUND emplacements only — the zeppelin hosts belong to F18/F19's live work.</summary>
+    /// switch. Zeppelin-slung entries are placed (they are world nodes) and their one gameplay
+    /// path is checked here too: the Instant Action builder's subtree-scoped activation of the
+    /// objective hull's rings, both directions, plus the fire it puts on a plane alongside.</summary>
     private static void WorldTurrets(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -4594,6 +4598,7 @@ public static class Suites
             ProjectilePool? pool = null;
             FlightController? target = null;
             FlightController? friend = null;
+            FlightController? zepBait = null;   // its own rig: the zeppelin rings shoot it to bits
             try
             {
                 var live = new ProjectilePool(textures, null, null)
@@ -4680,6 +4685,48 @@ public static class Suites
                 ctx.Check(aagun.ShotsFired == 0 && aagun.BarrelWorldDir.IsEqualApprox(restDir),
                     $"a dormant emplacement neither tracks nor fires shots={aagun.ShotsFired}");
 
+                // The Instant Action builder's own turret arm: a subtree-scoped ACTIVATED write
+                // over the objective zeppelin's node, which is what arms multiplayer1zep's four
+                // dormant entries on a zeppelin_run. Scoped, and reversible: the deactivation
+                // loop is the same call with the flag cleared.
+                var mp1 = world.Runtime.FindNodes("multiplayer1zep");
+                ctx.Same(1, mp1.Count, $"C1's world carries the Instant Action zeppelin node");
+                var mp2 = world.Runtime.FindNodes("multiplayer2zep");
+                ctx.Same(1, mp2.Count, $"…and the second MP zeppelin, the control for the scoping");
+                if (mp1.Count > 0 && mp2.Count > 0)
+                {
+                    List<TurretController> RingsOn(Node3D root) => runtime.Emplacements
+                        .Where(t => t.Site is { } s && (s == root || root.IsAncestorOf(s))).ToList();
+                    var mp1Rings = RingsOn(mp1[0]);
+                    var mp2Rings = RingsOn(mp2[0]);
+                    ctx.Same(14, mp1Rings.Count,
+                        $"multiplayer1zep carries 14 rings (3 nose, 3 belly, 4 left, 4 right)");
+                    ctx.Check(mp1Rings.All(t => !t.Activated),
+                        $"…every one of them dormant by data, which is why it flies unarmed");
+                    ctx.Same(14, runtime.SetActivatedUnder(mp1[0], true),
+                        $"the builder's zeppelin arm arms every ring on the objective hull");
+                    ctx.Check(mp1Rings.All(t => t.Activated && t.EngineTeam > AimAssist.WorldTeam),
+                        $"…all of them awake and hostile, the no-TEAM loader default");
+                    ctx.Check(!aagun.Activated && mp2Rings.All(t => !t.Activated),
+                        $"…and nothing outside that subtree woke with it");
+
+                    // What the player actually feels: an armed hull shoots back. Its own rig, so
+                    // the rounds it eats do not touch the aagun measurements below.
+                    int ZepShots() => mp1Rings.Sum(t => t.ShotsFired);
+                    var ringPos = mp1Rings.Count > 0 ? mp1Rings[0].WorldPosition : Vector3.Zero;
+                    zepBait = BuildRig(ctx.PlaneName, 0, ringPos + new Vector3(0f, -80f, 200f), ringPos);
+                    float baitBefore = Combined(zepBait);
+                    Step(300);
+                    ctx.Check(ZepShots() > 0,
+                        $"the armed zeppelin engages a hostile plane alongside shots={ZepShots()}");
+                    ctx.Check(Combined(zepBait) < baitBefore,
+                        $"…with rounds striking it moved={baitBefore - Combined(zepBait):0.##}");
+                    zepBait.PlaceHeld(ringPos + new Vector3(0f, -80f, 20000f), ringPos);
+
+                    ctx.Same(14, runtime.SetActivatedUnder(mp1[0], false),
+                        $"the same call with the flag cleared stows them again (the b=0 arm)");
+                }
+
                 // The stand-in wakes it — explicit, counted, logged — and it engages.
                 int woken = runtime.WakeAll();
                 ctx.Same(runtime.Count - 15, woken, $"--wake-turrets stand-in wakes every dormant emplacement");
@@ -4743,6 +4790,7 @@ public static class Suites
                 pool?.Free();
                 target?.Free();
                 friend?.Free();
+                zepBait?.Free();
                 textures.Dispose();
             }
         });

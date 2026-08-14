@@ -192,11 +192,26 @@ Three gates, in order:
 1. The **`HEALTHY_NODE`** must be alive. If it dies the turret goes permanently quiet.
 2. The **`DEACTIVATE`** node, if the entry names one, must *also* be alive — destroying it
    disables the turret without destroying it. (Unauthored in retail; the mechanism exists.)
-3. **`ACTIVATED`** must be set. **22 entries ship `ACTIVATED 0`** and are inert until a mission
-   script wakes them — `WAKEUP_TURRETS` and `WAKEUP_ZEP_TURRETS` ([ai-nets.md](ai-nets.md) lists
-   the script vocabulary). All 22 are standalone world emplacements; no carried turret is dormant.
-   `ACTIVATED` is also savegame state, not just a load-time value: it round-trips through
-   save/restore alongside `AMMO`.
+3. **`ACTIVATED`** must be set. **22 entries ship `ACTIVATED 0`** and are inert until something
+   wakes them: `WAKEUP_TURRETS` and `WAKEUP_ZEP_TURRETS` ([ai-nets.md](ai-nets.md) lists
+   the script vocabulary), or the Instant Action mission builder (below). All 22 are standalone
+   world emplacements; no carried turret is dormant. `ACTIVATED` is also savegame state, not just
+   a load-time value: it round-trips through save/restore alongside `AMMO`. The field is turret
+   byte `+0x6e`, written by the entry loader at `0x004aa7bb` and read as the tick's gate at
+   `0x004aac16`.
+
+### Waking a whole subtree
+
+The two script ops are two different primitives, which is why they have separate names. The
+per-turret one takes a turret and sets its byte. The **subtree** one takes a *node*, recurses over
+its children, looks each one up in the turret list by the turret's own node pointer, and writes the
+flag on every turret it finds standing there, so one call arms (or stows) every ring on a hull.
+
+⚠ **The subtree form is not script-only.** Instant Action's mission builder calls it directly, with
+`0` for each zeppelin it switches off and `1` for the `zeppelin_run` objective
+([instant-action.md](instant-action.md#the-turret-arm-is-what-arms-the-instant-action-zeppelin)).
+Since the four `multiplayer1zep`/`multiplayer2zep` entries all ship dormant and Instant Action runs
+no objectives script, that builder call is the only reason the zeppelin you attack shoots back.
 
 Separately, **both loaders bail out entirely if a global world-state flag is clear** — the same
 flag that gates the `capacity` read in the generator loader
