@@ -46,7 +46,7 @@ plus the words "marked INVENTED" if the decode comes back empty.
 |---|---|---|
 | 1 | Fidelity target | **Match the decoded original.** Option sets, defaults, the ace, the wave law and the militia plane lists all come from data; divergences are named individually. |
 | 2 | What an Instant Action setup is expressed in | **One typed `InstantActionDef`.** A `src/Mech3` reader parses the shipped `ia.zrd.json` into it; `--ia=<path>` reads a plain JSON object with the same field names into the same record; the wizard builds the same record. |
-| 3 | Friendly fire | **Decode it first (A2), then match.** The team gate we already have is a targeting gate; whether the original also refuses friendly damage is unknown. Fallback if the decode is empty: block it, marked INVENTED. |
+| 3 | Friendly fire | **Decoded (A2, 2026-08-14): the original applies it.** The team gate is a targeting gate and nothing more; the damage path carries no team test. CSVM matches, which means B7 adds no damage gate at all. The fallback ("block it, marked INVENTED") is not taken. |
 | 4 | Team ids | **The decoded turret convention:** 0 neutral, 1 the player's side, 2 and up enemy. Humans and wingmen are team 1, every Instant Action enemy is team 2. Waves are cohorts inside one enemy team, not teams of their own. |
 | 5 | Wingman behaviour | **Decode the Instant Action setup path (A3), then match.** M4 B7 closed formation flying disproven, so there is no shipped behaviour to copy blind. Fallback: the shipped M4 D11 mode machine on team 1, marked INVENTED as the wingman rule. |
 | 6 | When wave aircraft are built | **All at session build, held inert**, then teleported and activated on wave change. Faithful to the sequencer, and it keeps a six-plane build out of a live combat frame while `PLAN-perf-hitches` is open. |
@@ -78,7 +78,7 @@ plus the words "marked INVENTED" if the decode comes back empty.
 |---|---|---|
 | **Traced to an exact mechanism in code, with the data that proves it** | A1, B6, E11 | The option sets, the `ia.json` key census and the wave sequencer's spawn law are read out of the shipped data and out of `FUN_0045b9d0`. Confirm the trace, then implement. |
 | **Direction sound, magnitude a judgement call** | E10, G13, G14, H15, H16 | The behaviour is settled; the numbers and the presentation are not. Anything numeric here is TUNE, not fact. |
-| **Leads only, no mechanism yet** | A2, A3, A4, A5, B7, C8, D9, F12 | These rest on decodes that have not happened. A2 to A5 exist to convert the rest of this row into the row above; budget for at least one of them ending in a disproof. |
+| **Leads only, no mechanism yet** | A3, A4, A5, B7, C8, D9, F12 | These rest on decodes that have not happened. A3 to A5 exist to convert the rest of this row into the row above; budget for at least one of them ending in a disproof. A2 already did, against the "block it" fallback. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees, and other sessions may
 push or pop it concurrently. Never use a bare `git stash` in a worktree session here; use a local WIP
@@ -257,7 +257,7 @@ is M4's formation disproof, `B7` is the team model below.
 ### Wave A — Decode
 
 1. ☑ A1 The Instant Action format page: the whole configurable surface, written down
-2. ☐ A2 Does the original refuse friendly damage, or only friendly targeting?
+2. ☑ A2 Does the original refuse friendly damage, or only friendly targeting?
 3. ☐ A3 The Instant Action setup path: what a wingman is given, and what `enemy_skill` becomes
 4. ☐ A4 Re-read `FUN_0045b9d0`: the zeppelin branch, the mission-type ids, the spawn-point source
 5. ☐ A5 The wrap-up screen's four counters: what each one actually counts
@@ -297,9 +297,10 @@ is M4's formation disproof, `B7` is the team model below.
 ## Dependency and parallelism notes
 
 A1 is documentation and can run beside everything. A2, A3, A4 and A5 are four independent Ghidra
-reads and can run in parallel with each other; each one gates exactly one later item (A2 gates B7's
-damage gate, A3 gates D9 and E11's skill mapping, A4 gates F12, A5 gates G14), so a later item may
-start on its fallback and flip a single value when its decode lands. A5 is the loosest of the four:
+reads and can run in parallel with each other; each one gates exactly one later item (A2 gated B7's
+damage gate and is answered, A3 gates D9 and E11's skill mapping, A4 gates F12, A5 gates G14), so a
+later item may start on its fallback and flip a single value when its decode lands. A5 is the
+loosest of the four:
 it gates only the wrap-up board's arithmetic, so it may land last without holding anything up.
 
 B6 blocks every item after it, since the def is the currency. B7 blocks C8 (the ace needs a hostile
@@ -352,7 +353,13 @@ not the item count, and they coincide only because these lists are short; `ia_d_
 for the variable custom-plane list, not twenty aircraft. (c) Do not write the militia lists from
 `vehicle.json` defs; that reading is disproven above.
 
-## A2 ☐ Does the original refuse friendly damage, or only friendly targeting?
+## A2 ☑ Does the original refuse friendly damage, or only friendly targeting?
+
+**Answered 2026-08-14: only friendly targeting.** The damage path from impact to drained pool
+carries no team test, so a round from a team-1 aircraft hurts and can kill another team-1 aircraft.
+The one place that path asks about teams computes the answer into a stack byte and passes it to a
+parameter nothing reads. The decode is [`org/vehicleDamage.md`](org/vehicleDamage.md)'s "Teams and
+friendly fire"; the consequence for this plan is in decision 3, B7 and D9.
 
 **Goal.** A settled, sourced answer to whether a round from a team-1 aircraft can hurt another team-1
 aircraft in the original, so that the rule CSVM implements is matched rather than invented.
@@ -468,7 +475,11 @@ wired to a row: *Time to Complete Mission*, *Enemies Shot Down*, *Danger Zones C
 text object in `IA_WRAPUP.SCRIPT`, and no `IDS_IAWU_KILLS` format id in `RESOURCE.H` — it does not
 render, so this item does not need a definition for it. The four wired rows have their formats
 (`IDS_IAWU_TIME` is `%02d:%02d`, `IDS_IAWU_PERCENTAGE` is `%d%%`, the other two plain `%d`). What no
-source yet gives is what feeds them.
+source yet gives is what feeds them. One numerator candidate fell out of A2 and is worth checking
+first: `_DAT_0071d300` is incremented on every hit whose shooter is the local player and whose
+weapon carries flag `0x40`, from **two** sites: `0x004ba04e` in the take-hit body `FUN_004b9bc0`
+(the victim is a vehicle) and the same test in `FUN_004bab50` (it is not). Two sites
+for one counter is exactly the kind of thing a single-site read gets wrong.
 
 **Approach.** `ASSETS/SCRIPTS/IA_WRAPUP.SCRIPT` is already extracted and is the cheap half: read its
 `object` declarations and the callback ids they fill from, the same way `INSTANTACTION.SCRIPT` was
@@ -545,16 +556,20 @@ convention is decoded: M4 C9b established that an absent `TEAM` on a world empla
 the **first enemy team, id 2**, with 0 neutral and 1 ally, and that the four authored `TEAM 1`
 entries are the player's own defensive rings. The stand-in it replaces is explicit in
 `AimAssist.cs:310-317`: pilot index plus one, chosen because "CSVM has NO team model at all". M4 E16
-recorded voice trigger id 20 as unreachable for the same reason. Whether the gate also covers damage
-is A2's answer.
+recorded voice trigger id 20 as unreachable for the same reason. The gate does **not** cover damage:
+A2 decoded the original's damage path as team-blind (`org/vehicleDamage.md`, "Teams and friendly
+fire"), so this item is a targeting and announcement change only.
 
 **Approach.** A `Team` field on `FlightController`, set by whatever builds the aircraft, with the
 existing `TeamOfPilot` becoming the default for sessions that have no mission (free flight, Dogfight)
 so nothing outside Instant Action changes behaviour. Then thread it through the four existing
 consumers: `AimAssist`'s candidate registration, `AiGunner`'s nearest-hostile pick,
 `TurretController`'s target selection, and `AiVoiceDispatcher.Register`. Wire M4 E16's id 20 while
-there, since its blocker is being removed. The damage gate lands wherever A2 says, or is blocked with
-an INVENTED comment if A2 came back empty.
+there, since its blocker is being removed. **Add no damage gate**, and say in the code comment that
+the omission is decoded rather than an oversight, because that is the line a later reader will
+otherwise "fix". Voice triggers 22 to 24 and 28 become reachable at the same time and by the same
+argument ([`formats/combat-voice.md`](formats/combat-voice.md)); wiring them is optional here, but
+leaving their rows in that page's dispatch table stale is not.
 
 **Model recommendation.** High. It replaces a convention that four subsystems read, and the failure
 mode is silent (an AI that no longer shoots anyone, or shoots its own side).
@@ -563,7 +578,9 @@ mode is silent (an AI that no longer shoots anyone, or shoots its own side).
 `ai-gunnery`, `ai-modes`, `ai-voice`, `carried-turrets` and `world-turrets` suites before the change,
 then confirm each is unchanged after, since Dogfight and free flight must keep the old behaviour
 exactly. Then a new assertion that a team-1 AI ignores a team-1 human and engages a team-2 one, which
-must be watched failing first.
+must be watched failing first. A2's own corroboration belongs in the same pair: a team-1 round that
+does reach a team-1 human still costs it HP. That one passes vacuously today (nothing gates damage
+now), so it is only a real check once written against a deliberately gated build and watched failing.
 
 **⚠ Traps.** (a) Team 0 rejects a pair from **either** side; it is not "hostile to everyone" and not
 "friendly to everyone" (`AimAssist.cs:409-410`). (b) `AimAssist.WorldTeam` is 100 and exists so world
@@ -648,9 +665,8 @@ below-cap case (2 humans, 2 wingmen) proving the configured count is untouched. 
 `PT-` item judging whether the flight reads as a flight, because that is not a thing a suite can
 answer.
 
-**⚠ Traps.** (a) Wingmen are team 1 with the humans, so the A2 damage rule applies to them; a
-wingman that can be shot down by the player is either correct or a bug depending on A2's answer, and
-the item must not guess. (b) `player_fortune` ships a pattern with no colours in `vehicle.json`; its
+**⚠ Traps.** (a) Wingmen are team 1 with the humans, and A2 settled what that means: a wingman the
+player shoots down is **correct**, not a bug. Do not add a gate to "fix" it, and expect the report. (b) `player_fortune` ships a pattern with no colours in `vehicle.json`; its
 triple is inferred from artwork (`red, black, white`), which is stated as an inference in
 [`formats/paint.md`](formats/paint.md) and must not be restated as fact. (c) Splitscreen humans add
 to the flight rather than consuming the wingman budget, up to a flight of 6 (decisions 8 and 8a).

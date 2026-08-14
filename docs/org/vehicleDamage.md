@@ -25,6 +25,9 @@ consumed (`init_health`, the four zone pairs, `armor`).
 
 | Address | Role |
 |---|---|
+| `FUN_005abcf0` | The impact dispatcher: calls the handler the struck node registered at `+0xbc` |
+| `0x004b9750` | The handler a vehicle registers there, a thunk onto `FUN_004b9770` |
+| `FUN_004b9770` | Resolves the shooter from the round, files the radio and threat calls, then enters the wrapper |
 | `FUN_004b9b30` | **The take-hit entry point, a WRAPPER that LOOPS** (found 2026-08-14 — see the correction section) |
 | `FUN_004b3950` | The struck-zone resolver: matches hit geometry against parts **with health remaining only** |
 | `FUN_004b3b60` | The resolver's miss fallback: rand() over the first up-to-3 surviving parts |
@@ -150,6 +153,51 @@ its own shooter, weapon classes that detonate or attach instead of damaging), it
 The reverse direction exists too: `FUN_004b8180` sets health directly and then scales **every**
 part's current health by the new whole-vehicle fraction, so the two ledgers are kept consistent
 from either end.
+
+## Teams and friendly fire
+
+**A round from one aircraft damages another whatever the two teams are.** The team ids gate the
+target scan and the radio lines; nothing on the damage path gates the spend. Read 2026-08-14 to
+settle `PLAN-instant-action` A2, which asked whether the original refuses friendly damage or only
+friendly targeting. It refuses only the targeting.
+
+The path from a struck polygon to a drained pool has no team test in it. The node that owns the
+struck geometry carries a handler table at `node + 0xbc`, a list of `{context, callback}` pairs;
+`FUN_005abcf0` calls `pair.callback(pair.context, weapon, hitNode, damagePair)` at `0x005abe68`. A
+vehicle installs the thunk `0x004b9750`, with itself as the context, into slot 0 of its own node's
+table when it spawns (`FUN_0047c210` at `0x0047c7d0`, through `FUN_005abbf0` and `FUN_005abb20`).
+The thunk enters `FUN_004b9770`, which resolves the shooter and calls the wrapper
+`FUN_004b9b30`, which calls the per-pass body `FUN_004b9bc0`. The spend is reached at `0x004ba0da`
+(part-scoped) or `0x004ba102` (whole-vehicle), and the only things between the entry and those two
+calls are the body's own early returns: the victim is already dead (`+0x91d`) or already in its
+scripted destruct in a network game (`+0x91f`), a no-damage byte is set on the victim (`+0x920`) or
+globally outside a network game (`DAT_0064f66e`), the shooter is the victim itself, the damage pair
+is zero, or the weapon belongs to a class that detonates, attaches or blinds instead of damaging.
+None of them reads a team.
+
+**The team sits at instance `+0x08`,** and the engine has one recurring predicate over it: *the two
+teams are equal, or either one is 0*. It is the same test the target scan rejects a candidate on
+([aim-assist.md](aim-assist.md)) and the same test the spawn skips the enemy difficulty scale on
+(`FUN_0047c210`, whose `local_14[2]` is this field). It appears three times on the damage path, and
+each time it picks an announcement rather than an outcome:
+
+- **`0x004b9d5e`–`0x004b9d7d`** computes the predicate over shooter and victim into a stack byte.
+  Its **only** read is `0x004ba599`, where it is pushed as argument 2 of `FUN_0042e840`, and
+  `FUN_0042e840` never reads argument 2 (its body touches `[EBP+8]`, `+0x10`, `+0x14`, `+0x18`,
+  `+0x1c`, `+0x20` and `+0x24`, and nothing at `+0xc`). The value is computed and discarded. The
+  branch that reads it is in any case the flash/sonic arm, which zeroes the damage pair for every
+  victim regardless of team.
+- **`0x004b98e0`** in `FUN_004b9770`: when the **local player's** round damages an aircraft the
+  predicate calls friendly, that aircraft speaks combat-voice trigger 28 (`0x004b9961` sets `ECX`
+  to the victim), if it owns a line for it. See [`formats/combat-voice.md`](../formats/combat-voice.md).
+- **`0x004ba125`** at death: the gloat line is picked from the predicate over shooter and victim,
+  then over victim and the local player. When shooter and victim come out friendly, **no line is
+  chosen at all** and control falls straight through to `FUN_004b82d0`. A friendly kill is a silent
+  kill, not a refused one.
+
+⚠ **Do not read the test at `0x004b9d5e` as a friendly-fire rule.** It computes exactly the value
+such a rule would need and hands it to a parameter nothing reads, so the one place the damage path
+asks about teams decides nothing. `docs/verification.md` SRC-6 is the general form.
 
 ## Damage staging
 

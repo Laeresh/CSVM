@@ -341,6 +341,12 @@ and leave gaps when retiring old ones.
   the effect. Measured: all 51 `OBJECT_MOTION_FROM_TO` `*_delta` vectors are exactly
   `(to − from) / run_time` of the sibling channel already implemented (worst residual 4e-6), so
   the "dropped" relative motion was the same tween's precomputed rate.
+- **SRC-6** — **A test the binary computes is not a rule until you find what reads its result.**
+  Finding the question asked is not finding the answer acted on. Measured: the take-hit body
+  `FUN_004b9bc0` computes "shooter and victim are on the same team, or either is neutral" into a
+  stack byte at `0x004b9d5e`, and its only read passes it to `FUN_0042e840` as an argument that
+  function never touches, so the one place the damage path asks about teams decides nothing and the
+  original applies friendly damage (`PLAN-instant-action` A2, `org/vehicleDamage.md`).
 
 ## What this project cannot verify itself
 

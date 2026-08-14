@@ -25,13 +25,13 @@ populates a pilot's voice slots runs `i` from `0` to `0x1d` exclusive.
 | 19 | `DI-HighDmg-A` | …below **30 %** |
 | 20 | `DA-Bail-A` | the speaker is destroyed and is **on the player's team** |
 | 21 | `DE-Bail-A` | the speaker is destroyed and is **not** |
-| 22 | `GL-AllyDwn-A` | gloat — a plane on the player's team went down |
-| 23 | `GL-EnemyDwn-A` | gloat — an enemy went down |
-| 24 | `GL-PlyrDwn-A` | gloat — the player's kill/loss case; also broadcasts |
+| 22 | `GL-AllyDwn-A` | gloat by the killer; the plane it downed was on the player's team |
+| 23 | `GL-EnemyDwn-A` | gloat by the killer; the plane it downed was not |
+| 24 | `GL-PlyrDwn-A` | gloat for the local player's own kill; raised on the player and broadcast |
 | 25 | `TA-FailTail-A` | taunt — a pursuer failed its tail check |
 | 26 | `TA-FailShk-A` | taunt — a shake attempt failed |
 | 27 | `TA-SucShk-A` | taunt — the speaker shook its pursuer (fires as the reaction flag clears) |
-| 28 | `DS-Ally-A` | ally distress — fires when only one of the player's wingmen is left alive |
+| 28 | `DS-Ally-A` | ally distress; the local player's round damaged a friendly, or the last of three tracked planes is alive |
 
 ⚠ **The token in the table is a family root, not a clip name.** The `-A`/`-B`/`-C` variants and the
 `Bail`/`NoBail` split are resolved below this layer — trigger 20 selects `DA-*`, not
@@ -46,6 +46,31 @@ Two entries in the table settle questions the clip survey could only guess at:
   read from the dispatch, along with its polarity.
 - **`TA-FailTail` is a real engine trigger with a real dispatch site**, not an orphan clip family.
   The survey noted the design's taunt table omits it; the engine does not.
+
+### The gloat triggers and trigger 28, read from the take-hit path (2026-08-14)
+
+Both were traced out of the vehicle damage path while settling `PLAN-instant-action` A2
+([`org/vehicleDamage.md`](../org/vehicleDamage.md), "Teams and friendly fire"), which is where the
+team predicate used below (*the two teams are equal, or either one is 0*) is written down.
+
+**Triggers 22 to 24 are spoken by the killer, and the 22/23 split is decided by the victim, not by
+the speaker** (`0x004ba125`–`0x004ba194`, in the take-hit body `FUN_004b9bc0`, on the branch where
+the victim's health has just crossed zero). The dispatch runs the predicate twice. First over
+shooter and victim: friendly, and **no gloat is chosen at all**, so a friendly kill is silent.
+Otherwise over victim and the local player: friendly picks 22, hostile picks 23, and either way the
+call is made with the **shooter** as the speaker. The one exception is a kill by the local player,
+which takes 24 instead and broadcasts. This closes the polarity question the page previously left
+open.
+
+**Trigger 28 has two dispatch arms**, both in `FUN_004b9770` and both on a hit rather than a death.
+The first (`0x004b98e0`) fires when the local player's round damages an aircraft the predicate calls
+friendly: the **struck** aircraft speaks, if it owns a line for the trigger. The second
+(`0x004b98fc`) is the previously-recorded one, and it fires when exactly one of three globally
+tracked planes (`DAT_0071c4e4`/`e8`/`ec`) is still alive; it also installs a default sound set
+(`DAT_0071c4f4`) into the speaker's slot 28 first. ⚠ **The second arm sits on the *hostile* side of
+the same predicate**, so the three tracked planes are not on the player's team and the
+"the player's wingmen" reading of them is not supported by this dispatch; what they are was not
+chased here.
 
 ### The bearing call-outs are computed, not enumerated
 
@@ -180,9 +205,9 @@ site is recorded here:
 | 0 | unwired | turret acquisition is `TurretController`'s event; owned by C9's thread, not wired from here |
 | 15 | unwired | the danger-zone modes are never entered (their gate data is undecoded — F17) |
 | 16 | unwired | no dispatch site located in the binary (above) |
-| 22–24 | unwired | the gloat attacker/victim polarity is open (above); wiring a guess would invert speakers silently |
+| 22–24 | unwired | the polarity is now decoded (above), but the 22/23 split is a team question and CSVM has no team model, so wiring it waits on `PLAN-instant-action` B7 |
 | 26 | unwired | the original's shake-attempt check is undecoded; no machine transition maps to it without force-fitting |
-| 28 | unwired | needs an allied-wingman roster ("only one of the player's wingmen left"); no ally concept exists yet |
+| 28 | unwired | both arms (above) are team questions; no ally concept exists yet, so this waits on `PLAN-instant-action` B7 |
 
 Stand-ins and inventions, named:
 
@@ -206,10 +231,10 @@ Stand-ins and inventions, named:
 
 ## What is not pinned down
 
-- **The exact attacker/victim polarity of triggers 22–24.** The three gloat triggers are selected
-  by the team relationship between the attacker, the victim and the player, and each is gated on
-  the speaker owning that slot — but which party is the speaker in each branch is not settled here.
-  The token names indicate the intent; the dispatch was not traced far enough to assert it.
+- **What the three globals `DAT_0071c4e4`/`e8`/`ec` are.** Trigger 28's second arm counts their
+  survivors, and they are on the hostile side of the team predicate, so the "the player's wingmen"
+  reading of them does not hold (see the gloat/28 section above). *(Trigger 22–24's polarity, which
+  this list previously carried as open, was settled there.)*
 - **Trigger 16 (`PR-EnemyDwn`) has no located dispatch site.** It may be reached through a path not
   covered, or be unused.
 - **How `Bail`/`NoBail` is chosen** below the family root (the natural candidate is the

@@ -183,6 +183,16 @@ four (Shot %'s numerator/denominator remains the open question).
 | Danger Zones Completed | `IDS_IAWU_DANGERZONES` (1187) | `%d` |
 | Shot % | `IDS_IAWU_PERCENTAGE` (1188) | `%d%%` |
 
+## Friendly fire
+
+**The original applies friendly damage.** A round from one aircraft damages another whatever the
+two teams are: the path from impact to the drained pool carries no team test, and the team ids gate
+the target scan and the radio lines instead. A wingman on the player's side can therefore be shot
+down by the player or by another wingman, and an Instant Action flight needs no damage gate of its
+own. The decode is [`org/vehicleDamage.md`](../org/vehicleDamage.md)'s "Teams and friendly fire"
+section (2026-08-14); the team space it reads (0 neutral, 1 the player's side, 2 and up enemy) is
+on [turrets.md](turrets.md).
+
 ## Open
 
 - **The environment dropdown's order** is assumed to be the `langui` string-id order; settled
