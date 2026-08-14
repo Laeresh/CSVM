@@ -1568,7 +1568,10 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
     weight; the original multiplies it by reference area, which is what makes `RefArea` cancel
     against drag. See `ThrustFactor` above.
 11. **Drag is a polar in Mach with no induced term.** Any model that makes drag rise with the pull
-    is adding a mechanism the original does not have. See Drag above.
+    is adding a mechanism the original does not have. See Drag above. ⚠ **The remake does exactly
+    that**: `PLAN-flight-drag-lift` C21 landed a `sin²α` induced-drag term with `InducedDragCoef`
+    10.75 on 2026-08-07, two days before this decode, and the two were never reconciled. Open as
+    `BL-360`.
 12. **The throttle lever slews at 0.5/s with no idle floor** (2 s full-to-idle); the remake applies
     it instantly. Decoded, unimplemented — a feel/transient gap, not a steady-state one, and the
     one mechanism that could contaminate the first seconds of any throttle-step footage.
