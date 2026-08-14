@@ -129,7 +129,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 12. ☑ E12 — Hitch fields in `perf-history.jsonl` and in `-PerfCompare` output
 13. ❌ E13 — A debris-burst scenario in `analysis/perf/scenarios.json` — disproven
-14. ☐ E14 — `docs/verification.md`: a PERF rule on hitch comparability, plus the doc sweep
+14. ☑ E14 — `docs/verification.md`: a PERF rule on hitch comparability, plus the doc sweep
 
 ### Wave G — Diagnosis (the instrument's first customer)
 
@@ -789,7 +789,7 @@ over many, which could produce a bigger hitch than the real one or none at all. 
 discarded for a reason (PERF-7): a cold file cache reshapes a startup profile rather than scaling it,
 and it will also manufacture hitches that have nothing to do with the case being measured.
 
-## E14 ☐ `docs/verification.md`: a PERF rule on hitch comparability, plus the doc sweep
+## E14 ☑ `docs/verification.md`: a PERF rule on hitch comparability, plus the doc sweep
 
 **Goal.** The next person to read a hitch count knows what it can and cannot be compared against.
 
@@ -810,8 +810,29 @@ removed), `docs/architecture.md` (entries for `HitchMonitor`, `PerfSample`, `Per
 
 **Model recommendation.** medium.
 
-**Verify.** The parser's accepted-flag count and `cli.md`'s index count agree. Each new module
-has an architecture entry within the length budget and at most three `⚠` lines.
+**Verify.** New rule landed as `PERF-13` (`docs/verification.md`), covering both halves of the
+Evidence above in one bold imperative plus one evidence sentence, in the established shape:
+comparability is scoped to same-vsync-mode runs, and the vsync-pins-the-median mechanism (with its
+66.7 ms vs. 40 ms arithmetic) is cross-referenced to `PERF-12` rather than restated. `docs/tooling.md`
+cited `PERF-12` for the comparability claim (line 239, landed with E12 before `PERF-13` existed) —
+swapped to the new, on-point rule.
+
+The doc sweep found three of its five targets already correct from earlier items landing their own
+doc updates in-commit (this plan's Ground rules require that): `docs/cli.md`'s flag-index count
+(re-measured independently rather than trusted — `Grep "^- .--" docs/cli.md` gives 129 bullet lines,
+128 unique index entries in the "Flag index" block, and extracting every `arg == "--x"` /
+`arg.StartsWith("--x=")` name from `SessionSpec.cs`'s parse chain gives 128 unique flags too; all
+three agree, no edit needed); `docs/controls.md` (F14 already reads the readout row, no F15/F16 rows
+remain — landed with A1/D10); `docs/architecture.md`'s `TileGridOverlay` index line (already reads
+"flag-only" with the A1 cross-reference).
+
+The other two needed work. `docs/architecture.md`'s `HitchMonitor.cs` and `PerfSample.cs` entries
+had grown to four `⚠` lines each as B6/C9/D11/E13 landed content into them one item at a time, over
+this item's own three-line budget — merged `HitchMonitor.cs`'s short `Stopwatch`-vs-`delta` bullet
+into its TUNE-defaults bullet, and `PerfSample.cs`'s short main-thread-only bullet into its
+coarse-granularity bullet, losing no sentence, both now at three. `docs/tooling.md` already carried
+the perf-stage field documentation (`hitch_count`, `vsync`, the `hitch` stage) from E12/B7 landing
+in-commit; only the `PERF-12`→`PERF-13` citation needed changing.
 
 **⚠ Traps.** `docs/architecture.md` is about 110 KB: read only the specific `##` entry being edited,
 never the whole file. `PROJECT_CONTEXT.md`'s "Current status" gets its pointer swapped, never a

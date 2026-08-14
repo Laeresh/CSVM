@@ -4325,25 +4325,25 @@ like `Last.Ring` — for `PerfHud`'s Full-tier frame-time strip; `CopyRing` retu
 entries when handed a shorter destination than the ring holds, oldest of those first.
 ⚠ **Every default here is TUNE**, named in conversation on 2026-08-14 and evidenced by nothing:
   `medianMultiple` 4, `floorMs` 40, `baselineFrames`/`ringFrames` 120, `graceMs` 2000. Do not cite
-  one as a measured value.
+  one as a measured value. Fed a raw `Stopwatch.GetTimestamp` pair, **never Godot's `delta`**:
+  `delta` is post-processed (`OS.delta_smoothing`) and measures as a quantised constant here,
+  8.333 ms on every frame of a `--no-vsync --det` empty-stage run while the real cost varied
+  8.25–8.42 ms.
 ⚠ The baseline is a **true median**, not a mean, and the hitching frame is judged against the
   window BEFORE it joins. A mean would be dragged up by the hitch it just saw and would hide the
   next. Under vsync the median pins at the refresh interval, degenerating the relative term into a
   FIXED threshold — at the 60 Hz cap these defaults assume, 4 × 16.67 ms = 66.7 ms is ABOVE the
   40 ms floor, so the RELATIVE term fires there, not the floor; only ≥100 Hz brings it under
-  (PERF-12 — found verifying B5 on a 120 Hz dev box, where the floor genuinely did decide).
-⚠ Fed a raw `Stopwatch.GetTimestamp` pair, **never Godot's `delta`**: `delta` is post-processed
-  (`OS.delta_smoothing`) and measures as a quantised constant here, 8.333 ms on every frame of a
-  `--no-vsync --det` empty-stage run while the real cost varied 8.25–8.42 ms.
+  (PERF-12 — found verifying B5 on a 120 Hz dev box, where the floor genuinely did decide). A hitch
+  count is therefore only comparable to another run in the same vsync mode (PERF-13).
 ⚠ **Nothing applied during `Launcher.LaunchSession`'s build can ever trip this monitor, at any
-  magnitude.** `Rearm()` fires the instant `StartSession()` returns (`Launcher.cs:743-744`, by
-  design — see that method's own comment), so anything that runs earlier in the same build, like a
-  `--damage=` preset's `DamageLab._Ready()` cascade, is always finished before grace starts counting.
-  Measured (PLAN-perf-hitches E13, disproven): a real 18x single-frame spike from a maximal
-  four-part debris burst (`max_ms` 150.00 vs an 8.33 ms baseline) produced zero `[perf] hitch` lines
-  over a 600-frame run — the spike lands ~700 ms after `Rearm()`, a third of the 2000 ms grace, and
-  never recurs. A scenario wanting HitchMonitor to see an event needs that event live, mid-run, after
-  the build — a CLI preset applied at construction time cannot reach it.
+  magnitude**, because `Rearm()` fires the instant `StartSession()` returns (`Launcher.cs:743-744`,
+  by design), so anything earlier in the same build is always finished before grace starts counting.
+  Measured (PLAN-perf-hitches E13, disproven): a maximal four-part debris burst (`max_ms` 150.00 vs
+  an 8.33 ms baseline) produced zero `[perf] hitch` lines over 600 frames — the spike lands ~700 ms
+  after `Rearm()`, a third of the 2000 ms grace, and never recurs; a scenario wanting this monitor to
+  see an event needs that event live, mid-run, after the build, not a CLI preset applied at
+  construction time.
 
 ## src/Utils/HitchSidecar.cs
 `HitchMonitor`'s write path (PLAN-perf-hitches B6): a tripped `HitchRecord` is copied — never
@@ -4400,9 +4400,8 @@ real (non-injected) scenarios — `--destroy=` and `--crash=5` — with a tempor
 ⚠ **Coarse granularity is a rule, not a preference**: a debris burst, not one chunk; a spawn, not
   one node. A scope costs ~60 ns (58.8/59.3/62.7 ns over three 200k-iteration runs of
   `PerfSampleTests.AScopeCostsFarLessThanTheFrameItMeasures`, allocating exactly 0 bytes), so a
-  per-particle scope is 60 µs of instrument on the frame it was meant to explain.
-⚠ Main thread only, unsynchronised by design — a lock on the frame path would cost more than the
-  measurement.
+  per-particle scope is 60 µs of instrument on the frame it was meant to explain. Main thread only,
+  unsynchronised by design — a lock on the frame path would cost more than the measurement.
 
 ## src/Utils/Rng.cs
 The session's randomness policy: one master seed and ten named subsystem generators derived from it

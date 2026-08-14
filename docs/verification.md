@@ -233,6 +233,13 @@ and leave gaps when retiring old ones.
   cap can land well inside it on a faster box — measured on the dev machine, vsync's *actual*
   refresh is 120 Hz (~8.33 ms/frame, same as `--no-vsync` there), so frame 120 is ~1000 ms, half
   the default 2000 ms grace, and neither a 50 ms nor an 80 ms stall tripped until past ~frame 240.
+- **PERF-13** — **A hitch count only compares across runs in the same vsync mode; per-frame cost
+  transfers, frequency does not.** Vsync paces frames per wall second, which paces hitch frequency
+  directly; it also pins the rolling median at the refresh interval, collapsing `HitchMonitor`'s
+  relative trigger into a fixed threshold whose winner against the floor depends on the refresh
+  rate, not the defaults alone — at the 60 Hz cap this plan's defaults assume,
+  `medianMultiple × refresh_interval` is 66.7 ms, ABOVE the 40 ms floor, so the relative term
+  decides there, not the floor (`HitchMonitor.cs`, PERF-12).
 
 ## LOG — logs, error censuses, and exit codes
 

@@ -237,7 +237,7 @@ count on an unchanged build is not yet measured, and a count this bursty is the 
 should gate anything (`docs/verification.md` PERF-5, METHOD-3). Every record also carries `"vsync"`
 (`"off"`/`"on"`, read back from each launch's own `[perf] vsync …` line): hitch counts, and `max_ms`/
 `p95_ms`, are not comparable across vsync modes, since a padded frame changes what a hitch even means
-(PERF-12). Every scenario here runs `--no-vsync`, so today every record reads `"vsync":"off"`; the
+(PERF-13). Every scenario here runs `--no-vsync`, so today every record reads `"vsync":"off"`; the
 field is carried (not yet checked — `-PerfCompare` does not refuse a mismatched pair) so a future
 vsync-on scenario at least leaves the mode visible in both records being read side by side.
 
