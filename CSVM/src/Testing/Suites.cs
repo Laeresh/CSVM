@@ -175,6 +175,20 @@ public static class Suites
             "to wave 2 exactly on the last kill, activating wave 2's built-inert member at a " +
             "drawn spawn point at least 500 m from the human",
             InstantActionAce));
+        into.Add(new TestHarness.Suite("instant-action-zeppelin",
+            "the F12 zeppelin run over C1/IA1's own data: zeppelin_type selects the objective node " +
+            "(cargo/passenger/military, an unauthored or unrecognised value falling back to cargo " +
+            "the way the record reset does), the mission script's own deactivation of " +
+            "multiplayer1zep is undone for the objective while a non-selected zeppelin is switched " +
+            "off AND held (placed, no longer flown), and the wave arm is the generator alone: the " +
+            "claimed generator launches nothing on an uncredited budget, one wave's credit " +
+            "releases exactly that wave's built-inert members from the live cargobay drop point " +
+            "(12 m under the doors) and no more, a still-parked member counts as present so the " +
+            "sequencer does not skip the wave, and the last kill advances it; in C1/IA1's real " +
+            "world the objective starts hidden with every one of its gasbag's collision shapes " +
+            "switched off, and the activation brings the hull and those colliders back together " +
+            "(leaving off only the descendants that are themselves deactivated)",
+            InstantActionZeppelin));
         into.Add(new TestHarness.Suite("inert-aircraft",
             "the E10 inert state, each claim watched passing on a live aircraft first and on the " +
             "inert one AFTER activation: a plane built inert is not returned by a raycast, is " +
@@ -3471,6 +3485,294 @@ public static class Suites
                 m.Free();
             textures.Dispose();
         }
+    }
+
+    /// <summary>The F12 zeppelin run: the objective-zeppelin selection, the builder's own switch,
+    /// and the wave arm that replaces E11's teleport. Everything runs over C1/IA1's real
+    /// <c>ia.zrd.json</c> / <c>egen.zrd.json</c> / <c>zeppelins.zrd.json</c>, on the same host +
+    /// <c>cargobay</c> stand-in world the <c>zeppelin-launch</c> suite uses, so the drop geometry
+    /// under test is the one <c>AiGeneratorRuntime</c> already owns.</summary>
+    private static void InstantActionZeppelin(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
+        ctx.RequireData(chapterZrdr, $"C1 zrdr");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
+
+        // The objective selection, over the shipped file: C1 authors zeppelin_type cargo and
+        // names multiplayer1zep for all three types.
+        var iaDef = InstantAction.Load(missionZrdr);
+        ctx.Check(iaDef.ZeppelinType == "cargo",
+            $"C1/IA1 authors zeppelin_type: {iaDef.ZeppelinType ?? "(unauthored)"}");
+        ctx.Check(InstantActionRuntime.SelectedZeppelinNode(iaDef) == "multiplayer1zep",
+            $"cargo selects the cargo_zeppelin node: {InstantActionRuntime.SelectedZeppelinNode(iaDef)}");
+        ctx.Same(3, InstantActionRuntime.ZeppelinNodes(iaDef).Count,
+            $"the three *_zeppelin names are offered in type order");
+        ctx.Check(InstantActionRuntime.ZeppelinTypeIndex("passenger") == 1
+            && InstantActionRuntime.ZeppelinTypeIndex("military") == 2,
+            $"passenger/military index 1/2");
+        // ⚠ The fallback is cargo, not an error: the parser REJECTS an unrecognised string over a
+        // record whose reset wrote 0 (FUN_00458ff0's param_1[0x95] = 0).
+        ctx.Check(InstantActionRuntime.ZeppelinTypeIndex(null) == 0
+            && InstantActionRuntime.ZeppelinTypeIndex("blimp") == 0,
+            $"an unauthored or unrecognised zeppelin_type falls back to cargo (index 0)");
+
+        var egen = EnemyGenerators.Load(missionZrdr);
+        ctx.Check(egen.Count == 1 && egen[0].Node == "multiplayer1zep" && egen[0].IsZeppelin,
+            $"the objective zeppelin is the host of C1/IA1's one generator count={egen.Count}");
+        if (egen.Count != 1)
+            return;
+        var genDef = egen[0];
+        var nets = AiNets.Load(chapterZrdr);
+        var zepDefs = Zeppelins.Load(missionZrdr);
+        ctx.Check(zepDefs.Count == 1 && zepDefs[0].Node == "multiplayer1zep",
+            $"…and of its one zeppelin record count={zepDefs.Count}");
+        if (zepDefs.Count != 1)
+            return;
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        Node3D? host = null;
+        Node3D? heldHost = null;
+        AiGeneratorRuntime? gens = null;
+        ZeppelinRuntime? zeps = null;
+        var wave1 = new List<FlightController>();
+        var wave2 = new List<FlightController>();
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+            var spec = SessionSpec.Parse(System.Array.Empty<string>());
+            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var inputs = new FlightRigAssembler.Inputs
+            {
+                PlanesGamez = planesGamez,
+                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                RigCount = 0,
+                PaintRng = new RandomNumberGenerator(),
+                ZrdrPath = ctx.ZrdrPath,
+                StockLoadouts = StockLoadouts.Load(),
+                WeaponDefs = weaponDefs,
+                Textures = textures,
+                Projectiles = live,
+                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            };
+            var spawner = new AiAircraftSpawner(spec, liveries, null!, ctx.Host, inputs);
+
+            // Both waves built INERT at the origin, which is what the original does on this one
+            // mode for wave 1 as well ("even wave 1 is built deactivated at the origin").
+            string waveNode = InstantAction.PlaneNodeFor("Firebrand")!;
+            List<FlightController> BuildWave(int count)
+            {
+                var built = new List<FlightController>(count);
+                for (int i = 0; i < count; i++)
+                {
+                    var pilot = AiPilot.HoldingCourse(Vector3.Zero, Vector3.Forward);
+                    built.Add(spawner.Spawn(waveNode, Vector3.Zero, Vector3.Forward, pilot,
+                        scheme: null, team: InstantActionRuntime.EnemyTeam, inert: true));
+                }
+                return built;
+            }
+
+            wave1.AddRange(BuildWave(6));
+            wave2.AddRange(BuildWave(3));
+            ctx.Check(wave1.All(m => m.Inert) && wave2.All(m => m.Inert),
+                $"both waves are parked inert before the mission starts");
+
+            // The stand-in world: the host above its 100 m launch gate, with the authored
+            // cargobay drop node under the hull.
+            host = new Node3D { Name = "multiplayer1zep", Position = new Vector3(0f, 500f, 0f) };
+            var cargobay = new Node3D { Name = "cargobay", Position = new Vector3(0f, -20f, 0f) };
+            host.AddChild(cargobay);
+            ctx.Host.AddChild(host);
+            var resolvedHost = host;
+            var resolvedBay = cargobay;
+
+            int freshSpawns = 0;
+            gens = new AiGeneratorRuntime(new[] { genDef },
+                (name, scope) => name.Equals("multiplayer1zep", System.StringComparison.OrdinalIgnoreCase)
+                    ? resolvedHost
+                    : name.Equals("cargobay", System.StringComparison.OrdinalIgnoreCase) ? resolvedBay : null,
+                nets, ctx.PlaneName,
+                (_, _, _, _) => { freshSpawns++; return null; },
+                (_, _) => 1, (_, _) => { });
+            ctx.Same(1, gens.LiveCount, $"the generator is live");
+
+            int launchWave = 0;
+            var releasedAt = new List<Vector3>();
+            FlightController? Release(Vector3 pos, Vector3 lookAt)
+            {
+                var roster = launchWave == 1 ? wave1 : launchWave == 2 ? wave2 : null;
+                foreach (var member in roster ?? new List<FlightController>())
+                {
+                    if (!member.Inert)
+                        continue;
+                    member.Activate(pos, lookAt);
+                    releasedAt.Add(pos);
+                    return member;
+                }
+                return null;
+            }
+
+            ctx.Same(1, gens.UseInstantActionLaunches("multiplayer1zep", Release),
+                $"the objective zeppelin's generator takes the Instant Action launch arm");
+
+            // Uncredited: the decoded capacity rule is in force (the capacity-0 stand-in is OFF
+            // on this arm), so a full minute of sim above the altitude gate launches nothing.
+            const float dt = 1f / 60f;
+            for (int i = 0; i < 60 * 60; i++)
+                gens.SimStep(dt);
+            ctx.Check(releasedAt.Count == 0 && wave1.All(m => m.Inert),
+                $"an uncredited generator launches nothing released={releasedAt.Count}");
+
+            // The sequencer's own trigger: a wave whose members are all still in the bay counts
+            // as present (the decoded +0x945 rule), so it must NOT read as cleared.
+            var waves = new InstantActionWaves(new[] { 6, 3, 0, 0 });
+            ctx.Same(1, waves.Start(), $"wave 1 is current at mission start");
+            int parked = wave1.Count(m => !m.Crashed);
+            ctx.Check(parked == 6 && wave1.Count(m => m.InPlay) == 0,
+                $"…with all 6 members parked and none InPlay parked={parked}");
+            ctx.Same(0, waves.Step(parked),
+                $"a wave still waiting in the bay does not advance the sequencer");
+
+            // The credit: one wave's member count, then the generator's own 7 s composed
+            // schedule releases exactly that many and stops.
+            launchWave = 1;
+            ctx.Same(1, gens.GrantWaveCapacity("multiplayer1zep", wave1.Count),
+                $"wave 1's member count is credited to the generator");
+            for (int i = 0; i < 60 * 120 && releasedAt.Count < 6; i++)
+                gens.SimStep(dt);
+            ctx.Same(6, releasedAt.Count, $"exactly wave 1's six members are released");
+            ctx.Check(wave1.All(m => m.InPlay), $"…and all six are in play");
+            ctx.Check(wave2.All(m => m.Inert),
+                $"wave 2 is untouched — one wave's credit releases one wave");
+            var expectedDrop = cargobay.GlobalPosition + Vector3.Down * 12f;
+            ctx.Check(releasedAt.All(p => p.DistanceTo(expectedDrop) < 0.1f),
+                $"…at the generator's own drop point, 12 m under the bay floor drop={releasedAt[0]} bay={cargobay.GlobalPosition}");
+            ctx.Same(0, freshSpawns,
+                $"the generator never spawned an aircraft of its own on this arm");
+
+            for (int i = 0; i < 60 * 60; i++)
+                gens.SimStep(dt);
+            ctx.Same(6, releasedAt.Count, $"the credit is spent: a further minute releases nothing");
+
+            // The last kill advances, exactly as on the teleport arm.
+            foreach (var m in wave1)
+                m.DebugForceCrash();
+            ctx.Same(2, waves.Step(wave1.Count(m => !m.Crashed)),
+                $"wave 1's last kill advances to wave 2");
+
+            // The builder's other arm: a zeppelin it switches off is HELD — still placed at its
+            // authored pose, but no longer flown (a merely hidden one would keep flying its net
+            // and firing its broadside).
+            heldHost = new Node3D { Name = "multiplayer1zep" };
+            ctx.Host.AddChild(heldHost);
+            var resolvedHeld = heldHost;
+            zeps = new ZeppelinRuntime(zepDefs,
+                name => name.Equals("multiplayer1zep", System.StringComparison.OrdinalIgnoreCase)
+                    ? resolvedHeld : null, nets);
+            ctx.Same(1, zeps.LiveCount, $"the zeppelin record is placed");
+            ctx.Check(zeps.Hold("multiplayer1zep"), $"…and the builder can hold it");
+            ctx.Check(!zeps.Hold("nosuchzep"), $"holding an unknown node reports it, never throws");
+            var placedAt = heldHost.GlobalPosition;
+            for (int i = 0; i < 60 * 10; i++)
+                zeps.SimStep(dt);
+            ctx.Check(heldHost.GlobalPosition.DistanceTo(placedAt) < 0.01f,
+                $"a held zeppelin stays at its authored pose through 10 s of sim moved={heldHost.GlobalPosition.DistanceTo(placedAt):0.###} m");
+        }
+        finally
+        {
+            gens?.Free();
+            zeps?.Free();
+            host?.Free();
+            heldHost?.Free();
+            pool?.Free();
+            foreach (var m in wave1)
+                m.Free();
+            foreach (var m in wave2)
+                m.Free();
+            textures.Dispose();
+        }
+
+        // The half only a built world can answer: C1/IA1's own mission script switches
+        // multiplayer1zep off (support\c1\ia1.gw, 'NodeSetActive off'), so the objective of a
+        // zeppelin run starts hidden AND non-collidable — colliders derive from visibility
+        // (Mech3/WorldCollision). The builder's decoded activation has to put BOTH back or the
+        // objective cannot be shot at all, and that crossing is what is measured here.
+        //
+        // ⚠ Read-only against the shared world, and it must stay that way: the run's own
+        // chapter+mission world is CACHED across suites (TestHarness.WithWorld), so registering a
+        // pool or leaving a node switched on here would be handed to every later C1 suite —
+        // measured, as an inflated destructible-census. Hence no WireDamage (the pool seeding and
+        // the round path are the zeppelin-damage suite's, on a zeppelin its mission leaves live)
+        // and the visibility is put back before returning.
+        ctx.WithWorld("C1", collision: true, mission: "IA1", world =>
+        {
+            var runtime = world.Session.Runtime;
+            var objective = runtime.FindNodes("multiplayer1zep").FirstOrDefault();
+            ctx.Check(objective != null, $"the objective zeppelin's node is in C1/IA1's world");
+            if (objective == null)
+                return;
+            ctx.Check(!objective.IsVisibleInTree(),
+                $"C1/IA1's mission script has switched it off at world load (the state F12 inherits)");
+
+            var bagNode = runtime.FindNodes("gasbag1", objective).FirstOrDefault();
+            ctx.Check(bagNode != null, $"gasbag1 resolves under the objective's subtree");
+            if (bagNode == null)
+                return;
+            var (shapesTotal, shapesOff) = ShapeStates(bagNode);
+            ctx.Check(shapesTotal > 0 && shapesOff == shapesTotal,
+                $"…with all {shapesTotal} of its collision shapes switched off with it off={shapesOff}");
+            try
+            {
+                // The decoded builder step: gwNodeSetActive(node, TRUE) on the selected zeppelin.
+                objective.Visible = true;
+                var (_, stillOff) = ShapeStates(bagNode);
+                // ⚠ Not "all 36 back on": the ones that stay off are descendants that are
+                // themselves deactivated (the hidden `destroyed` variants), which is exactly why
+                // WorldCollision DERIVES the flag instead of walking a subtree to re-enable it.
+                // The measurement is the crossing, not a full count.
+                ctx.Check(objective.IsVisibleInTree() && stillOff < shapesTotal,
+                    $"the Instant Action activation puts BOTH back: visible again ({objective.IsVisibleInTree()}), {shapesTotal - stillOff} of {shapesTotal} shapes re-enabled (the {stillOff} left off are the hidden destroyed variants)");
+            }
+            finally
+            {
+                objective.Visible = false;
+                var (_, offAgain) = ShapeStates(bagNode);
+                ctx.Check(offAgain == shapesTotal,
+                    $"…and the world is left exactly as this suite found it off={offAgain} of {shapesTotal}");
+            }
+        });
+    }
+
+    /// <summary>How many collision shapes hang anywhere under this node, and how many of those are
+    /// switched off — the state <c>Mech3/WorldCollision</c> derives from its owner's visibility.
+    /// Recursive, because a world node's shapes hang off its MESH children rather than off the
+    /// named node itself; a non-recursive count reads 0 of 0 and passes an "all disabled" test
+    /// vacuously.</summary>
+    private static (int Total, int Disabled) ShapeStates(Node node)
+    {
+        int total = 0, disabled = 0;
+        if (node is CollisionShape3D collision)
+        {
+            total++;
+            if (collision.Disabled)
+                disabled++;
+        }
+        foreach (var child in node.GetChildren())
+        {
+            var (t, d) = ShapeStates(child);
+            total += t;
+            disabled += d;
+        }
+        return (total, disabled);
     }
 
     /// <summary>The E10 inert state (PLAN-instant-action.md): an aircraft built complete and then

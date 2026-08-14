@@ -220,10 +220,10 @@ clusters they delegate to.
 - `src/Session/EffectPools.cs` — the `data/effect_pools.json` reader: how many copies of each effect template the stage builds, per ROOT, scaled by player count.
 - `src/Session/FlightRigAssembler.cs` — assembles one player's flight rig: painted plane, `FlightController`, loadout/ordnance, HUD instruments, damage visuals, audio, stunt run, spawn, crash runtime.
 - `src/Session/AiAircraftSpawner.cs` — spawns an AI-piloted aircraft into a running session (M4 A2): the flight-essential subset of a rig, an `AiPilot` at the controls, shooter ids from 100.
-- `src/Session/InstantActionRuntime.cs` — owns one Instant Action mission's actor set (PLAN-instant-action.md C8/D9/E11): the loaded `InstantActionDef`, the ace's own spawn draw and team/rating, the wingmen's fan placement/escort chain/flight-size clamp, and E11's two per-wave-member draws (the five-row pilot-personality table, the accent-12 re-roll).
+- `src/Session/InstantActionRuntime.cs` — owns one Instant Action mission's actor set (PLAN-instant-action.md C8/D9/E11/F12): the loaded `InstantActionDef`, the ace's own spawn draw and team/rating, the wingmen's fan placement/escort chain/flight-size clamp, E11's two per-wave-member draws (the five-row pilot-personality table, the accent-12 re-roll), and F12's objective-zeppelin selection.
 - `src/Session/InstantActionWaves.cs` — the decoded wave sequencer's own selection/trigger/geometry (PLAN-instant-action.md E11), pure and engine-free: the wave counter (advance-on-last-kill, 0-enemy fall-through, no advance past wave 4), the 500-m-from-nearest-human spawn draw with its literal-index-0 fallback, and the 100 m/45° fan.
-- `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in.
-- `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (M4 B6, `--generators`): load-time drop rules, per-cycle stepping, spawns through `GameSession.SpawnAiAircraft`.
+- `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in and F12's wave-credit budget that switches it back off.
+- `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (M4 B6, `--generators`): load-time drop rules, per-cycle stepping, spawns through `GameSession.SpawnAiAircraft` — or, on an Instant Action zeppelin run (F12), releases an already-built wave member instead.
 - `src/Session/AiVoiceRuntime.cs` — wires E16's dispatch into a session: the decoded event sources (hit-path DI, Downed death cries, acquisition call-outs, taunts) played through `CombatVoice` + `WorldSounds.PlayOneShot`.
 - `src/Session/ZeppelinRuntime.cs` — runs a mission's zeppelins (M4 F17+F18+F19, `--zeppelins`): places each record's world node at its authored pose, flies it along its net through `ZeppelinMotion`, owns the multi-zone damage (per-part registry pools, the survivor-count kill, the authored hull death) and fires the broadside (`ZeppelinRuntime.Cannons.cs`: real unowned `wep_28` rounds through `ZeppelinBroadside`).
 - `src/Session/TurretEmplacementRuntime.cs` — the world AA emplacements (M4 C9b): the standalone `ai.zrd` family placed at its `NODES` patterns against the built chapter world, shipped `ACTIVATED` honoured, `--wake-turrets` the `WAKEUP_TURRETS` stand-in.
@@ -4232,7 +4232,8 @@ reconstructing the original's `<plane>_ia1`-style roster name.
 Right after the wingman block, E11's wave block builds EVERY configured wave's members through
 the same `SpawnAiAircraft` overload, `inert: true`, at the world origin (Decision 6: build inert,
 then teleport-and-activate on wave change, folding "wave 1 spawns live" into the same path every
-later wave takes) — skipped entirely on `zeppelin_run` (A4/F12's exclusive arm). Each member's
+later wave takes) — on all four modes, `zeppelin_run` included, where the original also builds even
+wave 1 deactivated at the origin and it is the ARRIVAL that differs (F12). Each member's
 attack rating is `InstantActionRuntime.RepresentativeRating(RandomPilotStats(draw))` off
 `Rng.Stream(Rng.Ai)` (the wave sequencer's own five-row personality roll) and its voice accent is
 `ResolveWaveAccentId(EnemyAccentId, draw)` off the same stream (the accent-12 re-roll); its livery
@@ -4246,6 +4247,26 @@ wave number it returns; `ActivateInstantActionWave` draws the spawn point
 (`InstantActionWaves.ChooseWaveSpawn`, `Rng.Stream(Rng.Spawn)`) against every live human's CURRENT
 `WorldPosition`, not their spawn pose, and fans the roster onto it (`InstantActionWaves.FanOffset`)
 through `FlightController.Activate`.
+F12's zeppelin run rewires three points of that without a second code path. (1) The `--zeppelins`
+and `--generators` blocks run unconditionally on that mode: the objective IS a zeppelin and its
+generator is the only way an enemy gets airborne, so neither is the tester's flag to remember.
+(2) Between them sits the builder's own zeppelin switch — every distinct
+`InstantActionRuntime.ZeppelinNodes` entry is resolved through the world runtime and written
+`Visible = objective`, which is the decoded `gwNodeSetActive`, with `ZeppelinRuntime.Hold` on the
+ones switched off. ⚠ **`Visible` is the WHOLE write**: world colliders derive their `Disabled` flag
+from it (`Mech3/WorldCollision`), so the activation restores shootability with the picture and
+there is no second flag to keep in step. (3) `ActivateInstantActionWave` branches at the top: on
+`zeppelin_run` it stamps `_iaLaunchWave` (the generator's decoded `+0x64` group) and calls
+`AiGeneratorRuntime.GrantWaveCapacity` with the wave's member count instead of drawing a spawn
+point, and `ReleaseInstantActionWaveMember` — handed to the generator at build — activates the next
+still-inert member of that wave at the generator's own bay drop point. Because the credit needs the
+generator to exist, `InstantActionWaves.Start()` is called after the generator block on that mode
+rather than inside the wave block.
+⚠ **A zeppelin run whose objective carries no `egen` generator launches nothing, ever** — the
+  original burns through all four waves the same way (its counter advances whether or not the
+  top-up lands), so this warns and does not invent a fallback spawn path. ⚠ **`BL-350` is in this
+  mission's way**: a generator drop is not gated on the hangar doors having finished opening, and
+  the zeppelin-run launch line says so at build.
 ⚠ **It parses no args and resolves nothing** — the Launcher hands it the one `SessionSpec` its
   session is built from; **a new flag is a SessionSpec change**. `_menuPads` is the deliberate
   exception: join-flow session state riding the `LauncherContext`, never the spec.
@@ -4501,6 +4522,17 @@ physics raycast, `CollectAircraft` into an `AimAssist.Scan`, a round fired throu
 absent; plus the roster check that an inert plane is listed as a not-live candidate. ⚠ It
 activates its subject AT ITS BUILD POSE for exactly the `ai-actor` reason above, and re-measured
 that constraint on its own live control before working around it),
+the Instant Action zeppelin run (`instant-action-zeppelin`, PLAN-instant-action F12: the
+`zeppelin_type` selection with its cargo fallback, a real generator on the wave-credit budget
+launching nothing uncredited and exactly one wave's members once credited — from the same bay drop
+point the plane arm uses, never a fresh spawn — the parked-counts-as-present trigger, and
+`ZeppelinRuntime.Hold`; plus, against C1/IA1's own built world, the objective starting hidden with
+every one of its gasbag's collision shapes off and the decoded activation bringing both back.
+⚠ It does NOT fire a round at the re-activated hull: a `CollisionShape3D` switched back on inside a
+synchronous suite does not re-enter the physics space either, the same one-frame limit as above,
+and the round path is `zeppelin-damage`'s. ⚠ It is read-only against the SHARED cached world —
+registering a pool or leaving the node switched on there is handed to every later C1 suite, which
+showed up as an inflated `destructible-census` while this was being written),
 destructible stages/death/census, animation
 stops and bounce-terminated launches, the full effects sweep (`effects-census`: every effect
 resolves, template meshes peak at the CALL SITE not the stage origin, none stays lit after its
@@ -4886,6 +4918,14 @@ shape: it is decoded but not wired, because `enemy_skill` is confirmed unread by
 alone — wiring the multiplier today would be a no-op with no way to test it (every file-launched
 wave is effectively "veteran", 1.0) until H15/H16 gives Instant Action a setup screen that can set
 it directly.
+F12 adds the objective-zeppelin selection, all pure: `IsZeppelinRun` (the one mission type whose
+waves take the generator arm), `ZeppelinNodes(def)` (the three `*_zeppelin` names in
+`zeppelin_type` order) and `SelectedZeppelinNode(def)` over `ZeppelinTypeIndex` — ⚠ **cargo is the
+FALLBACK, not an error**: the parser rejects an unrecognised string rather than storing it, over a
+record whose reset wrote `+0x254 = 0` (`FUN_00458ff0`'s `param_1[0x95] = 0`), so an unauthored or
+misspelled `zeppelin_type` resolves to cargo. All eight shipped chapters name `multiplayer1zep` for
+all three types, so the three names collapse to one in every real case and only a hand-authored
+`--ia=` file can distinguish them.
 
 ## src/Session/InstantActionWaves.cs
 The decoded wave sequencer's own selection, trigger and geometry logic (PLAN-instant-action.md
@@ -4904,18 +4944,25 @@ entry, index 0, not a random one, when the collection is empty), and `FanOffset(
 member 0 sits exactly on the point, member `k` after it (`k` = index − 1) sits
 `100 · ((k >> 1) + 1)` m out at ±45°, sign `+` when `k & 3` is 1 or 2, the same pattern
 `InstantActionRuntime.WingmanSlotFor` uses.
-⚠ **Does NOT run on `zeppelin_run`** — A4 traced the type-2 branch as an EXCLUSIVE alternative to
-  the teleport (a `JMP` past the whole block), not a caller of it; that mode's wave arrival is
-  F12's generator arm. Nothing in this class checks the mission type — `GameSession` gates it out.
+⚠ **Its two GEOMETRY helpers do not run on `zeppelin_run`** — A4 traced the type-2 branch as an
+  EXCLUSIVE alternative to the teleport (a `JMP` past the whole block), not a caller of it; that
+  mode's wave arrival is F12's generator arm. The COUNTER is mode-independent and this class runs
+  on every mode including that one: nothing here checks the mission type, and `GameSession` routes
+  what `Start`/`Step` hand back to either arm.
 `GameSession.BuildFlightRigs` builds every configured wave's members INERT at the world origin
 (Decision 6 folds "wave 1 spawns live" into the same build-then-activate path every later wave
-takes), tracked in its own `_iaWaveRosters[w]` array (not a field on `FlightController` — wave
+takes; on `zeppelin_run` the original builds even wave 1 that way, so the block runs on all four
+modes), tracked in its own `_iaWaveRosters[w]` array (not a field on `FlightController` — wave
 membership is bookkeeping the runtime keeps, not engine state), then calls `Start()` and activates
 whatever it returns. `DriveSimSteps` ticks `Step` once per sim step, after the AI planes' own
 `SimStep` (so the alive count reflects this step's crashes), and `ActivateInstantActionWave`
 resolves the spawn draw against every live human's CURRENT position (not their spawn pose — this
 runs again, mid-flight, for every wave after the first) before calling `FlightController.Activate`
 on each member.
+⚠ **On `zeppelin_run` the alive count is "not crashed", not `InPlay`** — a member still parked in
+  the bay COUNTS as present, which is the decoded walk's own rule (byte `+0x945`, "deactivated",
+  keeps an enemy in the tally). Feeding `InPlay` there would read a just-credited wave as cleared
+  in the frames before its first launch and cascade through all four waves in one second.
 
 ## src/Session/GeneratorCycle.cs
 The decoded egen launch timing law for ONE generator (M4 B6 + F20), pure over `Step` calls (no
@@ -4929,6 +4976,10 @@ last state (the decoded loop early-outs before any door rule).
 ⚠ The capacity check is a STAND-IN: the decoded rule applies only at `capacity > 0`, disabled at
   `<= 0` (the shipped value on all 23), pending the egen.zbd raw-byte read. See
   mission-entities.md's capacity-puzzle section. NOT a decode of "0 means unlimited".
+  `UseWaveCredits()` is the one path that switches the stand-in back OFF (F12): an Instant Action
+  `zeppelin_run` runs the DECODED rule regardless of the authored `capacity`, from zero remaining,
+  with `GrantCapacity(n)` the sequencer's per-wave top-up (`+0x80`). That mode is the one place the
+  decoded rule can be run as decoded, because there the sequencer is the budget.
 ⚠ The first post-load threshold is an assumption (full inter-wave gap); the decode does not pin
   it, and F20 revisits.
 
@@ -4952,8 +5003,17 @@ Pinned by the `zeppelin-launch` suite.
 ⚠ Host DEATH is wired for ZEPPELIN hosts only (`NotifyHostDied`, fed by
   `ZeppelinRuntime.ZeppelinKilled` — F18); fixed-installation hosts still have no death source.
 ⚠ The min_altitude gate reads the host node's live Y, so it is real only with `--zeppelins`
-  (F17) placing/flying the host — and C1/IA1's own mission setup DEACTIVATES its zeppelin (IA
-  wave logic would wake it; out of M4 scope), so IA1 doors swing hidden; demo on C1B/M03.
+  (F17) placing/flying the host — and C1/IA1's own mission setup DEACTIVATES its zeppelin, so
+  IA1 doors swing hidden on a plain `--generators` launch; demo on C1B/M03, or on an Instant
+  Action zeppelin run, which activates the hull itself (F12).
+`UseInstantActionLaunches(hostNode, release)` + `GrantWaveCapacity(hostNode, n)` are F12's arm: the
+objective zeppelin's generator goes onto the wave-credit budget and its launches RELEASE an
+already-built (inert) wave member through the caller's hook instead of spawning a fresh aircraft —
+the decoded shape, since `FUN_00452450` finds the parked airframes whose group matches and drops
+them from the bay. A released member takes no net pick (it carries its own `primary_target`), and a
+hook returning null (the wave has nothing parked left) is accounted exactly like a failed spawn.
+⚠ The drop point is the SAME one the plane arm uses, `DropClearanceM` and all — F12 must not
+  re-derive it (PLAN-instant-action.md F12 trap b).
 
 ## src/Session/ZeppelinRuntime.cs
 Runs a mission's zeppelins (M4 F17 motion + F18 damage + F19 broadside, behind
@@ -4982,6 +5042,12 @@ authored deploy/retract anims scoped to the hull, and spawns unowned rounds
 ⚠ A `deactivated` record (value 1) is PLACED but held — mission-script wake-up is out of M4's
   scope. A record whose net misses neindex is also placed-not-flown (the pose is real data and
   B6's altitude gate reads the node's Y). Stop nodes are NOT implemented (F17's open item).
+`Hold(node)` (F12) is the runtime counterpart of that flag for a zeppelin Instant Action's own
+builder switched off: placed, but no longer stepped, so it neither flies its net nor fires an
+invisible broadside. It stands in for `FUN_0045a390`'s `FUN_0045a2a0`, which deletes the vehicle/AI
+objects under the deactivated node — CSVM has no such object graph to delete. Switching the world
+NODE off is the CALLER's act (`GameSession`, the decoded `gwNodeSetActive`), because the builder's
+three `*_zeppelin` names need not be zeppelin records at all.
 ⚠ Effect templates snap to absolute world points and never track a moving host — a hit effect
   on a flying zeppelin stays behind, and the death choreography plays where the hull died. The
   `cannon_health` gasbag binding is parsed and logged but no damage transfer is decoded, so

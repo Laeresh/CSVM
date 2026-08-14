@@ -77,12 +77,14 @@ plus the words "marked INVENTED" if the decode comes back empty.
 | 5 | "CSVM already has a team model to hang this on." | `AimAssist.TeamOfPilot` is a documented stand-in: pilot index plus one, which makes every pane hostile to every other and every AI hostile to every other AI. `AimAssist.cs:310-317` says so in its own comment. |
 | 6 | "`enemy_skill` sets a wave's AI skill." | A3, 2026-08-14. The string `enemy_skill` does not exist in `crimson.exe` and the wave parser `FUN_00458e00` reads four keys, none of them that one. It is authored in all 8 chapters and read by nothing; a wave's nine pilot stats are rolled from a five-row table instead. |
 | 7 | "The mission-type ids follow the UI dropdown order." | A3, 2026-08-14. `FUN_00458c20` gives 0 ace, 1 squadron, **2 zeppelin run**, 3 ground target, **4 stunt flying**; the dropdown shows ace, squadron, stunt, zeppelin. |
+| 8 | "On a zeppelin run the objective zeppelin is simply never switched off — the builder just skips it, and nothing ever activates one." | F12, 2026-08-14. Half right, and the wrong half is the one that matters: `FUN_0045a390`'s deactivation loop does skip it, but a **second block** right after (`0x0045b910`) calls `gwNodeSetActive(node, TRUE)` on that same node. Without it the mission script's own `NodeSetActive off` would still be in force and the objective would be invisible and unshootable. A4 read the loop; the block after it went unread until F12. |
+| 9 | "The wave block does not run on `zeppelin_run`." | F12, 2026-08-14, correcting E11's own note. The original builds all four waves deactivated at the origin on that mode too (`formats/instant-action.md`, "The ace and the waves") — even wave 1. What the mode replaces is the ARRIVAL, not the build. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, A3, A4, A5, B6, D9, E11, G14 | The option sets, the `ia.json` key census, the damage path, the whole setup path, both of the wave sequencer's arms and all four wrap-up counters are read out of the shipped data and out of `crimson.exe`. Confirm the trace, then implement. |
+| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, A3, A4, A5, B6, D9, E11, F12, G14 | The option sets, the `ia.json` key census, the damage path, the whole setup path, both of the wave sequencer's arms, the builder's own zeppelin switch and all four wrap-up counters are read out of the shipped data and out of `crimson.exe`. Confirm the trace, then implement. |
 | **Direction sound, magnitude a judgement call** | E10, G13, G14, H15, H16 | The behaviour is settled; the numbers and the presentation are not. Anything numeric here is TUNE, not fact. |
-| **Leads only, no mechanism yet** | B7, C8, F12 | All four Wave A decodes have landed, so what is left here rests on implementation choices rather than on unread code. A4 settled F12's wave source (the generator, exclusively) but not how Instant Action's own zeppelin deactivation composes with the mission script's, so F12 stays here. Budget for a decode ending in a disproof: A2, A3 and A4 each did, against the "block it" and "3 / 6 / 9" fallbacks and against the standing "the wave logic wakes the zeppelin" note. |
+| **Leads only, no mechanism yet** | B7, C8 | All four Wave A decodes have landed, so what is left here rests on implementation choices rather than on unread code. F12 moved up on 2026-08-14: its own read found the second block at `0x0045b910`, which activates the objective zeppelin outright. Budget for a decode ending in a disproof: A2, A3 and A4 each did, against the "block it" and "3 / 6 / 9" fallbacks and against the standing "the wave logic wakes the zeppelin" note. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees, and other sessions may
 push or pop it concurrently. Never use a bare `git stash` in a worktree session here; use a local WIP
@@ -291,7 +293,7 @@ is M4's formation disproof, `B7` is the team model below.
 
 ### Wave F — Attacking a zeppelin
 
-12. ☐ F12 Zeppelin mode, and waking C1/IA1's own zeppelin
+12. ☑ F12 Zeppelin mode, and waking C1/IA1's own zeppelin
 
 ### Wave G — Ends
 
@@ -1048,7 +1050,64 @@ TUNE; do not adjust them because the formation looks wide.
 
 # Wave F — Attacking a zeppelin
 
-## F12 ☐ Zeppelin mode, and waking C1/IA1's own zeppelin
+## F12 ☑ Zeppelin mode, and waking C1/IA1's own zeppelin
+
+**Landed 2026-08-14. The composition question is decoded, and "waking" turns out to be the right
+word after all — just not the sequencer's.** `FUN_0045a390`'s tail has TWO blocks, not one. The loop
+over the three `*_zeppelin` nodes deactivates each (skipping the `zeppelin_type` pick on
+`mission_type == 2`); immediately after it, a second block runs for exactly that skipped node and
+calls the same three functions with inverted arguments — including
+**`gwNodeSetActive(node, TRUE)`** at `0x0045b937`, the exact inverse of the loop's `FALSE` at
+`0x0045b8e5`, with the object-teardown call (`FUN_0045a2a0`) omitted. So the builder does not merely
+decline to deactivate the objective: it explicitly activates it, which is how it composes with
+`support\c1\ia1.gw`'s own `NodeSetActive off` on `multiplayer1zep`. The full reading, including the
+`+0x6` "zeppelin is gone" byte the loop sets and this block clears, is in
+[`formats/instant-action.md`](formats/instant-action.md).
+
+Two further decodes fell out. `zeppelin_type`'s fallback is **cargo**, not an error: an unrecognised
+string is rejected rather than stored, over a record whose reset wrote `+0x254 = 0`
+(`FUN_00458ff0`'s `param_1[0x95] = 0`) — that row is now in the built-in defaults table. And the
+wave block runs on `zeppelin_run` after all: the original builds even wave 1 deactivated at the
+origin there, so what the mode changes is the ARRIVAL, not whether the aircraft exist. CSVM
+therefore builds all four waves inert on every mode and routes what `InstantActionWaves` hands back
+to either the teleport (E11) or the generator credit (this item).
+
+What landed: `InstantActionRuntime.IsZeppelinRun`/`ZeppelinNodes`/`ZeppelinTypeIndex`/
+`SelectedZeppelinNode` (pure); `GeneratorCycle.UseWaveCredits`/`GrantCapacity`, which switch the
+capacity STAND-IN back off and run the decoded rule from a zero budget — the one place in this
+install where it can be run as decoded, and the resolution of the capacity puzzle for this mode;
+`AiGeneratorRuntime.UseInstantActionLaunches`/`GrantWaveCapacity`, whose launches RELEASE an
+already-built inert wave member at the same bay drop point the plane arm uses rather than spawning
+anything; `ZeppelinRuntime.Hold`, the runtime stand-in for the builder's own object teardown of a
+switched-off zeppelin; and in `GameSession`, the zeppelin/generator blocks running unconditionally
+on that mode, the node switch between them, `_iaLaunchWave` as the decoded group stamp, and the
+alive count reading "not crashed" rather than `InPlay` on that mode alone (a member still in the bay
+COUNTS as present — byte `+0x945` — or a credited wave reads as cleared before its first launch).
+
+Verification: `RunTests.ps1` clean — 1191 unit tests, 57/57 engine suites, engine errors clean, 14/14
+goldens hash-identical. New `instant-action-zeppelin` suite (23 assertions): the `zeppelin_type`
+selection and its cargo fallback over C1's shipped `ia.zrd.json`; a real `AiGeneratorRuntime` over
+C1/IA1's own `egen` def launching nothing through 60 s uncredited, then exactly wave 1's six members
+once credited, each at `cargobay − 12 m`, wave 2 untouched, no fresh spawn, nothing more in a
+further 60 s; the parked-counts-as-present trigger and the last-kill advance; `Hold` leaving a
+placed zeppelin at its pose through 10 s; and against C1/IA1's real built world, the objective
+hidden with all 36 of its gasbag's shapes off, then visible with 26 of 36 re-enabled (the 10 left
+off are the hidden `destroyed` variants — `WorldCollision` derives the flag rather than walking).
+`zeppelin-motion`/`-damage`/`-broadside`/`-launch` unchanged. Live: `--ia=` zeppelin_run on C1/IA1
+prints `ia: zeppelin 'multiplayer1zep' ACTIVATED as this mission's objective` after the mission
+script's own 27-node deactivation, flies it at 30/30 m/s with damage and broadside wired without
+`--zeppelins`, and releases wave 1's six one at a time on the composed 7 s schedule
+(`5,4,3,2,1,0 of this wave's credit left`) before the door closes and stops. Screenshot: the hull
+airborne with the three wingmen alongside. 8-chapter `--freecam` regression: 0 errors, census
+unchanged (C1 7064/3425, C1B 5603/3099, C1C 5644/2965, C2 4956/1616, C2B 4901/2708, C3 5408/2331,
+C4 8289/4204, C5 11438/4722 nodes/meshes).
+
+Two instrument limits, both named at their site rather than worked around: a `CollisionShape3D`
+switched back on inside a synchronous suite does not re-enter the physics space (INSTR-13's family),
+so the round is `zeppelin-damage`'s to fire and this suite measures the flag crossing; and the run's
+own chapter+mission world is CACHED across suites, so a suite that registers a pool or leaves a node
+switched on there hands it to every later C1 suite — measured as an inflated `destructible-census`
+while this was being written, and the reason this one is strictly read-only.
 
 **Goal.** `mission_type: zeppelin_run` flies a mission whose objective is a live zeppelin, destroyed
 through the existing M4 F18 damage path, with its waves arriving by whatever route A4 establishes.

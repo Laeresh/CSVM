@@ -262,10 +262,12 @@ untraced launch timers are not interpreted). C1/IA1's own mission setup **deacti
 zeppelin at load (`support\c1\ia1.gw`), so a remake session without that layer sees IA1's doors
 swing on a hidden hull; campaign missions (C1B/M03's `vostokzep`) show the visual. ⚠ **Correction
 2026-08-14 (A4): the IA wave sequencer does not wake it.** `FUN_0045b9d0` touches only the
-generator's counters. What Instant Action does to zeppelins is the opposite: its mission builder
-deactivates all three of them, and on a `zeppelin_run` it merely declines to deactivate the one
-`zeppelin_type` selects ([instant-action.md](instant-action.md)). C1's `ia.json` runs
-`dogfight_squadron`, so its zeppelin is switched off by that path as well as by the script.
+generator's counters. What wakes it is the mission BUILDER: `FUN_0045a390` deactivates all three
+`*_zeppelin` nodes and then, on a `zeppelin_run` only, calls `gwNodeSetActive(node, TRUE)` on the
+one `zeppelin_type` selects — an explicit activation that overrides the script's own
+`NodeSetActive off`, traced in full by F12 ([instant-action.md](instant-action.md)). C1's `ia.json`
+runs `dogfight_squadron`, so its zeppelin is switched off by that path as well as by the script; a
+`--ia=` file selecting `zeppelin_run` on the same chapter is what puts it back in the air.
 
 ### The capacity puzzle
 
@@ -362,3 +364,13 @@ forbids); the stand-in is named in the class comment and asserted as such in
 `CSVM.Tests/GeneratorCycleTests.cs`. **Open follow-up, unchanged:** the raw-byte read of
 `capacity` out of the un-extracted `egen.zbd` is the discriminating instrument, and the stand-in
 is to be replaced by whatever it shows.
+
+#### Where the stand-in switches back off, 2026-08-14 (F12)
+
+On an Instant Action `zeppelin_run` the puzzle does not arise, because the sequencer IS the budget:
+`GeneratorCycle.UseWaveCredits()` puts the objective zeppelin's generator on the **decoded** rule
+regardless of the authored `capacity`, starting from zero remaining, and each wave change credits it
+with that wave's member count (`GrantCapacity`). Nothing launches before the first credit and
+exactly one wave's worth launches after it, which is the shape `capacity 0` plus a live top-up
+produces and the one place in this install where the decoded rule can be run as decoded. It says
+nothing about the campaign case; the raw-byte read above is still the instrument for that.

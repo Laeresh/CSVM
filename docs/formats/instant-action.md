@@ -191,6 +191,7 @@ value. Worth knowing because four of the parsed keys are authored by no chapter 
 | `ace_accentID` | -1; decals -2; colours -1 |
 | `ground_target_name` / `ground_target_node` | `Cargo Train` / `trcargo01` |
 | the three `*_zeppelin` node names | `vostokzep` |
+| `zeppelin_type` | 0 (**cargo**) — `param_1[0x95] = 0`, i.e. record `+0x254`. An unrecognised string is rejected rather than stored (below), so this is also what a typo resolves to |
 | per wave (`FUN_00458d00`) | `num_enemies` 0, `enemy_name` `Blake Firebrand`, `enemy_plane` 6 (**Firebrand**), skill 1, decals -2, colours -1 |
 
 The aircraft index is the `IDS_IA_PLANES` order (0 Autogyro, 1 Hellhound, 2 Balmoral, 3 Bloodhawk,
@@ -401,20 +402,42 @@ through all four waves with nothing ever released.
 
 `DAT_00718f2c` is setup record `+0x254`, written from **`zeppelin_type`** through `FUN_00458f60`:
 `cargo` → 0, `passenger` → 1, `military` → 2, anything else → 3, and 3 is rejected rather than
-stored. All 8 chapters author `cargo`, so slot 0 is the one in play throughout this install.
+stored — over a record the reset left at 0, so an unauthored or misspelled `zeppelin_type` is
+**cargo**, not an error. All 8 chapters author `cargo`, so slot 0 is the one in play throughout this
+install.
 `DAT_00718fd0[0..2]` are the three world nodes the mission builder resolved from the
 `cargo_zeppelin` / `passenger_zeppelin` / `military_zeppelin` values (the parser builds those keys by
 appending the literal `_zeppelin` at `0x00625688` to each type name), all `multiplayer1zep` here.
 
-⚠ **The builder deactivates all three zeppelins, except the selected one on `zeppelin_run`.** After
-the wave loop, `FUN_0045a390` resolves each of the three nodes and deactivates it; the only skip is
-`mission_type == 2` **and** this node being the `zeppelin_type` pick. So on the other four modes
-every zeppelin on the map is switched off by Instant Action itself, and on a zeppelin run the target
-is simply never switched off. Nothing here is a wake-up, and **the sequencer contains no zeppelin
-wake-up either** (it touches the generator's counters and nothing else), which corrects the standing
-note in [mission-entities.md](mission-entities.md) and `Session/AiGeneratorRuntime`. How this
-interacts with the mission script's own deactivation list (`support\c1\ia1.gw` names zeppelin nodes
-too, see [interp.md](interp.md)) was not traced and belongs to F12.
+⚠ **The builder deactivates all three zeppelins, and on `zeppelin_run` it ACTIVATES the selected
+one.** After the wave loop, `FUN_0045a390` walks the three resolved nodes (`0x0045b8a2`) and
+switches each off, skipping only the `zeppelin_type` pick on `mission_type == 2`. Then, immediately
+after that loop, a **second block** (`0x0045b910`) runs for exactly that skipped node. The two
+blocks call the same three functions with inverted arguments:
+
+| | the loop's deactivation (`0x0045b8d6`) | the type-2 objective (`0x0045b928`) |
+|---|---|---|
+| `FUN_004bd780(zep, b)` — record byte `+0x6`, plus `+0x8 = now + 3.0` | `1` | `0` |
+| `FUN_004cca30(zep->node, b)` — **`gwNodeSetActive`** (the string at `0x0062cd28` names it; the flag is bit 2 of the node's `+0x24`) | `0` | **`1`** |
+| `FUN_004bf060(zep, b)` → `FUN_004bef70(zep->node, b)` | `0` | `1` |
+| `FUN_0045a2a0(zep->node)` — recursive teardown of the vehicle/AI objects under that node | called | **not called** |
+
+The objective then also gets byte `+0x4d` set on the object `FUN_004a3360` finds by its name — the
+same "this is the mission's target" byte the stunt zones and the ground target get earlier in this
+function — and a `FUN_004edc50(…, 0, 0, 0)` motion reset on a third per-type slot
+(`0x00718fc4 + type·4`) which the record reset zeroes (`param_1[0xbb..0xbd] = 0`) and nothing on the
+`ia.json` path writes, so that last call does not fire in a file-driven launch.
+
+**That answers how the builder composes with the mission script's own deactivation list.** The two
+are independent and the builder wins, because it is a real activation rather than an omission:
+`support\c1\ia1.gw` switches `multiplayer1zep` off at world load ([interp.md](interp.md)), and on a
+zeppelin run Instant Action switches it back on. Note also byte `+0x6`, which the end-condition
+table below reads as "the zeppelin is gone": the loop **sets** it on every deactivated zeppelin and
+the objective block **clears** it, so the mode-2 end condition starts false only for the objective.
+
+⚠ Nothing here is a wake-up of the record's own `deactivated` flag, and **the sequencer contains no
+zeppelin wake-up either** (it touches the generator's counters and nothing else), which corrects the
+standing note in [mission-entities.md](mission-entities.md) and `Session/AiGeneratorRuntime`.
 
 The spawn list is `ia.json`'s own **`spawn_points`**, not a separate stored list. `FUN_0045a150`
 walks that dict, maps each scenario key to a mission-type id through `FUN_00458c20`, and appends the

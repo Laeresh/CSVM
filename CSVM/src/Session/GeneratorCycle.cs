@@ -16,7 +16,10 @@ namespace CSVM.Session;
 /// unresolved discrepancy (the capacity puzzle, docs/formats/mission-entities.md). This class
 /// applies the decoded rule only when <c>capacity &gt; 0</c> and disables the check at
 /// <c>capacity ≤ 0</c>, pending the egen.zbd raw-byte read. That is NOT a decode of "0 means
-/// unlimited"; it is the only reading that lets shipped data fire at all.</para>
+/// unlimited"; it is the only reading that lets shipped data fire at all.
+/// <see cref="UseWaveCredits"/> is the one path that switches the stand-in back off: on an
+/// Instant Action <c>zeppelin_run</c> the decoded rule IS the mechanism (F12), because the wave
+/// sequencer credits the budget itself.</para>
 ///
 /// <para>The hangar door (F20) runs on the decoded HARDCODED timings below, inside the same
 /// <c>Step</c>: open <see cref="DoorLeadSeconds"/> before a due spawn, hold at least
@@ -48,6 +51,7 @@ public sealed class GeneratorCycle
     private int _spawnedThisWave;
     private float _timer;
     private float _nextEvent;
+    private bool _waveCredited;
 
     public GeneratorCycle(int capacity, int maxActive, int waveSize, float wavePeriod,
         float indPeriod, float? minAltitude)
@@ -88,8 +92,31 @@ public sealed class GeneratorCycle
     /// <summary>The threshold the timer must reach for the next spawn.</summary>
     public float NextEvent => _nextEvent;
 
+    /// <summary>Launches this cycle still has budget for. Meaningless while the stand-in above
+    /// has the check switched off (authored <c>capacity</c> 0 and no wave credit).</summary>
+    public int CapacityRemaining => _capacityRemaining;
+
     /// <summary>The host died: disable permanently (decoded rule, never re-enabled).</summary>
     public void HostDied() => Disabled = true;
+
+    /// <summary>Puts this cycle on Instant Action's wave-credit budget (PLAN-instant-action.md
+    /// F12): the DECODED capacity rule is enforced from here on regardless of the authored
+    /// <c>capacity</c> — the stand-in above does not apply — starting from zero remaining, so the
+    /// generator launches nothing at all until <see cref="GrantCapacity"/> credits it. This is the
+    /// resolution of the capacity puzzle for this one mode (docs/formats/mission-entities.md "The
+    /// capacity puzzle"): on a <c>zeppelin_run</c> the wave sequencer is the generator's only
+    /// source of budget, which is exactly what <c>capacity 0</c> plus a live top-up produces.
+    /// Idempotent enough to call once at wire time; calling it again re-zeroes the budget.</summary>
+    public void UseWaveCredits()
+    {
+        _waveCredited = true;
+        _capacityRemaining = 0;
+    }
+
+    /// <summary>The decoded per-wave top-up (<c>FUN_0045b9d0</c>'s type-2 arm adds the new group's
+    /// member count to the generator's <c>capacityRemaining</c> at <c>+0x80</c>). Only meaningful
+    /// after <see cref="UseWaveCredits"/>; the caller stamps the group itself.</summary>
+    public void GrantCapacity(int count) => _capacityRemaining += count;
 
     /// <summary>A spawned aircraft left the fight (shot down); its max_active slot frees.</summary>
     public void SpawnRemoved()
@@ -136,7 +163,7 @@ public sealed class GeneratorCycle
         {
             return false;
         }
-        if (_capacity > 0)
+        if (_waveCredited || _capacity > 0)
         {
             _capacityRemaining--;
         }
@@ -157,6 +184,6 @@ public sealed class GeneratorCycle
 
     private bool Blocked(float hostAltitude) =>
         (_waveSize - _spawnedThisWave) + Active > _maxActive
-        || (_capacity > 0 && _waveSize - _spawnedThisWave > _capacityRemaining)
+        || ((_waveCredited || _capacity > 0) && _waveSize - _spawnedThisWave > _capacityRemaining)
         || (_minAltitude is float gate && hostAltitude < gate);
 }

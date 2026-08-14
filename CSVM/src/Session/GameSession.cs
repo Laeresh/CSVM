@@ -179,13 +179,18 @@ public partial class GameSession : Node3D
     // StartSession from --ia=<path> — null outside one, which is what keeps every other session
     // mode (free flight, Dogfight) untouched by its existence.
     private InstantActionRuntime? _instantAction;
-    // E11's wave sequencer: null on dogfight_ace/zeppelin_run (no teleport arm to run) or outside
-    // an Instant Action mission. _iaWaveRosters[w] is wave w+1's built (inert until activated)
-    // members, indexed the same way; DriveSimSteps polls the current wave's InPlay count and
-    // activates whatever InstantActionWaves.Step hands back.
+    // E11's wave sequencer: null on dogfight_ace (every wave count is forced to 0) or outside an
+    // Instant Action mission. _iaWaveRosters[w] is wave w+1's built (inert until activated)
+    // members, indexed the same way; DriveSimSteps polls the current wave's alive count and
+    // activates whatever InstantActionWaves.Step hands back — through the teleport arm, or (F12,
+    // zeppelin_run) through the zeppelin generator's own wave credit.
     private InstantActionWaves? _iaWaves;
     private List<FlightController>[]? _iaWaveRosters;
     private List<SpawnPoint>? _iaWaveSpawnList;
+    // F12: the wave whose parked members the objective zeppelin's generator is releasing — the
+    // decoded group stamp (FUN_0045b9d0 writes the new counter to the generator's +0x64). 0
+    // outside a zeppelin run, or before the first wave becomes current.
+    private int _iaLaunchWave;
     // The world AA emplacements (M4 C9b): built with the rigs whenever a chapter world and the
     // shared pool exist, stepped in DriveSimSteps after the zeppelins (slung mounts read the
     // moved pose). Shipped ACTIVATED honoured; --wake-turrets is the WAKEUP_TURRETS stand-in.
@@ -460,6 +465,7 @@ public partial class GameSession : Node3D
         _iaWaves = null;
         _iaWaveRosters = null;
         _iaWaveSpawnList = null;
+        _iaLaunchWave = 0;
         if (_spec.IaPath != null)
         {
             try
@@ -2151,14 +2157,15 @@ public partial class GameSession : Node3D
                 }
             }
         }
-        // Instant Action's wave sequencer (PLAN-instant-action.md E10/E11): up to four configured
-        // waves, EVERY one built inert right here (Decision 6 folds "wave 1 spawns live" into the
-        // same build-then-activate path every later wave takes) and released one at a time as
-        // InstantActionWaves finds the current wave cleared (DriveSimSteps). Does not run on
-        // zeppelin_run — A4 traced that mode's arm as an EXCLUSIVE alternative (the generator
-        // feed, F12), never a caller of this one.
-        if (_instantAction is { } iaWaves && !string.Equals(iaWaves.Def.MissionType, "zeppelin_run",
-                StringComparison.OrdinalIgnoreCase))
+        // Instant Action's wave sequencer (PLAN-instant-action.md E10/E11/F12): up to four
+        // configured waves, EVERY one built inert right here (Decision 6 folds "wave 1 spawns
+        // live" into the same build-then-activate path every later wave takes) and released one at
+        // a time as InstantActionWaves finds the current wave cleared (DriveSimSteps). The
+        // ARRIVAL of a wave is what the mission type decides, not whether it is built: on
+        // zeppelin_run the original also builds all four waves deactivated at the origin
+        // (docs/formats/instant-action.md "The ace and the waves") and each member waits on the
+        // zeppelin's own generator, the exclusive alternative to the teleport (F12 below).
+        if (_instantAction is { } iaWaves)
         {
             var waveSizes = iaWaves.Def.Waves.Select(w => w.NumEnemies).ToArray();
             var rosters = new List<FlightController>[4];
@@ -2219,10 +2226,16 @@ public partial class GameSession : Node3D
             _iaWaveRosters = rosters;
             _iaWaveSpawnList = spawnList;
             _iaWaves = new InstantActionWaves(waveSizes);
-            int firstWave = _iaWaves.Start();
-            if (firstWave != 0)
+            // On zeppelin_run the first wave is started after the generator block below, since
+            // "activating" it there means crediting the zeppelin's generator, which does not
+            // exist yet at this point in the build.
+            if (!iaWaves.IsZeppelinRun)
             {
-                ActivateInstantActionWave(firstWave);
+                int firstWave = _iaWaves.Start();
+                if (firstWave != 0)
+                {
+                    ActivateInstantActionWave(firstWave);
+                }
             }
             int totalWaveEnemies = rosters.Sum(r => r.Count);
             if (totalWaveEnemies > 0)
@@ -2292,8 +2305,11 @@ public partial class GameSession : Node3D
         // --zeppelins: the mission's zeppelin instances (M4 F17), placed at their authored
         // pose and flown along their nets as kinematic world nodes (no flight model). Built
         // before --generators below so a zeppelin generator's min_altitude gate reads the
-        // flown host's live Y from the first step.
-        if (_spec.Zeppelins)
+        // flown host's live Y from the first step. An Instant Action zeppelin run asks for them
+        // itself (F12): the objective is a live zeppelin, so the flag is not the tester's to
+        // remember.
+        bool iaZeppelinRun = _instantAction?.IsZeppelinRun ?? false;
+        if (_spec.Zeppelins || iaZeppelinRun)
         {
             List<ZeppelinDef> zepDefs;
             try
@@ -2332,9 +2348,52 @@ public partial class GameSession : Node3D
             state.What += $" + {_zeppelins.LiveCount} zeppelin(s)";
         }
 
+        // Instant Action's own zeppelin switch (PLAN-instant-action.md F12, FUN_0045a390's tail,
+        // decoded 2026-08-14). The builder resolves all three *_zeppelin nodes and deactivates
+        // each one — EXCEPT, on zeppelin_run, the node zeppelin_type selects, which it explicitly
+        // ACTIVATES: gwNodeSetActive(node, TRUE) at 0x0045b937, the exact inverse of the
+        // deactivation arm's FALSE at 0x0045b8e5, with the teardown call (FUN_0045a2a0) omitted.
+        // That is how the builder composes with the mission script's own deactivation list, the
+        // question A4 left open: C1/IA1's support\c1\ia1.gw switches multiplayer1zep off at world
+        // load and Instant Action switches it back on. It is not a "wake-up" invented here — it
+        // is a second, explicit activation the binary performs.
+        if (_instantAction is { } iaZeppelins && rigInputs.WorldRuntime is { } iaZepWorld)
+        {
+            string selectedZep = InstantActionRuntime.SelectedZeppelinNode(iaZeppelins.Def);
+            var switchedZeps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string zepName in InstantActionRuntime.ZeppelinNodes(iaZeppelins.Def))
+            {
+                if (!switchedZeps.Add(zepName))
+                {
+                    continue;   // all 8 shipped chapters name the same node three times
+                }
+                bool objective = iaZeppelinRun
+                    && zepName.Equals(selectedZep, StringComparison.OrdinalIgnoreCase);
+                if (iaZepWorld.FindNodes(zepName) is not { Count: > 0 } zepNodes)
+                {
+                    GD.Print($"ia: zeppelin '{zepName}' is not in {_spec.Chapter}'s world — " +
+                              "nothing to switch");
+                    continue;
+                }
+                foreach (var zepNode in zepNodes)
+                {
+                    zepNode.Visible = objective;   // colliders derive from this (WorldCollision)
+                }
+                if (!objective)
+                {
+                    _zeppelins?.Hold(zepName);
+                }
+                GD.Print($"ia: zeppelin '{zepName}' " + (objective
+                    ? "ACTIVATED as this mission's objective (zeppelin_run)"
+                    : "deactivated by the Instant Action builder"));
+            }
+        }
+
         // --generators: the mission's egen enemy generators (M4 B6), spawning through the seam
         // above. Loaded here because the drop rules need the built world (host-node resolution).
-        if (_spec.Generators)
+        // An Instant Action zeppelin run asks for them itself (F12): the objective zeppelin's
+        // generator is the ONLY way an enemy reaches the air on that mode.
+        if (_spec.Generators || iaZeppelinRun)
         {
             List<EnemyGeneratorDef> egenDefs;
             try
@@ -2365,6 +2424,36 @@ public partial class GameSession : Node3D
             GD.Print($"egen: {_generators.LiveCount} of {egenDefs.Count} generator(s) live for " +
                      $"{_spec.Chapter}/{_spec.Mission}, spawning '{_spec.GeneratorsPlane}'");
             state.What += $" + {_generators.LiveCount} generator(s)";
+        }
+
+        // F12: the zeppelin run's wave arm. The objective zeppelin's generator takes over the
+        // launching — it releases the waves built inert above instead of spawning aircraft of its
+        // own, on a budget the sequencer credits wave by wave — and only now can the first wave
+        // become current, since "activating" it means crediting that generator.
+        if (iaZeppelinRun && _instantAction is { } iaZepRun && _iaWaves != null)
+        {
+            string objectiveZep = InstantActionRuntime.SelectedZeppelinNode(iaZepRun.Def);
+            int claimed = _generators?.UseInstantActionLaunches(
+                objectiveZep, ReleaseInstantActionWaveMember) ?? 0;
+            if (claimed == 0)
+            {
+                // The original burns through all four waves the same way: its counter advances
+                // whether or not the top-up lands (docs/formats/instant-action.md "The generator
+                // arm"). Say so rather than inventing a fallback spawn path.
+                GD.PushWarning($"ia: zeppelin '{objectiveZep}' carries no egen generator — no " +
+                                "wave will ever launch on this zeppelin run");
+            }
+            else
+            {
+                GD.Print($"ia: zeppelin run: '{objectiveZep}' launches every wave " +
+                          $"({claimed} generator(s) on the wave-credit budget). BL-350 is open " +
+                          "and in this mission's way: a drop is not gated on the doors opening.");
+            }
+            int firstZepWave = _iaWaves.Start();
+            if (firstZepWave != 0)
+            {
+                ActivateInstantActionWave(firstZepWave);
+            }
         }
 
         // World AA emplacements (M4 C9b): the standalone ai.zrd family, placed at its NODES
@@ -2768,13 +2857,29 @@ public partial class GameSession : Node3D
     /// flight, for every wave after the first), then <c>InstantActionWaves.FanOffset</c>'s 100 m
     /// / 45° pattern off the chosen point's heading. A missing/empty spawn list leaves the wave
     /// parked inert with a warning rather than guessing a position — the same "no scenario spawn
-    /// points, no actor" shape C8's ace block already takes.</summary>
+    /// points, no actor" shape C8's ace block already takes.
+    ///
+    /// <para>F12: on <c>zeppelin_run</c> the generator arm REPLACES all of that (A4 traced the
+    /// type-2 branch as a <c>JMP</c> past the whole teleport block, not an addition to it). The
+    /// wave is not moved and no spawn point is drawn; the objective zeppelin's generator is
+    /// credited with the new wave's member count and stamped with the wave number, and it then
+    /// releases those members from the bay on its own launch schedule.</para></summary>
     private void ActivateInstantActionWave(int waveNumber)
     {
         var roster = _iaWaveRosters![waveNumber - 1];
         if (roster.Count == 0)
         {
             return; // InstantActionWaves.Start/Step never hand back an empty wave; stay defensive
+        }
+        if (_instantAction is { IsZeppelinRun: true } iaZepRun)
+        {
+            _iaLaunchWave = waveNumber;   // the decoded group stamp (the generator's +0x64)
+            string objectiveZep = InstantActionRuntime.SelectedZeppelinNode(iaZepRun.Def);
+            int fed = _generators?.GrantWaveCapacity(objectiveZep, roster.Count) ?? 0;
+            GD.Print($"ia: wave {waveNumber} ({roster.Count} aircraft) credited to '" +
+                      $"{objectiveZep}' ({fed} generator(s)) — they launch from the bay, " +
+                      "not teleported");
+            return;
         }
         if (_iaWaveSpawnList is not { Count: > 0 } spawns)
         {
@@ -2802,6 +2907,29 @@ public partial class GameSession : Node3D
         }
         GD.Print($"ia: wave {waveNumber} ({roster.Count} aircraft) activated at spawn #{spIndex} " +
                   $"of {spawns.Count}");
+    }
+
+    /// <summary>F12's launch hook, handed to the objective zeppelin's generator: releases the next
+    /// still-parked member of the CURRENT wave (<c>_iaLaunchWave</c>, the decoded group stamp) at
+    /// the generator's own drop point and attitude — the bay origin node's live position minus
+    /// <c>AiGeneratorRuntime</c>'s invented 12 m clearance, never re-derived here. Null once the
+    /// wave has nothing parked left, which the generator accounts as a failed spawn.</summary>
+    private FlightController? ReleaseInstantActionWaveMember(Vector3 pos, Vector3 lookAt)
+    {
+        if (_iaWaveRosters == null || _iaLaunchWave is < 1 or > 4)
+        {
+            return null;
+        }
+        foreach (var member in _iaWaveRosters[_iaLaunchWave - 1])
+        {
+            if (!member.Inert)
+            {
+                continue;
+            }
+            member.Activate(pos, lookAt);
+            return member;
+        }
+        return null;
     }
 
     /// <summary>Steps the consumers whose sim normally rides Godot's physics tick. They return
@@ -2860,9 +2988,18 @@ public partial class GameSession : Node3D
             }
             // E11: one sequencer tick per sim step, after the AI planes above have taken this
             // step's crashes — the alive count InstantActionWaves.Step reads must reflect them.
-            if (_iaWaves is { Finished: false } waves)
+            if (_iaWaves is { Finished: false, CurrentWave: >= 1 } waves)
             {
-                int alive = _iaWaveRosters![waves.CurrentWave - 1].Count(fc => fc.InPlay);
+                var waveRoster = _iaWaveRosters![waves.CurrentWave - 1];
+                // A wave member still waiting in the zeppelin's bay COUNTS as present, exactly
+                // as the decoded walk counts a still-deactivated enemy (byte +0x945,
+                // docs/formats/instant-action.md "Who still counts as an enemy") — otherwise a
+                // credited wave would read as cleared in the frames before its first launch.
+                // On every other mode the whole wave is airborne the instant it becomes
+                // current, so InPlay and "not crashed" agree and the E11 reading stands.
+                int alive = _instantAction is { IsZeppelinRun: true }
+                    ? waveRoster.Count(fc => !fc.Crashed)
+                    : waveRoster.Count(fc => fc.InPlay);
                 int next = waves.Step(alive);
                 if (next != 0)
                 {

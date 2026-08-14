@@ -28,6 +28,11 @@ namespace CSVM.Session;
 /// the submarine's <c>healthy</c>-node death) calls it with the dead node's name and the
 /// matching generators disable permanently (decoded rule). Nothing calls it until F18 lands.</para>
 ///
+/// <para><b>The F12 seam:</b> <see cref="UseInstantActionLaunches"/> +
+/// <see cref="GrantWaveCapacity"/> — on an Instant Action <c>zeppelin_run</c> the objective
+/// zeppelin's generator is the ONLY way an enemy gets airborne, and it runs on a budget the wave
+/// sequencer credits wave by wave rather than on a plane name of its own.</para>
+///
 /// <para>Spawned aircraft drop at the origin node's LIVE position (it rides F17's moving
 /// zeppelin) in the authored drop attitude — <c>rotation</c>'s pitch, clamped shy of vertical
 /// so the spawn basis stays valid — and patrol their generator's cyclic net pick through
@@ -112,6 +117,54 @@ public sealed partial class AiGeneratorRuntime : Node
 
     /// <summary>Generators that survived the load drops.</summary>
     public int LiveCount => _live.Count;
+
+    /// <summary>Instant Action's zeppelin arm (PLAN-instant-action.md F12): every generator hosted
+    /// on <paramref name="hostNode"/> goes onto the wave-credit budget
+    /// (<see cref="GeneratorCycle.UseWaveCredits"/> — nothing launches until
+    /// <see cref="GrantWaveCapacity"/> credits it) and releases an ALREADY-BUILT wave member
+    /// through <paramref name="release"/> instead of spawning a fresh aircraft, which is the
+    /// decoded shape: <c>FUN_00452450</c> finds the parked airframes whose group matches and drops
+    /// them from the bay. The release hook takes the same drop position and look-at point a spawn
+    /// would have got and returns the aircraft it released, or null when the current wave has no
+    /// parked member left (the launch is then accounted exactly like a failed spawn). Returns how
+    /// many generators this claimed — 0 means the selected zeppelin carries no generator, and on
+    /// that mode nothing will ever launch.</summary>
+    public int UseInstantActionLaunches(string hostNode,
+        Func<Vector3, Vector3, FlightController?> release)
+    {
+        int claimed = 0;
+        foreach (var gen in _live)
+        {
+            if (!gen.Def.Node.Equals(hostNode, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            gen.Release = release;
+            gen.Cycle.UseWaveCredits();
+            claimed++;
+        }
+        return claimed;
+    }
+
+    /// <summary>The decoded per-wave top-up (<c>FUN_0045b9d0</c>'s type-2 arm, F12): adds
+    /// <paramref name="count"/> to the remaining capacity of every generator hosted on
+    /// <paramref name="hostNode"/>. Returns how many generators were credited. ⚠ The original's
+    /// counter advances whether or not the top-up lands, so a wave whose zeppelin has no generator
+    /// is simply lost — the caller reports it rather than compensating.</summary>
+    public int GrantWaveCapacity(string hostNode, int count)
+    {
+        int fed = 0;
+        foreach (var gen in _live)
+        {
+            if (!gen.Def.Node.Equals(hostNode, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            gen.Cycle.GrantCapacity(count);
+            fed++;
+        }
+        return fed;
+    }
 
     /// <summary>The named host died: permanently disable every generator whose host node (or
     /// authored <c>healthy</c> node, the submarine's) carries this name — the decoded rule.
@@ -217,6 +270,27 @@ public sealed partial class AiGeneratorRuntime : Node
             drop = forward.Rotated(forward.Cross(Vector3.Up).Normalized(), pitch).Normalized();
         }
 
+        // Instant Action's zeppelin arm (F12): release a parked wave member instead of building a
+        // new aircraft. No net pick — a released member is a wave enemy carrying its own
+        // primary_target, not a generator-authored patroller.
+        if (gen.Release is { } release)
+        {
+            var released = release(pos, pos + drop);
+            if (released == null)
+            {
+                gen.Cycle.SpawnRemoved();   // the slot was counted before the release could fail
+                GD.Print($"egen: '{gen.Def.Node}' launch skipped: no parked wave member left");
+                return;
+            }
+            gen.SpawnCount++;
+            released.Downed += (_, _) => gen.Cycle.SpawnRemoved();
+            GD.Print($"egen: '{gen.Def.Node}' launch #{gen.SpawnCount}: IA wave member '" +
+                     $"{released.Name}' released at ({pos.X:0},{pos.Y:0},{pos.Z:0}), " +
+                     $"active {gen.Cycle.Active}/{gen.Def.MaxActive}, " +
+                     $"{gen.Cycle.CapacityRemaining} of this wave's credit left");
+            return;
+        }
+
         // The cyclic net pick (choose_nets is cyclic on every authored file; 'random' falls back
         // to cyclic here until something authors it). The spawned pilot patrols it.
         var net = gen.Nets[gen.NetCursor % gen.Nets.Count];
@@ -261,6 +335,11 @@ public sealed partial class AiGeneratorRuntime : Node
         public Node3D? Origin { get; }
 
         public List<AiNet> Nets { get; }
+
+        /// <summary>F12's Instant Action launch hook: non-null once
+        /// <see cref="AiGeneratorRuntime.UseInstantActionLaunches"/> has claimed this generator,
+        /// and then it replaces the plane spawn entirely.</summary>
+        public Func<Vector3, Vector3, FlightController?>? Release { get; set; }
 
         public int NetCursor { get; set; }
 

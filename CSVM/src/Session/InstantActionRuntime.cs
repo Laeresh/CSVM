@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -9,7 +10,9 @@ namespace CSVM.Session;
 /// <c>dogfight_ace</c>'s authored ace; D9 added the wingmen; E11 adds the two per-wave-member
 /// draws (<see cref="RandomPilotStats"/>, <see cref="ResolveWaveAccentId"/>) that the actual
 /// selection/trigger/geometry logic (<see cref="InstantActionWaves"/>, a separate engine-free
-/// class) does not own. <c>GameSession.BuildFlightRigs</c> reads <see cref="Def"/> directly to
+/// class) does not own; F12 adds the objective-zeppelin selection
+/// (<see cref="IsZeppelinRun"/>, <see cref="SelectedZeppelinNode"/>).
+/// <c>GameSession.BuildFlightRigs</c> reads <see cref="Def"/> directly to
 /// steer the player's own aircraft and spawn scenario, and calls the helpers below to place the
 /// ace, the wingmen and (with <see cref="InstantActionWaves"/>) each wave. Environment→chapter
 /// resolution is the launch MENU's job (H15), not this class's — a <c>--ia=&lt;path&gt;</c> CLI
@@ -20,6 +23,11 @@ public sealed class InstantActionRuntime
     /// decoded turret convention... every Instant Action enemy is team 2"). Waves (E11) are
     /// cohorts inside this one team, not teams of their own.</summary>
     public const int EnemyTeam = AimAssist.PlayerTeam + 1;
+
+    /// <summary><c>mission_type</c> id 2 (docs/formats/instant-action.md "The mission-type ids"),
+    /// the one mode whose enemies reach the air out of the objective zeppelin's bay rather than
+    /// through the wave teleport (F12).</summary>
+    public const string ZeppelinRunMissionType = "zeppelin_run";
 
     /// <summary>The five hand-authored pilot personalities a wave member's nine-stat vector is
     /// rolled from, <c>row = draw % 5</c> per aircraft (docs/formats/instant-action.md "A wave
@@ -43,6 +51,39 @@ public sealed class InstantActionRuntime
     }
 
     public InstantActionDef Def { get; }
+
+    /// <summary>Whether this mission is the zeppelin run (F12). The mode is exclusive in the
+    /// decode rather than additive: its waves take the generator arm and the teleport arm never
+    /// runs (<see cref="InstantActionWaves"/>), and its objective zeppelin is the one world node
+    /// the builder switches ON rather than off (<see cref="SelectedZeppelinNode"/>).</summary>
+    public bool IsZeppelinRun =>
+        string.Equals(Def.MissionType, ZeppelinRunMissionType, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The three <c>*_zeppelin</c> node names in <c>zeppelin_type</c> order — 0 cargo,
+    /// 1 passenger, 2 military (docs/formats/instant-action.md "Which zeppelin, and which spawn
+    /// list"). All eight shipped chapters author the same node three times
+    /// (<c>multiplayer1zep</c>), so the list is one distinct name in every real case; a
+    /// hand-authored <c>--ia=</c> file may name three.</summary>
+    public static IReadOnlyList<string> ZeppelinNodes(InstantActionDef def) =>
+        new[] { def.CargoZeppelinNode, def.PassengerZeppelinNode, def.MilitaryZeppelinNode };
+
+    /// <summary><c>zeppelin_type</c>'s own index into <see cref="ZeppelinNodes"/>:
+    /// <c>cargo</c> 0, <c>passenger</c> 1, <c>military</c> 2. ⚠ Anything else — including an
+    /// unauthored key — is <b>0</b>, not an error: <c>FUN_00458f60</c> maps an unrecognised
+    /// string to 3 and REJECTS it rather than storing it, over a record whose reset wrote
+    /// <c>+0x254 = 0</c> (<c>FUN_00458ff0</c>, <c>param_1[0x95] = 0</c>), so cargo is the
+    /// decoded fallback.</summary>
+    public static int ZeppelinTypeIndex(string? zeppelinType) =>
+        string.Equals(zeppelinType, "passenger", StringComparison.OrdinalIgnoreCase) ? 1
+        : string.Equals(zeppelinType, "military", StringComparison.OrdinalIgnoreCase) ? 2
+        : 0;
+
+    /// <summary>The objective zeppelin's world node: the <see cref="ZeppelinNodes"/> entry
+    /// <c>zeppelin_type</c> selects. On <c>zeppelin_run</c> this is the node the builder
+    /// ACTIVATES and whose generator the wave sequencer credits; on every other mode it is
+    /// switched off along with the other two.</summary>
+    public static string SelectedZeppelinNode(InstantActionDef def) =>
+        ZeppelinNodes(def)[ZeppelinTypeIndex(def.ZeppelinType)];
 
     /// <summary>The ace's own spawn draw (docs/formats/instant-action.md "The ace and the
     /// waves"): <c>rand() % (count - 1)</c> over the scenario's own spawn list, with the LITERAL

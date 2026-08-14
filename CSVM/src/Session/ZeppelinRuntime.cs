@@ -98,6 +98,26 @@ public sealed partial class ZeppelinRuntime : Node
     /// <summary>Whether this zeppelin's kill has fired (false for an unknown node).</summary>
     public bool IsDead(string node) => Find(node)?.Dead ?? false;
 
+    /// <summary>Instant Action's builder holds a zeppelin it has switched off
+    /// (PLAN-instant-action.md F12, <c>FUN_0045a390</c>'s tail): the record stays placed at its
+    /// authored pose, but its motion, broadside and damage poll stop from here on. That is the
+    /// CSVM stand-in for the builder's own <c>FUN_0045a2a0</c>, which tears down the vehicle/AI
+    /// objects under the deactivated node — CSVM has no equivalent object graph to delete, and a
+    /// merely hidden zeppelin would keep flying its net and firing invisible broadsides.
+    /// Switching the NODE off is the caller's own act (the decoded <c>gwNodeSetActive</c>),
+    /// because the builder's three <c>*_zeppelin</c> names need not be zeppelin records at all.
+    /// Returns whether the name is a zeppelin of this mission; one-way, like the original's
+    /// (nothing re-activates a held zeppelin).</summary>
+    public bool Hold(string node)
+    {
+        if (Find(node) is not { } zep)
+        {
+            return false;
+        }
+        zep.Held = true;
+        return true;
+    }
+
     /// <summary>Current surviving healthy-entry count, or -1 for an unknown/unwired node.</summary>
     public int SurvivorsOf(string node) =>
         Find(node) is { Damage: { } damage } zep ? damage.Survivors(zep.ZoneAlive) : -1;
@@ -169,9 +189,12 @@ public sealed partial class ZeppelinRuntime : Node
         }
         foreach (var zep in _live)
         {
-            if (zep.Def.Deactivated)
+            if (zep.Def.Deactivated || zep.Held)
             {
-                continue;   // placed, holding for a mission-script wake-up (out of M4 scope)
+                // Placed, holding: either for a mission-script wake-up (the record's own
+                // `deactivated`, out of M4 scope) or because Instant Action's builder switched
+                // this zeppelin off (F12, see Hold).
+                continue;
             }
             if (!zep.Dead)
             {
@@ -460,6 +483,11 @@ public sealed partial class ZeppelinRuntime : Node
         public ZeppelinDamage? Damage { get; set; }
 
         public bool Dead { get; set; }
+
+        /// <summary>Switched off by Instant Action's builder (F12, <see cref="Hold"/>) — placed
+        /// but stepped no further, the runtime counterpart of the record's own
+        /// <c>deactivated</c>.</summary>
+        public bool Held { get; set; }
 
         /// <summary>Pool per distinct healthy node; null = zone not damageable (logged).</summary>
         public Dictionary<string, DestructibleRegistry.Instance?> GasbagZones { get; } =
