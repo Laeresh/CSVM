@@ -389,8 +389,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   nearest-collision-shape falloff, landed 2026-08-05). Reworded 2026-08-14 from "a rocket": the
   decoded `DAMAGES_ZEPPELIN` gate (M4 F18) admits only `wep_14` (the aerial torpedo, the designed
   zeppelin killer) and `wep_28` (the broadside cannonball) — rockets bounce off gasbags by
-  design. ⚠ Check first whether any current loadout carries `wep_14`; if not, the test needs a
-  loadout knob before it can fly. Explicitly out of scope: the authored destruction sequence (`breakupzep` →
+  design. No stock loadout carries `wep_14` (checked 2026-08-14), but no loadout knob is needed:
+  `--weapon-lab=wep_14 --chapter=C1 --mission=M04 --zeppelins` is the harness — the held plane
+  fires torpedoes at the moored `hk_zep` with F18's per-zone pools live. Explicitly out of scope: the authored destruction sequence (`breakupzep` →
   13 `break*`, the crash-sink motions) — that is its own M4-sized feature for when zeppelins
   matter to gameplay, not this item.
 
