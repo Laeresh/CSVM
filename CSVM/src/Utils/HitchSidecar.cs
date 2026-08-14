@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -207,17 +208,44 @@ public sealed class HitchSidecar
         dst.AllocatedBytesDelta = src.AllocatedBytesDelta;
         dst.RingCount = src.RingCount;
         Array.Copy(src.Ring, dst.Ring, src.RingCount);
+        dst.Samples.CopyFrom(src.Samples);
     }
 
     // Mirrors ReportPerf's grammar (flat key=value, ms terms already in ms, bytes shown as MB) so
     // the two report families read the same way side by side in the perf category.
     private static void WriteLogLine(HitchRecord r)
     {
-        Log.Info("perf", $"hitch frame={r.Frame} frame_ms={r.FrameMs:0.00} baseline_ms={r.BaselineMs:0.00} threshold_ms={r.ThresholdMs:0.00} script_ms={r.ScriptMs:0.00} render_cpu_ms={r.RenderCpuMs:0.00} gpu_ms={r.GpuMs:0.00} physics_ms={r.PhysicsMs:0.00} draws={r.Draws} prims={r.Prims} nodes={r.Nodes} mem_mb={r.MemBytes / (1024.0 * 1024.0):0.00} draws_delta={r.DrawsDelta} prims_delta={r.PrimsDelta} nodes_delta={r.NodesDelta} mem_delta_mb={r.MemBytesDelta / (1024.0 * 1024.0):0.00} gc0_delta={r.Gc0Delta} gc1_delta={r.Gc1Delta} gc2_delta={r.Gc2Delta} alloc_delta_mb={r.AllocatedBytesDelta / (1024.0 * 1024.0):0.00}");
+        var s = r.Samples;
+        Log.Info("perf", $"hitch frame={r.Frame} frame_ms={r.FrameMs:0.00} baseline_ms={r.BaselineMs:0.00} threshold_ms={r.ThresholdMs:0.00} script_ms={r.ScriptMs:0.00} render_cpu_ms={r.RenderCpuMs:0.00} gpu_ms={r.GpuMs:0.00} physics_ms={r.PhysicsMs:0.00} draws={r.Draws} prims={r.Prims} nodes={r.Nodes} mem_mb={r.MemBytes / (1024.0 * 1024.0):0.00} draws_delta={r.DrawsDelta} prims_delta={r.PrimsDelta} nodes_delta={r.NodesDelta} mem_delta_mb={r.MemBytesDelta / (1024.0 * 1024.0):0.00} gc0_delta={r.Gc0Delta} gc1_delta={r.Gc1Delta} gc2_delta={r.Gc2Delta} alloc_delta_mb={r.AllocatedBytesDelta / (1024.0 * 1024.0):0.00} samples={FormatSamples(s)} attributed_ms={s.AttributedMs:0.00} unattributed_ms={s.UnattributedMs:0.00} sample_violations={s.Violations}");
+    }
+
+    // The frame's named work as one space-free value, so the flat key=value grammar survives:
+    // `site:callsxms`, comma-separated, in PerfSite order. A site with no calls is ABSENT rather
+    // than printed as zero — same rule as StartupProfile's phases, and it keeps the line short on
+    // the ordinary hitch where two things ran out of eight.
+    private static string FormatSamples(PerfSampleFrame s)
+    {
+        var sb = new StringBuilder();
+        for (int i = 0; i < s.Calls.Length; i++)
+        {
+            if (s.Calls[i] == 0)
+            {
+                continue;
+            }
+            if (sb.Length > 0)
+            {
+                sb.Append(',');
+            }
+            sb.Append(PerfSample.NameOf((PerfSite)i)).Append(':').Append(s.Calls[i]).Append('x')
+                .Append(s.Ms[i].ToString("0.00", CultureInfo.InvariantCulture));
+        }
+        return sb.Length == 0 ? "none" : sb.ToString();
     }
 
     // Hand-written, not a library: a HitchRecord is all-numeric (Frame/counts/ms terms, and the
     // Ring's FrameSamples are the same), so there is no string field that would ever need escaping.
+    // The one string is a C8 site name, which is a compile-time constant from a closed enum spelled
+    // [a-z_] — a name, never data, so that stays true.
     // string.Create(IFormatProvider, …) — not plain string interpolation — is what keeps every float
     // invariant; a raw $"..." would format under CurrentCulture instead (16,667 on a German machine).
     private void WriteJsonLine(HitchRecord r)
@@ -229,8 +257,19 @@ public sealed class HitchSidecar
             ringParts[i] = string.Create(CultureInfo.InvariantCulture,
                 $"{{\"frame_ms\":{f.FrameMs:0.000},\"script_ms\":{f.ScriptMs:0.000},\"render_cpu_ms\":{f.RenderCpuMs:0.000},\"gpu_ms\":{f.GpuMs:0.000},\"physics_ms\":{f.PhysicsMs:0.000}}}");
         }
+        var s = r.Samples;
+        var sampleParts = new List<string>();
+        for (int i = 0; i < s.Calls.Length; i++)
+        {
+            if (s.Calls[i] == 0)
+            {
+                continue;
+            }
+            sampleParts.Add(string.Create(CultureInfo.InvariantCulture,
+                $"{{\"site\":\"{PerfSample.NameOf((PerfSite)i)}\",\"ms\":{s.Ms[i]:0.000},\"calls\":{s.Calls[i]}}}"));
+        }
         string json = string.Create(CultureInfo.InvariantCulture,
-            $"{{\"frame\":{r.Frame},\"frame_ms\":{r.FrameMs:0.000},\"baseline_ms\":{r.BaselineMs:0.000},\"threshold_ms\":{r.ThresholdMs:0.000},\"script_ms\":{r.ScriptMs:0.000},\"render_cpu_ms\":{r.RenderCpuMs:0.000},\"gpu_ms\":{r.GpuMs:0.000},\"physics_ms\":{r.PhysicsMs:0.000},\"draws\":{r.Draws},\"prims\":{r.Prims},\"nodes\":{r.Nodes},\"mem_bytes\":{r.MemBytes},\"draws_delta\":{r.DrawsDelta},\"prims_delta\":{r.PrimsDelta},\"nodes_delta\":{r.NodesDelta},\"mem_bytes_delta\":{r.MemBytesDelta},\"gc0_delta\":{r.Gc0Delta},\"gc1_delta\":{r.Gc1Delta},\"gc2_delta\":{r.Gc2Delta},\"allocated_bytes_delta\":{r.AllocatedBytesDelta},\"ring\":[{string.Join(",", ringParts)}]}}");
+            $"{{\"frame\":{r.Frame},\"frame_ms\":{r.FrameMs:0.000},\"baseline_ms\":{r.BaselineMs:0.000},\"threshold_ms\":{r.ThresholdMs:0.000},\"script_ms\":{r.ScriptMs:0.000},\"render_cpu_ms\":{r.RenderCpuMs:0.000},\"gpu_ms\":{r.GpuMs:0.000},\"physics_ms\":{r.PhysicsMs:0.000},\"draws\":{r.Draws},\"prims\":{r.Prims},\"nodes\":{r.Nodes},\"mem_bytes\":{r.MemBytes},\"draws_delta\":{r.DrawsDelta},\"prims_delta\":{r.PrimsDelta},\"nodes_delta\":{r.NodesDelta},\"mem_bytes_delta\":{r.MemBytesDelta},\"gc0_delta\":{r.Gc0Delta},\"gc1_delta\":{r.Gc1Delta},\"gc2_delta\":{r.Gc2Delta},\"allocated_bytes_delta\":{r.AllocatedBytesDelta},\"samples\":[{string.Join(",", sampleParts)}],\"attributed_ms\":{s.AttributedMs:0.000},\"unattributed_ms\":{s.UnattributedMs:0.000},\"sample_violations\":{s.Violations},\"ring\":[{string.Join(",", ringParts)}]}}");
         _writer!.WriteLine(json);
     }
 }

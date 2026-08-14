@@ -112,12 +112,12 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 4. ☑ B4 — `HitchMonitor`: rolling baseline, trigger, grace window, ring buffer, GC and counter deltas
 5. ☑ B5 — `--hitch-inject=<ms>[@frame]`: a synthetic stall of known magnitude
-6. ☐ B6 — The sidecar: `perf` summary line plus `.scratch/logs/<mode>-<stamp>.hitches.jsonl`
+6. ☑ B6 — The sidecar: `perf` summary line plus `.scratch/logs/<mode>-<stamp>.hitches.jsonl`
 7. ☑ B7 — In-engine suite: a record fires, and carries its ring buffer, breadcrumbs and sidecar
 
 ### Wave C — Attribution
 
-8. ☐ C8 — `PerfSample`: ambient timed leaf scopes with an explicit unattributed remainder
+8. ☑ C8 — `PerfSample`: ambient timed leaf scopes with an explicit unattributed remainder
 9. ☐ C9 — Seed the call sites (debris, spawn, pool checkout, material creation, resource load)
 
 ### Wave D — The readout
@@ -443,7 +443,7 @@ the single one the C# side writes. Pass the compound extension directly instead 
 
 # Wave C — Attribution
 
-## C8 ☐ `PerfSample`: ambient timed leaf scopes with an explicit unattributed remainder
+## C8 ☑ `PerfSample`: ambient timed leaf scopes with an explicit unattributed remainder
 
 **Goal.** Any code path can declare that it ran and how long it took, without knowing anything about
 the monitor, and a hitch record lists the named work in that frame plus how much time was **not**
@@ -463,10 +463,27 @@ carries an explicit remainder term.
 **Model recommendation.** high. The API shape decides whether this survives contact with future
 features or rots.
 
-**Verify.** Unit tests in `CSVM.Tests` on the accumulate/reset/snapshot cycle and the remainder
-arithmetic. Measure the overhead of a scope directly and record the number in the module's
-architecture entry. <TODO: name the measurement, most likely a tight loop under `--perf --no-vsync`
-compared against the same loop with scopes compiled out.>
+**Verify.** `.\RunTests.ps1` green — 159.1s total (build 1.5s, units 11.1s/1214 passed, engine
+63.1s/53 suites clean, goldens 68.4s/14 shots hash-identical, hitch 15.0s: `clean: 0 hitch line(s);
+inject: 1 hitch line(s), frame_ms=62.39`). 16 new units in `PerfSampleTests` plus one in
+`HitchSidecarTests` cover the accumulate/freeze/snapshot cycle, the remainder arithmetic, nesting
+suppression, `Reset`, the site vocabulary, and the attribution reaching the sidecar's JSON as a copy.
+
+The overhead measurement is **a tight loop in the unit host, not the `--perf --no-vsync` A/B this
+plan first sketched**: 200 000 open+close pairs timed directly answers "what does one scope cost"
+to the nanosecond, where a frame-loop A/B would have to resolve ~60 ns against a frame that varies
+by ±0.1 ms and would mostly measure the machine. **60 ns per scope** (58.8 / 59.3 / 62.7 over three
+runs) and **exactly 0 bytes allocated** over 10 000 scopes, both asserted — the allocation figure
+exactly, the timing against a 2 µs ceiling that catches a lock or a lookup appearing on the path
+without failing on a loaded machine. Recorded in the `architecture.md` entry.
+
+The chain was also proved end to end **in-engine**, since no call site exists until C9 and a
+mechanism only unit-tested would land as plausible rather than working: `InjectHitch`'s stall was
+temporarily wrapped in a scope and the hitch stage rerun, giving
+`samples=debris_spawn:1x55.91 attributed_ms=55.91 unattributed_ms=11.69 sample_violations=0` on a
+67.60 ms frame — the scope's own time named, the rest visible as remainder, the sum exact. The wrap
+was then reverted (`git diff` clean on `Launcher.cs` apart from the wiring), because B5's rule is
+that the injected fault must read as unattributed time.
 
 **⚠ Traps.** This repo has already paid for the nesting lesson once. `StartupProfile`'s standing
 warning reads *"keep every phase a LEAF or the sum silently double-counts; `rest` = real
@@ -475,6 +492,17 @@ tree attributes un-instrumented time to whatever parent encloses it, and it is n
 instrumented, because the next feature to land will not add its scope. Flat leaves plus a visible
 remainder cannot lie that way. State in the module doc that scopes are **coarse-grained only**: a
 debris burst, not one chunk; a spawn, not one node.
+
+**⚠ What landing it added to that.** Nesting is *enforced*, not just documented: a scope opened
+inside another measures nothing and is counted in the record's `sample_violations`, so
+`Σ(sites) + unattributed = frame_ms` holds on every frame including a wrong one, and the violation
+is visible rather than being a quietly doubled total. The remainder is deliberately **not clamped** —
+negative means a scope spanned the frame boundary, which is a defect to see. `EndFrame()` is called
+on the same line as `Launcher`'s QPC stamp, which is what makes "the scopes" and "the frame_ms they
+ran inside" the same span; the session node processes at priority -1000, one notch ahead of the
+launcher, so its work is already in. And `HitchMonitor.Fill` takes the snapshot itself rather than
+leaving it to the caller: the one ambient read in a class that otherwise has everything handed in,
+so a record can never carry a stale frame's attribution.
 
 ## C9 ☐ Seed the call sites
 
@@ -492,7 +520,11 @@ already the low-pause configuration rather than a misconfiguration to be fixed.
 
 **Approach.** Seed: debris and part detach (the reproducible case), AI aircraft spawn, effect-pool
 checkout and pool exhaustion, runtime `ShaderMaterial` creation, synchronous resource and audio
-loads. Coarse granularity per C8's rule.
+loads. Coarse granularity per C8's rule. **The vocabulary already exists**: C8 landed `PerfSite`
+with exactly those eight values (`DebrisSpawn` · `PartDetach` · `AiSpawn` · `EffectCheckout` ·
+`EffectPoolMiss` · `MaterialCreate` · `ResourceLoad` · `AudioLoad`), so this item is call sites
+alone unless a site turns out to be missing — a site nothing calls is simply absent from a record,
+never a zero row.
 
 **Model recommendation.** medium. Mechanical fan-out across modules, but each site needs a judgement
 about granularity.

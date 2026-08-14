@@ -669,6 +669,11 @@ public partial class Launcher : Node3D
             ? 0
             : (stamp - _lastFrameStamp) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
         _lastFrameStamp = stamp;
+        // C8: close the attribution window at the same instant the wall cost is stamped, so the
+        // scopes that ran and the frame_ms they ran inside describe the same span. The session node
+        // processes at ProcessPriority -1000, one notch ahead of this one, so the work it declared
+        // this frame is already in — and lands on the record whose frameMs covers it.
+        PerfSample.EndFrame();
         // B6: a trip queues its record (a cheap, preallocated copy) rather than writing anything
         // here — the sidecar's own Tick below drains the queue a few quiet frames later.
         if (_hitchMonitor.Tick(frameMs, counters))
@@ -719,6 +724,9 @@ public partial class Launcher : Node3D
         // through it.
         _hitchSidecar.Flush();
         _hitchMonitor.Rearm();
+        // C8: the build's own scopes (loads, material creation) belong to no frame, and the frame
+        // that closes over the build would otherwise report them all at once.
+        PerfSample.Reset();
         return built;
     }
 
@@ -827,6 +835,7 @@ public partial class Launcher : Node3D
         // Same reason as the build in LaunchSession: a teardown legitimately stalls the loop.
         _hitchSidecar.Flush();
         _hitchMonitor.Rearm();
+        PerfSample.Reset();
         ShowLaunchMenu();
     }
 
@@ -906,9 +915,10 @@ public partial class Launcher : Node3D
     /// known magnitude to verify against instead of an incidental one. The busy-wait form (default)
     /// proves the timing path; <paramref name="alloc"/> burns the same wall time allocating and
     /// discarding 4 KB buffers instead of spinning, which is the only way to move the GC/
-    /// allocated-bytes columns on demand. Never wrapped in a profiling scope: an injected fault
-    /// must show as unattributed time, not as a breadcrumb that could be mistaken for the thing
-    /// under test (C8, not yet landed).</summary>
+    /// allocated-bytes columns on demand. Never wrapped in a <see cref="PerfSample"/> scope: an
+    /// injected fault must show as unattributed time, not as a breadcrumb that could be mistaken
+    /// for the thing under test. What the hitch stage checks instead is C8's identity — the
+    /// record's attributed and unattributed terms closing over its own frame cost.</summary>
     private void InjectHitch(float ms, bool alloc)
     {
         long start = System.Diagnostics.Stopwatch.GetTimestamp();

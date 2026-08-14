@@ -185,6 +185,7 @@ determinism repo-wide — read `docs/verification.md` first.
 - `src/Utils/StartupProfile.cs` — the always-on `[perf] startup …` line: every session build split by phase, `total = boot + Σphases + rest + first_frame`.
 - `src/Utils/HitchMonitor.cs` — the always-on frame-hitch detector: `frame_ms > max(medianMultiple × rolling_median, floorMs)`, a `HitchRecord` per trip.
 - `src/Utils/HitchSidecar.cs` — the hitch detector's write path: queues a tripped record and drains it a few seconds later to one `[perf] hitch …` line plus one JSON line in `.scratch/logs/<mode>-<stamp>.hitches.jsonl`.
+- `src/Utils/PerfSample.cs` — ambient timed leaf scopes: `using (PerfSample.Scope(PerfSite.X))` accumulates per site per frame, and every hitch record carries the sites plus the remainder no site claimed.
 - `src/Utils/Rng.cs` — the session's one master seed and the ten named subsystem generators every random draw derives from.
 - `src/Utils/ScriptedWindow.cs` — Win32-only window hiding for scripted runs; `ScriptedWindow.Hide()` uses `ShowWindow(SW_HIDE)` on the native window.
 
@@ -4268,11 +4269,13 @@ The always-on frame-hitch detector (PLAN-perf-hitches B4), ticked from `Launcher
 mode: a frame trips when `frame_ms > max(medianMultiple × rolling_median, floorMs)`, and a
 `HitchRecord` is assembled describing it: unaveraged script/render-CPU/GPU/physics, draws/prims/
 nodes/mem as absolutes AND as deltas against the frame before, `GC.CollectionCount` per generation
-plus allocated bytes, and a ring buffer of the preceding frames ending with the hitching one.
+plus allocated bytes, a ring buffer of the preceding frames ending with the hitching one, and (C8)
+the frame's named work from `PerfSample` plus the remainder no scope claimed.
 It only detects: nothing is logged from here, so a clean run is silent (B6 owns the sidecar).
 Godot-free by construction (the caller samples the engine counters into a `FrameCounters` and hands
 them in), so the trigger, both wraparounds and the grace window are unit-tested off-engine in
-`CSVM.Tests/HitchMonitorTests.cs`. Five `hitchMonitor.*` config keys over `const` defaults, read in
+`CSVM.Tests/HitchMonitorTests.cs`; `PerfSample` is the one thing read ambiently rather than handed
+in, and it is engine-free too. Five `hitchMonitor.*` config keys over `const` defaults, read in
 the constructor (which is what registers them for `--dump-config`). `FrameCount` exposes the same
 counter `HitchRecord.Frame` reports, one call early, so `--hitch-inject=` (B5) can fire on a stated
 ordinal in this monitor's own frame space rather than the sim frame.
@@ -4294,7 +4297,11 @@ ordinal in this monitor's own frame space rather than the sim frame.
 referenced, since `Last` is overwritten on the next trip — into a small preallocated queue, then
 drained a few seconds later to one `[perf] hitch …` line (`ReportPerf`'s own flat key=value grammar,
 ms terms as-is, byte counts as MB) plus one JSON line in `.scratch/logs/<mode>-<stamp>.hitches.jsonl`,
-sharing the main log's stem. All-numeric record, so the JSON is hand-written (no library) via
+sharing the main log's stem. Both carry C8's attribution at the end: `samples=site:callsxms,…`
+(`none` when nothing declared) with `attributed_ms`/`unattributed_ms`/`sample_violations` beside it,
+and a `"samples":[{"site","ms","calls"}]` array in the JSON. All-numeric record apart from those
+site names — compile-time `[a-z_]` constants from a closed enum — so the JSON is hand-written
+(no library) via
 `string.Create(CultureInfo.InvariantCulture, …)`, never plain `$"..."` interpolation, which would
 format under `CurrentCulture` instead. The file opens once for the process's whole life with `Log`'s
 own recipe (UTF-8 WITH a BOM, `AutoFlush`) — a line reaches disk the instant it is written.
@@ -4305,6 +4312,33 @@ own recipe (UTF-8 WITH a BOM, `AutoFlush`) — a line reaches disk the instant i
 ⚠ Drop-oldest on overflow (`hitchSidecar.queueDepth`, TUNE, default 8), reported as a `perf` warning
   with a count — a hitch burst faster than the flush interval is itself worth knowing about, not
   something to buffer around silently.
+
+## src/Utils/PerfSample.cs
+Ambient timed leaf scopes (PLAN-perf-hitches C8): `using (PerfSample.Scope(PerfSite.DebrisSpawn))`
+adds its wall time to that site's total for the frame in progress, and any code path can do it
+without knowing the monitor, the readout, or whether anything is listening — statics over a
+preallocated per-site array, the same ambient shape `StartupProfile` uses and for the same reason
+(a scope several call layers down cannot be handed an accumulator). `Launcher._Process` calls
+`EndFrame()` at the instant it stamps the frame's wall cost, so the scopes and the `frame_ms` they
+ran inside describe the same span, and `HitchMonitor.Fill` snapshots that closed frame into
+`HitchRecord.Samples` — its one ambient read, taken there rather than by the caller so a record can
+never carry a stale frame's attribution. `Reset()` on a build or teardown, beside `Rearm`. Sites are
+a closed enum (`debris_spawn` · `part_detach` · `ai_spawn` · `effect_checkout` · `effect_pool_miss` ·
+`material_create` · `resource_load` · `audio_load`); a site nothing called is ABSENT from the record
+rather than reported as zero.
+⚠ **`Σ(sites) + unattributed = frame_ms` on every frame.** `unattributed` is real work with no
+  stopwatch on it, never an error term — the same reading as `StartupProfile`'s `rest`. It is NOT
+  clamped: negative means a scope spanned the `EndFrame` boundary, which is a defect to see.
+⚠ **FLAT LEAVES ONLY.** A scope opened inside another is suppressed (measures nothing) and counted
+  in the record's `sample_violations`. A partially instrumented TREE would attribute
+  un-instrumented time to whatever parent encloses it, and it is never fully instrumented, because
+  the next feature to land will not add its scope.
+⚠ **Coarse granularity is a rule, not a preference**: a debris burst, not one chunk; a spawn, not
+  one node. A scope costs ~60 ns (58.8/59.3/62.7 ns over three 200k-iteration runs of
+  `PerfSampleTests.AScopeCostsFarLessThanTheFrameItMeasures`, allocating exactly 0 bytes), so a
+  per-particle scope is 60 µs of instrument on the frame it was meant to explain.
+⚠ Main thread only, unsynchronised by design — a lock on the frame path would cost more than the
+  measurement.
 
 ## src/Utils/Rng.cs
 The session's randomness policy: one master seed and ten named subsystem generators derived from it
@@ -4594,6 +4628,10 @@ quit and of `--dump-config`, which is what registers its five keys) and `Rearm`e
 `--hitch-inject=` (PLAN-perf-hitches B5) fires right before the QPC stamp, on the `_Process` call
 where `HitchMonitor.FrameCount + 1` matches the flag's frame — so the injected stall counts as that
 call's own frame cost instead of the next one's.
+`PerfSample.EndFrame()` (C8) is called on the same line as that stamp, so a frame's scopes and its
+wall cost cover the same span — the session node processes at priority -1000, one notch ahead of
+this one, so the work it declared is already in — and `PerfSample.Reset()` sits beside every
+`Rearm`, since a build's own loads belong to no frame.
 `_hitchSidecar` (B6) is built one step later than the monitor, right after `Log.Open` (its path
 derives from `Log.SinkPath`): a trip queues into it from `_Process`, and `LaunchSession`/
 `ReturnToMenu`/`_ExitTree` all flush it before `HitchMonitor.Rearm` — a build, a teardown and an

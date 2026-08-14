@@ -180,6 +180,10 @@ session prints once at `Log.Open` (`Log.SinkPath`, the PROJECT's own log — a d
 Godot's own `--log-file` this stage also passes), then read back as `<that path minus .log>.hitches.jsonl`.
 A `FAIL` here means the detector stopped detecting (or started firing on nothing) with nobody
 watching, which is exactly the failure mode an always-on, silent-when-clean instrument invites.
+The injected record's C8 attribution is checked as an identity — `attributed_ms + unattributed_ms`
+must close over `frame_ms`, with no scope violations — rather than as "no samples": the injected
+stall is deliberately unscoped (B5), and C9 seeding a site that fires during this launch must not
+turn the check red.
 
 ### The perf stage (`-Perf`)
 

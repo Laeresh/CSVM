@@ -27,7 +27,8 @@
                a known stall and stays silent without one. A scripted pass for the same reason
                goldens is one: the detector only trips on a REAL rendered frame over wall time,
                which --run-tests's single, frame-free _Ready call cannot produce. Reads the
-               printed "[perf] hitch ..." line and the .hitches.jsonl sidecar it names.
+               printed "[perf] hitch ..." line and the .hitches.jsonl sidecar it names, and
+               checks the record's C8 attribution closes over its own frame cost.
       perf     -Perf only. Every scenario in analysis/perf/scenarios.json, run under
                --det --perf --no-vsync for a fixed number of SIM frames (never wall seconds --
                the fixed clock advances one sim step per rendered frame, so a frame count is an
@@ -930,6 +931,19 @@ if ($SkipHitch) {
                     $ringCount = @($record.ring).Count
                     if ($ringCount -ne 120) {
                         $problems += "inject: sidecar ring has $ringCount entries, expected 120 (hitchMonitor.ringFrames default)"
+                    }
+                    # C8: what the frame could NAME plus what nothing claimed is the frame's cost,
+                    # by construction. Asserted as the identity rather than as "no samples": the
+                    # injected stall is deliberately not wrapped in a scope (B5's rule -- an
+                    # injected fault must read as unattributed time), and C9 may well seed a site
+                    # that does fire during this launch, but neither can break the sum.
+                    $attributed = [double]$record.attributed_ms
+                    $unattributed = [double]$record.unattributed_ms
+                    if ([math]::Abs(($attributed + $unattributed) - [double]$record.frame_ms) -gt 0.005) {
+                        $problems += "inject: attributed_ms=$attributed + unattributed_ms=$unattributed does not close over frame_ms=$($record.frame_ms)"
+                    }
+                    if ([int]$record.sample_violations -ne 0) {
+                        $problems += "inject: sample_violations=$($record.sample_violations) -- a nested or unclosed PerfSample scope"
                     }
                 }
             }

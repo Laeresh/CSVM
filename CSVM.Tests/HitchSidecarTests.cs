@@ -9,7 +9,8 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// PLAN-perf-hitches B6's write path: the queue's copy-not-reference semantics, the flush-interval
-/// gate, drop-oldest overflow, and the JSON line's shape and culture-invariance. Every test opens a
+/// gate, drop-oldest overflow, the JSON line's shape and culture-invariance, and C8's per-site
+/// attribution riding along inside the record. Every test opens a
 /// real file under <see cref="TestData.TempDir"/> — the sidecar's whole job is the write, so a fake
 /// sink would not verify it — and reads it back with <see cref="JsonDocument"/> rather than string
 /// matching, so a field reorder cannot make an assertion pass by accident.
@@ -103,6 +104,36 @@ public class HitchSidecarTests
         // surviving first — the same order HitchMonitor's own ring reads in.
         Assert.Equal(3, JsonDocument.Parse(lines[0]).RootElement.GetProperty("frame").GetInt64());
         Assert.Equal(4, JsonDocument.Parse(lines[1]).RootElement.GetProperty("frame").GetInt64());
+    }
+
+    [Fact]
+    public void AttributionRidesWithTheRecordAndIsCopiedNotReferenced()
+    {
+        string logPath = Path.Combine(TestData.TempDir(), "fly-stamp.log");
+        var sidecar = new HitchSidecar(logPath, ringFrames: 1, queueDepth: 2, flushSeconds: 0);
+        var record = NewRecord(frame: 300, frameMs: 62.5, gc0Delta: 0, allocDelta: 0, ringCount: 1);
+        record.Samples.Ms[(int)PerfSite.DebrisSpawn] = 12.5;
+        record.Samples.Calls[(int)PerfSite.DebrisSpawn] = 2;
+        record.Samples.AttributedMs = 12.5;
+        record.Samples.UnattributedMs = 50;
+
+        sidecar.Enqueue(record);
+        record.Samples.Ms[(int)PerfSite.DebrisSpawn] = 999;
+        record.Samples.UnattributedMs = 999;
+        sidecar.Flush();
+
+        using var doc = JsonDocument.Parse(Assert.Single(ReadLines(sidecar.JsonPath)));
+        var root = doc.RootElement;
+        // Only the sites that actually ran are written, so a record names two things rather than
+        // eight, seven of which are zero (C8's own rule, StartupProfile's phase rule before it).
+        var samples = root.GetProperty("samples");
+        Assert.Equal(1, samples.GetArrayLength());
+        Assert.Equal("debris_spawn", samples[0].GetProperty("site").GetString());
+        Assert.Equal(12.5, samples[0].GetProperty("ms").GetDouble(), 3);
+        Assert.Equal(2, samples[0].GetProperty("calls").GetInt32());
+        Assert.Equal(12.5, root.GetProperty("attributed_ms").GetDouble(), 3);
+        Assert.Equal(50, root.GetProperty("unattributed_ms").GetDouble(), 3);
+        Assert.Equal(0, root.GetProperty("sample_violations").GetInt32());
     }
 
     [Fact]

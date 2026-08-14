@@ -58,7 +58,10 @@ public readonly record struct FrameSample(
 /// frame, so the two line up with each other rather than with the frame being built.</para>
 ///
 /// <para>Godot-free by construction: the caller samples the engine's counters and hands them in, so
-/// the trigger math, the wraparound and the grace window are unit-testable off-engine.</para>
+/// the trigger math, the wraparound and the grace window are unit-testable off-engine. The single
+/// exception is <see cref="PerfSample"/> (C8), read ambiently when a record is filled — a scope
+/// several call layers away cannot be handed an accumulator by whoever ticks the monitor, which is
+/// the whole reason that class is a set of statics. It is engine-free too, so nothing above changes.</para>
 /// </summary>
 public sealed class HitchMonitor
 {
@@ -257,6 +260,12 @@ public sealed class HitchMonitor
         _last.Gc2Delta = _hasPrevious ? gc2 - _prevGc2 : 0;
         _last.AllocatedBytesDelta = _hasPrevious ? allocated - _prevAllocated : 0;
 
+        // The one thing this class does not have handed to it (PLAN-perf-hitches C8): the frame's
+        // named work comes from an ambient static, because a scope in some far-off call path has no
+        // way to be handed an accumulator by whoever ticks the monitor. Taken here rather than by
+        // the caller so a record can never carry a stale frame's attribution.
+        PerfSample.SnapshotInto(_last.Samples, frameMs);
+
         // Oldest first, ending with the hitching frame itself, so a consumer reads the run-up left
         // to right without knowing where the ring's write head is.
         int oldest = _ringCount == _ringFrames ? _ringNext : 0;
@@ -340,6 +349,12 @@ public sealed class HitchRecord
     /// <summary>The preceding frames, oldest first, the last entry being the hitching frame.
     /// Only the first <see cref="RingCount"/> entries are meaningful.</summary>
     public FrameSample[] Ring { get; }
+
+    /// <summary>What the frame could NAME: per-site times from the scopes that ran in it, plus the
+    /// remainder no scope claimed (PLAN-perf-hitches C8). <see cref="PerfSampleFrame.AttributedMs"/>
+    /// plus <see cref="PerfSampleFrame.UnattributedMs"/> is <see cref="FrameMs"/> by
+    /// construction.</summary>
+    public PerfSampleFrame Samples { get; } = new();
 
     /// <summary>The monitor's own rendered-frame counter, which counts from process start and is
     /// not the sim frame.</summary>
