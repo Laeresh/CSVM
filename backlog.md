@@ -2653,6 +2653,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scripted `--det`/`--hold` runs; the polling *sites* are the seam, `FireControl` itself never
   changes (it consumes `FireInputs` booleans). Update `docs/controls.md` when this lands.
 
+- `BL-351` `[Feature]` **Generalise the targeting HUD: target-cycling keybindings for the
+  original's target classes.** Requested 2026-08-14 alongside M4 H22 (which extends the VS
+  targeting elements to AI enemy planes but picks the target automatically). The original ships
+  several bindings to cycle the tracked target by class: enemies/objectives, allies, and
+  non-aircraft (ground/sea vehicles, turrets, zeppelins). Wanted: the same class-cycling on our
+  targeting HUD — per pane in splitscreen, reusing the VS/H22 drawing elements unchanged, only
+  the selection source generalises. Ground work: pull the original's exact bindings and cycle
+  order from its input config/manual before designing ours; wire through whatever input seam
+  exists when this lands (`BL-296`'s ActionMap if it has landed, hard polling if not).
+  *How you'd know it worked:* in a session with AI planes, a zeppelin and turrets, the target
+  key cycles hostile aircraft; the non-aircraft key walks the zeppelin and turrets; each pane
+  tracks its own pick. Depends on H22's target-tracking plumbing; `docs/controls.md` gains the
+  bindings when it lands.
+
 ## Missions, modes & campaign
 
 - `BL-350` `[Bug]` `[Blocked: mission animations]` **Generator-spawned planes crash inside closed hangars
