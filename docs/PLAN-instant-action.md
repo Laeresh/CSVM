@@ -287,7 +287,7 @@ is M4's formation disproof, `B7` is the team model below.
 ### Wave E — Waves
 
 10. ☑ E10 The inert aircraft state
-11. ☐ E11 The wave sequencer
+11. ☑ E11 The wave sequencer
 
 ### Wave F — Attacking a zeppelin
 
@@ -948,7 +948,53 @@ The pool registration in `_Ready` is what makes a plane a hit target, independen
 inert by parking the aircraft far away; that was considered and rejected because it still ticks,
 collides and burns CPU for the whole mission.
 
-## E11 ☐ The wave sequencer
+## E11 ☑ The wave sequencer
+
+**Landed 2026-08-14.** `Session/InstantActionWaves.cs` is new: the decoded selection/trigger/
+geometry logic, pure and engine-free (no `GD.*`, no `Godot.` node, no clock), in the shape of
+`GeneratorCycle`. `Start()`/`Step(aliveInCurrentWave)` hold the 1-4/5(`Finished`) counter,
+cascading past any 0-enemy wave without activating it and advancing exactly when the caller's own
+`InPlay` count of the current wave reaches 0 — no advance past wave 4, ever. The two static
+geometry helpers are `ChooseWaveSpawn` (the teleport arm's own two-step draw: collect every spawn
+point at or beyond 500 m squared from the NEAREST human — Decision 8's splitscreen reading of "the
+player" — then `draw % n` over that collection, falling back to the LITERAL first entry, index 0,
+when it is empty) and `FanOffset` (the same 100 m/45° pattern D9's `WingmanSlotFor` uses, member 0
+exactly on the point). `Mech3/InstantAction.cs` gained `InstantActionWave.EnemyAccentId` (parsed,
+default -1, the field B6 flagged as E11's to add) and `Session/InstantActionRuntime.cs` gained the
+two per-wave-member draws the sequencer itself does not own: `RandomPilotStats(draw)` (the decoded
+five-row personality table, `row = draw % 5`, fed to the existing `RepresentativeRating` for the
+one flat rating CSVM's AI tuning takes) and `ResolveWaveAccentId(id, draw)` (the accent-12
+re-roll, `12 + draw % 5`). `GameSession.BuildFlightRigs` builds EVERY configured wave's members
+inert at the world origin (Decision 6 folds "wave 1 spawns live" into the same build-then-activate
+path every later wave takes), tracked in its own `_iaWaveRosters[w]` array rather than as
+`FlightController` state, then calls `InstantActionWaves.Start()` and activates whatever it
+returns; `DriveSimSteps` ticks `Step` once per sim step (after the AI planes' own `SimStep`, so
+the alive count reflects that step's crashes) and `ActivateInstantActionWave` draws the spawn
+point against every live human's CURRENT position — not their spawn pose, since this runs again,
+mid-flight, for every wave after the first. Gated out entirely on `zeppelin_run`, per A4a: that
+mode's wave arrival is F12's exclusive generator arm, never a caller of this one. **Two decoded
+values are intentionally not wired, both documented at their would-be call site rather than
+implemented speculatively:** a wave's militia livery (`ia.json` never carries it — the original's
+own setup screen supplies it live, and unlike the wingmen's Fortune Hunter it is not a decidable
+constant, so a wave member builds through the ordinary `scheme: null` AI livery path instead of an
+invented mapping) and the novice/veteran/ace difficulty tier (`enemy_skill` is confirmed unread by
+the wave parser, so every file-launched wave is effectively "veteran"/1.0 — wiring the multiplier
+now would be a no-op with no way to test it until H15/H16 gives Instant Action a setup screen).
+Verification: `CSVM.Tests/InstantActionWavesTests.cs` (10 facts: wave-1 activation, leading- and
+mid-sequence 0-enemy fall-through, every-wave-empty, no-advance-past-4, the spawn draw's
+nearest-human filter and its index-0 fallback, and the fan's six offsets) plus
+`InstantActionTests.cs` extended for `EnemyAccentId` across the full-record/defaults/CLI-JSON
+fixtures — 16/16 Instant Action facts. The `instant-action` engine suite gained a real
+`InstantActionWaves` sequence over `AiAircraftSpawner.Spawn`-built aircraft: 2 live wave-1 members
+crashed via `DebugForceCrash` advance the sequencer to wave 2, whose built-inert member then
+activates at a drawn point proven at least 500 m from the human. `.\RunTests.ps1`: build clean,
+1191/1191 unit tests, 56/56 engine suites (the extended one included), all 14 golden hashes
+unchanged. Plus a manual `--det --ia=<path> --chapter=C1 --frames=180 --screenshot=` run on a
+hand-authored `dogfight_squadron`/2-wave mission: the log shows
+`ia: wave 1 (2 aircraft) activated at spawn #6 of 8` and
+`ia: 3 wave enemies across 2 wave(s), built inert, team=2`, and the two Firebrand wave-1 members
+are seen live in the categorized log (`ai mode: ai1_player_fbrand: patrol -> avoid crash`),
+proving the whole build path fires for real — not just the suite's direct construction.
 
 **Goal.** Up to four configured waves arrive one at a time: wave 1 at mission start, and each
 subsequent wave when no member of the current wave is still alive, teleported in at least 500 m from

@@ -11,7 +11,8 @@
     "num_enemies": 3,
     "enemy_name": "MSG_PROBE_CLI_G1",
     "enemy_plane": "Brigand",
-    "enemy_skill": "veteran"
+    "enemy_skill": "veteran",
+    "enemy_accentID": 18
   },
   "group2": null,
   "ace_name": "MSG_PROBE_CLI_ACE",

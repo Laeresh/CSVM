@@ -179,6 +179,13 @@ public partial class GameSession : Node3D
     // StartSession from --ia=<path> — null outside one, which is what keeps every other session
     // mode (free flight, Dogfight) untouched by its existence.
     private InstantActionRuntime? _instantAction;
+    // E11's wave sequencer: null on dogfight_ace/zeppelin_run (no teleport arm to run) or outside
+    // an Instant Action mission. _iaWaveRosters[w] is wave w+1's built (inert until activated)
+    // members, indexed the same way; DriveSimSteps polls the current wave's InPlay count and
+    // activates whatever InstantActionWaves.Step hands back.
+    private InstantActionWaves? _iaWaves;
+    private List<FlightController>[]? _iaWaveRosters;
+    private List<SpawnPoint>? _iaWaveSpawnList;
     // The world AA emplacements (M4 C9b): built with the rigs whenever a chapter world and the
     // shared pool exist, stepped in DriveSimSteps after the zeppelins (slung mounts read the
     // moved pose). Shipped ACTIVATED honoured; --wake-turrets is the WAKEUP_TURRETS stand-in.
@@ -450,6 +457,9 @@ public partial class GameSession : Node3D
         // soft (a warning, no def) rather than aborting the launch, the same policy every other
         // optional CLI-driven feature in this build follows.
         _instantAction = null;
+        _iaWaves = null;
+        _iaWaveRosters = null;
+        _iaWaveSpawnList = null;
         if (_spec.IaPath != null)
         {
             try
@@ -2141,6 +2151,88 @@ public partial class GameSession : Node3D
                 }
             }
         }
+        // Instant Action's wave sequencer (PLAN-instant-action.md E10/E11): up to four configured
+        // waves, EVERY one built inert right here (Decision 6 folds "wave 1 spawns live" into the
+        // same build-then-activate path every later wave takes) and released one at a time as
+        // InstantActionWaves finds the current wave cleared (DriveSimSteps). Does not run on
+        // zeppelin_run — A4 traced that mode's arm as an EXCLUSIVE alternative (the generator
+        // feed, F12), never a caller of this one.
+        if (_instantAction is { } iaWaves && !string.Equals(iaWaves.Def.MissionType, "zeppelin_run",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            var waveSizes = iaWaves.Def.Waves.Select(w => w.NumEnemies).ToArray();
+            var rosters = new List<FlightController>[4];
+            for (int w = 0; w < 4; w++)
+            {
+                var roster = new List<FlightController>();
+                var wave = iaWaves.Def.Waves[w];
+                if (wave.NumEnemies > 0)
+                {
+                    string? waveNode = InstantAction.PlaneNodeFor(wave.EnemyPlane);
+                    if (waveNode == null)
+                    {
+                        GD.PushWarning($"ia: wave {w + 1} plane '{wave.EnemyPlane}' is not one " +
+                                        "of the eleven airframes — no wave enemies spawned");
+                    }
+                    else
+                    {
+                        for (int m = 0; m < wave.NumEnemies; m++)
+                        {
+                            // Built at the origin, inert (E10) — position is irrelevant until
+                            // ActivateInstantActionWave teleports it in, same as the original's
+                            // own "deactivated at the world origin" (A3).
+                            var pilot = AiPilot.HoldingCourse(Vector3.Zero, Vector3.Forward);
+                            // A wave's militia livery is a setup-SCREEN-only value
+                            // (docs/formats/instant-action.md "The ace and the waves"): unlike
+                            // the wingmen (D9, always Fortune Hunter, a decidable constant), a
+                            // wave's militia varies per chapter and ia.json never carries it, so
+                            // wave members build through the ordinary AI livery path (unpainted
+                            // unless --paint=) rather than invent a mapping.
+                            int rating = InstantActionRuntime.RepresentativeRating(
+                                InstantActionRuntime.RandomPilotStats(Rng.Stream(Rng.Ai).Randi()));
+                            var enemy = SpawnAiAircraft(waveNode, Vector3.Zero, Vector3.Forward,
+                                pilot, scheme: null, team: InstantActionRuntime.EnemyTeam,
+                                attackRating: rating, inert: true);
+                            if (enemy == null)
+                            {
+                                continue;
+                            }
+                            if (pilot.Gunner != null)
+                            {
+                                pilot.Gunner.PrimaryTargetName = "player";
+                            }
+                            // Every Instant Action actor's activation volumes are authored
+                            // ±10000 m (docs/formats/instant-action.md), same as the ace/wingmen.
+                            if (pilot.Machine != null)
+                            {
+                                pilot.Machine.ActivationRange = 10000f;
+                            }
+                            int accentId = InstantActionRuntime.ResolveWaveAccentId(
+                                wave.EnemyAccentId, Rng.Stream(Rng.Ai).Randi());
+                            RegisterAiVoice(enemy, accentId, rating);
+                            roster.Add(enemy);
+                        }
+                    }
+                }
+                rosters[w] = roster;
+            }
+            _iaWaveRosters = rosters;
+            _iaWaveSpawnList = spawnList;
+            _iaWaves = new InstantActionWaves(waveSizes);
+            int firstWave = _iaWaves.Start();
+            if (firstWave != 0)
+            {
+                ActivateInstantActionWave(firstWave);
+            }
+            int totalWaveEnemies = rosters.Sum(r => r.Count);
+            if (totalWaveEnemies > 0)
+            {
+                GD.Print($"ia: {totalWaveEnemies} wave enemies across " +
+                          $"{rosters.Count(r => r.Count > 0)} wave(s), built inert, " +
+                          $"team={InstantActionRuntime.EnemyTeam}");
+                state.What += $" + {totalWaveEnemies} IA wave enemies";
+            }
+        }
         if (_spec.AiPlanes is { Count: > 0 } aiPlanes && _rigs.Count > 0
             && _rigs[0].Controller is { } lead)
         {
@@ -2670,6 +2762,48 @@ public partial class GameSession : Node3D
         _orbit.Frame(aabb, _spec.CamPos, pivot);
     }
 
+    /// <summary>E11: teleports and activates <paramref name="waveNumber"/>'s built (inert)
+    /// roster — <c>InstantActionWaves.ChooseWaveSpawn</c>'s own draw over <c>_iaWaveSpawnList</c>
+    /// against every live human's CURRENT position (not their spawn pose: this runs again, mid-
+    /// flight, for every wave after the first), then <c>InstantActionWaves.FanOffset</c>'s 100 m
+    /// / 45° pattern off the chosen point's heading. A missing/empty spawn list leaves the wave
+    /// parked inert with a warning rather than guessing a position — the same "no scenario spawn
+    /// points, no actor" shape C8's ace block already takes.</summary>
+    private void ActivateInstantActionWave(int waveNumber)
+    {
+        var roster = _iaWaveRosters![waveNumber - 1];
+        if (roster.Count == 0)
+        {
+            return; // InstantActionWaves.Start/Step never hand back an empty wave; stay defensive
+        }
+        if (_iaWaveSpawnList is not { Count: > 0 } spawns)
+        {
+            GD.PushWarning($"ia: no spawn points for wave {waveNumber} — {roster.Count} " +
+                            "aircraft stay parked inert");
+            return;
+        }
+        var humanPositions = new List<Vector3>();
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller is { } human)
+            {
+                humanPositions.Add(human.WorldPosition);
+            }
+        }
+        uint draw = Rng.Stream(Rng.Spawn).Randi();
+        var (spIndex, sp) = InstantActionWaves.ChooseWaveSpawn(spawns, humanPositions, draw);
+        var fwd = new Basis(Vector3.Up, Mathf.DegToRad(sp.HeadingDeg)) * Vector3.Forward;
+        for (int m = 0; m < roster.Count; m++)
+        {
+            var (metres, offsetDeg) = InstantActionWaves.FanOffset(m);
+            var dir = fwd.Rotated(Vector3.Up, Mathf.DegToRad(offsetDeg));
+            var pos = sp.Position + dir * metres;
+            roster[m].Activate(pos, pos + fwd);
+        }
+        GD.Print($"ia: wave {waveNumber} ({roster.Count} aircraft) activated at spawn #{spIndex} " +
+                  $"of {spawns.Count}");
+    }
+
     /// <summary>Steps the consumers whose sim normally rides Godot's physics tick. They return
     /// early from <c>_PhysicsProcess</c> whenever the clock is not realtime (GameClock.PhysicsDt
     /// hands them 0), because a fixed or halted sim cannot be paced by a tick it does not own.
@@ -2723,6 +2857,17 @@ public partial class GameSession : Node3D
             foreach (var ai in _aiPlanes)
             {
                 ai.SimStep(dt);
+            }
+            // E11: one sequencer tick per sim step, after the AI planes above have taken this
+            // step's crashes — the alive count InstantActionWaves.Step reads must reflect them.
+            if (_iaWaves is { Finished: false } waves)
+            {
+                int alive = _iaWaveRosters![waves.CurrentWave - 1].Count(fc => fc.InPlay);
+                int next = waves.Step(alive);
+                if (next != 0)
+                {
+                    ActivateInstantActionWave(next);
+                }
             }
             // The voice dispatch's mission clock (E16): the 2 s mute window and every 15 s
             // slot cooldown run on sim time, so a halted clock halts the chatter too.

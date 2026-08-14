@@ -220,7 +220,8 @@ clusters they delegate to.
 - `src/Session/EffectPools.cs` — the `data/effect_pools.json` reader: how many copies of each effect template the stage builds, per ROOT, scaled by player count.
 - `src/Session/FlightRigAssembler.cs` — assembles one player's flight rig: painted plane, `FlightController`, loadout/ordnance, HUD instruments, damage visuals, audio, stunt run, spawn, crash runtime.
 - `src/Session/AiAircraftSpawner.cs` — spawns an AI-piloted aircraft into a running session (M4 A2): the flight-essential subset of a rig, an `AiPilot` at the controls, shooter ids from 100.
-- `src/Session/InstantActionRuntime.cs` — owns one Instant Action mission's actor set (PLAN-instant-action.md C8/D9): the loaded `InstantActionDef`, the ace's own spawn draw and team/rating, and the wingmen's fan placement/escort chain/flight-size clamp.
+- `src/Session/InstantActionRuntime.cs` — owns one Instant Action mission's actor set (PLAN-instant-action.md C8/D9/E11): the loaded `InstantActionDef`, the ace's own spawn draw and team/rating, the wingmen's fan placement/escort chain/flight-size clamp, and E11's two per-wave-member draws (the five-row pilot-personality table, the accent-12 re-roll).
+- `src/Session/InstantActionWaves.cs` — the decoded wave sequencer's own selection/trigger/geometry (PLAN-instant-action.md E11), pure and engine-free: the wave counter (advance-on-last-kill, 0-enemy fall-through, no advance past wave 4), the 500-m-from-nearest-human spawn draw with its literal-index-0 fallback, and the 100 m/45° fan.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in.
 - `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (M4 B6, `--generators`): load-time drop rules, per-cycle stepping, spawns through `GameSession.SpawnAiAircraft`.
 - `src/Session/AiVoiceRuntime.cs` — wires E16's dispatch into a session: the decoded event sources (hit-path DI, Downed death cries, acquisition call-outs, taunts) played through `CombatVoice` + `WorldSounds.PlayOneShot`.
@@ -951,9 +952,11 @@ notes reserve `LaunchMenu.cs` for H15/H16 alone. Fixture units + install goldens
   `dogfight_ace`, so this only exercises on a `--ia=`/wizard-built ace mission.
 ⚠ `WingmanPlane` (D9) reads `wingman_plane`, defaulting to `"Devastator"` like `PlayerPlane`/
   `AcePlane` — the same built-in-defaults table, since the parser resets all three plane fields
-  together. The wave-only `enemy_accentID` and `ground_target_name`/`ground_target_node` are
-  decoded but deliberately not modelled here (E11's field to add / a mode nothing can reach); do
-  not add them speculatively — see the class doc comment for why each is out.
+  together. `InstantActionWave.EnemyAccentId` (E11) reads the wave-only `enemy_accentID`,
+  defaulting to -1 (the roster block's general "unset") like `AceAccentId` — modelled on the wave
+  record itself, not `InstantActionDef`, since it varies per wave. `ground_target_name`/
+  `ground_target_node` stay out (a mode nothing can reach); do not add them speculatively — see
+  the class doc comment for why.
 ⚠ `AceStats` reuses `Mech3.AiSkillVector` (the roster skill-slot type), not a new type — the
   field order is INFERRED (every shipped chapter carries nine 9s, so nothing in the data can
   settle it).
@@ -4209,7 +4212,7 @@ extend a method-group-to-delegate conversion over trailing optional ones. That o
 (E10) forwards to `AiAircraftSpawner.Spawn` and is how a wave is built at session time and arrives
 later; `--crash`'s sweep over `_aiPlanes` leaves an inert plane alone, since `DebugForceCrash` is
 gated on `InPlay`. `BuildFlightRigs` spawns
-the ace (`dogfight_ace` only; E11/F12 add the rest) right after the player voice registration,
+the ace (`dogfight_ace` only; F12 adds the zeppelin arm) right after the player voice registration,
 through that overload, with the authored `PaintScheme`/`InstantActionRuntime.EnemyTeam`/rating —
 the ace's own spawn-point draw is `InstantActionRuntime.ChooseAceSpawn` over
 `Rng.Stream(Rng.Spawn)`, one call after the player's own `ChooseSpawnBase` draw in the same
@@ -4226,6 +4229,23 @@ explicitly, rather than null, is what keeps a wingman armed on a CLI launch that
 4's target is the ALREADY-SPAWNED `FlightController` for wingmen 1/3's own `.Name` (ascending
 spawn order is load-bearing here, not just cosmetic), read off the real spawned node rather than
 reconstructing the original's `<plane>_ia1`-style roster name.
+Right after the wingman block, E11's wave block builds EVERY configured wave's members through
+the same `SpawnAiAircraft` overload, `inert: true`, at the world origin (Decision 6: build inert,
+then teleport-and-activate on wave change, folding "wave 1 spawns live" into the same path every
+later wave takes) — skipped entirely on `zeppelin_run` (A4/F12's exclusive arm). Each member's
+attack rating is `InstantActionRuntime.RepresentativeRating(RandomPilotStats(draw))` off
+`Rng.Stream(Rng.Ai)` (the wave sequencer's own five-row personality roll) and its voice accent is
+`ResolveWaveAccentId(EnemyAccentId, draw)` off the same stream (the accent-12 re-roll); its livery
+is `scheme: null`, the ordinary AI resolver, since a wave's militia is a setup-screen-only value
+`ia.json` never carries (`InstantActionRuntime.cs`'s own entry has the full reasoning). The built
+rosters live in `_iaWaveRosters[w]` (an array of `List<FlightController>`, not engine state), and
+`InstantActionWaves.Start()` — called once the rosters exist — returns the first wave worth
+activating, handed to `ActivateInstantActionWave`. `DriveSimSteps` calls `InstantActionWaves.Step`
+once per sim step with `_iaWaveRosters[CurrentWave-1].Count(fc => fc.InPlay)`, activating whatever
+wave number it returns; `ActivateInstantActionWave` draws the spawn point
+(`InstantActionWaves.ChooseWaveSpawn`, `Rng.Stream(Rng.Spawn)`) against every live human's CURRENT
+`WorldPosition`, not their spawn pose, and fans the roster onto it (`InstantActionWaves.FanOffset`)
+through `FlightController.Activate`.
 ⚠ **It parses no args and resolves nothing** — the Launcher hands it the one `SessionSpec` its
   session is built from; **a new flag is a SessionSpec change**. `_menuPads` is the deliberate
   exception: join-flow session state riding the `LauncherContext`, never the spec.
@@ -4818,7 +4838,9 @@ never step.
 
 ## src/Session/InstantActionRuntime.cs
 Owns one Instant Action mission's actor set (PLAN-instant-action.md), as it grows across the
-plan's later waves — C8 wired `dogfight_ace`'s ace, D9 adds the wingmen. Holds the loaded
+plan's later waves — C8 wired `dogfight_ace`'s ace, D9 added the wingmen, E11 adds the two draws
+a wave member needs that the sequencer itself (`InstantActionWaves`, below) does not own. Holds
+the loaded
 `InstantActionDef` plus static, engine-free helpers `GameSession.BuildFlightRigs` calls:
 `ChooseAceSpawn` (the setup path's own draw — `rand() % (count - 1)` over the scenario's spawn
 list, the LITERAL last index substituted, never a re-roll, on a collision with the player's own
@@ -4841,6 +4863,59 @@ applied silently (the caller must log it).
   `PrimaryTargetName` and `ActivationRange` itself, after `SpawnAiAircraft` has populated the
   pilot's `Gunner`/`Machine` (both start null on a fresh `AiPilot`), because a helper here has no
   spawned `FlightController` to name.
+E11 adds `RandomPilotStats(draw)` — the decoded five-row personality table
+(docs/formats/instant-action.md "A wave enemy's nine pilot stats are drawn at random from a table
+of five, not from its skill"), `row = draw % 5`, fed straight into `RepresentativeRating` for the
+one flat rating `AiAircraftSpawner.Spawn`'s `attackRating` takes — and `ResolveWaveAccentId(id,
+draw)`, the wingman accent range's own re-roll (`12` → `12 + draw % 5`) applied to a wave member's
+`InstantActionWave.EnemyAccentId`, never to the ace's or a wingman's own (both decided elsewhere).
+Both are pure over the caller's `rand()` pull, same shape as `ChooseAceSpawn`.
+⚠ **A wave's militia livery is NOT modelled here, or anywhere.** The decode
+(docs/formats/instant-action.md "The ace and the waves") states the militia's pattern/decals/
+colours are set by the SETUP SCREEN, not carried in `ia.json` — and unlike the wingmen (always
+Fortune Hunter, a decidable constant D9 could hardcode), a wave's militia varies per chapter with
+nothing in the shipped data to recover it from (`enemy_name`'s `MSG_*` key is a per-chapter
+object/mission name, not a reliable militia abbreviation — censused across all 8 chapters when
+this note was written: `MSG_VEH_<ABBREV>_<PLANE>` in five of them, `MSG_OBJ_*`/`MSG_DH_*` mission
+names in the other three). `GameSession` therefore spawns a wave member with `scheme: null`, the
+same ordinary AI livery path (unpainted unless `--paint=`) every other militia-unknown AI actor
+already takes, rather than invent a mapping. The novice/veteran/ace difficulty tier (a 0.875/1.0/
+1.25 HP multiplier, docs/formats/instant-action.md "What novice/veteran/ace becomes") is the same
+shape: it is decoded but not wired, because `enemy_skill` is confirmed unread by the wave parser
+(`FUN_00458e00`) and the live value the original actually applies comes from the setup screen
+alone — wiring the multiplier today would be a no-op with no way to test it (every file-launched
+wave is effectively "veteran", 1.0) until H15/H16 gives Instant Action a setup screen that can set
+it directly.
+
+## src/Session/InstantActionWaves.cs
+The decoded wave sequencer's own selection, trigger and geometry logic (PLAN-instant-action.md
+E11, `FUN_0045b9d0`, traced whole by A4 over M4 B7's main-path read): pure state over `Start`/
+`Step` calls (no `GD.*`, no `Godot.` node, no clock), in the shape of `GeneratorCycle` —
+`CSVM.Tests\InstantActionWavesTests.cs` pins it off-engine. `CurrentWave` is 0 before `Start`,
+1–4 while running, 5 once `Finished` (no advance past wave 4, ever). `Start`/`Step` both cascade
+past any wave whose configured enemy count is 0 without ever activating it — the original's own
+"no member of this group to wait on" shape — and `Step(aliveInCurrentWave)` advances exactly when
+that reaches 0, so `GameSession` feeds it its own `InPlay` count of the current wave's roster each
+sim step rather than this class tracking any aircraft itself. The two static geometry helpers are
+the teleport arm's own two-step draw, `ChooseWaveSpawn` (collect every spawn point at or beyond
+`MinSpawnDistanceSquared` — 500 m squared — from the NEAREST human, Decision 8's splitscreen
+reading of "the player", then `draw % n` over that collection; ⚠ falls back to the LITERAL first
+entry, index 0, not a random one, when the collection is empty), and `FanOffset(memberIndex)` —
+member 0 sits exactly on the point, member `k` after it (`k` = index − 1) sits
+`100 · ((k >> 1) + 1)` m out at ±45°, sign `+` when `k & 3` is 1 or 2, the same pattern
+`InstantActionRuntime.WingmanSlotFor` uses.
+⚠ **Does NOT run on `zeppelin_run`** — A4 traced the type-2 branch as an EXCLUSIVE alternative to
+  the teleport (a `JMP` past the whole block), not a caller of it; that mode's wave arrival is
+  F12's generator arm. Nothing in this class checks the mission type — `GameSession` gates it out.
+`GameSession.BuildFlightRigs` builds every configured wave's members INERT at the world origin
+(Decision 6 folds "wave 1 spawns live" into the same build-then-activate path every later wave
+takes), tracked in its own `_iaWaveRosters[w]` array (not a field on `FlightController` — wave
+membership is bookkeeping the runtime keeps, not engine state), then calls `Start()` and activates
+whatever it returns. `DriveSimSteps` ticks `Step` once per sim step, after the AI planes' own
+`SimStep` (so the alive count reflects this step's crashes), and `ActivateInstantActionWave`
+resolves the spawn draw against every live human's CURRENT position (not their spawn pose — this
+runs again, mid-flight, for every wave after the first) before calling `FlightController.Activate`
+on each member.
 
 ## src/Session/GeneratorCycle.cs
 The decoded egen launch timing law for ONE generator (M4 B6 + F20), pure over `Step` calls (no

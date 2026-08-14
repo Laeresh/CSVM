@@ -161,16 +161,19 @@ public static class Suites
             "fired round that reaches the teammate still costs it HP (Decision 3/A2: targeting is " +
             "gated, damage never is)", TeamModel));
         into.Add(new TestHarness.Suite("instant-action",
-            "the C8/D9 Instant Action runtime: an Instant Action display name (\"Warhawk\") " +
+            "the C8/D9/E11 Instant Action runtime: an Instant Action display name (\"Warhawk\") " +
             "resolves to its gamez node and an unrecognised one resolves to null rather than a " +
             "guess, the ace's own spawn draw substitutes the LITERAL last index on a collision " +
             "with the player's (never a re-roll), a mixed ace_stats vector averages to one " +
             "representative AI rating, AiAircraftSpawner.Spawn given an authored team/livery " +
             "wears them as-is (the ace lands on team 2 flying its configured airframe), the " +
             "wingman fan/escort-chain/accent-id table and the decision-8a flight-size clamp are " +
-            "pure over their inputs, and a real spawn census puts N wingmen on team 1 flying the " +
+            "pure over their inputs, a real spawn census puts N wingmen on team 1 flying the " +
             "configured airframe with wingmen 2/4's PrimaryTargetName resolving to wingmen 1/3's " +
-            "own spawned name",
+            "own spawned name, the wave-member personality/accent draws are pure over theirs, " +
+            "and a real InstantActionWaves sequence over spawned aircraft advances from wave 1 " +
+            "to wave 2 exactly on the last kill, activating wave 2's built-inert member at a " +
+            "drawn spawn point at least 500 m from the human",
             InstantActionAce));
         into.Add(new TestHarness.Suite("inert-aircraft",
             "the E10 inert state, each claim watched passing on a live aircraft first and on the " +
@@ -3340,6 +3343,7 @@ public static class Suites
         ProjectilePool? pool = null;
         FlightController? ace = null;
         var wingmen = new List<FlightController>();
+        var waveMembers = new List<FlightController>();
         try
         {
             var live = new ProjectilePool(textures, null, null);
@@ -3394,6 +3398,68 @@ public static class Suites
                 $"every wingman carries team 1, not a pilot-index default: teams={string.Join(",", wingmen.Select(w => w.Team))}");
             ctx.Check(wingmen.All(w => w.Name.ToString().Contains(wingmanNode)),
                 $"every wingman flies the configured airframe: {string.Join(",", wingmen.Select(w => w.Name))}");
+
+            // E11: RandomPilotStats/ResolveWaveAccentId are pure over their draw — row 4 is the
+            // flat-4 personality, and only accent 12 (the wingman range's own base) re-rolls.
+            var flatRow = InstantActionRuntime.RandomPilotStats(draw: 4);
+            ctx.Check(flatRow is { DareDevil: 4, Constitution: 4 },
+                $"draw 4 selects row 4, the flat personality: {flatRow}");
+            ctx.Check(InstantActionRuntime.ResolveWaveAccentId(12, draw: 3) == 15,
+                $"accent 12 re-rolls to 12 + draw%5: {InstantActionRuntime.ResolveWaveAccentId(12, 3)}");
+            ctx.Check(InstantActionRuntime.ResolveWaveAccentId(7, draw: 99) == 7,
+                $"any other accent id passes through unchanged: {InstantActionRuntime.ResolveWaveAccentId(7, 99)}");
+
+            // E11: a real InstantActionWaves sequence over real spawned aircraft — wave 1 (2
+            // members, live) killed down to 0 triggers wave 2 (1 member, built inert) activating
+            // at a spawn point at least 500 m from the human, fanned off it.
+            var iaWaves = new InstantActionWaves(new[] { 2, 1, 0, 0 });
+            int firstWave = iaWaves.Start();
+            ctx.Check(firstWave == 1, $"wave 1 is current at mission start: {firstWave}");
+
+            string waveNode = InstantAction.PlaneNodeFor("Brigand")!;
+            var wave1Pos = new Vector3(0f, 500f, 0f);
+            for (int i = 0; i < 2; i++)
+            {
+                var wmPos = wave1Pos + new Vector3(i * 10f, 0f, 0f);
+                var wmPilot = AiPilot.HoldingCourse(wmPos, wmPos + Vector3.Forward);
+                waveMembers.Add(spawner.Spawn(waveNode, wmPos, wmPos + Vector3.Forward, wmPilot,
+                    scheme: null, team: InstantActionRuntime.EnemyTeam));
+            }
+            var wave2Pilot = AiPilot.HoldingCourse(Vector3.Zero, Vector3.Forward);
+            var wave2Member = spawner.Spawn(waveNode, Vector3.Zero, Vector3.Forward, wave2Pilot,
+                scheme: null, team: InstantActionRuntime.EnemyTeam, inert: true);
+            waveMembers.Add(wave2Member);
+
+            int aliveWave1 = waveMembers.Take(2).Count(m => m.InPlay);
+            ctx.Check(aliveWave1 == 2, $"both wave-1 members InPlay before any kill: {aliveWave1}");
+            ctx.Check(!wave2Member.InPlay, $"wave 2's member is inert (not InPlay) before activation");
+            ctx.Check(iaWaves.Step(aliveInCurrentWave: aliveWave1) == 0,
+                $"wave 1 still alive: no advance");
+
+            foreach (var m in waveMembers.Take(2))
+                m.DebugForceCrash();
+            int aliveAfterKills = waveMembers.Take(2).Count(m => m.InPlay);
+            ctx.Check(aliveAfterKills == 0, $"both wave-1 members crashed: {aliveAfterKills}");
+            int nextWave = iaWaves.Step(aliveInCurrentWave: aliveAfterKills);
+            ctx.Check(nextWave == 2, $"wave 1's last kill advances to wave 2: {nextWave}");
+            ctx.Check(iaWaves.CurrentWave == 2 && !iaWaves.Finished,
+                $"the sequencer's own state agrees: {iaWaves.CurrentWave}");
+
+            var humanPos = new Vector3(0f, 500f, 0f);
+            var waveSpawns = new List<SpawnPoint>
+            {
+                new(new Vector3(10f, 500f, 0f), 0f),      // 10 m from the human — too close
+                new(new Vector3(600f, 500f, 0f), 0f),     // 600 m — eligible
+            };
+            var (spIdx, sp) = InstantActionWaves.ChooseWaveSpawn(
+                waveSpawns, new[] { humanPos }, draw: 0);
+            ctx.Check(spIdx == 1, $"the near point is excluded, the far one drawn: idx={spIdx}");
+            var fwd2 = new Basis(Vector3.Up, Mathf.DegToRad(sp.HeadingDeg)) * Vector3.Forward;
+            wave2Member.Activate(sp.Position, sp.Position + fwd2);
+            ctx.Check(wave2Member.InPlay, $"wave 2's member is InPlay once activated");
+            float distSq = wave2Member.WorldPosition.DistanceSquaredTo(humanPos);
+            ctx.Check(distSq >= InstantActionWaves.MinSpawnDistanceSquared,
+                $"activated at least 500 m from the human: dist={Mathf.Sqrt(distSq):0} m");
         }
         finally
         {
@@ -3401,6 +3467,8 @@ public static class Suites
             ace?.Free();
             foreach (var w in wingmen)
                 w.Free();
+            foreach (var m in waveMembers)
+                m.Free();
             textures.Dispose();
         }
     }

@@ -5,18 +5,37 @@ using CSVM.Mech3;
 namespace CSVM.Session;
 
 /// <summary>Owns one Instant Action mission's actor set, as it grows across the plan's later
-/// waves (PLAN-instant-action.md: E10/E11 the wave sequencer, F12 the zeppelin arm). C8 wired
-/// <c>dogfight_ace</c>'s authored ace; D9 adds the wingmen. <c>GameSession.BuildFlightRigs</c>
-/// reads <see cref="Def"/> directly to steer the player's own aircraft and spawn scenario, and
-/// calls the helpers below to place the ace and the wingmen. Environment→chapter resolution is
-/// the launch MENU's job (H15), not this class's — a <c>--ia=&lt;path&gt;</c> CLI launch already
-/// names its chapter via <c>--chapter=</c>.</summary>
+/// waves (PLAN-instant-action.md: E11 the wave sequencer, F12 the zeppelin arm). C8 wired
+/// <c>dogfight_ace</c>'s authored ace; D9 added the wingmen; E11 adds the two per-wave-member
+/// draws (<see cref="RandomPilotStats"/>, <see cref="ResolveWaveAccentId"/>) that the actual
+/// selection/trigger/geometry logic (<see cref="InstantActionWaves"/>, a separate engine-free
+/// class) does not own. <c>GameSession.BuildFlightRigs</c> reads <see cref="Def"/> directly to
+/// steer the player's own aircraft and spawn scenario, and calls the helpers below to place the
+/// ace, the wingmen and (with <see cref="InstantActionWaves"/>) each wave. Environment→chapter
+/// resolution is the launch MENU's job (H15), not this class's — a <c>--ia=&lt;path&gt;</c> CLI
+/// launch already names its chapter via <c>--chapter=</c>.</summary>
 public sealed class InstantActionRuntime
 {
     /// <summary>Every Instant Action enemy's team (PLAN-instant-action.md Decision 4: "the
     /// decoded turret convention... every Instant Action enemy is team 2"). Waves (E11) are
     /// cohorts inside this one team, not teams of their own.</summary>
     public const int EnemyTeam = AimAssist.PlayerTeam + 1;
+
+    /// <summary>The five hand-authored pilot personalities a wave member's nine-stat vector is
+    /// rolled from, <c>row = draw % 5</c> per aircraft (docs/formats/instant-action.md "A wave
+    /// enemy's nine pilot stats are drawn at random from a table of five, not from its skill" —
+    /// <c>FUN_0045a280</c>, <c>0x00607a3c</c>). Same field order/scale as
+    /// <see cref="InstantActionDef.AceStats"/>: <c>dare_devil, natural_touch, sixth_sense,
+    /// dead_eye, quick_draw, steady_hand, stun_recovery, talker, constitution</c>. Row 4 is a
+    /// flat 4 across every stat; the other four are hand-authored personalities.</summary>
+    private static readonly int[][] PilotPersonalities =
+    {
+        new[] { 5, 7, 5, 3, 2, 1, 4, 4, 4 },
+        new[] { 4, 3, 4, 5, 7, 5, 3, 5, 5 },
+        new[] { 3, 4, 3, 7, 3, 6, 4, 5, 4 },
+        new[] { 7, 5, 6, 3, 3, 2, 4, 4, 4 },
+        new[] { 4, 4, 4, 4, 4, 4, 4, 4, 4 },
+    };
 
     public InstantActionRuntime(InstantActionDef def)
     {
@@ -88,6 +107,38 @@ public sealed class InstantActionRuntime
     /// report it rather than apply it silently.</summary>
     public static int FlownWingmen(int configured, int humans) =>
         System.Math.Max(0, System.Math.Min(configured, 6 - humans));
+
+    /// <summary>One wave member's nine pilot stats — the wave sequencer's own per-aircraft roll
+    /// (A3/A4): <c>row = draw % 5</c> over <see cref="PilotPersonalities"/>. Pure over the
+    /// caller's own <c>rand()</c> pull, same shape as <see cref="ChooseAceSpawn"/>; feed the
+    /// result to <see cref="RepresentativeRating"/> for the one flat rating
+    /// <c>AiAircraftSpawner.Spawn</c>'s <c>attackRating</c> takes, CSVM's AI tuning having no
+    /// per-stat curves of its own to hang the full vector on.</summary>
+    public static AiSkillVector RandomPilotStats(uint draw)
+    {
+        var row = PilotPersonalities[draw % 5];
+        return new AiSkillVector
+        {
+            DareDevil = row[0],
+            NaturalTouch = row[1],
+            SixthSense = row[2],
+            DeadEye = row[3],
+            QuickDraw = row[4],
+            SteadyHand = row[5],
+            StunRecovery = row[6],
+            Talker = row[7],
+            Constitution = row[8],
+        };
+    }
+
+    /// <summary>The wingman accent range's own re-roll (docs/formats/instant-action.md "an
+    /// accentID of exactly 12 is re-rolled as 12 + rand() % 5"), applied to a wave member's
+    /// <see cref="InstantActionWave.EnemyAccentId"/> at spawn time — never to the ace's or a
+    /// wingman's own accent, both of which are already decided elsewhere. Pure over the caller's
+    /// own <c>rand()</c> pull; any other accent id (including the built-in -1 default) passes
+    /// through unchanged.</summary>
+    public static int ResolveWaveAccentId(int accentId, uint draw) =>
+        accentId == 12 ? 12 + (int)(draw % 5) : accentId;
 
     /// <summary>One wingman's standing order (docs/formats/instant-action.md "The player and the
     /// wingmen", PLAN-instant-action.md D9): its fan placement off the player's spawn heading —

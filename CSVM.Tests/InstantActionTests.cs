@@ -5,12 +5,13 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The Instant Action reader (docs/formats/instant-action.md, PLAN-instant-action.md B6/D9):
-/// fixture units for the full record (including D9's <c>WingmanPlane</c>), the built-in defaults
-/// every optional key falls back to (matching the original's own
-/// <c>FUN_00458ff0</c>/<c>FUN_00459390</c> reset-then-overlay), the <c>dogfight_ace</c>
-/// zero-forcing rule, and the <c>--ia=</c> plain-JSON-object path — plus golden counts over the
-/// install's 8 shipped chapters so a reader change moves a test instead of silently drifting.
+/// The Instant Action reader (docs/formats/instant-action.md, PLAN-instant-action.md B6/D9/E11):
+/// fixture units for the full record (including D9's <c>WingmanPlane</c> and E11's
+/// <c>InstantActionWave.EnemyAccentId</c>), the built-in defaults every optional key falls back
+/// to (matching the original's own <c>FUN_00458ff0</c>/<c>FUN_00459390</c> reset-then-overlay),
+/// the <c>dogfight_ace</c> zero-forcing rule, and the <c>--ia=</c> plain-JSON-object path — plus
+/// golden counts over the install's 8 shipped chapters so a reader change moves a test instead of
+/// silently drifting.
 /// </summary>
 public class InstantActionTests
 {
@@ -34,11 +35,14 @@ public class InstantActionTests
 
         Assert.Equal(4, def.Waves.Count);
         // Clamped to 6 — the fixture authors 9.
-        Assert.Equal(new InstantActionWave(6, "MSG_PROBE_GROUP1", "Firebrand", "novice"), def.Waves[0]);
-        Assert.Equal(new InstantActionWave(6, "MSG_PROBE_GROUP2", "Fury", "veteran"), def.Waves[1]);
+        Assert.Equal(new InstantActionWave(6, "MSG_PROBE_GROUP1", "Firebrand", "novice", 27), def.Waves[0]);
+        // group2 authors no enemy_accentID — the built-in -1 default.
+        Assert.Equal(new InstantActionWave(6, "MSG_PROBE_GROUP2", "Fury", "veteran", -1), def.Waves[1]);
         // group3 authored as a bare "group3", null — reads as the empty/default wave.
-        Assert.Equal(new InstantActionWave(0, "Blake Firebrand", "Firebrand", "veteran"), def.Waves[2]);
-        Assert.Equal(new InstantActionWave(2, "MSG_PROBE_GROUP4", "Warhawk", "ace"), def.Waves[3]);
+        Assert.Equal(new InstantActionWave(0, "Blake Firebrand", "Firebrand", "veteran", -1), def.Waves[2]);
+        // group4 authors the wingman accent range's own base (12) — stored verbatim; the re-roll
+        // (12 + rand() % 5) is a spawn-time policy (InstantActionRuntime), not a parse-time one.
+        Assert.Equal(new InstantActionWave(2, "MSG_PROBE_GROUP4", "Warhawk", "ace", 12), def.Waves[3]);
 
         Assert.Equal("MSG_PROBE_ACE_NAME", def.AceName);
         Assert.Equal("Peacemaker", def.AcePlane);
@@ -84,7 +88,7 @@ public class InstantActionTests
             Assert.Equal(0, wave.NumEnemies);
         }
         Assert.Equal("MSG_PROBE_G1", def.Waves[0].EnemyName); // the authored fields still read
-        Assert.Equal(new InstantActionWave(0, "Blake Firebrand", "Firebrand", "veteran"), def.Waves[1]);
+        Assert.Equal(new InstantActionWave(0, "Blake Firebrand", "Firebrand", "veteran", -1), def.Waves[1]);
 
         Assert.Equal("Marshall Bill Redmann", def.AceName);
         Assert.Equal("Devastator", def.AcePlane);
@@ -122,11 +126,11 @@ public class InstantActionTests
         Assert.Equal("cargo", def.ZeppelinType);
         Assert.Equal("probezep", def.CargoZeppelinNode);
 
-        Assert.Equal(new InstantActionWave(3, "MSG_PROBE_CLI_G1", "Brigand", "veteran"), def.Waves[0]);
+        Assert.Equal(new InstantActionWave(3, "MSG_PROBE_CLI_G1", "Brigand", "veteran", 18), def.Waves[0]);
         // group2 authored as a JSON null — same graceful default as a bare zrd flag.
-        Assert.Equal(new InstantActionWave(0, "Blake Firebrand", "Firebrand", "veteran"), def.Waves[1]);
+        Assert.Equal(new InstantActionWave(0, "Blake Firebrand", "Firebrand", "veteran", -1), def.Waves[1]);
         // group3/group4 not authored at all.
-        Assert.Equal(new InstantActionWave(0, "Blake Firebrand", "Firebrand", "veteran"), def.Waves[2]);
+        Assert.Equal(new InstantActionWave(0, "Blake Firebrand", "Firebrand", "veteran", -1), def.Waves[2]);
 
         Assert.Equal("MSG_PROBE_CLI_ACE", def.AceName);
         Assert.Equal("Hellhound", def.AcePlane);

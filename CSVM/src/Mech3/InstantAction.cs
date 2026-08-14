@@ -12,9 +12,12 @@ namespace CSVM.Mech3;
 /// effect is a global difficulty multiplier for the one spawn that used it, sourced from the
 /// SETUP SCREEN rather than this key (docs/formats/instant-action.md "What novice/veteran/ace
 /// becomes"). This reports the authored value verbatim, the same treatment
-/// <see cref="EnemyGeneratorDef.Capacity"/> gives its own unresolved key.</summary>
+/// <see cref="EnemyGeneratorDef.Capacity"/> gives its own unresolved key. <c>EnemyAccentId</c>
+/// (PLAN-instant-action.md E11) IS read by the wave parser and IS this wave's voice, subject to
+/// the decoded re-roll: an authored 12 (the wingman accent range's own base) becomes
+/// <c>12 + rand() % 5</c> at spawn, not at parse time — <see cref="Session.InstantActionRuntime.ResolveWaveAccentId"/>.</summary>
 public readonly record struct InstantActionWave(
-    int NumEnemies, string EnemyName, string EnemyPlane, string EnemySkill);
+    int NumEnemies, string EnemyName, string EnemyPlane, string EnemySkill, int EnemyAccentId);
 
 /// <summary>
 /// Reads a chapter's Instant Action configuration two ways onto the same
@@ -43,6 +46,7 @@ public static class InstantAction
     private const string DefaultWaveEnemyName = "Blake Firebrand";
     private const string DefaultWaveEnemyPlane = "Firebrand";
     private const string DefaultWaveEnemySkill = "veteran";
+    private const int DefaultWaveAccentId = -1; // the roster-block constructor's general "unset"
     private static readonly int[] DefaultAceStats = { 5, 6, 6, 8, 9, 6, 7, 6, 9 };
 
     // Display name -> planes.zbd root node (docs/formats/instant-action.md "The built-in
@@ -143,7 +147,8 @@ public static class InstantAction
             numEnemies,
             g?.Str("enemy_name") ?? DefaultWaveEnemyName,
             g?.Str("enemy_plane") ?? DefaultWaveEnemyPlane,
-            g?.Str("enemy_skill") ?? DefaultWaveEnemySkill);
+            g?.Str("enemy_skill") ?? DefaultWaveEnemySkill,
+            g != null && g.TryFloat("enemy_accentID", out float acc) ? (int)acc : DefaultWaveAccentId);
     }
 
     private static AiSkillVector MakeAceStats(List<object?>? list)
@@ -280,11 +285,12 @@ public static class InstantAction
 /// not repeat either, by design (PLAN-instant-action.md B6: "keep both where they are and have
 /// the def carry the rest").</para>
 ///
-/// <para>The wave-only <c>enemy_accentID</c> is decoded (parsed by the original, authored by no
-/// shipped chapter) but not modelled here; it is E11's field to add when the wave spawn needs it.
-/// <c>ground_target_name</c>/<c>ground_target_node</c> belong to the <c>ground_target</c> mission
-/// type, which every chapter's own <c>disallow_missions</c> bars and this milestone does not
-/// implement, so they are left out entirely rather than modelled for a mode nothing can reach.</para>
+/// <para><c>ground_target_name</c>/<c>ground_target_node</c> belong to the <c>ground_target</c>
+/// mission type, which every chapter's own <c>disallow_missions</c> bars and this milestone does
+/// not implement, so they are left out entirely rather than modelled for a mode nothing can
+/// reach. The wave-only <c>enemy_accentID</c> (PLAN-instant-action.md E11) IS modelled, on
+/// <see cref="InstantActionWave"/> itself rather than here — it varies per wave, unlike every
+/// other field on this record.</para>
 /// </summary>
 public sealed class InstantActionDef
 {
