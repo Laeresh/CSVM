@@ -48,7 +48,7 @@ plus the words "marked INVENTED" if the decode comes back empty.
 | 2 | What an Instant Action setup is expressed in | **One typed `InstantActionDef`.** A `src/Mech3` reader parses the shipped `ia.zrd.json` into it; `--ia=<path>` reads a plain JSON object with the same field names into the same record; the wizard builds the same record. |
 | 3 | Friendly fire | **Decoded (A2, 2026-08-14): the original applies it.** The team gate is a targeting gate and nothing more; the damage path carries no team test. CSVM matches, which means B7 adds no damage gate at all. The fallback ("block it, marked INVENTED") is not taken. |
 | 4 | Team ids | **The decoded turret convention:** 0 neutral, 1 the player's side, 2 and up enemy. Humans and wingmen are team 1, every Instant Action enemy is team 2. Waves are cohorts inside one enemy team, not teams of their own. |
-| 5 | Wingman behaviour | **Decode the Instant Action setup path (A3), then match.** M4 B7 closed formation flying disproven, so there is no shipped behaviour to copy blind. Fallback: the shipped M4 D11 mode machine on team 1, marked INVENTED as the wingman rule. |
+| 5 | Wingman behaviour | **Decoded (A3, 2026-08-14): the mode machine on team 1, with a `primary_target` chain.** Wingmen 0, 1 and 3 take `primary_target player`; 2 and 4 take wingmen 1 and 3. No net, no formation, activation volumes opened to ±10000 m, skill vector unset. The INVENTED fallback is not taken. |
 | 6 | When wave aircraft are built | **All at session build, held inert**, then teleported and activated on wave change. Faithful to the sequencer, and it keeps a six-plane build out of a live combat frame while `PLAN-perf-hitches` is open. |
 | 7 | Militia to aircraft list | **The `.BM` pattern coverage** (`PatternLibrary.PatternsFor` inverted), not `vehicle.json` defs. Settled by `LAYOUT.CSV`: `IA_D_PLANEE0` is an eleven-row dropdown and only pattern coverage reaches eleven. |
 | 8 | Splitscreen | **Humans join team 1 in addition to the wingmen**, so `num_wingmen` keeps meaning exactly what the data says. The sequencer's "500 m from the player" becomes "500 m from the nearest human", named as the extension it is. |
@@ -60,7 +60,7 @@ plus the words "marked INVENTED" if the decode comes back empty.
 | 13 | First playable slice | **Dogfighting an ace**, before any wave machinery exists. It is the smallest complete mission and it gives the later waves something working to land against. |
 | 14 | Player death | **One life by default; a downed pilot spectates.** The mission runs while any human is alive and the wrap-up shows the loss when the last one goes down. |
 | 15 | Lives | **A `lives` field on the def, INVENTED** (nothing in `ia.json` carries one). Default 1, which is the faithful one-life run. `N` gives N-1 respawns on the existing 3 s `VersusRespawnDelay` path. `0` is unlimited. Per pilot, not shared. |
-| 16 | Skill names to AI rating | **Decode it in A3.** `ace_stats` pins the ace at 9; novice and veteran appear in no shipped file. Fallback: 3 / 6 / 9, marked INVENTED. |
+| 16 | Skill names to AI rating | **Decoded (A3, 2026-08-14): there is no such mapping.** `novice`/`veteran`/`ace` parse to 0/1/2 and act only as the difficulty tier for that one spawn, which scales armour and health by 0.875/1.0/1.25. A wave pilot's nine stats are rolled from a five-row table; the ace's come from `ace_stats`. The 3/6/9 fallback is not taken and must not be reintroduced. |
 | 17 | Top-level menu | **Free Flight / Instant Action / Dogfight.** Stunt Flying stops being top-level and becomes a mission type inside Instant Action, offered only where the environment has `dzones`. `--stunt` survives as a CLI flag. |
 | 18 | Where `lives` appears in the wizard | **Step 2, beside the mission choice**, so the step count stays at five and step 4 remains the wingmen step. |
 
@@ -73,12 +73,14 @@ plus the words "marked INVENTED" if the decode comes back empty.
 | 3 | "The original has formation or wingman AI to copy." | M4 B7, closed disproven 2026-08-13 (`analysis/m4-b7-group-slot/FINDINGS.md`): `group` is a mission-logic cohort id, nothing in steering, targeting or the mode machine reads it, and the nine-mode dispatch has no formation or wingman mode. Escort-looking behaviour rides `player`-trailer nets, which are authored per story mission. |
 | 4 | "Instant Action offers one environment per chapter, so eight." | The `langui` string block at 3650 holds seven. C2B is the omitted one, and independently it is the only chapter whose `ia.json` omits `player_plane` and `num_wingmen`. |
 | 5 | "CSVM already has a team model to hang this on." | `AimAssist.TeamOfPilot` is a documented stand-in: pilot index plus one, which makes every pane hostile to every other and every AI hostile to every other AI. `AimAssist.cs:310-317` says so in its own comment. |
+| 6 | "`enemy_skill` sets a wave's AI skill." | A3, 2026-08-14. The string `enemy_skill` does not exist in `crimson.exe` and the wave parser `FUN_00458e00` reads four keys, none of them that one. It is authored in all 8 chapters and read by nothing; a wave's nine pilot stats are rolled from a five-row table instead. |
+| 7 | "The mission-type ids follow the UI dropdown order." | A3, 2026-08-14. `FUN_00458c20` gives 0 ace, 1 squadron, **2 zeppelin run**, 3 ground target, **4 stunt flying**; the dropdown shows ace, squadron, stunt, zeppelin. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | A1, B6, E11 | The option sets, the `ia.json` key census and the wave sequencer's spawn law are read out of the shipped data and out of `FUN_0045b9d0`. Confirm the trace, then implement. |
+| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, A3, B6, D9, E11 | The option sets, the `ia.json` key census, the damage path, the whole setup path and the wave sequencer's spawn law are read out of the shipped data and out of `crimson.exe`. Confirm the trace, then implement. |
 | **Direction sound, magnitude a judgement call** | E10, G13, G14, H15, H16 | The behaviour is settled; the numbers and the presentation are not. Anything numeric here is TUNE, not fact. |
-| **Leads only, no mechanism yet** | A3, A4, A5, B7, C8, D9, F12 | These rest on decodes that have not happened. A3 to A5 exist to convert the rest of this row into the row above; budget for at least one of them ending in a disproof. A2 already did, against the "block it" fallback. |
+| **Leads only, no mechanism yet** | A4, A5, B7, C8, F12 | These rest on decodes that have not happened. A4 and A5 exist to convert the rest of this row into the row above; budget for at least one of them ending in a disproof. A2 and A3 both already did, against the "block it" and "3 / 6 / 9" fallbacks. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees, and other sessions may
 push or pop it concurrently. Never use a bare `git stash` in a worktree session here; use a local WIP
@@ -258,7 +260,7 @@ is M4's formation disproof, `B7` is the team model below.
 
 1. ☑ A1 The Instant Action format page: the whole configurable surface, written down
 2. ☑ A2 Does the original refuse friendly damage, or only friendly targeting?
-3. ☐ A3 The Instant Action setup path: what a wingman is given, and what `enemy_skill` becomes
+3. ☑ A3 The Instant Action setup path: what a wingman is given, and what `enemy_skill` becomes
 4. ☐ A4 Re-read `FUN_0045b9d0`: the zeppelin branch, the mission-type ids, the spawn-point source
 5. ☐ A5 The wrap-up screen's four counters: what each one actually counts
 
@@ -298,7 +300,7 @@ is M4's formation disproof, `B7` is the team model below.
 
 A1 is documentation and can run beside everything. A2, A3, A4 and A5 are four independent Ghidra
 reads and can run in parallel with each other; each one gates exactly one later item (A2 gated B7's
-damage gate and is answered, A3 gates D9 and E11's skill mapping, A4 gates F12, A5 gates G14), so a
+damage gate, A3 gated D9 and E11's skill mapping, both answered; A4 gates F12, A5 gates G14), so a
 later item may start on its fallback and flip a single value when its decode lands. A5 is the
 loosest of the four:
 it gates only the wrap-up board's arithmetic, so it may land last without holding anything up.
@@ -389,7 +391,23 @@ rejects a pair when **either** side is 0, so a neutral aircraft is not a wildcar
 tested as one. (b) If the decode comes back empty, the fallback is "block it", and the code comment
 and the plan item must both say INVENTED. Do not let a fallback quietly become a finding.
 
-## A3 ☐ The Instant Action setup path: what a wingman is given, and what `enemy_skill` becomes
+## A3 ☑ The Instant Action setup path: what a wingman is given, and what `enemy_skill` becomes
+
+**Answered 2026-08-14, both halves, with no fallback taken.** A wingman is a synthetic `aiv` roster
+block handed to the ordinary roster spawn `FUN_0047c210`: team 1, group 0, no net, activation
+volumes opened to ±10000 m, the `fortune` pattern in the player's own colours, an unset skill
+vector, and a `primary_target` chain in which wingmen 0, 1 and 3 escort the player while 2 and 4
+escort 1 and 3. `enemy_skill` becomes **nothing**: no such string exists in the executable and the
+wave parser never reads it. The skill *names* parse to 0/1/2 elsewhere and act only as the global
+difficulty for the duration of one spawn, which is a **hit-point** multiplier (0.875/1.0/1.25), not
+a pilot rating; a wave pilot's nine stats are rolled from a five-row table instead. The decode is
+[`formats/instant-action.md`](formats/instant-action.md)'s "setup path" section.
+
+**Also settled, for other items.** Mission-type internal ids are `dogfight_ace` 0,
+`dogfight_squadron` 1, `zeppelin_run` 2, `ground_target` 3, `stunt_flying` 4, which answers one of
+A4's three questions outright: "mission type 2" is the zeppelin run. `num_wingmen` and all four wave
+counts are **forced to 0 when `mission_type` is 0**, so the ace duel is solo in the data. Waves 2 to
+4 are built deactivated at the origin, which is E10's inert state arriving from the original.
 
 **Goal.** Two answers. First, what a wingman aircraft is created with in Instant Action: its team,
 its net if any, its `primary_target`, and which mode the machine starts in. Second, what the
@@ -426,10 +444,19 @@ rating-to-stat mapping read as "higher is better" everywhere will be wrong in tw
 
 ## A4 ☐ Re-read `FUN_0045b9d0`: the zeppelin branch, the mission-type ids, the spawn-point source
 
-**Goal.** Three answers out of one function. Whether the `mission-type-2` branch replaces the
-teleport for that mode or runs alongside it. Which mission type internal id 2 actually is, given that
-the UI's dropdown order and the branch's behaviour disagree. And which list the "at least 500 m from
-the player" spawn point is drawn from, most likely the scenario's own `spawn_points` entries.
+**Goal.** Two answers left out of one function. Whether the `mission-type-2` branch replaces the
+teleport for that mode or runs alongside it. And which list the "at least 500 m from the player"
+spawn point is drawn from, most likely the scenario's own `spawn_points` entries.
+
+**Already answered by A3:** internal id 2 is `zeppelin_run` (0 ace, 1 squadron, 2 zeppelin,
+3 ground target, 4 stunt), so the branch's behaviour and its id agree and the UI dropdown order is
+simply not the internal order. A3 also found that waves 2 to 4 are built **deactivated at the world
+origin** and that wave 1 spawns at a scenario spawn point drawn as `rand() % (count − 1)` with the
+last index substituted on a collision with the player's, which is most of the third question.
+It also narrows the first: ⚠ **on `zeppelin_run` even wave 1 is built deactivated at the origin**,
+and the wave block runs there even with no spawn points at all, so on that one mode nothing is
+airborne at mission start and every enemy waits on a release. Whether that release is the teleport,
+the generator branch, or both is exactly what is left to read.
 
 **Evidence (confidence: traced for the main path, lead-only for the branch).** The main path is
 already written down verbatim in `analysis/m4-b7-group-slot/FINDINGS.md`: current-group counter
@@ -641,19 +668,22 @@ must not undo that.
 **Goal.** `num_wingmen` friendly aircraft fly with the player, in the configured wingman aircraft, on
 team 1, doing whatever A3 says the original gives them.
 
-**Evidence (confidence: lead-only).** `num_wingmen` is 3 in all seven chapters that carry it, the
-range is 0 to 5 from `LAYOUT.CSV`, and the wingman aircraft dropdown is hidden entirely when the
-count is 0 (`INSTANTACTION.SCRIPT`, `if (0 == TU.QG) mail(10000, UU)`). What they *do* comes from
-A3. The fallback, if A3 is empty, is the shipped M4 D11 mode machine on team 1: it starts on patrol,
-activates into pursue inside the airframe's own attack radius, and reacts to hits with the decoded
-steady-hand roll. That fallback is consistent with M4 B7's disproof but is not evidence of what the
-original does, and would be marked INVENTED.
+**Evidence (confidence: traced).** `num_wingmen` is 3 in all seven chapters that carry it, the
+range is 0 to 5 from `LAYOUT.CSV` (the parser clamps to 5 as well), and the wingman aircraft dropdown
+is hidden entirely when the count is 0 (`INSTANTACTION.SCRIPT`, `if (0 == TU.QG) mail(10000, UU)`).
+A3 decoded the rest and the INVENTED fallback is dropped: build each wingman as a roster block on
+**team 1, group 0, no net, activation volumes ±10000 m, skill vector unset**, wearing `fortune` with
+the six livery values the setup screen supplies, and give it the decoded `primary_target` chain (0, 1 and 3 on
+the player; 2 and 4 on wingmen 1 and 3). Placement is `100 · ((i >> 1) + 1)` metres at `±45°` off
+the player's spawn heading, sign `+` when `i & 3` is 1 or 2. Accent ids run 12, 14, 15, 13, 16.
+Full detail in [`formats/instant-action.md`](formats/instant-action.md).
 
 **Approach.** Extend `Session/InstantActionRuntime`'s actor set. Spawn through the same
-`SpawnAiAircraft` seam as the ace, on team 1, with the Fortune Hunter livery unless A3 says otherwise
-(the player's own militia is Fortune Hunter and `player_fortune` is the only pattern covering all
-eleven aircraft). `IDS_IA_FRIENDLYPLANENAME` is the original's naming format for a friendly; use it
-if the HUD names them.
+`SpawnAiAircraft` seam as the ace, on team 1, with the `fortune` pattern (A3 confirmed it; the
+player's own militia is Fortune Hunter and `player_fortune` is the only pattern covering all eleven
+aircraft). `IDS_IA_FRIENDLYPLANENAME` is the original's naming format for a friendly; use it if the
+HUD names them. ⚠ **`num_wingmen` is forced to 0 for `dogfight_ace`** by the original's own parser,
+so C8's duel must stay solo however the def is authored.
 
 **Model recommendation.** Medium. Mechanically it is the ace item repeated N times; the judgement was
 spent in A3.
@@ -687,7 +717,9 @@ whatever asks "is this wave clear".
 **Evidence (confidence: direction-sound).** The original spawns wave members deactivated and
 reactivates them through `FUN_004b0f40(0)`, the inverse of the flag the spawn applied
 (`analysis/m4-b7-group-slot/FINDINGS.md`), so the state exists in the original and the observable
-behaviour is settled. What is a judgement call is which of CSVM's per-aircraft systems must be told,
+behaviour is settled. A3 adds where they sit while inert: **waves 2 to 4 are built at the world
+origin** (0, 0, 0) with the deactivated byte set. Read that as incidental, not as the mechanism, and
+see trap (c) below. What is a judgement call is which of CSVM's per-aircraft systems must be told,
 since CSVM's aircraft is assembled from more parts than the original's record.
 
 **Approach.** A single flag on `FlightController` that the session's step loop honours, plus explicit
@@ -723,8 +755,11 @@ that militia's aircraft at their configured skill.
 `analysis/m4-b7-group-slot/FINDINGS.md`: the counter, the wave-clear trigger, the `250000`
 squared-distance test, the fan, and the reactivation call. The 500 m is measured from "the player"
 in a single-player game; extending it to "the nearest human" is the splitscreen extension of
-decision 8 and is named as such. The militia-to-aircraft list is the pattern-coverage table above,
-and the skill mapping comes from A3.
+decision 8 and is named as such. The militia-to-aircraft list is the pattern-coverage table above.
+A3 settled the rest of a wave member: **team 2, group N, `primary_target player`**, the plain
+`<plane>` def, its militia's livery, and nine pilot stats rolled per aircraft from a five-row table
+rather than derived from a skill. The wave's skill is a **hit-point** tier (0.875/1.0/1.25) applied
+around the spawn, and an `accentID` of exactly 12 is re-rolled as `12 + rand() % 5`.
 
 **Approach.** An engine-free `Session/InstantActionWaves.cs` holding the selection and trigger logic,
 in the shape of `Session/GeneratorCycle.cs`, `Flight/VersusMatch.cs` and `Flight/ZeppelinDamage.cs`:

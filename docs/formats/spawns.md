@@ -41,7 +41,7 @@ livery. Key census over all 8 chapters (only `player_plane`/`num_wingmen`, absen
 | `disallow_missions` | scenario names | scenarios this map cannot host (C1C bars `stunt_flying`, consistent with its having no `dzones`) |
 | `player_plane` | display name (`"Bloodhawk"`) | the player's aircraft — the UI name, not a `vehicle.json` def |
 | `num_wingmen` | `3` in all 7 | friendly flight size |
-| `group1`…`group4` | nested dict | one enemy wave each: `num_enemies`, `enemy_name` (a `MSG_*` key), `enemy_plane` (display name), `enemy_skill` (`novice`/`veteran`/`ace`) |
+| `group1`…`group4` | nested dict | one enemy wave each: `num_enemies` (clamped to 6), `enemy_name` (a `MSG_*` key), `enemy_plane` (display name), `enemy_skill` (`novice`/`veteran`/`ace`). ⚠ **`enemy_skill` is read by nothing**, see [instant-action.md](instant-action.md) |
 | `zeppelin_type` | `"cargo"` in all 8 | which of the three zeppelin slots the scenario uses |
 | `cargo_zeppelin` / `passenger_zeppelin` / `military_zeppelin` | node name | the world node each type resolves to (`multiplayer1zep` throughout this install) |
 | `ace_name` | `MSG_*` key | the named ace's display name (`MSG_PALBLAKE_NAME`) |
@@ -64,7 +64,14 @@ stun_recovery, talker, constitution` — with `accentID` broken out separately, 
 `ia.json` breaks out `ace_accentID` after `ace_stats`. The original design describes the same
 nine as its NPC pilot-skill modifiers, with higher = better; `9` is a maxed-out ace.
 **Read as inferred, not decoded** — a chapter with a non-uniform `ace_stats` would settle it,
-and this install has none.
+and this install has none. Non-uniform sets do exist inside `crimson.exe` (the record's own
+`ace_stats` default and the five-row table Instant Action rolls wave pilots from, both on
+[instant-action.md](instant-action.md)), but they are as unlabelled as the data is, so they
+corroborate the count and the scale and leave the order where it was.
+
+**What the whole `ia.json` is turned into** is the "setup path" section of
+[instant-action.md](instant-action.md): the setup record, the mission-type ids, the synthetic roster
+block every actor is spawned from, and which of these keys the engine never reads.
 
 ## Story missions — `objectives.json` `PLAYER_INIT`
 

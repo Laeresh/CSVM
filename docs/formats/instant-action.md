@@ -142,6 +142,178 @@ complete `ace_pattern`/`ace_colorN`/`ace_decalN` livery — authored in all 8 of
 2026-08-14. The full field table, the `PaintScheme` mapping and the `ace_stats` order inference are
 already on [spawns.md](spawns.md); this page does not repeat them.
 
+## The setup path: what the engine builds from all this
+
+Decoded 2026-08-14 out of `crimson.exe`. The file half is loaded by `FUN_0045a150` (opens `ia.zrd`,
+fills the per-mission-type spawn table, then calls the key parser `FUN_00459390` on the setup
+record) and the mission is built by `FUN_0045a390`. The setup record is the global at
+**`0x00718cd8`**; the per-mission-type table is `0x00718fe0`, five entries of 20 bytes, holding an
+availability flag `disallow_missions` clears and that scenario's spawn-point vector.
+
+### Mission types have internal ids, and they are not the dropdown order
+
+`FUN_00458c20` maps the scenario name to an id, and every consumer indexes by it:
+
+| id | name |
+|---|---|
+| 0 | `dogfight_ace` |
+| 1 | `dogfight_squadron` |
+| 2 | `zeppelin_run` |
+| 3 | `ground_target` |
+| 4 | `stunt_flying` |
+| 5 | *(unrecognised; the parser then leaves the field alone)* |
+
+⚠ **The UI dropdown order is ace, squadron, stunt, zeppelin; the internal order is not that.**
+`zeppelin_run` is id **2** and `stunt_flying` is id **4**. Anything in the executable that switches
+on "mission type 2" is the zeppelin run, including `FUN_0045b9d0`'s generator-capacity branch.
+
+### The built-in defaults
+
+`FUN_00458ff0` resets the record before the file is read, so every key the file omits still has a
+value. Worth knowing because four of the parsed keys are authored by no chapter (below).
+
+| Field | Default |
+|---|---|
+| `mission_type` | 0 (`dogfight_ace`) |
+| `player_plane` / `wingman_plane` / `ace_plane` | 5 (**Devastator**) |
+| `num_wingmen` | 0 |
+| `ace_name` | `Marshall Bill Redmann` |
+| `ace_stats` | `[5, 6, 6, 8, 9, 6, 7, 6, 9]`, non-uniform |
+| `ace_skill` | 1 (`veteran`) |
+| `ace_accentID` | -1; decals -2; colours -1 |
+| `ground_target_name` / `ground_target_node` | `Cargo Train` / `trcargo01` |
+| the three `*_zeppelin` node names | `vostokzep` |
+| per wave (`FUN_00458d00`) | `num_enemies` 0, `enemy_name` `Blake Firebrand`, `enemy_plane` 6 (**Firebrand**), skill 1, decals -2, colours -1 |
+
+The aircraft index is the `IDS_IA_PLANES` order (0 Autogyro, 1 Hellhound, 2 Balmoral, 3 Bloodhawk,
+4 Brigand, 5 Devastator, 6 Firebrand, 7 Fury, 8 Kestrel, 9 Peacemaker, 10 Warhawk), confirmed by
+`FUN_00426d80`'s name table and corroborated by the wave default pairing `Blake Firebrand` with
+index 6. A name that matches nothing resolves to `0xb` and the parser substitutes **5**.
+
+Each aircraft row carries seven names; the two this path uses are `w<plane>` (`FUN_00426d60`, the
+wingman def) and `<plane>` (`FUN_00426d20`, the plain AI def), beside the display name the file
+spells and the `player_<plane>` def.
+
+### Every actor is a synthetic `aiv` roster block
+
+`FUN_0045a390` builds a roster-block record on the stack, fills it, and hands it to
+**`FUN_0047c210`**, the same roster spawn story missions use ([ai-rosters.md](ai-rosters.md)). So
+an Instant Action aircraft is an ordinary roster vehicle; the only difference is that its block is
+computed rather than read from `aiv.zrd`. `FUN_00437360` is the block constructor and its defaults
+stand wherever this path writes nothing (`-1` unset, decals `-2`, `enabled` 1, team 0, group 0).
+The offsets confirm M4 B7's decode from the other direction: team at `+0x34`, group at `+0x38`,
+`primary_target` at `+0x44`.
+
+`FUN_0045a240` then overwrites all three activation volumes with radius **10000 m** and an altitude
+band of **±10000 m** for every Instant Action actor, which is the engine's own way of saying they
+are always awake, always willing to engage, and never return.
+
+### The player and the wingmen
+
+The player is placed at a **uniformly random** entry of the scenario's own `spawn_points` list.
+`num_wingmen` is clamped to 5 by the parser, and ⚠ **forced to 0 when `mission_type` is 0**, along
+with all four wave counts: dogfighting an ace is a solo duel, in the data as well as in the UI.
+
+Wingman `i` (0-based) is built as:
+
+| i | def | roster name | `accentID` | `primary_target` |
+|---|---|---|---|---|
+| 0 | `w<plane>` | `w<plane>_ia0` | 12 | `player` |
+| 1 | `<plane>` | `<plane>_ia1` | 14 | `player` |
+| 2 | `w<plane>` | `w<plane>_ia2` | 15 | `<plane>_ia1` |
+| 3 | `<plane>` | `<plane>_ia3` | 13 | `player` |
+| 4 | `w<plane>` | `w<plane>_ia4` | 16 | `<plane>_ia3` |
+
+`<plane>` is `wingman_plane`'s index through the two name columns above; the roster name format is
+`%s_ia%d` over the def and the index. **So the flight is not five aircraft on the player: 0, 1 and
+3 escort the player, while 2 and 4 escort 1 and 3.** That is `primary_target` doing the work M4 B7
+said it does, and it is the shipped Instant Action wingman mechanism. No patrol net is assigned
+(`netids` keeps its `-1`), and **the nine-value skill vector is left unset**, so wingmen fly on the
+airframe's own AI defaults.
+
+Every wingman is **team 1, group 0, not deactivated**, and is placed `100 · ((i >> 1) + 1)` metres
+from the player's spawn at `±45°` off its heading, the sign being `+` when `i & 3` is 1 or 2 and
+`−` otherwise, at the player's altitude. The same 100 m / 45° fan the wave sequencer uses.
+
+Its livery is the **`fortune`** pattern with three decals from record dwords 6 to 8 and three RGB
+triples unpacked from packed dwords 9 to 11. The `ia.zrd` parser never writes those six, so they
+come from elsewhere in the UI; that they are the player's own livery is an inference from their
+position and from `fortune` being the player's own militia pattern, not something this path states.
+
+### The ace and the waves
+
+The ace is spawned only for `mission_type` 0, on **team 2, group 1**, at a random spawn point drawn
+as `rand() % (count − 1)` with the last index substituted if it collides with the player's, wearing
+its authored `ace_pattern`/`ace_colorN`/`ace_decalN` and carrying `ace_stats` in the nine-value
+skill vector and `ace_accentID` as its voice.
+
+Wave `N` (1-based) puts `num_enemies` aircraft on **team 2, group N**, in the plain `<plane>` def,
+with `primary_target` `player`. Wave 1 spawns live at a spawn point picked the same way and sets the
+current-group counter `DAT_00718cd0` to 1; waves 2 to 4 are built **deactivated at the world
+origin**, which is the inert state `FUN_0045b9d0` later teleports and reactivates.
+
+⚠ **On `zeppelin_run` (id 2) even wave 1 is built deactivated at the origin**, and the wave block
+runs whether or not the scenario has spawn points, whereas every other mission type needs a
+non-empty list to build waves at all. So on that mode no enemy is airborne at mission start and
+every one of them waits on something else to release it. Which release that is (the sequencer's
+teleport, the generator branch, or both) is `FUN_0045b9d0`'s question, still open.
+
+Each wave member takes its wave's militia livery (pattern, three decals,
+nine colour components, set by the setup screen rather than by the file) and the wave's
+`enemy_accentID`, ⚠ except that an `accentID` of exactly **12** is re-rolled as `12 + rand() % 5`,
+the wingman accent range.
+
+⚠ **A wave enemy's nine pilot stats are drawn at random from a table of five, not from its skill.**
+`FUN_0045a280(row, k)` reads `0x00607a3c + row·36 + k·4`, and the caller picks `row = rand() % 5`
+per aircraft. The five rows, on the same 1-to-9 scale as `ace_stats`:
+
+| row | values |
+|---|---|
+| 0 | 5, 7, 5, 3, 2, 1, 4, 4, 4 |
+| 1 | 4, 3, 4, 5, 7, 5, 3, 5, 5 |
+| 2 | 3, 4, 3, 7, 3, 6, 4, 5, 4 |
+| 3 | 7, 5, 6, 3, 3, 2, 4, 4, 4 |
+| 4 | 4, 4, 4, 4, 4, 4, 4, 4, 4 |
+
+They land in the same nine record fields `ace_stats` does (`+0x7c`, `+0x80`, `+0x84`, `+0x88`,
+`+0x8c`, `+0x90`, `+0x94`, `+0x9c`, `+0xa0` on the roster block; the float at `+0x98` sits inside
+that run and is not one of them). Four hand-authored pilot personalities plus one flat average,
+rolled per aircraft.
+
+### What `novice` / `veteran` / `ace` becomes
+
+Not a pilot stat. The string parses to **0 / 1 / 2** (`_stricmp` in `FUN_00459390`; the wave skill
+lives in the wave's own record at dword 23 and is set by the setup screen), and the only thing
+either the ace's or a wave's skill does is **stand in as the global difficulty setting for the
+duration of that one spawn**:
+
+```
+saved = difficulty()          # FUN_00440710
+difficulty(skill)             # 0 -> 0, 2 -> 2, anything else -> 1
+FUN_0047c210(block)           # the spawn reads it back
+difficulty(saved)
+```
+
+`FUN_0047c210` is where that lands: a vehicle whose team differs from the player's has its armour
+and health maxima multiplied by **0.875 / 1.0 / 1.25** on difficulty 0 / 1 / 2
+([`org/vehicleDamage.md`](../org/vehicleDamage.md)). So the skill names are a **hit-point** scale in
+Instant Action, and nothing else. Nothing on this path converts them to a 1-to-9 rating.
+
+### Keys parsed but never authored, and authored but never parsed
+
+⚠ **`enemy_skill` is authored in all 8 chapters and read by nothing.** `FUN_00458e00`, the wave
+parser, reads exactly `num_enemies`, `enemy_name`, `enemy_plane` and `enemy_accentID`; no
+`enemy_skill` string exists anywhere in the executable. A file-launched wave therefore takes the
+built-in skill default of 1 (`veteran`) whatever the file says. Same class of finding as
+[turrets.md](turrets.md)'s unread `HEALTH`.
+
+The reverse also holds. `wingman_plane`, `enemy_accentID`, `ground_target_name` and
+`ground_target_node` are parsed but authored by no chapter. In retail that mostly does not show,
+because the setup screen writes into the same record before the mission is built (`ia_d_planew` is
+the wingman aircraft, `ia_d_egroupN` the wave's militia livery, `ia_d_difficultyN` the wave skill).
+It shows on any path that skips the screen: then the wingmen fly the **Devastator**, every wave
+enemy has `accentID` -1 and skill `veteran`, and the wave livery is whatever the record last held.
+
 ## The wrap-up screen
 
 `IA_WRAPUP.SCRIPT` and `LAYOUT.CSV` wire the post-mission board. The `langui` table carries **six**

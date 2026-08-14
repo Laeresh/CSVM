@@ -347,6 +347,13 @@ and leave gaps when retiring old ones.
   stack byte at `0x004b9d5e`, and its only read passes it to `FUN_0042e840` as an argument that
   function never touches, so the one place the damage path asks about teams decides nothing and the
   original applies friendly damage (`PLAN-instant-action` A2, `org/vehicleDamage.md`).
+- **SRC-7** — **A key the data authors is not a feature until you find the parser that reads it;
+  grep the executable for the key string before modelling it.** The dual of SRC-6, and the cheapest
+  check in this project: the key name is a literal in the binary or it is not. Measured: `ia.json`
+  authors `enemy_skill` in all 8 chapters and no such string exists in `crimson.exe`. The wave
+  parser reads four keys and that is not one of them, so every file-launched wave takes the
+  built-in default instead. Second instance of the same shape as `formats/turrets.md`'s unread
+  `HEALTH` (`PLAN-instant-action` A3).
 
 ## What this project cannot verify itself
 
