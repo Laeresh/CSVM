@@ -127,6 +127,10 @@ public partial class Launcher : Node3D
     // The previous frame's QPC stamp, so the monitor is fed a raw wall cost rather than Godot's
     // post-processed `delta`. 0 on the first frame, which reports 0 ms and trips nothing.
     private long _lastFrameStamp;
+    // B6's write path for the monitor above: queues a tripped record and drains it a few seconds
+    // later, never inline on the hitching frame. Built after Log.Open (its path derives from
+    // Log.SinkPath), so it lives a step later in _Ready than _hitchMonitor does.
+    private HitchSidecar _hitchSidecar = null!;
 
     // Base (chapter-independent) paths + parse state, set once in _Ready; each session node
     // receives them via LauncherContext and recomputes the chapter-dependent gamez/texture/mission
@@ -350,6 +354,13 @@ public partial class Launcher : Node3D
         {
             Log.Warn("core", $"deprecated flag={old} use={replacement}");
         }
+        // PLAN-perf-hitches B6: ahead of --dump-config, same reason as _hitchMonitor above — this
+        // constructor is what registers the two hitchSidecar.* keys. Log.SinkPath is set by the
+        // Open() call just above; the synthetic fallback only matters on the rare run where that
+        // open itself failed (Log.Open already degrades gracefully rather than crashing the launch).
+        string hitchLogPath = Log.SinkPath
+            ?? Path.Combine(_repoRoot, ".scratch", "logs", $"{_spec.ModeName}-nolog.hitches.jsonl");
+        _hitchSidecar = new HitchSidecar(hitchLogPath, _hitchMonitor.Last.Ring.Length);
 
         // --headless + --screenshot can never produce a frame: the dummy renderer's GetImage()
         // comes back null forever, so the capture loop never counts down and the process never
@@ -567,6 +578,14 @@ public partial class Launcher : Node3D
         }
     }
 
+    // PLAN-perf-hitches B6: the root node's own teardown, reached on an ordinary quit
+    // (GetTree().Quit() or the window's close button) — never on a kill/crash, which is what the
+    // sidecar's flush-interval loss bound (HitchSidecar's own doc) covers instead.
+    public override void _ExitTree()
+    {
+        _hitchSidecar.Flush();
+    }
+
     public override void _UnhandledInput(InputEvent @event)
     {
         if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape })
@@ -650,7 +669,13 @@ public partial class Launcher : Node3D
             ? 0
             : (stamp - _lastFrameStamp) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
         _lastFrameStamp = stamp;
-        _hitchMonitor.Tick(frameMs, counters);
+        // B6: a trip queues its record (a cheap, preallocated copy) rather than writing anything
+        // here — the sidecar's own Tick below drains the queue a few quiet frames later.
+        if (_hitchMonitor.Tick(frameMs, counters))
+        {
+            _hitchSidecar.Enqueue(_hitchMonitor.Last);
+        }
+        _hitchSidecar.Tick(frameMs);
         if (_spec.Perf)
             ReportPerf(delta, counters);
 
@@ -689,7 +714,10 @@ public partial class Launcher : Node3D
         bool built = _session.StartSession();
         // A build stalls the frame loop for as long as it takes, and the frames either side of it
         // are not each other's neighbours, so the hitch monitor starts its grace window and drops
-        // its baseline here rather than reporting the build as the session's first hitch.
+        // its baseline here rather than reporting the build as the session's first hitch. Flush
+        // first: whatever B6 still had queued from before the build is one B4 does not want held
+        // through it.
+        _hitchSidecar.Flush();
         _hitchMonitor.Rearm();
         return built;
     }
@@ -797,6 +825,7 @@ public partial class Launcher : Node3D
             _session = null;
         }
         // Same reason as the build in LaunchSession: a teardown legitimately stalls the loop.
+        _hitchSidecar.Flush();
         _hitchMonitor.Rearm();
         ShowLaunchMenu();
     }

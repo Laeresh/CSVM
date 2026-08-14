@@ -350,7 +350,7 @@ trip on the dev machine: vsync's own refresh there is 120 Hz, not 60 (~8.33 ms/f
 (disproven-claim 5, PERF-12). Pick `@frame` for the machine you are actually running on — 300 was
 verified clear on the dev box, with margin, at both vsync settings.
 
-## B6 ☐ The sidecar: `perf` summary line plus `.scratch/logs/<mode>-<stamp>.hitches.jsonl`
+## B6 ☑ The sidecar: `perf` summary line plus `.scratch/logs/<mode>-<stamp>.hitches.jsonl`
 
 **Goal.** A tripped frame leaves one human-readable line in the `perf` log category and one complete
 JSON record in a sidecar sharing the log's `<mode>-<stamp>` stem.
@@ -368,15 +368,30 @@ string for the same culture reason documented at `Launcher.cs:824`.
 
 **Model recommendation.** medium.
 
-**Verify.** `--hitch-inject=50@120` writes exactly one sidecar record whose ring buffer holds the
-preceding frames and whose counters match the log line. A clean run writes **no** hitch lines and
-either no sidecar or an empty one. Confirm the sidecar is swept by `CleanScratch.ps1`.
+**Verify.** `--hitch-inject=50@300` (B5's actual default frame — `@120` sits inside the grace window
+on this machine, disproven-claim 5) wrote exactly one sidecar record: `HitchSidecar.cs` opened
+`.scratch/logs/fly-<stamp>.hitches.jsonl` alongside `Log`'s own `.log`, and a single JSON line
+appeared there with a 120-entry ring ending in the hitching frame itself, every field matching the
+`[perf] hitch frame=300 …` line byte for byte after unit conversion (`mem_bytes` 119464361 ↔
+`mem_mb` 113.93, `allocated_bytes_delta` 16400 ↔ `alloc_delta_mb` 0.02). A clean `--frames=180` run
+(no `--hitch-inject=`) wrote no `[perf] hitch` line and left the sidecar at 3 bytes — the UTF-8 BOM
+alone, since the file opens unconditionally at session start. `CleanScratch.ps1 -WhatIf` listed both
+generated `.hitches.jsonl` files for deletion alongside their `.log`s, no new rule needed. New tests:
+`CSVM.Tests/HitchSidecarTests.cs` (queue-copy-not-reference, the flush-interval gate, drop-oldest
+overflow, JSON culture-invariance) — `.\RunTests.ps1` green throughout (build, 1198 units, 53 engine
+suites, 14 goldens unchanged).
 
 **⚠ Traps.** Do not use PowerShell to read or write the sidecar: PowerShell 5.1 corrupts UTF-8
-silently, and `.scratch/` is git-ignored so the pre-commit encoding tripwire cannot see it. Write it
-from C# with an explicit UTF-8 encoding. A flush on teardown must survive a crash-exit path, or the
-one run that crashed is the one with no record. <TODO: decide whether an abnormal exit is expected to
-retain records, and if so how.>
+silently, and `.scratch/` is git-ignored so the pre-commit encoding tripwire cannot see it. Written
+from C# with `Log.cs`'s own recipe: UTF-8 WITH a BOM (not just "explicit UTF-8" — a BOM-less file is
+what PowerShell 5.1 misreads) and `AutoFlush`, opened once for the process's whole life rather than
+per-flush. **The TODO on crash-exit survival is resolved, not deferred**: a record survives a crash
+from the moment it is FLUSHED (`AutoFlush` puts it on disk immediately), not from the moment it
+TRIPPED, so `hitchSidecar.flushSeconds` (default 3 s) is the loss bound on a `Stop-Process -Force`/
+crash — at most the queued-but-unflushed tail. `Launcher.LaunchSession`/`ReturnToMenu`/`_ExitTree`
+all flush before `HitchMonitor.Rearm`, so only an actual kill/crash can lose anything, never an
+ordinary quit or relaunch. A signal handler racing the crash it is meant to survive was considered
+and rejected as more mechanism than the bound it would buy.
 
 ## B7 ☐ In-engine suite: a record fires, and carries its ring buffer, breadcrumbs and sidecar
 

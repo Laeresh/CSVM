@@ -183,6 +183,8 @@ determinism repo-wide — read `docs/verification.md` first.
 - `src/Utils/Log.cs` — the diagnostic log: 9 categories × 4 levels, `--log=` console filter, always-on full-detail `.scratch/logs/` file sink.
 - `src/Utils/ShaderTime.cs` — the `csky_time` global uniform: the clock's GPU twin, replacing `TIME` in every generated shader; wraps at 3600 s.
 - `src/Utils/StartupProfile.cs` — the always-on `[perf] startup …` line: every session build split by phase, `total = boot + Σphases + rest + first_frame`.
+- `src/Utils/HitchMonitor.cs` — the always-on frame-hitch detector: `frame_ms > max(medianMultiple × rolling_median, floorMs)`, a `HitchRecord` per trip.
+- `src/Utils/HitchSidecar.cs` — the hitch detector's write path: queues a tripped record and drains it a few seconds later to one `[perf] hitch …` line plus one JSON line in `.scratch/logs/<mode>-<stamp>.hitches.jsonl`.
 - `src/Utils/Rng.cs` — the session's one master seed and the ten named subsystem generators every random draw derives from.
 - `src/Utils/ScriptedWindow.cs` — Win32-only window hiding for scripted runs; `ScriptedWindow.Hide()` uses `ShowWindow(SW_HIDE)` on the native window.
 
@@ -4287,6 +4289,23 @@ ordinal in this monitor's own frame space rather than the sim frame.
   (`OS.delta_smoothing`) and measures as a quantised constant here, 8.333 ms on every frame of a
   `--no-vsync --det` empty-stage run while the real cost varied 8.25–8.42 ms.
 
+## src/Utils/HitchSidecar.cs
+`HitchMonitor`'s write path (PLAN-perf-hitches B6): a tripped `HitchRecord` is copied — never
+referenced, since `Last` is overwritten on the next trip — into a small preallocated queue, then
+drained a few seconds later to one `[perf] hitch …` line (`ReportPerf`'s own flat key=value grammar,
+ms terms as-is, byte counts as MB) plus one JSON line in `.scratch/logs/<mode>-<stamp>.hitches.jsonl`,
+sharing the main log's stem. All-numeric record, so the JSON is hand-written (no library) via
+`string.Create(CultureInfo.InvariantCulture, …)`, never plain `$"..."` interpolation, which would
+format under `CurrentCulture` instead. The file opens once for the process's whole life with `Log`'s
+own recipe (UTF-8 WITH a BOM, `AutoFlush`) — a line reaches disk the instant it is written.
+⚠ **Crash durability is bounded by the flush interval, not by the trip.** A record survives a crash
+  only once FLUSHED; `hitchSidecar.flushSeconds` (TUNE, default 3) is the loss window on an abnormal
+  exit. `Launcher` flushes before every `HitchMonitor.Rearm` and from its own `_ExitTree`, so only a
+  kill/crash — never an ordinary quit or relaunch — can lose anything, and only the queued tail.
+⚠ Drop-oldest on overflow (`hitchSidecar.queueDepth`, TUNE, default 8), reported as a `perf` warning
+  with a count — a hitch burst faster than the flush interval is itself worth knowing about, not
+  something to buffer around silently.
+
 ## src/Utils/Rng.cs
 The session's randomness policy: one master seed and ten named subsystem generators derived from it
 (`weapons`, `flightaudio`, `spawn`, `paint`, `anim`, `crash`, `effects`, `puffer`, `clouds`,
@@ -4575,6 +4594,11 @@ quit and of `--dump-config`, which is what registers its five keys) and `Rearm`e
 `--hitch-inject=` (PLAN-perf-hitches B5) fires right before the QPC stamp, on the `_Process` call
 where `HitchMonitor.FrameCount + 1` matches the flag's frame — so the injected stall counts as that
 call's own frame cost instead of the next one's.
+`_hitchSidecar` (B6) is built one step later than the monitor, right after `Log.Open` (its path
+derives from `Log.SinkPath`): a trip queues into it from `_Process`, and `LaunchSession`/
+`ReturnToMenu`/`_ExitTree` all flush it before `HitchMonitor.Rearm` — a build, a teardown and an
+ordinary quit all legitimately stall or end the loop, and none of them should wait out the sidecar's
+own flush interval to write down what it already has queued.
 Measured render time is enabled once in `_Ready` (`ViewportSetMeasureRenderTime`) rather than per
 frame from `ReportPerf`, because the hitch record needs the CPU/GPU split on every run, not only a
 `--perf` one.
