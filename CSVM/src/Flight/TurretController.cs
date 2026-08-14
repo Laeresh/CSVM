@@ -227,7 +227,7 @@ public sealed class TurretController
             }
             var rng = new RandomNumberGenerator { Seed = (ulong)(uint)Utils.Rng.NewIntSeed(Utils.Rng.Weapons) };
             built.Add(new TurretController(def, weapon, host, pool, yaw, pitch, fps.ToArray(), rng,
-                AimAssist.TeamOfPilot(host.PlayerIndex), activated: true, healthyNode: null,
+                host.Team, activated: true, healthyNode: null,
                 label: mount.Title));
         }
         return built.ToArray();
@@ -236,15 +236,15 @@ public sealed class TurretController
     /// <summary>The engine-space team an emplacement fights on. The original's team ids are
     /// 0 = neutral, 1 = ally (the player's side — the four authored <c>TEAM 1</c> entries are
     /// the piratezep's own defensive turrets), 2+ = enemy teams, and the loader defaults an
-    /// absent TEAM to enemy team 2. CSVM has no team model (docs on
-    /// <see cref="AimAssist.TeamOfPilot"/>), so: neutral stays <see cref="AimAssist.NeutralTeam"/>
-    /// (never a target, never acquires), ally maps to player one's team (the closest thing CSVM
-    /// has to "the player's side"), and an enemy id lands in a band clear of every pilot team,
-    /// hostile to all of them.</summary>
+    /// absent TEAM to enemy team 2. CSVM's team model (<see cref="FlightController.Team"/>, B7)
+    /// maps this directly: neutral stays <see cref="AimAssist.NeutralTeam"/> (never a target,
+    /// never acquires), ally maps to <see cref="AimAssist.PlayerTeam"/> — the fixed id, never a
+    /// particular pilot's own — and an enemy id lands in a band clear of every pilot team, hostile
+    /// to all of them.</summary>
     public static int EngineTeamFor(int originalTeamId) => originalTeamId switch
     {
         0 => AimAssist.NeutralTeam,
-        1 => AimAssist.TeamOfPilot(0),
+        1 => AimAssist.PlayerTeam,
         _ => EmplacementEnemyBand + originalTeamId,
     };
 
@@ -465,7 +465,7 @@ public sealed class TurretController
         // rounds spread. Same uniform-polar cone as the player assist's launch scatter.
         var dir = AimAssist.Scatter(aimWorld, Mathf.DegToRad(Def.InaccuracyDeg), _rng);
         _pool.Spawn(Weapon, fp.GlobalTransform, PlatformVelocity,
-            _host?.PlayerIndex ?? ProjectilePool.NoShooter, fp, dir);
+            _host?.PlayerIndex ?? ProjectilePool.NoShooter, fp, dir, team: _team);
         if (_host == null && !_firstShotLogged)
         {
             _firstShotLogged = true; // verification breadcrumb: WHICH emplacements actually engage

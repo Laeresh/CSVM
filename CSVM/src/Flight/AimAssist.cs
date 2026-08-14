@@ -63,9 +63,9 @@ public struct AimCandidate
     public Vector3 Velocity;
 
     /// <summary>Team id (the engine's <c>+0x08</c>). Matching the shooter's rejects the pair, and
-    /// so does <see cref="AimAssist.NeutralTeam"/> on EITHER side — see
-    /// <see cref="AimAssist.TeamOfPilot"/> for the convention CSVM supplies, having no team model
-    /// of its own.</summary>
+    /// so does <see cref="AimAssist.NeutralTeam"/> on EITHER side — read off
+    /// <see cref="FlightController.Team"/> (PLAN-instant-action B7) for a live aircraft, or
+    /// <see cref="AimAssist.TeamOfPilot"/> for that field's own default.</summary>
     public int Team;
 
     /// <summary>False for a candidate the engine's vtable <c>+0x14</c> predicate would reject —
@@ -164,6 +164,13 @@ public static class AimAssist
     /// shooter's AND one where either side is 0, so this is "never a target", not "everyone's
     /// enemy".</summary>
     public const int NeutralTeam = 0;
+
+    /// <summary>The player's side, id 1 — the decoded turret convention (M4 C9b: 0 neutral, 1
+    /// ally, 2+ enemy) that <c>PLAN-instant-action</c> Decision 4 carries into the team model:
+    /// every human and every wingman is this team, regardless of pilot index. Use this rather than
+    /// <see cref="TeamOfPilot"/>(0) wherever "the player's side" is a fixed identity, not a
+    /// particular pilot's default.</summary>
+    public const int PlayerTeam = 1;
 
     /// <summary>The team CSVM's world objects (destructibles) sit on: hostile to every pilot, since
     /// nothing in the world data makes them anyone's own. Well clear of any pilot team
@@ -307,13 +314,14 @@ public static class AimAssist
     public static float ConeCosFor(in AimCandidate candidate, float weaponConeCos) =>
         candidate.ConeOverride >= 0f ? Mathf.Cos(candidate.ConeOverride) : weaponConeCos;
 
-    /// <summary>The team a pilot's things belong to. CSVM has NO team model at all (nothing in
-    /// <c>src/</c> carries one), so the port needs a convention to run the engine's team gate
-    /// against, and this is it: pilot N is team N+1, which makes every pane hostile to every other
-    /// pane — what <c>--vs</c> is. A round nobody owns
-    /// (<see cref="ProjectilePool.NoShooter"/>, and any other negative id) is
-    /// <see cref="NeutralTeam"/>, so the engine's own "either side is 0 rejects the pair" rule
-    /// leaves it untargetable.</summary>
+    /// <summary>The DEFAULT team for a pilot index with no mission-assigned team: pilot N is team
+    /// N+1, which makes every pane hostile to every other pane — what <c>--vs</c> and free flight
+    /// run on. <see cref="FlightController.Team"/> (PLAN-instant-action B7) falls back to this when
+    /// nothing has set it explicitly; a mission overrides it per aircraft (Instant Action's
+    /// wingmen and enemies both land on a fixed team, never one derived from pilot index — see
+    /// <see cref="PlayerTeam"/>). A round nobody owns (<see cref="ProjectilePool.NoShooter"/>, and
+    /// any other negative id) is <see cref="NeutralTeam"/>, so the engine's own "either side is 0
+    /// rejects the pair" rule leaves it untargetable.</summary>
     public static int TeamOfPilot(int shooterId) => shooterId >= 0 ? shooterId + 1 : NeutralTeam;
 
     /// <summary>The launch scatter (<c>FUN_00460940</c> → <c>FUN_004608a0</c>), the ONLY scatter the

@@ -15,20 +15,23 @@ namespace CSVM.Session;
 /// <para>The wired sites (the full wired/unwired table is
 /// <c>docs/formats/combat-voice.md</c> "The remake's dispatch sites"): the DI distress tiers off
 /// <see cref="FlightController.DamageApplied"/> (the projectile hit path's whole-vehicle summary,
-/// 70/50/30 % most-severe-first); the death cry off <see cref="FlightController.Downed"/> (id 21
-/// <c>DE</c> — CSVM has no team model yet, so no AI is ever on the player's team and id 20
-/// <c>DA</c> is unreachable, documented), dispatched with force; <c>WA-Attack</c> + the computed
-/// <c>WA-Enemy</c> bearing broadcast on the mode machine's patrol→pursue transition against a
-/// human target (our chosen stand-in for the original's undecoded "enemy spotted" event, marked
-/// as such); <c>TA-FailTail</c> spoken by the evading AI target when its pursuer's sixth-sense
-/// stun lands; <c>TA-SucShk</c> when an AI's own evade/evasive-maneuver reaction completes
-/// ("fires as the reaction flag clears"). The player's aircraft registers only as a damage
-/// source: its health crossing 30 % broadcasts <c>WA-HighDmg</c>.</para>
+/// 70/50/30 % most-severe-first); the death cry off <see cref="FlightController.Downed"/> — id 20
+/// <c>DA</c> when the dying aircraft's <see cref="FlightController.Team"/> is
+/// <see cref="AimAssist.PlayerTeam"/>, id 21 <c>DE</c> otherwise (PLAN-instant-action B7: every
+/// free-flight/<c>--vs</c> AI still lands on its own default team, so <c>DA</c> stays dormant
+/// there; a mission wingman on the player's team makes it reachable) — dispatched with force;
+/// <c>WA-Attack</c> + the computed <c>WA-Enemy</c> bearing broadcast on the mode machine's
+/// patrol→pursue transition against a human target (our chosen stand-in for the original's
+/// undecoded "enemy spotted" event, marked as such); <c>TA-FailTail</c> spoken by the evading AI
+/// target when its pursuer's sixth-sense stun lands; <c>TA-SucShk</c> when an AI's own
+/// evade/evasive-maneuver reaction completes ("fires as the reaction flag clears"). The player's
+/// aircraft registers only as a damage source: its health crossing 30 % broadcasts
+/// <c>WA-HighDmg</c> to its own <see cref="FlightController.Team"/>.</para>
 ///
-/// <para>⚠ Speakers register TEAMLESS (<c>AimAssist.NeutralTeam</c>) for broadcast eligibility —
-/// a documented stand-in: the combat convention (<c>AimAssist.TeamOfPilot</c>, pilot N = team
-/// N+1) makes every aircraft its own team, under which the decoded "caller's team or teamless"
-/// rule would never elect anyone. A real team model replaces this.</para></summary>
+/// <para>Speakers register on their real <see cref="FlightController.Team"/> (B7 removed the
+/// TEAMLESS stand-in this used before a team model existed): a broadcast now actually elects
+/// among a caller's own side, live the moment a mission puts two AI on one team; free
+/// flight/<c>--vs</c>, where every pilot still gets its own default team, is unaffected.</para></summary>
 public sealed partial class AiVoiceRuntime : Node
 {
     /// <summary>The player's WA-HighDmg broadcast threshold — decoded (id 13 fires when the
@@ -89,7 +92,7 @@ public sealed partial class AiVoiceRuntime : Node
             GD.Print($"ai voice: {ai.Name}: accent {accentId} resolves to no voiced pilot — silent");
             return;
         }
-        var speaker = _dispatcher.Register(ai.PlayerIndex, vo, AimAssist.NeutralTeam,
+        var speaker = _dispatcher.Register(ai.PlayerIndex, vo, ai.Team,
             isPlayer: false, talkerChance, constitutionChance);
         _bySpeaker[ai.PlayerIndex] = ai;
         GD.Print($"ai voice: {ai.Name}: accent {accentId} -> VO id {vo} " +
@@ -105,8 +108,7 @@ public sealed partial class AiVoiceRuntime : Node
         ai.Downed += (_, _) =>
         {
             speaker.Alive = false;
-            // No team model: an AI is never on the player's team, so the cry is DE (id 21).
-            Play(_dispatcher.DeathCry(speaker.Id, onPlayersTeam: false, _now));
+            Play(_dispatcher.DeathCry(speaker.Id, onPlayersTeam: ai.Team == AimAssist.PlayerTeam, _now));
         };
         if (ai.Pilot?.Machine is { } machine)
         {
@@ -129,8 +131,7 @@ public sealed partial class AiVoiceRuntime : Node
             if (fraction < PlayerHighDmgFraction
                 && _lastPlayerFraction[damaged] >= PlayerHighDmgFraction)
             {
-                Play(_dispatcher.Broadcast(AiVoiceDispatcher.WaHighDmg,
-                    AimAssist.TeamOfPilot(damaged.PlayerIndex), _now));
+                Play(_dispatcher.Broadcast(AiVoiceDispatcher.WaHighDmg, damaged.Team, _now));
             }
             _lastPlayerFraction[damaged] = fraction;
         };
@@ -148,7 +149,7 @@ public sealed partial class AiVoiceRuntime : Node
             Play(_dispatcher.Dispatch(speakerId, AiVoiceDispatcher.WaAttack, _now));
             int bearing = AiVoiceDispatcher.BearingTriggerFor(
                 quarry.WorldPosition, quarry.NoseDirection, ai.WorldPosition);
-            Play(_dispatcher.Broadcast(bearing, AimAssist.TeamOfPilot(quarry.PlayerIndex), _now));
+            Play(_dispatcher.Broadcast(bearing, quarry.Team, _now));
         }
 
         // A pursuer's failed sixth-sense (tail) check stuns it; its AI target taunts.

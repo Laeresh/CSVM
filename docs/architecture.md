@@ -1893,10 +1893,11 @@ registered aircraft's carried gunners, on their host's team), `Structures`
 strings and nothing damageable) and `Ordnance` (`ProjectilePool.CollectFusedOrdnance` — a FILTER
 over the rounds in flight, `DetonationDistance > AimAssist.MinFuseDistance`, not a structure of its
 own).
-⚠ **CSVM has no team model at all**, and the engine's team gate needs one, so `AimAssist` supplies
-  the convention: `TeamOfPilot` = `PlayerIndex + 1` (every pane hostile to every other, which is
-  what `--vs` is), `NeutralTeam` 0 for a round nobody owns, `WorldTeam` for the destructibles. Team
-  0 on EITHER side rejects the pair — it is "never a target", not a wildcard.
+⚠ **The team model is `FlightController.Team`** (PLAN-instant-action B7), not a per-call derivation:
+  every consumer here reads that field, which falls back to `AimAssist.TeamOfPilot` = `PlayerIndex +
+  1` (every pane hostile to every other, what `--vs`/free flight run on) only when nothing overrode
+  it. `NeutralTeam` 0 is for a round nobody owns, `WorldTeam` for the destructibles. Team 0 on EITHER
+  side rejects the pair — it is "never a target", not a wildcard.
 ⚠ `dist_factor` **ships at 0.0**, which deletes the distance term outright: selection is purely
   most-aligned, and a distant on-axis target beats a near off-axis one at any range inside `RANGE`.
   The executable's compiled default is `2.5e-4`; "restoring" it during tuning re-enables something
@@ -1939,8 +1940,9 @@ the vehicle def's `thirdp` `TurretMount`s × `TurretDefs` × the built plane mod
 `FlightController.SimStep`) and world emplacement (`BuildEmplacements`, per matched `NODES`
 pattern node via `AnimRuntime.FindNodes` with multi-segment paths scoped to the prior match,
 ticked by `Session/TurretEmplacementRuntime`). Per tick: nearest hostile aircraft inside
-`DETECTION_RANGE` (team gate; carried = host's pilot team, emplacement = `EngineTeamFor` over
-the authored/default TEAM), `AimAssist.TryIntercept` lead (no solution ⇒ track, hold fire),
+`DETECTION_RANGE` (team gate; carried = host's `FlightController.Team` (B7), emplacement =
+`EngineTeamFor` over the authored/default TEAM, ally now the fixed `AimAssist.PlayerTeam` rather
+than a particular pilot's own), `AimAssist.TryIntercept` lead (no solution ⇒ track, hold fire),
 wrap-aware directed yaw clamp + pitch clamp, bounded slew (3.0/s), pose written onto the PARTS
 nodes, then the fire gates: `Activated`, attack window, 15° barrel-on-solution cone, cached
 1–2 s world-only line of sight, `FIRE_RATE` redraw. Proven by the `carried-turrets` +
@@ -1952,6 +1954,10 @@ nodes, then the fire gates: `Activated`, attack window, 15° barrel-on-solution 
   shipped `"brigturret2 "` carries a trailing space); a global or exact match drives the wrong
   rig or none. An emplacement's kill switch is its healthy node's visibility — ai.zrd HEALTH is
   authored-but-unread; the real pool is the node's own gamez destroy def (turrets.md).
+⚠ A fired round is spawned with `team: _team` explicitly (B7) — a world emplacement has no shooter
+  id (`ProjectilePool.NoShooter`), so before B7 its own ordnance read as `NeutralTeam` in the aim
+  assist's ordnance candidate list rather than its real `EngineTeam`; do not drop the argument back
+  to the shooter-id default.
 ⚠ The gunner's weapon is its ai.zrd row (`wep_140` on every carried entry), NOT the stock-loadout
   turret slot's caliber — those slots stay bound-but-inert (`GunGroup.IsTurret`).
 
@@ -2443,8 +2449,9 @@ reading); `ObjectiveBiasFor` matches `rating_biases` patterns, first match wins.
 ⚠ Assumptions, named in the module doc: the three terms' sign conventions (the design's
   favourable arms), BiasScale = 1200 (raw metres would leave every shipped bias inert), the
   +0.4 dynamics / −0.5 structure terms unmodelled (no non-aircraft candidates reach this path).
-⚠ Deconfliction is inert in current sessions: `TeamOfPilot` gives every pilot its own team, so
-  the allied-attacker count is always zero until a team model exists.
+⚠ Deconfliction is still inert in free flight and `--vs`: every pilot keeps its own default
+  `FlightController.Team` (B7) there, so the allied-attacker count stays zero. It goes live the
+  moment a mission puts two AI on the same explicit team.
 
 ## src/Flight/IncomingFire.cs
 `--incoming[=metres[,wep_id]]` — the near-miss test rig: a phantom shooter 120 m on each player's
@@ -3499,7 +3506,12 @@ controls); false stages on the aircraft, which is what the def's `MAIN_ROOT_NODE
 `AttachWarningShotCue` registers the aircraft on the pool as a near-miss target and `OnNearMiss`
 rates the passes through `WarningShotCue` into `FlightAudio.OnWarningShot`; `PlayerIndex` is both
 the pane seat and the identity every round this pilot fires carries, so it must be set before the
-registration (the assembler sets it at construction, not in the stunt block).
+registration (the assembler sets it at construction, not in the stunt block). `Team`
+(PLAN-instant-action B7) is this aircraft's side for every hostility test — the aim-assist
+candidate scan, `SelectRankedTarget`, carried `TurretController`s and `AiVoiceDispatcher`
+registration all read it, none re-derives one from `PlayerIndex` — and defaults to
+`AimAssist.TeamOfPilot(PlayerIndex)` until a mission sets it explicitly, so free flight and `--vs`
+are unchanged.
 `Held` (the weapon lab) pins this ONE airframe while the session runs on: the sim step skips input,
 `FlightModel.Step` and the whole collision sweep and re-applies the pinned pose through
 `FlightModel.Reset(pos, attitude, 0, 0)` instead — everything from the pose commit down (weapon
@@ -4813,17 +4825,18 @@ breadcrumbs. Pinned by the `world-turrets` suite (C1 census 74, C4 census 92).
 ## src/Session/AiVoiceRuntime.cs
 Wires E16's dispatch into a running flight session (built with the rigs when the world has a
 `WorldSounds`; ticks on the sim clock like every consumer): registers each `--ai=…:accent=N`
-spawn as a speaker (accent → `CombatVoice.PilotFor` → VO id, seeded), each human rig as a
-damage source, and subscribes the wired sites — hit-path DI tiers (`DamageApplied` summary),
-`Downed` death cries with force (always id 21: no team model puts an AI on the player's team),
-patrol→pursue vs a human = `WA-Attack` + the bearing broadcast in the player's frame (our chosen
-stand-in for the undecoded "enemy spotted"), sixth-sense stun = the AI evader's `TA-FailTail`,
-reaction complete = `TA-SucShk`. Plays through `WorldSounds.PlayOneShot(Node3D)` only; the
-wired/unwired table is combat-voice.md "The remake's dispatch sites". Observability: the
-`ai voice:` lines (resolution at spawn, every roll outcome, every played clip).
-⚠ Speakers register TEAMLESS for broadcast eligibility — a documented stand-in: under
-  `TeamOfPilot` (pilot N = team N+1) the decoded "caller's team or teamless" rule would never
-  elect anyone. A team model replaces this.
+spawn as a speaker on its real `FlightController.Team` (B7 — no longer teamless), each human rig
+as a damage source broadcasting on its own `Team`, and subscribes the wired sites — hit-path DI
+tiers (`DamageApplied` summary), `Downed` death cries with force (id 20 `DA` when the dying
+aircraft's `Team` is `AimAssist.PlayerTeam`, id 21 `DE` otherwise), patrol→pursue vs a human =
+`WA-Attack` + the bearing broadcast on the target's `Team` (our chosen stand-in for the undecoded
+"enemy spotted"), sixth-sense stun = the AI evader's `TA-FailTail`, reaction complete =
+`TA-SucShk`. Plays through `WorldSounds.PlayOneShot(Node3D)` only; the wired/unwired table is
+combat-voice.md "The remake's dispatch sites". Observability: the `ai voice:` lines (resolution at
+spawn, every roll outcome, every played clip).
+⚠ Free flight and `--vs` still give every pilot its own default `Team`, so a broadcast still only
+  ever elects a "teamless" match there in practice — the B7 wiring goes live the moment a mission
+  (Instant Action, Wave C on) puts two AI, or an AI and the player, on the same explicit team.
 ⚠ A CLI accent must join the prewarm set (`SessionPrewarmNames`' extraAccents) — an unprewarmed
   accent is a silent pilot with no error anywhere but the resolver's availability check.
 

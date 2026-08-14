@@ -274,7 +274,7 @@ is M4's formation disproof, `B7` is the team model below.
 ### Wave B — The primitives
 
 6. ☑ B6 `InstantActionDef`, its `ia.zrd.json` reader, and `--ia=<path>`
-7. ☐ B7 The team model, replacing `AimAssist.TeamOfPilot`'s stand-in
+7. ☑ B7 The team model, replacing `AimAssist.TeamOfPilot`'s stand-in
 
 ### Wave C — Dogfighting an ace
 
@@ -636,7 +636,27 @@ every chapter stores all nines; record it as inferred in the type's own comment.
 an `MSG_*` key naming militia and aircraft together, not a plain name; it resolves through
 `Mech3/Messages.cs` and an unknown key resolves to itself rather than to blank.
 
-## B7 ☐ The team model, replacing `AimAssist.TeamOfPilot`'s stand-in
+## B7 ☑ The team model, replacing `AimAssist.TeamOfPilot`'s stand-in
+
+**Landed 2026-08-14.** `FlightController.Team` (nullable-backed, defaulting to
+`AimAssist.TeamOfPilot(PlayerIndex)`) is the aircraft's side; whoever builds a mission aircraft
+sets it explicitly and free flight/`--vs` are untouched since nothing sets it yet. Threaded
+through the four named consumers — `ProjectilePool.CollectAircraft`/`CollectTurrets`/
+`CollectFusedOrdnance` (the last stamps `Proj.Team` once at `Spawn`, never re-deriving it from the
+shooter id per scan), `FlightController.SelectRankedTarget`'s `ownTeam`, `TurretController`'s
+carried-turret registration and `EngineTeamFor`'s ally case (now the fixed `AimAssist.PlayerTeam`,
+never a particular pilot's own), and `AiVoiceRuntime`'s `Register`/`DeathCry`/`Broadcast` calls —
+plus a `TurretController.Spawn` correctness fix along the way: a world emplacement's own fired
+rounds now carry its real `EngineTeam` instead of reading as `NeutralTeam` through the
+`NoShooter` shooter-id fallback. **Added no damage gate**, per Decision 3/A2. M4 E16's voice
+trigger id 20 (`DA`) is wired (fires when the dying aircraft's `Team` equals
+`AimAssist.PlayerTeam`); ids 22–24 and 28 are documented as reachable in `combat-voice.md` but
+left unwired, per the item's own scope. Verification: the `team-model` in-engine suite (two
+distinct `PlayerIndex` values sharing one explicit team via the aim-assist scan, plus a real fired
+round proving A2's no-damage-gate corroboration) alongside the five named baseline suites
+(`ai-gunnery`, `ai-modes`, `ai-voice`, `carried-turrets`, `world-turrets`), unchanged —
+`.\RunTests.ps1`: build clean, 1181/1181 unit tests, 54/54 engine suites, all 14 golden hashes
+(the manifest has grown since the plan's "eleven" was written) hash-identical.
 
 **Goal.** An aircraft has a team, and everything that already asks "is this hostile" asks the team
 instead of a stand-in. Team 1 is the player's side, team 2 and up are enemies, team 0 is neutral and

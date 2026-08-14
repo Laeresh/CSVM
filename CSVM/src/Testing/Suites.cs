@@ -153,6 +153,13 @@ public static class Suites
             "plane, blasting with falloff and attributing the kill, concentrated fire on ONE " +
             "bearing kills through the decoded redirect + whole-pool overflow (the 2026-08-14 " +
             "correction), and a Fury dies to a few HE rockets", AirToAir));
+        into.Add(new TestHarness.Suite("team-model",
+            "the B7 team model: two distinct pilot indices (real PlayerIndex values, not synthetic " +
+            "ints) share one explicit FlightController.Team and a third sits on another — " +
+            "impossible under the retired pilot-index-derived stand-in — the plumbed aim-assist " +
+            "scan reads Team and snaps onto the enemy while refusing the teammate, and a real " +
+            "fired round that reaches the teammate still costs it HP (Decision 3/A2: targeting is " +
+            "gated, damage never is)", TeamModel));
         into.Add(new TestHarness.Suite("world-turrets",
             "the world AA emplacements (C9b) place at their NODES patterns against the real C1 " +
             "world (census pinned, one entry many turrets, scoped multi-segment paths), honour " +
@@ -3110,6 +3117,118 @@ public static class Suites
             shooter?.Free();
             bystander?.Free();
             fury?.Free();
+            textures.Dispose();
+        }
+    }
+
+    /// <summary>The B7 team model: two distinct pilot indices can now share one explicit
+    /// <see cref="FlightController.Team"/> — impossible under the old
+    /// <see cref="AimAssist.TeamOfPilot"/> stand-in, which derived a team from the pilot index and
+    /// so gave every pilot its own. Proves the plumbing end to end (<c>ProjectilePool.CollectAircraft</c>
+    /// → <see cref="AimAssist.Scan"/>): a shooter's scan snaps onto a same-index-range aircraft on a
+    /// DIFFERENT team and never onto one sharing its own team, real PlayerIndex values included. Then
+    /// A2's own corroboration, fired for real through the pool: a round that reaches a teammate still
+    /// costs it HP — Decision 3, no damage gate, targeting only.</summary>
+    private static void TeamModel(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        WeaponDef? gun = weapons.All.FirstOrDefault(w => w.IsGun && w.ArmorDamage is > 0f);
+        ctx.Check(gun != null, $"a gun with ARMOR_DAMAGE exists in the data");
+        if (gun == null)
+            return;
+
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightController? human = null;
+        FlightController? wingman = null;
+        FlightController? enemy = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            FlightController BuildRig(int playerIndex, Vector3 pos, int? team)
+            {
+                var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+                var rig = new FlightController
+                {
+                    PlaneModel = model,
+                    Collider = PlaneCollider.Build(model),
+                    Damage = new PlaneDamage(stats.DestroyableParts),
+                    PlayerIndex = playerIndex,
+                    Projectiles = live,
+                    UseKeyboard = false,
+                    AllowPause = false,
+                };
+                if (team is { } t)
+                    rig.Team = t;
+                rig.AddChild(model);
+                rig.Setup(new FlightModel(stats), ctx.Camera, new CamParams(), pos, pos + Vector3.Forward);
+                ctx.Host.AddChild(rig);
+                live.RegisterAircraft(rig.Body!);
+                return rig;
+            }
+
+            // Two DIFFERENT pilot indices (a human's and an AI's, well outside each other's range)
+            // pinned to the SAME explicit team; a third index lands on a different one. Under the
+            // retired stand-in every one of the three would have been its own team.
+            var humanPos = new Vector3(0f, 500f, 0f);
+            var wingPos = humanPos + new Vector3(200f, 0f, 0f);
+            var enemyPos = humanPos + new Vector3(0f, 0f, -300f);
+            human = BuildRig(0, humanPos, team: null); // the untouched default: TeamOfPilot(0)
+            wingman = BuildRig(AiAircraftSpawner.ShooterIdBase, wingPos, team: AimAssist.PlayerTeam);
+            enemy = BuildRig(AiAircraftSpawner.ShooterIdBase + 1, enemyPos, team: AimAssist.PlayerTeam + 1);
+            ctx.Check(human.Team == wingman.Team && human.Team != enemy.Team,
+                $"two distinct pilot indices share one explicit team, a third sits on another: human={human.Team} wingman={wingman.Team} enemy={enemy.Team}");
+
+            // --- targeting: the plumbed scan (CollectAircraft -> AimAssist.Scan) reads Team, not
+            // PlayerIndex — it snaps onto the team-2 enemy and refuses the team-1 wingman.
+            var candidates = new AimCandidateSet();
+            live.CollectAircraft(candidates);
+            var scan = new AimScan
+            {
+                MuzzlePosition = humanPos,
+                Forward = Vector3.Forward,
+                Team = human.Team,
+                Speed = 500f,
+                RangeSquared = 1000f * 1000f,
+                ConeCos = -1f, // whole forward hemisphere: only the team gate decides this scan
+                Self = human,
+            };
+            bool found = AimAssist.Scan(scan, candidates, out var result);
+            ctx.Check(found && ReferenceEquals(result.Source, enemy),
+                $"the scan snaps onto the team-2 enemy and never the team-1 wingman found={found}");
+
+            // --- A2's corroboration, fired for real: a team-1 round that reaches the team-1
+            // wingman still costs it HP, because Decision 3/A2 gates targeting only, never damage.
+            bool Pristine(FlightController rig) => rig.Damage!.Parts.Values.All(
+                p => p.Hp >= p.Def.MaxHp && p.Armor >= p.Def.MaxArmor);
+            var muzzle = new Transform3D(
+                Basis.LookingAt((wingPos - humanPos).Normalized(), Vector3.Up), humanPos);
+            for (int tries = 0; tries < 5 && Pristine(wingman); tries++)
+            {
+                live.Spawn(gun, muzzle, Vector3.Zero, human.PlayerIndex);
+                for (int i = 0; i < 30; i++)
+                    live.SimStep(1f / 60f);
+                live.Clear();
+            }
+            ctx.Check(!Pristine(wingman),
+                $"a team-1 round that reaches a team-1 wingman still costs it HP — no damage gate");
+        }
+        finally
+        {
+            pool?.Free();
+            human?.Free();
+            wingman?.Free();
+            enemy?.Free();
             textures.Dispose();
         }
     }

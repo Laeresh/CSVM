@@ -199,22 +199,23 @@ site is recorded here:
 | 1–12, 14 | wired | our chosen site: the mode machine's patrol→pursue transition against a human target ("committing to an attack") — the attacker speaks `WA-Attack`, and the flight broadcasts the bearing call-out computed in the warned player's frame. The original's exact "enemy spotted" event is undecoded; this is the closest transition the machine has |
 | 13 | wired | a human rig's summary health crossing 30 % on the projectile hit path (decoded threshold) — broadcast |
 | 17–19 | wired | the speaker's own summary health on the projectile hit path, 70/50/30 % most-severe-first (decoded) |
-| 20–21 | wired | `FlightController.Downed`, with force. CSVM has no team model, so no AI sits on the player's team and id 20 (`DA`) is currently unreachable — every death cry is id 21 (`DE`) |
+| 20–21 | wired | `FlightController.Downed`, with force: id 20 (`DA`) when the dying aircraft's `Team` is `AimAssist.PlayerTeam`, id 21 (`DE`) otherwise (`AiVoiceRuntime.RegisterAi`, PLAN-instant-action B7). Free flight and `--vs` still give every AI its own default team, so `DA` stays dormant there in practice — it fires once a mission places an AI on the player's team |
 | 25 | wired | a pursuer's failed sixth-sense (tail) check stunning it — its evading AI target speaks; a human evader stays silent (the player speaks no AI lines) |
 | 27 | wired | the speaker's own evade/evasive-maneuver reaction completing ("fires as the reaction flag clears", decoded) |
 | 0 | unwired | turret acquisition is `TurretController`'s event; owned by C9's thread, not wired from here |
 | 15 | unwired | the danger-zone modes are never entered (their gate data is undecoded — F17) |
 | 16 | unwired | no dispatch site located in the binary (above) |
-| 22–24 | unwired | the polarity is now decoded (above), but the 22/23 split is a team question and CSVM has no team model, so wiring it waits on `PLAN-instant-action` B7 |
+| 22–24 | unwired | the polarity is decoded (above) and the 22/23 split is answerable now that a team model exists (`PLAN-instant-action` B7, 2026-08-14) — no dispatch site chosen yet, left for a future item |
 | 26 | unwired | the original's shake-attempt check is undecoded; no machine transition maps to it without force-fitting |
-| 28 | unwired | both arms (above) are team questions; no ally concept exists yet, so this waits on `PLAN-instant-action` B7 |
+| 28 | unwired | both arms (above) are answerable now that a team model exists (B7) — no dispatch site chosen yet, left for a future item |
 
 Stand-ins and inventions, named:
 
-- **Speakers register teamless** for broadcast eligibility. The combat convention
-  (`AimAssist.TeamOfPilot`, pilot N = team N+1) makes every aircraft its own team, under which
-  the decoded "caller's team or teamless" rule would never elect anyone; the decoded rule itself
-  admits teamless candidates, so teamless is the honest stand-in until a team model exists.
+- **Speakers register on their real `FlightController.Team`** (`PLAN-instant-action` B7,
+  2026-08-14) — the earlier teamless stand-in is retired. Free flight and
+  `--vs` still give every pilot its own default team (`AimAssist.TeamOfPilot`, pilot N = team
+  N+1), so a broadcast only ever elects a "teamless" match there in practice; it goes live the
+  moment a mission puts two AI, or an AI and the player, on the same explicit team.
 - **`Bail`/`NoBail` is a constitution roll** (`constitution_chance`, 0.35→0.95) — the open
   item's natural-candidate reading, implemented and marked unconfirmed.
 - **Bearing quantisation**: the four clock quadrants split at ±45° (the natural reading of a

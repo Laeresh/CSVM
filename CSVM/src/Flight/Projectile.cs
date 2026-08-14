@@ -494,7 +494,9 @@ public sealed partial class ProjectilePool : Node3D
     /// <summary>Appends this pool's live proximity-fused rounds to the gun assist's candidate set
     /// (`BL-342` B4) — the original's fourth candidate list, which is a FILTER over the rounds in
     /// flight rather than a structure of its own: the engine registers a tracking record after every
-    /// spawn whose def carries a fuse longer than <see cref="AimAssist.MinFuseDistance"/>. A round
+    /// spawn whose def carries a fuse longer than <see cref="AimAssist.MinFuseDistance"/>. Reads the
+    /// round's own <c>Team</c>, stamped once at <see cref="Spawn"/> from the shooter's
+    /// <c>FlightController.Team</c> (B7) rather than re-derived from the shooter id here; a round
     /// nobody owns lands on <see cref="AimAssist.NeutralTeam"/> and is therefore rejected by the
     /// scorer's team gate, same as the engine's own "either side is 0" rule.</summary>
     public void CollectFusedOrdnance(AimCandidateSet into)
@@ -506,7 +508,7 @@ public sealed partial class ProjectilePool : Node3D
             {
                 continue;
             }
-            into.AddOrdnance(p.Pos, p.Vel, AimAssist.TeamOfPilot(p.Shooter), source: null);
+            into.AddOrdnance(p.Pos, p.Vel, p.Team, source: null);
         }
     }
 
@@ -514,26 +516,26 @@ public sealed partial class ProjectilePool : Node3D
     /// original's `VehicleList` pass, which is aircraft plus the AI ground/sea vehicles M4 will add.
     /// The registered bodies are the one live roster of flying planes this pool already keeps (for
     /// the hit ray and the fuse), so the assist reads the same list rather than a second one that
-    /// could drift. A crashed pilot is present but not live, which is the engine's own
-    /// dead-candidate rejection; the shooter excludes itself through
+    /// could drift. Reads each rig's own <see cref="FlightController.Team"/> (B7), never re-derives
+    /// one from its <c>PlayerIndex</c>. A crashed pilot is present but not live, which is the engine's
+    /// own dead-candidate rejection; the shooter excludes itself through
     /// <see cref="AimScan.Self"/>.</summary>
     public void CollectAircraft(AimCandidateSet into)
     {
         foreach (var body in _aircraft)
         {
             var rig = body.Rig;
-            into.AddVehicle(rig.WorldPosition, rig.WorldVelocity, AimAssist.TeamOfPilot(rig.PlayerIndex),
-                !rig.Crashed, rig);
+            into.AddVehicle(rig.WorldPosition, rig.WorldVelocity, rig.Team, !rig.Crashed, rig);
         }
     }
 
     /// <summary>Appends every registered aircraft's carried turrets (C9a) and every world
     /// emplacement (C9b) to the assist's candidate set — the original's `TurretList` pass. A
     /// carried turret rides its host, so it moves with the host's velocity and sits on the
-    /// host's team; the host's own scan rejects it through that same team gate, never through
-    /// Self (the turret is its own Source). An emplacement carries its own team and platform
-    /// velocity, and stays listed while dormant — a sleeping AA gun is still a lockable object;
-    /// only its death delists it as live.</summary>
+    /// host's <see cref="FlightController.Team"/> (B7); the host's own scan rejects it through that
+    /// same team gate, never through Self (the turret is its own Source). An emplacement carries its
+    /// own team and platform velocity, and stays listed while dormant — a sleeping AA gun is still a
+    /// lockable object; only its death delists it as live.</summary>
     public void CollectTurrets(AimCandidateSet into)
     {
         foreach (var body in _aircraft)
@@ -541,8 +543,7 @@ public sealed partial class ProjectilePool : Node3D
             var rig = body.Rig;
             foreach (var turret in rig.Turrets)
             {
-                into.AddTurret(turret.WorldPosition, rig.WorldVelocity,
-                    AimAssist.TeamOfPilot(rig.PlayerIndex), turret.Alive, turret);
+                into.AddTurret(turret.WorldPosition, rig.WorldVelocity, rig.Team, turret.Alive, turret);
             }
         }
         foreach (var turret in _worldTurrets)
@@ -620,9 +621,17 @@ public sealed partial class ProjectilePool : Node3D
     /// aim-assist vector, `BL-342`/B5). ⚠ Keep it that way: an assisted direction is a value
     /// produced at the fire call, never re-derived inside this method, so a networking milestone
     /// can feed a received vector here and get the shooter's own answer rather than a locally
-    /// re-run scan that would diverge (`BL-342`/B6).</para></summary>
+    /// re-run scan that would diverge (`BL-342`/B6).</para>
+    ///
+    /// <para><paramref name="team"/> is the round's team for <see cref="CollectFusedOrdnance"/>'s
+    /// candidate stamp (PLAN-instant-action B7) — stamped ONCE at spawn, not re-derived from
+    /// <paramref name="shooterId"/> on every scan, so a caller with a real
+    /// <c>FlightController.Team</c> (a mission override, not the pilot-index default) is
+    /// answered faithfully for the round's whole flight. Omitted, it falls back to
+    /// <see cref="AimAssist.TeamOfPilot"/>(<paramref name="shooterId"/>), the same default every
+    /// unowned/bench/turret caller already got.</para></summary>
     public void Spawn(WeaponDef weapon, Transform3D muzzle, Vector3 inheritVel, int shooterId = NoShooter,
-        Node3D? muzzleAnchor = null, Vector3? aimDir = null)
+        Node3D? muzzleAnchor = null, Vector3? aimDir = null, int? team = null)
     {
         // The launch bark: only rockets/ordnance carry a FIRE.SOUND — every cannon's is
         // null in the data (LOOPED_SOUND_NAME covers continuous gunfire instead), so this is a
@@ -686,6 +695,7 @@ public sealed partial class ProjectilePool : Node3D
                 Trails = trails,
                 RollRate = rollRate,
                 Shooter = shooterId,
+                Team = team ?? AimAssist.TeamOfPilot(shooterId),
             };
             if (slot >= _projHigh)
                 _projHigh = slot + 1;
@@ -2263,6 +2273,7 @@ public sealed partial class ProjectilePool : Node3D
         public float RollRate;   // rad/s about the nose axis (the sonic spinner); 0 = no roll
         public float Age;        // s since launch — drives the roll angle
         public int Shooter;      // who fired it (PlayerIndex); NoShooter when nobody owns it
+        public int Team;         // stamped at spawn from the shooter's own Team (B7), not re-derived
     }
 
     private struct Sprite

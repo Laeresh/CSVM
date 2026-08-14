@@ -438,6 +438,7 @@ public partial class FlightController : Node3D
     private bool _gunLoopOn;                     // the firing loop sound is currently playing
     private bool[] _gunLoggedFirst = Array.Empty<bool>(); // verification breadcrumb: each group logs its first live round once
     private int _rocketsLaunched;                // verification breadcrumb: the first few launches log their pylon
+    private int? _team;                          // Team's backing field — null until overridden (B7)
     private bool _held;                          // Held's backing field — the airframe is pinned (weapon lab)
     private bool _cameraOwned;                   // CameraOwned's backing field — the lab's free camera has the view
     private bool _orbitPrev;                     // edge detection for entering the orbit (halt or hold)
@@ -478,6 +479,22 @@ public partial class FlightController : Node3D
     /// the player's WA-HighDmg crossing. Terrain grazes do not raise it; the decoded distress
     /// sites are the combat hit path's.</summary>
     public event Action<FlightController>? DamageApplied;
+
+    /// <summary>This aircraft's team (PLAN-instant-action B7), replacing <c>AimAssist.TeamOfPilot</c>
+    /// as a stand-in everywhere "is this hostile" is asked: <see cref="AimAssist"/>'s candidate
+    /// scan, <see cref="SelectRankedTarget"/>, <see cref="TurretController"/>'s target selection and
+    /// <see cref="AiVoiceDispatcher"/> registration all read this instead of deriving a team from
+    /// <see cref="PlayerIndex"/> themselves (shooter ids are not team ids — the derivation is the
+    /// stand-in this item removes). Unset, it falls back to <see cref="AimAssist.TeamOfPilot"/>, so
+    /// free flight and <c>--vs</c> Dogfight keep every pane on its own team exactly as before;
+    /// whoever builds a mission aircraft (Instant Action's runtime, from Wave C on) sets it
+    /// explicitly to a fixed team — <see cref="AimAssist.PlayerTeam"/> for a wingman, a per-wave id
+    /// for an enemy — never one derived from that aircraft's own pilot index.</summary>
+    public int Team
+    {
+        get => _team ?? AimAssist.TeamOfPilot(PlayerIndex);
+        set => _team = value;
+    }
 
     /// <summary>The weapon lab's hold: the airframe holds the pose it had when this was set — it does
     /// not fly, stall, fall or collide — while everything else in the session keeps running. The
@@ -1670,7 +1687,7 @@ public partial class FlightController : Node3D
             // Alignment is measured against the PLANE's nose, not this muzzle's axis — the engine
             // scores every candidate against the airframe's own forward row.
             Forward = -planeBasis.Z,
-            Team = AimAssist.TeamOfPilot(PlayerIndex),
+            Team = Team,
             Speed = weapon.Velocity ?? ProjectilePool.DefaultVelocity,
             RangeSquared = range * range,
             ConeCos = AimAssist.WeaponConeCos(weapon),
@@ -1735,7 +1752,7 @@ public partial class FlightController : Node3D
             var g = _firableGuns[gi];
             var muzzle = g.Muzzles[mi];
             var aimDir = AssistedGunDirection(g.Weapon, gi, mi, muzzle, planeBasis, inheritVel, aimNow);
-            Projectiles!.Spawn(g.Weapon, muzzle.GlobalTransform, inheritVel, PlayerIndex, muzzle, aimDir);
+            Projectiles!.Spawn(g.Weapon, muzzle.GlobalTransform, inheritVel, PlayerIndex, muzzle, aimDir, Team);
             Shake?.FireBullet(g.Weapon.Caliber ?? 0f); // the firing buzz: factor × caliber (measured)
             if (!_gunLoggedFirst[gi])
             {
@@ -1749,7 +1766,7 @@ public partial class FlightController : Node3D
             var hp = Loadout!.Hardpoints[outcome.RocketPylon];
             // No aim assist on a rocket: the original's assist is the GUN fire path's
             // (`FUN_004b6530` is reached from the gun branch alone). It leaves along the pylon axis.
-            Projectiles!.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel, PlayerIndex, hp.Pylon);
+            Projectiles!.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel, PlayerIndex, hp.Pylon, team: Team);
             if (_rocketsLaunched < 12)
             {
                 _rocketsLaunched++;
@@ -2088,7 +2105,7 @@ public partial class FlightController : Node3D
 
     /// <summary>The D12 acquisition: the decoded ranking formula over the pool's registered
     /// aircraft, same roster and team gate as the aim assist and the turret gunners
-    /// (<see cref="AimAssist.TeamOfPilot"/>). An assigned <see cref="AiGunner.PrimaryTargetName"/>
+    /// (<see cref="Team"/>, PLAN-instant-action B7). An assigned <see cref="AiGunner.PrimaryTargetName"/>
     /// that resolves to a live hostile inside the activation radius is picked outright —
     /// the assumed reading of the decoded "Primary target: %s" semantics: the assignment holds
     /// while valid, ranking takes over when it dies or leaves. The activation radius is the
@@ -2097,9 +2114,10 @@ public partial class FlightController : Node3D
     /// return-range rule, not acquisition's).
     ///
     /// <para>Deconfliction counts allied gunners already holding each candidate (invented
-    /// minimum, see <see cref="AiTargetRanking"/>). ⚠ Under <see cref="AimAssist.TeamOfPilot"/>
-    /// every pilot is its own team, so the count is zero in every current session — it becomes
-    /// live the moment a team model puts two AI on one side.</para></summary>
+    /// minimum, see <see cref="AiTargetRanking"/>). ⚠ Free flight and <c>--vs</c> still give every
+    /// pilot its own default team (<see cref="Team"/>'s <see cref="AimAssist.TeamOfPilot"/>
+    /// fallback), so the count stays zero there — it goes live the moment a mission (Instant
+    /// Action, Wave C on) puts two AI on the same explicit team.</para></summary>
     private FlightController? SelectRankedTarget(AiGunner gunner, out TargetScore score,
         out string how)
     {
@@ -2109,7 +2127,7 @@ public partial class FlightController : Node3D
             return null;
         _gunnerScan.Clear();
         Projectiles.CollectAircraft(_gunnerScan);
-        int ownTeam = AimAssist.TeamOfPilot(PlayerIndex);
+        int ownTeam = Team;
         float activation = Pilot?.Machine?.ActivationRange ?? 2000f; // min_ai_active_dist fallback
         var ownPos = WorldPosition;
         var ownFwd = NoseDirection;

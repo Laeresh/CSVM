@@ -24,7 +24,9 @@ public struct RankedTargetCandidate
     public float ObjectiveBias;
 
     /// <summary>How many ALLIES already hold this candidate as their standing target — the
-    /// deconfliction input. Zero when no team model exists to count over.</summary>
+    /// deconfliction input. Zero whenever every pilot sits on its own default team (free flight,
+    /// <c>--vs</c>); it counts real allies once a mission puts two AI on the same
+    /// <see cref="FlightController.Team"/> (PLAN-instant-action B7).</summary>
     public int AlliedAttackers;
 }
 
