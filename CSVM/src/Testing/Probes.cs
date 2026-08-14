@@ -1185,28 +1185,32 @@ public static class Probes
         // turn. turn_fade_in/turn_fade_out: decoded as a base ramp on AIRSPEED ALONE — 0 at 10 mph
         // rising to 1 at 50 and flat above — so it is identically 1 across the 222-260 mph this row
         // settles at, carries no bank or load-factor term, and cannot be a bank effect at all (it is
-        // a real unimplemented LOW-speed behaviour). What discriminates now is a capture, not a
-        // decode: this measurement is not internally consistent with a coordinated level turn (see
-        // the bank note below), and the same turn held at ~60-70° instead of ~100° would settle
-        // whether the original is rate-limited, bank-limited, or being mis-read off its ADI.
+        // a real unimplemented LOW-speed behaviour). The capture that was meant to discriminate has
+        // been flown — CAP-33, 2026-08-15, the turn held at ~60-70° — and it answered the ADI
+        // question rather than this one: the original was being mis-read off its ADI, and its turn
+        // is coordinated after all (see the bank note below). So this row stays open with no
+        // authored candidate and no outstanding capture.
         // ⚠ It is NOT the bank coupling, and that is now settled rather than suspected. The
         // original's own 0.205/0.165 terms are implemented, and they move this row AWAY from the
         // target (32.35 -> 34.71 here, up on ten of eleven airframes) because both add heading rate
         // in the direction of bank by construction. No sign or scale of them subtracts turn rate,
         // so do not re-open them looking for one.
-        // ⚠ The original's own turn is NOT internally consistent with a coordinated level turn, so
-        // do not promote this by matching the ADI's bank either: 18.95 °/sim-s at 222.94 mph is
-        // V·ω = 32.96 m/s² lateral, which implies atan(32.96/20) = 58.7° of bank, not the +100° the
-        // ADI sky-region centroid reads (trusted only to ±4°). Ours IS consistent —
-        // it settles at exactly the bank its own lateral acceleration implies — which is why the
-        // two banks differ by more than the two rates do.
+        // ⚠ Do not promote this row by matching the ADI's +100°: that reading is not a bank, and
+        // this comment used to say the original's turn was "not internally consistent with a
+        // coordinated level turn" on the strength of it. SETTLED by CAP-33 (2026-08-15), flown with
+        // the pilot holding a known 60-70°: across that turn the ADI sky-region centroid read a
+        // mean 105.1° while V·ω/nom_gravity read 62.2°, and the ADI's 46° swing tracked the pitch
+        // cycle (r = +0.886 against climb rate) rather than the heading rate (r = -0.091). The ADI
+        // shows airframe attitude, which in a high-alpha pull sits tens of degrees off the bank of
+        // the turn. So CAP-01's 18.95 °/sim-s at 222.94 mph — V·ω = 32.96 m/s², atan(32.96/20) =
+        // 58.7° — IS its bank, the original IS coordinated, and ours is consistent with it too.
         Row("sustained-turn-rate", "sustained max-pull turn, heading rate", "°/s",
             turn.RateDegS, 18.95, 3.0,
             $"{turn.RateDegS / 18.95:0.00}x the original — OPEN. The original pulls 1.6x slower "
             + "BANKED than wings-level (18.95 vs 30.16 °/sim-s round its own loop) and we pull the "
             + "same rate in both, so the gap is bank/load-factor, not pitch authority. Its 18.95 "
-            + "°/sim-s at 222.94 mph also implies a 58.7° coordinated-turn bank, not the +100° its "
-            + "ADI reads",
+            + "°/sim-s at 222.94 mph implies a 58.7° bank, and CAP-33 confirmed that IS its bank — "
+            + "the ADI's +100° is airframe attitude, not bank",
             info: true);
 
         // --- part throttle. These two are the ONLY place the drag shape is observable: the

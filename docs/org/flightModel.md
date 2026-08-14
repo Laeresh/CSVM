@@ -761,13 +761,16 @@ paragraph was itself wrong, and `CAP-33` is what corrected it.** The apparent in
 `CAP-01`'s 58.7° implied bank (`V·ω` = 32.96 m/s² against `nom_gravity`) set against the ~100° its
 ADI sky-centroid reads. `CAP-33` was flown with the pilot **holding a known 60–70° of bank** and
 reporting it at the controls, which makes the bank independent of any instrument: over that turn the
-ADI centroid reads a mean **105.1°** (range 79.5–125.4°) while `V·ω / nom_gravity` reads **62.9°**
-(range 56.0–69.9°). The ADI reading tracks the pitch cycle, not the turn — binned per second,
-`r(ADI roll, climb rate) = +0.886` against `r(ADI roll, heading rate) = −0.091`. So the ADI shows
-airframe attitude, which in a high-α pull is tens of degrees away from the bank of the turn, and the
-original **is** flying coordinated closely enough for the level-turn relation to recover the flown
-bank. `CAP-01`'s 58.7° was the good number; its 100° should not be quoted as a bank. Evidence on
-`backlog.md` `BL-307`.
+ADI centroid reads a mean **105.1°** (range 79.5–125.4°) while `V·ω / nom_gravity` reads **62.2°**
+(range 56.0–69.9°), both over the turn's 23 one-second bins. The ADI reading tracks the pitch cycle,
+not the turn — binned per second, `r(ADI roll, climb rate) = +0.886` against
+`r(ADI roll, heading rate) = −0.091`. So the ADI shows airframe attitude, which in a high-α pull is
+tens of degrees away from the bank of the turn, and the original **is** flying coordinated closely
+enough for the level-turn relation to recover the flown bank. `CAP-01`'s 58.7° was the good number;
+its 100° should not be quoted as a bank.
+⚠ The bank in `atan(V·ω / g)` takes **`nom_gravity` (20 m/s²)**, not 9.81; Earth gravity gives 73.4°
+for `CAP-01` and breaks every comparison above. Full record: `git log --grep=BL-307` (the entry
+itself is closed and deleted).
 
 ## The three arcade terms
 
@@ -1568,10 +1571,11 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
     weight; the original multiplies it by reference area, which is what makes `RefArea` cancel
     against drag. See `ThrustFactor` above.
 11. **Drag is a polar in Mach with no induced term.** Any model that makes drag rise with the pull
-    is adding a mechanism the original does not have. See Drag above. ⚠ **The remake does exactly
-    that**: `PLAN-flight-drag-lift` C21 landed a `sin²α` induced-drag term with `InducedDragCoef`
-    10.75 on 2026-08-07, two days before this decode, and the two were never reconciled. Open as
-    `BL-360`.
+    is adding a mechanism the original does not have. See Drag above. The remake briefly did:
+    `PLAN-flight-drag-lift` C21 fitted a `sin²α` term (`InducedDragCoef` 10.75) on 2026-08-07, two
+    days before this decode, and `PLAN-flight-model-rewrite` B12 removed it with no successor when
+    the decoded Mach polar replaced the fitted drag law. `FlightModel.cs` now carries the same
+    no-induced-drag statement in its own comments.
 12. **The throttle lever slews at 0.5/s with no idle floor** (2 s full-to-idle); the remake applies
     it instantly. Decoded, unimplemented — a feel/transient gap, not a steady-state one, and the
     one mechanism that could contaminate the first seconds of any throttle-step footage.
