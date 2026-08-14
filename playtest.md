@@ -83,7 +83,22 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 |---|---|---|---|
 | `CAP-20` | Throttle equilibria + a shallow held climb | Two level runs held to equilibrium at **1/4** and **1/2** throttle (the thrust-vs-throttle curve), then a **shallow, steady climb** at fixed throttle — shallow enough that the ADI does **not** saturate, i.e. keep the nose under ~+25°, and hold it 10 s+. `CAP-05`'s 50%-throttle clip failed on exactly this: it was a zoom, the ADI pinned at sky fraction 0.730, and the nose angle became unreadable. ⚠ Still owed after D32, and now the ONLY thing that can settle the climb residual: the 90° climb clip gives a clean speed plateau (163.05 mph at a 56.3° path) but its ADI saturates too, so the nose angle — and with it α, the leading candidate for the model's remaining +25% — is unreadable in every climb capture taken so far | `BL-115` (the sustained-climb residual; `ClimbGravityScale` itself is retired) |
 | `CAP-32` | A deliberately **part-deflected** pull, level entry | Full throttle, level cruise, then a held **partial** back-stick pull (clearly less than full deflection — a light, steady pull, not a tap), sustained long enough for speed to settle. Speedo, altimeter and ADI in frame. Gives a second load-factor point below `CAP-01`'s max-pull plateau, so the induced-drag exponent (`n`, `n²` or `ω²` in the pull) stops being a free choice | `BL-307` |
-| `CAP-33` | A sustained turn at a bank other than ~100° | Full throttle, full back stick, banked turn held to a settled equilibrium (speed and heading rate both flat) at a bank clearly different from `CAP-01`'s ~100° — a ~60–70° bank is the useful target. ADI, speedo, altimeter, compass tape all in frame throughout | `BL-307` |
+
+**`CAP-33` was flown and decoded on 2026-08-15, and its row is retired.** The head-turn gate passed
+(`corr dx(ALT), dx(MPH) = +1.00`, dial translation 0 px). It did **not** deliver the settled
+equilibrium the row asked for — the turn porpoises on an ~11 s cycle, altitude 1804–2486 ft and
+speed 180–253 mph — but it answered the question anyway, and did so *because* it oscillates. The
+pilot held **60–70°** of bank throughout and said so at the controls, which made the flown bank
+known independently of any instrument: across the 23 one-second bins of the turn the **ADI sky
+centroid reads a mean 105.1° (range 79.5–125.4°)** while **`V·ω / nom_gravity` reads 62.2° (range
+56.0–69.9°)**. The ADI's swing tracks
+the pitch cycle (`r = +0.886` against climb rate) and not the heading rate (`r = −0.091`). So the
+ADI does not read the pilot's bank in a pulling turn, `CAP-01`'s "~100°" is an artifact, and its
+58.7° implied bank was the good number all along. Full evidence on `BL-307`, which keeps its
+`CAP-32` block for the induced-drag exponent.
+⚠ **Do not re-file "a turn at a different bank" as a capture.** Implied bank is computed from the
+rate, so no cockpit clip can give an independent bank/rate pair; reading bank off the ADI is the
+thing that does not work.
 
 **`CAP-31` was flown and decoded on 2026-08-07, and its row is retired.** It was the 1/8-throttle
 deceleration — the case `CAP-05`'s clip never covered, since 0/8 has no equilibrium to approach. The

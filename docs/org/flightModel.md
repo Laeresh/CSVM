@@ -752,12 +752,22 @@ base ramp is a function of **airspeed alone**, 0 at `turn_fade_in` (10) rising t
 bank or load-factor term anywhere in it. The banked turn settles at 222–260 mph and the knife-edge
 takes are at 143 and 300, so the ramp is saturated across the whole regime where the 1.6× appears
 and cannot be its cause. The ramp is a real unimplemented low-speed behaviour (`BL-330`) — it is
-simply not this. **What remains is not a decode question**: the original's own turn is not
-internally consistent with a coordinated level turn (18.95 °/sim-s at 222.94 mph is `V·ω` =
-32.96 m/s² lateral, implying 58.7° of bank against the ~100° its ADI shows), so `CAP-33` — a
-sustained turn at a clearly different bank — is what discriminates. Recorded rather than quietly
+simply not this. **What remains is not a decode question.** Recorded rather than quietly
 re-pointed: a gap that has been attributed to the same three fields four times is exactly the kind
 of inherited claim that stops being re-checked.
+
+⚠ **UPDATE (2026-08-15): the "not internally consistent with a coordinated level turn" half of that
+paragraph was itself wrong, and `CAP-33` is what corrected it.** The apparent inconsistency was
+`CAP-01`'s 58.7° implied bank (`V·ω` = 32.96 m/s² against `nom_gravity`) set against the ~100° its
+ADI sky-centroid reads. `CAP-33` was flown with the pilot **holding a known 60–70° of bank** and
+reporting it at the controls, which makes the bank independent of any instrument: over that turn the
+ADI centroid reads a mean **105.1°** (range 79.5–125.4°) while `V·ω / nom_gravity` reads **62.9°**
+(range 56.0–69.9°). The ADI reading tracks the pitch cycle, not the turn — binned per second,
+`r(ADI roll, climb rate) = +0.886` against `r(ADI roll, heading rate) = −0.091`. So the ADI shows
+airframe attitude, which in a high-α pull is tens of degrees away from the bank of the turn, and the
+original **is** flying coordinated closely enough for the level-turn relation to recover the flown
+bank. `CAP-01`'s 58.7° was the good number; its 100° should not be quoted as a bank. Evidence on
+`backlog.md` `BL-307`.
 
 ## The three arcade terms
 

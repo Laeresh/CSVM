@@ -246,6 +246,15 @@ CLIPS = {
     # at a KNOWN nose angle. The one clip that separates a climb-retention term
     # from an attitude-thrust term, because the two predict opposite signs here.
     "climb90": "Climp 90° 100% Thrust.mp4",
+    # 2026-08-14 CAP-33: a sustained max-performance turn held at a bank OTHER than
+    # CAP-01's ~100 deg, which is the whole point of it (BL-307). CAP-01 is one
+    # plateau, so the bank/rate curve has one point and the ADI-vs-implied-bank
+    # disagreement (100 deg read against 58.7 deg implied by V*omega for a
+    # coordinated level turn) cannot be resolved from it. A second bank with its own
+    # settled rate says whether the turn is rate-limited, bank-limited, or whether
+    # the ADI reading is not bank. Cockpit at 2560x720, the original 32:9 geometry
+    # the pool was built from, so it needs no resampling.
+    "cap33": "CAP-33.mp4",
 }
 
 

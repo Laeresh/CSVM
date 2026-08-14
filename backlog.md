@@ -723,9 +723,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   wrong way by construction (`C22`), `highGs` is a limiter that never fires (`D33`), and
   `turn_fade_*` is an airspeed ramp that is saturated at 1 everywhere the gap appears (`C21` era
   correction, 2026-08-09). What remains is the measurement's own interpretation: `CAP-01`'s
-  18.95 °/sim-s at 222.94 mph implies **58.7° of bank**, not the ~100° its ADI shows, so a model
-  reproducing the measured *rate* would disagree with the measured *bank*. `CAP-33` (a sustained turn
-  at ~60–70°) discriminates. A capture question, not a decode one, and tracked on `BL-307`.
+  18.95 °/sim-s at 222.94 mph implies **58.7° of bank**, and `CAP-33` (2026-08-15) settled that the
+  ~100° its ADI shows is not a bank at all: with the pilot holding a known 60–70°, the implied bank
+  tracked it to within a few degrees while the ADI over-read by ~40° and swung with the pitch cycle.
+  So the "measured bank" half of this disagreement was never real. Evidence on `BL-307`.
   ⚠ **Do not fill the hole by inventing a rate limiter from field names.** A naive speed/bank
   coupling that quietly costs pitch authority is exactly the wrong-mechanism fix `BL-124`'s history
   warns about, and `maxAOA`/`liftAOAs` were consumed as a hypothesis under test rather than as a
@@ -738,8 +739,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   1. **Implement ground blow** (`BL-359`, minted 2026-08-14). Nothing blocks it.
   2. **Implement the roll/pitch base ramp** (`BL-330`) and **the `bounce_factor` restitution**
      (`BL-172`).
-  3. **Confirm the zeppelin emitter** on any zeppelin mission (free), and settle `CAP-33` for the
-     banked-turn gap (`BL-307`).
+  3. **Confirm the zeppelin emitter** on any zeppelin mission (free). (`CAP-33` was flown
+     2026-08-15; it settled the ADI-vs-implied-bank question, not the banked-turn rate gap.)
 
   When those are homed elsewhere or done, this entry retires: there is no research left in it.
 
@@ -1178,22 +1179,67 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   wings level, no visible attitude kick at that severity. Judge the kick and the stop rule
   against that footage and `BL-120`'s corner feel item before tuning further.
 
-- `BL-307` `[Research]` `[Blocked: CAP-32, CAP-33]` **The induced-drag exponent and the `CAP-01` turn's
-  bank are each pinned by one data point.** `PLAN-flight-drag-lift` C21 fitted `InducedDragCoef`
+- `BL-307` `[Research]` `[Blocked: CAP-32]` **The induced-drag exponent is pinned by one data point.
+  The `CAP-01` bank half is ANSWERED — `CAP-33`, 2026-08-15: the ADI does not read the pilot's
+  bank.**
+  *Evidence (`CAP-33`, `OriginalScreenshots/Videos/CAP-33.mp4`, 33.76 s, 2560×720, decoded this
+  session; head-turn gate **OK**, `corr dx(ALT), dx(MPH) = +1.00`, dial translation 0 px).* The
+  pilot held a **60–70° bank** with full back stick and full throttle and reported it at the
+  controls, so the bank is known independently of any instrument. Over the sustained turn
+  (10.0–33.7 s wall = 32.9 s sim, 702 frames) the two estimators disagree completely:
+
+  | Estimator | Mean | Range | Swing |
+  |---|---|---|---|
+  | ADI sky centroid (the method `CAP-01`'s "~100°" used) | **105.1°** | 79.5–125.4° | 45.9° |
+  | `V·ω / nom_gravity` (implied bank) | **62.2°** | 56.0–69.9° | 13.9° |
+
+  (All four columns are over the 23 one-second bins of the sustained turn. Fitting the whole span in
+  one regression instead gives 22.95 °/sim-s at 218.55 mph, `V·ω` = 39.14 m/s², implied bank
+  **62.9°** — the same answer.)
+  The implied bank sits **inside the pilot's stated band and stays there through the whole
+  manoeuvre**; the ADI over-reads by ~40° and swings 46°. What the ADI's swing tracks is the pitch
+  cycle, not any input: binned per second, `r(ADI roll, climb rate) = **+0.886**` and
+  `r(ADI roll, speed) = **−0.914**`, while `r(ADI roll, heading rate) = **−0.091**`. The same ball's
+  own pitch (sky-area fraction, `adi.py`) swings 39.5° and correlates `+0.520` with its roll,
+  frame by frame, which is the instrument-internal version of the same statement.
+  **So BL-307's dilemma resolves on its first horn: the ADI reading is not bank. The original's
+  turn IS coordinated closely enough that `V·ω / nom_gravity` recovers the flown bank**, and
+  `CAP-01`'s 58.7° implied bank is the good number while its "~100° ADI" is an artifact of reading
+  airframe attitude in a high-α pull. There was never a contradiction; the two figures were
+  different quantities.
+  ⚠ **`nom_gravity` (20 m/s²), not 9.81, is the constant in the implied-bank formula.** `atan(32.96
+  / 20) = 58.7°` is how `CAP-01`'s figure was derived (`PLAN-flight-drag-lift.md:521`); using Earth
+  gravity gives 73.4° and silently breaks every comparison in this entry.
+  ⚠ **This does not give a bank/rate curve, and no cockpit capture can.** Implied bank is computed
+  *from* the rate, so the two are not independent measurements — `CAP-33`'s value is that an
+  independently-known bank validated the estimator. Reading bank off an ADI in a pulling turn is the
+  thing that does not work; do not re-file that as a capture request.
+  ⚠ **The clip never settles**, so its numbers are cycle means and not a plateau: altitude
+  oscillates 1804–2486 ft on an ~11 s cycle, speed 180–253 mph in antiphase, heading rate
+  19.8–28.4 °/sim-s. Mean over the turn is 22.95 °/sim-s at 218.55 mph. Quoted to no better than
+  ±0.33 s in time (the sidecar's `pts_short` note).
+  *What is still open:* the induced-drag exponent, unchanged and still on `CAP-32`.
+  **The original two-point framing, for the record:** `PLAN-flight-drag-lift` C21 fitted `InducedDragCoef`
   10.75 to `CAP-01`'s single sustained-turn plateau — a real fit, but the *functional form* (`sin²α`
   vs `n` vs `n²` vs `ω²`) is a choice (Decision 8), not a measurement, because both segments of that
   clip sit at essentially the same load factor (`V·ω` 32.96 vs 34.02 m/s², 3% apart). B12 also found
   `CAP-01`'s own numbers are not those of a coordinated level turn: 18.95 °/sim-s at 222.94 mph is
   `V·ω` = 32.96 m/s² lateral, which for a level turn implies **58.7°** of bank — not the **100°** the
-  ADI sky-centroid reads (trusted only to ±4°). Either the ADI reading is not bank, or the original
-  is not flying coordinated; nothing measured so far says which.
-  **What would settle it.** A capture at a *deliberately part-deflected* pull (`CAP-32`) gives a
-  second load-factor point, separating the candidate exponents. A capture of a sustained turn at a
-  bank other than ~100° (`CAP-33`) gives a second point on the bank/rate curve and an independent
-  read on the 58.7°-vs-100° question.
+  ADI sky-centroid reads (trusted only to ±4°). "Either the ADI reading is not bank, or the original
+  is not flying coordinated" was the standing dilemma; `CAP-33` answered it above, and the 100°
+  should not be quoted as a bank again.
+  **What would still settle the exponent.** A capture at a *deliberately part-deflected* pull
+  (`CAP-32`) gives a second load-factor point, separating the candidate exponents.
   ⚠ Neither blocks anything currently asserted — `InducedDragCoef` and the landed lift re-key both
   stand regardless of how this resolves; this is about confidence in the fit, not a known defect.
-  *Blocked on `CAP-32`, `CAP-33`* (`playtest.md` §0).
+  ⚠ **But the 100° bank is relied on elsewhere, and it is now known to be an instrument artifact.**
+  `PLAN-flight-drag-lift` motivates its lift re-key partly on "the aircraft must hold 100° of bank,
+  which needs `1/|cos 100°|` = 5.8 g" (`docs/plans/PLAN-flight-drag-lift.md:486-487`, and the same
+  premise at `:7`, `:32`, `:200`, `:549`). At the flown bank of 60–70° that demand is ~2–3 g, a
+  different problem. The landed code is not being challenged here and nothing is asserted against
+  it; what is recorded is that the premise quoted in that plan came from the ADI. Re-checking it is
+  its own piece of work.
+  *Blocked on `CAP-32`* (`playtest.md` §0).
 
 - `BL-309` `[Feature]` **Engine torque is a designed, one-sided turn assist — unmodelled.** GDD §4.1.8
   ("Engine Torque", Motion Model/Flight Dynamics → Simulated Elements; restated, no prose): torque
