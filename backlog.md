@@ -735,7 +735,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   reconcile.
 
   **Still to do, all of it downstream of this entry:**
-  1. **Implement ground blow.** Unowned; mint a `[Feature]` when scheduled. Nothing blocks it.
+  1. **Implement ground blow** (`BL-359`, minted 2026-08-14). Nothing blocks it.
   2. **Implement the roll/pitch base ramp** (`BL-330`) and **the `bounce_factor` restitution**
      (`BL-172`).
   3. **Confirm the zeppelin emitter** on any zeppelin mission (free), and settle `CAP-33` for the
@@ -1226,6 +1226,66 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   source. Check `shakes.zrd.json`/`docs/formats/shakes.md` for an ambient source before inventing
   one; if no data carries it, magnitude and cadence are a TUNE against feel. Low priority; pairs
   with `BL-266`'s open shake data questions.
+
+- `BL-359` `[Feature]` **Ground blow is decoded and entirely unmodelled — the original biases your
+  controls away from anything large you are closing on.**
+  *Evidence:* decoded from `crimson.exe` 2026-08-14, write-up in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow". `FUN_0048bf60` casts a ray
+  of `groundblow_elev` metres (authored **400 m**) along the nose; `FUN_0048c220` adds a rotation
+  away from the hit surface into the same accumulator the stick fills, one call after the stick
+  terms in `FUN_0048c470`, on the player's aeroplane every frame. Nothing in `CSVM/src` carries it
+  (grep for `groundblow` returns no hits) and `FlightModel.Step` has no such term. The design side
+  is GDD §4.1.7, and `CAP-02` (closed 2026-08-07) saw the behaviour at the controls: a wings-level
+  full pull at a cliff steps heading 17° away with nothing in the vertical plane.
+  *The rule*, with `n` the hit normal, `b` the backward body axis (`Attitude.Z`), `d` the distance
+  to the hit point, `c = dot(b, n)`:
+
+      require c > 0                     the surface must face back at you
+      S = sqrt(c) · (elev − d) / elev   1 at contact, 0 at the ray's end
+      V = normalize(n × b) · S          world axis rotating the nose away, scaled by proximity
+      p = dot(cmd, V)
+      cmd += V · (p ≥ 0 ? p : −0.05·p) · groundblow_mag
+
+  With `groundblow_mag` authored **10**, commanding away is amplified by up to `1 + 10·S²` and
+  commanding into the obstacle is met with `0.05 × 10`, halved and never reversed.
+  *Fix shape:* the probe belongs in `FlightController`, which has the world
+  (`IntersectRay` with `CollisionLayers.World`, `FlightController.cs:1830,1851`), and its result is
+  handed to `FlightModel`, which has no world access at all. Add the term to `cmd` in
+  `FlightModel.Step` (`FlightModel.cs:475-495`) after the bank coupling and the weathervane, which
+  is the original's ordering, and before `BodyRates += cmd * dt`.
+  ⚠ *Traps:*
+  (a) **Add it to `cmd`, not to `BodyRates`, and do not introduce a `dt` of your own.** The
+  original's accumulator already carries `dt` when the term is formed, so the effect is linear in
+  `dt`; ours lands in the same place because `FlightModel.cs:507` multiplies `cmd` by `dt`
+  afterwards. A second `dt` makes it vanish at small steps.
+  (b) **Frame mismatch.** The axis is built from a world normal and `Attitude.Z`, so it is a world
+  axis, while `cmd` is body-frame (X pitch, Y yaw, Z roll). Project it onto the body axes before
+  the dot and the add. Mixing frames gives a term that is right wings-level and wrong everywhere
+  else, which is the hardest version of this bug to see.
+  (c) **It is not a force and not a terrain-altitude effect.** No push on velocity, and no
+  `HeightAboveWorldGround` gate. A world-frame force is refuted by the original behaving the same
+  inverted, and canyon runs held at 165–336 ft never trip it because nothing is close *ahead*.
+  (d) **`groundblow_elev` 400 is a ray LENGTH in metres.** Not feet, not a trigger altitude, and it
+  is also the falloff's denominator, so shortening it steepens the ramp rather than just shrinking
+  the reach (`BL-095`).
+  (e) **Do not calibrate `groundblow_mag` against the cliff clip's 17° step.** It is an authored
+  constant with a traced consumer, not a TUNE.
+  (f) **The AI path is a different law, not a scaled one:** a fixed push of
+  `ai_groundblow × groundblow_mag × S` independent of what the AI commanded, linear in `S`, cut to
+  15 % for 2.5 s after a drop, and suppressed entirely while the AI is stunned. Only relevant if AI
+  aircraft get ground avoidance; do not reuse the player term scaled by `ai_groundblow`.
+  (g) **A dead-on approach must get nothing.** As `n → b` the axis `n × b` collapses and the whole
+  term goes to zero. That is the original's "never saves a head-on collision", so special-casing or
+  renormalising the degenerate case would break the behaviour it is there to produce.
+  (h) **Emitters:** terrain and scenery qualify, ordinary flying aircraft do not. Whether zeppelins
+  do is unconfirmed in the binary (`BL-095`); the GDD names them.
+  *Playtest after fix:* fly a wings-level full pull straight at a cliff at ~300 mph and look for a
+  one-off heading offset away from the wall that then holds, with no change in pitch rate. Hands off
+  must still end in a crash, and inverted must behave the same. The smaller second effect (the
+  velocity direction steered toward the nose at `2.0 · S` per second) rides along with it.
+  *Cross-refs:* `BL-095` (the decode and the authored values), `BL-172` (the collision impulse from
+  the same neighbourhood of the flight loop), `CAP-02` (closed; footage staged under
+  `playtest/CAP-02/`).
 
 ## Environment & world
 

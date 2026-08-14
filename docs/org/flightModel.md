@@ -1355,8 +1355,8 @@ anything running a flight update, so an ordinary flying aeroplane does not repel
 entities keep it set permanently was not determined, so the GDD's naming of zeppelins is a design
 statement this decode neither confirms nor refutes.
 
-**Nothing in `CSVM/src` implements any of this** (a grep for `groundblow` returns no hits). The
-implementation is unowned follow-on work.
+**Nothing in `CSVM/src` implements any of this** (a grep for `groundblow` returns no hits). Owned by
+`BL-359`, which carries the implementation rule and its traps.
 
 ## Collision response and `bounce_factor` (`FUN_0048d7f0`)
 
