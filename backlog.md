@@ -672,7 +672,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   | `maxAOA 46.0` / `liftAOAs [5,9]` / `lift_accel_rate 0.75` | Decoded. `liftAOAs` is an airflow blend, **not** a load-factor ramp. Consumed by `PLAN-flight-drag-lift` B12 as a **hypothesis under test, not a decode**. ⚠ That plan justifies its lift re-key partly on "the aircraft must hold 100° of bank, which needs `1/\|cos 100°\|` = 5.8 g" (`PLAN-flight-drag-lift.md:486-487`, `:7`, `:32`, `:200`, `:549`). `CAP-33` showed the ADI reads airframe **attitude**, not the turn's bank, so the ~100° attitude is real but the load factor does not follow from it that way — `CAP-01`'s turn banked 58.7°, ~2 g. The re-key is not challenged; its stated arithmetic is |
   | `high_speed_pitch_fade [1000,1001]` / `highGs [9,15]` / `lowGs [-6,-9]` | Decoded as **authored unreachable** (`C24`, `D33`). Nothing implemented, which is the correct outcome |
   | `drag_factor 1.5` (global) / `drag_fade_speed 40` | **Dead in the executable** (B14): parsed, then read by nothing. The per-plane `drag_factor` is the only drag scale |
-  | `groundblow_elev 400` / `groundblow_mag 10` / `ai_groundblow 0.5` | Decoded 2026-08-14. **Unimplemented and unowned** |
+  | `groundblow_elev 400` / `groundblow_mag 10` / `ai_groundblow 0.5` | Decoded 2026-08-14. **Unimplemented, owned by `BL-359`**; its emitter set settled 2026-08-15 |
   | `bounce_factor 0.6` | Decoded 2026-08-14. Units settled; implementation owned by `BL-172` |
   | `nom_gravity 20.0` / `stall_mag 1.25` | Already consumed |
 
@@ -744,8 +744,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   1. **Implement ground blow** (`BL-359`, minted 2026-08-14). Nothing blocks it.
   2. **Implement the roll/pitch base ramp** (`BL-330`) and **the `bounce_factor` restitution**
      (`BL-172`).
-  3. **Confirm the zeppelin emitter** on any zeppelin mission (free). (`CAP-33` was flown
-     2026-08-15; it settled the ADI-vs-implied-bank question, not the banked-turn rate gap.)
+  3. ~~Confirm the zeppelin emitter on any zeppelin mission.~~ **Answered 2026-08-15 from the binary
+     and the shipped data, no capture needed.** The emitter test keys on whether a hit node carries
+     the spawn mark `0x40000000` and, if so, whether its registry entity is on a scripted path; never
+     on vehicle type. IA1's zeppelin is a plain gamez node with no spawn mark, so it repels exactly
+     like terrain. Recorded on `BL-359`'s trap (h) and in
+     [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow"; the path mechanism it
+     surfaced is `BL-361`. (`CAP-33` was flown 2026-08-15; it settled the ADI-vs-implied-bank
+     question, not the banked-turn rate gap.)
 
   When those are homed elsewhere or done, this entry retires: there is no research left in it.
 
@@ -1266,8 +1272,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (g) **A dead-on approach must get nothing.** As `n → b` the axis `n × b` collapses and the whole
   term goes to zero. That is the original's "never saves a head-on collision", so special-casing or
   renormalising the degenerate case would break the behaviour it is there to produce.
-  (h) **Emitters:** terrain and scenery qualify, ordinary flying aircraft do not. Whether zeppelins
-  do is unconfirmed in the binary (`BL-095`); the GDD names them.
+  (h) **Emitters, settled 2026-08-15 in `crimson.exe`** (write-up in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow"). The test is not on vehicle
+  type. A hit node repels **unless** it carries the spawn mark `0x40000000` at `node+0x28` *and* its
+  vehicle-registry entity (`0x0071dab8`, found by `FUN_004afee0`) has a **zero** byte at `+0xcc`.
+  That byte means "following a scripted path instead of being flight-simulated" (`FUN_00489ea0`
+  calls the follower `FUN_0048a110` in its place, see `BL-361`), which is why an ordinary flying
+  aeroplane does not repel you and a path-driven one does. The mark itself is applied at spawn by
+  `FUN_004848f0` and appears on no authored node, so terrain and all scenery repel by default.
+  **Zeppelins do repel:** `extracted/zrdr/vehicle.zrd.json` names no zeppelin type, so IA1's is the
+  plain gamez node `multiplayer1zep` with `active` and `intersect_surface` set and no spawn mark, an
+  emitter by the same rule as terrain. The GDD's naming of zeppelins describes the outcome, not a
+  mechanism. ⚠ **The whole filter is player-only** (it sits inside the `param_1 == DAT_0071c298` test
+  at `0x0048c047`), so on the AI path every hit repels, other aircraft included; the aircraft
+  exemption is player behaviour, not a property of the emitter set. Build the AI term (trap (f)) with
+  no filter at all.
   *Playtest after fix:* fly a wings-level full pull straight at a cliff at ~300 mph and look for a
   one-off heading offset away from the wall that then holds, with no change in pitch rate. Hands off
   must still end in a crash, and inverted must behave the same. The smaller second effect (the
@@ -3013,6 +3032,55 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   marker centre and, eventually, the trigger for a stunt screenshot feature. No design beyond
   this sentence exists yet — recorded so the constant's purpose and the feature intent survive.
   ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
+
+- `BL-361` `[Feature]` {CAMPAIGN} **Scripted-path vehicles: a second movement law, decoded, with
+  nothing in `CSVM/src` for it.** Surfaced 2026-08-15 by the ground-blow emitter decode (`BL-359`
+  trap (h)), which had to establish what the byte at `+0xcc` means before it could say whether
+  zeppelins repel the player. Write-up in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow".
+  *What it is:* the aircraft update dispatcher `FUN_00489ea0` branches on `obj+0xcc` **before** it
+  reaches any flight law. Non-zero, and the object is driven by the path follower `FUN_0048a110`;
+  zero, and it runs the movement law selected by `obj+0x67C` (`0`/`4` being `FUN_0048e580`, the
+  flight integrator). So a placed vehicle can be a puppet on an authored waypoint list rather than a
+  simulated aeroplane, and it hands itself back to the flight model on reaching the last waypoint.
+  *The lifecycle, decoded:* the spawner `FUN_0047c210` sets `+0xcc = 1` when the spawn record carries
+  a path (`0x0047c568`) together with a freeze flag `+0xd4 = 1` (`0x0047c57e`), so the vehicle sits
+  motionless at its first waypoint until a mission goal releases it (`FUN_0046a2b0`, `0x0046a2c3`,
+  reached from the goal-action runtime `FUN_0046a490`). That same runtime can attach a path at any
+  time with `FUN_004940d0` (`0x0049427c`), which sets `+0xcc = 1` and `+0xd4 = 0` so the vehicle
+  starts moving at once. Only `FUN_0048a110` clears `+0xcc` (`0x0048a863`), and only on the final leg.
+  *The follower's law*, per tick, with `dt` = `DAT_009ad744`:
+
+      target   = next waypoint, y raised by the vehicle type's ride height at type+0x218
+                 (a flat 0.2 m for movement classes other than 0/4)
+      heading += clamp(headingError / 60°, ±1) · dt        radians, so ≥60° of error gives 1 rad/s
+      speed    = 17.8816 m/s, which is exactly 40 mph      held until the final leg
+      forward  = speed · (1 − |clamped heading error|)     it barely advances while turning hard
+      advance the leg when dot(target − pos, legDir) ≤ 5.0
+
+  On the **final** leg the target is replaced by a point **300 m** along the leg direction, its y
+  gains `(speed/110mph − 0.4) · 83.3` once speed passes 0.4 of 110 mph (44 mph), and the speed term
+  becomes `speed += 4.0302024 · dt` instead of the fixed 40 mph. Fixed taxi speed, a ground-height
+  offset from the vehicle type, a final-leg acceleration with a climb-out, and a handoff to the
+  flight model at the end read as **the runway takeoff run**, though `FUN_004940d0` shows a goal can
+  attach a path for any purpose.
+  ⚠ *Traps.* (a) **It is not AI behaviour and not our `AiMode.AvoidCrash`.** The follower replaces the
+  flight model outright; nothing in it is a steering input to `FlightModel.Step`. (b) **The freeze
+  flag `+0xd4` is separate from the path flag `+0xcc`**, and only the follower clears the path flag. A
+  design folding the two into one boolean cannot express "placed and waiting", which is the state
+  most authored vehicles spend most of a mission in. (c) `FUN_004afd00` gates AI radio chatter on
+  `+0xcc` too, so a path-driven vehicle is silent; do not model the movement and leave the voice on.
+  (d) **`4.0302024` and the `83.3` climb gain were read but not identified**, unlike `17.8816` (40 mph
+  exactly), `0.020335784` (1/110 mph) and `0.95492965` (3/π, the 60° heading-error normaliser). Nail
+  those two before shipping a takeoff that looks right at one airframe and wrong at another.
+  *Size:* LARGER. It needs a path source in the mission data, the follower, and a hook in the goal
+  runtime. Campaign-scoped: Instant Action places no vehicle on a path (`ia.zrd.json`'s
+  `dzpath1`–`dzpath5` are danger-zone gates, not vehicle paths), so no golden can see it.
+  *How you'd know it worked:* a mission-opening aircraft sits still on the strip until its goal
+  fires, then rolls at a steady 40 mph, accelerates and climbs out on the last leg, and flies
+  normally from the moment it leaves the path.
+  *Cross-refs:* `BL-359` (which surfaced it, and whose emitter set depends on it for spawned
+  vehicles), `BL-095`, [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow".
 
 ## Tooling, platform & docs
 

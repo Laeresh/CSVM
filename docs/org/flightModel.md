@@ -1357,16 +1357,52 @@ is a weapon effect. A stunned AI therefore has its controls zeroed **and** its g
 suppressed, so it flies into terrain. That reads as deliberate.
 
 **Emitters.** `FUN_004c8f70` walks the terrain grid and tests, per cell, the terrain geometry and
-every scene node whose flag word at `node+0x24` carries both bits `0x4` and `0x10`; `FUN_004c8ec0`
-keeps the nearest hit. Terrain and unregistered scenery always qualify.
+every scene node whose flag word at `node+0x24` carries both bits `0x4` and `0x10`, which are
+`ACTIVE` and `INTERSECT_SURFACE` (`tools/mech3ax/crates/api-types/src/gamez/nodes.rs`);
+`FUN_004c8ec0` keeps the nearest hit. Terrain and ordinary scenery always qualify.
 
-⚠ **Zeppelins as emitters is still NOT confirmed from the binary.** There is a player-only extra
-filter at `0x0048c05d`: a node flagged `0x40000000` at `node+0x28` is resolved through the vehicle
-registry at `0x0071dab8` and must carry a non-zero byte at `+0xcc`. That byte is a **"placed but not
-yet simulated" transient**, set by the placement paths and cleared every frame by `FUN_0048a110` for
-anything running a flight update, so an ordinary flying aeroplane does not repel you. Which registry
-entities keep it set permanently was not determined, so the GDD's naming of zeppelins is a design
-statement this decode neither confirms nor refutes.
+**The vehicle filter, and what it excludes** (decoded 2026-08-15). Inside the player-only branch
+guarded by `param_1 == DAT_0071c298` at `0x0048c047`, a hit node carrying bit `0x40000000` at
+`node+0x28` is resolved through the vehicle registry at `0x0071dab8` (`FUN_004afee0`, matched on the
+entity's node pointer at `+0xc`, walking up the parent chain on a miss). If an entity is found and
+its byte at `+0xcc` is **zero**, the whole term is abandoned and the function returns 0
+(`0x0048c0ac`). Everything else falls through and repels: an unmarked node, a marked node with no
+registry entity above it, and a marked node whose entity carries a non-zero `+0xcc`.
+
+⚠ **The `0x40000000` mark is applied at spawn, never authored.** Its only setter is `FUN_004848f0`
+(`0x0048490c`), which ORs it into the node and its whole child subtree, and its only external caller
+is the vehicle spawner `FUN_0047c210`. No node in the shipped world data carries it: all 7,064 nodes
+in `extracted/C1/gamez/nodes.json` have `update_flags` 0 or 1.
+
+**The byte at `+0xcc` is a mode flag, not a transient. It means "this vehicle is following a scripted
+path instead of being flight-simulated".** The update dispatcher `FUN_00489ea0` reads it first and
+calls the path follower `FUN_0048a110` **instead of** the movement law selected by `obj+0x67C`
+(`0`/`4` being `FUN_0048e580`, the flight integrator that consumes ground blow). Its writers:
+
+| Address | Function | Effect |
+|---|---|---|
+| `0x004b005e` | `FUN_004aff80`, the constructor | 0, so the default is not an emitter |
+| `0x0047c568` | `FUN_0047c210`, the spawner | 1 when the spawn record carries a path, with `+0xd4 = 1` at `0x0047c57e` |
+| `0x00452275` | `FUN_00451bf0` | 1, path taken from the placement record's `+0x24`, leaving `+0xd4` alone |
+| `0x0049427c` | `FUN_004940d0` | 1 with `+0xd4 = 0`, called from the mission-goal runtime `FUN_0046a490` |
+| `0x0048a863` | `FUN_0048a110` | 0, the only clear, and only on reaching the **last** waypoint within 5.0 m |
+
+A non-zero `+0xd4` makes `FUN_0048a110` return on its first line, so the vehicle neither moves nor
+clears `+0xcc`; the release is `FUN_0046a2b0` (`0x0046a2c3`), a mission-goal action. A vehicle
+spawned with a path is therefore a frozen emitter from placement until a goal releases it, and stops
+being one the moment it completes the path and drops into the flight model. No vehicle type holds the
+flag by identity. The follower itself is written up under `BL-361`.
+
+**Zeppelins: yes, and by the default rather than by a zeppelin rule.** `extracted/zrdr/vehicle.zrd.json`
+names no zeppelin, blimp or airship type, so a zeppelin is never a spawned registry vehicle in this
+install. IA1's is the C1 gamez scene node `multiplayer1zep` (`extracted/C1/gamez/nodes.json`), driven
+by `mis_anim` animations, with `update_flags` 1 and both `active` and `intersect_surface` set. It
+never reaches the registry filter at all, and repels the player exactly as terrain does. The GDD's
+naming of zeppelins describes the outcome, not a mechanism.
+
+⚠ **The vehicle filter is player-only**, since it sits inside the `param_1 == DAT_0071c298` test. On
+the AI path nothing is filtered and every hit the sweep returns repels, other aircraft in ordinary
+flight included.
 
 **Nothing in `CSVM/src` implements any of this** (a grep for `groundblow` returns no hits). Owned by
 `BL-359`, which carries the implementation rule and its traps.
