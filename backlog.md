@@ -2670,7 +2670,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 ## Missions, modes & campaign
 
 - `BL-352` `[Feature]` **Instant Action's Table of Contents: the 19 preset scenarios and their View
-  Story page.** Split out of [`docs/PLAN-instant-action.md`](docs/PLAN-instant-action.md) at writing
+  Story page.** Split out of [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) at writing
   (2026-08-14) as deliberately out of that plan's scope. The original's Instant Action screen is not
   primarily a form: down its left side sits `ia_tl_contents`, a 14-row list of 19 named preset
   scenarios (`langui` ids 3600 to 3618: *Girl Trouble*, *Sour Grapes*, *Black Hats and Hoplites*,
@@ -2690,7 +2690,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `PLAN-instant-action` lands the configurable mission the presets would fill in.
 
 - `BL-353` `[Feature]` **Weapon Loadout before an Instant Action flight.** Split out of
-  [`docs/PLAN-instant-action.md`](docs/PLAN-instant-action.md) at writing (2026-08-14). The original's
+  [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) at writing (2026-08-14). The original's
   Instant Action screen carries a *Weapon Loadout* button (`IA_B_CHANGEWEAPONS`, `IDS_IA_B_WEAPONLOADOUT`)
   that opens `ORDINANCELAYOUT.SCRIPT` for either the pilot or the wingmen, selected by the
   `IA_B_PLAYER` / `IA_B_WINGMAN` radio pair beside it (`@globals@ZQ` is -1 for the pilot, -2 for the
@@ -2707,7 +2707,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   build a per-wingman editor without checking that against the original.
 
 - `BL-354` `[Feature]` **The hangar: Build Custom Plane.** Split out of
-  [`docs/PLAN-instant-action.md`](docs/PLAN-instant-action.md) at writing (2026-08-14) as a milestone
+  [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md) at writing (2026-08-14) as a milestone
   of its own rather than a wave of that plan. `IA_B_BUILD` opens the customisation flow, which
   `crimson.rof` ships whole: `PLANESELECTION`, `PLANECONSTRUCTION`, `AIRFRAME`, `ARMOR`, `ENGINE`,
   `GUNS`, `HARDPOINTS`, `PAINT`, `PLANENAME`, `PURCHASE`. Instant Action's pilot-plane dropdown is
@@ -2735,7 +2735,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   fix is hiding `StuntScoreboard` for the duration of an Instant Action mission, sequencing the two
   (splits first, then the wrap-up), or leaving both (the original may have shown an analogous
   sequence of screens) is a design call this item did not make, since G14's own scope was the four
-  rows, not the interaction between two already-separate boards — `docs/PLAN-instant-action.md`'s own
+  rows, not the interaction between two already-separate boards — `docs/plans/PLAN-instant-action.md`'s own
   trap (b) on this item says not to change either board's persistence rule while adding one that
   shows both, which this leaves untouched.
 

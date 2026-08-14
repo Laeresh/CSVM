@@ -927,19 +927,34 @@ in `CSVM.Tests/ZeppelinsTests.cs`.
   present-but-empty; `team` accepts three names case-insensitively AND a bare integer id.
 
 ## src/Mech3/InstantAction.cs
-`InstantActionDef` (docs/formats/instant-action.md, PLAN-instant-action.md B6) plus two readers
-onto it: `Load` for a chapter's shipped `ia.zrd.json`, `LoadFromJson` for a hand-authored
-`--ia=<path>` file — a plain JSON object using the same field names, not the zrdr archive's
-flat-alternating shape. Both funnel through one private `BuildDef(ZrdrDict)`; `LoadFromJson`'s
-only job is `FromJsonObject`, the small mapping from a JSON object onto the same key/[values…]
-shape `ZrdrDict` already wraps (a nested `group1`…`group4` object flattens the same way), so a
-JSON-authored mission parses through exactly the same field-population path a real chapter's
-does. `spawn_points` and `dzones` stay where they already were (`Flight/SpawnPoints.LoadIa`,
-`Flight/StuntMission`) — this def does not repeat either. `PlaneNodeFor` (PLAN-instant-action.md
-C8) is the eleven-entry display-name → gamez-node table (`"Bloodhawk"` → `"player_bhawk"`), a
-deliberate duplicate of `UI.LaunchMenu.Planes` rather than a shared one — the plan's file-contention
-notes reserve `LaunchMenu.cs` for H15/H16 alone. Fixture units + install goldens in
-`CSVM.Tests/InstantActionTests.cs`.
+`InstantActionDef` (docs/formats/instant-action.md, PLAN-instant-action.md B6) plus the three
+producers decision 2 names, converging on one record: `Load` for a chapter's shipped
+`ia.zrd.json`, `LoadFromJson` for a hand-authored `--ia=<path>` file — a plain JSON object using
+the same field names, not the zrdr archive's flat-alternating shape — and `BuildFromWizard` for
+the launchscreen's Instant Action wizard (H16). `Load`/`LoadFromJson` funnel through one private
+`BuildDef(ZrdrDict)`; `LoadFromJson`'s only job is `FromJsonObject`, the small mapping from a JSON
+object onto the same key/[values…] shape `ZrdrDict` already wraps (a nested `group1`…`group4`
+object flattens the same way), so a JSON-authored mission parses through exactly the same
+field-population path a real chapter's does. `BuildFromWizard(baseDef, missionType, playerPlane,
+numWingmen, wingmanPlane, waves, lives)` takes a different shape: `baseDef` is the chosen
+environment's own `Load` result, and only the fields the wizard actually lets a pilot configure
+are overlaid — the ace, the zeppelin node names and `disallow_missions` carry over from `baseDef`
+unedited, since they are chapter-level facts with no wizard control. It applies the same
+`dogfight_ace` zero-forcing rule `BuildDef` does, so a stale wizard wingmen/waves state behind a
+just-switched-to-ace mission type can't produce a solo-breaking def. `EmptyWave` (`MakeWave(null,
+false)`) is what an unconfigured wizard wave slot resolves to — byte-identical to a JSON file's
+own omitted `groupN`, which is the whole point: `LaunchMenu.WaveFor` returns it outright for any
+slot at 0 enemies, regardless of what the militia/aircraft/skill cursors are sitting on.
+`Defaults()` is `BuildDef` over an empty `ZrdrDict` — the wizard's fallback if an environment's own
+file somehow fails to load. `spawn_points` and `dzones` stay where they already were
+(`Flight/SpawnPoints.LoadIa`, `Flight/StuntMission`) — this def does not repeat either.
+`PlaneNodeFor` (PLAN-instant-action.md C8) is the eleven-entry display-name → gamez-node table
+(`"Bloodhawk"` → `"player_bhawk"`), a deliberate duplicate of `UI.LaunchMenu.Planes` rather than a
+shared one — the plan's file-contention notes reserved `LaunchMenu.cs` for H15/H16 alone. Fixture
+units + install goldens in `CSVM.Tests/InstantActionTests.cs`; the wizard's own build path is
+`CSVM.Tests/InstantActionTests.cs`'s "The wizard's own build path" region (a wizard-built def and
+its hand-authored `--ia=` equivalent compared field for field) and
+`CSVM.Tests/LaunchMenuWizardTests.cs` (the militia/aircraft/skill rosters, `WaveFor`).
 ⚠ Every optional key is resolved to the original's own reset-then-overlay default
   (`FUN_00458ff0`/`FUN_00459390`/`FUN_00458d00`), not left null — `PlayerPlane` reads
   `"Devastator"` when unauthored (C2B), a wave with no `groupN` key reads 0 enemies with the
@@ -3790,34 +3805,52 @@ the structs need no `Control` to construct, so `CSVM.Tests` drives them directly
   the physical slot.
 
 ## src/UI/LaunchMenu.cs
-The in-game launchscreen CanvasLayer: Mode branches two ways (PLAN-instant-action.md H15). Free
+The in-game launchscreen CanvasLayer: Mode branches two ways (PLAN-instant-action.md H15/H16). Free
 Flight/Dogfight go Mode → Chapter → Plane, unchanged. Instant Action (the Mode row that used to
-read Stunt Flying — decision 17) instead opens Mode → Environment → MissionType → Plane, reusing
-Plane as this item's stand-in for H16's still-unbuilt wave/wingmen steps 3-4. Input polled every
-frame through one MenuInput per player (no input-map/focus wiring); joining is gated to the Plane
-screen, and with >1 player that screen becomes real SplitScreen.PaneRect panes — pick in the pane
-you fly in. Three Mode rows — Free Flight/Instant Action/Dogfight — map 1:1 onto
-`SessionSpec.MenuMode`'s ordinals (the enum member stays named `Stunt`, out of this item's
-file-contention scope — only the row's label changed); `Launch` carries the enum straight through
-to `SessionSpec.FromMenu`, and for Instant Action `FireLaunch` picks which existing MenuMode value
-to pass by mapping the WIZARD's own picked mission type onto whichever of Free/Stunt's behaviour it
-most resembles (`stunt_flying` → `MenuMode.Stunt`, everything else → `MenuMode.Free`) — an interim
-shape, not `SessionSpec.cs`'s to fix, until H16 gives Instant Action a build path of its own.
-`Environments` (7 rows, the decoded dropdown order, A5 — NOT `Chapters`' alphabetic one) and
-`MissionTypes` (4 rows, the UI dropdown order — NOT the internal id order) are new tables;
-`CurrentMissionTypes` filters Stunt Flying out for whichever environment's chapter bars it via
-`disallow_missions` (decoded: only C2B, "the clouds"), read through the same `Chapters`-table
-`DangerZones` flag `ChapterCodesFor` already uses, so the two screens cannot disagree. The lives
-stepper (decision 18) rides `MissionType` on `MenuInput.MoveX`, a second axis added beside `Move`
-for exactly this — the vertical list cursor and the horizontal stepper read independently. Size
-comes from GetViewport().GetVisibleRect() (a CanvasLayer is not a CanvasItem); LayoutScale caps
-fonts so 4P fits 720p, over `CurrentCount()` generalised to cover every screen.
+read Stunt Flying — decision 17) instead opens its own five-step wizard: Mode → Environment →
+MissionType → Waves → Wingmen → Plane, shared with the other two modes as the final step.
+Dogfighting an Ace skips Waves/Wingmen entirely, both forward (`HandleAccept`'s MissionType case)
+and on the way back out of Plane (its own Back handler) — the decoded setup screen's own behaviour
+(A1: mission type 0 hides every enemy control). Input polled every frame through one MenuInput per
+player (no input-map/focus wiring); joining is gated to the Plane screen, and with >1 player that
+screen becomes real SplitScreen.PaneRect panes — pick in the pane you fly in. Three Mode rows —
+Free Flight/Instant Action/Dogfight — map 1:1 onto `SessionSpec.MenuMode`'s ordinals (the enum
+member stays named `Stunt`, out of this item's file-contention scope — only the row's label
+changed); `Launch` now carries a fourth value, the wizard's own built `InstantActionDef?` (null
+outside Instant Action) alongside the chapter/choices/mode it always carried — H16's own build
+path, replacing H15's interim "map the picked mission type onto whichever of Free/Stunt's
+behaviour it most resembles" (that mapping is gone; `FireLaunch` always passes `_mode` straight
+through now, and `SessionSpec.FromMenu`'s `iaDef` parameter is what actually decides
+Scenario/Stunt, precisely, off the wizard's own pick).
+`Environments` (7 rows, the decoded dropdown order, A5 — NOT `Chapters`' alphabetic one),
+`MissionTypes` (4 rows, the UI dropdown order — NOT the internal id order), `Militias` (13 rows,
+the `.BM` pattern-coverage aircraft lists, decision 7) and `Skills` (novice/veteran/ace) are the
+wizard's own tables. `CurrentMissionTypes` filters Stunt Flying out for whichever environment's
+chapter bars it via `disallow_missions` (decoded: only C2B, "the clouds"), read through the same
+`Chapters`-table `DangerZones` flag `ChapterCodesFor` already uses, so the two screens cannot
+disagree. `MenuInput.MoveX` — added in H15 for the lives stepper — now also drives WaveEdit's four
+fields (Enemies/Militia/Aircraft/Skill, one focused at a time by `Move`) and Wingmen's count/
+aircraft; picking a new Militia resets `AircraftIndex` to 0 (the decoded `AV[BA].QG = 0`). A wave
+slot's own build step (`WaveFor`, static + public) returns `InstantAction.EmptyWave` outright at 0
+enemies, regardless of the militia/aircraft/skill cursors — they are not "configured" until a pilot
+raises the count. `FireLaunch` hands the built def to `InstantAction.BuildFromWizard`, using the
+environment's own `ia.zrd.json` (loaded once, on Environment's own Accept, cached as `_iaBaseDef`)
+as the ace/zeppelin/`disallow_missions` base — `SessionPaths.MissionZrdr(_dataRoot, code, "IA1")`,
+which is why `Build` now also takes `dataRoot`. `DebugWaves(N)`/`DebugWingmen(N)` (--debug-waves=/
+--debug-wingmen=) are `DebugJoin`'s own screenshot-aid pattern, extended to the wizard's own
+screens. Size comes from GetViewport().GetVisibleRect() (a CanvasLayer is not a CanvasItem);
+LayoutScale caps fonts so 4P fits 720p, over `CurrentCount()` generalised to cover every screen —
+and, on the Plane screen specifically, over the OPTIONAL flown-wingmen line (decision 8a,
+`WingmenLine`/`InstantActionRuntime.FlownWingmen`) both `LayoutScale`'s own reference height and
+`RebuildPanes`'s fixed strip band (`StripHeightFrac`) must grow by when it is going to draw, or a
+wingman-heavy wizard launch overflows 720p with nothing telling either estimate to make room —
+caught only by an actual screenshot at the pilot-configures-5-wingmen-solo edge, not by inspection.
 ⚠ Player 1 is the keyboard + the SET of all unclaimed pads until ClaimP1Pad pins its real pad —
   never pads[0], which re-breaks the phantom-device fix; the leftover set makes hand-off free.
 ⚠ Re-entrant: ShowMenu resets to Mode, clears locks (joined players survive), and primes input +
   join edges from the CURRENT raw state — a still-held Esc/Start must not read as a fresh press.
-  `--menu=environment`/`--menu=missiontype` force `_mode` to Instant Action first, since those
-  screens only exist under it and ShowMenu must not render them against a stale `_mode`.
+  `--menu=environment`/`missiontype`/`waves`/`wingmen` force `_mode` to Instant Action first, since
+  those screens only exist under it and ShowMenu must not render them against a stale `_mode`.
 ⚠ Dogfight withholds the launch gesture below 2 joined players (`CanLaunch`), even once P1 is
   locked — the hint line says so; every other mode launches solo exactly as before.
 
@@ -3825,8 +3858,9 @@ fonts so 4P fits 720p, over `CurrentCount()` generalised to cover every screen.
 One launchscreen player's input source — keyboard flag (player 1 only), `Pads` device array, edge/
 auto-repeat state; `Poll(dt)` fills Move/MoveX/Accept/Back/Start (polled: actions can't read a
 named device). `MoveX` (Left/Right, PLAN-instant-action.md H15) is `Move`'s horizontal twin, added
-so the Instant Action MissionType screen can carry a vertical list cursor and a horizontal lives
-stepper at once without either read starving the other — every other screen ignores it.
+so an Instant Action wizard screen can carry a vertical list cursor and a horizontal stepper at
+once without either read starving the other: MissionType's lives (H15), WaveEdit's four fields and
+Wingmen's count/aircraft (H16) all read it — every other screen ignores it.
 ⚠ `Pads` is an array, not an int: player 1 holds every unclaimed device. Reads OR the buttons and
   take the max-magnitude axis, so idle phantom devices contribute nothing.
 ⚠ Raw reads go through `CSVM.Pads.For(Pads)`, never the field: the field is the player's binding
@@ -4163,7 +4197,12 @@ they are testable. `SessionMode` is closed — Menu/Fly/Viewer/Freecam/AnimLab �
 ⚠ **`FromMenu` is static, takes its base as a PARAMETER, and does NOT re-resolve** — it must keep
   writing every menu-settable field, or the pristine base re-opens the carry-over bug. Takes a
   `MenuMode` (Free/Stunt/Versus, also defined here so `LaunchMenu`'s tests stay engine-free), not
-  a bool — the >= 2-player Dogfight lock is `LaunchMenu`'s job, not this factory's.
+  a bool — the >= 2-player Dogfight lock is `LaunchMenu`'s job, not this factory's. Its fifth
+  parameter, `InstantActionDef? iaDef = null` (H16), is the Instant Action wizard's own built def —
+  when given, IT decides `Scenario`/`Stunt` (the exact mission type picked), not `mode`'s own
+  Free/Stunt/Versus guess, which is what H15's own interim mapping approximated before a real def
+  existed to ask. `IaDef` itself is just carried onto the record (`GameSession` reads it); nothing
+  here loads or builds it, the same purity contract `IaPath` (a path, not a load) already keeps.
 
 ## src/Mech3/WorldSession.cs
 Builds one chapter world and binds its `AnimProgram` — the world+anim half of a session build;
@@ -4258,9 +4297,13 @@ scripting an actual shot. `BuildFlightRigs` also constructs `AiAircraftSpawner` 
 `Inputs`; `SpawnAiAircraft` (public — the M4 A2 actor seam, called by `--ai=` at build and by
 later waves mid-session) adds each AI plane to `_aiPlanes`, stepped in `DriveSimSteps` after the
 rigs (a realtime clock lets them tick themselves, like the rigs). `_instantAction`
-(`InstantActionRuntime?`, PLAN-instant-action.md C8) loads `--ia=<path>` at the very top of
-`StartSession` — before any archive, since it is a bare JSON read — and stays null on a load
-failure or absent flag, which is what keeps every other mode untouched by its existence.
+(`InstantActionRuntime?`, PLAN-instant-action.md C8) builds at the very top of `StartSession` —
+before any archive, since loading its source is a bare value read — from whichever of two
+producers the spec carries: `SessionSpec.IaDef` (the Instant Action wizard's own already-built def,
+H16) first, else `--ia=<path>` loaded through `InstantAction.LoadFromJson`; stays null on a load
+failure or when neither was given, which is what keeps every other mode untouched by its
+existence. Both producers converge on the identical `new InstantActionRuntime(def)` call — "one
+build path from wizard and CLI" (H16's own goal) is this one line, not two similar ones.
 `SpawnAiAircraft` has a second overload
 (`string, Vector3, Vector3, AiPilot, PaintScheme?, int?, int?, bool inert = false`) for this: the
 four-parameter one must keep NO optional parameters, because the method GROUP passed

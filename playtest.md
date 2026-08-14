@@ -363,7 +363,7 @@ Save this as `ia-wingmen-test.json` next to the repo, then:
 }
 ```
 
-- `PT-50` `[Own]` **D9's wingman flight (`docs/PLAN-instant-action.md` D9, landed 2026-08-14).**
+- `PT-50` `[Own]` **D9's wingman flight (`docs/plans/PLAN-instant-action.md` D9, landed 2026-08-14).**
   Three Fury wingmen spawn on team 1 alongside the player's Bloodhawk, fanned 100/100/200 m off
   its spawn heading at ±45°, escorting per the decoded `primary_target` chain (0/1 escort the
   player directly; 2 escorts wingman 1). No original splitscreen/Instant Action reference exists

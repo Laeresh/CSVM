@@ -20,16 +20,20 @@ public readonly record struct InstantActionWave(
     int NumEnemies, string EnemyName, string EnemyPlane, string EnemySkill, int EnemyAccentId);
 
 /// <summary>
-/// Reads a chapter's Instant Action configuration two ways onto the same
-/// <see cref="InstantActionDef"/>: the shipped <c>ia.zrd.json</c> (<see cref="Load"/>), and a
-/// hand-authored <c>--ia=&lt;path&gt;</c> file using the same field names as an ordinary JSON
-/// object rather than the zrdr archive's flat-alternating shape (<see cref="LoadFromJson"/>).
-/// The two share one field-population path (<c>BuildDef</c>, over <see cref="ZrdrDict"/>) —
+/// Builds an <see cref="InstantActionDef"/> the three ways decision 2 (PLAN-instant-action.md)
+/// names: the shipped <c>ia.zrd.json</c> (<see cref="Load"/>), a hand-authored <c>--ia=&lt;path&gt;</c>
+/// file using the same field names as an ordinary JSON object rather than the zrdr archive's
+/// flat-alternating shape (<see cref="LoadFromJson"/>), and the launchscreen's Instant Action
+/// wizard (<see cref="BuildFromWizard"/>, H16), which starts from a chosen environment's own
+/// <see cref="Load"/> result and overlays only what the wizard actually lets a pilot configure.
+/// The first two share one field-population path (<c>BuildDef</c>, over <see cref="ZrdrDict"/>) —
 /// <see cref="LoadFromJson"/>'s only job is the small mapping from a plain JSON object onto the
 /// same key/[values…] shape <see cref="ZrdrDict"/> already wraps (PLAN-instant-action.md B6:
 /// "a small hand-written mapping and not a second schema"), so a JSON object's nested
 /// <c>group1</c>…<c>group4</c> records parse through exactly the same <c>ZrdrDict.Dict</c> call
-/// a real reader's does.
+/// a real reader's does. The wizard converges on the same record type rather than this same
+/// parse — <c>GameSession</c> builds one <c>InstantActionRuntime</c> from an
+/// <see cref="InstantActionDef"/> regardless of which of the three produced it.
 /// </summary>
 public static class InstantAction
 {
@@ -70,6 +74,14 @@ public static class InstantAction
         ["Warhawk"] = "player_warhawk",
     };
 
+    /// <summary>The built-in defaults for a wave with no <c>groupN</c> key at all
+    /// (<c>FUN_00458d00</c>'s per-wave reset, read through <see cref="MakeWave"/> with nothing to
+    /// overlay). What an unconfigured launchscreen wizard wave slot resolves to, so a wizard wave
+    /// left at 0 enemies and a JSON file's own omitted/null <c>groupN</c> produce byte-identical
+    /// <see cref="InstantActionWave"/> values (PLAN-instant-action.md H16's own "one build path"
+    /// check).</summary>
+    public static InstantActionWave EmptyWave => MakeWave(null, forceZero: false);
+
     /// <summary>The gamez node an Instant Action display name (an
     /// <see cref="InstantActionDef.PlayerPlane"/>/<see cref="InstantActionDef.AcePlane"/> value,
     /// e.g. <c>"Bloodhawk"</c>) builds — null when the name matches none of the eleven airframes
@@ -98,6 +110,59 @@ public static class InstantAction
             throw new InvalidDataException($"'{jsonPath}': not a JSON object");
         }
         return BuildDef(FromJsonObject(doc.RootElement));
+    }
+
+    /// <summary>Every field at its built-in default (<see cref="BuildDef"/>'s own reset, no key
+    /// overlaid) — an empty <c>{}</c> object read through <see cref="LoadFromJson"/> would produce
+    /// the same record; this skips the JSON round-trip. The launchscreen wizard's fallback
+    /// (PLAN-instant-action.md H16) when an Instant Action environment's own <c>ia.zrd.json</c>
+    /// somehow fails to load — should not happen for the seven environments Instant Action offers,
+    /// kept for the same reason <c>--ia=</c>'s own load catches and warns rather than crashing.</summary>
+    public static InstantActionDef Defaults() => BuildDef(ZrdrDict.FromAlternating(new List<object?>()));
+
+    /// <summary>Builds an <see cref="InstantActionDef"/> from the launchscreen's Instant Action
+    /// wizard (PLAN-instant-action.md H15/H16) — the third of the three producers decision 2 names,
+    /// converging on the same record the shipped-file reader and <c>--ia=</c> build. The wizard
+    /// owns <paramref name="missionType"/>, <paramref name="playerPlane"/>, the wingmen and
+    /// <paramref name="waves"/>, and <paramref name="lives"/> — everything else (the ace, the
+    /// zeppelin node names, <c>disallow_missions</c>) is the chosen environment's own, carried over
+    /// from <paramref name="baseDef"/> unedited, since the wizard has no control for any of them
+    /// (they are chapter-level facts, not mission-type-level ones). <c>dogfight_ace</c> forces the
+    /// wingman count and every wave's enemy count to 0 — the same rule <see cref="BuildDef"/>
+    /// applies when reading the file (A3/B6): the ace duel is solo whichever producer built the
+    /// def, so a wizard pilot who configured wingmen and then switched to Dogfighting an Ace does
+    /// not get a solo-breaking def out of stale wizard state.</summary>
+    public static InstantActionDef BuildFromWizard(InstantActionDef baseDef, string missionType,
+        string playerPlane, int numWingmen, string wingmanPlane,
+        IReadOnlyList<InstantActionWave> waves, int lives)
+    {
+        bool ace = string.Equals(missionType, "dogfight_ace", StringComparison.OrdinalIgnoreCase);
+        var resolvedWaves = new List<InstantActionWave>(4);
+        for (int i = 0; i < 4; i++)
+        {
+            resolvedWaves.Add(ace ? EmptyWave : i < waves.Count ? waves[i] : EmptyWave);
+        }
+
+        return new InstantActionDef
+        {
+            MissionType = missionType,
+            DisallowMissions = baseDef.DisallowMissions,
+            PlayerPlane = playerPlane,
+            NumWingmen = ace ? 0 : Math.Clamp(numWingmen, 0, 5),
+            WingmanPlane = wingmanPlane,
+            Waves = resolvedWaves,
+            ZeppelinType = baseDef.ZeppelinType,
+            CargoZeppelinNode = baseDef.CargoZeppelinNode,
+            PassengerZeppelinNode = baseDef.PassengerZeppelinNode,
+            MilitaryZeppelinNode = baseDef.MilitaryZeppelinNode,
+            AceName = baseDef.AceName,
+            AcePlane = baseDef.AcePlane,
+            AceSkill = baseDef.AceSkill,
+            AceStats = baseDef.AceStats,
+            AceAccentId = baseDef.AceAccentId,
+            AceLivery = baseDef.AceLivery,
+            Lives = Math.Max(0, lives),
+        };
     }
 
     private static InstantActionDef BuildDef(ZrdrDict d)

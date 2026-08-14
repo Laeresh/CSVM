@@ -153,6 +153,121 @@ public class InstantActionTests
         Assert.Throws<System.IO.InvalidDataException>(() => InstantAction.LoadFromJson(file));
     }
 
+    // ---- The wizard's own build path (H16) --------------------------------------------------------
+
+    /// <summary>H16's own "one build path" check: a wizard-built def and the equivalent hand-authored
+    /// <c>--ia=</c> JSON — same mission type/player plane/wingmen/waves/lives, same environment
+    /// (the "ia" fixture, whose ace/zeppelin/disallow_missions <see cref="TheFullRecordParsesFromTheFixture"/>
+    /// already pins) — produce byte-identical <see cref="InstantActionDef"/> field values. This is
+    /// what makes the wizard and <c>--ia=</c> converge on one record rather than two similar ones.</summary>
+    [Fact]
+    public void BuildFromWizardConvergesWithAnEquivalentIaJsonFile()
+    {
+        var baseDef = InstantAction.Load(TestData.Fixture("ia"));
+        var waves = new[]
+        {
+            new InstantActionWave(4, "Black Hat Warhawk", "Warhawk", "veteran", -1),
+            InstantAction.EmptyWave,
+            InstantAction.EmptyWave,
+            InstantAction.EmptyWave,
+        };
+        var wizardDef = InstantAction.BuildFromWizard(baseDef, "dogfight_squadron", "Kestrel", 2, "Fury", waves, 2);
+
+        var path = System.IO.Path.Combine(TestData.TempDir(), "ia-wizard-equivalent.json");
+        System.IO.File.WriteAllText(path, """
+        {
+          "mission_type": "dogfight_squadron",
+          "disallow_missions": ["ground_target"],
+          "player_plane": "Kestrel",
+          "num_wingmen": 2,
+          "wingman_plane": "Fury",
+          "group1": {"num_enemies": 4, "enemy_name": "Black Hat Warhawk", "enemy_plane": "Warhawk", "enemy_skill": "veteran"},
+          "zeppelin_type": "cargo",
+          "cargo_zeppelin": "probezep",
+          "passenger_zeppelin": "probezep",
+          "military_zeppelin": "probezep",
+          "ace_name": "MSG_PROBE_ACE_NAME",
+          "ace_plane": "Peacemaker",
+          "ace_skill": "ace",
+          "ace_stats": [9, 9, 9, 9, 9, 9, 9, 9, 9],
+          "ace_accentID": 24,
+          "ace_pattern": "probepattern",
+          "ace_decal1": 21,
+          "ace_decal2": 3,
+          "ace_decal3": 3,
+          "ace_color1": [149, 163, 195],
+          "ace_color2": [89, 114, 159],
+          "ace_color3": [233, 228, 240],
+          "lives": 2
+        }
+        """);
+        var jsonDef = InstantAction.LoadFromJson(path);
+
+        Assert.Equal(jsonDef.MissionType, wizardDef.MissionType);
+        Assert.Equal(jsonDef.DisallowMissions, wizardDef.DisallowMissions);
+        Assert.Equal(jsonDef.PlayerPlane, wizardDef.PlayerPlane);
+        Assert.Equal(jsonDef.NumWingmen, wizardDef.NumWingmen);
+        Assert.Equal(jsonDef.WingmanPlane, wizardDef.WingmanPlane);
+        Assert.Equal(jsonDef.Waves, wizardDef.Waves);
+        Assert.Equal(jsonDef.ZeppelinType, wizardDef.ZeppelinType);
+        Assert.Equal(jsonDef.CargoZeppelinNode, wizardDef.CargoZeppelinNode);
+        Assert.Equal(jsonDef.PassengerZeppelinNode, wizardDef.PassengerZeppelinNode);
+        Assert.Equal(jsonDef.MilitaryZeppelinNode, wizardDef.MilitaryZeppelinNode);
+        Assert.Equal(jsonDef.AceName, wizardDef.AceName);
+        Assert.Equal(jsonDef.AcePlane, wizardDef.AcePlane);
+        Assert.Equal(jsonDef.AceSkill, wizardDef.AceSkill);
+        Assert.Equal(jsonDef.AceAccentId, wizardDef.AceAccentId);
+        Assert.Equal(jsonDef.AceStats, wizardDef.AceStats);
+        Assert.NotNull(jsonDef.AceLivery);
+        Assert.NotNull(wizardDef.AceLivery);
+        Assert.Equal(jsonDef.AceLivery!.Pattern, wizardDef.AceLivery!.Pattern);
+        Assert.Equal(jsonDef.AceLivery!.Color1, wizardDef.AceLivery!.Color1);
+        Assert.Equal(jsonDef.AceLivery!.Color2, wizardDef.AceLivery!.Color2);
+        Assert.Equal(jsonDef.AceLivery!.Color3, wizardDef.AceLivery!.Color3);
+        Assert.Equal(jsonDef.AceLivery!.NoseDecal, wizardDef.AceLivery!.NoseDecal);
+        Assert.Equal(jsonDef.AceLivery!.TailDecal, wizardDef.AceLivery!.TailDecal);
+        Assert.Equal(jsonDef.AceLivery!.WingDecal, wizardDef.AceLivery!.WingDecal);
+        Assert.Equal(jsonDef.Lives, wizardDef.Lives);
+    }
+
+    /// <summary>Dogfighting an Ace forces the wingman count and every wave's enemy count to 0 —
+    /// the same rule <c>BuildDef</c> applies reading the file — even when the wizard state handed
+    /// in still carries configured wingmen/waves (stale state from before the pilot switched mission
+    /// types), so a solo-breaking def can never reach the runtime whichever producer built it.</summary>
+    [Fact]
+    public void BuildFromWizardForcesTheAceDuelSoloEvenWithStaleWizardState()
+    {
+        var baseDef = InstantAction.Load(TestData.Fixture("ia"));
+        var waves = new[]
+        {
+            new InstantActionWave(6, "Some Militia Warhawk", "Warhawk", "ace", -1),
+            InstantAction.EmptyWave,
+            InstantAction.EmptyWave,
+            InstantAction.EmptyWave,
+        };
+        var def = InstantAction.BuildFromWizard(baseDef, "dogfight_ace", "Devastator", 3, "Fury", waves, 1);
+
+        Assert.Equal(0, def.NumWingmen);
+        foreach (var wave in def.Waves)
+        {
+            Assert.Equal(InstantAction.EmptyWave, wave);
+        }
+    }
+
+    /// <summary>An unconfigured wizard wave slot (0 enemies) and a JSON file's own omitted
+    /// <c>groupN</c> key resolve to the exact same <see cref="InstantActionWave"/>, regardless of
+    /// what the wizard's militia/aircraft/skill cursors happen to be sitting on — they are not
+    /// "configured" until a pilot actually raises the count above 0.</summary>
+    [Fact]
+    public void AnUnconfiguredWaveMatchesAnOmittedGroupNRegardlessOfCursorPosition()
+    {
+        var fromCursors = UI.LaunchMenu.WaveFor(0, militiaIndex: 7, aircraftIndex: 1, skillIndex: 2);
+        Assert.Equal(InstantAction.EmptyWave, fromCursors);
+
+        var fromFile = InstantAction.Load(TestData.Fixture("ia-minimal")).Waves[1]; // group2: unauthored
+        Assert.Equal(InstantAction.EmptyWave, fromFile);
+    }
+
     // ---- Goldens over the install ---------------------------------------------------------------
 
     [ExtractedDataFact]

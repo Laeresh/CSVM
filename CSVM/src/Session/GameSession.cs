@@ -463,10 +463,14 @@ public partial class GameSession : Node3D
             ?? (_spec.WorldMode ? SessionPaths.ChapterGamez(_dataRoot, _spec.Chapter) : _planesGamezPath);
         state.MissionZrdrPath = SessionPaths.MissionZrdr(_dataRoot, _spec.Chapter, _spec.Mission);
 
-        // --ia=<path>: load the hand-authored mission def before anything chapter-dependent
-        // builds (PLAN-instant-action.md C8) — no archives needed, so this can run first. Fails
-        // soft (a warning, no def) rather than aborting the launch, the same policy every other
-        // optional CLI-driven feature in this build follows.
+        // Instant Action's def: the wizard's own build (SessionSpec.IaDef, H16) or --ia=<path>
+        // (PLAN-instant-action.md C8), loaded before anything chapter-dependent builds — no
+        // archives needed, so this can run first. Either producer converges on the same
+        // InstantActionRuntime construction from here on ("one build path from wizard and CLI",
+        // H16's own goal); a failed --ia= load fails soft (a warning, no def) rather than aborting
+        // the launch, the same policy every other optional CLI-driven feature in this build
+        // follows — the wizard's own def never fails to load, since it is already a resolved value
+        // by the time it reaches here.
         _instantAction = null;
         _iaWaves = null;
         _iaWaveRosters = null;
@@ -474,7 +478,13 @@ public partial class GameSession : Node3D
         _iaLaunchWave = 0;
         _iaAce = null;
         _iaDebugForceFired = false;
-        if (_spec.IaPath != null)
+        if (_spec.IaDef is { } wizardDef)
+        {
+            _instantAction = new InstantActionRuntime(wizardDef);
+            GD.Print($"ia: wizard mission_type={wizardDef.MissionType} " +
+                     $"player='{wizardDef.PlayerPlane}' ace='{wizardDef.AceName}' ({wizardDef.AcePlane})");
+        }
+        else if (_spec.IaPath != null)
         {
             try
             {

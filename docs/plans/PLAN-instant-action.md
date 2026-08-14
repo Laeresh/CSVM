@@ -1,8 +1,7 @@
 # Instant Action
 
-**ACTIVE PLAN** (written 2026-08-14). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE 2026-08-15** (written 2026-08-14; executed 2026-08-14/15). All 16 checklist items are
+☑, Waves A–H. Indexed in [`plans.md`](plans.md); read as history.
 
 This plan delivers the original's **Instant Action** as a configurable mission: pick an environment,
 pick one of four mission types (dogfighting an ace, dogfighting a squadron, stunt flying, attacking a
@@ -303,7 +302,7 @@ is M4's formation disproof, `B7` is the team model below.
 ### Wave H — The menu
 
 15. ☑ H15 Top-level restructure and wizard steps 1 to 2
-16. ☐ H16 Wizard steps 3 to 5, and one build path from wizard and CLI
+16. ☑ H16 Wizard steps 3 to 5, and one build path from wizard and CLI
 
 ## Dependency and parallelism notes
 
@@ -1422,7 +1421,44 @@ withholds the launch gesture below 2 joined players and says so in its hint line
 not inherit that gate. (c) `SessionSpec.FromMenu` does not re-resolve and must keep writing every
 menu-settable field, or the pristine base re-opens the carry-over bug.
 
-## H16 ☐ Wizard steps 3 to 5, and one build path from wizard and CLI
+## H16 ☑ Wizard steps 3 to 5, and one build path from wizard and CLI
+
+**Landed 2026-08-15.** Steps 3-4 are two new screens: Waves (up to four slots, 0 enemies =
+unconfigured — decision 1's own presentation divergence from the original's always-four
+dropdowns) drilling into WaveEdit (Enemies/Militia/Aircraft/Skill, `MenuInput.MoveX` live-editing
+whichever field `Move` focused — the same pattern H15's lives stepper introduced, generalised to
+four fields); then Wingmen (count 0-5, Aircraft hidden at 0). Picking a Militia resets Aircraft to
+0 (the decoded `AV[BA].QG = 0`). Dogfighting an Ace skips both screens outright, forward and on the
+way back out of Plane — A1's own "mission type 0 hides every enemy control." Step 5 reuses the
+existing Plane screen unchanged, plus one addition: the flown-wingmen re-clamp (decision 8a) as a
+live display line (`WingmenLine`/`InstantActionRuntime.FlownWingmen`), recomputed every Rebuild so
+it tracks a pilot joining. `Mech3.InstantAction.BuildFromWizard` is the wizard's own producer
+(decision 2's third, after `Load`/`LoadFromJson`): it takes the chosen environment's own shipped
+`ia.zrd.json` (loaded once, on Environment's Accept, cached as `_iaBaseDef`) as the ace/zeppelin/
+`disallow_missions` base — the wizard has no control for any of them — and overlays only what it
+actually lets a pilot configure; `dogfight_ace` forces wingmen/waves to 0 the same way `BuildDef`
+does, defending against stale wizard state. **One build path**: `SessionSpec.FromMenu` gained a
+fifth parameter, `InstantActionDef? iaDef`, which — when given — decides `Scenario`/`Stunt`
+precisely off the wizard's own picked mission type (replacing H15's interim Free/Stunt
+approximation entirely); `GameSession`'s Instant Action load block now checks `_spec.IaDef` before
+`_spec.IaPath`, and both converge on the identical `new InstantActionRuntime(def)` call. Two
+screenshot-only debug aids, `--debug-waves=N`/`--debug-wingmen=N`, mirror `--debug-join=`'s own
+pattern. One real layout defect surfaced only at the controls: the Plane screen's new wingmen line
+overflowed 720p at 5 configured wingmen solo (both `LayoutScale`'s reference-height estimate and
+`RebuildPanes`'s fixed strip band needed to grow by the extra row when it draws) — caught by an
+actual screenshot, not by inspection, and fixed before landing.
+
+**Verify.** `.\RunTests.ps1` full run: build clean (0 StyleCop warnings), 1234/1234 unit tests (19
+new: `InstantActionTests`' wizard-build-converges-with-equivalent-JSON check plus the ace
+zero-forcing and empty-wave-matches-omitted-groupN facts, `LaunchMenuWizardTests`' militia/
+aircraft/skill roster and `WaveFor` facts, `SessionSpecMenuTests`' `iaDef`-decides-Scenario/Stunt
+and 4-player-vs-1-player-identical-def facts), 59/59 engine suites (the four `instant-action-*`
+suites unchanged — the runtime consumption path was not touched, only its two producers), 14/14
+golden hashes unchanged. `--menu=` screenshots (`.scratch/h16/`, `RunProbe.ps1`, absolute paths):
+the Waves screen at 0/1/4 configured (`--debug-waves=`) and at 4 players; the Wingmen screen; the
+Plane screen's flown-wingmen line at 1 and 4 players (`--debug-wingmen=5 --debug-join=3`, showing
+"2 of 5 configured (flight capped at 6)") — the last of these is what caught the overflow defect
+above, re-shot clean after the fix.
 
 **Goal.** Steps 3 to 5 complete the wizard: a wave editor that starts empty and adds up to four
 waves, each configured with count, militia, aircraft and skill; then the wingman count and aircraft;

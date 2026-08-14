@@ -200,6 +200,15 @@ public sealed record SessionSpec
     /// the path; loading it is the runtime's job (PLAN-instant-action.md B6/C8), which keeps this
     /// type free of file I/O.</summary>
     public string? IaPath { get; private set; }
+    /// <summary><b>Set only by <see cref="FromMenu"/>.</b> The launchscreen's Instant Action
+    /// wizard's own built <c>InstantActionDef</c> (PLAN-instant-action.md H16) — null on every CLI
+    /// launch, since <c>--ia=</c> carries a path instead. Already resolved: building it is the
+    /// menu's job, not this type's, the same purity contract <see cref="IaPath"/> keeps (no file
+    /// I/O here). When set, <c>GameSession</c> builds its <c>InstantActionRuntime</c> straight from
+    /// this value rather than loading <see cref="IaPath"/> — the wizard and <c>--ia=</c> converge
+    /// on that one build path from here on, which is what "one build path from wizard and CLI"
+    /// (H16's own goal) means in code.</summary>
+    public InstantActionDef? IaDef { get; private set; }
     /// <summary>The <c>--stage=</c> value as given, unvalidated — only "empty" names a stage.
     /// Whether it survived is <see cref="EmptyStage"/>.</summary>
     public string? Stage { get; private set; }
@@ -491,6 +500,15 @@ public sealed record SessionSpec
     /// <c>UI.WorldDamageLab.ParseDebugSpec</c>.</summary>
     public string? DebugDamage { get; private set; }
     public int DebugJoin { get; private set; }
+    /// <summary><c>--debug-waves=N</c> (launchscreen only, H16): pre-configure the first N
+    /// (clamped 0-4) Instant Action wizard wave slots with a representative load, so the wave
+    /// editor's "N waves configured" states are screenshot-able with nobody at the controls. Same
+    /// role <see cref="DebugJoin"/> plays for the plane screen's join strip.</summary>
+    public int DebugWaves { get; private set; }
+    /// <summary><c>--debug-wingmen=N</c> (launchscreen only, H16): pre-configure the Instant
+    /// Action wizard's wingman count (clamped 0-5), so the plane screen's flown-wingmen re-clamp
+    /// (decision 8a) is screenshot-able alongside <c>--debug-join=</c>.</summary>
+    public int DebugWingmen { get; private set; }
     public bool MarkersOverlay { get; private set; }
     public bool WeaponLab { get; private set; }
     public string? WeaponSelect { get; private set; }
@@ -658,6 +676,8 @@ public sealed record SessionSpec
             else if (arg == "--debug-ainets") { s.DebugAiNets ??= ""; }
             else if (arg.StartsWith("--debug-ainets=")) { s.DebugAiNets = arg["--debug-ainets=".Length..]; }
             else if (arg.StartsWith("--debug-join=")) { s.DebugJoin = int.Parse(arg["--debug-join=".Length..]); }
+            else if (arg.StartsWith("--debug-waves=")) { s.DebugWaves = int.Parse(arg["--debug-waves=".Length..]); }
+            else if (arg.StartsWith("--debug-wingmen=")) { s.DebugWingmen = int.Parse(arg["--debug-wingmen=".Length..]); }
             else if (arg.StartsWith("--paint=")) { s.PaintNames = arg["--paint=".Length..].Split(',', StringSplitOptions.TrimEntries); }
             else if (arg.StartsWith("--paint-color=")) { s.PaintColorOverride = ParsePaintColors(arg["--paint-color=".Length..]); }
             else if (arg.StartsWith("--paint-decal=")) { s.PaintDecalOverride = ParsePaintDecals(arg["--paint-decal=".Length..]); }
@@ -966,9 +986,15 @@ public sealed record SessionSpec
     ///
     /// <para>⚠ <b>The &gt;= 2-player Dogfight lock is the caller's job, not this one's</b> — the
     /// launchscreen's Plane screen withholds the launch gesture until enough pilots have joined
-    /// (see <c>LaunchMenu</c>); this factory trusts whatever roster it is handed.</para></summary>
+    /// (see <c>LaunchMenu</c>); this factory trusts whatever roster it is handed.</para>
+    ///
+    /// <para><paramref name="iaDef"/> is the Instant Action wizard's own built def (H16), null for
+    /// every other launch. When given, it — not <paramref name="mode"/>'s own Free/Stunt/Versus
+    /// guess — decides <see cref="Scenario"/> and <see cref="Stunt"/>: the wizard already knows
+    /// exactly which of the four mission types was picked, so this stops approximating it the way
+    /// H15 had to before the wizard could build a def at all.</para></summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
-        MenuMode mode)
+        MenuMode mode, InstantActionDef? iaDef = null)
     {
         var names = planeNodes.ToArray();
         return cli with
@@ -980,16 +1006,17 @@ public sealed record SessionSpec
             // plane rather than to whatever the last session flew.
             PlaneName = names.Length > 0 ? names[0] : cli.PlaneName,
             Players = Mathf.Clamp(names.Length, 1, UI.SplitScreen.MaxPlayers),
-            Stunt = mode == MenuMode.Stunt,
+            Stunt = iaDef != null ? iaDef.MissionType == "stunt_flying" : mode == MenuMode.Stunt,
             Versus = mode == MenuMode.Versus,
             Mode = SessionMode.Fly,
             WorldMode = true,
-            Scenario = cli.ScenarioExplicit ? cli.Scenario : mode switch
+            Scenario = cli.ScenarioExplicit ? cli.Scenario : iaDef?.MissionType ?? mode switch
             {
                 MenuMode.Stunt => "stunt_flying",
                 MenuMode.Versus => "dogfight_ace",
                 _ => "zeppelin_run",
             },
+            IaDef = iaDef,
         };
     }
 

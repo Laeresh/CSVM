@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM;
+using CSVM.Mech3;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -261,6 +262,82 @@ public class SessionSpecMenuTests
             Assert.Contains("zeppelin_run", keys);
         }
     }
+
+    // ---- Instant Action wizard steps 3-5, one build path (PLAN-instant-action.md H16) -----------
+
+    /// <summary>When the wizard hands over a built <c>InstantActionDef</c>, IT — not the picked
+    /// <see cref="MenuMode"/> — decides <see cref="SessionSpec.Scenario"/>/<see cref="SessionSpec.Stunt"/>:
+    /// the wizard already knows exactly which of the four mission types was picked, so this
+    /// replaces H15's own approximation (mission type mapped onto whichever of Free/Stunt it most
+    /// resembled) now that a real build path exists.</summary>
+    [Theory]
+    [InlineData("dogfight_ace", false)]
+    [InlineData("dogfight_squadron", false)]
+    [InlineData("stunt_flying", true)]
+    [InlineData("zeppelin_run", false)]
+    public void AnIaDefsOwnMissionTypeDecidesScenarioAndStunt(string missionType, bool expectStunt)
+    {
+        var def = WizardDef(missionType);
+        var spec = SessionSpec.FromMenu(Cli(), "C1", new[] { "player_bhawk" }, MenuMode.Stunt, def);
+
+        Assert.Equal(missionType, spec.Scenario);
+        Assert.Equal(expectStunt, spec.Stunt);
+        Assert.False(spec.Versus);
+        Assert.Same(def, spec.IaDef);
+    }
+
+    /// <summary>Every CLI launch and every Free Flight/Dogfight menu pick carries no
+    /// <c>InstantActionDef</c> at all — <see cref="SessionSpec.IaDef"/> stays null, the same
+    /// backward-compatible default every existing <c>FromMenu</c> call site (this file's own
+    /// 4-argument calls included) already relies on.</summary>
+    [Fact]
+    public void IaDefIsNullOutsideInstantAction()
+    {
+        Assert.Null(Cli().IaDef);
+        Assert.Null(Menu(Cli(), "C1", MenuMode.Free, "player_bhawk").IaDef);
+        Assert.Null(Menu(Cli(), "C1", MenuMode.Versus, "player_bhawk", "player_fury").IaDef);
+    }
+
+    /// <summary>Decision 8a's own promise, checked at the seam <c>FireLaunch</c> actually calls:
+    /// the flown-wingmen clamp is a Plane-screen DISPLAY concern
+    /// (<c>InstantActionRuntime.FlownWingmen</c>), never a rewrite of the def — a 4-player wizard
+    /// launch and its 1-player equivalent carry the exact same <c>NumWingmen</c>, because
+    /// <c>FromMenu</c> never reads <paramref name="planeNodes"/>'s length into
+    /// <see cref="SessionSpec.IaDef"/> at all.</summary>
+    [Fact]
+    public void AFourPlayerAndAOnePlayerLaunchCarryTheSameWizardDefUntouched()
+    {
+        var def = WizardDef("dogfight_squadron");
+
+        var onePlayer = SessionSpec.FromMenu(Cli(), "C1", new[] { "player_bhawk" }, MenuMode.Stunt, def);
+        var fourPlayers = SessionSpec.FromMenu(Cli(), "C1",
+            new[] { "player_bhawk", "player_fury", "player_kestrel", "player_warhawk" }, MenuMode.Stunt, def);
+
+        Assert.Equal(1, onePlayer.Players);
+        Assert.Equal(4, fourPlayers.Players);
+        Assert.Equal(def.NumWingmen, onePlayer.IaDef!.NumWingmen);
+        Assert.Equal(def.NumWingmen, fourPlayers.IaDef!.NumWingmen);
+        Assert.Equal(onePlayer.IaDef!.NumWingmen, fourPlayers.IaDef!.NumWingmen);
+    }
+
+    private static InstantActionDef WizardDef(string missionType) => new()
+    {
+        MissionType = missionType,
+        DisallowMissions = Array.Empty<string>(),
+        PlayerPlane = "Bloodhawk",
+        NumWingmen = 5,
+        WingmanPlane = "Fury",
+        Waves = new[] { InstantAction.EmptyWave, InstantAction.EmptyWave, InstantAction.EmptyWave, InstantAction.EmptyWave },
+        CargoZeppelinNode = "vostokzep",
+        PassengerZeppelinNode = "vostokzep",
+        MilitaryZeppelinNode = "vostokzep",
+        AceName = "Marshall Bill Redmann",
+        AcePlane = "Devastator",
+        AceSkill = "veteran",
+        AceStats = default,
+        AceAccentId = -1,
+        Lives = 1,
+    };
 
     private static SessionSpec Cli(params string[] args) => SessionSpec.Parse(args);
 

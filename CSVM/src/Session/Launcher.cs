@@ -66,6 +66,9 @@ public partial class Launcher : Node3D
     // The device-less menu players --debug-join= asks for, held until the launchscreen exists and
     // consumed there: a later return to the menu keeps whoever really joined.
     private int _pendingJoin;
+    // --debug-waves=/--debug-wingmen=, the same one-shot hold as _pendingJoin above but for the
+    // Instant Action wizard's own screenshot aids (H16).
+    private int _pendingWaves, _pendingWingmen;
     // The --screenshot=/--shots=/--frames= state machine and F11/F12's placement print and
     // ad-hoc save — see src/Testing/CaptureDirector.cs's entry. Process-scoped: constructed once
     // from the launch spec, never re-armed by a menu relaunch.
@@ -249,6 +252,8 @@ public partial class Launcher : Node3D
         _captureDirector = new Testing.CaptureDirector(_spec);
         _gltfExporter = new Testing.GltfExporter(_spec);
         _pendingJoin = _spec.DebugJoin;
+        _pendingWaves = _spec.DebugWaves;
+        _pendingWingmen = _spec.DebugWingmen;
 
 
         // The window is CREATED without focus (`display/window/size/no_focus` in project.godot), so
@@ -655,7 +660,7 @@ public partial class Launcher : Node3D
     {
         if (_menu == null)
         {
-            _menu = LaunchMenu.Build(_zrdrPath);
+            _menu = LaunchMenu.Build(_zrdrPath, _dataRoot);
             _menu.Launch = StartSessionFromMenu;
             _menu.Quit = () => GetTree().Quit();
             AddChild(_menu);
@@ -669,6 +674,18 @@ public partial class Launcher : Node3D
             _menu.DebugJoin(_pendingJoin);
             _pendingJoin = 0; // one-shot: a return to the menu keeps whoever really joined
         }
+        // --debug-waves=/--debug-wingmen=: the same screenshot aid for the Instant Action wizard's
+        // own screens (H16).
+        if (_pendingWaves > 0)
+        {
+            _menu.DebugWaves(_pendingWaves);
+            _pendingWaves = 0;
+        }
+        if (_pendingWingmen > 0)
+        {
+            _menu.DebugWingmen(_pendingWingmen);
+            _pendingWingmen = 0;
+        }
     }
 
     /// <summary>The launchscreen's players locked their picks: derive this session's spec from the
@@ -680,14 +697,14 @@ public partial class Launcher : Node3D
     /// the exception on purpose: they come from the join flow rather than from args, so they stay
     /// session state here instead of becoming a spec field.</para></summary>
     private void StartSessionFromMenu(string chapter, IReadOnlyList<LaunchMenu.PlayerChoice> players,
-        MenuMode mode)
+        MenuMode mode, InstantActionDef? iaDef)
     {
         var planes = new List<string>(players.Count);
         foreach (var p in players)
         {
             planes.Add(p.PlaneNode);
         }
-        _spec = SessionSpec.FromMenu(_cli, chapter, planes, mode);
+        _spec = SessionSpec.FromMenu(_cli, chapter, planes, mode, iaDef);
         // Honour the join flow's device binding rather than re-deriving it from the roster: the
         // pad that joined as P2 in the menu must be the pad that flies P2. Single player keeps the
         // any-pad policy (null), so every connected pad flies the one plane, as before.
