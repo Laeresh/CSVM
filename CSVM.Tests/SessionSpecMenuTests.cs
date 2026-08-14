@@ -219,6 +219,49 @@ public class SessionSpecMenuTests
         Assert.Equal(8, UI.LaunchMenu.ChapterCodesFor(MenuMode.Versus).Length);
     }
 
+    // ---- Instant Action wizard steps 1-2 (PLAN-instant-action.md H15) --------------------------
+
+    /// <summary>The Environment screen's roster, in the decoded dropdown order (A5) — seven rows,
+    /// C1C never among them (the chapter Instant Action omits). Matches
+    /// docs/formats/instant-action.md's "Environment → chapter" table exactly.</summary>
+    [Fact]
+    public void TheEnvironmentScreenOffersTheDecodedSevenInOrder()
+    {
+        Assert.Equal(
+            new[] { "C1", "C2B", "C3", "C5", "C1B", "C4", "C2" },
+            UI.LaunchMenu.EnvironmentCodes());
+    }
+
+    /// <summary>The MissionType screen's roster for one environment: all four mission types except
+    /// on "the clouds" (C2B), whose own `disallow_missions` bars Stunt Flying — the same rule
+    /// `ChapterCodesFor`/`StuntFlyingHidesTheChaptersWithoutDangerZones` already exercises from the
+    /// plain Chapter screen's side, read here from the Environment screen's.</summary>
+    [Fact]
+    public void MissionTypeHidesStuntFlyingOnlyWhereTheChapterBarsIt()
+    {
+        Assert.Equal(
+            new[] { "dogfight_ace", "dogfight_squadron", "stunt_flying", "zeppelin_run" },
+            UI.LaunchMenu.MissionTypeKeysFor("C1"));
+        Assert.Equal(
+            new[] { "dogfight_ace", "dogfight_squadron", "zeppelin_run" },
+            UI.LaunchMenu.MissionTypeKeysFor("C2B"));
+    }
+
+    /// <summary>Every one of the seven Instant Action environments offers at least the three
+    /// mission types no chapter's `disallow_missions` ever bars — ace, squadron and zeppelin are
+    /// never filtered, only stunt is.</summary>
+    [Fact]
+    public void EveryEnvironmentOffersAceSquadronAndZeppelin()
+    {
+        foreach (string code in UI.LaunchMenu.EnvironmentCodes())
+        {
+            var keys = UI.LaunchMenu.MissionTypeKeysFor(code);
+            Assert.Contains("dogfight_ace", keys);
+            Assert.Contains("dogfight_squadron", keys);
+            Assert.Contains("zeppelin_run", keys);
+        }
+    }
+
     private static SessionSpec Cli(params string[] args) => SessionSpec.Parse(args);
 
     private static SessionSpec Menu(SessionSpec cli, string chapter, MenuMode mode, params string[] planes)

@@ -33,6 +33,11 @@ public sealed class MenuInput
 
     // Results of the last Poll, valid until the next one.
     public int Move;        // −1 up, +1 down, 0 none (auto-repeat already applied)
+    /// <summary>−1 left, +1 right, 0 none (auto-repeat already applied) — a second, independent
+    /// axis from <see cref="Move"/> so a screen can carry a list cursor (vertical) and a numeric
+    /// stepper (horizontal) at once, the way the Instant Action wizard's mission-type screen reads
+    /// mission choice and lives together (PLAN-instant-action.md H15).</summary>
+    public int MoveX;
     public bool Accept;     // pressed this frame (edge)
     public bool Back;       // pressed this frame (edge)
     public bool Start;      // pressed this frame (edge)
@@ -50,8 +55,8 @@ public sealed class MenuInput
     private const float StickDeadzone = 0.5f;    // |LeftY| past this counts as a d-pad press
 
     private bool _acceptPrev, _backPrev, _startPrev;
-    private int _dirPrev;
-    private float _repeatTimer;
+    private int _dirPrev, _dirXPrev;
+    private float _repeatTimer, _repeatTimerX;
 
     /// <summary>The single pad this player is bound to, or −1 when it has none or several
     /// (player 1's unclaimed set) — for logging and the join bookkeeping.</summary>
@@ -96,6 +101,23 @@ public sealed class MenuInput
         }
         _dirPrev = dir;
 
+        int dirX = RawDirX();
+        MoveX = 0;
+        if (dirX != 0)
+        {
+            if (dirX != _dirXPrev)
+            {
+                MoveX = dirX;
+                _repeatTimerX = RepeatInitial;
+            }
+            else if ((_repeatTimerX -= dt) <= 0f)
+            {
+                MoveX = dirX;
+                _repeatTimerX = RepeatInterval;
+            }
+        }
+        _dirXPrev = dirX;
+
         bool accept = RawAccept();
         Accept = accept && !_acceptPrev;
         _acceptPrev = accept;
@@ -123,6 +145,9 @@ public sealed class MenuInput
         _dirPrev = RawDir();
         _repeatTimer = RepeatInitial;
         Move = 0;
+        _dirXPrev = RawDirX();
+        _repeatTimerX = RepeatInitial;
+        MoveX = 0;
         Accept = Back = Start = false;
     }
 
@@ -178,6 +203,14 @@ public sealed class MenuInput
         bool up = KeyDown(Key.Up) || KeyDown(Key.W) || PadButton(JoyButton.DpadUp) || stickY < -StickDeadzone;
         bool down = KeyDown(Key.Down) || KeyDown(Key.S) || PadButton(JoyButton.DpadDown) || stickY > StickDeadzone;
         return up ? -1 : down ? 1 : 0;
+    }
+
+    private int RawDirX()
+    {
+        float stickX = PadAxis(JoyAxis.LeftX);
+        bool left = KeyDown(Key.Left) || KeyDown(Key.A) || PadButton(JoyButton.DpadLeft) || stickX < -StickDeadzone;
+        bool right = KeyDown(Key.Right) || KeyDown(Key.D) || PadButton(JoyButton.DpadRight) || stickX > StickDeadzone;
+        return left ? -1 : right ? 1 : 0;
     }
 
     private bool RawAccept() =>

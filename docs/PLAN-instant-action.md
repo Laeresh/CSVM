@@ -302,7 +302,7 @@ is M4's formation disproof, `B7` is the team model below.
 
 ### Wave H — The menu
 
-15. ☐ H15 Top-level restructure and wizard steps 1 to 2
+15. ☑ H15 Top-level restructure and wizard steps 1 to 2
 16. ☐ H16 Wizard steps 3 to 5, and one build path from wizard and CLI
 
 ## Dependency and parallelism notes
@@ -1360,7 +1360,36 @@ the filtered one.
 
 # Wave H — The menu
 
-## H15 ☐ Top-level restructure and wizard steps 1 to 2
+## H15 ☑ Top-level restructure and wizard steps 1 to 2
+
+**Landed 2026-08-14.** `UI/LaunchMenu.cs`'s Mode screen reads Free Flight / Instant Action /
+Dogfight (the `MenuMode` enum stays named `Free`/`Stunt`/`Versus` — `SessionSpec.cs` is out of this
+item's file-contention scope, so only the row label changed). Picking Instant Action opens two new
+screens: Environment (the seven decoded environments in the launcher's own dropdown order, A5) then
+MissionType (the four mission types that environment's `disallow_missions` allows — decoded: only
+C2B/"the clouds" bars Stunt Flying — with the lives stepper beside them, decision 18, on
+`MenuInput`'s new `MoveX` axis so it never competes with the vertical list cursor). Both screens
+reuse the existing single-cursor navigation `CurrentCount()`/`Row()`/`Detail()` already gave Mode
+and Chapter, generalised rather than duplicated. Steps 3-5 (waves, wingmen, the `InstantActionDef`
+these and the mission pick build, and one build path from wizard and CLI) are H16's — until that
+build path exists, the wizard's own MissionType screen still hands off to the existing Plane screen
+as its stand-in last step, and `FireLaunch` maps the picked mission type onto whichever of
+Free/Stunt's existing session shape it most resembles (`stunt_flying` keeps today's exact Stunt
+Flying session; the other three fly free over the chosen environment) — an explicit, commented
+fallback, not a finding. The environment/mission-type PICKS themselves are the real, decoded,
+working part of this item.
+
+**Verify.** `.\RunTests.ps1` full run: build clean (0 StyleCop warnings), 1215/1215 unit tests (3
+new: the decoded 7-row Environment order, MissionType's per-chapter Stunt Flying filter on both C1
+and C2B, and every environment offering ace/squadron/zeppelin), 59/59 engine suites including
+`instant-action`/`instant-action-zeppelin`/`instant-action-end`/`instant-action-wrapup` unchanged,
+14/14 golden hashes unchanged — Free Flight and Dogfight are provably untouched by this item.
+`--menu=` screenshots at 1P and 4P for Mode, Environment and MissionType (`.scratch/h15/`,
+`RunProbe.ps1`, absolute paths per SHOT-10): the three Mode rows read in order, Environment shows
+its seven rows with "Region C1" for the focused one, MissionType shows its four rows plus "Lives 1
+◀▶ change", and both 4P shots fit 720p with room under the footer — `LayoutScale`'s cap holds.
+Chapter and Plane screens re-screenshot rendering exactly as before (all 8 chapters, the
+11-aircraft roster) as a regression check on the `CurrentCount()`/`Row()`/`Detail()` generalisation.
 
 **Goal.** The launchscreen's top level reads Free Flight / Instant Action / Dogfight. Choosing
 Instant Action gives step 1, the seven environments, then step 2, the mission types that environment

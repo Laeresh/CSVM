@@ -3790,23 +3790,43 @@ the structs need no `Control` to construct, so `CSVM.Tests` drives them directly
   the physical slot.
 
 ## src/UI/LaunchMenu.cs
-The in-game launchscreen CanvasLayer: Mode → Chapter → Plane, input polled every frame through
-one MenuInput per player (no input-map/focus wiring); joining is gated to the Plane screen, and
-with >1 player that screen becomes real SplitScreen.PaneRect panes — pick in the pane you fly in.
-Three Mode rows — Free Flight/Stunt Flying/Dogfight — map 1:1 onto `SessionSpec.MenuMode`'s
-ordinals; `Launch` carries the enum (not a bool) straight through to `SessionSpec.FromMenu`. Size
+The in-game launchscreen CanvasLayer: Mode branches two ways (PLAN-instant-action.md H15). Free
+Flight/Dogfight go Mode → Chapter → Plane, unchanged. Instant Action (the Mode row that used to
+read Stunt Flying — decision 17) instead opens Mode → Environment → MissionType → Plane, reusing
+Plane as this item's stand-in for H16's still-unbuilt wave/wingmen steps 3-4. Input polled every
+frame through one MenuInput per player (no input-map/focus wiring); joining is gated to the Plane
+screen, and with >1 player that screen becomes real SplitScreen.PaneRect panes — pick in the pane
+you fly in. Three Mode rows — Free Flight/Instant Action/Dogfight — map 1:1 onto
+`SessionSpec.MenuMode`'s ordinals (the enum member stays named `Stunt`, out of this item's
+file-contention scope — only the row's label changed); `Launch` carries the enum straight through
+to `SessionSpec.FromMenu`, and for Instant Action `FireLaunch` picks which existing MenuMode value
+to pass by mapping the WIZARD's own picked mission type onto whichever of Free/Stunt's behaviour it
+most resembles (`stunt_flying` → `MenuMode.Stunt`, everything else → `MenuMode.Free`) — an interim
+shape, not `SessionSpec.cs`'s to fix, until H16 gives Instant Action a build path of its own.
+`Environments` (7 rows, the decoded dropdown order, A5 — NOT `Chapters`' alphabetic one) and
+`MissionTypes` (4 rows, the UI dropdown order — NOT the internal id order) are new tables;
+`CurrentMissionTypes` filters Stunt Flying out for whichever environment's chapter bars it via
+`disallow_missions` (decoded: only C2B, "the clouds"), read through the same `Chapters`-table
+`DangerZones` flag `ChapterCodesFor` already uses, so the two screens cannot disagree. The lives
+stepper (decision 18) rides `MissionType` on `MenuInput.MoveX`, a second axis added beside `Move`
+for exactly this — the vertical list cursor and the horizontal stepper read independently. Size
 comes from GetViewport().GetVisibleRect() (a CanvasLayer is not a CanvasItem); LayoutScale caps
-fonts so 4P fits 720p.
+fonts so 4P fits 720p, over `CurrentCount()` generalised to cover every screen.
 ⚠ Player 1 is the keyboard + the SET of all unclaimed pads until ClaimP1Pad pins its real pad —
   never pads[0], which re-breaks the phantom-device fix; the leftover set makes hand-off free.
 ⚠ Re-entrant: ShowMenu resets to Mode, clears locks (joined players survive), and primes input +
   join edges from the CURRENT raw state — a still-held Esc/Start must not read as a fresh press.
+  `--menu=environment`/`--menu=missiontype` force `_mode` to Instant Action first, since those
+  screens only exist under it and ShowMenu must not render them against a stale `_mode`.
 ⚠ Dogfight withholds the launch gesture below 2 joined players (`CanLaunch`), even once P1 is
   locked — the hint line says so; every other mode launches solo exactly as before.
 
 ## src/UI/MenuInput.cs
 One launchscreen player's input source — keyboard flag (player 1 only), `Pads` device array, edge/
-auto-repeat state; `Poll(dt)` fills Move/Accept/Back/Start (polled: actions can't read a named device).
+auto-repeat state; `Poll(dt)` fills Move/MoveX/Accept/Back/Start (polled: actions can't read a
+named device). `MoveX` (Left/Right, PLAN-instant-action.md H15) is `Move`'s horizontal twin, added
+so the Instant Action MissionType screen can carry a vertical list cursor and a horizontal lives
+stepper at once without either read starving the other — every other screen ignores it.
 ⚠ `Pads` is an array, not an int: player 1 holds every unclaimed device. Reads OR the buttons and
   take the max-magnitude axis, so idle phantom devices contribute nothing.
 ⚠ Raw reads go through `CSVM.Pads.For(Pads)`, never the field: the field is the player's binding

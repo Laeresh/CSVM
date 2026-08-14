@@ -8,16 +8,23 @@ namespace CSVM.UI;
 /// <summary>
 /// The in-game launchscreen: a keyboard/controller-driven menu shown
 /// when the viewer is launched with no content-selecting CLI arg (a bare launch, e.g.
-/// RunGame.ps1). Three screens in sequence — <b>Mode</b> (Free Flight / Stunt Flying / Dogfight) →
-/// <b>Chapter</b> (the eight chapter worlds) → <b>Plane</b> (the player roster, with a couple of
-/// stats from <see cref="PlaneStats"/>) — after which <see cref="Launch"/> fires with the chosen
-/// chapter, the per-player plane + pad, and the mode; GameSession builds the world through the
-/// normal arg-driven pipeline (the menu just fills in the same selections the CLI would).
+/// RunGame.ps1). <b>Mode</b> (Free Flight / Instant Action / Dogfight) branches two ways
+/// (PLAN-instant-action.md decision 17). Free Flight and Dogfight go straight to <b>Chapter</b>
+/// (the eight chapter worlds, unchanged) → <b>Plane</b>. Instant Action instead opens its own
+/// wizard: <b>Environment</b> (the seven decoded Instant Action environments, each naming one
+/// chapter) → <b>MissionType</b> (the four mission types that environment's `disallow_missions`
+/// allows, with the lives stepper beside them) → <i>waves, wingmen (H16, not built yet)</i> →
+/// <b>Plane</b>, reused as this item's stand-in last step. Whichever path is taken,
+/// <see cref="Launch"/> fires with the chosen chapter, the per-player plane + pad, and a
+/// <see cref="MenuMode"/> — for Instant Action the picked mission type maps onto whichever of
+/// Free's/Stunt's existing behaviour it most resembles until H16 gives it a build path of its own
+/// (<see cref="FireLaunch"/>); GameSession builds the world through the normal arg-driven pipeline
+/// (the menu just fills in the same selections the CLI would).
 ///
 /// <para><b>Dogfight needs a fight.</b> Its Plane screen withholds the launch gesture until at
 /// least two players have joined, even once everyone present is locked — see
 /// <see cref="CanLaunch"/> and the hint line <see cref="JoinHint"/> shows while it is withheld.
-/// Free Flight and Stunt Flying still launch solo exactly as before.</para>
+/// Free Flight and Instant Action still launch solo exactly as before.</para>
 ///
 /// <para><b>Join flow.</b> Two phases, in this order. First player 1 — the keyboard plus
 /// every pad nobody else holds — picks the mode and the chapter, and the pad it actually steers
@@ -29,7 +36,8 @@ namespace CSVM.UI;
 /// under the breadcrumb shows who is in on every screen. Each player then locks their pick with A
 /// — <b>duplicates are allowed</b>, nothing reserves an aircraft — and the flight starts when
 /// everyone is locked. B unlocks; B while unlocked leaves the session (player 1 goes back to the
-/// chapter screen instead, which unlocks everyone). A pad that disconnects drops its player
+/// screen that fed the Plane screen this launch — Chapter, or Instant Action's MissionType —
+/// which unlocks everyone). A pad that disconnects drops its player
 /// (player 1 just loses its pad and keeps the keyboard).</para>
 ///
 /// <para><b>The aircraft screen splits</b> once more than one player has joined: instead of one
@@ -72,14 +80,53 @@ public sealed partial class LaunchMenu : CanvasLayer
     // Reference values at 720p (TUNE).
     private const float StripHeightFrac = 0.12f;
     private const int PanePad = 10;
+    // The lives stepper's range (Screen.MissionType, decision 15/18): 0 = unlimited, 1 = the
+    // faithful one-life run (default), up to this cap. INVENTED — ia.json carries no such field, so
+    // there is no decoded range to match; TUNE.
+    private const int MaxLives = 9;
 
-    // The three flight modes, in MenuMode's ordinal order (Free/Stunt/Versus) so the row index
-    // doubles as the enum value with no separate lookup.
+    // The three top-level modes, in MenuMode's ordinal order (Free/Stunt/Versus) so the row index
+    // doubles as the enum value with no separate lookup. Row 1 reads "Instant Action" (decision 17,
+    // PLAN-instant-action.md): Stunt Flying is no longer offered here on its own — it is one of the
+    // four Instant Action mission types (Screen.MissionType, below), reachable only where the
+    // picked environment's chapter carries dzones. The MenuMode enum value stays named Stunt
+    // (SessionSpec.cs, out of this item's file-contention scope) — only the label changes; picking
+    // this row still opens the Environment screen rather than the plain Chapter one.
     private static readonly Choice[] Modes =
     {
         new("Free Flight", "Explore the map freely — no objectives, no clock."),
-        new("Stunt Flying", "Race through every Danger Zone against the clock."),
+        new("Instant Action", "Pick an environment and a mission — ace, squadron, stunt or zeppelin."),
         new("Dogfight", "Splitscreen free-for-all — first to the kill target wins."),
+    };
+
+    // The seven Instant Action environments, in the decoded dropdown order (A5, `FUN_004174d0`;
+    // docs/formats/instant-action.md "Environment → chapter") — NOT the alphabetic order `Chapters`
+    // below uses for Free Flight/Dogfight's plain Chapter screen. C1C is not offered here (the
+    // chapter Instant Action omits); its DangerZones flag is looked up from `Chapters` by code
+    // rather than duplicated, so the two tables cannot drift apart on that value.
+    private static readonly (string Name, string Code)[] Environments =
+    {
+        ("an airfield", "C1"),
+        ("the clouds", "C2B"),
+        ("Hawaii", "C3"),
+        ("Manhattan", "C5"),
+        ("the ocean", "C1B"),
+        ("Sky Haven", "C4"),
+        ("a movie studio", "C2"),
+    };
+
+    // The four Instant Action mission types, in the UI dropdown's own order (`IDS_IA_MISSIONTYPE`,
+    // 3660) — NOT the internal id order (`docs/formats/instant-action.md` "Mission types have
+    // internal ids"). Key is the ia.json `mission_type` string every consumer (InstantActionDef,
+    // --scenario=) already uses. Every environment offers all four except that Stunt Flying is
+    // hidden where the chapter's own `disallow_missions` bars it (decoded: only C2B among the seven
+    // offered here) — CurrentMissionTypes applies that filter; this table is the unfiltered set.
+    private static readonly (string Label, string Key)[] MissionTypes =
+    {
+        ("Dogfighting an Ace", "dogfight_ace"),
+        ("Dogfighting a Squadron", "dogfight_squadron"),
+        ("Stunt Flying", "stunt_flying"),
+        ("Attacking a Zeppelin", "zeppelin_run"),
     };
 
     // The eight chapter worlds (mirrors RunDev.ps1's roster: display name + extracted folder code).
@@ -140,6 +187,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string _zrdrPath = "";
     private Screen _screen = Screen.Mode;
     private int _modeIndex, _chapterIndex;
+    // Instant Action wizard state (steps 1-2, PLAN-instant-action.md H15): the picked environment
+    // row, the picked mission type row within CurrentMissionTypes, and the lives stepper beside it
+    // (decision 18). Steps 3-5 (waves, wingmen, the def these feed) are H16's.
+    private int _environmentIndex, _missionTypeIndex;
+    private int _lives = 1;
     private MenuMode _mode;
     private string _error = "";
     // The pad player 1 claimed by driving the Mode/Chapter screens with it (−1 = none yet, i.e.
@@ -153,11 +205,18 @@ public sealed partial class LaunchMenu : CanvasLayer
     // instead of _center on the Plane screen once more than one player has joined.
     private Control _paneRoot = null!;
 
-    private enum Screen { Mode, Chapter, Plane }
+    private enum Screen { Mode, Chapter, Environment, MissionType, Plane }
 
     /// <summary>The chapter roster the picked mode offers — the Chapter screen and everything
-    /// downstream (breadcrumb, launch) index into this, never the full list.</summary>
+    /// downstream (breadcrumb, launch) index into this, never the full list. Free Flight/Dogfight
+    /// only; Instant Action uses <see cref="Environments"/>/<see cref="CurrentMissionTypes"/>
+    /// instead (its own environment list is decoded, not this table's alphabetic one).</summary>
     private (string Name, string Code, bool DangerZones)[] CurrentChapters => ChaptersFor(_mode);
+
+    /// <summary>The mission types the picked environment's chapter actually offers: all four,
+    /// minus Stunt Flying where that chapter's own `disallow_missions` bars it (decoded: only "the
+    /// clouds" among the seven Instant Action environments — <see cref="DangerZonesFor"/>).</summary>
+    private (string Label, string Key)[] CurrentMissionTypes => MissionTypeRowsFor(Environments[_environmentIndex].Code);
 
     /// <summary>The single-player cursor position on the current screen (the plane screen reads
     /// player 1's cursor).</summary>
@@ -165,6 +224,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         Screen.Mode => _modeIndex,
         Screen.Chapter => _chapterIndex,
+        Screen.Environment => _environmentIndex,
+        Screen.MissionType => _missionTypeIndex,
         _ => _slots[0].PlaneIndex,
     };
 
@@ -202,7 +263,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     /// <summary>The launch-gate RULE, pure and public so it is reachable from <c>CSVM.Tests</c>
     /// with no menu instance behind it: everyone joined has locked a plane, AND — Dogfight only —
-    /// at least two have joined to fight each other. Free Flight and Stunt Flying launch solo
+    /// at least two have joined to fight each other. Free Flight and Instant Action launch solo
     /// exactly as before.</summary>
     public static bool CanLaunch(MenuMode mode, bool allLocked, int joinedCount) =>
         allLocked && (mode != MenuMode.Versus || joinedCount >= 2);
@@ -219,19 +280,57 @@ public sealed partial class LaunchMenu : CanvasLayer
         return codes;
     }
 
+    /// <summary>The Instant Action Environment screen's roster, as chapter codes, in the decoded
+    /// dropdown order (A5) — C1, C2B, C3, C5, C1B, C4, C2, C1C never among them. Static + public so
+    /// the decoded order is testable without a menu instance.</summary>
+    public static string[] EnvironmentCodes()
+    {
+        var codes = new string[Environments.Length];
+        for (int i = 0; i < Environments.Length; i++)
+            codes[i] = Environments[i].Code;
+        return codes;
+    }
+
+    /// <summary>The Instant Action MissionType screen's roster for one environment's chapter, as
+    /// `ia.json` `mission_type` keys, in the UI dropdown's own order: every environment offers all
+    /// four except that Stunt Flying is dropped where the chapter's `disallow_missions` bars it
+    /// (decoded: only C2B, "the clouds", among the seven offered environments — the same rule
+    /// <see cref="ChapterCodesFor"/> already applies via <see cref="DangerZonesFor"/>, read once
+    /// here instead of duplicated). Static + public so the filter is testable without a menu
+    /// instance.</summary>
+    public static string[] MissionTypeKeysFor(string chapterCode)
+    {
+        var rows = MissionTypeRowsFor(chapterCode);
+        var keys = new string[rows.Length];
+        for (int i = 0; i < rows.Length; i++)
+            keys[i] = rows[i].Key;
+        return keys;
+    }
+
     /// <summary>Show the menu (normally from the Mode screen) and prime every input edge so a
     /// button still held from the transition here (the Esc that left a flight, the Start that
     /// joined a player) does not fire immediately. Joined players survive a return from flight;
-    /// their plane locks do not. <paramref name="startScreen"/> ("chapter"/"plane") opens on a
-    /// later screen — a screenshot/verification aid (--menu=plane).</summary>
+    /// their plane locks do not. <paramref name="startScreen"/>
+    /// ("chapter"/"environment"/"missiontype"/"plane") opens on a later screen — a
+    /// screenshot/verification aid (--menu=plane, --menu=missiontype).</summary>
     public void ShowMenu(string startScreen = "")
     {
         _screen = startScreen switch
         {
             "chapter" => Screen.Chapter,
+            "environment" => Screen.Environment,
+            "missiontype" => Screen.MissionType,
             "plane" => Screen.Plane,
             _ => Screen.Mode,
         };
+        // Environment/MissionType only exist under Instant Action — force it so a --menu= opening
+        // straight onto one of them (a screenshot aid) renders the right roster/filter rather than
+        // whatever _mode was last left at.
+        if (_screen is Screen.Environment or Screen.MissionType)
+        {
+            _modeIndex = (int)MenuMode.Stunt;
+            _mode = MenuMode.Stunt;
+        }
         _error = "";
         Visible = true;
         if (_slots.Count == 0)
@@ -303,6 +402,22 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private static (string Name, string Code, bool DangerZones)[] ChaptersFor(MenuMode mode) =>
         mode == MenuMode.Stunt ? Array.FindAll(Chapters, c => c.DangerZones) : Chapters;
+
+    private static (string Label, string Key)[] MissionTypeRowsFor(string chapterCode) =>
+        DangerZonesFor(chapterCode) ? MissionTypes : Array.FindAll(MissionTypes, m => m.Key != "stunt_flying");
+
+    /// <summary>Whether a chapter's `ia.json` ships `dzones` — looked up from <see cref="Chapters"/>
+    /// by code so the Environment/MissionType screens and the plain Chapter screen cannot read two
+    /// different answers for the same chapter. Chapters is the eight-row table; every Environment
+    /// row's code is one of the seven that carry a DangerZones entry there (C1C, the omitted
+    /// chapter, is the only one that would not be).</summary>
+    private static bool DangerZonesFor(string chapterCode)
+    {
+        foreach (var c in Chapters)
+            if (c.Code == chapterCode)
+                return c.DangerZones;
+        return false;
+    }
 
     private static int Mph(PlaneStats s) => Mathf.RoundToInt(s.FdSpeed * 2.23694f);
 
@@ -466,26 +581,54 @@ public sealed partial class LaunchMenu : CanvasLayer
             dirty |= ClaimP1Pad();
             if (p1.Move != 0)
             {
-                int n = _screen == Screen.Mode ? Modes.Length : CurrentChapters.Length;
-                if (_screen == Screen.Mode)
-                    _modeIndex = Wrap(_modeIndex + p1.Move, n);
-                else
-                    _chapterIndex = Wrap(_chapterIndex + p1.Move, n);
+                int n = CurrentCount();
+                switch (_screen)
+                {
+                    case Screen.Mode: _modeIndex = Wrap(_modeIndex + p1.Move, n); break;
+                    case Screen.Chapter: _chapterIndex = Wrap(_chapterIndex + p1.Move, n); break;
+                    case Screen.Environment: _environmentIndex = Wrap(_environmentIndex + p1.Move, n); break;
+                    case Screen.MissionType: _missionTypeIndex = Wrap(_missionTypeIndex + p1.Move, n); break;
+                }
+                dirty = true;
+            }
+            // The lives stepper rides the same screen as the mission choice (decision 18) on the
+            // horizontal axis, so it never competes with the vertical list cursor above.
+            if (_screen == Screen.MissionType && p1.MoveX != 0)
+            {
+                _lives = Math.Clamp(_lives + p1.MoveX, 0, MaxLives);
                 dirty = true;
             }
             if (p1.Accept)
             {
                 _error = "";
-                _screen = _screen == Screen.Mode ? Screen.Chapter : Screen.Plane;
-                if (_screen == Screen.Chapter)
+                switch (_screen)
                 {
-                    _mode = (MenuMode)_modeIndex; // the row order IS the enum order
-                    // The roster may have shrunk (Stunt hides the dzone-less maps) — keep the
-                    // cursor on a row that exists.
-                    _chapterIndex = Wrap(_chapterIndex, CurrentChapters.Length);
+                    case Screen.Mode:
+                        _mode = (MenuMode)_modeIndex; // the row order IS the enum order
+                        if (_mode == MenuMode.Stunt) // "Instant Action" — the wizard's step 1
+                        {
+                            _screen = Screen.Environment;
+                        }
+                        else
+                        {
+                            _screen = Screen.Chapter;
+                            // The roster may have shrunk (Stunt hid the dzone-less maps last time
+                            // around) — keep the cursor on a row that exists.
+                            _chapterIndex = Wrap(_chapterIndex, CurrentChapters.Length);
+                        }
+                        break;
+                    case Screen.Environment:
+                        _screen = Screen.MissionType;
+                        // The mission-type roster depends on the environment just picked (Stunt
+                        // Flying hidden on "the clouds") — keep the cursor on a row that exists.
+                        _missionTypeIndex = Wrap(_missionTypeIndex, CurrentMissionTypes.Length);
+                        break;
+                    case Screen.Chapter:
+                    case Screen.MissionType:
+                        _screen = Screen.Plane;
+                        PrimeJoins(); // joining opens here — a Start held on the way in must not fire
+                        break;
                 }
-                else
-                    PrimeJoins(); // joining opens here — a Start held on the way in must not fire
                 dirty = true;
             }
             else if (p1.Back)
@@ -493,7 +636,12 @@ public sealed partial class LaunchMenu : CanvasLayer
                 if (_screen == Screen.Mode)
                     Quit?.Invoke();
                 else
-                    _screen = Screen.Mode;
+                    _screen = _screen switch
+                    {
+                        Screen.Environment => Screen.Mode,
+                        Screen.MissionType => Screen.Environment,
+                        _ => Screen.Mode, // Chapter
+                    };
                 dirty = true;
             }
             // Everyone else can only drop out from here.
@@ -531,8 +679,10 @@ public sealed partial class LaunchMenu : CanvasLayer
                 }
                 else if (i == 0)
                 {
-                    // Player 1 backing out returns everyone to the chapter screen.
-                    _screen = Screen.Chapter;
+                    // Player 1 backing out returns everyone to whichever screen fed the Plane
+                    // screen this time — MissionType for Instant Action, the plain Chapter
+                    // screen for Free Flight/Dogfight.
+                    _screen = _mode == MenuMode.Stunt ? Screen.MissionType : Screen.Chapter;
                     foreach (var s in _slots)
                         s.Locked = false;
                     return true;
@@ -570,8 +720,28 @@ public sealed partial class LaunchMenu : CanvasLayer
         var choices = new List<PlayerChoice>(_slots.Count);
         foreach (var slot in _slots)
             choices.Add(new PlayerChoice(Planes[slot.PlaneIndex].Node, slot.Input.Pads));
+
+        string chapter;
+        MenuMode launchMode;
+        if (_mode == MenuMode.Stunt) // Instant Action
+        {
+            // Steps 3-5 (waves, wingmen, the InstantActionDef these and the mission choice build)
+            // are H16's — until that build path exists, an Instant Action launch reuses whichever
+            // existing session shape its picked mission type most resembles: the Stunt Flying
+            // mission type is the real Stunt session (unchanged from before this item); the other
+            // three fly free over the chosen environment. The environment and mission-type PICKS
+            // themselves are the real, decoded, working part of this item — this fallback is only
+            // how far a launch reaches until H16 wires the rest through.
+            chapter = Environments[_environmentIndex].Code;
+            launchMode = CurrentMissionTypes[_missionTypeIndex].Key == "stunt_flying" ? MenuMode.Stunt : MenuMode.Free;
+        }
+        else
+        {
+            chapter = CurrentChapters[_chapterIndex].Code;
+            launchMode = _mode;
+        }
         // Leave our state as-is so a failed build can send us back with ShowMenu.
-        Launch?.Invoke(CurrentChapters[_chapterIndex].Code, choices, _mode);
+        Launch?.Invoke(chapter, choices, launchMode);
     }
 
     // --- rendering ---
@@ -606,6 +776,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             Screen.Mode => "SELECT MODE",
             Screen.Chapter => "SELECT MAP",
+            Screen.Environment => "SELECT ENVIRONMENT",
+            Screen.MissionType => "SELECT MISSION",
             _ => _slots.Count > 1 ? "SELECT AIRCRAFT — ALL PLAYERS" : "SELECT AIRCRAFT",
         };
         _body.AddChild(Label(heading, (int)(HeadingFont * s), HeadingColor, HorizontalAlignment.Center));
@@ -761,6 +933,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         Screen.Mode => Modes.Length,
         Screen.Chapter => CurrentChapters.Length,
+        Screen.Environment => Environments.Length,
+        Screen.MissionType => CurrentMissionTypes.Length,
         _ => Planes.Length,
     };
 
@@ -773,6 +947,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             Screen.Mode => Modes[index].Label,
             Screen.Chapter => CurrentChapters[index].Name,
+            Screen.Environment => Environments[index].Name,
+            Screen.MissionType => CurrentMissionTypes[index].Label,
             _ => Planes[index].Name,
         };
         bool sel = index == CurrentIndex;
@@ -837,7 +1013,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         string back = _screen == Screen.Mode ? "Esc / B  Quit" : "Esc / B  Back";
         string who = _slots.Count > 1 ? "       (P1 chooses)" : "";
-        return $"↑↓  Navigate       Enter / A  Select       {back}{who}";
+        string nav = _screen == Screen.MissionType
+            ? "↑↓  Choose mission       ←→  Lives"
+            : "↑↓  Navigate";
+        return $"{nav}       Enter / A  Select       {back}{who}";
     }
 
     private string Breadcrumb()
@@ -847,6 +1026,10 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             Screen.Mode => "Mode  ›  Map  ›  Aircraft",
             Screen.Chapter => $"{mode}  ›  Map  ›  Aircraft",
+            Screen.Environment => $"{mode}  ›  Environment  ›  Mission  ›  Aircraft",
+            Screen.MissionType => $"{mode}  ›  {Environments[_environmentIndex].Name}  ›  Mission  ›  Aircraft",
+            _ when _mode == MenuMode.Stunt =>
+                $"{mode}  ›  {Environments[_environmentIndex].Name}  ›  {CurrentMissionTypes[_missionTypeIndex].Label}  ›  Aircraft",
             _ => $"{mode}  ›  {CurrentChapters[_chapterIndex].Name}  ›  Aircraft",
         };
     }
@@ -855,8 +1038,15 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         Screen.Mode => Modes[focus].Detail,
         Screen.Chapter => $"Region {CurrentChapters[focus].Code}",
+        Screen.Environment => $"Region {Environments[focus].Code}",
+        Screen.MissionType => LivesDetail(),
         _ => PlaneStat(Planes[focus].Node),
     };
+
+    /// <summary>The lives stepper's own line, shown where the other screens show the focused row's
+    /// stat/region — it is not per-row, so it does not vary with the mission-type cursor.</summary>
+    private string LivesDetail() =>
+        _lives == 0 ? "Lives   Unlimited        ◀ ▶  change" : $"Lives   {_lives}        ◀ ▶  change";
 
     /// <summary>A couple of stats for the focused plane, loaded lazily from vehicle.json and cached
     /// (null = load failed, shown as unavailable — never blocks the menu). fd_speed → mph is the
