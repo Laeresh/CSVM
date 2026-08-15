@@ -11,7 +11,7 @@ Sourced from `ASSETS/SCRIPTS/INSTANTACTION.SCRIPT`, `ASSETS/SCRIPTS/IA_WRAPUP.SC
 table (see [strings.md](strings.md)), and the per-chapter `<chapter>/IA1/zrdr/ia.zrd.json`. The
 latter's full key census — every field an `ia.json` carries, including the ace's livery keys —
 already lives in [spawns.md](spawns.md); this page does not restate it, only what feeds the
-**setup UI** and the **wrap-up UI** around that data. Decoded 2026-08-14.
+**setup UI** and the **wrap-up UI** around that data.
 
 The "setup path" and "built-in defaults" sections below are what `Mech3.InstantActionDef` and
 its two readers (`Mech3/InstantAction.cs`, PLAN-instant-action.md B6) implement — every optional
@@ -164,12 +164,12 @@ Hellhound alone, coverage gives Warhawk and Hellhound).
 Every chapter's `ia.zrd.json` names one ace in full, not a random draw: `ace_name`, `ace_plane`,
 `ace_skill` (always `"ace"`), `ace_stats` (always `[9,9,9,9,9,9,9,9,9]`), `ace_accentID`, and a
 complete `ace_pattern`/`ace_colorN`/`ace_decalN` livery — authored in all 8 of 8 chapters, censused
-2026-08-14. The full field table, the `PaintScheme` mapping and the `ace_stats` order inference are
+The full field table, the `PaintScheme` mapping and the `ace_stats` order inference are
 already on [spawns.md](spawns.md); this page does not repeat them.
 
 ## The setup path: what the engine builds from all this
 
-Decoded 2026-08-14 out of `crimson.exe`. The file half is loaded by `FUN_0045a150` (opens `ia.zrd`,
+`crimson.exe` establishes this. The file half is loaded by `FUN_0045a150` (opens `ia.zrd`,
 fills the per-mission-type spawn table, then calls the key parser `FUN_00459390` on the setup
 record) and the mission is built by `FUN_0045a390`. The setup record is the global at
 **`0x00718cd8`**; the per-mission-type table is `0x00718fe0`, five entries of 20 bytes, holding an
@@ -250,7 +250,7 @@ as a target assignment only. [`org/aiPilot.md`](../org/aiPilot.md) has the demot
 formation law it suppresses.
 
 ⚠ **That first net is a CAMPAIGN MISSION's asset, not a generic patrol area** (censused
-2026-08-15). Net names are mission-scoped, the prefix naming the mission that uses them
+Net names are mission-scoped, the prefix naming the mission that uses them
 ([`ai-nets.md`](ai-nets.md), "Net names are mission-scoped"), and each chapter's first net is
 referenced by exactly one mission, or by nothing at all:
 
@@ -367,7 +367,7 @@ Instant Action, and nothing else. Nothing on this path converts them to a 1-to-9
 
 One function, ticked every frame, does two jobs. It advances the wave counter when the current wave
 is gone, and it decides whether the mission is over. M4 B7 traced its main path
-(`analysis/m4-b7-group-slot/FINDINGS.md`); it was read whole on 2026-08-14 (A4), which is what
+(`analysis/m4-b7-group-slot/FINDINGS.md`); the full read establishes
 settled the three questions that pass left open.
 
 Two globals drive it. `DAT_00718cd8` is the setup record's first dword, the **`mission_type` id**,
@@ -637,7 +637,7 @@ four (Shot %'s numerator/denominator remains the open question).
 
 ### What the four numbers count
 
-Decoded 2026-08-14 (A5). `gui_init` makes exactly one engine call, `callback($$E$$, 2352, GT, HT,
+ `gui_init` makes exactly one engine call, `callback($$E$$, 2352, GT, HT,
 IT, JT)`, and its arm in `crimson.exe` is `0x0040c644`-`0x0040c749`. That arm formats all four
 strings and writes them back through the four out-pointers, so the whole board is one function
 reading one record.
