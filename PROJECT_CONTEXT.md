@@ -191,18 +191,14 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Fixed shape — five short paragraphs, ~15 lines / ~2 KB: this rule, where the project is, active plan + wave position, next items, pointers.** When work lands, the only edits allowed here are: advance the wave-position clause, swap the "Next" IDs, delete text. **Adding a sentence about the landed item is forbidden in every tense** —  If this section is longer after your edit than before it, the edit was wrong.
 
-**Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt flying, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, world destructibles that take damage, die, lose collision, throw debris and reset — and planes shoot planes down (M4 A1, front-loaded). The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
+**Where the project is.** Milestones 1 through 4 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, Instant Action, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 added guns, rockets and world destructibles that take damage, die, lose collision, throw debris and reset; M4 added the combat AI: aircraft that patrol, engage, evade and die, turrets, zeppelins, and pilot voice. All four Instant Action mission types (ace, squadron, stunt flying, zeppelin run) are playable and scored, solo or in splitscreen, over the seven shipped environments.
 
-**No active plan.** Splitscreen polish completed 2026-08-15,
-[`docs/plans/PLAN-splitscreen-polish.md`](docs/plans/PLAN-splitscreen-polish.md). AI flight (the
-plant, then the pilot) completed 2026-08-15, waves C–F,
-[`docs/plans/PLAN-ai-flight.md`](docs/plans/PLAN-ai-flight.md). Instant Action completed
-2026-08-15, [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md); M4 (Game AI)
-completed 2026-08-14, [`docs/plans/PLAN-M4-ai.md`](docs/plans/PLAN-M4-ai.md). Owed at the
-controls: `PT-28`, `PT-41`, `PT-43` (4-player pane only), `PT-45`, `PT-46`, `PT-47`, `PT-49`,
-`PT-50`, `PT-52`, `PT-53`–`PT-57`, `CAP-37`
-([`playtest.md`](playtest.md)). Verify any
-change with **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit
-code); read [`docs/verification.md`](docs/verification.md) first.
+**No active plan.**
+
+Verify any change with **`.\RunTests.ps1`** (build → units →
+in-engine suites → golden hashes → one exit code); read
+[`docs/verification.md`](docs/verification.md) first.
+
+The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
 Everything else unscheduled — known issues, deferred items, fidelity questions, the TUNE list — is in `backlog.md`; keep it updated as items land or get scheduled.
