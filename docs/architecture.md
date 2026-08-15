@@ -5430,9 +5430,14 @@ three `*_zeppelin` names need not be zeppelin records at all.
 The world AA emplacements (M4 C9b): `TurretController.BuildEmplacements` resolved against the
 built chapter world (`AnimRuntime.FindNodes`; a multi-segment `NODES` path scopes each further
 segment to the prior match's subtree), registered with the shared pool so every player's aim
-assist sees them (`ProjectilePool.CollectTurrets`), and stepped from `GameSession.DriveSimSteps`
-after the zeppelins so a slung mount reads its ride's moved pose. Built unconditionally with a
-chapter flight — the original's world placement pass is unconditional too. Observability: the
+assist sees them (`ProjectilePool.CollectTurrets`), and stepped from its own `_PhysicsProcess` on a
+realtime clock or from `GameSession.DriveSimSteps` on a parent-driven one — added to the tree after
+the zeppelin runtime, so a slung mount reads its ride's moved pose under either. Built
+unconditionally with a chapter flight — the original's world placement pass is unconditional too.
+⚠ It was a plain class stepped from `DriveSimSteps` alone until 2026-08-15, which meant every
+emplacement in the install was inert in ordinary play and ticked only under `--det`; every suite
+and every golden runs fixed-step, so nothing caught it. A session runtime that steps only from
+`DriveSimSteps` is silently dead in the mode players use. Observability: the
 `turrets: N world emplacement(s) placed…` census line plus per-turret `woken`/`engaging`
 breadcrumbs. Pinned by the `world-turrets` suite (C1 census 74, C4 census 92).
 ⚠ Shipped `ACTIVATED` is the default: dormant emplacements stay dormant (the mission-script

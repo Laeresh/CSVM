@@ -2653,6 +2653,10 @@ public partial class GameSession : Node3D
             _turretEmplacements = new TurretEmplacementRuntime(turretDefs, weaponDefs,
                 (pattern, scope) => placedRt.FindNodes(pattern, scope), projectiles,
                 placedRt.WorldRoot);
+            // Into the tree AFTER the zeppelin runtime, so a slung mount reads its ride's moved
+            // pose on a realtime clock too — the physics tick follows tree order, and that is the
+            // same ordering DriveSimSteps keeps for a fixed clock.
+            _worldRoot!.AddChild(_turretEmplacements);
             int awakeByData = _turretEmplacements.AwakeCount;
             // The Instant Action builder's zeppelin turret arm, recorded above: the objective
             // zeppelin's rings come up armed, the switched-off zeppelins' go quiet. Runs BEFORE

@@ -224,7 +224,8 @@ public static class Suites
             "write on the objective zeppelin (14 rings armed and shooting back, nothing outside " +
             "the hull touched, the same call with the flag cleared stowing them again), keep " +
             "their own mounting SECTION out of their own sight line while the rest of the hull " +
-            "stays cover, skip " +
+            "stays cover, step THEMSELVES on a realtime clock (the mode every real session runs, " +
+            "and the one no suite or golden uses), skip " +
             "same-team targets, join the aim-assist candidate list, and go permanently quiet " +
             "when the emplacement's own destructible dies", WorldTurrets));
         into.Add(new TestHarness.Suite("carried-turrets",
@@ -4601,6 +4602,7 @@ public static class Suites
             FlightController? target = null;
             FlightController? friend = null;
             FlightController? zepBait = null;   // its own rig: the zeppelin rings shoot it to bits
+            Session.TurretEmplacementRuntime? emplacements = null;   // a Node now: freed below
             try
             {
                 var live = new ProjectilePool(textures, null, null)
@@ -4609,7 +4611,7 @@ public static class Suites
                 };
                 pool = live;
                 ctx.Host.AddChild(live);
-                var runtime = new Session.TurretEmplacementRuntime(turretDefs, weapons,
+                var runtime = emplacements = new Session.TurretEmplacementRuntime(turretDefs, weapons,
                     (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live,
                     world.Runtime.WorldRoot);
 
@@ -4752,6 +4754,25 @@ public static class Suites
                         $"the armed zeppelin engages a hostile plane alongside shots={ZepShots()}");
                     ctx.Check(Combined(zepBait) < baitBefore,
                         $"…with rounds striking it moved={baitBefore - Combined(zepBait):0.##}");
+
+                    // ⚠ The tick contract, and the reason this suite could pass while the guns
+                    // stood silent in ordinary play: GameSession.DriveSimSteps runs ONLY on a
+                    // parent-driven clock, so a runtime that steps from there alone is inert on
+                    // the realtime clock every real session uses — and every suite and golden
+                    // runs fixed-step, which is exactly the blind spot. Driven here the way
+                    // Godot's physics tick drives it, with a realtime clock in Current.
+                    var savedClock = Utils.GameClock.Current;
+                    Utils.GameClock.Current = new Utils.GameClock { Mode = Utils.GameClock.RunMode.Realtime };
+                    int shotsBeforeRealtime = ZepShots();
+                    for (int i = 0; i < 240; i++)
+                    {
+                        runtime._PhysicsProcess(1.0 / 60.0);
+                        live.SimStep(1f / 60f);
+                    }
+                    Utils.GameClock.Current = savedClock;
+                    ctx.Check(ZepShots() > shotsBeforeRealtime,
+                        $"the runtime steps ITSELF on a realtime clock: {ZepShots() - shotsBeforeRealtime} more shot(s) with nobody calling SimStep");
+
                     zepBait.PlaceHeld(ringPos + new Vector3(0f, -80f, 20000f), ringPos);
 
                     ctx.Same(14, runtime.SetActivatedUnder(mp1[0], false),
@@ -4822,6 +4843,7 @@ public static class Suites
                 target?.Free();
                 friend?.Free();
                 zepBait?.Free();
+                emplacements?.Free();
                 textures.Dispose();
             }
         });
@@ -4834,9 +4856,10 @@ public static class Suites
             using var c4Textures = new TextureArchive(texturesPath);
             var live = new ProjectilePool(c4Textures, null, null);
             ctx.Host.AddChild(live);
+            Session.TurretEmplacementRuntime? c4Emplacements = null;
             try
             {
-                var runtime = new Session.TurretEmplacementRuntime(turretDefs, weapons,
+                var runtime = c4Emplacements = new Session.TurretEmplacementRuntime(turretDefs, weapons,
                     (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live,
                     world.Runtime.WorldRoot);
                 var census = new List<string>();
@@ -4856,6 +4879,7 @@ public static class Suites
             }
             finally
             {
+                c4Emplacements?.Free();
                 live.Free();
             }
         });
