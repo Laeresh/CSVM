@@ -407,6 +407,15 @@ public static class Suites
             + "AimCandidateSet.Structures is, live ordnance is not walked, and a zeppelin "
             + "contributes one entry per gasbag/engine/cannon with its hull's velocity; plus C1's "
             + "real emplacements landing on the Non-Aircraft cycle", TargetPoolModel));
+        into.Add(new TestHarness.Suite("target-selection",
+            "B13's sticky selection, tree-free: the decoded cycle order in one assertion "
+            + "(objectives, then ahead/behind/left/right with distance inside a sector), the "
+            + "auto-acquire at the head, Next/Previous stepping and wrapping, Nearest as HEAD OF "
+            + "CYCLE rather than nearest-in-space, target death dropping to the head and not to the "
+            + "dead entry's neighbour, own respawn preserving a live selection, range/bearing/"
+            + "attitude changes never dropping one, Target Nothing STAYING cleared through repeated "
+            + "rebuilds, nearest-crosshairs scoring the NOSE cone (not the pipper) with its 2 km cap "
+            + "and reaching an ally, and 0x24's attacker queue walked backwards", TargetSelectionModel));
         into.Add(new TestHarness.Suite("splitscreen-listeners",
             "every 2–4P pane is a 3D audio listener, which a SubViewport is not by default — the "
             + "pinned listener model (A2), and the one thing standing between splitscreen and a "
@@ -5674,6 +5683,197 @@ public static class Suites
                   && !TargetRef.ForTurret(default, TargetClass.NonAircraft, "")
                       .IsSameTarget(TargetRef.ForTurret(default, TargetClass.NonAircraft, "")),
             $"two different sources never match, and a null source matches nothing — including another null, which would otherwise make every sourceless ref the same target");
+    }
+
+    /// <summary>B13's <see cref="TargetSelection"/>, entirely tree-free and data-free: plain
+    /// <c>object</c> sources through the real <see cref="TargetPool"/>, a plane at the origin on the
+    /// identity basis (nose down −Z, right +X), and no world at all.
+    ///
+    /// <para>The geometry is chosen so the decoded sector order and a plain nearest-in-space order
+    /// DISAGREE: the nearest candidate sits 100 m off the right wing and the head of the cycle is
+    /// 400 m ahead. An implementation that quietly sorted by range would pass a weaker suite and fail
+    /// this one.</para></summary>
+    private static void TargetSelectionModel(TestContext ctx)
+    {
+        var ahead1 = new object();      // 900 m ahead   -> sector 0
+        var ahead2 = new object();      // 400 m ahead   -> sector 0, nearer
+        var behind = new object();      // 200 m behind  -> sector 1
+        var left = new object();        // 200 m left    -> sector 2
+        var right = new object();       // 100 m right   -> sector 3, the nearest thing in space
+        var ally = new object();        // 300 m ahead, own team
+        int own = AimAssist.PlayerTeam;
+        int foe = InstantActionRuntime.EnemyTeam;
+        var basis = Basis.Identity;
+
+        AimCandidateSet Scan(params (object Src, Vector3 At, int Team)[] entries)
+        {
+            var s = new AimCandidateSet();
+            foreach (var (src, at, team) in entries)
+            {
+                s.AddVehicle(at, Vector3.Zero, team, live: true, src);
+            }
+
+            return s;
+        }
+
+        var full = Scan(
+            (ahead1, new Vector3(0f, 0f, -900f), foe),
+            (ahead2, new Vector3(0f, 0f, -400f), foe),
+            (behind, new Vector3(0f, 0f, 200f), foe),
+            (left, new Vector3(-200f, 0f, 0f), foe),
+            (right, new Vector3(100f, 0f, 0f), foe),
+            (ally, new Vector3(0f, 0f, -300f), own));
+
+        // The sector key itself, against the decode's own table.
+        ctx.Check(TargetSelection.SectorKey(Vector3.Forward * 5f, basis, false) == 0
+                  && TargetSelection.SectorKey(Vector3.Back * 5f, basis, false) == 1
+                  && TargetSelection.SectorKey(Vector3.Left * 5f, basis, false) == 2
+                  && TargetSelection.SectorKey(Vector3.Right * 5f, basis, false) == 3
+                  && TargetSelection.SectorKey(Vector3.Right * 5f, basis, true) == -1,
+            $"FUN_004bbd60's sectors: ahead 0, behind 1, left 2, right 3, and an objective overrides to -1");
+
+        // An objective can only be hand-filed today: nothing in CSVM sets TargetRef.Objective,
+        // because no mission objectiveTarget data is plumbed. The -1 key is still the cycle's first
+        // rule, so it is exercised here rather than left until that data exists. The pool is driven
+        // directly rather than through TargetSelection.Rebuild so the objective is present on the
+        // FIRST resolve — the auto-acquire below is a claim about a selector that has never
+        // resolved, and pre-resolving would make it vacuous.
+        var objective = new object();
+        var sel = new TargetSelection();
+        sel.Pool.Rebuild(full, null, own, null);
+        sel.Pool.Add(TargetRef.ForStructure(
+            new AimCandidate { Position = new Vector3(0f, 0f, 1500f), Team = foe, Live = true, Source = objective },
+            TargetClass.Enemy, "Promised Land", "Zeppelin", "Destroy", objective: true));
+        sel.Resolve(Vector3.Zero, basis);
+
+        var order = sel.Ordered.Select(t => t.Source).ToList();
+        ctx.Check(order.SequenceEqual(new[] { objective, ahead2, ahead1, behind, left, right }),
+            $"the whole cycle order in one read: the objective first (1500 m BEHIND, and still first), then ahead nearest-first, then behind, left, right — the 100 m target off the right wing is LAST");
+        ctx.Check(sel.Current is { } head && ReferenceEquals(head.Source, objective)
+                  && sel.ActiveClass == TargetClass.Enemy,
+            $"auto-acquire: a fresh selector starts on the Enemy cycle already holding its head, with no input");
+        ctx.Check(!sel.Ordered.Any(t => ReferenceEquals(t.Source, ally)),
+            $"…and the ally is not in the Enemy cycle at all");
+
+        // Stepping.
+        sel.Next(TargetClass.Enemy);
+        ctx.Check(ReferenceEquals(sel.Current?.Source, objective),
+            $"a handler mutates state only — Current still reads the old target until the next Resolve publishes it, which is the original's own one-frame shape");
+        sel.Resolve(Vector3.Zero, basis);
+        ctx.Check(ReferenceEquals(sel.Current?.Source, ahead2), $"Next steps one entry down the cycle");
+        sel.Previous(TargetClass.Enemy);
+        sel.Resolve(Vector3.Zero, basis);
+        ctx.Check(ReferenceEquals(sel.Current?.Source, objective), $"Previous steps back up");
+        sel.Previous(TargetClass.Enemy);
+        sel.Resolve(Vector3.Zero, basis);
+        ctx.Check(ReferenceEquals(sel.Current?.Source, right),
+            $"…and wraps past the head to the tail");
+        sel.Next(TargetClass.Enemy);
+        sel.Resolve(Vector3.Zero, basis);
+        ctx.Check(ReferenceEquals(sel.Current?.Source, objective), $"…and back again past the tail");
+
+        // Nearest is the HEAD, not the nearest thing.
+        sel.Next(TargetClass.Enemy);
+        sel.Next(TargetClass.Enemy);
+        sel.Resolve(Vector3.Zero, basis);
+        ctx.Check(ReferenceEquals(sel.Current?.Source, ahead1), $"walked two down the cycle");
+        sel.Nearest(TargetClass.Enemy);
+        sel.Resolve(Vector3.Zero, basis);
+        ctx.Check(ReferenceEquals(sel.Current?.Source, objective),
+            $"'Nearest' returns to the HEAD of the cycle, which is 1500 m away, not the 100 m target off the wing");
+
+        // Death: the selected target leaves the pool. It drops to the HEAD, not to its neighbour.
+        sel.Next(TargetClass.Enemy);
+        sel.Next(TargetClass.Enemy);
+        sel.Resolve(Vector3.Zero, basis);
+        ctx.Check(ReferenceEquals(sel.Current?.Source, ahead1), $"holding the third entry");
+        var afterDeath = Scan(
+            (ahead2, new Vector3(0f, 0f, -400f), foe),
+            (behind, new Vector3(0f, 0f, 200f), foe),
+            (left, new Vector3(-200f, 0f, 0f), foe),
+            (right, new Vector3(100f, 0f, 0f), foe));
+        sel.Rebuild(afterDeath, null, own, null, Vector3.Zero, basis);
+        ctx.Check(ReferenceEquals(sel.Current?.Source, ahead2),
+            $"the selected target dying drops to the HEAD of the cycle, never to the dead entry's neighbour (which would have been 'behind')");
+
+        // Stickiness: nothing but death, input and the explicit clear moves it.
+        sel.Next(TargetClass.Enemy);
+        sel.Resolve(Vector3.Zero, basis);
+        ctx.Check(ReferenceEquals(sel.Current?.Source, behind), $"holding a mid-cycle entry");
+        sel.Rebuild(afterDeath, null, own, null, Vector3.Zero, basis);
+        ctx.Check(ReferenceEquals(sel.Current?.Source, behind),
+            $"own respawn (a rebuild with the target still alive) preserves the live selection");
+        var orderBefore = sel.Ordered.Select(t => t.Source).ToList();
+        var farBasis = new Basis(Vector3.Up, Mathf.Pi * 0.75f);
+        sel.Rebuild(afterDeath, null, own, null, new Vector3(4000f, 900f, -6000f), farBasis);
+        ctx.Check(ReferenceEquals(sel.Current?.Source, behind)
+                  && !sel.Ordered.Select(t => t.Source).SequenceEqual(orderBefore),
+            $"flying 7 km away and swinging the nose onto a new bearing re-sorts the cycle but does NOT drop the selection — there is no range, bearing or LOS gate anywhere in the decoded path");
+
+        // Target Nothing STAYS cleared.
+        sel.Clear();
+        ctx.Check(sel.Current == null && sel.ActiveClass == null, $"Target Nothing clears the target and every class flag");
+        for (int i = 0; i < 3; i++)
+        {
+            sel.Rebuild(afterDeath, null, own, null, Vector3.Zero, basis);
+        }
+
+        ctx.Check(sel.Current == null && sel.Pool.Count == 0,
+            $"…and STAYS cleared through repeated rebuilds — the collection pass is skipped, so the auto-acquire cannot fire again pool={sel.Pool.Count}");
+        sel.Next(TargetClass.Enemy);
+        sel.Rebuild(afterDeath, null, own, null, Vector3.Zero, basis);
+        ctx.Check(sel.Current != null && sel.ActiveClass == TargetClass.Enemy,
+            $"…until a class action presses, which is the only thing that ends the clear");
+
+        // Nearest crosshairs: the NOSE cone, friend or foe, 2 km cap.
+        var crosshair = new TargetSelection();
+        var coneScan = Scan(
+            (ally, new Vector3(0f, 0f, -300f), own),                 // dead ahead, friendly
+            (right, new Vector3(100f, 0f, -100f), foe),              // 45° off the nose: outside 15°
+            (ahead1, new Vector3(0f, 0f, -2400f), foe));             // on the nose but past 2 km
+        crosshair.Rebuild(coneScan, null, own, null, Vector3.Zero, basis);
+        ctx.Check(crosshair.NearestCrosshairs(Vector3.Zero, basis),
+            $"nearest-crosshairs finds something in the cone");
+        crosshair.Resolve(Vector3.Zero, basis);
+        ctx.Check(crosshair.ActiveClass == TargetClass.Ally
+                  && ReferenceEquals(crosshair.Current?.Source, ally),
+            $"it reaches an ALLY 300 m dead ahead and writes the class back to Ally, so the next Next/Previous continues in that cycle");
+        ctx.Check(!new TargetSelection().NearestCrosshairs(Vector3.Zero, basis),
+            $"an empty pool finds nothing");
+        var farOnly = new TargetSelection();
+        farOnly.Rebuild(Scan((ahead1, new Vector3(0f, 0f, -2400f), foe)), null, own, null, Vector3.Zero, basis);
+        ctx.Check(!farOnly.NearestCrosshairs(Vector3.Zero, basis),
+            $"a target dead on the nose but past the hard 2 km cap is never picked");
+        var offAxis = new TargetSelection();
+        offAxis.Rebuild(Scan((right, new Vector3(100f, 0f, -100f), foe)), null, own, null, Vector3.Zero, basis);
+        ctx.Check(!offAxis.NearestCrosshairs(Vector3.Zero, basis),
+            $"a target 45° off the nose is outside the 15° half-angle cone, however close");
+
+        // 0x24's attacker queue, walked backwards from the end.
+        var shot = new TargetSelection();
+        shot.Rebuild(full, null, own, null, Vector3.Zero, basis);
+        shot.RecordAttacker(ahead1);
+        shot.RecordAttacker(right);
+        ctx.Check(shot.Attackers.Count == 2 && ReferenceEquals(shot.Attackers[1], right),
+            $"the queue is an end insert, oldest first");
+        shot.RecordAttacker(ahead1);
+        ctx.Check(shot.Attackers.Count == 2 && ReferenceEquals(shot.Attackers[1], ahead1),
+            $"a repeat attacker MOVES to the end rather than listing twice (inference, not decode — FUN_004bc1e0 was not traced)");
+        shot.NextEnemy();
+        shot.Resolve(Vector3.Zero, basis);
+        ctx.Check(ReferenceEquals(shot.Current?.Source, ahead1),
+            $"Next Enemy with a target not in the queue takes the MOST RECENT attacker, ignoring the ordinary cycle");
+        shot.NextEnemy();
+        shot.Resolve(Vector3.Zero, basis);
+        ctx.Check(ReferenceEquals(shot.Current?.Source, right),
+            $"…pressing again walks BACKWARDS to an older attacker");
+        shot.NextEnemy();
+        shot.Resolve(Vector3.Zero, basis);
+        ctx.Check(ReferenceEquals(shot.Current?.Source, ahead2),
+            $"…and from the queue's FIRST entry it falls through to an ordinary +1 step, which from the cycle's tail wraps to its head");
+        shot.ForgetTarget(ahead1);
+        ctx.Check(shot.Attackers.Count == 1 && ReferenceEquals(shot.Attackers[0], right),
+            $"the death hook prunes the queue, so a dead shooter is never offered again");
     }
 
     /// <summary>B12's <see cref="TargetPool"/>. The pure half runs over a hand-built

@@ -88,6 +88,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the forget + catch-up pass (B2), the intercept solver (B3), the four-list candidate scan (B4), and the fire call's step order + 1° launch scatter (B5).
 - `src/Flight/TargetRef.cs` — the player-targeting abstraction (`PLAN-targeting.md` B11): one value over every selectable thing (aircraft, mission structure, turret), wrapping an `AimCandidate` for the pose/team/liveness/source half and adding class, label, optional health/armor, plus `Classify` (the decoded class model) and source-identity matching.
 - `src/Flight/TargetPool.cs` — the player's classed candidate pool (`PLAN-targeting.md` B12): the three cycles (Enemy/Objective, Ally, Non-Aircraft) of `TargetRef`, rebuilt from scratch off the aim assist's `Vehicles`/`Turrets` lists plus an explicit sub-part list; the one place a concrete source type is read.
+- `src/Flight/TargetSelection.cs` — the sticky player selection (`PLAN-targeting.md` B13): owns a `TargetPool`, sorts it into the decoded cycle order, re-finds the selection by entity each frame, and carries every action (next/previous/nearest per class, nearest-crosshairs, target-nothing) plus the attacker queue and the lifecycle.
 - `src/Flight/TurretDefs.cs` — typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
 - `src/Flight/TurretController.cs` — one carried turret gunner (M4 C9a): acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
 - `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; each mode picks the aim point and table `AiControlLaw` steers on. `SteeringPatrol` reports whether the last step actually flew the net (F13's leashes read it).
@@ -2084,12 +2085,72 @@ source type — the kind picks the shape, the source supplies only the name and 
   because the mission authored it as its own `MStruct` carrying the flag. Decision 8 asked for the
   parts, so CSVM enumerates what it already models as damageable. Do not "correct" it back by citing
   the decode.
-⚠ No live call site yet. B13's `TargetSelection` owns the instance and the per-session count
-  breadcrumb; wiring it here would mean choosing that owner early. The `target-pool` suite's note
-  over C1's real 74-emplacement census is this item's count log.
+⚠ `TargetSelection` (B13) owns the instance and prints the per-session `target pool:` count
+  breadcrumb. Nothing in a live session constructs one yet — that wiring rides B14, with the input
+  binds.
 Pinned by the `target-pool` suite (a synthetic half with no world, plus C1's real emplacement census
 through the same pool); the carried-gunner exclusion rides the `turret-gunner` suite, where a real
 carried turret already exists.
+
+## src/Flight/TargetSelection.cs
+One pilot's target selection (`PLAN-targeting.md` B13), decoded in
+[org/targeting.md](org/targeting.md). One instance per pane; it OWNS its `TargetPool`, since the pool
+is per-selector state and nothing else needs one. No Godot node dependency — `Resolve` takes the pose
+it needs — so the whole lifecycle drives from the suite with no tree.
+**The split between the handlers and the per-frame pass is the original's, and it matters.** An action
+handler (`Next`/`Previous`/`Nearest`/`NextEnemy`/`NearestCrosshairs`/`Clear`) only mutates state — the
+class and the selection identity — and steps the list that ALREADY exists. `Resolve` is the per-frame
+pass (`FUN_004b5fb0`) that re-sorts and re-finds the selection **by entity** (`FUN_004b6490`),
+returning the matching entry or the list HEAD when it is gone. That one fallback is the entire
+lifecycle: the auto-acquire at mission start, the switch on target death, and the drop when a target
+leaves the class are all the same failed re-find. Nothing is re-picked beyond it, which is what makes
+the selection sticky.
+`SectorKey` is the cycle comparator (`FUN_004bbd60`): −1 for an objective, else the 90° sector after a
+π/4 rotation with the 0 and 3 quadrants swapped, giving **ahead, behind, left, right**, nearest-first
+inside each. Godot's basis makes this a direct port — the X column IS the engine's `row0` (right) and
+the Z column IS `row2` (the negated forward axis), so no sign fixing is needed.
+⚠ **"Nearest" means head-of-cycle, not nearest-in-space.** `Nearest(cls)` re-asserts the class and
+  restarts the cycle at its head: the nearest objective if any exists, else the nearest candidate
+  ahead, else behind, else left, else right. A target 200 m off the left wing loses to one 900 m
+  ahead. Unlike Next/Previous, which only reset when the class actually changes, Nearest always
+  restarts.
+⚠ **Nearest-crosshairs scores the NOSE, not the pipper** (`FUN_00488db0`/`FUN_00488ce0`): a hard 15°
+  half-angle cone about the plane's forward axis, plain slant range as the score, and a **2 km hard
+  cap** because the running best starts at 2000.0. It ignores the cycle entirely, runs its own scan
+  over all three classes, **includes friendlies** (which is how one keypress reaches an ally), and
+  writes the class back from what it found. B13's original plan text said the `ImpactReticle` pipper;
+  that was written pre-decode and is wrong — the pipper is a separate velocity-derived point nothing
+  in this path reads.
+⚠ **`Target Nothing` must STAY cleared.** `Clear` nulls the class as well as the target, and `Rebuild`
+  short-circuits on a null class so the pool is left empty rather than built and discarded. That is
+  the original's mechanism, not a convenience: with the class flags zero its collection pass is
+  skipped, so the auto-acquire cannot fire again until a class action presses. Auto-acquire at start
+  and drop-to-head on death are the ONLY two automatic transitions — a third ("nothing selected, so
+  pick one") silently breaks this action.
+⚠ **Nothing else drops a selection.** There is no range, line-of-sight or field-of-view gate anywhere
+  in the decoded path; the suite flies 7 km away and swings the nose onto a new bearing to prove it.
+  Adding one would be a port invention.
+⚠ The **attacker queue** is `NextEnemy`'s alone (action `0x24`, `FUN_004b9770`): shooters that have hit
+  this pilot, walked BACKWARDS from the end, so not-in-the-queue takes the most recent, in-the-queue
+  takes the one before it, and the queue's first entry falls through to an ordinary `+1`. Its
+  de-duplication is an **inference** — `FUN_004bc1e0` before the insert is probably a
+  remove-if-present but was not traced. `RecordAttacker` and `ForgetTarget` are the hooks; wiring them
+  to the damage and death paths is owed and does not exist yet.
+⚠ The class handlers step LAST frame's list, built under the old class. That one-frame lag is the
+  original's (`docs/org/targeting.md` "The eleven actions") and self-heals on the next `Resolve`; a
+  port that rebuilt synchronously inside the handler would not reproduce it. Do not "fix" it.
+⚠ The sort's third key is the pre-sort index. The engine's own sort makes no promise about exact
+  ties, and a total order keeps two candidates at the same range in the same sector (two parts of one
+  zeppelin) from reordering between frames and walking the cycle under the pilot.
+⚠ Nothing sets `TargetRef.Objective` yet, so the −1 key never fires in a real session — no mission
+  `objectiveTarget` data is plumbed. The suite files one by hand to exercise the rule.
+⚠ The player's own death/respawn was **not traced** (`FUN_00421500` and `FUN_00469e20` both zero the
+  field; neither was tied to the respawn path). Doing nothing on own respawn already gives the
+  required behaviour — a live selection survives the rebuild, a dead one drops to the head — so no
+  rule is invented here.
+Pinned by the `target-selection` suite, which is tree-free and data-free; its geometry deliberately
+makes the sector order and a plain range order DISAGREE, so an implementation that quietly sorted by
+distance fails it.
 
 ## src/Flight/TurretDefs.cs
 Typed reader over the shared `ai.zrd`'s `TURRET` section — 42 `TurretDef`s (docs/formats/turrets.md):

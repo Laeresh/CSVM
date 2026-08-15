@@ -232,7 +232,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ `TargetRef` — one abstraction over every selectable thing
 12. ☑ The classed candidate pool, including zeppelin sub-parts and turret emplacements
-13. ☐ `TargetSelection` — sticky choice, cycles, nearest queries, lifecycle
+13. ☑ `TargetSelection` — sticky choice, cycles, nearest queries, lifecycle
 14. ☐ Input: `D-pad Up` tap/hold, and the curated keyboard set
 15. ☐ `--target=` scripted twin
 
@@ -615,7 +615,26 @@ pool fast; a zeppelin with a gasbag, four engines and six cannons is eleven entr
 zeppelins make the Non-Aircraft cycle long. That is the original's behaviour as far as we know, but
 watch it in playtest.
 
-## B13 ☐ `TargetSelection` — sticky choice, cycles, nearest queries, lifecycle
+## B13 ☑ `TargetSelection` — sticky choice, cycles, nearest queries, lifecycle
+
+**Landed 2026-08-16.** [`CSVM/src/Flight/TargetSelection.cs`](../CSVM/src/Flight/TargetSelection.cs).
+Four things B14 and Wave C should build against rather than re-decide:
+
+- **Handlers mutate; `Resolve` publishes.** An action only changes the class and the selection
+  identity and steps the list that already exists; the per-frame `Resolve` re-sorts and re-finds the
+  selection by entity, falling back to the list head. That one fallback IS the whole lifecycle — the
+  auto-acquire, the switch on death, and the drop when a target leaves the class are the same failed
+  re-find. B14 should call the handlers on input and `Rebuild` once per frame, and must not rebuild
+  inside a handler (see the one-frame-lag note below).
+- **`Nearest` is head-of-cycle**, not nearest-in-space, and it always restarts the cycle where
+  Next/Previous only reset on a class change.
+- **Nearest-crosshairs scores the NOSE**, 15° half-angle, 2 km hard cap, friendlies included, and it
+  writes the class back from what it picked.
+- **`TargetSelection` owns the `TargetPool`** and prints the `target pool:` count breadcrumb, closing
+  what B12 deferred. Nothing in a live session constructs one yet — that wiring is B14's.
+
+`RecordAttacker`/`ForgetTarget` exist and are tested, but nothing calls them yet: the damage path and
+the death hook are owed, and are the natural companions to B14's binds.
 
 **Goal.** The selection state and every rule that changes it, as one module with no Godot
 dependency: next/previous/nearest within a class, nearest-to-crosshair across classes, clear, and
@@ -632,8 +651,18 @@ camera (Track Target) and any later AI-order consumer can read it without rework
 every query pure over a pool snapshot, matching the existing static, tree-free style of
 `NearestHostile` and `CollectMarks`. "Nearest to crosshair" scores against the **`ImpactReticle`
 point, not screen centre** — the reticle is deliberately not centred (`ImpactReticle.cs:7`), so
-"crosshair" means the pipper. <TODO: confirm against A1 what the original scores — screen-space angle
-from the reticle, world-space angle from the nose, or something else.>
+"crosshair" means the pipper.
+
+**TODO resolved — it is the NOSE, and this paragraph's pipper reading is wrong.** A1's decode
+(`FUN_00488db0`/`FUN_00488ce0`, `docs/org/targeting.md` "Select Target Nearest Crosshairs") is
+explicit: the scan tests `dot(v, row2) > d · −cos(15°)` against the plane's own negated forward axis
+and scores the survivor by plain slant range, with the running best seeded at 2000.0 — so a hard 15°
+half-angle **nose** cone and a hard 2 km cap. Nothing in that path reads the pipper, which is a
+separate velocity-derived point (`docs/formats/hud.md`, `aim-assist.md`). Two further findings the
+paragraph above predates: the action **ignores the class flags and the candidate list entirely** and
+runs its own scan over every pool, **friendlies included** (that is how one keypress reaches an ally);
+and having chosen, it writes the class back from what it found, so a following Next/Previous continues
+in that target's own cycle. `ImpactReticle` is not touched by this item at all.
 
 **Model recommendation.** high — the rules are subtle, the state is per-pane, and this is the module
 everything else reads.
@@ -642,6 +671,26 @@ everything else reads.
 selected target advances to the expected next; own respawn preserves a live selection and re-acquires
 a dead one; an explicit clear stays cleared until the next selection input; range, bearing and LOS
 changes never drop a selection.
+**Verified (2026-08-16):** the `target-selection` suite, tree-free and data-free, over plain `object`
+sources through the real `TargetPool`. The geometry is chosen so the decoded sector order and a plain
+range order **disagree** — the nearest candidate is 100 m off the right wing and the head of the cycle
+is an objective 1500 m *behind* — so a pool sorted by distance cannot pass. It covers the whole order
+in one `SequenceEqual`, `SectorKey` against the decode's own table, the auto-acquire on a selector that
+has never resolved, Next/Previous stepping and wrapping both ways, `Nearest` returning to the head
+rather than to the 100 m target, target death dropping to the **head** and not to the dead entry's
+neighbour, a rebuild preserving a live selection (own respawn), a 7 km move plus a 135° yaw re-sorting
+the cycle without dropping the selection, `Target Nothing` staying cleared through three rebuilds and
+ending only on a class action, nearest-crosshairs reaching an **ally** dead ahead with its class
+written back plus the two rejections (past 2 km on the nose, and 45° off it), and the attacker queue
+walked backwards through all three branches plus the death prune.
+**Able to fail:** replacing the sector key with a constant, i.e. sorting purely by range, turns the
+suite FAIL and exit 1 on seven checks including the order and the auto-acquire; restored, it passes.
+The one-frame handler/resolve split is asserted directly (`Current` still reads the old target until
+the next `Resolve`), so a synchronous rebuild inside a handler would show up as a failure rather than
+silently.
+Full run: 1378/1378 units, 67/67 in-engine suites, engine errors clean, `dotnet build` clean of new
+warnings. The `target pool: enemy=… ally=… nonAircraft=… class=… acquired=…` breadcrumb prints. No
+freecam regression is owed — nothing in a live session constructs a `TargetSelection` yet.
 
 **⚠ Traps.** The explicit clear must **stay** cleared — auto-acquire at spawn and auto-advance on
 death are the only two automatic transitions, and if a third creeps in ("nothing selected, so pick
