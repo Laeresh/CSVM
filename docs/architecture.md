@@ -2684,6 +2684,16 @@ of reach), the `crash` block's `bounce_factor` (a raw scalar, read one level dow
 volume/pitch `SoundCurve`s (clamped two-point ramps), `destroyable_parts` → `DestroyablePart`
 records (name, max HP, max armor, `critical`/`engine` flags, `got_hit_anim`, per-part
 `injure_anims`), and the def-level `VehicleInjureAnims`. Schema: docs/formats/vehicle.md.
+Two flavours of one airframe: `Load` resolves everything down the player chain, `LoadForAi` takes
+  ONLY the damage model (pair, parts, def-level ladder) from the AI def's own chain — the player
+  def's name minus its leading `p`, validated — and leaves `DefName`, dynamics, turrets and the
+  model on the player chain. An AI aircraft is therefore **zone-less**: an authored `armor`/`health`
+  pair and NO `destroyable_parts`, which is what every roster-named def chain resolves in the
+  shipped game (`docs/org/vehicleDamage.md`'s 2026-08-16 correction).
+⚠ `DefName` stays the player def on both flavours ON PURPOSE — it keys the eleven-entry
+  `data/stock_loadouts.json`, and an AI def name there binds nothing, leaving the plane unarmed
+  with no warning (`AiAircraftSpawner` has no "unarmed" branch). Do not "finish the job" by moving
+  it; that is its own item with the AI `weapons` block behind it.
 Both lists are consumed on the decoded pools (`DamageVisuals.OnHullDamage` off
   `PlaneDamage.SummaryHealthFraction`, `OnPartDamage` off the struck part's `HealthFraction`):
   health-only at both levels, armour in neither, per `FUN_004b3800` / `FUN_004b3d70`
@@ -3852,6 +3862,11 @@ the unabsorbed leftover re-enters zone-less and drains the whole pair directly. 
 whole health ≤ 0 (reachable with zones still healthy — the overflow kill). Summary leads with
 the hull pair for the HUD DMG line; SummaryHealthFraction reads the whole pool (DI voice);
 WorstFraction stays the worst PART (FlightAudio's damaged-engine loop).
+⚠ An AI aircraft has NO parts (`PlaneStats.LoadForAi`), so on one the whole pair is the entire
+  ledger: every hit takes the zone-less route from the first pass, and `WorstFraction` returns a
+  constant 1f. Anything keyed to "how hurt is this aeroplane" must read `SummaryHealthFraction` to
+  work on both flavours. The spawner's damage guard is "zones OR an authored pair" for the same
+  reason — a parts-only test leaves an AI plane with a null ledger, invulnerable.
 ⚠ The recompute OVERWRITES earlier overflow dents (partial heal) — the decoded quirk, kept on
   purpose; and armor standing against a hit with no armor damage nulls the health damage.
 ⚠ The "tail" arm ignores localImpact and is correct only because PlaneCollider.Relabel hands it

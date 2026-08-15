@@ -351,8 +351,10 @@ public sealed class PlaneStats
             return chain; // derived first, base last
         }
 
-        // Find the player def whose nodename matches (pbloodhawk for player_bhawk);
-        // require player_airplane in the chain to skip the AI wingman variants.
+        // Find the player def whose nodename matches (pbloodhawk for player_bhawk); requiring
+        // player_airplane in the chain is what makes the match unique, since the AI and wingman
+        // variants share the model nodename. This runs on BOTH flavours — an AI load starts from
+        // the player def too and hops to the AI chain below for the damage model alone.
         string? found = null;
         List<ZrdrDict>? chain = null;
         foreach (var name in order)
