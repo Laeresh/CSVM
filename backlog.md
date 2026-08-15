@@ -2585,14 +2585,36 @@ nearest/union rule, or record it as deliberately single/global. This theme colle
 (sweep of 2026-08-15). **Route fixes through the two existing seams instead of minting new ones:**
 `GameSession.PlayerPositions` (nearest human) for gameplay rules that say "the player", and the
 viewer set behind `ProjectilePool.Viewers` / `ScreenSize.NearestFloor` for draw rules that say
-"the camera". Sim state stays global (`BL-338`'s ⚠). Splitscreen-scoped items that live with
+"the camera". Sim state stays global — the mission wind is the worked example
+(`Session/WeatherRig.Tick`, stepped once per frame outside the per-rig loop on purpose). Splitscreen-scoped items that live with
 their own system: `BL-231` (per-player pool term), `BL-296` (per-player ActionMap), `BL-299`
 (MP spawn maps), `BL-301` (Dogfight tuning), `BL-314` (race countdown), `BL-351` (per-pane target
 cycling), `BL-358` (board stacking).
 
-The theme's twelve open items (`BL-126`, `BL-338`, `BL-365`–`BL-376`) are all
+The theme's thirteen open items (`BL-126`, `BL-365`–`BL-376`) are all
 scheduled in [`docs/PLAN-splitscreen-polish.md`](docs/PLAN-splitscreen-polish.md) (2026-08-15) and
 live there per the scheduled-items rule. New splitscreen findings mint here as usual.
+
+- `BL-380` `[Bug]` `[Blocked: per-instance fog shader uniforms]` **Fog-zone selection stays
+  player-1-only in splitscreen: `csky_fog_color`/`_range`/`_alt`/`csky_world_light` are one GLOBAL
+  shader uniform set, written from rig 0's camera weather state alone
+  (`Session/WeatherRig.cs:459-466`), so a pane on the other side of a fog-zone boundary from P1
+  renders P1's fog, not its own.** Split out of the `BL-338` residual sweep 2026-08-15 (plan B14):
+  the whiteout overlay and the deck regime are already per-rig (the same `WeatherRig.Tick` loop) —
+  only the fog GLOBALS lag behind, because `ApplyFogGlobals` writes session-wide shader uniforms,
+  never per-instance ones.
+  *Evidence:* `WeatherRig.cs:459`'s own comment: "Driven by rig 0, because the fog parameters this
+  writes are GLOBAL shader uniforms — one set for the whole session ... In splitscreen with one
+  player under the deck and one over it, both panes therefore wear player 1's fog." Pre-existing
+  (`SetupWeather` always wrote one global set before splitscreen existed), not introduced by it.
+  *Fix shape:* per-instance fog uniforms on every fogged mesh instance, selected by whichever
+  pane's camera the instance should answer to — a shader-architecture change (per-instance state
+  keyed off the viewer set), not a wiring change.
+  *⚠ Traps:* a second `RenderingServer.GlobalShaderParameterSet` call does not fix this — that is
+  still one value for the whole process, not one per viewport. Any new `instance uniform` this adds
+  to `shaders/csky_instance_uniforms.gdshaderinc` must be APPENDED, never inserted — Godot assigns
+  instance-uniform slots by declaration order per shader, and the file's own header names the
+  2026-07-17 `csky_fog_on` index-collision bug this ordering contract exists to prevent.
 
 ## Missions, modes & campaign
 

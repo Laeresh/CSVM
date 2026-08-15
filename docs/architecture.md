@@ -392,6 +392,9 @@ per placement.
   out-of-range material index gets, so it shares the ordinary bias-shader fog/lighting pipeline
   (`fogged: true`, `lit: false`) rather than a hand-rolled second one. `materialIndex = -1` is a
   deliberate reuse of an existing fallback path, not a new one.
+⚠ **Splitscreen-correct by construction** (residual sweep, `PLAN-splitscreen-polish` B14): the LOD
+  pick is a one-time BUILD-time choice (keep the highest-detail level, `LodRangeMin == 0`), never a
+  per-frame distance check against any camera — so there is no "whose camera" question to ask.
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`, `PLAN-weather-decompile-match` B12,
@@ -1226,6 +1229,11 @@ satisfies its `ISequenceHost` seam by explicit interface implementation (`Dispat
 ⚠ `SetSubtreeActive` writes ONLY `Visible`, and the fade path only `WorldCollision.SetFaded` —
   collision is DERIVED from both. Never write `CollisionShape3D.Disabled` from here again: a
   recursive walk re-solidifies activations landing inside an already-hidden subtree.
+⚠ **`PlayerPos()`'s `GetViewport().GetCamera3D()` branch is a fallback, not a live splitscreen
+  site** (residual sweep, `PLAN-splitscreen-polish` B14): `GameSession` always wires `PlayerPosition`
+  (`GameSession.cs:875`), so the branch only ever runs for an `AnimRuntime` built standalone (a lab
+  or a unit test with no session behind it) — never in a real `--fly` session, splitscreen or not.
+  The live P1-singleton concern here is `PlayerPosition` itself, tracked by `BL-365`/C21.
 `Targets` reads the event payloads and resolves through the resolver's symbol authority
 (`SymbolClaims`); a claimed-but-unbuilt index falls back to a strictly anchor-scoped name match
 (never global) — how a re-anchored exploder template (`genx12`) binds its meshless `pt*` parameter
@@ -3179,7 +3187,7 @@ otherwise be near-culled wholesale by the unauthored `NEAR_FADE (0,0)` cutting a
 remaining divergence is the ALPHA, not the answer: one `MultiMesh` per emitter is shared by every
 pane, so a particle is drawn if ANY pane should see it, at the most favourable pane's alpha
 (`Puffer.NearestViewerAlpha`) rather than each pane's own. Per-pane alpha would take N MultiMeshes
-(`BL-338`'s per-pane-geometry rule). With one viewer that is that viewer's own answer unchanged,
+(the plan's nearest/union boundary rule — `PLAN-splitscreen-polish.md`'s Milestone goal). With one viewer that is that viewer's own answer unchanged,
 which is why no capture moved. There is also a one-frame lag at session start: an emitter that draws
 on the very first frame can beat the first `Tick` and draw unfaded once.
 `EffectAmbience.Still` is the null object every unwired puffer reads (unit suites, the plane
@@ -4180,6 +4188,10 @@ than under it (the anim lab's `--plane=` prop), each also capping its own ancest
 ⚠ Rungs are the `cs_name` meta, never `Node.Name` (WORLD-8) — C1's second `box_car.flt` is `godot=@Node3D@5`.
 ⚠ The box is measured from the selected subtree's OWN meshes, never an `OrbitCamera.MergedAabb`
   live-tree merge (WORLD-14 — an overlay parked elsewhere would enter the merge).
+⚠ **Unreachable in splitscreen, by construction** (residual sweep, `PLAN-splitscreen-polish` B14):
+  `--freecam`/`--anim-lab` are not `Fly`, and `SessionSpec.Resolve` clamps `Players` back to 1
+  whenever `Players > 1 && !Fly` — so this single-camera pick never has a second pane to be wrong
+  about. Documented here rather than fixed; no code follows.
 
 ## src/UI/ColliderOverlay.cs
 The collision wireframe overlay (key C, `--collision=show`/`--debug-colliders` script it) in

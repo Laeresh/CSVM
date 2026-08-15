@@ -98,7 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ Puffer distance fade answers every pane (`BL-339`)
 12. ☑ Screen wash routed to the hit pane(s) (`BL-340`)
 13. ☑ World point lights budgeted against the nearest rig (`BL-366`)
-14. ☐ Close out `BL-338`: residual sweep + fog verdict recorded
+14. ☑ Close out `BL-338`: residual sweep + fog verdict recorded
 
 ### Wave C — Gameplay "the player" rules
 
@@ -459,7 +459,7 @@ position generalises. Do not fold `LightViewerPositions` into `PlayerPositions` 
 C21's) — this is A3's draw-rule seam, the same separation `ViewerSet`'s own trap and B12's dispatch
 already keep.
 
-## B14 ☐ Close out `BL-338`: residual sweep + fog verdict recorded
+## B14 ☑ Close out `BL-338`: residual sweep + fog verdict recorded
 
 **Goal.** `BL-338`'s sweep list is finished: every named site has a verdict (fixed here, recorded
 as deliberate, or split into its own item), and the umbrella item closes.
@@ -471,17 +471,43 @@ verdicts for most of the list: precipitation, cloud clutter, `FogVolumeClutter` 
 selection remains genuinely wrong (`WeatherRig.cs:457` drives global fog uniforms from rig 0,
 self-documented) and per-pane fog needs per-instance uniforms.
 
-**Approach.** Walk `BL-338`'s to-audit list once more against the landed B11/B12/B13: LOD bands,
-the cloud whiteout, the lens flare sun wash, `SelectionService`, any remaining `GetViewport()` in
-a draw path. Record each verdict in `docs/architecture.md` module entries (one line each, per the
-⚠ budget). For fog: record "shared, P1-driven, deliberate until per-instance fog uniforms" as the
-verdict and mint a new blocked backlog item for per-pane fog so the thread stays visible. Then
-close `BL-338`.
+**Approach (landed).** Walked `BL-338`'s to-audit list once more against the landed B11/B12/B13,
+reading each site's current code rather than trusting the sweep's prior notes:
+
+| Site | Verdict | Where it's decided |
+|---|---|---|
+| LOD bands | Per-pane-correct — not camera-dependent at all | `SceneBuilder.BuildSubtree` keeps only `LodRangeMin == 0` at BUILD time, once, never a per-frame distance check |
+| Cloud whiteout | Per-pane-correct — already per rig | `WeatherRig.Tick`'s per-rig loop (`rig.Whiteout.Color`, one call per rig) |
+| Deck regime / zone cull masks | Per-pane-correct — already per rig | Same `Tick` loop (`DeckRegime`, `rig.Camera.CullMask`) |
+| `FogVolumeClutter` far fade / visibility | Per-pane-correct — shader `CAMERA_POSITION_WORLD` + per-camera cull-mask zone bit | `Effects/FogVolumeClutter.cs`'s own ⚠ |
+| Precipitation | Per-pane-correct — same `CAMERA_POSITION_WORLD` shader mechanism as the world billboards | `Effects/Precipitation.cs`'s wrap shader |
+| Lens flare sun wash | Per-pane-correct — already one `LensFlareRig` instance per pane | `Session/LensFlareRig.cs`'s own module note |
+| `SelectionService` | Unreachable in splitscreen, by construction | `SessionSpec.Resolve` clamps `Players` to 1 whenever `Players > 1 && !Fly`, and `--freecam`/`--anim-lab` are never `Fly` |
+| `AnimRuntime.PlayerPos()`'s `GetViewport()` fallback | Dead in every real session | `GameSession.cs:875` always wires `PlayerPosition`; the branch only runs for a standalone `AnimRuntime` (lab/test) — the live P1-singleton concern is `PlayerPosition` itself, `BL-365`/C21's |
+| `MarkerOverlay`'s `GetViewport()` | Genuinely wrong, already tracked | F51 (`BL-376`), not re-opened here |
+| Fog-zone selection | **Genuinely wrong, deliberate** — global shader uniforms, rig 0 only | `WeatherRig.cs:459-466`'s own ⚠, confirmed unchanged; per-instance fog uniforms needed, out of scope (Milestone goal) |
+
+No new code follows: every site is either already correct (by a mechanism read directly off the
+current source, not assumed) or already tracked by a live item (`F51`, `C21`). The one genuinely
+open thread — fog — was split into a new blocked item, `BL-380`, rather than left as a dangling
+BL-338 sub-claim: `[Bug]` `[Blocked: per-instance fog shader uniforms]` in `backlog.md`'s
+Splitscreen theme, citing `WeatherRig.cs:459` and the `csky_instance_uniforms.gdshaderinc`
+ordering-contract hazard any fix would have to respect. Each surviving verdict also got a one-line
+⚠ at its own site in `docs/architecture.md` (`SceneBuilder.cs`, `SelectionService.cs`,
+`AnimRuntime.cs`) rather than only in this table, so a future reader hits it locally. Two stray
+narrative citations of the closing `BL-338` ID (a Puffer.cs doc comment, one architecture.md line)
+were repointed at the plan's own nearest/union boundary rule instead of a soon-nonexistent ID;
+`playtest.md`'s `PT-52` likewise. `BL-338` itself is deleted from `backlog.md`'s Splitscreen theme
+intro (it was never its own bullet there — a scheduled item's detail lives here) and
+`PROJECT_CONTEXT.md`'s "Current status" advances past it.
 
 **Model recommendation.** medium, low effort — mechanical audit over an existing checklist.
 
-**Verify.** The closing commit's message carries the site-by-site verdict table; `.\RunTests.ps1`
-green (this item should land no behaviour change beyond docs unless the audit finds a straggler).
+**Verify (done 2026-08-15).** `dotnet build CSVM/CSVM.sln` clean, 0 warnings;
+`dotnet format --verify-no-changes` clean. `.\RunTests.ps1`: 1289/1289 units, 61/61 engine suites,
+14/14 goldens hash-identical, engine errors clean, hitch clean — unchanged from B13's landing,
+confirming the audit found no straggler needing a code fix. 8-chapter `--freecam` sweep (C1, C1B,
+C1C, C2, C2B, C3, C4, C5): all exit 0, zero errors.
 
 **⚠ Traps.** The instinct to fix fog while in there — resist it; per-instance fog uniforms have a
 recorded hazard (`csky_instance_uniforms.gdshaderinc` ordering) and deserve their own plan.

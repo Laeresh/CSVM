@@ -267,7 +267,8 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
   whole trail, not just the stretch beside P1; (b) neither pane shows a puffer popping in or out as
   the OTHER player turns or flies away (the shared-alpha tell); (c) flying through an emitter still
   culls it in the pane that flew through it rather than filling that screen.
-  *Blocks:* the fidelity verdict `BL-338` asks for — per-pane alpha (one MultiMesh per pane) is
+  *Blocks:* the fidelity verdict the plan's nearest/union boundary rule asks for
+  (`docs/PLAN-splitscreen-polish.md`'s Milestone goal) — per-pane alpha (one MultiMesh per pane) is
   reached for only if (b) visibly fails, and a fail mints its own `BL` item.
   *Variations:* C3 (`--chapter=C3`, the waterfalls' `spew_puffer` is the tightest authored band);
   `--players=4` for the same question with four alphas competing.
