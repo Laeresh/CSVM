@@ -45,7 +45,7 @@ behind [effects.md](effects.md)'s sprites).
 
 ### Aircraft and combat
 
-- [vehicle.md](vehicle.md), [markers.md](markers.md), [loadouts.md](loadouts.md), [paint.md](paint.md), and [camparam.md](camparam.md).
+- [vehicle.md](vehicle.md), [markers.md](markers.md),`r`n  - [Player global blocks](vehicle/player-globals.md) — `player.json` globals. [loadouts.md](loadouts.md), [paint.md](paint.md), and [camparam.md](camparam.md).
 - [weapons.md](weapons.md), [weapon-effects.md](weapon-effects.md), [turrets.md](turrets.md), [shakes.md](shakes.md), and [sounds.md](sounds.md).
 
 ### Missions and AI
