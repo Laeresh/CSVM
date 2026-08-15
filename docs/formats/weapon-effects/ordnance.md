@@ -55,7 +55,7 @@ not rendered yet: the TIME-interval `torpufferblast` cloud, and the torpedo def'
 
 `large_fireball` / `small_fireball` (bound by `FIRE`/`IMPACT` on the heaviest ordnance) are the
 **shared** destruction fireballs defined in `flame_ball.zrd.json` and reused by nearly every
-destructible — see [destructibles.md](destructibles.md) and [effects.md](effects.md), not a
+destructible — see [destructibles.md](../destructibles.md) and [effects.md](../effects.md), not a
 weapon-specific asset.
 
 Supporting effect readers with no direct binding target, driven by the controls above or by the
@@ -90,4 +90,4 @@ below the name `FLYOUT`/`CallAnimation` target. The C22 ejection wiring instance
 the `g1` mesh with its own materials — never assume the root alone shows anything.
 
 `firepoint` is the marker prototype (the aircraft's own firepoints are documented in
-[markers.md](markers.md)).
+[markers.md](../markers.md)).
