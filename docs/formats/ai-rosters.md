@@ -1,25 +1,20 @@
-# aiv.zrd, maneuvers.zrd — AI rosters, pilot skills & the maneuver library
+# AI rosters, pilot skills, and maneuver library
 
-Part of the [format documentation](README.md). The per-mission AI roster (`aiv.json`), the shared
-maneuver library (`maneuvers.json`), and the `ai_skill_parameters` block in `player.json` that turns
-a pilot's 1–9 skill ratings into engine constants. Companion pages: [ai-nets.md](ai-nets.md) (the
-patrol graphs a roster entry references by id), [mission-entities.md](mission-entities.md)
-(zeppelins, generators), [vehicle.md](vehicle.md) (the per-airframe AI tuning keys).
+Part of the [format documentation](README.md). `aiv.json` is the per-mission AI roster;
+`maneuvers.json` is the shared maneuver library; `player.json` supplies the
+`ai_skill_parameters` that turn a pilot's 1-9 ratings into engine constants. See
+[AI nets](ai-nets.md) for patrol graphs, [mission entities](mission-entities.md) for zeppelins and
+generators, and [vehicle definitions](vehicle.md) for airframe AI tuning.
 
-**Provenance.** Unlike most pages here, the field *names* on this page are not inferred — they are
-read from `crimson.exe`, which embeds its editor's own text-format comment for the roster file at
-`.rdata:0x00622508` (an unused writer header retained in the retail build). Every name below is that
-comment's, verbatim. Field *positions* and *values* are then confirmed against the shipped
-extraction; where the two disagree this page says so. See
-[the field-list gap](#the-three-unnamed-slots) for the one place they do.
-
+The roster field names come from the retail executable's embedded editor-format comment. Field
+positions and values are checked against the shipped extraction; this page notes any mismatch.
 
 ## Contents
 
-- [`<Cx>/<mission>/zrdr/aiv.zrd` — the AI vehicle roster](#cxmissionzrdraivzrd-�-the-ai-vehicle-roster)
-- [`zrdr/maneuvers.zrd` — the maneuver library](#zrdrmaneuverszrd-�-the-maneuver-library)
-- [AI modes, engine-side](#ai-modes-engine-side)
-## `<Cx>/<mission>/zrdr/aiv.zrd` — the AI vehicle roster
+- [AI vehicle roster](#ai-vehicle-roster)
+- [Maneuver library](#maneuver-library)
+- [AI runtime modes](#ai-runtime-modes)
+## AI vehicle roster
 
 One file per mission directory (53 in this install), **414 vehicle blocks** total. The root list is:
 
@@ -232,7 +227,7 @@ vocabulary, which the design document contradicts itself on: *"Absorbed %f damag
 **failed**. Evading."* / *"…test **passed**. Not evading."*, and *"AI has been evaded. Sixth sense test
 failed; AI now stunned."*
 
-## `zrdr/maneuvers.zrd` — the maneuver library
+## Maneuver library
 
 One shared reader; a flat alternating `name, [properties…]` list of **17 maneuvers**. Each is a
 timed control program plus a difficulty gate — the library is *data*, not code.
@@ -298,7 +293,7 @@ lists them in**:
 `32896` = bits 7+15 = `rolling_scissors` + `barrel_roll`, `2048` = `split_s` alone (the Black Swan's
 signature). `0` on 174 blocks = no signature maneuver.
 
-## AI modes, engine-side
+## AI runtime modes
 
 Not a format, but decoded from the same binary and load-bearing for anyone reading this data. The
 engine's debug readout dispatches on a single mode field with these states:
