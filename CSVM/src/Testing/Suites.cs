@@ -170,7 +170,9 @@ public static class Suites
             "wingman fan/escort-chain/accent-id table and the decision-8a flight-size clamp are " +
             "pure over their inputs, a real spawn census puts N wingmen on team 1 flying the " +
             "configured airframe with wingmen 2/4's PrimaryTargetName resolving to wingmen 1/3's " +
-            "own spawned name, the wave-member personality/accent draws are pure over theirs, " +
+            "own spawned name, ApplyActorVolumes puts the authored 10000 m on all three of a " +
+            "spawned actor's range gates over the airframe's own 2000/2000/1200, the wave-member " +
+            "personality/accent draws are pure over theirs, " +
             "and a real InstantActionWaves sequence over spawned aircraft advances from wave 1 " +
             "to wave 2 exactly on the last kill, activating wave 2's built-inert member at a " +
             "drawn spawn point at least 500 m from the human",
@@ -3432,6 +3434,25 @@ public static class Suites
                 $"every wingman carries team 1, not a pilot-index default: teams={string.Join(",", wingmen.Select(w => w.Team))}");
             ctx.Check(wingmen.All(w => w.Name.ToString().Contains(wingmanNode)),
                 $"every wingman flies the configured airframe: {string.Join(",", wingmen.Select(w => w.Name))}");
+
+            // The synthetic roster block's volumes: FUN_0045a240 writes 10000 m into all THREE, so
+            // the airframe gates the spawner seeds first must not survive on an Instant Action
+            // actor. Overriding activation alone leaves attack as the real engagement gate, since
+            // the mode machine enters pursue on the minimum of the two.
+            var volPos = new Vector3(600f, 500f, 0f);
+            var volPilot = AiPilot.HoldingCourse(volPos, volPos + Vector3.Forward);
+            volPilot.Machine = new AiModeMachine(new System.Random(7));
+            wingmen.Add(spawner.Spawn(wingmanNode, volPos, volPos + Vector3.Forward, volPilot,
+                scheme: null, team: AimAssist.PlayerTeam));
+            var vol = volPilot.Machine;
+            ctx.Check(Mathf.IsEqualApprox(vol.AttackRange, 2000f)
+                && Mathf.IsEqualApprox(vol.ReturnRange, 1200f),
+                $"the spawner seeds the airframe's own gates first: attack={vol.AttackRange:0} return={vol.ReturnRange:0}");
+            InstantActionRuntime.ApplyActorVolumes(vol);
+            ctx.Check(Mathf.IsEqualApprox(vol.ActivationRange, InstantActionRuntime.ActorVolumeRadiusM)
+                && Mathf.IsEqualApprox(vol.AttackRange, InstantActionRuntime.ActorVolumeRadiusM)
+                && Mathf.IsEqualApprox(vol.ReturnRange, InstantActionRuntime.ActorVolumeRadiusM),
+                $"all three volumes take the authored 10000 m: activation={vol.ActivationRange:0} attack={vol.AttackRange:0} return={vol.ReturnRange:0}");
 
             // E11: RandomPilotStats/ResolveWaveAccentId are pure over their draw — row 4 is the
             // flat-4 personality, and only accent 12 (the wingman range's own base) re-rolls.

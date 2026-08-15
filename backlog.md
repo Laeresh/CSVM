@@ -638,6 +638,56 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   matter), `BL-296` (ActionMap/rebinding seam), `git log --grep=BL-062` for what settled the
   per-hardpoint half.
 
+- `BL-363` `[Bug]` **Only aircraft are AI targeting candidates, so an escort with no enemy planes
+  has nothing to do.** *Evidence:* the user at the controls, 2026-08-15, flying a zeppelin run
+  configured with no enemy planes: the wingmen never engaged the zeppelin and flew straight away.
+  `FlightController.SelectRankedTarget` (`FlightController.cs:2233`) builds its candidate list from
+  `Projectiles.CollectAircraft` alone and then drops any candidate whose source is not a
+  `FlightController`. A zeppelin is a kinematic world node owned by `ZeppelinRuntime` (F17), never a
+  `FlightController`, so it cannot be ranked, cannot resolve as a `primary_target`, and cannot put
+  an AI into pursue. The same holds for every world destructible and turret emplacement. The decoded
+  ranking already expects these candidates: `AiTargetRanking`'s own module doc names the "+0.4
+  dynamics / −0.5 structure terms unmodelled (no non-aircraft candidates reach this path)", which is
+  exactly this gap.
+  *Fix shape:* widen the collector to the roster the aim assist already scans (it lists vehicles and
+  turrets, not just aircraft), keeping the `Live` and team gates as they are, then wire the two
+  unmodelled class terms in `AiTargetRanking`.
+  ⚠ *Traps.* (a) **The ranking is MINIMISED**, so a large nearby structure can outrank a distant
+  fighter for every pilot at once. Settle the structure term's sign and scale before widening the
+  pool, or one zeppelin becomes the whole sky's target. (b) `AiGunner` solves its intercept from the
+  target's `WorldVelocity` and gates on an aircraft-sized cone; a zeppelin also needs
+  `DAMAGES_ZEPPELIN` ordnance (F18) or every round is refused, so a wingman with the stock fit would
+  fly a pursuit it can never convert. (c) **Attacking the objective is not automatic in the
+  original**: it is assigned through `primary_target` and `rating_biases`. Widening the candidate
+  pool must not turn every AI into a zeppelin attacker.
+  *Cross-refs:* `BL-362` (the wingmen half of the same playtest), `AiTargetRanking`,
+  [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) "AI modes, engine-side".
+
+- `BL-364` `[Research]` **A netless AI in `patrol` flies one straight line forever, and we do not
+  know what the original flies instead.** *Evidence:* the user at the controls, 2026-08-15: the
+  default mode of enemy AI is to fly straight in one direction, and an enemy wave out of engagement
+  range never turns back. `AiPilot.SteerPatrol` returns immediately when `Patrol` is null
+  (`AiPilot.cs:266`), leaving `TargetHeadingDeg`/`TargetAltitude` at whatever `HoldingCourse` set at
+  spawn, so the aircraft holds one course and one altitude until something retargets it.
+  **Every Instant Action actor is in that state, and correctly so:**
+  [`docs/formats/instant-action.md`](docs/formats/instant-action.md) "Every actor is a synthetic
+  `aiv` roster block" leaves `netids` at its `-1` default for all of them. A patrol net is therefore
+  NOT the missing wiring. What is missing is the behaviour a netless roster vehicle actually flies,
+  on top of a steering law that is an admitted placeholder (`docs/architecture.md` on `AiPilot`:
+  bank-to-turn plus a turn pull plus an altitude leash, gains hand-settled, "the law itself is still
+  not original").
+  *Fix shape:* decode first, build second. If the original holds course too, this closes as correct
+  and the answer is the deliverable. If it orbits, loiters, or climbs toward `pref_engage_alt` (aiv
+  slot 31, authored 350/1100/1500/1550/1600 across the shipped rosters and read by nothing of ours),
+  that is what gets built.
+  ⚠ *Traps.* (a) **Do not assign a chapter patrol net to Instant Action actors to make this look
+  better.** The decode says they have none; the change would pass every test and still be wrong.
+  (b) `pref_engage_alt` is an altitude in metres, not a radius (`ai-rosters.md`), so anything built
+  on it is an altitude order and not a loiter circle. (c) The engagement gate was 2000 m until the
+  10000 m volume fix (`git log --grep=ApplyActorVolumes`), which is most of why waves read as flying
+  away. Re-judge the symptom with that in before building a loiter.
+  *Cross-refs:* `BL-362`, `docs/architecture.md` on `AiPilot` and `AiModeMachine`.
+
 ## Flight model & collision physics
 
 - `BL-089` `[Feature]` **Nitro booster — scoped, low priority (the user's standing call).** Recorded because the data is
@@ -3081,6 +3131,41 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   normally from the moment it leaves the path.
   *Cross-refs:* `BL-359` (which surfaced it, and whose emitter set depends on it for spawned
   vehicles), `BL-095`, [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow".
+
+- `BL-362` `[Feature]` **Instant Action wingmen never form up on the player, and the decoded
+  escort chain that should hold them there is unreachable.** *Evidence:* the user at the controls,
+  2026-08-15: wingmen fly away instead of staying near the player. `PT-50`'s own check (b) already
+  records that no formation-flying behaviour exists and that the placeholder law is what drives
+  them.
+  *What we do today:* `GameSession.BuildFlightRigs` places wingman `i` on the decoded spawn fan
+  (`InstantActionRuntime.WingmanSlotFor`) and hands it `AiPilot.HoldingCourse`, so it holds the
+  player's spawn heading and altitude for the rest of the mission. The decoded escort chain (0/1/3
+  escort the player, 2/4 escort 1/3) is wired only into `AiGunner.PrimaryTargetName`, which names
+  who to SHOOT, not who to stay near.
+  ⚠ **And that assignment is unreachable in our engine:** `SelectRankedTarget` skips every same-team
+  candidate before it tests `PrimaryTargetName` (`FlightController.cs:2253`), and a wingman sits on
+  `AimAssist.PlayerTeam` exactly like the player it is pointed at. So the chain resolves to nothing,
+  on every wingman, in every mission. Verify that before designing on top of it.
+  *What the decode says:* [`docs/formats/instant-action.md`](docs/formats/instant-action.md) "The
+  player and the wingmen" is explicit that a wingman gets no patrol net (`netids` keeps its `-1`)
+  and no skill vector. [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) on
+  `primary_target` says formation-looking behaviour in the original rides nets whose trailer names
+  `player`, and `primary_target`, "not this slot". A wingman has no net, so the trailer half cannot
+  be the mechanism, which leaves `primary_target` on a FRIENDLY doing something other than
+  target assignment. That is the thing to decode.
+  *Fix shape:* answer the decode question first, then a station-keeping input source in `AiPilot`
+  dispatched from `AiModeMachine`. Do not invent a formation offset ahead of it: `WingmanSlotFor`'s
+  fan is decoded as a SPAWN placement, and reusing it as a flying station is a guess wearing a
+  decoded number.
+  ⚠ *Traps.* (a) The nine `AiMode` values are decoded from the engine's own debug readout and none
+  of them is "form up"; a tenth is invented and has to be named as such, out of `NameOf`'s verbatim
+  vocabulary. (b) **Friendly fire is decoded as real** (M4 A2): a wingman holding a tight station
+  will die to the player's guns, which is correct, and must not be papered over with a damage or
+  collision exemption. (c) It is a chain, not a star: 2 and 4 station on 1 and 3, so a dead leader
+  leaves its follower without one, and that case needs an answer rather than a crash.
+  *Playtest after fix:* `PT-50`.
+  *Cross-refs:* `BL-363` (the other half of the same playtest: an escort with nothing targetable),
+  `BL-364` (what a netless AI flies at all).
 
 ## Tooling, platform & docs
 

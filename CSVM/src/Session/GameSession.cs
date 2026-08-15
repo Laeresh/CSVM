@@ -2107,6 +2107,7 @@ public partial class GameSession : Node3D
                 RegisterAiVoice(ace, ia.Def.AceAccentId, rating);
                 iaAce = ace;
                 _iaAce = ace;
+                InstantActionRuntime.ApplyActorVolumes(pilot.Machine);
                 if (ace != null)
                 {
                     GD.Print($"ia: ace '{ia.Def.AceName}' ({aceNode}) rating={rating} " +
@@ -2176,12 +2177,10 @@ public partial class GameSession : Node3D
                             ? wingmen[escortIdx]?.Name.ToString()
                             : "player";
                     }
-                    // Every Instant Action actor's activation volumes are authored ±10000 m
+                    // All three of an Instant Action actor's volumes are authored 10000 m
                     // (docs/formats/instant-action.md "Every actor is a synthetic aiv roster
-                    // block"), not the shipped min_ai_active_dist (2000 m) SpawnAiAircraft arms
-                    // by default.
-                    if (pilot.Machine != null)
-                        pilot.Machine.ActivationRange = 10000f;
+                    // block"), not the airframe's 2000/2000/1200 m SpawnAiAircraft arms by default.
+                    InstantActionRuntime.ApplyActorVolumes(pilot.Machine);
                     RegisterAiVoice(wingman, slot.AccentId);
                 }
                 int wmSpawned = wingmen.Count(w => w != null);
@@ -2243,12 +2242,9 @@ public partial class GameSession : Node3D
                             {
                                 pilot.Gunner.PrimaryTargetName = "player";
                             }
-                            // Every Instant Action actor's activation volumes are authored
-                            // ±10000 m (docs/formats/instant-action.md), same as the ace/wingmen.
-                            if (pilot.Machine != null)
-                            {
-                                pilot.Machine.ActivationRange = 10000f;
-                            }
+                            // All three of an Instant Action actor's volumes are authored 10000 m
+                            // (docs/formats/instant-action.md), same as the ace/wingmen.
+                            InstantActionRuntime.ApplyActorVolumes(pilot.Machine);
                             int accentId = InstantActionRuntime.ResolveWaveAccentId(
                                 wave.EnemyAccentId, Rng.Stream(Rng.Ai).Randi());
                             RegisterAiVoice(enemy, accentId, rating);

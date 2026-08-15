@@ -391,9 +391,12 @@ Save this as `ia-wingmen-test.json` next to the repo, then:
     HUD/feedback (no distinguishing "friendly" cue) rather than in the mechanic itself, since no
     gate was added on purpose.
 
-  *Blocks:* nothing open yet — a fail on (a)/(b) is fresh evidence for the placeholder `AiPilot`
-  law (Wave D/E's own open scope, not this item's decode) or a new `BL` item; (c) reads confirm
-  Decision 3/A2 rather than opening anything.
+  *Blocks:* (b) is now answered in the negative and filed as `BL-362` (no station-keeping exists,
+  and the `primary_target` escort chain is unreachable because same-team candidates are skipped
+  before it is tested), so fly (b) as a judgement on how badly it reads, not as an open question.
+  (a) and (c) stand: a fail on (a) is fresh evidence for the placeholder `AiPilot` law (Wave D/E's
+  own open scope, not this item's decode) or a new `BL` item; (c) reads confirm Decision 3/A2 rather
+  than opening anything.
   *Variations:* `"num_wingmen": 5` with 1–2 `--players=` to see decision 8a's clamp in the spawn
   log; any other `mission_type` besides `dogfight_ace` (which forces wingmen to 0).
 

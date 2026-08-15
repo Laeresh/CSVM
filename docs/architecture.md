@@ -5223,9 +5223,14 @@ applied silently (the caller must log it).
   `--ia=<path>` CLI launch already names its chapter via `--chapter=`; nothing here derives one.
 ⚠ **`WingmanSlotFor`/`FlownWingmen` place and clamp only** — they say nothing about livery, team,
   or the actual `AiGunner`/`AiModeMachine` wiring; `GameSession.BuildFlightRigs` sets
-  `PrimaryTargetName` and `ActivationRange` itself, after `SpawnAiAircraft` has populated the
-  pilot's `Gunner`/`Machine` (both start null on a fresh `AiPilot`), because a helper here has no
-  spawned `FlightController` to name.
+  `PrimaryTargetName` and calls `ApplyActorVolumes` itself, after `SpawnAiAircraft` has populated
+  the pilot's `Gunner`/`Machine` (both start null on a fresh `AiPilot`), because a helper here has
+  no spawned `FlightController` to name.
+`ApplyActorVolumes` is the synthetic block's volume override (`FUN_0045a240`): 10000 m onto ALL
+THREE of a spawned actor's gates — activation, attack and return — over the airframe's own
+2000/2000/1200 m, which `AiAircraftSpawner.Spawn` seeds first and which is the fallback only for a
+roster leaving its volume slots at 0.0. Setting activation alone leaves the airframe's attack
+radius as the real engagement gate, since `AiModeMachine` enters pursue on the minimum of the two.
 E11 adds `RandomPilotStats(draw)` — the decoded five-row personality table
 (docs/formats/instant-action.md "A wave enemy's nine pilot stats are drawn at random from a table
 of five, not from its skill"), `row = draw % 5`, fed straight into `RepresentativeRating` for the
