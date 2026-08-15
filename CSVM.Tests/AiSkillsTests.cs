@@ -12,8 +12,8 @@ namespace CSVM.Tests;
 /// (docs/formats/ai-rosters.md). Mechanics on the hand-authored
 /// <c>fixtures/zrdr-skills/player.json</c>; the shipped endpoint constants and the roster's
 /// worked cases (the cabbie, the dead-eye-1 mooks) as goldens against the real extraction.
-/// The between-endpoint curve is LINEAR by documented assumption — only the two endpoints are
-/// decoded — so the midpoint test pins the assumption, not a decoded fact.
+/// The between-endpoint curve is LINEAR, and — decoded as of E42 — its origin is rating 0, not
+/// rating 1: <c>value = lo + (hi-lo) · rating/9</c> (docs/org/aiControlLaw.md "The skill scalar").
 /// </summary>
 public class AiSkillsTests
 {
@@ -27,20 +27,22 @@ public class AiSkillsTests
     {
         var s = Fixture;
         Assert.Equal(3, s.Parameters.Count);
-        Assert.Equal(8.0f, s.At("dead_eye_angle", 1f), 3);
+        // Rating 1 is NOT the pair's lo endpoint: the engine's own origin is rating 0
+        // (lo + (hi-lo)/9 at rating 1), decoded in docs/org/aiControlLaw.md.
+        Assert.Equal(8.0f + (2.0f - 8.0f) / 9f, s.At("dead_eye_angle", 1f), 3);
         Assert.Equal(2.0f, s.At("dead_eye_angle", 9f), 3);
-        Assert.Equal(40.0f, s.At("quick_draw_angle", 1f), 3);
+        Assert.Equal(40.0f + (88.0f - 40.0f) / 9f, s.At("quick_draw_angle", 1f), 3);
         Assert.Equal(88.0f, s.At("quick_draw_angle", 9f), 3);
     }
 
     [Fact]
-    public void InterpolatesLinearlyAcrossTheOneToNineScale()
+    public void InterpolatesLinearlyFromARatingZeroOrigin()
     {
         var s = Fixture;
-        // Rating 5 is the exact midpoint of [1,9]; rating 3 sits a quarter along.
-        Assert.Equal(5.0f, s.At("dead_eye_angle", 5f), 3);
-        Assert.Equal(6.5f, s.At("dead_eye_angle", 3f), 3);
-        Assert.Equal(64.0f, s.At("quick_draw_angle", 5f), 3);
+        // value = lo + (hi-lo) * rating/9: rating 5 is 5/9 of the way, rating 3 is 3/9.
+        Assert.Equal(8.0f + (2.0f - 8.0f) * (5f / 9f), s.At("dead_eye_angle", 5f), 3);
+        Assert.Equal(8.0f + (2.0f - 8.0f) * (3f / 9f), s.At("dead_eye_angle", 3f), 3);
+        Assert.Equal(40.0f + (88.0f - 40.0f) * (5f / 9f), s.At("quick_draw_angle", 5f), 3);
     }
 
     [Fact]
@@ -122,17 +124,18 @@ public class AiSkillsTests
         // The decoded table (docs/formats/ai-rosters.md): ten keys, no natural_touch.
         Assert.Equal(10, s.Parameters.Count);
         Assert.False(s.Parameters.ContainsKey("natural_touch"));
-        Assert.Equal(4.0f, s.DeadEyeAngleDeg(1), 2);
+        // Rating 1 is lo + (hi-lo)/9, not the raw lo endpoint (the engine's origin is rating 0).
+        Assert.Equal(4.0f + (1.45f - 4.0f) / 9f, s.DeadEyeAngleDeg(1), 2);
         Assert.Equal(1.45f, s.DeadEyeAngleDeg(9), 2);
-        Assert.Equal(50f, s.QuickDrawAngleDeg(1), 1);
+        Assert.Equal(50f + (89f - 50f) / 9f, s.QuickDrawAngleDeg(1), 1);
         Assert.Equal(89f, s.QuickDrawAngleDeg(9), 1);
-        Assert.Equal(0.5f, s.At("steady_hand_chance", 1f), 2);
+        Assert.Equal(0.5f + (0.08f - 0.5f) / 9f, s.At("steady_hand_chance", 1f), 2);
         Assert.Equal(0.08f, s.At("steady_hand_chance", 9f), 2);
-        Assert.Equal(4.8f, s.At("stun_recovery_interval", 1f), 2);
+        Assert.Equal(4.8f + (0.6f - 4.8f) / 9f, s.At("stun_recovery_interval", 1f), 2);
         Assert.Equal(0.6f, s.At("stun_recovery_interval", 9f), 2);
-        Assert.Equal(0.35f, s.At("constitution_chance", 1f), 2);
+        Assert.Equal(0.35f + (0.95f - 0.35f) / 9f, s.At("constitution_chance", 1f), 2);
         Assert.Equal(0.95f, s.At("constitution_chance", 9f), 2);
-        Assert.Equal(0.35f, s.At("daredevil_chance", 1f), 2);
+        Assert.Equal(0.35f + (0.99f - 0.35f) / 9f, s.At("daredevil_chance", 1f), 2);
         Assert.Equal(0.99f, s.At("daredevil_chance", 9f), 2);
     }
 

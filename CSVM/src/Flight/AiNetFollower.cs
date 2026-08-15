@@ -21,9 +21,13 @@ namespace CSVM.Flight;
 ///
 /// <para><b>Arrival is a capture radius, and it is invented.</b>
 /// <see cref="DefaultArrivalRadius"/> is not an original value: the node counts as reached when
-/// the follower is horizontally (XZ) within the radius. Horizontal, because the placeholder
-/// control law converges on altitude slowly, and the pilot model (wave D) owns real
-/// waypoint-arrival and turn behaviour. Replace, do not tune, when that lands.</para>
+/// the follower is horizontally (XZ) within the radius. Horizontal, because neither the deleted
+/// placeholder law nor the ported <see cref="AiControlLaw"/> (E41) converges on altitude quickly
+/// through a level patrol turn. E42 re-measured the radius against the ported law rather than
+/// assume it would shrink: it does not — on C1's M4ReinfAce the real law's own turning circle
+/// misses a stationary aim point on roughly this same scale, and halving the radius to 100 m
+/// roughly quadruples the mean time between node captures (measured over a 600 s run: 17 s/leg at
+/// 200 m vs 65 s/leg at 100 m). The value stands, re-justified rather than retired.</para>
 ///
 /// <para><b>The trailer and the per-node tags ride along untouched.</b> The net's trailer
 /// (its attach/follow target, e.g. <c>[10, "player"]</c>) is recorded and exposed via
@@ -32,10 +36,11 @@ namespace CSVM.Flight;
 /// (stop-point id vs segment id) are still open (F17), so this class acts on neither.</para></summary>
 public sealed class AiNetFollower
 {
-    /// <summary>The capture radius, metres: an invented value, not original behaviour, sized to
-    /// the placeholder control law's tracking error on the tightest fighter rings (measured on
-    /// C1's M4ReinfAce: the law orbits a node at ~200 m; wave D's real maneuvering shrinks
-    /// this).</summary>
+    /// <summary>The capture radius, metres: an invented value, not original behaviour. First
+    /// sized to the (now deleted) placeholder law's tracking error; E42 re-measured it against
+    /// the ported <see cref="AiControlLaw"/> on the same C1 M4ReinfAce loop and found no smaller
+    /// value to prefer — shrinking it makes the patrol slower to advance, not more precise, so it
+    /// stands unchanged (see the class remarks for the measurement).</summary>
     public const float DefaultArrivalRadius = 200f;
 
     private readonly Random _rng;

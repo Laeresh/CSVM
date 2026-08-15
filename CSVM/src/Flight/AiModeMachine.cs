@@ -55,8 +55,9 @@ public enum AiMode
 /// <c>stun_recovery_interval</c>. An evasive maneuver is an eligible library entry
 /// (<see cref="Maneuver.EligibleFor"/>) played to <see cref="ManeuverExecutor.Done"/>, then back
 /// to the prior mode. Lay off is the design's rubber-band assist, deliberate design: a pursued
-/// pilot eases off to let the player catch up, and the shipped <c>sixth_sense_factor</c>
-/// (0.994 at rating 1 → 1.07 at 9) is its decoded ease-off constant.</para>
+/// pilot eases off to let the player catch up, and the shipped <c>sixth_sense_factor</c> pair
+/// (0.994 → 1.07, interpolated <c>rating/9</c> per E42's correction) is its decoded ease-off
+/// constant.</para>
 ///
 /// <para><b>Invented, named as such:</b> the evade behaviour beyond breaking off (timed run,
 /// seeded heading scrambles away from the threat — the decode is thin past "Evading."); the
@@ -152,20 +153,22 @@ public sealed class AiModeMachine
     public float ReturnRange = 1200f;
 
     /// <summary>Probability that a hit's steady-hand test FAILS and the pilot evades —
-    /// <c>steady_hand_chance</c> (0.5 at rating 1 → 0.08 at 9; lower is the better pilot).
+    /// <c>steady_hand_chance</c> (0.5 → 0.08 over the pair; lower is the better pilot). The
+    /// default here is the pair's raw low endpoint, not the rating-1 value (rating/9 interpolation
+    /// puts rating 1 partway toward the high endpoint already — see <see cref="AiSkills.At"/>).
     /// The design's damage weighting on this roll is undecoded and not modelled.</summary>
     public float SteadyHandChance = 0.5f;
 
     /// <summary>Probability that the sixth-sense test PASSES (the pilot follows the target's
-    /// maneuver) — <c>sixth_sense_chance</c> (0.45 at rating 1 → 0.71 at 9). A failure stuns.</summary>
+    /// maneuver) — <c>sixth_sense_chance</c> (0.45 → 0.71 over the pair). A failure stuns.</summary>
     public float SixthSenseChance = 0.45f;
 
-    /// <summary>How long a stun lasts — <c>stun_recovery_interval</c> (4.8 s at rating 1 →
-    /// 0.6 s at 9).</summary>
+    /// <summary>How long a stun lasts — <c>stun_recovery_interval</c> (4.8 s → 0.6 s over the
+    /// pair).</summary>
     public float StunRecoveryIntervalS = 4.8f;
 
     /// <summary>The decoded ease-off factor applied while being pursued —
-    /// <c>sixth_sense_factor</c> (0.994 at rating 1 → 1.07 at 9): the fraction of the
+    /// <c>sixth_sense_factor</c> (0.994 → 1.07 over the pair): the fraction of the
     /// pursuer's speed a laying-off pilot flies at, so a poor pilot lets the player close and
     /// an ace pulls away. The constant is decoded; the speed-matching application point is our
     /// reading (<see cref="AiPilot"/>).</summary>

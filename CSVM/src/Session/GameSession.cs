@@ -2322,7 +2322,6 @@ public partial class GameSession : Node3D
                     var pos = net.Nodes[0].Position + right * lateral;
                     var look = net.Nodes.Count > 1 ? net.Nodes[1].Position : pos + fwd;
                     var pilot = AiPilot.HoldingCourse(pos, look);
-                    pilot.Throttle = AiPilot.PatrolThrottle;
                     pilot.Patrol = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai));
                     RegisterAiVoice(SpawnAiAircraft(planeName, pos, look, pilot), accentId);
                 }

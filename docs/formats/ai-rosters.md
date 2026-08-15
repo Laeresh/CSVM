@@ -188,8 +188,8 @@ Notes that matter to anyone implementing this:
   and 9: a 9 yields `hi` exactly, but a 1 yields `lo + (hi − lo)/9`, not `lo`. Two of the ten pairs
   are confirmed on this path by name (`sixth_sense_chance` → `obj+0x970`, `sixth_sense_factor` →
   `obj+0x974`); the other eight are assumed to share it, since one interpolation site serves the
-  block. ⚠ **CSVM's `AiSkills` reader still implements the old assumption** and is a point off at
-  every rating below 9; correcting it is plan item `E42`.
+  block. **Corrected 2026-08-15 (`E42`): `AiSkills.At` now computes `rating/9` directly** rather
+  than `(rating-1)/8`, matching the engine at every rating rather than only at 9.
 - **The scale is 1–9 and nothing else.** Ratings are an index into this table; there is no 0–100
   scale anywhere in the shipped data. (The original *design document* gives a Danger-Zone poll
   interval of `100 − DareDevil` seconds, which only type-checks on 0–100. That formula is design-era:

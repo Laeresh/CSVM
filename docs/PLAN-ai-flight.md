@@ -154,7 +154,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave E — Replace the placeholder
 
 41. ☑ E41 Port the control law into `AiPilot` (landed as `Flight/AiControlLaw.cs`; three D31 readings corrected in the process, one suite assertion re-pinned)
-42. ☐ E42 Retire the placeholder-support constants
+42. ☑ E42 Retire the placeholder-support constants (landed: `PatrolThrottle` deleted, `OrderAimRangeM` and lay off's throttle override justified and kept, `AiNetFollower.DefaultArrivalRadius` re-measured and kept at 200 m, and the `AiSkills.At` interpolation-origin bug D31 found is fixed)
 
 ### Wave F — Judge it
 
@@ -922,7 +922,56 @@ stated reasons. The real verdict is F52.
 law needs it, that is evidence the port is wrong or that C22 is incomplete, and it should be
 diagnosed rather than papered over. Orders must stay mutable fields.
 
-## E42 ☐ Retire the placeholder-support constants
+## E42 ☑ Retire the placeholder-support constants
+
+**Landed 2026-08-15.** By the time this item started, the bank-to-turn law itself and its
+`MaxBankDeg`/`BankPerHeadingDeg`/`RollGain`/`RollRateLead`/`MaxPathDeg`/`PathPerMeter`/
+`PitchGain`/`PitchRateLead`/`BankPull`/altitude-leash constants were already gone with it — E41
+deleted the whole placeholder law and everything that stabilised it, per that item's own trap.
+What was left to judge: `AiPilot.PatrolThrottle`, `AiPilot.OrderAimRangeM`, lay off's throttle
+override (`LayOffThrottleRatePerS`/`LayOffMinThrottle`), `AiNetFollower.DefaultArrivalRadius`, and
+— found while reading D31's decode page rather than guessed — `AiSkills.At`'s interpolation-origin
+bug, which `docs/org/aiControlLaw.md` and `docs/formats/ai-rosters.md` had already named as this
+item's business.
+
+**`PatrolThrottle` (0.5) is DELETED, not justified.** Measured rather than argued: seeding
+`Throttle` to any value below a table's `ThrottleMin` is erased on the very first call to
+`AiControlLaw.Steer`, whose own `Mathf.Max(lever, p.ThrottleMin)` clamp (`AiControlLaw.cs`:331)
+overwrites it before the aircraft has flown a single frame. The three call sites that set it
+(`AiGeneratorRuntime.cs`, `GameSession.cs`, `Suites.cs`'s `ai-net-follow` rig) are simplified to
+drop the assignment; `AiPilot`'s own default `Throttle = 0.85f` is already inside the cruise
+table's `[0.8, 1.1]` band and needs no seed.
+
+**`OrderAimRangeM` and lay off's throttle override SURVIVE, both re-justified in place** (their
+in-file comments already carried the reason; unchanged in substance, tightened in `architecture.md`
+to say "survives" rather than "E42's to decide").
+
+**`AiNetFollower.DefaultArrivalRadius` (200 m) SURVIVES, but its justification was wrong and is
+now measured against the real law instead of assumed.** The plan expected wave D's real maneuvering
+to shrink it; a direct measurement disproves that. Built a throwaway harness driving `AiPilot` +
+`AiNetFollower` around C1's real `M4ReinfAce` loop (11 nodes, the same net the old ~200 m figure
+was measured on) under `AiControlLaw`, varying only the capture radius: 300 m completes 135 node
+captures in a 600 s run, 200 m completes 32, 100 m completes 8, 50 m completes 10 — closest-approach
+distances cluster right at the radius threshold at every setting, so the real law's own turning
+circle misses a stationary aim point on roughly the 200–300 m scale regardless, and shrinking the
+radius only makes the patrol slower to advance (measured mean time per leg: 17 s at 200 m vs 65 s
+at 100 m), never tighter. The correct disproof-with-no-code-change the ground rules describe: the
+number is kept, its story corrected in `AiNetFollower.cs` and `architecture.md`.
+
+**`AiSkills.At`'s interpolation origin is fixed.** D31 found while decoding the skill scalar
+(`docs/org/aiControlLaw.md` "The skill scalar…") that the engine's own formula is
+`lo + (hi−lo) · rating/9`, with the endpoints at rating **0** and 9, not 1 and 9 — `At` computed
+`(rating−1)/8` instead, a point off at every rating below 9. Corrected to `rating/9`; every
+xmldoc/test/suite comment asserting a specific "at rating 1" value was re-derived rather than left
+stale (`AiSkillsTests`, `AiModeMachine.cs`, `AiGunner.cs`, `AiVoiceDispatcher.cs`, `Suites.cs`'s
+`ai-gunnery` messages).
+
+**Verify.** `RunTests.ps1` green, unfiltered: units 1344/1344, engine 61/61 (including
+`ai-net-follow`, `ai-modes`, `ai-gunnery`, `ai-actor`, `ai-spawn-jitter`, `ai-voice`,
+`ai-crash-defs`), 14 goldens hash-identical, hitch clean, exit 0. `AiSkillsTests` re-pinned to the
+corrected formula rather than loosened; no suite needed a behavioural re-pin (the `ai-gunnery`
+dead-eye split is unchanged at 6/30 vs 13/30 — the seeded scatter rng dominates over the small
+skill-1 angle shift).
 
 **Goal.** No constant survives whose only justification is stabilising the placeholder law.
 

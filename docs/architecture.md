@@ -992,10 +992,10 @@ slot 6; `RosterRatingBiases`: slot 33 as `AiRatingBias` — wildcard `Matches`, 
 a third element accepted and preserved raw, never acted on) and the thin per-mission
 roster loader (`LoadRoster`). Units + shipped-constant goldens in `AiSkillsTests`;
 slot 6/33 census goldens in `AiTargetRankingTests`.
-⚠ Between the endpoints the curve is LINEAR BY ASSUMPTION, and D31 traced the real one: the engine
-  computes `lo + (hi − lo) · rating/9`, so the endpoints sit at rating 0 and 9, not 1 and 9. `At`
-  is therefore a point off at every rating below 9. Correcting it is plan E42; see
-  `docs/org/aiControlLaw.md` and `docs/formats/ai-rosters.md`.
+⚠ Between the endpoints the curve is LINEAR, and — decoded by D31, corrected in `At` by E42 — the
+  engine's own origin is rating 0, not rating 1: `lo + (hi − lo) · rating/9`. A rating of 1 reads
+  `lo + (hi−lo)/9`, not `lo` outright. See `docs/org/aiControlLaw.md` and
+  `docs/formats/ai-rosters.md`.
 ⚠ Two stats improve DOWNWARD (`dead_eye_angle`, `steady_hand_chance`); never normalise the
   direction. `natural_touch` has no entry by design and asking for it throws.
 ⚠ A null roster slot means "fall back to the airframe def's own stat keys"
@@ -2362,9 +2362,13 @@ positions in, target node out; its two consumers are `AiPilot.Patrol` (aircraft)
 `ai-net-follow` suite.
 ⚠ Traversal treats EDGES as undirected (our reading, not decoded: the worked C1 loop dead-ends
   under a directed one). Never walk node order; only the edge list is connectivity.
-⚠ `DefaultArrivalRadius` (200 m, XZ-only) is INVENTED, sized to the placeholder law's tracking
-  error; wave D's real maneuvering shrinks it. Zeppelins pass a wider per-record radius that
-  clears their turning circle (`ZeppelinRuntime`).
+⚠ `DefaultArrivalRadius` (200 m, XZ-only) is INVENTED. E42 re-measured it against the ported
+  `AiControlLaw` on C1's M4ReinfAce rather than assume wave D's maneuvering would shrink it: it
+  does not — the real law's own turning circle misses a stationary aim point on roughly this same
+  scale, and halving the radius to 100 m roughly quadruples the mean time between node captures
+  (measured over a 600 s run: 17 s/leg at 200 m vs 65 s/leg at 100 m). The value stands,
+  re-justified rather than retired. Zeppelins pass a wider per-record radius that clears their
+  turning circle (`ZeppelinRuntime`).
 ⚠ The trailer is recorded and exposed, never acted on (target-relative motion is later-wave
   work); per-node tags ride along raw. Stop-point vs segment id is still open (F17's remaining
   item; the discriminating instrument is locating the runtime net loader).
@@ -2430,10 +2434,13 @@ the model state and its own fields, seeded randomness only, so a fixed-dt run is
   around it. The placeholder bank-to-turn law and its altitude leash are gone — do not reintroduce
   a leash, the real law's wings-level rule and elevator deadband are what replaced it. `Throttle`
   is now the lever's CURRENT state, walked by the law at 0.35/s, not a held order.
-⚠ Three values here are NOT the original's: `PatrolThrottle` (0.5, now only seeding the lever's
-  walk), `OrderAimRangeM` (a port artifact of our heading/altitude orders, which the original does
-  not carry), and lay off's throttle override (D15's invented speed match, where the decode has the
-  break-off arm simply flying the cruise table). All three are E42's to retire or justify.
+⚠ E42 retired or justified the three values here that are NOT the original's. `PatrolThrottle` is
+  GONE: the law's own throttle clamp (`AiLawParams.ThrottleMin`) overwrites any seed below the
+  table floor on the very first step, so seeding it was dead weight once the real law landed.
+  `OrderAimRangeM` SURVIVES: it converts our heading/altitude order shape into the point-plus-
+  velocity the law wants, which the original never needed because it never carries bare
+  heading/altitude orders. Lay off's throttle override SURVIVES too, D15's own invention, not the
+  steering law's — see `src/Flight/AiPilot.cs`'s `FlyLayOff` remarks.
 
 ## src/Flight/AiControlLaw.cs
 The original's own AI steering law (E41), decoded as plan D31 in `docs/org/aiControlLaw.md` — read

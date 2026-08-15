@@ -5516,10 +5516,10 @@ public static class Suites
     /// <summary>The D14 AI gunnery, on real engine state: an AI-piloted, stock-armed plane HELD
     /// at fixed poses (the weapon-lab pin — held rigs fire through the normal path) against a
     /// parked hostile target. Pins: nearest-hostile acquisition into the gunner's MUTABLE target
-    /// field; the quick-draw gate (a beam-ish bearing is refused at rating 1's 50° cone and
+    /// field; the quick-draw gate (a beam-ish bearing is refused at rating 1's ~54° cone and
     /// taken at rating 9's 89°); the ±11° forward gun cone as a hard fire gate (nose 30° off the
     /// bearing = no fire, whatever quick draw says); dead-eye scatter as a per-shot cone whose
-    /// interpolated rating-1 angle (4.0°) lands measurably fewer hits than rating 9's (1.45°) at
+    /// interpolated rating-1 angle (~3.7°) lands measurably fewer hits than rating 9's (1.45°) at
     /// fixed range, with the rounds under the AI's own shooter id and none on its own airframe;
     /// the kill attributed to the AI id through Downed; and the IsHumanPiloted assist exclusion
     /// A/B'd in place — the same off-boresight geometry misses as an AI and hits the moment the
@@ -5641,13 +5641,13 @@ public static class Suites
             ctx.Check(ReferenceEquals(gunner.Target, target), $"a cleared target re-acquires next tick");
 
             // --- the quick-draw gate: 80° off the target's tail axis (a beam-ish shot). At
-            // rating 1 the 50° cone refuses it; at rating 9 the 89° cone takes it.
+            // rating 1 the ~54° cone refuses it; at rating 9 the 89° cone takes it.
             var beamPos = targetPos + new Vector3(0.9848f, 0f, 0.1736f) * 500f; // 80° off +Z
             ai.PlaceHeld(beamPos, targetPos);
             int ammoAtBeam = gun.Ammo;
             Step(60);
             ctx.Check(!gunner.WantsFire && gun.Ammo == ammoAtBeam,
-                $"a beam-ish shot is refused at quick-draw rating 1 (50°) rounds={ammoAtBeam - gun.Ammo}");
+                $"a beam-ish shot is refused at quick-draw rating 1 (~54°) rounds={ammoAtBeam - gun.Ammo}");
             gunner.QuickDrawAngleDeg = skills.QuickDrawAngleDeg(9);
             Step(60);
             ctx.Check(gun.Ammo < ammoAtBeam,
@@ -5665,7 +5665,7 @@ public static class Suites
             // --- dead-eye scatter, skill 1 vs 9: same fixed geometry (the high rear quarter at
             // ~212 m, where the planform presents real area — dead astern the airframe is
             // edge-on and both cones mostly miss, drowning the difference), a fixed round
-            // budget each, hits counted off the damage ledger. The rating-1 cone (4.0°) must
+            // budget each, hits counted off the damage ledger. The rating-1 cone (~3.7°) must
             // land measurably fewer than rating 9's (1.45°).
             ai.PlaceHeld(targetPos + new Vector3(0f, 150f, 150f), targetPos);
             (int Rounds, int Hits) Volley(float deadEyeDeg, int roundCap)
@@ -6388,7 +6388,6 @@ public static class Suites
             var spawn = net.Nodes[0].Position;
             var look = net.Nodes[1].Position;
             var pilot = AiPilot.HoldingCourse(spawn, look);
-            pilot.Throttle = AiPilot.PatrolThrottle;
             var follower = new AiNetFollower(net, new System.Random(1));
             pilot.Patrol = follower;
             var aiModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);

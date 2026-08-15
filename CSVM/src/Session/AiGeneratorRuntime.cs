@@ -298,7 +298,6 @@ public sealed partial class AiGeneratorRuntime : Node
         SpawnedNet[gen.Def.Node] = net.Name;
 
         var pilot = AiPilot.HoldingCourse(pos, pos + forward);
-        pilot.Throttle = AiPilot.PatrolThrottle;
         pilot.Patrol = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai));
         var controller = _spawn(_planeName, pos, pos + drop, pilot);
         if (controller == null)

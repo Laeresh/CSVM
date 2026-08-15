@@ -22,13 +22,6 @@ namespace CSVM.Flight;
 /// law's own wings-level rule and elevator deadband handle instead.</para></summary>
 public sealed class AiPilot
 {
-    /// <summary>The throttle order a net assignment should come with. Invented, not an original
-    /// value: at the 0.85 default (~125 m/s) the placeholder law's turn radius exceeds the
-    /// tightest fighter rings and the plane limit-cycles around a node forever (measured on C1's
-    /// M4ReinfAce); at 0.5 it laps them. Callers assigning <see cref="Patrol"/> set it
-    /// explicitly, so it stays a visible order rather than a hidden override.</summary>
-    public const float PatrolThrottle = 0.5f;
-
     /// <summary>Invented: how fast lay off walks the throttle toward the ease-off speed, per
     /// second (the decoded constant is the speed factor, not a lever rate).</summary>
     public const float LayOffThrottleRatePerS = 0.4f;
@@ -50,11 +43,12 @@ public sealed class AiPilot
     public AiNetFollower? Patrol;
 
     /// <summary>The forward-gun gunnery (D14), or null for an unarmed pilot. When its target is
-    /// live, each <see cref="Next"/> re-derives the heading/altitude orders from the target's
-    /// position — a plain pursuit through the placeholder law, taking precedence over
-    /// <see cref="Patrol"/> — so the plane turns onto its victim and the gunner's cones get
-    /// geometry to pass. The host <see cref="FlightController"/> drives the gunner's fire
-    /// decision itself; this class only steers. Mutable like every other order.</summary>
+    /// live and there is no <see cref="Machine"/>, each <see cref="Next"/> re-derives the
+    /// heading/altitude orders from the target's position — a plain pursuit through
+    /// <see cref="AiControlLaw"/>, taking precedence over <see cref="Patrol"/> — so the plane
+    /// turns onto its victim and the gunner's cones get geometry to pass. The host
+    /// <see cref="FlightController"/> drives the gunner's fire decision itself; this class only
+    /// steers. Mutable like every other order.</summary>
     public AiGunner? Gunner;
 
     /// <summary>The nine-mode state machine (D11), or null for the bare-orders pilot above.

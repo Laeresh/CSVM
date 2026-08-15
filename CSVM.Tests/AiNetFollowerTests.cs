@@ -76,7 +76,8 @@ public class AiNetFollowerTests
         Assert.False(f.Update(new Vector3(250f, 400f, 0f)));
         Assert.Equal(0, f.CurrentIndex);
         // Within the (invented) 200 m capture radius in XZ, 300 m of altitude error is ignored:
-        // the placeholder law converges on altitude slowly, so arrival is horizontal by design.
+        // neither the deleted placeholder law nor the ported one converges on altitude quickly
+        // through a level patrol turn, so arrival is horizontal by design.
         Assert.True(f.Update(new Vector3(150f, 700f, 0f)));
         Assert.Equal(1, f.CurrentIndex);
         Assert.Equal(1, f.Advances);
