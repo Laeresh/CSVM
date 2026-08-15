@@ -1,10 +1,16 @@
-# Sounds: `sounds.json` SETS, player curves, WAV format
+# Sound readers and WAV format
 
-Part of the [format documentation](README.md). Covers the shared zrdr archive's sound
-definitions and curve blocks, and the audio container format. Consumed by
-`CSVM/src/Mech3/SoundDefs.cs`, `WavFile.cs`, `src/Flight/FlightAudio.cs`.
+Part of the [format documentation](README.md). This page covers shared sound definitions, player
+volume and pitch curves, and the WAV container. The readers are `SoundDefs.cs`, `WavFile.cs`, and
+`FlightAudio.cs`.
 
-## `sounds.json` — the SETS block
+## Contents
+
+- [Sound sets](#sound-sets)
+- [Sound groups](#sound-groups)
+- [Player curves](#player-curves)
+- [WAV format](#wav-format)
+## Sound sets
 
 `SETS` alternates set-name → list of entries. Entry shape:
 
@@ -28,7 +34,7 @@ Each plane def names its own engine loop via `engine_sound` / `cockpit_engine_so
 `damaged_engine_sound` is a second, vehicle.json-only loop (`snd_damagedengine`) blended in as
 damage accumulates — its own two-float shape, not a `player.json` curve block; see vehicle.md.
 
-## `sounds.json` — the SOUND_GROUPS block
+## Sound groups
 
 A sibling of `SETS`: the weighted random sound groups a one-shot `SOUND` animation event resolves
 through when it names a group instead of a plain `snd_*` definition. The combat/destruction
@@ -65,7 +71,7 @@ picks one of `snd_exp_hit1/2/3/3a/5`, each of which is an ordinary `SETS` entry
 (`snd_exp_hit1` → `explosion_1.wav`). See [anim-definitions.md](anim-definitions.md) for the
 `SOUND` vs `SOUND_NODE` distinction (only the latter is ambient looping world audio).
 
-## `player.json` — volume/pitch curve blocks
+## Player curves
 
 All are clamped two-point ramps `(inStart→inEnd maps outStart→outEnd)`:
 
