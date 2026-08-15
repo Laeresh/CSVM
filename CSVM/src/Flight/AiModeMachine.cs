@@ -31,7 +31,8 @@ public enum AiMode
     /// <summary>Controls neutral for <c>stun_recovery_interval</c> after a failed sixth-sense test.</summary>
     Stunned,
 
-    /// <summary>Terrain-closure override: climb out, everything else waits.</summary>
+    /// <summary>Obstacle-closure override (terrain or another aircraft dead ahead): climb out,
+    /// everything else waits.</summary>
     AvoidCrash,
 
     /// <summary>Danger-zone approach. Never entered yet — see <see cref="AiModeMachine"/>.</summary>
@@ -76,7 +77,7 @@ public enum AiMode
 /// <para>Config fields are plain and mutable BY DESIGN (the mission-script rule:
 /// <c>SET_AI_ATTACK_RADIUS</c> and friends rewrite them at runtime). All randomness is this
 /// machine's own seeded stream, so a fixed-seed run transitions identically. Engine-free: the
-/// terrain probe is an injected delegate and target state arrives as a snapshot, so the
+/// obstacle probe is an injected delegate and target state arrives as a snapshot, so the
 /// transition table unit-tests without a scene tree (<c>AiModeMachineTests</c>).</para></summary>
 public sealed class AiModeMachine
 {
@@ -86,10 +87,10 @@ public sealed class AiModeMachine
     /// <summary>Invented: seconds between evade heading scrambles.</summary>
     public const float EvadeScrambleIntervalS = 2f;
 
-    /// <summary>Invented: terrain-probe cadence, seconds.</summary>
+    /// <summary>Invented: obstacle-probe cadence, seconds.</summary>
     public const float ProbeIntervalS = 0.25f;
 
-    /// <summary>Invented: terrain-probe lookahead, seconds of current velocity.</summary>
+    /// <summary>Invented: obstacle-probe lookahead, seconds of current velocity.</summary>
     public const float ProbeLookaheadS = 2.5f;
 
     /// <summary>Invented: minimum probe length, metres (a slow plane still looks ahead).</summary>
@@ -189,8 +190,10 @@ public sealed class AiModeMachine
     /// weighted up <see cref="SignatureWeight"/>× during selection; null/empty = none.</summary>
     public IReadOnlyCollection<string>? SignatureManeuvers;
 
-    /// <summary>World-only line-of-sight probe for the avoid-crash test (the host wires
-    /// <c>FlightController.WorldBlocksLine</c>; tests inject a fake). Null = no terrain data,
+    /// <summary>Line-of-sight probe for the avoid-crash test: static world plus other aircraft,
+    /// never the caster's own body — the original's ray has no vehicle filter and excludes only
+    /// itself (docs/org/aiPilot.md, "What the ray can hit"). The host wires
+    /// <c>FlightController.AvoidCrashBlocksLine</c>; tests inject a fake. Null = no world data,
     /// the mode is never entered.</summary>
     public Func<Vector3, Vector3, bool>? ProbeBlocked;
 
@@ -506,9 +509,10 @@ public sealed class AiModeMachine
         return chaseCos >= Mathf.Cos(Mathf.DegToRad(LayOffPursuerConeDeg));
     }
 
-    /// <summary>The terrain-closure override (invented probe, marked above): two world-only rays
-    /// along the velocity lookahead, every <see cref="ProbeIntervalS"/>. Blocked → avoid crash
-    /// (dropping a running maneuver); clear for <see cref="ClearProbesToExit"/> rounds → back.</summary>
+    /// <summary>The obstacle-closure override (invented probe geometry, marked above): two rays
+    /// along the velocity lookahead, every <see cref="ProbeIntervalS"/>, seeing world and other
+    /// aircraft alike (decoded; the caster alone is excluded). Blocked → avoid crash (dropping a
+    /// running maneuver); clear for <see cref="ClearProbesToExit"/> rounds → back.</summary>
     private void UpdateAvoidCrash(Vector3 pos, Vector3 velocity, float dt)
     {
         if (ProbeBlocked is not { } probe)
@@ -528,7 +532,7 @@ public sealed class AiModeMachine
         {
             _clearProbes = blocked ? 0 : _clearProbes + 1;
             if (_clearProbes >= ClearProbesToExit)
-                Transition(_returnMode, "clear of terrain");
+                Transition(_returnMode, "clear of obstacles");
         }
         else if (blocked && Mode != AiMode.Stunned)
         {
@@ -537,7 +541,7 @@ public sealed class AiModeMachine
             Executor = null; // a running maneuver is abandoned to the override
             _clearProbes = 0;
             ClimbOutAltitude = pos.Y + ClimbOutM;
-            Transition(AiMode.AvoidCrash, $"terrain inside {reach:0} m");
+            Transition(AiMode.AvoidCrash, $"obstacle inside {reach:0} m");
         }
     }
 

@@ -1511,6 +1511,19 @@ public partial class FlightController : Node3D
             PhysicsRayQueryParameters3D.Create(from, to, CollisionLayers.World)).Count > 0;
     }
 
+    /// <summary>Whether anything the AI's avoid-crash ray can hit blocks the segment: the static
+    /// world or another aircraft, never this plane's own body. The original's ray has no vehicle
+    /// filter and excludes only the caster (its node is deactivated around the cast; see
+    /// docs/org/aiPilot.md, "What the ray can hit"), so this is not <see cref="WorldBlocksLine"/>.</summary>
+    internal bool AvoidCrashBlocksLine(Vector3 from, Vector3 to)
+    {
+        var space = GetWorld3D()?.DirectSpaceState;
+        if (space == null)
+            return false;
+        return space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+            from, to, CollisionLayers.WorldAndAircraft, Body?.ExcludeSelf)).Count > 0;
+    }
+
     /// <summary>The rocket name the text readout shows: the resolved <c>MSG_WEAP_*</c> display name
     /// (e.g. "High-explosive rocket") when it resolved, else the short internal handle ("BOOM") — a
     /// raw, unresolved <c>MSG_*</c> key falls back to the handle rather than being shown verbatim.</summary>
@@ -2198,11 +2211,11 @@ public partial class FlightController : Node3D
     /// telemetry) see the flown value exactly as the keyboard ramp path leaves it.</summary>
     private FlightInput NextPilotInput(float dt)
     {
-        // The mode machine's terrain probe (D11 avoid crash) is this node's world-only LOS ray;
-        // wired lazily so a machine assigned after spawn still gets it, and never overwriting a
-        // probe a test injected.
+        // The mode machine's obstacle probe (D11 avoid crash) is this node's world-and-aircraft
+        // ray; wired lazily so a machine assigned after spawn still gets it, and never
+        // overwriting a probe a test injected.
         if (Pilot!.Machine is { ProbeBlocked: null } machine && IsInsideTree())
-            machine.ProbeBlocked = WorldBlocksLine;
+            machine.ProbeBlocked = AvoidCrashBlocksLine;
         var input = Pilot!.Next(_model, dt);
         _throttle = input.Throttle;
         return input;
