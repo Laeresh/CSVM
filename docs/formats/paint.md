@@ -92,7 +92,7 @@ time; the shipped 16×16 image is a placeholder, not artwork to render. Placehol
 are both `alpha=Full`, so the swap does not disturb a renderer's alpha classification.
 
 **Not every aircraft has all three.** The Firebrand ships no `fir_noselogo` (only
-`fir_taillogo` / `fir_winglogo`) — corrected , after keying the remake's aircraft
+`fir_taillogo` / `fir_winglogo`) — , after keying the remake's aircraft
 detection on the nose slot alone left the Firebrand unpainted. Detect on any of the three.
 
 Index → texture is unambiguous: in both C1 and C5 exactly 50 textures match "two digits
@@ -118,7 +118,6 @@ Evidence, on the Bloodhawk:
 
 ### The palette is not organised into reserved ramps
 
-An earlier reading of this page claimed the palette holds "contiguous index ramps, one per
 paint region", based on `blo_fin`'s indices **0–31** being a clean 32-step blue-gray ramp
 covering the fin body. **That generalisation is wrong**, and an implementation must not key
 on palette index:
@@ -142,7 +141,7 @@ So the engine cannot be doing an index-range palette swap. Whatever table it use
 > per *pattern* — which also answers "what a pattern actually varies" below. Full decode in
 > [rof.md](rof.md); `ExtractRof.ps1` writes each mask out as `<SKIN>_mask.png` (R/G/B = slots
 > 1/2/3). **The remake was reworked onto these masks on ** — the hue-window sections
-> below describe the approach they replaced; see "Superseded" at the bottom.
+> below describe the source-skin analysis; the runtime uses the mask-based mapping described in this page.
 
 ### What the regions actually look like
 
@@ -263,7 +262,7 @@ colour, and all of them are gone:
 - **Slot order is data, not area rank.**
 - **Borders come antialiased** in the masks themselves, so the soft hue falloff that existed
   only to stop borders speckling is gone.
-- **It is faster.** A flat multiply-add per texel replaced per-texel HSV conversion plus a
+- **It is faster.** A flat multiply-add per texel uses a flat multiply-add per texel instead of HSV conversion plus a
   percentile pass; painting four aircraft is now within measurement noise of not painting.
 
 ## Known limits

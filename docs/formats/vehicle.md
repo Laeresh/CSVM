@@ -100,7 +100,6 @@ A list of part entries:
   duplicated. `PlaneStats` reads both values (`DestroyablePart.MaxHp`/`MaxArmor`); the two-pool
   `PlaneDamage.Apply(part, healthDamage, armorDamage)` — armour first, 1:1 overflow — landed
    (`PLAN-armour-layer`).
-  *(An earlier version of this page said AI variants differ 25/20 — that is wrong; nothing in
   this install has an unequal pair.)*
 - Flags: `critical` — the plane is destroyed when this part reaches 0 HP (all four player
   parts carry it); `engine` — engine damage/power loss on that part.
@@ -221,7 +220,7 @@ Corroborating evidence, all data-confirmed:
    warns "Left and right wings must be balanced!" (and indeed `leftwing == rightwing` in all 22
    defs); id 1170 `IDS_PX_ARMORUNITS` = "%1!d! units"; id 206 `IDS_PX_SWITCHAIRFRAMES` speaks of
    "the **default** armor, engine, and guns for this new airframe" — a stock allocation exists.
-   *(This replaces an earlier appeal to the pre-release design spec, which
+   *(This replaces an appeal to the pre-release design spec, which
    [`playtest.md`](../../playtest.md) flags as unreliable as a class for HUD/damage material.)*
 5. **Retail states armour-first depletion outright** — `ui_strings.json` id 3372 (AP: "hardened
    tip designed for shredding and destroying armor. WARNING: AP rounds tend to punch clean through
@@ -253,7 +252,6 @@ weight model can carry. The armory's own constants — per-unit cost and weight,
 ```
 
 Whole-plane effects. **The fractions are the whole-vehicle health fraction**, decoded from the
-executable  ([`org/vehicleDamage.md`](../org/vehicleDamage.md)); an earlier reading here
 had them as any single part's fraction, on the argument that a total-HP reading could never reach
 0.10 if a critical part killed the plane at 75 % total. The decode removes that argument: the
 whole-vehicle fraction is itself the parts-weighted total, and nothing on the death path reads the
@@ -335,7 +333,7 @@ directly, through the same armour-first helper. So the `armor 64 / health 64` on
 not a second, competing pool; it is the scale its four 20/20 zones are expressed in.
 
 Everything downstream reads the summary rather than the parts. **Death is one test: whole-vehicle
-health at or below zero.** (Corrected : the take-hit wrapper loops the unabsorbed
+health at or below zero.** (the take-hit wrapper loops the unabsorbed
 leftover back into the whole pair zone-less, and a dead zone redirects to a surviving one, so the
 kill can arrive with zones still healthy — every zone exhausted is sufficient, not necessary;
 [`org/vehicleDamage.md`](../org/vehicleDamage.md)'s correction section has the full contract.) The

@@ -68,7 +68,6 @@ them as upright (Y-axis) billboards.
 
 ## Placement model
 
-This section previously said the original's alignment of the pattern to the terrain was
 **undecoded**, and that UV-space placement was ruled out because "the world's UV tiling is wildly
 non-uniform on hillsides, so it would visibly stretch the clutter". Both claims are dead.
 Stretching with the UV is precisely what the original does.

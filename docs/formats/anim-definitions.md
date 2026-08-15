@@ -174,7 +174,7 @@ live pose walked every repeat explosion's debris further from the blast than the
   ELEVATION, both in DEGREES, and `initial` is the launch SPEED in m/s** (`delta` the same constant
   acceleration, non-zero on 233 of 1,226). This is an acceleration, not a distance reading:
   threw debris hundreds of metres; census + evidence in `analysis/object-motion-range/`.
-  ? **The elevation is LINEAR, not spherical**, and that was corrected on : the direction
+  ? **The elevation is LINEAR, not spherical**, and that was on : the direction
   is `dirY = elevation/90` with the horizontal taking the remainder `1 - |elevation|/90`, so it is
   deliberately **not unit length** (0.707 at 45°) and only the azimuth goes through trigonometry. Do
   not normalise it — the unit-sphere reading launches 60–70° debris 20–25 % too fast. The mechanism
@@ -195,7 +195,7 @@ live pose walked every repeat explosion's debris further from the blast than the
   vertical column under the body to a full geometry sweep, which is what lands a piece on a rooftop
   or stops it against a wall. `NO_ALTITUDE` is the opt-out and `gunshell` alone authors it. This was
   read the other way round — the test gated on `DO_INTERSECTIONS`, `NO_ALTITUDE` as something about
-  spawn altitude — until ; the corrected mechanism is in
+  spawn altitude — until ; the mechanism is in
   [`../org/objectMotion.md`](../org/objectMotion.md). Every gravity-bearing body therefore lands,
   including the free-falling shapes (zeppelin gasbags, lifeboats, `chuteman` descents) that had been
   deferred as `BL-245` on the older reading.
@@ -337,7 +337,6 @@ not "fix" it back.
 ### `IF`/`ELSEIF` conditions are all evaluable
 
 Ten condition kinds appear across the install. None of them is opaque gameplay state that a
-world build has no value for — an earlier reading, which led the runtime to skip every
 branch. **All ten are evaluated as of ** (`AnimRuntime.EvaluateCondition`).
 
 ? **The engine has fourteen, and the missing four are unused data, not unimplemented code.**
@@ -595,7 +594,7 @@ third — the "stopper" — turns out to author a teardown that never runs:
   taken pass so the remaining branches never evaluate. Requires the halt reading on self.
 - **Halt a running sibling** (`large_30sec_fire`'s `fire_n_smoke`, `zepskinfire`×5,
   `flame_light_seq`): the target is genuinely running — a `LOOP -1` poll or a sequence started
-  earlier by `CALL_SEQUENCE`. The halt is load-bearing beyond bookkeeping: a `PUFFER_STATE`
+  by `CALL_SEQUENCE`. The halt is load-bearing beyond bookkeeping: a `PUFFER_STATE`
   re-assert *revives* a stopped emitter (the damage-stage sputter contract), so the
   `PUFFER_STATE INACTIVE` these stops pair with cannot end the fire alone — the un-halted poll
   would re-light it one frame later.
@@ -622,7 +621,6 @@ the call at run time is a control-flow question the static census cannot answer.
 ## Fire animations
 
 Decoded  while chasing the user's "there is a fire flipbook at the refinery" report;
-**the mechanism was re-decoded out of `crimson.exe` on  and the earlier reading of it
 was wrong** (see "What changed" below). Three separate layers, none of which is
 `OBJECT_ADD_CHILD`:
 
@@ -882,7 +880,6 @@ shows the field zeppelin with an empty hangar and no parked train (what compilin
 produces), and C1/M02 is the only mission where the tether tower disappears — the only
 mission that compiles `tethertower`.
 
-? This **supersedes** the earlier note that `zepstate` "is never compiled into any archive",
 which was generalised from C1/IA1. It is compiled into the missions that use it; being
 uncompiled is exactly the signal that the mission does not instantiate it.
 
@@ -900,7 +897,7 @@ has no def in IA1 scope at all, and needs none: `support\c1\ia1.gw` contains
 exactly why it is on the field in M04 and nowhere else. The CTF props are switched off by
 every mission script except `mp2.gw`.
 
-? **This corrects the roster hypothesis previously recorded here.** Neither candidate could
+? **This corrects the roster hypothesis recorded here.** Neither candidate could
 have gated anything, and both were checked before implementing:
 
 - **`aiv.zrd.json`** is the AI *vehicle* table, not a spawn roster. Its only mention of
@@ -1098,7 +1095,6 @@ are not visible from the byte format alone, each measured against this install.
   must terminate uses it: no door, gate, one-shot, hangar, bomb or explosion def carries `Count: 0`.
   Reading `0` as "stop" makes every car in the game drive its route once and freeze.
   **The reader (`zrdr`) scope never uses it** — 703 `LOOP` events there, `LOOP_COUNT` ? {`-1`
-  (575), positive N}, zero zeros. (An earlier note claimed the reader scope has *no* `LOOP` events
   at all; it has 703. The usable fact is the absence of `0`, not the absence of `LOOP`.)
 - **A positive `LOOP` count over an instantaneous body is a timer denominated in ANIMATION
   FRAMES, and the frame is 1/60 s — measured against the original .** The
@@ -1187,8 +1183,7 @@ are not visible from the byte format alone, each measured against this install.
   the distance alpha would reach 1, so almost every event in the install has `max < min`. The
   semantics live in [effects.md](effects.md).
 - **`growth_factors[i]` is `(age_i, scale_i)`, not `(min, max)`**
-  (`PLAN-puffer-engine-deltas.md` item B3, which closed as a disproof). This bullet previously
-  read the entry as a size *range* and cited a "matches 172 of 177 puffers" survey; **both
+  (`PLAN-puffer-engine-deltas.md` item B3, which closed as a disproof). This bullet read the entry as a size *range* and cited a "matches 172 of 177 puffers" survey; **both
   statements are withdrawn** — the reading was wrong and the survey does not reproduce (see the
   wildcard bullet below for what it was actually seeing).
   **The data alone proves the reading**, independent of the disassembly: **216 compiled events
@@ -1251,8 +1246,8 @@ are not visible from the byte format alone, each measured against this install.
 Everything above this point in the section was inferred from the shipped data. The original's
 interpreter has since been located and read directly out of `crimson.exe` with Ghidra, and each
 paragraph above now states the mechanism the exe actually uses rather than the census that stood in
-for it. Where the decode corrected a stated mechanism (the null-`start` encoding, `LOOP 0`), the
-paragraph asserts the corrected one directly and keeps the census as corroborating measurement,
+for it. Where the decode a stated mechanism (the null-`start` encoding, `LOOP 0`), the
+paragraph asserts the one directly and keeps the census as corroborating measurement,
 never as the sole justification.
 
 **The decode itself is not repeated here.** It is one page,

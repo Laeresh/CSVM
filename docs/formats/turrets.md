@@ -59,7 +59,6 @@ mounts **`firstp`** / **`thirdp`**, and the `firstp` entries name the `_G1` titl
 `kestrel_turret2` with `hturret2`/`hgun2`/`hfirepoint2` beside `kestrel_turret1` with
 `hturret`/`hgun`/`hfirepoint`), one drawn in the cockpit view and one externally. The AI and
 remote-player models carry only the `thirdp` rig, which is why only the player defs reference a
-`_G1` row. (An earlier draft of this page read the suffix as an `IDS_AIRFRAMEGUNGROUPNAMES`
 gun-group slot; the `firstp`/`thirdp` keys refute that.) Reading `G3` as "grade 3" and scaling
 accuracy off it invents a difficulty system the data does not have.
 

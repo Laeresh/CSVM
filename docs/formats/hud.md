@@ -86,7 +86,6 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   the base `texture.zbd` copy is a 32×128 RGB flat full-width slab with no alpha,
   but every `rtextureN` tier ships a same-size **RGBA** copy with different art
   (beveled lance, rimmed hub discs) whose alpha channel is the complete antialiased
-  silhouette — pointed tip, tapering shaft, waist, two hub discs. An earlier note
   here claimed the shape was applied engine-side; it is simply in the archives the
   engine actually renders from (see `docs/tooling.md` on the tiers).
 - **Warning overlays** `lowalt_on` / `stallwarning_on` (priority 7 — *under* the

@@ -354,8 +354,7 @@ degenerate ranges).
       original needs 192): before, discrete cauliflower lumps hang below the deck sheet with a
       hard lower boundary (`before-river-pose.png`); after, the sheet's underside reads clean with
       the cloud band sitting well above it (`after-river-pose.png`).
-      ? **`A3`'s `--tex-override` numbers at this pose were misread, and `A6` () corrected
-      them — do not re-cite them as written.** ~~looking straight up shows **zero** sprite pixels
+      ? **`A3`'s `--tex-override` numbers at this pose were misread, and `A6` () them — do not re-cite them as written.** ~~looking straight up shows **zero** sprite pixels
       (`after-river-override-up.png`); levelled and tilted up, the coloured field's lower edge sits
       well clear of a flat gray band (the deck mesh at y=960) with no green intrusion at all
       (`after-river-override-level.png`)~~. Both readings measured something else. (a) A
@@ -398,7 +397,7 @@ degenerate ranges).
     (unchanged-logic) containment draws land on different random numbers than before — an
     expected consequence of one shared seeded stream, not a second correction to the build-up
     rule itself.
-- ~~**The volume is its axis-aligned bounding box.**~~ — **corrected `A1`/`A2`, . The
+- ~~**The volume is its axis-aligned bounding box.**~~ — **`A1`/`A2`, . The
   volume is the authored mesh**, and the two agree only for C1/C2B/C4.
   `FogVolumeSpec.VolumesOf` now carries each volume's face planes beside its bounds, and
   `FogVolumeBox.Contains` is a half-space test over them — which is **exact, not an approximation,

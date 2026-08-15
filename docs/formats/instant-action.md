@@ -217,7 +217,6 @@ The offsets confirm M4 B7's decode from the other direction: team at `+0x34`, gr
 band of **±10000 m** for every Instant Action actor, which is the engine's own way of saying they
 are always awake, always willing to engage, and never return.
 
-⚠ **Every actor is also given a patrol net** (corrected ; this page previously said
 `netids` kept its `-1`). All three branches of `FUN_0045a390` write a one-entry `netids` list
 holding the **first id in the chapter's net table** (`0x0045a8b4` for the wingmen, `0x0045ab18` for
 the ace, `0x0045ae85` for the waves), so every Instant Action aircraft walks the chapter's first
@@ -461,7 +460,7 @@ blocks call the same three functions with inverted arguments:
 | `FUN_0045a2a0(zep->node)` — recursive teardown of the vehicle/AI objects under that node | called | **not called** |
 
 The objective then also gets byte `+0x4d` set on the object `FUN_004a3360` finds by its name — the
-same "this is the mission's target" byte the stunt zones and the ground target get earlier in this
+same "this is the mission's target" byte the stunt zones and the ground target get in this
 function — and a `FUN_004edc50(…, 0, 0, 0)` motion reset on a third per-type slot
 (`0x00718fc4 + type·4`) which the record reset zeroes (`param_1[0xbb..0xbd] = 0`) and nothing on the
 `ia.json` path writes, so that last call does not fire in a file-driven launch.

@@ -230,13 +230,12 @@ the light flashes. Both surfaces are *supposed* to show the same fireball, and i
 visual — which is exactly what makes them read as "identical" in the air. Making dirt a light flash
 would mean deleting the fireball the data calls, i.e. inventing content.
 
-⚠ **The material `soil` field IS what the IMPACT lookup keys on** — corrected ****, and
+⚠ **The material `soil` field IS what the IMPACT lookup keys on** — ****, and
 the reverse of what this page said until then. The `IMPACT` block's names are the game's global
 surface registry, the block is an array indexed by surface id, and the struck material's `soil` id
 picks the row (`analysis/surface-classification/FINDINGS.md`; the
 `weapons.md` `IMPACT` section has the shipped per-id counts). The polygon's **texture name**
-(`SceneBuilder.ClassifySurface`) decides nothing about a weapon impact any more. The earlier
-"MechWarrior-3 leftover" gloss on the field is not used; the same field
+(`SceneBuilder.ClassifySurface`) decides nothing about a weapon impact any more. The "MechWarrior-3 leftover" gloss on the field is not used; the same field
 turned out to drive the crash/touchdown choreography vectors; it drives both families.
 
 ⚠ **An id no weapon NAMES plays the `default` row** ([weapons.md](weapons.md#an-id-the-weapon-never-names-inherits-the-default-row)).

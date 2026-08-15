@@ -146,7 +146,7 @@ are fully wind-carried; only 12 events across the six-strong `subdoors_puffer` f
 explicit `0.0` to opt out. See `PLAN-puffer-engine-deltas.md` B6.
 
 It still does **not** move the cloud clutter. It used to drive the drift of the hand-tuned
-`CloudPuffs` field, which the authored `fogvol.zrd` clutter replaced on  (`BL-273`,
+`CloudPuffs` field, which the authored `fogvol.zrd` clutter does not use (`BL-273`,
 [fogvol.md](../fogvol.md)) — that field is static world geometry and no reader says wind moves it.
 
 ## Precipitation

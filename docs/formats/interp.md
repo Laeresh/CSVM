@@ -66,7 +66,7 @@ moored at the tether tower), `multiplayer1zep`/`multiplayer2zep`, `piratezep`,
 and all four CTF props. C1/M04's script does **not** name `hk_zep` — which is exactly why
 that zeppelin is on the field in M04 and nowhere else.
 
-Polygons removed from each chapter's Instant Action by its own script:
+Polygons omitted from each chapter's Instant Action by its own script:
 
 | Chapter | Nodes off | Polygons | Largest items |
 |---|---:|---:|---|
@@ -259,7 +259,6 @@ They overlap deliberately: C1/M02 hides `hk_zep` in *both* its `.gw` and its `ze
 Load order is world → `.gw` → animation bootstrap, so an animation state can override a
 script state.
 
-**Corrects an earlier reading.** This project previously hypothesised that entities were
 absent-unless-a-roster-spawned-them, with `aiv.zrd.json` and `zeppelins.zrd.json` as the
 rosters. Both are wrong: `aiv.zrd.json` is the AI vehicle table (its only mention of
 `hk_zep` anywhere is inside a wingman's target-priority list in C1/M02), and

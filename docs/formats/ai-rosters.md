@@ -42,7 +42,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 3 | `team` | |
 | 4 | `group` | **mission-logic cohort id, not a formation** (see [below](#group-is-a-cohort-id-not-a-formation)). Values 0-8; `0` (the default) is the at-mission-start population |
 | 5 | `enabled` | |
-| 6 | `primary_target` | an assigned target node name. 6 distinct: `""` (346), `player` (27), `devastator_1/2/3`, `piratezep`. The engine's own debug readout prints it as "Primary target: %s". ⚠ **Its meaning depends on `mode`:** on a `jet` it is a targeting assignment, but on a netless `wingman` it is the **formation leader**, and the escort law flies a fixed offset from it ([`org/aiPilot.md`](../org/aiPilot.md)). Corrects the earlier "not a formation leader" reading, which was right about `jet`s and wrong about wingmen |
+| 6 | `primary_target` | an assigned target node name. 6 distinct: `""` (346), `player` (27), `devastator_1/2/3`, `piratezep`. The engine's own debug readout prints it as "Primary target: %s". ⚠ **Its meaning depends on `mode`:** on a `jet` it is a targeting assignment, but on a netless `wingman` it is the **formation leader**, and the escort law flies a fixed offset from it ([`org/aiPilot.md`](../org/aiPilot.md)). Corrects the "not a formation leader" reading, which was right about `jet`s and wrong about wingmen |
 | 7 | `init_health` | starting health override; `0.0` = use the airframe default. Real values do occur (e.g. `216.0`) |
 | 8–19 | the activation/attack/return volumes | 12 slots for the 9 named `{active,attack,return}_{rad,u,l}` — see [below](#the-three-unnamed-slots). `rad` is a radius, `u`/`l` an upper/lower altitude band |
 | 20 | `title` | `MSG_*_NAME` display key, resolving in `messages.json` ([missions.md](missions.md)) |
@@ -132,7 +132,7 @@ one of the 414 blocks — the volumes are never authored, so every AI falls back
 `min_ai_active_dist` (2000 m). Do not spend time on it; do not invent values for it.
 
 **Closed  — treat them as inherited padding.** The likeliest explanation is that they are
-a remnant: this engine is a descendant of Zipper's earlier `mech3` lineage (the same lineage the
+a remnant: this engine is a descendant of Zipper's `mech3` lineage (the same lineage the
 extraction toolchain targets — [extraction.md](extraction.md)), and a record layout that outlived
 the fields it was written for is exactly what a carried-over roster format looks like. That is a
 hypothesis and this page does not assert it. What *is* established is enough to act on:

@@ -244,7 +244,7 @@ because they share the same frame sets (`fire101-112` etc.), so:
 looping, from load, with no trigger. `mb1` and `mb_spinflame` are on the same material and flip in
 lockstep with it. Its `LIGHT_STATE` flicker is real and separate - `refinery_fire.zrd.json` cycles
 `orange_light`'s range 2->11, 3->15, 1.5->10, 2.5->14 in a tight loop - so the flare both animates
-its texture and pulses its spill. ⚠ This entry previously claimed `flame01` was a static billboard
+its texture and pulses its spill. ⚠ This entry claimed `flame01` was a static billboard
 whose apparent motion was only the light; that was wrong, and the muzzle-flash observation behind it
 did not survive the draw-loop decode.
 

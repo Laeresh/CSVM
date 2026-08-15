@@ -62,7 +62,7 @@ sRGB→linear before handing it to the world shader (which mixes fog in linear s
 Round-trip check: a fully-fogged pixel renders back at its source byte value — C4's 192
 measures 192 gray, C1's 0.69 measures 176 (0.69·255).
 
-*Bug this fixed:* the integer chapters previously built `Color(192,192,192)` (an HDR
+*Bug this fixed:* the integer chapters built `Color(192,192,192)` (an HDR
 colour far above 1), which sRGB→linear then blew to pure white — C4's Rocky-Mountains fog
 was a blown-white wall with a hard horizon cut instead of its data's 192 haze.
 
@@ -485,7 +485,7 @@ one-unit-lower render, a DX7 quantisation-sized offset, recorded and not chased.
 a shared constant.** C1's `h_zone1scroll` is a two-piece dome (upward cap + separate downward
 `o28` skirt); C1C and C2B's zone-1 geometry is a **single** mesh with no node named
 `h_zone1scroll` at all (matching the plan's own B14 trap note that C1C has no scroll statement —
-confirmed, and corrected: the zone-1 subtree there is exactly one node, `g1164`, not a
+confirmed, and the zone-1 subtree there is exactly one node, `g1164`, not a
 `g1163`–`g1166` range); C4's sole zone-1 node is even named `h_zone2scroll`, a leftover/reused
 name, not `h_zone1scroll`. None of the three reproduce C1's dome-mid-at-+396 shape — their
 whole-mesh `bbox_mid.y` values are strongly negative (skirt-dominated), because there is no

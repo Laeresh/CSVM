@@ -78,7 +78,7 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   (same name, different pointers — the mech3ax fork disambiguates with a reversible `~N`
   suffix since events reference nodes by index); light/puffer/dynamic-sound 44 bytes;
   static-sound refs **40 bytes** = one garbage-padded name field (the garbage runs past
-  byte 32); **activation prereqs (48 B) ARE used** (contra the earlier survey note): object
+  byte 32); **activation prereqs (48 B) ARE used** (contra the survey note): object
   prereqs carry `active` ∈ {0,1,2} and real pointers, `min_to_satisfy` up to the count;
   anim refs 72 B — `ref_ty` **1 = CALL_ANIMATION with LOCAL_NAME** (name + local_name
   halves, both garbage-padded), 0 = plain CALL_ANIMATION. Object/node name fields use MW/PM's

@@ -114,7 +114,7 @@ at 0.4598).
 that list subtracting from one uniform draw. So C1's `firtree1` at `[[9, firtree1], [1,
 firtree2]]` is **90 % / 10 %**, not "nine of something". Weight sums in the shipped data run
 8.5 to 20, and the extreme case is C5's `hotelsign0`, which weights *itself* 0.1 against two
-alternatives at 5.0: it is replaced 99 % of the time.
+alternatives at 5.0: it is selected 99 % of the time.
 
 Every shipped list names its own model as one of the alternatives — that is how "usually
 stays itself" is expressed. ⚠ **The roll rewrites the model and nothing else: properties
