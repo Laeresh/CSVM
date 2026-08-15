@@ -219,7 +219,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   YELLOW) on the first lit blink ≤ 0.25 s after contact, then blinks lit/dim persistently.
   (d) The clip contains **no nose-anchored trail** even with the wing red-critical for 30 s —
   moot in code since `BL-259` landed (2026-08-05): nothing anchors at a synthetic nose offset
-  any more; the heavy stage plays `player_damage_trail` at `prop1` (`BL-246` for *when*).
+  any more; the heavy stage plays `player_damage_trail` at `prop1`. *When* is settled (`BL-246`,
+  decoded 2026-08-15): the whole-vehicle health fraction at 10%, which a graze that leaves the hull
+  healthy never reaches — so this clip showing no whole-plane trail is expected, not a puzzle.
 
 - `BL-122` `[Tuning]` `[Owed-playtest]` **Data-driven crash (PLAN-data-driven-crash, default since Wave 4)** — several playtest-gated TUNEs,
   all needing the original at the controls: `WreckMomentum` **0.4** (`FlightController.cs` — the
@@ -356,30 +358,34 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   turns out to be the binding constraint when tuning. Otherwise what remains is the **A/B against
   our build at the controls**, with the reference numbers above to judge against.
 
-- `BL-246` `[Research]` **Smoke/fire trail is effectively unreachable from organic gameplay** (found while
-  fixing the trail-anchor bug, 2026-08-03). The whole-plane `player_smoketrail` needs a part at
-  ≤ 0.10 HP fraction (`DamageVisuals.cs`), but the only in-game damage source is a terrain graze:
-  `GrazeMaxDamage` 18 behind `_damageCooldown` (`FlightController.cs`) against 15–25 HP parts, and
-  a critical part reaching 0 crashes the plane outright — so hitting the 0.10 window without dying
-  takes several survivable grazes on the *same* part, which normal play never produces. The F5 lab
-  (or `--damage=`) is currently the only practical way to see the trail. Design/tuning question,
-  deliberately split from the render fix: candidate shapes are weapon fire damaging planes (no
-  enemy-fire path exists at all today), a lower smoke threshold, or accepting it as a
-  near-death-only effect like the original. Decide against the original at the controls.
-  **`CAP-15`'s footage (analysed 2026-08-05, `playtest/CAP-15/`) reframes the stakes:** in the
-  original, ONE survivable graze puts on the whole show — per-panel `short_firetrail` fire for
-  ~12 wall-s then sputtering black smoke past 31 wall-s, plus the charred-wing skin swap — and
-  **no nose-anchored whole-plane trail ever appears** even with the wing red-critical to clip
-  end. So the drama the player actually sees at heavy damage is the panel-level burn (reachable
-  organically today), and the `player_smoketrail` pair may be rarer in the original than we
-  assumed, or anchored at the damage site rather than the nose; the clip cannot separate those.
-  **The anchor half is landed (`BL-259`, 2026-08-05):** the build plays `player_damage_trail`
-  (`short_firetrail` at `prop1` + the `fire_lt` light) at the ≤ 0.10 tier. The corpus check made
-  at that landing corrected an earlier claim: the data's own ≤ 0.10 entries (`player_smoketrail`
-  / `player_firetrail`) DO call `dense_firetrail` at `prop1` — CAP-15 favours the
-  `short_firetrail` shape and the mapping is one pinned string in `DamageVisuals.RigAnimFor` if
-  ever revisited. The remaining question here is only *when* the exe calls the heavy stage, not
-  where it sits — do not loosen the 0.10 tier to make it reachable.
+- `BL-246` `[Research]` **ANSWERED 2026-08-15 — when the exe fires the heavy smoke/fire trail.**
+  *Answer:* `FUN_004b3800`, the def-level `injure_anims` driver, divides `[inst+0x2d0] / [inst+0x2cc]`
+  — **whole-vehicle health current over health max**, armour excluded — and starts the entry's anim
+  when that fraction falls to or below the threshold, stopping it again when the fraction rises back
+  above (reversible, not a latch). So `player_smoketrail`'s 0.10 entry means **"the hull is at 10%"**,
+  not "some zone is at 10%". Nothing is rare or special-cased about it; the write-up with the entry
+  layout is `docs/org/vehicleDamage.md` ("Damage staging"). The original question — *when*, not
+  where — is closed, and this entry is a close candidate.
+  *The premise it was filed under is void.* It was minted 2026-08-03 reasoning that the only damage
+  source was a terrain graze (`GrazeMaxDamage` 18 behind `_damageCooldown`, `FlightController.cs`)
+  against 15–25 HP parts, with a critical part reaching 0 killing the plane outright, so the 0.10
+  window took several survivable grazes on the same part. Both halves have since gone: the player
+  can be shot by other players, enemy AI and turrets, and the decoded whole-vehicle health pool
+  (`FUN_004b9bc0`, `PlaneDamage.IsDestroyed`) lets parts reach 0% without death. The hull sitting at
+  10% is now an ordinary late-fight state, so **the tier needs no loosening** — and never did.
+  *What actually remains is a fix, not a question:* our implementation drives the def-level list off
+  a per-part combined armour+health fraction and latches it. Three deltas, all in `BL-384`.
+  *Retained findings.* `CAP-15` (analysed 2026-08-05, `playtest/CAP-15/`): in the original ONE
+  survivable graze puts on the panel-level show — per-panel `short_firetrail` fire for ~12 wall-s
+  then sputtering black smoke past 31 wall-s, plus the charred-wing skin swap — with no
+  nose-anchored whole-plane trail across the clip. That is consistent with the decode rather than
+  evidence against it: a graze that leaves the hull healthy crosses per-part stages only, so the
+  clip simply never reached hull-at-10%. **The anchor half is landed (`BL-259`, 2026-08-05):** the
+  build plays `player_damage_trail` (`short_firetrail` at `prop1` + the `fire_lt` light) at the
+  ≤ 0.10 tier. The corpus check at that landing corrected an earlier claim: the data's own ≤ 0.10
+  entries (`player_smoketrail` / `player_firetrail`) DO call `dense_firetrail` at `prop1` — CAP-15
+  favours the `short_firetrail` shape and the mapping is one pinned string in
+  `DamageVisuals.RigAnimFor` if ever revisited.
 
 - `BL-291` `[Feature]` **A way to spawn/damage a zeppelin — the thin harness that finishes `BL-239`'s in-game
   verification** (PT-36, 2026-08-06). Splash damage reads right at the controls, but nothing in
@@ -472,6 +478,45 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   unowned. *Supersedes:* the "decision 6 upheld" caveat (`PLAN-M3-weapons.md:1281`,
   `docs/HISTORY.md:5295` records the old behaviour landing) and `docs/formats/destructibles.md`'s
   `ACTIVATION` reading (⚠-noted in place).
+
+- `BL-384` `[Bug]` **Our `injure_anims` staging is keyed on the wrong pool, the wrong scope and the
+  wrong lifetime — the whole-plane damage trail fires while the hull is still near full.** Filed
+  2026-08-15 from `BL-246`'s decode; the original's rules are `docs/org/vehicleDamage.md`
+  ("Damage staging").
+  *Evidence (decode, `crimson.exe`, 2026-08-15).* `FUN_004b3800` drives the **def-level** list off
+  `[inst+0x2d0] / [inst+0x2cc]` — whole-vehicle health current over health max. `FUN_004b3d70`
+  drives the **per-part** list off `[part+0x30] / [part+0x2c]` — that part's health over its max.
+  Both start an entry's anim at `fraction <= threshold` and **stop it again** at
+  `threshold < fraction`, keeping one handle per entry (`inst+0x890`, `part+0x4c`).
+  Three deltas:
+  (1) **Scope.** `DamageVisuals.cs:208-221` walks the def-level list against whatever per-part
+  fraction the caller passed (`FlightController.cs:972` passes `state.Fraction`), commented "any
+  part qualifies". So one wing at 10% lights `player_damage_trail` with the hull untouched. The
+  faithful input already exists: `PlaneDamage.SummaryHealthFraction` (`PlaneDamage.cs:73`) is
+  literally the quotient `FUN_004b3800` computes.
+  (2) **Pool.** Both levels use the combined armour+health progression (`PartState.Fraction`,
+  `PlaneDamage.cs:273-275`). The original divides health only, at both levels — armour never enters
+  either quotient. `PartState.HealthFraction` (`PlaneDamage.cs:277`) is the faithful per-part input.
+  (3) **Lifetime.** The `_applied` set (`DamageVisuals.cs:174,210`) latches every stage one-way. The
+  original retracts: heal back above a threshold and the anim stops and its handle clears.
+  *Fix shape:* split the two loops' inputs — vehicle loop on `SummaryHealthFraction`, part loop on
+  the struck part's `HealthFraction` — and replace `_applied` with a per-entry handle the stop path
+  can clear, mirroring the two `+0x890`/`+0x4c` arrays. The vehicle loop then no longer needs a
+  part name at all, so it wants its own call site off the hull pool rather than riding
+  `OnPartDamage`.
+  *⚠ Traps.* (a) The combined armour+health fraction is **correct** for the gauge dial
+  (`docs/architecture.md:3780`) — fix the staging inputs without touching `GaugeCluster`'s scale.
+  (b) Do not change the shipped 0.10 / 0.85 / 0.99 thresholds; they are authored data and they are
+  right — only what is divided is wrong. (c) `docs/architecture.md:2582`'s "def-level `injure_anims`
+  are consumed as ANY-part HP fractions" documents the defect, not the original; it must move with
+  the code. (d) Retraction makes the F5 damage lab's repair path visibly un-stage, which is
+  faithful, not a regression — `DamageVisuals.Reset` stays for respawn.
+  *Playtest after fix:* take sustained fire until the hull gauge reads ~10% and confirm
+  `player_damage_trail` starts there and not before; then repair in the F5 lab and watch the stage
+  retract.
+  *Cross-refs:* `BL-246` (the decode that produced this), `BL-259` (landed the anchor/staging this
+  mis-keys), `BL-297` (the panel-damage semantics re-test — `pdpanelN` thresholds are on the same
+  health-only scale, so panels currently tear earlier than the original tears them).
 
 ## Weapons & combat
 

@@ -210,12 +210,39 @@ no anim running, it starts one and stores the handle in the instance's `+0x890` 
 fraction rises back above the threshold and a handle is live, it stops the anim and clears the
 handle. So the staging is reversible, not a latch, and repairing a vehicle visibly un-stages it.
 
+⚠ **Armour is not in the fraction.** The divide is literally `[inst+0x2d0] / [inst+0x2cc]` — the
+health pair only. The armour pair (`+0x2c4` / `+0x2c8`) is never read on this path, so a vehicle
+with its armour stripped and its health untouched has crossed no def-level stage. This matters
+because the combined armour+health progression is the right scale for the gauge (a hit walks one
+down and then the other) and the wrong scale for these thresholds.
+
+The entry layout, `0x1c` bytes:
+
+| Offset | Field |
+|---|---|
+| `+0x00` | the threshold fraction |
+| `+0x08` | the root-node reference, read only when `+0x0c` is set |
+| `+0x0c` | non-zero selects a node-scoped context: `FUN_004d8cf0` resolves `+0x08` against the vehicle (falling back to `_C_exref` when `+0x08` is null). Zero plays against the vehicle's own node at inst`+0x0c` |
+| `+0x18` | the anim reference, passed to `FUN_004edda0` |
+
+That `+0x0c` field is the optional third element in
+[`formats/vehicle.md`](../formats/vehicle.md)'s `[[fraction, animName, rootName], …]`. The player
+airframes spell two elements, so their stages play against the vehicle root.
+
 **Per-part `injure_anims` (`FUN_004b3d70`)** is the same loop against `part health current / part
-health max`, over the part's own list at part`+0x3c` with handles at part`+0x4c`. It runs on every
-part-scoped hit.
+health max` (`[part+0x30] / [part+0x2c]` — **also health-only**, and likewise not the combined
+progression), over the part's own list at part`+0x3c` with handles at part`+0x4c`. It takes its
+context straight from entry`+0x14` rather than resolving a root. It runs on every part-scoped hit.
 
 Both are called from the spend paths, so a single bullet can move both levels at once. A part
 reaching zero also plays that part's destroy anim (part`+0x1c`), which is separate from either list.
+
+⚠ **The two levels are keyed on different pools and are not interchangeable.** The player's
+def-level list carries `[0.85, player_fuelleak]` and `[0.10, player_smoketrail]`; both are
+whole-vehicle-health stages, so `player_smoketrail` means "the hull is at 10%", not "some zone is at
+10%". Driving the def-level list off a per-part fraction fires the whole-plane trail while the hull
+is still near full. Decoded 2026-08-15 (`BL-246`); our implementation's three deltas against this
+are `BL-384`.
 
 ## Death
 
