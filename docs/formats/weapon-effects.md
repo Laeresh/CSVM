@@ -64,7 +64,7 @@ already-live gate would drop every ejection but one per 2 s window):
 The **white puff cluster** the retail captures show riding each ejected casing matches **no
 shipped effect def** (only `muzzle_burst` references `gunshell`, and the `gunshell` def carries
 no puffer) — the "cluster" in the captures is the muzzlepuffer's own smoke misread as a casing
-effect (user-confirmed 2026-08-05). The engine's hand-authored stand-in cluster has been deleted
+effect  .
 (`BL-261`, A2): the casing now flies bare and the muzzlepuffer plays at its authored 6-puffs/0.3 s
 window instead.
 
@@ -175,7 +175,7 @@ material carrying the identical `splash01.tif` texture (confirmed against C1B's 
 `bsplsh_splash`'s polygon binds directly to 135, so its automatic registration already worked). Once
 registered a flipbook runs globally and continuously like every other world cycle, not reset per
 hit — concurrent splashes share one synced frame. The column's **width** plays at 8×
-(`SplashColumnWidthScale`), settled at the controls 2026-08-06 with the fades in: the authored
+(`SplashColumnWidthScale`), with the fades in: the authored
 quad is 5 cm wide — sub-pixel past ~30 m — while the reference ticks measure ~0.35 m, which 8×
 matches. The authored 1× stays reachable, same `static readonly` pattern as A3's
 `MuzzleFlashCount`.
@@ -249,10 +249,10 @@ would mean deleting the fireball the data calls, i.e. inventing content.
 ⚠ **The material `soil` field IS what the IMPACT lookup keys on** — corrected **2026-08-13**, and
 the reverse of what this page said until then. The `IMPACT` block's names are the game's global
 surface registry, the block is an array indexed by surface id, and the struck material's `soil` id
-picks the row (`analysis/surface-classification/FINDINGS.md`, 2026-08-12 and 2026-08-13; the
+picks the row (`analysis/surface-classification/FINDINGS.md`; the
 `weapons.md` `IMPACT` section has the shipped per-id counts). The polygon's **texture name**
 (`SceneBuilder.ClassifySurface`) decides nothing about a weapon impact any more. The earlier
-"MechWarrior-3 leftover" gloss on the field was already retired on 2026-08-11, when the same field
+"MechWarrior-3 leftover" gloss on the field is not used; the same field
 turned out to drive the crash/touchdown choreography vectors; it drives both families.
 
 ⚠ **An id no weapon NAMES plays the `default` row** ([weapons.md](weapons.md#an-id-the-weapon-never-names-inherits-the-default-row)).
