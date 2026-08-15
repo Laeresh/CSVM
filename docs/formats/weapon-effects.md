@@ -22,8 +22,7 @@ This page is the current reference for its documented format family.
 
 - [Muzzle flashes â€” `muzzle_burst.zrd.json`](#muzzle-flashes-â-muzzleburstzrdjson)
 - [Bullet impacts â€” `gunhit.zrd.json`](#bullet-impacts-â-gunhitzrdjson)
-- [Ordnance effect readers](#ordnance-effect-readers)
-- [Projectile prototypes (gamez roots)](#projectile-prototypes-gamez-roots)
+- [Ordnance effects and projectile prototypes](weapon-effects/ordnance.md)
 - [Muzzle & tracer textures â€” the ammo-type axis](#muzzle-tracer-textures-â-the-ammo-type-axis)
 - [Binding resolution â€” 5 unresolved names](#binding-resolution-â-5-unresolved-names)
 ## Muzzle flashes â€” `muzzle_burst.zrd.json`
