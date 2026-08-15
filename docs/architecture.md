@@ -88,7 +88,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the forget + catch-up pass (B2), the intercept solver (B3), the four-list candidate scan (B4), and the fire call's step order + 1° launch scatter (B5).
 - `src/Flight/TurretDefs.cs` — typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
 - `src/Flight/TurretController.cs` — one carried turret gunner (M4 C9a): acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
-- `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; a placeholder steering law.
+- `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; a placeholder steering law. `SteeringPatrol` reports whether the last step actually flew the net (F13's leashes read it).
 - `src/Flight/AiModeMachine.cs` — the nine-mode AI state machine (M4 D11), the engine's decoded mode vocabulary: patrol/pursue/lay off/evade/evasive maneuver/stunned/avoid crash + two enum-only danger-zone modes; steady-hand and sixth-sense reaction rolls on the shipped chances.
 - `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery (M4 D14): intercept lead via `AimAssist.TryIntercept`, the ±11° gun cone and the quick-draw cone as fire gates, per-shot dead-eye scatter; mutable target, primary-target name and rating biases (the D12 script seams).
 - `src/Flight/AiVoiceDispatcher.cs` — the combat-voice trigger dispatch (M4 E16), engine-free: the talker roll, the 15 s per-slot cooldown armed on failure too, the bearing halving, the broadcast election, the DI tiers, the death cries with force, the computed bearing index.
@@ -2756,8 +2756,9 @@ byte-identical.
 `--debug-markers` (`MarkAll`, set by the rig assembler alongside `Own`) widens that to EVERY live
 aircraft in the same scan: `CollectMarks` is the pure selection (live, a `FlightController`, not
 `Own`), each drawn through the same `DrawOpponent` in HUD blue on the pane's own team and HUD red
-otherwise, tagged with its slant range, and off-screen tags stepped along the screen edge
-(`RefStaggerStep`) so a flight sharing one bearing does not stack into one string. It REPLACES the
+otherwise, tagged with its slant range and its current AI mode (`ModeSuffix`, the mode machine's
+own `NameOf` vocabulary; empty for a pilot without a machine), and off-screen tags stepped along
+the screen edge (`RefStaggerStep`) so a flight sharing one bearing does not stack into one string. It REPLACES the
 single-hostile draw rather than adding to it, so the tracked plane is never drawn twice in two
 colours.
 ⚠ A neutral-team aircraft marks HOSTILE here, unlike `NearestHostile`'s engine gate which rejects
@@ -4155,9 +4156,18 @@ sphere markers per node (tagged nodes bigger), one fixed-size `Label3D` per net 
 line per net — goes to the `world` log. A HUD text field narrows the drawn set live by
 case-insensitive name prefix. F13 is the first tenant of the F13–F24 debug-overlay key
 range (`docs/controls.md`).
+It also draws LIVE LEASHES while up: one `ImmediateMesh` line per AI aircraft, from the plane to
+the node its follower is flying at, plus a short vertical tick at the plane end. The overlay knows
+nothing about aircraft: `CollectLeashes` is an `Action<List<AiNetLeash>>` the session fills from
+each pilot's own `AiNetFollower.CurrentTarget` (built before any AI exists, hence a supplier and
+not a snapshot). `AiNetLeash.Steering` is `AiPilot.SteeringPatrol`, which the pilot REPORTS off its
+own dispatch rather than the overlay re-deriving it from the mode: a leash for a plane that only
+holds its node while pursuing draws dimmed, and the HUD line counts the two separately.
 ⚠ Never draw node order as the route — the graph branches; only the edge list is connectivity.
 ⚠ The filter field is a deliberate PanelFocus exception (a text filter cannot work unfocusable):
   focus arrives only by clicking the field, and Enter releases it back to the aircraft.
+⚠ The leash mesh belongs to the per-show holder, so both the hide path and the refilter rebuild
+  null it; `_Process` must never write a mesh whose holder was freed.
 
 ## src/UI/ClassOverlay.cs
 The colour-by-class overlay (key X, `--debug-classoverlay` scripts it) — same mode set as

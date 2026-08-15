@@ -441,8 +441,14 @@ you to put the file "next to the repo", where nothing would find it. Absolute pa
   untargetable, the pane becomes the free camera following an AI), because a player in the air
   pulls the whole first wave onto themselves within seconds and there is then no patrolling left
   to watch. `--debug-markers` marks every plane at once, red hostile / blue own side, with its
-  range. **F13** draws the nets themselves, which is what turns (a) into a direct read: the
-  markers should be walking the drawn graph. Confirm the launch log says
+  range and its current AI mode. **F13** draws the nets themselves plus a live leash from each
+  plane to the node it is flying at (dimmed when it only holds that node while fighting), which
+  is what turns (a) into a direct read rather than an impression.
+  ⚠ **With wingmen configured, the two sides fight each other and nobody patrols.** Measured
+  2026-08-15: three wingmen and three enemies with no player present read `0 plane(s) flying it,
+  3 holding a node` and every marker said `pursue`. That is correct behaviour, not a failure of
+  the net. `"num_wingmen": 0` is the configuration that shows patrol at all: same run, `3 plane(s)
+  flying it, 0 holding a node`, every marker `patrol`. Confirm the launch log says
   `ia: actors patrol 'M4ReinfAce' (net 10), the chapter's first` before judging anything: without
   that line the actors have no net and (a)–(d) are moot.
   *Variations:* drop both debug flags and fly it yourself for the (b) judgement, which needs you

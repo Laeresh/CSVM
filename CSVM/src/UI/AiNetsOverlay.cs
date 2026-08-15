@@ -6,6 +6,16 @@ using Godot;
 
 namespace CSVM.UI;
 
+/// <summary>One AI aircraft's live link to the net node it is flying at: where the plane is,
+/// where that node is, and which net owns it (for the overlay's per-net colour and filter). A
+/// plain value so the overlay stays ignorant of aircraft: the session fills these in from each
+/// pilot's own follower state, never from a guess about which node looks nearest.
+///
+/// <para><paramref name="Steering"/> separates the two cases that look identical on screen and
+/// are not: the pilot is flying at that node right now, or it merely still HOLDS it while
+/// pursuing/evading and will resume there. A held leash draws dimmed.</para></summary>
+public readonly record struct AiNetLeash(Vector3 From, Vector3 To, int NetId, bool Steering);
+
 /// <summary>
 /// The AI patrol-net overlay (key F13, flag <c>--debug-ainets</c>): draws the chapter's
 /// <c>ne0NNNNN</c> waypoint graphs (docs/formats/ai-nets.md) — data the original never
@@ -18,6 +28,14 @@ namespace CSVM.UI;
 /// route threads terrain. While the overlay is up, a HUD text field narrows the drawn set
 /// live to nets whose name starts with the typed prefix (case-insensitive).
 ///
+/// <para><b>Leashes.</b> While the overlay is up it also draws, live, one line per AI aircraft
+/// from the plane to the node it is currently flying at (<see cref="CollectLeashes"/>, filled by
+/// the session from each pilot's own <c>AiNetFollower.CurrentTarget</c>) with a short vertical
+/// tick at the plane end so the two ends are never confused. That is the follower's actual state
+/// rather than an inference from the geometry, so a plane that has silently stopped advancing is
+/// visible as a leash that stops changing. A leash whose net is filtered out of the drawn set is
+/// filtered out too.</para>
+///
 /// <para>F13 is the first tenant of the F13–F24 range reserved for debug overlays
 /// (docs/controls.md); the older overlay keys (C/X/T/…) migrate there later.</para>
 /// </summary>
@@ -25,9 +43,14 @@ public sealed partial class AiNetsOverlay : Node
 {
     private const float NodeRadius = 6f;
     private const float TaggedNodeRadius = 12f;
+    private const float LeashTick = 20f;   // the vertical mark at the plane end, metres
+    private const float HeldLeashDim = 0.6f; // how far a merely-held leash darkens off its net colour
 
     private readonly string _chapterZrdrPath;
     private readonly string _chapter;
+
+    private readonly List<AiNetLeash> _leashes = new();
+    private readonly HashSet<int> _drawnIds = new();
 
     private List<AiNet>? _nets;
     private List<AiNet>? _cliSelected;
@@ -37,6 +60,8 @@ public sealed partial class AiNetsOverlay : Node
     private Label? _hud;
     private LineEdit? _filterEdit;
     private string _summary = "";
+    private ImmediateMesh? _leashMesh;
+    private int _leashCount = -1;
 
     public AiNetsOverlay(string chapterZrdrPath, string chapter)
     {
@@ -54,6 +79,12 @@ public sealed partial class AiNetsOverlay : Node
     /// a miss logs the candidates containing the token rather than failing silently.</summary>
     public string Filter { get; init; } = "";
 
+    /// <summary>Fills the caller's list with one entry per AI aircraft currently flying a net:
+    /// where it is, the node it is flying at, and which net that node belongs to. Supplied by the
+    /// session (the overlay knows nothing about aircraft) and called once per frame while the
+    /// overlay is up. Null draws no leashes, which is every session that has no AI.</summary>
+    public Action<List<AiNetLeash>>? CollectLeashes { get; init; }
+
     public override void _Process(double delta)
     {
         if (DebugShow && !_debugDone)
@@ -62,6 +93,10 @@ public sealed partial class AiNetsOverlay : Node
             // final once the session has finished building.
             _debugDone = true;
             Toggle();
+        }
+        if (_shown && _leashMesh != null)
+        {
+            RedrawLeashes();
         }
     }
 
@@ -85,6 +120,7 @@ public sealed partial class AiNetsOverlay : Node
         {
             _holder?.QueueFree();
             _holder = null;
+            _leashMesh = null;   // it belonged to the freed holder; _Process must not touch it
             _shown = false;
             HideNotice();
             Log.Info("world", $"ai nets overlay off");
@@ -252,8 +288,57 @@ public sealed partial class AiNetsOverlay : Node
         }
         _holder?.QueueFree();
         _holder = null;
+        _leashMesh = null;
         Build(Visible());
         ShowNotice(_summary);
+    }
+
+    // One live line per patrolling aircraft, rebuilt each frame: the plane, a short vertical tick
+    // at that end, and the node its follower is actually flying at. Drawn in the net's own colour
+    // so a leash reads as belonging to the graph it points into, and depth-tested like the graph
+    // for the same reason (an x-ray line lies about where the route threads terrain).
+    private void RedrawLeashes()
+    {
+        var mesh = _leashMesh!;
+        mesh.ClearSurfaces();
+        _leashes.Clear();
+        CollectLeashes?.Invoke(_leashes);
+        int drawn = 0, steering = 0;
+        mesh.SurfaceBegin(Mesh.PrimitiveType.Lines);
+        foreach (var leash in _leashes)
+        {
+            if (_drawnIds.Count > 0 && !_drawnIds.Contains(leash.NetId))
+            {
+                continue; // its net is filtered out of the drawn set
+            }
+            var color = ColorOf(leash.NetId);
+            if (leash.Steering)
+            {
+                steering++;
+            }
+            else
+            {
+                color = color.Darkened(HeldLeashDim);   // holds the node, is not flying at it
+            }
+            mesh.SurfaceSetColor(color);
+            mesh.SurfaceAddVertex(leash.From);
+            mesh.SurfaceSetColor(color);
+            mesh.SurfaceAddVertex(leash.To);
+            mesh.SurfaceSetColor(color);
+            mesh.SurfaceAddVertex(leash.From);
+            mesh.SurfaceSetColor(color);
+            mesh.SurfaceAddVertex(leash.From + Vector3.Up * LeashTick);
+            drawn++;
+        }
+        mesh.SurfaceEnd();
+        int key = (drawn << 8) | steering;
+        if (key != _leashCount && _hud != null)
+        {
+            _leashCount = key;
+            _hud.Text = _summary + (drawn > 0
+                ? $", {steering} plane(s) flying it, {drawn - steering} holding a node"
+                : ", no plane on a net");
+        }
     }
 
     private void Build(List<AiNet> nets)
@@ -261,13 +346,31 @@ public sealed partial class AiNetsOverlay : Node
         _holder = new Node3D { Name = "ainets_draw" };
         _holder.SetMeta(SelectionService.OverlayMeta, true);
         int nodes = 0, edges = 0;
+        _drawnIds.Clear();
         foreach (var net in nets)
         {
             var color = ColorOf(net.Id);
             _holder.AddChild(BuildNet(net, color));
+            _drawnIds.Add(net.Id);
             nodes += net.Nodes.Count;
             edges += net.Edges.Count;
         }
+
+        // The live leash layer: one ImmediateMesh rewritten per frame, vertex-coloured so all of
+        // them share one surface however many nets are on screen.
+        _leashMesh = new ImmediateMesh();
+        _leashCount = -1;
+        _holder.AddChild(new MeshInstance3D
+        {
+            Name = "leashes",
+            Mesh = _leashMesh,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            MaterialOverride = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                VertexColorUseAsAlbedo = true,
+            },
+        });
         AddChild(_holder);
         int skipped = (_nets?.Count ?? 0) - nets.Count;
         _summary = $"ai nets: {nets.Count} net(s), {nodes} nodes, {edges} edges"

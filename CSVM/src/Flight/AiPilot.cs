@@ -91,6 +91,13 @@ public sealed class AiPilot
 
     private bool _altRecovering;
 
+    /// <summary>Whether the LAST <see cref="Next"/> actually steered to <see cref="Patrol"/>'s
+    /// node, as opposed to pursuing, evading or holding the bare orders. Reported rather than
+    /// re-derived from the mode: the dispatch in <see cref="Next"/> is the only thing that
+    /// decides it, so an observer (F13's leashes) that asked the mode machine instead could
+    /// drift from it.</summary>
+    public bool SteeringPatrol { get; private set; }
+
     /// <summary>Aims the standing orders at holding the given spawn pose: heading from the
     /// pos→look-at pair, altitude from the position — what a freshly spawned patrol-less AI
     /// flies until something retargets it.</summary>
@@ -115,6 +122,7 @@ public sealed class AiPilot
     public FlightInput Next(FlightModel model, float dt)
     {
         var quarry = Gunner is { Target: { InPlay: true } t } ? t : null;
+        SteeringPatrol = false;   // SteerPatrol sets it when it actually flies the net
 
         // The mode machine (D11), when present, decides which input source flies this step;
         // without one the pre-D11 priority stands (gunner target, then patrol, then orders).
@@ -267,6 +275,7 @@ public sealed class AiPilot
     {
         if (Patrol is not { } patrol)
             return;
+        SteeringPatrol = true;
         // Patrol owns the throttle while it is flying, not just at assignment: pursue leaves the
         // lever at 1.0 and a plane that drops back to patrol there limit-cycles around the
         // tightest rings. The original does the same thing structurally (its patrol parameter

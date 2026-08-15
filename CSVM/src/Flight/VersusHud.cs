@@ -186,6 +186,14 @@ public sealed partial class VersusHud : Control
         }
     }
 
+    /// <summary>A marked plane's current AI mode in the ENGINE's own vocabulary
+    /// (<see cref="AiModeMachine.NameOf"/>: patrol / pursue / lay off / evade / evasive maneuver /
+    /// stunned / avoid crash), or empty for anything without a mode machine (a human seat, or an
+    /// AI flying bare orders). <c>--debug-markers</c> only; the shipped marker carries a tag and a
+    /// bearing, nothing about the other pilot's state.</summary>
+    public static string ModeSuffix(FlightController plane) =>
+        plane.Pilot?.Machine is { } machine ? $"  {AiModeMachine.NameOf(machine.Mode)}" : "";
+
     /// <summary>The marker tag for a hostile: the controller name's first '_'-segment,
     /// uppercased ("ai1_player_fury" reads "AI1"), "AI" when the name yields nothing.</summary>
     public static string HostileTag(string name)
@@ -290,8 +298,8 @@ public sealed partial class VersusHud : Control
                     continue;
                 var at = plane.GlobalPosition;
                 DrawOpponent(font, at, friendly ? HudBlue : HudRed,
-                    $"{HostileTag(plane.Name)} {PlanePos.DistanceTo(at):0} m", s, markerFont,
-                    stagger++);
+                    $"{HostileTag(plane.Name)} {PlanePos.DistanceTo(at):0} m{ModeSuffix(plane)}",
+                    s, markerFont, stagger++);
             }
 
             return;

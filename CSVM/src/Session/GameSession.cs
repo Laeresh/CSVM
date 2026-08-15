@@ -950,6 +950,20 @@ public partial class GameSession : Node3D
             {
                 DebugShow = _spec.DebugAiNets != null,
                 Filter = _spec.DebugAiNets ?? "",
+                // The live leashes: each patrolling AI's own follower state, read per frame off
+                // the list this session keeps (the overlay is built before any AI exists, so it
+                // takes a supplier rather than a snapshot).
+                CollectLeashes = into =>
+                {
+                    foreach (var ai in _aiPlanes)
+                    {
+                        if (ai is { InPlay: true } && ai.Pilot is { Patrol: { CurrentIndex: >= 0 } patrol } pilot)
+                        {
+                            into.Add(new UI.AiNetLeash(ai.WorldPosition, patrol.CurrentTarget,
+                                patrol.Net.Id, pilot.SteeringPatrol));
+                        }
+                    }
+                },
             });
         }
 

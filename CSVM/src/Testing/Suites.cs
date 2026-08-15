@@ -5208,6 +5208,16 @@ public static class Suites
             marks.Clear();
             VersusHud.CollectMarks(AimAssist.PlayerTeam, ai1, scan, marks);
             ctx.Check(marks.Count == 0, $"the pane's own aircraft is excluded marks={marks.Count}");
+
+            // The mode suffix the marker tag carries, in the engine's own vocabulary. A pilot
+            // with no mode machine (this suite's own bare-orders spawn) adds nothing rather than
+            // inventing a state; armed, it names whatever mode the machine is in.
+            ctx.Check(VersusHud.ModeSuffix(ai1) == "",
+                $"a pilot with no mode machine adds nothing to the tag: '{VersusHud.ModeSuffix(ai1)}'");
+            ai1.Pilot!.Machine = new AiModeMachine(new System.Random(5));
+            ai1.Pilot.Machine.Enter(AiMode.Pursue, "suite");
+            ctx.Check(VersusHud.ModeSuffix(ai1).Trim() == "pursue",
+                $"the marker tag carries the plane's mode: '{VersusHud.ModeSuffix(ai1).Trim()}'");
         }
         finally
         {
