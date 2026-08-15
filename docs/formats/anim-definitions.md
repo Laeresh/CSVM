@@ -1,30 +1,25 @@
-# ANIMATION_DEFINITION readers (zepstate, startanims, building/vehicle anims)
+# Animation definition readers
 
-Part of the [format documentation](README.md). Validated against this install's zrdr
-extraction (mech3ax v0.6.1)
-(mission start states). Field tables + tiny excerpt values only — no bulk game data.
-
-The original compiles these reader sources into per-mission `mis_anim.zbd` archives
-(a binary format upstream mech3ax does not support; the project's mech3ax **fork decodes
-it** — see the compiled-archives section below); the zrdr JSON sources carry the same
-definitions, so scanning them is a full substitute for state purposes.
-
+Part of the [format documentation](README.md). The zrdr sources define mission start states and
+animation behavior; the project fork also decodes their compiled per-mission `mis_anim.zbd`
+archives. This page contains field tables and small illustrative values only.
 
 ## Contents
 
-- [Where definitions live](#where-definitions-live)
+- [Definition locations](#definition-locations)
 - [File shape](#file-shape)
-- [ANIMATION_DEFINITION fields](#animationdefinition-fields)
-- [State ops (the part-1 subset)](#state-ops-the-part-1-subset)
-- [`CALL_ANIMATION` carries a target node — this is the template-instancing mechanism](#callanimation-carries-a-target-node-�-this-is-the-template-instancing-mechanism)
-- [`STOP_SEQUENCE` halts the named sequence, and does nothing else](#stopsequence-halts-the-named-sequence-and-does-nothing-else)
-- [Fire: a texture cycle on a material, and behaviours nothing calls](#fire-a-texture-cycle-on-a-material-and-behaviours-nothing-calls)
-- [`LIGHT_STATE` / `LIGHT_ANIMATION` — the world's point lights](#lightstate-lightanimation-�-the-worlds-point-lights)
-- [`SOUND_NODE` is a three-event triple — the world's ambient audio](#soundnode-is-a-three-event-triple-�-the-worlds-ambient-audio)
-- [The mission zrdr scope is a LIBRARY, not a manifest](#the-mission-zrdr-scope-is-a-library-not-a-manifest)
-- [startanims.json](#startanimsjson)
-- [zepstate.json](#zepstatejson)
-## Where definitions live
+- [Definition fields](#definition-fields)
+- [State operations](#state-operations)
+- [Animation calls](#animation-calls)
+- [Sequence stopping](#sequence-stopping)
+- [Fire animations](#fire-animations)
+- [Point lights](#point-lights)
+- [Ambient audio](#ambient-audio)
+- [Mission library scope](#mission-library-scope)
+- [Start animations](#start-animations)
+- [Zeppelin states](#zeppelin-states)
+- [Compiled animation archives](anim-definitions/compiled-archives.md)
+## Definition locations
 
 Three zrdr scopes are visible to a mission (the remake scans all reader files in each
 whose content mentions `ANIMATION_DEFINITIONS`):
@@ -56,7 +51,7 @@ Alternating key/value-list pairs **with meaningful duplicate keys** (multiple
 view loses data; walk the raw list. A key followed by `null` (or by another key) is a
 bare flag (`LOCAL_NODES_ONLY`).
 
-## ANIMATION_DEFINITION fields
+## Definition fields
 
 | Key | Value | Meaning |
 |---|---|---|
@@ -75,7 +70,7 @@ bare flag (`LOCAL_NODES_ONLY`).
 | `PERSIST_LOG` | `ON` | The def's state **additionally crosses mission boundaries**: a later mission in the same chapter loads with it applied. A strict subset of `SAVE_LOG ON` (62 defs, all of them fixed world scenery). Same section. |
 | `EXECUTION_PRIORITY`, `AUTO_RESET_NODE_STATES`, `AUTO_ADD_TO_WORLD` | | Engine bookkeeping, undecoded detail. |
 
-## State ops (the part-1 subset)
+## State operations
 
 | Op | Body | Meaning |
 |---|---|---|
@@ -442,7 +437,7 @@ see "CALL_ANIMATION carries a target node" below; that is the data's template-in
 mechanism and `OBJECT_ADD_CHILD` is **not** (surveyed: the fire templates are never its
 children, and 75% of its 1,152 uses attach sound *definitions* rather than nodes).
 
-## `CALL_ANIMATION` carries a target node — this is the template-instancing mechanism
+## Animation calls
 
 Surveyed and implemented 2026-07-21. A call may name **another node to run the callee on**,
 and that is how one authored definition serves many sites. Three spellings, two shapes:
@@ -582,7 +577,7 @@ component tracks up/down. `he_ground_effect` lifts its fireball 12 m over a ring
 seven explosions over 165 m of a 231 m hull at constant height. **A reading that is 8 m too high is
 therefore authored, not mis-parsed** — look at where the def's host was staged, not at the axes.
 
-## `STOP_SEQUENCE` halts the named sequence, and does nothing else
+## Sequence stopping
 
 The wire format is identical to `CALL_SEQUENCE` — a 36-byte struct carrying only the name — and so
 is the name resolution. `004eb610` resolves the name to an index in the definition's own sequence
@@ -624,7 +619,7 @@ starts it where the original's done state would refuse. 123 definitions name one
 a call and a stop (mostly `flame_light_seq`), but whether any of them reaches the stop *before*
 the call at run time is a control-flow question the static census cannot answer.
 
-## Fire: a texture cycle on a material, and behaviours nothing calls
+## Fire animations
 
 Decoded 2026-07-21 while chasing the user's "there is a fire flipbook at the refinery" report;
 **the mechanism was re-decoded out of `crimson.exe` on 2026-08-13 and the earlier reading of it
@@ -710,7 +705,7 @@ the missing trigger either. The original invokes them engine-side, so reproducin
 object catching fire* still requires choosing our own trigger. The always-on refinery flame does
 not: it is the material cycle above, and CSVM installs it in `EffectCycles`.
 
-## `LIGHT_STATE` / `LIGHT_ANIMATION` — the world's point lights
+## Point lights
 
 Surveyed across the whole install 2026-07-21: **1,468 `LIGHT_STATE` events, every one of them
 `type_: "PointSource"`** — no directional or spot lights exist in this data. A definition's
@@ -788,7 +783,7 @@ nodes against a regex matcher, ~12M comparisons/second) and cost ~7 ms/frame on 
 name is what identifies the target, so the resolution is cached per light and only redone when
 the name changes.
 
-## `SOUND_NODE` is a three-event triple — the world's ambient audio
+## Ambient audio
 
 Implemented 2026-07-22 (`src/Mech3/WorldSounds.cs`). This is the waterfall roar, the train, the
 firetruck and police sirens, the zeppelin nacelle engines, the fire crackle and the cockpit
@@ -862,7 +857,7 @@ use: C1/IA1 deactivates both multiplayer zeppelins, so 36 of its 38 emitters are
 stopped, and only the waterfall and the train sound. That is also what makes the counts safe —
 C5 builds 108 emitters and plays none.
 
-## The mission zrdr scope is a LIBRARY, not a manifest
+## Mission library scope
 
 A mission folder ships reader files it never uses. **A mission-scope reader definition applies
 only if the mission's compiled `mis_anim` archive contains it** (matched on the compiled
@@ -918,7 +913,7 @@ have gated anything, and both were checked before implementing:
 The `dliner1` caveat that motivated the roster idea also dissolves: no name pattern is
 involved, the script names its nodes outright.
 
-## startanims.json
+## Start animations
 
 ```
 [["NEW_GAME_START", [["player_setup"], ["train_on_track"], …],
@@ -931,7 +926,7 @@ order matters: C1/IA1 runs `hangar3_doors` (doors to ±50) then `mp_hangar3_open
 visible scopes (C1/IA1 lists `pure_panic`, defined only in C1/M02's folder) — the
 engine evidently tolerates the miss; skip and log.
 
-## zepstate.json
+## Zeppelin states
 
 Ordinary ANIMATION_DEFINITIONs, `ACTIVATION ON_STARTUP`, whose sequences hold only
 `OBJECT_ACTIVE_STATE`s — the per-mission roster of world objects present: C1/IA1
