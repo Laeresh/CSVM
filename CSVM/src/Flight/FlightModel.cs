@@ -231,6 +231,11 @@ public sealed class FlightModel
     private const float GroundBlowIntoFactor = 0.05f;  // what a command INTO the obstacle is met with
     private const float GroundBlowVelocitySteer = 2f;  // 1/s at contact: velocity steered onto the nose
 
+    // The collision impulse's linear weight (see BounceNormalSpeed): a hardcoded literal at
+    // 0x00608108 with no data origin, so no key in player.json can move it. It sets where the
+    // rebound/spin partition sits — L = 2.25·|J| against A = |Δω| — and is NOT a TUNE.
+    private const float BounceLeverScale = 2.25f;
+
     // Drag is a parabolic polar in MACH:
     //
     //   C_D  = DragPolarScale · (DragPolarParasite + DragPolarLinear · M + DragPolarQuad · M²)
@@ -904,6 +909,60 @@ public sealed class FlightModel
     public bool IsStallWarned() =>
         StallFraction < Config.GetFloat("flightModel.stallWarnFrac", StallWarnFrac);
 
+    /// <summary>The decoded collision restitution (<c>FUN_0048d7f0</c>, docs/org/flightModel.md's
+    /// "Collision response and <c>bounce_factor</c>"): the velocity's component along the contact
+    /// normal AFTER the original's impulse, positive away from the surface. The caller owns the
+    /// contact and the gate — in the original the impulse branch runs for the local player alone
+    /// (<see cref="FlightController.SurviveHit"/>), so this is deliberately not branched on
+    /// <see cref="UsesAiForcePath"/>.
+    /// <para>With <c>r</c> the contact arm, <c>ω</c> the body rates and <c>I⁻¹</c> the airframe's
+    /// reciprocal moments:</para>
+    /// <para><c>vp = v + 2·(ω × r)</c>, <c>J = −(n·vp)·n</c>,
+    /// <c>Δω = R·I⁻¹·Rᵀ·[(r × J)/|r|²]</c>, <c>L = 2.25·|J|</c>, <c>A = |Δω|</c>,
+    /// <c>f_lin = L/(L+A)</c>, and the impulse is <c>v += J·(1 + f_lin·bounce_factor)</c>.</para>
+    /// <para>Effective restitution is <c>f_lin · bounce_factor</c>, bounded by [0, 0.6] as authored.
+    /// ⚠ The partition runs the opposite way round to the summary sentence that has travelled with
+    /// this decode ("a short arm rebounds at up to 0.6 while a wingtip throws the impact into
+    /// rotation"): <c>|Δω| = |I⁻¹|·|J|·sinθ/|r|</c> falls as <b>1/|r|</b>, because the <c>/|r|²</c>
+    /// is a point-mass moment of inertia and not a lever, so a LONG arm partitions more into rebound
+    /// and a short one less. With <c>I⁻¹ ≈ 1.1</c> it reads
+    /// <c>f_lin = 2.25/(2.25 + 1.1·sinθ/|r|)</c>: ≈0.91 at a 5 m wingtip, ≈0.67 at a 1 m arm, and
+    /// rising toward 1 as the arm lengthens. So a wingtip rebounds HARDER than a contact near the
+    /// centre, and nothing here converts a wingtip strike into spin.</para>
+    /// <para>⚠ There is NO surface dependence anywhere in this: no verticality test, no material
+    /// lookup, no friction term. <c>CAP-14</c>'s measured flat-versus-vertical split (0.62 against
+    /// 0.10) is not a per-surface coefficient and must not be implemented as one; it is a contact
+    /// geometry difference, and on a vertical face the sink an altimeter reads is tangential to the
+    /// contact, which this impulse never touches.</para>
+    /// <para>⚠ The contact-point velocity carries the rotational term DOUBLED, and the resulting
+    /// impulse is applied in full to the centre of mass with no reaction term — so the normal
+    /// component comes out as <c>−k·(n·v) − (1+k)·2·n·(ω × r)</c> with <c>k = f_lin·bounce_factor</c>.
+    /// The second half is unbounded and is not restitution; it is also what produces the original's
+    /// measured flat-ground rebound, which <c>bounce_factor</c> alone cannot reach. Raising the
+    /// constant to chase that measurement is the wrong fix.</para></summary>
+    /// <param name="velocity">The velocity entering the contact, world frame.</param>
+    /// <param name="normal">The contact normal, pointing away from the struck surface.</param>
+    /// <param name="contactArm">Contact point minus the aircraft's centre, world frame, NOT
+    /// normalised — its length sets both the doubled contact-point term and the rebound/spin
+    /// partition, so normalising it silently changes the answer.</param>
+    public float BounceNormalSpeed(Vector3 velocity, Vector3 normal, Vector3 contactArm)
+    {
+        float vn = normal.Dot(velocity);
+        var omegaWorld = Attitude * BodyRates;
+        float vpn = vn + 2f * normal.Dot(omegaWorld.Cross(contactArm));
+        var j = -vpn * normal;
+        float r2 = contactArm.LengthSquared();
+        // Δω is the impulse's angular share, in body axes here — |Δω| is all this needs, and a
+        // rotation back to world could not change it.
+        var dOmega = r2 > 1e-12f
+            ? Attitude.Transposed() * (contactArm.Cross(j) / r2) * Stats.RecInertia
+            : Vector3.Zero;
+        float l = BounceLeverScale * j.Length();
+        float a = dOmega.Length();
+        float fLin = l + a > 0f ? l / (l + a) : 0f;   // L == 0 → 0, the original's own degenerate arm
+        return vn - vpn * (1f + fLin * Stats.BounceFactor);
+    }
+
     // Solves clMax(V)·q(V)·RefArea = VehWeight for V at a load factor of 1 (see StallSpeed's doc for
     // why 1, not nom_gravity/StandardG). clMax's Mach term makes this implicit; a handful of
     // fixed-point passes converge to float precision because stall speeds sit well below the speed
@@ -922,6 +981,7 @@ public sealed class FlightModel
         }
         return vFps * MetresPerFoot;
     }
+
 
     /// <summary>Ground blow: the original's bias of aircraft control response away from anything
     /// large the nose is closing on (docs/org/flightModel.md's "Ground blow"). The probe itself
@@ -947,7 +1007,7 @@ public sealed class FlightModel
     /// drop, and it lands a freshly-spawned AI aircraft on this same <c>UsesAiForcePath</c> plant —
     /// but nothing here tracks a per-aircraft spawn timestamp, so the cut is NOT modelled: a
     /// just-dropped fighter gets the full un-cut 5.0 rather than the original's 0.75 for its first
-    /// 2.5 s. Recorded as a known gap (`backlog.md` `BL-095`), not implemented by this method.</para>
+    /// 2.5 s. Recorded as a known gap (`backlog.md` `BL-382`), not implemented by this method.</para>
     /// <para>⚠ It carries no dt on either path: the caller's <c>cmd * dt</c> is what makes it linear
     /// in dt, as the original's is. A dt applied here as well would make the whole effect vanish at
     /// a small step.</para>
@@ -1003,5 +1063,6 @@ public sealed class FlightModel
         // authored 10) and never reversed.
         return v * ((p >= 0f ? p : GroundBlowIntoFactor * -p) * Stats.GroundBlowMag);
     }
+
 
 }

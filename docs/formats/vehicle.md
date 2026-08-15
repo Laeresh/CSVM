@@ -87,7 +87,10 @@ document, so they are shipped-only features.
 | `smokescreen_stun_range` `_angle` `_interval` | 600 m / 170° / 5.0 s | **The smokescreen weapon's blind effect** — who it stuns: within 600 m, inside a 170° arc, re-evaluated every 5 s. Matches the design's stun-recovery pilot skill and the flare/sonic-rocket stun. |
 
 Also worth naming, all data-confirmed: `crash` (`armor_damage_range`, `health_damage_range`,
-`bounce_factor` — see [the hp pair](#the-hp-pair-armor--hit-points));
+`bounce_factor` — see [the hp pair](#the-hp-pair-armor--hit-points); `bounce_factor 0.6` is a raw
+scalar and the CEILING on collision restitution rather than the restitution itself, decoded and
+implemented, see [`org/flightModel.md`](../org/flightModel.md)'s "Collision response". ⚠ It is
+player-only in the original, and what a contact actually rebounds at is `f_lin × bounce_factor`);
 `groundblow_elev 400` / `groundblow_mag 10` / `ai_groundblow 0.5` (ground blow — the design's
 §4.1.7 proximity repulsion from large objects, decoded and implemented, see
 [`org/flightModel.md`](../org/flightModel.md)'s "Ground blow". ⚠ `groundblow_elev` is a ray LENGTH

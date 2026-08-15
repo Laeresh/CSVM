@@ -884,8 +884,9 @@ runs into a real boundary at 0.10, where the knife-edge α reaches 5.36° and cr
 `liftAOAs[0] = 5°`.
 
 ⚠ **CORRECTION (2026-08-09): the authored candidates are exhausted, and this document said
-otherwise for four items running.** C22, C23, D31 and D33 each parked this gap on "`BL-095`'s
-unconsumed `turn_fade_in`/`turn_fade_out`/`highGs` are the only authored fields shaped like it".
+otherwise for four items running.** C22, C23, D31 and D33 each parked this gap on "the unconsumed
+`turn_fade_in`/`turn_fade_out`/`highGs` are the only authored fields shaped like it" (then
+`backlog.md`'s `BL-095`, retired 2026-08-15; the gap itself is now `BL-383`).
 Both halves are now false. `highGs` is measured inert on every airframe (D33). And `turn_fade_*` is
 **already decoded in this very document** — "Control authority vs speed" above: `FUN_00490e10`'s
 base ramp is a function of **airspeed alone**, 0 at `turn_fade_in` (10) rising to 1 at
@@ -1278,9 +1279,10 @@ under "There are two integrators" above, and it has collision and ground blow re
 ## ⚠ Authored values vs the executable's fallbacks
 
 **Everything above quotes the fallbacks compiled into `crimson.exe`. This install authors different
-numbers, and in four places the difference changes the conclusion.** The authored set is recorded in
-`backlog.md` `BL-095`; read it as the operative one, and treat the fallbacks as evidence of intent
-only.
+numbers, and in four places the difference changes the conclusion.** The authored set is the table
+below, read back out of `extracted/zrdr/player.zrd.json` and pinned by
+`CSVM.Tests/PlaneStatsFlightGlobalsTests`; read it as the operative one, and treat the fallbacks as
+evidence of intent only.
 
 | Key | Fallback | **Authored** | Why it matters |
 |---|---|---|---|
@@ -1343,9 +1345,9 @@ aerodynamically-settled terminal dive (itself well below it on every airframe me
 The Bloodhawk's own hard ceiling (528.5 mph) is the highest of the eleven and sits at little over
 **half** of `high_speed_pitch_fade[0]` (1000 mph) — every other airframe's ceiling is lower still.
 **Nothing was implemented.** Untestable code on a threshold no capture of the original could ever
-exercise is exactly the invented content this project's ground rules forbid; `backlog.md`'s `BL-095`
-and this document now both carry the closed finding so a future session reading the decode does not
-mistake the fade for a missing feature.
+exercise is exactly the invented content this project's ground rules forbid; this document and
+`CSVM.Tests/ControlLimiterTests` (which fails if a data edit brings one into reach) carry the closed
+finding, so a future session reading the decode does not mistake the fade for a missing feature.
 
 **Corrected — both the G and AOA limiters are inert.** The lift clamp is a hard ±5/9 G, while
 `highGs` begins at 9 G and `lowGs` at −6 G. Neither limiter can engage before lift is already
@@ -1522,7 +1524,7 @@ anywhere in the chain, so it is frame-rate dependent. Both the factor and `S` ar
 (`AiGeneratorRuntime` → `AiAircraftSpawner.Spawn`, the "Zeppelins" section below) is this engine's
 carrier drop, and a freshly-dropped fighter flies the same `UsesAiForcePath` plant this law reads.
 The port tracks no per-aircraft spawn timestamp, so the ×0.15 cut is an unmodelled gap
-(`backlog.md` `BL-095`), not an unreachable one: a just-dropped fighter gets the full un-cut 5.0.
+(`backlog.md` `BL-382`), not an unreachable one: a just-dropped fighter gets the full un-cut 5.0.
 
 **Gates on the whole effect.** `obj[0xd6] != 4`; for non-player objects the clock must be past
 `obj+0xAC`; and `FUN_0048c470` skips the call entirely when the player is flagged crashed
@@ -1612,15 +1614,20 @@ AI's independence from command sign, and the body-frame conversion.
 `ai_groundblow · groundblow_mag` (5.0 authored), matching the correction above; the AI probe is
 additionally gated on `AiModeMachine.Mode != AiMode.Stunned` (`0x0048c317`'s own mode check,
 flightModel.md above), reproducing "a stunned AI flies into terrain". Two gates are NOT modelled,
-both recorded as gaps (`backlog.md` `BL-095`) rather than as moot: the 2.5 s post-carrier-drop ×0.15
+both recorded as gaps (`backlog.md` `BL-382`) rather than as moot: the 2.5 s post-carrier-drop ×0.15
 cut — reachable here (a zeppelin fighter-drop launch is this engine's carrier drop, see "Zeppelins"
 above), just not tracked, since nothing carries a per-aircraft spawn timestamp — and the per-object
-`obj+0xAC` collision-grace gate (non-player objects only), which is `BL-172`/C25's object (the same
-timer family), not C23's.
+`obj+0xAC` collision-grace gate (non-player objects only), the same timer family, which C25 did not
+take on either: it ported the impulse and not the resolver around it.
 
 ## Collision response and `bounce_factor` (`FUN_0048d7f0`)
 
-Decoded 2026-08-14. `bounce_factor` lives in `player.json`'s `crash` block, is a **raw scalar**, and
+Decoded 2026-08-14, **impulse implemented 2026-08-15** (`PLAN-ai-flight` `C25`, retiring `BL-172`):
+`FlightModel.BounceNormalSpeed` is the law and `FlightController.SurviveHit` the site, gated on
+`IsHumanPiloted` and not-already-crashed. The sweep, the placement and the two timers below are
+NOT ported — this engine has its own collision sweep, and what C25 bound is the impulse alone.
+
+`bounce_factor` lives in `player.json`'s `crash` block, is a **raw scalar**, and
 lands in global `0x0071c35c` from the parser store at `0x00473c38`. Its default is pre-set at
 `0x00473bb5` *before* the block is looked up, so an absent `crash` block leaves the fallback
 standing. Fallback **0.8**, this install authors **0.6**.
@@ -1632,7 +1639,10 @@ rather than moving by `v·dt`. One resolution per aircraft per tick, no sub-step
 
 ⚠ **Only the player bounces.** The impulse branch is entered only when `obj == DAT_0071c298` and the
 player is not already crashed. AI aircraft get position correction and an impact cosine, and no
-impulse at all.
+impulse at all. Ported as `IsHumanPiloted && !crashed` (`C25`), the same widening of a single-global-
+player-pointer guard to every human-piloted aircraft that `C21` recorded for the force path; pinned
+by the `graze-bounce` suite, which flies a player rig and an AI rig down the same trajectory into the
+same floor and measures `e = 0.56` against `0.00`.
 
 With `r` the contact point minus `obj+0x204`, `ω` the body rates at `obj+0x16c`, and
 `I⁻¹ = (obj[0x197], obj[0x198], obj[0x199])`:
@@ -1655,6 +1665,16 @@ The `0.5` is the shared literal at `0x006032e0`, also hardcoded. The angular imp
 Effective normal restitution for a non-rotating contact is **`f_lin · bounce_factor`**, bounded by
 `[0, 0.6]` as authored.
 
+⚠ **The partition runs the opposite way round to the summary sentence this decode has been quoted
+with ("a short lever arm rebounds at up to 0.6 while a wingtip throws most of the impact into
+rotation"). Corrected 2026-08-15 while implementing it (`C25`).** `Δω = (r × J)/|r|²` has magnitude
+`|I⁻¹|·|J|·sinθ/|r|`, which **falls as 1/|r|**: the `/|r|²` is a point-mass moment of inertia, not a
+lever. So `A` shrinks as the arm lengthens and `f_lin = L/(L+A)` rises toward 1 — a wingtip rebounds
+HARDER than a contact near the centre, and nothing here converts a wingtip strike into spin. With
+`I⁻¹ ≈ 1.1` it reads `f_lin = 2.25/(2.25 + 1.1·sinθ/|r|)`: ≈0.91 at a 5 m arm, ≈0.67 at 1 m, exactly
+1 when `r ∥ n` (a contact directly under the centre of mass, where `r × J` vanishes). The formulas
+above are unchanged; only their reading was wrong.
+
 ⚠ **The impulse is not a rigid-body impulse, and that defect is the mechanism behind `CAP-14`'s
 split.** It is computed from the *contact point's* velocity, with the rotational term doubled, then
 applied in full to the *centre of mass* with no reaction term removing the rotational share. Taking
@@ -1669,12 +1689,17 @@ belly or nose contact carrying any nose-down pitch rate, the aircraft leaves the
 
 ⚠ **There is no surface dependence anywhere in the code.** No test on the normal's verticality, no
 per-surface-type table, no material lookup, no friction term. `CAP-14`'s measured split (0.75–0.86
-on flat ground against 0.06–0.18 on vertical faces, `BL-172`) is reproduced by the geometry alone: on
-flat ground `r` is long and roughly horizontal against a vertical `n`, so `n·(ω × r)` is large and
-negative while `f_lin` stays high; against a wall `r × J` is large, `f_ang` dominates, `f_lin → 0`,
-and the impact converts to spin instead of rebound. The direction of that split is confirmed; the
-flat-ground magnitude comes from the doubled rotational term, not from `bounce_factor`, which cannot
-produce it.
+on flat ground against 0.06–0.18 on vertical faces, `BL-172`) must therefore never be implemented as
+a per-surface coefficient.
+
+⚠ **The lever-arm partition does not produce that split either, and the claim that it does was
+withdrawn 2026-08-15 (`C25`) on the arithmetic above.** With `A ∝ 1/|r|`, `f_lin` is ≈0.9 in both
+orientations at any contact geometry an airframe actually presents, so the two rebound at nearly the
+same coefficient: the `graze-bounce` suite flies both and measures `e = 0.56` on flat ground against
+`e = 0.59` on a vertical face. What differs on a wall is the AXIS — the rebound is horizontal, so an
+altimeter reads nothing across the contact (measured `vy 0.00 → 0.00` there) — and that, not a
+coefficient, is what a vertical-face clip shows. The flat-ground magnitude above `bounce_factor`
+still comes from the doubled rotational term, which `bounce_factor` cannot produce.
 
 **Ruled out as sources of the excess, each traced:** multiple resolutions per frame (one per aircraft
 per tick, `FUN_004897c0`'s head); successive-frame stacking (once the contact velocity is outgoing
@@ -1794,8 +1819,8 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
    `lift_accel_rate` (fallback 1.2/s) — it should be read from `player.json`, not tuned.
 2. **`liftAOAs` is an airflow blend, not a load-factor ramp.** The remake reads `[5, 9]` as the
    edges of a G ramp; the original uses them as the window over which the relative wind is faked
-   toward the nose. Same numbers, different mechanism. This also **settles `BL-095` for these
-   keys**: the parser takes their cosine, so `liftAOAs` and `maxAOA` are confirmed **degrees**,
+   toward the nose. Same numbers, different mechanism. This also **settles the units question for
+   these keys**: the parser takes their cosine, so `liftAOAs` and `maxAOA` are confirmed **degrees**,
    while `highGs`/`lowGs` are stored raw and are plain **G**.
 3. **The two hardcoded bank constants (0.205, 0.165).** These are in no data file — they are
    developer-console variables — so no amount of data extraction would have surfaced them. Landed

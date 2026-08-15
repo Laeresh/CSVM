@@ -2387,7 +2387,10 @@ public partial class FlightController : Node3D
     /// crash (severe impact, whole-vehicle health exhausted, or no damage data), true =
     /// survivable graze — the struck part takes severity-scaled damage, the plane is
     /// placed at the swept safe pose, its velocity deflects along the surface with
-    /// some tangential loss, and the attitude takes a lever-arm kick.</summary>
+    /// some tangential loss, a human-piloted aircraft additionally rebounds along the contact
+    /// normal (<see cref="FlightModel.BounceNormalSpeed"/>, the decoded <c>bounce_factor</c>
+    /// impulse — AI aircraft get the position correction alone, as in the original), and the
+    /// attitude takes a lever-arm kick.</summary>
     private bool SurviveHit(Vector3 prev, Vector3 step, float stopFrac, Vector3 impact,
         string hitName, string part, Vector3 normal, Node? hitBody)
     {
@@ -2445,6 +2448,29 @@ public partial class FlightController : Node3D
         _model.Speed = slideLen * (1f - GrazeFriction * vn / CrashSpeed);
         if (slideLen > 1e-4f)
             _model.VelocityDir = slide / slideLen;
+
+        // Restitution along the normal (C25/BL-172): the decoded impulse of FUN_0048d7f0, binding
+        // player.json's shipped bounce_factor rather than inventing a pushback. It replaces the
+        // normal component the slide above stripped out, and it reads the body rates this contact
+        // was entered with, so it is computed BEFORE the attitude kick below adds to them.
+        // ⚠ Player-only, as the original is: its impulse branch tests obj == the local-player
+        // pointer and that the player is not already crashed; an AI aircraft gets the position
+        // correction and nothing else. Gated on IsHumanPiloted for the same reason the sticky-bullet
+        // assist is (C21's recorded divergence — a single global player pointer is meaningless with
+        // 2-4 humans in splitscreen), and NOT on FlightModel.UsesAiForcePath: this is a second
+        // player/AI split at a different site, with the original's extra already-crashed test on it.
+        if (IsHumanPiloted && !_crashed)
+        {
+            float rebound = _model.BounceNormalSpeed(vel, normal, impact - _model.Position);
+            var bounced = _model.VelocityDir * _model.Speed + normal * rebound;
+            float bouncedLen = bounced.Length();
+            if (bouncedLen > 1e-4f)
+            {
+                _model.Speed = bouncedLen;
+                _model.VelocityDir = bounced / bouncedLen;
+            }
+        }
+
         var inv = _model.Attitude.Inverse();
         var lever = (inv * (impact - _model.Position)).Normalized();
         var kick = lever.Cross((inv * normal).Normalized());

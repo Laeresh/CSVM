@@ -237,6 +237,12 @@ public static class Suites
             "holds fire while tracking through a bored window, parks at the NEARER yaw end stop " +
             "out of arc, treats YAW [0,0] as unrestricted rather than locked, and goes quiet with " +
             "a crashed host — plus the aim assist's turret candidate list is fed", CarriedTurrets));
+        into.Add(new TestHarness.Suite("graze-bounce",
+            "the decoded graze restitution (C25) on real contacts: a player rig flown into a floor " +
+            "rebounds along the contact normal off the shipped bounce_factor, an AI rig on the " +
+            "identical trajectory gets the position correction and nothing else (the original's " +
+            "player-only impulse gate), and the same impulse on a vertical face is entirely " +
+            "horizontal — one coefficient, no surface test anywhere in it", GrazeBounce));
         into.Add(new TestHarness.Suite("ai-actor",
             "the M4 AI actor seam: an AI-piloted plane (AiPilot input, IsHumanPiloted false, no " +
             "camera/HUD/devices) spawned into an already-running sim flies its orders, takes a " +
@@ -2586,6 +2592,167 @@ public static class Suites
             pool?.Free();
             textures.Dispose();
         }
+    }
+
+    /// <summary>The decoded graze restitution on real contacts (C25/BL-172): a shallow dive onto a
+    /// floor and a shallow scrape along a vertical wall, on controlled geometry, flown by a real
+    /// flight rig through the real collision sweep.
+    ///
+    /// <para>Two things need a live contact and cannot be read off <c>FlightModel</c> (whose own
+    /// arithmetic <c>BounceRestitutionTests</c> pins): the PLAYER-ONLY gate — an AI rig flown down
+    /// the identical trajectory must get the position correction and nothing else, which is the
+    /// original's sixth decoded player/AI divergence — and the two orientations of CAP-14, where a
+    /// flat contact's rebound is what an altimeter reads and a vertical face's is entirely
+    /// horizontal.</para>
+    ///
+    /// <para>⚠ The wall assertion is about the REBOUND AXIS, not about a per-surface coefficient.
+    /// The impulse has no surface dependence at all; what differs between the two runs is which way
+    /// the contact normal points.</para></summary>
+    private static void GrazeBounce(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        ctx.Check(Mathf.IsEqualApprox(stats.BounceFactor, 0.6f),
+            $"the airframe carries this install's authored bounce_factor={stats.BounceFactor:0.###}");
+
+        var textures = new TextureArchive(texturesPath);
+        StaticBody3D? surface = null;
+        FlightController? rig = null;
+        try
+        {
+            // One contact run: a rig placed `startPos` out, flying `dir` at `speed`, stepped until
+            // the collision resolver answers. Returns the normal-direction speed entering and
+            // leaving that one frame (positive = away from the surface), and the vertical pair
+            // alongside it, so the wall run can be read on the axis the altimeter sees.
+            (float NormalIn, float NormalOut, float VerticalIn, float VerticalOut, bool Contacted,
+             bool Crashed) Run(bool human, Vector3 startPos, Vector3 dir, Vector3 normal, float speed)
+            {
+                var plane = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+                var model = new FlightModel(stats, aiForcePath: !human);
+                rig = new FlightController
+                {
+                    PlaneModel = plane,
+                    Collider = PlaneCollider.Build(plane),
+                    Damage = new PlaneDamage(stats.DestroyableParts),
+                    PlayerIndex = 0,
+                    IsHumanPiloted = human,
+                    // Deliberately pilot-less on both runs: an AiPilot would fly its own course
+                    // (its avoid-crash override climbs off a ground probe) and the two trajectories
+                    // would stop being the same one. Neutral stick on both, so the ONLY differences
+                    // reaching the contact are the gate and the force path.
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                };
+                rig.AddChild(plane);
+                rig.Setup(model, human ? ctx.Camera : null, new CamParams(), startPos, startPos + dir);
+                ctx.Host.AddChild(rig);
+                // Straight onto the approach, past whatever Setup's respawn left: the model is ours,
+                // so the state entering the sweep is stated rather than flown into.
+                model.Reset(startPos, Basis.LookingAt(dir, Vector3.Up), speed, 0f);
+                model.VelocityDir = dir;
+
+                float nIn = 0f, nOut = 0f, yIn = 0f, yOut = 0f;
+                bool contacted = false;
+                for (int i = 0; i < 900 && !contacted && !rig.Crashed; i++)
+                {
+                    var before = model.VelocityDir * model.Speed;
+                    rig.SimStep(1f / 60f);
+                    var after = model.VelocityDir * model.Speed;
+                    // The resolver is the only thing in the frame that can turn the normal
+                    // component around; nothing else moves it by metres per second in one step.
+                    if (after.Dot(normal) - before.Dot(normal) > 0.5f)
+                    {
+                        contacted = true;
+                        nIn = before.Dot(normal);
+                        nOut = after.Dot(normal);
+                        yIn = before.Y;
+                        yOut = after.Y;
+                    }
+                }
+                bool crashed = rig.Crashed;
+                var freed = rig;
+                rig = null;
+                freed.Free();
+                return (nIn, nOut, yIn, yOut, contacted, crashed);
+            }
+
+            // --- flat ground. A 15° descent at 60 m/s puts 15.5 m/s on the normal, under the 25 m/s
+            // crash threshold, so this is the survivable graze the impulse belongs to. Started a few
+            // metres out on purpose: the AI plant's own ground blow (C23) is a fixed push away from
+            // terrain, and given a long approach it flies the AI rig off this trajectory entirely.
+            surface = Plate("graze-floor", new Vector3(600f, 4f, 600f), new Vector3(0f, -2f, 0f));
+            ctx.Host.AddChild(surface);
+            var descent = new Vector3(0f, -Mathf.Sin(Mathf.DegToRad(15f)),
+                                      -Mathf.Cos(Mathf.DegToRad(15f))).Normalized();
+            var start = new Vector3(0f, 6f, 30f);
+
+            var player = Run(true, start, descent, Vector3.Up, 60f);
+            var ai = Run(false, start, descent, Vector3.Up, 60f);
+            surface.Free();
+            surface = null;
+
+            ctx.Check(player.Contacted && !player.Crashed,
+                $"the player rig grazed the floor and survived it vn={-player.NormalIn:0.0} m/s");
+            ctx.Check(ai.Contacted && !ai.Crashed,
+                $"the AI rig grazed the same floor on the same trajectory vn={-ai.NormalIn:0.0} m/s");
+            if (player.Contacted && ai.Contacted)
+            {
+                ctx.Check(player.NormalOut > 0.3f * -player.NormalIn,
+                    $"the player rebounds along the contact normal in={player.NormalIn:0.00} out={player.NormalOut:0.00} m/s (bounce_factor {stats.BounceFactor:0.##} × the lever partition)");
+                ctx.Check(player.VerticalOut > 0f,
+                    $"…and on flat ground that rebound is what the altimeter reads vy {player.VerticalIn:0.00} → {player.VerticalOut:0.00} m/s");
+                // The divergence: same trajectory, same geometry, no impulse at all.
+                ctx.Check(Mathf.Abs(ai.NormalOut) < 0.05f * -ai.NormalIn,
+                    $"an AI aircraft gets the position correction ALONE — no impulse (0x0048d7f0's player gate) in={ai.NormalIn:0.00} out={ai.NormalOut:0.00} m/s");
+                ctx.Note($"floor graze: player {player.NormalIn:0.00} → {player.NormalOut:0.00} m/s on the normal (e={player.NormalOut / -player.NormalIn:0.00}), AI {ai.NormalIn:0.00} → {ai.NormalOut:0.00}");
+            }
+
+            // --- a vertical face, same approach angle, so the only thing that changes is which way
+            // the normal points. The rebound must follow the normal and leave the altimeter alone.
+            surface = Plate("graze-wall", new Vector3(4f, 600f, 600f), new Vector3(-100f, 0f, 0f));
+            ctx.Host.AddChild(surface);
+            var scrape = new Vector3(-Mathf.Sin(Mathf.DegToRad(10f)), 0f,
+                                     -Mathf.Cos(Mathf.DegToRad(10f))).Normalized();
+            var wallNormal = Vector3.Right;
+            var wallStart = new Vector3(-30f, 200f, 300f);
+
+            var alongWall = Run(true, wallStart, scrape, wallNormal, 60f);
+            surface.Free();
+            surface = null;
+
+            ctx.Check(alongWall.Contacted && !alongWall.Crashed,
+                $"the player rig scraped the vertical face and survived it vn={-alongWall.NormalIn:0.0} m/s");
+            if (alongWall.Contacted)
+            {
+                ctx.Check(alongWall.NormalOut > 0.3f * -alongWall.NormalIn,
+                    $"the same impulse fires on a wall — no surface test anywhere in it in={alongWall.NormalIn:0.00} out={alongWall.NormalOut:0.00} m/s");
+                ctx.Check(Mathf.Abs(alongWall.VerticalOut - alongWall.VerticalIn) < 1f,
+                    $"…and it is entirely horizontal: an altimeter reads nothing across the contact vy {alongWall.VerticalIn:0.00} → {alongWall.VerticalOut:0.00} m/s (CAP-14's vertical-face runs)");
+                ctx.Note($"wall scrape: {alongWall.NormalIn:0.00} → {alongWall.NormalOut:0.00} m/s on the normal (e={alongWall.NormalOut / -alongWall.NormalIn:0.00}), vy {alongWall.VerticalIn:0.00} → {alongWall.VerticalOut:0.00}");
+            }
+        }
+        finally
+        {
+            rig?.Free();
+            surface?.Free();
+            textures.Dispose();
+        }
+    }
+
+    /// <summary>A static world plate for the graze runs — layer 1 (the world), placed once at its
+    /// final pose because a body MOVED after creation is invisible to space queries this frame.</summary>
+    private static StaticBody3D Plate(string name, Vector3 size, Vector3 at)
+    {
+        var body = new StaticBody3D { Name = name };
+        body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = size } });
+        body.GlobalTransform = new Transform3D(Basis.Identity, at);
+        return body;
     }
 
     /// <summary>The neighbour-splash repro pair, on controlled geometry: a torpedo detonates against a thin

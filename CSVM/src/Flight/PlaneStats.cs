@@ -139,10 +139,18 @@ public sealed class PlaneStats
     // (5.0 authored, not 0.15 — see that method's own note). The compiled AI branch cuts both the
     // factor and S to ×0.15 for 2.5 s after a carrier drop (a zeppelin fighter-drop launch is this
     // engine's carrier drop and IS reachable, but this port tracks no spawn timestamp, so the cut is
-    // an unmodelled gap — backlog.md BL-095) and suppresses the whole term while the AI is stunned
+    // an unmodelled gap — backlog.md BL-382) and suppresses the whole term while the AI is stunned
     // (ported, but at FlightController.ProbeGroundBlow's gate, not here — GroundBlowTerm itself sees
     // only what the probe already decided to feed it).
     public float AiGroundBlow = 0.9f;       // ai_groundblow, dimensionless
+
+    // The collision restitution ceiling (player.json's `crash` block, docs/org/flightModel.md's
+    // "Collision response and bounce_factor"): a RAW SCALAR, and the ceiling on effective normal
+    // restitution rather than the restitution itself — what a contact actually rebounds at is
+    // f_lin · this, with f_lin the lever arm's rebound/spin partition (FlightModel's
+    // BounceNormalSpeed). The fallback is the executable's compiled default, pre-set before the
+    // block is looked up, so an absent `crash` block leaves it standing; this install authors 0.6.
+    public float BounceFactor = 0.8f;       // bounce_factor, dimensionless
 
     // The near-miss cue's shipped accumulator (warning_shot_*) — see WarningShotCue for the units
     // question. The sound is a SOUND_GROUPS name (bullet_warning_sg → snd_bulletpass1-3), not a
@@ -478,6 +486,10 @@ public sealed class PlaneStats
             stats.GroundBlowElev = player.Float("groundblow_elev", stats.GroundBlowElev);
             stats.GroundBlowMag = player.Float("groundblow_mag", stats.GroundBlowMag);
             stats.AiGroundBlow = player.Float("ai_groundblow", stats.AiGroundBlow);
+            // bounce_factor sits inside the `crash` block, beside the two damage ranges; a missing
+            // block keeps the compiled fallback, which is the original's own parse order.
+            if (player.Dict("crash") is { } crash)
+                stats.BounceFactor = crash.Float("bounce_factor", stats.BounceFactor);
 
             // curve blocks hold (x, y) pairs: min_* = ramp start, max_* = ramp end
             static SoundCurve Curve(ZrdrDict d, string minKey, string maxKey, SoundCurve fb) =>

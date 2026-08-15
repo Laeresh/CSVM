@@ -2548,8 +2548,10 @@ engines.json stock engine power + player.json globals (the flight constants, the
 (`AimAssist.cs`'s B2), `_dist_factor` (B4's scoring) and `_inaccuracy` (B5's launch scatter, stored
 in RADIANS as the original stores it), plus the decoded model's
 lift/AoA/G, turn/yaw-curve, pitch-fade and drag-fade-speed globals — docs/org/flightModel.md; converted
-exactly as the original does: MPH×0.44704, AoA/liftAOAs cosined, highGs/lowGs raw G — and as yet
-unread by FlightModel.cs), the `engine_sound` def name with its
+exactly as the original does: MPH×0.44704, AoA/liftAOAs cosined, highGs/lowGs raw G; the turn/yaw
+curves are live in the model, the G limiters and the pitch fade deliberately not, being authored out
+of reach), the `crash` block's `bounce_factor` (a raw scalar, read one level down inside that block
+— the collision restitution's ceiling, C25), the `engine_sound` def name with its
 volume/pitch `SoundCurve`s (clamped two-point ramps), `destroyable_parts` → `DestroyablePart`
 records (name, max HP, max armor, `critical`/`engine` flags, `got_hit_anim`, per-part
 `injure_anims`), and the def-level `VehicleInjureAnims`. Schema: docs/formats/vehicle.md.
@@ -3307,7 +3309,10 @@ weathervane, floors its post-integration nose-axis velocity at 10 mph, and appli
 command-independent ground blow instead of the player's command-proportional one; air density is NOT
 branched. The original selected inside the force function on a compare against its single global
 player (`0x48c520`, `0x48cd3e`, `0x48e925`, `0x48c317`) — not copied, because that presumes ONE
-player and this engine flies four. Every mechanism and trap is documented at the line that computes
+player and this engine flies four. `BounceNormalSpeed` is the one law here that no step of the plant
+calls: the decoded collision restitution (`bounce_factor` × the lever-arm partition, C25), asked for
+by `FlightController.SurviveHit`, which owns the contact and the player-only gate.
+Every mechanism and trap is documented at the line that computes
 it; the decode is [`org/flightModel.md`](org/flightModel.md) and the measurement rules are
 `verification.md`.
 ⚠ The three `*Tune` rates and the decoded coefficients here are all PINNED, not free TUNEs — the
@@ -3317,7 +3322,8 @@ it; the decode is [`org/flightModel.md`](org/flightModel.md) and the measurement
   coefficient at all.
 ⚠ Four decode-vs-footage gaps stand RECORDED rather than open: the drag polar against `CAP-05`'s
   zero-thrust points, the sustained climb (`CAP-20` would settle it), the Bloodhawk's computed stall
-  speed against its filmed nose-drop, and the ≈1.6×-fast banked rotation (`BL-095`).
+  speed against its filmed nose-drop, and the ≈1.6×-fast banked rotation (`BL-383`, which has no
+  authored candidate left).
   `FlightEnvelopeTests` carries the informational rows and names their owners. Accepted artifacts,
   not bugs: loop energy pump, steep-climb equilibrium, stall hang.
 ⚠ Deliberately absent, each for a measured reason: the authored `highGs`/`lowGs`/`maxAOA` limiters
@@ -3526,6 +3532,15 @@ crash/respawn while `StuntMission` holds their timer/objectives and `MarkerHud` 
 this prevents their finish pose from obstructing another pilot's gate.
 `Respawn` plays `startprops` back and resets
 `ThrottleSmoke`, which `Update` otherwise drives every frame off the live throttle.
+A survivable graze also REBOUNDS along the contact normal (C25, retiring `BL-172`): the decoded
+`bounce_factor` impulse (`FlightModel.BounceNormalSpeed`) replaces the normal component the
+tangential slide strips out, computed before the attitude kick so it reads the rates the contact was
+entered with. ⚠ Player-only, as the original is — its impulse branch tests the single global player
+pointer and not-already-crashed, widened here to `IsHumanPiloted` for the same reason C21 widened the
+force-path guard; an AI aircraft gets the position correction and nothing else. The `graze-bounce`
+suite flies both into the same floor (e = 0.56 against 0.00) and a player rig along a vertical face,
+where the same impulse fires horizontally and leaves the altimeter alone — there is no surface test
+anywhere in it, and `CAP-14`'s flat-versus-vertical split must not be implemented as one.
 A survivable graze plays touchdown.zrd's per-surface reaction (`GrazeReaction`) through the SAME
 cascade: the struck body's surface id indexes `TouchdownDefs` (the session's one `SurfaceDefTable`,
 built by `WorldEffectsFactory` against the world program because the original's touchdown vector is
@@ -3638,7 +3653,8 @@ WorstFraction stays the worst PART (FlightAudio's damaged-engine loop).
 ⚠ A stock zone's effective pool is DOUBLE its MaxHp (armor == hp on all 88 shipped entries, spent
   first) — faithful to the original, not a regression to tune away. Armor at 0 is a stripped zone,
   not a dead one. FlightController.Crash still never calls in
-  (a hard hit is a boolean destroy) and player.json's crash block is still unbound (`BL-172`).
+  (a hard hit is a boolean destroy) and the crash block's two DAMAGE ranges are still unbound
+  (`BL-381`); only its `bounce_factor` is, as the graze restitution (C25).
 ⚠ The kill is `IsDestroyed` — whole-vehicle health at zero via the summary recompute over the
   parts (docs/org/vehicleDamage.md "The A4 decision"), i.e. EVERY zone's health exhausted. The
   old any-critical-part kill was a recorded divergence D14 retired; `Critical` stays parsed and

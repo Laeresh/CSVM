@@ -64,6 +64,11 @@ public class PlaneStatsFlightGlobalsTests
         Assert.Equal(10f, s.GroundBlowMag, 3);
         Assert.Equal(0.5f, s.AiGroundBlow, 3);
 
+        // bounce_factor 0.6 against a fallback of 0.8, and it lives one level down, inside the
+        // `crash` block — a reader that looked for it at the top level would read the fallback back.
+        Assert.Equal(0.6f, s.BounceFactor, 3);
+        Assert.NotEqual(0.8f, s.BounceFactor, 3);
+
         // drag_fade_speed: authored 40 mph — happens to equal this field's
         // documented-as-unconfirmed fallback, so this only proves the read did not error,
         // not that the read (versus the fallback) took effect; see the field's comment.

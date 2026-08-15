@@ -656,121 +656,52 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   data port. (`rof/ui_strings.json` carries "NITRO-BOOST: %4!s!" on the purchase screen and the
   buyable engines come in plain and "… nitro" variants, so the engine choice is what grants it.)
 
-- `BL-095` `[Research]` **`player.json`'s physics block — DECODED END TO END. What is left is
-  implementation, not research.** Every key is now read out of `crimson.exe`, with the write-up in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md): the flight block on 2026-08-09, ground blow
-  and `bounce_factor` on 2026-08-14. Units come off the conversion the parser applies, never from
-  inference: **speeds are MPH** (`× 0.44704` on load), **`liftAOAs`/`maxAOA` are degrees** (the
-  parser takes their cosine), and **`highGs`/`lowGs`, `groundblow_*`, `ai_groundblow` and
-  `bounce_factor` are raw scalars**. World lengths are **metres**, identified positively from
-  `nom_gravity`'s 9.82 reference divisor.
+- `BL-382` `[Feature]` **A just-dropped AI fighter gets the full ground blow, where the original cuts
+  it to 15 % for 2.5 s.** Split out of `BL-095` when that umbrella retired 2026-08-15; the mechanism
+  is decoded and the gap is narrow but real. The original's AI ground-blow branch multiplies BOTH the
+  push factor (`ai_groundblow × groundblow_mag`, 5.0 authored) and the velocity-steer's proximity by
+  **0.15** while the game clock sits inside `obj+0xB4`, a 2.5 s window written on the carrier-drop
+  spawn path (`FUN_00452450`: repositioned, yawed to −π/2, launch velocity minus 22.352 m/s
+  vertically — a drop from a carrier at 50 mph). See
+  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow" and its collision-response
+  timers.
+  ⚠ **The window IS reachable here.** A zeppelin's fighter-drop launch (`AiGeneratorRuntime` →
+  `AiAircraftSpawner.Spawn`) is this engine's carrier drop, and it puts a freshly-dropped AI aircraft
+  on the same `UsesAiForcePath` plant `FlightModel.GroundBlowTerm` reads. `PLAN-ai-flight` `C23`
+  scoped to the response law and left this out deliberately.
+  *Fix shape:* thread a per-aircraft spawn timestamp through `AiAircraftSpawner`/`FlightController`
+  (nothing carries one today) and cut both terms while the clock is inside 2.5 s of it. The same
+  per-object clock family holds `obj+0xAC`, a 1.5 s collision-grace window that disables collision
+  outright on a fresh spawn and 1.0 s on both parties after an entity-versus-entity impact — decoded,
+  also unmodelled, and worth landing in the same change.
+  *How you'd know it worked:* a fighter dropped from a zeppelin over terrain is not shoved off its
+  drop for its first 2.5 s.
 
-  | Key (authored) | Where it stands |
-  |---|---|
-  | `yaw_low_speed 0.0625` / `yaw_high_speed 0.17` / `yaw_fade_in 10` / `yaw_max 50` / `yaw_fade_out 400` | Decoded and **implemented** (`PLAN-flight-model-rewrite` C21), retiring `BL-108`'s interim `eff` |
-  | `turn_fade_in 10` / `turn_fade_out 50` | Decoded: the roll/pitch base ramp from airspeed alone. **Implemented 2026-08-15** (`PLAN-ai-flight` `C24`, retiring `BL-330`) |
-  | `maxAOA 46.0` / `liftAOAs [5,9]` / `lift_accel_rate 0.75` | Decoded. `liftAOAs` is an airflow blend, **not** a load-factor ramp. Consumed by `PLAN-flight-drag-lift` B12 as a **hypothesis under test, not a decode**. ⚠ That plan justifies its lift re-key partly on "the aircraft must hold 100° of bank, which needs `1/\|cos 100°\|` = 5.8 g" (`PLAN-flight-drag-lift.md:486-487`, `:7`, `:32`, `:200`, `:549`). `CAP-33` showed the ADI reads airframe **attitude**, not the turn's bank, so the ~100° attitude is real but the load factor does not follow from it that way — `CAP-01`'s turn banked 58.7°, ~2 g. The re-key is not challenged; its stated arithmetic is |
-  | `high_speed_pitch_fade [1000,1001]` / `highGs [9,15]` / `lowGs [-6,-9]` | Decoded as **authored unreachable** (`C24`, `D33`). Nothing implemented, which is the correct outcome |
-  | `drag_factor 1.5` (global) / `drag_fade_speed 40` | **Dead in the executable** (B14): parsed, then read by nothing. The per-plane `drag_factor` is the only drag scale |
-  | `groundblow_elev 400` / `groundblow_mag 10` / `ai_groundblow 0.5` | Decoded 2026-08-14, emitter set settled 2026-08-15, **player law implemented and flown 2026-08-15** (`git log --grep=BL-359`), **AI law implemented 2026-08-15** (`PLAN-ai-flight` `C23`). `ai_groundblow` is now read, off `FlightModel.UsesAiForcePath` |
-  | `bounce_factor 0.6` | Decoded 2026-08-14. Units settled; implementation owned by `BL-172` |
-  | `nom_gravity 20.0` / `stall_mag 1.25` | Already consumed |
-
-  ⚠ **Three keys are authored so the feature they gate never fires. That is a finding, not a gap to
-  fill: do not implement them as missing features.** `high_speed_pitch_fade` is beyond any attainable
-  dive speed (the highest of the eleven ceilings is the Bloodhawk's 528.5 mph against an authored
-  1000, `C24`), and `highGs`/`lowGs` sit past the hard ±5/9 G lift clamp (peak demand 2.13–5.01 G
-  against a threshold of 9, peak α 8.9–25.6° against `maxAOA` 46°, all eleven airframes, `D33`).
-  `lowGs` is unreachable twice over, since the demand is a vector LENGTH that never goes negative.
-  Tables in [`docs/org/flightModel.md`](docs/org/flightModel.md) and
-  [`POST-B14.md`](analysis/flight-model-baseline/POST-B14.md); pinned by
-  `CSVM.Tests/ControlLimiterTests.cs`, which asserts each airframe against its OWN loaded thresholds,
-  so a per-plane override or a data edit that brings either into reach fails the suite.
-  ⚠ The Bloodhawk's 5.01 G peak is 0.2 % **past** the executable's fallback `highGs[0] = 5`, so under
-  the fallbacks the limiter would fire, barely. The disproof rests on the authored 9.
-
-  **Ground blow: DECODED from the binary 2026-08-14, IMPLEMENTED and flown 2026-08-15**
-  (`git log --grep=BL-359`). Mechanism, constants, gates and emitter rule are in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md); `CAP-02` closed 2026-08-07 and the GDD's
-  §4.1.7 *mechanism* is confirmed by the code, its emitter *list* replaced by the rule that produces
-  it. In short: `FUN_0048bf60` casts a ray of
-  `groundblow_elev` **metres** along the nose, and `FUN_0048c220` adds a rotation away from the hit
-  surface into the **same accumulator the stick writes to**, one call after the stick terms in
-  `FUN_0048c470`. It is a bias on control response, not an applied force. A command *into* the
-  obstacle is met with `0.05 × groundblow_mag`, so it is halved and never reversed; a command *away*
-  is amplified by up to `1 + 10·S²`; and on a dead-on approach the bias axis `n × b` collapses to
-  zero, so a head-on gets no help at all. The AI path is a different law, not a scaled one: a fixed
-  push of `ai_groundblow × groundblow_mag × S` = **5.0 authored** (not the 0.15 the plan first misread
-  from this row — that is a further post-carrier-drop cut, see below), independent of what the AI
-  commanded, linear in proximity, and not `dt`-scaled. **Both laws are built** (`PLAN-ai-flight` `C23`
-  landed the AI half 2026-08-15), branched in `FlightModel.GroundBlowTerm` off `UsesAiForcePath`,
-  fed by the same `FlightController.ProbeGroundBlow` cast for both paths.
-  ⚠ **Reachable-but-unmodelled gap: the 2.5 s post-carrier-drop ×0.15 cut.** `FUN_00452450`'s
-  `obj+0xB4` timer, decoded above, DOES have a live analogue in this engine — a zeppelin's fighter-drop
-  launch (`AiGeneratorRuntime` → `AiAircraftSpawner.Spawn`) puts a freshly-dropped AI aircraft on the
-  same `UsesAiForcePath` plant this law reads, the same "carrier drop" the original's timer guards.
-  This port tracks no per-aircraft spawn timestamp, so a just-dropped fighter gets the full un-cut 5.0
-  rather than the original's reduced 0.75 for its first 2.5 s. Narrow (needs terrain close enough to
-  repel within 2.5 s of a drop) and not implemented by `C23`, which scoped to the response law only;
-  would need a spawn-time field threaded through `AiAircraftSpawner`/`FlightController`, closest in
-  kind to `BL-172`'s `obj+0xAC` collision-grace timer (the same per-object clock family).
-
-  ⚠ **`groundblow_elev` 400 is 400 METRES of ray length, not a 400 ft trigger range, and the
-  footage agreement was a coincidence of digits.** The `CAP-02` onset bracketed at 427 → 376 ft sits
-  well inside a 1,312 ft ray at roughly 70 % strength, so the ray never explains an onset there and
-  whatever timed that pull was not this threshold. The footage record that carried this reading,
-  `analysis/video-flight-calibration/FINDINGS.md`, was deleted 2026-08-14 as superseded.
-  ⚠ **`groundblow_mag` 10 is not a TUNE** and must not be fitted to the cliff clip's 17° step. It is
-  an authored constant with a traced consumer, 6.7× the engine's own fallback of 1.5.
-  ⚠ **The proximity power is `S²`, settled at `0x0048c30f` on 2026-08-15**: `FUN_0048bf60` hands
-  back the axis ALREADY scaled (`A·S`) plus `S` as its return value, and the caller uses that one
-  scaled vector twice, once in the dot and once in the add. Reading the write-up's `p` as
-  `dot(accum, A·S)` *and* keeping an `S²` in the add counts it three times. `CSVM.Tests`'
-  `GroundBlowTests` pins the quadratic against the linear reading.
-  One `CAP-02` anomaly stands unexplained and is now moot for implementing: `Up Down` recovery #1
-  reads 2.30× free air with 28–30 % of samples gated at γ ≈ −63°, suspected estimator artifact, and
-  every clip designed to reproduce it came back flat.
-
-  **The original's 1.6×-slower banked turn has no authored candidate left, and this block is not
-  where it will be found.** All three died: the hardcoded bank coupling moves the banked rate the
-  wrong way by construction (`C22`), `highGs` is a limiter that never fires (`D33`), and
-  `turn_fade_*` is an airspeed ramp that is saturated at 1 everywhere the gap appears (`C21` era
-  correction, 2026-08-09). What remains is the measurement's own interpretation: `CAP-01`'s
-  18.95 °/sim-s at 222.94 mph implies **58.7° of bank** (`atan(V·ω / nom_gravity)`, and it is
-  `nom_gravity` 20 m/s² in that formula, not 9.81). `CAP-33` (2026-08-15) settled that the ~100° its
-  ADI shows is not a bank at all: flown with the pilot holding a known 60–70°, the ADI sky centroid
-  read a mean 105.1° while `V·ω / nom_gravity` read 62.2°, and the ADI's 46° swing tracked the pitch
-  cycle (`r = +0.886` against climb rate) rather than the heading rate (`r = −0.091`). An ADI shows
-  airframe attitude, which in a high-α pull sits tens of degrees off the bank of the turn. So the
-  "measured bank" half of this disagreement was never real, the original **is** flying coordinated,
-  and 58.7° is `CAP-01`'s actual bank. The rate gap itself is untouched by this and stays open.
-  (`git log --grep=BL-307` for the closing record.)
-  ⚠ **Do not fill the hole by inventing a rate limiter from field names.** A naive speed/bank
-  coupling that quietly costs pitch authority is exactly the wrong-mechanism fix `BL-124`'s history
-  warns about, and `maxAOA`/`liftAOAs` were consumed as a hypothesis under test rather than as a
-  decode (`docs/plans/PLAN-flight-drag-lift.md` B12).
-  ⚠ **Do not re-open `drag_factor` as a name collision.** The global one is dead in the executable,
-  so `vehicle.json`'s per-plane `drag_factor` is the only drag scale and there is nothing to
-  reconcile.
-
-  **Still to do, all of it downstream of this entry:**
-  1. ~~Implement ground blow.~~ **Landed 2026-08-15** (`BL-359`, closed; `git log --grep=BL-359`),
-     player path only and confirmed at the controls. The AI law is unbuilt and is a different one.
-  2. ~~Implement the roll/pitch base ramp~~ **Landed 2026-08-15** (`BL-330`, closed;
-     `git log --grep=BL-330`), unbranched, player and AI alike; the same item traced
-     `FUN_0048bdd0`'s fifth output to the visible rudder angle rather than to any force term.
-     Still open: **the `bounce_factor` restitution** (`BL-172`).
-  3. ~~Confirm the zeppelin emitter on any zeppelin mission.~~ **Answered 2026-08-15 from the binary
-     and the shipped data, no capture needed.** The emitter test keys on whether a hit node carries
-     the spawn mark `0x40000000` and, if so, whether its registry entity is on a scripted path; never
-     on vehicle type. IA1's zeppelin is a plain gamez node with no spawn mark, so it repels exactly
-     like terrain. Written up in
-     [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow"; the path mechanism it
-     surfaced is `BL-361`. In the build, the rule is the `CollisionLayers.World` mask on the probe,
-     which is why an aeroplane does not repel and the zeppelin does. (`CAP-33` was flown 2026-08-15;
-     it settled the ADI-vs-implied-bank question, not the banked-turn rate gap.)
-
-  When those are homed elsewhere or done, this entry retires: there is no research left in it.
+- `BL-383` `[Research]` `[Owed-capture]` **The original's banked rotation is ≈1.6× slower than ours
+  and no authored constant is left to explain it.** Split out of `BL-095` when that umbrella retired
+  2026-08-15: every candidate that entry tracked has now died, so what remains is a measurement gap
+  with no data-side suspect. The whole banked rotation runs ≈1.6× fast — `sustained-turn-rate` 32.80
+  against `CAP-01`'s 18.95 °/s, knife-edge drift 1.09 °/s against 0.69–0.89, heading 1.68 against
+  0.68–1.13, the same ratio in all three.
+  ⚠ **All three authored candidates are dead, and re-opening one is the trap.** The hardcoded bank
+  coupling moves the banked rate the WRONG way by construction (`C22`); `highGs`/`lowGs` is a limiter
+  that never fires on any of the eleven airframes (`D33`, pinned by `ControlLimiterTests`); and
+  `turn_fade_in`/`turn_fade_out` is an airspeed ramp, implemented 2026-08-15 (`C24`) and saturated at
+  1 everywhere this gap appears.
+  ⚠ **`CAP-33` settled the other half and did not close this one.** The ~100° an ADI shows in the
+  footage is airframe ATTITUDE, not the bank of the turn (flown at a known 60–70°, the ADI sky
+  centroid read 105.1° while `V·ω / nom_gravity` read 62.2°, and the ADI's swing tracked the pitch
+  cycle at `r = +0.886` against the heading rate's `r = −0.091`). So `CAP-01`'s turn was banked 58.7°
+  at ~2 g, the original IS flying coordinated, and the rate gap is untouched by that finding.
+  ⚠ **Do not fill the hole by inventing a rate limiter from field names**, and do not hide it in a
+  chase constant: retuning `KnifeAlignFloor` would bury a rotation error in a camera-adjacent knob,
+  and a naive speed/bank coupling that quietly costs pitch authority is the wrong-mechanism fix
+  `BL-124`'s history warns about.
+  *Where it is recorded:* [`docs/org/flightModel.md`](docs/org/flightModel.md) (the "authored
+  candidates exhausted" note), `FlightEnvelopeTests`' informational rows, and
+  [`POST-B14.md`](analysis/flight-model-baseline/POST-B14.md).
+  *How you'd know it worked:* `sustained-turn-rate` lands near 18.95 °/s at `CAP-01`'s speed through
+  a decoded mechanism, not a fitted one.
 
 - `BL-380` `[Tuning]` **The control surfaces' deflection angles, mix and slew are decoded and the
   TUNEs are still in place.** `ControlSurfaceAnimator` deflects ±20° per kind and slews linearly at
@@ -886,10 +817,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     the footage and still cannot reach it, while walking the knife-edge α to 5.36°, past
     `liftAOAs[0] = 5°`. ⚠ **What is left is not this constant**: the whole banked rotation runs
     ≈1.6× fast (knife-edge drift 1.09 °/s against 0.69–0.89, heading 1.68 against 0.68–1.13, the same
-    ratio as `sustained-turn-rate`'s 32.80 against 18.95) and `BL-095`'s unconsumed
-    `turn_fade_in`/`turn_fade_out` are the only authored fields shaped like it (`highGs` was the
-    third until `D33` measured the G limiter inert on all eleven airframes). Retuning
-    `KnifeAlignFloor` would hide a rotation error inside a chase constant.
+    ratio as `sustained-turn-rate`'s 32.80 against 18.95), and no authored field is left that is
+    shaped like it: `turn_fade_in`/`turn_fade_out` was implemented 2026-08-15 (`C24`) and is
+    saturated at 1 across the whole band, `highGs` was measured inert on all eleven airframes
+    (`D33`), and the bank coupling moves the rate the wrong way (`C22`). That gap is `BL-383`.
+    Retuning `KnifeAlignFloor` would hide a rotation error inside a chase constant.
     The original's knife-edge trajectory (`CAP-05`, both takes, 143/300 mph,
     agreeing to ~13%, so driven by time-since-roll-in, not airspeed):
 
@@ -1090,100 +1022,36 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   roll question has the same defect**: there is no partial aileron deflection either, so a "moderate
   roll input" clip cannot be flown, and `BL-097` should be re-read as a held-key step question too.
 
-- `BL-172` `[Feature]` **Graze pushback is entirely unmodelled — and the shipped data already has the constant to
-  bind it. Plan-sized — not a TUNE.** `FlightController.SurviveHit` (`FlightController.cs:1435-1535`)
-  only ever does a friction-scaled tangential slide (`GrazeFriction`), a lever-arm attitude kick
-  (`GrazeKick`), and a fixed `GrazePushOut` (0.15 m) off the surface — there is no
-  restitution/repulsion term along the normal at all. Meanwhile `player.json`'s `crash` block ships
-  **`bounce_factor 0.6`** alongside `armor_damage_range [50,300]` / `health_damage_range [50,300]`
-  (`docs/formats/vehicle.md:65,90-149`), and nothing in `CSVM/src` reads any of the three (grep
-  confirms zero hits for `bounce_factor` under `CSVM/src`; `BL-095` has the block's decode status).
-  *Fix shape:* add a restitution impulse along the contact normal scaled by `bounce_factor`, alongside
-  the existing tangential slide — this turns "invent a pushback mechanic" into "bind the shipped
-  constant." *Blocks:* the collision-feel sign-off.
-
-  **DECODED 2026-08-14 from `crimson.exe`; units settled and the fix shape confirmed.**
-  `bounce_factor` is a **raw scalar** (global `0x0071c35c`, parser store `0x00473c38`, fallback 0.8),
-  applied in the collision resolver `FUN_0048d7f0` as a normal-only impulse with no tangential or
-  friction term. Write-up in [`docs/org/flightModel.md`](docs/org/flightModel.md), "Collision response
-  and `bounce_factor`". Three things it changes here:
-  - **Effective normal restitution is `f_lin × bounce_factor`, not `bounce_factor`**, where
-    `f_lin = L/(L+A)` splits the impact between linear rebound and spin (`L = 2.25·|J|`,
-    `A = |Δω|`). A short lever arm rebounds at up to 0.6; a wingtip or nose into a wall throws
-    almost everything into rotation instead.
-  - **There is no surface dependence in the code at all** — no verticality test, no per-surface
-    table, no material lookup. The measured vertical-versus-flat split below is a lever-arm
-    partition, and reading it as a per-surface coefficient would be wrong.
-  - **Only the player bounces.** The impulse branch is entered only for the local player and only
-    while not already crashed; AI aircraft get position correction and nothing else.
-  ⚠ **The measured 0.75–0.86 on flat ground is above what `bounce_factor` can produce**, and the
-  decode found why: the impulse is computed from the *contact point's* velocity with the rotational
-  term **doubled**, then applied in full to the centre of mass with no reaction term
-  (`n·v_after = −k·(n·v) − (1+k)·2·n·(ω × r)`, `k = f_lin·bounce_factor`). The second term is
-  unbounded and is not restitution. Reproducing the original's feel needs that term, not a larger
-  `bounce_factor`. Ruled out as sources, each traced: multiple contacts per frame, successive-frame
-  stacking, a separate ground-support path, and gravity ordering.
-  ⚠ **`bounce_factor` 0.6 IS a restitution along the contact normal — measured 2026-08-04 from
-  `CAP-14`** (eight clips, `playtest/CAP-14/`; two airframes, Bloodhawk and a max-armour Balmoral;
-  **seven** contacts, three surface orientations, 139–302 mph; every clip's altimeter and speedometer
-  registering to the chase pooled median at dx = dy = 0, peaks 0.82–0.97; altitude d2 sd 0.34–0.84 ft).
-  `v0` is the vertical speed at the contact instant from a free parabola over the N frames after it,
-  `e = −v0/v_before`:
-
-  | surface | normal | mph | v_before | v0 (N=9) | v0 (N=12) | accel | e |
-  |---|---|---|---|---|---|---|---|
-  | cliff face | **vertical** | 216 | −45.9 | +8.0 | +3.0 | −86 | **0.06–0.18** |
-  | building wall | **vertical** | 145 | −21.7 | +1.4 | +1.8 | −107 | **0.06–0.08** |
-  | flat, wingtip #1 | **flat** | 143 | −14.2 | +10.6 | +12.3 | −66 | **0.75–0.86** |
-  | flat, belly (slide) | **flat** | 302 | −44.9 | +17.5 | +21.9 | −73 | **0.39–0.49** |
-  | flat, wingtip #2 | flat | 139 | −5.4 | +1.7 | +0.4 | +8 | pull-up |
-  | flat, nose | flat | 146 | −31.9 | −23.6 | −15.1 | +342 | pull-up |
-  | flat, belly | flat | 302 | −39.7 | +80.3 | +83.4 | +88 | pull-up |
-
-  (ft/wall-s; accel ft/wall-s².) **Vertical surfaces e = 0.10 ± 0.05; flat ground e = 0.62 ± 0.19,
-  against a shipped 0.60.** That split is the signature of a normal-direction restitution and nothing
-  else gives it: on a vertical wall the sink is *tangential*, so a normal bounce puts nothing into the
-  altimeter — and the altimeter sees nothing; on flat ground the sink *is* the normal component, and
-  it comes back at 0.6 of itself. So this item's original fix shape is **confirmed, not overturned**.
-  **Speed loss is set by incidence, not speed** — 302 mph belly-flat costs **0.11 mph**; 216 mph along
-  a cliff costs 11.64 in one frame; 145 mph along a building wall costs 23.15 in the contact frame and
-  then keeps scraping to **−40% (144.5 → 86.7 mph over 0.47 s)**, the only multi-frame contact in the
-  set — so an oblique wall scrape is a sustained several-tick event, not an impulse.
-  **Buildings behave like terrain, and survival is geometry not speed:** the Balmoral grazed a C5
-  skyscraper at 144.5 mph and flew on, and died against one at 144.2 mph; a Bloodhawk survived flat
-  ground at 302 mph twice, once holding altitude within 2.6 ft for 0.40 s while sparking.
-  *Fix shape, confirmed and sharpened:* add the restitution impulse along the contact normal scaled by
-  `bounce_factor`, replacing the fixed 0.15 m `GrazePushOut`; leave tangential speed almost untouched
-  for a flat skim; and make an oblique scrape a *sustained multi-tick* drag rather than a single
-  impulse.
-  *Playtest after fix:* grazes vs crashes should feel fair against the original, including behaviour
-  against building corners (`CAP-14`).
-  ⚠ **Traps.** (a) `bounce_factor`'s units are settled (raw scalar, decode above); what remains
-  unverified is the footage. `CAP-14` supports reading it as a coefficient of restitution on the
-  contact normal, but **0.6 is *consistent with* that footage, not
-  measured from it.** Only two of five flat-ground contacts are readable at all; of those, the belly
-  slide's `v0` still walks with the fit window (+3.2/+11.8/+17.5/+21.9 at N = 5/7/9/12, so e is really
-  0.07–0.49) and only wingtip #1 is window-stable (+10.6…+12.3 over N = 7–15, residual 0.07–0.09 ft
-  against 0.20 ft noise) — and it reads **above** 0.6, at 0.75–0.86. Two contacts bracketing 0.6 is
-  agreement, not a measurement; do not quote ±0.19 as a precision.
-  ⚠ (a2) **A post-contact climb is not evidence of a bounce; the SIGN of the post-contact acceleration
-  is the discriminator.** In `CAP-14 Bloodhawk  Hard Graze.mp4` the climb rate keeps *growing* for a
-  second (accel **+88 to +228** ft/wall-s², upward, nose visibly rising in the stills) and reads as
-  e = 2.0 if fitted as restitution — impossible. A real rebound decays at −127 ft/wall-s² under
-  `nom_gravity` 20. Read `e` only where the fitted acceleration is negative.
-  ⚠ (a3) **Restitution alone will not reproduce the vertical-surface clips.** On *both* of them the
-  sink is killed as well (−45.9 → +8.0, −21.7 → +1.4) even though on a vertical wall the sink is
-  tangential — while the flat-ground contacts show tangential speed almost perfectly preserved
-  (302 mph belly-flat costs 0.11 mph). Something removes vertical speed on contact regardless of the
-  surface's orientation, on top of the normal-direction bounce, and it is unexplained. (b) The receiving side is no longer the
-  blocker: `PLAN-armour-layer.md` (`docs/plans/`, complete 2026-08-04, `BL-173` closed as part of it)
-  landed the two-pool `PlaneDamage.Apply(part, healthDamage, armorDamage)`, armour first with 1:1
-  overflow — but it deliberately left the `crash` block itself (`armor_damage_range`/
-  `health_damage_range`/`bounce_factor`) unconsumed on every axis (Decision 4), so this item still
-  owns binding grazes/crashes through that `Apply` overload alongside the pushback, as one coupled
-  change. (c) `GrazeStopSpeed`/`GrazeFriction`/`GrazeKick` were tuned against the *current* no-bounce
-  slide — expect them to need re-tuning once a normal-direction impulse is added, not to survive
-  unchanged.
+- `BL-381` `[Feature]` `[Owed-playtest]` **What `BL-172` left behind: the crash block's two damage
+  ranges, and an unexplained vertical-speed kill on contact.** `PLAN-ai-flight` `C25` landed that
+  item's fix shape — the decoded normal-direction restitution off `bounce_factor`, player-only
+  (`git log --grep=BL-172`) — and three things it named are still not built:
+  - **`armor_damage_range [50,300]` / `health_damage_range [50,300]` are still unconsumed.** A
+    collision spends no armour and no health through `PlaneDamage.Apply(part, healthDamage,
+    armorDamage)`; `SurviveHit` deals its own invented `GrazeMaxDamage` quadratic instead, and
+    `Crash` consults the ledger not at all. `PLAN-armour-layer` left the whole `crash` block
+    deliberately unconsumed (its Decision 4) and `BL-172` owned it; nothing owns it now.
+  - **Something removes vertical speed on contact regardless of the surface's orientation, and it is
+    not the restitution.** On BOTH of `CAP-14`'s vertical-face contacts the sink is killed (−45.9 →
+    +8.0 and −21.7 → +1.4 ft/wall-s) even though on a wall the sink is tangential, while flat-ground
+    contacts preserve tangential speed almost perfectly (302 mph belly-flat costs 0.11 mph). The
+    decoded impulse cannot do that: it is normal-only, with no tangential or friction term anywhere
+    in it. Unexplained, and the one live question left in that footage.
+  - **An oblique wall scrape is a sustained multi-tick drag, not an impulse.** `CAP-14`'s only
+    multi-frame contact scraped a building at 144.5 mph and lost 40 % over 0.47 s (144.5 → 86.7).
+    This engine resolves one contact per frame with a fixed 0.15 m push-out and a friction-scaled
+    slide, which is a different shape.
+  ⚠ **`GrazeStopSpeed`/`GrazeFriction`/`GrazeKick` were tuned against the old no-bounce slide**
+  (`BL-271` owns them), so they are the first suspects if grazes now feel wrong — the restitution
+  landed on top of them unchanged.
+  ⚠ **Do not chase the flat-ground magnitude with a bigger `bounce_factor`.** The decoded impulse's
+  doubled rotational term is what exceeds 0.6, and it is already implemented; the constant is
+  authored data. See [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Collision response and
+  `bounce_factor`", which also carries the `CAP-14` reading and the correction `C25` made to the
+  lever-arm partition.
+  *How you'd know it worked:* a graze spends real armour before health on the struck zone, and an
+  oblique scrape along a building bleeds speed over several ticks rather than one.
+  *Playtest after fix:* `PT-53`.
 
 - `BL-271` `[Tuning]` `[Owed-playtest]` **The survivable-graze and stop laws are invented physics with player-facing
   consequences** (`FlightController.cs:271-295,1652-1672`, header "all TUNE"): attitude kick
@@ -2759,8 +2627,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   in this engine via the same launch routine (`AiGeneratorRuntime` → `AiAircraftSpawner.Spawn`) but
   not yet ported — a recorded gap, not a fix for THIS bug (ground blow is a control-response bias on
   an already-flying aircraft; it cannot save a plane the collision sweep kills on the spawn frame).
-  `+0xac`'s consumer (the collision-grace gate) is still untraced for the AI path — `BL-172`/C25's
-  turf, read that before inventing any grace window there. (c) The launched-vehicle mechanism itself
+  `+0xac`'s consumer (the collision-grace gate) is decoded — it returns out of the collision resolver
+  outright, so the object has no collision at all inside the window — and unmodelled; `BL-382` owns
+  landing it with the drop timer beside it, so read that before inventing any grace window here. (c) The launched-vehicle mechanism itself
   (parked roster planes, not fresh spawns) is a separate fidelity gap from this bug; B6's fresh-spawn
   stand-in is documented in its landing commit.
 
@@ -3016,7 +2885,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *How you'd know it worked:* a mission-opening aircraft sits still on the strip until its goal
   fires, then rolls at a steady 40 mph, accelerates and climbs out on the last leg, and flies
   normally from the moment it leaves the path.
-  *Cross-refs:* `BL-095`, [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow" —
+  *Cross-refs:* [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow" —
   ground blow's own emitter test reads this byte, so a spawned vehicle put on a path stops repelling
   the player the moment it completes the path and drops into the flight model. Ground blow itself
   shipped without the registry filter (its player probe simply excludes aircraft), so building the

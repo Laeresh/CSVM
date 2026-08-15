@@ -397,6 +397,21 @@ Save this as `ia-wingmen-test.json` next to the repo, then:
   *Variations:* `"num_wingmen": 5` with 1–2 `--players=` to see decision 8a's clamp in the spawn
   log; any other `mission_type` besides `dogfight_ace` (which forces wingmen to 0).
 
+- `PT-53` `[Own]` **Graze feel now that a graze bounces (`docs/PLAN-ai-flight.md` `C25`, landed
+  2026-08-15, closing `BL-172`).** A survivable scrape now rebounds along the contact normal off the
+  shipped `bounce_factor` 0.6, where before it only slid. Three surfaces, at speed, in C1 or C5:
+  - (a) **a shallow belly skim over flat ground** — the plane should come off the ground and fly on,
+    not skip like a stone or bury itself. This is the case the suite measures at `e = 0.56`;
+  - (b) **an oblique scrape along a building wall or a cliff face** — the rebound there is
+    horizontal, so the altimeter should barely move; what to judge is whether being pushed off the
+    wall reads as a graze rather than as a bounce off a trampoline;
+  - (c) **a building corner** — `CAP-14` shows the original surviving a 144.5 mph graze on a C5
+    skyscraper and dying at 144.2 against another, so survival there is geometry, not speed.
+  ⚠ The three graze constants (`GrazeKick`, `GrazeFriction`, `GrazeStopSpeed`, `BL-271`) were tuned
+  against the OLD no-bounce slide and were not re-tuned when the impulse landed. If a graze feels
+  wrong, they are the first suspects — not `bounce_factor`, which is authored data.
+  *Blocks:* `BL-271`'s re-tune, and `BL-381`'s multi-tick scrape (a fail on (b) is evidence for it).
+
 ---
 
 ## Everything else

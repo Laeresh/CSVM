@@ -26,7 +26,10 @@ applies no speed term to pitch or roll; nothing under `CSVM/src` reads `bounce_f
 `BL-095` is deliberately **not** an item here, because it is not work. Its own entry declares the
 physics block "DECODED END TO END. What is left is implementation, not research", and its remaining
 to-do list is `BL-330` plus `BL-172`, both of which this plan lands. It therefore retires as a
-consequence of C24 and C25 rather than through an item of its own.
+consequence of C24 and C25 rather than through an item of its own. **Retired 2026-08-15 at C25**,
+which split the two live gaps it still carried into `BL-382` (the post-carrier-drop ground-blow cut
+and the collision-grace timer) and `BL-383` (the ≈1.6× banked rotation, with no authored candidate
+left); `git log --grep=BL-095` for the record.
 
 ## Milestone goal
 
@@ -68,7 +71,7 @@ what a mission tells it to do.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | ~~C22~~, ~~C23~~, ~~C24~~, C25, C26 | Addresses and line cites are in `docs/org/flightModel.md`. Confirm the trace, then implement |
+| **Traced to an exact mechanism in code, with the data that proves it** | ~~C22~~, ~~C23~~, ~~C24~~, ~~C25~~, C26 | Addresses and line cites are in `docs/org/flightModel.md`. Confirm the trace, then implement. ⚠ C25 landed the formulas as decoded but had to correct the PROSE around them: confirm a summary sentence against the formula it cites before building on it |
 | **Traced statically, never verified at runtime** | ~~A1, A2~~ | Both landed 2026-08-15, and both readings were wrong: there is no AI density band and no AI throttle setpoint. Read their landing notes before citing flightModel.md's older AI-path claims, several of which are debug-copy citations |
 | **Leads only, no mechanism yet** | D31, E41 | The AI control law has never been located. Budget for investigation; this may end in a documented dead end |
 
@@ -96,7 +99,7 @@ decoding the **player** path and set aside for M4's AI work. None of it is imple
 | Stun zeroes the AI's control inputs | flightModel.md:1366 | `FUN_004200d0` |
 | The three stick channels are summed into the torque accumulator | flightModel.md:1308 | inside `FUN_0048c470` |
 | Per-object update dispatch on the vehicle class | flightModel.md:1391 | `FUN_00489ea0` |
-| Only the player bounces; AI gets position correction alone | `BL-172`, flightModel.md "Collision response" | `FUN_0048d7f0` |
+| Only the player bounces; AI gets position correction alone — **C25: landed** (and the lever-arm partition reads the other way round: `f_lin` rises with arm length) | `BL-172`, flightModel.md "Collision response" | `FUN_0048d7f0` |
 
 The 11 pinned shots in `analysis/goldens/manifest.json` contain **no AI aircraft**, so wave C cannot
 move a golden hash. The in-engine suites that do fly AI (`ai-modes`, `ai-gunnery`, `air-to-air`,
@@ -141,7 +144,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☑ C22 The AI aerodynamic deltas: airflow, weathervane, speed floor (three branches, no re-pins)
 23. ☑ C23 The AI ground blow, a different law
 24. ☑ C24 `BL-330`'s authority ramp and the reverse-authority factor (ramp landed unbranched; the factor is not a force term — its one consumer is the visible rudder)
-25. ☐ C25 `BL-172`'s `bounce_factor` restitution, player-only as decoded
+25. ☑ C25 `BL-172`'s `bounce_factor` restitution, player-only as decoded (landed; the lever-arm partition reads the opposite way round to this plan's Evidence, corrected in `org/flightModel.md`)
 26. ☐ C26 The per-AI spawn jitter of eleven dynamics slots (split out of C22)
 
 ### Wave D — Decode the control law
@@ -497,9 +500,9 @@ velocity, onto the exact same `UsesAiForcePath` plant this law reads — this en
 drop, reachable in a normal Instant Action zeppelin run. The settling window is real and un-modelled,
 not moot: nothing in this port tracks a per-aircraft spawn timestamp, so a just-dropped fighter's
 ground blow runs at the full un-cut 5.0 for its first 2.5 s instead of the original's reduced 0.75.
-Recorded as a gap in `backlog.md` `BL-095`, not implemented here — C23 scoped to the response law,
+Recorded as a gap in `backlog.md` `BL-382` (minted when `BL-095` retired at C25), not implemented here — C23 scoped to the response law,
 and closing this needs new state (a spawn-time field) threaded through `AiAircraftSpawner`/
-`FlightController`, closest in kind to `BL-172`'s own `obj+0xAC` timer.
+`FlightController`, alongside the `obj+0xAC` collision-grace timer of the same family (`BL-382` owns both).
 
 **The probe gap was the real blocker, not named in the item's Approach.** "Reuse the probe...
 unchanged; only the response differs" undersold the work: `ProbeGroundBlow`'s pre-existing
@@ -523,8 +526,8 @@ out of reusing the existing accumulator/integration split BL-359 already built.
 (`param_1[0xd6] != 4`, `0x0048c220`'s own first line) IS ported — `ProbeGroundBlow` skips while
 stunned, so a stunned AI still flies into terrain as the trap required. Not ported: the per-object
 `obj+0xAC` collision-grace gate (non-player objects only, `(float)param_1[0x2b] <= DAT_0071c470`),
-because nothing in this engine tracks that timer yet — it is `BL-172`/C25's object (the same timer
-gates collision response), not a new one to invent here.
+because nothing in this engine tracks that timer yet — `BL-382` owns it (the same timer
+gates collision response, and C25 ported the impulse rather than the resolver around it), not a new one to invent here.
 
 **No re-pins.** `.\RunTests.ps1` baseline taken first (METHOD-10): units 1301 → 1305 (four new
 `GroundBlowTests`, all this item's), engine 59 → 59, goldens 14 hash-identical both times. The
@@ -643,7 +646,41 @@ write it into `docs/` as a finding unless D31 confirms it. `BL-330`'s own trap a
 force. Do not let this become a speed-versus-bank coupling that quietly costs pitch authority, which
 is the wrong-mechanism fix `BL-124` warns about. `maxAOA` and `liftAOAs` are not part of this item.
 
-## C25 ☐ `BL-172`'s `bounce_factor` restitution, player-only as decoded
+## C25 ☑ `BL-172`'s `bounce_factor` restitution, player-only as decoded
+
+**Landed 2026-08-15.** `FlightModel.BounceNormalSpeed` is the decoded impulse and
+`FlightController.SurviveHit` the site, gated on `IsHumanPiloted && !crashed`; `PlaneStats` reads
+`bounce_factor` out of `player.json`'s `crash` block (authored **0.6**, compiled fallback 0.8), which
+nothing under `CSVM/src` did before. The whole formula went in, doubled rotational term included, so
+the second term is present rather than folded into a raised constant. `BL-172` closes and `BL-095`
+retires with it; the residue neither of them had landed was split out rather than deleted —
+`BL-381` (the crash block's two damage ranges, the unexplained vertical-speed kill on a wall, the
+multi-tick scrape), `BL-382` (the post-carrier-drop cut and the collision-grace timer) and `BL-383`
+(the ≈1.6× banked rotation). `PT-53` is the graze-feel test the change now owes at the controls.
+
+**One correction came out of implementing it, and it is this item's other deliverable.** The
+Evidence below says "a short lever arm rebounds at up to 0.6 while a wingtip throws most of the
+impact into rotation". That reads the partition backwards. `Δω = (r × J)/|r|²` has magnitude
+`|I⁻¹|·|J|·sinθ/|r|`, which falls as **1/|r|** — the `/|r|²` is a point-mass moment of inertia, not
+a lever — so `A` shrinks as the arm lengthens and `f_lin` RISES toward 1. A wingtip rebounds harder
+than a contact near the centre. The consequence is that the partition cannot be `CAP-14`'s
+flat-versus-vertical split either: `f_lin` is ≈0.9 in both orientations at any geometry an airframe
+presents, and the `graze-bounce` suite measures `e = 0.56` on flat ground against `e = 0.59` on a
+vertical face. What actually differs on a wall is the AXIS — the rebound is horizontal, so an
+altimeter reads nothing across the contact (`vy 0.00 → 0.00` measured) — which is what a
+vertical-face clip shows. The decoded formulas are untouched; only their reading was wrong, and
+[`org/flightModel.md`](org/flightModel.md) now carries the correction with the arithmetic.
+
+**Verified (METHOD-10).** `.\RunTests.ps1` in full: units 1318 → 1325, engine 59 → 60, 14 goldens
+hash-identical (no re-pins — the pinned shots carry no collision), hitch clean, engine errors clean,
+exit 0. The seven new unit tests are `CSVM.Tests/BounceRestitutionTests.cs` (the restitution
+isolated on an axial contact, the shipped-versus-fallback constant, the doubled rotational term
+exceeding the ceiling, the partition's direction and magnitude, the absence of surface dependence,
+and an outgoing contact damping rather than compounding); the new engine suite is `graze-bounce`,
+which flies real rigs into real geometry for the two things arithmetic cannot reach — the
+player-only gate and the two orientations. The 8-chapter `--freecam` regression was not re-run: no
+aircraft is stepped under `--freecam`, so no collision resolves and mesh/node counts cannot move,
+the same reasoning C22–C24 landed under. The at-the-controls half is F52's player-side arm.
 
 **Goal.** A player aircraft grazing a surface rebounds along the contact normal as the original does.
 AI aircraft keep getting position correction and nothing else, which is what the original gives
