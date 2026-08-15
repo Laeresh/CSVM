@@ -299,9 +299,37 @@ engine's debug readout dispatches on a single mode field with these states:
 behaviour — the same idea as `sixth_sense_factor` — and being a distinct mode makes it directly
 observable and switchable rather than something buried in the steering maths.
 
+⚠ **These nine are not one stored field**, and the readout does not dispatch on one.
+[`aiPilot.md`](../org/aiPilot.md) "The per-frame AI update" has the decode: `patrol`, `pursue` and
+`lay off` are derived from whether a target is selected and from the AI *task* at `+0x2f0`, while
+the five interrupt states live in a separate enum at `+0x358`.
+
 The same readout recomputes the **target ranking** inline, which fixes its shape:
 `rank = weight × 1200 + distance + objectiveBias`, minimised. The weight starts at **1.0 for any
-target except the player, which starts at 0.7** — the "rank the player last" rule as a hard
-constant — then takes ±0.2 adjustments for bearing, for altitude sign, and for whether the target
-faces the AI, +0.4 for one dynamics class, and −0.5 for one structure case. Targets outside the
-activation volume score `1e21` (i.e. excluded).
+target except the player, which starts at 0.7** (the "rank the player last" rule as a hard
+constant), then takes ±0.2 adjustments for bearing, for altitude sign, and for whether the target
+faces the AI, plus two class terms. Targets outside the activation volume score `1e21` (i.e.
+excluded).
+
+⚠ **The two class terms are decoded, and this paragraph used to name them wrongly.** It read "+0.4
+for one dynamics class, and −0.5 for one structure case", both read off the readout's labels rather
+than off the ranking function. [`aiPilot.md`](../org/aiPilot.md) "Target acquisition" has the
+decode:
+
+- **+0.4** applies to a candidate whose **`mode`** is `wingman` (the field at `+0x67c`, which the
+  debug overlay labels `Dynamics:`; see [`vehicle.md`](vehicle.md) and `aiPilot.md` "`mode`, the
+  dynamics class"). It is not a dynamics or airframe class, and minimisation makes it 480 m
+  *against* the candidate, so the engine de-prioritises enemy wingmen.
+- **−0.5** applies only to a **zeppelin gasbag**, reached through the `Target` virtual at vtable
+  `+0x1c` that just three of the four candidate classes hard-wire to false. It is worth 600 m in
+  the gasbag's favour, and nothing else in the game takes the term.
+
+⚠ **`objectiveBias` is not in metres and not scaled by 1200.** `rating_biases` resolves through
+`FUN_0041ae40` to rank units directly: `bias × −750`, with `≥ 1.0` collapsing to `−100000` (always
+target), `≤ −1.0` returning the `1e21` exclusion (**never** target), and a turret taking a flat
+`+37.5` on top of every arm, including the no-match case. So an authored `−1.0` is a hard
+exclusion, not a penalty.
+
+⚠ **The ±0.2 terms are aircraft-only.** There are two scorers, chosen on the *scoring* vehicle's
+`mode`: `jet` and `wingman` take all three, and every other mode scores on base weight and the two
+class terms alone.

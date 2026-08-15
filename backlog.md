@@ -660,8 +660,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   fly a pursuit it can never convert. (c) **Attacking the objective is not automatic in the
   original**: it is assigned through `primary_target` and `rating_biases`. Widening the candidate
   pool must not turn every AI into a zeppelin attacker.
+  ✔ **DECODED 2026-08-15**, in [`docs/org/aiPilot.md`](docs/org/aiPilot.md) "Target acquisition".
+  The pool is four typed lists, not one: `TargetVehicle` (`DAT_0071dabc`), `TargetTurret`
+  (`DAT_0071d914`), `TargetStruct` (`DAT_0071d33c`) and `TargetProjectile` (`DAT_0064f78c`), swept
+  by `FUN_0041f9c0` for one global minimum. Both unmodelled terms are named: **+0.4** is a candidate
+  whose `mode` (`+0x67c`) is 4, a `wingman`, so enemy wingmen are de-prioritised by 480 m; **−0.5**
+  is a **zeppelin gasbag** and nothing else, worth 600 m in its favour, reached through the `Target`
+  virtual at vtable `+0x1c` (`0x004227a0`, the same one the overlay prints `Gasbag targeted` from).
+  Trap (a) is smaller than feared and trap (b) is answered at admission: the struct list is always
+  swept (the literal `1` at `0x00420002`), and its gasbag members are admitted only for a pilot
+  carrying loaded `DAMAGES_ZEPPELIN` ordnance (`FUN_00420070`, flag bit `0x1000`), so a stock fit is
+  never offered a gasbag. **Three constants we already ship are wrong** and are independent of the
+  widening: `AiTargetRanking.BiasScale` is `+1200` where `FUN_0041ae40` returns `bias × −750` with
+  `≤ −1.0` a hard exclusion, `≥ 1.0` = `−100000` and a flat `+37.5` on turrets; the bearing term's
+  sign is inverted and its ±0.5 is a half-metre ahead/behind deadband, not `cos 60°`; and the ±0.2
+  terms are aircraft-only (`FUN_00421950` has none). Acquisition also has a sticky standing target
+  and a real attacker count our invented deconfliction does not match.
   *Cross-refs:* `BL-362` (the wingmen half of the same playtest), `AiTargetRanking`,
-  [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) "AI modes, engine-side".
+  [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) "AI modes, engine-side" (whose "+0.4
+  for one dynamics class" and "−0.5 for one structure case" are now named, and whose "dynamics" is
+  the `mode` field), [`docs/org/aiPilot.md`](docs/org/aiPilot.md) (the decode).
 
 - `BL-364` `[Bug]` `[Blocked: campaign missions]` **Our AI aircraft have no patrol net, and the original gives
   every one of them one. DECODED and the Instant Action half LANDED 2026-08-15; what is left is

@@ -86,6 +86,109 @@ The AI mode enum lives at `+0x358` and is a different thing from the task: 1 eva
 `+0x2f0 == 1` prints `pursue` and anything else prints `lay off`. So "lay off" is literally *has a
 target and is flying its net*, and "patrol" is *has no target*.
 
+## Target acquisition: four candidate classes, not one
+
+`FUN_0041fe10` is step 2 above. It picks the target, and `FUN_0041f9c0` is the sweep it delegates
+to. The candidate pool is **four separate global lists**, each with its own `Target` subclass; the
+RTTI names survive in the binary.
+
+| Class | List | Constructor | vtable | Admission | Rank offset |
+|---|---|---|---|---|---|
+| `TargetVehicle` | `DAT_0071dabc` | `FUN_004a6330` | `0x0060886c` | none | candidate `+0x340` |
+| `TargetTurret` | `DAT_0071d914` | `FUN_004a6370` | `0x006088cc` | none | scorer `+0x344` |
+| `TargetStruct` | `DAT_0071d33c`–`DAT_0071d340` | inline | `0x0060364c` | object `+0x8d` set; `+0x65` needs gasbag ordnance | scorer `+0x344` |
+| `TargetProjectile` | `DAT_0064f78c` | `FUN_004a63b0` | `0x00608920` | object `+0x6c` set | none |
+
+`FUN_0041f9c0` carries one running minimum across all four lists, so the pick is the global minimum;
+the return chain resolves projectile, struct, turret, vehicle only because a later list records a
+winner solely when it already beat the earlier ones. `+0x344` on the scoring vehicle is a per-pilot
+handicap applied to turrets and structures but never to aircraft; `+0x340` on a candidate vehicle is
+a per-target offset. `TargetProjectile` is the consumer of the `TARGETABLE` weapon flag.
+
+⚠ **World structures are always swept.** The fourth argument to `FUN_0041f9c0`, which decides
+whether the struct list is walked at all, is the literal `1` pushed at `0x00420002`. Only the
+list's gasbag members are conditional.
+
+### The scorer, and which one runs
+
+`rank = weight × 1200 + distance + objectiveBias`, minimised, as
+[`ai-rosters.md`](../formats/ai-rosters.md) has it. Two implementations, selected on the scoring
+vehicle's own `+0x67c` at `0x0041fe75`: `FUN_00421ad0` (vtable `0x00603544`) for `jet` and
+`wingman`, `FUN_00421950` (vtable `0x0060354c`) for everything else. The debug overlay
+`FUN_0041c470` duplicates both instruction for instruction, which is where the readout's formula
+came from.
+
+Weight starts at **1.0**, or **0.7** when the candidate is the player (`DAT_0071c298`). Then:
+
+- **+0.4** when the candidate casts to `TargetVehicle` and its `+0x67c` is **4**, that is, when the
+  candidate is a **`wingman`**. Minimised, so this is 480 m against it: the engine de-prioritises
+  enemy wingmen. The readout's "one dynamics class" is this, and "dynamics" is the overlay's label
+  for the `mode` field above.
+- **−0.5** when the `Target`'s virtual at vtable `+0x1c` returns true. `TargetVehicle`,
+  `TargetTurret` and `TargetProjectile` all bind `0x00422720`, a constant false. Only
+  `TargetStruct` binds `0x004227a0`, which returns the object's `+0x65` flag, and the overlay calls
+  that same virtual to print `Gasbag targeted: %s`. So the readout's "one structure case" is a
+  **zeppelin gasbag**, worth 600 m in its favour, and nothing else in the game takes the term.
+
+`FUN_00421ad0` adds three more terms that `FUN_00421950` does not have, so **a ground or sea AI
+scores on base weight and the two class terms alone**. Let `d` be candidate minus self, in metres
+and not normalised:
+
+- `d` dotted with the scorer's own forward row (`+0x198`–`+0x1a0`): above **+0.5** adds **+0.2**,
+  below **−0.5** adds **−0.2**, between them adds nothing. ⚠ This is an ahead/behind test with a
+  half-metre deadband, **not** a cone, and **ahead is the unfavourable arm**. The engine prefers the
+  target on its tail.
+- `d.y > 0`, the candidate above, adds **+0.2**; otherwise **−0.2**.
+- `d` dotted with the candidate's own forward (its vtable `+0x04`) negative, meaning it faces the
+  scorer, adds **+0.2**; otherwise **−0.2**.
+
+The activation test is a **cylinder**, not a radius: horizontal `d.x² + d.z²` at or under
+`+0x328`, and `+0x32c ≤ d.y ≤ +0x330`. Outside it the score is `1e21` and the candidate is never
+picked. `FUN_00421ad0` also returns `1e21` when the candidate object's `+0x04` field is 3 or more,
+and `FUN_00422890` is a validity check whose failure scores the same.
+
+### `rating_biases` returns rank units directly
+
+`FUN_0041ae40` walks the bias list at scorer `+0x8a4`, entries of 0x14 bytes with the bias float at
+`+0x10`, matching through `FUN_0041add0` and, for a turret, walking the parent chain at `+0x54` /
+`+0x58`. It returns a value added raw to `weight × 1200 + distance`:
+
+| Authored bias | `TargetVehicle` | `TargetTurret` |
+|---|---|---|
+| no matching entry | `0` | `+37.5` |
+| `≤ −1.0` | `FLT_MAX`, which every caller maps to `1e21` | same |
+| `≥ 1.0` | `−100000` | `−99962.5` |
+| otherwise | `bias × −750` | `bias × −750 + 37.5` |
+
+⚠ **An authored `−1.0` is a hard exclusion, not a penalty.** The turret column is uniformly the
+vehicle column plus 37.5, so a turret carries a flat 37.5 m handicap against an aircraft.
+
+### The gasbag gate is ordnance, checked at admission
+
+`FUN_00420070` walks the scorer's weapon list (`+0x268` to `+0x26c`, stride 0x30) for a weapon
+whose def flags at `+0x210` carry bit **`0x1000`**, with ammo above zero and both cooldowns at or
+under `DAT_0071c470`. Bit `0x1000` is `DAMAGES_ZEPPELIN`, set by the weapon parser `FUN_004ba6f0`
+at `0x004ba960` from the keyword string at `0x0062b2ec`. The result is pushed as the third argument
+at `0x00420011`, and it admits the `+0x65` members of the struct list.
+
+So a pilot without gasbag ordnance is never offered a gasbag at all. It still sees the airship's
+engines, turrets and cannons, which are ordinary members of the turret and struct lists.
+
+### Three more rules the acquisition carries
+
+1. **A `wingman` ignores its `primary_target`.** `0x0041feb0` skips the assigned-target branch when
+   the scorer's own `+0x67c` is 4. This is the escort law's reading confirmed from a second site:
+   for a `wingman` that field is a formation leader, not a target.
+2. **An assigned `primary_target` wins outright** whenever it scores under `1e20`, without the pool
+   being swept.
+3. **A standing target is sticky.** It is re-scored only once `+0x94c` exceeds `DAT_0071c470`, and
+   while it still scores under `1e20` it is kept and the pool is not swept at all.
+
+⚠ **Deconfliction is a count, not a pool drop.** `FUN_0041fe10` decrements `target+0x8` and
+`target->object+0x4` before scoring and restores them after (`0x0041fece`, `0x0041ff0b`), so
+`object+0x4` is a live count of how many AI hold that target and the scorer simply excludes its own
+contribution. There is no drop-and-reselect pass.
+
 ## The chapter's net table, and what "the first net" means
 
 `DAT_0064f610` points at a 16-byte header built by `FUN_004311c0`: an allocation figure at `+0x00`,
@@ -427,6 +530,12 @@ is where to start.
 | `FUN_00479240` | the `vehicle.json` def parser, including the `mode` string table |
 | `FUN_004201a0` | evasive-maneuver selection, the one reader of `preferred_engagement_altitude` |
 | `FUN_0041c470` | the debug overlay that names the modes and recomputes the target ranking |
+| `FUN_0041fe10` | target acquisition: primary target, sticky standing target, else the sweep |
+| `FUN_0041f9c0` | the sweep over the four candidate lists, and the pick |
+| `FUN_00421ad0` | the scorer for `jet` and `wingman`, with the three ±0.2 terms |
+| `FUN_00421950` | the scorer for every other `mode`, base weight and the two class terms only |
+| `FUN_0041ae40` | the `rating_biases` lookup, returning rank units |
+| `FUN_00420070` | the `DAMAGES_ZEPPELIN` ordnance check that admits gasbag candidates |
 
 ## Open
 
