@@ -230,7 +230,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — The selection model
 
-11. ☐ `TargetRef` — one abstraction over every selectable thing
+11. ☑ `TargetRef` — one abstraction over every selectable thing
 12. ☐ The classed candidate pool, including zeppelin sub-parts and turret emplacements
 13. ☐ `TargetSelection` — sticky choice, cycles, nearest queries, lifecycle
 14. ☐ Input: `D-pad Up` tap/hold, and the curated keyboard set
@@ -443,7 +443,27 @@ in the range rather than falling back to a letter.
 
 # Wave B — The selection model
 
-## B11 ☐ `TargetRef` — one abstraction over every selectable thing
+## B11 ☑ `TargetRef` — one abstraction over every selectable thing
+
+**Landed 2026-08-16.** [`CSVM/src/Flight/TargetRef.cs`](../CSVM/src/Flight/TargetRef.cs) plus the
+tree-free `target-ref` suite. Three things later items should build against rather than re-decide:
+
+- **`TargetRef` wraps an `AimCandidate`; it does not restate it** (the TODO below, resolved). The
+  five shared facts (position, velocity, team, liveness, source) stay in the candidate and are read
+  through forwarding properties, so there is no second copy to drift and the existing collectors
+  feed it unchanged. `AimCandidate.ConeOverride` rides along unused, since it is the same entity's
+  data rather than a duplicated field.
+- **`TargetRef.Classify` is the decoded class model**, `FUN_004b5cd0`'s order verbatim, returning
+  null for "not selectable at all". B12 calls it rather than writing its own split. Objective is not
+  a fourth class: it returns `Enemy` (the cycle objectives ride with `-too` off) and the caller
+  records the companion flag.
+- **Health and armor are nullable and never defaulted.** The three shipped sources genuinely differ
+  (aircraft both, structure health only, turret emplacement neither), so C23's `H78 A91` must omit a
+  missing figure rather than print a full bar.
+
+Also settled in passing: `AimTargetKind` is reused for "which pool" rather than minting a second
+enum, and identity is the source object (`IsSameTarget`), because the original re-finds its
+selection by underlying entity every frame.
 
 **Goal.** A single type answers, for anything the player can target: where are you, are you alive,
 what is your display name, what is your health and armor, and which class are you. An enemy Fury, a
@@ -462,14 +482,32 @@ problem for the aim assist — position, velocity, team, `Live`, and an `object?
 the caller. `TargetRef` is that plus display name, health/armor fractions, and class. Keep it a
 value-type-ish record with no Godot node dependency so it is unit-testable without a tree, the way
 `NearestHostile` and `CollectMarks` are static and testable today.
-<TODO: decide whether `TargetRef` wraps an `AimCandidate` or replaces it for this path — they carry
-overlapping fields and duplicating them invites drift.>
+**TODO resolved — wraps, does not replace.** The five overlapping fields are not incidentally
+similar, they are the *same reads off the same four pools*: `ProjectilePool.CollectAircraft` /
+`CollectTurrets` and `AimCandidateSet.AddStructures` already produce them, and B12 is instructed to
+build on `AimCandidateSet` rather than beside it. Replacing would mean a second collector writing a
+second copy of position/velocity/team/liveness/source, which is exactly the drift the TODO names;
+wrapping makes it structurally impossible. The cost is that a caller constructing a `TargetRef` must
+build its `AimCandidate` first, which the suite does and which is honest about where those facts come
+from. The targeting-only fields (class, labels, health) live on `TargetRef` alone, and the assist's
+`ConeOverride` is left on the candidate untouched rather than promoted or dropped.
 
 **Model recommendation.** high — this is the interface every later item is written against, and
 getting the seam wrong is expensive to undo.
 
 **Verify.** Unit tests in `Suites.cs` construct a `TargetRef` for each of the three source kinds from
 synthetic data and assert every field reads correctly, with no Godot tree.
+**Verified (2026-08-16):** the `target-ref` suite builds one ref per source kind (aircraft, zeppelin
+sub-part, turret emplacement) from synthetic `AimCandidate`s and plain `object` sources (no plane is
+built, no pool registered, no data root required) and asserts the forwarded pose/team/liveness/source,
+the own fields, the four label formats, the optional health/armor spread (both / health only / neither,
+plus `Fraction`'s zero-maximum and clamp cases), `Classify`'s full order including the two "not
+selectable" cases and the dead-objective case, and source identity across a rebuilt ref. **Able to
+fail:** flipping the turret's `Health == null` assertion to `== 1f` (the exact defaulting mistake
+decision 12 forbids) turns the suite FAIL and exit 1; restored, it passes. Full run on the primary
+tree's data root: `RunTests.ps1 -SkipGoldens -SkipHitch` = 1378/1378 units, 65/65 in-engine suites,
+engine errors clean, `dotnet build` clean of new warnings. No 8-chapter freecam regression is owed
+here: the item adds a type and a suite and changes no shipped call site, so no rendered path moved.
 
 **⚠ Traps.** Health is the field most likely to go wrong: `PlaneDamage` exposes `WholeHealth`/
 `WholeArmor` against their maxima, but zeppelin sub-parts and turret emplacements have their own,

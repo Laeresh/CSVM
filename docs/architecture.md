@@ -86,6 +86,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/WeaponBench.cs` — the world-less 48-weapon mount-and-fire pass check behind `--weapon-test` and `weapons-fire`; fires the whole `ForRig` rig, no lab node involved.
 - `src/Flight/FireControl.cs` — the engine-free fire-control state machine (BL-295): trigger edges, fire clocks, ammo draw-down, both selectors, dry cues; `FlightController` performs its `FireOutcome`.
 - `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the forget + catch-up pass (B2), the intercept solver (B3), the four-list candidate scan (B4), and the fire call's step order + 1° launch scatter (B5).
+- `src/Flight/TargetRef.cs` — the player-targeting abstraction (`PLAN-targeting.md` B11): one value over every selectable thing (aircraft, mission structure, turret), wrapping an `AimCandidate` for the pose/team/liveness/source half and adding class, label, optional health/armor, plus `Classify` (the decoded class model) and source-identity matching.
 - `src/Flight/TurretDefs.cs` — typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
 - `src/Flight/TurretController.cs` — one carried turret gunner (M4 C9a): acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
 - `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; each mode picks the aim point and table `AiControlLaw` steers on. `SteeringPatrol` reports whether the last step actually flew the net (F13's leashes read it).
@@ -1999,6 +2000,51 @@ about the aim axis, then a polar angle **uniform in `[0, inaccuracy]`**.
 ⚠ Do **not** reuse `ProjectilePool.ApplySpread` for this: it samples `half·sqrt(rand)` (disc-uniform,
   so it piles shots near the rim) and treats its argument as a FULL angle. Both are wrong here, and
   the suite's able-to-fail control is exactly that sampling scored alongside.
+
+## src/Flight/TargetRef.cs
+The one abstraction over everything the player can select (`PLAN-targeting.md` B11), decoded in
+[org/targeting.md](org/targeting.md). An enemy Fury, a zeppelin engine and a turret emplacement are
+three unrelated C# types (`FlightController`, `DestructibleRegistry.Instance`, `TurretController`),
+and every consumer downstream of this (the classed pool B12, the cycles B13, the label formatter and
+the marker C22) reads `TargetRef` and never the underlying type. `VersusHud`'s
+`c.Source is not FlightController fc` test in both `NearestHostile` and `CollectMarks` is the shape
+that would otherwise have multiplied across four modules.
+**It WRAPS an `AimCandidate` rather than restating it** (B11's open question, settled here). Position,
+velocity, team, liveness and the source object are the same five facts the aim assist already needs,
+filled by the same collectors off the same four pools (`ProjectilePool.CollectAircraft`/
+`CollectTurrets`, `AimCandidateSet.AddStructures`), so a second copy could only drift; the forwarding
+properties (`Position`/`Velocity`/`Team`/`Live`/`Source`) make that invisible at the call site. What
+`TargetRef` adds is what the assist has no use for: `Kind` (which pool, reusing `AimTargetKind` rather
+than minting a second enum), `Class` + `Objective`, `Name`/`TypeLabel`/`Category`, and optional
+`Health`/`Armor`. The assist's `AimCandidate.ConeOverride` rides along unused, since it is the same
+entity's data rather than a duplicate. Pure data, no Godot node, so B12/B13 unit-test with no tree the
+way `NearestHostile` already does.
+`Classify` is the decoded class model (`FUN_004b5cd0`) in its own order: the liveness predicate, then
+`objectiveTarget` (`+0x4d`), then `otherTarget` (`+0x4c`), then the vehicle/ordnance restriction, then
+the team split (different and both non-zero = Enemy, else Ally). It returns null for "not selectable
+at all", which is what an **unflagged** turret or structure is. The mission decides what may be locked
+onto, not the world, and that is why `DestructibleRegistry` never feeds this pool.
+`CategoryLine` composes the marker's line 1 through the original's four format strings
+(`%s [%s] -` / `%s -` / `[%s] -` / blank), which is why an ordinary aircraft shows line 2 alone
+(`Targeting HUD Kestrel.png`) and a named objective shows both (`C1 M04 Zeppelin.png`).
+⚠ `Health`/`Armor` are **genuinely optional and never defaulted** (decision 12). The three shipped
+  sources differ: an aircraft has both (`PlaneDamage.WholeHealth`/`WholeArmor` against their maxima),
+  a structure has health alone (`DestructibleRegistry.Instance` carries no armor pool), and a turret
+  emplacement has **neither**, since the retail loaders read no HEALTH key and its aliveness is its
+  healthy node's visibility. Omitting the figure is the shipped behaviour; a defaulted `100%` would be
+  a number the game does not have. `TargetRef.Fraction` is the single place that decides this.
+⚠ **Objective is not a fourth class.** The engine carries it as a companion flag on whichever cycle
+  objectives currently ride, and with the `-too` switch off (normal play) that is Enemy, hence
+  "Next Enemy/Objective". `Classify` returns `Enemy` for an objective and the caller records the flag
+  separately; `-too` is not ported.
+⚠ **Identity is the SOURCE object, never the ref.** `IsSameTarget` matches by reference because the
+  original rebuilds its candidate list from scratch every frame and `FUN_004b6490` re-finds the
+  selection by underlying entity for exactly that reason. A sticky selection compared by wrapper would
+  drop on the next frame. A null source matches nothing, including another null.
+⚠ Not ported, and recorded so it is not re-derived as a bug: the extra `+0x67c in {0, 4}` gate the
+  original applies to an own-team aircraft before it will call it an Ally. The field is unidentified
+  in the decode, so there is nothing to port it to.
+Pinned by the `target-ref` suite (`Suites.cs`), which is deliberately tree-free and data-free.
 
 ## src/Flight/TurretDefs.cs
 Typed reader over the shared `ai.zrd`'s `TURRET` section — 42 `TurretDef`s (docs/formats/turrets.md):

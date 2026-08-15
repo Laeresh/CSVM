@@ -1,0 +1,209 @@
+using Godot;
+
+namespace CSVM.Flight;
+
+/// <summary>The original's three player-target cycles (<c>FUN_004b5cd0</c>, decoded in
+/// docs/org/targeting.md "The class model"). Objective is NOT a fourth class: the engine carries it
+/// as a companion flag on whichever cycle the objectives currently ride, and in normal play (the
+/// <c>-too</c> switch off) that is <see cref="Enemy"/>, which is why the action is called
+/// "Next Enemy/Objective". <see cref="TargetRef.Objective"/> is that companion.</summary>
+public enum TargetClass
+{
+    /// <summary>A different, non-zero team, plus every mission objective in normal play.</summary>
+    Enemy,
+
+    /// <summary>The same team, or either side unaffiliated.</summary>
+    Ally,
+
+    /// <summary>A turret or structure the mission flagged <c>otherTarget</c>.</summary>
+    NonAircraft,
+}
+
+/// <summary>One thing the player can select, whatever it actually is: an enemy Fury, a zeppelin
+/// engine, a turret emplacement. Every consumer (the pool, the cycles, the label formatter, the
+/// marker) reads this and never the underlying C# type, which is the whole point. Without it the
+/// <c>c.Source is not FlightController fc</c> test in <see cref="VersusHud.NearestHostile"/> and
+/// <see cref="VersusHud.CollectMarks"/> multiplies across four modules.
+///
+/// <para><b>It WRAPS an <see cref="AimCandidate"/> rather than restating it</b> (B11's open
+/// question). Position, velocity, team, liveness and the source object are the same five facts the
+/// aim assist already needs, read off the same four pools by the same collectors
+/// (<c>ProjectilePool.CollectAircraft</c>/<c>CollectTurrets</c>, <c>AimCandidateSet.AddStructures</c>),
+/// so a second copy of them could only drift. What this adds is everything the assist has no use
+/// for: which pool it came from, which cycle it sits in, what to print, and how hurt it is. The
+/// assist's own <see cref="AimCandidate.ConeOverride"/> rides along unused, since it is the same
+/// entity's data rather than a duplicated field.</para>
+///
+/// <para>Pure data with no Godot node dependency, so the cycles and the label formatter unit-test
+/// with no tree, the way <see cref="VersusHud.NearestHostile"/> already does.</para></summary>
+public readonly struct TargetRef
+{
+    private TargetRef(AimCandidate candidate, AimTargetKind kind, TargetClass cls, bool objective,
+        string name, string? typeLabel, string? category, float? health, float? armor)
+    {
+        Candidate = candidate;
+        Kind = kind;
+        Class = cls;
+        Objective = objective;
+        Name = name;
+        TypeLabel = typeLabel;
+        Category = category;
+        Health = health;
+        Armor = armor;
+    }
+
+    /// <summary>The wrapped candidate, the shared half of the model. Read through
+    /// <see cref="Position"/>/<see cref="Velocity"/>/<see cref="Team"/>/<see cref="Live"/>/
+    /// <see cref="Source"/>; exposed whole so a caller that already holds one can hand it to
+    /// <see cref="AimAssist.Scan"/> without rebuilding it.</summary>
+    public AimCandidate Candidate { get; }
+
+    /// <summary>Which of the original's four pools this came out of. Reused rather than mint a
+    /// second enum: the pools are the same four, and the targeting path's own class model
+    /// (<see cref="Class"/>) is a separate axis over them.</summary>
+    public AimTargetKind Kind { get; }
+
+    /// <summary>Which cycle this sits in.</summary>
+    public TargetClass Class { get; }
+
+    /// <summary>The mission's <c>objectiveTarget</c> flag (entity <c>+0x4d</c>). It sorts ahead of
+    /// everything else in the cycle and colours the marker by its category.</summary>
+    public bool Objective { get; }
+
+    /// <summary>The entity's own name (<c>+0x14</c>), the marker's line 2: <c>Kestrel</c> for an
+    /// aircraft, <c>Promised Land</c> for a named zeppelin. Never null; empty is legal.</summary>
+    public string Name { get; }
+
+    /// <summary>The label half of the marker's line 1 (entity <c>+0x28</c>), e.g. <c>Zeppelin</c>.
+    /// Null on an ordinary aircraft, which carries neither half and so renders line 1
+    /// blank.</summary>
+    public string? TypeLabel { get; }
+
+    /// <summary>The category half of line 1 (entity <c>+0x3c</c>): <c>Destroy</c>, <c>Disable</c>,
+    /// <c>Protect</c>. Null off an objective.</summary>
+    public string? Category { get; }
+
+    /// <summary>Health as a fraction of its own maximum, or <b>null where the source has no health
+    /// model at all</b>. A turret emplacement is the shipped case: its aliveness is its healthy
+    /// node's visibility, and the retail loaders read no HEALTH key. Decision 12 says omit the
+    /// figure rather than print a misleading full bar, so this is genuinely optional and never
+    /// defaulted.</summary>
+    public float? Health { get; }
+
+    /// <summary>Armor as a fraction of its own maximum, or null with no armor model, which is
+    /// everything except an aircraft. Kept separate from <see cref="Health"/> (decision 12): a
+    /// blended figure would be a number the game does not have.</summary>
+    public float? Armor { get; }
+
+    /// <summary>World position.</summary>
+    public Vector3 Position => Candidate.Position;
+
+    /// <summary>World velocity, m/s.</summary>
+    public Vector3 Velocity => Candidate.Velocity;
+
+    /// <summary>Engine-space team id (<see cref="AimAssist.NeutralTeam"/> is unaffiliated).</summary>
+    public int Team => Candidate.Team;
+
+    /// <summary>False once dead, the engine's vtable <c>+0x14</c> predicate. A dead target stays
+    /// listed for a frame, so the selection drops it rather than the pool hiding it.</summary>
+    public bool Live => Candidate.Live;
+
+    /// <summary>What this actually is, handed straight back to the caller. The identity the
+    /// selection is held by, never the wrapper (see <see cref="IsSameTarget"/>).</summary>
+    public object? Source => Candidate.Source;
+
+    /// <summary>The marker's line 1, through the original's four format strings
+    /// (<c>0x006253ac</c>/<c>0x006253b8</c>/<c>0x006253c0</c>/blank): both halves, label only,
+    /// category only, or empty. The trailing " -" is the original's, not a separator we
+    /// added.</summary>
+    public string CategoryLine =>
+        (TypeLabel, Category) switch
+        {
+            (not null, not null) => $"{TypeLabel} [{Category}] -",
+            (not null, null) => $"{TypeLabel} -",
+            (null, not null) => $"[{Category}] -",
+            _ => "",
+        };
+
+    /// <summary>A live aircraft. Team and liveness come off the candidate;
+    /// <paramref name="cls"/> is <see cref="Classify"/>'s answer, passed in rather than
+    /// re-derived so the pool decides class exactly once.</summary>
+    public static TargetRef ForAircraft(AimCandidate candidate, TargetClass cls, string name,
+        float? health = null, float? armor = null) =>
+        new(candidate, AimTargetKind.Vehicle, cls, objective: false, name, null, null, health, armor);
+
+    /// <summary>A mission structure, which covers CSVM's zeppelin sub-parts and destructibles.
+    /// Health only: <c>DestructibleRegistry.Instance</c> carries <c>Health</c>/<c>MaxHealth</c> and
+    /// no armor pool.</summary>
+    public static TargetRef ForStructure(AimCandidate candidate, TargetClass cls, string name,
+        string? typeLabel = null, string? category = null, bool objective = false,
+        float? health = null) =>
+        new(candidate, AimTargetKind.Structure, cls, objective, name, typeLabel, category, health,
+            armor: null);
+
+    /// <summary>A turret. **No health figure exists** (see <see cref="Health"/>); do not invent one
+    /// from the gate state.</summary>
+    public static TargetRef ForTurret(AimCandidate candidate, TargetClass cls, string name,
+        string? category = null, bool objective = false) =>
+        new(candidate, AimTargetKind.Turret, cls, objective, name, null, category, health: null,
+            armor: null);
+
+    /// <summary>A current/maximum pair as a 0..1 fraction, or null when the maximum is zero or
+    /// negative, i.e. when the source has no pool of that kind. The one place the
+    /// "no source, no figure" rule is decided, so a caller cannot accidentally default it.</summary>
+    public static float? Fraction(float current, float max) =>
+        max > 0f ? Mathf.Clamp(current / max, 0f, 1f) : null;
+
+    /// <summary>Which cycle a candidate belongs to, or null when it is not selectable at all.
+    /// <c>FUN_004b5cd0</c>'s order verbatim: the liveness predicate, then <c>objectiveTarget</c>,
+    /// then <c>otherTarget</c>, then the vehicle/ordnance restriction, then the team split.
+    ///
+    /// <para>An objective returns <see cref="TargetClass.Enemy"/> because that is the cycle
+    /// objectives ride in normal play (the <c>-too</c> switch, which moves them onto the
+    /// Non-Aircraft cycle, is not ported); the caller records the flag itself through
+    /// <see cref="TargetRef.Objective"/>.</para></summary>
+    /// <param name="kind">Which pool the candidate came from.</param>
+    /// <param name="live">The candidate's own liveness.</param>
+    /// <param name="targetTeam">The candidate's team.</param>
+    /// <param name="ownTeam">The selecting player's team.</param>
+    /// <param name="otherTarget">The mission's <c>otherTarget</c> flag (entity <c>+0x4c</c>).</param>
+    /// <param name="objectiveTarget">The mission's <c>objectiveTarget</c> flag (<c>+0x4d</c>).</param>
+    public static TargetClass? Classify(AimTargetKind kind, bool live, int targetTeam, int ownTeam,
+        bool otherTarget = false, bool objectiveTarget = false)
+    {
+        if (!live)
+        {
+            return null;
+        }
+
+        if (objectiveTarget)
+        {
+            return TargetClass.Enemy;
+        }
+
+        if (otherTarget)
+        {
+            return TargetClass.NonAircraft;
+        }
+
+        // A turret or structure carrying neither flag is not selectable at all: the mission, not
+        // the world, decides what the player may lock onto.
+        if (kind is not (AimTargetKind.Vehicle or AimTargetKind.Ordnance))
+        {
+            return null;
+        }
+
+        return targetTeam != ownTeam && targetTeam != AimAssist.NeutralTeam
+            && ownTeam != AimAssist.NeutralTeam
+            ? TargetClass.Enemy
+            : TargetClass.Ally;
+    }
+
+    /// <summary>Whether two refs name the same thing. Matched by the SOURCE object, never by the
+    /// ref itself: the original rebuilds its candidate list from scratch every frame and
+    /// <c>FUN_004b6490</c> re-finds the selection by underlying entity for exactly that reason, so
+    /// a sticky selection compared by wrapper would drop on the next frame. A null source matches
+    /// nothing, including another null.</summary>
+    public bool IsSameTarget(in TargetRef other) =>
+        Source != null && ReferenceEquals(Source, other.Source);
+}

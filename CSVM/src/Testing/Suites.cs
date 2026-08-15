@@ -389,6 +389,15 @@ public static class Suites
             "--debug-markers' own selection, which takes EVERY live aircraft instead of the " +
             "nearest, flags each by team against the pane's own, skips a crashed one and skips " +
             "the pane's own aircraft", HostileMarkerHud));
+        into.Add(new TestHarness.Suite("target-ref",
+            "B11's one abstraction over every selectable thing, tree-free: a TargetRef built for "
+            + "each of the three source kinds (aircraft, zeppelin sub-part, turret emplacement) "
+            + "forwards the wrapped AimCandidate's pose/team/liveness/source and reads its own "
+            + "identity back; health and armor are genuinely optional, so the turret carries "
+            + "neither and the structure carries health alone; the label line runs the original's "
+            + "four format strings; Classify reproduces FUN_004b5cd0's order (objective over "
+            + "otherTarget over the team split, an unflagged turret not selectable at all); and "
+            + "identity is the SOURCE object, not the wrapper", TargetRefModel));
         into.Add(new TestHarness.Suite("splitscreen-listeners",
             "every 2–4P pane is a 3D audio listener, which a SubViewport is not by default — the "
             + "pinned listener model (A2), and the one thing standing between splitscreen and a "
@@ -5527,6 +5536,128 @@ public static class Suites
             ai?.Free();
             textures.Dispose();
         }
+    }
+
+    /// <summary>B11's <see cref="TargetRef"/>. Entirely tree-free — no plane is built, no pool is
+    /// registered, no data root is required — because that is the seam's whole claim: the cycles,
+    /// the label formatter and the marker read this and never the underlying C# type, so they all
+    /// unit-test without a Godot tree.
+    ///
+    /// <para>One ref per source kind, built from synthetic data the way the three real collectors
+    /// will: an aircraft with both health pools, a zeppelin sub-part with health alone
+    /// (<c>DestructibleRegistry.Instance</c> has no armor), and a turret emplacement with neither
+    /// (the retail loaders read no HEALTH key at all). That spread is the point — decision 12 says
+    /// omit the figure where there is no source, so the turret's nulls are the case that must not
+    /// silently become 1.0.</para></summary>
+    private static void TargetRefModel(TestContext ctx)
+    {
+        int ownTeam = AimAssist.PlayerTeam;
+        var plane = new object();  // stands in for the FlightController the collector hands back
+        var engine = new object(); // a zeppelin engine's DestructibleRegistry.Instance
+        var gun = new object();    // a TurretController
+
+        // --- an enemy aircraft: the Kestrel screenshot's case ------------------------------------
+        var planeCandidate = new AimCandidate
+        {
+            Position = new Vector3(120f, 300f, -640f),
+            Velocity = new Vector3(0f, 0f, -90f),
+            Team = AimAssist.PlayerTeam + 1,
+            Live = true,
+            Source = plane,
+        };
+        var kestrel = TargetRef.ForAircraft(planeCandidate, TargetClass.Enemy, "Kestrel",
+            TargetRef.Fraction(70.2f, 90f), TargetRef.Fraction(91f, 100f));
+        ctx.Check(kestrel.Position == planeCandidate.Position
+                  && kestrel.Velocity == planeCandidate.Velocity
+                  && kestrel.Team == planeCandidate.Team && kestrel.Live
+                  && ReferenceEquals(kestrel.Source, plane),
+            $"the aircraft ref forwards the wrapped candidate's pose, team, liveness and source");
+        ctx.Check(kestrel.Kind == AimTargetKind.Vehicle && kestrel.Class == TargetClass.Enemy
+                  && !kestrel.Objective && kestrel.Name == "Kestrel",
+            $"…and reads back its own pool, cycle and name '{kestrel.Name}'");
+        ctx.Check(kestrel.CategoryLine.Length == 0,
+            $"an ordinary aircraft carries neither label half, so line 1 is blank (the Kestrel shot shows line 2 alone) got='{kestrel.CategoryLine}'");
+        ctx.Check(kestrel.Health is { } h && Mathf.IsEqualApprox(h, 0.78f)
+                  && kestrel.Armor is { } a && Mathf.IsEqualApprox(a, 0.91f),
+            $"health and armor read separately, never blended (decision 12's H78 A91) h={kestrel.Health:0.00} a={kestrel.Armor:0.00}");
+
+        // --- a zeppelin sub-part: the C1 M04 objective, health but no armor ----------------------
+        var engineCandidate = new AimCandidate
+        {
+            Position = new Vector3(-40f, 900f, 1200f),
+            Velocity = new Vector3(6f, 0f, 0f),
+            Team = AimAssist.WorldTeam,
+            Live = true,
+            Source = engine,
+        };
+        var promisedLand = TargetRef.ForStructure(engineCandidate, TargetClass.Enemy,
+            "Promised Land", "Zeppelin", "Destroy", objective: true,
+            TargetRef.Fraction(150f, 200f));
+        ctx.Check(promisedLand.Kind == AimTargetKind.Structure && promisedLand.Objective
+                  && promisedLand.Class == TargetClass.Enemy,
+            $"a flagged sub-part is a Structure riding the ENEMY cycle with the objective companion set (the -too switch, which moves objectives to Non-Aircraft, is not ported)");
+        ctx.Check(promisedLand.CategoryLine == "Zeppelin [Destroy] -"
+                  && promisedLand.Name == "Promised Land",
+            $"both label halves compose the original's '%s [%s] -' got='{promisedLand.CategoryLine}'");
+        ctx.Check(promisedLand.Health is { } ph && Mathf.IsEqualApprox(ph, 0.75f)
+                  && promisedLand.Armor == null,
+            $"a structure has health and NO armor pool h={promisedLand.Health:0.00} a={promisedLand.Armor?.ToString("0.00") ?? "none"}");
+
+        // --- a turret emplacement: no health model at all ----------------------------------------
+        var gunCandidate = new AimCandidate
+        {
+            Position = new Vector3(500f, 12f, 500f),
+            Velocity = Vector3.Zero,
+            Team = AimAssist.PlayerTeam + 1,
+            Live = false, // its healthy node was swapped out — the decoded permanent kill switch
+            Source = gun,
+        };
+        var flak = TargetRef.ForTurret(gunCandidate, TargetClass.NonAircraft, "AA Emplacement");
+        ctx.Check(flak.Kind == AimTargetKind.Turret && flak.Class == TargetClass.NonAircraft
+                  && !flak.Live && flak.Name == "AA Emplacement",
+            $"the turret ref carries its own kind and cycle and forwards a DEAD candidate's liveness rather than hiding it");
+        ctx.Check(flak.Health == null && flak.Armor == null && flak.CategoryLine.Length == 0,
+            $"a turret emplacement has neither pool, so both figures are omitted, never defaulted to full (decision 12's trap) h={flak.Health?.ToString() ?? "none"} a={flak.Armor?.ToString() ?? "none"}");
+        ctx.Check(TargetRef.Fraction(50f, 0f) == null && TargetRef.Fraction(300f, 200f) == 1f,
+            $"Fraction is the one place that decides 'no source, no figure', and it clamps");
+
+        // --- the class model, FUN_004b5cd0's own order -------------------------------------------
+        ctx.Check(TargetRef.Classify(AimTargetKind.Vehicle, live: true, ownTeam + 1, ownTeam)
+                      == TargetClass.Enemy
+                  && TargetRef.Classify(AimTargetKind.Vehicle, live: true, ownTeam, ownTeam)
+                      == TargetClass.Ally
+                  && TargetRef.Classify(AimTargetKind.Vehicle, live: true, AimAssist.NeutralTeam,
+                      ownTeam) == TargetClass.Ally,
+            $"the aircraft split: a different non-zero team is Enemy, the same team is Ally, and either side unaffiliated is Ally too");
+        ctx.Check(TargetRef.Classify(AimTargetKind.Vehicle, live: true, ownTeam, ownTeam,
+                      objectiveTarget: true) == TargetClass.Enemy
+                  && TargetRef.Classify(AimTargetKind.Structure, live: true, AimAssist.WorldTeam,
+                      ownTeam, otherTarget: true, objectiveTarget: true) == TargetClass.Enemy,
+            $"objectiveTarget overrides everything below it, including an own-team aircraft and otherTarget on the same entity");
+        ctx.Check(TargetRef.Classify(AimTargetKind.Structure, live: true, AimAssist.WorldTeam,
+                      ownTeam, otherTarget: true) == TargetClass.NonAircraft
+                  && TargetRef.Classify(AimTargetKind.Turret, live: true, ownTeam + 1, ownTeam,
+                      otherTarget: true) == TargetClass.NonAircraft,
+            $"otherTarget puts a structure or a turret on the Non-Aircraft cycle");
+        ctx.Check(TargetRef.Classify(AimTargetKind.Turret, live: true, ownTeam + 1, ownTeam) == null
+                  && TargetRef.Classify(AimTargetKind.Structure, live: true, AimAssist.WorldTeam,
+                      ownTeam) == null,
+            $"an UNFLAGGED turret or structure is not selectable at all — the mission decides, not the world (which is why DestructibleRegistry never feeds this pool)");
+        ctx.Check(TargetRef.Classify(AimTargetKind.Vehicle, live: false, ownTeam + 1, ownTeam) == null
+                  && TargetRef.Classify(AimTargetKind.Structure, live: false, AimAssist.WorldTeam,
+                      ownTeam, objectiveTarget: true) == null,
+            $"the liveness predicate runs FIRST, so a dead objective classifies to nothing");
+
+        // --- identity is the source object, not the wrapper --------------------------------------
+        var sameEngineLater = TargetRef.ForStructure(
+            new AimCandidate { Position = Vector3.Up, Live = true, Source = engine },
+            TargetClass.NonAircraft, "Promised Land");
+        ctx.Check(promisedLand.IsSameTarget(sameEngineLater),
+            $"a ref rebuilt next frame at a new pose still names the same target (FUN_004b6490 re-finds the selection by ENTITY — the wrappers are new objects every frame)");
+        ctx.Check(!promisedLand.IsSameTarget(kestrel)
+                  && !TargetRef.ForTurret(default, TargetClass.NonAircraft, "")
+                      .IsSameTarget(TargetRef.ForTurret(default, TargetClass.NonAircraft, "")),
+            $"two different sources never match, and a null source matches nothing — including another null, which would otherwise make every sourceless ref the same target");
     }
 
     /// <summary>The H22 targeting HUD on AI hostiles. Two halves: the pure selection
