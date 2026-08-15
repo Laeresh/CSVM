@@ -384,10 +384,10 @@ public sealed class FlightModel
     /// that test: it presumes one player, and this engine flies up to four in splitscreen, so the
     /// selection is made once per aircraft at construction from <c>IsHumanPiloted</c> instead. Same
     /// two paths, a different way of choosing which one an aircraft is on.
-    /// <para>⚠ Named for the PATH, not for the pilot. An AI-flown aircraft put back on the player
-    /// path (the temporary <c>--no-ai-plant</c> A/B switch) is still AI-flown; nothing downstream of
-    /// this may read it as "is this an AI aircraft" — <see cref="FlightController.IsHumanPiloted"/>
-    /// answers that.</para>
+    /// <para>⚠ Named for the PATH, not for the pilot. It is a constructor parameter set independently
+    /// of who is flying (test sites in particular mix the two freely); nothing downstream of this may
+    /// read it as "is this an AI aircraft" — <see cref="FlightController.IsHumanPiloted"/> answers
+    /// that.</para>
     /// <para>⚠ Immutable by construction. A plant that could change path mid-flight would make a
     /// golden shot or a suite run unreproducible, since the trajectory would depend on WHEN the
     /// switch happened rather than on the inputs.</para>

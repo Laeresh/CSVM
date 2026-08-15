@@ -974,6 +974,70 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ The ±20° pair was validated by eye against the original, so this is an A/B against footage, not a
   correction of something known wrong.
 
+- `BL-387` `[Bug]` **An AI aircraft flying straight and level, needing no turn, rolls left-right-left
+  indefinitely and never settles — confirmed absent from the original at the controls (`PT-54`/
+  `PT-56`, 2026-08-15).** First seen netless and targetless
+  (`--stage=empty --plane=player_bhawk --ai=player_fury,player_avenger`, `AiPilot.FlyPatrol`'s
+  no-`Patrol` branch holding a fixed `OrderAim` 1000 m out) and persisting through
+  `AiMode.AvoidCrash` in the same session. **Re-flown on a real net** (`--debug-spectate` on a
+  wingman flying its default patrol net, `PT-56`): the net-follow itself "looked good", but **the
+  same oscillation appears whenever the plane is flying straight and does not need to turn** — it is
+  not confined to the static/netless case after all. **Not reproduced in Instant Action → Dogfight a
+  Squadron** (`PT-54`), where aircraft spend most of their time turning hard onto a live quarry
+  rather than holding a straight leg.
+  *Evidence:* `AiControlLaw.Steer` (`src/Flight/AiControlLaw.cs`:189–207) renormalises `bx`/`by`
+  (the body-frame lateral/vertical aim error) onto the UNIT CIRCLE whenever the aim point is ahead
+  (`bz > 0`) — `h = sqrt(bx²+by²); bx /= h; by /= h`. This throws away the MAGNITUDE of the error and
+  keeps only its sign/ratio: flying dead-on with a genuinely tiny error (`bx`, `by` ~1e-3) still
+  divides by their own tiny `h`, blowing the normalised pair back up to order 1. `roll = -bx` then
+  feeds that full-scale value into `Limit()`, and architecture.md's own note on this file already
+  flags the output as "NEAR-BANG-BANG… anything past ~0.29 of body-frame aim error saturates" — so a
+  near-zero true error still commands a near-maximum bank. With no term damping the TURN RATE (only
+  bank angle is corrected, and roll→bank→turn rate→heading is two open integrators), this is a relay
+  hunting around its own setpoint: it overshoots the tiny error, the sign flips, it banks the other
+  way, repeating without bound. A real, sustained turn (large `bx`/`by` before renormalisation) does
+  not have this problem — the sign stays consistent and the plane just banks hard one way — which is
+  exactly why dogfighting and any leg with real heading error reads fine and straight-and-level does
+  not.
+  ⚠ **Do not assume this is a faithful port of a genuinely twitchy original law.** The user's direct
+  A/B says the original does not do this; the decode (`docs/org/aiControlLaw.md`, plan D31/E41) may
+  be missing a rate-damping term, or the renormalisation step itself may be over-applied relative to
+  what the original does with it (the original may use it only for the `rudder_tol` branch-select
+  test, not for the roll MAGNITUDE too). `CAP-37` (unfilmed) is the instrument that would settle
+  which, but this bug does not need footage to confirm — it is visible against the player's own
+  flying and against a wingman's own patrol leg.
+  *Fix shape:* re-check `docs/org/aiControlLaw.md`'s decode of `FUN_0048bdd0`/whichever function
+  owns this branch for whether the renormalised `bx` is what the original feeds to roll, or whether
+  the original keeps (or re-scales by) the pre-normalisation magnitude for the OUTPUT even while
+  using the normalised pair for branch selection — before inventing a rate-damping term from nothing,
+  which `BL-330`'s history warns against.
+  *Playtest after fix:* `PT-54`/`PT-56` (`docs/plans/PLAN-ai-flight.md` F52) — watch a straight patrol leg
+  and a netless hold-course alike for the roll to settle instead of hunting.
+  *Cross-refs:* `docs/plans/PLAN-ai-flight.md` F52 (this is the AI-arm finding it owes), `BL-330`
+  (a prior instance of not inventing a rate term from field names).
+
+- `BL-388` `[Tuning]` `[Owed-playtest]` **The AI autogyro's nose-down at low speed may read softer
+  than the original's — soft, single-session A/B, not a confirmed measurement.** `PT-57`
+  (`docs/plans/PLAN-ai-flight.md` F52 player arm, 2026-08-15): the autogyro's authority-ramp feel
+  otherwise matched the original directly at the controls; the one residual is "the nose pulling
+  down is not as hard as in the original", offered with a "perhaps".
+  *Evidence:* two candidate mechanisms, neither pinned to the report yet. (1) `AiControlLaw`'s
+  low-speed recovery (`src/Flight/AiControlLaw.cs`:116,119,250–254): below `RecoveryNoseY` (nose
+  more than ~30° under the horizon) and `RecoverySpeed` (60 mph), the law firewalls pitch full
+  nose-down and the throttle to `SpeedCap` — if this arms later or weaker than the original's
+  equivalent, the recovery would read soft exactly like this. (2) `C24`'s authority ramp
+  (`FlightModel.RollPitchAuthorityAt`) fades pitch alongside roll below `turn_fade_in`/`_out`; the
+  autogyro is the airframe `BL-330` measured losing the MOST authority by its own stall speed
+  (~79%), so a soft nose-down there could also just be the ramp doing its authored job and reading
+  unfamiliar rather than being wrong.
+  ⚠ Do not tune either candidate from this report alone — it is one flight, phrased as uncertain by
+  the reporter, and PT-57 also confirmed the airframe reads correctly everywhere else.
+  *Playtest after fix (or before touching anything):* a second `PT-57` autogyro pass, ideally with
+  the original open side by side, isolating whether the softness is in the recovery arm timing or
+  the authority ramp itself.
+  *Cross-refs:* `docs/plans/PLAN-ai-flight.md` F52 (player arm), `BL-330` (the authority ramp this pairs
+  with).
+
 - `BL-096` `[Feature]` **Angle of attack is now fittable and is not modelled.** The ADI shows hysteresis against
   vertical speed round the loop — expected, since the ball shows attitude while `dh/dt` follows the
   flight path, and AoA is exactly what separates them. That hysteresis *is* the AoA signal, and it

@@ -130,7 +130,7 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-37` | An AI aircraft flying a patrol/attack loop, unprompted by the player | An AI-controlled aircraft in external/chase view, held long enough to cover a sustained turn, a low-speed moment and a patrol leg's end, with the player's own aircraft in frame where possible for a same-shot comparison. Behavioural and comparative questions only, **no absolute distances or speeds read off this footage** (`docs/verification.md`; a decode is never contested with a footage-derived measurement): does it gain altitude through a sustained turn or hold it; is its turn tighter or wider than the player's in the same airframe; does it hold a speed through manoeuvres or bleed and recover like a lever-driven aircraft; does it wallow at low speed or stay crisp; what does it do at the end of a patrol leg | `docs/PLAN-ai-flight.md` F52 (the AI-side at-the-controls verdict for waves C and E) |
+| `CAP-37` | An AI aircraft flying a patrol/attack loop, unprompted by the player | An AI-controlled aircraft in external/chase view, held long enough to cover a sustained turn, a low-speed moment and a patrol leg's end, with the player's own aircraft in frame where possible for a same-shot comparison. Behavioural and comparative questions only, **no absolute distances or speeds read off this footage** (`docs/verification.md`; a decode is never contested with a footage-derived measurement): does it gain altitude through a sustained turn or hold it; is its turn tighter or wider than the player's in the same airframe; does it hold a speed through manoeuvres or bleed and recover like a lever-driven aircraft; does it wallow at low speed or stay crisp; what does it do at the end of a patrol leg | `docs/plans/PLAN-ai-flight.md` F52 (the AI-side at-the-controls verdict for waves C and E) |
 
 ---
 
@@ -364,7 +364,7 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
   *Variations:* one flight each — repeat with `--chapter=C3`, then `--chapter=C2`; (d)'s four
   untouched chapters need only a glance in each.
 
-- `PT-53` `[Own]` **Graze feel now that a graze bounces (`docs/PLAN-ai-flight.md` `C25`, landed
+- `PT-53` `[Own]` **Graze feel now that a graze bounces (`docs/plans/PLAN-ai-flight.md` `C25`, landed
   2026-08-15, closing `BL-172`).** A survivable scrape now rebounds along the contact normal off the
   shipped `bounce_factor` 0.6, where before it only slid. Three surfaces, at speed, in C1 or C5:
   - (a) **a shallow belly skim over flat ground** — the plane should come off the ground and fly on,
@@ -377,7 +377,63 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
   ⚠ The three graze constants (`GrazeKick`, `GrazeFriction`, `GrazeStopSpeed`, `BL-271`) were tuned
   against the OLD no-bounce slide and were not re-tuned when the impulse landed. If a graze feels
   wrong, they are the first suspects — not `bounce_factor`, which is authored data.
-  *Blocks:* `BL-271`'s re-tune, and `BL-381`'s multi-tick scrape (a fail on (b) is evidence for it).
+  *Blocks:* `BL-271`'s re-tune, `BL-381`'s multi-tick scrape (a fail on (b) is evidence for it), and
+  `docs/plans/PLAN-ai-flight.md` F52's player-side graze check (C25) — no separate PT item repeats it.
+
+### AI flight — external view, own build (F52 AI arm)
+
+- `PT-54` `[Own]` **AI plant A/B against the old plant (`docs/plans/PLAN-ai-flight.md` C21–C24, F52 AI
+  arm).** Fly the new AI force path, then relaunch flipping AI aircraft back onto the player plant
+  with `--no-ai-plant` and fly the same engagement again — the switch exists for exactly this
+  comparison (`docs/cli.md` `--no-ai-plant`) and is temporary, removed once this verdict lands.
+  ```powershell
+  ./RunGame.ps1 --stage=empty --plane=player_bhawk --ai=player_fury,player_avenger
+  ./RunGame.ps1 --stage=empty --plane=player_bhawk --ai=player_fury,player_avenger --no-ai-plant
+  ```
+  *Look for:* the divergences wave C/E ported onto the AI plant — nose-aligned airflow instead of
+  weathervane centring, the AI's own speed floor, ground blow, and the authority ramp/reverse
+  factor now shared with the player path (C24) — against a plant with none of them wired in. Does
+  the new plant read as a distinct AI flight character, or as indistinguishable from the old one?
+  *Blocks:* F52's AI-side verdict.
+
+- `PT-55` `[Own]` **AI plant under `--ai-attack`, free flight (F52 AI arm).**
+  ```powershell
+  ./RunGame.ps1 --stage=empty --plane=player_bhawk --ai=player_fury --ai-attack=9
+  ```
+  *Look for:* the same behavioural and comparative questions `CAP-37` asks of the original — does
+  the AI gain altitude through a sustained turn or hold it, is its turn tighter or wider than the
+  player's own in the same airframe, does it hold speed through manoeuvres or bleed and recover like
+  a lever-driven aircraft, does it wallow at low speed or stay crisp — now under the hard
+  maneuvering of pursuing and firing on a live target.
+  *Blocks:* F52's AI-side verdict.
+
+- `PT-56` `[Own]` **AI plant in a chapter mission with patrol nets running (F52 AI arm).**
+  ```powershell
+  ./RunGame.ps1 --chapter=C1 --plane=player_bhawk --ai=player_fury:M4ReinfAce --ai-attack=9
+  ```
+  *Look for:* the same questions as `PT-55`, this time along a real net in a real mission context —
+  what the AI does at a patrol leg's end, and whether the plant holds up once `AiModeMachine` is
+  actually cycling patrol/pursue/lay off rather than idling in an empty stage.
+  *Variations:* pair with `--debug-ainets=M4ReinfAce` to watch the drawn route alongside the flight.
+  *Blocks:* F52's AI-side verdict.
+
+### Autogyro, Balmoral, Fury — low-speed authority ramp (F52 player arm)
+
+- `PT-57` `[Own]` **Low-speed handling across `BL-330`'s authority-ramp extremes
+  (`docs/plans/PLAN-ai-flight.md` C24, F52 player arm, judged against `BL-330`'s existing corroboration).**
+  The ramp fades roll and pitch to nothing at 10 mph and back to full at 50; `BL-330`'s own decode
+  picked out the two airframes furthest apart on it — the autogyro (18.5 mph stall, ~21% of
+  authority left there) and the Balmoral (45.5 mph stall, ~89% left) — plus a mid-pack airframe for
+  the common case (Fury, in the 52–57 mph band nine of the eleven share).
+  ```powershell
+  ./RunGame.ps1 --plane=player_autogyro --chapter=C1
+  ./RunGame.ps1 --plane=player_balmoral --chapter=C1
+  ./RunGame.ps1 --plane=player_fury --chapter=C1
+  ```
+  *Look for:* controls going progressively mushy on the approach to stall and gone outright at
+  10 mph, roll and pitch only (yaw is unaffected — C21); the autogyro's fade should be felt hard and
+  early relative to its own stall, the Balmoral barely at all, and the Fury somewhere between.
+  *Blocks:* F52's player-side verdict.
 
 ---
 

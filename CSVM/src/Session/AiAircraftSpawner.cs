@@ -75,8 +75,7 @@ public sealed class AiAircraftSpawner
         // ⚠ The original exempts its own class-4 `w*` wingman family and this engine cannot: an
         // Instant Action wingman flies a player airframe. Divergence recorded in org/flightModel.md.
         // Keyed by spawn ordinal rather than drawn off the shared spawn stream, so a --det replay
-        // reproduces it and no other subsystem's sequence moves. NOT gated on --no-ai-plant: that
-        // switch A/Bs the force path, and a spread on both sides of the A/B is what keeps it one.
+        // reproduces it and no other subsystem's sequence moves.
         var stats = _in.StatsFor(planeName).WithAiSpawnJitter(Rng.NewSystemRandom(Rng.Spawn, index, 0));
         if (pilot.Machine is { } machine)
         {
@@ -152,10 +151,9 @@ public sealed class AiAircraftSpawner
             // No camera rides an AI plane — Setup(null) skips the whole camera half — and CamParams
             // is camera tuning, so the default is passed rather than loading the plane's block.
             // The plant's force path is chosen once, here, off who is flying (C21): nobody, so the
-            // AI path — unless --no-ai-plant puts this aircraft back on the player one for an A/B at
-            // the controls. See FlightModel.UsesAiForcePath.
+            // AI path. See FlightModel.UsesAiForcePath.
             controller.Setup(
-                new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted && !_spec.NoAiPlant),
+                new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
                 null, new CamParams(), pos, lookAt);
             controller.Name = $"ai{index + 1}_{planeName}";
             _worldRoot.AddChild(controller);

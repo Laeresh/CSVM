@@ -1991,9 +1991,9 @@ public partial class FlightController : Node3D
     /// <see cref="AircraftBody"/> is the only thing that carries the Aircraft layer, on both
     /// paths.</para>
     /// <para>⚠ Gated on <see cref="FlightModel.UsesAiForcePath"/> for a non-human pilot, not on
-    /// <see cref="IsHumanPiloted"/> alone: an AI aircraft flipped back to the player path by the
-    /// temporary <c>--no-ai-plant</c> switch stays unprobed, a pre-existing gap (ground blow was
-    /// player-only when that switch landed) this item does not close. Also skipped while
+    /// <see cref="IsHumanPiloted"/> alone: a plant constructed off the player path for an AI-flown
+    /// aircraft (test sites do this) stays unprobed, a pre-existing gap this item does not close.
+    /// Also skipped while
     /// <see cref="AiPilot.Machine"/> reads <see cref="AiMode.Stunned"/> — <c>0x0048c317</c>'s own
     /// gate, mode == stunned, so a stunned AI flies into terrain (flightModel.md:1369). Do not lift
     /// this for a "fix"; the original does the same.</para></summary>

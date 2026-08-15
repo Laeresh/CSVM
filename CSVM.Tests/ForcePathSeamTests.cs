@@ -49,18 +49,13 @@ public class ForcePathSeamTests
     }
 
     /// <summary>The selection rule the two production sites encode, stated once: the AI path is taken
-    /// when nobody is at the controls AND the temporary A/B switch is off. Both sites read
-    /// <c>IsHumanPiloted</c>, so a player aircraft is on the player path in every combination — the
-    /// switch moves AI aircraft only, which is what makes an A/B a comparison of plants rather than
-    /// of two different sessions.</summary>
+    /// when nobody is at the controls. Both sites read <c>IsHumanPiloted</c> directly.</summary>
     [Theory]
-    [InlineData(true, false, false)]   // a person flying: player path
-    [InlineData(true, true, false)]    // ...and --no-ai-plant does not touch them
-    [InlineData(false, false, true)]   // nobody flying: AI path
-    [InlineData(false, true, false)]   // ...put back on the player path for the A/B
-    public void TheSelectionRuleIsHumanAndTheSwitch(bool isHuman, bool noAiPlant, bool expectAi)
+    [InlineData(true, false)]    // a person flying: player path
+    [InlineData(false, true)]    // nobody flying: AI path
+    public void TheSelectionRuleIsHumanPiloted(bool isHuman, bool expectAi)
     {
-        Assert.Equal(expectAi, new FlightModel(Bhawk(), !isHuman && !noAiPlant).UsesAiForcePath);
+        Assert.Equal(expectAi, new FlightModel(Bhawk(), !isHuman).UsesAiForcePath);
     }
 
     /// <summary>C21's probe, with its assertion turned around by C22: the same second of sim with a

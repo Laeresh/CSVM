@@ -1,8 +1,7 @@
 # AI flight — the plant, then the pilot
 
-**ACTIVE PLAN** (written 2026-08-15). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE 2026-08-15** (written 2026-08-15; executed 2026-08-15). All checklist items are ☑,
+Waves A–F. Indexed in [`plans.md`](plans.md); read as history.
 
 M4 delivered the AI's decisions (modes, target ranking, the maneuver library, gunnery, voice) but
 not the AI's flying. `Flight/AiPilot.cs` converts those decisions into stick with an invented
@@ -159,7 +158,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave F — Judge it
 
 51. ☑ F51 Capture the original's AI flying (minted `CAP-37`, `playtest.md`)
-52. ☐ F52 The at-the-controls verdict, AI side and player side
+52. ☑ F52 The at-the-controls verdict, AI side and player side
 
 ## Dependency and parallelism notes
 
@@ -1033,7 +1032,41 @@ is *not* allowed to be used for.
 distances have failed repeatedly on this project, and a decode must never be contested with one. If
 the capture appears to contradict a traced address, the capture is the thing in doubt.
 
-## F52 ☐ The at-the-controls verdict, AI side and player side
+## F52 ☑ The at-the-controls verdict, AI side and player side
+
+**Landed 2026-08-15. Flown, not clean — one confirmed bug, one soft note, otherwise a pass.**
+`PT-54`–`PT-57` minted and flown (`playtest.md`), plus `PT-53`'s player-side graze check.
+
+**AI arm.** `PT-54` (free-flight A/B against `--no-ai-plant`): no felt difference in the plant
+itself, but the merged net behaviour (`BL-377`'s trailer riding, from `main`) reads well —
+aggressive, gets into firing lines. `PT-55` (under `--ai-attack`): gains altitude through a
+sustained turn, turn radius about the same as the player's in the same airframe, bleeds and
+recovers speed like a lever-driven aircraft (matches the decode); low-speed wallow inconclusive
+from the cockpit, but a spectated 5v5 autogyro dogfight looked good. `PT-56` (a wingman on its
+default net, `--debug-spectate`): the net-follow itself looked good, but surfaced a real bug —
+**`BL-387`**, filed and refined across both PT-54 and PT-56: an AI aircraft flying straight and
+level (needing no turn) rolls left-right-left and never settles, confirmed absent from the
+original. Root-caused to `AiControlLaw.Steer`'s bank branch, which renormalises the body-frame aim
+error onto the unit circle whenever the target is ahead — discarding the error's MAGNITUDE and
+keeping only its sign, so a genuinely tiny heading error still commands a near-maximum bank. Not
+reproduced in Instant Action → Dogfight a Squadron, where aircraft are almost always turning hard
+onto a live quarry (large, consistently-signed error) rather than holding a straight leg.
+
+**Player arm.** `PT-57` (autogyro/Balmoral/Fury at low speed, `C24`'s authority ramp): flown
+directly against the original at the controls, and the autogyro "feels the same now" — one soft
+residual, "perhaps the nose pulling down is not as hard as in the original", filed as **`BL-388`**
+(single-session, reporter-uncertain, not a confirmed measurement). `PT-53` (grazing, `C25`): (a)
+the flat-ground belly skim passes; (b) the wall/cliff scrape reads as a graze, "a little light but
+better than before" (the existing `BL-271` re-tune note already covers this); (c) the building-
+corner survival-by-geometry question is, per the user, decodable rather than a feel question —
+already `BL-381`'s first bullet (the unconsumed `armor_damage_range`/`health_damage_range`), no new
+item needed.
+
+**Verdict:** the plant and control-authority work is sound and reads as intended; two real, scoped
+follow-ups (`BL-387`, `BL-388`) are filed rather than fixed here, per this item's own trap. Waves
+C–E stand.
+
+**Original text follows unchanged.**
 
 **Goal.** The plan's changes are judged by the user at the controls, on both arms: how AI aircraft
 now fly, and how the player's own aircraft now flies after C24.
