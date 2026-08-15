@@ -194,8 +194,10 @@ public static class Suites
             "ace's own Downed report wins the duel, the wave sequencer's last kill wins the " +
             "squadron (with a wave still flying it does not), the LAST pilot in wins the stunt run " +
             "over C1/IA1's authored zones while the first does not — and the last still-flying one " +
-            "does when the other is out of lives — and really destroying C1/M04's piratezep wins " +
-            "the zeppelin run; each with a second mission of another type subscribed to the same " +
+            "does when the other is out of lives — and really shooting out every one of C1/M04's " +
+            "piratezep engines wins the zeppelin run with its hull still alive (one engine short " +
+            "does not), as does the gasbag threshold on its own; each with a second mission of " +
+            "another type subscribed to the same " +
             "signal and staying Running, plus a hull that is not the objective leaving it running; " +
             "and the lives ledger on a real aircraft: with a life left the armed 3 s crash cam " +
             "respawns it, out of lives the wreck is still there 10 s later and the solo mission " +
@@ -3804,7 +3806,9 @@ public static class Suites
     /// report, <c>InstantActionWaves.Finished</c> over real spawned aircraft, two real
     /// <c>StuntMission</c> runs over C1/IA1's authored danger zones through
     /// <c>InstantActionRuntime.ZoneSetsFlown</c> (the predicate the session itself calls), and
-    /// <c>ZeppelinRuntime.ZeppelinKilled</c> raised by really destroying C1/M04's piratezep —
+    /// <c>ZeppelinRuntime</c>'s two zeppelin signals raised by really damaging C1/M04's piratezep
+    /// — <c>ZeppelinEnginesDisabled</c> from shooting out all of its engines, which is the mode's
+    /// actual objective, and <c>ZeppelinKilled</c> from the gasbag threshold, which also wins it —
     /// plus the lives ledger's two ends on a real <see cref="FlightController"/>: with a life
     /// left the armed crash cam ends in a respawn, out of lives it never does.
     ///
@@ -4051,41 +4055,73 @@ public static class Suites
                     name => runtime.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null, zepNets);
                 zeps.WireDamage(runtime);
 
-                // A hand-authored --ia= zeppelin run whose objective IS this world's zeppelin,
-                // and a second one naming a different node: the same kill must win one and not
-                // the other, which is the node filter GameSession puts on the subscription.
-                var mission = new InstantActionRuntime(EndDef(ctx, "zep-objective", "zeppelin_run",
-                    cargoZeppelin: "piratezep"));
-                var otherHull = new InstantActionRuntime(EndDef(ctx, "zep-other", "zeppelin_run",
-                    cargoZeppelin: "someotherzep"));
-                zeps.ZeppelinKilled += node =>
+                // The node filter GameSession puts on both subscriptions: a signal from THIS
+                // world's zeppelin wins a mission whose objective is it, and never one naming
+                // another node.
+                void Report(string node, params InstantActionRuntime[] missions)
                 {
-                    foreach (var ia in new[] { mission, otherHull })
+                    foreach (var ia in missions)
                     {
                         if (string.Equals(node, InstantActionRuntime.SelectedZeppelinNode(ia.Def),
                                 System.StringComparison.OrdinalIgnoreCase))
                         {
-                            ia.ReportObjective(InstantActionObjective.ZeppelinDestroyed);
+                            ia.ReportObjective(InstantActionObjective.ZeppelinDisabled);
                         }
                     }
-                };
-                ctx.Check(InstantActionRuntime.SelectedZeppelinNode(mission.Def) == "piratezep",
+                }
+
+                // ---- path 1: the engines, which is what the mode is FOR --------------------
+                var engineMission = new InstantActionRuntime(EndDef(ctx, "zep-engines",
+                    "zeppelin_run", cargoZeppelin: "piratezep"));
+                var otherHull = new InstantActionRuntime(EndDef(ctx, "zep-other", "zeppelin_run",
+                    cargoZeppelin: "someotherzep"));
+                zeps.ZeppelinEnginesDisabled += n => Report(n, engineMission, otherHull);
+                zeps.ZeppelinKilled += n => Report(n, engineMission, otherHull);
+                ctx.Check(InstantActionRuntime.SelectedZeppelinNode(engineMission.Def) == "piratezep",
                     $"the mission's objective resolves to the world's zeppelin");
+
+                var engines = zepDefs[0].Engines;
+                var motion = zeps.MotionFor("piratezep");
+                ctx.Check(motion != null && engines.Count > 0 && motion.AliveEngines == engines.Count,
+                    $"all {engines.Count} of piratezep's authored engines start alive: {motion?.AliveEngines}");
+                for (int i = 0; i < engines.Count; i++)
+                {
+                    runtime.DamageAt(runtime.FindNodes(engines[i], host).FirstOrDefault(), 10_000f);
+                    zeps.SimStep(1f / 60f);
+                    if (i == engines.Count - 2)
+                    {
+                        // The able-to-fail control on the win below: one engine short is not it.
+                        ctx.Check(!engineMission.Ended && motion?.AliveEngines == 1,
+                            $"with ONE engine left the mission runs on: alive={motion?.AliveEngines} outcome={engineMission.Outcome}");
+                    }
+                }
+                ctx.Check(motion?.AliveEngines == 0
+                    && engineMission.Outcome == InstantActionOutcome.Won,
+                    $"the last engine dying WINS a zeppelin_run mission: alive={motion?.AliveEngines} outcome={engineMission.Outcome}");
+                ctx.Check(!zeps.IsDead("piratezep"),
+                    $"…with the HULL still alive — engines are their own win, not a kill");
+                ctx.Check(!otherHull.Ended,
+                    $"…and a mission whose objective is another hull is untouched: {otherHull.Outcome}");
+
+                // ---- path 2: the hull, which also wins the mode ----------------------------
+                // Subscribed only now, so the engines signal already fired above cannot be what
+                // ends it: this runtime sees the gasbag threshold and nothing else.
+                var hullMission = new InstantActionRuntime(EndDef(ctx, "zep-hull", "zeppelin_run",
+                    cargoZeppelin: "piratezep"));
+                zeps.ZeppelinKilled += n => Report(n, hullMission);
 
                 // The decoded survivor threshold does the killing (4 of 6 required): two gasbags
                 // down is not enough, the third is.
                 runtime.DamageAt(runtime.FindNodes("gasbag1", host).FirstOrDefault(), 10_000f);
                 runtime.DamageAt(runtime.FindNodes("gasbag2", host).FirstOrDefault(), 10_000f);
                 zeps.SimStep(1f / 60f);
-                ctx.Check(!zeps.IsDead("piratezep") && !mission.Ended,
+                ctx.Check(!zeps.IsDead("piratezep") && !hullMission.Ended,
                     $"two gasbags down: the hull lives and the mission runs on");
                 runtime.DamageAt(runtime.FindNodes("gasbag3", host).FirstOrDefault(), 10_000f);
                 zeps.SimStep(1f / 60f);
                 ctx.Check(zeps.IsDead("piratezep")
-                    && mission.Outcome == InstantActionOutcome.Won,
-                    $"the objective's real death WINS a zeppelin_run mission: {mission.Outcome}");
-                ctx.Check(!otherHull.Ended,
-                    $"…and a mission whose objective is another hull is untouched by it: {otherHull.Outcome}");
+                    && hullMission.Outcome == InstantActionOutcome.Won,
+                    $"the objective's real death ALSO wins a zeppelin_run mission: {hullMission.Outcome}");
             }
             finally
             {

@@ -1293,7 +1293,16 @@ With `n` the hit normal, `b` the backward body axis, `d` the straight-line dista
 ```
 S = sqrt(c) · (elev − d) / elev     proximity: 1 at contact, falling to 0 at the ray's end
 A = normalize(n × b)                unit axis rotating the nose away from the surface
+V = A · S                           the scaled axis, which is what the probe hands back
 ```
+
+⚠ **The probe returns `S` and writes `V = A · S`, not `A`** (corrected 2026-08-15). Its
+out-parameter takes the normalised cross product multiplied by `S` (`FUN_00422690`, then the three
+scalings before the adds), and `S` itself is the return value. The caller uses that one scaled
+vector **twice**, once in the dot and once in the add, which is where the second power of `S` in the
+player law comes from. The out-parameter is zero-initialised from `DAT_0075d1b8`, a zero vector, and
+is written only on a qualifying hit, so a miss, a `c ≤ 0` rejection and the vehicle-filter abandon
+all leave a zero vector and contribute nothing on either path.
 
 **Where it goes, which is the whole question.** `FUN_0048c220` writes into the same accumulator the
 three stick channels were summed into one call earlier in `FUN_0048c470`; `FUN_0048e580` then adds
@@ -1302,20 +1311,24 @@ that accumulator to `obj+0x160`, the persistent angular-velocity state. The line
 bias on **control response**, not an applied force, which is what the GDD's §4.1.7 describes and what
 `CAP-02` inferred.
 
-Player path (`0x0048c30f`), with `p = dot(accum, A·S)`:
+Player path (`0x0048c30f`), with `p = dot(accum, V)`:
 
 ```
-p ≥ 0 (commanding away):   accum += A · S² · |p| · groundblow_mag
-p < 0 (commanding into):   accum += A · S² · 0.05·|p| · groundblow_mag,  and S is zeroed
+p ≥ 0 (commanding away):   accum += V · |p| · groundblow_mag
+p < 0 (commanding into):   accum += V · 0.05·|p| · groundblow_mag,  and S is zeroed
 ```
 
-Both push along `+A`, away from the surface. Three consequences, each matching a design claim:
+Both push along `+A`, away from the surface. Written against the unscaled command component
+`u = dot(accum, A)`, the same two lines are `u → u · (1 + mag·S²)` and
+`u → u · (1 − 0.05·mag·S²)`, since `p = S·u` and the add carries a further `S`. Three consequences,
+each matching a design claim:
 
-- **It cannot overpower the stick.** An into-obstacle command is met with `0.05 × 10 = 0.5` of its
-  own magnitude, so the offending rotation is halved and never reversed.
+- **It cannot overpower the stick.** An into-obstacle command is scaled by `1 − 0.5·S²` at the
+  authored 10, so it is exactly halved at contact, cut less than that further out, and never
+  reversed (reversal would need a `groundblow_mag` above 20).
 - **It cannot save a head-on.** As the approach becomes perpendicular, `n → b`, so `n × b → 0` and
   the whole term vanishes (`FUN_00422690` leaves a zero vector untouched).
-- **Commanding away is amplified** by up to `1 + 10·S²`, i.e. 11× at contact with the authored 10.
+- **Commanding away is amplified** by `1 + 10·S²`, i.e. 11× at contact with the authored 10.
 
 **A second, smaller effect.** After the accumulator write, the velocity *direction* is steered
 exponentially toward the nose at `DAT_00622bbc · S` per second (`FUN_00460700`, speed preserved,
@@ -1326,7 +1339,7 @@ on the player path whenever the pilot is commanding into the obstacle, because `
 **The AI path is a different law, not a scaled one** (`0x0048c317`):
 
 ```
-accum += A · S · (ai_groundblow · groundblow_mag)        = A · S · 5.0 as authored
+accum += V · (ai_groundblow · groundblow_mag)           = A · S · 5.0 as authored
 ```
 
 It is independent of the AI's own command (a fixed push, where the player's is proportional to what
@@ -1357,19 +1370,63 @@ is a weapon effect. A stunned AI therefore has its controls zeroed **and** its g
 suppressed, so it flies into terrain. That reads as deliberate.
 
 **Emitters.** `FUN_004c8f70` walks the terrain grid and tests, per cell, the terrain geometry and
-every scene node whose flag word at `node+0x24` carries both bits `0x4` and `0x10`; `FUN_004c8ec0`
-keeps the nearest hit. Terrain and unregistered scenery always qualify.
+every scene node whose flag word at `node+0x24` carries both bits `0x4` and `0x10`, which are
+`ACTIVE` and `INTERSECT_SURFACE` (`tools/mech3ax/crates/api-types/src/gamez/nodes.rs`);
+`FUN_004c8ec0` keeps the nearest hit. Terrain and ordinary scenery always qualify.
 
-⚠ **Zeppelins as emitters is still NOT confirmed from the binary.** There is a player-only extra
-filter at `0x0048c05d`: a node flagged `0x40000000` at `node+0x28` is resolved through the vehicle
-registry at `0x0071dab8` and must carry a non-zero byte at `+0xcc`. That byte is a **"placed but not
-yet simulated" transient**, set by the placement paths and cleared every frame by `FUN_0048a110` for
-anything running a flight update, so an ordinary flying aeroplane does not repel you. Which registry
-entities keep it set permanently was not determined, so the GDD's naming of zeppelins is a design
-statement this decode neither confirms nor refutes.
+**The vehicle filter, and what it excludes** (decoded 2026-08-15). Inside the player-only branch
+guarded by `param_1 == DAT_0071c298` at `0x0048c047`, a hit node carrying bit `0x40000000` at
+`node+0x28` is resolved through the vehicle registry at `0x0071dab8` (`FUN_004afee0`, matched on the
+entity's node pointer at `+0xc`, walking up the parent chain on a miss). If an entity is found and
+its byte at `+0xcc` is **zero**, the whole term is abandoned and the function returns 0
+(`0x0048c0ac`). Everything else falls through and repels: an unmarked node, a marked node with no
+registry entity above it, and a marked node whose entity carries a non-zero `+0xcc`.
 
-**Nothing in `CSVM/src` implements any of this** (a grep for `groundblow` returns no hits). Owned by
-`BL-359`, which carries the implementation rule and its traps.
+⚠ **The `0x40000000` mark is applied at spawn, never authored.** Its only setter is `FUN_004848f0`
+(`0x0048490c`), which ORs it into the node and its whole child subtree, and its only external caller
+is the vehicle spawner `FUN_0047c210`. No node in the shipped world data carries it: all 7,064 nodes
+in `extracted/C1/gamez/nodes.json` have `update_flags` 0 or 1.
+
+**The byte at `+0xcc` is a mode flag, not a transient. It means "this vehicle is following a scripted
+path instead of being flight-simulated".** The update dispatcher `FUN_00489ea0` reads it first and
+calls the path follower `FUN_0048a110` **instead of** the movement law selected by `obj+0x67C`
+(`0`/`4` being `FUN_0048e580`, the flight integrator that consumes ground blow). Its writers:
+
+| Address | Function | Effect |
+|---|---|---|
+| `0x004b005e` | `FUN_004aff80`, the constructor | 0, so the default is not an emitter |
+| `0x0047c568` | `FUN_0047c210`, the spawner | 1 when the spawn record carries a path, with `+0xd4 = 1` at `0x0047c57e` |
+| `0x00452275` | `FUN_00451bf0` | 1, path taken from the placement record's `+0x24`, leaving `+0xd4` alone |
+| `0x0049427c` | `FUN_004940d0` | 1 with `+0xd4 = 0`, called from the mission-goal runtime `FUN_0046a490` |
+| `0x0048a863` | `FUN_0048a110` | 0, the only clear, and only on reaching the **last** waypoint within 5.0 m |
+
+A non-zero `+0xd4` makes `FUN_0048a110` return on its first line, so the vehicle neither moves nor
+clears `+0xcc`; the release is `FUN_0046a2b0` (`0x0046a2c3`), a mission-goal action. A vehicle
+spawned with a path is therefore a frozen emitter from placement until a goal releases it, and stops
+being one the moment it completes the path and drops into the flight model. No vehicle type holds the
+flag by identity. The follower itself is written up under `BL-361`.
+
+**Zeppelins: yes, and by the default rather than by a zeppelin rule.** `extracted/zrdr/vehicle.zrd.json`
+names no zeppelin, blimp or airship type, so a zeppelin is never a spawned registry vehicle in this
+install. IA1's is the C1 gamez scene node `multiplayer1zep` (`extracted/C1/gamez/nodes.json`), driven
+by `mis_anim` animations, with `update_flags` 1 and both `active` and `intersect_surface` set. It
+never reaches the registry filter at all, and repels the player exactly as terrain does. The GDD's
+naming of zeppelins describes the outcome, not a mechanism.
+
+⚠ **The vehicle filter is player-only**, since it sits inside the `param_1 == DAT_0071c298` test. On
+the AI path nothing is filtered and every hit the sweep returns repels, other aircraft in ordinary
+flight included.
+
+**Implemented 2026-08-15** (`BL-359`, closed; `git log --grep=BL-359`), player path only.
+`FlightController.ProbeGroundBlow` casts the ray and `FlightModel.GroundBlowTerm` applies the law,
+added to the command accumulator after the bank coupling and the weathervane and before
+`BodyRates += cmd * dt`, which is this function's own ordering. Two things the port does differently
+on purpose: the emitter filter is the probe's `CollisionLayers.World` mask rather than a registry
+lookup (only aircraft bodies carry the Aircraft layer, so terrain, scenery and the zeppelin repel
+and aeroplanes do not, which is the same set the filter above produces), and the second effect is
+folded into the model's existing nose-chase as `align + 2·S` — exact rather than approximate, since
+two exponential steers toward the same target compose. `CSVM.Tests`' `GroundBlowTests` pins the law,
+including the `S²` power and the body-frame conversion. **The AI law is not built.**
 
 ## Collision response and `bounce_factor` (`FUN_0048d7f0`)
 

@@ -25,7 +25,11 @@ public enum InstantActionObjective
     AceDown,
     WavesCleared,
     ZonesFlown,
-    ZeppelinDestroyed,
+
+    /// <summary>The zeppelin run's win. Two decoded paths satisfy it, whichever lands first:
+    /// every engine destroyed (the objective the briefing and the target panel name), or the hull
+    /// dying on the gasbag survivor threshold. See <see cref="ObjectiveFor"/>.</summary>
+    ZeppelinDisabled,
 }
 
 /// <summary>Owns one Instant Action mission's actor set, as it grows across the plan's later
@@ -131,7 +135,18 @@ public sealed class InstantActionRuntime
 
     /// <summary>The mission type's own win condition (PLAN-instant-action.md G13's goal): the ace
     /// down, every configured wave cleared, every player's zone set flown, or the zeppelin
-    /// destroyed. Null for a type with no end condition here — see <see cref="Objective"/>.</summary>
+    /// disabled. Null for a type with no end condition here — see <see cref="Objective"/>.
+    ///
+    /// <para>⚠ The zeppelin run's is the ENGINES, not the hull. <c>FUN_0045b9d0</c>'s
+    /// mission-type-2 arm (<c>0x0045be0a</c>) wins the moment the objective zeppelin's engine
+    /// vector is empty, and that vector is the LIVE one: <c>FUN_004bf150</c> erases each nacelle
+    /// from it as the node goes inactive, keeping the authored count separately as the sqrt
+    /// curve's denominator. The hull's own death byte is tested immediately after, so the gasbag
+    /// threshold (F18) still wins the mode too, but it is the second path and not the one the
+    /// shipped text describes: <c>MSG_BRF_IAZ_OBJ2</c> is "Destroy the zeppelin's engines to
+    /// win!" and every chapter's <c>IA1/targets.zrd</c> labels the target
+    /// <c>MSG_OBJ_DISABLEENG</c> ("Disable Engines"). Until 2026-08-15 this mapped to the hull
+    /// kill alone, which no stock Instant Action loadout could reach.</para></summary>
     public static InstantActionObjective? ObjectiveFor(string missionType) =>
         string.Equals(missionType, "dogfight_ace", StringComparison.OrdinalIgnoreCase)
             ? InstantActionObjective.AceDown
@@ -140,7 +155,7 @@ public sealed class InstantActionRuntime
         : string.Equals(missionType, "stunt_flying", StringComparison.OrdinalIgnoreCase)
             ? InstantActionObjective.ZonesFlown
         : string.Equals(missionType, ZeppelinRunMissionType, StringComparison.OrdinalIgnoreCase)
-            ? InstantActionObjective.ZeppelinDestroyed
+            ? InstantActionObjective.ZeppelinDisabled
         : (InstantActionObjective?)null;
 
     /// <summary>The three <c>*_zeppelin</c> node names in <c>zeppelin_type</c> order — 0 cargo,

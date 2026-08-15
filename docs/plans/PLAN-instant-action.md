@@ -78,6 +78,7 @@ plus the words "marked INVENTED" if the decode comes back empty.
 | 7 | "The mission-type ids follow the UI dropdown order." | A3, 2026-08-14. `FUN_00458c20` gives 0 ace, 1 squadron, **2 zeppelin run**, 3 ground target, **4 stunt flying**; the dropdown shows ace, squadron, stunt, zeppelin. |
 | 8 | "On a zeppelin run the objective zeppelin is simply never switched off — the builder just skips it, and nothing ever activates one." | F12, 2026-08-14. Half right, and the wrong half is the one that matters: `FUN_0045a390`'s deactivation loop does skip it, but a **second block** right after (`0x0045b910`) calls `gwNodeSetActive(node, TRUE)` on that same node. Without it the mission script's own `NodeSetActive off` would still be in force and the objective would be invisible and unshootable. A4 read the loop; the block after it went unread until F12. |
 | 9 | "The wave block does not run on `zeppelin_run`." | F12, 2026-08-14, correcting E11's own note. The original builds all four waves deactivated at the origin on that mode too (`formats/instant-action.md`, "The ace and the waves") — even wave 1. What the mode replaces is the ARRIVAL, not the build. |
+| 10 | "A zeppelin run is won by destroying the zeppelin." | ⚠ **G13 shipped this and it stood for a day.** Reported from the controls 2026-08-15 (every engine destroyed, mission ran on) and decoded the same day: `FUN_0045b9d0` at `0x0045be0a` tests the objective zeppelin's LIVE engine vector (`+0x4c`…`+0x50`, compacted by `FUN_004bf150` as nacelles die) for empty **before** the hull-death byte `+0x6`. Both win, engines first. `MSG_BRF_IAZ_OBJ2` ("Destroy the zeppelin's engines to win!") and `IA1/zrdr/targets.zrd`'s `MSG_OBJ_DISABLEENG` said so in shipped data all along; G13 reasoned from the mission type instead of reading either. The hull-only rule also made the mode unwinnable without `wep_14`, since gasbags are `DAMAGES_ZEPPELIN`-gated and engines are not. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -1162,6 +1163,31 @@ flying zeppelin stays behind; that is known and is not this item's bug.
 
 ## G13 ☑ End conditions, lives and spectating
 
+⚠ **Corrected 2026-08-15: the zeppelin run's win condition below was WRONG, and is now fixed.**
+This item mapped `zeppelin_run` to the hull kill, on the strength of "the end conditions follow
+from the mission types" (its own Evidence line, confidence *direction-sound*, never traced). The
+original wins that mode on the **engines**. `FUN_0045b9d0`'s mission-type-2 arm at `0x0045be0a`
+tests the objective zeppelin's engine vector for empty BEFORE it tests the hull's death byte, and
+that vector is the live one — `FUN_004bf150` erases each nacelle from it as the node goes inactive,
+which is the same list the sqrt speed curve reads. The shipped text says so twice and was never
+consulted: `MSG_BRF_IAZ_OBJ2` is "Destroy the zeppelin's engines to win!" and every chapter's
+`IA1/zrdr/targets.zrd` labels the target `MSG_OBJ_DISABLEENG` ("Disable Engines"). Reported from
+the controls: every engine on the objective zeppelin destroyed and the mission ran on.
+
+The fix keeps BOTH decoded paths, since the hull byte is still tested one instruction later:
+`InstantActionObjective.ZeppelinDestroyed` is renamed `ZeppelinDisabled`, `ZeppelinRuntime` raises
+a new `ZeppelinEnginesDisabled` off the recount the F17 seam already runs (gated on the hull, since
+the original's compaction stops at death), and `GameSession` subscribes that and `ZeppelinKilled`
+to the one objective. `WireZones` now warns outright when an engine has no destructible pool,
+because such an engine can never die and would leave the mode unwinnable on its own objective
+rather than merely slow. The full decode is in
+[`formats/instant-action.md`](../formats/instant-action.md), "The zeppelin run is won on the
+ENGINES". Its severity is worth naming: gasbags are behind the `DAMAGES_ZEPPELIN` gate and engines
+are not, so the hull-only reading made the mode unwinnable for anyone who had not fitted `wep_14`
+torpedoes, and no stock loadout carries one. The `instant-action-end` suite now drives both paths
+over C1/M04's real piratezep — every engine shot out wins it with the hull still alive, one engine
+short does not, and the gasbag threshold wins it separately.
+
 **Landed 2026-08-14. All four mission types now end, and one bug fell out of writing the fourth.**
 The end state lives on `InstantActionRuntime` as its first instance state: `ObjectiveFor(missionType)`
 maps a mission type to the one thing that wins it, `ReportObjective` drops what the mission does not
@@ -1228,14 +1254,20 @@ pilots watching at once move together; named in `docs/architecture.md`, not work
 
 **Goal.** Every mission type can be won and lost. Dogfighting an ace ends when the ace is down.
 Dogfighting a squadron ends when all configured waves are cleared. Stunt flying ends when every
-player has completed their zone set. Attacking a zeppelin ends when the zeppelin is destroyed. Any of
+player has completed their zone set. Attacking a zeppelin ends when its engines are all destroyed
+(corrected 2026-08-15; as originally written, "when the zeppelin is destroyed"). Any of
 them is lost when the last human is out of lives, and a downed pilot with no lives left watches from
 the spectator camera while the others fly on.
 
 **Evidence (confidence: direction-sound).** The end conditions follow from the mission types and each
 has an existing signal to hang off: `Downed` on the ace's controller, the sequencer's own state,
 `StuntMission.CompletedAt` plus `StuntRace`'s existing all-finished handling, and
-`ZeppelinRuntime.ZeppelinKilled`. Decision 10 fixes stunt on all-finished rather than first-past-the-
+`ZeppelinRuntime.ZeppelinKilled`. ⚠ **That last one was wrong, and this Evidence line is where it
+went wrong** — the mode is won on the engines, not the hull (see the correction at the top of this
+item). "Follows from the mission type" is exactly the reasoning that produced it: there was a
+decoded arm to read (`FUN_0045b9d0` at `0x0045be0a`) and shipped briefing text to check, and
+neither was. A *direction-sound* end condition is not the same class of claim as a
+*direction-sound* placement or feel, and should have been traced before it shipped. Decision 10 fixes stunt on all-finished rather than first-past-the-
 post, which is what `StuntRace` already does (a finisher parks showing their placing while the field
 flies on, and the last one in raises the board). `lives` is an INVENTED extension with no authority in
 the data; 1 is the default because the original is a one-life game.

@@ -25,7 +25,10 @@ public class InstantActionEndTests
             InstantActionRuntime.ObjectiveFor("dogfight_squadron"));
         Assert.Equal(InstantActionObjective.ZonesFlown,
             InstantActionRuntime.ObjectiveFor("stunt_flying"));
-        Assert.Equal(InstantActionObjective.ZeppelinDestroyed,
+        // The zeppelin run wins on the ENGINES, not the hull (FUN_0045b9d0 at 0x0045be0a tests
+        // the live engine vector before the hull's death byte) — the mode's own briefing string
+        // and its "Disable Engines" target label say the same.
+        Assert.Equal(InstantActionObjective.ZeppelinDisabled,
             InstantActionRuntime.ObjectiveFor("zeppelin_run"));
         // ground_target is the fifth type every shipped map's disallow_missions bars, and this
         // milestone does not implement it: no win condition, deliberately.
@@ -45,7 +48,7 @@ public class InstantActionEndTests
         zeppelin.ReportObjective(InstantActionObjective.ZonesFlown);
         Assert.False(zeppelin.Ended);
 
-        zeppelin.ReportObjective(InstantActionObjective.ZeppelinDestroyed);
+        zeppelin.ReportObjective(InstantActionObjective.ZeppelinDisabled);
         Assert.Equal(InstantActionOutcome.Won, zeppelin.Outcome);
     }
 
@@ -59,7 +62,7 @@ public class InstantActionEndTests
         var stunt = new InstantActionRuntime(Def("stunt_flying"));
 
         stunt.ReportObjective(InstantActionObjective.WavesCleared);
-        stunt.ReportObjective(InstantActionObjective.ZeppelinDestroyed);
+        stunt.ReportObjective(InstantActionObjective.ZeppelinDisabled);
         stunt.ReportObjective(InstantActionObjective.AceDown);
         Assert.False(stunt.Ended);
 

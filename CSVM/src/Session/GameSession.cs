@@ -2503,7 +2503,7 @@ public partial class GameSession : Node3D
         // Instant Action's end conditions, lives and spectating (PLAN-instant-action.md G13).
         // Every signal this needs already exists and is built by the blocks above — the ace's own
         // Downed report, the wave sequencer's exhausted counter (StepInstantAction), the stunt
-        // run's all-finished path and ZeppelinRuntime.ZeppelinKilled — so this only routes them
+        // run's all-finished path and ZeppelinRuntime's two zeppelin signals — so this only routes them
         // into the one runtime that decides the outcome. Each source reports the objective it has
         // satisfied and the runtime drops what this mission type does not run on, which is why a
         // zeppelin run clearing all four of its waves is not a win.
@@ -2559,18 +2559,23 @@ public partial class GameSession : Node3D
                     }
                 }
             }
-            else if (objective == InstantActionObjective.ZeppelinDestroyed && _zeppelins != null)
+            else if (objective == InstantActionObjective.ZeppelinDisabled && _zeppelins != null)
             {
                 string endZep = InstantActionRuntime.SelectedZeppelinNode(iaEnd.Def);
-                _zeppelins.ZeppelinKilled += node =>
+                Action<string> reportZeppelin = node =>
                 {
-                    // The OBJECTIVE's death only: a mission world may fly other zeppelins, and
-                    // shooting one of those down is not this mission's win.
+                    // The OBJECTIVE's own signal only: a mission world may fly other zeppelins,
+                    // and disabling or shooting down one of those is not this mission's win.
                     if (string.Equals(node, endZep, StringComparison.OrdinalIgnoreCase))
                     {
-                        iaEnd.ReportObjective(InstantActionObjective.ZeppelinDestroyed);
+                        iaEnd.ReportObjective(InstantActionObjective.ZeppelinDisabled);
                     }
                 };
+                // Both decoded paths, in the order FUN_0045b9d0 tests them and subscribed to the
+                // one objective because ReportObjective is one-way: the engines running out is
+                // what the mode is FOR, and the hull dying on the gasbag threshold wins it too.
+                _zeppelins.ZeppelinEnginesDisabled += reportZeppelin;
+                _zeppelins.ZeppelinKilled += reportZeppelin;
             }
             else
             {

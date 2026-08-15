@@ -482,11 +482,47 @@ Whatever the arm, the tick finishes by deciding whether the mission is over, and
 | 1 squadron | the same walk found no enemy that still counts |
 | 3 ground target | the object at `DAT_00718f50` reports through vtable slot `+0x14`, or there is no such object |
 | 4 stunt | every entry of the danger-zone list at `DAT_00718f78`…`DAT_00718f7c` reports done (`+0x48` clear or `+0x40` set), clearing byte `+0x4d` of the parallel list at `DAT_00718f88` as it goes |
-| 2 zeppelin | the selected zeppelin is gone, or its list at `+0x4c`…`+0x50` is empty, or its byte `+0x6` is set |
+| 2 zeppelin | the selected zeppelin is gone, or its **live engine** list at `+0x4c`…`+0x50` is empty, or its hull-death byte `+0x6` is set |
 
 The mode 2 row is also where the type-2 arm lands when the zeppelin pointer is null. The field
-meanings in the last three rows are read from their use here only, not from their own modules, so
-treat them as pointers for G13 rather than as a decoded end-condition model.
+meanings in rows 3 and 4 are read from their use here only, not from their own modules, so treat
+them as pointers rather than as a decoded end-condition model. Row 2 is decoded in full below.
+
+#### The zeppelin run is won on the ENGINES
+
+The two zeppelin fields resolve against the record reader (`FUN_004bd8d0`) and the zeppelin's own
+per-frame update (`FUN_004bf9d0`), and the empty-list test is the mode's actual objective, not a
+degenerate guard:
+
+- **`+0x4c`…`+0x50` is the `engines` list, and it is the LIVE one.** The reader fills it from the
+  record's `engines` key, one entry per nacelle's own `healthy` child node (`0x004bea8a`), and
+  keeps the load-time count separately at `+0x98`. `FUN_004bf150`, run every frame while the
+  zeppelin is alive and active, **erases** from the list every entry whose node has lost its active
+  bit (`node[+0x24] & 4`), then scales the live limits from what is left:
+  `+0xa0 = sqrt(alive/total) · max_speed` and `+0xac = (0.8·sqrt(alive/total) + 0.2) · max_accel`,
+  the same curve [mission-entities.md](mission-entities.md) documents under "Engine loss". So the
+  list running empty means **every engine has been destroyed**.
+- **`+0x6` is the hull-death byte**, set by `FUN_004bf0b0` when the surviving `healthy` entries
+  (`+0x38`…`+0x3c`) drop below `num_healthy_required` (`+0x44`). That is F18's gasbag threshold,
+  unchanged.
+
+So the mode has **two winning paths, tested in that order**: destroy all the engines, or kill the
+hull on the gasbag threshold. The shipped text names the first and only the first —
+`MSG_BRF_IAZ_OBJ2` is *"Destroy the zeppelin's engines to win!"*, `MSG_BRF_IAZ_OBJ1` is *"Cripple
+the zep so your raiding parties can hit it"*, and all eight chapters' `IA1/zrdr/targets.zrd` give
+the `multiplayer1zep` target `help_label` `MSG_OBJ_DISABLEENG` ("Disable Engines"). Neither the
+mission's `objectives.zrd` (which carries only `MISSION_TIMER` and `PLAYER_INIT`) nor any zeppelin
+record authors a threshold: the count is "all of them", because the test is on an empty vector.
+
+⚠ **A record authoring no engines wins the mission on the first tick.** The list is empty from
+load, and nothing distinguishes that from having emptied it. Unobservable in the shipped data (all
+58 records author 12 or 14 engines) but it is the behaviour, not an accident.
+
+⚠ **This was decoded 2026-08-15, after G13 had already shipped the hull kill as the only path.**
+The tell was in play: every engine on the objective zeppelin destroyed and the mission ran on.
+The reason the error survived review is that the gasbags are behind the `DAMAGES_ZEPPELIN` gate
+([weapons.md](weapons.md)) while engines are ordinary destructibles, so the hull-only reading made
+the mode unwinnable for any pilot who had not fitted `wep_14` torpedoes.
 
 ### Keys parsed but never authored, and authored but never parsed
 

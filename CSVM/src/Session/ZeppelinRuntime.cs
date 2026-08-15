@@ -24,7 +24,9 @@ namespace CSVM.Session;
 /// authored hp nor a destructible def is NOT damageable and says so in a <c>zep:</c> line —
 /// never an invented default. The per-zeppelin <see cref="ZeppelinDamage"/> aggregator owns the
 /// kill (<c>survivors &lt; num_healthy_required</c>, the decoded polarity), engine deaths drive
-/// <see cref="ZeppelinMotion.AliveEngines"/> (F17's sqrt curve), and the kill plays the
+/// <see cref="ZeppelinMotion.AliveEngines"/> (F17's sqrt curve) and, once the last one is gone,
+/// <see cref="ZeppelinEnginesDisabled"/> — Instant Action's own win on <c>zeppelin_run</c>, which
+/// the hull kill is only the second route to. The kill plays the
 /// authored hull death — the def anchored on the zeppelin node whose ACTIVATION_PREREQUISITE
 /// counts the gasbag finish anims (<c>all_pzep_gasbags</c>, which itself calls
 /// <c>killpzep</c>). <see cref="GateWeaponDamage"/> is the <c>DAMAGES_ZEPPELIN</c> routing
@@ -86,6 +88,19 @@ public sealed partial class ZeppelinRuntime : Node
     /// <summary>Raised once when a zeppelin's survivor count crosses the threshold — the
     /// generator runtime disables the dead host's generator off this (decoded rule).</summary>
     public event Action<string>? ZeppelinKilled;
+
+    /// <summary>Raised once when a zeppelin's last live engine dies. This is Instant Action's own
+    /// win signal on <c>zeppelin_run</c> (<c>FUN_0045b9d0</c> at <c>0x0045be0a</c> tests the live
+    /// engine vector for empty BEFORE it tests the hull's death byte), which is why the mode's
+    /// briefing says "Destroy the zeppelin's engines to win!" and its target panel reads "Disable
+    /// Engines". The original has no separate flag for it: <c>FUN_004bf150</c> erases each dead
+    /// nacelle from the vector the speed curve already reads, so an empty vector IS the signal.
+    /// Here the same recount raises this, so nothing polls a second list.
+    ///
+    /// <para>A record authoring NO engines fires this on the first step, matching the original's
+    /// empty-from-load vector. That is unobservable in the shipped data (all 58 records author 12
+    /// or 14) but it is the decoded behaviour, not an accident.</para></summary>
+    public event Action<string>? ZeppelinEnginesDisabled;
 
     /// <summary>Zeppelins placed on a resolved net (a held <c>deactivated</c> one counts — it
     /// is placed and would fly when a script layer wakes it).</summary>
@@ -362,6 +377,15 @@ public sealed partial class ZeppelinRuntime : Node
                 pooled++;
             }
         }
+        if (pooled < def.Engines.Count)
+        {
+            // Instant Action's zeppelin_run is won by emptying this list, so an engine that can
+            // never die makes that mode unwinnable on its own objective. Say it outright rather
+            // than leaving it to be read out of the census line below.
+            GD.PushWarning($"zep: '{def.Node}' has {def.Engines.Count - pooled} engine(s) with no " +
+                           $"destructible pool — they can never die, so an Instant Action " +
+                           $"zeppelin run on this hull cannot be won on engines");
+        }
 
         // cannon_health cannons: record hp beats the def pool (Reseed); the record's stages
         // (0.6/0.3) play through the aggregator, mirroring the def-pooled DAMAGE_SEQUENCE path.
@@ -395,6 +419,20 @@ public sealed partial class ZeppelinRuntime : Node
             zep.Motion.AliveEngines = engines;
             GD.Print($"zep: '{zep.Def.Node}' engines {engines}/{zep.Motion.TotalEngines} — " +
                      $"max speed now {zep.Motion.EffectiveMaxSpeed:0.#} m/s");
+        }
+
+        // The engines gone, once: Instant Action's own win on zeppelin_run (see the event). The
+        // denominator here is the RECORD's engine count, not ZeppelinMotion.TotalEngines, which
+        // floors at 1 so a record with no engines still moves — that floor must not suppress the
+        // decoded empty-vector win.
+        // Gated on the hull, because the original's compaction only runs while alive: a death
+        // sequence that takes the nacelles with it must not raise this after the fact.
+        if (!zep.Dead && !zep.EnginesDisabled && engines == 0)
+        {
+            zep.EnginesDisabled = true;
+            GD.Print($"zep: '{zep.Def.Node}' ENGINES DISABLED — 0 of {zep.Def.Engines.Count} " +
+                     $"engine(s) live");
+            ZeppelinEnginesDisabled?.Invoke(zep.Def.Node);
         }
 
         // Per-zone kill lines, once each.
@@ -483,6 +521,10 @@ public sealed partial class ZeppelinRuntime : Node
         public ZeppelinDamage? Damage { get; set; }
 
         public bool Dead { get; set; }
+
+        /// <summary>Whether the engines-gone signal has fired (one-way, like <see cref="Dead"/>).
+        /// </summary>
+        public bool EnginesDisabled { get; set; }
 
         /// <summary>Switched off by Instant Action's builder (F12, <see cref="Hold"/>) — placed
         /// but stepped no further, the runtime counterpart of the record's own
