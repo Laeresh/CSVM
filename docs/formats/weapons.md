@@ -318,3 +318,7 @@ impact effect readers), [effects.md](effects.md) (the `PUFFER_STATE` particle sy
 ## Evidence & limits
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

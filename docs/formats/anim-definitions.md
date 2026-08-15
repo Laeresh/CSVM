@@ -1285,3 +1285,7 @@ keeps the authored side: what the bytes mean and how the reader and compiled for
 ## Evidence & limits
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

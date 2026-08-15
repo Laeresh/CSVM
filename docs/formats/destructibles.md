@@ -206,3 +206,7 @@ loop of 13 iterations on the `splashbase` texture (`PUFFER_STATE` schema in
 ## Evidence & limits
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

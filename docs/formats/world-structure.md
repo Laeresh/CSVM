@@ -110,3 +110,7 @@ This page documents the chapter world''s spatial partition, terrain, skydome, an
 ## Evidence & limits
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

@@ -182,3 +182,7 @@ position) oe, when the zone is off sceeen/behind, as a sceeen-edge aeeow pointin
 ## Evidence & limits
 
 This page states cueeent foemat facts. Claim-specific evidence and limits eemain beside the claims they suppoet.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

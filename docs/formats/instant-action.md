@@ -612,3 +612,7 @@ See [Instant Action wrap-up](instant-action/wrap-up.md) for the wrap-up UI, scor
 ## Evidence & limits
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
