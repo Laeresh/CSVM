@@ -1354,6 +1354,14 @@ belongs to the session, which sets it on the world and world-effects runtimes. R
 a wash is a thing that happens, not a base state. Decode (blend, interpolation, the single global
 state a second burst overwrites, and why `alpha_delta` is not read) in
 `docs/formats/anim-definitions.md`.
+The push also carries the **burst's world point and the def's own gate radius squared**
+(`WashGateRadiusSquared`, cached per def), which is what routes the wash to the right pane(s) in
+splitscreen (B12): the sink decides which panes, because pane geometry is the overlay's business,
+not this class's. The radius is the def's single `If PlayerRange` operand, already metres squared in
+this runtime's convention — the same authored gate that decides whether the chain is called at all,
+just re-asked per pane instead of once. ⚠ **Do not re-derive that radius from the weapon.** It is
+authored in the anim def, not in `weapons.json`, and the wash defs are ground effects that fire on
+terrain impacts where no aircraft was hit.
 `LIGHT_ANIMATION` reports its `run_time` as the event's **duration**, so a chain of ramps is
 spaced instead of firing in one instant — the original's handler (dispatch slot 5, `004e82b0`)
 returns "still running" until the sequence's event timer passes the run time, exactly as
@@ -3941,22 +3949,38 @@ and every `AudioStreamPlayer3D` in the world goes silent, uncounted and unlogged
   two ambient cloud populations, which this band replaced.)
 
 ## src/UI/ScreenFlash.cs
-The `FBFX_COLOR_FROM_TO` full-screen wash — a close HE, AP or flak burst ramping the whole picture
-from one RGBA to another over the event's run time. **One ramp state, one hidden `ColorRect` per
+The `FBFX_COLOR_FROM_TO` full-screen wash — a close HE, AP or flak burst ramping the picture
+from one RGBA to another over the event's run time. **One ramp state and one hidden `ColorRect` per
 rendered view** (`HudLayers.WorldOverlay`, under each rig's `HudParent`, built with the rigs so
 every runtime can be handed the same `Play` sink). `AnimRuntime`'s handler pushes `(from, to,
-run_time)`; the node lerps in RGBA on `GameClock` sim time and ends — it does NOT hold the `to`
-colour, because the original re-arms its frame-buffer object for the current frame only and a
-completed chain simply stops re-arming. `Play` **replaces** whatever is running, which is the
-original's composition rule literally: one process-wide state a second burst overwrites (decode in
-`docs/formats/anim-definitions.md`).
+run_time, origin, radius²)`; the node lerps in RGBA on `GameClock` sim time and ends — it does NOT
+hold the `to` colour, because the original re-arms its frame-buffer object for the current frame only
+and a completed chain simply stops re-arming. `Play` **replaces** whatever that pane is running,
+which is the original's composition rule literally: one process-wide state a second burst overwrites
+(decode in `docs/formats/anim-definitions.md`).
 ⚠ **Per view, not per window, and per-rig is what makes that right.** The original is single-view,
   so "the whole picture" is unambiguous there; in splitscreen each pane IS a picture, and painting
   the window instead would wash the 2 px gutters and the empty 3P quadrant, which are neither.
-  One state drives all panes, so all panes flash together as the single global state implies.
   Under the HUD (unlike the lens flare's sun wash, which `CAP-13` measured whitening the
   instruments — there is no footage saying this one does) and unreachable by the launchscreen and
   the scoreboards, which sit at `HudLayers.Board`.
+**Which panes wash (B12, `BL-340`): every pane whose own camera is inside the burst's authored
+radius**, read off the session's `ViewerSet` (A3), which `GameSession` hands to `Build` alongside the
+same rig list the panes come from — so pane *i* and camera *i* are the same rig by construction, and
+a set that does not match the pane count is not indexed at all (every pane washes, the labs' case).
+The radius is the wash def's own `If PlayerRange` gate — `10000` m² = **100 m**, and all 24 shipped
+wash defs (`he_ground_effect`/`ap_ground_effect`/`flak_effect` × 8 chapters) author exactly that one
+gate — so the rule here is the original's own gate re-asked per player rather than a new constant.
+Radius 0 means ungated and paints every pane; the intro cutscene's `gi_scene1` is the one such
+carrier, and an ungated wash is not a proximity effect.
+⚠ **Not "the hit player".** Two of the three carriers are GROUND effects: they play on terrain and
+  water impacts, where no aircraft was struck at all, so a hit-player rule would silence the common
+  case. The decode's gate is a range from the burst, and that is what this asks.
+⚠ If no pane's camera is in range the **nearest** pane still washes. The def's gate already fired,
+  so a player WAS near the burst; the gate measures rig 0's camera while this measures each pane's
+  own, so the two can disagree at the margin and the burst must not end up washing nobody. A floor,
+  not a second rule — single player measures the same camera twice, so it never engages and the
+  goldens stay hash-identical.
 ⚠ The layer stays **`Visible = false` with no ramp running**, so a session that never sees a close
   burst renders exactly what it rendered before this existed — that is what keeps the golden set
   byte-identical rather than a claim about a transparent rect costing nothing.
@@ -3993,8 +4017,11 @@ plus forward for a view-space depth comparison. `Poses(into)` fills a caller-own
 consumer, `EffectAmbience`, which republishes the set every frame and would otherwise allocate a
 list per frame. `ScreenSize`'s arithmetic did not move: this class carries cameras, not the
 screen-size/view-depth math itself.
-Consumers today: `ProjectilePool.Viewers` (tracer floor) and `WeatherRig.Tick` → `EffectAmbience`
-(the puffer distance fade), both handed the session's one instance at construction.
+Consumers today: `ProjectilePool.Viewers` (tracer floor), `WeatherRig.Tick` → `EffectAmbience`
+(the puffer distance fade), both handed the session's one instance at construction, and
+`UI.ScreenFlash` (B12's wash routing), handed it at `Build`. That last one reads `Cameras` rather
+than `Positions` because it needs the index to stay aligned with its own per-pane rects, and
+`Positions` skips a freed camera.
 ⚠ Not `PlayerPositions` (`GameSession`'s gameplay seam feeding `WorldSession.Options`, C21's) —
 that answers "where are the humans" for proximity gameplay rules off each rig's `Controller`/camera
 fallback; this answers "what do the cameras see" for draw rules. A3's own trap: do not fold them
@@ -4381,8 +4408,8 @@ The per-launch session node: `Session.Launcher` instantiates one per launch with
 `(SessionSpec, LauncherContext)` and runs `StartSession()` — an ordered sequence of phase methods
 sharing one `BuildState`; menu and CLI share that one build path. Owns the session `GameClock`,
 `StartupProfile` and the `UI.ScreenFlash` overlay (built with the rigs, since it needs one surface
-per view, and handed as a sink to the world runtime and — via `WorldEffectsFactory.ScreenFlash` —
-the world-effects one); delegates to the `src/Session/` clusters (LiveryResolver, SpawnPicker,
+per view and the `ViewerSet` that routes a wash to them, and handed as a sink to the world runtime
+and — via `WorldEffectsFactory.ScreenFlash` — the world-effects one); delegates to the `src/Session/` clusters (LiveryResolver, SpawnPicker,
 PlaneRoster, FlightRigAssembler, WorldEffectsFactory, WeatherRig, LensFlareRig) and to `Testing.ProbeRunner`/
 `CaptureDirector` on the Launcher — read `src/Session/Launcher.cs`'s entry too before touching the
 build's edges. `BuildsCollision` is the only spelling of "does this session build colliders".
@@ -4958,7 +4985,11 @@ it asserts the six wash steps' authored run times AND the gaps between their fir
 per-step run time alone is reported correctly even by a handler that returns 0 as its duration and
 fires all six in one instant. Shown able to fail exactly that way. The chain's total gets one step
 of headroom per gap — the authored run times are exact multiples of the step but not of binary
-float, and three of the five gaps land one step late.
+float, and three of the five gaps land one step late. It then asserts B12's routing on both sides of
+the sink: every step reports the burst's own point and the def's authored `10000` m² gate, and a
+real two-pane `ScreenFlash` over two `Camera3D` nodes 120 m apart paints one pane, the other pane, or
+both, purely by where the burst is. The able-to-fail control is the same overlay with no `ViewerSet`
+bound, which paints both — the pre-B12 behaviour; disabling the routing fails three of the checks.
 `ordnance-burst-timeline` is `PLAN-anim-original-match` D31's proof: it plays `he_ground_effect`,
 `flash_effect` and `sonic_ground_effect` on its own miniature world-effects stage and matches the
 WHOLE recorded `OnEventDispatched` log of each — every sequence, every event, in its sequence's
@@ -5676,7 +5707,9 @@ excludes C4's train-anchored `b_steamtrail`. Constructed once per session (`_wor
 same lifetime as `LiveryResolver`/`SpawnPicker`) from
 `(SessionSpec, Node3D worldRoot, Func<Vector3> playerPosition)`, plus a settable `ScreenFlash`
 sink it hands to the effects runtime — the three defs carrying an `FBFX_COLOR_FROM_TO`
-(`he_ground_effect`/`ap_ground_effect`/`flak_effect`) all play there.
+(`he_ground_effect`/`ap_ground_effect`/`flak_effect`) all play there. The sink's last two arguments
+are the burst point and the def's own gate radius squared, B12's pane routing; this class only
+forwards them.
 The effects runtime's puffer factory passes `softParticles: false` for MIX-ramp states — these effects
 emit at ground-level sites, where the depth fade zeroes fresh dark puffs against the terrain (the
 crash-smokeball lesson; the damage-stage smoke measured near-invisible with it on) — and keeps the

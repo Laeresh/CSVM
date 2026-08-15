@@ -96,7 +96,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Draw rules (`BL-338`'s class)
 
 11. ☑ Puffer distance fade answers every pane (`BL-339`)
-12. ☐ Screen wash routed to the hit pane(s) (`BL-340`)
+12. ☑ Screen wash routed to the hit pane(s) (`BL-340`)
 13. ☐ World point lights budgeted against the nearest rig (`BL-366`)
 14. ☐ Close out `BL-338`: residual sweep + fog verdict recorded
 
@@ -336,7 +336,7 @@ also where `BL-338`'s per-pane-alpha verdict is decided.
 the screen, and the suite pins the decoded bands against C3's own emitters. The fade is view-space
 depth along the camera forward, not distance; "nearest" must compare per-viewer depths, not ranges.
 
-## B12 ☐ Screen wash routed to the hit pane(s) (`BL-340`)
+## B12 ☑ Screen wash routed to the hit pane(s) (`BL-340`)
 
 **Goal.** An `FBFX_COLOR_FROM_TO` wash paints the pane(s) of players near the burst, not all four.
 
@@ -346,22 +346,65 @@ holds one ramp state, and `Play` paints every rect (`ScreenFlash.cs:28`, `:108`)
 whose second burst replaces the first (`crimson.exe` 0x9c8a98); replace-not-composite is decoded
 and must survive per pane.
 
-**Approach.** Per-pane ramp state (the fields become one struct per view) plus targeting on the
-play call. The routing is the substance: the dispatch site that knows the aircraft and distance is
-`ProjectilePool`'s blast/impact path, not `AnimRuntime`. Decide there between "the hit player
-only" and "every player within the burst's own radius" — the second is truer to what the effect
-is, the first is what was reported; the second needs a distance term. <TODO: that design call, at
-implementation time, with the burst radius data in hand.>
+**Decision (2026-08-15, with the radius data in hand): every player within the burst's own radius,
+and the radius is the wash def's OWN authored gate, not the weapon's.** Read out of the extraction:
+each of the three ordnance wash defs carries exactly one `If`, and it is `PlayerRange 10000` — metres
+squared in the compiled convention, so **100 m** — guarding the `CallSequence frame_buffer_effects1`
+that holds the ramp chain. Identical in all 8 chapters, 24 defs, no exceptions. The intro cutscene's
+`gi_scene1` is the fourth carrier and gates on nothing, so its wash is ungated and paints
+everything. So the routing rule is not a new rule at all: it is the original's own gate, asked once
+per player instead of once for player 1.
+
+"The hit player only" is refused on the same data. Two of the three carriers are GROUND effects —
+they play at terrain and water impacts, where no aircraft was struck at all — so a hit-player rule
+would silence the wash in its commonest case, and the decoded gate measures a range from the burst,
+not a victim.
+
+**That also moved the dispatch site.** The plan expected `ProjectilePool`'s blast/impact path to own
+the routing because it knows the aircraft and the distance. It knows neither of the things this
+actually needs: the radius is authored in the anim def, and the burst point is the effect instance's
+own anchor, both of which live in `AnimRuntime`, which already evaluates that very gate for the
+`If`. `ProjectilePool` is untouched by this item.
+
+**Approach (landed).** The `ScreenFlash` sink grows two arguments — the burst's world point and the
+def's gate radius squared (`AnimRuntime.WashGateRadiusSquared`, a cached per-def scan for the single
+`If PlayerRange` operand; 0 = ungated). `UI.ScreenFlash` holds one `Ramp` per pane instead of one
+set of fields, takes the session's `ViewerSet` at `Build` (index-aligned with the panes, since
+`GameSession` builds both from the same rig list), and paints the panes whose own camera is inside
+that radius. Replace-not-composite is unchanged, held within each pane. One floor: if no pane's
+camera is in range the nearest pane still washes, because the def's gate already fired (it measures
+rig 0's camera, this measures each pane's own, and the two can disagree at the margin). In single
+player both measure the same camera, so the routing is a no-op there and the goldens are
+hash-identical.
 
 **Model recommendation.** high — the dispatch-site derivation crosses `ProjectilePool`,
 `AnimRuntime` and `GameSession`.
 
-**Verify.** Extend the `fbfx-flash` suite to assert the right pane's ramp through the new per-pane
-seam (its current `ScreenFlash.Current` readout changes; extend, do not delete the timing checks).
-At the controls: 2 players apart, rocket hit near P2 — only P2's pane washes.
+**Verify (done 2026-08-15).** `dotnet build CSVM/CSVM.sln` clean, 0 warnings. `.\RunTests.ps1`:
+1289/1289 units, 60/60 engine suites, 14/14 goldens hash-identical, engine errors clean, hitch
+clean. `fbfx-flash` keeps every timing check (the six authored run times, the gaps between fires,
+the 1.1 s span) and gains both halves of the routing: at the sink, every step reports the burst's
+own point (0.000 m off the play point) and the def's authored 10000 m² gate; at the overlay,
+`WashPaintsOnlyThePanesItReached` drives a real two-pane `ScreenFlash` over two `Camera3D` nodes
+120 m apart and asserts one pane (burst 50 m from P1, 170 m from P2), the other pane (the mirror
+case, while P1's ramp is still running and must not move), both panes (60 m from each — the design
+call, which a nearest-only rule would fail), the ungated case, and the nearest-pane floor. The
+able-to-fail control is the same overlay with no `ViewerSet` bound, which paints both panes;
+disabling the routing outright was run and fails three of the checks. 8-chapter `--freecam` sweep
+(C1, C1B, C1C, C2, C2B, C3, C4, C5): all exit 0, zero errors, node/mesh counts unmoved.
+
+**At the controls: still owed, and it is B11's blocker, not a new one.** Two panes cannot be given
+independent positions from the CLI (no per-player placement flag, no scripted fire — both panes
+spawn near-coincident off the same spawn list), so the discriminating geometry for "a burst near P2
+only" is not reachable in a scripted session; the suite pins the rule instead. Folded into `PT-52`
+in `playtest.md`, beside B11's: 2 players apart, rocket hit near P2, only P2's pane washes.
 
 **⚠ Traps.** Keep replace-not-composite within each pane. The gutters and the empty 3P quadrant
 must stay out of the wash (the per-view rect build already guarantees this; don't regress it).
+⚠ The wash still FIRES on player 1's camera alone — the def's `If PlayerRange` gate reads
+`AnimRuntime.PlayerPos()`, which is C21 (`BL-365`)'s item, not this one. Until C21 lands, a burst
+100 m from P4 and 2 km from P1 plays no wash for anyone to route. B12 decides who sees a wash that
+happened; C21 decides that it happens.
 
 ## B13 ☐ World point lights budgeted against the nearest rig (`BL-366`)
 

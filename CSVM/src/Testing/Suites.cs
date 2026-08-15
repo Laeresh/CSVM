@@ -8066,7 +8066,11 @@ public static class Suites
     /// <c>run_time</c> as its duration, because that is the only thing spacing them: report 0 and
     /// all six fire in one instant and the wash is a single frame of violet. Asserts the six
     /// ramps arrive in order with their authored run times and colours, and that the chain
-    /// actually spans its authored 1.1 s from the first fire to the last.</summary>
+    /// actually spans its authored 1.1 s from the first fire to the last.
+    ///
+    /// <para>Then the routing half (B12): each step must also report WHERE the burst was and the
+    /// def's own <c>PlayerRange</c> gate, and <see cref="ScreenFlash"/> must paint only the panes
+    /// that gate admits.</para></summary>
     private static void FbfxFlash(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -8083,8 +8087,9 @@ public static class Suites
 
                 const float dt = 1f / 60f;
                 float clock = 0f;
-                var fired = new List<(float T, Color From, Color To, float Run)>();
-                runtime.ScreenFlash = (from, to, seconds) => fired.Add((clock, from, to, seconds));
+                var fired = new List<(float T, Color From, Color To, float Run, Vector3 At, float GateSq)>();
+                runtime.ScreenFlash = (from, to, seconds, at, gateSq) =>
+                    fired.Add((clock, from, to, seconds, at, gateSq));
 
                 // At the camera, so the def's own PLAYER_RANGE 10000 gate passes.
                 runtime.PlayEffectAt("he_ground_effect", point);
@@ -8120,8 +8125,118 @@ public static class Suites
                 // five gaps land one step late, 0.05 s over the chain.
                 ctx.Check(Mathf.Abs((fired[5].T - fired[0].T) - 1.1f) <= 5f * dt,
                     $"the chain spans its authored 1.1 s first-to-last fire ({fired[5].T - fired[0].T:0.###} s)");
+
+                // B12's routing half at the source: every step carries the burst point and the
+                // def's OWN gate, which is what lets the overlay pick panes. 10000 is metres
+                // squared (the compiled PLAYER_RANGE convention) = 100 m, and all 24 shipped wash
+                // defs author exactly that one gate.
+                ctx.Check(fired.All(f => Mathf.IsEqualApprox(f.GateSq, 10000f)),
+                    $"every step reports the def's authored PlayerRange gate ({fired[0].GateSq:0.#} m², want 10000 = 100 m)");
+                float drift = fired.Max(f => f.At.DistanceTo(point));
+                ctx.Note($"the wash routes from {fired[0].At} on the def's own {fired[0].GateSq:0.#} m² gate ({Mathf.Sqrt(fired[0].GateSq):0.#} m), {drift:0.###} m off the play point");
+                ctx.Check(drift <= 1f,
+                    $"every step reports the burst's own world point ({drift:0.###} m from where it was played)");
             });
         });
+        WashPaintsOnlyThePanesItReached(ctx);
+    }
+
+    /// <summary>
+    /// The wash reaches the panes the burst reached and no others (B12, `BL-340`). Two panes 120 m
+    /// apart under the authored 100 m gate, so each of the three cases — one pane, the other pane,
+    /// both — is reachable by moving the burst alone.
+    ///
+    /// <para>The design call this pins: the wash paints <b>every player inside the burst's own
+    /// authored radius</b>, not just a hit or nearest one. That is the original's own rule read
+    /// literally — the gate is `If PlayerRange 10000 → CallSequence frame_buffer_effects1`, asked
+    /// once of the one player there and once per player here — and the two ground-effect defs
+    /// carrying it play on TERRAIN impacts, where there is no hit aircraft to route to at all.</para>
+    ///
+    /// <para>Ramp state is per pane, so a second burst near player 2 must not disturb the ramp
+    /// player 1 is already watching; within a pane it still REPLACES, which is the original's
+    /// single-frame-buffer-object rule (docs/org/sequences.md).</para>
+    /// </summary>
+    private static void WashPaintsOnlyThePanesItReached(TestContext ctx)
+    {
+        // The gate every shipped wash def authors: metres SQUARED in the compiled convention.
+        const float gate = 10000f;
+        var clear = new Color(0f, 0f, 0f, 0f);
+        var white = new Color(1f, 1f, 1f, 0.3f);
+        var violet = new Color(0.2f, 0f, 1f, 0.2f);
+        var green = new Color(0f, 1f, 0f, 0.5f);
+
+        var p1 = ViewerCamera(ctx, Vector3.Zero);
+        var p2 = ViewerCamera(ctx, new Vector3(0f, 0f, 120f));
+        var viewers = new ViewerSet();
+        viewers.Bind(new[] { p1, p2 });
+        var (flash, panes) = PaneFlash(ctx, viewers);
+        var (blind, blindPanes) = PaneFlash(ctx, null);
+        try
+        {
+            ctx.Check(flash.PaneCount == 2, $"the overlay built one ramp per pane ({flash.PaneCount})");
+
+            // 50 m ahead of P1, 170 m from P2: inside the gate for one of them only.
+            flash.Play(white, violet, 0.2f, new Vector3(0f, 0f, -50f), gate);
+            ctx.Check(flash.RunningFor(0) && flash.CurrentFor(0).IsEqualApprox(white),
+                $"a burst 50 m from P1 washes P1's pane ({flash.CurrentFor(0)})");
+            ctx.Check(!flash.RunningFor(1) && flash.CurrentFor(1).IsEqualApprox(clear),
+                $"and leaves P2's pane, 170 m away, clear — the BL-340 report ({flash.CurrentFor(1)})");
+
+            // 50 m past P2, 170 m from P1 — the same case from the other side, while P1's own ramp
+            // is still running: two panes, two independent states.
+            flash.Play(violet, white, 0.2f, new Vector3(0f, 0f, 170f), gate);
+            ctx.Check(flash.RunningFor(1) && flash.CurrentFor(1).IsEqualApprox(violet),
+                $"a second burst 50 m from P2 washes P2's pane ({flash.CurrentFor(1)})");
+            ctx.Check(flash.CurrentFor(0).IsEqualApprox(white),
+                $"without touching the ramp P1 is already watching ({flash.CurrentFor(0)}) — the state is per pane");
+
+            // Between them: 60 m from each, so BOTH are inside the burst's own radius.
+            flash.Play(green, white, 0.2f, new Vector3(0f, 0f, 60f), gate);
+            ctx.Check(flash.CurrentFor(0).IsEqualApprox(green) && flash.CurrentFor(1).IsEqualApprox(green),
+                $"a burst 60 m from both washes both panes — every player inside the radius, not just the nearest ({flash.CurrentFor(0)} / {flash.CurrentFor(1)})");
+            ctx.Check(flash.RunningFor(0) && flash.RunningFor(1),
+                $"and replaces what each pane was running rather than compositing with it ({flash.RunningFor(0)}/{flash.RunningFor(1)})");
+
+            // An ungated def (the intro cutscene's gi_scene1 authors no PlayerRange) is not a
+            // proximity effect at all, so it still paints everything.
+            flash.Play(white, violet, 0.2f, new Vector3(0f, 0f, -5000f), 0f);
+            ctx.Check(flash.CurrentFor(0).IsEqualApprox(white) && flash.CurrentFor(1).IsEqualApprox(white),
+                $"an UNGATED wash 5 km out still paints every pane ({flash.CurrentFor(0)} / {flash.CurrentFor(1)})");
+
+            // The floor: the def's gate already fired, so something was near it. If no pane's own
+            // camera agrees, the nearest pane still gets it rather than the burst washing nobody.
+            flash.Play(violet, green, 0.2f, new Vector3(0f, 0f, -5000f), gate);
+            ctx.Check(flash.CurrentFor(0).IsEqualApprox(violet) && flash.CurrentFor(1).IsEqualApprox(white),
+                $"a gated wash no pane is in range of falls to the nearest pane alone ({flash.CurrentFor(0)} / {flash.CurrentFor(1)})");
+
+            blind.Play(white, violet, 0.2f, new Vector3(0f, 0f, -50f), gate);
+            ctx.Check(blind.CurrentFor(0).IsEqualApprox(white) && blind.CurrentFor(1).IsEqualApprox(white),
+                $"ABLE-TO-FAIL CONTROL: the same burst with no viewer set bound paints both panes, which is what this did before the routing existed ({blind.CurrentFor(1)})");
+        }
+        finally
+        {
+            blind.Free();
+            foreach (var pane in blindPanes)
+                pane.Free();
+            flash.Free();
+            foreach (var pane in panes)
+                pane.Free();
+            p2.Free();
+            p1.Free();
+        }
+    }
+
+    /// <summary>A two-pane <see cref="ScreenFlash"/> over bare HUD parents — the shape
+    /// <c>GameSession</c> builds from the rigs, with nothing but the parents and the viewer set,
+    /// since that is all the routing reads.</summary>
+    private static (ScreenFlash Flash, Node[] Panes) PaneFlash(TestContext ctx, ViewerSet? viewers)
+    {
+        var panes = new[] { new Node { Name = "pane1_hud" }, new Node { Name = "pane2_hud" } };
+        foreach (var pane in panes)
+            ctx.Host.AddChild(pane);
+        var flash = ScreenFlash.Build(panes, viewers);
+        ctx.Host.AddChild(flash);
+        return (flash, panes);
     }
 
     /// <summary>A miniature world-effects stage: the named template roots built from the chapter's

@@ -78,8 +78,10 @@ public sealed class WorldEffectsFactory
     /// factory builds — an <c>FBFX_COLOR_FROM_TO</c> wash is screen-space and session-owned, and
     /// the runtimes built here are the ones that play the defs carrying one (<c>he_ground_effect</c>,
     /// <c>ap_ground_effect</c>, <c>flak_effect</c>). Set once, before the first build; null leaves
-    /// the event undrawn.</summary>
-    public Action<Color, Color, float>? ScreenFlash { get; set; }
+    /// the event undrawn. The signature is <see cref="Mech3.AnimRuntime.ScreenFlash"/>'s: the ramp,
+    /// plus the burst's world point and its def's own gate radius squared, which is what routes the
+    /// wash to the panes it reached.</summary>
+    public Action<Color, Color, float, Vector3, float>? ScreenFlash { get; set; }
 
     /// <summary>The world-effects template stage — the subtree
     /// <see cref="EffectCatalogue.WorldStageRoots"/>' roots are built into, one

@@ -6,17 +6,24 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The full-screen colour wash an <c>FBFX_COLOR_FROM_TO</c> event authors: a close HE, AP or flak
-/// burst ramping the whole picture from one RGBA to another over the event's run time. One ramp at
-/// a time, painted into every rendered view.
+/// burst ramping the whole picture from one RGBA to another over the event's run time. One ramp per
+/// pane, painted into the pane(s) whose camera the burst was actually near.
 ///
-/// <para><b>One state, N views.</b> The original keeps a single frame-buffer-effect object
-/// (<c>crimson.exe</c> 0x9c8a98) whose colour and alpha the handler simply overwrites, so a second
-/// burst landing mid-wash replaces the first outright rather than compositing with it — that is the
-/// composition rule here too (<see cref="Play"/> replaces whatever is running). The original is
-/// single-view, so "the whole picture" is unambiguous there; in splitscreen each pane IS a rendered
-/// picture, so the one ramp is painted into each pane's own viewport rather than across the window.
-/// That keeps the 2 px gutters and the empty 3P quadrant — which are not part of any picture — out
-/// of it, and it is the same shape the cloud whiteout already uses.</para>
+/// <para><b>One state per pane, because the routing is the def's own gate.</b> The original keeps a
+/// single frame-buffer-effect object (<c>crimson.exe</c> 0x9c8a98) whose colour and alpha the
+/// handler simply overwrites, so a second burst landing mid-wash replaces the first outright rather
+/// than compositing with it — that is still the composition rule here, held WITHIN each pane (<see
+/// cref="Play"/> replaces whatever that pane was running). The original is single-view, so one
+/// global state and "the whole picture" mean the same thing there; in splitscreen each pane IS a
+/// rendered picture, and two bursts 2 km apart are two different pictures. That keeps the 2 px
+/// gutters and the empty 3P quadrant — which are not part of any picture — out of it, and it is the
+/// same shape the cloud whiteout already uses.</para>
+///
+/// <para><b>Which panes.</b> <paramref name="radiusSquared"/> on <see cref="Play"/> is the wash
+/// def's OWN <c>If PlayerRange</c> gate (<see cref="Mech3.AnimRuntime.ScreenWashSink"/>), so the
+/// routing rule is the authored one re-asked per pane instead of once for player 1. A pane whose
+/// camera is inside that radius of the burst washes; the rest do not. Ungated (radius 0, the intro
+/// cutscene's `gi_scene1`) paints every pane, which is what an ungated wash means.</para>
 ///
 /// <para><b>Under the HUD.</b> <see cref="HudLayers.WorldOverlay"/>, beside the whiteout: this is a
 /// world-picture effect, and unlike the lens flare's sun wash there is no footage saying it whitens
@@ -27,26 +34,40 @@ public sealed partial class ScreenFlash : Node
 {
     private readonly List<ColorRect> _rects = new();
     private readonly List<CanvasLayer> _layers = new();
+    private readonly List<Ramp> _ramps = new();
+    // Reused by every Play call, so routing a wash allocates nothing.
+    private readonly List<int> _selected = new();
 
-    private Color _from;
-    private Color _to;
-    private float _runTime;
-    private float _elapsed;
-    private bool _running;
+    private Flight.ViewerSet? _viewers;
 
-    /// <summary>The colour currently washed over the picture, or a fully transparent one when no
-    /// ramp is running. Read by the <c>fbfx-flash</c> suite.</summary>
-    public Color Current { get; private set; } = new(0f, 0f, 0f, 0f);
+    /// <summary>The colour currently washed over pane 0's picture, or a fully transparent one when
+    /// no ramp is running there. The single-player readout (one pane), kept for the `fbfx-flash`
+    /// suite's timing checks; <see cref="CurrentFor"/> is the per-pane one.</summary>
+    public Color Current => _ramps.Count > 0 ? _ramps[0].Current : new Color(0f, 0f, 0f, 0f);
 
-    /// <summary>Whether a ramp is running.</summary>
-    public bool Running => _running;
+    /// <summary>Whether ANY pane has a ramp running.</summary>
+    public bool Running
+    {
+        get
+        {
+            foreach (var ramp in _ramps)
+                if (ramp.Running)
+                    return true;
+            return false;
+        }
+    }
+
+    /// <summary>How many rendered views this overlay was built over — the rig count.</summary>
+    public int PaneCount => _ramps.Count;
 
     /// <summary>Builds one hidden overlay per rendered view. <paramref name="hudParents"/> is each
     /// rig's <c>HudParent</c> — the window root with one player, the pane's SubViewport with
-    /// several.</summary>
-    public static ScreenFlash Build(IEnumerable<Node> hudParents)
+    /// several. <paramref name="viewers"/> is the session's viewer set (A3), read INDEX-ALIGNED with
+    /// those parents because both come from the same rig list; null (a build with no session behind
+    /// it) leaves every wash painting every pane, as it did before the routing existed.</summary>
+    public static ScreenFlash Build(IEnumerable<Node> hudParents, Flight.ViewerSet? viewers = null)
     {
-        var flash = new ScreenFlash { Name = "screen_flash" };
+        var flash = new ScreenFlash { Name = "screen_flash", _viewers = viewers };
         foreach (var parent in hudParents)
         {
             // Hidden until a ramp runs, so a session that never sees a close burst renders exactly
@@ -67,55 +88,122 @@ public sealed partial class ScreenFlash : Node
             parent.AddChild(canvas);
             flash._layers.Add(canvas);
             flash._rects.Add(rect);
+            flash._ramps.Add(new Ramp());
         }
         return flash;
     }
 
-    /// <summary>Starts a ramp, replacing whatever was running. <paramref name="runTime"/> is the
-    /// event's authored run time; a non-positive one shows nothing.</summary>
-    public void Play(Color from, Color to, float runTime)
+    /// <summary>Starts a ramp in every pane the burst reaches, replacing whatever those panes were
+    /// running. <paramref name="runTime"/> is the event's authored run time; a non-positive one
+    /// shows nothing. <paramref name="origin"/> is the burst's world point and
+    /// <paramref name="radiusSquared"/> its def's own <c>PLAYER_RANGE</c> gate in metres squared
+    /// (0 = ungated, every pane).</summary>
+    public void Play(Color from, Color to, float runTime, Vector3 origin, float radiusSquared)
     {
         if (runTime <= 0f)
             return;
-        _from = from;
-        _to = to;
-        _runTime = runTime;
-        _elapsed = 0f;
-        _running = true;
-        Apply(from);
+        SelectPanes(origin, radiusSquared);
+        foreach (int i in _selected)
+        {
+            var ramp = _ramps[i];
+            ramp.From = from;
+            ramp.To = to;
+            ramp.RunTime = runTime;
+            ramp.Elapsed = 0f;
+            ramp.Running = true;
+            Apply(i, from);
+        }
     }
+
+    /// <summary>The colour currently washed over one pane's picture.</summary>
+    public Color CurrentFor(int pane) =>
+        pane >= 0 && pane < _ramps.Count ? _ramps[pane].Current : new Color(0f, 0f, 0f, 0f);
+
+    /// <summary>Whether one pane has a ramp running.</summary>
+    public bool RunningFor(int pane) => pane >= 0 && pane < _ramps.Count && _ramps[pane].Running;
 
     public override void _Process(double delta)
     {
-        if (!_running)
-            return;
         // Sim time, so a halt freezes the wash and --det reproduces it frame for frame.
-        _elapsed += GameClock.Current?.FrameDt ?? (float)delta;
-        if (_elapsed >= _runTime)
+        float dt = GameClock.Current?.FrameDt ?? (float)delta;
+        for (int i = 0; i < _ramps.Count; i++)
         {
-            // The original re-arms its frame-buffer effect for the current frame only, every tick
-            // the handler runs; once the event completes nothing re-arms it and the wash is simply
-            // gone. So the ramp does not hold its `to` colour — it ends.
-            _running = false;
-            Apply(new Color(0f, 0f, 0f, 0f));
-            foreach (var layer in _layers)
-                layer.Visible = false;
-            return;
+            var ramp = _ramps[i];
+            if (!ramp.Running)
+                continue;
+            ramp.Elapsed += dt;
+            if (ramp.Elapsed >= ramp.RunTime)
+            {
+                // The original re-arms its frame-buffer effect for the current frame only, every
+                // tick the handler runs; once the event completes nothing re-arms it and the wash is
+                // simply gone. So the ramp does not hold its `to` colour — it ends.
+                ramp.Running = false;
+                Apply(i, new Color(0f, 0f, 0f, 0f));
+                continue;
+            }
+            Apply(i, ramp.From.Lerp(ramp.To, ramp.Elapsed / ramp.RunTime));
         }
-        Apply(_from.Lerp(_to, _elapsed / _runTime));
     }
 
-    private void Apply(Color c)
+    /// <summary>The panes a burst at <paramref name="origin"/> washes, into <see cref="_selected"/>:
+    /// every pane whose own camera is within the def's authored gate of it.</summary>
+    private void SelectPanes(Vector3 origin, float radiusSquared)
+    {
+        _selected.Clear();
+        var cameras = _viewers?.Cameras;
+        // An ungated wash, or no viewer set to ask (the labs, a bench build): every pane, which is
+        // what this did for every wash before the routing existed. The count test is the
+        // index-alignment contract — panes and cameras are both the rig list, and a set that does
+        // not match it is not one this can index into.
+        if (radiusSquared <= 0f || cameras == null || cameras.Count != _rects.Count)
+        {
+            for (int i = 0; i < _rects.Count; i++)
+                _selected.Add(i);
+            return;
+        }
+        int nearest = -1;
+        float nearestSq = float.MaxValue;
+        for (int i = 0; i < cameras.Count; i++)
+        {
+            var cam = cameras[i];
+            if (cam == null || !GodotObject.IsInstanceValid(cam))
+                continue;
+            float distSq = cam.GlobalPosition.DistanceSquaredTo(origin);
+            if (distSq <= radiusSquared)
+                _selected.Add(i);
+            if (distSq < nearestSq)
+            {
+                nearestSq = distSq;
+                nearest = i;
+            }
+        }
+        // The def's gate already fired, so a player WAS near this burst; the gate measures rig 0's
+        // camera while this measures each pane's own, so the two can disagree at the margin. The
+        // nearest pane still gets the wash rather than the burst washing nobody — a floor, not a
+        // second rule (in single player the two measure the same camera, so it never engages).
+        if (_selected.Count == 0 && nearest >= 0)
+            _selected.Add(nearest);
+    }
+
+    private void Apply(int pane, Color c)
     {
         // Per-channel clamp, as the handler does before it packs the pixel: the reader's own
         // range assertions do not cover every channel, so an out-of-range author cannot bleed.
         c = c.Clamp();
-        Current = c;
-        bool visible = c.A > 0f;
-        for (int i = 0; i < _rects.Count; i++)
-        {
-            _rects[i].Color = c;
-            _layers[i].Visible = visible;
-        }
+        _ramps[pane].Current = c;
+        _rects[pane].Color = c;
+        _layers[pane].Visible = c.A > 0f;
+    }
+
+    /// <summary>One pane's ramp. A class rather than a struct because these are held in a list and
+    /// advanced in place every frame.</summary>
+    private sealed class Ramp
+    {
+        public Color From;
+        public Color To;
+        public float RunTime;
+        public float Elapsed;
+        public bool Running;
+        public Color Current = new(0f, 0f, 0f, 0f);
     }
 }

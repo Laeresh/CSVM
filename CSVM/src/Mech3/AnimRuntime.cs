@@ -272,13 +272,20 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <see cref="TemplateStage{TNode}.RootsFor"/> set, which would touch every copy at once.</summary>
     public Func<string, Node3D, Node3D?>? ResolveLibraryRoot;
 
-    /// <summary>Washes the whole picture from one RGBA to another over a run time — the session's
+    /// <summary>Washes the picture from one RGBA to another over a run time — the session's
     /// <see cref="UI.ScreenFlash"/> overlay, which an <c>FBFX_COLOR_FROM_TO</c> event drives. A sink
     /// rather than a node here because the overlay is screen-space and belongs to the SESSION: this
     /// runtime is world-scoped and is instanced per effect pool and per player crash rig, so an
     /// overlay owned here would exist several times over. Null on every runtime with no session
-    /// behind it (the labs, the headless suites), where the event is simply not drawn.</summary>
-    public Action<Color, Color, float>? ScreenFlash;
+    /// behind it (the labs, the headless suites), where the event is simply not drawn.
+    ///
+    /// <para>The five arguments are <c>(from, to, run_time, origin, radius²)</c>: the authored ramp,
+    /// then WHERE the burst was and how far its own def gates the wash — metres SQUARED, the
+    /// compiled <c>PLAYER_RANGE</c> convention <see cref="AnimDefs"/> normalises both sources to, and
+    /// 0 for a def that gates on nothing. Those last two are what routes the wash to the right
+    /// pane(s) in splitscreen (B12); the sink decides which panes, since pane geometry is the
+    /// overlay's business and not this runtime's.</para></summary>
+    public Action<Color, Color, float, Vector3, float>? ScreenFlash;
 
     /// <summary>This runtime does not own audio — its SOUND / SOUND_NODE events are no-ops, not
     /// late-failure reports. Set on the world-effects runtime: it renders an effect def's
@@ -477,6 +484,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // sequence) — the damage-stage sputters. Their lifetime is authored (loop while the host node
     // is active), so PlayEffectAt gives them the real site node and no TTL.
     private readonly Dictionary<AnimDefinition, bool> _inputGoverned = new();
+
+    // Each def's own FBFX wash gate (WashGateRadiusSquared), scanned once. Four defs per chapter
+    // carry a wash and a burst can fire several a second, so the scan is cached rather than repeated
+    // per event.
+    private readonly Dictionary<AnimDefinition, float> _washGates = new();
 
     // Keyed by (sound name, anchor), like the lights and for the same reason: the anchor
     // identifies the *instance* of the definition, so C1's four firetrucks each get their own
@@ -2831,7 +2843,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     // not a pose. Nothing to apply instantly.
                     if (!instant && ScreenFlash != null)
                     {
-                        ScreenFlash(Rgba(ev.Data.Obj("from")), Rgba(ev.Data.Obj("to")), runTime);
+                        // Where the burst is and how far its def admits the wash, so the overlay can
+                        // paint the pane(s) it reached instead of all four (B12). The anchor is the
+                        // effect instance's own node — the same point the def's gate measures.
+                        ScreenFlash(Rgba(ev.Data.Obj("from")), Rgba(ev.Data.Obj("to")), runTime,
+                            anchor != null ? WorldPos(anchor) : Vector3.Zero,
+                            anchor != null ? WashGateRadiusSquared(def) : 0f);
                         _opsApplied++;
                     }
                     return true;
@@ -2851,6 +2868,38 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 Count(ev.Kind);
                 return true;
         }
+    }
+
+    /// <summary>
+    /// How far from its anchor a definition's own <c>If PlayerRange</c> gate admits its wash —
+    /// metres SQUARED (the compiled convention both sources are normalised to in
+    /// <c>AnimDefs.ReaderCondition</c>), 0 for a definition that gates on nothing.
+    ///
+    /// <para>This is the routing radius for <see cref="ScreenFlash"/>, and it is the authored one:
+    /// every one of the 24 shipped wash definitions (<c>he_ground_effect</c>,
+    /// <c>ap_ground_effect</c>, <c>flak_effect</c> × 8 chapters) carries exactly ONE <c>If</c>, and
+    /// it is <c>PlayerRange 10000</c> = 100 m, guarding the <c>CallSequence
+    /// frame_buffer_effects1</c> that holds the ramp chain (docs/org/sequences.md). The intro
+    /// cutscene's <c>gi_scene1</c> is the fourth carrier and gates on nothing, so its wash is
+    /// ungated and paints every pane. The scan takes the largest gate rather than the first so a
+    /// def with several cannot route a wash by whichever one happens to be listed first; nothing in
+    /// this install has more than one.</para>
+    /// </summary>
+    private float WashGateRadiusSquared(AnimDefinition def)
+    {
+        if (_washGates.TryGetValue(def, out float cached))
+            return cached;
+        float radiusSq = 0f;
+        foreach (var seq in def.Sequences)
+            foreach (var ev in seq.Events)
+            {
+                if (ev.Kind is not ("If" or "Elseif"))
+                    continue;
+                if (ev.Data.Obj("condition")?.Num("PlayerRange") is { } r && r > radiusSq)
+                    radiusSq = r;
+            }
+        _washGates[def] = radiusSq;
+        return radiusSq;
     }
 
     /// <summary>An <c>{r,g,b,a}</c> sub-object as a colour; absent → transparent black.</summary>

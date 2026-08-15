@@ -156,7 +156,8 @@ public partial class GameSession : Node3D
     // weathered build exists to write it; WeatherRig.Tick is what fills it in.
     private Effects.EffectAmbience _ambience = new();
     private LensFlareRig? _lensFlareRig;
-    // The FBFX_COLOR_FROM_TO full-screen wash — one ramp state painted into every rendered view.
+    // The FBFX_COLOR_FROM_TO wash — one ramp per rendered view, painted into the pane(s) the burst
+    // was near (B12).
     private UI.ScreenFlash? _screenFlash;
     private Node3D? _plane;
     // The session's simulation clock (see GameClock). Also published as GameClock.Current, which
@@ -445,11 +446,12 @@ public partial class GameSession : Node3D
         // returns — kept explicit for the same defensiveness the old per-pool loop had.
         _viewers.Bind(_rigs.Count > 0 ? _rigs.Select(r => r.Camera)
             : _camera != null ? new[] { _camera } : System.Array.Empty<Camera3D>());
-        // The FBFX_COLOR_FROM_TO wash: one ramp state, one overlay per rendered view, built
+        // The FBFX_COLOR_FROM_TO wash: one ramp and one overlay per rendered view, built
         // as soon as the rigs exist so every runtime below can be handed the same sink. Screen-space
         // and session-scoped on purpose — an AnimRuntime is world-scoped and is instanced per effect
-        // pool and per crash rig.
-        _screenFlash = UI.ScreenFlash.Build(_rigs.Select(r => r.HudParent));
+        // pool and per crash rig. The viewer set goes with it because the routing rule is per pane
+        // (B12): the same rig list builds both, so the two are index-aligned by construction.
+        _screenFlash = UI.ScreenFlash.Build(_rigs.Select(r => r.HudParent), _viewers);
         _worldRoot!.AddChild(_screenFlash);
         _worldEffectsFactory.ScreenFlash = _screenFlash.Play;
 

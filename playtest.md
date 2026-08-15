@@ -271,6 +271,12 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
   reached for only if (b) visibly fails, and a fail mints its own `BL` item.
   *Variations:* C3 (`--chapter=C3`, the waterfalls' `spew_puffer` is the tightest authored band);
   `--players=4` for the same question with four alphas competing.
+  *Also carries B12 (`BL-340` landed 2026-08-15):* the `FBFX_COLOR_FROM_TO` screen wash now paints
+  only the panes whose camera is inside the burst's authored 100 m radius, and the same missing
+  levers (no per-player placement, no scripted fire) keep it off the scripted path. In the same
+  session: put P2 over the ground alone and have him rocket the terrain — P2's pane flashes
+  white/violet and P1's, a few hundred metres off, does not; then fly the pair in together and both
+  flash. A wash that still paints all panes, or one that paints none, is the failure.
 
 ### C1 · two pilots — stunt race (splitscreen starting grid)
 
