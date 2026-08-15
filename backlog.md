@@ -697,6 +697,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   nine at ±10000 m), and `min_ai_active_dist` (2000 m, `player.zrd.json`) floors every activation
   volume twice over. **What is left:** a campaign roster spawner reading each block's authored
   `netids`. Nothing in `src/` reads `aiv` as a spawn roster today, so there is no seam to plumb.
+  ⚠ **The net Instant Action hands out is a campaign MISSION's asset, not a patrol area meant for
+  free play** (censused 2026-08-15, at the user's prompting after seeing the shapes at the
+  controls). Net names are mission-scoped and the census bears the convention out: 103 of the 222
+  nets are referenced by an `aiv` block and every one is used by the single mission its `M<N>`
+  prefix names. Each chapter's first net is then one mission's: C1 `M4ReinfAce` is M04's
+  `blakebloodhawk_8`, C1B `Patrolboat3` is M03's objectives, **C2B `PirateZep1` is the pirate
+  zeppelin's own flight path**, C5 `M1Bravo` is used by nothing at all. Faithful, not a bug, but it
+  is why an Instant Action flight walks an odd-looking graph; see
+  [`docs/formats/instant-action.md`](docs/formats/instant-action.md) for the per-chapter table.
   ⚠ `--ai=<plane>` without a net ref still spawns a course-holder; that is the debug flag's own
   documented behaviour, kept deliberately, not a leftover of this item.
   *Playtest:* `PT-51`.

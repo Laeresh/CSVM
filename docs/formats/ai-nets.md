@@ -68,6 +68,29 @@ actor is given) is the first PAIR here: 10 `M4ReinfAce` (C1), 29 `Patrolboat3` (
 on both), so a sorted-by-id read answers the wrong net on two of the eight chapters.
 `AiNets.LoadIndexPairs` is the ordered read; `AiNets.Load` sorts by id and `LoadIndex` is a map.
 
+### Net names are mission-scoped
+
+Nets are stored per CHAPTER but authored per MISSION, and the name says which: the `M<N>` prefix
+names the mission that uses the net (`M4ReinfAce`, `M2Train`, `M5Patrol1`). Censused across all 8
+chapters 2026-08-15 by resolving every `aiv` block's field 0 back to its `neindex` name: **103 of
+the 222 nets are referenced by an `aiv` block, and every one of them is used by a single mission,
+the one its prefix names.** The remaining 119 are referenced by `egen`, `zeppelins` or `objectives`
+instead, or by nothing at all.
+
+Two qualifications, both from the same census:
+
+- **C2's first two missions carry each other's prefix.** `C2/M01` flies `M2First`, `M2Second`,
+  `M2Patrol1`, `M2Bravo1`, `M2Charlie1` and `M2Dummy`; `C2/M02` flies `M1Security`, `M1Police`,
+  `M1Knights` and `M1FilmShot`. M03 and M05 match their prefixes normally. Unexplained; recorded
+  because a name-based guess about which mission owns a C2 net will be wrong on those two.
+- **A few shared nets are used by two neighbouring missions**, always a `*Dummy` or a `*Bravo`:
+  C4's `M1Dummy` (M01 + M02, 10 blocks) and C2's `M2Bravo1` (M01 + M02).
+
+⚠ **Instant Action ignores all of this and takes the chapter's first net regardless**, which is
+therefore some mission's asset rather than a patrol area meant for free play. The per-chapter table
+of what that is (a patrol boat's route on C1B, the pirate zeppelin's own course on C2B, a net no
+mission uses on C5) is in [`instant-action.md`](instant-action.md).
+
 ## `ne0NNNNN.zrd` — one net
 
 ```
@@ -179,7 +202,8 @@ cycle over nodes 0–9 (`[0,1] … [8,9], [0,9]`), node 10 edgeless and off that
 `[10, "player"]`. Every node has degree 2, so the graph is one closed loop, but the GEOMETRY
 crosses itself: it traces a **figure eight** roughly 550 × 1030 m, and the anchor sits at the
 centre of one of the two lobes, 255 m from the cycle's centroid. C1's other player-anchored net,
-`M2Ace` #23 (12 nodes at y = 350, anchor node 12), is the same shape at 585 × 1105 m. ⚠ Do not
+`M2Ace` #23 (12 nodes at y = 350, anchor node 12), is the same shape at 585 × 1105 m; it belongs to
+`C1/M02`, whose `objectives` is the only file that names it, and no `aiv` block flies it. ⚠ Do not
 read "closed cycle" as "ring": a plane flying one of these passes close to its target through one
 lobe and about a kilometre away through the other.
 

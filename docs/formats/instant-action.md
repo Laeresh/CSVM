@@ -232,6 +232,28 @@ the original: the wingmen's `w<plane>` defs carry `mode wingman`, but a net demo
 as a target assignment only. [`org/aiPilot.md`](../org/aiPilot.md) has the demotion rule and the
 formation law it suppresses.
 
+⚠ **That first net is a CAMPAIGN MISSION's asset, not a generic patrol area** (censused
+2026-08-15). Net names are mission-scoped, the prefix naming the mission that uses them
+([`ai-nets.md`](ai-nets.md), "Net names are mission-scoped"), and each chapter's first net is
+referenced by exactly one mission, or by nothing at all:
+
+| Chapter | First net | What owns it in the campaign |
+|---|---|---|
+| C1 | 10 `M4ReinfAce` | M04's `blakebloodhawk_8` (one `aiv` block, by id) |
+| C1B | 29 `Patrolboat3` | M03's `objectives` only |
+| C1C | 25 `M1Defense` | M01's `aiv` + its `egen` |
+| C2 | 1 `M2First` | M01's `aiv` (4 blocks) |
+| C2B | 1 `PirateZep1` | M04's `zeppelins`: it is `piratezep`'s OWN flight path |
+| C3 | 1 `M1Medusas` | M01's `objectives` |
+| C4 | 1 `M1Train` | M01's `objectives` |
+| C5 | 1 `M1Bravo` | nothing, anywhere in the chapter |
+
+So Instant Action does not hand out a patrol area designed for it. It takes index 0 of the chapter
+table, whatever that happens to be: on C1 an ace's approach pattern, on C1B a patrol BOAT's route,
+on C2B the pirate zeppelin's own course, on C5 a net no mission uses. That is the decoded
+behaviour and it is faithful; it is recorded here so the odd shapes it produces are not read as a
+bug in the follower.
+
 ### The player and the wingmen
 
 The player is placed at a **uniformly random** entry of the scenario's own `spawn_points` list.

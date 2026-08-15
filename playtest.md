@@ -460,6 +460,13 @@ you to put the file "next to the repo", where nothing would find it. Absolute pa
   (350 m). Only #10 is assigned to anything here, since it is the chapter's first; #23 is drawn
   because it is anchored, not because anyone is on it. Type `M4` into the overlay's filter field to
   see just the flown one.
+  ⚠ **The net you are flying belongs to C1/M04.** Net names are mission-scoped, and Instant Action
+  takes the chapter's first net whatever it is: `M4ReinfAce` is M04's reinforcement ace's approach
+  pattern, and `M2Ace` is M02's, referenced only by that mission's objectives. So judge (a)–(d) as
+  "does it walk the graph", not as "is this a sensible patrol area for free play". The original
+  hands out the same mission asset. Other chapters are stranger still (C1B gives fighters a patrol
+  BOAT's route, C2B the pirate zeppelin's own course); the table is in
+  [`docs/formats/instant-action.md`](docs/formats/instant-action.md).
   ⚠ **Neither is a ring.** Both are closed cycles whose geometry crosses itself, so each is a
   **figure eight**, and the anchor sits at the centre of ONE lobe rather than at the middle. A
   plane on it therefore passes close to you through one lobe and about a kilometre out through the
