@@ -68,7 +68,7 @@ what a mission tells it to do.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | C22, C23, C24, C25 | Addresses and line cites are in `docs/org/flightModel.md`. Confirm the trace, then implement |
+| **Traced to an exact mechanism in code, with the data that proves it** | ~~C22~~, C23, C24, C25, C26 | Addresses and line cites are in `docs/org/flightModel.md`. Confirm the trace, then implement |
 | **Traced statically, never verified at runtime** | ~~A1, A2~~ | Both landed 2026-08-15, and both readings were wrong: there is no AI density band and no AI throttle setpoint. Read their landing notes before citing flightModel.md's older AI-path claims, several of which are debug-copy citations |
 | **Leads only, no mechanism yet** | D31, E41 | The AI control law has never been located. Budget for investigation; this may end in a documented dead end |
 
@@ -84,11 +84,11 @@ decoding the **player** path and set aside for M4's AI work. None of it is imple
 |---|---|---|
 | ~~AI throttle is read as a target speed, `fd_speed · throttle`~~ **A2: false.** Throttle is a lever for both; the product drives the far-field (>1 km) cruise model | flightModel.md, "A2" | `0x48c593` |
 | ~~AI aerodynamics skip the altitude zeroing, so the thin density band is reachable~~ **A1: false.** The zeroing is the debug copy's; the live atmosphere call is shared and unbranched | flightModel.md, "A1" | `0x48c883` |
-| AI always uses nose-aligned wind, i.e. permanently zero incidence | flightModel.md:217 | (in text) |
-| AI does not get weathervane centring | flightModel.md:791 | (in text) |
-| Forward-velocity floor of 4.4704 m/s (10 mph), player exempt | flightModel.md:137 | (in text) |
+| AI always uses nose-aligned wind, i.e. permanently zero incidence — **C22: landed** | flightModel.md:217 | `0x48c520` |
+| AI does not get weathervane centring — **C22: landed** | flightModel.md:791 | `0x48cd3e` |
+| Forward-velocity floor of 4.4704 m/s (10 mph), player exempt — **C22: landed** | flightModel.md:137 | `0x48e925` |
 | AI ground blow is a fixed push, linear in proximity, not `dt`-scaled, factor 0.15 | flightModel.md:1339 | `0x0048c317` |
-| Per-AI random jitter of `fd_speed` and `ThrustFactor` | flightModel.md:1004 | `FUN_00477280` |
+| Per-AI random jitter of **eleven** dynamics slots at spawn, not two — **C26**, split out of C22 | flightModel.md:1004 | inside `FUN_00476250` |
 | The bank-coupling block is inlined a second time on the AI path behind a byte flag | flightModel.md:585 | `0x48cc61`–`0x48ccf4` |
 | Control authority ramp, shared, 0 at `turn_fade_in` = 10 mph | flightModel.md:471, 499 | `FUN_0048bdd0` |
 | Reverse-authority factor, decoded, unimplemented and unowned | flightModel.md:488 | `FUN_0048bdd0`, consumed by `FUN_0048c470` |
@@ -138,10 +138,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Port the decoded plant
 
 21. ☑ C21 The AI force-path seam, plus the temporary A/B switch (`UsesAiForcePath`, `--no-ai-plant`)
-22. ☐ C22 The AI aerodynamic deltas: airflow, weathervane, speed floor (density band out, per A1)
+22. ☑ C22 The AI aerodynamic deltas: airflow, weathervane, speed floor (three branches, no re-pins)
 23. ☐ C23 The AI ground blow, a different law
 24. ☐ C24 `BL-330`'s authority ramp and the reverse-authority factor
 25. ☐ C25 `BL-172`'s `bounce_factor` restitution, player-only as decoded
+26. ☐ C26 The per-AI spawn jitter of eleven dynamics slots (split out of C22)
 
 ### Wave D — Decode the control law
 
@@ -168,7 +169,9 @@ consistency rather than necessity (see that item). C24 and C25 are the items tha
 flight, so they can land independently of C22 and C23 if the AI half stalls, and `BL-095` retires
 once both are in. C22, C23 and C24 all edit `FlightModel.cs` and must not run in parallel with each
 other; C25's fix site is `FlightController.SurviveHit`, so it is the one C-wave item that can run
-concurrently with the others. D31 blocks E41; E41 blocks E42. F51 can be shot as soon as the plan
+concurrently with the others. C26 was split out of C22 on 2026-08-15 and depends on nothing in this
+wave: its site is the AI spawn path and the session seed, not `FlightModel.cs`, so it too can run
+concurrently. D31 blocks E41; E41 blocks E42. F51 can be shot as soon as the plan
 starts and does not depend on any code item; F52 needs C and E landed, and the switch still present.
 
 ---
@@ -382,7 +385,58 @@ player path. With two sites today that is acceptable, but a third one added late
 say so at the constructor. Do not make the flag mutable, a plant that can change mid-flight makes a
 golden or a suite run unreproducible.
 
-## C22 ☐ The AI aerodynamic deltas: airflow, weathervane, speed floor (density band out, per A1)
+## C22 ☑ The AI aerodynamic deltas: airflow, weathervane, speed floor (density band out, per A1)
+
+**Landed 2026-08-15, three branches, all in `FlightModel.Step` and all off `UsesAiForcePath`.** C21's
+warning held: none of the three live guards is at `0x4916fe`, and only one of the three had ever been
+cited by address at all.
+
+| Divergence | Live guard | The block |
+|---|---|---|
+| Airflow blend skipped, wind always down the nose | `cmp esi, ecx` `0x48c520` (player in `ecx` from `0x48c502`) | `0x48c6e9`–`0x48c70a` in `FUN_0048c470`: `−speed · m[2]`, and `m[2]` is `−nose` |
+| Weathervane not summed in | `cmp esi, [0x71c298]` `0x48cd3e` | `0x48cd3e`–`0x48ce45`, the live twin of the debug copy's `0x4916fe` |
+| Nose-axis velocity floor | `cmp edi, [0x71c298]` `0x48e925` | `0x48e95e`–`0x48e998` in `FUN_0048e580`, against `−4.4704` at `0x608128` |
+
+⚠ **The item's own expected direction was wrong, and the code is right.** "AI flies at zero incidence"
+does not mean "the AI pulls harder": the lift demand is
+`lift_accel_rate · (relativeWind − velocity)` **plus weight**, so with the flight path above the nose
+the fully-nose-aligned swing points down and cancels part of the weight term. Measured on the
+Bloodhawk at α = 8°: the AI demands **0.26 G against the player's 2.04 G**. Past `liftAOAs[1]` the two
+agree exactly, because there the player is nose-aligned as well — so the divergence is confined to
+the window, which is the shape the decode predicts and the shape the tests now pin.
+
+The floor is the trap the item named. It is on the velocity's nose component, it is **one-sided**, and
+it **adds along the nose** rather than rescaling, so the perpendicular components survive and `|v|` is
+recomputed from the result. A plane descending at 20 m/s with its nose on the horizon has four times
+the floor in SPEED and none along the nose; a `Speed` clamp is a no-op there and the original is not.
+
+**No re-pins anywhere, and that is a real finding rather than a quiet pass.** `.\RunTests.ps1` was run
+on the unchanged tree first (METHOD-10, since all three branches are skips on the AI side): units
+1294 → 1301 (all seven new ones this item's), engine 59 → 59, goldens 14 hash-identical both times. The AI-flying suites the plan expected
+to move (`ai-modes`, `ai-gunnery`, `air-to-air`, `ai-net-follow`, `zeppelin-motion`) all pass unmoved,
+because every one of them asserts a behaviour — a transition fires, a hop is an edge, a round lands —
+rather than a pinned trajectory number. Nothing was tuned in `AiPilot` to achieve that.
+
+Able-to-fail proved rather than assumed (METHOD-9/15/17), four ablations, each rebuilt and run:
+un-gating the weathervane fails `AiSkipsTheWeathervane` alone; forcing the player blend onto the AI
+fails both airflow rows plus the aggregate; deleting the floor fails the floor test alone; making the
+floor two-sided fails `TheNoseAxisFloorNeverSlowsAnAiAircraft` and all four airflow rows. `git diff`
+confirms no trace of any of them remains.
+
+C21's `BothPathsStillIntegrateIdentically` was turned around rather than deleted, into
+`TheTwoPathsNoLongerIntegrateIdentically` over the same 60-step probe, with the three divergences
+asserted one at a time beside it. The airflow one is stated as an IDENTITY — a third plant on the
+PLAYER path with the cosine window collapsed must land on the AI's lift demand to five places — which
+pins the direction that "they differ" would not.
+
+⚠ **The jitter did not ride in; it is now `C26`.** The item's Evidence offered `FUN_00477280`'s
+`fd_speed`/`ThrustFactor` jitter "if it is cheap". It is not: the block (inside `FUN_00476250`,
+after the `"player"` name compare and `FUN_00440ad0() == 0`) applies an independent `1 ± 0.05` draw
+to **eleven** runtime slots, not two — `+0x2c4`, `+0x2cc`, `+0x644`, `+0x648`, `+0x668` (`fd_speed`),
+`+0x66c` (`ThrustFactor`), `+0x670`, `+0x680`, `+0x684`, `+0x688`, `+0x68c` — at spawn, from `rand()`.
+That is a spawn-time perturbation of most of the dynamics block, not a force-path branch, and it lands
+on the determinism seam (`--det`, the goldens, every suite that flies AI), so it needs its own item.
+Split, per the item's own `<TODO>`.
 
 **Goal.** An AI aircraft flies the original's aerodynamics: nose-aligned wind always (zero
 incidence), no weathervane centring, and a forward-velocity floor of
@@ -525,6 +579,42 @@ unbounded and is not restitution. **Reproducing the original's feel needs that t
 out and traced as sources: multiple contacts per frame, successive-frame stacking, a separate
 ground-support path, and gravity ordering. Do not read the vertical-versus-flat split as a
 per-surface coefficient; it is a lever-arm partition, and the code has no surface dependence at all.
+
+## C26 ☐ The per-AI spawn jitter of eleven dynamics slots
+
+**Goal.** Decide whether the original's per-non-player spawn jitter of the dynamics block belongs in
+this engine, and if so land it without breaking determinism. Split out of C22, which found it is not
+the two-field change its Evidence described.
+
+**Evidence (confidence: traced; read in C22, not yet ported).** The block sits at the end of
+`FUN_00476250` (the address `FUN_00477280` from flightModel.md:1004 lands inside it). It runs only
+when the object's own name is not `"player"`, `FUN_00440ad0()` returns 0 and the vehicle class
+(`obj+0x67c`) is 0 or 1; then, for each of **eleven** runtime slots, it draws `rand()` and multiplies
+the slot in place by `((2r − 1) · 0.05 + 1)`, i.e. an independent `1 ± 5 %`:
+
+`+0x2c4`/`+0x2c8` and `+0x2cc`/`+0x2d0` (paired, each written twice — the second is a "current"
+mirror), `+0x644` (`RollTorque`), `+0x648`, `+0x668` (`fd_speed`), `+0x66c` (`ThrustFactor`),
+`+0x670`, `+0x680`, `+0x684`, `+0x688`, `+0x68c`. The `+0x644 … +0x678` window is the runtime mirror
+of the def's `dynamics` block (flightModel.md, "the struct slot"), so most of what an airframe
+authors is perturbed per aircraft. `FUN_00440ad0`'s meaning is NOT decoded — read it before assuming
+the jitter is on in single player.
+
+**Approach.** Decode `FUN_00440ad0` first: if it gates the jitter off in the mode we simulate, the
+item ends as a recorded finding with no code. Otherwise the draw has to come from the session seed
+rather than `rand()`, at the spawn site, and the eleven slots have to be named against `PlaneStats`
+one at a time — several of them are not `dynamics` keys at all and must be identified before being
+scaled.
+
+**Model recommendation.** high. It reaches the determinism seam, and an unseeded draw makes every
+golden shot and every AI-flying suite unreproducible.
+
+**Verify.** Two `--det` runs of the same seed must produce identical AI trajectories, and two
+different seeds must not. `.\RunTests.ps1` in full, with the AI suites re-checked: this is the change
+that can genuinely move them, where C22 did not.
+
+**⚠ Traps.** It is eleven slots, not the two `fd_speed`/`ThrustFactor` that flightModel.md:1004 names
+— that line is a summary, not the list. `StallSpeed` is computed once at construction from
+`VehWeight`/`RefArea`, so a jitter applied after construction would silently leave it stale.
 
 # Wave D — Decode the control law
 

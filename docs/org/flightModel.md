@@ -95,7 +95,11 @@ left alone deliberately: mapping each one to its live-copy address is a separate
 and inventing the mapping without tracing it would be worse than the inconsistency. When reading an
 address out of this document, check which family it belongs to first. **A1 (2026-08-15) corrected
 the first of them:** the Atmosphere section's "the player force path zeroes the altitude" was a
-debug-copy citation, and with it went the supposed player-versus-AI density divergence.
+debug-copy citation, and with it went the supposed player-versus-AI density divergence. **C22
+(2026-08-15) mapped three more,** the ones it had to port: the player/AI guard on the airflow blend
+(`0x48c520`), on the weathervane (`0x48cd3e`, the live twin of `0x4916fe`) and on the forward-speed
+floor (`0x48e925`, in `FUN_0048e580`). The weathervane's is the only one this document had ever
+quoted, and it quoted the debug copy's.
 
 ## Units and conventions
 
@@ -139,6 +143,19 @@ figures in `dynamics.txt` are 100 Hz results.
 ⚠ **AI aircraft have a forward-speed floor.** For any aircraft that is not the player, the
 velocity component along the nose axis is clamped to at least **4.4704 m/s (10 mph)** after
 integration. The player is exempt.
+
+**C22 (2026-08-15) read the LIVE site and ported it.** It is in `FUN_0048e580`, not in the debug
+integrator: `cmp edi, [0x71c298]` at `0x48e925` skips the block for the player, and the block itself
+runs `0x48e95e`–`0x48e998`. It compares the velocity's **`m[2]` component against the negated
+constant at `0x608128` (`−4.4704`)** and, when that component is greater, adds
+`(−4.4704 − v·m[2]) · m[2]`. `m[2]` is `−nose`, so both signs flip and the effect is "raise `v·nose`
+to 4.4704 by adding along the nose". Three properties follow from the arithmetic and are easy to get
+wrong: it is **one-sided** (it never slows anything), it **adds along one axis** rather than
+rescaling, so the perpendicular components survive untouched, and it is **not a floor on speed** —
+it sits before the velocity is stored to `obj+0x924` and `|v|` recomputed into `obj+0x934`, so the
+speed that comes out is the length of the floored vector. A plane descending at 20 m/s with its nose
+on the horizon has four times the floor in SPEED and none of it along the nose, and the original
+pushes it forward.
 
 **C24 landing note — the exponential form, implemented, and where it sits.** `FlightModel.Step`
 now matches steps 2–3 exactly: `BodyRates += cmd · dt` (the stick, the bank coupling and the
@@ -257,6 +274,18 @@ or incidence at all.
 
 ⚠ **This blend is player-only.** AI aircraft skip it and *always* use the nose-aligned wind —
 AI effectively flies permanently at zero incidence.
+
+**C22 (2026-08-15) located the LIVE guard and ported it.** In `FUN_0048c470`, `cmp esi, ecx` at
+`0x48c520` (the player object loaded into `ecx` at `0x48c502`) jumps to `0x48c6e9` for anything that
+is not the player, and `0x48c6e9`–`0x48c70a` builds `−speed · m[2]` — `m[2]` being `−nose`, that is
+`speed · nose` — with no reference to the window constants `_DAT_0071c430`/`_DAT_0071c434` the
+player branch reads. So it really is a skip of the whole block, not a saturated blend.
+⚠ **The sign of the resulting difference is not fixed, and "the AI pulls harder" is wrong.** The
+demand is `lift_accel_rate · (relativeWind − velocity)` **plus weight**, so at a climbing flight path
+the fully-nose-aligned swing points down and partially cancels the weight term: measured on the
+Bloodhawk at α = 8° with the path above the nose, the AI's demanded load factor is **0.26 G against
+the player's 2.04 G**. Past `liftAOAs[1]` the two agree exactly, because there the player is
+nose-aligned as well.
 
 ### Step 2 — the demanded acceleration
 
@@ -659,6 +688,13 @@ cmp esi, [0x71c298]        ; 0x4916fe — the PLAYER object. AI skips the whole 
 fld [ebp-0x10]; fcomp 0    ; 0x49170a — speed ([obj+0x934], the true |v|) must be > 0
 ```
 
+**C22 (2026-08-15): the LIVE copy of this guard is `cmp esi, [0x71c298]` at `0x48cd3e` in
+`FUN_0048c470`**, jumping past the whole block to `0x48ce45`. It is guarded three times there rather
+than twice — player, `[obj+0x384]` (the crashed flag) clear at `0x48cd4a`, and speed > 0 — and the
+block is `0x48cd3e`–`0x48ce45`, reading `return_rate` from `[obj+0x654]`. The addresses in the
+listing above are the debug copy's and remain re-checkable there; this is the one the game runs, and
+it is the guard `FlightModel.UsesAiForcePath` now stands for.
+
 Then, in full:
 
 ```
@@ -830,8 +866,8 @@ observed video.
    "Bank coupling — resolved" above, including the inverted case.
 3. **Weathervane centring.** `return_rate` applies a torque along `cross(nose, v̂)` — HALF the
    misalignment angle — pulling the nose onto the velocity vector. **Player aircraft only** — AI
-   does not get it. Fully recovered under "Weathervane centring — resolved" above, where the
-   `−nose` this line used to read is corrected.
+   does not get it (live guard `0x48cd3e`, ported in `C22`). Fully recovered under "Weathervane
+   centring — resolved" above, where the `−nose` this line used to read is corrected.
 
 There is also a **boost state**: it **replaces** the throttle multiplier with a flat **1.8** (not a
 multiply — `mov [ebp+8], 1.8f` on the boost branch at `0x48fcb6`, where the normal branch loads the

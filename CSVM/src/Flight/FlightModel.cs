@@ -55,6 +55,8 @@ public struct FlightInput
 /// the scale constants marked TUNE are ours, adjusted against playtests — except
 /// the three *Tune rates, which are pinned to measurements of the original
 /// decoded from cockpit-gauge video and must not be retuned by feel.
+/// An instance flies one of the original's TWO force paths, fixed at construction — see
+/// <see cref="UsesAiForcePath"/> for the three places the AI one diverges.
 /// </summary>
 public sealed class FlightModel
 {
@@ -331,10 +333,23 @@ public sealed class FlightModel
     // measurement.
     // ⚠ It vanishes identically when the nose is on the velocity vector, which is what keeps level
     // cruise untouched — by construction, not by scale.
-    // ⚠ The original applies this to the PLAYER aircraft only (AI is skipped outright). Nothing here
-    // gates on that because this class only ever flies a player aircraft; an AI flight path added
-    // later must not reuse it without the gate.
+    // ⚠ The original applies this to the PLAYER aircraft only, and Step gates it on
+    // UsesAiForcePath (C22). The live guard is `cmp esi, [0x71c298]` at 0x48cd3e inside
+    // FUN_0048c470, jumping the whole block (0x48cd3e–0x48ce45) for anything that is not the single
+    // global player object. WeathervaneTorque() itself is UNGATED — it is the law, and an
+    // instrument or a test may sample it on either path; the gate is on whether Step sums it in.
     private const float WeathervaneHalfAngle = 0.5f;
+
+    // The AI's forward-velocity floor: after integration, and for AI aircraft only, the velocity's
+    // component along the NOSE is raised to at least 10 mph by adding along the nose, leaving the
+    // perpendicular components untouched, and |v| is recomputed from the result. Live at
+    // FUN_0048e580 0x48e95e–0x48e998, guarded by `cmp edi, [0x71c298]` at 0x48e925, against the
+    // negated constant at 0x608128 (the original tests the m[2] = −nose component against −4.4704,
+    // which is the same comparison with both signs flipped). One-sided: it only ever raises.
+    // ⚠ It is NOT a floor on Speed, and the two are different in a dive or a sideslip — a plane
+    // dropping at 20 m/s with its nose on the horizon has ample speed and no forward velocity at
+    // all, and the original pushes it forward while a Speed clamp would do nothing.
+    private const float AiNoseSpeedFloor = 4.4704f;
 
     /// <param name="aiForcePath">Which of the original's two force paths this instance flows — see
     /// <see cref="UsesAiForcePath"/>. ⚠ Optional, and it defaults to the PLAYER path, so a
@@ -365,9 +380,12 @@ public sealed class FlightModel
     /// <para>⚠ Immutable by construction. A plant that could change path mid-flight would make a
     /// golden shot or a suite run unreproducible, since the trajectory would depend on WHEN the
     /// switch happened rather than on the inputs.</para>
-    /// <para>Wave C of PLAN-ai-flight hangs the decoded divergences off this: the AI's nose-aligned
-    /// airflow, its skipped weathervane, its speed floor (C22) and its ground blow (C23). It selects
-    /// nothing yet — C21 landed the seam alone so wave C's diff is readable.</para></summary>
+    /// <para>Three divergences hang off it today, all in <see cref="Step"/> and each carrying its
+    /// own live address (C22): the airflow blend is skipped so the wind always comes straight down
+    /// the nose, the weathervane torque is not summed in, and the post-integration velocity carries
+    /// the <see cref="AiNoseSpeedFloor"/>. There is no density branch — A1 disproved it, the
+    /// atmosphere call is shared and unbranched, so both paths fly the dense band. C23 adds the
+    /// ground blow.</para></summary>
     public bool UsesAiForcePath { get; }
 
     /// <summary>Airspeed as a fraction of fd_speed — the single stall-proximity scale both stall
@@ -462,7 +480,9 @@ public sealed class FlightModel
     /// the damping) — <c>return_rate · (α/2)</c> about the axis that swings the nose onto the
     /// velocity vector. Zero when the two are aligned, and its roll component is zero always.
     /// Exposed so an instrument or a test can read the torque without re-deriving it; Step calls the
-    /// same method. See <see cref="WeathervaneHalfAngle"/> for the decode and its traps.</summary>
+    /// same method — on the PLAYER path only, and this method is not itself gated, so it answers
+    /// "what would the weathervane do here" for either path. See
+    /// <see cref="WeathervaneHalfAngle"/> for the decode and its traps.</summary>
     public Vector3 WeathervaneTorque()
     {
         var nose = -Attitude.Z;
@@ -545,7 +565,10 @@ public sealed class FlightModel
         // velocity vector, half the misalignment angle about the axis that closes it. Read off the
         // attitude and the velocity direction this frame ENTERED with, alongside the stick command
         // and the bank coupling, which is the original's own ordering.
-        cmd += WeathervaneTorque() * s.RecInertia;
+        // AI skips the whole block (0x48cd3e), so an AI aircraft's nose is never pulled back onto
+        // its flight path and its rotation is a first-order lag again rather than a spring-damper.
+        if (!UsesAiForcePath)
+            cmd += WeathervaneTorque() * s.RecInertia;
 
         // Ground blow (see GroundBlowTerm): the nose-forward probe biasing the command away from
         // what it is closing on. Last of the three torques and after both of the above, which is
@@ -651,12 +674,23 @@ public sealed class FlightModel
         // cosined at load and the window is a cosine window (blending on the angle instead is a
         // different, subtly wrong curve). This is the large arcade assist that lets a hard-
         // manoeuvring aircraft behave as though it has no sideslip.
+        // ⚠ The window is PLAYER-ONLY. The AI path skips it outright and takes the wind fully
+        // nose-aligned at every incidence — the live guard is `cmp esi, ecx` at 0x48c520 (the
+        // player object loaded at 0x48c502), jumping to 0x48c6e9, where the AI branch builds
+        // −speed·m[2] and m[2] is −nose. So an AI aircraft flies at permanently zero incidence.
+        // ⚠ That does NOT mean it pulls harder. The demand below is the swing onto this wind PLUS
+        // weight, so with the flight path above the nose the fully-nose-aligned swing points down
+        // and cancels part of the weight term: measured on the Bloodhawk at α = 8°, the AI demands
+        // 0.26 G against the player's 2.04 G. Past liftAOAs[1] the two agree exactly, the player
+        // being nose-aligned there too, so the whole divergence lives inside the window.
         var velocity = VelocityDir * Speed;
         float cosAlpha = Mathf.Clamp(nose.Dot(VelocityDir), -1f, 1f);
         float cosSpan = s.LiftAoaCosLo - s.LiftAoaCosHi;
-        float windBlend = cosSpan > 1e-6f
-            ? Mathf.Clamp((s.LiftAoaCosLo - cosAlpha) / cosSpan, 0f, 1f)
-            : (cosAlpha < s.LiftAoaCosLo ? 1f : 0f);
+        float windBlend = UsesAiForcePath
+            ? 1f
+            : cosSpan > 1e-6f
+                ? Mathf.Clamp((s.LiftAoaCosLo - cosAlpha) / cosSpan, 0f, 1f)
+                : (cosAlpha < s.LiftAoaCosLo ? 1f : 0f);
         var relativeWind = velocity.Lerp(nose * Speed, windBlend);
 
         // Step 2 — the demand: swing the velocity onto that airflow at the authored rate, and carry
@@ -722,6 +756,18 @@ public sealed class FlightModel
                     + Vector3.Down * s.Gravity
                     + liftAccel;
         var vel = VelocityDir * Speed + accel * dt;
+
+        // The AI's nose-axis floor (see AiNoseSpeedFloor), applied here because the original applies
+        // it here: after the velocity integration and before |v| is recomputed and the position
+        // steps. It adds along the nose only, so the perpendicular components survive it, and the
+        // speed that comes out is the length of the RESULT rather than a clamped scalar.
+        if (UsesAiForcePath)
+        {
+            float alongNose = vel.Dot(nose);
+            if (alongNose < AiNoseSpeedFloor)
+                vel += nose * (AiNoseSpeedFloor - alongNose);
+        }
+
         Speed = Mathf.Min(vel.Length(), MaxDiveSpeedFrac * s.FdSpeed);
         if (vel.LengthSquared() > 1e-8f)
             VelocityDir = vel.Normalized();
