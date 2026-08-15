@@ -1,22 +1,20 @@
-# vehicle.json — aircraft definitions
+# Aircraft definitions - `vehicle.json`
 
-Part of the [format documentation](README.md). Validated against this install's zrdr
-extraction (mech3ax v0.6.1), decoded across Milestone-2 flight work and Run-2 item 10
-(2026-07-19). One reader file, shared by every mission scope; the root list alternates
-`defName, [properties…]`.
-
+Part of the [format documentation](README.md). `vehicle.json` is the shared zrdr reader for
+aircraft definitions. Its root alternates `defName, [properties...]`; definitions inherit through
+`kind_of` and resolve properties nearest-first.
 
 ## Contents
 
-- [Def structure & inheritance](#def-structure-inheritance)
-- [Units, dynamics & engines](#units-dynamics-engines)
-- [player.json � player-global blocks](#playerjson-player-global-blocks)
-- [destroyable_parts (Run-2 item 10)](#destroyableparts-run-2-item-10)
-- [Def-level injure_anims](#def-level-injureanims)
-- [collision — 6 probe points](#collision-�-6-probe-points)
+- [Definition structure and inheritance](#definition-structure-and-inheritance)
+- [Units, dynamics, and engines](#units-dynamics-and-engines)
+- [Player global blocks](vehicle/player-globals.md)
+- [Destroyable parts](#destroyable-parts)
+- [Definition injury animations](#definition-injury-animations)
+- [Collision probes](#collision-probes)
 - [Effect emitters](#effect-emitters)
-- [Weapons, damage & AI keys](#weapons-damage-ai-keys)
-## Def structure & inheritance
+- [Weapons, damage, and AI keys](#weapons-damage-and-ai-keys)
+## Definition structure and inheritance
 
 Each def's property list is an alternating key/value-list dict. `kind_of` names the parent
 def; properties resolve **nearest-first** through the chain (e.g. `pbloodhawk` →
@@ -41,7 +39,7 @@ Keys the remake consumes (see `src/Flight/PlaneStats.cs`):
 | `collision` | 6 collision probe points (below) |
 | `bullethole_anims`, `weapons`, `turrets`, `cannon_jam`, `armor`/`health`, AI tuning | only `turrets` consumed (M4 C9a) — [Weapons, damage & AI keys](#weapons-damage--ai-keys) below |
 
-## Units, dynamics & engines
+## Units, dynamics, and engines
 
 Units are meters/seconds: `fd_speed` 135 m/s ≈ 302 mph matches the Bloodhawk's published
 top speed; `flight_ceiling` 2500 m. `player.json` holds player-global values —
@@ -79,11 +77,11 @@ solving a constant from a Lvl-1 row inflates it by ~30 %. `power` is the plane's
 and the original applies it as `Thrust = power · ref_area · thrustAvailable(Mach) · throttle` —
 scaled by **reference area**, not divided by weight.
 
-## player.json � player-global blocks
+## Player global blocks
 
 See [player global blocks](vehicle/player-globals.md) for the player-global reader reference.
 
-## destroyable_parts (Run-2 item 10)
+## Destroyable parts
 
 A list of part entries:
 
@@ -248,7 +246,7 @@ already one of the two arguments against blurb-as-cap; the measured 60 replaces 
 weight model can carry. The armory's own constants — per-unit cost and weight, per-zone caps — are
 **executable-resident**; `ui_strings.json` ships only the printf templates.
 
-## Def-level injure_anims
+## Definition injury animations
 
 ```
 "injure_anims", [[0.10, "player_smoketrail"], [0.85, "player_fuelleak"]]
@@ -267,7 +265,7 @@ following `prop1`: a black-smoke trail (COLORS ramp: born orange 255,164,90 → 
 node's motion — 1.0 m smoke / 0.25 m fire). `player_fuelleak` runs a `fuel_trail` at a
 random pdp panel (unwired).
 
-## collision — 6 probe points
+## Collision probes
 
 Each player def carries a `collision` list of six xyz points in the plane's local frame
 (nose −Z, right +X, meters) — the original's own collision representation, apparently
@@ -289,7 +287,7 @@ The effect emitters these anims call (`short_firetrail`, `dense_firetrail`,
 `large_fireball`, …) are `PUFFER_STATE` definitions — full schema in
 [effects.md](effects.md).
 
-## Weapons, damage & AI keys
+## Weapons, damage, and AI keys
 
 The airframe half of the combat data — of which only `turrets` is consumed by the remake so
 far (M4 C9a). Player defs carry `weapons` (as a catalogue), `cannon_jam`, `turrets` and
