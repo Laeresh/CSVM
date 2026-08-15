@@ -1,7 +1,7 @@
 # Effects: `PUFFER_STATE` emitters, effect readers, flipbook textures
 
 Part of the [format documentation](README.md). Covers the original's fully data-driven
-effect system (surveyed 2026-07-14 for the crash sequence + damage trails; no binary anim
+effect system (the crash sequence and damage trails; no binary anim
 format needed for any of it). Consumed by `CSVM/src/Effects/Puffer.cs`.
 
 **This page is the authored side** — the keys, the files, the textures. What the original's
@@ -41,7 +41,7 @@ This page is the current reference for its documented format family.
 - [The camera-distance fade (`FADE_RANGE` + `NEAR_FADE`)](#the-camera-distance-fade-faderange-nearfade)
 - [Aircraft speed-cue wisps](#aircraft-speed-cue-wisps)
 - [Hard-coded aircraft throttle-rise exhaust](#hard-coded-aircraft-throttle-rise-exhaust)
-- [Texture flipbooks, layer by layer (2026-07-21)](#texture-flipbooks-layer-by-layer-2026-07-21)
+- [Texture flipbooks, layer by layer](#texture-flipbooks-layer-by-layer)
 ## `PUFFER_STATE` schema
 
 A state is a **fully-defined emitter iff it has `NUMBER` (burst) or `DISTANCE_INTERVAL`
@@ -79,7 +79,7 @@ where they differ: a **distance** emitter adds the frame's motion length, but on
 is under 200 m; a **time** emitter adds `dt`. Emission is then the whole
 `floor(accumulator / interval)` with the remainder carried. The decoded form, offsets and
 addresses are in [`../org/puffer.md`](../org/puffer.md#the-emission-accumulator-fun_0054f8b0)
-(decoded 2026-08-10, `PLAN-puffer-engine-deltas` C9).
+.
 
 Three things this settles for a reader of the authored keys:
 
@@ -204,7 +204,7 @@ This is the executable counterpart of the throttle-rise smoke described in
 `analysis/bl-317-plane-wisps/FINDINGS.md`.
 
 
-## Texture flipbooks, layer by layer (2026-07-21)
+## Texture flipbooks, layer by layer
 
 The install animates textures through **three** distinct mechanisms. They are easy to confuse
 because they share the same frame sets (`fire101-112` etc.), so:
@@ -212,7 +212,7 @@ because they share the same frame sets (`fire101-112` etc.), so:
 1. **Puffer flipbooks** - `PUFFER_STATE`'s `TEXTURES`/`TEXTURE_SEQUENCE`, played per *particle*.
    Implemented (`src/Effects/Puffer.cs`); this is what animates crash fireballs and damage trails.
 2. **Material cycles** - a gamez material's own `cycle` block: `texture_indices` (the frame
-   list), `speed` (fps), `looping`. Played on the *surface*. Implemented 2026-07-21
+   list), `speed` (fps), `looping`. Played on the *surface*. 
    (`src/Mech3/TextureCycler.cs`). Only 1-7 materials per chapter carry one, but they cover the
    animated sea: C1B has `wtr00000` x16 @10 fps over 695 polygons and `srf0001` x16 @9 over 375,
    plus `wakefront1` x5 @12 (boat wakes) and `turb01` x6 @12 (turbulence); C1 has `splash01` x3
@@ -235,12 +235,12 @@ because they share the same frame sets (`fire101-112` etc.), so:
    `common\effects\models\` by `support\load.gw`.
 
    **The entry names a node, but what it animates is that node's MATERIAL** (decoded out of
-   `crimson.exe` 2026-08-13, see [`anim-definitions.md`](anim-definitions.md#fire-a-texture-cycle-on-a-material-and-behaviours-nothing-calls)).
+   `crimson.exe`, see [`anim-definitions.md`](anim-definitions.md#fire-a-texture-cycle-on-a-material-and-behaviours-nothing-calls)).
    The engine resolves the node, walks to the first mesh under it, and installs the frame list on
    surface 0's material record, which is the same per-material cycle block as (2); the draw loop
    then tests the material's own cycled bit per polygon. Materials are one record per texture, so
    `fire1.flt` is a **proxy** exactly like the interp's `watersetup`/`surfsetup`, and the cycle
-   reaches every polygon on that material. Implemented 2026-08-13 (`src/Mech3/EffectCycles.cs`),
+   reaches every polygon on that material. `src/Mech3/EffectCycles.cs` implements this,
    which applies both entries to their gamez materials before the world build so the existing
    `TextureCycler` picks them up. It needs no `OBJECT_ADD_CHILD` and no burn site.
 
