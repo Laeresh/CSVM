@@ -622,10 +622,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   have to be invented. The mount names are data (`IDS_AIRFRAMEGUNGROUPNAMES`, ui_strings
   3060–3079) and the per-plane stock table is authored, so the *placing* half is real.
 
-- `BL-213` `[Research]` **Does the original splash when gun rounds range-expire over water?** Needs a CAP of the
-  original (fire out to sea from altitude, watch the 1000 m expiry point). Until answered, our rounds
-  expire silently, which METHOD-18 documents as correct-per-data.
-
 - `BL-226` `[Feature]` `[Blocked: cockpit view]` **The incoming-fire cue set's other two halves are blocked on things that do not exist
   yet.** The near-miss third landed (`BL-087`, 2026-08-02); `bullet_hit_sg` (= `snd_ricochet1-4`,
   `player.json`'s `bullet_hit_sound`) and `window_hit_sg` (= `snd_windowhit1-3`, non-3D) did not.
