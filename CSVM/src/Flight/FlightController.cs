@@ -860,6 +860,10 @@ public partial class FlightController : Node3D
         if (dir.LengthSquared() > 1e-6f)
             _spawnAttitude = Basis.LookingAt(dir.Normalized(), Vector3.Up);
         Inert = false;
+        // The original snaps an activated vehicle to its net's nearest node (FUN_004b0f40 →
+        // FUN_00432010), which is what makes a teleported wave patrol where it ARRIVED rather
+        // than fly back to wherever it was parked.
+        Pilot?.Patrol?.Reseat();
         Respawn();
     }
 
@@ -967,9 +971,12 @@ public partial class FlightController : Node3D
         string struckPart = state?.Def.Name ?? dataPart;
         if (state != null)
         {
-            Visuals?.OnPartDamage(struckPart, state.Fraction);
+            Visuals?.OnPartDamage(struckPart, state.HealthFraction);
             Gauges?.OnPartDamage(struckPart); // damage dial: hit zone blinks 5 s
         }
+
+        // the def-level stages run off the hull pool even when the round went zone-less
+        Visuals?.OnHullDamage(Damage.SummaryHealthFraction);
 
         if (_projectileHitsLogged < 6)
         {
@@ -2417,9 +2424,12 @@ public partial class FlightController : Node3D
             string struckPart = state?.Def.Name ?? dataPart; // the resolver may redirect
             if (state != null)
             {
-                Visuals?.OnPartDamage(struckPart, state.Fraction);
+                Visuals?.OnPartDamage(struckPart, state.HealthFraction);
                 Gauges?.OnPartDamage(struckPart); // damage dial: hit zone blinks 5 s
             }
+
+            // the def-level stages run off the hull pool even when the graze went zone-less
+            Visuals?.OnHullDamage(Damage.SummaryHealthFraction);
 
             if (Damage.IsDestroyed)
             {

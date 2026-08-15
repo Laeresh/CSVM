@@ -1,14 +1,14 @@
 [
   [
     9,
+    11,
+    "TestIndexOnly",
     5,
     "TestLoop",
     7,
     "TestTrailerless",
     9,
     "TestNoTarget",
-    11,
-    "TestIndexOnly",
     13,
     "TestTargetNoNode"
   ]

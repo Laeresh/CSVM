@@ -26,6 +26,21 @@ public class AiNetsTests
         { "C5", 40 },
     };
 
+    /// <summary>The first net of each chapter's index, which is the one every Instant Action
+    /// actor is given (BL-364). Measured over the install; two chapters open on something other
+    /// than their lowest id, which is why this is pinned rather than derived.</summary>
+    public static TheoryData<string, int, string> ChapterFirstNets => new()
+    {
+        { "C1", 10, "M4ReinfAce" },
+        { "C1B", 29, "Patrolboat3" },   // lowest id is 11
+        { "C1C", 25, "M1Defense" },     // lowest id is 11
+        { "C2", 1, "M2First" },
+        { "C2B", 1, "PirateZep1" },
+        { "C3", 1, "M1Medusas" },
+        { "C4", 1, "M1Train" },
+        { "C5", 1, "M1Bravo" },
+    };
+
     [Fact]
     public void LoadsEveryFixtureNetSortedByIdWithItsIndexName()
     {
@@ -80,6 +95,17 @@ public class AiNetsTests
         Assert.Equal("TestIndexOnly", names[11]);
     }
 
+    [Fact]
+    public void TheIndexIsReadInFileOrderAndTheFirstNetIsItsFirstPair()
+    {
+        // The fixture's pairs are deliberately not in ascending id (11 first, lowest 5), the
+        // shape C1B and C1C ship. "The chapter's first net" is the engine's table order, which
+        // is this order, and a sorted-by-id read would answer 5.
+        var pairs = AiNets.LoadIndexPairs(TestData.Fixture("ainets"));
+        Assert.Equal(new[] { 11, 5, 7, 9, 13 }, pairs.ConvertAll(p => p.Id));
+        Assert.Equal("TestIndexOnly", AiNets.ChapterFirst(Fixtures(), TestData.Fixture("ainets"))?.Name);
+    }
+
     // ---- Goldens over the install ---------------------------------------------------------------
 
     [ExtractedDataTheory]
@@ -94,6 +120,19 @@ public class AiNetsTests
         {
             Assert.NotEqual("", net.Name);
         }
+    }
+
+    [ExtractedDataTheory]
+    [MemberData(nameof(ChapterFirstNets))]
+    public void EachChapterHandsItsInstantActionActorsTheFirstNetOfItsIndex(
+        string chapter, int expectedId, string expectedName)
+    {
+        string zrdr = SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter);
+        var first = AiNets.ChapterFirst(AiNets.Load(zrdr), zrdr);
+        Assert.NotNull(first);
+        Assert.Equal(expectedId, first!.Id);
+        Assert.Equal(expectedName, first.Name);
+        Assert.NotEmpty(first.Nodes);
     }
 
     [ExtractedDataFact]

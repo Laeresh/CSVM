@@ -78,6 +78,7 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `ExtractRof.ps1` — extractor for the non-ZBD half: the `.rof` UI archives + DLL string tables → `extracted/rof/`. Details: `docs/tooling.md`.
 - `RunGame.ps1` / `RunDev.ps1` — play and dev launch scripts (build + Godot; dev one prompts). Details: `docs/tooling.md`.
 - `RunTests.ps1` — one command, one exit code: build → `dotnet test` → `--run-tests` → goldens → perf (`-Perf`, A/B'd via the git-ignored `perf-history.jsonl`). Details: `docs/tooling.md`.
+- `ExportRelease.ps1` — builds, headless-imports, and exports the "Windows Desktop" release preset to `.scratch/export/CSVM.exe`; checks the export templates are installed and creates `.scratch/export/` if missing before starting. Details: `docs/tooling.md`.
 - `RunProbe.ps1` — **every ad-hoc scripted Godot launch goes through this** (`--screenshot=`, `--dump-*`, one-off `--run-tests=`): hidden desktop + streams redirected to files, so nothing flashes on screen or prints over the calling terminal. Never invoke the Godot exe directly for a probe. Details: `docs/tooling.md`.
 - `HiddenDesktop.ps1` — dot-sourced by `RunTests.ps1`: runs every launch on a separate Windows desktop so no test window ever appears on screen. Details: `docs/tooling.md`.
 - `CleanScratch.ps1` — sweeps `.scratch/` artifacts **and finished `.claude/worktrees/` agent worktrees** (`-?` lists its switches). Spares backups and dirty worktrees; leaves branches alone by default.
@@ -193,11 +194,13 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt flying, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, world destructibles that take damage, die, lose collision, throw debris and reset — and planes shoot planes down (M4 A1, front-loaded). The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
 **Active plan: [`docs/PLAN-ai-flight.md`](docs/PLAN-ai-flight.md)** (AI flight: the plant, then the
-pilot), written 2026-08-15, waves C, D and E complete. Next: `F52`. Instant Action completed 2026-08-15,
-[`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md); M4
+pilot), written 2026-08-15, waves C, D and E complete. Next: `F52`. A concurrent
+`docs/PLAN-splitscreen-polish.md` (Splitscreen backlog theme, waves A–F) is active on `main` in
+another worktree; its own pointer wins here once that plan's session merges after this one lands.
+Instant Action completed 2026-08-15, [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md); M4
 (Game AI) completed 2026-08-14, [`docs/plans/PLAN-M4-ai.md`](docs/plans/PLAN-M4-ai.md). Owed at the
 controls: `PT-28`, `PT-41`, `PT-43` (4-player pane only), `PT-45`, `PT-46`, `PT-47`, `PT-49` and
-`PT-50`, `PT-53`, `CAP-37` ([`playtest.md`](playtest.md)). Verify any
+`PT-53`, `CAP-37` ([`playtest.md`](playtest.md)). Verify any
 change with **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit
 code); read [`docs/verification.md`](docs/verification.md) first.
 

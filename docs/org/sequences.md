@@ -322,6 +322,13 @@ parser squares its metres argument into `+0x14` (independently confirming the re
 compiled-72900 relation in the format doc's condition table) and the evaluator compares
 `dist² <= m²`, which is what CSVM implements. No gate radius is scaled.
 
+Two details of the `0x2` branch, decoded 2026-08-15 (`BL-313`). The distance is measured from the
+animation instance's **anchor** node at `+0x6c` (`004ec108`); the condition's own node-index field
+at `+0x10` is ignored here, unlike the `NODE_*` branches. And the test is one-shot: it runs when the
+stepper dispatches the `IF`/`ELSEIF`, not per frame, and re-runs only if a `LOOP` rewinds the cursor
+back over it. ⚠ `FUN_004ec540` returns **0.0** when the node lookup fails, so a failed lookup reads
+as "in range" rather than out of it.
+
 **`RANDOM_WEIGHT` reads a 200-entry ring, and that ring is not reproducible.** Each evaluation reads
 `table[DAT_0072836c]` and advances that index modulo 200, with the index global across every
 definition in the world. The table at `DAT_009fce20` is not compiled data: `FUN_004ee380` fills it at

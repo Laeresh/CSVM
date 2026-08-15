@@ -113,6 +113,38 @@ public class PlaneDamageTests
         Assert.Equal(30f, damage.WholeHealth, 4);
     }
 
+    /// <summary>Which quotient the injure staging must read (BL-384 items 1 and 2, from BL-297's
+    /// decode). FUN_004b3d70 divides health only, and while a zone's armor stands its health
+    /// cannot move, so no per-part threshold is crossed. The combined progression crosses them
+    /// early: a Bloodhawk zone stripped of armor sits at combined 0.5, which is already the
+    /// shipped leftwing pdpanel5 threshold, with the airframe untouched. DamageVisuals.OnPartDamage
+    /// takes HealthFraction for exactly this reason; feeding it Fraction tears panels early.</summary>
+    [Fact]
+    public void StrippingAZonesArmorCrossesAShippedPanelThresholdOnTheCombinedScaleButNotOnHealth()
+    {
+        var damage = Bloodhawk();
+        damage.Apply("nose", 0f, 20f);          // strip the armor exactly, health untouched
+        var nose = damage.Parts["nose"];
+        Assert.Equal(0.5f, nose.Fraction, 4);   // ≤ 0.5: pdpanel5's shipped threshold
+        Assert.Equal(1f, nose.HealthFraction, 4);
+        Assert.Equal(1f, damage.SummaryHealthFraction, 4);
+    }
+
+    /// <summary>The def-level list is on the hull pool, not any one zone (FUN_004b3800). One zone
+    /// gutted leaves the hull well above player_smoketrail's 0.10 entry, which is why
+    /// DamageVisuals.OnHullDamage exists apart from OnPartDamage.</summary>
+    [Fact]
+    public void OneGuttedZoneLeavesTheHullFractionFarAboveTheHeavyTrailThreshold()
+    {
+        var damage = Bloodhawk();
+        damage.Apply("nose", 0f, 20f);          // armor off
+        damage.Apply("nose", 40f, 0f);          // and the zone's health with it
+        Assert.Equal(0f, damage.Parts["nose"].HealthFraction, 4);
+        Assert.True(damage.SummaryHealthFraction > 0.10f,
+            $"hull at {damage.SummaryHealthFraction:0.00}, above the 0.10 heavy-trail entry");
+        Assert.False(damage.IsDestroyed);
+    }
+
     /// <summary>The decoded quirk kept on purpose (FUN_004b7f80's opening branch): a hit with
     /// health damage but NO armor damage is nulled outright while the zone's armor stands.</summary>
     [Fact]

@@ -67,16 +67,25 @@ bound name (`3040slug_gunhit`, …) and whose body is distance-gated:
   plume), `whitehotpuffer` for **ap**/**dum** (`magnesiumtip`), `firepuffer` + `whitehotpuffer` for
   **mag** (`fire_f01`–`04`). Beyond 500 m the impact is silent visual-wise.
 - **`PLAYER_RANGE 200`** adds flung debris via ballistic `OBJECT_MOTION` (`bit1`/`bit2`/`bit3`/
-  `chunk`, `RUN_TIME` 1–4 s). The `bit1`–`bit3` gamez nodes carry **no geometry** in this install
-  (0 vertices, measured C1/C2; `chunk` has one 4-vertex quad), **so read literally this draws the
-  `chunk` quad and nothing else** — confirmed in the original 2026-08-07:
+  `chunk`, `RUN_TIME` 1–4 s). Four bodies fly, but only one is visible: `chunk` has one 4-vertex
+  quad, while `bit1`–`bit3` carry **0 vertices and 0 polygons** in this install (measured C1/C2)
+  and each renders as **one 1-pixel, near-black point**. That matches the original 2026-08-07:
   `OriginalScreenshots/Videos/70 DD Dirt.mp4` shows a 70-slug dirt hit producing only the `chunk`
   and one faint black `blacksmokepuffer` puff.
+  ⚠ **They draw a point, not nothing** (decoded 2026-08-15, `BL-313`). Models 24–26 carry
+  `lights: 1` with a non-null light array, and both draw functions gate the light block on the light
+  **count** alone, not on vertices or polygons — software `FUN_005524d0` at `00552be2`, D3D
+  `FUN_00554550` at `005445f1`, the latter ending in `DrawPrimitive(D3DPT_POINTLIST, …)` via
+  `FUN_005a5800`. The record decodes to size field 0 (point size 1 px, `size × 0.02 + 1.0`,
+  constants set in `FUN_0054d9c0`), colour word `0x020B` unpacked by `FUN_0059e0e0` to R=0 G=16 B=11
+  of 255, and one position at the node origin. There is no sprite, billboard or texture-quad
+  substitution anywhere in either draw function.
   ⚠ **RETRACTED 2026-08-07 (`BL-313`):** this line used to read *"the debris art is the `bit01`–
   `bit04` textures every chapter archive ships"* — i.e. the zero-vertex nodes were taken as
-  pointers to those textures. The footage refutes it, and the motive behind it (why ship the
-  textures at all) is answered by an unrelated consumer, `zep_skin_fire3`/`zepskinfire_3`, whose
-  pooled sibling templates each carry a real child mesh ([gamez.md](gamez.md)).
+  pointers to those textures. The binary refutes it outright: no string `bit01`–`bit04` or
+  `bit1`–`bit3` exists in `crimson.exe`, neither draw function resolves anything by name, and no
+  polygon of any of C1's 2,237 models uses materials 19–22 (the four `bit0N` textures). Their only
+  consumer is `zep_skin_fire3`/`zepskinfire_3`, which names `bit01` in its own data ([gamez.md](gamez.md)).
 - **`PLAYER_RANGE 1000` + `ANIMATION_LOD HIGH`** randomly flashes a short `gunhit_lt` light.
 
 Puffer definitions are shared with [effects.md](effects.md); the range gates are the reason a
@@ -115,8 +124,9 @@ effect **animation**, splits by what the bound name resolves to:
   and relocates the effect templates onto the hit point — the same machinery the per-player crash
   runtime already proves (`BuildFlightCrashRuntime`) and that **destruction effects (D32)** share,
   so the impact-puffer wiring folds into D32. The per-class stand-ins these names fall to (A2):
-  dirt → tumbling chips on the authored `bit01–04` textures, alpha-blended (**scheduled for
-  deletion, `BL-313` — the original draws no chips**, see the `PLAYER_RANGE 200` note above); a gun round on a
+  dirt → the single spark, i.e. no arm of its own (the tumbling chips on the `bit01–04` textures
+  were **deleted 2026-08-15, `BL-313`**, see the `PLAYER_RANGE 200` note above; ground still
+  resolves to a non-`None` stand-in because the world-effects sink is gated on it); a gun round on a
   buildings-classed surface → a ricochet spark burst + flash (judged by eye — `bld_damage.flt`
   and the `rcochet1` `EFFECT` are both install-missing, see the unresolved-names table).
 

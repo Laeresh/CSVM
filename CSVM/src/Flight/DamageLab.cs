@@ -58,8 +58,15 @@ public sealed class ViewerDamageTarget : IDamageLabTarget
         if (!rebuildVisuals)
             return;
         _visuals.Reset();
+        var health = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
         foreach (var (name, f) in fractions)
-            _visuals.OnPartDamage(name, f.Combined);
+        {
+            health[name] = f.Health;
+            _visuals.OnPartDamage(name, f.Health);
+        }
+
+        // no ledger behind the parked viewer, so the hull pool is summed from the sliders
+        _visuals.OnHullDamage(_visuals.HullHealthFractionFrom(health));
     }
 
     public void Tick(float dt) => _visuals.UpdateStatic(dt);
@@ -103,13 +110,14 @@ public sealed class FlightDamageTarget : IDamageLabTarget
                 if (state.Def.MaxArmor > 0f)
                     damage.Apply(name, 0f, (1f - f.Armor) * state.Def.MaxArmor);
                 var after = damage.Apply(name, (1f - f.Health) * state.Def.MaxHp, 0f);
-                applied[name] = after?.Fraction ?? f.Combined;
+                applied[name] = after?.HealthFraction ?? f.Health;
             }
         if (rebuildVisuals && _controller.Visuals is { } visuals)
         {
             visuals.Reset();
-            foreach (var (name, combined) in applied)
-                visuals.OnPartDamage(name, combined);
+            foreach (var (name, health) in applied)
+                visuals.OnPartDamage(name, health);
+            visuals.OnHullDamage(damage.SummaryHealthFraction);
         }
     }
 

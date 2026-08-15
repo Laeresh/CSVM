@@ -129,6 +129,12 @@ public sealed record SessionSpec
     /// given, with a warning — the two are not composable. The menu enforces
     /// <see cref="Players"/> &gt;= 2 before it will start a match; the CLI only warns.</summary>
     public bool Versus { get; private set; }
+    /// <summary><c>--coop</c>: plain splitscreen free flight (no <see cref="Versus"/>, no Instant
+    /// Action) puts every human on <see cref="AimAssist.PlayerTeam"/> instead of the per-pilot
+    /// default (PLAN-splitscreen-polish A1 — plain flight's default stays FFA, this is the opt-in
+    /// to co-op). Dropped with a warning when combined with <c>--vs</c>, whose FFA is explicit and
+    /// outranks it.</summary>
+    public bool Coop { get; private set; }
     /// <summary><c>--vs-kills=N</c>: the kill target that ends a match early. Default 5; 0
     /// disables the kill limit (the match then runs to the time limit alone).</summary>
     public int VsKills { get; private set; } = 5;
@@ -507,6 +513,19 @@ public sealed record SessionSpec
     public bool DebugTargets { get; private set; }
 
     public bool DebugScoreboard { get; private set; }
+
+    /// <summary><c>--debug-markers</c>: mark EVERY live aircraft on the targeting HUD at once,
+    /// red for a hostile team and blue for your own, instead of the shipped single
+    /// nearest-hostile marker. A watching aid for AI work (whose plane is where), never a
+    /// gameplay feature.</summary>
+    public bool DebugMarkers { get; private set; }
+
+    /// <summary><c>--debug-spectate</c>: build the session exactly as it would be flown, then take
+    /// every human OUT of it: the aircraft goes inert (undrawn, uncollidable, and absent from
+    /// every AI's live candidate list, so nothing pursues you) and the pane switches to the
+    /// <c>SpectatorCamera</c>. The way to watch what the AI does when no player is provoking
+    /// it.</summary>
+    public bool DebugSpectate { get; private set; }
     public int? DebugLivery { get; private set; }
     public string? DebugMesh { get; private set; }
     public string? DebugNames { get; private set; }
@@ -695,6 +714,7 @@ public sealed record SessionSpec
             else if (arg == "--fly") { s._flyArg = true; s.HasContentArg = true; }
             else if (arg == "--stunt") { s._stuntArg = true; s.HasContentArg = true; }
             else if (arg == "--vs") { s._vsArg = true; s.HasContentArg = true; }
+            else if (arg == "--coop") { s.Coop = true; }
             else if (arg.StartsWith("--vs-kills=")) { s.VsKills = int.Parse(arg["--vs-kills=".Length..]); }
             else if (arg.StartsWith("--vs-time=")) { s.VsTimeMinutes = int.Parse(arg["--vs-time=".Length..]); }
             else if (arg == "--freecam") { s._freecamArg = true; s.HasContentArg = true; }
@@ -724,6 +744,8 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--paint-seed=")) { s.PaintSeed = ulong.Parse(arg["--paint-seed=".Length..]); s.PaintSeedExplicit = true; }
             else if (arg.StartsWith("--rof=")) { s.Rof = arg["--rof=".Length..]; }
             else if (arg == "--debug-scoreboard") { s.DebugScoreboard = true; }
+            else if (arg == "--debug-markers") { s.DebugMarkers = true; }
+            else if (arg == "--debug-spectate") { s.DebugSpectate = true; }
             else if (arg == "--debug-livery") { s.DebugLivery ??= 0; }
             else if (arg.StartsWith("--debug-livery=")) { s.DebugLivery = int.Parse(arg["--debug-livery=".Length..]); }
             else if (arg == "--debug-mesh") { s.DebugMesh ??= ""; }
@@ -1297,6 +1319,12 @@ public sealed record SessionSpec
         Stunt = stunt;
         Versus = vs;
         DamageLab = damageLab;
+        // --vs's FFA is explicit and outranks --coop; the deathmatch is the point of the mode.
+        if (Coop && Versus)
+        {
+            Warn("core", "--coop has no effect with --vs (its FFA is explicit); ignoring --coop");
+            Coop = false;
+        }
 
         // The numpad views orbit a FLYING plane; the other modes have their own cameras (the
         // viewer's orbit, the spectator freecam) placed with --pos/--direction instead.

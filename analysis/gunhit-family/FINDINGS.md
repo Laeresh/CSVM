@@ -51,9 +51,16 @@ shroud's dot band. Almost certainly a stale material index in the shipped data; 
 **`CAP-25` answered and retired 2026-08-07: the original does show it.**
 `OriginalScreenshots/Videos/70 DD Dirt.mp4` — a 70-slug dirt hit produces the `chunk` quad and one
 faint black `blacksmokepuffer` puff, and **nothing else**. The same clip settles the other half the
-opposite way: our `bit01`–`bit04` tumbling chips have no counterpart in the original, which is
-`BL-313` (delete them) — the zero-vertex `bit1`–`bit3` nodes draw nothing, exactly as the vertex
-counts above say.
+opposite way: our `bit01`–`bit04` tumbling chips have no counterpart in the original, which was
+`BL-313` (deleted 2026-08-15, entry closed).
+⚠ **Correction (2026-08-15, decoded): the zero-vertex nodes do not draw *nothing*.** Models 24–26
+carry `lights: 1`, and both model draw functions gate their light block on the light **count**
+alone, not on vertices or polygons (`FUN_005524d0` at `00552be2`, `FUN_00554550` at `005445f1`,
+ending in `DrawPrimitive(D3DPT_POINTLIST, …)`). Each renders **one 1-pixel near-black point** at the
+node origin: size field 0 ⇒ point size 1 px, colour word `0x020B` ⇒ R=0 G=16 B=11 of 255. Invisible
+against ground at gameplay zoom, which is why the clip reads as "nothing else", but the mechanism is
+a point draw and not an early-out. There is no sprite or texture-quad substitution in either draw
+function, and no string `bit01`–`bit04` exists in `crimson.exe` at all.
 
 ## Two things that make a probe of this lie
 

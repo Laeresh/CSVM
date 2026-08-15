@@ -61,6 +61,13 @@ public sealed class InstantActionRuntime
     /// through the wave teleport (F12).</summary>
     public const string ZeppelinRunMissionType = "zeppelin_run";
 
+    /// <summary>The radius <c>FUN_0045a240</c> writes into all THREE of an Instant Action actor's
+    /// volumes — activation, attack and return — with a ±10000 m altitude band
+    /// (docs/formats/instant-action.md "Every actor is a synthetic aiv roster block"): the engine's
+    /// own way of saying an Instant Action actor is always awake, always willing to engage, and
+    /// never returns.</summary>
+    public const float ActorVolumeRadiusM = 10000f;
+
     /// <summary>The five hand-authored pilot personalities a wave member's nine-stat vector is
     /// rolled from, <c>row = draw % 5</c> per aircraft (docs/formats/instant-action.md "A wave
     /// enemy's nine pilot stats are drawn at random from a table of five, not from its skill" —
@@ -225,6 +232,24 @@ public sealed class InstantActionRuntime
             }
         }
         return n > 0 ? System.Math.Clamp((int)System.MathF.Round(sum / (float)n), 1, 9) : 5;
+    }
+
+    /// <summary>Puts <see cref="ActorVolumeRadiusM"/> on all three of a spawned Instant Action
+    /// pilot's range gates. Call AFTER the spawn: <c>AiAircraftSpawner.Spawn</c> seeds attack and
+    /// return from the airframe def (2000/1200 m), which is the fallback for a roster that leaves
+    /// its volume slots at 0.0 (docs/formats/ai-rosters.md "The three unnamed slots") — an Instant
+    /// Action block authors them, so the fallback must not survive. Setting activation alone leaves
+    /// the airframe's 2000 m attack radius as the real engagement gate, since the mode machine
+    /// enters pursue on the MINIMUM of the two.</summary>
+    public static void ApplyActorVolumes(AiModeMachine? machine)
+    {
+        if (machine == null)
+        {
+            return;
+        }
+        machine.ActivationRange = ActorVolumeRadiusM;
+        machine.AttackRange = ActorVolumeRadiusM;
+        machine.ReturnRange = ActorVolumeRadiusM;
     }
 
     /// <summary>The five wingman slots' standing orders, 0-based. <paramref name="i"/> must be

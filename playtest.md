@@ -119,7 +119,7 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
 | `CAP-27` | Does the original spark on the airframe at all? | Take damage in the original — a light scrape is enough — with the aircraft in frame (external/chase fine), and look for a **spark burst on the airframe itself**, distinct from smoke at the contact point. ⚠ This capture can **delete** a feature rather than tune one: `BL-090`'s per-impact spark burst is driven by a 0.99 `injure_anims` entry that exists on **1 of 11** aircraft (the Devastator), which the backlog already calls "plausibly an authoring leftover". If the original never sparks, our implementation goes. If it does, `BL-281`'s ricochet mix can be judged | `BL-281`, `BL-090` (item 2) |
 | `CAP-28` | Torpedo flight dynamics | The aerial torpedo (`TORPDO`) released in level flight, ideally at high speed, filmed external/chase with the surface in frame and held from release to impact — long enough to read the speed decay the user saw at the controls (a max/cruise speed, slowing after launch). HUD in frame lets `analysis/video-flight-calibration` decode speed over time; without it the decay is still readable against fixed terrain | `BL-290` |
 | `CAP-30` | Firing-wobble amplitude across calibers and airframes | Dead-astern external/chase clips, level flight, guns held 3 s+: **(a)** one plane with two well-separated calibers (30 vs 70), **(b)** one caliber on a light vs a heavy plane, **(c)** — added 2026-08-07 — a **Bloodhawk 40-cal** clip framed and fire-rate-matched to `Gun Wobble and animation.mp4`, giving a *second independent amplitude measurement* of the same case the law was derived from. (c) is what lets this capture serve as `BL-266`(a)'s fallback instrument: (a)/(b) alone ask only whether caliber and plane weight enter the law, and **cannot** settle the uniform ~2–4× shortfall our render shows against the reference clip. ⚠ Dead-astern framing is load-bearing: it makes the on-screen roll angle the world roll angle with no projection model (`analysis/gun-wobble-shake/FINDINGS.md`, capture spec there). Confirms or refutes the pure-caliber magnitude law (7e-5 × caliber, measured on one 40-cal clip) and whether plane model/weight enter; a being-hit clip on the same sortie also pins the impact sources' stand-in quantities | `BL-266` |
-| `CAP-29` | Panel-damage semantics | Take controlled damage per part in the original, own aircraft in frame (external/chase), damage display visible if possible. Three questions: **(a) location** — take fire ONLY on the nose: do sparks/debris/fuel vapor ever appear at the WINGS, or does everything stay at the struck part? **(b) armor gate** — on a fresh plane with armor still absorbing, do any skin panels tear, or only once a part's armor is gone (health damage)? **(c) repetition & look** — watch one panel cross its tear threshold: how many debris bursts fire, does that panel's debris ever repeat later in the same flight, does the flung debris read as a piece of that panel or as generic flakes, and what visibly changes on the airframe | `BL-297` |
+| `CAP-29` | Panel-damage semantics | Take controlled damage per part in the original, own aircraft in frame (external/chase), damage display visible if possible. **Reduced 2026-08-15 by the `BL-297` decode**, which answered all three questions out of `crimson.exe` (`docs/org/vehicleDamage.md`, "Damage staging"): (a) effects land at the node the def names, so a nose hit DOES spark wing sites; (b) nothing per-part fires at all while a part's armor absorbs; (c) each entry fires once per downward crossing, so a panel tears once until repaired. **What is still owed is the look:** watch one panel cross its tear threshold and judge whether the flung debris reads as a piece of that panel or as generic flakes, and what visibly changes on the airframe. The other three are now confirmation, worth capturing on the same take if the framing allows but not worth a dedicated sortie | `BL-297` |
 
 ### World
 
@@ -363,45 +363,6 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
   instead (`PLAN-overcast-match` `B12`: C1/C2B/C4/C1C = `zone2`), not by a fresh flight.
   *Variations:* one flight each — repeat with `--chapter=C3`, then `--chapter=C2`; (d)'s four
   untouched chapters need only a glance in each.
-
-### C1 · Bloodhawk — Instant Action wingmen (`--ia=`)
-
-Save this as `ia-wingmen-test.json` next to the repo, then:
-
-```powershell
-./RunGame.ps1 --ia=ia-wingmen-test.json --chapter=C1
-```
-```json
-{
-  "mission_type": "dogfight_squadron",
-  "player_plane": "Bloodhawk",
-  "num_wingmen": 3,
-  "wingman_plane": "Fury"
-}
-```
-
-- `PT-50` `[Own]` **D9's wingman flight (`docs/plans/PLAN-instant-action.md` D9, landed 2026-08-14).**
-  Three Fury wingmen spawn on team 1 alongside the player's Bloodhawk, fanned 100/100/200 m off
-  its spawn heading at ±45°, escorting per the decoded `primary_target` chain (0/1 escort the
-  player directly; 2 escorts wingman 1). No original splitscreen/Instant Action reference exists
-  for this — every call here is a judgement on our own remake, and this is not a thing a suite can
-  answer (the suite only proves the count/team/airframe/pure math). *Look for:*
-  - (a) **does it read as a flight** — do the three Fury wingmen sit in a plausible formation
-    around the Bloodhawk at spawn, or does the fan look wrong (too tight, too spread, overlapping,
-    behind rather than beside);
-  - (b) **do they actually fly** — watch a minute or two: do the wingmen hold a sensible course
-    near the player rather than drifting off alone or diving into terrain (the D11 mode machine is
-    driving them, not a scripted formation, so some independent movement is expected and correct);
-  - (c) **A2's decoded friendly fire** — shoot a wingman down. This is supposed to be possible
-    (Decision 3/A2: the original applies friendly damage) — confirm it feels like a bug in the
-    HUD/feedback (no distinguishing "friendly" cue) rather than in the mechanic itself, since no
-    gate was added on purpose.
-
-  *Blocks:* nothing open yet — a fail on (a)/(b) is fresh evidence for the placeholder `AiPilot`
-  law (Wave D/E's own open scope, not this item's decode) or a new `BL` item; (c) reads confirm
-  Decision 3/A2 rather than opening anything.
-  *Variations:* `"num_wingmen": 5` with 1–2 `--players=` to see decision 8a's clamp in the spawn
-  log; any other `mission_type` besides `dogfight_ace` (which forces wingmen to 0).
 
 - `PT-53` `[Own]` **Graze feel now that a graze bounces (`docs/PLAN-ai-flight.md` `C25`, landed
   2026-08-15, closing `BL-172`).** A survivable scrape now rebounds along the contact normal off the

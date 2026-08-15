@@ -251,6 +251,36 @@ public class SessionSpecTests
         Assert.True(s.ScenarioExplicit);
     }
 
+    // ---- --coop (PLAN-splitscreen-polish A1) -----------------------------------------------
+
+    [Fact]
+    public void CoopParsesTrueAndLeavesFlyUnaffected()
+    {
+        var s = S("--fly", "--coop");
+        Assert.Equal(SessionMode.Fly, s.Mode);
+        Assert.True(s.Coop);
+        Assert.False(s.Versus);
+    }
+
+    [Fact]
+    public void CoopDefaultsToFalse() => Assert.False(S("--fly").Coop);
+
+    /// <summary>`--vs`'s FFA is explicit and outranks `--coop`, whichever order they're given in —
+    /// dropped with a warning rather than racing `--vs` at the assembler.</summary>
+    [Fact]
+    public void VsDropsCoopWithAWarning()
+    {
+        var vsThenCoop = S("--vs", "--coop");
+        Assert.True(vsThenCoop.Versus);
+        Assert.False(vsThenCoop.Coop);
+        Assert.Contains(vsThenCoop.Warnings, w => w.Message.Contains("--coop has no effect with --vs"));
+
+        var coopThenVs = S("--coop", "--vs");
+        Assert.True(coopThenVs.Versus);
+        Assert.False(coopThenVs.Coop);
+        Assert.Contains(coopThenVs.Warnings, w => w.Message.Contains("--coop has no effect with --vs"));
+    }
+
     // ---- The launchscreen decision -------------------------------------------------------------
 
     [Fact]

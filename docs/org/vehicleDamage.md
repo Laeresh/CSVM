@@ -214,12 +214,73 @@ no anim running, it starts one and stores the handle in the instance's `+0x890` 
 fraction rises back above the threshold and a handle is live, it stops the anim and clears the
 handle. So the staging is reversible, not a latch, and repairing a vehicle visibly un-stages it.
 
+⚠ **Armour is not in the fraction.** The divide is literally `[inst+0x2d0] / [inst+0x2cc]` — the
+health pair only. The armour pair (`+0x2c4` / `+0x2c8`) is never read on this path, so a vehicle
+with its armour stripped and its health untouched has crossed no def-level stage. This matters
+because the combined armour+health progression is the right scale for the gauge (a hit walks one
+down and then the other) and the wrong scale for these thresholds.
+
+The entry layout, `0x1c` bytes:
+
+| Offset | Field |
+|---|---|
+| `+0x00` | the threshold fraction |
+| `+0x08` | the root-node reference, read only when `+0x0c` is set |
+| `+0x0c` | non-zero selects a node-scoped context: `FUN_004d8cf0` resolves `+0x08` against the vehicle (falling back to `_C_exref` when `+0x08` is null). Zero plays against the vehicle's own node at inst`+0x0c` |
+| `+0x18` | the anim reference, passed to `FUN_004edda0` |
+
+That `+0x0c` field is the optional third element in
+[`formats/vehicle.md`](../formats/vehicle.md)'s `[[fraction, animName, rootName], …]`. The player
+airframes spell two elements, so their stages play against the vehicle root.
+
 **Per-part `injure_anims` (`FUN_004b3d70`)** is the same loop against `part health current / part
-health max`, over the part's own list at part`+0x3c` with handles at part`+0x4c`. It runs on every
-part-scoped hit.
+health max` (`[part+0x30] / [part+0x2c]` — **also health-only**, and likewise not the combined
+progression), over the part's own list at part`+0x3c` with handles at part`+0x4c`. It takes its
+context straight from entry`+0x14` rather than resolving a root. It runs on every part-scoped hit.
 
 Both are called from the spend paths, so a single bullet can move both levels at once. A part
 reaching zero also plays that part's destroy anim (part`+0x1c`), which is separate from either list.
+
+⚠ **The two levels are keyed on different pools and are not interchangeable.** The player's
+def-level list carries `[0.85, player_fuelleak]` and `[0.10, player_smoketrail]`; both are
+whole-vehicle-health stages, so `player_smoketrail` means "the hull is at 10%", not "some zone is at
+10%". Driving the def-level list off a per-part fraction fires the whole-plane trail while the hull
+is still near full. Decoded 2026-08-15 (`BL-246`); our implementation's three deltas against this
+are `BL-384`.
+
+### One start per downward crossing
+
+The handle arrays (inst`+0x890`, part`+0x4c`) are the whole lifetime rule. An entry starts only when
+its slot reads zero, and the slot is written with the instance `FUN_004edda0` returns. The slot is
+cleared on the **upward** crossing alone (`threshold < fraction`, via `FUN_004ed480`), never when the
+anim finishes by itself. So a stage fires exactly once per downward crossing and cannot fire again
+until a repair lifts the fraction back over its threshold.
+
+`FUN_004b3e20` (per-part) and `FUN_004b3910` (def-level) are the wipes: each stops every live anim in
+its array and zeroes the slots. `FUN_004b8180`, the set-health path behind repairs and cheats, calls
+the per-part wipe before re-running `FUN_004b3d70`, so a repair un-stages and then restages from the
+new fractions.
+
+Two consequences for a per-part list. Each part carries its own copy of a shared entry, with its own
+slot, so an entry authored on all four player zones fires up to four times over a flight, once as
+each zone first crosses. And because the fraction is health-only while `FUN_004b7f80` blocks health
+damage outright until a part's armour is spent, a fully-armoured part crosses nothing at all: even a
+0.99 entry waits for the armour pool. Decoded 2026-08-15 (`BL-297`).
+
+### Where a stage's effects land
+
+Node names in a started anim are bound in `FUN_00521180`, which walks the anim's node tables and
+resolves each reference through `FUN_004efa40`. An entry naming an explicit parent is searched under
+that parent; everything else goes to `FUN_004efaf0`, which tries, in order, the instance's context
+subtree (inst`+0x6c`), the context node (inst`+0x48`), the anim's two local tables (`FUN_004ee7e0`,
+`FUN_004ee770`), and finally a global by-name lookup (`FUN_004d0280(7, name)`). The subtree search is
+`FUN_004efa70`, a recursive name compare down `+0x56`/`+0x5c`.
+
+⚠ **The context does not redirect a name, it only disambiguates one.** A name that is unique on the
+airframe resolves to the same node whichever context started the anim, because a miss in the context
+subtree falls through to the global lookup. The `pdpN` panel nodes are unique, so a stage naming
+`pdp1` sparks at `pdp1` regardless of which part's list started it. There is no part-relative
+retarget on this path. Decoded 2026-08-15 (`BL-297`).
 
 ## Death
 
