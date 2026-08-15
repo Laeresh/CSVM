@@ -336,13 +336,39 @@ public sealed class FlightModel
     // later must not reuse it without the gate.
     private const float WeathervaneHalfAngle = 0.5f;
 
-    public FlightModel(PlaneStats stats)
+    /// <param name="aiForcePath">Which of the original's two force paths this instance flows — see
+    /// <see cref="UsesAiForcePath"/>. ⚠ Optional, and it defaults to the PLAYER path, so a
+    /// production construction site added later gets the player plant silently. Two sites pass it
+    /// today (<c>FlightRigAssembler</c>, <c>AiAircraftSpawner</c>); a third one must pass it too.
+    /// The default exists for the ~18 test sites that construct a plant with no session around
+    /// them, not as a statement about what a new caller wants.</param>
+    public FlightModel(PlaneStats stats, bool aiForcePath = false)
     {
         Stats = stats;
+        UsesAiForcePath = aiForcePath;
         StallSpeed = ComputeStallSpeed(stats);
     }
 
     public PlaneStats Stats { get; }
+
+    /// <summary>Whether this plant flows the original's AI force path rather than its player one.
+    /// The original selects between them INSIDE its force function, on a pointer compare against
+    /// the single global player object (<c>cmp esi, [0x71c298]</c> at <c>0x4916fe</c>, guarding the
+    /// weathervane block; <c>docs/org/flightModel.md</c>'s "Weathervane centring"). We cannot copy
+    /// that test: it presumes one player, and this engine flies up to four in splitscreen, so the
+    /// selection is made once per aircraft at construction from <c>IsHumanPiloted</c> instead. Same
+    /// two paths, a different way of choosing which one an aircraft is on.
+    /// <para>⚠ Named for the PATH, not for the pilot. An AI-flown aircraft put back on the player
+    /// path (the temporary <c>--no-ai-plant</c> A/B switch) is still AI-flown; nothing downstream of
+    /// this may read it as "is this an AI aircraft" — <see cref="FlightController.IsHumanPiloted"/>
+    /// answers that.</para>
+    /// <para>⚠ Immutable by construction. A plant that could change path mid-flight would make a
+    /// golden shot or a suite run unreproducible, since the trajectory would depend on WHEN the
+    /// switch happened rather than on the inputs.</para>
+    /// <para>Wave C of PLAN-ai-flight hangs the decoded divergences off this: the AI's nose-aligned
+    /// airflow, its skipped weathervane, its speed floor (C22) and its ground blow (C23). It selects
+    /// nothing yet — C21 landed the seam alone so wave C's diff is readable.</para></summary>
+    public bool UsesAiForcePath { get; }
 
     /// <summary>Airspeed as a fraction of fd_speed — the single stall-proximity scale both stall
     /// thresholds are measured on, and the one the STALL lamp's blink rate ramps over. Every stall

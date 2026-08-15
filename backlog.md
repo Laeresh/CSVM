@@ -3029,6 +3029,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Workaround on record:* kill the lingering Godot process for that shot; the hash it printed
   is still valid.
 
+- `BL-379` `[Bug]` **`PerfSampleTests.AScopeAllocatesNothing` is flaky — it asserts EXACTLY zero
+  allocated bytes and intermittently reads 4872.** Hit once during PLAN-ai-flight C21 (2026-08-15) on
+  a run whose change touches nothing in `PerfSample`'s path, then **7 consecutive clean runs** of the
+  same tree, so roughly 1 in 8. The measurement is
+  `GC.GetAllocatedBytesForCurrentThread()` either side of a 10,000-iteration scope loop; the loop
+  body genuinely allocates nothing (a ref-struct handle over a fixed enum), so the bytes are almost
+  certainly the runtime's own — tiered JIT re-compilation or OSR firing inside the measured window,
+  which the single warm-up scope above it does not cover. Adding an unrelated test class perturbs it,
+  which fits that reading. **Cost is the false alarm, not the instrument:** a red gate suite on a
+  change that cannot have caused it burns a session's time deciding whether to trust it, which is
+  exactly what happened here. Fix by measuring the delta over a second identical loop (JIT paid on
+  the first), or by asserting a small ceiling with the reason written down rather than an exact 0.
+  ⚠ Do NOT "fix" it by relaxing the assertion to a large tolerance — the exact-zero claim is the
+  point of the test (an instrument that allocates on the frame path manufactures the collections it
+  exists to catch), so the noise floor is what must be excluded, not the property.
+
 - `BL-356` `[Bug]` **`HitchSidecar`'s queue (default depth 8, 3 s flush) loses records under a real
   hitch storm — confirmed at the controls, not just a theoretical TUNE gap.** A user session
   dragging the `DamageLab` sliders repeatedly (`.scratch/logs/fly-20260814-210336.{log,hitches.jsonl}`,

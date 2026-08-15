@@ -137,7 +137,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Port the decoded plant
 
-21. ☐ C21 The AI force-path seam, plus the temporary A/B switch
+21. ☑ C21 The AI force-path seam, plus the temporary A/B switch (`UsesAiForcePath`, `--no-ai-plant`)
 22. ☐ C22 The AI aerodynamic deltas: airflow, weathervane, speed floor (density band out, per A1)
 23. ☐ C23 The AI ground blow, a different law
 24. ☐ C24 `BL-330`'s authority ramp and the reverse-authority factor
@@ -328,7 +328,30 @@ lines defeats the purpose of the file.
 
 # Wave C — Port the decoded plant
 
-## C21 ☐ The AI force-path seam, plus the temporary A/B switch
+## C21 ☑ The AI force-path seam, plus the temporary A/B switch
+
+**Landed 2026-08-15.** `FlightModel(PlaneStats stats, bool aiForcePath = false)` carries the choice
+into a readonly `UsesAiForcePath`, and the two production sites pass it off `IsHumanPiloted`
+(`FlightRigAssembler`:388, `AiAircraftSpawner`:145). The switch is `--no-ai-plant`
+(`SessionSpec.NoAiPlant`), read only at the AI spawn site, so it moves AI aircraft and never a
+player's. Nothing reads the flag yet, which is the point.
+
+⚠ **The citation in this item's Evidence was off.** The pointer compare is at `0x4916fe`
+(`cmp esi, [0x71c298]`), quoted at [`org/flightModel.md`](org/flightModel.md):658 in the
+*Weathervane centring* section, not at :617. It also sits inside `FUN_00490f70` — which A1 identified
+as the **debug copy** of the force function. So it is a sound example of *how* the original phrases
+the player/AI selection (a pointer compare against the single global player object), which is all
+C21 needed, but it is **not** evidence that the live function branches at that address. C22 must
+locate the live guard for each divergence it ports rather than inheriting this address.
+
+**A green suite verifies nothing here on its own** (METHOD-10): with the flag unread, the whole
+regression passes whether it is wired correctly, backwards, or not at all. `ForcePathSeamTests`
+is the falsifiable form, and its `BothPathsStillIntegrateIdentically` deliberately becomes false in
+C22 — rewrite it there rather than deleting it.
+
+**Also corrected in passing:** `--debug-targets` had a `## Flags` bullet but no `cli.md` index entry,
+and `PROJECT_CONTEXT.md`'s flag count read 117 against an actual 132. Both sides are now 133 and
+equal, checked by counting the parser's accepted literals against the index.
 
 **Goal.** `FlightModel` can flow either the player force path or the AI one, selected once at
 construction, with no behaviour change yet. A temporary CLI switch flips AI aircraft back to the

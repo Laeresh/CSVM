@@ -142,7 +142,12 @@ public sealed class AiAircraftSpawner
 
             // No camera rides an AI plane — Setup(null) skips the whole camera half — and CamParams
             // is camera tuning, so the default is passed rather than loading the plane's block.
-            controller.Setup(new FlightModel(stats), null, new CamParams(), pos, lookAt);
+            // The plant's force path is chosen once, here, off who is flying (C21): nobody, so the
+            // AI path — unless --no-ai-plant puts this aircraft back on the player one for an A/B at
+            // the controls. See FlightModel.UsesAiForcePath.
+            controller.Setup(
+                new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted && !_spec.NoAiPlant),
+                null, new CamParams(), pos, lookAt);
             controller.Name = $"ai{index + 1}_{planeName}";
             _worldRoot.AddChild(controller);
 

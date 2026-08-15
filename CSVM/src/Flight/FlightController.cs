@@ -288,8 +288,10 @@ public partial class FlightController : Node3D
 
     /// <summary>The non-player input source: set (with <see cref="IsHumanPiloted"/> false), it
     /// replaces the keyboard/pad read each sim step, the way <see cref="HoldSegments"/> does for
-    /// scripted runs — everything downstream of the input (flight model, collision, weapons,
-    /// damage, crash) is byte-for-byte the player's path. Its orders are mutable between steps;
+    /// scripted runs — collision, weapons, damage and crash downstream of it are byte-for-byte the
+    /// player's path. The FLIGHT MODEL is the one exception, and only since C21: the plant selects
+    /// the original's AI force path off this same human/AI split, once at construction
+    /// (<see cref="FlightModel.UsesAiForcePath"/>). Its orders are mutable between steps;
     /// see <see cref="AiPilot"/>.</summary>
     public AiPilot? Pilot;
 

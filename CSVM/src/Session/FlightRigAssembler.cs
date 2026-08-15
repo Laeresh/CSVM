@@ -385,8 +385,11 @@ public sealed class FlightRigAssembler
         // and so the caller keeps constructing the assembler before the rigs are known.
         var (spawnPos, spawnLookAt) = (_starts ??= _spawns.ChooseStarts(
             _in.SpawnList, _in.MissionZrdrPath, _in.SpawnBase, _in.RigCount))[pi];
-        controller.Setup(new FlightModel(stats), rig.Camera, _in.CamParamsFor(planeName),
-            spawnPos, spawnLookAt);
+        // The plant's force path is chosen once, here, off who is flying (C21) — a person, so the
+        // player path. FlightModel.UsesAiForcePath carries why this is a construction argument
+        // rather than the original's own pointer-compare-against-the-player test.
+        controller.Setup(new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
+            rig.Camera, _in.CamParamsFor(planeName), spawnPos, spawnLookAt);
         // --weapon-lab: the lab is a flight session whose aircraft is pinned at the spawn pose
         // — everything else (world, pool, effects, the trigger itself) runs exactly as in free
         // flight. Set AFTER Setup, which places the plane: the pin is captured at the first held

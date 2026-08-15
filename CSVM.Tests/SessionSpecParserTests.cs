@@ -190,6 +190,20 @@ public class SessionSpecParserTests
         Assert.Equal(9, SessionSpec.Parse(new[] { "--ai-attack=42" }).AiAttackSkill);
     }
 
+    /// <summary>C21's temporary A/B switch. Default OFF, so an ordinary launch flies the AI plant —
+    /// the thing being compared against has to be the shipped behaviour, or the A/B measures nothing.
+    /// ⚠ Removed with the flag itself by F52.</summary>
+    [Fact]
+    public void NoAiPlantIsOffUnlessAsked()
+    {
+        Assert.False(SessionSpec.Parse(new[] { "--fly" }).NoAiPlant);
+        Assert.True(SessionSpec.Parse(new[] { "--fly", "--no-ai-plant" }).NoAiPlant);
+        // Distinct from --no-assist, which is the AI's MODE MACHINE, not its plant; a stray prefix
+        // match between the two would silently disable the rubber band in every A/B run.
+        Assert.False(SessionSpec.Parse(new[] { "--no-ai-plant" }).NoAssist);
+        Assert.False(SessionSpec.Parse(new[] { "--no-assist" }).NoAiPlant);
+    }
+
     [Fact]
     public void AMalformedDamagePresetIsReportedThroughTheSpecsWarnings()
     {

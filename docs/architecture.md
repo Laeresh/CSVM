@@ -3293,17 +3293,18 @@ way `FlightController.PadDevices`/`UseKeyboard` gives the flying panes one.
 
 ## src/Flight/FlightModel.cs
 The aircraft's plant: the arcade velocity-vector flight model, decoded from the original and
-parameterised by the vehicle's own `dynamics` block. Rotation is a spring-damper — stick torque, the
-decoded bank→yaw/pitch coupling and the `return_rate` weathervane sum into one accumulator that is
-then decayed EXPONENTIALLY by `ang_momentum_damp`; yaw alone carries the authored speed-authority
-curve, and the ground blow biases the finished command away from what the nose is closing on.
-Translation integrates thrust, drag, gravity and lift on the velocity VECTOR, so speed passes
-through zero: lift is a demanded load factor rather than a fraction of gravity, drag a parabolic
-polar in MACH with no induced term, thrust a Mach curve times a LINEAR throttle lever scaled by nose
-attitude, gravity full strength in every attitude. Nothing in the force path is fitted. The arcade
-handling on top is ours: the flight path chasing the nose, the stall nose-drop, the altitude clamp.
-Every mechanism, constant and trap is documented at the line that computes it; the decode behind
-them is [`org/flightModel.md`](org/flightModel.md) and how to measure any of it is `verification.md`.
+parameterised by the vehicle's own `dynamics` block. Rotation is a spring-damper: stick torque, the
+bank→yaw/pitch coupling, the `return_rate` weathervane and the ground blow sum into one accumulator
+decayed EXPONENTIALLY by `ang_momentum_damp`, with an authored speed-authority curve on yaw alone.
+Thrust, drag, gravity and lift integrate on the velocity VECTOR, so speed passes through zero — lift
+a demanded load factor, drag a polar in MACH with no induced term, thrust a Mach curve times a
+LINEAR lever scaled by nose attitude. Nothing in that force path is fitted; the nose-chase, the
+stall nose-drop and the altitude clamp are ours. There are TWO force paths, the original's player one
+and its AI one, and which an instance flows is fixed at construction (`UsesAiForcePath`, C21) where
+the original instead branched inside the force function on a compare against its single global
+player (`cmp esi, [0x71c298]` at `0x4916fe`) — not copied, because that presumes ONE player and this
+engine flies four. Every mechanism and trap is documented at the line that computes it; the decode is
+[`org/flightModel.md`](org/flightModel.md) and the measurement rules are `verification.md`.
 ⚠ The three `*Tune` rates and the decoded coefficients here are all PINNED, not free TUNEs — the
   rates to cockpit-gauge video of the original (`analysis/video-flight-calibration/`), the
   coefficients to the binary's own bytes. Re-pin a rate only when a decoded mechanism moves the
