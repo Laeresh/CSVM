@@ -25,10 +25,15 @@ namespace CSVM.Flight;
 /// control law converges on altitude slowly, and the pilot model (wave D) owns real
 /// waypoint-arrival and turn behaviour. Replace, do not tune, when that lands.</para>
 ///
-/// <para><b>The trailer and the per-node tags ride along untouched.</b> The net's trailer
-/// (its attach/follow target, e.g. <c>[10, "player"]</c>) is recorded and exposed via
-/// <see cref="AiNet.Trailer"/> but not acted on; target-relative motion is later-wave work.
-/// Per-node tags are preserved raw on <see cref="AiNetNode.Tags"/>; both decoded readings
+/// <para><b>⚠ The trailer is DECODED and still not acted on (`BL-377`).</b> An anchored trailer
+/// (<c>[10, "player"]</c>) means the whole graph RIDES that object in the original: every node
+/// position comes back as <c>(node − anchor) + target</c> in X/Z with the node's authored Y
+/// (docs/org/aiPilot.md, "The trailer"). 76 of 222 nets are anchored, 11 of them to the player,
+/// and six of the eight chapters' first nets. Until that lands, this class flies an anchored net
+/// as a fixed route at its authored coordinates, which is why an Instant Action wingman patrols a
+/// ring in the middle of the map instead of one centred on the player.</para>
+///
+/// <para>Per-node tags are preserved raw on <see cref="AiNetNode.Tags"/>; both decoded readings
 /// (stop-point id vs segment id) are still open (F17), so this class acts on neither.</para></summary>
 public sealed class AiNetFollower
 {

@@ -2355,9 +2355,12 @@ positions in, target node out; its two consumers are `AiPilot.Patrol` (aircraft)
 ⚠ `DefaultArrivalRadius` (200 m, XZ-only) is INVENTED, sized to the placeholder law's tracking
   error; wave D's real maneuvering shrinks it. Zeppelins pass a wider per-record radius that
   clears their turning circle (`ZeppelinRuntime`).
-⚠ The trailer is recorded and exposed, never acted on (target-relative motion is later-wave
-  work); per-node tags ride along raw. Stop-point vs segment id is still open (F17's remaining
-  item; the discriminating instrument is locating the runtime net loader).
+⚠ **The trailer is DECODED (`BL-377`) and still not acted on.** An anchored trailer means the net
+  RIDES its target: `(node − anchor) + target` in X/Z, authored Y (`org/aiPilot.md` "The trailer").
+  76 of 222 nets are anchored, 11 to the `player`, and six of the eight chapters' FIRST nets (the
+  net every Instant Action actor takes), so today an IA wingman patrols a ring at fixed world
+  coordinates where the original patrols one centred on the player. Per-node tags ride along raw;
+  stop-point vs segment id is still open (F17's remaining item).
 
 ## src/Flight/ZeppelinBroadside.cs
 The pure zeppelin broadside law (M4 F19), engine-free: the decoded 90° arc

@@ -104,6 +104,49 @@ Action's three branches below) means this entry.
 `FUN_00475f30` is the by-name form (`SET_AI_NET`'s string arm): it walks the same table comparing
 each entry's name, then calls `FUN_00475fc0` with the entry's id.
 
+## The trailer: an anchored net rides its target
+
+A net record's trailer is `[anchorNodeIndex, "name"]`. `FUN_004314e0`, which builds a `CCENet`
+from the parsed record, stores the anchor index at net `+0x18` and resolves the NAME to an object
+once, at build: `FUN_004d0280(7, name)`, the by-name lookup over the kind-7 registry, into net
+`+0x1c`. A record with no name leaves `+0x1c` at 0.
+
+Every node position the engine reads goes through `FUN_00432140(net, out, nodeIndex)`, which is a
+thin wrapper over **`FUN_00432010`**, and that is where the trailer does its work. With a resolved
+target and an anchor index other than −1:
+
+```
+target = the trailer object's world position   (FUN_004cf2c0, refreshed once per frame,
+                                                cached against the frame stamp at net +0x00)
+anchor = node[net +0x18]                        the net's own stored anchor position
+out.x  = (node.x - anchor.x) + target.x
+out.y  =  node.y                                ⚠ authored altitude, NEVER the target's
+out.z  = (node.z - anchor.z) + target.z
+```
+
+So **the graph is a pattern carried horizontally by the named object**, keeping each node's
+authored height. With no trailer, or an anchor of −1, the node's stored position is returned
+verbatim. Because every consumer goes through this one function, the offset applies to the nearest
+-node scan (`FUN_00431900`), the follower's current target and the edge geometry alike: nothing
+sees the static coordinates.
+
+⚠ **This is what "an AI escorts something" is in the shipped data.** 76 of 222 nets are anchored,
+and the census of their targets is in [`../formats/ai-nets.md`](../formats/ai-nets.md): zeppelins,
+a train, a tanker, and **`player` on 11 of them**. C1's `M4ReinfAce` (the chapter's FIRST net, so
+the one every Instant Action actor is handed) is `[10, "player"]`, an 11-node ring whose node 10 is
+the anchor: in the original, every Instant Action aircraft in C1 flies a ring **centred on the
+player**. Six of the eight chapters' first nets are anchored this way, to the player (C1), a
+zeppelin (C1C, C2, C3) or a train (C4).
+
+⚠ One mission-specific special case sits at the top of `FUN_00432010` and is NOT the general rule:
+if the trailer target is one of `britbalmoral_1/2/3` (`DAT_0071c4e4`/`e8`/`ec`, set by name in
+`FUN_004735b0` for one mission only) the net re-binds to whichever of the three is still present.
+An escort-target failover for that mission, nothing more.
+
+⚠ A node with no edges is skipped by the nearest-node scan (`FUN_00431900` tests the node's own
+degree at `+0x18`), which is how an anchor node parked off the ring never becomes a flight target
+itself.
+
 ## The patrol-net follower has no netless branch
 
 `FUN_0041d1f0` resolves the net before it does anything else (`0x0041d1f9`–`0x0041d237`): it scans
@@ -312,6 +355,10 @@ is where to start.
 | `FUN_0041e760` | the formation escort law |
 | `FUN_0041b560` | the shared steering law: point in, stick and throttle out |
 | `FUN_004311c0` | builds the chapter net table from `neindex`, in file order (`FUN_00431300` frees it) |
+| `FUN_004314e0` | builds one `CCENet` from its record: nodes, edges, volumes, and the trailer's name→object resolve |
+| `FUN_00432010` | node position with the trailer offset applied: the "this net rides that object" rule |
+| `FUN_00432140` | node position by index, the wrapper every consumer calls |
+| `FUN_00431900` | nearest node to a point, skipping edgeless nodes |
 | `FUN_00475fc0` | net assignment (`SET_AI_NET`), including the volume overwrite |
 | `FUN_00475f30` | the by-name net assignment: table scan on the entry name, then `FUN_00475fc0` |
 | `FUN_004735b0` | the `player.zrd.json` loader, including `min_ai_active_dist` |
@@ -326,6 +373,10 @@ is where to start.
 
 ## Open
 
+- The per-node fields beyond position and degree (`+0xc`, `+0x10`, `+0x11`, `+0x14` on the 0x28-byte
+  node record) are still unread; the raw tags `ai-nets.md` exposes are these. The follower's own
+  reads of `+0x11` / `+0x14` (a flag and a danger-zone path id, `FUN_0041d1f0`'s `dzpath_%d`
+  branch) are the lead.
 - `FUN_0041b560` is described by its parameter table only. The law itself (how it converts a station
   point into bank, pitch and rudder) is a separate decode, and it is what would replace
   `AiPilot`'s placeholder.

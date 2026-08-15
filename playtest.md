@@ -444,6 +444,11 @@ you to put the file "next to the repo", where nothing would find it. Absolute pa
   range and its current AI mode. **F13** draws the nets themselves plus a live leash from each
   plane to the node it is flying at (dimmed when it only holds that node while fighting), which
   is what turns (a) into a direct read rather than an impression.
+  ⚠ **The ring is in the wrong place until `BL-377` lands.** C1's first net is anchored to the
+  `player` (`[10, "player"]`), which in the original carries the whole ring around the player;
+  ours flies it at its authored coordinates, so wingmen and enemies alike patrol a fixed ring in
+  the middle of the map. Judge (a)–(d) as "does it walk the graph", not as "is the graph in the
+  right place".
   ⚠ **With wingmen configured, the two sides fight each other and nobody patrols.** Measured
   2026-08-15: three wingmen and three enemies with no player present read `0 plane(s) flying it,
   3 holding a node` and every marker said `pursue`. That is correct behaviour, not a failure of

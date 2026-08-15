@@ -34,6 +34,16 @@ The **name** is the join key everything else uses: `egen.json` `vehicle.nets`,
 `zeppelins.json` `net`, and `objectives.json` reference nets by name. `aiv.json` field 0
 references them by **id** ([PLAN-M4-ai.md](../plans/PLAN-M4-ai.md), decoded slots table).
 
+⚠ **An anchored trailer makes the whole net RIDE its target** (decoded 2026-08-15, `BL-377`,
+[`org/aiPilot.md`](../org/aiPilot.md) "The trailer"). `[nodeIndex, "name"]` is not decoration: the
+named object is resolved at net build and every node position the engine hands out is offset by
+it, so the graph is a PATTERN carried around a moving thing rather than a fixed route. 76 of the
+222 nets are anchored this way, and their targets say what the mechanism is for: `piratezep` (25),
+`workersvoyagezep` (11), **`player` (11)**, `cargozep2` (10), `sprucegoose` (5), `cargozep1` (3),
+`mptrailer` (3), and one each of `train01`, `cargozep3`, `beowulfzep`, `dantezep`,
+`passenger_trengine`, `tanker`, `britbalmoral_2`, `barracuda`. The anchor is the LAST node in
+every shipped case, sitting off the ring the other nodes form.
+
 ⚠ **Pair order is meaningful and is not id order.** The engine builds its whole net table by
 walking this list forward and indexes the nets themselves by table position (`FUN_004311c0`,
 [`org/aiPilot.md`](../org/aiPilot.md)), so "the chapter's first net" (what every Instant Action

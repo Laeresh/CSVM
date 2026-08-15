@@ -713,6 +713,41 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   half, whose blocker this decode voids), `docs/formats/ai-nets.md`, `docs/architecture.md` on
   `AiPilot` and `AiModeMachine`.
 
+- `BL-377` `[Bug]` **A net with an anchored trailer RIDES its target in the original, and ours
+  flies it as a fixed route. DECODED 2026-08-15; what is left is implementation.** *Evidence:* the
+  user at the controls, 2026-08-15, flying `stunt_flying` with wingmen: the wingmen leave and
+  patrol the chapter's default net instead of staying with the player. That is what our code does,
+  and the original does not. [`docs/org/aiPilot.md`](docs/org/aiPilot.md) "The trailer":
+  `FUN_004314e0` resolves the trailer's NAME to an object at net build
+  (`FUN_004d0280(7, name)` → net `+0x1c`) and keeps the anchor node index at `+0x18`; every node
+  position then goes through `FUN_00432010`, which returns
+  `(node − anchor) + target` in X and Z with the node's **authored Y**. So an anchored net is a
+  PATTERN carried by a moving object, not a route. `AiNetFollower` records `Net.Trailer` and acts
+  on nothing (`docs/architecture.md`, and the class doc says so outright).
+  *Scale:* 76 of 222 nets are anchored. Targets: `piratezep` ×25, `workersvoyagezep` ×11,
+  **`player` ×11**, `cargozep2` ×10, `sprucegoose` ×5, `cargozep1`/`mptrailer` ×3, and one each of
+  `train01`, `cargozep3`, `beowulfzep`, `dantezep`, `passenger_trengine`, `tanker`,
+  `britbalmoral_2`, `barracuda`. **Six of the eight chapters' FIRST nets are anchored** (the net
+  every Instant Action actor is handed, `BL-364`): C1 `[10, player]`, C1C `[6, workersvoyagezep]`,
+  C2 `[11, sprucegoose]`, C3 `[9, cargozep1]`, C4 `[9, train01]`; C1B and C5's are unanchored and
+  C2B's is `[-1]`. The anchor is the last node in every shipped case, parked off the ring.
+  *Fix shape:* `AiNetFollower` takes an optional anchor index + a target-position supplier and
+  offsets every node read (its nearest-node scan included, since the engine's does). The name
+  resolve is the session's job, not the follower's: `player` to the player rig, anything else to a
+  world node.
+  ⚠ *Traps.* (a) **Y is never offset.** The pattern keeps its authored altitude, so a ring at
+  400 m stays at 400 m over a zeppelin at 200 m. (b) The offset applies to EVERY node read, so a
+  follower that offsets `CurrentTarget` but not its nearest-node pick will seat itself on the wrong
+  node. (c) `ZeppelinMotion` shares the follower: a zeppelin whose own net is anchored would start
+  riding its target, so check the zeppelin nets before switching this on for them. (d) Splitscreen
+  has 2–4 players and the engine's `player` is one object; whose position an anchored net follows
+  with a split field is undecided and is not in the binary. (e) An absent target (a `--fly` session
+  with no such world node) must fall back to the authored positions, which is the engine's own
+  no-trailer branch.
+  *Cross-refs:* `BL-364` (the first net every IA actor takes), `BL-362` (the wingman-station item:
+  this is a second, likelier mechanism for "wingmen stay with the player" in Instant Action),
+  [`docs/formats/ai-nets.md`](docs/formats/ai-nets.md), `PT-51`.
+
 ## Flight model & collision physics
 
 - `BL-089` `[Feature]` **Nitro booster — scoped, low priority (the user's standing call).** Recorded because the data is
