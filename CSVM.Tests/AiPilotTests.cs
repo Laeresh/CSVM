@@ -105,4 +105,51 @@ public class AiPilotTests
         pilot.Next(model, Dt);
         Assert.False(pilot.SteeringPatrol);
     }
+
+    /// <summary>The merge test's four decoded gates (<c>FUN_0041d9f0</c> at <c>0x0041e130</c>):
+    /// inside 400 m, we fly at the victim, the victim flies at us, and either party more than
+    /// ~37° off the line of sight disarms it. Pure geometry, so it is pinned directly rather
+    /// than through a flown pursuit (which would need a scene tree for the quarry).</summary>
+    [Fact]
+    public void TheMergeTestArmsOnlyOnATrueHeadOnInsideItsRange()
+    {
+        var closing = new Vector3(0f, 0f, -100f);    // us, flying at a victim dead ahead
+        var oncoming = new Vector3(0f, 0f, 100f);    // the victim, flying back at us
+
+        Assert.True(AiPilot.IsMerging(new Vector3(0f, 0f, -300f), closing, oncoming));
+        Assert.False(AiPilot.IsMerging(new Vector3(0f, 0f, -500f), closing, oncoming));
+        Assert.False(AiPilot.IsMerging(new Vector3(0f, 0f, -400f), closing, oncoming));  // exclusive
+
+        // A tail chase and a beam pass are both merge-free however close they get.
+        Assert.False(AiPilot.IsMerging(new Vector3(0f, 0f, -100f), closing, closing));
+        Assert.False(AiPilot.IsMerging(new Vector3(0f, 0f, -100f), closing, new Vector3(100f, 0f, 0f)));
+        Assert.False(AiPilot.IsMerging(new Vector3(0f, 0f, -100f), new Vector3(100f, 0f, 0f), oncoming));
+
+        // The closure cone: 30° off the line of sight still merges, 40° does not (cos 37° ≈ 0.8).
+        Vector3 Off(float deg, float sign) => new(
+            sign * 100f * Mathf.Sin(Mathf.DegToRad(deg)), 0f, sign * 100f * Mathf.Cos(Mathf.DegToRad(deg)));
+        Assert.True(AiPilot.IsMerging(new Vector3(0f, 0f, -300f), Off(30f, -1f), Off(30f, 1f)));
+        Assert.False(AiPilot.IsMerging(new Vector3(0f, 0f, -300f), Off(40f, -1f), oncoming));
+        Assert.False(AiPilot.IsMerging(new Vector3(0f, 0f, -300f), closing, Off(40f, 1f)));
+
+        // A stationary party has no closure to measure and never merges.
+        Assert.False(AiPilot.IsMerging(new Vector3(0f, 0f, -300f), Vector3.Zero, oncoming));
+        Assert.False(AiPilot.IsMerging(new Vector3(0f, 0f, -300f), closing, Vector3.Zero));
+    }
+
+    /// <summary>The merge's vertical bias ramp: dive at or below 50 mph, climb at or above
+    /// 90 mph, linear between and zero at the 70 mph the aim velocity collapses to. ⚠ These are
+    /// metres per unit of a UNIT vector's horizontal magnitude, so the whole term is worth 0.3 m
+    /// at most — see <see cref="AiPilot.MergeVerticalBias"/>.</summary>
+    [Fact]
+    public void TheMergeVerticalBiasRampsFromDiveToClimbAcrossItsTwoSpeeds()
+    {
+        Assert.Equal(-0.3f, AiPilot.MergeVerticalBias(10f), 4);
+        Assert.Equal(-0.3f, AiPilot.MergeVerticalBias(22.352f), 4);
+        Assert.Equal(0f, AiPilot.MergeVerticalBias(31.292799f), 4);
+        Assert.Equal(0.3f, AiPilot.MergeVerticalBias(40.2336f), 4);
+        Assert.Equal(0.3f, AiPilot.MergeVerticalBias(120f), 4);
+        Assert.True(AiPilot.MergeVerticalBias(26f) < 0f);   // still diving below 70 mph
+        Assert.True(AiPilot.MergeVerticalBias(36f) > 0f);   // climbing above it
+    }
 }

@@ -84,6 +84,17 @@ public sealed class AiPilot
     // The original's own avoid-crash aim point: straight up from the aircraft by this much.
     private const float ClimbOutAimM = 1000f;
 
+    // The merge rule's five decoded constants (FUN_0041d9f0 at 0x0041e130): the range it arms
+    // inside, the fraction of each party's own speed its closure test wants along the line of
+    // sight, the flat speed the aim velocity collapses to, and the vertical-bias endpoints.
+    private const float MergeRangeM = 400f;
+    private const float MergeClosureFraction = 0.8f;
+    private const float MergeSpeedMps = 31.292799f;
+    private const float MergeDiveSpeedMps = 22.352f;
+    private const float MergeClimbSpeedMps = 40.2336f;
+    private const float MergeVerticalBiasM = 0.3f;
+    private const float MergeVerticalBiasPerMps = 0.033554047f;
+
     /// <summary>Whether the LAST <see cref="Next"/> actually steered to <see cref="Patrol"/>'s
     /// node, as opposed to pursuing, evading or holding the bare orders. Reported rather than
     /// re-derived from the mode: the dispatch in <see cref="Next"/> is the only thing that
@@ -108,6 +119,38 @@ public sealed class AiPilot
     /// <paramref name="dir"/>'s horizontal projection.</summary>
     public static float HeadingDegOf(Vector3 dir) =>
         Mathf.RadToDeg(Mathf.Atan2(-dir.X, -dir.Z));
+
+    /// <summary>The decoded merge test (<c>FUN_0041d9f0</c> at <c>0x0041e130</c>): the victim is
+    /// inside <see cref="MergeRangeM"/> and the two are flying AT each other — each party's own
+    /// velocity lies within <see cref="MergeClosureFraction"/> of its speed along the line of
+    /// sight, which is about 37° of it. The original also tests that the victim is a
+    /// <c>jet</c>/<c>wingman</c> and never arms this against a ground target; every quarry that
+    /// reaches <see cref="FlyPursuit"/> is an aircraft, so that arm has nothing to port.</summary>
+    public static bool IsMerging(Vector3 toQuarry, Vector3 ownVelocity, Vector3 quarryVelocity)
+    {
+        float range = toQuarry.Length();
+        float ownSpeed = ownVelocity.Length();
+        float quarrySpeed = quarryVelocity.Length();
+        if (range >= MergeRangeM || range < 1e-3f || ownSpeed < 1e-3f || quarrySpeed < 1e-3f)
+            return false;
+        var u = toQuarry / range;
+        return ownVelocity.Dot(u) > MergeClosureFraction * ownSpeed
+            && quarryVelocity.Dot(u) < -MergeClosureFraction * quarrySpeed;
+    }
+
+    /// <summary>The merge's vertical aim bias per unit of the line of sight's HORIZONTAL
+    /// magnitude, metres: a dive below <see cref="MergeDiveSpeedMps"/> (50 mph), a climb above
+    /// <see cref="MergeClimbSpeedMps"/> (90 mph), linear between. ⚠ The line of sight is a unit
+    /// vector where the original applies this, so the bias it can produce is at most
+    /// <see cref="MergeVerticalBiasM"/>, 0.3 m. That is the decode and not a port artifact: the
+    /// original's merge is a speed collapse, and this term does effectively nothing. It is ported
+    /// because a decoded term left out invites re-deriving it later as a bug.</summary>
+    public static float MergeVerticalBias(float ownSpeed) => ownSpeed switch
+    {
+        <= MergeDiveSpeedMps => -MergeVerticalBiasM,
+        >= MergeClimbSpeedMps => MergeVerticalBiasM,
+        _ => (ownSpeed - MergeSpeedMps) * MergeVerticalBiasPerMps,
+    };
 
     /// <summary>One sim step's stick and throttle for the current orders. Pure over the model's
     /// state and this instance's fields (no clocks, no node reads, and the only randomness is
@@ -178,7 +221,13 @@ public sealed class AiPilot
     /// <summary>Pursuit: the aim point is the decoded lead offset ahead of the victim along the
     /// victim's own facing, flown on the engaged table with its authority bonus. A victim coming
     /// at us inside its own quick-draw cone is the original's head-on case, which aims at the
-    /// victim itself and lets the law solve the firing problem instead of a fly-to.</summary>
+    /// victim itself and lets the law solve the firing problem instead of a fly-to.
+    ///
+    /// <para>On top of that, a merge (<see cref="IsMerging"/>) replaces the aim VELOCITY the law
+    /// is handed: the victim's own velocity gives way to a flat <see cref="MergeSpeedMps"/>
+    /// (70 mph) along the line of sight, which collapses the law's speed demand into the pass —
+    /// the law then walks the lever down against its own ±26.82 m/s clamp. This is the original's
+    /// entire answer to two aircraft closing nose to nose; it does not break off.</para></summary>
     private FlightInput FlyPursuit(FlightModel model, float dt, FlightController quarry)
     {
         var toQuarry = quarry.WorldPosition - model.Position;
@@ -193,7 +242,14 @@ public sealed class AiPilot
         var aim = headOn
             ? quarry.WorldPosition
             : quarry.WorldPosition + (nose * AiControlLaw.LeadOffsetFor(vel.Length()));
-        return Fly(model, dt, aim, vel, AiLawParams.Engaged, engaged: true, gunLead: headOn);
+        var aimVelocity = vel;
+        if (IsMerging(toQuarry, model.VelocityDir * model.Speed, vel))
+        {
+            var u = toQuarry.Normalized();
+            aimVelocity = u * MergeSpeedMps;
+            aim.Y += new Vector2(u.X, u.Z).Length() * MergeVerticalBias(model.Speed);
+        }
+        return Fly(model, dt, aim, aimVelocity, AiLawParams.Engaged, engaged: true, gunLead: headOn);
     }
 
     /// <summary>Lay off (D15, the rubber-band assist): let the pursuer catch up. Steers the course

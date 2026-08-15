@@ -64,8 +64,10 @@ public enum AiMode
 /// seeded heading scrambles away from the threat — the decode is thin past "Evading."); the
 /// steady-hand roll is the flat shipped chance, the design's "damage weighted by accumulated
 /// damage" arithmetic being undecoded; <c>return_range</c> read as a chase leash from the point
-/// where pursuit began (which anchor the original uses is undecoded); the avoid-crash probe
-/// geometry, cadence and climb-out; the ×3 signature-maneuver selection weight; lay off's
+/// where pursuit began (which anchor the original uses is undecoded); the avoid-crash probe's
+/// cadence, second ray and minimum length (its LOOKAHEAD is decoded, see
+/// <see cref="ProbeLookaheadS"/>) and the <see cref="ClimbOutM"/> release altitude; the ×3
+/// signature-maneuver selection weight; lay off's
 /// entry/exit geometry (the pursued test's cones, the fallen-behind / caught-up distances and
 /// the anti-chatter hold — only the mode, the ease-off constant and the intent are decoded;
 /// no condition on the player's health exists anywhere in the decode, so none is modelled).</para>
@@ -91,8 +93,10 @@ public sealed class AiModeMachine
     /// <summary>Invented: obstacle-probe cadence, seconds.</summary>
     public const float ProbeIntervalS = 0.25f;
 
-    /// <summary>Invented: obstacle-probe lookahead, seconds of current velocity.</summary>
-    public const float ProbeLookaheadS = 2.5f;
+    /// <summary>Obstacle-probe lookahead, seconds of current velocity — decoded: the original's
+    /// ray is the vehicle's own velocity scaled by 4.5 (<c>FUN_0041f810</c>), so 4.5 seconds of
+    /// travel. Was an invented 2.5 until the reach was read out of the image.</summary>
+    public const float ProbeLookaheadS = 4.5f;
 
     /// <summary>Invented: minimum probe length, metres (a slow plane still looks ahead).</summary>
     public const float ProbeMinLookaheadM = 120f;
