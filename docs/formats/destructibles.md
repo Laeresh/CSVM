@@ -132,10 +132,10 @@ there varies — for the water tower it is the second puffer sequence (`h2twr_pu
 actual death swap `destroy_h2twr` sits in the regular `sequences` array. Do not treat
 `unknown_seq` as a reliable pointer to the death swap.
 
-**The slot is loaded and dispatched at death (`BL-276`, 2026-08-05).** `CompiledAnim` parses it
+**The slot is loaded and dispatched at death.** `CompiledAnim` parses it
 into `AnimDefinition.DeathSlot` — deliberately OFF `Sequences`, so bootstrap and the
 sequence-walking derivations never see it — and `AnimRuntime.RunDeathSequence` runs it as an
-extra runner on the death's own instance. The 2026-08-05 census over all 12,693 compiled defs:
+extra runner on the death's own instance. Across all 12,693 compiled defs:
 every non-empty slot sits on a `health > 0` destructible (none elsewhere), and 1,429 of the
 1,430 mission-archive slots dispatch calls no listed sequence reaches — this block is where
 ~all of `large_30sec_fire`'s 1,035 death calls live, so before it dispatched, the game's
@@ -244,7 +244,7 @@ the "Debris tumbles" bullet below. A format reader should know the current wirin
   - The patrol boat and truck are the only world objects also described by an AI-**vehicle** def
     (armour+health). M3 sees them only as scenery, so they are damaged through their **anim** def
     (`ptboat*`, HEALTH 20), not the vehicle def (HP 40); the armour+health combatant model is M4.
-    **Confirmed by the 2026-08-13 executable decode** ([`../org/vehicleDamage.md`](../org/vehicleDamage.md)):
+    **Confirmed by the executable decode** ([`../org/vehicleDamage.md`](../org/vehicleDamage.md)):
     the two models are selected by how an instance was created, not by what it is, so both are
     correct at once. C1's three placed refinery boats (`ptboat1`–`3`, compiled into `C1/cam_anim`
     at `health 20.0` / `WeaponHit`) are destructibles and this path is right for them; boats spawned
@@ -307,7 +307,7 @@ the "Debris tumbles" bullet below. A format reader should know the current wirin
     knowing: the `translation_range` elevation is **linear**, not spherical, so the launch direction
     is `dirY = elev/90` with the horizontal taking the remainder `1 − |elev|/90` and the vector is
     deliberately not unit length (0.707 at 45°). Multiply that by the drawn speed.
-    ⚠ **A `LaunchScale` of 0.65 shipped here until 2026-08-13 and was DELETED, not re-judged.** It
+    ⚠ **No `LaunchScale` of 0.65 applies here.** It
     was a judged look standing in for that elevation reading — the linear form is 0.745–0.81 of the
     spherical one across `m_build03`'s own 60–70° band — and the ~3× rise a frame comparison of
     `OriginalScreenshots/Videos/m_build03 destruction.mp4` reported was the compounded error, not a
