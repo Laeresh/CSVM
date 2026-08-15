@@ -79,6 +79,11 @@ public sealed class WeatherRig
     // has to hand it to the emitter factories long before this rig exists), written here because
     // this is the class that holds the mission's weather and already ticks once per frame.
     private readonly EffectAmbience _ambience;
+    // The session's viewer set (A3), whose poses Tick publishes onto the ambience each frame for
+    // the puffer distance fade (B11). Constructor-injected beside _ambience because it is the same
+    // shape of thing: a session-owned seam this class only WRITES THROUGH. An unbound set (no
+    // GameSession, i.e. the suites' own rigs) publishes no camera, which is the no-fade path.
+    private readonly ViewerSet _viewers;
     // The world's one DirectionalLight3D, whose bearing is the zone's authored
     // SUNLIGHT_ORIENTATION. A constructor argument rather than a SetX() like SetDeckZoneId /
     // SetFogVolumes, because ApplyZone cannot do its job without it — the others are optional
@@ -135,13 +140,14 @@ public sealed class WeatherRig
     private WorldWind _wind = WorldWind.Still();
 
     public WeatherRig(SessionSpec spec, Node3D worldRoot, DirectionalLight3D sun,
-        EffectAmbience? ambience = null)
+        EffectAmbience? ambience = null, ViewerSet? viewers = null)
     {
         _spec = spec;
         _worldRoot = worldRoot;
         _sun = sun;
         _activeZone = spec.SkyZone;
         _ambience = ambience ?? new EffectAmbience();
+        _viewers = viewers ?? new ViewerSet();
     }
 
     /// <summary>The deck's regime for ONE camera: where its cloud-deck copy sits, and whether the
@@ -290,17 +296,13 @@ public sealed class WeatherRig
         _wind.Step(frameDt);
         _ambience.SetWind(_wind.Velocity);
 
-        // The camera pose the puffer distance fade measures against, published on the same
-        // seam and in the same place, for the same reason: it is world state an emitter READS.
-        // Player 1's camera, not one per pane — see EffectAmbience.SetCamera for why, and note
-        // that a single-player, spectator or freecam session has exactly one rig anyway, so this
-        // is the only camera there is on every path a capture takes.
-        if (rigs.Count > 0)
-        {
-            var fadeCam = rigs[0].Camera;
-            var camXform = fadeCam.GlobalTransform;
-            _ambience.SetCamera(camXform.Origin, -camXform.Basis.Z);
-        }
+        // The camera poses the puffer distance fade measures against, published on the same seam
+        // and in the same place as the wind, for the same reason: it is world state an emitter
+        // READS. EVERY pane, from the session's viewer set (A3) rather than rigs[0] — the fade is a
+        // DRAW rule, so a trail near player 2 has to draw in player 2's pane whatever player 1 is
+        // pointing at (B11, `BL-339`). Unlike the wind this is not a per-camera step of shared sim
+        // state, so publishing N poses walks nothing twice.
+        _ambience.SetViewers(_viewers);
 
         foreach (var rig in rigs)
         {

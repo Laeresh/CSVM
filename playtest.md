@@ -255,6 +255,23 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
   *Variations:* `--debug-fps --players=4 --vs --chapter=C1`; `--debug-fps=full --players=4` for the
   taller panel specifically; also worth a glance at `--players=2`.
 
+- `PT-52` `[Own]` **The puffer distance fade in two panes (`BL-339` landed 2026-08-15, plan B11).**
+  The fade now runs its bands against every pane's camera and each particle takes the most
+  favourable pane's alpha, so a trail near player 2 draws in player 2's pane. What no instrument
+  here can judge is the remaining divergence: one alpha per particle for the whole world, so a pane
+  can see a puff its own camera would have faded further. A scripted shot cannot set this up —
+  there is no per-player placement flag and no scripted fire, so both panes spawn near-coincident.
+  *Launch:* `./RunGame.ps1 --fly --players=2 --chapter=C3` (plain 2-pane free flight, two pads or
+  pad + keyboard) — the section's Dogfight launch above works too if a target is wanted.
+  *Look for:* (a) the reported repro is gone — P2 astern of P1 fires a rocket past him and sees the
+  whole trail, not just the stretch beside P1; (b) neither pane shows a puffer popping in or out as
+  the OTHER player turns or flies away (the shared-alpha tell); (c) flying through an emitter still
+  culls it in the pane that flew through it rather than filling that screen.
+  *Blocks:* the fidelity verdict `BL-338` asks for — per-pane alpha (one MultiMesh per pane) is
+  reached for only if (b) visibly fails, and a fail mints its own `BL` item.
+  *Variations:* C3 (`--chapter=C3`, the waterfalls' `spew_puffer` is the tightest authored band);
+  `--players=4` for the same question with four alphas competing.
+
 ### C1 · two pilots — stunt race (splitscreen starting grid)
 
 ```powershell

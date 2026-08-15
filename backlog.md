@@ -2590,7 +2590,7 @@ their own system: `BL-231` (per-player pool term), `BL-296` (per-player ActionMa
 (MP spawn maps), `BL-301` (Dogfight tuning), `BL-314` (race countdown), `BL-351` (per-pane target
 cycling), `BL-358` (board stacking).
 
-The theme's fourteen items (`BL-126`, `BL-338`, `BL-339`, `BL-340`, `BL-365`–`BL-376`) are all
+The theme's thirteen open items (`BL-126`, `BL-338`, `BL-340`, `BL-365`–`BL-376`) are all
 scheduled in [`docs/PLAN-splitscreen-polish.md`](docs/PLAN-splitscreen-polish.md) (2026-08-15) and
 live there per the scheduled-items rule. New splitscreen findings mint here as usual.
 

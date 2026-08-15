@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
@@ -704,13 +705,12 @@ public sealed partial class Puffer : Node3D
         // not written this frame. That is why the renderer gets its own cursor below: its contract
         // is "indices 0…n-1, packed and ascending, then Show(n)", and n is the DRAWN count, which
         // is at most _liveCount.
-        // False until WeatherRig.Tick has published a camera — see EffectAmbience.HasCamera. In a
-        // live session that is true from the first tick on; an emitter that draws on the very
+        // Empty until WeatherRig.Tick has published the pane cameras — see EffectAmbience.Viewers.
+        // In a live session that is filled from the first tick on; an emitter that draws on the very
         // first frame of a session can beat it by one frame and draw unfaded, which is one frame
         // of full alpha at session start and is left alone rather than deferred.
-        bool fading = _ambience.HasCamera;
-        var camPos = _ambience.CameraPosition;
-        var camFwd = _ambience.CameraForward;
+        var viewers = _ambience.Viewers;
+        bool fading = viewers.Count > 0;
         // Burst mode keeps particle positions in the node's own frame (the burst point is the
         // node's translation); trail and sustain force the transform to identity and store world
         // positions. Every mode leaves the basis at identity, so one addition covers all three.
@@ -749,7 +749,7 @@ public sealed partial class Puffer : Node3D
             // itself keeps integrating and reaping normally above.
             // The distance gate, before any draw work: discarded means not written at all.
             float distAlpha = 1f;
-            if (fading && !DistanceAlpha(nodeOrigin + p.Pos, camPos, camFwd, out distAlpha))
+            if (fading && !NearestViewerAlpha(nodeOrigin + p.Pos, viewers, out distAlpha))
                 continue;
 
             float lifeFrac = p.Age > 0f ? p.Age / p.Life : 0f;
@@ -845,8 +845,49 @@ public sealed partial class Puffer : Node3D
         return sum / (w * h);
     }
 
-    /// <summary>The camera-distance alpha, decoded verbatim from the head of the original's
-    /// per-particle draw. Returns <c>false</c> when the particle is discarded for this frame;
+    /// <summary>The distance alpha across EVERY pane (B11, `BL-339`): <see cref="DistanceAlpha"/>
+    /// evaluated against each viewer, keeping the most favourable answer — the particle is drawn if
+    /// any pane should see it, with the alpha of the pane that sees it best. Returns <c>false</c>
+    /// only when every pane discards it.
+    ///
+    /// <para>The comparison has to be per viewer rather than a nearest viewer picked up front,
+    /// because the fade is a view-space DEPTH along each camera's own forward axis: the pane
+    /// closest in range can be the one facing away, which the near band culls at depth 0. Picking a
+    /// viewer by euclidean range would reinstate exactly the bug this fixes, one camera further
+    /// along.</para>
+    ///
+    /// <para>Highest alpha rather than smallest depth for the same reason, and the two agree
+    /// wherever the far ramp decides: it is monotonically decreasing in depth. Where they disagree
+    /// is the near CULL — a pane the particle sits inside of, which draws nothing while a farther
+    /// pane draws it fully — and there the drawn answer is the one wanted. With one viewer this is
+    /// that viewer's own answer unchanged, which is why every single-pane path (capture, freecam,
+    /// single player) is bit-identical.</para>
+    ///
+    /// <para>⚠ One alpha per particle, not one per pane: the emitter is one <c>MultiMesh</c> every
+    /// pane draws, so a pane can see a puff its own camera would have faded further. Per-pane alpha
+    /// takes N MultiMeshes (`BL-338`'s per-pane-geometry rule: only if the nearest rule visibly
+    /// fails).</para></summary>
+    private bool NearestViewerAlpha(Vector3 worldPos,
+        IReadOnlyList<ViewerSet.ViewerPose> viewers, out float alpha)
+    {
+        alpha = 0f;
+        bool drawn = false;
+        for (int v = 0; v < viewers.Count; v++)
+        {
+            var pose = viewers[v];
+            if (!DistanceAlpha(worldPos, pose.Position, pose.Forward, out float paneAlpha))
+                continue;
+            drawn = true;
+            if (paneAlpha > alpha)
+                alpha = paneAlpha;
+            if (alpha >= 1f)
+                break;                      // nothing a further pane says can beat full alpha
+        }
+        return drawn;
+    }
+
+    /// <summary>The camera-distance alpha for ONE viewer, decoded verbatim from the head of the
+    /// original's per-particle draw. Returns <c>false</c> when the particle is discarded for this frame;
     /// otherwise <paramref name="alpha"/> is the factor its drawn alpha is multiplied by.
     /// See <c>docs/org/puffer.md</c>.
     ///

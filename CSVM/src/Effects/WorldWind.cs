@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using CSVM.Flight;
 using Godot;
 
 namespace CSVM.Effects;
@@ -143,8 +145,8 @@ public sealed class WorldWind
 ///
 /// <para>This is deliberately a small mutable holder rather than a value passed down each
 /// <c>_Process</c>: a <see cref="Puffer"/> is a <c>Node3D</c> that ticks itself off the scene
-/// tree, so there is no per-frame call from above to thread a parameter through. The wind and the
-/// active camera's pose both live here for that reason, on the same once-per-frame write.</para>
+/// tree, so there is no per-frame call from above to thread a parameter through. The wind and
+/// every pane's camera pose both live here for that reason, on the same once-per-frame write.</para>
 ///
 /// <para><see cref="Still"/> is the null object: the wind a puffer feels when nobody wired one in
 /// (unit tests, the viewer, a mission with no weather.json). It refuses to be written, so a
@@ -152,6 +154,10 @@ public sealed class WorldWind
 /// process.</para></summary>
 public sealed class EffectAmbience
 {
+    // Every pane's camera pose this frame, refilled in place from the session's ViewerSet. A list
+    // rather than a single pose since B11: the fade is evaluated per particle against all of them.
+    private readonly List<ViewerSet.ViewerPose> _viewers = new();
+
     private readonly bool _frozen;
 
     public EffectAmbience()
@@ -167,22 +173,19 @@ public sealed class EffectAmbience
     /// <see cref="Vector3.Zero"/> until someone steps a wind into it.</summary>
     public Vector3 Wind { get; private set; }
 
-    /// <summary>Whether a camera pose has ever been published. <b>False means "no camera known",
+    /// <summary>Whether any camera pose has been published. <b>False means "no camera known",
     /// and the camera-distance fade is skipped entirely</b> rather than measured against the origin —
     /// which is the right answer for every caller that has no camera to give (the unit suites, the
     /// plane viewer, the damage lab) and would otherwise near-cull half their particles, the
     /// unauthored <c>NEAR_FADE</c> default being a hard cull at depth 0.</summary>
-    public bool HasCamera { get; private set; }
+    public bool HasCamera => _viewers.Count > 0;
 
-    /// <summary>The active camera's world position. Meaningful only while
-    /// <see cref="HasCamera"/>.</summary>
-    public Vector3 CameraPosition { get; private set; }
-
-    /// <summary>The active camera's world-space forward axis (unit, <c>-Z</c> of its basis).
-    /// Paired with <see cref="CameraPosition"/> because the original's fade distance is the
-    /// VIEW-SPACE DEPTH along this axis, not the euclidean range — see
-    /// <see cref="Puffer.DistanceAlpha"/>.</summary>
-    public Vector3 CameraForward { get; private set; } = Vector3.Forward;
+    /// <summary>This frame's camera poses, one per rendered pane (one in single player, freecam and
+    /// every scripted shot). Position and world-space forward (<c>-Z</c>) both, because the
+    /// original's fade distance is the VIEW-SPACE DEPTH along that axis and not the euclidean
+    /// range — see <see cref="Puffer.DistanceAlpha"/>, which evaluates the bands against each entry
+    /// and keeps the most favourable answer.</summary>
+    public IReadOnlyList<ViewerSet.ViewerPose> Viewers => _viewers;
 
     /// <summary>Publishes this frame's wind. Throws on <see cref="Still"/> — see the class
     /// remark.</summary>
@@ -192,21 +195,35 @@ public sealed class EffectAmbience
         Wind = wind;
     }
 
-    /// <summary>Publishes this frame's camera pose. Throws on <see cref="Still"/>, for the
-    /// same reason <see cref="SetWind"/> does.
-    ///
-    /// <para>⚠ One camera for the world, like the wind: the original evaluates the fade per
-    /// particle per DRAW, so a splitscreen pane would get its own distances, but ours is one
-    /// <c>MultiMesh</c> per emitter shared by every pane and the alpha is written once per frame.
-    /// The writer therefore publishes player 1's camera and every pane sees player 1's fade — a
-    /// known, recorded divergence that costs nothing in the single-player and freecam paths every
-    /// capture uses.</para></summary>
+    /// <summary>Publishes this frame's one camera pose, replacing whatever was published before.
+    /// Throws on <see cref="Still"/>, for the same reason <see cref="SetWind"/> does. The
+    /// single-viewer spelling, for a caller that has exactly one camera and no
+    /// <see cref="ViewerSet"/> to hand over (the suites, the labs).</summary>
     public void SetCamera(Vector3 position, Vector3 forward)
     {
         Writable();
-        CameraPosition = position;
-        CameraForward = forward;
-        HasCamera = true;
+        _viewers.Clear();
+        _viewers.Add(new ViewerSet.ViewerPose(position, forward));
+    }
+
+    /// <summary>Publishes this frame's pose for EVERY pane, from the session's viewer set (B11).
+    /// Throws on <see cref="Still"/>, for the same reason <see cref="SetWind"/> does.
+    ///
+    /// <para>Unlike the wind — one for the world, stepped once — the fade is a DRAW rule, and the
+    /// original evaluates it per particle per draw, so each pane owes its own answer. Ours is still
+    /// one <c>MultiMesh</c> per emitter shared by every pane with one alpha written per frame, so
+    /// what a particle gets is the most favourable of the panes' answers rather than each pane's
+    /// own: drawn if any pane should see it, at that pane's alpha (see
+    /// <see cref="Puffer.DistanceAlpha"/>). Per-pane alpha would take one <c>MultiMesh</c> per pane;
+    /// the nearest rule is the tracer-floor precedent and is what this project takes until it
+    /// visibly fails.</para>
+    ///
+    /// <para>An unbound set publishes nothing and leaves <see cref="HasCamera"/> false, which is the
+    /// no-camera-no-fade path rather than a fade against the origin.</para></summary>
+    public void SetViewers(ViewerSet viewers)
+    {
+        Writable();
+        viewers.Poses(_viewers);
     }
 
     private void Writable()

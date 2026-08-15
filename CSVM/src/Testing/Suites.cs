@@ -115,7 +115,8 @@ public static class Suites
             PufferWind));
         into.Add(new TestHarness.Suite("puffer-distance-fade",
             "the NEAR_FADE/FAR_FADE camera-distance alpha and its two culls, against the shipped "
-            + "bands of C3's spew_puffer and volcanosmoke — the cross-wire included (C7)",
+            + "bands of C3's spew_puffer and volcanosmoke — the cross-wire included (C7), and the "
+            + "most-favourable-pane rule every viewer gets an answer from (B11)",
             PufferDistanceFade));
         into.Add(new TestHarness.Suite("puffer-priority-size",
             "PRIORITY inflates the drawn sprite by 1 + K·PRIORITY, folded into BaseSize at spawn (C8)",
@@ -576,6 +577,7 @@ public static class Suites
             PufferFadeCrossWire(ctx);
             PufferFadeSwitchesOff(ctx);
             PufferFadeNoCameraNoFade(ctx);
+            PufferFadeEveryPane(ctx);
         }
         finally
         {
@@ -750,6 +752,87 @@ public static class Suites
         ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -20f), amb) is { } near
                   && Mathf.IsEqualApprox(near, 1f),
             $"and one inside the near cull draws too");
+    }
+
+    /// <summary>The splitscreen rule (B11, <c>BL-339</c>): the bands are evaluated against EVERY
+    /// pane's camera and the particle takes the most favourable answer, so a trail 20 m in front of
+    /// player 2 draws even while player 1's own camera near-culls it. Driven through the real
+    /// <see cref="ViewerSet"/> over real <c>Camera3D</c> nodes, which is the seam
+    /// <c>WeatherRig.Tick</c> publishes from.</summary>
+    private static void PufferFadeEveryPane(TestContext ctx)
+    {
+        var state = FadeTestState("spew_puffer", 40f, 5f, 300f, 400f);
+
+        // Two panes looking the same way down −Z, player 2 astern of player 1 by 200 m — the
+        // BL-339 repro's geometry (P2 behind P1, shooting past him).
+        var p1 = ViewerCamera(ctx, Vector3.Zero);
+        var p2 = ViewerCamera(ctx, new Vector3(0f, 0f, 200f));
+        try
+        {
+            var both = new ViewerSet();
+            both.Bind(new[] { p1, p2 });
+            var amb = new EffectAmbience();
+            amb.SetViewers(both);
+
+            var justAheadOfP1 = new Vector3(0f, 0f, -20f);
+            ctx.Check(FadeAlphaAt(ctx, state, justAheadOfP1, amb) is { } near
+                      && Mathf.IsEqualApprox(near, 1f),
+                $"20 m ahead of P1 is inside P1's near cull but 220 m ahead of P2, so it DRAWS — the pane that can see it decides");
+
+            var onlyP1 = new EffectAmbience();
+            onlyP1.SetCamera(Vector3.Zero, Vector3.Forward);
+            ctx.Check(FadeAlphaAt(ctx, state, justAheadOfP1, onlyP1) == null,
+                $"ABLE-TO-FAIL CONTROL: that same particle against P1's camera alone is culled, which is the reported bug");
+
+            ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, 300f), amb) == null,
+                $"behind BOTH panes it is still culled — 'any pane' is a union, not a disabled fade");
+
+            // The most FAVOURABLE answer, not the first or the last: P1 reads 350 m (half way
+            // across its far band), P2 sits 50 m short of it and reads full alpha.
+            var p3 = ViewerCamera(ctx, new Vector3(0f, 0f, -300f));
+            try
+            {
+                var nearer = new ViewerSet();
+                nearer.Bind(new[] { p1, p3 });
+                var ambNearer = new EffectAmbience();
+                ambNearer.SetViewers(nearer);
+                float? shared = FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -350f), ambNearer);
+                ctx.Check(shared is { } s && Mathf.IsEqualApprox(s, 1f),
+                    $"a particle half-faded for P1 and full-alpha for the nearer pane draws at full alpha={shared}");
+                ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -350f), onlyP1) is { } lone
+                          && Mathf.IsEqualApprox(lone, 0.5f, 1e-4f),
+                    $"ABLE-TO-FAIL CONTROL: P1 alone reads that same particle at half alpha");
+            }
+            finally
+            {
+                p3.Free();
+            }
+
+            // One pane is the old behaviour exactly — the single-viewer case must not move, and it
+            // is what every capture, freecam shot and single-player session runs.
+            var alone = new ViewerSet();
+            alone.Bind(new[] { p1 });
+            var ambAlone = new EffectAmbience();
+            ambAlone.SetViewers(alone);
+            float? single = FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -350f), ambAlone);
+            ctx.Check(single is { } one && Mathf.IsEqualApprox(one, 0.5f, 1e-4f),
+                $"with ONE viewer the answer is that viewer's own, unchanged alpha={single}");
+        }
+        finally
+        {
+            p1.Free();
+            p2.Free();
+        }
+    }
+
+    /// <summary>A bare <c>Camera3D</c> at a world position looking down −Z, parented to the test
+    /// host — a stand-in for a pane's camera, which is all a <see cref="ViewerSet"/> reads.</summary>
+    private static Camera3D ViewerCamera(TestContext ctx, Vector3 at)
+    {
+        var cam = new Camera3D { Current = false };
+        ctx.Host.AddChild(cam);
+        cam.GlobalTransform = new Transform3D(Basis.Identity, at);
+        return cam;
     }
 
     // ---- PRIORITY inflates the sprite -------------------------------------------------------------

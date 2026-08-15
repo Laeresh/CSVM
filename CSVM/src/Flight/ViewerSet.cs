@@ -58,13 +58,22 @@ public sealed class ViewerSet
     public List<ViewerPose> Poses()
     {
         var result = new List<ViewerPose>(_cameras.Count);
+        Poses(result);
+        return result;
+    }
+
+    /// <summary>The same poses into a caller-owned buffer, cleared first — for the one consumer
+    /// that reads them EVERY frame (<c>EffectAmbience</c>, B11), where a fresh list per frame is a
+    /// per-frame allocation for a set that changes only when the rigs are rebuilt.</summary>
+    public void Poses(List<ViewerPose> into)
+    {
+        into.Clear();
         foreach (var cam in _cameras)
         {
             if (cam == null || !GodotObject.IsInstanceValid(cam))
                 continue;
-            result.Add(new ViewerPose(cam.GlobalPosition, -cam.GlobalTransform.Basis.Z));
+            into.Add(new ViewerPose(cam.GlobalPosition, -cam.GlobalTransform.Basis.Z));
         }
-        return result;
     }
 
     /// <summary>One viewer's world position and forward direction (`-Z`, the engine's camera-local

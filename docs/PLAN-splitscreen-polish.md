@@ -95,7 +95,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Draw rules (`BL-338`'s class)
 
-11. ☐ Puffer distance fade answers every pane (`BL-339`)
+11. ☑ Puffer distance fade answers every pane (`BL-339`)
 12. ☐ Screen wash routed to the hit pane(s) (`BL-340`)
 13. ☐ World point lights budgeted against the nearest rig (`BL-366`)
 14. ☐ Close out `BL-338`: residual sweep + fog verdict recorded
@@ -284,7 +284,7 @@ humans", the other "what do the cameras see"; C21 keeps consuming `PlayerPositio
 
 # Wave B — Draw rules (`BL-338`'s class)
 
-## B11 ☐ Puffer distance fade answers every pane (`BL-339`)
+## B11 ☑ Puffer distance fade answers every pane (`BL-339`)
 
 **Goal.** A smoke trail near any player is visible in that player's pane, whatever P1 is doing.
 
@@ -297,20 +297,40 @@ the controls 2026-08-15: shooting at P1 from behind, trail streaks appear only a
 passes P1. Decode: [`docs/org/puffer.md`](../docs/org/puffer.md) — the fade is a DRAW rule in the
 original, and a view-space depth, not a euclidean range.
 
-**Approach.** Take the nearest-viewer rule, matching the tracer precedent: per particle, evaluate
-`DistanceAlpha` against the viewer (from A3) whose view-space depth is most favourable, i.e. a
-particle is drawn if any pane should see it, with the alpha of its nearest viewer. One `MultiMesh`
-stays one `MultiMesh`. Per-pane alpha would need N MultiMeshes (the true-fidelity option the
-backlog entry names); reach for it only if the nearest rule visibly fails at the controls — record
-the verdict either way (`BL-338`'s rule).
+**Approach (landed).** The nearest-viewer rule, matching the tracer precedent. `EffectAmbience`
+carries a LIST of poses instead of one camera (`Viewers`, `SetViewers(ViewerSet)`; `SetCamera` stays
+as the single-pose spelling for the suites and labs), `WeatherRig.Tick` publishes the session's
+`ViewerSet` (constructor-injected beside the ambience) instead of `rigs[0]`'s transform, and
+`Puffer.NearestViewerAlpha` runs the existing per-viewer `DistanceAlpha` against each pose and keeps
+the highest alpha, discarding only when every pane discards. Per viewer rather than a viewer picked
+up front, because the fade is a depth along each camera's own forward: the pane nearest in range can
+be the one facing away, which the near band culls at depth 0. `ViewerSet.Poses(into)` fills a
+caller-owned buffer, since this consumer republishes every frame. One `MultiMesh` stayed one
+`MultiMesh`; per-pane alpha (N MultiMeshes) was not reached for, per `BL-338`'s rule, and the
+verdict on whether the nearest rule suffices visually is the at-the-controls check below.
 
 **Model recommendation.** high — per-particle hot path plus a fidelity judgement.
 
-**Verify.** The `puffer-distance-fade` suite still pins the decoded bands (single-viewer case must
-be bit-identical). At the controls, the `BL-339` repro: two players, P2 astern of P1, P2 fires a
-rocket — P2 sees the full trail. <TODO: whether a scripted 2-pane screenshot can assert this
-(splitscreen under `--screenshot=` is untested territory); if not, it is an at-the-controls
-verify.>
+**Verify (done 2026-08-15).** `dotnet build` + `dotnet format --verify-no-changes` clean.
+`.\RunTests.ps1`: 1289/1289 units, 60/60 engine suites, 14/14 goldens hash-identical, engine errors
+clean, hitch clean. `puffer-distance-fade` keeps all four decoded-band cases and gains
+`PufferFadeEveryPane`, which drives the real `ViewerSet` over two `Camera3D` nodes: a particle 20 m
+ahead of P1 (inside P1's 40 m near cull) but 220 m ahead of P2 draws, the same particle against P1
+alone is culled (able-to-fail control), a particle behind BOTH panes is still culled, the most
+favourable of two panes' alphas is the one taken (1.0 over P1's 0.5, with the 0.5 pinned as its
+control), and the one-viewer case reads exactly what it read before. 8-chapter `--freecam` sweep
+(C1, C1B, C1C, C2, C2B, C3, C4, C5): all exit 0, zero errors, node/mesh counts unmoved.
+
+**Scripted 2-pane assertion: no — the TODO's answer.** Splitscreen under `--screenshot=` does work
+(`--fly --players=2 --chapter=C3 --screenshot= --frames=90` boots clean and captures both stacked
+panes), so that half of the unknown is settled. But it cannot assert B11: the discriminating
+geometry needs P2's camera placed independently of P1's and something emitting between them, and
+there is no per-player placement flag (`--pos` places the flown plane) and no scripted fire — both
+panes spawn near-coincident and co-aligned off the same mission spawn list, so they see the same
+thing. The rule is pinned by the suite above instead, and the *visual* verdict (does one shared
+alpha read right in a real 2-pane session) stays an at-the-controls verify: two players, P2 astern
+of P1, P2 fires a rocket — P2 sees the full trail. Written up as `PT-52` in `playtest.md`, which is
+also where `BL-338`'s per-pane-alpha verdict is decided.
 
 **⚠ Traps.** Do not disable the fade — the near cull stops a camera inside an emitter from filling
 the screen, and the suite pins the decoded bands against C3's own emitters. The fade is view-space

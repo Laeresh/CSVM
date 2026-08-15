@@ -1165,7 +1165,9 @@ public partial class GameSession : Node3D
             // The sun goes in with the weather: its bearing is the zone's own
             // SUNLIGHT_ORIENTATION, applied by the same zone-apply that writes the fog. The
             // ambience rides along as the wind seam — same reason, different authored block.
-            _weatherRig = new WeatherRig(_spec, _worldRoot!, _sun, _ambience);
+            // The viewer set rides along beside the ambience: Tick publishes every pane's camera
+            // pose onto it each frame for the puffer distance fade (B11).
+            _weatherRig = new WeatherRig(_spec, _worldRoot!, _sun, _ambience, _viewers);
             // The deck's own zone_id, the one gated population that cannot ride a visual layer (it
             // is a per-rig camera-anchored copy — see WeatherRig.SetDeckZoneId).
             _weatherRig.SetDeckZoneId(builder.CloudDeckZoneId);

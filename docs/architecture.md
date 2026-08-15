@@ -3002,8 +3002,12 @@ The wind itself is `Effects/WorldWind.cs` — see its own entry.
 `NEAR_FADE` become a per-particle alpha and two hard culls at DRAW time — the mechanism, the field
 order, the cross-wire and the three `puffer.*` switches are all written up in
 [formats/effects.md](formats/effects.md); read that before touching this. What matters here is the
-plumbing: the distance is view-space depth off `EffectAmbience`'s camera pose (see
-`Effects/WorldWind.cs`), and a discarded particle keeps living, moving and ageing — it is simply not
+plumbing: the distance is view-space depth off `EffectAmbience`'s camera poses (see
+`Effects/WorldWind.cs`) — every pane's, since B11 (`BL-339`): `NearestViewerAlpha` runs the bands
+against each viewer and keeps the most favourable answer, so a trail near player 2 draws in player
+2's pane whatever player 1 is pointing at. The comparison is per viewer rather than a viewer chosen
+up front because the fade is a DEPTH along each camera's own forward, and a discarded particle keeps
+living, moving and ageing — it is simply not
 written this frame, exactly as the engine's split between `FUN_0054ee10` (sim) and `FUN_0054e6e0`
 (draw) has it. That is why `_Process` carries a separate `drawn` cursor for the renderer: its
 contract is indices `0…n-1` packed and ascending followed by `Show(n)`, and `n` is now the DRAWN
@@ -3151,16 +3155,20 @@ emitter factories at `StartSession`, long before the first weathered build exist
 `WeatherRig.Tick` writes it once per frame, before the rig loop — one wind for the world, exactly
 where `FUN_0054ee10` derives it, and NOT once per camera (a splitscreen session must not walk the
 gust twice as fast).
-C7 landed on the same seam: `CameraPosition`/`CameraForward`/`HasCamera`, written by the same
-`WeatherRig.Tick` call, one camera for the world rather than one per pane. ⚠ `HasCamera` false means
-**no distance fade at all** rather than one measured against the origin — the right answer for every
-caller with no camera to give (unit suites, plane viewer, damage lab), which would otherwise be
-near-culled wholesale by the unauthored `NEAR_FADE (0,0)` cutting at depth 0. ⚠ The original
-evaluates the fade per particle per DRAW, so a splitscreen pane would get its own distances; ours is
-one `MultiMesh` per emitter shared by every pane with the alpha written once per frame, so every pane
-sees **player 1's** fade. A recorded divergence that costs nothing on the single-player and freecam
-paths every capture uses. There is also a one-frame lag at session start: an emitter that draws on
-the very first frame can beat the first `Tick` and draw unfaded once.
+C7 landed on the same seam and B11 widened it: `Viewers` (`ViewerSet.ViewerPose`, position +
+forward) / `HasCamera`, written by the same `WeatherRig.Tick` call — **every pane's camera, not
+player 1's** (`SetViewers` off the session's `ViewerSet`; `SetCamera` is the single-pose spelling the
+suites and labs use). Unlike the wind, which is shared sim state stepped once, the fade is a DRAW
+rule the original evaluates per particle per draw, so each pane owes its own answer. ⚠ `HasCamera`
+false means **no distance fade at all** rather than one measured against the origin — the right
+answer for every caller with no camera to give (unit suites, plane viewer, damage lab), which would
+otherwise be near-culled wholesale by the unauthored `NEAR_FADE (0,0)` cutting at depth 0. ⚠ The
+remaining divergence is the ALPHA, not the answer: one `MultiMesh` per emitter is shared by every
+pane, so a particle is drawn if ANY pane should see it, at the most favourable pane's alpha
+(`Puffer.NearestViewerAlpha`) rather than each pane's own. Per-pane alpha would take N MultiMeshes
+(`BL-338`'s per-pane-geometry rule). With one viewer that is that viewer's own answer unchanged,
+which is why no capture moved. There is also a one-frame lag at session start: an emitter that draws
+on the very first frame can beat the first `Tick` and draw unfaded once.
 `EffectAmbience.Still` is the null object every unwired puffer reads (unit suites, the plane
 viewer, a mission with no weather.json). It **refuses to be written**, so a session that forgets to
 hand its own over fails loudly at the writer instead of silently blowing one wind through the whole
@@ -3981,8 +3989,12 @@ reads, single player included (one entry wrapping the main camera). `Cameras` ha
 bound list unfiltered, for a consumer (`ProjectilePool.TracerFloor`) that needs each viewer's own
 FOV and pane height alongside its position and already skips a freed instance itself; `Positions`/
 `Poses` are the two derived shapes B13 and B11 consume, respectively — position only, or position
-plus forward for a view-space depth comparison. `ScreenSize`'s arithmetic did not move: this class
-carries cameras, not the screen-size/view-depth math itself.
+plus forward for a view-space depth comparison. `Poses(into)` fills a caller-owned buffer for B11's
+consumer, `EffectAmbience`, which republishes the set every frame and would otherwise allocate a
+list per frame. `ScreenSize`'s arithmetic did not move: this class carries cameras, not the
+screen-size/view-depth math itself.
+Consumers today: `ProjectilePool.Viewers` (tracer floor) and `WeatherRig.Tick` → `EffectAmbience`
+(the puffer distance fade), both handed the session's one instance at construction.
 ⚠ Not `PlayerPositions` (`GameSession`'s gameplay seam feeding `WorldSession.Options`, C21's) —
 that answers "where are the humans" for proximity gameplay rules off each rig's `Controller`/camera
 fallback; this answers "what do the cameras see" for draw rules. A3's own trap: do not fold them
