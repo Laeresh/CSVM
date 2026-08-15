@@ -108,7 +108,7 @@ both halves carry the **same** filter:
   by the shooter being the local player and by `TEST byte ptr [weaponDef], 0x40`.
 - Bit `0x40` is the **`CANNON`** flag. `FUN_004ba6f0` is the weapon-flags parser and its
   `OR dword ptr [ESI], 0x40` at `0x004ba9ba` follows the `CANNON` key string at `0x0062b320`
-  ([weapons.md](weapons.md) lists `CANNON` on 31 entries).
+  ([weapons.md](../weapons.md) lists `CANNON` on 31 entries).
 - The fire side carries the same filter even though no `0x40` immediate appears in `FUN_004b6820`:
   the function hoists the bit to `(weaponFlags >> 6) & 1` at the top of each station and the
   increment sits inside that arm. The ordnance arms of the same function create their rounds
@@ -148,6 +148,6 @@ table above, which A5 had wrong on two rows.
 two teams are: the path from impact to the drained pool carries no team test, and the team ids gate
 the target scan and the radio lines instead. A wingman on the player's side can therefore be shot
 down by the player or by another wingman, and an Instant Action flight needs no damage gate of its
-own. The decode is [`org/vehicleDamage.md`](../org/vehicleDamage.md)'s "Teams and friendly fire"
+own. The decode is [`org/vehicleDamage.md`](../../org/vehicleDamage.md)'s "Teams and friendly fire"
 section (2026-08-14); the team space it reads (0 neutral, 1 the player's side, 2 and up enemy) is
-on [turrets.md](turrets.md).
+on [turrets.md](../turrets.md).

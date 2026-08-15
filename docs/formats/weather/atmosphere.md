@@ -147,7 +147,7 @@ explicit `0.0` to opt out. See `PLAN-puffer-engine-deltas.md` B6.
 
 It still does **not** move the cloud clutter. It used to drive the drift of the hand-tuned
 `CloudPuffs` field, which the authored `fogvol.zrd` clutter replaced on 2026-08-06 (`BL-273`,
-[fogvol.md](fogvol.md)) — that field is static world geometry and no reader says wind moves it.
+[fogvol.md](../fogvol.md)) — that field is static world geometry and no reader says wind moves it.
 
 ## Precipitation
 
