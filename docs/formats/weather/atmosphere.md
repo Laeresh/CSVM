@@ -51,7 +51,7 @@ The two objects are swapped by the
 gate, not carried/relocated by `WeatherRig.Tick` — the deck tiles are `zone_id 2` (culled below
 the deck), the zone-1 dome is `zone_id 1` (culled above it), and each renders only when the
 camera state makes it visible. The install-wide survey — [the deck census
-below](#deck-census-zone_id-across-all-eight-chapters) — found C1's `h_zone1scroll`
+below](../weather.md#deck-census) — found C1's `h_zone1scroll`
 + `o28` skirt pairing is **not** reproduced identically in C1C/C2B/C4: those three each carry a
 **single** zone-1 mesh (not the two-piece dome+skirt), so the ceiling geometry is per chapter, not a
 shared constant — `B14` measured all five (the four deck chapters plus C5's `zone3`) into
