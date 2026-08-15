@@ -1,27 +1,17 @@
-# Weapon effect readers & projectile prototypes
+# Weapon effect readers and projectile prototypes
 
-Part of the [format documentation](README.md). The muzzle, flyout and impact assets that a
-weapon's [`FIRE` / `FLYOUT` / `IMPACT`](weapons.md#fire--flyout--impact-bindings) bindings name:
-the effect-reader files (`ON_CALL` `ANIMATION_DEFINITION`s) and the gamez node prototypes each
-binding resolves to.
-
-Each weapon in [weapons.md](weapons.md) points at its effects by name — `FIRE` names a muzzle
-animation, `FLYOUT` a projectile `MODEL`, `IMPACT` a per-surface hit animation. Those names
-resolve to one of two places: an **effect reader** in `extracted/zrdr/` (a named animation
-built from `PUFFER_STATE`/`LIGHT_STATE`/`OBJECT_MOTION` events — the event vocabulary is in
-[anim-definitions.md](anim-definitions.md), the particle system in [effects.md](effects.md)),
-or a **gamez node prototype** (a model root under a chapter's `nodes.json`, instanced at the
-firepoint/impact point). This page maps every binding target to its source.
-
+Part of the [format documentation](README.md). This page maps the `FIRE`, `FLYOUT`, and `IMPACT`
+bindings in [weapons.md](weapons.md) to their effect readers or GameZ node prototypes. Effect
+readers are named animations; prototypes are model roots instantiated at a firepoint or impact.
 
 ## Contents
 
-- [Muzzle flashes — `muzzle_burst.zrd.json`](#muzzle-flashes-�-muzzleburstzrdjson)
-- [Bullet impacts — `gunhit.zrd.json`](#bullet-impacts-�-gunhitzrdjson)
-- [Ordnance effects and projectile prototypes](#ordnance-effects-and-projectile-prototypes)
-- [Muzzle & tracer textures — the ammo-type axis](#muzzle-tracer-textures-�-the-ammo-type-axis)
-- [Binding resolution — 5 unresolved names](#binding-resolution-�-5-unresolved-names)
-## Muzzle flashes — `muzzle_burst.zrd.json`
+- [Muzzle flashes](#muzzle-flashes)
+- [Bullet impacts](#bullet-impacts)
+- [Ordnance effects and projectile prototypes](weapon-effects/ordnance.md)
+- [Muzzle and tracer textures](#muzzle-and-tracer-textures)
+- [Unresolved bindings](#unresolved-bindings)
+## Muzzle flashes
 
 `FIRE`'s `ANIMATION` slot names one of these. All are `ON_CALL`, `EXECUTION_PRIORITY 6`, and
 toggle a gamez node of the same name active for one frame:
@@ -63,7 +53,7 @@ effect  .
 (`BL-261`, A2): the casing now flies bare and the muzzlepuffer plays at its authored 6-puffs/0.3 s
 window instead.
 
-## Bullet impacts — `gunhit.zrd.json`
+## Bullet impacts
 
 `IMPACT`'s `default` `ANIMATION` for a gun names a `<caliber><ammo>_gunhit` — `3040` (30/40-cal),
 `5060` (50/60-cal) or `70`, crossed with `slug` / `dum` / `ap` / `mag`, i.e. the same
@@ -291,7 +281,7 @@ Effect templates are presentation only and are built with collision suppressed.
 
 See [ordnance effects and projectile prototypes](weapon-effects/ordnance.md).
 
-## Muzzle & tracer textures — the ammo-type axis
+## Muzzle and tracer textures
 
 The per-ammo appearance is texture-driven, on the **same four-way axis as the `wep_X0`–`X3`
 ammo types**. In each chapter's `texture/`:
@@ -327,7 +317,7 @@ recoverable from the data. The pick-one reading (one rolled quad playing the
 The `_muzzle2` frame is not played by the flash; the impact stand-in spark keeps reusing it
 through its own separate pool.
 
-## Binding resolution — 5 unresolved names
+## Unresolved bindings
 
 Of the **57** distinct asset names referenced across all 48 weapons' `FIRE`/`FLYOUT`/`IMPACT`
 bindings, **52 resolve** to a reader above or a gamez prototype root, and all **23** referenced
