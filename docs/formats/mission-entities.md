@@ -3,7 +3,7 @@
 Part of the [format documentation](README.md). Two readers in the **mission's own** zrdr archive
 (`<chapter>/<mission>/zrdr.zbd`) that configure the mission's big live entities: the zeppelins
 the player attacks or escorts, and the generators that feed fighters into the fight. Decoded
-2026-07-25 from a census over the whole install (50 `zeppelins.json` → 58 instances; 53
+The whole-install census shows (50 `zeppelins.json` → 58 instances; 53
 `egen.json` → 23 generators, the other 33 files being an empty `[null]`).
 
 **The remake reads both**: `egen.json` via `CSVM/src/Mech3/EnemyGenerators.cs` (run by
@@ -46,9 +46,9 @@ instances; the rest are conditional.
 | `cannon_fire_delay` / `cannon_fire_range` | s / m | broadside cadence (10/15/20 s) and reach (500–15000 m) |
 | `left_cannons` / `right_cannons` | `[[node, deployAnim, retractAnim], …]` | the broadside guns and the animations that run them out and back in |
 | `cannon_health` | see below | per-cannon damage record (24 of 58 instances) |
-| `cannon_inaccuracy` | ° | on 3 instances: 10.0 on C2B/M04's pair, 6.0 on C4/M05's `blackhatzep` (re-measured 2026-08-14; an earlier census read all three as 10.0). An absent key scatters nothing — the remake reads it as 0 |
+| `cannon_inaccuracy` | ° | on 3 instances: 10.0 on C2B/M04's pair, 6.0 on C4/M05's `blackhatzep` . An absent key scatters nothing — the remake reads it as 0 |
 | `team` | `enemy` / `ally` / `neutral` | 16 instances. The parser accepts all three names (case-insensitively) **and** a bare integer team id; this install only authors the names, and only two of the three |
-| `deactivated` | `[0]` / `[1]` | the KEY is on 9 instances but the VALUE decides: 7 author `1` (starts switched off, waiting on script), and C1/M04 + C2/M03 author `0` (active). Measured 2026-08-13; asserted in `CSVM.Tests/ZeppelinsTests.cs` |
+| `deactivated` | `[0]` / `[1]` | the KEY is on 9 instances but the VALUE decides: 7 author `1` (starts switched off, waiting on script), and C1/M04 + C2/M03 author `0` (active). Asserted in `CSVM.Tests/ZeppelinsTests.cs` |
 
 **`cannon_health` entry** —
 `[cannonNode, "gunback", "frame", gasbagName, hp, [destroyAnim], [[frac, stageAnim], …]]`.
@@ -211,7 +211,7 @@ design document and the shipped data agree field-for-field.
 `vehicle.params` value names a designer label in the same mission's `aiv.json` header. 14 of the
 15 authored labels resolve; C1/M04's egen says `Eairg32_params` while the header spells it
 `Earig32_params` (a transposition), so that generator's roster lookup cannot succeed as authored.
-Measured 2026-08-13; asserted in `CSVM.Tests/EnemyGeneratorsTests.cs`.
+Asserted in `CSVM.Tests/EnemyGeneratorsTests.cs`.
 
 ### The generator cycle
 
@@ -264,7 +264,7 @@ Smaller loader findings: `open_anim`/`close_anim` **default from the node name**
 file authors; and the `vehicle` block additionally accepts **`primary_target`** and **`title`**,
 neither authored in this install.
 
-What the door names resolve to (measured 2026-08-14, M4 F20): every authored `open_anim`/
+What the door names resolve to: every authored `open_anim`/
 `close_anim` is a **compiled `mis_anim` definition** — root `hangerdoors` under the host
 zeppelin, activation OnCall — whose sequences `OBJECT_MOTION_FROM_TO` the hull's `door_left`/
 `door_right` nodes 0 → ±90° about Z over **5 s** (close is the reverse), with the open's first
