@@ -493,10 +493,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   original (fire out to sea from altitude, watch the 1000 m expiry point). Until answered, our rounds
   expire silently, which METHOD-18 documents as correct-per-data.
 
-- `BL-215` `[Tuning]` `[Owed-playtest]` **Rocket-trail puff size (C21, 2026-07-31)** — the trail look and per-type character
-  passed the cockpit A/B (PT-09), but the user flags the puff size as possibly needing more tuning.
-  The authored FLYOUT values are verbatim; only render-side size/overlap is in play.
-
 - `BL-226` `[Feature]` `[Blocked: cockpit view]` **The incoming-fire cue set's other two halves are blocked on things that do not exist
   yet.** The near-miss third landed (`BL-087`, 2026-08-02); `bullet_hit_sg` (= `snd_ricochet1-4`,
   `player.json`'s `bullet_hit_sound`) and `window_hit_sg` (= `snd_windowhit1-3`, non-3D) did not.
