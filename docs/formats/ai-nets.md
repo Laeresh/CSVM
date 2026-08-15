@@ -38,7 +38,7 @@ The **name** is the join key everything else uses: `egen.json` `vehicle.nets`,
 `zeppelins.json` `net`, and `objectives.json` reference nets by name. `aiv.json` field 0
 references them by **id** ([PLAN-M4-ai.md](../plans/PLAN-M4-ai.md), decoded slots table).
 
-⚠ **An anchored trailer makes the whole net RIDE its target** (decoded and implemented 2026-08-15,
+⚠ **An anchored trailer makes the whole net RIDE its target** (
 `BL-377`, [`org/aiPilot.md`](../org/aiPilot.md) "The trailer"). `[nodeIndex, "name"]` is not
 decoration: the named object is resolved at net build and every node position the engine hands out is
 offset by it, so the graph is a PATTERN carried around a moving thing rather than a fixed route. 76 of the
@@ -51,7 +51,7 @@ every shipped case, sitting off the ring the other nodes form.
 ⚠ **A player-anchored net is not a friendly thing.** The 11 are `M4ReinfAce` and `M2Ace` (C1),
 `M4MedusaAce` / `M3BritAce` / `M5Bravo` / `M5Charlie` / `M5Postpick` (C3), `M2Blacke` (C4),
 `M2STI` / `M3Bravo` / `M4Miles` (C5), four of them `*Ace*` boss flights. Census of every `aiv`
-block that flies one (2026-08-15): **12 blocks, 8 of them team 2 and 4 team 1.** The enemies are
+block that flies one: **12 blocks, 8 of them team 2 and 4 team 1.** The enemies are
 `blakebloodhawk_8` (C1/M04, on `M4ReinfAce`), `bhatbrigand_1/2/3` (C4/M02) and
 `stihellhound_5_1..4` (C5/M02); the friendlies are `devastator_1/2` (C3/M05 and C5/M03). One
 enemy generator also names one (C5's `M4Miles`). So the mechanism is team-blind: it is how the
@@ -76,7 +76,7 @@ on both), so a sorted-by-id read answers the wrong net on two of the eight chapt
 
 Nets are stored per CHAPTER but authored per MISSION, and the name says which: the `M<N>` prefix
 names the mission that uses the net (`M4ReinfAce`, `M2Train`, `M5Patrol1`). Censused across all 8
-chapters 2026-08-15 by resolving every `aiv` block's field 0 back to its `neindex` name: **103 of
+chapters by resolving every `aiv` block's field 0 back to its `neindex` name: **103 of
 the 222 nets are referenced by an `aiv` block, and every one of them is used by a single mission,
 the one its prefix names.** The remaining 119 are referenced by `egen`, `zeppelins` or `objectives`
 instead, or by nothing at all.
@@ -114,7 +114,7 @@ A node list may carry extra numbers past `z`: **81 nodes carry two extra values 
 carry four**. These per-node tags are **undecoded**; the design describes stop/valve
 nodes on patrol routes (zeppelins halt at script-armed stop nodes), and these tags are
 the obvious candidate. Read them raw; do not interpret. ⚠ The two widths are **two different
-systems on disjoint sets of nets** — see [below](#the-tags-are-two-systems-not-one-measured-2026-08-10).
+systems on disjoint sets of nets** — see [below](#the-tags-are-two-systems-not-one).
 
 **Stop points are real, and they are scripted.** The binary's mission-script vocabulary
 (`D:\zipper\Crimson\mission.cpp`) includes a **`COMPLETED_STOPPOINT`** condition, in the same
@@ -123,7 +123,7 @@ reaching its stop point, exactly as the design describes. That raises the confid
 per-node tags above encode stop points, but it does **not** decode them: nothing yet ties a
 specific tag value to the condition. Still a lead, not a finding.
 
-#### The tags are two systems, not one (measured 2026-08-10)
+#### The tags are two systems, not one
 
 **40 nets of 222 carry tagged nodes**, and cross-referencing them against `neindex` names, the
 `zeppelins.json` `net` field, and each node's degree in the edge list splits them cleanly:
@@ -195,7 +195,7 @@ Five shipped shapes:
 | `[-1]` | 133 | no target |
 | *(absent — 13-element record)* | 8 | no target |
 
-The 2026-07-25 survey recorded only `[-1]` vs `[nodeIndex, "name"]`; the middle two rows
+The observed shapes include `[-1]`, `[nodeIndex, "name"]`, and the middle two rows
 are the shapes it missed. Target names seen: `player`, zeppelin node names
 (`piratezep`, `dantezep`, …).
 

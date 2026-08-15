@@ -59,7 +59,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 22–30 | **the skill vector** | `dare_devil natural_touch sixth_sense dead_eye quick_draw steady_hand stun_recovery talker constitution` — see [below](#the-skill-vector) |
 | 31 | `pref_engage_alt` | **preferred engagement altitude in metres**, not a radius; `-1.0` on 384, else 350 / 1100 / 1500 / 1550 / 1600. Spelled `preferred_engagement_altitude` in `vehicle.json`, which is also the fallback when this slot is `-1.0` (`basic_airplane` authors 300.0). ⚠ **It is a maneuver-selection weight, not an altitude order:** its one reader (`FUN_004201a0`, `0x004204da`) adds 1.0 to a candidate evasive maneuver's weight when the aircraft is on the wrong side of it. Nothing steers toward it ([`org/aiPilot.md`](../org/aiPilot.md)) |
 | 32 | `signature_maneuvers` | **bitmask over the maneuver library** — see [below](#signature_maneuvers-is-a-bitmask) |
-| 33 | `rating_biases` | target-selection weights: a list of `[nodeNamePattern, bias]` pairs, wildcards allowed (`["fuel_truck*", -1.0]`). List on 321 blocks, null on 93; 1–9 entries (697 total); biases run `-1.0`…`1.0`, both signs, `-1.0` on 389. ⚠ The exe's comment admits a third element per entry, but this install authors none (0 across all 414 blocks, measured 2026-08-13) — read defensively, preserve a third raw if one ever appears |
+| 33 | `rating_biases` | target-selection weights: a list of `[nodeNamePattern, bias]` pairs, wildcards allowed (`["fuel_truck*", -1.0]`). List on 321 blocks, null on 93; 1–9 entries (697 total); biases run `-1.0`…`1.0`, both signs, `-1.0` on 389. ⚠ The exe's comment admits a third element per entry, but this install authors none (0 across all 414 blocks) — read defensively, preserve a third raw if one ever appears |
 | 34 | `nitro` | |
 | 35 | `engine` | engines.json row id ([vehicle.md](vehicle.md)) |
 | 36 | `otherTarget` | |
@@ -84,7 +84,7 @@ authored defaults, not signal.
 
 ### Who is netless: the player and the wingmen, nobody else
 
-Census of all 53 `aiv.zrd.json` files, 414 blocks, 2026-08-15. `netids` is `-1` on exactly 106 of
+Across all 53 `aiv.zrd.json` files (414 blocks), `netids` is `-1` on exactly 106 of
 them and every one is the player or a wingman:
 
 | node name | blocks | `netids` |
@@ -103,7 +103,7 @@ constants.
 
 ### `group` is a cohort id, not a formation
 
-Decoded 2026-08-13 (plan item B7; instrument and function addresses in
+The format is established; instrument and function addresses are in
 `analysis/m4-b7-group-slot/`). Slot 4 tags a block with a small integer so that mission logic can
 address a set of vehicles at once. The executable has exactly four consumers of the value, and
 none of them is flight behaviour:
