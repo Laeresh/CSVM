@@ -143,7 +143,7 @@ Semantics worth knowing:
   and toggles every node the partition grid indexes inside it. It is the *same* toggle
   `NodeSetActive` performs, reached by area instead of by name — see below.
 - **`Object3DTranslate`/`Object3DRotate` place the selection** (`MissionSetup`, BL-249, consumed
-  since 2026-08-06): translate is a plain absolute position, applied through the same
+  translate is a plain absolute position, applied through the same
   parent-frame convention `OBJECT_TRANSLATE_STATE` uses. **`Object3DRotate`'s angle unit is
   ambiguous per script, not globally**, and is decided once per script by magnitude
   (`MissionSetup.RotateAsRadians`): any component whose absolute value exceeds 2π marks that
@@ -191,7 +191,7 @@ redundant, C4/`tex_fx.gw`'s `waterfall01 0.0 -0.5`, names a group node with no m
 own, and every C4 mission script then sets that waterfall's two leaves to −0.4 directly. So
 it is unobservable whether the verb also recurses into a subtree.
 
-Consumed since 2026-07-22: `MissionSetup.ScrollByModel` resolves each statement to a gamez
+`MissionSetup.ScrollByModel` resolves each statement to a gamez
 model index and hands the table to the world build, because the rate has to be known while
 the material is created (a scrolling model can share its material with static geometry — see
 `SceneBuilder`'s cache key in `docs/architecture.md`). Every scroll target in this install is
@@ -199,7 +199,7 @@ a model used by exactly one node, so per-model and per-node granularity cannot d
 
 ## `WorldPartitionSetActive` — `NodeSetActive`, selected by area
 
-Decompiled from `crimson.exe` in Ghidra, 2026-08-09 (`BL-037`). Reproducible at the addresses
+The `crimson.exe` control flow establishes this behavior. Reproducible at the addresses
 named: verb dispatch `FUN_005b80a0` (the interpreter — all ten verbs are matched there by
 `strncmp`), rectangle walk `FUN_004db790`, and the shared toggle `FUN_004cca30`.
 
@@ -215,7 +215,7 @@ returns error 3.
 
 ⚠ **This is not the ground-LOD mechanism**, a claim [`docs/HISTORY.md`](../HISTORY.md)'s M2
 polish-4 entry still makes ("we draw both because the original selects between them via
-partition visibility") and which `BL-037` retracted on 2026-07-23. The verb appears in no C5
+partition visibility"). The verb appears in no C5
 script at all; C5's coarse/fine ground selection is the **subface flag**
 (`analysis/item9-depth-bias/CBLOCK-LOD.md`, and `BL-250` for the clutter side).
 
