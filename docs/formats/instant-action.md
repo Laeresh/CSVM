@@ -457,7 +457,7 @@ blocks call the same three functions with inverted arguments:
 |---|---|---|
 | `FUN_004bd780(zep, b)` — record byte `+0x6`, plus `+0x8 = now + 3.0` | `1` | `0` |
 | `FUN_004cca30(zep->node, b)` — **`gwNodeSetActive`** (the string at `0x0062cd28` names it; the flag is bit 2 of the node's `+0x24`) | `0` | **`1`** |
-| `FUN_004bf060(zep, b)` → `FUN_004bef70(zep->node, b)` | `0` | `1` |
+| `FUN_004bf060(zep, b)` → `FUN_004bef70(zep->node, b)` — **the turret arm**: writes `ACTIVATED` on every turret standing anywhere in that node's subtree (below) | `0` | `1` |
 | `FUN_0045a2a0(zep->node)` — recursive teardown of the vehicle/AI objects under that node | called | **not called** |
 
 The objective then also gets byte `+0x4d` set on the object `FUN_004a3360` finds by its name — the
@@ -476,6 +476,27 @@ the objective block **clears** it, so the mode-2 end condition starts false only
 ⚠ Nothing here is a wake-up of the record's own `deactivated` flag, and **the sequencer contains no
 zeppelin wake-up either** (it touches the generator's counters and nothing else), which corrects the
 standing note in [mission-entities.md](mission-entities.md) and `Session/AiGeneratorRuntime`.
+
+### The turret arm is what arms the Instant Action zeppelin
+
+⚠ **`FUN_004bf060` is a turret activation, and it is the only thing that puts working guns on the
+zeppelin you attack.** `FUN_004bef70(node, b)` stores `b` in `DAT_0071df90` and recurses over the
+node's children (`FUN_004bef20`): each visited node is looked up in the turret list at
+`DAT_0071d910` (`FUN_004a9890`, matching the turret's own `+0xc` node pointer) and, on a hit, the
+flag is written to **turret byte `+0x6e`**, the `ACTIVATED` slot the entry loader fills at
+`0x004aa7bb` and the turret tick reads as its awake gate at `0x004aac16`
+([turrets.md](turrets.md#being-alive-and-being-awake)).
+
+That matters because **all four `multiplayer1zep` / `multiplayer2zep` entries in `ai.zrd` ship
+`ACTIVATED 0`**, and Instant Action runs no objectives script (every chapter's `IA1/objectives.zrd`
+is a `MISSION_TIMER` + `PLAYER_INIT` and three null anim lists), so no `WAKEUP_TURRETS` ever fires
+there. Without this call the objective zeppelin would fly with fourteen dead gun rings. The
+deactivation loop's `b = 0` is the same call stowing the other zeppelins' rings.
+
+The objectives script reaches the same primitive from its own list: `FUN_00469af0`'s `+0x29c`
+entries resolve a node by name and call `FUN_004bef70(node, 1)` (the subtree form,
+`WAKEUP_ZEP_TURRETS`), beside the `+0x270` list's `FUN_004a97b0(turret)` per-turret form
+(`WAKEUP_TURRETS`), which is why the two script ops exist separately.
 
 The spawn list is `ia.json`'s own **`spawn_points`**, not a separate stored list. `FUN_0045a150`
 walks that dict, maps each scenario key to a mission-type id through `FUN_00458c20`, and appends the

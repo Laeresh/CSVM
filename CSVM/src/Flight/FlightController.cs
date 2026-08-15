@@ -440,6 +440,7 @@ public partial class FlightController : Node3D
     private float _reticleRate;                  // m/s the pipper's range is currently closing at
     private bool _aimLoggedFirst;                // verification breadcrumb: the assist's first snap logs once
     private bool _aimListsLogged;                // verification breadcrumb: the candidate list sizes log once
+    private bool _groundBlowLoggedFirst;         // verification breadcrumb: ground blow's first repelling hit
     private bool _gunnerLoggedTarget;            // verification breadcrumb: the AI gunner's first acquisition
     private bool _gunnerLoggedFire;              // verification breadcrumb: the AI gunner's first open fire
     private bool _gunLoopOn;                     // the firing loop sound is currently playing
@@ -1131,6 +1132,7 @@ public partial class FlightController : Node3D
             var input = HoldSegments != null ? NextHoldInput(dt)
                 : Pilot != null ? NextPilotInput(dt)
                 : ReadKeyboard(dt);
+            ProbeGroundBlow(ref input);      // reads the pose this step ENTERED with, as the original does
             _lastInput = input;
             _damageCooldown -= dt;
             _grazeReactionCooldown -= dt;
@@ -1966,6 +1968,47 @@ public partial class FlightController : Node3D
             hitName = $"{body.GetParent()?.Name}/{body.Name}";
         }
         return true;
+    }
+
+    /// <summary>Ground blow's probe (`BL-359`, docs/org/flightModel.md's "Ground blow"): a ray of
+    /// <c>groundblow_elev</c> metres from the aircraft origin along the nose, whose nearest hit's
+    /// WORLD normal and distance <see cref="FlightModel"/> turns into a bias on control response.
+    /// No hit leaves the input's normal at zero, which is the model's own "nothing there".
+    /// <para>⚠ The mask is <see cref="CollisionLayers.World"/>, and that is the EMITTER RULE rather
+    /// than an optimisation. In the original an aeroplane flying its own flight update never repels
+    /// the player, while terrain, scenery and the zeppelin all do — and the zeppelin does it as a
+    /// plain world node there exactly as it is one here. World holds precisely that set, since
+    /// <see cref="AircraftBody"/> is the only thing that carries the Aircraft layer.</para>
+    /// <para>⚠ Player-only, gated on <see cref="IsHumanPiloted"/> — the original's filter sits inside
+    /// its own human-versus-AI test. The AI's ground avoidance is a DIFFERENT law (a fixed push,
+    /// linear in proximity, unfiltered), not this one, so an AI plane must not be fed this
+    /// probe.</para></summary>
+    private void ProbeGroundBlow(ref FlightInput input)
+    {
+        float elev = _model.Stats.GroundBlowElev;
+        if (!IsHumanPiloted || elev <= 0f)
+            return;
+        var space = GetWorld3D()?.DirectSpaceState;
+        if (space == null)
+            return;
+        var from = _model.Position;
+        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+            from, from - _model.Attitude.Z * elev, CollisionLayers.World));
+        if (hit.Count == 0)
+            return;
+        input.GroundBlowNormal = (Vector3)hit["normal"];
+        input.GroundBlowDistM = from.DistanceTo((Vector3)hit["position"]);
+        if (!_groundBlowLoggedFirst && _model.Attitude.Z.Dot(input.GroundBlowNormal) > 0f)
+        {
+            _groundBlowLoggedFirst = true;   // verification breadcrumb: the probe reaches real geometry
+            // The normal's facing test comes with it because a hit that fails it is inert: without
+            // that, the line would print on the first ray to touch anything and read as "ground blow
+            // is working" on a build where nothing ever repels.
+            string what = (hit["collider"].Obj as Node) is { } body
+                ? $"{body.GetParent()?.Name}/{body.Name}" : "?";
+            GD.Print($"ground blow: first repelling hit on {what} at {input.GroundBlowDistM:0} m "
+                     + $"of {elev:0} (facing {_model.Attitude.Z.Dot(input.GroundBlowNormal):0.00})");
+        }
     }
 
     /// <summary>Vertical clearance over static world collision only. Unlike <see cref="HitWorld"/>,

@@ -168,6 +168,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
 - `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels.
 - `src/UI/PerfHud.cs` — the frame-cost readout (F14, `--debug-fps=`): fps/current-frame-cost/worst-recent-frame, once for the window, drawn above the launchscreen too.
+- `src/UI/TargetingOverlay.cs` — the targeting overlay (F15, `--debug-targets`): a per-frame line from every turret gunner (`TurretController.TargetPosition`) and AI gunner (`AiGunner.Target`) to its acquired target, coloured by the gate holding the trigger (`TurretController.Gate`), with the gate named per shooter in the HUD. Depth test off, since the line into a hull is the one worth seeing.
 - `src/UI/SelectionService.cs` — the shared `--freecam`/`--anim-lab` selection: click-pick + the `cs_name` ancestor ladder, breadcrumb + highlight box.
 - `src/UI/NodeLab.cs` — the `--freecam`/`--anim-lab` node lab (N, `--debug-nodelab`): lazy `cs_name` tree, search, frame/hide, dependencies, destructibles.
 - `src/UI/WorldDamageLab.cs` — the `--freecam`/`--anim-lab` world damage lab (F5, `--debug-damage`): HP slider + kill/reset on the selection's destructible pool.
@@ -231,7 +232,7 @@ clusters they delegate to.
 - `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (M4 B6, `--generators`): load-time drop rules, per-cycle stepping, spawns through `GameSession.SpawnAiAircraft` — or, on an Instant Action zeppelin run (F12), releases an already-built wave member instead.
 - `src/Session/AiVoiceRuntime.cs` — wires E16's dispatch into a session: the decoded event sources (hit-path DI, Downed death cries, acquisition call-outs, taunts) played through `CombatVoice` + `WorldSounds.PlayOneShot`.
 - `src/Session/ZeppelinRuntime.cs` — runs a mission's zeppelins (M4 F17+F18+F19, `--zeppelins`): places each record's world node at its authored pose, flies it along its net through `ZeppelinMotion`, owns the multi-zone damage (per-part registry pools, the survivor-count kill, the authored hull death) and fires the broadside (`ZeppelinRuntime.Cannons.cs`: real unowned `wep_28` rounds through `ZeppelinBroadside`).
-- `src/Session/TurretEmplacementRuntime.cs` — the world AA emplacements (M4 C9b): the standalone `ai.zrd` family placed at its `NODES` patterns against the built chapter world, shipped `ACTIVATED` honoured, `--wake-turrets` the `WAKEUP_TURRETS` stand-in.
+- `src/Session/TurretEmplacementRuntime.cs` — the world AA emplacements (M4 C9b): the standalone `ai.zrd` family placed at its `NODES` patterns against the built chapter world, shipped `ACTIVATED` honoured, `SetActivatedUnder` the Instant Action builder's subtree activation (what arms the objective zeppelin's rings), `--wake-turrets` the `WAKEUP_TURRETS` stand-in.
 
 ### Session root and tests
 
@@ -1930,9 +1931,12 @@ over the rounds in flight, `DetonationDistance > AimAssist.MinFuseDistance`, not
 own).
 ⚠ **The team model is `FlightController.Team`** (PLAN-instant-action B7), not a per-call derivation:
   every consumer here reads that field, which falls back to `AimAssist.TeamOfPilot` = `PlayerIndex +
-  1` (every pane hostile to every other, what `--vs`/free flight run on) only when nothing overrode
-  it. `NeutralTeam` 0 is for a round nobody owns, `WorldTeam` for the destructibles. Team 0 on EITHER
-  side rejects the pair — it is "never a target", not a wildcard.
+  1` (every pane hostile to every other, what `--vs`/free flight run on by default) only when
+  nothing overrode it. `NeutralTeam` 0 is for a round nobody owns, `WorldTeam` for the destructibles.
+  Team 0 on EITHER side rejects the pair — it is "never a target", not a wildcard. `--coop`
+  (PLAN-splitscreen-polish A1) is the plain-flight opt-in to `AimAssist.PlayerTeam` for every human,
+  the same override `FlightRigAssembler` gives Instant Action; `--vs` drops `--coop` at parse time
+  (`SessionSpec.Resolve`), so Dogfight's FFA is never at risk of the override racing it.
 ⚠ `dist_factor` **ships at 0.0**, which deletes the distance term outright: selection is purely
   most-aligned, and a distant on-axis target beats a near off-axis one at any range inside `RANGE`.
   The executable's compiled default is `2.5e-4`; "restoring" it during tuning re-enables something
@@ -1988,6 +1992,19 @@ nodes, then the fire gates: `Activated`, attack window, 15° barrel-on-solution 
 ⚠ Out-of-arc yaw snaps to the angularly NEARER end stop, not the shortest-path one, and bored
   suppresses firing ONLY — tracking runs through it; a DORMANT emplacement does neither
   (`ACTIVATED` gates the tick, but the load pose still writes). All visible original behaviour.
+⚠ `Site` (the emplacement's own matched `NODES` node, null on a carried turret) is what lets a
+  caller scope an activation to one hull's subtree, the shape of the engine's own node-keyed
+  turret lookup; `SetActivated` writes the gate both ways, because the engine's walk stores a flag
+  rather than only ever setting it.
+⚠ **An emplacement's own MOUNTING SECTION is never its own cover, and the rest of the hull still
+  is.** `PlatformOf` resolves the node its `Site` hangs off (a zeppelin ring's own gasbag group, a
+  ground gun's own node) and `PlatformColliderRids` excludes that subtree's colliders from the
+  line-of-sight ray. Without any exclusion the ray starts inside the gun's own body and reports
+  blocked at 0.5 m, so the rings track forever and never shoot — the playtest symptom. Excluding
+  the whole vehicle instead lets a ring shoot through its own zeppelin, which the section rule
+  restores: a line crossing the far side reports blocked, visible live on the F15 overlay. A
+  carried gunner needs none of this: its host is an aircraft, and aircraft are not on the world
+  layer.
 ⚠ PARTS names resolve inside the mount's/matched node's subtree with TRIMMED cs_names (the
   shipped `"brigturret2 "` carries a trailing space); a global or exact match drives the wrong
   rig or none. An emplacement's kill switch is its healthy node's visibility — ai.zrd HEALTH is
@@ -3621,7 +3638,8 @@ registration (the assembler sets it at construction, not in the stunt block). `T
 candidate scan, `SelectRankedTarget`, carried `TurretController`s and `AiVoiceDispatcher`
 registration all read it, none re-derives one from `PlayerIndex` — and defaults to
 `AimAssist.TeamOfPilot(PlayerIndex)` until a mission sets it explicitly, so free flight and `--vs`
-are unchanged.
+are unchanged; plain flight's `--coop` (PLAN-splitscreen-polish A1) is the one other explicit
+setter, `FlightRigAssembler` giving it `AimAssist.PlayerTeam` the same way Instant Action does.
 `Inert` (PLAN-instant-action E10) is this aircraft's other lifecycle state: BUILT but held
 completely out of the session — not stepped (`SimStep` and `_Process` return at once), not drawn,
 not on the aircraft collision layer, not hittable, not a targeting candidate, and not counted as
@@ -4454,7 +4472,11 @@ generator is the only way an enemy gets airborne, so neither is the tester's fla
 `Visible = objective`, which is the decoded `gwNodeSetActive`, with `ZeppelinRuntime.Hold` on the
 ones switched off. ⚠ **`Visible` is the WHOLE write**: world colliders derive their `Disabled` flag
 from it (`Mech3/WorldCollision`), so the activation restores shootability with the picture and
-there is no second flag to keep in step. (3) `ActivateInstantActionWave` branches at the top: on
+there is no second flag to keep in step. ⚠ The same switch carries the builder's TURRET arm: each
+switched node is remembered and handed to `TurretEmplacementRuntime.SetActivatedUnder` once the
+emplacements are built further down, which is what arms the objective hull's 14 dormant rings (and
+stows a switched-off hull's). Without it the zeppelin you are sent to kill never shoots back.
+(3) `ActivateInstantActionWave` branches at the top: on
 `zeppelin_run` it stamps `_iaLaunchWave` (the generator's decoded `+0x64` group) and calls
 `AiGeneratorRuntime.GrantWaveCapacity` with the wave's member count instead of drawing a spawn
 point, and `ReleaseInstantActionWaveMember` — handed to the generator at build — activates the next
@@ -5506,14 +5528,26 @@ three `*_zeppelin` names need not be zeppelin records at all.
 The world AA emplacements (M4 C9b): `TurretController.BuildEmplacements` resolved against the
 built chapter world (`AnimRuntime.FindNodes`; a multi-segment `NODES` path scopes each further
 segment to the prior match's subtree), registered with the shared pool so every player's aim
-assist sees them (`ProjectilePool.CollectTurrets`), and stepped from `GameSession.DriveSimSteps`
-after the zeppelins so a slung mount reads its ride's moved pose. Built unconditionally with a
-chapter flight — the original's world placement pass is unconditional too. Observability: the
+assist sees them (`ProjectilePool.CollectTurrets`), and stepped from its own `_PhysicsProcess` on a
+realtime clock or from `GameSession.DriveSimSteps` on a parent-driven one — added to the tree after
+the zeppelin runtime, so a slung mount reads its ride's moved pose under either. Built
+unconditionally with a chapter flight — the original's world placement pass is unconditional too.
+⚠ It was a plain class stepped from `DriveSimSteps` alone until 2026-08-15, which meant every
+emplacement in the install was inert in ordinary play and ticked only under `--det`; every suite
+and every golden runs fixed-step, so nothing caught it. A session runtime that steps only from
+`DriveSimSteps` is silently dead in the mode players use. Observability: the
 `turrets: N world emplacement(s) placed…` census line plus per-turret `woken`/`engaging`
 breadcrumbs. Pinned by the `world-turrets` suite (C1 census 74, C4 census 92).
-⚠ Shipped `ACTIVATED` is the default: dormant emplacements stay dormant (the real mechanism is
-  the mission script's `WAKEUP_TURRETS`, out of M4's scope). `WakeAll` — the `--wake-turrets`
-  stand-in — is the ONLY wake path, explicit and logged per turret; never wake them silently.
+⚠ Shipped `ACTIVATED` is the default: dormant emplacements stay dormant (the mission-script
+  mechanism, `WAKEUP_TURRETS`, is out of M4's scope). Two explicit, logged wake paths and no
+  others: `WakeAll` (the `--wake-turrets` stand-in) and `SetActivatedUnder` (the Instant Action
+  builder's own subtree write, below). Never wake a turret silently.
+⚠ `SetActivatedUnder(node, flag)` is the binary's `FUN_004bef70` walk: every emplacement standing
+  on that node or under it takes the flag. `GameSession` runs it from the Instant Action zeppelin
+  switch (the objective hull's 14 rings come up armed, a switched-off hull's go quiet) BEFORE
+  `--wake-turrets`, which stands in for a mission script and therefore wins, the order the binary
+  has. All four `multiplayer1zep` entries ship dormant, so without this the Instant Action
+  zeppelin flies unarmed (docs/formats/turrets.md "Waking a whole subtree").
 ⚠ The awake-by-data set is world-model dependent, not per-chapter authored: the piratezep model
   (and its allied TEAM-1 rings) is part of EVERY chapter's world, so C1 and C4 both census 15
   awake; C5 adds the hostile `thug*` boats.
@@ -5556,7 +5590,10 @@ runtime built after the controller joins the tree. An active Instant Action miss
 (PLAN-instant-action.md C8) overrides two things here: `Inputs.InstantActionPlayerPlaneNode`, when
 set, replaces `PlaneRoster.PlaneFor` for every human alike (the def carries one `player_plane`,
 not a per-player list), and `Inputs.InstantActionActive` puts every human on
-`AimAssist.PlayerTeam` (Decision 8) regardless of pilot index. Constructed
+`AimAssist.PlayerTeam` (Decision 8) regardless of pilot index. Plain flight's `--coop`
+(PLAN-splitscreen-polish A1) gives every human the same team the same way — the two flags are
+independent inputs to one `if`, since Instant Action always implies its own co-op regardless of
+`--coop`. Constructed
 once per session build from
 `(SessionSpec, LiveryResolver, SpawnPicker, WorldEffectsFactory, worldRoot, Inputs)`, then
 `Assemble(pi, rig)` once per rig; `MeshInstances`/`WhatSuffix` accumulate across the rigs for the

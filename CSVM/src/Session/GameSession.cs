@@ -1891,6 +1891,7 @@ public partial class GameSession : Node3D
             Rigs = _rigs,
             InstantActionPlayerPlaneNode = iaPlayerNode,
             InstantActionActive = _instantAction != null,
+            Coop = _spec.Coop,
             Textures = state.Textures,
             ZrdrPath = state.ZrdrPath,
             ChapterZrdrPath = SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter),
@@ -2480,6 +2481,14 @@ public partial class GameSession : Node3D
         // question A4 left open: C1/IA1's support\c1\ia1.gw switches multiplayer1zep off at world
         // load and Instant Action switches it back on. It is not a "wake-up" invented here — it
         // is a second, explicit activation the binary performs.
+        //
+        // The same block's THIRD call is the turret arm: FUN_004bf060(zep, b) walks the zeppelin
+        // node's subtree and writes ACTIVATED (the turret byte +0x6e the loader fills from the
+        // ai.zrd key and the tick reads as its awake gate) on every turret standing in it: 0 in
+        // the deactivation loop, 1 for the zeppelin_run objective. All four multiplayer1zep
+        // entries ship ACTIVATED 0, so without this the Instant Action zeppelin flies unarmed.
+        // Applied below, once the emplacements exist (they are built further down).
+        var iaZepTurretSwitch = new List<(Node3D Node, bool Objective, string Name)>();
         if (_instantAction is { } iaZeppelins && rigInputs.WorldRuntime is { } iaZepWorld)
         {
             string selectedZep = InstantActionRuntime.SelectedZeppelinNode(iaZeppelins.Def);
@@ -2501,6 +2510,7 @@ public partial class GameSession : Node3D
                 foreach (var zepNode in zepNodes)
                 {
                     zepNode.Visible = objective;   // colliders derive from this (WorldCollision)
+                    iaZepTurretSwitch.Add((zepNode, objective, zepName));
                 }
                 if (!objective)
                 {
@@ -2736,8 +2746,26 @@ public partial class GameSession : Node3D
         {
             var placedRt = worldRt;
             _turretEmplacements = new TurretEmplacementRuntime(turretDefs, weaponDefs,
-                (pattern, scope) => placedRt.FindNodes(pattern, scope), projectiles);
+                (pattern, scope) => placedRt.FindNodes(pattern, scope), projectiles,
+                placedRt.WorldRoot);
+            // Into the tree AFTER the zeppelin runtime, so a slung mount reads its ride's moved
+            // pose on a realtime clock too — the physics tick follows tree order, and that is the
+            // same ordering DriveSimSteps keeps for a fixed clock.
+            _worldRoot!.AddChild(_turretEmplacements);
             int awakeByData = _turretEmplacements.AwakeCount;
+            // The Instant Action builder's zeppelin turret arm, recorded above: the objective
+            // zeppelin's rings come up armed, the switched-off zeppelins' go quiet. Runs BEFORE
+            // --wake-turrets, which stands in for a mission script and therefore wins, the same
+            // order the binary has (builder at mission build, script ops after it).
+            foreach (var (zepNode, objective, zepName) in iaZepTurretSwitch)
+            {
+                int touched = _turretEmplacements.SetActivatedUnder(zepNode, objective);
+                if (touched > 0)
+                {
+                    GD.Print($"ia: zeppelin '{zepName}' turrets: {touched} emplacement(s) " +
+                             (objective ? "ACTIVATED with the objective" : "stowed with the hull"));
+                }
+            }
             int woken = _spec.WakeTurrets ? _turretEmplacements.WakeAll() : 0;
             GD.Print($"turrets: {_turretEmplacements.Count} world emplacement(s) placed for " +
                      $"{_spec.Chapter} ({awakeByData} awake by data, " +
@@ -2748,6 +2776,29 @@ public partial class GameSession : Node3D
                 state.What += $" + {_turretEmplacements.Count} emplacement(s)";
             }
         }
+
+        // F15 / --debug-targets: who is aiming at whom. Reads the live gunners through closures
+        // rather than a snapshot — waves activate, AI planes spawn and emplacements die long
+        // after this line runs. The shooter list is reused, not rebuilt per frame.
+        var targetScan = new List<FlightController>();
+        _worldRoot!.AddChild(new UI.TargetingOverlay(
+            () => _turretEmplacements?.Emplacements ?? Array.Empty<TurretController>(),
+            () =>
+            {
+                targetScan.Clear();
+                foreach (var rig in _rigs)
+                {
+                    if (rig.Controller is { } c)
+                    {
+                        targetScan.Add(c);
+                    }
+                }
+                targetScan.AddRange(_aiPlanes);
+                return targetScan;
+            })
+        {
+            DebugShow = _spec.DebugTargets,
+        });
 
         if (_rigs.Count > 1)
         {

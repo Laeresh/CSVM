@@ -5,6 +5,24 @@ using Godot;
 
 namespace CSVM.Flight;
 
+/// <summary>Where a gunner's tick stopped this frame — the fire gates of
+/// <see cref="TurretController.SimStep"/> named, in the order they are taken. Read by the
+/// targeting overlay (F15) so "it is not shooting" can be answered with WHICH gate rather than
+/// by guesswork; <see cref="Firing"/> means every gate passed and a round left the muzzle.</summary>
+public enum TurretGate
+{
+    Asleep,
+    Dead,
+    NoTarget,
+    Bored,
+    NoSolution,
+    Reloading,
+    NoAmmo,
+    Blocked,
+    Slewing,
+    Firing,
+}
+
 /// <summary>
 /// One <c>ai.zrd</c> turret gunner (docs/formats/turrets.md) — the same tracking loop for both
 /// families: a carried turret riding an aircraft (C9a, <see cref="BuildCarried"/>) and a world
@@ -61,6 +79,8 @@ public sealed class TurretController
     private readonly Transform3D _pitchRest;
     private readonly int _team;            // engine-space team (AimAssist convention)
     private readonly Node3D? _healthyNode; // emplacement kill switch; null on a carried turret
+    private readonly Node3D? _site;        // emplacement placement node; null on a carried turret
+    private readonly Node3D? _platform;    // the hull section the emplacement is mounted on
 
     private float _windowLeft;   // s left in the current attack/bored window
     private float _fireIn;       // s until the next shot is allowed
@@ -71,10 +91,12 @@ public sealed class TurretController
     private Vector3 _lastPos;
     private bool _hasLastPos;
     private bool _firstShotLogged;
+    private Godot.Collections.Array<Rid>? _platformColliders;
 
     private TurretController(TurretDef def, WeaponDef weapon, FlightController? host,
         ProjectilePool pool, Node3D? yawNode, Node3D pitchNode, Node3D[] firepoints,
-        RandomNumberGenerator rng, int team, bool activated, Node3D? healthyNode, string label)
+        RandomNumberGenerator rng, int team, bool activated, Node3D? healthyNode, Node3D? site,
+        Node3D? platform, string label)
     {
         Def = def;
         Weapon = weapon;
@@ -87,6 +109,8 @@ public sealed class TurretController
         _team = team;
         Activated = activated;
         _healthyNode = healthyNode;
+        _site = site;
+        _platform = platform ?? site;
         Label = label;
         _yawRest = yawNode?.Transform ?? Transform3D.Identity;
         _pitchRest = pitchNode.Transform;
@@ -129,6 +153,12 @@ public sealed class TurretController
     /// the world node it stands on.</summary>
     public string Label { get; }
 
+    /// <summary>The world node this emplacement was placed at (its <c>NODES</c> match); null on
+    /// a carried turret. What a subtree-scoped activation walks against, the engine's own
+    /// per-node lookup of the turret standing on a node
+    /// (docs/formats/turrets.md "Waking a whole subtree").</summary>
+    public Node3D? Site => _site;
+
     /// <summary>The engine-space team the acquisition gate and the aim-assist candidate list
     /// run on (<see cref="EngineTeamFor"/> for an emplacement, the host's pilot team for a
     /// carried turret).</summary>
@@ -142,6 +172,15 @@ public sealed class TurretController
     /// <summary>The barrel direction in the turret's base frame (the yaw node's rest frame) —
     /// what the pose writes and the fire gate read.</summary>
     public Vector3 BarrelLocal { get; private set; }
+
+    /// <summary>Where this tick stopped, for the F15 targeting overlay. Plain observation: the
+    /// tick writes it and nothing reads it back, so it cannot change what the gunner does.</summary>
+    public TurretGate Gate { get; private set; }
+
+    /// <summary>The position this gunner is tracking, valid while <see cref="Gate"/> is past
+    /// <see cref="TurretGate.NoTarget"/>. The acquired aircraft's own position, not the lead
+    /// solution — the overlay draws the line to the TARGET and the barrel shows the lead.</summary>
+    public Vector3 TargetPosition { get; private set; }
 
     /// <summary>Carried: alive while the host is in play (the carried family's <c>HEALTHY_NODE</c>
     /// is a model node the plane damage model does not track individually, so host death is the
@@ -229,7 +268,7 @@ public sealed class TurretController
             }
             var rng = new RandomNumberGenerator { Seed = (ulong)(uint)Utils.Rng.NewIntSeed(Utils.Rng.Weapons) };
             built.Add(new TurretController(def, weapon, host, pool, yaw, pitch, fps.ToArray(), rng,
-                host.Team, activated: true, healthyNode: null,
+                host.Team, activated: true, healthyNode: null, site: null, platform: null,
                 label: mount.Title));
         }
         return built.ToArray();
@@ -262,7 +301,8 @@ public sealed class TurretController
     /// with a warning (the world carries grouping nodes like C5's <c>thugs</c> beside
     /// <c>thug1..3</c> that the patterns also match).</summary>
     public static TurretController[] BuildEmplacements(TurretDefs defs, WeaponDefs weapons,
-        Func<string, Node3D?, IReadOnlyList<Node3D>> findNodes, ProjectilePool pool)
+        Func<string, Node3D?, IReadOnlyList<Node3D>> findNodes, ProjectilePool pool,
+        Node3D? worldRoot = null)
     {
         var built = new List<TurretController>();
         foreach (var def in defs.All)
@@ -329,11 +369,33 @@ public sealed class TurretController
                     var rng = new RandomNumberGenerator { Seed = (ulong)(uint)Utils.Rng.NewIntSeed(Utils.Rng.Weapons) };
                     built.Add(new TurretController(def, weapon, host: null, pool, yaw, pitch,
                         fps.ToArray(), rng, EngineTeamFor(def.TeamId),
-                        def.Activated, healthy, label));
+                        def.Activated, healthy, site, PlatformOf(site, worldRoot), label));
                 }
             }
         }
         return built.ToArray();
+    }
+
+    /// <summary>The structure an emplacement is mounted ON: the node its site hangs off, which in
+    /// the shipped models is the hull section carrying it (a zeppelin ring's own gasbag group, a
+    /// balloon's canopy) — or the gun's own node, for a gun that stands on the ground and whose
+    /// site is already a top-level world child. That section is what its line-of-sight test must
+    /// not treat as cover, and the reason the test needs the world root at all: to know when to
+    /// stop climbing.
+    ///
+    /// <para>⚠ Deliberately the SECTION and not the whole vehicle. Excluding a zeppelin entire
+    /// let its rings shoot through their own hull; excluding only the gun's own rig blocked all
+    /// 14 of C1/IA1's rings, because the panel colliders engulf the ring they carry. The section
+    /// is the unit that separates a gun's own clutter from the far side of the same
+    /// hull.</para></summary>
+    public static Node3D? PlatformOf(Node3D? site, Node3D? worldRoot)
+    {
+        if (site == null || worldRoot == null || site.GetParent() is not Node3D parent
+            || parent == worldRoot)
+        {
+            return site;   // a gun standing on the ground: its own body is the whole platform
+        }
+        return parent;
     }
 
     /// <summary>The pitch clamp — plain, and only when the axis is limited at all: the engine
@@ -386,7 +448,12 @@ public sealed class TurretController
 
     /// <summary>The activation stand-in's hook (and, later, the real <c>WAKEUP_TURRETS</c>'):
     /// wakes a dormant emplacement. Logged by the caller, never silent.</summary>
-    public void Wake() => Activated = true;
+    public void Wake() => SetActivated(true);
+
+    /// <summary>Writes the awake gate directly, both ways, which is what the engine's subtree
+    /// walk does to every turret standing on a node it visits (<c>ACTIVATED</c> is a plain byte
+    /// on the turret, set to the walk's flag, so the same call both wakes and stows).</summary>
+    public void SetActivated(bool activated) => Activated = activated;
 
     /// <summary>One gunner tick: duty cycle, acquire, aim, slew, pose, fire. A dormant
     /// emplacement takes no tick at all — <c>ACTIVATED</c> gates tracking as well as fire.</summary>
@@ -394,6 +461,7 @@ public sealed class TurretController
     {
         if (!Activated || !Alive)
         {
+            Gate = Activated ? TurretGate.Dead : TurretGate.Asleep;
             return;
         }
         if (_host == null && dt > 0f)
@@ -418,8 +486,10 @@ public sealed class TurretController
 
         if (!AcquireTarget(out var targetPos, out var targetVel))
         {
+            Gate = TurretGate.NoTarget;
             return; // nothing in the detection field: hold the current pose
         }
+        TargetPosition = targetPos;
 
         // The base frame the arcs are authored in: the yaw node's rest orientation on the host.
         var baseBasis = BaseBasis();
@@ -451,16 +521,23 @@ public sealed class TurretController
         // ammo, the cached line of sight, and the 15° barrel-on-solution cone.
         if (!Attacking || !solution || _fireIn > 0f || Ammo <= 0)
         {
+            Gate = !Attacking ? TurretGate.Bored
+                : !solution ? TurretGate.NoSolution
+                : _fireIn > 0f ? TurretGate.Reloading
+                : TurretGate.NoAmmo;
             return;
         }
         if (LineOfSightBlocked(targetPos))
         {
+            Gate = TurretGate.Blocked;
             return;
         }
         if (BarrelLocal.Dot(solvedLocal) < FireGateCos)
         {
+            Gate = TurretGate.Slewing;
             return;
         }
+        Gate = TurretGate.Firing;
         var fp = Firepoints[_fpNext];
         _fpNext = (_fpNext + 1) % Firepoints.Length; // round-robin, one muzzle per shot
         // INACCURACY perturbs the SHOT after the pose is written: the turret aims true and the
@@ -480,6 +557,36 @@ public sealed class TurretController
         Ammo--;
         ShotsFired++;
         _fireIn = RandRange(Def.FireRateMin, Def.FireRateMax);
+    }
+
+    /// <summary>The mounting section's own colliders, collected once: the RIDs this gunner's
+    /// line-of-sight ray excludes. Internal so the suite can read the set rather than infer it
+    /// from behaviour. RIDs are stable for the world's lifetime and the subtree gains no
+    /// colliders after the build (a destroyed part hides, it is not re-parented). Empty for a
+    /// section that resolved to nothing.</summary>
+    internal Godot.Collections.Array<Rid> PlatformColliderRids()
+    {
+        if (_platformColliders != null)
+        {
+            return _platformColliders;
+        }
+        _platformColliders = new Godot.Collections.Array<Rid>();
+        if (_platform != null && GodotObject.IsInstanceValid(_platform))
+        {
+            void Walk(Node node)
+            {
+                if (node is CollisionObject3D body)
+                {
+                    _platformColliders.Add(body.GetRid());
+                }
+                foreach (var child in node.GetChildren())
+                {
+                    Walk(child);
+                }
+            }
+            Walk(_platform);
+        }
+        return _platformColliders;
     }
 
     private static float AngularDistance(float a, float b) =>
@@ -572,7 +679,11 @@ public sealed class TurretController
     }
 
     // FlightController.WorldBlocksLine's twin for a gunner with no host rig: the same
-    // world-layer-only ray off the turret's own node.
+    // world-layer-only ray off the turret's own node, minus the section it is mounted on. A
+    // carried gunner needs no such exclusion because its host is an aircraft and aircraft are not
+    // on the world layer; an emplacement's mount IS world geometry, and a gun whose own mount
+    // counts as cover can never fire at anything. The REST of the hull still blocks, which is
+    // what stops a ring shooting through its own zeppelin.
     private bool WorldRayBlocked(Vector3 from, Vector3 to)
     {
         var space = (YawNode ?? PitchNode).GetWorld3D()?.DirectSpaceState;
@@ -580,8 +691,8 @@ public sealed class TurretController
         {
             return false;
         }
-        return space.IntersectRay(
-            PhysicsRayQueryParameters3D.Create(from, to, CollisionLayers.World)).Count > 0;
+        return space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+            from, to, CollisionLayers.World, PlatformColliderRids())).Count > 0;
     }
 
     // The bounded slew: the barrel chases the clamped aim direction at SlewRate per second,

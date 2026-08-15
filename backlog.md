@@ -17,12 +17,14 @@ counter lives in `.git/item-id-counters.json` (shared by every worktree, outside
 control) and the script increments it under an exclusive file lock, so two concurrent sessions
 cannot be handed the same number.
 
-**Structure.** Items are grouped into eleven theme sections, in this fixed order: Damage &
+**Structure.** Items are grouped into twelve theme sections, in this fixed order: Damage &
 destruction · Weapons & combat · Flight model & collision physics · Environment & world · Effects
-& animation runtime · Audio · Cameras & views · HUD & UI · Missions, modes & campaign · Tooling,
-platform & docs · Misc. Within a theme, items sort by ascending ID. A straddler goes to the theme
+& animation runtime · Audio · Cameras & views · HUD & UI · Splitscreen · Missions, modes &
+campaign · Tooling, platform & docs · Misc. Within a theme, items sort by ascending ID. A straddler goes to the theme
 whose system you would open to fix it; Misc is the escape hatch for items with no such system —
-if it grows past a handful, that is a missing theme, not a working bucket.
+if it grows past a handful, that is a missing theme, not a working bucket. Splitscreen is the one
+cross-cutting exception: an item whose subject is the single-viewer/single-player assumption goes
+there, even though the fix opens another theme's system.
 
 Every item is one flat bullet:
 
@@ -827,7 +829,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   | `maxAOA 46.0` / `liftAOAs [5,9]` / `lift_accel_rate 0.75` | Decoded. `liftAOAs` is an airflow blend, **not** a load-factor ramp. Consumed by `PLAN-flight-drag-lift` B12 as a **hypothesis under test, not a decode**. ⚠ That plan justifies its lift re-key partly on "the aircraft must hold 100° of bank, which needs `1/\|cos 100°\|` = 5.8 g" (`PLAN-flight-drag-lift.md:486-487`, `:7`, `:32`, `:200`, `:549`). `CAP-33` showed the ADI reads airframe **attitude**, not the turn's bank, so the ~100° attitude is real but the load factor does not follow from it that way — `CAP-01`'s turn banked 58.7°, ~2 g. The re-key is not challenged; its stated arithmetic is |
   | `high_speed_pitch_fade [1000,1001]` / `highGs [9,15]` / `lowGs [-6,-9]` | Decoded as **authored unreachable** (`C24`, `D33`). Nothing implemented, which is the correct outcome |
   | `drag_factor 1.5` (global) / `drag_fade_speed 40` | **Dead in the executable** (B14): parsed, then read by nothing. The per-plane `drag_factor` is the only drag scale |
-  | `groundblow_elev 400` / `groundblow_mag 10` / `ai_groundblow 0.5` | Decoded 2026-08-14. **Unimplemented, owned by `BL-359`**; its emitter set settled 2026-08-15 |
+  | `groundblow_elev 400` / `groundblow_mag 10` / `ai_groundblow 0.5` | Decoded 2026-08-14, emitter set settled 2026-08-15, **implemented and flown 2026-08-15** (`git log --grep=BL-359`). `ai_groundblow` is loaded and deliberately unread: the AI path is a different law |
   | `bounce_factor 0.6` | Decoded 2026-08-14. Units settled; implementation owned by `BL-172` |
   | `nom_gravity 20.0` / `stall_mag 1.25` | Already consumed |
 
@@ -844,10 +846,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ The Bloodhawk's 5.01 G peak is 0.2 % **past** the executable's fallback `highGs[0] = 5`, so under
   the fallbacks the limiter would fire, barely. The disproof rests on the authored 9.
 
-  **Ground blow: DECODED from the binary 2026-08-14.** Mechanism, constants and gates are in
+  **Ground blow: DECODED from the binary 2026-08-14, IMPLEMENTED and flown 2026-08-15**
+  (`git log --grep=BL-359`). Mechanism, constants, gates and emitter rule are in
   [`docs/org/flightModel.md`](docs/org/flightModel.md); `CAP-02` closed 2026-08-07 and the GDD's
-  §4.1.7 *mechanism* is confirmed by the code, though its emitter list is not (below). In short:
-  `FUN_0048bf60` casts a ray of
+  §4.1.7 *mechanism* is confirmed by the code, its emitter *list* replaced by the rule that produces
+  it. In short: `FUN_0048bf60` casts a ray of
   `groundblow_elev` **metres** along the nose, and `FUN_0048c220` adds a rotation away from the hit
   surface into the **same accumulator the stick writes to**, one call after the stick terms in
   `FUN_0048c470`. It is a bias on control response, not an applied force. A command *into* the
@@ -855,7 +858,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   is amplified by up to `1 + 10·S²`; and on a dead-on approach the bias axis `n × b` collapses to
   zero, so a head-on gets no help at all. The AI path is a different law, not a scaled one: a fixed
   push of `ai_groundblow × groundblow_mag × S`, independent of what the AI commanded, linear in
-  proximity, and not `dt`-scaled.
+  proximity, and not `dt`-scaled. **The AI half is not built** — the player term is, in
+  `FlightModel.GroundBlowTerm` off `FlightController.ProbeGroundBlow`.
 
   ⚠ **`groundblow_elev` 400 is 400 METRES of ray length, not a 400 ft trigger range, and the
   footage agreement was a coincidence of digits.** The `CAP-02` onset bracketed at 427 → 376 ft sits
@@ -864,11 +868,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `analysis/video-flight-calibration/FINDINGS.md`, was deleted 2026-08-14 as superseded.
   ⚠ **`groundblow_mag` 10 is not a TUNE** and must not be fitted to the cliff clip's 17° step. It is
   an authored constant with a traced consumer, 6.7× the engine's own fallback of 1.5.
-  ⚠ **Zeppelins as emitters is still unconfirmed.** Terrain and unregistered scenery always qualify,
-  but registered entities are filtered on a byte that is a "placed but not yet simulated" transient,
-  cleared every frame for anything running a flight update. Which entities keep it set permanently
-  was not determined, so the GDD's emitter list is neither confirmed nor refuted. A free check
-  whenever a zeppelin mission is flown.
+  ⚠ **The proximity power is `S²`, settled at `0x0048c30f` on 2026-08-15**: `FUN_0048bf60` hands
+  back the axis ALREADY scaled (`A·S`) plus `S` as its return value, and the caller uses that one
+  scaled vector twice, once in the dot and once in the add. Reading the write-up's `p` as
+  `dot(accum, A·S)` *and* keeping an `S²` in the add counts it three times. `CSVM.Tests`'
+  `GroundBlowTests` pins the quadratic against the linear reading.
   One `CAP-02` anomaly stands unexplained and is now moot for implementing: `Up Down` recovery #1
   reads 2.30× free air with 28–30 % of samples gated at γ ≈ −63°, suspected estimator artifact, and
   every clip designed to reproduce it came back flat.
@@ -896,17 +900,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   reconcile.
 
   **Still to do, all of it downstream of this entry:**
-  1. **Implement ground blow** (`BL-359`, minted 2026-08-14). Nothing blocks it.
+  1. ~~Implement ground blow.~~ **Landed 2026-08-15** (`BL-359`, closed; `git log --grep=BL-359`),
+     player path only and confirmed at the controls. The AI law is unbuilt and is a different one.
   2. **Implement the roll/pitch base ramp** (`BL-330`) and **the `bounce_factor` restitution**
      (`BL-172`).
   3. ~~Confirm the zeppelin emitter on any zeppelin mission.~~ **Answered 2026-08-15 from the binary
      and the shipped data, no capture needed.** The emitter test keys on whether a hit node carries
      the spawn mark `0x40000000` and, if so, whether its registry entity is on a scripted path; never
      on vehicle type. IA1's zeppelin is a plain gamez node with no spawn mark, so it repels exactly
-     like terrain. Recorded on `BL-359`'s trap (h) and in
+     like terrain. Written up in
      [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow"; the path mechanism it
-     surfaced is `BL-361`. (`CAP-33` was flown 2026-08-15; it settled the ADI-vs-implied-bank
-     question, not the banked-turn rate gap.)
+     surfaced is `BL-361`. In the build, the rule is the `CollisionLayers.World` mask on the probe,
+     which is why an aeroplane does not repel and the zeppelin does. (`CAP-33` was flown 2026-08-15;
+     it settled the ADI-vs-implied-bank question, not the banked-turn rate gap.)
 
   When those are homed elsewhere or done, this entry retires: there is no research left in it.
 
@@ -1377,79 +1383,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   one; if no data carries it, magnitude and cadence are a TUNE against feel. Low priority; pairs
   with `BL-266`'s open shake data questions.
 
-- `BL-359` `[Feature]` **Ground blow is decoded and entirely unmodelled — the original biases your
-  controls away from anything large you are closing on.**
-  *Evidence:* decoded from `crimson.exe` 2026-08-14, write-up in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow". `FUN_0048bf60` casts a ray
-  of `groundblow_elev` metres (authored **400 m**) along the nose; `FUN_0048c220` adds a rotation
-  away from the hit surface into the same accumulator the stick fills, one call after the stick
-  terms in `FUN_0048c470`, on the player's aeroplane every frame. Nothing in `CSVM/src` carries it
-  (grep for `groundblow` returns no hits) and `FlightModel.Step` has no such term. The design side
-  is GDD §4.1.7, and `CAP-02` (closed 2026-08-07) saw the behaviour at the controls: a wings-level
-  full pull at a cliff steps heading 17° away with nothing in the vertical plane.
-  *The rule*, with `n` the hit normal, `b` the backward body axis (`Attitude.Z`), `d` the distance
-  to the hit point, `c = dot(b, n)`:
-
-      require c > 0                     the surface must face back at you
-      S = sqrt(c) · (elev − d) / elev   1 at contact, 0 at the ray's end
-      V = normalize(n × b) · S          world axis rotating the nose away, scaled by proximity
-      p = dot(cmd, V)
-      cmd += V · (p ≥ 0 ? p : −0.05·p) · groundblow_mag
-
-  With `groundblow_mag` authored **10**, commanding away is amplified by up to `1 + 10·S²` and
-  commanding into the obstacle is met with `0.05 × 10`, halved and never reversed.
-  *Fix shape:* the probe belongs in `FlightController`, which has the world
-  (`IntersectRay` with `CollisionLayers.World`, `FlightController.cs:1830,1851`), and its result is
-  handed to `FlightModel`, which has no world access at all. Add the term to `cmd` in
-  `FlightModel.Step` (`FlightModel.cs:475-495`) after the bank coupling and the weathervane, which
-  is the original's ordering, and before `BodyRates += cmd * dt`.
-  ⚠ *Traps:*
-  (a) **Add it to `cmd`, not to `BodyRates`, and do not introduce a `dt` of your own.** The
-  original's accumulator already carries `dt` when the term is formed, so the effect is linear in
-  `dt`; ours lands in the same place because `FlightModel.cs:507` multiplies `cmd` by `dt`
-  afterwards. A second `dt` makes it vanish at small steps.
-  (b) **Frame mismatch.** The axis is built from a world normal and `Attitude.Z`, so it is a world
-  axis, while `cmd` is body-frame (X pitch, Y yaw, Z roll). Project it onto the body axes before
-  the dot and the add. Mixing frames gives a term that is right wings-level and wrong everywhere
-  else, which is the hardest version of this bug to see.
-  (c) **It is not a force and not a terrain-altitude effect.** No push on velocity, and no
-  `HeightAboveWorldGround` gate. A world-frame force is refuted by the original behaving the same
-  inverted, and canyon runs held at 165–336 ft never trip it because nothing is close *ahead*.
-  (d) **`groundblow_elev` 400 is a ray LENGTH in metres.** Not feet, not a trigger altitude, and it
-  is also the falloff's denominator, so shortening it steepens the ramp rather than just shrinking
-  the reach (`BL-095`).
-  (e) **Do not calibrate `groundblow_mag` against the cliff clip's 17° step.** It is an authored
-  constant with a traced consumer, not a TUNE.
-  (f) **The AI path is a different law, not a scaled one:** a fixed push of
-  `ai_groundblow × groundblow_mag × S` independent of what the AI commanded, linear in `S`, cut to
-  15 % for 2.5 s after a drop, and suppressed entirely while the AI is stunned. Only relevant if AI
-  aircraft get ground avoidance; do not reuse the player term scaled by `ai_groundblow`.
-  (g) **A dead-on approach must get nothing.** As `n → b` the axis `n × b` collapses and the whole
-  term goes to zero. That is the original's "never saves a head-on collision", so special-casing or
-  renormalising the degenerate case would break the behaviour it is there to produce.
-  (h) **Emitters, settled 2026-08-15 in `crimson.exe`** (write-up in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow"). The test is not on vehicle
-  type. A hit node repels **unless** it carries the spawn mark `0x40000000` at `node+0x28` *and* its
-  vehicle-registry entity (`0x0071dab8`, found by `FUN_004afee0`) has a **zero** byte at `+0xcc`.
-  That byte means "following a scripted path instead of being flight-simulated" (`FUN_00489ea0`
-  calls the follower `FUN_0048a110` in its place, see `BL-361`), which is why an ordinary flying
-  aeroplane does not repel you and a path-driven one does. The mark itself is applied at spawn by
-  `FUN_004848f0` and appears on no authored node, so terrain and all scenery repel by default.
-  **Zeppelins do repel:** `extracted/zrdr/vehicle.zrd.json` names no zeppelin type, so IA1's is the
-  plain gamez node `multiplayer1zep` with `active` and `intersect_surface` set and no spawn mark, an
-  emitter by the same rule as terrain. The GDD's naming of zeppelins describes the outcome, not a
-  mechanism. ⚠ **The whole filter is player-only** (it sits inside the `param_1 == DAT_0071c298` test
-  at `0x0048c047`), so on the AI path every hit repels, other aircraft included; the aircraft
-  exemption is player behaviour, not a property of the emitter set. Build the AI term (trap (f)) with
-  no filter at all.
-  *Playtest after fix:* fly a wings-level full pull straight at a cliff at ~300 mph and look for a
-  one-off heading offset away from the wall that then holds, with no change in pitch rate. Hands off
-  must still end in a crash, and inverted must behave the same. The smaller second effect (the
-  velocity direction steered toward the nose at `2.0 · S` per second) rides along with it.
-  *Cross-refs:* `BL-095` (the decode and the authored values), `BL-172` (the collision impulse from
-  the same neighbourhood of the flight loop), `CAP-02` (closed; footage staged under
-  `playtest/CAP-02/`).
-
 ## Environment & world
 
 - `BL-037` `[Feature]` {CAMPAIGN} **`WorldPartitionSetActive` is decoded and unimplemented — `NodeSetActive`
@@ -1834,29 +1767,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   reused, per this file's own rule).
 
 ## Effects & animation runtime
-
-- `BL-339` `[Bug]` **In splitscreen only player 1 sees the rocket smoke trails — the puffer distance
-  fade is evaluated against P1's camera and the alpha is written into the shared sprite.** Reported
-  at the controls 2026-08-10 alongside `BL-340`; both are instances of `BL-338`'s class.
-  **Mechanism, exactly:** `WeatherRig.Tick` publishes ONE camera pose per frame —
-  `_ambience.SetCamera(rigs[0].Camera…)`, with a comment saying "Player 1's camera, not one per
-  pane" — and `Puffer` reads `_ambience.CameraPosition`/`CameraForward` to compute
-  `DistanceAlpha` per particle (C7), then writes that alpha into the one `MultiMesh` instance every
-  pane draws. A trail 50 m from P2 but far behind P1 is drawn with P1's alpha, in P2's pane too.
-  ⚠ **The near band is a hard CULL, not a dim, which is why the symptom reads as "invisible" rather
-  than "faint".** The unauthored `NEAR_FADE` default is `(0, 0)` — a cull at view-space depth 0 — so
-  every particle BEHIND player 1's camera is dropped outright for everyone. A second player flying
-  behind P1 sees no trail at all, however close they are to it. That also predicts the sharpest
-  repro: two players, P2 astern of P1, P2 fires a rocket.
-  ⚠ **Fidelity is genuinely ambiguous here and must be decided before coding.** The fade is decoded
-  verbatim from the original ([`docs/org/puffer.md`](docs/org/puffer.md)) — but the original has one
-  view, so "the camera" is not a choice it ever made. Per-pane alpha means per-pane sprite
-  instances (N× the emitter's `MultiMesh` cost); a nearest-viewer rule, as the tracer floor took, is
-  one instance and never culls a particle someone can see up close. Neither is "what the original
-  does", because the question does not arise there. Pick one, write down why.
-  ⚠ Do not "fix" this by disabling the fade: `puffer-distance-fade` pins the decoded bands against
-  C3's own `spew_puffer`/`volcanosmoke`, and the near cull is what stops a camera flying through an
-  emitter from filling the screen.
 
 - `BL-335` `[Fidelity]` **Our puffer blend verdict reads the sprite's darkness; the original reads a
   flag in the texture's own header.** Reported at the controls 2026-08-10 (the refuel-tank flames),
@@ -2519,39 +2429,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Cameras & views
 
-- `BL-338` `[Bug]` **plan-sized — the single-viewer assumption is a CLASS, not three bugs. Sweep
-  every draw rule that measures against "the camera" and make it per-pane.** The original is a
-  single-view engine, so every screen-space rule it authors — LOD bands, distance fades, the
-  frame-buffer wash — has exactly one camera to mean. We inherited those rules and, in several
-  places, one camera: **player 1's**. In splitscreen the rule is then evaluated for P1 and the
-  RESULT is baked into world-space geometry or shared state that every pane draws, so the other
-  panes get P1's answer to their own question. Three instances are known, and the pattern is what
-  makes a fourth likely:
-  - **The tracer pixel floor** — FIXED 2026-08-10 (`ProjectilePool.Viewers` /
-    `ScreenSize.NearestFloor`). Symptom at the controls: P1's tracers looked right, everyone else's
-    were much larger. A round 1000 m from P1 but 100 m from P2 was floored for P1 and came out ~10×
-    oversized in P2's pane. Worked example and the arithmetic:
-    [`docs/org/tracers.md`](docs/org/tracers.md), and `TracerScreenSizeTests` pins the rule.
-  - **The puffer distance fade** — `BL-339`, open.
-  - **The `FBFX_COLOR_FROM_TO` screen wash** — `BL-340`, open. (Not a camera rule at all, which is
-    why it belongs in the same sweep: it is the same *shape* — one piece of state the original could
-    only have one of, painted into N views.)
-  **The sweep is the work.** Every consumer of a camera pose or viewport that feeds a DRAWN result:
-  the LOD bands, `Puffer.DistanceAlpha`, the cloud whiteout, the lens flare's sun wash, fog-zone
-  selection, `SelectionService`'s pick, any `GetViewport()` in a draw path. For each: does it decide
-  something per-pane, and if so is it reading one camera? The answer will not always be "make it
-  per-pane" — a shared `MultiMesh` instance genuinely cannot hold two sizes at once, which is why
-  the tracer fix took the *nearest* viewer rather than per-pane geometry — so each site needs its
-  own verdict: per-pane state, a nearest/union rule, or documented as fine.
-  ⚠ **Not every one-camera decision is a bug.** The mission wind is stepped ONCE per frame outside
-  the rig loop deliberately (`WeatherRig.Tick`, B6) — the original has one wind for the world, and
-  stepping it per rig would make a splitscreen gust walk twice as fast. Sim state stays global; it
-  is *draw* rules that owe each pane its own answer. Keep that line or the sweep will break physics
-  to fix pixels.
-  ⚠ **Cost of a per-pane rule is real.** Anything that becomes per-pane geometry multiplies its
-  instance count by the pane count. Prefer a nearest/union rule where the visual difference does not
-  justify N copies, and say which was chosen and why at each site.
-
 - `BL-080` `[Feature]` **Future cockpit view** would consume a mix of already-parsed and still-raw data: `pcdpN`
   cockpit damage panels and the `*_damage_green/yellow/red` indicator anims are already parsed
   (PlaneStats parses them, DamageVisuals skips them). `cockpit_engine_sound` (`*_cp` WAVs, e.g.
@@ -2816,34 +2693,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
-- `BL-340` `[Bug]` **A rocket hit washes EVERY player's pane, not the pane of the player who was
-  hit.** Reported at the controls 2026-08-10 alongside `BL-339`; both are instances of `BL-338`'s
-  class. `ScreenFlash` builds one overlay per rendered view (`Build(hudParents)` — correct, and it
-  is why the gutters and the empty 3P quadrant stay out of the wash) but holds **one ramp state**
-  for the whole session: `_from`/`_to`/`_runTime`/`_elapsed`/`_running` are single fields and `Play`
-  paints them into every pane's `ColorRect`. So any `FBFX_COLOR_FROM_TO` — a close HE, AP or flak
-  burst — whites out all four players when one of them is near the blast.
-  **Why it is built that way, and what actually needs deciding.** The class doc is explicit: the
-  original keeps a single frame-buffer-effect object (`crimson.exe` 0x9c8a98) whose colour and alpha
-  the handler overwrites, so a second burst mid-wash REPLACES the first rather than compositing.
-  That replace-not-composite rule is decoded and should survive. What does not carry over is the
-  *scope*: the original is single-view, so it never had to say whose picture washes. Splitting the
-  state per pane keeps the decoded rule (each pane still replaces its own running ramp) and answers
-  the question the original never asked.
-  *Fix shape:* per-pane ramp state (the fields become one struct per view), plus a **player index on
-  the play call** so the burst reaches the right pane(s). The routing is the substance, not the
-  state split: the event is authored by an effect def played at a world point, so "who was hit" has
-  to be derived where the burst is dispatched — `ProjectilePool`'s blast/impact path knows the
-  aircraft and the distance, `AnimRuntime` firing the `FBFX` event does not.
-  ⚠ **Distance, not just the victim.** The authored wash is a proximity effect, not a damage
-  receipt: a rocket detonating near a bystander should presumably wash the bystander too. Deciding
-  "the hit player only" vs "every player within the burst's own radius" is a design call — the
-  second is closer to what the effect is for, and the first is what was reported. Settle it before
-  wiring, and note that only the second needs a distance term at all.
-  ⚠ `fbfx-flash` pins the six-step wash's authored run times through `ScreenFlash.Current`, a single
-  session-wide readout. Splitting the state per pane changes that suite's seam — extend it to assert
-  the right pane rather than deleting the timing check it already guards.
-
 - `BL-113` `[Tuning]` `[Owed-playtest]` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).
 
@@ -2882,6 +2731,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   key cycles hostile aircraft; the non-aircraft key walks the zeppelin and turrets; each pane
   tracks its own pick. Depends on H22's target-tracking plumbing; `docs/controls.md` gains the
   bindings when it lands.
+
+## Splitscreen
+
+Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
+against "the player" or "the camera" needs an explicit splitscreen verdict: generalise it, take a
+nearest/union rule, or record it as deliberately single/global. This theme collects that work
+(sweep of 2026-08-15). **Route fixes through the two existing seams instead of minting new ones:**
+`GameSession.PlayerPositions` (nearest human) for gameplay rules that say "the player", and the
+viewer set behind `ProjectilePool.Viewers` / `ScreenSize.NearestFloor` for draw rules that say
+"the camera". Sim state stays global (`BL-338`'s ⚠). Splitscreen-scoped items that live with
+their own system: `BL-231` (per-player pool term), `BL-296` (per-player ActionMap), `BL-299`
+(MP spawn maps), `BL-301` (Dogfight tuning), `BL-314` (race countdown), `BL-351` (per-pane target
+cycling), `BL-358` (board stacking).
+
+The theme's fourteen items (`BL-126`, `BL-338`, `BL-339`, `BL-340`, `BL-365`–`BL-376`) are all
+scheduled in [`docs/PLAN-splitscreen-polish.md`](docs/PLAN-splitscreen-polish.md) (2026-08-15) and
+live there per the scheduled-items rule. New splitscreen findings mint here as usual.
 
 ## Missions, modes & campaign
 
@@ -3030,9 +2896,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Unlocked by the grid, noted here rather than promised:* race best-times become feasible once a
   race has a defined start (`StuntRace.cs`, `ScoreStore.GetBest`/`RecordIfBest`) — and would want
   their own key namespace, since a countdown makes race and solo totals diverge again.
-
-- `BL-126` `[Tuning]` `[Owed-playtest]` **Splitscreen** — the `HudMetrics` sqrt pane damping, `MixGain`, `SpawnAbreast`, join/lock
-  feel, tag-gutter widths.
 
 - `BL-299` `[Research]` **Decode `net.zrd.json` as the multiplayer spawn table → the retail MP1–MP3 maps for
   Dogfight.** 45 files, one flat group each, node counts quantised by mission type (MP1→80,
@@ -3189,9 +3052,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
 
 - `BL-361` `[Feature]` {CAMPAIGN} **Scripted-path vehicles: a second movement law, decoded, with
-  nothing in `CSVM/src` for it.** Surfaced 2026-08-15 by the ground-blow emitter decode (`BL-359`
-  trap (h)), which had to establish what the byte at `+0xcc` means before it could say whether
-  zeppelins repel the player. Write-up in
+  nothing in `CSVM/src` for it.** Surfaced 2026-08-15 by the ground-blow emitter decode (`BL-359`,
+  since closed — `git log --grep=BL-359`), which had to establish what the byte at `+0xcc` means
+  before it could say whether zeppelins repel the player. Write-up in
   [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow".
   *What it is:* the aircraft update dispatcher `FUN_00489ea0` branches on `obj+0xcc` **before** it
   reaches any flight law. Non-zero, and the object is driven by the path follower `FUN_0048a110`;
@@ -3234,8 +3097,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *How you'd know it worked:* a mission-opening aircraft sits still on the strip until its goal
   fires, then rolls at a steady 40 mph, accelerates and climbs out on the last leg, and flies
   normally from the moment it leaves the path.
-  *Cross-refs:* `BL-359` (which surfaced it, and whose emitter set depends on it for spawned
-  vehicles), `BL-095`, [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow".
+  *Cross-refs:* `BL-095`, [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow" —
+  ground blow's own emitter test reads this byte, so a spawned vehicle put on a path stops repelling
+  the player the moment it completes the path and drops into the flight model. Ground blow itself
+  shipped without the registry filter (its player probe simply excludes aircraft), so building the
+  follower means revisiting whether a path-driven vehicle needs to become an emitter in this build.
 
 - `BL-362` `[Feature]` **Instant Action wingmen never form up on the player.** *Evidence:* the user at the controls,
   2026-08-15: wingmen fly away instead of staying near the player, with no formation-flying

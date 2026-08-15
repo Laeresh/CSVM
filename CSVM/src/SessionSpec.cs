@@ -129,6 +129,12 @@ public sealed record SessionSpec
     /// given, with a warning — the two are not composable. The menu enforces
     /// <see cref="Players"/> &gt;= 2 before it will start a match; the CLI only warns.</summary>
     public bool Versus { get; private set; }
+    /// <summary><c>--coop</c>: plain splitscreen free flight (no <see cref="Versus"/>, no Instant
+    /// Action) puts every human on <see cref="AimAssist.PlayerTeam"/> instead of the per-pilot
+    /// default (PLAN-splitscreen-polish A1 — plain flight's default stays FFA, this is the opt-in
+    /// to co-op). Dropped with a warning when combined with <c>--vs</c>, whose FFA is explicit and
+    /// outranks it.</summary>
+    public bool Coop { get; private set; }
     /// <summary><c>--vs-kills=N</c>: the kill target that ends a match early. Default 5; 0
     /// disables the kill limit (the match then runs to the time limit alone).</summary>
     public int VsKills { get; private set; } = 5;
@@ -494,6 +500,12 @@ public sealed record SessionSpec
     /// launch. Null = flag absent; empty = every net; else the comma-separated net names to
     /// build.</summary>
     public string? DebugAiNets { get; private set; }
+
+    /// <summary><c>--debug-targets</c>: open the targeting overlay (F14) at launch — a line from
+    /// every turret gunner and AI gunner to the target it has acquired, coloured by the gate that
+    /// is holding its trigger.</summary>
+    public bool DebugTargets { get; private set; }
+
     public bool DebugScoreboard { get; private set; }
 
     /// <summary><c>--debug-markers</c>: mark EVERY live aircraft on the targeting HUD at once,
@@ -696,6 +708,7 @@ public sealed record SessionSpec
             else if (arg == "--fly") { s._flyArg = true; s.HasContentArg = true; }
             else if (arg == "--stunt") { s._stuntArg = true; s.HasContentArg = true; }
             else if (arg == "--vs") { s._vsArg = true; s.HasContentArg = true; }
+            else if (arg == "--coop") { s.Coop = true; }
             else if (arg.StartsWith("--vs-kills=")) { s.VsKills = int.Parse(arg["--vs-kills=".Length..]); }
             else if (arg.StartsWith("--vs-time=")) { s.VsTimeMinutes = int.Parse(arg["--vs-time=".Length..]); }
             else if (arg == "--freecam") { s._freecamArg = true; s.HasContentArg = true; }
@@ -715,6 +728,7 @@ public sealed record SessionSpec
             else if (arg == "--debug-dzpaths") { s.DebugDzPaths = true; }
             else if (arg == "--debug-ainets") { s.DebugAiNets ??= ""; }
             else if (arg.StartsWith("--debug-ainets=")) { s.DebugAiNets = arg["--debug-ainets=".Length..]; }
+            else if (arg == "--debug-targets") { s.DebugTargets = true; }
             else if (arg.StartsWith("--debug-join=")) { s.DebugJoin = int.Parse(arg["--debug-join=".Length..]); }
             else if (arg.StartsWith("--debug-waves=")) { s.DebugWaves = int.Parse(arg["--debug-waves=".Length..]); }
             else if (arg.StartsWith("--debug-wingmen=")) { s.DebugWingmen = int.Parse(arg["--debug-wingmen=".Length..]); }
@@ -1298,6 +1312,12 @@ public sealed record SessionSpec
         Stunt = stunt;
         Versus = vs;
         DamageLab = damageLab;
+        // --vs's FFA is explicit and outranks --coop; the deathmatch is the point of the mode.
+        if (Coop && Versus)
+        {
+            Warn("core", "--coop has no effect with --vs (its FFA is explicit); ignoring --coop");
+            Coop = false;
+        }
 
         // The numpad views orbit a FLYING plane; the other modes have their own cameras (the
         // viewer's orbit, the spectator freecam) placed with --pos/--direction instead.

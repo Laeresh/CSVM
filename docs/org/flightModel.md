@@ -1293,7 +1293,16 @@ With `n` the hit normal, `b` the backward body axis, `d` the straight-line dista
 ```
 S = sqrt(c) · (elev − d) / elev     proximity: 1 at contact, falling to 0 at the ray's end
 A = normalize(n × b)                unit axis rotating the nose away from the surface
+V = A · S                           the scaled axis, which is what the probe hands back
 ```
+
+⚠ **The probe returns `S` and writes `V = A · S`, not `A`** (corrected 2026-08-15). Its
+out-parameter takes the normalised cross product multiplied by `S` (`FUN_00422690`, then the three
+scalings before the adds), and `S` itself is the return value. The caller uses that one scaled
+vector **twice**, once in the dot and once in the add, which is where the second power of `S` in the
+player law comes from. The out-parameter is zero-initialised from `DAT_0075d1b8`, a zero vector, and
+is written only on a qualifying hit, so a miss, a `c ≤ 0` rejection and the vehicle-filter abandon
+all leave a zero vector and contribute nothing on either path.
 
 **Where it goes, which is the whole question.** `FUN_0048c220` writes into the same accumulator the
 three stick channels were summed into one call earlier in `FUN_0048c470`; `FUN_0048e580` then adds
@@ -1302,20 +1311,24 @@ that accumulator to `obj+0x160`, the persistent angular-velocity state. The line
 bias on **control response**, not an applied force, which is what the GDD's §4.1.7 describes and what
 `CAP-02` inferred.
 
-Player path (`0x0048c30f`), with `p = dot(accum, A·S)`:
+Player path (`0x0048c30f`), with `p = dot(accum, V)`:
 
 ```
-p ≥ 0 (commanding away):   accum += A · S² · |p| · groundblow_mag
-p < 0 (commanding into):   accum += A · S² · 0.05·|p| · groundblow_mag,  and S is zeroed
+p ≥ 0 (commanding away):   accum += V · |p| · groundblow_mag
+p < 0 (commanding into):   accum += V · 0.05·|p| · groundblow_mag,  and S is zeroed
 ```
 
-Both push along `+A`, away from the surface. Three consequences, each matching a design claim:
+Both push along `+A`, away from the surface. Written against the unscaled command component
+`u = dot(accum, A)`, the same two lines are `u → u · (1 + mag·S²)` and
+`u → u · (1 − 0.05·mag·S²)`, since `p = S·u` and the add carries a further `S`. Three consequences,
+each matching a design claim:
 
-- **It cannot overpower the stick.** An into-obstacle command is met with `0.05 × 10 = 0.5` of its
-  own magnitude, so the offending rotation is halved and never reversed.
+- **It cannot overpower the stick.** An into-obstacle command is scaled by `1 − 0.5·S²` at the
+  authored 10, so it is exactly halved at contact, cut less than that further out, and never
+  reversed (reversal would need a `groundblow_mag` above 20).
 - **It cannot save a head-on.** As the approach becomes perpendicular, `n → b`, so `n × b → 0` and
   the whole term vanishes (`FUN_00422690` leaves a zero vector untouched).
-- **Commanding away is amplified** by up to `1 + 10·S²`, i.e. 11× at contact with the authored 10.
+- **Commanding away is amplified** by `1 + 10·S²`, i.e. 11× at contact with the authored 10.
 
 **A second, smaller effect.** After the accumulator write, the velocity *direction* is steered
 exponentially toward the nose at `DAT_00622bbc · S` per second (`FUN_00460700`, speed preserved,
@@ -1326,7 +1339,7 @@ on the player path whenever the pilot is commanding into the obstacle, because `
 **The AI path is a different law, not a scaled one** (`0x0048c317`):
 
 ```
-accum += A · S · (ai_groundblow · groundblow_mag)        = A · S · 5.0 as authored
+accum += V · (ai_groundblow · groundblow_mag)           = A · S · 5.0 as authored
 ```
 
 It is independent of the AI's own command (a fixed push, where the player's is proportional to what
@@ -1404,8 +1417,16 @@ naming of zeppelins describes the outcome, not a mechanism.
 the AI path nothing is filtered and every hit the sweep returns repels, other aircraft in ordinary
 flight included.
 
-**Nothing in `CSVM/src` implements any of this** (a grep for `groundblow` returns no hits). Owned by
-`BL-359`, which carries the implementation rule and its traps.
+**Implemented 2026-08-15** (`BL-359`, closed; `git log --grep=BL-359`), player path only.
+`FlightController.ProbeGroundBlow` casts the ray and `FlightModel.GroundBlowTerm` applies the law,
+added to the command accumulator after the bank coupling and the weathervane and before
+`BodyRates += cmd * dt`, which is this function's own ordering. Two things the port does differently
+on purpose: the emitter filter is the probe's `CollisionLayers.World` mask rather than a registry
+lookup (only aircraft bodies carry the Aircraft layer, so terrain, scenery and the zeppelin repel
+and aeroplanes do not, which is the same set the filter above produces), and the second effect is
+folded into the model's existing nose-chase as `align + 2·S` — exact rather than approximate, since
+two exponential steers toward the same target compose. `CSVM.Tests`' `GroundBlowTests` pins the law,
+including the `S²` power and the body-frame conversion. **The AI law is not built.**
 
 ## Collision response and `bounce_factor` (`FUN_0048d7f0`)
 

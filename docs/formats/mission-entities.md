@@ -279,7 +279,9 @@ generator's counters. What wakes it is the mission BUILDER: `FUN_0045a390` deact
 one `zeppelin_type` selects — an explicit activation that overrides the script's own
 `NodeSetActive off`, traced in full by F12 ([instant-action.md](instant-action.md)). C1's `ia.json`
 runs `dogfight_squadron`, so its zeppelin is switched off by that path as well as by the script; a
-`--ia=` file selecting `zeppelin_run` on the same chapter is what puts it back in the air.
+`--ia=` file selecting `zeppelin_run` on the same chapter is what puts it back in the air. The same
+builder block also arms the hull's own gun rings, which ship dormant in `ai.zrd` and have no other
+wake path in Instant Action ([turrets.md](turrets.md#waking-a-whole-subtree)).
 
 ### The capacity puzzle
 
