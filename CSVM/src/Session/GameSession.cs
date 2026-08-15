@@ -1758,6 +1758,11 @@ public partial class GameSession : Node3D
             // reports the struck collider, the runtime resolves it to a destructible and
             // spends the weapon's HEALTH_DAMAGE. Null runtime ⇒ impacts stay cosmetic.
             DamageSink = state.WorldRuntime != null ? state.WorldRuntime.DamageAt : null,
+            // D31 (BL-370): the same equal-power splitscreen factor FlightAudio's own-ship loops
+            // already take, plus the nearest-human seam its gun/rocket one-shots' distance term
+            // reads (C21's PLAYER_RANGE seam, one snapshot shared with WorldSession/WorldEffects).
+            MixGain = mixGain,
+            PlayerPositions = PlayerPositionsSnapshot,
         };
         // EVERY pane's camera, not just player 1's. The tracer pixel floor is a screen-space rule
         // over one shared world mesh, so binding P1 alone sized every round against P1's distance

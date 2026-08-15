@@ -49,4 +49,28 @@ public class WeaponBlastTests
         Assert.True(ProjectilePool.FuseDotAllows(0.3f, Vector3.Forward, Vector3.Forward));
         Assert.False(ProjectilePool.FuseDotAllows(0.3f, Vector3.Forward, Vector3.Back));
     }
+
+    // D31 (BL-370): the one-shot pool's distance term — linear between a sound's own RANGE,
+    // full inside the near edge, silent past the far edge, 1 (skip the term) with no nearest
+    // human to measure against.
+    [Fact]
+    public void OneShotDistanceGainIsFullInsideRangeMinAndZeroPastRangeMax()
+    {
+        Assert.Equal(1f, ProjectilePool.DistanceGain(0f, 20f, 200f));
+        Assert.Equal(1f, ProjectilePool.DistanceGain(20f, 20f, 200f));
+        Assert.Equal(0f, ProjectilePool.DistanceGain(200f, 20f, 200f));
+        Assert.Equal(0f, ProjectilePool.DistanceGain(5000f, 20f, 200f));
+    }
+
+    [Fact]
+    public void OneShotDistanceGainFallsOffLinearlyBetweenRangeMinAndRangeMax()
+    {
+        Assert.Equal(0.5f, ProjectilePool.DistanceGain(110f, 20f, 200f));
+    }
+
+    [Fact]
+    public void OneShotDistanceGainSkipsTheTermWithNoPlayerPositionsWired()
+    {
+        Assert.Equal(1f, ProjectilePool.DistanceGain(float.MaxValue, 20f, 200f));
+    }
 }

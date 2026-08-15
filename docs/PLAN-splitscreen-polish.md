@@ -107,7 +107,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Audio one-shots
 
-31. ☐ Projectile one-shots get mix gain and a distance term (`BL-370`)
+31. ☑ Projectile one-shots get mix gain and a distance term (`BL-370`)
 32. ☐ `FlightAudio` one-shots respect `MixGain` where they should (`BL-371`)
 
 ### Wave E — Seats and input
@@ -619,7 +619,7 @@ not necessarily a bug to "fix" by consulting it; keep the change minimal.
 
 # Wave D — Audio one-shots
 
-## D31 ☐ Projectile one-shots get mix gain and a distance term (`BL-370`)
+## D31 ☑ Projectile one-shots get mix gain and a distance term (`BL-370`)
 
 **Goal.** Four players firing does not quadruple point-blank impact chatter; far impacts sound
 far, per the A2 listener model.
@@ -628,18 +628,37 @@ far, per the A2 listener model.
 `AudioStreamPlayer`s at `def.Volume * 0.2f`, no distance term, no per-player gain; round-robin
 voice stealing cuts samples in a 4-player firefight.
 
-**Approach.** A2 pinned per-pane listeners, so a positional player now attenuates against whichever
-pane is nearest it with no work of ours — the choice below is real, not blocked. Either route
-through a shared one-shot helper that applies
-`MixGain` and a distance term against the nearest human, or convert the pool to positional
-players. Keep the 8-voice pool and its stealing policy unless A2 chose positional (then re-judge
-the pool size as TUNE). D32 reuses whatever helper this creates.
+**Approach (landed).** A2 pinned per-pane listeners for `AudioStreamPlayer3D` emitters, but this
+pool's 8 voices are plain `AudioStreamPlayer`s and never join that engine rule, so the chosen shape
+is the shared helper, not a conversion to positional players (the pool and its round-robin
+stealing stay exactly as they were). `ProjectilePool` gains two seams: `MixGain` (the same
+equal-power `1/√N` figure `GameSession` already hands `FlightAudio`) and `PlayerPositions`
+(`GameSession.PlayerPositionsSnapshot`, C21's `PLAYER_RANGE` seam — nearest human, not nearest
+pane camera, per the plan's own seam-choice decision). `PlaySound` takes a `worldPos` now (the
+FIRE muzzle's origin or the IMPACT point) and multiplies the pre-existing `def.Volume * 0.2f` by
+`MixGain` and a new `DistanceGain(distance, rangeMin, rangeMax)` — a `public static` linear falloff
+between the sound's own `RANGE` (1 inside the full-volume distance, 0 past the audible one), so
+D32 can reuse the exact same term rather than a second implementation. `PlayShotSound` (turret
+gunners' launch bark) takes the firepoint's position through the same path. A throttled breadcrumb
+(first 8 one-shots, the same convention as the impact `fx=`/`snd=` log) prints the resolved sound,
+`MixGain`, the nearest-human distance, the RANGE pair, `distGain` and the final linear gain.
 
-**Model recommendation.** medium — mechanical once A2 is decided.
+**Model recommendation.** medium — mechanical once A2 was decided.
 
-**Verify.** `--volume=0` scripted run: `.scratch/logs/` shows the computed gains for a near and a
-far impact. At the controls (2 players): a firefight near P2 is loud for P2, attenuated for P1
-per the chosen model. The `snd_*` counting in existing audio assertions stays green.
+**Verify (done 2026-08-15).** `dotnet build CSVM/CSVM.sln` clean, `dotnet format --verify-no-changes`
+clean. `.\RunTests.ps1`: 1292/1292 unit tests (3 new — `WeaponBlastTests`'s
+`OneShotDistanceGain*`, pinning `DistanceGain`'s full-inside/zero-past-RANGE edges, its linear
+midpoint, and the `float.MaxValue`/no-seam skip), 61/61 engine suites, 14/14 goldens
+hash-identical — the existing `snd_*`-counting audio assertions are part of that 61 and stayed
+green. Scripted probe (`--det --ia=<empty JSON, defaults to dogfight_ace> --chapter=C1 --volume=0
+--frames=3600 --screenshot=`, SHELL-12's exit condition): a real 1-vs-1 duel produced both readings
+the plan asked for in one run — two direct hits on the player's own airframe at 5-6 m (well inside
+`snd_ricochet*`'s `[20, 200]` m RANGE) logged `distGain=1,00 vol=0,200`, and six ground `snd_grnd_bullet`
+hits at 221-333 m (inside its `[80, 800]` m RANGE) logged `distGain=0,65..0,80 vol=0,130..0,161` —
+the term discriminates near from far using real RANGE data, not a synthetic case. **What this
+cannot show:** a live multi-player mix is the user's own call (`verification.md`'s "what this
+project cannot verify itself"), so the at-the-controls two-pad firefight (P2 loud for P2, attenuated
+for P1) stays owed and folds into `F52`, the same deferral A1/A2 already recorded.
 
 **⚠ Traps.** The `* 0.2f` factor is the current tuned balance — carry it into the new path, do
 not silently drop or double-apply it.

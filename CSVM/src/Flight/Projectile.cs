@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using CSVM.Effects;
 using CSVM.Mech3;
@@ -399,6 +400,7 @@ public sealed partial class ProjectilePool : Node3D
     private bool _flyoutPoseLogged;
     private int _muzzleBasisLogs;
     private int _impactsLogged;
+    private int _soundGainsLogged;               // D31 (BL-370) one-shot gain breadcrumb, first 8
     private float _simClock;                   // sim seconds since the pool started (the gun-effect throttle)
     private CasingSpec? _casingSpec;           // the gunshell OBJECT_MOTION, resolved once
     private bool _casingSpecResolved;
@@ -436,6 +438,19 @@ public sealed partial class ProjectilePool : Node3D
     /// weapon bench, the `Suites.cs` labs) means no viewers and so no floor — see
     /// <see cref="TracerFloor"/>.</summary>
     public ViewerSet Viewers { get; set; } = new();
+
+    /// <summary>Splitscreen's overall gain for this pool's one-shots, the same equal-power figure
+    /// (1 for 1P, 1/√N for N — <c>GameSession.mixGain</c>) <see cref="FlightAudio.MixGain"/> already
+    /// applies to a plane's own-ship loops, so N simultaneous firefights don't sum to a wall of
+    /// noise either (D31, `BL-370`).</summary>
+    public float MixGain { get; set; } = 1f;
+
+    /// <summary>The nearest-human seam (<c>GameSession.PlayerPositionsSnapshot</c>, C21's
+    /// <c>PLAYER_RANGE</c>/`BL-365` seam) — read here so a gun/rocket one-shot's distance term
+    /// (D31, `BL-370`) answers "how far is this from the nearest pilot", not player 1's alone. Null
+    /// outside a real session (the weapon bench, `Suites.cs` labs), where the distance term is
+    /// skipped entirely rather than guessing a listener.</summary>
+    public Func<IReadOnlyList<Vector3>>? PlayerPositions { get; set; }
 
     /// <summary>The aircraft each round's swept step is measured against for the near-miss cue
     /// one per flight rig. Empty in every build that has no player aircraft (the weapon
@@ -506,6 +521,27 @@ public sealed partial class ProjectilePool : Node3D
     /// already resolved). The world runtime's <c>SurfaceIsWater</c> hook and the spark tint are
     /// bound to this, so a landing piece, a round and a wingtip cannot disagree about the sea.</summary>
     public static bool SurfaceIsWater(Node? collider) => SurfaceIdOf(collider) == SurfaceRegistry.Water;
+
+    /// <summary>D31's distance term (`BL-370`): linear falloff between a one-shot's own RANGE — 1
+    /// at or inside the full-volume distance (<paramref name="rangeMin"/>), 0 at or past the
+    /// audible distance (<paramref name="rangeMax"/>), the same [full-volume, audible] reading
+    /// <see cref="WorldSounds"/> gives the RANGE pair for its positional emitters.
+    /// <paramref name="distance"/> is measured to the NEAREST human, not the nearest pane camera —
+    /// the gameplay seam, per this plan's seam-choice decision — so a shooter's own muzzle/impact
+    /// reads full volume while a firefight at the other end of a splitscreen map fades for everyone
+    /// else. 1 (no attenuation) at <see cref="float.MaxValue"/> — no listener seam wired, nothing
+    /// to measure against. TUNE: linear, not Godot's own inverse-distance curve — these one-shots
+    /// stay plain <c>AudioStreamPlayer</c>s, not <c>AudioStreamPlayer3D</c>, so there is no engine
+    /// curve to match. `public static` (not the class's usual instance-private shape) so D32's
+    /// <c>FlightAudio</c> one-shots reuse this exact term rather than a second implementation.</summary>
+    public static float DistanceGain(float distance, float rangeMin, float rangeMax)
+    {
+        if (distance >= float.MaxValue)
+            return 1f;
+        if (rangeMax <= rangeMin)
+            return distance <= rangeMax ? 1f : 0f;
+        return Mathf.Clamp(1f - (distance - rangeMin) / (rangeMax - rangeMin), 0f, 1f);
+    }
 
     /// <summary>Registers a flying aircraft's body as a strikeable target: rounds from every
     /// OTHER identity can hit it, and this plane's own rounds exclude it per shot (the body's
@@ -582,8 +618,9 @@ public sealed partial class ProjectilePool : Node3D
 
     /// <summary>A non-player fire source's launch bark (the turret gunners' <c>SOUNDS.CANNON</c>)
     /// through the pool's own one-shot pool — the same resolve-through-groups path a weapon's
-    /// FIRE sound takes.</summary>
-    public void PlayShotSound(string sndName) => PlaySound(sndName);
+    /// FIRE sound takes. <paramref name="worldPos"/> is the firing muzzle's position, feeding the
+    /// same distance term (D31) a player's own shots get.</summary>
+    public void PlayShotSound(string sndName, Vector3 worldPos) => PlaySound(sndName, worldPos);
 
     public override void _Ready()
     {
@@ -659,7 +696,7 @@ public sealed partial class ProjectilePool : Node3D
         // null in the data (LOOPED_SOUND_NAME covers continuous gunfire instead), so this is a
         // one-shot with no double-up risk.
         if (weapon.Fire?.Sound is { } fireSnd)
-            PlaySound(fireSnd);
+            PlaySound(fireSnd, muzzle.Origin);
         var forward = aimDir is { } aim && aim.LengthSquared() > 1e-12f
             ? aim.Normalized()
             : -muzzle.Basis.Z.Normalized();
@@ -1611,7 +1648,7 @@ public sealed partial class ProjectilePool : Node3D
         }
         // Per-surface IMPACT sound (landed): the struck surface's SOUND, else the default's.
         if (outcome.Sound is { } snd)
-            PlaySound(snd);
+            PlaySound(snd, point);
         // A ray-struck aircraft takes the weapon's health/armor damage through its own per-part
         // model — never the destructible pipeline. Only a ray hit carries a struck shape; a fuse
         // detonation (shapeIdx -1) leaves its plane to the blast's aircraft pass, where falloff
@@ -2173,7 +2210,15 @@ public sealed partial class ProjectilePool : Node3D
     // rocket's ground_mixed_exp_sg default impact) rather than a plain sounds.json SETS def —
     // resolve it through the group first, same as WorldSounds.PlayOneShot, or the lookup below
     // misses and the call silently no-ops.
-    private void PlaySound(string sndName)
+    //
+    // D31 (BL-370): these players are non-positional (an 8-voice round-robin pool, not
+    // AudioStreamPlayer3D, so A2's per-pane-listener engine rule never touches them), so the
+    // splitscreen answer has to be applied by hand — MixGain, the same equal-power factor
+    // FlightAudio's own-ship loops use, plus a distance term against the NEAREST human
+    // (PlayerPositions, C21's PLAYER_RANGE seam) so a firefight at P2's end of the map doesn't
+    // also blare at P1. worldPos is the FIRE muzzle or the IMPACT point — whichever this call is
+    // for. The 0.2f factor is the pre-existing tuned balance; carried, not re-tuned.
+    private void PlaySound(string sndName, Vector3 worldPos)
     {
         if (_sounds == null || _soundDefs == null)
             return;
@@ -2188,8 +2233,39 @@ public sealed partial class ProjectilePool : Node3D
         var player = _sfxPool[_sfxNext];
         _sfxNext = (_sfxNext + 1) % _sfxPool.Count;
         player.Stream = stream;
-        player.VolumeDb = Mathf.LinearToDb(Mathf.Max(0.002f, def.Volume * 0.2f));
+        float nearest = NearestPlayerDistance(worldPos);
+        float distanceGain = DistanceGain(nearest, def.RangeMin, def.RangeMax);
+        float gain = def.Volume * 0.2f * MixGain * distanceGain;
+        player.VolumeDb = Mathf.LinearToDb(Mathf.Max(0.002f, gain));
         player.Play();
+        // Verification breadcrumb (D31, BL-370): the first few one-shots confirm the computed
+        // gain without needing a lucky --volume=0 listen, same convention as the impact fx/snd
+        // breadcrumb above.
+        if (_soundGainsLogged < 8)
+        {
+            _soundGainsLogged++;
+            GD.Print($"sound gain: {resolved} MixGain={MixGain:0.00} dist={(nearest >= float.MaxValue ? "n/a" : $"{nearest:0}m")} " +
+                     $"range=[{def.RangeMin:0}-{def.RangeMax:0}]m distGain={distanceGain:0.00} vol={gain:0.000}");
+        }
+    }
+
+    /// <summary>The NEAREST <see cref="PlayerPositions"/> entry to <paramref name="worldPos"/> —
+    /// D31's "nearest human" reading, C21's <c>PLAYER_RANGE</c> seam reused for audio.
+    /// <see cref="float.MaxValue"/> with nobody wired (the weapon bench, <c>Suites.cs</c> labs),
+    /// which <see cref="DistanceGain"/> reads as "skip the term".</summary>
+    private float NearestPlayerDistance(Vector3 worldPos)
+    {
+        var positions = PlayerPositions?.Invoke();
+        if (positions == null || positions.Count == 0)
+            return float.MaxValue;
+        float nearest = float.MaxValue;
+        foreach (var p in positions)
+        {
+            float d = (p - worldPos).Length();
+            if (d < nearest)
+                nearest = d;
+        }
+        return nearest;
     }
 
     /// <summary>The floor for one round across every bound viewer: the SMALLEST size that satisfies

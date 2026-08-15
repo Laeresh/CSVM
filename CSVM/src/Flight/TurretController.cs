@@ -552,7 +552,7 @@ public sealed class TurretController
         }
         if (Def.CannonSound is { } snd)
         {
-            _pool.PlayShotSound(snd);
+            _pool.PlayShotSound(snd, fp.GlobalPosition);
         }
         Ammo--;
         ShotsFired++;

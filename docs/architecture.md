@@ -2349,6 +2349,19 @@ magnitudes TUNE. `PlaySound`
 name (e.g. the incendiary rocket's `ground_mixed_exp_sg` default impact) through `_soundGroups`
 first, same as `WorldSounds.PlayOneShot` — `FIRE.SOUND` is null for every cannon in the data
 (`LOOPED_SOUND_NAME` covers continuous gunfire instead), so the one-shot never doubles up (BL-211).
+**D31 (`BL-370`):** these 8 voices are plain `AudioStreamPlayer`s, never `AudioStreamPlayer3D`, so
+A2's per-pane-listener engine rule never touches them — splitscreen has to be applied by hand.
+`PlaySound` now multiplies the existing `def.Volume * 0.2f` (the pre-existing tuned balance,
+carried verbatim) by `MixGain` (the same equal-power `1/√N` figure `FlightAudio.MixGain` already
+gives a plane's own-ship loops) and `DistanceGain` — a linear falloff between the sound's own
+`RANGE` (1 at/inside the full-volume distance, 0 at/past the audible one, the same [full-volume,
+audible] reading `WorldSounds`' positional emitters give the pair) measured to the NEAREST entry
+in `PlayerPositions` (`GameSession.PlayerPositionsSnapshot`, C21's `PLAYER_RANGE` seam — nearest
+human, not nearest pane camera, per this plan's seam-choice decision). A shooter's own muzzle bark
+and impact read full volume (distance ≈ 0 to themselves); a firefight at the far end of a
+splitscreen map fades for everyone else. `PlayerPositions` null (the weapon bench, `Suites.cs`
+labs — no human to measure against) skips the term entirely, gain 1. `PlayShotSound` (a turret
+gunner's launch bark) takes the same treatment from its firepoint's position.
 Positive-`HEALTH_DAMAGE` blasts linearly fall from full at direct contact to zero at the authored
 `IMPACT_PROXIMITY`; `DAMAGE 0` effect radii never damage. The struck body always takes full damage
 (`ApplyDamage`'s direct-hit branch, unscaled by falloff); every OTHER body the blast sphere overlaps
