@@ -133,10 +133,24 @@ sees the static coordinates.
 ⚠ **This is what "an AI escorts something" is in the shipped data.** 76 of 222 nets are anchored,
 and the census of their targets is in [`../formats/ai-nets.md`](../formats/ai-nets.md): zeppelins,
 a train, a tanker, and **`player` on 11 of them**. C1's `M4ReinfAce` (the chapter's FIRST net, so
-the one every Instant Action actor is handed) is `[10, "player"]`, an 11-node ring whose node 10 is
-the anchor: in the original, every Instant Action aircraft in C1 flies a ring **centred on the
-player**. Six of the eight chapters' first nets are anchored this way, to the player (C1), a
-zeppelin (C1C, C2, C3) or a train (C4).
+the one every Instant Action actor is handed) is `[10, "player"]`: a single 10-node cycle, every
+node degree 2, whose node 10 is the edgeless anchor. In the original, every Instant Action aircraft
+in C1 flies that pattern carried around the player. Six of the eight chapters' first nets are
+anchored this way, to the player (C1), a zeppelin (C1C, C2, C3) or a train (C4).
+
+⚠ **The anchor is not the pattern's centre, and the pattern is not a ring.** Measured on both C1
+player-anchored nets (2026-08-15, at the controls and confirmed against the node coordinates): the
+cycle's geometry crosses itself, tracing a **figure eight** of two lobes, and the anchor node sits
+at the centre of ONE lobe rather than at the centroid.
+
+| Net | Nodes | y | Extent | Anchor vs centroid | Anchor vs near lobe's centre |
+|---|---|---|---|---|---|
+| `M4ReinfAce` #10 | 10 + anchor | 400 | ~550 × 1030 m | 255 m off | 39 m |
+| `M2Ace` #23 | 12 + anchor | 350 | ~585 × 1105 m | 246 m off | ~110 m |
+
+So the aircraft orbits the player closely through one lobe and swings ~1 km away through the
+other, rather than circling at a constant radius. Both anchors sit off-centre in the same
+direction, which is authoring, not coincidence.
 
 ⚠ One mission-specific special case sits at the top of `FUN_00432010` and is NOT the general rule:
 if the trailer target is one of `britbalmoral_1/2/3` (`DAT_0071c4e4`/`e8`/`ec`, set by name in

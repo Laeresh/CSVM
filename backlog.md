@@ -750,7 +750,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ✔ **The seat scan now skips edgeless nodes**, which is `FUN_00431900`'s own rule and was the
   hidden half of the bug: the anchor is parked off the ring in all 76 anchored nets, and a plane
   that seats on it has no neighbour to advance to and holds it forever.
-  ⚠ *Traps, and where each one stands.* (a) **Y is never offset**, so a ring at 400 m stays at
+  ✔ **Seen at the controls 2026-08-15**, and it corrected two doc claims. C1 has TWO
+  player-anchored nets, `M4ReinfAce` #10 (400 m) and `M2Ace` #23 (350 m), so both ride the player
+  while only #10 is assigned to anything. And neither is a "ring": each is a closed cycle whose
+  geometry crosses itself into a **figure eight** (~550 × 1030 m and ~585 × 1105 m), with the
+  anchor at the centre of one LOBE, 255 m and 246 m off the centroid. So a netted AI passes close
+  through one lobe and about a kilometre out through the other, which is not what "orbits the
+  player" implied. [`docs/org/aiPilot.md`](docs/org/aiPilot.md) and
+  [`docs/formats/ai-nets.md`](docs/formats/ai-nets.md) are corrected.
+  ⚠ *Traps, and where each one stands.* (a) **Y is never offset**, so a pattern at 400 m stays at
   400 m over a zeppelin at 200 m; done, and asserted. (b) The offset applies to EVERY node read; done via
   the single `NodePosition`, asserted by a seat-scan test. (c) `ZeppelinMotion` shares the follower:
   checked, and switched on. Exactly two of the 222 nets are both zeppelin-flown and anchored (C1C's

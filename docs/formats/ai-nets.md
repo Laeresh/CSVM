@@ -175,8 +175,13 @@ are the shapes it missed. Target names seen: `player`, zeppelin node names
 ## Worked example
 
 `C1/zrdr/ne000010.zrd` = id 10 = `M4ReinfAce`: 11 nodes at y = 400, 10 edges closing a
-loop over nodes 0–9 (`[0,1] … [8,9], [0,9]`), node 10 sitting off the ring, trailer
-`[10, "player"]` — a patrol ring whose trailer names the player via that off-ring node.
+cycle over nodes 0–9 (`[0,1] … [8,9], [0,9]`), node 10 edgeless and off that cycle, trailer
+`[10, "player"]`. Every node has degree 2, so the graph is one closed loop, but the GEOMETRY
+crosses itself: it traces a **figure eight** roughly 550 × 1030 m, and the anchor sits at the
+centre of one of the two lobes, 255 m from the cycle's centroid. C1's other player-anchored net,
+`M2Ace` #23 (12 nodes at y = 350, anchor node 12), is the same shape at 585 × 1105 m. ⚠ Do not
+read "closed cycle" as "ring": a plane flying one of these passes close to its target through one
+lobe and about a kilometre away through the other.
 
 ## What this is not
 

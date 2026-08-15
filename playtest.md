@@ -409,18 +409,19 @@ you to put the file "next to the repo", where nothing would find it. Absolute pa
 - `PT-51` `[Own]` **Every Instant Action actor now patrols the chapter's first net (`BL-364`), and
   in C1 that net rides the player (`BL-377`). Both landed 2026-08-15.** The symptom that raised it was enemies flying straight in one direction and
   a wave out of engagement range never turning back. The ace, the wingmen and every wave member are
-  now given C1's net 10 (`M4ReinfAce`, a ring at 400 m), which the launch log names as
+  now given C1's net 10 (`M4ReinfAce`, a closed 10-node cycle at 400 m that traces a figure eight
+  about 550 × 1030 m across), which the launch log names as
   `ia: actors patrol 'M4ReinfAce' (net 10), the chapter's first, anchored to 'player' at node 10`. The steering law underneath is
   still the placeholder, so this is a judgement on whether the behaviour reads right, not on
   whether the path is exact. *Look for:*
   - (a) **do they come back**: let a wave lose you and watch. It should turn and circle rather
     than shrink to a dot on the horizon;
   - (b) **after a fight**: break off an engagement and watch an enemy return to patrol. It should
-    settle back onto the ring, not orbit one waypoint forever (that limit cycle is the invented
+    settle back onto the graph, not orbit one waypoint forever (that limit cycle is the invented
     `PatrolThrottle`'s known failure, `BL-364` trap (a));
   - (c) **the wave teleport**: when wave 2 arrives, does it patrol from where it appeared rather
     than turning back toward the map origin;
-  - (d) **the ring is shared**: every actor walks the SAME net, so some clustering is expected and
+  - (d) **the net is shared**: every actor walks the SAME graph, so some clustering is expected and
     correct. Judge whether it reads as a busy patrol or as a conga line.
 
   *Blocks:* a pass closes `BL-364`'s landed half (leaving only its campaign-roster remainder) and
@@ -444,19 +445,28 @@ you to put the file "next to the repo", where nothing would find it. Absolute pa
   range and its current AI mode. **F13** draws the nets themselves plus a live leash from each
   plane to the node it is flying at (dimmed when it only holds that node while fighting), which
   is what turns (a) into a direct read rather than an impression.
-  **The ring now RIDES you** (`BL-377`, landed 2026-08-15). C1's first net is anchored to the
-  `player` (`[10, "player"]`), so the whole 11-node ring is carried around your own aircraft at its
+  **The net now RIDES you** (`BL-377`, landed 2026-08-15). C1's first net is anchored to the
+  `player` (`[10, "player"]`), so the whole graph is carried around your own aircraft at its
   authored 400 m, and every Instant Action actor on it, wingman and enemy alike, patrols around
-  you rather than around a fixed spot on the map. F13 draws the ring where it actually is, so it
-  should visibly travel with you as you fly. That is worth its own look:
-  - (e) **does the ring follow you**: with F13 up, fly a few kilometres and watch the graph move
-    with you rather than staying behind. Its altitude must NOT follow you: climb and the ring
-    stays at 400 m, which is the decoded behaviour, not a bug;
+  you rather than around a fixed spot on the map. F13 draws it where it actually is, so it should
+  visibly travel with you as you fly. That is worth its own look:
+  - (e) **does it follow you**: with F13 up, fly a few kilometres and watch the graph move with you
+    rather than staying behind. Its altitude must NOT follow you: climb and it stays at 400 m,
+    which is the decoded behaviour, not a bug;
   - (f) **and does that read as intended**: it is team-blind in the original, so enemies arriving
     on you is correct, not a mistake. Judge whether it makes the mission better or just crowded.
-  ⚠ **`--debug-spectate` moves the ring's centre with your PINNED plane**, which sits still. That
-  is the right way to watch (a)–(d) undisturbed, but (e) needs you flying, so do that pass without
-  the flag.
+  ⚠ **Two graphs will follow you, and only one is flown.** F13 with no filter draws every net in
+  the chapter, and C1 has TWO player-anchored ones: `M4ReinfAce` #10 (400 m) and `M2Ace` #23
+  (350 m). Only #10 is assigned to anything here, since it is the chapter's first; #23 is drawn
+  because it is anchored, not because anyone is on it. Type `M4` into the overlay's filter field to
+  see just the flown one.
+  ⚠ **Neither is a ring.** Both are closed cycles whose geometry crosses itself, so each is a
+  **figure eight**, and the anchor sits at the centre of ONE lobe rather than at the middle. A
+  plane on it therefore passes close to you through one lobe and about a kilometre out through the
+  other. That is the authored shape (confirmed against the node coordinates), not a follower bug.
+  ⚠ **`--debug-spectate` carries the graph with your PINNED plane**, which sits still. That is the
+  right way to watch (a)–(d) undisturbed, but (e) needs you flying, so do that pass without the
+  flag.
   ⚠ **With wingmen configured, the two sides fight each other and nobody patrols.** Measured
   2026-08-15: three wingmen and three enemies with no player present read `0 plane(s) flying it,
   3 holding a node` and every marker said `pursue`. That is correct behaviour, not a failure of
