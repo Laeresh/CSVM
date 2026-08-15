@@ -443,11 +443,18 @@ to the def, which is what every shipped roster block does. The shipped defs auth
 `ai_input_limit_pitch` (11 defs, 0.79–0.91) and one `ai_input_limit_yaw` (0.79); the rest inherit
 down the `kind_of` chain as one six-slot block.
 
-**`rudder_tol`** selects between the law's two steering branches: above it the aim error is flown
-with rudder, below it with bank. ⚠ **Inert as shipped** — it is authored `1.0` and the quantity
-compared against it is a unit-vector component that cannot exceed 1.0, so the branch is always
-chosen by the alternative test. Real code on an unreachable threshold, like
-`high_speed_pitch_fade` ([../org/flightModel.md](../org/flightModel.md)).
+**`rudder_tol`** selects between the law's two steering branches, and **a higher value means MORE
+rudder**: clearing the threshold picks the bank branch, so raising it makes banking harder to
+reach. **Default 0.2**, at which any target ahead is banked toward and the rudder is reserved for
+targets nearly dead astern. Exactly two defs author it, `autogyro` and `balmoral`, both at `1.0`,
+which is the ceiling the compared quantity can never exceed: on those two a lateral-dominant aim
+error goes on the rudder even when the target is straight ahead. The `autogyro` is class 1 and
+never reaches this law, so `balmoral` is the one aeroplane that turns onto a target with rudder
+rather than bank.
+
+**Def defaults for the block above** (from the def initialiser, not from any key): scales `3.5`,
+limits `1.0`, the emergency set identical, `rudder_tol` `0.2`. The AI speed clamp that sits beside
+them is fixed at `0`…`111.76 m/s` (250 mph) for every airframe and has no token at all.
 
 **`mode` is the vehicle class**, and the parser maps it to a small enum the whole object update
 dispatches on: **`jet` = 0, `heli` = 1, `tank` = 2, `ship` = 3, `wingman` = 4, `plane` = 5**

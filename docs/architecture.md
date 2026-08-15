@@ -88,7 +88,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the forget + catch-up pass (B2), the intercept solver (B3), the four-list candidate scan (B4), and the fire call's step order + 1° launch scatter (B5).
 - `src/Flight/TurretDefs.cs` — typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
 - `src/Flight/TurretController.cs` — one carried turret gunner (M4 C9a): acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
-- `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; a placeholder steering law.
+- `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; each mode picks the aim point and table `AiControlLaw` steers on.
+- `src/Flight/AiControlLaw.cs` — the original's own AI steering law (E41, decoded in `docs/org/aiControlLaw.md`): aim point + that point's velocity + one of four decoded parameter tables → stick and throttle lever. Engine-free and pure.
 - `src/Flight/AiModeMachine.cs` — the nine-mode AI state machine (M4 D11), the engine's decoded mode vocabulary: patrol/pursue/lay off/evade/evasive maneuver/stunned/avoid crash + two enum-only danger-zone modes; steady-hand and sixth-sense reaction rolls on the shipped chances.
 - `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery (M4 D14): intercept lead via `AimAssist.TryIntercept`, the ±11° gun cone and the quick-draw cone as fire gates, per-shot dead-eye scatter; mutable target, primary-target name and rating biases (the D12 script seams).
 - `src/Flight/AiVoiceDispatcher.cs` — the combat-voice trigger dispatch (M4 E16), engine-free: the talker roll, the 15 s per-slot cooldown armed on failure too, the bearing halving, the broadcast election, the DI tiers, the death cries with force, the computed bearing index.
@@ -2413,28 +2414,44 @@ by `ZeppelinMotionTests` + the `zeppelin-motion` suite.
 ## src/Flight/AiPilot.cs
 The non-player `FlightModel` driver (M4 A2): standing orders in (heading in the mission-data
 `SpawnPoint.HeadingDeg` convention, altitude, throttle, optional `Patrol` net follower, optional
-`Gunner` whose live target is chased as a flat-out plain pursuit, optional `Machine` — D11's
-nine-mode state machine, which when set is stepped first and dispatches the input source per
-mode: patrol/danger-zone stubs fly the net, pursue chases the gunner's target, lay off (D15)
-holds its entry course and walks the throttle toward `sixth_sense_factor` × the pursuer's speed
-so the human catches up (the factor is decoded; the speed-match application and the 0.4/s lever
-rate / 0.3 floor are invented), evade and avoid crash fly the machine's own orders, an evasive
-maneuver plays its `ManeuverExecutor`, stunned returns neutral sticks), one `FlightInput` per sim
-step out, read by a `FlightController` whose `Pilot` is set. Pure over the model state and its
-own fields, seeded randomness only, so a fixed-dt run is deterministic (`AiPilotTests`).
+`Gunner` whose live target is chased at the decoded lead offset ahead of it, optional `Machine` —
+D11's nine-mode state machine, which when set is stepped first and picks this step's AIM POINT and
+parameter table: patrol/danger-zone fly the net node itself, pursue leads the gunner's target on
+the engaged table (or aims at it outright for the head-on firing solution), lay off (D15) holds its
+entry course and then walks the throttle toward `sixth_sense_factor` × the pursuer's speed so the
+human catches up, evade flies the machine's orders, avoid crash aims 1000 m straight up on the
+emergency arm, an evasive maneuver plays its `ManeuverExecutor`, stunned returns neutral sticks),
+one `FlightInput` per sim step out, read by a `FlightController` whose `Pilot` is set. Pure over
+the model state and its own fields, seeded randomness only, so a fixed-dt run is deterministic
+(`AiPilotTests`).
 ⚠ Orders are plain mutable fields BY DESIGN — the original's mission script retargets/re-nets an
   AI at runtime (`SET_AI_NET`, `ADD_OTHER_TARGET`, …), so nothing here may be read-once at spawn.
-⚠ The steering law is a placeholder (bank-to-turn + turn pull + an altitude leash): in THIS
-  flight model bank alone yaws only at the coupling rate and any sustained pull climbs. D11's
-  machine dispatches WHICH orders it flies; the shipped maneuver programs play through
-  `ManeuverExecutor` only during `evasive maneuver` — the law itself is still not original.
-  ⚠ The original's law IS now decoded, in `docs/org/aiControlLaw.md` (`FUN_0041b560`, plan D31),
-  and replacing this body with it is plan E41. Read that page before touching the law: the
-  placeholder's shape (bank-to-turn) is right and its output stage, cadence and gain source are
-  not.
-⚠ `PatrolThrottle` (0.5) and the leash/gain constants are INVENTED placeholder-law values, never
-  original behaviour; at the 0.85 default the turn radius exceeds the tightest fighter rings and
-  the plane limit-cycles around a node forever (measured on C1's `M4ReinfAce`).
+⚠ Since E41 the steering is `AiControlLaw`, the original's own, and this class is only the DRIVER
+  around it. The placeholder bank-to-turn law and its altitude leash are gone — do not reintroduce
+  a leash, the real law's wings-level rule and elevator deadband are what replaced it. `Throttle`
+  is now the lever's CURRENT state, walked by the law at 0.35/s, not a held order.
+⚠ Three values here are NOT the original's: `PatrolThrottle` (0.5, now only seeding the lever's
+  walk), `OrderAimRangeM` (a port artifact of our heading/altitude orders, which the original does
+  not carry), and lay off's throttle override (D15's invented speed match, where the decode has the
+  break-off arm simply flying the cruise table). All three are E42's to retire or justify.
+
+## src/Flight/AiControlLaw.cs
+The original's own AI steering law (E41), decoded as plan D31 in `docs/org/aiControlLaw.md` — read
+that page before changing anything here. An aim point, that point's velocity and one of four
+parameter tables read out of the image in, one `FlightInput` out: a desired speed from the aim
+point's own speed plus range-weighted lead terms, an intercept solve (`AimAssist.TryIntercept`) for
+the direction, bank-to-turn with the elevator joining once the bank command is inside a deadband, a
+wings-level rule, a low-speed unload, and a per-axis scale/limit stage off `PlaneStats`. Engine-free
+and pure over its arguments; pinned against the decode by `AiControlLawTests`.
+⚠ The output stage is NEAR-BANG-BANG, not proportional: the shipped scale is 3.5 against a limit of
+  1, so anything past ~0.29 of body-frame aim error saturates. Limits above 1 are the original's
+  range too, and `FlightModel.Step` is what clamps to ±1 — do not clamp here.
+⚠ A HIGHER `rudder_tol` means MORE rudder (clearing it selects the bank branch), and the
+  wings-level rule is the DEAD-ASTERN case, not the straight-ahead one. Both read backwards at a
+  glance and both were landed wrong once; `AiControlLawTests` exists to keep them honest.
+⚠ Two pieces are deliberately unported: the emergency arm's altitude/velocity assist (it writes
+  model state, which this seam must not) and the intercept solver's second-root preference (which
+  `TryIntercept` does not expose, and which is unreachable on patrol).
 
 ## src/Flight/AiModeMachine.cs
 The nine-mode AI state machine (M4 D11), owned by `AiPilot.Machine` and stepped from its `Next`:

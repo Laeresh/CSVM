@@ -73,7 +73,7 @@ what a mission tells it to do.
 |---|---|---|
 | **Traced to an exact mechanism in code, with the data that proves it** | ~~C22~~, ~~C23~~, ~~C24~~, ~~C25~~, ~~C26~~ | Addresses and line cites are in `docs/org/flightModel.md`. Confirm the trace, then implement. ⚠ C25 landed the formulas as decoded but had to correct the PROSE around them, and C26 found its Evidence's slot list right but its consumers unstated: confirm a summary sentence against the formula it cites before building on it |
 | **Traced statically, never verified at runtime** | ~~A1, A2~~ | Both landed 2026-08-15, and both readings were wrong: there is no AI density band and no AI throttle setpoint. Read their landing notes before citing flightModel.md's older AI-path claims, several of which are debug-copy citations |
-| **Leads only, no mechanism yet** | ~~D31~~, E41 | ~~The AI control law has never been located.~~ **D31 landed 2026-08-15 and it is not a dead end**: the law is `FUN_0041b560`, decoded in [`org/aiControlLaw.md`](org/aiControlLaw.md). E41 is now a port against a traced mechanism, not a search. Read that page's "What this page does not settle" list before fitting any number, and read its gain-ordering warning before wiring any axis |
+| **Leads only, no mechanism yet** | ~~D31, E41~~ | ~~The AI control law has never been located.~~ **Both landed 2026-08-15**: the law is `FUN_0041b560`, decoded in [`org/aiControlLaw.md`](org/aiControlLaw.md) and ported as `Flight/AiControlLaw.cs`. ⚠ E41 had to correct THREE of D31's readings while porting (`rudder_tol`'s direction, the wings-level rule's geometry, and the missing def defaults). Trust the page as it stands now, and trust `AiControlLawTests` over the prose |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees, never use it in a
 worktree session here; use a local commit or a file copy.
@@ -153,7 +153,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E — Replace the placeholder
 
-41. ☐ E41 Port the control law into `AiPilot`
+41. ☑ E41 Port the control law into `AiPilot` (landed as `Flight/AiControlLaw.cs`; three D31 readings corrected in the process, one suite assertion re-pinned)
 42. ☐ E42 Retire the placeholder-support constants
 
 ### Wave F — Judge it
@@ -862,7 +862,42 @@ degrades accordingly.
 
 # Wave E — Replace the placeholder
 
-## E41 ☐ Port the control law into `AiPilot`
+## E41 ☑ Port the control law into `AiPilot`
+
+**Landed 2026-08-15 as `Flight/AiControlLaw.cs`.** The law is ported whole, and `AiPilot` keeps its
+contract: mutable orders, purity over model state and instance fields, and the mode dispatch. What
+changed shape is that each mode now picks an **aim point, that point's velocity and one of the four
+parameter tables**, which is the split the original itself has between its drivers and
+`FUN_0041b560`. The placeholder bank-to-turn law and its altitude leash are both deleted, per this
+item's own trap.
+
+**D31's blocking unknown is closed, and three of its readings were wrong.** The def initialiser
+`FUN_00478a00` carries the `ai_input_*` defaults nothing authors: scales **3.5**, limits **1.0**,
+the emergency set identical, `rudder_tol` **0.2**, and a fixed AI speed clamp of **0 to 111.76 m/s
+(250 mph)** that no parser token can reach. That last one matters most: every AI aircraft in the
+original shares one 250 mph ceiling regardless of airframe. The three corrections, all now pinned
+by `CSVM.Tests/AiControlLawTests`:
+
+1. **`rudder_tol` points the other way round.** Clearing the threshold selects the BANK branch, so
+   a higher value means MORE rudder. At the 0.2 default anything ahead is banked toward; `balmoral`
+   authors 1.0 and is therefore the one aeroplane that turns onto a target with rudder.
+2. **The wings-level rule is the dead-astern case, not the straight-ahead one.** The horizontal
+   pair is renormalised whenever the aim point is ahead, so both components can only be tiny when
+   the aim is within about 5 degrees of directly behind.
+3. **A scale of 3.5 against a limit of 1.0 makes the output stage near-bang-bang**, not
+   proportional, for any aim error past about 0.29.
+
+**Verify.** `RunTests.ps1` green at the final state: units 1334 → 1344, engine 61/61, 14 goldens
+hash-identical, hitch clean, exit 0. `AiPilotTests` passed **unchanged**, which is the useful
+result rather than a re-pin: the two laws agree on course-holding, capture and retargeting. One
+`ai-modes` assertion was re-pinned with its reason in the suite (pursue no longer assigns the lever
+at 1; the law walks it as a speed controller between the engaged table's 0.3 and 1.3).
+
+**Not ported, recorded rather than papered over:** the emergency arm's altitude/velocity assist
+(it writes model state, which this seam must not), the intercept solver's second-root preference
+(unreachable on patrol, and suppressed by the original itself while engaged), and lay off's
+throttle override, which stays D15's invented speed match rather than the decoded break-off arm
+because D15 is a landed and playtested feature. All three are `E42`/`F52` business.
 
 **Goal.** `AiPilot.Next` produces stick by the original's rule rather than by the invented
 bank-to-turn law, through the same class seam the module doc already names.

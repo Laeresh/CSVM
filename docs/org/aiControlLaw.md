@@ -120,6 +120,13 @@ Then, when `emergency` is clear: `want` is held within 26.8224 m/s (60 mph) of `
 `fd_speed · params[1]`, floored at 22.352 m/s (50 mph), and finally clamped to the pair at
 `def+0x1e4`/`def+0x1e8`.
 
+⚠ **That last pair is `0.0` and `111.76 m/s` (250 mph) on every airframe.** No parser token writes
+either slot; the def initialiser sets them (`FUN_00478a00`, `0x478d47` and `0x478d52`) and the
+`kind_of` copy propagates them unchanged. So **the AI's desired speed is capped at 250 mph
+regardless of airframe**, and on the faster fighters that ceiling binds well before
+`fd_speed · params[1]` does: a Bloodhawk chasing at `params[1] = 1.3` would ask for 393 mph and
+gets 250. Recovered 2026-08-15 while landing `E41`; D31 left it named as unresolved.
+
 When `emergency` is set, `want` is 22.352 m/s, and with the nose above the horizon the law
 **writes the aircraft's own state**: it adds `dt · noseY · 4.0` to the altitude and, if the vertical
 velocity is below `-22.352 · noseY`, eases it toward that value at rate 0.5 and rewrites the
@@ -151,30 +158,55 @@ throttle = clamp(throttle, params[0], params[1])
 is ahead (`bz > 0`), pitch and yaw start at zero and:
 
 ```
-if h > def+0x260 (rudder_tol) or |bx| <= |by|:       vertical-dominant
+if h > def+0x260 (rudder_tol) or |bx| <= |by|:       the ordinary branch
     if by < 0:  bx = -bx  when emergency or h < params[6],  else bx = sign(bx)
     roll = -bx
     if |bx| < params[2]:  pitch = by
-else:                                                lateral-dominant
+else:                                                the dead-astern branch
     if bx < 0:  by = -by
     roll = by
     if |by| < params[2]:  yaw = -bx
 ```
 
-Both branches command **roll** first. The lateral branch is bank-to-turn: it banks so the lift
-vector points at the target and lets the plant's own bank coupling do the turning, adding rudder
-only once the bank command is small. The vertical branch levels the wings laterally and pulls.
+⚠ **Read the branch test together with the renormalisation above it, or it reads backwards.**
+Because `h` is forced to exactly 1.0 whenever the target is ahead, `h > rudder_tol` (0.2 by
+default) is **true for every target in front of the aircraft**, so the first branch is the ordinary
+one: bank toward the lateral error, and add elevator once the bank command is nearly satisfied.
+That is bank-to-turn with a pull, and it lets the plant's own bank coupling do the turning.
 
-⚠ **`rudder_tol` is inert at the shipped value.** It is authored as `1.0` on the two defs that
-carry it, and `h` is at most 1.0 by construction, so `h > rudder_tol` never holds and the branch is
-chosen by `|bx|` against `|by|` alone. This is the same class of finding as
-[flightModel.md](flightModel.md)'s unreachable `high_speed_pitch_fade`: real code on a threshold
-the shipped data never reaches.
+At the default `rudder_tol` the second branch can only be reached when `bz <= 0`, and `h <= 0.2`
+then forces `|bz| >= 0.98`: the aim point is within about 11 degrees of **dead astern**. There the
+law banks on the *vertical* component and puts the *lateral* component on the rudder, which is how
+it breaks into a turn with nothing ahead to bank toward. Raising `rudder_tol` widens that cone, and
+at 1.0 it swallows the whole forward hemisphere as well (see the warning below).
 
-**7. Wings level.** When `emergency` is clear, the aim is nearly straight ahead
-(`|bx| < params[2]` and `|by| < params[3]`) and the aircraft is not near vertical
-(`|noseY| < 0.9`), the roll command is overwritten with `0.2 ·` a levelling term read off the
-right-wing vector's vertical component `obj+0x184`, sign-flipped when inverted.
+⚠ **`rudder_tol` reads the opposite way round to what its position in the test suggests, and D31
+had it backwards twice.** Settled 2026-08-15 while landing `E41`, and pinned by
+`CSVM.Tests/AiControlLawTests`. Clearing the threshold selects the BANK branch, so a **higher**
+`rudder_tol` yields **more** rudder, not less:
+
+| `rudder_tol` | Aim point ahead (`h` = 1) | Aim point behind |
+|---|---|---|
+| **0.2**, the def default | `1 > 0.2`, so always the bank branch | rudder once inside about 11 degrees of astern and the lateral error dominates |
+| **1.0**, authored by `autogyro` and `balmoral` | `1 > 1` is false, so the branch falls to `abs(bx) <= abs(by)`: a lateral-dominant error goes on the RUDDER | rudder whenever the lateral error dominates |
+
+So the key is what its name says, a tolerance on how much horizontal aim error justifies banking
+rather than ruddering, and the two defs that raise it to 1.0 are **rudder-steered aircraft**. The
+`autogyro` is class 1 and never reaches this law, which leaves the **`balmoral` as the one
+aeroplane in the game that turns onto a target ahead with rudder instead of bank.**
+
+**7. Wings level.** When `emergency` is clear, both `|bx| < params[2]` and `|by| < params[3]`, and
+the aircraft is not near vertical (`|noseY| < 0.9`), the roll command is overwritten with `0.2 ·` a
+levelling term read off the right-wing vector's vertical component `obj+0x184`, sign-flipped when
+inverted.
+
+⚠ **This is the DEAD-ASTERN case, not the straight-ahead one, and the renormalisation is again
+why.** Whenever the aim point is ahead, `(bx, by)` is scaled to unit length, so at least one of
+them is at least 0.707 and the pair can never both sit under 0.06. Both small therefore forces
+`bz <= 0` and `|bz| > 0.996`: the aim point is within about 5 degrees of dead astern. What the rule
+actually says is "the thing I want is directly behind me, so stop steering and roll the wings
+level". Note also the edge case one step earlier: an aim point EXACTLY ahead gives `h == 0` before
+renormalisation, and the law sets `by = 1`, which is full elevator.
 
 **8. Low-speed recovery.** Nose more than 0.5 below the horizon and speed under 26.8224 m/s
 (60 mph) forces pitch to `-1.0` upright or `+1.0` inverted (pull toward level either way) and the
@@ -282,12 +314,35 @@ different files. A port that assumes one order throughout will swap the pitch an
 The emergency set repeats the same six at `+0x18` further on, `+0x8dc`…`+0x8f0`, and `emergency` is
 set only by the avoid-crash arm and one of the wingman driver's two calls.
 
-**What the shipped data authors.** Nothing on the roster side: all twelve slots read `-1.0`. On the
-def side, only `ai_input_limit_pitch` (11 defs, 0.79 to 0.91) and one `ai_input_limit_yaw` (0.79).
-Everything else inherits down the `kind_of` chain, which `FUN_00477b70` copies as one six-slot block
-(`0x478942`–`0x47897e`). ⚠ **The compiled default the chain terminates at has not been read**, and
-`E41` needs it: an unauthored scale of 0 would leave an AI with no stick at all, so the default is
-not zero and must be recovered before the port fixes numbers.
+**What the shipped data authors.** Nothing on the roster side: all twelve slots read `-1.0`, on
+every block of every mission checked (59 blocks across 6 missions, and `ai-rosters.md`'s own census
+puts the whole column at one constant). On the def side, only `ai_input_limit_pitch` (11 defs, 0.79
+to 0.91) and one `ai_input_limit_yaw` (0.79, on `firebrand`'s neighbour in the file). Everything
+else inherits down the `kind_of` chain, which `FUN_00477b70` copies as one six-slot block
+(`0x478942`–`0x47897e`), and terminates at the def initialiser's compiled defaults.
+
+**The compiled defaults**, read from `FUN_00478a00` (`0x478dd6`–`0x478e28`). Recovered 2026-08-15
+while landing `E41`; D31 left this open:
+
+| Def slot | Default | Set at |
+|---|---|---|
+| `+0x260` `rudder_tol` | **0.2** | `0x478dd6` |
+| `+0x264`/`+0x268`/`+0x26c` scales, roll/pitch/yaw | **3.5** each | `0x478de0`–`0x478dec` |
+| `+0x270`/`+0x274`/`+0x278` limits, roll/pitch/yaw | **1.0** each | `0x478df2`–`0x478dfe` |
+| `+0x27c`/`+0x280`/`+0x284` emergency scales | **3.5** each | `0x478e04`–`0x478e10` |
+| `+0x288`/`+0x28c`/`+0x290` emergency limits | **1.0** each | `0x478e16`–`0x478e22` |
+
+⚠ **The emergency block's defaults are identical to the normal block's, and nothing in the shipped
+data authors any emergency slot.** So on every shipped airframe the `emergency` flag changes *which
+behaviours run* inside the law (the 22.352 m/s target, the climb assist, the suppressed wings-level
+rule and the suppressed skill multiplier) and **not the gains**. A port may share one gain pair
+between the two arms and still be exact against this install.
+
+So the effective per-axis stage on a stock airframe is **scale 3.5, limit 1.0** on all three axes,
+with pitch limited to 0.79–0.91 instead of 1.0 on the eleven defs that say so. A scale of 3.5
+against a limit of 1.0 means the law saturates its own output for any aim error over about 0.29 in
+the body frame: the stage is a **near-bang-bang** one, not a proportional one, for all but small
+errors.
 
 ## The skill scalar, and how a 1 to 9 rating interpolates
 
@@ -318,10 +373,6 @@ on being pursued.
 
 Named so they are not mistaken for decoded:
 
-- **The compiled default of the `ai_input_*` def slots** (above). The next step is reading the def
-  constructor's initialisation of `+0x264`…`+0x278`.
-- **`def+0x1e4`/`+0x1e8`**, the final speed clamp in step 2. The vehicle def parser writes neither,
-  so they arrive from somewhere else in the def's construction.
 - **`obj+0xb4`**, the deadline that cuts the skill scalar to a tenth while the clock is short of it.
 - **`obj+0x314`**, the aim-altitude ceiling, and the global floor `DAT_0071c3f0`.
 - **`FUN_004216e0`**, the mode-2 danger-zone driver, characterised only as far as "writes no channel

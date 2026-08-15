@@ -6034,8 +6034,8 @@ public static class Suites
             ctx.Check(transitions.Contains("pursue>lay off"),
                 $"…logged as pursue>lay off transitions=[{string.Join(" ", transitions)}]");
 
-            // The observable assist, through the live pilot: the throttle eases off flat-out
-            // (pursue's is 1) and the gunner's trigger is held for the whole dwell.
+            // The observable assist, through the live pilot: the throttle eases off pursue's own
+            // lever and the gunner's trigger is held for the whole dwell.
             Step(30);
             ctx.Check(machine.Mode == AiMode.LayOff,
                 $"the anti-chatter hold keeps the mode mode={AiModeMachine.NameOf(machine.Mode)}");
@@ -6044,13 +6044,22 @@ public static class Suites
             ctx.Check(!pilot.Gunner.WantsFire, $"fire is held while laying off");
 
             // The parked target is not actually chasing, so once the hold expires the machine
-            // releases back to pursue and the throttle runs flat out again.
+            // releases back to pursue and the lever runs back up to its ceiling.
+            // RE-PINNED AT E41 (was "IsEqualApprox(Throttle, 1f)"): pursue no longer assigns the
+            // lever at all. AiControlLaw WALKS it at 0.35/s toward its own desired speed, between
+            // the engaged table's 0.3 floor and 1.3 ceiling, so it is a speed controller and not a
+            // setpoint: measured 1.295 five frames after release, then back to 1.149 by frame 30
+            // once the desired speed was met. Pinning an exact value would pin the settling
+            // transient, so the check is the behaviour the old one meant — the assist has let go
+            // and the AI is commanding past full again. Above 1 is the original's own range (three
+            // of its four tables put params[1] over 1.0); FlightModel.Step clamps the lever to
+            // [0,1] as it consumes it, so >1 reads as "full, and still wanting more".
             Step(150);
             ctx.Check(machine.Mode == AiMode.Pursue,
                 $"a non-pursuing target releases lay off after the hold mode={AiModeMachine.NameOf(machine.Mode)}");
             Step(5);
-            ctx.Check(Mathf.IsEqualApprox(pilot.Throttle, 1f),
-                $"…and pursue runs flat out again throttle={pilot.Throttle:0.00}");
+            ctx.Check(pilot.Throttle > 1f,
+                $"…and pursue commands past full again throttle={pilot.Throttle:0.000}");
 
             ctx.Note($"transitions: {string.Join(" ", transitions)}");
         }

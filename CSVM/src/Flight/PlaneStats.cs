@@ -90,6 +90,33 @@ public sealed class PlaneStats
     public float AiAttackRange = 2000f;
     public float AiReturnRange = 1200f;
 
+    // The AI control law's per-axis output stage (docs/org/aiControlLaw.md, E41): the law's roll,
+    // pitch and yaw commands are multiplied by these three scales and then clamped to these three
+    // limits. Fallbacks are the def initialiser's own compiled defaults, which is what every
+    // airframe in this install actually flies on — no roster block authors them (all twelve slots
+    // are -1.0, the fall-through marker) and the shipped defs author only ai_input_limit_pitch, on
+    // eleven of them, at 0.79-0.91.
+    // ⚠ A scale of 3.5 against a limit of 1.0 saturates for any body-frame aim error over ~0.29, so
+    // this stage is NEAR-BANG-BANG, not proportional. That is the decoded behaviour, not a bug.
+    // ⚠ The original's ai_emerg_input_* set is deliberately NOT mirrored: its compiled defaults are
+    // identical to these and nothing in this install authors a single emergency slot, so crash
+    // recovery would read the same six numbers. Add the six fields only if a data edit makes them
+    // differ.
+    public float AiInputScaleRoll = 3.5f;
+    public float AiInputScalePitch = 3.5f;
+    public float AiInputScaleYaw = 3.5f;
+    public float AiInputLimitRoll = 1f;
+    public float AiInputLimitPitch = 1f;
+    public float AiInputLimitYaw = 1f;
+
+    // rudder_tol: how much horizontal aim error justifies banking rather than ruddering
+    // (docs/org/aiControlLaw.md). ⚠ A HIGHER value means MORE rudder, not less — clearing the
+    // threshold is what selects the bank branch. At the 0.2 default any target ahead is banked
+    // toward and the rudder is reserved for targets nearly dead astern; `autogyro` and `balmoral`
+    // author 1.0, the ceiling the compared quantity can never exceed, which puts a lateral-dominant
+    // error on the rudder even dead ahead. Only `balmoral` reaches this law (the autogyro is class 1).
+    public float RudderTol = 0.2f;
+
     // player.json globals
     public float Gravity = PhysicsConstants.NomGravity; // nom_gravity — the game's arcade gravity, m/s²
     public float StallMag = 1.25f;
@@ -317,6 +344,14 @@ public sealed class PlaneStats
             FlightCeiling = Prop("flight_ceiling", 2500f),
             AiAttackRange = Prop("attack", 2000f),
             AiReturnRange = Prop("return_range", 1200f),
+            // Fallbacks are the def initialiser's compiled defaults, not guesses — see the fields.
+            AiInputScaleRoll = Prop("ai_input_scale_roll", 3.5f),
+            AiInputScalePitch = Prop("ai_input_scale_pitch", 3.5f),
+            AiInputScaleYaw = Prop("ai_input_scale_yaw", 3.5f),
+            AiInputLimitRoll = Prop("ai_input_limit_roll", 1f),
+            AiInputLimitPitch = Prop("ai_input_limit_pitch", 1f),
+            AiInputLimitYaw = Prop("ai_input_limit_yaw", 1f),
+            RudderTol = Prop("rudder_tol", 0.2f),
         };
         stats.EngineSound = PropStr("engine_sound", stats.EngineSound);
 
