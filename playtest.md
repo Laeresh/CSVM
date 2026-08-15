@@ -126,6 +126,12 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
 
+### AI flight — an AI aircraft flying itself, external view
+
+| ID | Capture | What must be in frame | Unblocks |
+|---|---|---|---|
+| `CAP-37` | An AI aircraft flying a patrol/attack loop, unprompted by the player | An AI-controlled aircraft in external/chase view, held long enough to cover a sustained turn, a low-speed moment and a patrol leg's end, with the player's own aircraft in frame where possible for a same-shot comparison. Behavioural and comparative questions only, **no absolute distances or speeds read off this footage** (`docs/verification.md`; a decode is never contested with a footage-derived measurement): does it gain altitude through a sustained turn or hold it; is its turn tighter or wider than the player's in the same airframe; does it hold a speed through manoeuvres or bleed and recover like a lever-driven aircraft; does it wallow at low speed or stay crisp; what does it do at the end of a patrol leg | `docs/PLAN-ai-flight.md` F52 (the AI-side at-the-controls verdict for waves C and E) |
+
 ---
 
 ## 1 · Actionable now (`PT-nn`)

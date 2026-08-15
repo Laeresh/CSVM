@@ -158,7 +158,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave F — Judge it
 
-51. ☐ F51 Capture the original's AI flying
+51. ☑ F51 Capture the original's AI flying (minted `CAP-37`, `playtest.md`)
 52. ☐ F52 The at-the-controls verdict, AI side and player side
 
 ## Dependency and parallelism notes
@@ -1000,7 +1000,14 @@ radii are a different consumer of the same follower, do not change them here.
 
 # Wave F — Judge it
 
-## F51 ☐ Capture the original's AI flying
+## F51 ☑ Capture the original's AI flying
+
+**Landed 2026-08-15.** `CAP-37` minted with `New-ItemId.ps1 -Kind CAP` and added to
+`playtest.md`'s owed-captures table under a new "AI flight" theme section, citing this plan's F52
+as the item it unblocks. No footage is shot yet — that is `playtest.md`'s job, done at the user's
+own pace — this item lands the capture spec itself: what must be in frame, and the behavioural and
+comparative questions it may be used to answer. The spec repeats the ⚠ below verbatim so a future
+reader of `playtest.md` alone (without this plan open) still gets the trap.
 
 **Goal.** Footage of the original's AI aircraft flying, sufficient to judge waves C and E
 behaviourally.
