@@ -360,10 +360,11 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
 
 ### C1 · Bloodhawk — Instant Action wingmen (`--ia=`)
 
-Save this as `ia-wingmen-test.json` next to the repo, then:
+Save this as `playtest/PT-50/ia-wingmen-test.json` (git-ignored, kept until the item closes) and
+launch it by ABSOLUTE path:
 
 ```powershell
-./RunGame.ps1 --ia=ia-wingmen-test.json --chapter=C1
+./RunGame.ps1 --ia=Z:\CSVM\playtest\PT-50\ia-wingmen-test.json --chapter=C1
 ```
 ```json
 {
@@ -373,6 +374,11 @@ Save this as `ia-wingmen-test.json` next to the repo, then:
   "wingman_plane": "Fury"
 }
 ```
+
+⚠ **A relative `--ia=` path resolves against the GODOT PROJECT directory** (`<repo>/CSVM/`), not
+the repo root and not your shell's directory: Godot chdirs there for `--path`, and the file is
+read with plain `File.ReadAllText`. Measured 2026-08-15, after this block spent a while telling
+you to put the file "next to the repo", where nothing would find it. Absolute paths always work.
 
 - `PT-50` `[Own]` **D9's wingman flight (`docs/plans/PLAN-instant-action.md` D9, landed 2026-08-14).**
   Three Fury wingmen spawn on team 1 alongside the player's Bloodhawk, fanned 100/100/200 m off
@@ -420,8 +426,21 @@ Save this as `ia-wingmen-test.json` next to the repo, then:
   *Blocks:* a pass closes `BL-364`'s landed half, leaving only its campaign-roster remainder. A
   fail on (b) is evidence for the placeholder law (Wave D/E scope), not for the net data; a fail on
   (a) or (c) is a fresh `BL` item.
-  *Variations:* add `"group1": { "num_enemies": 3, "enemy_plane": "Fury" }` to the section's
-  mission file. The section's own file has no enemies, so (a)–(d) need it.
+  ⚠ **Fly this from the worktree, not the main checkout**, until `worktree-ia-patrol-nets` is
+  merged: the fix is on that branch. `$env:CSVM_DATA_ROOT` already points at `Z:\CSVM`, so
+  `./RunGame.ps1` there finds Godot and the game data by itself. Its own mission file (the
+  section's has no enemies, and (a)–(d) need some) is staged at
+  `playtest/PT-51/ia-patrol-test.json`:
+
+  ```powershell
+  cd Z:\CSVM\.claude\worktrees\ia-patrol-nets
+  ./RunGame.ps1 --ia=Z:\CSVM\.claude\worktrees\ia-patrol-nets\playtest\PT-51\ia-patrol-test.json --chapter=C1
+  ```
+
+  Confirm the launch log says `ia: actors patrol 'M4ReinfAce' (net 10), the chapter's first`
+  before judging anything: without that line the actors have no net and (a)–(d) are moot.
+  *Variations:* another chapter to see a different first net (C1B walks `Patrolboat3`, C1C
+  `M1Defense`); `"mission_type": "dogfight_ace"` for the ace alone on the same net.
 
 ---
 
