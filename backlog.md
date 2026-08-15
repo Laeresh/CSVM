@@ -726,76 +726,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   half, whose blocker this decode voids), `docs/formats/ai-nets.md`, `docs/architecture.md` on
   `AiPilot` and `AiModeMachine`.
 
-- `BL-377` `[Bug]` **A net with an anchored trailer RIDES its target in the
-  original, and ours flew it as a fixed route. DECODED, LANDED and FLOWN 2026-08-15; what is left
-  is the splitscreen question, trap (d).** *Evidence:* the
-  user at the controls, 2026-08-15, flying `stunt_flying` with wingmen: the wingmen leave and
-  patrol the chapter's default net instead of staying with the player. That is what our code does,
-  and the original does not. [`docs/org/aiPilot.md`](docs/org/aiPilot.md) "The trailer":
-  `FUN_004314e0` resolves the trailer's NAME to an object at net build
-  (`FUN_004d0280(7, name)` → net `+0x1c`) and keeps the anchor node index at `+0x18`; every node
-  position then goes through `FUN_00432010`, which returns
-  `(node − anchor) + target` in X and Z with the node's **authored Y**. So an anchored net is a
-  PATTERN carried by a moving object, not a route.
-  *Scale:* 76 of 222 nets are anchored. Targets: `piratezep` ×25, `workersvoyagezep` ×11,
-  **`player` ×11**, `cargozep2` ×10, `sprucegoose` ×5, `cargozep1`/`mptrailer` ×3, and one each of
-  `train01`, `cargozep3`, `beowulfzep`, `dantezep`, `passenger_trengine`, `tanker`,
-  `britbalmoral_2`, `barracuda`. **Six of the eight chapters' FIRST nets are anchored** (the net
-  every Instant Action actor is handed, `BL-364`): C1 `[10, player]`, C1C `[6, workersvoyagezep]`,
-  C2 `[11, sprucegoose]`, C3 `[9, cargozep1]`, C4 `[9, train01]`; C1B and C5's are unanchored and
-  C2B's is `[-1]`. The anchor is the last node in every shipped case, parked off the ring.
-  ⚠ **It is team-blind, and mostly used on ENEMIES.** Of the 12 campaign `aiv` blocks flying a
-  player-anchored net, 8 are team 2 (`blakebloodhawk_8` on C1/M04's `M4ReinfAce`, C4/M02's three
-  `bhatbrigand_*`, C5/M02's four `stihellhound_5_*`) and 4 are team 1 (`devastator_1/2` in C3/M05
-  and C5/M03). Four of the 11 player-anchored nets are named `*Ace*`. So this is not "wingmen
-  escort you", it is "this flight operates on the player", and implementing it makes enemy aces
-  and reinforcement flights arrive on the player as much as it makes wingmen stay with them.
-  ✔ **Landed 2026-08-15** (`git log --grep=BL-377`). `AiNetFollower` takes an optional
-  target-position supplier and offsets EVERY node read through `NodePosition`, the seat scan
-  included; `Session/NetTrailerTargets` resolves the name, `player` to the player rig and anything
-  else to a world node through the same `FindNodes` lookup the zeppelins use, lazily and cached
-  because the AI is armed before the zeppelin hosts are placed. Riding is the caller's opt-in, so a
-  follower built without a supplier flies the authored coordinates, which is the engine's own
-  unresolved-target branch. Wired at all four assignment sites: Instant Action (ace, wingmen,
-  waves), `--ai=<plane>:<net>`, the egen generators and the zeppelins. The F13 overlay draws an
-  anchored graph where it actually is (each net is one `Node3D`, so the offset is that root's
-  position), which is what makes the leashes readable at all.
-  ✔ **The seat scan now skips edgeless nodes**, which is `FUN_00431900`'s own rule and was the
-  hidden half of the bug: the anchor is parked off the ring in all 76 anchored nets, and a plane
-  that seats on it has no neighbour to advance to and holds it forever.
-  ✔ **Seen at the controls 2026-08-15**, and it corrected two doc claims. C1 has TWO
-  player-anchored nets, `M4ReinfAce` #10 (400 m) and `M2Ace` #23 (350 m), so both ride the player
-  while only #10 is assigned to anything. And neither is a "ring": each is a closed cycle whose
-  geometry crosses itself into a **figure eight** (~550 × 1030 m and ~585 × 1105 m), with the
-  anchor at the centre of one LOBE, 255 m and 246 m off the centroid. So a netted AI passes close
-  through one lobe and about a kilometre out through the other, which is not what "orbits the
-  player" implied. [`docs/org/aiPilot.md`](docs/org/aiPilot.md) and
-  [`docs/formats/ai-nets.md`](docs/formats/ai-nets.md) are corrected.
-  ⚠ *Traps, and where each one stands.* (a) **Y is never offset**, so a pattern at 400 m stays at
-  400 m over a zeppelin at 200 m; done, and asserted. (b) The offset applies to EVERY node read; done via
-  the single `NodePosition`, asserted by a seat-scan test. (c) `ZeppelinMotion` shares the follower:
-  checked, and switched on. Exactly two of the 222 nets are both zeppelin-flown and anchored (C1C's
-  `SwanZep1` on `workersvoyagezep`, C2B's `Gemini2` on `piratezep`, one zeppelin escorting
-  another); neither is self-referential and both records are
-  `deactivated`, so nothing exercises it until a script layer wakes them. (d) **STILL OPEN.**
-  Splitscreen has 2–4 players and the engine's `player` is one object; rig 0 is used and no rule
-  (nearest player, host, per-plane) is invented, because the binary has none to copy. (e) An absent
-  target falls back to the authored positions; done, and asserted.
-  ✔ **Flown 2026-08-15 and it PASSES** (`PT-51`, now retired). With F13 up the graph visibly travels
-  with the player over kilometres rather than staying behind, and the actors on it, wingmen and
-  enemies alike, patrol around the player instead of around a fixed spot. Judged as reading right
-  rather than merely crowded: the enemies arrive in waves, so a team-blind net that brings them onto
-  the player is what the mission wants anyway. The altitude staying authored while the player climbs
-  was confirmed as the decoded behaviour at the controls, not read as a bug.
-  *Cross-refs:* `BL-364` (the first net every IA actor takes), `BL-362` (the wingman-station item:
-  this is a second, likelier mechanism for "wingmen stay with the player" in Instant Action),
-  [`docs/formats/ai-nets.md`](docs/formats/ai-nets.md), `BL-378` (net altitudes vs terrain).
-
 - `BL-378` `[Bug]` **Our AI has no terrain avoidance, so a net authored below a ridge flies AI into
   it. DECODED 2026-08-15; what is left is implementation.** *Evidence:* the user at the controls,
-  2026-08-15, on the `BL-377` build: C1's patrol nets sit at an authored 400 m (`M4ReinfAce`) and
-  350 m (`M2Ace`), which clashes with elevated terrain, and the nets now ride the player into any
-  part of the map.
+  2026-08-15, on the build that made anchored nets ride their target (`BL-377`, closed): C1's
+  patrol nets sit at an authored 400 m (`M4ReinfAce`) and 350 m (`M2Ace`), which clashes with
+  elevated terrain, and the nets now ride the player into any part of the map.
   ⚠ **The two natural fixes are both wrong, and the binary says so outright.** A net node's
   altitude is neither above-ground nor target-relative: `FUN_00432010` returns `out.y = node.y`
   verbatim, with the trailer offset applied to X and Z only
@@ -835,8 +770,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   and `--debug-markers`, and watch a netted enemy cross a ridge that sits above the net's authored
   400 m: it should pitch up and climb out of the state on its own rather than fly into the slope,
   and it should return to the graph afterwards rather than stay in the climb.
-  *Cross-refs:* `BL-377` (the ride that made this visible), `BL-364`,
-  [`docs/org/aiPilot.md`](docs/org/aiPilot.md).
+  *Cross-refs:* `BL-364`,
+  [`docs/org/aiPilot.md`](docs/org/aiPilot.md) "The trailer" (the anchored-net ride that carries a
+  net over any terrain and so made this visible; closed as `BL-377`,
+  `git log --grep=BL-377`).
 
 ## Flight model & collision physics
 
@@ -3303,7 +3240,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   2026-08-15): an Instant Action wingman IS given the chapter's first net. So the sentence that
   followed it here, "a wingman has no net, so the trailer half cannot be the mechanism", was wrong
   twice over, and is struck: in C1 that first net is `[10, "player"]`, so the trailer half is
-  exactly the mechanism there (`BL-377`, landed).
+  exactly the mechanism there (`BL-377`, landed and closed).
   *Fix shape:* answer the decode question first, then a station-keeping input source in `AiPilot`
   dispatched from `AiModeMachine`. Do not invent a formation offset ahead of it: `WingmanSlotFor`'s
   fan is decoded as a SPAWN placement, and reusing it as a flying station is a guess wearing a
@@ -3329,8 +3266,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   netless wingmen are the campaign's `wingman_N` / `bswingman_N` roster blocks. Read off the code
   path, not observed at the controls of the original, so an IA capture would be worth having before
   building station-keeping for that mode.
-  ✔ **And Instant Action's half is now DELIVERED, by a different mechanism** (`BL-377`, landed
-  2026-08-15). An IA wingman takes the chapter's first net, and in C1 that net is anchored to the
+  ✔ **And Instant Action's half is now DELIVERED, by a different mechanism** (`BL-377`, landed and
+  closed 2026-08-15; [`docs/org/aiPilot.md`](docs/org/aiPilot.md) "The trailer" is the decode, and
+  `git log --grep=BL-377` the work). An IA wingman takes the chapter's first net, and in C1 that
+  net is anchored to the
   `player`, so the whole graph is carried around the player and the wingman patrols around them
   without any station-keeping at all. So "wingmen never form up on the player" is answered for
   Instant Action by the original's own means; what remains here is the CAMPAIGN's netless
@@ -3347,8 +3286,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the 700 m join threshold inward, and trail at the speed-ramped distance when it is chasing.
   *Cross-refs:* [`docs/org/aiPilot.md`](docs/org/aiPilot.md) (the decode), `BL-363` (the other half
   of the same playtest: an escort with nothing targetable), `BL-364` (the patrol nets, and the
-  correction to `instant-action.md` this rests on), `BL-377` (the anchored net that delivers the IA
-  half).
+  correction to `instant-action.md` this rests on),
+  [`docs/formats/ai-nets.md`](docs/formats/ai-nets.md) (the anchored net that delivers the IA half,
+  closed as `BL-377`).
 
 ## Tooling, platform & docs
 

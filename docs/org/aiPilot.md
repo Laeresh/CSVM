@@ -164,7 +164,8 @@ itself.
 Implemented 2026-08-15 (`BL-377`): `AiNetFollower.NodePosition` applies the offset to every node
 read and `Session/NetTrailerTargets` resolves the name, `player` to the player rig and anything else
 to a world node. The one thing the binary cannot answer is whose position `player` means with a
-split field; rig 0 is used and nothing else is invented.
+split field, because the original has no splitscreen; the call (2026-08-15) is that split play
+matches single player, so rig 0 is used and nothing else is invented.
 
 ## The patrol-net follower has no netless branch
 

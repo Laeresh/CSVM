@@ -17,11 +17,11 @@ namespace CSVM.Session;
 /// hundred lines later. The result (hit or miss) is then cached per name, so a target that never
 /// resolves costs one search, not one per frame.</para>
 ///
-/// <para><b>⚠ <c>player</c> is one object in the binary and 2–4 rigs here.</b> Splitscreen is
-/// outside what the executable can answer, so this hands back the FIRST rig and says so once in
-/// the log rather than inventing a rule (nearest player, host player, per-plane pick). A session
-/// with no player rig at all resolves nothing and the net is flown at its authored
-/// coordinates.</para>
+/// <para><b>⚠ <c>player</c> is one object in the binary and 2–4 rigs here.</b> The original has no
+/// splitscreen, so there is no behaviour to copy; the decision (2026-08-15) is that split play
+/// matches single player, which is the FIRST rig for every anchored net, and no rule (nearest
+/// player, host player, per-plane pick) is invented. A session with no player rig at all resolves
+/// nothing and the net is flown at its authored coordinates.</para>
 /// </summary>
 public sealed class NetTrailerTargets
 {

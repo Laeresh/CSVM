@@ -5416,9 +5416,10 @@ Pinned by `NetTrailerTargetsTests` + the `ai-net-follow` suite.
 ⚠ The name resolve is lazy-once and CACHED, hit or miss. The original resolves at net build
   (`FUN_004314e0`); here the nets are read and the AI armed before `ZeppelinRuntime` has placed its
   hosts, so a build-time resolve would miss targets that exist a few hundred lines later.
-⚠ `player` is ONE object in the binary and 2–4 rigs here. Splitscreen is outside what the
-  executable can answer, so rig 0 is handed back and nothing is invented (nearest player, host
-  player, per-plane pick). This is `BL-377` trap (d), still open as a design question.
+⚠ `player` is ONE object in the binary and 2–4 rigs here. The original has no splitscreen, so
+  there is nothing to be faithful to; the user's call (2026-08-15) is that split play behaves as
+  single player does, so rig 0 is handed back and no rule (nearest player, host player, per-plane
+  pick) is invented. Settled, not deferred.
 ⚠ A freed target (a killed zeppelin's node) falls back to the authored coordinates rather than
   throwing on a stale handle.
 

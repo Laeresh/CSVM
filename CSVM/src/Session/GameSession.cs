@@ -2098,7 +2098,7 @@ public partial class GameSession : Node3D
         }
         // BL-377: an anchored net RIDES its trailer target, so every follower built below gets a
         // supplier for the object its net names. The player is rig 0 (the binary has one 'player'
-        // and splitscreen has up to four; NetTrailerTargets says why that is not invented here),
+        // and no splitscreen at all, so split play matches single player; NetTrailerTargets says so),
         // anything else is a world node, looked up the same way the zeppelin runtime looks its
         // hosts up. A name that resolves to nothing leaves the net at its authored coordinates.
         var netTrailers = _netTrailers = new NetTrailerTargets(
