@@ -5,7 +5,7 @@ namespace CSVM.Flight;
 /// <summary>Which hand-authored burst stands in for an impact when no authored asset renders it.
 /// <c>None</c> means an authored gamez model was instanced and nothing stands in; <c>Spark</c> is
 /// the single-sprite base case every surface falls back to.</summary>
-public enum ImpactStandIn { None, Spark, Explosion, DirtDebris, Ricochet }
+public enum ImpactStandIn { None, Spark, Explosion, Ricochet }
 
 /// <summary>What should happen when one weapon hits one surface — the effect name, the sound, the
 /// stand-in and the damage numbers, as a value with no <c>Node3D</c> and no physics space behind
@@ -76,16 +76,22 @@ public readonly record struct ImpactOutcome
         };
     }
 
-    /// <summary>The stand-in ladder, in its load-bearing order: an instanced model beats everything;
-    /// a hardpoint weapon with nowhere to build its fireball gets the explosion; ground gets
-    /// tumbling debris; a gun off a building gets ricochet sparks; everything else gets the single
-    /// spark.
+    /// <summary>The stand-in ladder, in its order: an instanced model beats everything; a hardpoint
+    /// weapon with nowhere to build its fireball gets the explosion; a gun off a building gets
+    /// ricochet sparks; everything else, ground included, gets the single spark.
     ///
     /// <para>The ladder is ours, not the original's — it stands in for authored assets that do not
-    /// render here — so keying it by surface id did not narrow its arms to one id each. "Ground" is
-    /// every id that is not water, a building or an aircraft, which is the same set the
-    /// texture-derived class called <c>Default</c> before B11: an id-0-only debris arm would have
-    /// sparked on <c>dirt</c>(13) ground for no reason in the data or the decode.</para></summary>
+    /// render here.</para>
+    ///
+    /// <para><b>Ground has no arm of its own (BL-313, 2026-08-15).</b> It used to take a tumbling
+    /// chip burst on the <c>bit01</c>–<c>bit04</c> textures, inferred from the gunhit def's
+    /// zero-vertex <c>bit1</c>–<c>bit3</c> nodes. The original draws no such chips: those nodes each
+    /// carry one light record and render a single 1-pixel near-black point (<c>FUN_005524d0</c> /
+    /// <c>FUN_00554550</c> gate the light block on the light count alone), invisible against ground
+    /// at gameplay zoom. Ground must still return a non-<c>None</c> stand-in, because
+    /// <c>ProjectilePool</c> gates the world-effects <c>EffectSink</c> call on
+    /// <c>StandIn != None</c> — a <c>None</c> here would take the <c>blacksmokepuffer</c> with
+    /// it.</para></summary>
     private static ImpactStandIn StandInFor(WeaponDef weapon, int surfaceId, bool modelResolved,
         bool hasEffectsRuntime)
     {
@@ -93,17 +99,8 @@ public readonly record struct ImpactOutcome
             return ImpactStandIn.None;
         if (!weapon.IsGun && !hasEffectsRuntime)
             return ImpactStandIn.Explosion;
-        if (IsGround(surfaceId))
-            return ImpactStandIn.DirtDebris;
         if (surfaceId == SurfaceRegistry.Buildings && weapon.IsGun)
             return ImpactStandIn.Ricochet;
         return ImpactStandIn.Spark;
     }
-
-    /// <summary>Whether a struck id is ground — terrain of any registry name, i.e. not water, not
-    /// a building and not an aircraft. An out-of-range id lands here too, which is the same answer
-    /// its unauthored row already gives.</summary>
-    private static bool IsGround(int surfaceId) =>
-        surfaceId != SurfaceRegistry.Water && surfaceId != SurfaceRegistry.Buildings
-        && surfaceId != SurfaceRegistry.Player && surfaceId != SurfaceRegistry.Enemy;
 }

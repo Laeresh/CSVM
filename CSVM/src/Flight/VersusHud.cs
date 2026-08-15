@@ -33,6 +33,11 @@ namespace CSVM.Flight;
 /// no gunner, so there is no D12 "the target" to mirror; nearest-hostile is the shipped rule,
 /// re-evaluated per frame, which is VS mode's own no-lock behaviour. The hostile draws through
 /// <see cref="DrawOpponent"/> unchanged, in the HUD's hostile red.</para>
+///
+/// <para><c>--debug-markers</c> (<see cref="MarkAll"/>) widens that one marker to EVERY live
+/// aircraft the pool lists, red for a hostile team and blue for this pane's own side, each
+/// tagged with its slant range. It is a watching aid for AI work, not a gameplay feature: the
+/// shipped HUD marks exactly one hostile and the flag is off unless asked for.</para>
 /// </summary>
 public sealed partial class VersusHud : Control
 {
@@ -51,6 +56,18 @@ public sealed partial class VersusHud : Control
     /// hostile drops without extra plumbing.</summary>
     public ProjectilePool? HostilePool;
 
+    /// <summary><c>--debug-markers</c>: mark EVERY live aircraft in <see cref="HostilePool"/>
+    /// instead of the single nearest hostile: red for a hostile team, blue for this pane's own
+    /// side, each with its tag and slant range. A watching aid while the AI is being worked on
+    /// (which of six planes is the one that flew off), off by default and never a gameplay
+    /// feature: the shipped marker is exactly one hostile.</summary>
+    public bool MarkAll;
+
+    /// <summary>This pane's own aircraft, excluded from <see cref="MarkAll"/>'s sweep. Null marks
+    /// everything the pool lists, which is what the suite wants and what a pane with no aircraft
+    /// of its own (a spectator) should see.</summary>
+    public FlightController? Own;
+
     // 1440p reference metrics (scaled by HudMetrics — matches MarkerHud's calibration).
     private const int RefStatusFont = 19;
     private const int RefBannerFont = 24;
@@ -64,12 +81,14 @@ public sealed partial class VersusHud : Control
     private const float RefArrowHalf = 8f;
     private const float RefTextGap = 8f;
     private const float RefOnScreenLift = 22f; // gap above a plane's own projected point
+    private const float RefStaggerStep = 18f;  // --debug-markers: gap between two edge tags on one bearing
 
     private static readonly Color HudBlue = new(0.55f, 0.78f, 1f);
     private static readonly Color HudRed = new(1f, 0.55f, 0.55f);
     private static readonly Color Shadow = new(0f, 0f, 0f, 0.75f);
 
     private readonly AimCandidateSet _hostileScan = new(); // rebuilt per frame, aircraft list only
+    private readonly List<(FlightController Plane, bool Friendly)> _marks = new(); // --debug-markers
 
     private VersusMatch? _match;
     private Camera3D _camera = null!;
@@ -148,6 +167,32 @@ public sealed partial class VersusHud : Control
 
         return best;
     }
+
+    /// <summary>Every live aircraft in <paramref name="scan"/> paired with whether it is on
+    /// <paramref name="ownTeam"/> (<c>--debug-markers</c>), skipping <paramref name="own"/>. The
+    /// team test is the plain identity one, not the assist's: a neutral aircraft is nobody's
+    /// friend, so it marks hostile rather than vanishing, which is what a debugging overlay
+    /// wants. Pure over the snapshot, same contract as <see cref="NearestHostile"/>.</summary>
+    public static void CollectMarks(int ownTeam, object? own, AimCandidateSet scan,
+        List<(FlightController Plane, bool Friendly)> into)
+    {
+        foreach (var c in scan.Vehicles)
+        {
+            if (!c.Live || ReferenceEquals(c.Source, own))
+                continue;
+            if (c.Source is not FlightController fc)
+                continue;
+            into.Add((fc, c.Team == ownTeam && c.Team != AimAssist.NeutralTeam));
+        }
+    }
+
+    /// <summary>A marked plane's current AI mode in the ENGINE's own vocabulary
+    /// (<see cref="AiModeMachine.NameOf"/>: patrol / pursue / lay off / evade / evasive maneuver /
+    /// stunned / avoid crash), or empty for anything without a mode machine (a human seat, or an
+    /// AI flying bare orders). <c>--debug-markers</c> only; the shipped marker carries a tag and a
+    /// bearing, nothing about the other pilot's state.</summary>
+    public static string ModeSuffix(FlightController plane) =>
+        plane.Pilot?.Machine is { } machine ? $"  {AiModeMachine.NameOf(machine.Mode)}" : "";
 
     /// <summary>The marker tag for a hostile: the controller name's first '_'-segment,
     /// uppercased ("ai1_player_fury" reads "AI1"), "AI" when the name yields nothing.</summary>
@@ -239,6 +284,27 @@ public sealed partial class VersusHud : Control
 
         int markerFont = Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s));
 
+        // --debug-markers: every live aircraft at once, red hostile / blue own side, each with
+        // its slant range. Replaces the single-hostile marker below rather than stacking on it,
+        // so the tracked one is not drawn twice in two colours.
+        if (MarkAll && HostilePool != null)
+        {
+            _marks.Clear();
+            CollectMarks(AimAssist.TeamOfPilot(PlayerIndex), Own, _hostileScan, _marks);
+            int stagger = 0;
+            foreach (var (plane, friendly) in _marks)
+            {
+                if (!GodotObject.IsInstanceValid(plane) || !plane.IsInsideTree())
+                    continue;
+                var at = plane.GlobalPosition;
+                DrawOpponent(font, at, friendly ? HudBlue : HudRed,
+                    $"{HostileTag(plane.Name)} {PlanePos.DistanceTo(at):0} m{ModeSuffix(plane)}",
+                    s, markerFont, stagger++);
+            }
+
+            return;
+        }
+
         // The tracked AI hostile (H22): the same marker as a VS opponent, in the hostile red.
         // UpdateHostile ran this frame, so the reference is at most one scan old; the validity
         // guard covers a hostile freed between the scan and this draw.
@@ -291,7 +357,8 @@ public sealed partial class VersusHud : Control
     /// <summary>One opponent's marker: on screen, their tag floats just above the projected
     /// point; off screen (or behind), an edge arrow + "N o'clock" bearing — MarkerHud's on-screen/
     /// edge-arrow branch, one instance per opponent instead of one stunt zone.</summary>
-    private void DrawOpponent(Font font, Vector3 pos, Color color, string tag, float s, int fontSize)
+    private void DrawOpponent(Font font, Vector3 pos, Color color, string tag, float s, int fontSize,
+        int stagger = 0)
     {
         bool behind = _camera.IsPositionBehind(pos);
         Vector2 sp = _camera.UnprojectPosition(pos);
@@ -311,8 +378,11 @@ public sealed partial class VersusHud : Control
         dir = dir.Normalized();
         var edge = EdgePoint(center, dir, m);
         DrawArrow(edge, dir, RefArrowLen * s, RefArrowHalf * s, s, color);
-        DrawTag(font, edge - dir * (RefArrowLen + RefTextGap) * s, $"{tag}  {ClockHour(pos)} o'clock",
-            color, fontSize);
+        // Several planes on one bearing put their tags on the same pixel (--debug-markers marks
+        // six at once); step each one along the screen edge so all of them stay readable.
+        var along = new Vector2(-dir.Y, dir.X) * (stagger * RefStaggerStep * s);
+        DrawTag(font, edge - dir * (RefArrowLen + RefTextGap) * s + along,
+            $"{tag}  {ClockHour(pos)} o'clock", color, fontSize);
     }
 
     /// <summary>Relative bearing of <paramref name="targetPos"/> from this pilot's own heading in

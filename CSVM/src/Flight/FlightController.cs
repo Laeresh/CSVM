@@ -296,8 +296,10 @@ public partial class FlightController : Node3D
 
     /// <summary>The non-player input source: set (with <see cref="IsHumanPiloted"/> false), it
     /// replaces the keyboard/pad read each sim step, the way <see cref="HoldSegments"/> does for
-    /// scripted runs — everything downstream of the input (flight model, collision, weapons,
-    /// damage, crash) is byte-for-byte the player's path. Its orders are mutable between steps;
+    /// scripted runs — collision, weapons, damage and crash downstream of it are byte-for-byte the
+    /// player's path. The FLIGHT MODEL is the one exception, and only since C21: the plant selects
+    /// the original's AI force path off this same human/AI split, once at construction
+    /// (<see cref="FlightModel.UsesAiForcePath"/>). Its orders are mutable between steps;
     /// see <see cref="AiPilot"/>.</summary>
     public AiPilot? Pilot;
 
@@ -869,6 +871,10 @@ public partial class FlightController : Node3D
         if (dir.LengthSquared() > 1e-6f)
             _spawnAttitude = Basis.LookingAt(dir.Normalized(), Vector3.Up);
         Inert = false;
+        // The original snaps an activated vehicle to its net's nearest node (FUN_004b0f40 →
+        // FUN_00432010), which is what makes a teleported wave patrol where it ARRIVED rather
+        // than fly back to wherever it was parked.
+        Pilot?.Patrol?.Reseat();
         Respawn();
     }
 
@@ -976,9 +982,12 @@ public partial class FlightController : Node3D
         string struckPart = state?.Def.Name ?? dataPart;
         if (state != null)
         {
-            Visuals?.OnPartDamage(struckPart, state.Fraction);
+            Visuals?.OnPartDamage(struckPart, state.HealthFraction);
             Gauges?.OnPartDamage(struckPart); // damage dial: hit zone blinks 5 s
         }
+
+        // the def-level stages run off the hull pool even when the round went zone-less
+        Visuals?.OnHullDamage(Damage.SummaryHealthFraction);
 
         if (_projectileHitsLogged < 6)
         {
@@ -1519,7 +1528,7 @@ public partial class FlightController : Node3D
         if (!_crashed && !halted)
         {
             WingLights?.Advance(simDt);
-            Surfaces?.Advance(simDt, _lastInput);
+            Surfaces?.Advance(simDt, _lastInput, _model.ReverseAuthorityAt(_model.Speed));
             // damage-stage trails need no per-frame feed: the rig runtime's emitters follow
             // their pdpN/prop1 host nodes themselves
         }
@@ -1535,6 +1544,19 @@ public partial class FlightController : Node3D
             return false;
         return space.IntersectRay(
             PhysicsRayQueryParameters3D.Create(from, to, CollisionLayers.World)).Count > 0;
+    }
+
+    /// <summary>Whether anything the AI's avoid-crash ray can hit blocks the segment: the static
+    /// world or another aircraft, never this plane's own body. The original's ray has no vehicle
+    /// filter and excludes only the caster (its node is deactivated around the cast; see
+    /// docs/org/aiPilot.md, "What the ray can hit"), so this is not <see cref="WorldBlocksLine"/>.</summary>
+    internal bool AvoidCrashBlocksLine(Vector3 from, Vector3 to)
+    {
+        var space = GetWorld3D()?.DirectSpaceState;
+        if (space == null)
+            return false;
+        return space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+            from, to, CollisionLayers.WorldAndAircraft, Body?.ExcludeSelf)).Count > 0;
     }
 
     /// <summary>The rocket name the text readout shows: the resolved <c>MSG_WEAP_*</c> display name
@@ -1999,23 +2021,34 @@ public partial class FlightController : Node3D
         return true;
     }
 
-    /// <summary>Ground blow's probe (`BL-359`, docs/org/flightModel.md's "Ground blow"): a ray of
-    /// <c>groundblow_elev</c> metres from the aircraft origin along the nose, whose nearest hit's
-    /// WORLD normal and distance <see cref="FlightModel"/> turns into a bias on control response.
+    /// <summary>Ground blow's probe (`BL-359` player, C23 AI; docs/org/flightModel.md's "Ground
+    /// blow"): a ray of <c>groundblow_elev</c> metres from the aircraft origin along the nose, whose
+    /// nearest hit's WORLD normal and distance <see cref="FlightModel"/> turns into a bias on
+    /// control response — the SAME cast and falloff feed both the player's and the AI's law
+    /// (<see cref="FlightModel.GroundBlowTerm"/> branches on the response, not the probe).
     /// No hit leaves the input's normal at zero, which is the model's own "nothing there".
     /// <para>⚠ The mask is <see cref="CollisionLayers.World"/>, and that is the EMITTER RULE rather
     /// than an optimisation. In the original an aeroplane flying its own flight update never repels
-    /// the player, while terrain, scenery and the zeppelin all do — and the zeppelin does it as a
-    /// plain world node there exactly as it is one here. World holds precisely that set, since
-    /// <see cref="AircraftBody"/> is the only thing that carries the Aircraft layer.</para>
-    /// <para>⚠ Player-only, gated on <see cref="IsHumanPiloted"/> — the original's filter sits inside
-    /// its own human-versus-AI test. The AI's ground avoidance is a DIFFERENT law (a fixed push,
-    /// linear in proximity, unfiltered), not this one, so an AI plane must not be fed this
-    /// probe.</para></summary>
+    /// another aircraft, while terrain, scenery and the zeppelin all do — and the zeppelin does it as
+    /// a plain world node there exactly as it is one here. World holds precisely that set for both
+    /// paths: the original's vehicle-registry filter (excluding a scripted-path vehicle) sits inside
+    /// the PLAYER branch only, and this engine has no scripted-path vehicles carrying that filter's
+    /// mark to begin with, so there is nothing for the AI's "unfiltered" sweep to disagree with here.
+    /// <see cref="AircraftBody"/> is the only thing that carries the Aircraft layer, on both
+    /// paths.</para>
+    /// <para>⚠ Gated on <see cref="FlightModel.UsesAiForcePath"/> for a non-human pilot, not on
+    /// <see cref="IsHumanPiloted"/> alone: a plant constructed off the player path for an AI-flown
+    /// aircraft (test sites do this) stays unprobed, a pre-existing gap this item does not close.
+    /// Also skipped while
+    /// <see cref="AiPilot.Machine"/> reads <see cref="AiMode.Stunned"/> — <c>0x0048c317</c>'s own
+    /// gate, mode == stunned, so a stunned AI flies into terrain (flightModel.md:1369). Do not lift
+    /// this for a "fix"; the original does the same.</para></summary>
     private void ProbeGroundBlow(ref FlightInput input)
     {
         float elev = _model.Stats.GroundBlowElev;
-        if (!IsHumanPiloted || elev <= 0f)
+        if (elev <= 0f)
+            return;
+        if (!IsHumanPiloted && (!_model.UsesAiForcePath || Pilot?.Machine?.Mode == AiMode.Stunned))
             return;
         var space = GetWorld3D()?.DirectSpaceState;
         if (space == null)
@@ -2224,11 +2257,11 @@ public partial class FlightController : Node3D
     /// telemetry) see the flown value exactly as the keyboard ramp path leaves it.</summary>
     private FlightInput NextPilotInput(float dt)
     {
-        // The mode machine's terrain probe (D11 avoid crash) is this node's world-only LOS ray;
-        // wired lazily so a machine assigned after spawn still gets it, and never overwriting a
-        // probe a test injected.
+        // The mode machine's obstacle probe (D11 avoid crash) is this node's world-and-aircraft
+        // ray; wired lazily so a machine assigned after spawn still gets it, and never
+        // overwriting a probe a test injected.
         if (Pilot!.Machine is { ProbeBlocked: null } machine && IsInsideTree())
-            machine.ProbeBlocked = WorldBlocksLine;
+            machine.ProbeBlocked = AvoidCrashBlocksLine;
         var input = Pilot!.Next(_model, dt);
         _throttle = input.Throttle;
         return input;
@@ -2429,7 +2462,10 @@ public partial class FlightController : Node3D
     /// crash (severe impact, whole-vehicle health exhausted, or no damage data), true =
     /// survivable graze — the struck part takes severity-scaled damage, the plane is
     /// placed at the swept safe pose, its velocity deflects along the surface with
-    /// some tangential loss, and the attitude takes a lever-arm kick.</summary>
+    /// some tangential loss, a human-piloted aircraft additionally rebounds along the contact
+    /// normal (<see cref="FlightModel.BounceNormalSpeed"/>, the decoded <c>bounce_factor</c>
+    /// impulse — AI aircraft get the position correction alone, as in the original), and the
+    /// attitude takes a lever-arm kick.</summary>
     private bool SurviveHit(Vector3 prev, Vector3 step, float stopFrac, Vector3 impact,
         string hitName, string part, Vector3 normal, Node? hitBody)
     {
@@ -2456,9 +2492,12 @@ public partial class FlightController : Node3D
             string struckPart = state?.Def.Name ?? dataPart; // the resolver may redirect
             if (state != null)
             {
-                Visuals?.OnPartDamage(struckPart, state.Fraction);
+                Visuals?.OnPartDamage(struckPart, state.HealthFraction);
                 Gauges?.OnPartDamage(struckPart); // damage dial: hit zone blinks 5 s
             }
+
+            // the def-level stages run off the hull pool even when the graze went zone-less
+            Visuals?.OnHullDamage(Damage.SummaryHealthFraction);
 
             if (Damage.IsDestroyed)
             {
@@ -2487,6 +2526,29 @@ public partial class FlightController : Node3D
         _model.Speed = slideLen * (1f - GrazeFriction * vn / CrashSpeed);
         if (slideLen > 1e-4f)
             _model.VelocityDir = slide / slideLen;
+
+        // Restitution along the normal (C25/BL-172): the decoded impulse of FUN_0048d7f0, binding
+        // player.json's shipped bounce_factor rather than inventing a pushback. It replaces the
+        // normal component the slide above stripped out, and it reads the body rates this contact
+        // was entered with, so it is computed BEFORE the attitude kick below adds to them.
+        // ⚠ Player-only, as the original is: its impulse branch tests obj == the local-player
+        // pointer and that the player is not already crashed; an AI aircraft gets the position
+        // correction and nothing else. Gated on IsHumanPiloted for the same reason the sticky-bullet
+        // assist is (C21's recorded divergence — a single global player pointer is meaningless with
+        // 2-4 humans in splitscreen), and NOT on FlightModel.UsesAiForcePath: this is a second
+        // player/AI split at a different site, with the original's extra already-crashed test on it.
+        if (IsHumanPiloted && !_crashed)
+        {
+            float rebound = _model.BounceNormalSpeed(vel, normal, impact - _model.Position);
+            var bounced = _model.VelocityDir * _model.Speed + normal * rebound;
+            float bouncedLen = bounced.Length();
+            if (bouncedLen > 1e-4f)
+            {
+                _model.Speed = bouncedLen;
+                _model.VelocityDir = bounced / bouncedLen;
+            }
+        }
+
         var inv = _model.Attitude.Inverse();
         var lever = (inv * (impact - _model.Position)).Normalized();
         var kick = lever.Cross((inv * normal).Normalized());

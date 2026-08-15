@@ -68,7 +68,15 @@ public sealed class AiAircraftSpawner
         PaintScheme? scheme = null, int? team = null, bool inert = false)
     {
         int index = _spawned++;
-        var stats = _in.StatsFor(planeName);
+        // C26: the original's per-spawn ±5 % spread (PlaneStats.WithAiSpawnJitter), on a copy of the
+        // session's shared airframe cache. Its "not the player" test is read off IsHumanPiloted,
+        // C21's recorded divergence; its other two gates hold by construction here (no network play,
+        // and every airframe this spawner can fly resolves the class token `mode jet` = 0).
+        // ⚠ The original exempts its own class-4 `w*` wingman family and this engine cannot: an
+        // Instant Action wingman flies a player airframe. Divergence recorded in org/flightModel.md.
+        // Keyed by spawn ordinal rather than drawn off the shared spawn stream, so a --det replay
+        // reproduces it and no other subsystem's sequence moves.
+        var stats = _in.StatsFor(planeName).WithAiSpawnJitter(Rng.NewSystemRandom(Rng.Spawn, index, 0));
         if (pilot.Machine is { } machine)
         {
             // The airframe's shipped range gates (vehicle.json attack / return_range).
@@ -142,7 +150,11 @@ public sealed class AiAircraftSpawner
 
             // No camera rides an AI plane — Setup(null) skips the whole camera half — and CamParams
             // is camera tuning, so the default is passed rather than loading the plane's block.
-            controller.Setup(new FlightModel(stats), null, new CamParams(), pos, lookAt);
+            // The plant's force path is chosen once, here, off who is flying (C21): nobody, so the
+            // AI path. See FlightModel.UsesAiForcePath.
+            controller.Setup(
+                new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
+                null, new CamParams(), pos, lookAt);
             controller.Name = $"ai{index + 1}_{planeName}";
             _worldRoot.AddChild(controller);
 
@@ -160,6 +172,7 @@ public sealed class AiAircraftSpawner
 
         GD.Print($"ai: spawned '{planeName}' as {controller.Name} (shooter id " +
                  $"{controller.PlayerIndex}) pos=({pos.X:0},{pos.Y:0},{pos.Z:0}) " +
+                 $"jitter=(fd {stats.FdSpeed:0.0} thrust {stats.EnginePower:0.000}) " +
                  (inert ? "INERT " : "") +
                  (pilot.Patrol is { } patrol
                      ? $"net='{patrol.Net.Name}#{patrol.Net.Id}' ({patrol.Net.Nodes.Count} nodes)"

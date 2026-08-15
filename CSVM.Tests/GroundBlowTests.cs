@@ -30,6 +30,13 @@ public class GroundBlowTests
     private const float Mag = 10f;     // groundblow_mag — likewise
     private const float IntoFactor = 0.05f;
 
+    // AngMomentumDamp on Bhawk() below — needed only for the AI-law tests because, unlike the
+    // player law, the AI push does not read cmd, so the free dt·damp cancellation the player tests
+    // exploit (baseline.Dot(v), itself already dt·damp-scaled, supplying the addition's own missing
+    // factor) does not apply: the AI addition needs its dt·damp spelled out explicitly against a
+    // no-hit BASELINE.
+    private const float AngDamp = 5f;
+
     /// <summary>A slope ahead and below, its normal facing up and back at the aircraft — the cliff
     /// case, in BODY coordinates (nose −Z, up +Y, right +X). Its escape axis is body +X, i.e. the
     /// bias is pitch-up.</summary>
@@ -187,10 +194,84 @@ public class GroundBlowTests
             + $"{intoAlone:0.000000} (an unsuppressed steer would give {ifItRanAnyway:0.000000})");
     }
 
+    [Fact]
+    public void TheAiLawIsAFixedPushNotACommandProportionalOne()
+    {
+        // 0x0048c317: accum += V · (ai_groundblow · groundblow_mag), authored 0.5 × 10 = 5.0 — NOT
+        // ai_groundblow alone (0.15 is a different quantity: a further ×0.15 cut for the 2.5 s
+        // post-carrier-drop settling window, reachable via a zeppelin fighter-drop launch but not
+        // modelled here — see FlightModel.GroundBlowTerm's own note). This test fixes AiGroundBlow
+        // at the un-cut authored value, matching every production spawn outside that window. The
+        // push does not read cmd at all, so a full-deflection pitch command and a centred stick get
+        // the SAME bias relative to their own no-hit baseline.
+        const float aiGroundBlow = 0.5f;
+        var deflectedBase = OneStep(Basis.Identity, pitch: 1f, normal: Vector3.Zero, dist: 0f, ai: true);
+        var deflectedHit = OneStep(Basis.Identity, pitch: 1f, normal: SlopeNormalBody, dist: 0f, ai: true);
+        var centredBase = OneStep(Basis.Identity, pitch: 0f, normal: Vector3.Zero, dist: 0f, ai: true);
+        var centredHit = OneStep(Basis.Identity, pitch: 0f, normal: SlopeNormalBody, dist: 0f, ai: true);
+        var v = ExpectedAxis(0f);
+        var expected = ExpectedAiDelta(v, aiGroundBlow);
+
+        AssertMatches(deflectedBase + expected, deflectedHit, 0f);
+        AssertMatches(centredBase + expected, centredHit, 0f);
+    }
+
+    [Fact]
+    public void TheAiLawIsNeverSuppressedByCommandingIntoTheSurface()
+    {
+        // The player law halves an into-obstacle command; the AI law has no such branch at all —
+        // "independent of the AI's own command" applies to sign as much as magnitude.
+        const float aiGroundBlow = 0.5f;
+        var pushingInBase = OneStep(Basis.Identity, pitch: -1f, normal: Vector3.Zero, dist: 0f, ai: true);
+        var pushingInHit = OneStep(Basis.Identity, pitch: -1f, normal: SlopeNormalBody, dist: 0f, ai: true);
+        var v = ExpectedAxis(0f);
+        AssertMatches(pushingInBase + ExpectedAiDelta(v, aiGroundBlow), pushingInHit, 0f);
+    }
+
+    [Fact]
+    public void TheAiFalloffIsLinearInProximityRatherThanQuadratic()
+    {
+        // The player law's escape axis carries S once and is then dotted with the command for a
+        // second factor of S (the quadratic falloff GroundBlowTests already pins). The AI law never
+        // dots into cmd, so its only S comes from the escape axis itself — linear, not quadratic.
+        const float aiGroundBlow = 0.5f;
+        var baseline = OneStep(Basis.Identity, pitch: 0f, normal: Vector3.Zero, dist: 0f, ai: true);
+        var atHalf = OneStep(Basis.Identity, pitch: 0f, normal: SlopeNormalBody, dist: Elev / 2f, ai: true);
+        float s = ExpectedProximity(Elev / 2f);
+        var linear = baseline + ExpectedAiDelta(new Vector3(s, 0f, 0f), aiGroundBlow);
+        var quadraticWouldBe = baseline + ExpectedAiDelta(new Vector3(s * s, 0f, 0f), aiGroundBlow);
+
+        Assert.True(Mathf.IsEqualApprox(atHalf.X, linear.X, 1e-6f),
+            $"half way out the AI push must be linear in S = {linear.X:0.000000}, not quadratic "
+            + $"{quadraticWouldBe.X:0.000000} (got {atHalf.X:0.000000})");
+    }
+
+    [Fact]
+    public void TheAiVelocitySteerNeverSuppresses()
+    {
+        // The player path zeroes its steer while commanding into the obstacle (S is zeroed on that
+        // branch, TheVelocitySteerStopsWhenCommandingIntoTheSurface pins it); the AI path has no
+        // command-direction branch to zero it, so the steer always rides at 2·S regardless of pitch.
+        float alone = GapAfter(pitch: 0f, normal: Vector3.Zero, ai: true);
+        float pushingIn = GapAfter(pitch: -1f, normal: SlopeNormalBody, ai: true);
+        float expected = alone * Mathf.Exp(-2f * ExpectedProximity(0f) * Dt);
+
+        Assert.True(Mathf.IsEqualApprox(pushingIn, expected, 1e-6f),
+            $"the AI steer must run even while commanding into the surface: expected {expected:0.000000} "
+            + $"rad, got {pushingIn:0.000000}");
+    }
+
     /// <summary>The escape axis the law should build for <see cref="SlopeNormalBody"/>, in body
     /// coordinates and already scaled by proximity — <c>normalize(n × b) · S</c>, which for this
     /// slope is body +X (pitch up).</summary>
     private static Vector3 ExpectedAxis(float dist) => new(ExpectedProximity(dist), 0f, 0f);
+
+    /// <summary>The AI law's contribution to one step's <c>BodyRates</c>: <c>v · (ai_groundblow ·
+    /// groundblow_mag)</c> is a command-accumulator torque like the player law's, carrying no dt of
+    /// its own — the same single <c>dt</c> then <c>exp(−dt·damp)</c> the caller applies to the whole
+    /// accumulator applies here too.</summary>
+    private static Vector3 ExpectedAiDelta(Vector3 v, float aiGroundBlow) =>
+        v * (aiGroundBlow * Mag) * Dt * Mathf.Exp(-Dt * AngDamp);
 
     private static float ExpectedProximity(float dist) =>
         Mathf.Sqrt(Vector3.Back.Dot(SlopeNormalBody)) * (Elev - dist) / Elev;
@@ -204,17 +285,17 @@ public class GroundBlowTests
     /// <summary>The angle in radians between the flight path and the nose after one step, with the
     /// path started 10° off the nose IN YAW so there is a gap for the steer to close on an axis the
     /// pitch-axis bias does not move.</summary>
-    private static float GapAfter(float pitch, Vector3 normal)
+    private static float GapAfter(float pitch, Vector3 normal, bool ai = false)
     {
-        var m = Fresh();
+        var m = Fresh(ai: ai);
         m.VelocityDir = (Basis.Identity.Rotated(Vector3.Up, Mathf.DegToRad(10f)) * m.VelocityDir).Normalized();
         m.Step(Input(pitch, normal, 0f), Dt);
         return m.VelocityDir.AngleTo(-m.Attitude.Z);
     }
 
-    private static Vector3 OneStep(Basis attitude, float pitch, Vector3 normal, float dist)
+    private static Vector3 OneStep(Basis attitude, float pitch, Vector3 normal, float dist, bool ai = false)
     {
-        var m = Fresh(attitude);
+        var m = Fresh(attitude, ai);
         m.Step(Input(pitch, normal, dist), Dt);
         return m.BodyRates;
     }
@@ -227,16 +308,16 @@ public class GroundBlowTests
         GroundBlowDistM = dist,
     };
 
-    private static FlightModel Fresh(Basis? attitude = null)
+    private static FlightModel Fresh(Basis? attitude = null, bool ai = false)
     {
-        var m = new FlightModel(Bhawk());
+        var m = new FlightModel(Bhawk(), ai);
         m.Reset(Vector3.Zero, attitude ?? Basis.Identity, 120f, 1f);
         return m;
     }
 
     /// <summary>The Bloodhawk's real dynamics, with this install's authored ground-blow values
-    /// rather than the executable's 100/1.5 fallbacks (PlaneStatsFlightGlobalsTests pins the read
-    /// itself).</summary>
+    /// rather than the executable's 100/1.5/0.9 fallbacks (PlaneStatsFlightGlobalsTests pins the
+    /// read itself). <c>AiGroundBlow</c> at the authored 0.5 for the AI-path tests.</summary>
     private static PlaneStats Bhawk() => new()
     {
         PitchTorque = 3.3f,
@@ -251,5 +332,6 @@ public class GroundBlowTests
         DragFactor = 0.37f,
         GroundBlowElev = Elev,
         GroundBlowMag = Mag,
+        AiGroundBlow = 0.5f,
     };
 }

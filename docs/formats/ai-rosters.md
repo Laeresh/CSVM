@@ -35,19 +35,19 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 
 | idx | name | notes |
 |---|---|---|
-| 0 | `netids` | patrol-net id into the chapter `neindex` ([ai-nets.md](ai-nets.md)); `-1` = none. Per the exe comment this may also be a **list** of net ids, though this install only ever authors a scalar |
+| 0 | `netids` | patrol-net id into the chapter `neindex` ([ai-nets.md](ai-nets.md)); `-1` = none. The exe comment calls it a **list** and the reader agrees: `FUN_0047c210` (`0x0047c733`) takes the single id when the count is 1 and **`rand() % count`** when it is higher, drawn once at spawn. This install only ever authors a scalar, so the draw never fires. ⚠ **A `-1` here is not "no orders", it selects a different AI behaviour entirely** ([`org/aiPilot.md`](../org/aiPilot.md)); in the shipped campaign the only netless blocks are `player` and the wingmen (below) |
 | 1 | `(x y z)` | spawn position — the only list-typed slot, present on all 414 |
 | 2 | `yaw` | spawn heading, degrees |
 | 3 | `team` | |
 | 4 | `group` | **mission-logic cohort id, not a formation** (see [below](#group-is-a-cohort-id-not-a-formation)). Values 0-8; `0` (the default) is the at-mission-start population |
 | 5 | `enabled` | |
-| 6 | `primary_target` | **an assigned target node name, not a formation leader.** 6 distinct: `""` (346), `player` (27), `devastator_1/2/3`, `piratezep`. The engine's own debug readout prints it as "Primary target: %s" |
+| 6 | `primary_target` | an assigned target node name. 6 distinct: `""` (346), `player` (27), `devastator_1/2/3`, `piratezep`. The engine's own debug readout prints it as "Primary target: %s". ⚠ **Its meaning depends on `mode`:** on a `jet` it is a targeting assignment, but on a netless `wingman` it is the **formation leader**, and the escort law flies a fixed offset from it ([`org/aiPilot.md`](../org/aiPilot.md)). Corrects the earlier "not a formation leader" reading, which was right about `jet`s and wrong about wingmen |
 | 7 | `init_health` | starting health override; `0.0` = use the airframe default. Real values do occur (e.g. `216.0`) |
 | 8–19 | the activation/attack/return volumes | 12 slots for the 9 named `{active,attack,return}_{rad,u,l}` — see [below](#the-three-unnamed-slots). `rad` is a radius, `u`/`l` an upper/lower altitude band |
 | 20 | `title` | `MSG_*_NAME` display key, resolving in `messages.json` ([missions.md](missions.md)) |
 | 21 | `deactivated` | |
 | 22–30 | **the skill vector** | `dare_devil natural_touch sixth_sense dead_eye quick_draw steady_hand stun_recovery talker constitution` — see [below](#the-skill-vector) |
-| 31 | `pref_engage_alt` | **preferred engagement altitude in metres**, not a radius; `-1.0` on 384, else 350 / 1100 / 1500 / 1550 / 1600 |
+| 31 | `pref_engage_alt` | **preferred engagement altitude in metres**, not a radius; `-1.0` on 384, else 350 / 1100 / 1500 / 1550 / 1600. Spelled `preferred_engagement_altitude` in `vehicle.json`, which is also the fallback when this slot is `-1.0` (`basic_airplane` authors 300.0). ⚠ **It is a maneuver-selection weight, not an altitude order:** its one reader (`FUN_004201a0`, `0x004204da`) adds 1.0 to a candidate evasive maneuver's weight when the aircraft is on the wrong side of it. Nothing steers toward it ([`org/aiPilot.md`](../org/aiPilot.md)) |
 | 32 | `signature_maneuvers` | **bitmask over the maneuver library** — see [below](#signature_maneuvers-is-a-bitmask) |
 | 33 | `rating_biases` | target-selection weights: a list of `[nodeNamePattern, bias]` pairs, wildcards allowed (`["fuel_truck*", -1.0]`). List on 321 blocks, null on 93; 1–9 entries (697 total); biases run `-1.0`…`1.0`, both signs, `-1.0` on 389. ⚠ The exe's comment admits a third element per entry, but this install authors none (0 across all 414 blocks, measured 2026-08-13) — read defensively, preserve a third raw if one ever appears |
 | 34 | `nitro` | |
@@ -60,7 +60,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 41 | `stickiness` | |
 | 42 | `bait` | |
 | 43 | `pilot` | pilot def name (`P_Wingman` and friends; see `pilots.zrd`) |
-| 44–55 | `sclp sclr scly limp limr limy` + `esclp esclr escly elimp elimr elimy` | per-axis **scale** and **limit** factors on the AI's control output — pitch/roll/yaw, then the `e`-prefixed *emergency* set. These are `vehicle.json`'s `ai_input_*` / `ai_emerg_input_*` at roster scope |
+| 44–55 | `sclp sclr scly limp limr limy` + `esclp esclr escly elimp elimr elimy` | per-axis **scale** and **limit** factors on the AI's control output — pitch/roll/yaw, then the `e`-prefixed *emergency* set. These are `vehicle.json`'s `ai_input_*` / `ai_emerg_input_*` at roster scope. `-1.0` (which is what all 414 blocks author) means "fall through to the def". ⚠ **The def and the runtime hold these in roll/pitch/yaw order, not this file's pitch/roll/yaw** — the spawner transposes, slot by slot. Both orders are real; see [aiControlLaw.md](../org/aiControlLaw.md#where-the-gains-come-from) for the slot-to-offset table and the exact fallback |
 | 56 | `attack_time_factor` | |
 | 57–64 | `anose hnose atail htail aleft hleft aright hright` | **per-zone armour + health**, in `(armor, health)` pairs over the four damage zones nose / tail / left / right — the same zone set and the same armour-first two-pool model as the player's `destroyable_parts` ([vehicle.md](vehicle.md#the-hp-pair-armor--hit-points)) |
 | 65 | `accentID` | **the voice id** → row in `voice.zrd` → `soundsh/VO_id<N>_*` clips |
@@ -71,6 +71,25 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 
 **31 of the bare-number slots are constant across all 414 blocks** (8–19, 36, 43–56, 58, 60, 62, 64) —
 authored defaults, not signal.
+
+### Who is netless: the player and the wingmen, nobody else
+
+Census of all 53 `aiv.zrd.json` files, 414 blocks, 2026-08-15. `netids` is `-1` on exactly 106 of
+them and every one is the player or a wingman:
+
+| node name | blocks | `netids` |
+|---|---|---|
+| `player` | 53 | `-1` |
+| `wingman_N` | 50 | `-1` |
+| `bswingman_N` | 3 | `-1` |
+| everything else (enemies, `patrolboat_N`, `t_truck_N`) | 308 | a real net id, every one |
+
+This is not a curiosity of the data, it is the switch that selects the AI behaviour. `wingman` and
+`bswingman` are also the two `vehicle.json` defs (besides the eleven Instant Action `w<plane>` ones)
+that author `mode wingman`, and a netless `wingman` flies a formation station on its
+`primary_target` instead of a patrol graph. A netted one is demoted to `jet` at spawn and flies the
+graph like everything else. [`org/aiPilot.md`](../org/aiPilot.md) has the mechanism and the
+constants.
 
 ### `group` is a cohort id, not a formation
 
@@ -170,7 +189,7 @@ pair per stat**, the endpoints the rating interpolates between.
 |---|---|---|---|
 | `daredevil_chance` | 0.35 | 0.99 | probability of taking an available Danger Zone run |
 | `sixth_sense_chance` | 0.45 | 0.71 | passing the test to follow a target's maneuver (a failure leaves the AI stunned) |
-| `sixth_sense_factor` | 0.994 | 1.07 | the ease-off factor applied while being pursued |
+| `sixth_sense_factor` | 0.994 | 1.07 | ~~the ease-off factor applied while being pursued~~ **decoded 2026-08-15 (`D31`): a flat multiplier on the AI's three stick channels, applied every frame on the non-emergency path** ([aiControlLaw.md](../org/aiControlLaw.md#the-skill-scalar-and-how-a-1-to-9-rating-interpolates)). Not conditional on being pursued |
 | `dead_eye_angle` | 4.0° | 1.45° | half-angle of the aiming-error cone around the lead point |
 | `quick_draw_angle` | 50° | 89° | half-angle of the cones off the target's nose/tail within which a shot is taken |
 | `quick_draw_chance` | 0.05 | 0.44 | probability of taking a marginal shot |
@@ -181,9 +200,15 @@ pair per stat**, the endpoints the rating interpolates between.
 
 Notes that matter to anyone implementing this:
 
-- **Only the two endpoints are decoded.** How the engine moves between value@1 and value@9 is not
-  traced; linear interpolation over the 1–9 scale is the working assumption (CSVM's `AiSkills`
-  reader implements exactly that, marked as an assumption).
+- ~~**Only the two endpoints are decoded.**~~ **Traced 2026-08-15 (`D31`), and the working assumption
+  was the right shape with the wrong origin.** The engine computes
+  `value = lo + (hi − lo) · rating · 1/9` (`FUN_0047c210` at `0x47d0c1`–`0x47d101`, the constant at
+  `0x608028` being exactly `0.11111112`). The endpoints therefore sit at rating **0 and 9**, not 1
+  and 9: a 9 yields `hi` exactly, but a 1 yields `lo + (hi − lo)/9`, not `lo`. Two of the ten pairs
+  are confirmed on this path by name (`sixth_sense_chance` → `obj+0x970`, `sixth_sense_factor` →
+  `obj+0x974`); the other eight are assumed to share it, since one interpolation site serves the
+  block. **Corrected 2026-08-15 (`E42`): `AiSkills.At` now computes `rating/9` directly** rather
+  than `(rating-1)/8`, matching the engine at every rating rather than only at 9.
 - **The scale is 1–9 and nothing else.** Ratings are an index into this table; there is no 0–100
   scale anywhere in the shipped data. (The original *design document* gives a Danger-Zone poll
   interval of `100 − DareDevil` seconds, which only type-checks on 0–100. That formula is design-era:
@@ -280,9 +305,41 @@ engine's debug readout dispatches on a single mode field with these states:
 behaviour — the same idea as `sixth_sense_factor` — and being a distinct mode makes it directly
 observable and switchable rather than something buried in the steering maths.
 
+⚠ **At most one AI per frame can be laying off.** The combat driver's break-off branch is gated on
+a global (`DAT_0064ee4d`) that the world tick clears once a frame and the first AI through the
+branch sets ([aiControlLaw.md](../org/aiControlLaw.md#dat_0064ee4c-and-dat_0064ee4d)). The steering
+of the mode itself is that page's subject; the mode dispatch is `obj+0x358`, not this file.
+⚠ **These nine are not one stored field**, and the readout does not dispatch on one.
+[`aiPilot.md`](../org/aiPilot.md) "The per-frame AI update" has the decode: `patrol`, `pursue` and
+`lay off` are derived from whether a target is selected and from the AI *task* at `+0x2f0`, while
+the five interrupt states live in a separate enum at `+0x358`.
+
 The same readout recomputes the **target ranking** inline, which fixes its shape:
 `rank = weight × 1200 + distance + objectiveBias`, minimised. The weight starts at **1.0 for any
-target except the player, which starts at 0.7** — the "rank the player last" rule as a hard
-constant — then takes ±0.2 adjustments for bearing, for altitude sign, and for whether the target
-faces the AI, +0.4 for one dynamics class, and −0.5 for one structure case. Targets outside the
-activation volume score `1e21` (i.e. excluded).
+target except the player, which starts at 0.7** (the "rank the player last" rule as a hard
+constant), then takes ±0.2 adjustments for bearing, for altitude sign, and for whether the target
+faces the AI, plus two class terms. Targets outside the activation volume score `1e21` (i.e.
+excluded).
+
+⚠ **The two class terms are decoded, and this paragraph used to name them wrongly.** It read "+0.4
+for one dynamics class, and −0.5 for one structure case", both read off the readout's labels rather
+than off the ranking function. [`aiPilot.md`](../org/aiPilot.md) "Target acquisition" has the
+decode:
+
+- **+0.4** applies to a candidate whose **`mode`** is `wingman` (the field at `+0x67c`, which the
+  debug overlay labels `Dynamics:`; see [`vehicle.md`](vehicle.md) and `aiPilot.md` "`mode`, the
+  dynamics class"). It is not a dynamics or airframe class, and minimisation makes it 480 m
+  *against* the candidate, so the engine de-prioritises enemy wingmen.
+- **−0.5** applies only to a **zeppelin gasbag**, reached through the `Target` virtual at vtable
+  `+0x1c` that just three of the four candidate classes hard-wire to false. It is worth 600 m in
+  the gasbag's favour, and nothing else in the game takes the term.
+
+⚠ **`objectiveBias` is not in metres and not scaled by 1200.** `rating_biases` resolves through
+`FUN_0041ae40` to rank units directly: `bias × −750`, with `≥ 1.0` collapsing to `−100000` (always
+target), `≤ −1.0` returning the `1e21` exclusion (**never** target), and a turret taking a flat
+`+37.5` on top of every arm, including the no-match case. So an authored `−1.0` is a hard
+exclusion, not a penalty.
+
+⚠ **The ±0.2 terms are aircraft-only.** There are two scorers, chosen on the *scoring* vehicle's
+`mode`: `jet` and `wingman` take all three, and every other mode scores on base weight and the two
+class terms alone.

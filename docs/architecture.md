@@ -88,12 +88,13 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the forget + catch-up pass (B2), the intercept solver (B3), the four-list candidate scan (B4), and the fire call's step order + 1° launch scatter (B5).
 - `src/Flight/TurretDefs.cs` — typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
 - `src/Flight/TurretController.cs` — one carried turret gunner (M4 C9a): acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
-- `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; a placeholder steering law.
+- `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; each mode picks the aim point and table `AiControlLaw` steers on. `SteeringPatrol` reports whether the last step actually flew the net (F13's leashes read it).
+- `src/Flight/AiControlLaw.cs` — the original's own AI steering law (E41, decoded in `docs/org/aiControlLaw.md`): aim point + that point's velocity + one of four decoded parameter tables → stick and throttle lever. Engine-free and pure.
 - `src/Flight/AiModeMachine.cs` — the nine-mode AI state machine (M4 D11), the engine's decoded mode vocabulary: patrol/pursue/lay off/evade/evasive maneuver/stunned/avoid crash + two enum-only danger-zone modes; steady-hand and sixth-sense reaction rolls on the shipped chances.
 - `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery (M4 D14): intercept lead via `AimAssist.TryIntercept`, the ±11° gun cone and the quick-draw cone as fire gates, per-shot dead-eye scatter; mutable target, primary-target name and rating biases (the D12 script seams).
 - `src/Flight/AiVoiceDispatcher.cs` — the combat-voice trigger dispatch (M4 E16), engine-free: the talker roll, the 15 s per-slot cooldown armed on failure too, the bearing halving, the broadcast election, the DI tiers, the death cries with force, the computed bearing index.
 - `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula (M4 D12): rank = weight × 1200 + distance + objectiveBias, minimised; player base weight 0.7, ±0.2 bearing/altitude/facing terms, 1e21 beyond activation; rating-bias matching and the allied-attacker deconfliction pick.
-- `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints (M4 B5): nearest node first, then edge-list neighbours, seeded branch draws; aircraft-agnostic, shared by `AiPilot` and `ZeppelinMotion`.
+- `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints (M4 B5): nearest node first, then edge-list neighbours, seeded branch draws, and an anchored net offset onto its live trailer target (`BL-377`); aircraft-agnostic, shared by `AiPilot` and `ZeppelinMotion`.
 - `src/Flight/ZeppelinBroadside.cs` — the pure broadside law (M4 F19): the decoded 90° side arc (dot > 0.707 on the moving hull's lateral axis), the per-cannon stowed→deploy→ready→fire machine with its own re-fire timer, the ballistic lead solve (skip on no solution) and the seeded gasbag pick.
 - `src/Flight/ZeppelinDamage.cs` — the pure zeppelin kill arithmetic (M4 F18): the decoded survivor threshold over the `healthy` list, the engine recount, the DAMAGES_ZEPPELIN gasbag gate, the record-stage crossing helper.
 - `src/Flight/ZeppelinMotion.cs` — the kinematic zeppelin motion law (M4 F17): forward-only flight along a net under the record's speed/accel/rate/pitch limits, plus the decoded sqrt engine-loss curve behind the `AliveEngines` seam.
@@ -229,6 +230,7 @@ clusters they delegate to.
 - `src/Session/InstantActionRuntime.cs` — owns one Instant Action mission's actor set (PLAN-instant-action.md C8/D9/E11/F12): the loaded `InstantActionDef`, the ace's own spawn draw and team/rating, the wingmen's fan placement/escort chain/flight-size clamp, E11's two per-wave-member draws (the five-row pilot-personality table, the accent-12 re-roll), and F12's objective-zeppelin selection.
 - `src/Session/InstantActionWaves.cs` — the decoded wave sequencer's own selection/trigger/geometry (PLAN-instant-action.md E11), pure and engine-free: the wave counter (advance-on-last-kill, 0-enemy fall-through, no advance past wave 4), the 500-m-from-nearest-human spawn draw with its literal-index-0 fallback, and the 100 m/45° fan.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in and F12's wave-credit budget that switches it back off.
+- `src/Session/NetTrailerTargets.cs` — resolves a patrol net's trailer name (`player`, a zeppelin, a train) to a live position, so an anchored net rides its target (`BL-377`).
 - `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (M4 B6, `--generators`): load-time drop rules, per-cycle stepping, spawns through `GameSession.SpawnAiAircraft` — or, on an Instant Action zeppelin run (F12), releases an already-built wave member instead.
 - `src/Session/AiVoiceRuntime.cs` — wires E16's dispatch into a session: the decoded event sources (hit-path DI, Downed death cries, acquisition call-outs, taunts) played through `CombatVoice` + `WorldSounds.PlayOneShot`.
 - `src/Session/ZeppelinRuntime.cs` — runs a mission's zeppelins (M4 F17+F18+F19, `--zeppelins`): places each record's world node at its authored pose, flies it along its net through `ZeppelinMotion`, owns the multi-zone damage (per-part registry pools, the survivor-count kill, the authored hull death) and fires the broadside (`ZeppelinRuntime.Cannons.cs`: real unowned `wep_28` rounds through `ZeppelinBroadside`).
@@ -887,12 +889,17 @@ The chapter patrol-net reader (`docs/formats/ai-nets.md`): every `ne0NNNNN.zrd.j
 zrdr scope joined with its `neindex.zrd.json` name — nodes, the explicit edge list, raw per-node
 tags, and the trailer attach target. Plus the lookups both ways the data references nets:
 `ById` (aiv field 0), `ByName` (egen/zeppelins/objectives, case-insensitive), `Resolve` (either
-spelling). Consumers: `UI/AiNetsOverlay.cs` and `Flight/AiNetFollower.cs` (B5). Golden counts
-asserted in `CSVM.Tests/AiNetsTests.cs`.
+spelling), and `ChapterFirst` (the net an Instant Action actor is given). Consumers:
+`UI/AiNetsOverlay.cs` and `Flight/AiNetFollower.cs` (B5). Golden counts asserted in
+`CSVM.Tests/AiNetsTests.cs`.
 ⚠ A net is a GRAPH: only `Edges` is connectivity — node order is not a route, loops are one
   authoring choice. Tags and the trailer are exposed raw, never interpreted (undecoded).
 ⚠ The `neindex` first element is NOT the pair count (C1: 46 over 29 pairs) — parse pairs to the
   list's end.
+⚠ `neindex` PAIR ORDER is meaningful and is not id order: the engine indexes nets by their
+  position in it, so "the chapter's first net" is the first pair (C1B 29, C1C 25, both above
+  their chapter's lowest id of 11). `LoadIndexPairs`/`ChapterFirst` keep that order; `Load`
+  sorts by id and `LoadIndex` is an unordered map.
 
 ## src/Mech3/Maneuvers.cs
 The shared maneuver-library reader (`docs/formats/ai-rosters.md`): `zrdr/maneuvers.zrd`'s 17
@@ -995,7 +1002,10 @@ slot 6; `RosterRatingBiases`: slot 33 as `AiRatingBias` — wildcard `Matches`, 
 a third element accepted and preserved raw, never acted on) and the thin per-mission
 roster loader (`LoadRoster`). Units + shipped-constant goldens in `AiSkillsTests`;
 slot 6/33 census goldens in `AiTargetRankingTests`.
-⚠ Between the endpoints the curve is LINEAR BY ASSUMPTION — only the two endpoints are decoded.
+⚠ Between the endpoints the curve is LINEAR, and — decoded by D31, corrected in `At` by E42 — the
+  engine's own origin is rating 0, not rating 1: `lo + (hi − lo) · rating/9`. A rating of 1 reads
+  `lo + (hi−lo)/9`, not `lo` outright. See `docs/org/aiControlLaw.md` and
+  `docs/formats/ai-rosters.md`.
 ⚠ Two stats improve DOWNWARD (`dead_eye_angle`, `steady_hand_chance`); never normalise the
   direction. `natural_touch` has no entry by design and asking for it throws.
 ⚠ A null roster slot means "fall back to the airframe def's own stat keys"
@@ -2214,18 +2224,20 @@ polygon binds to a non-cycling sibling material, confirmed against C1B's gamez d
 (`SplashColumnWidthScale`; judged at the controls 2026-08-06 with the fades in — the authored quad
 is 5 cm wide, sub-pixel past ~30 m, while the reference ticks measure ~0.35 m, which 8× matches;
 the authored 1× stays reachable, `static readonly` not `const`, so the branch stays compiled). A dirt
-(unclassified-terrain) hit spawns tumbling chips (`SpawnDirtDebris`) drawn on the gunhit def's own
-`bit01–04` chip textures in alpha-blended per-texture pools (through the additive
-muzzle-flash-textured impact pool they read as a small flame — the BL-203 mechanism), launched
-outward and arcing via `Sprite.Vel`/`SpinAxis`/`SpinRate`, zero and inert for every other sprite.
-⚠ **RETRACTED 2026-08-07 — this effect is scheduled for deletion (`BL-313`).** It rested on the
-inference *"the def's bit1–3 gamez nodes carry no geometry, so the textures ARE the chips."* The
-original draws no such chips: `OriginalScreenshots/Videos/70 DD Dirt.mp4` shows a 70-slug dirt hit
-producing only the `chunk` quad and one faint black `blacksmokepuffer` puff. Read literally, the
-zero-vertex `bit1`–`bit3` nodes draw nothing and only `chunk` (one 4-vertex quad) does. The
-inference's sole motive — why ship `bit01`–`bit04` if nothing draws them — is answered by a
-different consumer, `zep_skin_fire3`. **Do not generalise "zero-vertex node ⇒ draw its texture as a
-sprite" anywhere else.**
+(unclassified-terrain) hit takes the same single spark as every other unhandled surface: it has no
+stand-in of its own.
+⚠ **The tumbling-chip burst that used to sit here was DELETED 2026-08-15 (`BL-313`).** It drew the
+`bit01`–`bit04` textures as arcing sprites, on the inference *"the def's bit1–3 gamez nodes carry no
+geometry, so the textures ARE the chips."* The original draws no such chips:
+`OriginalScreenshots/Videos/70 DD Dirt.mp4` shows a 70-slug dirt hit producing only the `chunk` quad
+and one faint black `blacksmokepuffer` puff. The binary says why (decoded 2026-08-15): the
+zero-vertex `bit1`–`bit3` models each carry one light record, and both draw functions gate their
+light block on the light **count** alone (`FUN_005524d0` at `00552be2`, `FUN_00554550` at
+`005445f1`), so each node renders a single 1-pixel near-black point — invisible against ground, and
+nothing like a chip. **Do not generalise "zero-vertex node ⇒ draw its texture as a sprite" anywhere
+else**, and do not restate the retraction as "zero-vertex nodes draw nothing": they draw a point.
+Ground must still resolve to a non-`None` stand-in, since the world-effects `EffectSink` call is
+gated on `StandIn != None` and the `blacksmokepuffer` routing rides it.
 A gun hit on a
 buildings-classed surface spawns a ricochet spark burst + flash (`SpawnRicochet`, additive — a
 judged stand-in: the authored `bld_damage.flt`/`rcochet1` are 2 of the 5 install-missing names). Each burst sprite carries its own orientation basis (`Sprite.Orient`): the muzzle flash
@@ -2426,12 +2438,26 @@ positions in, target node out; its two consumers are `AiPilot.Patrol` (aircraft)
 `ai-net-follow` suite.
 ⚠ Traversal treats EDGES as undirected (our reading, not decoded: the worked C1 loop dead-ends
   under a directed one). Never walk node order; only the edge list is connectivity.
-⚠ `DefaultArrivalRadius` (200 m, XZ-only) is INVENTED, sized to the placeholder law's tracking
-  error; wave D's real maneuvering shrinks it. Zeppelins pass a wider per-record radius that
-  clears their turning circle (`ZeppelinRuntime`).
-⚠ The trailer is recorded and exposed, never acted on (target-relative motion is later-wave
-  work); per-node tags ride along raw. Stop-point vs segment id is still open (F17's remaining
-  item; the discriminating instrument is locating the runtime net loader).
+⚠ `Reseat` drops the walk back to "nearest node next" and is the original's own activation snap
+  (`FUN_004b0f40` → `FUN_00432010`); `FlightController.Activate` calls it, which is what makes a
+  teleported Instant Action wave member patrol from where it ARRIVES.
+⚠ `DefaultArrivalRadius` (200 m, XZ-only) is INVENTED. E42 re-measured it against the ported
+  `AiControlLaw` on C1's M4ReinfAce rather than assume wave D's maneuvering would shrink it: it
+  does not — the real law's own turning circle misses a stationary aim point on roughly this same
+  scale, and halving the radius to 100 m roughly quadruples the mean time between node captures
+  (measured over a 600 s run: 17 s/leg at 200 m vs 65 s/leg at 100 m). The value stands,
+  re-justified rather than retired. Zeppelins pass a wider per-record radius that clears their
+  turning circle (`ZeppelinRuntime`).
+⚠ **An anchored net RIDES its target (`BL-377`).** Every node read goes through `NodePosition`,
+  which adds `target − anchorNode` in X/Z and **nothing in Y** (`org/aiPilot.md` "The trailer"),
+  the seat scan included, since the original's single `FUN_00432010` serves both. Riding is the
+  CALLER's opt-in: no `trailerTarget` supplier, authored coordinates, which is also the engine's
+  unresolved-target branch. `Session/NetTrailerTargets` is what resolves the name.
+⚠ The seat scan SKIPS edgeless nodes (`FUN_00431900`, degree at node `+0x18`). The anchor is
+  parked off the ring in all 76 anchored nets, so without the skip a plane seats on it and, having
+  no neighbour to advance to, holds it forever. A net whose nodes are all edgeless still gets a seat.
+⚠ Per-node tags ride along raw; stop-point vs segment id is still open (F17's remaining item; the
+  discriminating instrument is locating the runtime net loader).
 
 ## src/Flight/ZeppelinBroadside.cs
 The pure zeppelin broadside law (M4 F19), engine-free: the decoded 90° arc
@@ -2478,24 +2504,55 @@ by `ZeppelinMotionTests` + the `zeppelin-motion` suite.
 ## src/Flight/AiPilot.cs
 The non-player `FlightModel` driver (M4 A2): standing orders in (heading in the mission-data
 `SpawnPoint.HeadingDeg` convention, altitude, throttle, optional `Patrol` net follower, optional
-`Gunner` whose live target is chased as a flat-out plain pursuit, optional `Machine` — D11's
-nine-mode state machine, which when set is stepped first and dispatches the input source per
-mode: patrol/danger-zone stubs fly the net, pursue chases the gunner's target, lay off (D15)
-holds its entry course and walks the throttle toward `sixth_sense_factor` × the pursuer's speed
-so the human catches up (the factor is decoded; the speed-match application and the 0.4/s lever
-rate / 0.3 floor are invented), evade and avoid crash fly the machine's own orders, an evasive
-maneuver plays its `ManeuverExecutor`, stunned returns neutral sticks), one `FlightInput` per sim
-step out, read by a `FlightController` whose `Pilot` is set. Pure over the model state and its
-own fields, seeded randomness only, so a fixed-dt run is deterministic (`AiPilotTests`).
+`Gunner` whose live target is chased at the decoded lead offset ahead of it, optional `Machine` —
+D11's nine-mode state machine, which when set is stepped first and picks this step's AIM POINT and
+parameter table: patrol/danger-zone fly the net node itself, pursue leads the gunner's target on
+the engaged table (or aims at it outright for the head-on firing solution), lay off (D15) holds its
+entry course and then walks the throttle toward `sixth_sense_factor` × the pursuer's speed so the
+human catches up, evade flies the machine's orders, avoid crash aims 1000 m straight up on the
+emergency arm, an evasive maneuver plays its `ManeuverExecutor`, stunned returns neutral sticks),
+one `FlightInput` per sim step out, read by a `FlightController` whose `Pilot` is set. Pure over
+the model state and its own fields, seeded randomness only, so a fixed-dt run is deterministic
+(`AiPilotTests`).
 ⚠ Orders are plain mutable fields BY DESIGN — the original's mission script retargets/re-nets an
   AI at runtime (`SET_AI_NET`, `ADD_OTHER_TARGET`, …), so nothing here may be read-once at spawn.
-⚠ The steering law is a placeholder (bank-to-turn + turn pull + an altitude leash): in THIS
-  flight model bank alone yaws only at the coupling rate and any sustained pull climbs. D11's
-  machine dispatches WHICH orders it flies; the shipped maneuver programs play through
-  `ManeuverExecutor` only during `evasive maneuver` — the law itself is still not original.
-⚠ `PatrolThrottle` (0.5) and the leash/gain constants are INVENTED placeholder-law values, never
-  original behaviour; at the 0.85 default the turn radius exceeds the tightest fighter rings and
-  the plane limit-cycles around a node forever (measured on C1's `M4ReinfAce`).
+⚠ Since E41 the steering is `AiControlLaw`, the original's own, and this class is only the DRIVER
+  around it. The placeholder bank-to-turn law and its altitude leash are gone — do not reintroduce
+  a leash, the real law's wings-level rule and elevator deadband are what replaced it. `Throttle`
+  is now the lever's CURRENT state, walked by the law at 0.35/s, not a held order.
+⚠ E42 retired or justified the three values here that are NOT the original's. `PatrolThrottle` is
+  GONE: the law's own throttle clamp (`AiLawParams.ThrottleMin`) overwrites any seed below the
+  table floor on the very first step, so seeding it was dead weight once the real law landed.
+  `OrderAimRangeM` SURVIVES: it converts our heading/altitude order shape into the point-plus-
+  velocity the law wants, which the original never needed because it never carries bare
+  heading/altitude orders. Lay off's throttle override SURVIVES too, D15's own invention, not the
+  steering law's — see `src/Flight/AiPilot.cs`'s `FlyLayOff` remarks.
+⚠ What the ORIGINAL flies is decoded in [`org/aiPilot.md`](org/aiPilot.md): the engine has no
+  netless patrol at all, and `Patrol == null` here models nothing it does. A roster aeroplane is
+  either a `jet` on a patrol net or a netless `wingman` holding a formation station on its
+  `primary_target`. Every Instant Action actor now takes the chapter's first net at spawn
+  (`GameSession`, `BL-364`); a campaign roster's authored `netids` waits on a roster spawn path,
+  and `BL-362` owns the station. `BL-387` (2026-08-15, flown) is the open question this raises for
+  the ported `AiControlLaw`: a netless free-flight spawn — an engine-only configuration the
+  original never reaches — hunts in roll and does not settle, including through `AvoidCrash`.
+
+## src/Flight/AiControlLaw.cs
+The original's own AI steering law (E41), decoded as plan D31 in `docs/org/aiControlLaw.md` — read
+that page before changing anything here. An aim point, that point's velocity and one of four
+parameter tables read out of the image in, one `FlightInput` out: a desired speed from the aim
+point's own speed plus range-weighted lead terms, an intercept solve (`AimAssist.TryIntercept`) for
+the direction, bank-to-turn with the elevator joining once the bank command is inside a deadband, a
+wings-level rule, a low-speed unload, and a per-axis scale/limit stage off `PlaneStats`. Engine-free
+and pure over its arguments; pinned against the decode by `AiControlLawTests`.
+⚠ The output stage is NEAR-BANG-BANG, not proportional: the shipped scale is 3.5 against a limit of
+  1, so anything past ~0.29 of body-frame aim error saturates. Limits above 1 are the original's
+  range too, and `FlightModel.Step` is what clamps to ±1 — do not clamp here.
+⚠ A HIGHER `rudder_tol` means MORE rudder (clearing it selects the bank branch), and the
+  wings-level rule is the DEAD-ASTERN case, not the straight-ahead one. Both read backwards at a
+  glance and both were landed wrong once; `AiControlLawTests` exists to keep them honest.
+⚠ Two pieces are deliberately unported: the emergency arm's altitude/velocity assist (it writes
+  model state, which this seam must not) and the intercept solver's second-root preference (which
+  `TryIntercept` does not expose, and which is unreachable on patrol).
 
 ## src/Flight/AiModeMachine.cs
 The nine-mode AI state machine (M4 D11), owned by `AiPilot.Machine` and stepped from its `Next`:
@@ -2536,6 +2593,9 @@ engine-free; deterministic on a fixed dt (`ManeuverExecutorTests` demonstrates a
 flying the shipped dive and split_s).
 ⚠ The tracking law (body-frame quaternion error × gain, rate lead) and `ZeroDurationTimeoutS`
   are placeholder/invented values, not original behaviour — same status as `AiPilot`'s law.
+  ⚠ The original's executor (`FUN_004209b0`, D31) shares its per-axis scale/limit output stage and
+  its skill multiplier with the steering law, so E41's port covers both or neither; see
+  `docs/org/aiControlLaw.md`.
 ⚠ A positive-yaw step turns LEFT (FlightInput's sign). Whether the original mirrors maneuvers
   left/right at selection time is undecided — D11's question, do not bake a side in here.
 
@@ -2617,17 +2677,30 @@ engines.json stock engine power + player.json globals (the flight constants, the
 (`AimAssist.cs`'s B2), `_dist_factor` (B4's scoring) and `_inaccuracy` (B5's launch scatter, stored
 in RADIANS as the original stores it), plus the decoded model's
 lift/AoA/G, turn/yaw-curve, pitch-fade and drag-fade-speed globals — docs/org/flightModel.md; converted
-exactly as the original does: MPH×0.44704, AoA/liftAOAs cosined, highGs/lowGs raw G — and as yet
-unread by FlightModel.cs), the `engine_sound` def name with its
+exactly as the original does: MPH×0.44704, AoA/liftAOAs cosined, highGs/lowGs raw G; the turn/yaw
+curves are live in the model, the G limiters and the pitch fade deliberately not, being authored out
+of reach), the `crash` block's `bounce_factor` (a raw scalar, read one level down inside that block
+— the collision restitution's ceiling, C25), the `engine_sound` def name with its
 volume/pitch `SoundCurve`s (clamped two-point ramps), `destroyable_parts` → `DestroyablePart`
 records (name, max HP, max armor, `critical`/`engine` flags, `got_hit_anim`, per-part
 `injure_anims`), and the def-level `VehicleInjureAnims`. Schema: docs/formats/vehicle.md.
-⚠ Def-level injure_anims are consumed as ANY-part HP fractions, not per-part — see DamageVisuals.
+Both lists are consumed on the decoded pools (`DamageVisuals.OnHullDamage` off
+  `PlaneDamage.SummaryHealthFraction`, `OnPartDamage` off the struck part's `HealthFraction`):
+  health-only at both levels, armour in neither, per `FUN_004b3800` / `FUN_004b3d70`
+  (`docs/org/vehicleDamage.md`).
+⚠ The staging does not yet RETRACT: `DamageVisuals._applied` latches each entry one-way, where the
+  original clears its handle on the upward crossing and stops the anim. `BL-384` item (3) carries
+  that; this line moves with it.
 ⚠ `damaged_engine_sound` is now parsed (`DamagedEngineSound` + `DamagedEngineGain`); only
   `cockpit_engine_sound` remains unparsed — it needs a cockpit view (`BL-161`).
 ⚠ `DamagedEngineGain`'s two source floats (0.0, 1.0 for every plane — one shared `basic_airplane`
   entry) are undecoded; read here as a fade window over accumulated damage fraction, a TUNE
   candidate not a confirmed mechanic — see `FlightAudio.cs`.
+⚠ `WithAiSpawnJitter` (C26) is the original's per-spawn ±5 % spread of eleven runtime slots, seven
+  of which have a field here. It returns a COPY because the session shares one `PlaneStats` per
+  airframe, and it writes the whole-vehicle damage pair out explicitly (the parts' sum, scaled) so
+  `PlaneDamage` cannot re-derive the unscaled hull. `veh_weight`/`ref_area` are deliberately not in
+  it — see the method's own note before adding a slot.
 
 ## src/Flight/SpawnPoints.cs
 Reads the flight spawn from a mission's OWN zrdr (`extracted/<chapter>/<mission>/zrdr/` — a
@@ -2820,6 +2893,17 @@ and drops a crashed hostile (listed but not live) with no extra plumbing. Acquir
 transitions log one `targeting hud:` breadcrumb each. Pinned by the `hostile-marker-hud` suite +
 `HostileTagTests`; a hud built without a pool never tracks, which keeps the golden VS path
 byte-identical.
+`--debug-markers` (`MarkAll`, set by the rig assembler alongside `Own`) widens that to EVERY live
+aircraft in the same scan: `CollectMarks` is the pure selection (live, a `FlightController`, not
+`Own`), each drawn through the same `DrawOpponent` in HUD blue on the pane's own team and HUD red
+otherwise, tagged with its slant range and its current AI mode (`ModeSuffix`, the mode machine's
+own `NameOf` vocabulary; empty for a pilot without a machine), and off-screen tags stepped along
+the screen edge (`RefStaggerStep`) so a flight sharing one bearing does not stack into one string. It REPLACES the
+single-hostile draw rather than adding to it, so the tracked plane is never drawn twice in two
+colours.
+⚠ A neutral-team aircraft marks HOSTILE here, unlike `NearestHostile`'s engine gate which rejects
+  the pair. A debugging overlay that silently omitted a plane would be worse than one that
+  mis-colours it.
 
 ## src/Flight/VersusBoard.cs
 The dogfight's shared results overlay (`PLAN-vs-mode.md` C25) — `StuntRaceBoard`'s construction
@@ -3405,104 +3489,44 @@ split (one physical mouse) and stays shared.
   the same reason).
 
 ## src/Flight/FlightModel.cs
-Velocity-vector arcade flight model: body rates = control torque × reciprocal inertia vs
-ang_momentum_damp, decayed EXPONENTIALLY (`BodyRates *= exp(-dt·damp)`, applied to the whole rate
-AFTER this tick's torque is added — C24, not the explicit-Euler linear subtraction it replaced;
-the two forms agree to first order per step but not at steady state, and the steady rates moved a
-few % at this engine's dt = 1/60 s, all still inside tolerance, no `*Tune` refit), per axis
-(PitchTune/YawTune/RollTune); yaw torque is additionally scaled by
-`YawAuthorityAt` — the original's authored piecewise speed table (a low-speed floor, ramping to
-full authority at `yaw_max`, then DECLINING to a high-speed floor at `yaw_fade_out`), YAW ONLY,
-replacing the interim `eff`. Thrust, drag, gravity and lift integrate
-on the velocity vector (speed passes through zero). Lift is a DEMAND — the airflow blended toward
-the nose over the authored `liftAOAs` cosine window, `lift_accel_rate·(wind − v)` plus `nom_gravity`
-on world-up, projected onto the body X/Y plane, delivered as `clamp(|·|/9.82, −5, +9)` G and capped
-at `(0.75 − 0.15·Mach)·q·RefArea/Weight` (imperial q, dense band ρ = 2.2688e-3 slug/ft³) — so level
-flight at zero incidence cancels weight IDENTICALLY, and the nose-chase runs at that same authored
-rate. Drag is the original's parabolic polar in MACH, `C_D = 0.73·(0.12 + 0.8·M + 0.5·M²)` applied
-as `q·RefArea·DragFactor·C_D` opposing velocity — there is NO induced-drag term of any kind, so a
-pull costs speed only through the lift vector's own tilt. Thrust is
-`EnginePower·RefArea·T_avail(M)·throttle` (LINEAR lever), `T_avail = q_ref·0.73·(0.12−M/60) /
-(M·pow(1.3146, 1.41·M))` at `q_ref = ½ρ((0.84M+0.112)·a)²`, Mach floored at 0.1 — it RISES with
-speed; the thrust MARGIN is what falls. Available thrust is then scaled by NOSE ATTITUDE
-(`AttitudeThrustScale`, D32): `(1+0.24a)·(a ≤ 0 ? 1+0.13a : 1)` on `a = Attitude.Z.Y = −nose.Y`, so
-a vertical climb keeps 0.6612 and a vertical dive gets 1.24 — a climb is PENALISED. That argument is
-NEGATIVE in a climb, and a dropped sign swaps climb for dive while still flying plausibly, so
-`AttitudeThrustTests` reads the term back out of the integrator and fails under the flip. Gravity acts at
-full strength in EVERY attitude; the fitted `ClimbGravityScale = 0.6` is retired with its config key
-(it made the sustained climb worse on the post-B14 shapes, 276.7 mph against a measured 163.1, and
-was absorbing the old drag/thrust error). Nothing in the force path is fitted.
-Bank couples straight into rate, the original's coordinated-turn cheat: `0.205·(starboard·up)` into
-yaw (signed) and `0.165·|starboard·up|` into pitch (always nose-up), plus `0.205·|bodyUp·up|` into
-PITCH once inverted — the same 0.205 constant, not a third number. Both vanish at wings-level
-upright, so nothing that flies level can see them; they make the banked turn FASTER, so they are
-not the missing explanation of the original's 1.6×-slower banked pull (`BL-095` owns that).
-`return_rate` is the WEATHERVANE torque, not damping: `WeathervaneTorque()` adds
-`return_rate·(α/2)·unit(nose × VelocityDir)` (body frame, × RecInertia) into the same command, and
-`damp` is `ang_momentum_damp` alone — a spring-damper, second order, where folding `return_rate`
-into the damping coefficient was a first-order lag. Its axis is ⊥ the nose, so it can never reach
-ROLL, and it vanishes identically at α = 0, which is why every stick-centred, wings-level scenario
-is untouched — but a SUSTAINED FULL-STICK manoeuvre holds α ≈ 18° and it opposes the stick there,
-which is what `PitchTune` 0.89 / `YawTune` 1.57 re-pin (C23; it does not close `BL-147`, it closes
-about a sixth of it).
-`Alpha` (deg) is angle(nose, VelocityDir) — an emergent LAG, not modelled
-incidence, and now instrument-only: no force reads it — and the
-stall is TWO DIFFERENT mechanisms, not one margin split two ways (B15). `isStalled()` is the
-airframe's own `StallSpeed` — the speed at which the SAME aerodynamic ceiling lift uses,
-`clMax(V)·q·RefArea`, can no longer equal `VehWeight` (a load factor of exactly 1, not
-`nom_gravity/StandardG` ≈ 2.04 — the decode's own worked example, reproducing 75.5/309 mph for the
-fallback aircraft under the dense/thin bands, only matches the bare-Weight read). `IsStallWarned()`
-is unchanged: the lamp at a fixed 0.30 fd (`StallFraction` = speed/fd_speed), which led the
-Bloodhawk's break by 2.64 sim s in the clip that measured it (`BL-148`/`CAP-06`) — never drive both
-cues off one number. ⚠ The Bloodhawk's own computed `StallSpeed` (56.5 mph) no longer reproduces
-that clip's ~76 mph nose-drop — the fixed `0.25 fd` this replaced only matched the footage because
-0.25 × the Bloodhawk's fd_speed happens to sit near the FALLBACK aircraft's stall speed, not the
-Bloodhawk's own (a coincidence of wing loading). Recorded as a decode-vs-footage conflict, not
-closed by switching G-conventions to fit one clip. The autogyro moves most of the eleven airframes
-(57.0 → 18.5 mph, its huge ref_area relative to weight), not the Balmoral (44.2 → 45.5 mph, nearly
-unmoved) as the plan predicted.
-⚠ The ±5/9 clamp is a LOAD FACTOR in G, never an angle — re-deriving it as degrees gives a model
-  that looks right at small inputs and diverges at the limits. The authored `highGs`/`lowGs`
-  control limiters are a WIDER, inert pair (`BL-095`) and must not be folded into it: measured peak
-  demand is 2.13–5.01 G against `highGs[0]` = 9 and peak α 8.9–25.6° against `maxAOA` = 46° on all
-  eleven airframes, so neither limiter can fire and neither is implemented (D33 —
-  `ControlLimiterTests` asserts each airframe against its OWN loaded thresholds, and
-  `LoadFactorDemand` is the pre-clamp instrument it reads; if it ever fails, the limiter gates only
-  input OPPOSING the current rotation). A third authored-inert feature, the same family:
-  `high_speed_pitch_fade` [1000,1001] mph is beyond even
-  the model's own hard dive ceiling (1.75×fd_speed, 528.5 mph at its highest, the Bloodhawk) on all
-  eleven airframes (C24) — deliberately NOT implemented; do not add it "for completeness".
-⚠ The three *Tune rates are pinned to the original off cockpit-gauge video
-  (`analysis/video-flight-calibration/`) and are not free TUNEs. They re-pin only when a decoded
-  mechanism moves the steady rate they hold (C21's yaw curve, C23's weathervane) — never to chase a
-  transient or a feel report (`BL-147`). The 2003 m altitude clamp
-  (`BL-094`/`CAP-03`, traced to C1B IA1 only) is a numerical backstop, not a modelled limit.
-  Accepted artifacts, not bugs: loop energy pump, steep-climb equilibrium, stall hang.
-⚠ The drag polar's variable is MACH, never `C_L` — the original passes `C_L` to its drag routine
-  and never reads it. The same three coefficients read as a `C_L` polar give a drag floor and an
-  induced-drag term the original does not have; only the raw bytes settle it (`docs/org/flightModel.md`).
-  The ≈2–3.6× gap against `CAP-05`'s zero-thrust points is a RECORDED decode-vs-footage CONFLICT,
-  not an open scale question: the force→acceleration chain is byte-verified conversion-free
-  (`docs/org/flightModel.md`, "The force scale — settled"), and no constant can close the set —
-  a rescale that fixed the decel breaks the accel row the same footage pins. Never refit the
-  polar/thrust coefficients against it; `accel-150-290`, `decel-290-150`, `sustained-turn-speed` and
-  `sustained-turn-sink` (both riding the unattributed turn-rate gap, `BL-095`) sit informational in
-  `FlightEnvelopeTests` with their owners named in the rows. `terminal-dive` came BACK to asserting
-  when the attitude scale landed (−5.3% → +0.2%; the suite asserts 7 again).
-  The sustained climb joins that same recorded-conflict list from the other side: it settles ≈25%
-  FAST (204.0 mph against a measured 163.1) and is not tuned; the leading candidate is that the
-  original held a large α there (its clip is a 90° pull) where the probe holds α = 0, and at a 90°
-  nose with the measured 56° path the same force path balances to −3.3%. `CAP-20` would settle it.
-⚠ Lift is BANK-INDEPENDENT and the knife-edge sag has NO term of its own (D31, settled). At 90° of
-  bank the body yaw axis is horizontal, so C22's `0.205` bank→yaw IS the sag and C23's weathervane
-  deepens it — the footage's shape, from the original's own constants. The bounded
-  `KnifeNoseSag`/`KnifeNoseRate` pair is retired: it double-counted the onset (−7.3° at +3 s against
-  a measured −4.9°, −4.9° without it) and, keyed on `1 − |bodyUp·up|`, fought every wings-level pull
-  at up to 11.5 °/s. Do not add one back. `wingVert` survives ONLY in the nose-chase floor
-  (`KnifeAlignFloor`), kept on measurement not decode — the original holds its nose 4.8° → 8.3°
-  below its path and removing `wingVert` collapses that to 1.9° → 0.5° while the 36 s loss rises
-  1087 → 1334 m against a measured 540. Still open, and now one number: the whole banked rotation
-  runs ≈1.6× fast, the same ratio as `sustained-turn-rate` (`BL-095`).
+The aircraft's plant: the arcade velocity-vector flight model, decoded from the original and
+parameterised by the vehicle's own `dynamics` block. Rotation is a spring-damper: stick torque, the
+bank→yaw/pitch coupling, the `return_rate` weathervane and the ground blow sum into one accumulator
+decayed EXPONENTIALLY by `ang_momentum_damp`, with an authored speed-authority curve on each of the
+three axes — yaw its own non-monotone table, roll and pitch the shared low-speed ramp (C24) — scaling
+the STICK COMMAND only, never the coupling or the weathervane.
+Thrust, drag, gravity and lift integrate on the velocity VECTOR, so speed passes through zero — lift
+a demanded load factor, drag a polar in MACH with no induced term, thrust a Mach curve times a
+LINEAR lever scaled by nose attitude. Nothing in that force path is fitted; the nose-chase, the
+stall nose-drop and the altitude clamp are ours. There are TWO force paths, fixed per instance at
+construction (`UsesAiForcePath`, C21/C22/C23): the AI one skips the `liftAOAs` airflow blend and the
+weathervane, floors its post-integration nose-axis velocity at 10 mph, and applies a fixed,
+command-independent ground blow instead of the player's command-proportional one; air density is NOT
+branched. The original selected inside the force function on a compare against its single global
+player (`0x48c520`, `0x48cd3e`, `0x48e925`, `0x48c317`) — not copied, because that presumes ONE
+player and this engine flies four. `BounceNormalSpeed` is the one law here that no step of the plant
+calls: the decoded collision restitution (`bounce_factor` × the lever-arm partition, C25), asked for
+by `FlightController.SurviveHit`, which owns the contact and the player-only gate.
+Every mechanism and trap is documented at the line that computes
+it; the decode is [`org/flightModel.md`](org/flightModel.md) and the measurement rules are
+`verification.md`.
+⚠ The three `*Tune` rates and the decoded coefficients here are all PINNED, not free TUNEs — the
+  rates to cockpit-gauge video of the original (`analysis/video-flight-calibration/`), the
+  coefficients to the binary's own bytes. Re-pin a rate only when a decoded mechanism moves the
+  steady rate it holds, never to chase a transient or a feel report (`BL-147`); never refit a
+  coefficient at all.
+⚠ Four decode-vs-footage gaps stand RECORDED rather than open: the drag polar against `CAP-05`'s
+  zero-thrust points, the sustained climb (`CAP-20` would settle it), the Bloodhawk's computed stall
+  speed against its filmed nose-drop, and the ≈1.6×-fast banked rotation (`BL-383`, which has no
+  authored candidate left).
+  `FlightEnvelopeTests` carries the informational rows and names their owners. Accepted artifacts,
+  not bugs: loop energy pump, steep-climb equilibrium, stall hang.
+⚠ Deliberately absent, each for a measured reason: the authored `highGs`/`lowGs`/`maxAOA` limiters
+  and `high_speed_pitch_fade` are unreachable on all eleven airframes (`ControlLimiterTests` fails if
+  a data edit brings one into reach), and the fitted `ClimbGravityScale` and the
+  `KnifeNoseSag`/`KnifeNoseRate` pair were retired on their own ablations. Do not add any back "for
+  completeness". `FUN_0048bdd0`'s fifth output is absent for a different reason: it is not a force
+  term at all, its one consumer being the visible rudder angle (`ReverseAuthorityAt`, C24).
 
 ## src/Flight/PropAnimator.cs
 Spins the flying aircraft's prop/rotor blur discs: Build collects every node PropParts classifies
@@ -3545,6 +3569,13 @@ hard-clears all three on crash/respawn so a teleported aircraft cannot bridge it
 Deflects ailerons/elevators/rudders to an absolute pose: each surface stores its build-time local
 basis and gets Basis = base · Rot(hingeAxis, angle); three channels slew toward the stick at
 SlewPerSec (TUNE), ±20° per kind. --fly only; frozen while paused/crashed, reset on respawn.
+The RUDDER target is additionally scaled by the reverse-authority factor (`FlightModel
+.ReverseAuthorityAt`, C24) — decoded, and this is its ONLY consumer in the original, so the rudder
+barely moves at cruise and swings fully only in the slow-flight window where it has authority.
+⚠ The original's own angles/mix/rate are decoded and deliberately NOT ported (`BL-393`): its six
+  node lists do not map onto our four kinds, and the ±20° pair was validated by eye. Its whole
+  surface block is also player-only, so the original's AI aircraft fly with frozen surfaces and ours
+  do not — a deliberate divergence, not a missing guard.
 ⚠ The per-surface sign bakes three flips: the stick convention (ailerons opposite per side, TE
   against the commanded rotation), a canard flip (hinge z < CanardMaxZ ⇒ nose-mounted ⇒ pull
   deflects TE-down), and a frame flip from the accumulated hinge axis vs its canonical plane-space
@@ -3708,6 +3739,15 @@ crash/respawn while `StuntMission` holds their timer/objectives and `MarkerHud` 
 this prevents their finish pose from obstructing another pilot's gate.
 `Respawn` plays `startprops` back and resets
 `ThrottleSmoke`, which `Update` otherwise drives every frame off the live throttle.
+A survivable graze also REBOUNDS along the contact normal (C25, retiring `BL-172`): the decoded
+`bounce_factor` impulse (`FlightModel.BounceNormalSpeed`) replaces the normal component the
+tangential slide strips out, computed before the attitude kick so it reads the rates the contact was
+entered with. ⚠ Player-only, as the original is — its impulse branch tests the single global player
+pointer and not-already-crashed, widened here to `IsHumanPiloted` for the same reason C21 widened the
+force-path guard; an AI aircraft gets the position correction and nothing else. The `graze-bounce`
+suite flies both into the same floor (e = 0.56 against 0.00) and a player rig along a vertical face,
+where the same impulse fires horizontally and leaves the altimeter alone — there is no surface test
+anywhere in it, and `CAP-14`'s flat-versus-vertical split must not be implemented as one.
 A survivable graze plays touchdown.zrd's per-surface reaction (`GrazeReaction`) through the SAME
 cascade: the struck body's surface id indexes `TouchdownDefs` (the session's one `SurfaceDefTable`,
 built by `WorldEffectsFactory` against the world program because the original's touchdown vector is
@@ -3821,7 +3861,8 @@ WorstFraction stays the worst PART (FlightAudio's damaged-engine loop).
 ⚠ A stock zone's effective pool is DOUBLE its MaxHp (armor == hp on all 88 shipped entries, spent
   first) — faithful to the original, not a regression to tune away. Armor at 0 is a stripped zone,
   not a dead one. FlightController.Crash still never calls in
-  (a hard hit is a boolean destroy) and player.json's crash block is still unbound (`BL-172`).
+  (a hard hit is a boolean destroy) and the crash block's two DAMAGE ranges are still unbound
+  (`BL-381`); only its `bounce_factor` is, as the graze restitution (C25).
 ⚠ The kill is `IsDestroyed` — whole-vehicle health at zero via the summary recompute over the
   parts (docs/org/vehicleDamage.md "The A4 decision"), i.e. EVERY zone's health exhausted. The
   old any-critical-part kill was a recorded divergence D14 retired; `Critical` stays parsed and
@@ -4340,9 +4381,22 @@ sphere markers per node (tagged nodes bigger), one fixed-size `Label3D` per net 
 line per net — goes to the `world` log. A HUD text field narrows the drawn set live by
 case-insensitive name prefix. F13 is the first tenant of the F13–F24 debug-overlay key
 range (`docs/controls.md`).
+It also draws LIVE LEASHES while up: one `ImmediateMesh` line per AI aircraft, from the plane to
+the node its follower is flying at, plus a short vertical tick at the plane end. The overlay knows
+nothing about aircraft: `CollectLeashes` is an `Action<List<AiNetLeash>>` the session fills from
+each pilot's own `AiNetFollower.CurrentTarget` (built before any AI exists, hence a supplier and
+not a snapshot). `AiNetLeash.Steering` is `AiPilot.SteeringPatrol`, which the pilot REPORTS off its
+own dispatch rather than the overlay re-deriving it from the mode: a leash for a plane that only
+holds its node while pursuing draws dimmed, and the HUD line counts the two separately.
+An ANCHORED net is drawn where it actually is, not where the file says (`BL-377`): each net is one
+`Node3D` of authored-space children, so `TrailerOffsetOf` (the session's `NetTrailerTargets`) is
+applied per frame as that root's `Position` and nothing is rebuilt. Without the supplier every net
+draws at its authored coordinates.
 ⚠ Never draw node order as the route — the graph branches; only the edge list is connectivity.
 ⚠ The filter field is a deliberate PanelFocus exception (a text filter cannot work unfocusable):
   focus arrives only by clicking the field, and Enter releases it back to the aircraft.
+⚠ The leash mesh belongs to the per-show holder, so both the hide path and the refilter rebuild
+  null it; `_Process` must never write a mesh whose holder was freed.
 
 ## src/UI/ClassOverlay.cs
 The colour-by-class overlay (key X, `--debug-classoverlay` scripts it) — same mode set as
@@ -4645,7 +4699,17 @@ cannot arrive is disabled and WARNS at build rather than silently never ending.
 `BeginInstantActionSpectate` pins the wreck (`FlightController.Spectating`), takes the pane with
 `CameraOwned` and gives it a `SpectatorCamera` locked onto a still-flying human where there is one;
 the target is picked once, so if that pilot later goes out too (3+ players) the watcher orbits a
-wreck until any movement input releases the lock. An `--ia=` `stunt_flying` mission also loads the
+wreck until any movement input releases the lock.
+`ApplyDebugSpectate` (`--debug-spectate`) is the deliberate twin of that path, for watching the AI
+with nobody provoking it: every human aircraft goes `Held` + `Inert` (pinned, undrawn, and absent
+from every candidate scan's live set, which is what stops the pursuit) and its pane takes a
+`SpectatorCamera` following the first AI aircraft, cockpit instruments hidden and the marker HUD
+kept. It runs AFTER `BuildFlightRigs` because the wingman fan, the ace's spawn draw and wave 1's
+500-m-from-a-human placement all read the player's position; removing the player earlier would move
+what is being watched. The mission's own end conditions are untouched, so a squadron mission whose
+enemies have nobody to shoot never resolves, which is the expected outcome of taking the target
+away rather than a hang.
+An `--ia=` `stunt_flying` mission also loads the
 danger zones itself, `--stunt` or not — the mission type is what asks for them, the way a zeppelin
 run asks for the zeppelin and generator runtimes.
 G14 adds the wrap-up board, built once right after G13's own block (same `_instantAction is { }
@@ -5407,6 +5471,11 @@ outside every player index and `IncomingFire.ShooterId`. The crash runtime it bu
 too, so the split is readable off the `CRASH … def=` line headlessly.
 ⚠ Liveries draw from the session paint stream AFTER every player (players draw at build, AI at
   spawn) — player paint is unchanged by AI existing; keep that ordering.
+⚠ Every spawn flies a JITTERED COPY of the session's shared per-airframe `PlaneStats`
+  (`WithAiSpawnJitter`, C26): the original's per-spawn ±5 % spread, drawn off `Rng.Spawn` keyed by
+  spawn ORDINAL rather than off the shared stream, so a `--det` replay reproduces it and it shifts
+  no other subsystem's sequence. Read the gate and the divergences on that method before touching
+  either — the cache must come out unperturbed, and a human rig never sees this path.
 ⚠ The spawned subtree is deliberately NOT indexed into the world runtime's `NameResolver` (same
   as a player's plane): planes.zbd gamez indices collide with the chapter's by-index map — the
   `NameResolveFallback` case. A later item making AI aircraft addressable by mission animations
@@ -5445,9 +5514,17 @@ applied silently (the caller must log it).
   `--ia=<path>` CLI launch already names its chapter via `--chapter=`; nothing here derives one.
 ⚠ **`WingmanSlotFor`/`FlownWingmen` place and clamp only** — they say nothing about livery, team,
   or the actual `AiGunner`/`AiModeMachine` wiring; `GameSession.BuildFlightRigs` sets
-  `PrimaryTargetName` and `ActivationRange` itself, after `SpawnAiAircraft` has populated the
-  pilot's `Gunner`/`Machine` (both start null on a fresh `AiPilot`), because a helper here has no
-  spawned `FlightController` to name.
+  `PrimaryTargetName` and calls `ApplyActorVolumes` itself, after `SpawnAiAircraft` has populated
+  the pilot's `Gunner`/`Machine` (both start null on a fresh `AiPilot`), because a helper here has
+  no spawned `FlightController` to name.
+`ApplyActorVolumes` is the synthetic block's volume override (`FUN_0045a240`): 10000 m onto ALL
+THREE of a spawned actor's gates — activation, attack and return — over the airframe's own
+2000/2000/1200 m, which `AiAircraftSpawner.Spawn` seeds first and which is the fallback only for a
+roster leaving its volume slots at 0.0. Setting activation alone leaves the airframe's attack
+radius as the real engagement gate, since `AiModeMachine` enters pursue on the minimum of the two.
+⚠ It stays the last word even though every actor now also carries a patrol net (`BL-364`): a net
+  can overwrite a vehicle's volumes, but the original copies the roster block over the net's
+  afterwards and this block authors all nine at ±10000 m (`org/aiPilot.md`, "Net assignment").
 E11 adds `RandomPilotStats(draw)` — the decoded five-row personality table
 (docs/formats/instant-action.md "A wave enemy's nine pilot stats are drawn at random from a table
 of five, not from its skill"), `row = draw % 5`, fed straight into `RepresentativeRating` for the
@@ -5561,6 +5638,25 @@ last state (the decoded loop early-outs before any door rule).
 ⚠ The first post-load threshold is an assumption (full inter-wave gap); the decode does not pin
   it, and F20 revisits.
 
+## src/Session/NetTrailerTargets.cs
+Resolves a patrol net's TRAILER name to a live position supplier (`BL-377`), the session half of
+"an anchored net rides its target", so `Flight/AiNetFollower` can do the arithmetic knowing nothing
+about players or world nodes. `For(net)` returns a `Func<Vector3?>` only for the anchored-and-named
+shape (`[nodeIndex, "name"]`, 76 nets); the other three shipped shapes get null, which means "fly
+the authored coordinates". `player` is the player rig; anything else is a world node through the
+same `WorldRuntime.FindNodes` lookup `ZeppelinRuntime` uses. `OffsetOf(net)` is the overlay's read
+of the same offset. Every follower the session builds shares one instance (`GameSession._netTrailers`).
+Pinned by `NetTrailerTargetsTests` + the `ai-net-follow` suite.
+⚠ The name resolve is lazy-once and CACHED, hit or miss. The original resolves at net build
+  (`FUN_004314e0`); here the nets are read and the AI armed before `ZeppelinRuntime` has placed its
+  hosts, so a build-time resolve would miss targets that exist a few hundred lines later.
+⚠ `player` is ONE object in the binary and 2–4 rigs here. The original has no splitscreen, so
+  there is nothing to be faithful to; the user's call (2026-08-15) is that split play behaves as
+  single player does, so rig 0 is handed back and no rule (nearest player, host player, per-plane
+  pick) is invented. Settled, not deferred.
+⚠ A freed target (a killed zeppelin's node) falls back to the authored coordinates rather than
+  throwing on a stale handle.
+
 ## src/Session/AiGeneratorRuntime.cs
 Runs a mission's egen generators (M4 B6 + F20, behind `--generators[=plane]`): one
 `GeneratorCycle` per surviving `EnemyGeneratorDef`, host altitude read live off the resolved host
@@ -5624,6 +5720,11 @@ authored deploy/retract anims scoped to the hull, and spawns unowned rounds
 ⚠ A `deactivated` record (value 1) is PLACED but held — mission-script wake-up is out of M4's
   scope. A record whose net misses neindex is also placed-not-flown (the pose is real data and
   B6's altitude gate reads the node's Y). Stop nodes are NOT implemented (F17's open item).
+⚠ Zeppelins ride an anchored net too (`BL-377`, via `NetTrailerTargets`), but only two of the 222
+  nets are both zeppelin-flown and anchored: C1C's `SwanZep1` on `workersvoyagezep` and C2B's
+  `Gemini2` on `piratezep`, one zeppelin escorting another, neither self-referential. Both records
+  are `deactivated`, so nothing exercises it today. Wired because it is the decoded behaviour
+  (`formats/ai-nets.md`).
 `Hold(node)` (F12) is the runtime counterpart of that flag for a zeppelin Instant Action's own
 builder switched off: placed, but no longer stepped, so it neither flies its net nor fires an
 invisible broadside. It stands in for `FUN_0045a390`'s `FUN_0045a2a0`, which deletes the vehicle/AI

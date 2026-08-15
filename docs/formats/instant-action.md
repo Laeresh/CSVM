@@ -217,6 +217,43 @@ The offsets confirm M4 B7's decode from the other direction: team at `+0x34`, gr
 band of **±10000 m** for every Instant Action actor, which is the engine's own way of saying they
 are always awake, always willing to engage, and never return.
 
+⚠ **Every actor is also given a patrol net** (corrected 2026-08-15; this page previously said
+`netids` kept its `-1`). All three branches of `FUN_0045a390` write a one-entry `netids` list
+holding the **first id in the chapter's net table** (`0x0045a8b4` for the wingmen, `0x0045ab18` for
+the ace, `0x0045ae85` for the waves), so every Instant Action aircraft walks the chapter's first
+patrol graph. That table is built in `neindex.zrd.json` FILE order, not sorted, so "first" is its
+first pair: **net 10 `M4ReinfAce` (C1), 29 `Patrolboat3` (C1B), 25 `M1Defense` (C1C), net 1 in the
+other five**. On C1B and C1C that is not the lowest id, which is 11 on both. The 10000 m
+volumes above survive the net assignment: the net can overwrite a vehicle's volumes, but the roster
+block is copied over it afterwards and this block authors all nine
+([`org/aiPilot.md`](../org/aiPilot.md), "Net assignment"). Two consequences, both read off the code path rather than observed at the controls of
+the original: the wingmen's `w<plane>` defs carry `mode wingman`, but a net demotes a wingman to
+`jet` at spawn, so **the escort chain below is not flown as a formation in this mode**; it survives
+as a target assignment only. [`org/aiPilot.md`](../org/aiPilot.md) has the demotion rule and the
+formation law it suppresses.
+
+⚠ **That first net is a CAMPAIGN MISSION's asset, not a generic patrol area** (censused
+2026-08-15). Net names are mission-scoped, the prefix naming the mission that uses them
+([`ai-nets.md`](ai-nets.md), "Net names are mission-scoped"), and each chapter's first net is
+referenced by exactly one mission, or by nothing at all:
+
+| Chapter | First net | What owns it in the campaign |
+|---|---|---|
+| C1 | 10 `M4ReinfAce` | M04's `blakebloodhawk_8` (one `aiv` block, by id) |
+| C1B | 29 `Patrolboat3` | M03's `objectives` only |
+| C1C | 25 `M1Defense` | M01's `aiv` + its `egen` |
+| C2 | 1 `M2First` | M01's `aiv` (4 blocks) |
+| C2B | 1 `PirateZep1` | M04's `zeppelins`: it is `piratezep`'s OWN flight path |
+| C3 | 1 `M1Medusas` | M01's `objectives` |
+| C4 | 1 `M1Train` | M01's `objectives` |
+| C5 | 1 `M1Bravo` | nothing, anywhere in the chapter |
+
+So Instant Action does not hand out a patrol area designed for it. It takes index 0 of the chapter
+table, whatever that happens to be: on C1 an ace's approach pattern, on C1B a patrol BOAT's route,
+on C2B the pirate zeppelin's own course, on C5 a net no mission uses. That is the decoded
+behaviour and it is faithful; it is recorded here so the odd shapes it produces are not read as a
+bug in the follower.
+
 ### The player and the wingmen
 
 The player is placed at a **uniformly random** entry of the scenario's own `spawn_points` list.
@@ -236,9 +273,10 @@ Wingman `i` (0-based) is built as:
 `<plane>` is `wingman_plane`'s index through the two name columns above; the roster name format is
 `%s_ia%d` over the def and the index. **So the flight is not five aircraft on the player: 0, 1 and
 3 escort the player, while 2 and 4 escort 1 and 3.** That is `primary_target` doing the work M4 B7
-said it does, and it is the shipped Instant Action wingman mechanism. No patrol net is assigned
-(`netids` keeps its `-1`), and **the nine-value skill vector is left unset**, so wingmen fly on the
-airframe's own AI defaults.
+said it does, and it is the shipped Instant Action wingman mechanism. ⚠ **Corrected 2026-08-15: a
+patrol net IS assigned** (see above), and the net demotes the `w<plane>` def's `wingman` mode to
+`jet`, so on this path the chain is a target assignment rather than a flown formation. **The
+nine-value skill vector is left unset**, so wingmen fly on the airframe's own AI defaults.
 
 Every wingman is **team 1, group 0, not deactivated**, and is placed `100 · ((i >> 1) + 1)` metres
 from the player's spawn at `±45°` off its heading, the sign being `+` when `i & 3` is 1 or 2 and

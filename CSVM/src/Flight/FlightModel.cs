@@ -44,9 +44,10 @@ public struct FlightInput
 /// Gravity acts at full strength in every attitude. Neither carries a fitted constant, and
 /// the level-speed equilibrium is simply where the two cross: that lands within 1%
 /// of the authored fd_speed for nine of the eleven airframes without anything being
-/// tuned to make it. Rudder authority follows the original's own authored speed
-/// table (see <see cref="YawAuthorityAt"/>) — YAW ONLY; pitch and roll carry
-/// their own, different authority curves. Bank additionally couples straight into
+/// tuned to make it. Control authority is a function of airspeed on all three
+/// axes, each following the original's own authored curve: the rudder its
+/// non-monotone speed table (see <see cref="YawAuthorityAt"/>), roll and pitch the
+/// shared low-speed base ramp (see <see cref="RollPitchAuthorityAt"/>). Bank additionally couples straight into
 /// yaw and pitch rate (see <see cref="BankYawCoupling"/>), the original's
 /// coordinated-turn cheat, and <c>return_rate</c> is a restoring torque onto the
 /// flight path rather than extra damping (see <see cref="WeathervaneHalfAngle"/>),
@@ -55,6 +56,8 @@ public struct FlightInput
 /// the scale constants marked TUNE are ours, adjusted against playtests — except
 /// the three *Tune rates, which are pinned to measurements of the original
 /// decoded from cockpit-gauge video and must not be retuned by feel.
+/// An instance flies one of the original's TWO force paths, fixed at construction — see
+/// <see cref="UsesAiForcePath"/> for the four places the AI one diverges.
 /// </summary>
 public sealed class FlightModel
 {
@@ -130,7 +133,13 @@ public sealed class FlightModel
     // diverges at the limits.
     // ⚠ Distinct from the authored highGs/lowGs control limiters, which are a WIDER pair
     // ([9, 15] / [−6, −9] in this install) and therefore sit at or past this clamp — they can never
-    // engage before lift is already capped here. Do not fold the two together.
+    // engage before lift is already capped here. Do not fold the two together. Neither they nor the
+    // authored maxAOA (46°) is reachable on any of the eleven airframes, so neither is implemented
+    // (D33; ControlLimiterTests asserts each airframe's measured peaks against its OWN loaded
+    // thresholds, so a data edit or per-plane override that brings one into reach fails the suite
+    // rather than passing silently). If one ever does, the asymmetry is the thing to get right and
+    // docs/org/flightModel.md has it: the original gates only input OPPOSING the current rotation,
+    // so the limiter damps recovery from a departure rather than entry into one.
     // ⚠ The demanded load factor is the LENGTH of the projected demand, so it is never negative and
     // the lower bound is unreachable in practice. It is written out because it is what the model
     // clamps to, not because this code path can reach it.
@@ -221,6 +230,11 @@ public sealed class FlightModel
     // command, so no data key can move it.
     private const float GroundBlowIntoFactor = 0.05f;  // what a command INTO the obstacle is met with
     private const float GroundBlowVelocitySteer = 2f;  // 1/s at contact: velocity steered onto the nose
+
+    // The collision impulse's linear weight (see BounceNormalSpeed): a hardcoded literal at
+    // 0x00608108 with no data origin, so no key in player.json can move it. It sets where the
+    // rebound/spin partition sits — L = 2.25·|J| against A = |Δω| — and is NOT a TUNE.
+    private const float BounceLeverScale = 2.25f;
 
     // Drag is a parabolic polar in MACH:
     //
@@ -325,18 +339,66 @@ public sealed class FlightModel
     // measurement.
     // ⚠ It vanishes identically when the nose is on the velocity vector, which is what keeps level
     // cruise untouched — by construction, not by scale.
-    // ⚠ The original applies this to the PLAYER aircraft only (AI is skipped outright). Nothing here
-    // gates on that because this class only ever flies a player aircraft; an AI flight path added
-    // later must not reuse it without the gate.
+    // ⚠ The original applies this to the PLAYER aircraft only, and Step gates it on
+    // UsesAiForcePath (C22). The live guard is `cmp esi, [0x71c298]` at 0x48cd3e inside
+    // FUN_0048c470, jumping the whole block (0x48cd3e–0x48ce45) for anything that is not the single
+    // global player object. WeathervaneTorque() itself is UNGATED — it is the law, and an
+    // instrument or a test may sample it on either path; the gate is on whether Step sums it in.
     private const float WeathervaneHalfAngle = 0.5f;
 
-    public FlightModel(PlaneStats stats)
+    // The AI's forward-velocity floor: after integration, and for AI aircraft only, the velocity's
+    // component along the NOSE is raised to at least 10 mph by adding along the nose, leaving the
+    // perpendicular components untouched, and |v| is recomputed from the result. Live at
+    // FUN_0048e580 0x48e95e–0x48e998, guarded by `cmp edi, [0x71c298]` at 0x48e925, against the
+    // negated constant at 0x608128 (the original tests the m[2] = −nose component against −4.4704,
+    // which is the same comparison with both signs flipped). One-sided: it only ever raises.
+    // ⚠ It is NOT a floor on Speed, and the two are different in a dive or a sideslip — a plane
+    // dropping at 20 m/s with its nose on the horizon has ample speed and no forward velocity at
+    // all, and the original pushes it forward while a Speed clamp would do nothing.
+    private const float AiNoseSpeedFloor = 4.4704f;
+
+    // The reverse-authority factor's floor: FUN_0048bdd0's fifth output is max(yawAuthority, 0.2)
+    // above yaw_max and 1.0 at or below it (0x48bf16-0x48bf58; the 0.2 is the immediate at
+    // 0x6034fc). It is NOT a force term — see ReverseAuthorityAt for where the trace leads.
+    private const float ReverseAuthorityFloor = 0.2f;
+
+    /// <param name="aiForcePath">Which of the original's two force paths this instance flows — see
+    /// <see cref="UsesAiForcePath"/>. ⚠ Optional, and it defaults to the PLAYER path, so a
+    /// production construction site added later gets the player plant silently. Two sites pass it
+    /// today (<c>FlightRigAssembler</c>, <c>AiAircraftSpawner</c>); a third one must pass it too.
+    /// The default exists for the ~18 test sites that construct a plant with no session around
+    /// them, not as a statement about what a new caller wants.</param>
+    public FlightModel(PlaneStats stats, bool aiForcePath = false)
     {
         Stats = stats;
+        UsesAiForcePath = aiForcePath;
         StallSpeed = ComputeStallSpeed(stats);
     }
 
     public PlaneStats Stats { get; }
+
+    /// <summary>Whether this plant flows the original's AI force path rather than its player one.
+    /// The original selects between them INSIDE its force function, on a pointer compare against
+    /// the single global player object (<c>cmp esi, [0x71c298]</c> at <c>0x4916fe</c>, guarding the
+    /// weathervane block; <c>docs/org/flightModel.md</c>'s "Weathervane centring"). We cannot copy
+    /// that test: it presumes one player, and this engine flies up to four in splitscreen, so the
+    /// selection is made once per aircraft at construction from <c>IsHumanPiloted</c> instead. Same
+    /// two paths, a different way of choosing which one an aircraft is on.
+    /// <para>⚠ Named for the PATH, not for the pilot. It is a constructor parameter set independently
+    /// of who is flying (test sites in particular mix the two freely); nothing downstream of this may
+    /// read it as "is this an AI aircraft" — <see cref="FlightController.IsHumanPiloted"/> answers
+    /// that.</para>
+    /// <para>⚠ Immutable by construction. A plant that could change path mid-flight would make a
+    /// golden shot or a suite run unreproducible, since the trajectory would depend on WHEN the
+    /// switch happened rather than on the inputs.</para>
+    /// <para>Four divergences hang off it today, all in <see cref="Step"/> and each carrying its
+    /// own live address: the airflow blend is skipped so the wind always comes straight down
+    /// the nose, the weathervane torque is not summed in, the post-integration velocity carries
+    /// the <see cref="AiNoseSpeedFloor"/> (all C22), and <see cref="GroundBlowTerm"/> applies a
+    /// fixed, command-independent push instead of the player's command-proportional one (C23).
+    /// There is no density branch — A1 disproved it, the atmosphere call is shared and unbranched,
+    /// so both paths fly the dense band.</para></summary>
+    public bool UsesAiForcePath { get; }
 
     /// <summary>Airspeed as a fraction of fd_speed — the single stall-proximity scale both stall
     /// thresholds are measured on, and the one the STALL lamp's blink rate ramps over. Every stall
@@ -371,8 +433,9 @@ public sealed class FlightModel
     /// <para>⚠ The argument is the world-up component of the BODY Z AXIS, and the nose points along
     /// <b>−Z</b>: pass <c>Attitude.Z.Y</c>, which is <c>−nose.Y</c> and therefore NEGATIVE in a
     /// climb. This is the one place in the force path where a dropped sign produces flight that still
-    /// looks entirely plausible — it merely swaps climb for dive — so it is asserted by a test that
-    /// fails under the flip rather than left to review.</para></summary>
+    /// looks entirely plausible — it merely swaps climb for dive — so <c>AttitudeThrustTests</c> reads
+    /// the term back out of the integrator and fails under the flip, rather than leaving it to
+    /// review.</para></summary>
     public static float AttitudeThrustScale(float bodyZUp)
     {
         float a = Mathf.Clamp(bodyZUp, -1f, 1f);
@@ -424,12 +487,69 @@ public sealed class FlightModel
         return s.YawHighSpeed;
     }
 
+    /// <summary>Roll and pitch authority at an airspeed — the original's base ramp, taken from
+    /// AIRSPEED ALONE (<see cref="PlaneStats.TurnFadeIn"/>/<see cref="PlaneStats.TurnFadeOut"/>):
+    /// 0 at or below turn_fade_in (10 mph), rising LINEARLY to 1 at turn_fade_out (authored 50, the
+    /// executable's fallback 40), and held at 1 above. So the slower the aircraft, the mushier it
+    /// gets, and at 10 mph roll and pitch are gone entirely. <c>FUN_0048bdd0</c> 0x48bdd0-0x48be1a
+    /// writes the same scalar to its pitch output (0x48be20) and its roll output (0x48be6c); the
+    /// yaw output is a different, non-monotone curve (see <see cref="YawAuthorityAt"/>).
+    /// Exposed so an instrument can sample the curve without re-deriving it; Step calls this method.
+    /// <para>⚠ ROLL AND PITCH ONLY, and keyed on airspeed, not on stall. Extending it to the rudder
+    /// double-fades an axis that already carries its own curve, and gating it on
+    /// <see cref="isStalled"/> makes it vanish on the nine airframes whose stall sits above 50 mph
+    /// (BL-330's own traps).</para>
+    /// <para>⚠ It scales the STICK command only. The bank coupling, the weathervane and the ground
+    /// blow enter the same accumulator carrying no authority factor at all — <c>FUN_0048c470</c>
+    /// multiplies these scalars inside the three per-axis input blocks and nowhere else — so a slow
+    /// aircraft still gets the full coupling and the full restoring torque.</para>
+    /// <para>Where 50 mph falls decides how visible this is, and it differs by airframe: nine of the
+    /// eleven stall at 52-57 mph, i.e. above the ramp's top, so the fade only bites once they are
+    /// already stalling; the Balmoral reaches its stall at ≈89 % authority and the autogyro (stall
+    /// 18.5 mph) at roughly 21 %, which for that airframe reads as deliberate.</para>
+    /// <para>The original's HIGH-speed pitch fade sits on the same output (0x48be22-0x48be68) and is
+    /// deliberately not implemented — this install authors it at [1000, 1001] mph, out of reach on
+    /// every airframe. Roll has no high-speed fade in the original at all.</para></summary>
+    public float RollPitchAuthorityAt(float speed)
+    {
+        var s = Stats;
+        if (speed <= s.TurnFadeIn)
+            return 0f;
+        return speed < s.TurnFadeOut && s.TurnFadeOut > s.TurnFadeIn
+            ? (speed - s.TurnFadeIn) / (s.TurnFadeOut - s.TurnFadeIn)
+            : 1f;
+    }
+
+    /// <summary>The reverse-authority factor — <c>FUN_0048bdd0</c>'s fifth output, which the debug
+    /// copy lacks: <c>max(yawAuthority, 0.2)</c> above <c>yaw_max</c> (authored 50 mph) and 1.0 at
+    /// or below it. Because yaw_max is where the yaw curve peaks, it engages across the whole of
+    /// normal flight, tracking the declining yaw curve down to the 0.2 floor (reached at ≈345 mph,
+    /// ≈0.40 at the Bloodhawk's 302 mph cruise).
+    /// <para>⚠ NOTHING IN THE FORCE PATH READS IT, and that is a trace rather than an omission
+    /// (C24). <c>FUN_0048c470</c> takes it as an out-parameter and writes it straight through to its
+    /// only caller, <c>FUN_0048e580</c>, where its single use is <c>0x48ec0b</c>-<c>0x48ec1d</c>:
+    /// <c>rudderAngle = factor · yawInput · −0.61086524 rad</c> (−35°, the immediate at
+    /// <c>0x608120</c>), smoothed toward that target at 2/s (<c>FUN_00460490</c>) into the angle
+    /// slots <c>obj+0x634</c>/<c>+0x638</c>, which <c>FUN_004b2fe0</c> then applies as a node
+    /// rotation to the two rudder node lists at <c>obj+0xa04</c>/<c>+0xa14</c>. It scales the
+    /// VISIBLE rudder deflection, on the player's aircraft only, and touches no torque.</para>
+    /// <para>⚠ What softens opposing control INSIDE <c>FUN_0048c470</c> is a different, local
+    /// quantity — <c>min(</c>the maxAOA window<c>, </c>the G limiter<c>)</c>, applied to pitch and
+    /// yaw when the command's sign opposes the nose→velocity closing axis. Reading the fifth output
+    /// as that scalar is the misattribution this method exists to record.</para>
+    /// <para>Exposed for <see cref="ControlSurfaceAnimator"/>, which is its one consumer here, and
+    /// for an instrument that wants the curve.</para></summary>
+    public float ReverseAuthorityAt(float speed) =>
+        speed > Stats.YawMax ? Mathf.Max(YawAuthorityAt(speed), ReverseAuthorityFloor) : 1f;
+
     /// <summary>The weathervane's restoring torque for the current attitude and flight path, in
     /// BODY axes and in the same units as the stick command (rad/s², before RecInertia and before
     /// the damping) — <c>return_rate · (α/2)</c> about the axis that swings the nose onto the
     /// velocity vector. Zero when the two are aligned, and its roll component is zero always.
     /// Exposed so an instrument or a test can read the torque without re-deriving it; Step calls the
-    /// same method. See <see cref="WeathervaneHalfAngle"/> for the decode and its traps.</summary>
+    /// same method — on the PLAYER path only, and this method is not itself gated, so it answers
+    /// "what would the weathervane do here" for either path. See
+    /// <see cref="WeathervaneHalfAngle"/> for the decode and its traps.</summary>
     public Vector3 WeathervaneTorque()
     {
         var nose = -Attitude.Z;
@@ -479,20 +599,29 @@ public sealed class FlightModel
 
         // --- rotation: torque·recInertia vs momentum damping (all from the dynamics block), plus
         // two decoded torques into the same accumulator — the bank coupling and the weathervane.
-        // Yaw authority follows the original's authored speed table (see YawAuthorityAt) — a
-        // declining function of speed — the original's own shape, not a fitted stand-in. Pitch and
-        // roll carry no HIGH-speed fade here: the original fades neither with speed (its pitch fade
-        // is authored unreachable).
-        // ⚠ They do fade at LOW speed in the original and do not here — it ramps roll and pitch
-        // authority from 0 at turn_fade_in (10 mph) to 1 at turn_fade_out (50), flat above.
-        // Traced and corroborated from the controls, but unimplemented; see
-        // docs/org/flightModel.md. Do not read the line above as "roll never fades" — that
-        // misreading is what had turn_fade_* filed as a bank effect.
+        // Each axis carries the original's own authority curve, all three from airspeed alone and
+        // all three the binary's shapes rather than fitted stand-ins: yaw the authored, non-monotone
+        // speed table (see YawAuthorityAt), pitch and roll the shared low-speed base ramp (see
+        // RollPitchAuthorityAt), which is why an aeroplane goes mushy as it slows and has no roll or
+        // pitch left at all at 10 mph.
+        // Pitch and roll carry no HIGH-speed fade. The original's high_speed_pitch_fade IS authored,
+        // at [1000, 1001] mph, and is unreachable — past even this model's own hard dive ceiling of
+        // 1.75 × fd_speed (528.5 mph at its highest, the Bloodhawk) on all eleven airframes — so it
+        // is deliberately NOT implemented; do not add it "for completeness". Roll has no high-speed
+        // fade in the original at all. See docs/org/flightModel.md's unreachability table, and do
+        // not read "roll never fades" as speed-independence: that misreading is what had
+        // turn_fade_* filed as a bank effect for four items.
+        // ⚠ The three scalars multiply the STICK COMMAND only. The bank coupling, the weathervane
+        // and the ground blow are summed into the same accumulator below carrying no authority at
+        // all, which is the original's arrangement (FUN_0048c470 applies them inside the three
+        // per-axis input blocks and nowhere else): a slow aircraft loses its controls but keeps the
+        // coupling and the restoring torque.
         float yawEff = YawAuthorityAt(Speed);
+        float rollPitchEff = RollPitchAuthorityAt(Speed);
         var cmd = new Vector3(
-            Mathf.Clamp(input.Pitch, -1f, 1f) * s.PitchTorque * s.RecInertia.X * pitchTune,
+            Mathf.Clamp(input.Pitch, -1f, 1f) * s.PitchTorque * s.RecInertia.X * pitchTune * rollPitchEff,
             Mathf.Clamp(input.Yaw, -1f, 1f) * s.RudderTorque * s.RecInertia.Y * yawTune * yawEff,
-            Mathf.Clamp(input.Roll, -1f, 1f) * s.RollTorque * s.RecInertia.Z * rollTune);
+            Mathf.Clamp(input.Roll, -1f, 1f) * s.RollTorque * s.RecInertia.Z * rollTune * rollPitchEff);
 
         // Bank coupling (see the two constants): banking yaws the nose the way the wings point and
         // pulls it up, with a further pull once the wings are past vertical. Read off the attitude
@@ -509,7 +638,10 @@ public sealed class FlightModel
         // velocity vector, half the misalignment angle about the axis that closes it. Read off the
         // attitude and the velocity direction this frame ENTERED with, alongside the stick command
         // and the bank coupling, which is the original's own ordering.
-        cmd += WeathervaneTorque() * s.RecInertia;
+        // AI skips the whole block (0x48cd3e), so an AI aircraft's nose is never pulled back onto
+        // its flight path and its rotation is a first-order lag again rather than a spring-damper.
+        if (!UsesAiForcePath)
+            cmd += WeathervaneTorque() * s.RecInertia;
 
         // Ground blow (see GroundBlowTerm): the nose-forward probe biasing the command away from
         // what it is closing on. Last of the three torques and after both of the above, which is
@@ -581,8 +713,10 @@ public sealed class FlightModel
         // gives the original's own shape — a drift with no equilibrium — and its onset: at the
         // original's +3 s sample the coupling alone reads −4.94° against a measured −4.9°, sinking
         // 5.7 ft/s against a measured 0.5. ⚠ Do not add a nose-sag term to deepen the knife-edge:
-        // a bounded ≈4° drop keyed on wing verticality, stacked on top, takes that same sample to
-        // −7.28° and 12.7 ft/s. The remaining divergence is that the whole banked rotation runs
+        // a bounded ≈4° drop keyed on wing verticality — the retired KnifeNoseSag/KnifeNoseRate pair
+        // — stacked on top, takes that same sample to −7.28° and 12.7 ft/s, and being keyed on
+        // 1 − |bodyUp·up| it fought every WINGS-LEVEL pull too, at up to 11.5 °/s.
+        // The remaining divergence is that the whole banked rotation runs
         // ≈1.6× fast (see KnifeAlignFloor), and a second nose-down term would double-count what is
         // already there. See docs/org/flightModel.md.
 
@@ -613,12 +747,23 @@ public sealed class FlightModel
         // cosined at load and the window is a cosine window (blending on the angle instead is a
         // different, subtly wrong curve). This is the large arcade assist that lets a hard-
         // manoeuvring aircraft behave as though it has no sideslip.
+        // ⚠ The window is PLAYER-ONLY. The AI path skips it outright and takes the wind fully
+        // nose-aligned at every incidence — the live guard is `cmp esi, ecx` at 0x48c520 (the
+        // player object loaded at 0x48c502), jumping to 0x48c6e9, where the AI branch builds
+        // −speed·m[2] and m[2] is −nose. So an AI aircraft flies at permanently zero incidence.
+        // ⚠ That does NOT mean it pulls harder. The demand below is the swing onto this wind PLUS
+        // weight, so with the flight path above the nose the fully-nose-aligned swing points down
+        // and cancels part of the weight term: measured on the Bloodhawk at α = 8°, the AI demands
+        // 0.26 G against the player's 2.04 G. Past liftAOAs[1] the two agree exactly, the player
+        // being nose-aligned there too, so the whole divergence lives inside the window.
         var velocity = VelocityDir * Speed;
         float cosAlpha = Mathf.Clamp(nose.Dot(VelocityDir), -1f, 1f);
         float cosSpan = s.LiftAoaCosLo - s.LiftAoaCosHi;
-        float windBlend = cosSpan > 1e-6f
-            ? Mathf.Clamp((s.LiftAoaCosLo - cosAlpha) / cosSpan, 0f, 1f)
-            : (cosAlpha < s.LiftAoaCosLo ? 1f : 0f);
+        float windBlend = UsesAiForcePath
+            ? 1f
+            : cosSpan > 1e-6f
+                ? Mathf.Clamp((s.LiftAoaCosLo - cosAlpha) / cosSpan, 0f, 1f)
+                : (cosAlpha < s.LiftAoaCosLo ? 1f : 0f);
         var relativeWind = velocity.Lerp(nose * Speed, windBlend);
 
         // Step 2 — the demand: swing the velocity onto that airflow at the authored rate, and carry
@@ -666,6 +811,9 @@ public sealed class FlightModel
         // was one half of. There is no climb-retention scale on it: the original's own gravity term
         // is a plain nom_gravity/9.82 × Weight with nothing attitude-dependent anywhere near it, and
         // what the original DOES scale by attitude is the thrust above — in the opposite direction.
+        // The fitted ClimbGravityScale = 0.6 that used to sit here is retired with its config key: on
+        // the post-B14 drag/thrust shapes it was making the sustained climb WORSE, the error it was
+        // absorbing having moved (docs/verification.md METHOD-22).
         //
         // The polar's variable is MACH. A pull therefore costs speed only through the lift vector's
         // own backward tilt in the force sum below — there is no induced-drag term here at all, and
@@ -681,6 +829,18 @@ public sealed class FlightModel
                     + Vector3.Down * s.Gravity
                     + liftAccel;
         var vel = VelocityDir * Speed + accel * dt;
+
+        // The AI's nose-axis floor (see AiNoseSpeedFloor), applied here because the original applies
+        // it here: after the velocity integration and before |v| is recomputed and the position
+        // steps. It adds along the nose only, so the perpendicular components survive it, and the
+        // speed that comes out is the length of the RESULT rather than a clamped scalar.
+        if (UsesAiForcePath)
+        {
+            float alongNose = vel.Dot(nose);
+            if (alongNose < AiNoseSpeedFloor)
+                vel += nose * (AiNoseSpeedFloor - alongNose);
+        }
+
         Speed = Mathf.Min(vel.Length(), MaxDiveSpeedFrac * s.FdSpeed);
         if (vel.LengthSquared() > 1e-8f)
             VelocityDir = vel.Normalized();
@@ -749,6 +909,60 @@ public sealed class FlightModel
     public bool IsStallWarned() =>
         StallFraction < Config.GetFloat("flightModel.stallWarnFrac", StallWarnFrac);
 
+    /// <summary>The decoded collision restitution (<c>FUN_0048d7f0</c>, docs/org/flightModel.md's
+    /// "Collision response and <c>bounce_factor</c>"): the velocity's component along the contact
+    /// normal AFTER the original's impulse, positive away from the surface. The caller owns the
+    /// contact and the gate — in the original the impulse branch runs for the local player alone
+    /// (<see cref="FlightController.SurviveHit"/>), so this is deliberately not branched on
+    /// <see cref="UsesAiForcePath"/>.
+    /// <para>With <c>r</c> the contact arm, <c>ω</c> the body rates and <c>I⁻¹</c> the airframe's
+    /// reciprocal moments:</para>
+    /// <para><c>vp = v + 2·(ω × r)</c>, <c>J = −(n·vp)·n</c>,
+    /// <c>Δω = R·I⁻¹·Rᵀ·[(r × J)/|r|²]</c>, <c>L = 2.25·|J|</c>, <c>A = |Δω|</c>,
+    /// <c>f_lin = L/(L+A)</c>, and the impulse is <c>v += J·(1 + f_lin·bounce_factor)</c>.</para>
+    /// <para>Effective restitution is <c>f_lin · bounce_factor</c>, bounded by [0, 0.6] as authored.
+    /// ⚠ The partition runs the opposite way round to the summary sentence that has travelled with
+    /// this decode ("a short arm rebounds at up to 0.6 while a wingtip throws the impact into
+    /// rotation"): <c>|Δω| = |I⁻¹|·|J|·sinθ/|r|</c> falls as <b>1/|r|</b>, because the <c>/|r|²</c>
+    /// is a point-mass moment of inertia and not a lever, so a LONG arm partitions more into rebound
+    /// and a short one less. With <c>I⁻¹ ≈ 1.1</c> it reads
+    /// <c>f_lin = 2.25/(2.25 + 1.1·sinθ/|r|)</c>: ≈0.91 at a 5 m wingtip, ≈0.67 at a 1 m arm, and
+    /// rising toward 1 as the arm lengthens. So a wingtip rebounds HARDER than a contact near the
+    /// centre, and nothing here converts a wingtip strike into spin.</para>
+    /// <para>⚠ There is NO surface dependence anywhere in this: no verticality test, no material
+    /// lookup, no friction term. <c>CAP-14</c>'s measured flat-versus-vertical split (0.62 against
+    /// 0.10) is not a per-surface coefficient and must not be implemented as one; it is a contact
+    /// geometry difference, and on a vertical face the sink an altimeter reads is tangential to the
+    /// contact, which this impulse never touches.</para>
+    /// <para>⚠ The contact-point velocity carries the rotational term DOUBLED, and the resulting
+    /// impulse is applied in full to the centre of mass with no reaction term — so the normal
+    /// component comes out as <c>−k·(n·v) − (1+k)·2·n·(ω × r)</c> with <c>k = f_lin·bounce_factor</c>.
+    /// The second half is unbounded and is not restitution; it is also what produces the original's
+    /// measured flat-ground rebound, which <c>bounce_factor</c> alone cannot reach. Raising the
+    /// constant to chase that measurement is the wrong fix.</para></summary>
+    /// <param name="velocity">The velocity entering the contact, world frame.</param>
+    /// <param name="normal">The contact normal, pointing away from the struck surface.</param>
+    /// <param name="contactArm">Contact point minus the aircraft's centre, world frame, NOT
+    /// normalised — its length sets both the doubled contact-point term and the rebound/spin
+    /// partition, so normalising it silently changes the answer.</param>
+    public float BounceNormalSpeed(Vector3 velocity, Vector3 normal, Vector3 contactArm)
+    {
+        float vn = normal.Dot(velocity);
+        var omegaWorld = Attitude * BodyRates;
+        float vpn = vn + 2f * normal.Dot(omegaWorld.Cross(contactArm));
+        var j = -vpn * normal;
+        float r2 = contactArm.LengthSquared();
+        // Δω is the impulse's angular share, in body axes here — |Δω| is all this needs, and a
+        // rotation back to world could not change it.
+        var dOmega = r2 > 1e-12f
+            ? Attitude.Transposed() * (contactArm.Cross(j) / r2) * Stats.RecInertia
+            : Vector3.Zero;
+        float l = BounceLeverScale * j.Length();
+        float a = dOmega.Length();
+        float fLin = l + a > 0f ? l / (l + a) : 0f;   // L == 0 → 0, the original's own degenerate arm
+        return vn - vpn * (1f + fLin * Stats.BounceFactor);
+    }
+
     // Solves clMax(V)·q(V)·RefArea = VehWeight for V at a load factor of 1 (see StallSpeed's doc for
     // why 1, not nom_gravity/StandardG). clMax's Mach term makes this implicit; a handful of
     // fixed-point passes converge to float precision because stall speeds sit well below the speed
@@ -768,29 +982,50 @@ public sealed class FlightModel
         return vFps * MetresPerFoot;
     }
 
-    /// <summary>Ground blow: the original's bias of the player's control response away from
-    /// anything large the nose is closing on (docs/org/flightModel.md's "Ground blow"). The probe
-    /// itself belongs to the caller, which has the world; this is the law it feeds.
+
+    /// <summary>Ground blow: the original's bias of aircraft control response away from anything
+    /// large the nose is closing on (docs/org/flightModel.md's "Ground blow"). The probe itself
+    /// belongs to the caller, which has the world; this is the law it feeds. Two DIFFERENT laws
+    /// share the same probe and falloff, branching on <see cref="UsesAiForcePath"/> exactly as
+    /// <c>FUN_0048c220</c> does (<c>0x0048c30f</c> player, <c>0x0048c317</c> AI).
     /// <para>With <c>n</c> the hit normal, <c>b</c> the backward body axis, <c>d</c> the distance to
     /// the hit and <c>c = dot(b, n)</c>: the surface must face back at the aircraft (<c>c &gt; 0</c>),
     /// proximity is <c>S = sqrt(c)·(elev − d)/elev</c> (1 at contact, 0 at the ray's end), and the
-    /// escape axis is <c>V = normalize(n × b)·S</c>. The command's own component along <c>V</c> is
-    /// then amplified when it points away from the surface and cut when it points into it, so this
-    /// is a bias on the STICK, never a force and never a rate of its own.</para>
-    /// <para>⚠ It returns a torque to add to the command accumulator, NOT to BodyRates, and carries
-    /// no dt: the caller's <c>cmd * dt</c> is what makes it linear in dt, as the original's is. A dt
-    /// applied here as well would make the whole effect vanish at a small step.</para>
+    /// escape axis is <c>V = normalize(n × b)·S</c>. On the PLAYER path the command's own component
+    /// along <c>V</c> is then amplified when it points away from the surface and cut when it points
+    /// into it, so it is a bias on the STICK. On the AI path it is a fixed push, independent of the
+    /// AI's own command and linear in <c>S</c> rather than quadratic (<c>V</c> already carries one
+    /// factor of <c>S</c>; the player law gets its second one from dotting into the command, which
+    /// the AI law never does) — <c>accum += V · (ai_groundblow · groundblow_mag)</c>. Neither is
+    /// ever a force or a rate of its own; both return a torque to add to the command accumulator.</para>
+    /// <para>⚠ <c>ai_groundblow · groundblow_mag</c> is the AI factor, not <c>ai_groundblow</c> alone
+    /// (5.0 authored, not 0.15 — decompiled 2026-08-15). The compiled AI branch cuts BOTH this
+    /// factor and the velocity-steer's <c>S</c> to ×0.15 only while the per-object clock sits inside
+    /// <c>obj+0xB4</c>, a 2.5 s settling window written on the carrier-drop spawn path
+    /// (<c>FUN_00452450</c>) alone. ⚠ That window IS reachable here — a zeppelin's fighter-drop
+    /// launch (<c>AiGeneratorRuntime</c> → <c>AiAircraftSpawner.Spawn</c>) is this engine's carrier
+    /// drop, and it lands a freshly-spawned AI aircraft on this same <c>UsesAiForcePath</c> plant —
+    /// but nothing here tracks a per-aircraft spawn timestamp, so the cut is NOT modelled: a
+    /// just-dropped fighter gets the full un-cut 5.0 rather than the original's 0.75 for its first
+    /// 2.5 s. Recorded as a known gap (`backlog.md` `BL-382`), not implemented by this method.</para>
+    /// <para>⚠ It carries no dt on either path: the caller's <c>cmd * dt</c> is what makes it linear
+    /// in dt, as the original's is. A dt applied here as well would make the whole effect vanish at
+    /// a small step.</para>
     /// <para>⚠ The escape axis is built from a WORLD normal and is converted to the body frame here,
     /// once, before both the dot and the return. Skipping that gives a term that is right
     /// wings-level and wrong at every other attitude.</para>
-    /// <para>⚠ A dead-on approach must get nothing: as <c>n → b</c> the cross product collapses and
-    /// the term goes to zero. That is the original's "never saves a head-on collision", so the
-    /// degenerate case is returned as zero rather than special-cased or renormalised.</para></summary>
+    /// <para>⚠ A dead-on approach must get nothing on EITHER path: as <c>n → b</c> the cross product
+    /// collapses and the term goes to zero. That is the original's "never saves a head-on
+    /// collision", so the degenerate case is returned as zero rather than special-cased or
+    /// renormalised.</para></summary>
     /// <param name="cmd">This step's command accumulator, with the stick, the bank coupling and the
-    /// weathervane already summed in — the original reads exactly that.</param>
+    /// weathervane already summed in — the original reads exactly that. Read only on the player
+    /// path; the AI law does not consult it.</param>
     /// <param name="velocitySteerRate">The second, smaller effect: the rate in 1/s at which the
-    /// velocity direction is steered onto the nose, zero while the pilot commands into the
-    /// obstacle (the original zeroes its proximity on that branch, which suppresses this).</param>
+    /// velocity direction is steered onto the nose. On the player path it is zero while the pilot
+    /// commands into the obstacle (the original zeroes its proximity on that branch, which
+    /// suppresses this); the AI path never suppresses it, matching "independent of the AI's own
+    /// command".</param>
     private Vector3 GroundBlowTerm(in FlightInput input, Vector3 cmd, out float velocitySteerRate)
     {
         velocitySteerRate = 0f;
@@ -808,10 +1043,19 @@ public sealed class FlightModel
         var axis = n.Cross(b);
         if (axis.LengthSquared() < 1e-12f)
             return Vector3.Zero;
-        // ONE scaled axis, built once and used TWICE — once in the dot, once in the add. That is
-        // where the second power of proximity comes from, and building it once is what stops it
-        // from silently becoming a third.
+        // ONE scaled axis, built once and used TWICE on the player path — once in the dot, once in
+        // the add — which is where the second power of proximity comes from. The AI path uses it
+        // only once, so it stays linear in S.
         var v = Attitude.Transposed() * (axis.Normalized() * proximity);
+
+        if (UsesAiForcePath)
+        {
+            // AI law (0x0048c317): a fixed push, independent of the AI's own command, never
+            // suppressed by command direction — unlike the player law below.
+            velocitySteerRate = GroundBlowVelocitySteer * proximity;
+            return v * (Stats.AiGroundBlow * Stats.GroundBlowMag);
+        }
+
         float p = cmd.Dot(v);
         velocitySteerRate = p < 0f ? 0f : GroundBlowVelocitySteer * proximity;
         // Both branches push along +v, away from the surface: commanding away is amplified by
@@ -819,5 +1063,6 @@ public sealed class FlightModel
         // authored 10) and never reversed.
         return v * ((p >= 0f ? p : GroundBlowIntoFactor * -p) * Stats.GroundBlowMag);
     }
+
 
 }

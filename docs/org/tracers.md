@@ -33,6 +33,9 @@ All in `D:\zipper\gamez\zweapon\` unless noted.
 | `FUN_005aeca0` | Projectile pool alloc — attaches the flyout model to the round's node |
 | `FUN_005aef40` | Fire/spawn — places the round and applies its **one and only** orientation |
 | `FUN_005af900` | Per-frame projectile pass over the live list |
+| `FUN_005af720` | The integrator: one pass over the live list, moving and colliding each round |
+| `FUN_005afd50` | Moves one round, accumulates its flown distance, and ends it at `RANGE` |
+| `FUN_005ac3a0` | The end-of-flight detonation: the impact/blast handler at the round's last position |
 | `FUN_005b0770` | Per-frame visual update of one live round — position, and conditional re-orientation |
 | `FUN_005aed40` | Despawn — detaches the model, resets the node's scale/rotation/position |
 | `FUN_005ad290` | Hands out a per-round *clone* of the flyout model (only for `MODEL_ANIMATION` carriers) |
@@ -111,6 +114,50 @@ The `0x4000` branch is the exception that proves it: those rounds are spun about
 `3.4906585 rad/s` (200°/s) and scaled `1 → 5` over their first second (`s = 1 + 4t`). Nothing scales
 or fades an ordinary round — no per-frame opacity, no distance scaling, no billboarding.
 
+## How a round ends: `RANGE`, and what it leaves behind
+
+Decoded 2026-08-15. The integrator is `FUN_005af720`, which walks the live list and calls
+`FUN_005afd50` to move one round. Every frame that move adds the length of the step to a running
+total at `round+0x664` and compares the total against the weapon's `RANGE` at `weapon+0x1c`
+(`0x005b01e6` onward). While the total is under `RANGE` the round keeps flying; once it reaches
+`RANGE` the round's state word at `round+0x20` is cleared, and the next pass of `FUN_005af900`
+hands it to the despawn path `FUN_005b08d0`.
+
+What the round leaves behind at that point is decided by a single flag test at `0x005b0206`, and
+**nothing on that path queries what the round is flying over.**
+
+- The false arm falls to `LAB_005b0318`, which clears the state word and returns. No raycast, no
+  impact row, no sound, no effect. The round is simply gone.
+- The true arm publishes the last position into the effect-origin globals (`_DAT_00a1d7a4` onward)
+  and calls `FUN_005ac3a0`, which runs the ordinary impact/blast handler `FUN_005ac7a0` at that
+  point and, when `weapon+0x3c` is positive, the area pass `FUN_005aca30` / `FUN_005acac0`.
+
+The condition as written is `(LOCK_ON && !EXPIRES) || DETONATE_AT_RANGE`, against three bits of the
+def flag word at `weapon+0x74`: bit 15 (`0x8000`) `LOCK_ON`, set at `0x005addd5`; bit 7 (`0x80`)
+`EXPIRES`, set at `0x005adca6`; bit 25 (`0x2000000`) `DETONATE_AT_RANGE`, set at `0x005adbf8`.
+**Neither `EXPIRES` nor `DETONATE_AT_RANGE` is authored by any of the 48 entries in
+`weapons.zrd.json`.**
+
+⚠ **Do not read "which weapons detonate at max range" off bit 15.** Inside this layer both the
+max-range detonation and the proximity fuse are gated on `LOCK_ON`, yet `wep_12` CHOKER authors
+`DETONATION_DISTANCE 35` and `DETONATION_DOT_PRODUCT 0.1` without `LOCK_ON` and is filmed detonating
+in mid-air. Some consumer outside the ZWEP projectile layer therefore also ends these rounds, and it
+has not been read (the game-side weapon-extension struct hung off `FUN_004ba6f0`, or the `TANGLER`
+handling, are the candidates). Which rocket ends how is an open decode, not a settled table.
+
+Two neighbouring fields, since they are easy to confuse with the range test: `weapon+0x44` is
+`DETONATION_DISTANCE` and is stored **squared** (`0x005adbb9`), and `weapon+0x48` is
+`DETONATION_TIME` (`0x005adbd6`). Neither key sets a flag bit of its own.
+
+**The default `RANGE` is 500 m** (`MOV dword ptr [EBX+0x1c], 0x43fa0000` at `0x005ad80b`, in the
+reader's defaults block). Only `wep_13` SMOKER and `wep_15` FLARE omit the key, and neither appears
+to end by range: SMOKER is `REAR` + `SMOKE_SCREEN`, FLARE carries `DETONATION_TIME 2.0`.
+
+**Probe trap.** A round is invisible past the 600 m LOD cut but live and lethal out to `RANGE`, and
+past `RANGE` it is gone with no trace at all. A firing probe placed at a slant beyond the weapon's
+`RANGE` logs zero impacts and looks exactly like a missing collider. Fire from well inside `RANGE`,
+or the instrument manufactures a false negative.
+
 ## The dead beam renderer
 
 `FUN_005b0cb0` is a second, much larger per-frame pass over the same live list that renders a shot
@@ -182,6 +229,17 @@ puffer smoke ([`formats/weapon-effects.md`](../formats/weapon-effects.md), "FLYO
 
 `CSVM/src/Flight/Projectile.cs` does not instance the prototype at all: it draws a hand-tuned sprite
 per round. The decode settles the numbers that tuning was standing in for.
+
+At the range-expiry branch (`Projectile.cs:897-912`) we agree with the original on the case that
+matters at the controls: a gun round dies silently, with no effect and no surface query, so nothing
+splashes when it runs out of range over water. Two details differ and are not yet reconciled.
+
+- We split on `weapon.IsRocket`; the original's flag test is the `LOCK_ON` bit, and the two sets are
+  not the same (`wep_12` CHOKER, `wep_13` SMOKER and `wep_26` FW are `ROCKET` without `LOCK_ON`,
+  `wep_25` is the reverse). Fixing this to `LockOn` alone would be premature while the CHOKER case
+  above says the flag is not the whole story.
+- Our fallback `RANGE` is `1000f` (`Projectile.cs:711`) against the engine's 500 m. It reaches only
+  SMOKER and FLARE, neither of which appears to end by range.
 
 | | Original (measured) | CSVM (`RenderTracers`) | Note |
 |---|---|---|---|

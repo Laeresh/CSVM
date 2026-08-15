@@ -219,7 +219,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   YELLOW) on the first lit blink ≤ 0.25 s after contact, then blinks lit/dim persistently.
   (d) The clip contains **no nose-anchored trail** even with the wing red-critical for 30 s —
   moot in code since `BL-259` landed (2026-08-05): nothing anchors at a synthetic nose offset
-  any more; the heavy stage plays `player_damage_trail` at `prop1` (`BL-246` for *when*).
+  any more; the heavy stage plays `player_damage_trail` at `prop1`. *When* is settled (`BL-246`,
+  decoded 2026-08-15): the whole-vehicle health fraction at 10%, which a graze that leaves the hull
+  healthy never reaches — so this clip showing no whole-plane trail is expected, not a puzzle.
 
 - `BL-122` `[Tuning]` `[Owed-playtest]` **Data-driven crash (PLAN-data-driven-crash, default since Wave 4)** — several playtest-gated TUNEs,
   all needing the original at the controls: `WreckMomentum` **0.4** (`FlightController.cs` — the
@@ -356,30 +358,34 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   turns out to be the binding constraint when tuning. Otherwise what remains is the **A/B against
   our build at the controls**, with the reference numbers above to judge against.
 
-- `BL-246` `[Research]` **Smoke/fire trail is effectively unreachable from organic gameplay** (found while
-  fixing the trail-anchor bug, 2026-08-03). The whole-plane `player_smoketrail` needs a part at
-  ≤ 0.10 HP fraction (`DamageVisuals.cs`), but the only in-game damage source is a terrain graze:
-  `GrazeMaxDamage` 18 behind `_damageCooldown` (`FlightController.cs`) against 15–25 HP parts, and
-  a critical part reaching 0 crashes the plane outright — so hitting the 0.10 window without dying
-  takes several survivable grazes on the *same* part, which normal play never produces. The F5 lab
-  (or `--damage=`) is currently the only practical way to see the trail. Design/tuning question,
-  deliberately split from the render fix: candidate shapes are weapon fire damaging planes (no
-  enemy-fire path exists at all today), a lower smoke threshold, or accepting it as a
-  near-death-only effect like the original. Decide against the original at the controls.
-  **`CAP-15`'s footage (analysed 2026-08-05, `playtest/CAP-15/`) reframes the stakes:** in the
-  original, ONE survivable graze puts on the whole show — per-panel `short_firetrail` fire for
-  ~12 wall-s then sputtering black smoke past 31 wall-s, plus the charred-wing skin swap — and
-  **no nose-anchored whole-plane trail ever appears** even with the wing red-critical to clip
-  end. So the drama the player actually sees at heavy damage is the panel-level burn (reachable
-  organically today), and the `player_smoketrail` pair may be rarer in the original than we
-  assumed, or anchored at the damage site rather than the nose; the clip cannot separate those.
-  **The anchor half is landed (`BL-259`, 2026-08-05):** the build plays `player_damage_trail`
-  (`short_firetrail` at `prop1` + the `fire_lt` light) at the ≤ 0.10 tier. The corpus check made
-  at that landing corrected an earlier claim: the data's own ≤ 0.10 entries (`player_smoketrail`
-  / `player_firetrail`) DO call `dense_firetrail` at `prop1` — CAP-15 favours the
-  `short_firetrail` shape and the mapping is one pinned string in `DamageVisuals.RigAnimFor` if
-  ever revisited. The remaining question here is only *when* the exe calls the heavy stage, not
-  where it sits — do not loosen the 0.10 tier to make it reachable.
+- `BL-246` `[Research]` **ANSWERED 2026-08-15 — when the exe fires the heavy smoke/fire trail.**
+  *Answer:* `FUN_004b3800`, the def-level `injure_anims` driver, divides `[inst+0x2d0] / [inst+0x2cc]`
+  — **whole-vehicle health current over health max**, armour excluded — and starts the entry's anim
+  when that fraction falls to or below the threshold, stopping it again when the fraction rises back
+  above (reversible, not a latch). So `player_smoketrail`'s 0.10 entry means **"the hull is at 10%"**,
+  not "some zone is at 10%". Nothing is rare or special-cased about it; the write-up with the entry
+  layout is `docs/org/vehicleDamage.md` ("Damage staging"). The original question — *when*, not
+  where — is closed, and this entry is a close candidate.
+  *The premise it was filed under is void.* It was minted 2026-08-03 reasoning that the only damage
+  source was a terrain graze (`GrazeMaxDamage` 18 behind `_damageCooldown`, `FlightController.cs`)
+  against 15–25 HP parts, with a critical part reaching 0 killing the plane outright, so the 0.10
+  window took several survivable grazes on the same part. Both halves have since gone: the player
+  can be shot by other players, enemy AI and turrets, and the decoded whole-vehicle health pool
+  (`FUN_004b9bc0`, `PlaneDamage.IsDestroyed`) lets parts reach 0% without death. The hull sitting at
+  10% is now an ordinary late-fight state, so **the tier needs no loosening** — and never did.
+  *What actually remains is a fix, not a question:* our implementation drives the def-level list off
+  a per-part combined armour+health fraction and latches it. Three deltas, all in `BL-384`.
+  *Retained findings.* `CAP-15` (analysed 2026-08-05, `playtest/CAP-15/`): in the original ONE
+  survivable graze puts on the panel-level show — per-panel `short_firetrail` fire for ~12 wall-s
+  then sputtering black smoke past 31 wall-s, plus the charred-wing skin swap — with no
+  nose-anchored whole-plane trail across the clip. That is consistent with the decode rather than
+  evidence against it: a graze that leaves the hull healthy crosses per-part stages only, so the
+  clip simply never reached hull-at-10%. **The anchor half is landed (`BL-259`, 2026-08-05):** the
+  build plays `player_damage_trail` (`short_firetrail` at `prop1` + the `fire_lt` light) at the
+  ≤ 0.10 tier. The corpus check at that landing corrected an earlier claim: the data's own ≤ 0.10
+  entries (`player_smoketrail` / `player_firetrail`) DO call `dense_firetrail` at `prop1` — CAP-15
+  favours the `short_firetrail` shape and the mapping is one pinned string in
+  `DamageVisuals.RigAnimFor` if ever revisited.
 
 - `BL-291` `[Feature]` **A way to spawn/damage a zeppelin — the thin harness that finishes `BL-239`'s in-game
   verification** (PT-36, 2026-08-06). Splash damage reads right at the controls, but nothing in
@@ -397,7 +403,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   13 `break*`, the crash-sink motions) — that is its own M4-sized feature for when zeppelins
   matter to gameplay, not this item.
 
-- `BL-297` `[Research]` `[Blocked: CAP-29]` **Panel-damage semantics: what the original actually
+- `BL-297` `[Research]` `[Owed-playtest]` **Panel-damage semantics: what the original actually
   shows when a part is damaged — the user's re-test verdict is that our authored-data reading has
   the feature wrong.** User at the controls 2026-08-06, after `BL-288`'s pooling fix landed
   (bursts no longer teleport — that mechanical fix stands and is not in question): (1) nose
@@ -414,16 +420,41 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `player_fuelleak` (ANY part's fraction) plays a gunhit flash + fuel vapor at a random `pdp1–3`.
   The "repeats" have two shapes: `pdpanel7` (nose) is authored to throw FOUR `gimmeflakes` bursts
   within 0.4 s (one extended burst), and every panel's burst uses the same 7-flake `planeflakes`
-  template, so successive panels' bursts look identical. The armor question is a scale ambiguity:
-  we consume threshold fractions as COMBINED armor+HP (`DamageLab.Combined`); stock parts are
-  25 armor/25 HP so `pdpanelN` thresholds ≤ 0.5 do imply armor exhausted under armor-first — but
-  armor upgrades shift the combined scale, `--damage` presets floor armor, and health-only vs
-  combined is undecoded.
-  *Fix shape:* answer `CAP-29` first; then either close as faithful-as-authored, or change
-  mechanism — e.g. resolve `random_gun_impact`/`player_fuelleak`'s panel pick to the pdpN nearest
-  the struck part instead of the authored random, and/or re-base injure thresholds on health-only.
-  Any such change is a deliberate deviation or a re-decode — not a bug fix — until the capture
-  says which.
+  template, so successive panels' bursts look identical.
+  *Decoded 2026-08-15 (`crimson.exe`). All three symptoms are settled without the capture.*
+  Write-up: `docs/org/vehicleDamage.md` ("Damage staging", the two new subsections).
+  **(2) armor, answered; ours is wrong.** Not a scale ambiguity: `FUN_004b3d70` keys the per-part
+  `injure_anims` on `[part+0x30] / [part+0x2c]`, health only, and `FUN_004b7f80` zeroes the health
+  damage outright while the part's armour pool covers the incoming armour damage. So a fully-armoured
+  part crosses NO per-part threshold, not even the 0.99 `<part>_damage_effects` shim: the original
+  shows nothing at all on a fresh armoured plane. Our combined armour+HP scale
+  (`PartState.Fraction`) was why panels tore early; **fixed 2026-08-15** as `BL-384` items (1) and
+  (2), re-basing the per-part loop on `PartState.HealthFraction` and splitting the hull loop out
+  onto `SummaryHealthFraction`. Owed at the controls with `BL-384`'s playtest line.
+  **(1) location, answered; ours is faithful in mechanism and wrong in timing.** `FUN_00521180` binds
+  an anim's node names through `FUN_004efaf0`, which searches the instance's context subtree, then
+  the anim's local tables, then a GLOBAL by-name lookup (`FUN_004d0280(7, name)`). `pdpN` names are
+  unique on the airframe, so a context miss falls through and finds the same node anyway: the
+  context disambiguates a name, it never redirects one. There is no part-relative retarget on this
+  path, so the original really does spark wing sites on a nose hit. It just does not do it until
+  that part's armour is gone.
+  **(3) repetition, answered; a panel tears once.** The handle arrays (part`+0x4c`, inst`+0x890`)
+  start an entry only when its slot reads zero and clear the slot on the UPWARD crossing alone,
+  never when the anim ends. So each entry fires once per downward crossing and can only re-fire
+  after a repair (`FUN_004b3e20` wipes, `FUN_004b8180` restages). The `pdp4` repeat the user saw is
+  authored and faithful: `<part>_damage_effects` is a separate entry on each of the four zones with
+  its own slot, so `pdp4` legitimately sparks up to four times a flight, once as each zone first
+  crosses.
+  *Fix shape:* no code change is owned here. Symptom (2) is `BL-384` item (2). Symptoms (1) and (3)
+  are faithful-as-authored and this item closes on them once `CAP-29` confirms the look. Do NOT
+  resolve `random_gun_impact`/`player_fuelleak`'s panel pick to the nearest pdpN. The decode says
+  the original does not do that.
+  *What `CAP-29` still owes:* the look only. Does the flung debris read as a piece of that panel or
+  as generic flakes, and what visibly changes on the airframe. Questions (a) and (b) are now
+  confirmation, not decision.
+  *Not decoded:* whether the interpreter's selection event really is the 40/40/always-`pdp4`
+  weighted pick our data reading describes. The exe executes the authored def; what was verified is
+  where the nodes resolve, not how the random branch is evaluated.
   *⚠ Traps:* do not "fix" by suppressing the authored shims wholesale (`CAP-27` already probes
   whether the spark shim exists at all in the original — coordinate, don't overlap). Do not
   re-open `BL-288`'s pooling — the theft mechanism was real and its fix is verified independent
@@ -473,6 +504,174 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `docs/HISTORY.md:5295` records the old behaviour landing) and `docs/formats/destructibles.md`'s
   `ACTIVATION` reading (⚠-noted in place).
 
+- `BL-384` `[Bug]` `[Owed-playtest]` **Our `injure_anims` staging latches one-way where the original
+  retracts.** Filed 2026-08-15 from `BL-246`'s decode; the original's rules are
+  `docs/org/vehicleDamage.md` ("Damage staging"). **Items (1) scope and (2) pool landed 2026-08-15**
+  (`DamageVisuals.OnHullDamage` split out from `OnPartDamage`, the two call sites in
+  `FlightController.cs` and both damage-lab targets moved onto the decoded quotients, engine suite
+  `damage-staging-pool`); what remains is item (3), and what is owed is the flight A/B below.
+  *Evidence (decode, `crimson.exe`, 2026-08-15).* `FUN_004b3800` drives the **def-level** list off
+  `[inst+0x2d0] / [inst+0x2cc]` — whole-vehicle health current over health max. `FUN_004b3d70`
+  drives the **per-part** list off `[part+0x30] / [part+0x2c]` — that part's health over its max.
+  Both start an entry's anim at `fraction <= threshold` and **stop it again** at
+  `threshold < fraction`, keeping one handle per entry (`inst+0x890`, `part+0x4c`).
+  Three deltas were filed; two are closed.
+  (1) **Scope — LANDED 2026-08-15.** The def-level list was walked against whatever per-part
+  fraction the caller passed, commented "any part qualifies", so one wing at 10% lit
+  `player_damage_trail` with the hull untouched. `DamageVisuals.OnHullDamage` is now its own call
+  site off `PlaneDamage.SummaryHealthFraction`, the quotient `FUN_004b3800` computes, and it runs
+  even on a zone-less hit.
+  (2) **Pool — LANDED 2026-08-15.** Both levels used the combined armour+health progression
+  (`PartState.Fraction`). The original divides health only at both levels, armour never entering
+  either quotient, so the per-part loop now takes `PartState.HealthFraction`. Because
+  `FUN_004b7f80` blocks health damage outright while a part's armour covers the hit, an armoured
+  part now crosses nothing at all, including the 0.99 spark shim.
+  (3) **Lifetime — OPEN.** The `_applied` set (`DamageVisuals.cs`) latches every stage one-way. The
+  original retracts: heal back above a threshold and the anim stops and its handle clears.
+  *Fix shape (item 3):* replace `_applied` with a per-entry handle the stop path can clear,
+  mirroring the two `+0x890` / `+0x4c` arrays.
+  *⚠ Traps.* (a) The combined armour+health fraction is **correct** for the gauge dial
+  (`docs/architecture.md:3780`) — fix the staging inputs without touching `GaugeCluster`'s scale.
+  (b) Do not change the shipped 0.10 / 0.85 / 0.99 thresholds; they are authored data and they are
+  right — only what is divided is wrong. (c) `docs/architecture.md` around the `injure_anims` bullet
+  carried the old defect note; it moved with items (1) and (2) and now records the open retraction
+  gap instead. (d) Retraction makes the F5 damage lab's repair path visibly un-stage, which is
+  faithful, not a regression — `DamageVisuals.Reset` stays for respawn.
+  *Playtest after fix (items 1 and 2, owed):* take sustained fire and confirm nothing at all shows
+  on a zone while its armour still absorbs, that a panel tears only once that zone's HEALTH crosses
+  its threshold, and that `player_damage_trail` starts when the hull gauge reads ~10% and not
+  before. The 0.99 spark shim going quiet on early hits is the most visible change.
+  *Playtest after fix (item 3):* repair in the F5 lab and watch the stage retract.
+  *Cross-refs:* `BL-246` (the decode that produced this), `BL-259` (landed the anchor/staging this
+  mis-keys), `BL-297` (the panel-damage semantics re-test — `pdpanelN` thresholds are on the same
+  health-only scale, so panels currently tear earlier than the original tears them; its 2026-08-15
+  decode confirms this and hands the fix to item (2) here).
+  *⚠ One more trap, from `BL-297`'s decode:* item (3)'s replacement of `_applied` must keep
+  ONCE-per-downward-crossing. The original's slot is cleared on the upward crossing alone, never
+  when the anim ends (`FUN_004b3e20` / `FUN_004b8180` are the repair wipe/restage), so a stage that
+  re-fires whenever the fraction stays below its threshold is a different bug, not the fix.
+
+- `BL-385` `[Bug]` **Enemy and wingman aircraft show no damage at all — the whole progressive-damage
+  layer is wired for the player only, and their crash is silent.** User at the controls 2026-08-15:
+  "the destruction animation only plays for the player but not enemies or wingmen". An AI plane
+  flies pristine until the frame it explodes.
+  *Evidence (code, 2026-08-15).* `controller.Visuals` is assigned at exactly two sites —
+  `FlightRigAssembler.cs:294` (the player rig) and `GameSession.cs:1477` (the parked damage lab).
+  `AiAircraftSpawner.Spawn` never assigns it, so `Visuals` is null on every AI controller, and all
+  three call sites are null-conditional (`FlightController.cs:972` projectile hit, `:2408` graze,
+  `:798` respawn reset). The `DamageEffectSink`/`DamageEffectStop` wiring is likewise inside
+  `if (controller.Visuals != null && …)` at `FlightRigAssembler.cs:452-488`. AI planes DO get
+  `Damage` (`AiAircraftSpawner.cs:102`) and DO get a rig runtime with the damage-stage defs bound
+  (`AiAircraftSpawner.cs:153-158`, `EffectCatalogue.cs:228-235`) — the stages are staged and
+  playable, just never triggered.
+  *Evidence (data, 2026-08-15) — the original authors a separate AI trail and we play none of it.*
+  `basic_airplane` carries a def-level `injure_anims` of **`[[0.5, "pfsmoketrail"]]`**
+  (`extracted/zrdr/vehicle.zrd.json:4108-4114`), inherited by every non-player airframe
+  (`bloodhawk`, `avenger`, `fury`, `brigand`, `devastator`, `autogyro`, `peacemaker`, the `r*`
+  variants, and `bswingman` — wingmen included). The def ships in every chapter as
+  `extracted/<ch>/cam_anim/piratefighter-pfsmoketrail.json`: a `smokepuffer` + `firepuffer` pair at
+  `prop1`. So in the original **an enemy starts trailing smoke at half hull health** — a combat read
+  the player uses to tell a hurt bandit from a fresh one — and it is one stage, not the player's
+  two (no `pfsmoketrail` counterpart to `player_fuelleak`).
+  *⚠ The threshold is whole-vehicle health, not a part fraction* — same decoded driver as the
+  player's (`FUN_004b3800`, `docs/org/vehicleDamage.md`), so this item lands on top of `BL-384`'s
+  correction rather than beside it. Doing this one first would wire the AI list to the same wrong
+  input.
+  *Fix shape:* give `AiAircraftSpawner.Spawn` the `DamageVisuals` construction and the sink/stop
+  pair that `FlightRigAssembler.cs:284-299,452-488` build, and a `FlightAudio` (see the audio half
+  below). Both blocks are near-verbatim; the shared shape wants extracting rather than copying.
+  *The audio half.* `FlightAudio` is built only at `FlightRigAssembler.cs:304-309`; the AI spawner
+  never sets `controller.Audio`, so `PlayCrashBoom` (`FlightController.cs:2027-2048`) and
+  `OnEngineStop` never run for an AI kill — **an AI fireball is completely silent** — even though
+  the `ai_crash_dirt` / `ai_crash_water` arms already exist in that switch. Note the crash
+  CHOREOGRAPHY is not missing: `Crash()` is one path for everyone and
+  `EffectCatalogue.CrashDefTableFor` (`WorldEffectsFactory.cs:311-319`) keys off `IsHumanPiloted`
+  onto the original's own `ai_crash_*` family. If an AI kill shows no fireball either, suspect that
+  family and its meshless `kestrel` scaffold anchor, not a missing call.
+  *⚠ Traps.* (a) Per-AI-plane panel pairing and puffer pools at spawn time is a real cost on a
+  chapter holding many aircraft — measure before wiring it unconditionally, and consider gating the
+  panel-flip half on distance or aircraft count. The trail half is one puffer pair and is cheap.
+  (b) `pfsmoketrail`'s `anim_root_name` is `piratefighter`; whether it retargets onto every AI
+  airframe through the runtime's root fallback (the `player_pfighter` shape noted at
+  `FlightRigAssembler.cs:458-459`) or needs an explicit OPERAND_NODE retarget is **unverified** —
+  check before assuming the player path's resolution carries over. (c) Do not give AI planes the
+  `player_*` stage menu; their data names one stage and a different anim.
+  *Open question, not part of this item:* an AI wreck never leaves. `Crash` arms `_autoRespawnIn`
+  but the respawn gate (`FlightController.cs:1090-1107`) needs a key press or
+  `HoldSegments`/`AutoRespawnAfter`, none of which the spawner sets, and nothing calls `QueueFree`
+  on an AI controller — so wrecks accumulate for the session. Whether the original also leaves them
+  is unchecked; do not "fix" it without that check.
+  *Playtest after fix:* shoot down a wingman and an enemy in C1 — smoke should start around half
+  health and the fireball should be audible.
+  *Cross-refs:* `BL-384` (the fraction correction this depends on), `BL-246` (the decode),
+  `BL-343` (wreck momentum — the other AI-wreck item), `BL-386` (which def the AI list is READ
+  from — wiring the visuals before that fix would stage the player ladder on AI planes).
+  *Correction 2026-08-15 (found minting `BL-386`):* the `[[0.5, pfsmoketrail]]` cited above is NOT
+  on `basic_airplane` — `vehicle.zrd.json:4108-4114` sits inside the `bswingman` def (line 3993),
+  and `basic_airplane` (lines 3–224) authors no `injure_anims` at all. Each AI airframe authors its
+  own SEVEN-entry ladder instead (`fury` 4738–4768: `random_remote_damage` at
+  0.95/0.80/0.65/0.50/0.45/0.25 plus `pfsmoketrail` at **0.40**), restated verbatim on its `r*`
+  variant. So the original's smoke starts at 40% on an enemy and 50% on a campaign wingman, and the
+  `random_remote_damage` stages are part of the same list — the "one stage, not two" reading holds
+  only for the trail itself.
+
+- `BL-386` `[Bug]` **Every AI aircraft is built from the player def — `PlaneStats.Load` refuses
+  the AI defs in `vehicle.zrd.json`, so AI planes carry the player damage model instead of their
+  own authored one.** An AI Fury flies with `pfury`'s four pdpanel-wired parts summing 90/90 where
+  the original seeds `armor 72 / health 72` with bare zones — AI planes are ~15–25% too tough and
+  stage the wrong anims.
+  *Evidence (code, 2026-08-15).* `PlaneStats.Load` (`Flight/PlaneStats.cs:235-258`) accepts only a
+  def whose `kind_of` chain contains `player_airplane` — deliberate, "skip the AI wingman
+  variants". It is the sole stats loader (`GameSession.cs:1673` `StatsFor`), and
+  `AiAircraftSpawner.Spawn` (`Session/AiAircraftSpawner.cs:71`) resolves through it with the
+  player node names (`InstantAction.PlaneNodeFor` maps to the eleven `player_*` nodes;
+  `GameSession.cs:2163/2203/2323/2416`). Since no player def authors `armor`/`health`,
+  `PlaneStats.VehicleArmor`/`VehicleHealth` stay null and `PlaneDamage` seeds the whole pair as
+  the sum over the player parts.
+  *Evidence (data, 2026-08-15) — the def families per airframe, Fury as the worked example.*
+  `pfury` (`extracted/zrdr/vehicle.zrd.json:1801`): no whole pair, parts 25/25 nose (+`engine`),
+  25/25 tail, 20/20 wings, each with the green/yellow/red + `pdpanelN` injure lists and
+  `got_hit_anim`s. `fury` (`:4613`): `armor 72 / health 72`, NO parts, the 7-entry AI injure
+  ladder (see `BL-385`'s correction), own AI `weapons`/`gun_pitch`/`gun_yaw`/`activation`.
+  `rfury` (`:9271`): `kind_of fury`, `nodename fury`, own BARE parts — same pool numbers but
+  `critical` flags only, no injure lists, no `got_hit_anim`, and the `engine` flag on the TAIL
+  where `pfury` puts it on the nose. `wfury` (`:9949`): `kind_of fury`, `mode wingman`, no parts
+  of its own. `bswingman` (`:3993`): `nodename fury`, 90/90. The decoded seeding rule
+  (`docs/org/vehicleDamage.md` "Where the numbers come from at spawn" and the A4 section's A2
+  bullet): a spawned AI aircraft seeds from **the `r*` def chain's `destroyable_parts` plus its
+  inherited `armor`/`health`** — parts as the ledger, the authored pair as the summary scale.
+  ⚠ That page's correction section has one wrong parenthetical: it calls 90/90 "the AI `fury`
+  def's authored" pair; `fury` authors 72/72, and 90/90 is `bswingman`'s (and the parts sum).
+  Fix the doc line when this lands.
+  *The concrete deltas:* (1) whole pair 90/90 vs authored 72/72 Fury, 80/80 vs 64/64 Bloodhawk —
+  the summary the death test, radio lines and def-level staging all read; (2) AI parts carry the
+  player's cockpit-indicator/pdpanel injure lists and got-hit sparks the original never gives
+  them; (3) the def-level ladder is the player's two stages instead of the AI seven; (4) the
+  `engine` flag sits on the wrong part (nose vs tail, Fury pair; other airframes unchecked).
+  *What is coincidentally fine:* the `dynamics` blocks are byte-identical between `p<name>` and
+  `<name>` (checked fury and bloodhawk pairs in full), `engine` ids match, and both chains bottom
+  out at `basic_airplane` so `flight_ceiling`/`attack`/`return_range` resolve the same — flight
+  behaviour is unaffected today, but by authoring discipline, not by code.
+  *Fix shape:* give `PlaneStats` an AI resolution path — resolve the `r*` def whose chain's
+  `nodename` matches the AI model (or by def name), keep the player path for rigs and the launch
+  menu — and have `AiAircraftSpawner` request it; `PlaneDamage` already prefers an authored
+  `VehicleArmor`/`VehicleHealth` pair by design, so the seeding largely follows. Decide per spawn
+  context which flavour applies: the decode names the `r*` chain for roster spawns; whether IA
+  wingmen should read `w*` (no parts — whole-pair-only, zone-less spends) is open.
+  *⚠ Traps:* (a) the `air-to-air` suite's pinned kill counts (5 head-on `wep_06` rockets, 80
+  `wep_00` rounds) were measured against the 90/90 seeding — original-correct 72/72 re-pins them;
+  that is the re-measure, not a regression. (b) Turret planes: the `turrets` block ships on the
+  player defs (both viewpoints) AND the six AI/five `r*` variants (`thirdp` only,
+  `docs/formats/vehicle.md`) — after the switch `TurretMounts` must still find the `thirdp`
+  entries. (c) `PlaneRoster.PlaneDisplayName` strips a leading `p`; an `r*`/bare def name breaks
+  that heuristic if it ever reaches the scoreboard. (d) The difficulty scale (0.875/1.0/1.25) and
+  the ±5% aircraft jitter are adjacent decoded spawn steps, deliberately NOT this item.
+  *Playtest after fix:* IA waves — an enemy Fury should fall noticeably faster (whole pair 72,
+  not 90), and with `BL-385`'s visuals landed its smoke trail should start near 40%.
+  *Cross-refs:* `BL-385` (the visuals half — it stages whatever list this item resolves),
+  `BL-384` (fraction semantics), `docs/org/vehicleDamage.md` (the decoded seeding, incl. the
+  parenthetical to correct), `docs/formats/vehicle.md` (the def-family census).
+
 ## Weapons & combat
 
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
@@ -488,14 +687,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   counts, weapon costs and the economy are all executable-resident, so the *buying* half would
   have to be invented. The mount names are data (`IDS_AIRFRAMEGUNGROUPNAMES`, ui_strings
   3060–3079) and the per-plane stock table is authored, so the *placing* half is real.
-
-- `BL-213` `[Research]` **Does the original splash when gun rounds range-expire over water?** Needs a CAP of the
-  original (fire out to sea from altitude, watch the 1000 m expiry point). Until answered, our rounds
-  expire silently, which METHOD-18 documents as correct-per-data.
-
-- `BL-215` `[Tuning]` `[Owed-playtest]` **Rocket-trail puff size (C21, 2026-07-31)** — the trail look and per-type character
-  passed the cockpit A/B (PT-09), but the user flags the puff size as possibly needing more tuning.
-  The authored FLYOUT values are verbatim; only render-side size/overlap is in play.
 
 - `BL-226` `[Feature]` `[Blocked: cockpit view]` **The incoming-fire cue set's other two halves are blocked on things that do not exist
   yet.** The near-miss third landed (`BL-087`, 2026-08-02); `bullet_hit_sg` (= `snd_ricochet1-4`,
@@ -571,8 +762,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   rejected at the controls — do not re-land it without new footage evidence.
 
 - `BL-289` `[Tuning]` `[Owed-playtest]` **Gun-impact looks (A2/`BL-203`, landed 2026-08-01)** —
-  ⚠ **The six `DirtDebris*` constants left this entry 2026-08-07: `BL-313` deletes the effect they
-  tune, so there is nothing to A/B.** What remains here is the building ricochet:
+  ⚠ **The six `DirtDebris*` constants left this entry: the dirt-chip effect they tuned was deleted
+  2026-08-15 (`BL-313`, closed), so there is nothing to A/B.** Dirt now takes the single spark.
+  What remains here is the building ricochet:
   `RicochetSparks` **8**, `RicochetSparkSize` **0.55 m**,
   `RicochetSparkLife` **0.55 s**, `RicochetSparkSpeed` **22 m/s**, `RicochetSpreadDeg` **90°** (a
   stand-in — both authored assets are missing from the install). The water-splash column width
@@ -580,33 +772,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   2026-08-06 with the fades in (`BL-265` closed — the authored quad is 5 cm wide, sub-pixel past
   ~30 m; the reference ticks measure ~0.35 m, which 8× matches). A/B the rest against
   `Dirt Splash.png` at the controls; the splash *height/timing* curves are authored data, not TUNE.
-
-- `BL-313` `[Bug]` **Our gun hits on dirt fling `bit01`–`bit04` chips the original never draws — delete
-  the sprite half of `SpawnDirtDebris`** (`PT-27` at the controls + `OriginalScreenshots/Videos/70 DD
-  Dirt.mp4`, 2026-08-07). Three independent lines agree, which is why this is a deletion and not a
-  tune:
-  - **The data, read literally.** The slug gunhit defs fling `bit1`/`bit2`/`bit3`/`chunk` at
-    `PLAYER_RANGE 200`, and **`bit1`–`bit3` carry 0 vertices in this install** (measured C1/C2)
-    while **`chunk` has one 4-vertex quad** (`docs/formats/weapon-effects.md`). Read as written,
-    that draws the chunk quad — the perforated `gun_barrel` shroud band — and nothing else.
-  - **The footage.** `70 DD Dirt.mp4`: a 70-slug burst into dirt shows **only the chunk and one
-    very faint black puff**, no chips. The puff is the authored slug `blacksmokepuffer`
-    (`TIME_INTERVAL` 1.1 s, one puff per hit), so both visible elements are accounted for.
-  - **The inference's motive is answered elsewhere.** `architecture.md` recorded the leap as *"the
-    def's bit1–3 gamez nodes carry no geometry, the textures ARE the chips"* — motivated by the
-    `bit01`–`bit04` textures shipping in every chapter archive. They are **not** orphans, but their
-    consumer is **`zep_skin_fire3`/`zepskinfire_3`** (user, 2026-08-07), a pooled template whose
-    siblings each carry a real child mesh index (`gamez.md:48–53`). The textures earn their place
-    without the zero-vertex gunhit nodes drawing anything, so the leap has nothing left holding it
-    up.
-  *Fix shape:* delete `SpawnDirtDebris`'s sprite emission and `Projectile.cs:245`'s
-  `DirtDebrisTextures`; the `chunk` quad stays exactly as it draws today (`CAP-25` retired
-  2026-08-07 having confirmed the original shows it). Retract the inference in
-  `docs/architecture.md` and `docs/formats/weapon-effects.md` rather than silently overwriting it.
-  `BL-289`'s six `DirtDebris*` constants go with the effect.
-  ⚠ Trap: **do not generalise "zero-vertex node ⇒ draw its texture as a sprite" anywhere else** —
-  that is the reading this item retracts. If another effect is found relying on it, it needs its
-  own evidence, not this precedent.
 
 - `BL-290` `[Bug]` `[Blocked: CAP-28]` **Torpedo flight dynamics: the original's torpedo has a max/cruise speed and
   visibly slows after firing; ours flies the generic projectile model** (PT-38, 2026-08-06). Data
@@ -640,6 +805,161 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   matter), `BL-296` (ActionMap/rebinding seam), `git log --grep=BL-062` for what settled the
   per-hardpoint half.
 
+- `BL-363` `[Bug]` **Only aircraft are AI targeting candidates, so an escort with no enemy planes
+  has nothing to do.** *Evidence:* the user at the controls, 2026-08-15, flying a zeppelin run
+  configured with no enemy planes: the wingmen never engaged the zeppelin and flew straight away.
+  `FlightController.SelectRankedTarget` (`FlightController.cs:2233`) builds its candidate list from
+  `Projectiles.CollectAircraft` alone and then drops any candidate whose source is not a
+  `FlightController`. A zeppelin is a kinematic world node owned by `ZeppelinRuntime` (F17), never a
+  `FlightController`, so it cannot be ranked, cannot resolve as a `primary_target`, and cannot put
+  an AI into pursue. The same holds for every world destructible and turret emplacement. The decoded
+  ranking already expects these candidates: `AiTargetRanking`'s own module doc names the "+0.4
+  dynamics / −0.5 structure terms unmodelled (no non-aircraft candidates reach this path)", which is
+  exactly this gap.
+  *Fix shape:* widen the collector to the roster the aim assist already scans (it lists vehicles and
+  turrets, not just aircraft), keeping the `Live` and team gates as they are, then wire the two
+  unmodelled class terms in `AiTargetRanking`.
+  ⚠ *Traps.* (a) **The ranking is MINIMISED**, so a large nearby structure can outrank a distant
+  fighter for every pilot at once. Settle the structure term's sign and scale before widening the
+  pool, or one zeppelin becomes the whole sky's target. (b) `AiGunner` solves its intercept from the
+  target's `WorldVelocity` and gates on an aircraft-sized cone; a zeppelin also needs
+  `DAMAGES_ZEPPELIN` ordnance (F18) or every round is refused, so a wingman with the stock fit would
+  fly a pursuit it can never convert. (c) **Attacking the objective is not automatic in the
+  original**: it is assigned through `primary_target` and `rating_biases`. Widening the candidate
+  pool must not turn every AI into a zeppelin attacker.
+  ✔ **DECODED 2026-08-15**, in [`docs/org/aiPilot.md`](docs/org/aiPilot.md) "Target acquisition".
+  The pool is four typed lists, not one: `TargetVehicle` (`DAT_0071dabc`), `TargetTurret`
+  (`DAT_0071d914`), `TargetStruct` (`DAT_0071d33c`) and `TargetProjectile` (`DAT_0064f78c`), swept
+  by `FUN_0041f9c0` for one global minimum. Both unmodelled terms are named: **+0.4** is a candidate
+  whose `mode` (`+0x67c`) is 4, a `wingman`, so enemy wingmen are de-prioritised by 480 m; **−0.5**
+  is a **zeppelin gasbag** and nothing else, worth 600 m in its favour, reached through the `Target`
+  virtual at vtable `+0x1c` (`0x004227a0`, the same one the overlay prints `Gasbag targeted` from).
+  Trap (a) is smaller than feared and trap (b) is answered at admission: the struct list is always
+  swept (the literal `1` at `0x00420002`), and its gasbag members are admitted only for a pilot
+  carrying loaded `DAMAGES_ZEPPELIN` ordnance (`FUN_00420070`, flag bit `0x1000`), so a stock fit is
+  never offered a gasbag. **Three constants we already ship are wrong** and are independent of the
+  widening: `AiTargetRanking.BiasScale` is `+1200` where `FUN_0041ae40` returns `bias × −750` with
+  `≤ −1.0` a hard exclusion, `≥ 1.0` = `−100000` and a flat `+37.5` on turrets; the bearing term's
+  sign is inverted and its ±0.5 is a half-metre ahead/behind deadband, not `cos 60°`; and the ±0.2
+  terms are aircraft-only (`FUN_00421950` has none). Acquisition also has a sticky standing target
+  and a real attacker count our invented deconfliction does not match.
+  *Cross-refs:* `BL-362` (the wingmen half of the same playtest), `AiTargetRanking`,
+  [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) "AI modes, engine-side" (whose "+0.4
+  for one dynamics class" and "−0.5 for one structure case" are now named, and whose "dynamics" is
+  the `mode` field), [`docs/org/aiPilot.md`](docs/org/aiPilot.md) (the decode).
+
+- `BL-364` `[Bug]` `[Blocked: campaign missions]` **Our AI aircraft have no patrol net, and the original gives
+  every one of them one. DECODED and the Instant Action half LANDED 2026-08-15; what is left is
+  the campaign roster path, which has no spawner to plumb into yet.** *Evidence:* the user at the controls,
+  2026-08-15: the default mode of enemy AI is to fly straight in one direction, and an enemy wave
+  out of engagement range never turns back. `AiPilot.SteerPatrol` returns immediately when `Patrol`
+  is null (`AiPilot.cs:266`), leaving `TargetHeadingDeg`/`TargetAltitude` at whatever
+  `HoldingCourse` set at spawn.
+  **The research half is answered, in [`docs/org/aiPilot.md`](docs/org/aiPilot.md).** The engine has
+  no netless patrol at all: `FUN_0041d1f0`, the net follower, resolves the net unconditionally and
+  has no fallback branch. A netless aircraft is instead a `mode wingman` aircraft flying a fixed
+  formation station on its `primary_target` (`FUN_0041e760`), and a `wingman` that is given a net is
+  demoted to `jet` at spawn. Two censuses settle who is which: of 414 shipped `aiv` blocks, the only
+  106 netless ones are `player`, `wingman_N` and `bswingman_N`, and every enemy, boat and truck
+  carries a real net id; of 75 `vehicle.json` defs, only 12 author `mode wingman` and every enemy
+  resolves `jet` through `basic_airplane`.
+  ⚠ **The entry's own premise was wrong, and so was the doc it rested on.** Instant Action does
+  NOT leave `netids` at `-1`: all three branches of `FUN_0045a390` write a one-entry list holding
+  the chapter's first net id (`0x0045a8b4` / `0x0045ab18` / `0x0045ae85`), so in the original the
+  ace, the waves and the wingmen all walk that graph.
+  [`docs/formats/instant-action.md`](docs/formats/instant-action.md) is corrected.
+  *Fix shape:* give AI aircraft a patrol net, which is `AiNets` data we already parse
+  (`src/Mech3/AiNets.cs`) plumbed into `AiPilot.Patrol` at spawn. Instant Action actors take the
+  chapter's first net, exactly as the original does. Campaign rosters take their authored `netids`.
+  ✔ **The Instant Action half landed 2026-08-15** (`git log --grep=BL-364`): the ace, the wingmen
+  and every wave member take the chapter's first net, `AiNets.ChapterFirst` reads it in `neindex`
+  FILE order (**not** ascending id: C1B opens on 29 and C1C on 25 against a lowest of 11, decoded
+  from `FUN_004311c0` and pinned in `AiNetsTests`), `FlightController.Activate` re-seats the walk
+  the way the original's activation snap does, and `SteerPatrol` re-asserts `PatrolThrottle` so a
+  plane leaving pursue does not patrol at the chase throttle. Two more decodes are in
+  [`docs/org/aiPilot.md`](docs/org/aiPilot.md): the roster block's volumes are copied over the
+  net's afterwards (so trap (d) below cannot bite an Instant Action actor, whose block authors all
+  nine at ±10000 m), and `min_ai_active_dist` (2000 m, `player.zrd.json`) floors every activation
+  volume twice over. **What is left:** a campaign roster spawner reading each block's authored
+  `netids`. Nothing in `src/` reads `aiv` as a spawn roster today, so there is no seam to plumb.
+  ⚠ **The net Instant Action hands out is a campaign MISSION's asset, not a patrol area meant for
+  free play** (censused 2026-08-15, at the user's prompting after seeing the shapes at the
+  controls). Net names are mission-scoped and the census bears the convention out: 103 of the 222
+  nets are referenced by an `aiv` block and every one is used by the single mission its `M<N>`
+  prefix names. Each chapter's first net is then one mission's: C1 `M4ReinfAce` is M04's
+  `blakebloodhawk_8`, C1B `Patrolboat3` is M03's objectives, **C2B `PirateZep1` is the pirate
+  zeppelin's own flight path**, C5 `M1Bravo` is used by nothing at all. Faithful, not a bug, but it
+  is why an Instant Action flight walks an odd-looking graph; see
+  [`docs/formats/instant-action.md`](docs/formats/instant-action.md) for the per-chapter table.
+  ⚠ `--ai=<plane>` without a net ref still spawns a course-holder; that is the debug flag's own
+  documented behaviour, kept deliberately, not a leftover of this item.
+  ✔ **Flown 2026-08-15 and the landed half PASSES** (`PT-51`, now retired). A wave that loses the
+  player turns and comes back rather than shrinking to a dot; an enemy breaking off an engagement
+  settles back onto the graph instead of orbiting one waypoint, so trap (a)'s known failure did not
+  appear; wave 2 patrols from where it teleports in; and a shared net reads as a busy patrol rather
+  than a conga line. So what remains here is only the campaign roster spawner.
+  ⚠ *Traps.* (a) **`AiPilot.PatrolThrottle` (0.5) is an invention that exists because the
+  placeholder steering law cannot hold the tightest net rings at cruise** (`architecture.md`). Do
+  not read a net-follow regression as a net-data problem before checking it. (b) `pref_engage_alt`
+  is decoded and is **not** an altitude order: its one reader weights the evasive-maneuver draw
+  (`FUN_004201a0`). Nothing steers toward it, so do not build an altitude hold on it. (c) The
+  engagement gate was 2000 m until the 10000 m volume fix (`git log --grep=ApplyActorVolumes`),
+  which is part of why waves read as flying away. (d) A net assignment also **overwrites the
+  vehicle's three volumes** from the net's own where the net authors non-zero values
+  (`FUN_00475fc0`), which interacts with that fix and must not be dropped.
+  *Cross-refs:* [`docs/org/aiPilot.md`](docs/org/aiPilot.md) (the decode), `BL-362` (the wingman
+  half, whose blocker this decode voids), `docs/formats/ai-nets.md`, `docs/architecture.md` on
+  `AiPilot` and `AiModeMachine`.
+
+- `BL-378` `[Bug]` **Our AI has no terrain avoidance, so a net authored below a ridge flies AI into
+  it. DECODED 2026-08-15; what is left is implementation.** *Evidence:* the user at the controls,
+  2026-08-15, on the build that made anchored nets ride their target (`BL-377`, closed): C1's
+  patrol nets sit at an authored 400 m (`M4ReinfAce`) and 350 m (`M2Ace`), which clashes with
+  elevated terrain, and the nets now ride the player into any part of the map.
+  ⚠ **The two natural fixes are both wrong, and the binary says so outright.** A net node's
+  altitude is neither above-ground nor target-relative: `FUN_00432010` returns `out.y = node.y`
+  verbatim, with the trailer offset applied to X and Z only
+  ([`docs/org/aiPilot.md`](docs/org/aiPilot.md) "The trailer"). There is no terrain sample anywhere
+  in the node read, and none in the patrol follower `FUN_0041d1f0` either. Making our Y
+  terrain-relative or player-relative would put every AI on a different route from the original's,
+  on all 222 nets, to paper over a missing behaviour.
+  **The behaviour that is actually missing is a crash-avoidance MODE.** `FUN_0041f810` is a
+  per-plane ground-proximity check that writes the AI substate at vehicle `+0x358`:
+  - below the global altitude floor `DAT_0071c3f0` (**20.0** in the image, the only unconditional
+    store) it sets state **3** outright;
+  - between that floor and `DAT_0071c3f4` (**8000.0**) it casts a ray **4.5 ×** the vector the
+    vehicle's virtual `+0x04` accessor returns (velocity by shape and use, so ~4.5 s of travel,
+    which is the one inferred step here) through `FUN_004c8f70`, and sets state 3 on a hit;
+  - above 8000 m it runs no check and CLEARS state 3 back to 0.
+  The re-check is throttled per plane to the game clock plus `0.5–1.0 s`, drawn from
+  `rand()/32767`, so it is not a per-frame cast. State 3 is then handled by the follower's own
+  switch (`FUN_0041d1f0` case 3): the steering target becomes the plane's own position with
+  **Y + 1000**, flown through parameter block `DAT_0061fb48` (throttle band 0.6–1.3) instead of
+  patrol's `DAT_0061fb68` (0.8–1.1). `FUN_0041b560`, the shared steering law, reads the same
+  `DAT_0071c3f0` floor directly, and `FUN_004216e0`'s maneuver suspends it (writing −FLT_MAX, with
+  a paired per-vehicle ceiling at `+0x314` set to +FLT_MAX) for its duration.
+  *Fix shape:* a mode in `AiModeMachine`, not a change to `AiNetFollower`. `AiPilot` currently sets
+  `TargetAltitude = patrol.CurrentTarget.Y` and its only altitude leash handles being too HIGH
+  (`_altRecovering`, `AltLeashEnterM`), so there is no floor and no lookahead at all. The ray needs
+  a world collision query; `GameSession.GroundSampler()` is a height sampler, not a ray, so decide
+  which of the two to use rather than assuming the sampler is enough on a cliff face.
+  ⚠ *Traps.* (a) **Do not clamp the net.** The climb-out is a state that overrides steering and
+  then releases; a clamped node altitude would permanently move the route. (b) The 20 m floor is a
+  flat world-Y floor, NOT terrain-following, so it does not by itself save a plane over a 600 m
+  ridge; the raycast is what does. (c) The +1000 m target is relative to the PLANE, not to the
+  terrain or the net. (d) `ZeppelinMotion` shares the follower but is a different actor with no
+  flight model; do not fold zeppelins into an aircraft crash-avoid mode without checking whether
+  the original runs one for them. (e) The throttle-band swap is part of the behaviour, not
+  decoration: a climb-out at patrol throttle is a slower climb than the original's.
+  *Playtest after fix:* fly Instant Action in C1 over the high ground east of the spawn with F13 up
+  and `--debug-markers`, and watch a netted enemy cross a ridge that sits above the net's authored
+  400 m: it should pitch up and climb out of the state on its own rather than fly into the slope,
+  and it should return to the graph afterwards rather than stay in the climb.
+  *Cross-refs:* `BL-364`,
+  [`docs/org/aiPilot.md`](docs/org/aiPilot.md) "The trailer" (the anchored-net ride that carries a
+  net over any terrain and so made this visible; closed as `BL-377`,
+  `git log --grep=BL-377`).
+
 ## Flight model & collision physics
 
 - `BL-089` `[Feature]` **Nitro booster — scoped, low priority (the user's standing call).** Recorded because the data is
@@ -658,135 +978,131 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   data port. (`rof/ui_strings.json` carries "NITRO-BOOST: %4!s!" on the purchase screen and the
   buyable engines come in plain and "… nitro" variants, so the engine choice is what grants it.)
 
-- `BL-095` `[Research]` **`player.json`'s physics block — DECODED END TO END. What is left is
-  implementation, not research.** Every key is now read out of `crimson.exe`, with the write-up in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md): the flight block on 2026-08-09, ground blow
-  and `bounce_factor` on 2026-08-14. Units come off the conversion the parser applies, never from
-  inference: **speeds are MPH** (`× 0.44704` on load), **`liftAOAs`/`maxAOA` are degrees** (the
-  parser takes their cosine), and **`highGs`/`lowGs`, `groundblow_*`, `ai_groundblow` and
-  `bounce_factor` are raw scalars**. World lengths are **metres**, identified positively from
-  `nom_gravity`'s 9.82 reference divisor.
+- `BL-382` `[Feature]` **A just-dropped AI fighter gets the full ground blow, where the original cuts
+  it to 15 % for 2.5 s.** Split out of `BL-095` when that umbrella retired 2026-08-15; the mechanism
+  is decoded and the gap is narrow but real. The original's AI ground-blow branch multiplies BOTH the
+  push factor (`ai_groundblow × groundblow_mag`, 5.0 authored) and the velocity-steer's proximity by
+  **0.15** while the game clock sits inside `obj+0xB4`, a 2.5 s window written on the carrier-drop
+  spawn path (`FUN_00452450`: repositioned, yawed to −π/2, launch velocity minus 22.352 m/s
+  vertically — a drop from a carrier at 50 mph). See
+  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow" and its collision-response
+  timers.
+  ⚠ **The window IS reachable here.** A zeppelin's fighter-drop launch (`AiGeneratorRuntime` →
+  `AiAircraftSpawner.Spawn`) is this engine's carrier drop, and it puts a freshly-dropped AI aircraft
+  on the same `UsesAiForcePath` plant `FlightModel.GroundBlowTerm` reads. `PLAN-ai-flight` `C23`
+  scoped to the response law and left this out deliberately.
+  *Fix shape:* thread a per-aircraft spawn timestamp through `AiAircraftSpawner`/`FlightController`
+  (nothing carries one today) and cut both terms while the clock is inside 2.5 s of it. The same
+  per-object clock family holds `obj+0xAC`, a 1.5 s collision-grace window that disables collision
+  outright on a fresh spawn and 1.0 s on both parties after an entity-versus-entity impact — decoded,
+  also unmodelled, and worth landing in the same change.
+  *How you'd know it worked:* a fighter dropped from a zeppelin over terrain is not shoved off its
+  drop for its first 2.5 s.
 
-  | Key (authored) | Where it stands |
-  |---|---|
-  | `yaw_low_speed 0.0625` / `yaw_high_speed 0.17` / `yaw_fade_in 10` / `yaw_max 50` / `yaw_fade_out 400` | Decoded and **implemented** (`PLAN-flight-model-rewrite` C21), retiring `BL-108`'s interim `eff` |
-  | `turn_fade_in 10` / `turn_fade_out 50` | Decoded: the roll/pitch base ramp from airspeed alone. **Unimplemented, owned by `BL-330`** |
-  | `maxAOA 46.0` / `liftAOAs [5,9]` / `lift_accel_rate 0.75` | Decoded. `liftAOAs` is an airflow blend, **not** a load-factor ramp. Consumed by `PLAN-flight-drag-lift` B12 as a **hypothesis under test, not a decode**. ⚠ That plan justifies its lift re-key partly on "the aircraft must hold 100° of bank, which needs `1/\|cos 100°\|` = 5.8 g" (`PLAN-flight-drag-lift.md:486-487`, `:7`, `:32`, `:200`, `:549`). `CAP-33` showed the ADI reads airframe **attitude**, not the turn's bank, so the ~100° attitude is real but the load factor does not follow from it that way — `CAP-01`'s turn banked 58.7°, ~2 g. The re-key is not challenged; its stated arithmetic is |
-  | `high_speed_pitch_fade [1000,1001]` / `highGs [9,15]` / `lowGs [-6,-9]` | Decoded as **authored unreachable** (`C24`, `D33`). Nothing implemented, which is the correct outcome |
-  | `drag_factor 1.5` (global) / `drag_fade_speed 40` | **Dead in the executable** (B14): parsed, then read by nothing. The per-plane `drag_factor` is the only drag scale |
-  | `groundblow_elev 400` / `groundblow_mag 10` / `ai_groundblow 0.5` | Decoded 2026-08-14, emitter set settled 2026-08-15, **implemented and flown 2026-08-15** (`git log --grep=BL-359`). `ai_groundblow` is loaded and deliberately unread: the AI path is a different law |
-  | `bounce_factor 0.6` | Decoded 2026-08-14. Units settled; implementation owned by `BL-172` |
-  | `nom_gravity 20.0` / `stall_mag 1.25` | Already consumed |
+- `BL-383` `[Research]` `[Owed-capture]` **The original's banked rotation is ≈1.6× slower than ours
+  and no authored constant is left to explain it.** Split out of `BL-095` when that umbrella retired
+  2026-08-15: every candidate that entry tracked has now died, so what remains is a measurement gap
+  with no data-side suspect. The whole banked rotation runs ≈1.6× fast — `sustained-turn-rate` 32.80
+  against `CAP-01`'s 18.95 °/s, knife-edge drift 1.09 °/s against 0.69–0.89, heading 1.68 against
+  0.68–1.13, the same ratio in all three.
+  ⚠ **All three authored candidates are dead, and re-opening one is the trap.** The hardcoded bank
+  coupling moves the banked rate the WRONG way by construction (`C22`); `highGs`/`lowGs` is a limiter
+  that never fires on any of the eleven airframes (`D33`, pinned by `ControlLimiterTests`); and
+  `turn_fade_in`/`turn_fade_out` is an airspeed ramp, implemented 2026-08-15 (`C24`) and saturated at
+  1 everywhere this gap appears.
+  ⚠ **`CAP-33` settled the other half and did not close this one.** The ~100° an ADI shows in the
+  footage is airframe ATTITUDE, not the bank of the turn (flown at a known 60–70°, the ADI sky
+  centroid read 105.1° while `V·ω / nom_gravity` read 62.2°, and the ADI's swing tracked the pitch
+  cycle at `r = +0.886` against the heading rate's `r = −0.091`). So `CAP-01`'s turn was banked 58.7°
+  at ~2 g, the original IS flying coordinated, and the rate gap is untouched by that finding.
+  ⚠ **Do not fill the hole by inventing a rate limiter from field names**, and do not hide it in a
+  chase constant: retuning `KnifeAlignFloor` would bury a rotation error in a camera-adjacent knob,
+  and a naive speed/bank coupling that quietly costs pitch authority is the wrong-mechanism fix
+  `BL-124`'s history warns about.
+  *Where it is recorded:* [`docs/org/flightModel.md`](docs/org/flightModel.md) (the "authored
+  candidates exhausted" note), `FlightEnvelopeTests`' informational rows, and
+  [`POST-B14.md`](analysis/flight-model-baseline/POST-B14.md).
+  *How you'd know it worked:* `sustained-turn-rate` lands near 18.95 °/s at `CAP-01`'s speed through
+  a decoded mechanism, not a fitted one.
 
-  ⚠ **Three keys are authored so the feature they gate never fires. That is a finding, not a gap to
-  fill: do not implement them as missing features.** `high_speed_pitch_fade` is beyond any attainable
-  dive speed (the highest of the eleven ceilings is the Bloodhawk's 528.5 mph against an authored
-  1000, `C24`), and `highGs`/`lowGs` sit past the hard ±5/9 G lift clamp (peak demand 2.13–5.01 G
-  against a threshold of 9, peak α 8.9–25.6° against `maxAOA` 46°, all eleven airframes, `D33`).
-  `lowGs` is unreachable twice over, since the demand is a vector LENGTH that never goes negative.
-  Tables in [`docs/org/flightModel.md`](docs/org/flightModel.md) and
-  [`POST-B14.md`](analysis/flight-model-baseline/POST-B14.md); pinned by
-  `CSVM.Tests/ControlLimiterTests.cs`, which asserts each airframe against its OWN loaded thresholds,
-  so a per-plane override or a data edit that brings either into reach fails the suite.
-  ⚠ The Bloodhawk's 5.01 G peak is 0.2 % **past** the executable's fallback `highGs[0] = 5`, so under
-  the fallbacks the limiter would fire, barely. The disproof rests on the authored 9.
+- `BL-393` `[Tuning]` **The control surfaces' deflection angles, mix and slew are decoded and the
+  TUNEs are still in place.** `ControlSurfaceAnimator` deflects ±20° per kind and slews linearly at
+  3 units/s, both chosen by eye. `PLAN-ai-flight` `C24` decoded what the original does while tracing
+  the reverse-authority factor to this same block — six angle slots, six node lists, exponential
+  smoothing at 2/s, rudder −35°, one pair at ±0.5 rad from a single stick channel and one at ±0.6 rad
+  MIXING two channels — and the table is in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "The original's control-surface animation".
+  Only the rudder's reverse-authority scale was ported.
+  ⚠ **The blocker is the mapping, not the numbers.** We classify four surface kinds by node name;
+  the original drives six node lists whose contents are not decoded, and its two mixed slots are not
+  one-axis-per-surface at all. Decode the list population before assigning any angle from that table,
+  or the mix lands on the wrong surfaces.
+  ⚠ The ±20° pair was validated by eye against the original, so this is an A/B against footage, not a
+  correction of something known wrong.
 
-  **Ground blow: DECODED from the binary 2026-08-14, IMPLEMENTED and flown 2026-08-15**
-  (`git log --grep=BL-359`). Mechanism, constants, gates and emitter rule are in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md); `CAP-02` closed 2026-08-07 and the GDD's
-  §4.1.7 *mechanism* is confirmed by the code, its emitter *list* replaced by the rule that produces
-  it. In short: `FUN_0048bf60` casts a ray of
-  `groundblow_elev` **metres** along the nose, and `FUN_0048c220` adds a rotation away from the hit
-  surface into the **same accumulator the stick writes to**, one call after the stick terms in
-  `FUN_0048c470`. It is a bias on control response, not an applied force. A command *into* the
-  obstacle is met with `0.05 × groundblow_mag`, so it is halved and never reversed; a command *away*
-  is amplified by up to `1 + 10·S²`; and on a dead-on approach the bias axis `n × b` collapses to
-  zero, so a head-on gets no help at all. The AI path is a different law, not a scaled one: a fixed
-  push of `ai_groundblow × groundblow_mag × S`, independent of what the AI commanded, linear in
-  proximity, and not `dt`-scaled. **The AI half is not built** — the player term is, in
-  `FlightModel.GroundBlowTerm` off `FlightController.ProbeGroundBlow`.
+- `BL-387` `[Bug]` **An AI aircraft flying straight and level, needing no turn, rolls left-right-left
+  indefinitely and never settles — confirmed absent from the original at the controls (`PT-54`/
+  `PT-56`, 2026-08-15).** First seen netless and targetless
+  (`--stage=empty --plane=player_bhawk --ai=player_fury,player_avenger`, `AiPilot.FlyPatrol`'s
+  no-`Patrol` branch holding a fixed `OrderAim` 1000 m out) and persisting through
+  `AiMode.AvoidCrash` in the same session. **Re-flown on a real net** (`--debug-spectate` on a
+  wingman flying its default patrol net, `PT-56`): the net-follow itself "looked good", but **the
+  same oscillation appears whenever the plane is flying straight and does not need to turn** — it is
+  not confined to the static/netless case after all. **Not reproduced in Instant Action → Dogfight a
+  Squadron** (`PT-54`), where aircraft spend most of their time turning hard onto a live quarry
+  rather than holding a straight leg.
+  *Evidence:* `AiControlLaw.Steer` (`src/Flight/AiControlLaw.cs`:189–207) renormalises `bx`/`by`
+  (the body-frame lateral/vertical aim error) onto the UNIT CIRCLE whenever the aim point is ahead
+  (`bz > 0`) — `h = sqrt(bx²+by²); bx /= h; by /= h`. This throws away the MAGNITUDE of the error and
+  keeps only its sign/ratio: flying dead-on with a genuinely tiny error (`bx`, `by` ~1e-3) still
+  divides by their own tiny `h`, blowing the normalised pair back up to order 1. `roll = -bx` then
+  feeds that full-scale value into `Limit()`, and architecture.md's own note on this file already
+  flags the output as "NEAR-BANG-BANG… anything past ~0.29 of body-frame aim error saturates" — so a
+  near-zero true error still commands a near-maximum bank. With no term damping the TURN RATE (only
+  bank angle is corrected, and roll→bank→turn rate→heading is two open integrators), this is a relay
+  hunting around its own setpoint: it overshoots the tiny error, the sign flips, it banks the other
+  way, repeating without bound. A real, sustained turn (large `bx`/`by` before renormalisation) does
+  not have this problem — the sign stays consistent and the plane just banks hard one way — which is
+  exactly why dogfighting and any leg with real heading error reads fine and straight-and-level does
+  not.
+  ⚠ **Do not assume this is a faithful port of a genuinely twitchy original law.** The user's direct
+  A/B says the original does not do this; the decode (`docs/org/aiControlLaw.md`, plan D31/E41) may
+  be missing a rate-damping term, or the renormalisation step itself may be over-applied relative to
+  what the original does with it (the original may use it only for the `rudder_tol` branch-select
+  test, not for the roll MAGNITUDE too). `CAP-37` (unfilmed) is the instrument that would settle
+  which, but this bug does not need footage to confirm — it is visible against the player's own
+  flying and against a wingman's own patrol leg.
+  *Fix shape:* re-check `docs/org/aiControlLaw.md`'s decode of `FUN_0048bdd0`/whichever function
+  owns this branch for whether the renormalised `bx` is what the original feeds to roll, or whether
+  the original keeps (or re-scales by) the pre-normalisation magnitude for the OUTPUT even while
+  using the normalised pair for branch selection — before inventing a rate-damping term from nothing,
+  which `BL-330`'s history warns against.
+  *Playtest after fix:* `PT-54`/`PT-56` (`docs/plans/PLAN-ai-flight.md` F52) — watch a straight patrol leg
+  and a netless hold-course alike for the roll to settle instead of hunting.
+  *Cross-refs:* `docs/plans/PLAN-ai-flight.md` F52 (this is the AI-arm finding it owes), `BL-330`
+  (a prior instance of not inventing a rate term from field names).
 
-  ⚠ **`groundblow_elev` 400 is 400 METRES of ray length, not a 400 ft trigger range, and the
-  footage agreement was a coincidence of digits.** The `CAP-02` onset bracketed at 427 → 376 ft sits
-  well inside a 1,312 ft ray at roughly 70 % strength, so the ray never explains an onset there and
-  whatever timed that pull was not this threshold. The footage record that carried this reading,
-  `analysis/video-flight-calibration/FINDINGS.md`, was deleted 2026-08-14 as superseded.
-  ⚠ **`groundblow_mag` 10 is not a TUNE** and must not be fitted to the cliff clip's 17° step. It is
-  an authored constant with a traced consumer, 6.7× the engine's own fallback of 1.5.
-  ⚠ **The proximity power is `S²`, settled at `0x0048c30f` on 2026-08-15**: `FUN_0048bf60` hands
-  back the axis ALREADY scaled (`A·S`) plus `S` as its return value, and the caller uses that one
-  scaled vector twice, once in the dot and once in the add. Reading the write-up's `p` as
-  `dot(accum, A·S)` *and* keeping an `S²` in the add counts it three times. `CSVM.Tests`'
-  `GroundBlowTests` pins the quadratic against the linear reading.
-  One `CAP-02` anomaly stands unexplained and is now moot for implementing: `Up Down` recovery #1
-  reads 2.30× free air with 28–30 % of samples gated at γ ≈ −63°, suspected estimator artifact, and
-  every clip designed to reproduce it came back flat.
-
-  **The original's 1.6×-slower banked turn has no authored candidate left, and this block is not
-  where it will be found.** All three died: the hardcoded bank coupling moves the banked rate the
-  wrong way by construction (`C22`), `highGs` is a limiter that never fires (`D33`), and
-  `turn_fade_*` is an airspeed ramp that is saturated at 1 everywhere the gap appears (`C21` era
-  correction, 2026-08-09). What remains is the measurement's own interpretation: `CAP-01`'s
-  18.95 °/sim-s at 222.94 mph implies **58.7° of bank** (`atan(V·ω / nom_gravity)`, and it is
-  `nom_gravity` 20 m/s² in that formula, not 9.81). `CAP-33` (2026-08-15) settled that the ~100° its
-  ADI shows is not a bank at all: flown with the pilot holding a known 60–70°, the ADI sky centroid
-  read a mean 105.1° while `V·ω / nom_gravity` read 62.2°, and the ADI's 46° swing tracked the pitch
-  cycle (`r = +0.886` against climb rate) rather than the heading rate (`r = −0.091`). An ADI shows
-  airframe attitude, which in a high-α pull sits tens of degrees off the bank of the turn. So the
-  "measured bank" half of this disagreement was never real, the original **is** flying coordinated,
-  and 58.7° is `CAP-01`'s actual bank. The rate gap itself is untouched by this and stays open.
-  (`git log --grep=BL-307` for the closing record.)
-  ⚠ **Do not fill the hole by inventing a rate limiter from field names.** A naive speed/bank
-  coupling that quietly costs pitch authority is exactly the wrong-mechanism fix `BL-124`'s history
-  warns about, and `maxAOA`/`liftAOAs` were consumed as a hypothesis under test rather than as a
-  decode (`docs/plans/PLAN-flight-drag-lift.md` B12).
-  ⚠ **Do not re-open `drag_factor` as a name collision.** The global one is dead in the executable,
-  so `vehicle.json`'s per-plane `drag_factor` is the only drag scale and there is nothing to
-  reconcile.
-
-  **Still to do, all of it downstream of this entry:**
-  1. ~~Implement ground blow.~~ **Landed 2026-08-15** (`BL-359`, closed; `git log --grep=BL-359`),
-     player path only and confirmed at the controls. The AI law is unbuilt and is a different one.
-  2. **Implement the roll/pitch base ramp** (`BL-330`) and **the `bounce_factor` restitution**
-     (`BL-172`).
-  3. ~~Confirm the zeppelin emitter on any zeppelin mission.~~ **Answered 2026-08-15 from the binary
-     and the shipped data, no capture needed.** The emitter test keys on whether a hit node carries
-     the spawn mark `0x40000000` and, if so, whether its registry entity is on a scripted path; never
-     on vehicle type. IA1's zeppelin is a plain gamez node with no spawn mark, so it repels exactly
-     like terrain. Written up in
-     [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow"; the path mechanism it
-     surfaced is `BL-361`. In the build, the rule is the `CollisionLayers.World` mask on the probe,
-     which is why an aeroplane does not repel and the zeppelin does. (`CAP-33` was flown 2026-08-15;
-     it settled the ADI-vs-implied-bank question, not the banked-turn rate gap.)
-
-  When those are homed elsewhere or done, this entry retires: there is no research left in it.
-
-- `BL-330` `[Feature]` **The low-speed control-authority ramp — decoded, corroborated at the
-  controls, and not implemented.** `FUN_0048bdd0` scales **roll and pitch** authority by a base ramp
-  taken from airspeed alone: 0 below `turn_fade_in` (**10 mph**), rising linearly to 1 at
-  `turn_fade_out` (**50 mph** as authored here), flat at 1 above. So the slower the aircraft gets,
-  the mushier it gets — and at 10 mph roll and pitch are gone entirely. Our `FlightModel` applies no
-  such fade on either axis; the only thing that makes our aircraft feel unflyable when slow is the
-  stall block taking the nose, which is a different mechanism. Write-up in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Control authority vs speed".
-  **Two-source support, which is why this is a `[Feature]` and not a `[Research]`:** the trace above,
-  plus a player report from the controls (2026-08-09) that the original hampers the controls at stall
-  speed — offered unprompted while flying the post-`D33` build, i.e. describing the original from
-  memory rather than reading it off ours.
-  ⚠ **Where 50 mph falls decides how visible this is, and it differs by airframe** (stall speeds from
-  `PLAN-flight-model-rewrite` B15): nine of the eleven stall at 52–57 mph, i.e. *above* the ramp's
-  top, so for them the fade only bites once already stalling and falling. The **Balmoral** (45.5)
-  reaches its own stall at ≈89% authority. The **autogyro** (18.5) flies a long way inside the ramp
-  and reaches stall at roughly **21%** of roll and pitch authority — near-inert controls while still
-  flying, which for that airframe reads as deliberate rather than as a bug.
-  ⚠ **Traps.** (a) This is *airspeed*-keyed, not stall-keyed — do not gate it on `isStalled()`, or
-  the two mechanisms compound and the fade vanishes on the airframes whose stall sits above 50 mph.
-  (b) It is roll and pitch **only**: yaw has its own, different curve, already landed (`C21`), and
-  extending this ramp to the rudder would double-fade it. (c) `FlightModel.cs`'s rotation comment
-  currently asserts "roll never fades in the original" — true of *high* speed, false of low, and the
-  same misreading of this function that had `turn_fade_*` filed as a bank fade until 2026-08-09 (see
-  `BL-095`). (d) It reaches into stall recovery and the ground handling the race grid sits on, so it
-  wants a flown check, not only a probe row.
+- `BL-388` `[Tuning]` `[Owed-playtest]` **The AI autogyro's nose-down at low speed may read softer
+  than the original's — soft, single-session A/B, not a confirmed measurement.** `PT-57`
+  (`docs/plans/PLAN-ai-flight.md` F52 player arm, 2026-08-15): the autogyro's authority-ramp feel
+  otherwise matched the original directly at the controls; the one residual is "the nose pulling
+  down is not as hard as in the original", offered with a "perhaps".
+  *Evidence:* two candidate mechanisms, neither pinned to the report yet. (1) `AiControlLaw`'s
+  low-speed recovery (`src/Flight/AiControlLaw.cs`:116,119,250–254): below `RecoveryNoseY` (nose
+  more than ~30° under the horizon) and `RecoverySpeed` (60 mph), the law firewalls pitch full
+  nose-down and the throttle to `SpeedCap` — if this arms later or weaker than the original's
+  equivalent, the recovery would read soft exactly like this. (2) `C24`'s authority ramp
+  (`FlightModel.RollPitchAuthorityAt`) fades pitch alongside roll below `turn_fade_in`/`_out`; the
+  autogyro is the airframe `BL-330` measured losing the MOST authority by its own stall speed
+  (~79%), so a soft nose-down there could also just be the ramp doing its authored job and reading
+  unfamiliar rather than being wrong.
+  ⚠ Do not tune either candidate from this report alone — it is one flight, phrased as uncertain by
+  the reporter, and PT-57 also confirmed the airframe reads correctly everywhere else.
+  *Playtest after fix (or before touching anything):* a second `PT-57` autogyro pass, ideally with
+  the original open side by side, isolating whether the softness is in the recovery arm timing or
+  the authority ramp itself.
+  *Cross-refs:* `docs/plans/PLAN-ai-flight.md` F52 (player arm), `BL-330` (the authority ramp this pairs
+  with).
 
 - `BL-096` `[Feature]` **Angle of attack is now fittable and is not modelled.** The ADI shows hysteresis against
   vertical speed round the loop — expected, since the ball shows attitude while `dh/dt` follows the
@@ -887,10 +1203,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     the footage and still cannot reach it, while walking the knife-edge α to 5.36°, past
     `liftAOAs[0] = 5°`. ⚠ **What is left is not this constant**: the whole banked rotation runs
     ≈1.6× fast (knife-edge drift 1.09 °/s against 0.69–0.89, heading 1.68 against 0.68–1.13, the same
-    ratio as `sustained-turn-rate`'s 32.80 against 18.95) and `BL-095`'s unconsumed
-    `turn_fade_in`/`turn_fade_out` are the only authored fields shaped like it (`highGs` was the
-    third until `D33` measured the G limiter inert on all eleven airframes). Retuning
-    `KnifeAlignFloor` would hide a rotation error inside a chase constant.
+    ratio as `sustained-turn-rate`'s 32.80 against 18.95), and no authored field is left that is
+    shaped like it: `turn_fade_in`/`turn_fade_out` was implemented 2026-08-15 (`C24`) and is
+    saturated at 1 across the whole band, `highGs` was measured inert on all eleven airframes
+    (`D33`), and the bank coupling moves the rate the wrong way (`C22`). That gap is `BL-383`.
+    Retuning `KnifeAlignFloor` would hide a rotation error inside a chase constant.
     The original's knife-edge trajectory (`CAP-05`, both takes, 143/300 mph,
     agreeing to ~13%, so driven by time-since-roll-in, not airspeed):
 
@@ -1091,100 +1408,36 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   roll question has the same defect**: there is no partial aileron deflection either, so a "moderate
   roll input" clip cannot be flown, and `BL-097` should be re-read as a held-key step question too.
 
-- `BL-172` `[Feature]` **Graze pushback is entirely unmodelled — and the shipped data already has the constant to
-  bind it. Plan-sized — not a TUNE.** `FlightController.SurviveHit` (`FlightController.cs:1435-1535`)
-  only ever does a friction-scaled tangential slide (`GrazeFriction`), a lever-arm attitude kick
-  (`GrazeKick`), and a fixed `GrazePushOut` (0.15 m) off the surface — there is no
-  restitution/repulsion term along the normal at all. Meanwhile `player.json`'s `crash` block ships
-  **`bounce_factor 0.6`** alongside `armor_damage_range [50,300]` / `health_damage_range [50,300]`
-  (`docs/formats/vehicle.md:65,90-149`), and nothing in `CSVM/src` reads any of the three (grep
-  confirms zero hits for `bounce_factor` under `CSVM/src`; `BL-095` has the block's decode status).
-  *Fix shape:* add a restitution impulse along the contact normal scaled by `bounce_factor`, alongside
-  the existing tangential slide — this turns "invent a pushback mechanic" into "bind the shipped
-  constant." *Blocks:* the collision-feel sign-off.
-
-  **DECODED 2026-08-14 from `crimson.exe`; units settled and the fix shape confirmed.**
-  `bounce_factor` is a **raw scalar** (global `0x0071c35c`, parser store `0x00473c38`, fallback 0.8),
-  applied in the collision resolver `FUN_0048d7f0` as a normal-only impulse with no tangential or
-  friction term. Write-up in [`docs/org/flightModel.md`](docs/org/flightModel.md), "Collision response
-  and `bounce_factor`". Three things it changes here:
-  - **Effective normal restitution is `f_lin × bounce_factor`, not `bounce_factor`**, where
-    `f_lin = L/(L+A)` splits the impact between linear rebound and spin (`L = 2.25·|J|`,
-    `A = |Δω|`). A short lever arm rebounds at up to 0.6; a wingtip or nose into a wall throws
-    almost everything into rotation instead.
-  - **There is no surface dependence in the code at all** — no verticality test, no per-surface
-    table, no material lookup. The measured vertical-versus-flat split below is a lever-arm
-    partition, and reading it as a per-surface coefficient would be wrong.
-  - **Only the player bounces.** The impulse branch is entered only for the local player and only
-    while not already crashed; AI aircraft get position correction and nothing else.
-  ⚠ **The measured 0.75–0.86 on flat ground is above what `bounce_factor` can produce**, and the
-  decode found why: the impulse is computed from the *contact point's* velocity with the rotational
-  term **doubled**, then applied in full to the centre of mass with no reaction term
-  (`n·v_after = −k·(n·v) − (1+k)·2·n·(ω × r)`, `k = f_lin·bounce_factor`). The second term is
-  unbounded and is not restitution. Reproducing the original's feel needs that term, not a larger
-  `bounce_factor`. Ruled out as sources, each traced: multiple contacts per frame, successive-frame
-  stacking, a separate ground-support path, and gravity ordering.
-  ⚠ **`bounce_factor` 0.6 IS a restitution along the contact normal — measured 2026-08-04 from
-  `CAP-14`** (eight clips, `playtest/CAP-14/`; two airframes, Bloodhawk and a max-armour Balmoral;
-  **seven** contacts, three surface orientations, 139–302 mph; every clip's altimeter and speedometer
-  registering to the chase pooled median at dx = dy = 0, peaks 0.82–0.97; altitude d2 sd 0.34–0.84 ft).
-  `v0` is the vertical speed at the contact instant from a free parabola over the N frames after it,
-  `e = −v0/v_before`:
-
-  | surface | normal | mph | v_before | v0 (N=9) | v0 (N=12) | accel | e |
-  |---|---|---|---|---|---|---|---|
-  | cliff face | **vertical** | 216 | −45.9 | +8.0 | +3.0 | −86 | **0.06–0.18** |
-  | building wall | **vertical** | 145 | −21.7 | +1.4 | +1.8 | −107 | **0.06–0.08** |
-  | flat, wingtip #1 | **flat** | 143 | −14.2 | +10.6 | +12.3 | −66 | **0.75–0.86** |
-  | flat, belly (slide) | **flat** | 302 | −44.9 | +17.5 | +21.9 | −73 | **0.39–0.49** |
-  | flat, wingtip #2 | flat | 139 | −5.4 | +1.7 | +0.4 | +8 | pull-up |
-  | flat, nose | flat | 146 | −31.9 | −23.6 | −15.1 | +342 | pull-up |
-  | flat, belly | flat | 302 | −39.7 | +80.3 | +83.4 | +88 | pull-up |
-
-  (ft/wall-s; accel ft/wall-s².) **Vertical surfaces e = 0.10 ± 0.05; flat ground e = 0.62 ± 0.19,
-  against a shipped 0.60.** That split is the signature of a normal-direction restitution and nothing
-  else gives it: on a vertical wall the sink is *tangential*, so a normal bounce puts nothing into the
-  altimeter — and the altimeter sees nothing; on flat ground the sink *is* the normal component, and
-  it comes back at 0.6 of itself. So this item's original fix shape is **confirmed, not overturned**.
-  **Speed loss is set by incidence, not speed** — 302 mph belly-flat costs **0.11 mph**; 216 mph along
-  a cliff costs 11.64 in one frame; 145 mph along a building wall costs 23.15 in the contact frame and
-  then keeps scraping to **−40% (144.5 → 86.7 mph over 0.47 s)**, the only multi-frame contact in the
-  set — so an oblique wall scrape is a sustained several-tick event, not an impulse.
-  **Buildings behave like terrain, and survival is geometry not speed:** the Balmoral grazed a C5
-  skyscraper at 144.5 mph and flew on, and died against one at 144.2 mph; a Bloodhawk survived flat
-  ground at 302 mph twice, once holding altitude within 2.6 ft for 0.40 s while sparking.
-  *Fix shape, confirmed and sharpened:* add the restitution impulse along the contact normal scaled by
-  `bounce_factor`, replacing the fixed 0.15 m `GrazePushOut`; leave tangential speed almost untouched
-  for a flat skim; and make an oblique scrape a *sustained multi-tick* drag rather than a single
-  impulse.
-  *Playtest after fix:* grazes vs crashes should feel fair against the original, including behaviour
-  against building corners (`CAP-14`).
-  ⚠ **Traps.** (a) `bounce_factor`'s units are settled (raw scalar, decode above); what remains
-  unverified is the footage. `CAP-14` supports reading it as a coefficient of restitution on the
-  contact normal, but **0.6 is *consistent with* that footage, not
-  measured from it.** Only two of five flat-ground contacts are readable at all; of those, the belly
-  slide's `v0` still walks with the fit window (+3.2/+11.8/+17.5/+21.9 at N = 5/7/9/12, so e is really
-  0.07–0.49) and only wingtip #1 is window-stable (+10.6…+12.3 over N = 7–15, residual 0.07–0.09 ft
-  against 0.20 ft noise) — and it reads **above** 0.6, at 0.75–0.86. Two contacts bracketing 0.6 is
-  agreement, not a measurement; do not quote ±0.19 as a precision.
-  ⚠ (a2) **A post-contact climb is not evidence of a bounce; the SIGN of the post-contact acceleration
-  is the discriminator.** In `CAP-14 Bloodhawk  Hard Graze.mp4` the climb rate keeps *growing* for a
-  second (accel **+88 to +228** ft/wall-s², upward, nose visibly rising in the stills) and reads as
-  e = 2.0 if fitted as restitution — impossible. A real rebound decays at −127 ft/wall-s² under
-  `nom_gravity` 20. Read `e` only where the fitted acceleration is negative.
-  ⚠ (a3) **Restitution alone will not reproduce the vertical-surface clips.** On *both* of them the
-  sink is killed as well (−45.9 → +8.0, −21.7 → +1.4) even though on a vertical wall the sink is
-  tangential — while the flat-ground contacts show tangential speed almost perfectly preserved
-  (302 mph belly-flat costs 0.11 mph). Something removes vertical speed on contact regardless of the
-  surface's orientation, on top of the normal-direction bounce, and it is unexplained. (b) The receiving side is no longer the
-  blocker: `PLAN-armour-layer.md` (`docs/plans/`, complete 2026-08-04, `BL-173` closed as part of it)
-  landed the two-pool `PlaneDamage.Apply(part, healthDamage, armorDamage)`, armour first with 1:1
-  overflow — but it deliberately left the `crash` block itself (`armor_damage_range`/
-  `health_damage_range`/`bounce_factor`) unconsumed on every axis (Decision 4), so this item still
-  owns binding grazes/crashes through that `Apply` overload alongside the pushback, as one coupled
-  change. (c) `GrazeStopSpeed`/`GrazeFriction`/`GrazeKick` were tuned against the *current* no-bounce
-  slide — expect them to need re-tuning once a normal-direction impulse is added, not to survive
-  unchanged.
+- `BL-381` `[Feature]` `[Owed-playtest]` **What `BL-172` left behind: the crash block's two damage
+  ranges, and an unexplained vertical-speed kill on contact.** `PLAN-ai-flight` `C25` landed that
+  item's fix shape — the decoded normal-direction restitution off `bounce_factor`, player-only
+  (`git log --grep=BL-172`) — and three things it named are still not built:
+  - **`armor_damage_range [50,300]` / `health_damage_range [50,300]` are still unconsumed.** A
+    collision spends no armour and no health through `PlaneDamage.Apply(part, healthDamage,
+    armorDamage)`; `SurviveHit` deals its own invented `GrazeMaxDamage` quadratic instead, and
+    `Crash` consults the ledger not at all. `PLAN-armour-layer` left the whole `crash` block
+    deliberately unconsumed (its Decision 4) and `BL-172` owned it; nothing owns it now.
+  - **Something removes vertical speed on contact regardless of the surface's orientation, and it is
+    not the restitution.** On BOTH of `CAP-14`'s vertical-face contacts the sink is killed (−45.9 →
+    +8.0 and −21.7 → +1.4 ft/wall-s) even though on a wall the sink is tangential, while flat-ground
+    contacts preserve tangential speed almost perfectly (302 mph belly-flat costs 0.11 mph). The
+    decoded impulse cannot do that: it is normal-only, with no tangential or friction term anywhere
+    in it. Unexplained, and the one live question left in that footage.
+  - **An oblique wall scrape is a sustained multi-tick drag, not an impulse.** `CAP-14`'s only
+    multi-frame contact scraped a building at 144.5 mph and lost 40 % over 0.47 s (144.5 → 86.7).
+    This engine resolves one contact per frame with a fixed 0.15 m push-out and a friction-scaled
+    slide, which is a different shape.
+  ⚠ **`GrazeStopSpeed`/`GrazeFriction`/`GrazeKick` were tuned against the old no-bounce slide**
+  (`BL-271` owns them), so they are the first suspects if grazes now feel wrong — the restitution
+  landed on top of them unchanged.
+  ⚠ **Do not chase the flat-ground magnitude with a bigger `bounce_factor`.** The decoded impulse's
+  doubled rotational term is what exceeds 0.6, and it is already implemented; the constant is
+  authored data. See [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Collision response and
+  `bounce_factor`", which also carries the `CAP-14` reading and the correction `C25` made to the
+  lever-arm partition.
+  *How you'd know it worked:* a graze spends real armour before health on the struck zone, and an
+  oblique scrape along a building bleeds speed over several ticks rather than one.
+  *Playtest after fix:* `PT-53`.
 
 - `BL-271` `[Tuning]` `[Owed-playtest]` **The survivable-graze and stop laws are invented physics with player-facing
   consequences** (`FlightController.cs:271-295,1652-1672`, header "all TUNE"): attitude kick
@@ -2753,11 +3006,17 @@ usual.
   before launch, so the geometry the plane flies through is open. Ours never plays it, the door
   stays closed, and the collision sweep kills the plane on frame one.
   ⚠ **Traps.** (a) Do NOT "fix" the spawn placement — it matches the decode; the missing piece is
-  the door animation, not the position. (b) Leads preserved from a partial decode, unimplemented:
-  the launch also sets two timers (`+0xac = now + 1.5`, `+0xb4 = now + 2.5`, consumers untraced)
-  and an initial velocity with a −22.352 m/s vertical component (the zeppelin drop case); read
-  those before inventing any grace window. (c) The launched-vehicle mechanism itself (parked
-  roster planes, not fresh spawns) is a separate fidelity gap from this bug; B6's fresh-spawn
+  the door animation, not the position. (b) Leads preserved from a partial decode: the launch also
+  sets two timers (`+0xac = now + 1.5`, `+0xb4 = now + 2.5`) and an initial velocity with a
+  −22.352 m/s vertical component (the zeppelin drop case). `+0xb4`'s consumer is now traced
+  (`PLAN-ai-flight` `C23`): it cuts the AI ground-blow factor to ×0.15 for its 2.5 s span, reachable
+  in this engine via the same launch routine (`AiGeneratorRuntime` → `AiAircraftSpawner.Spawn`) but
+  not yet ported — a recorded gap, not a fix for THIS bug (ground blow is a control-response bias on
+  an already-flying aircraft; it cannot save a plane the collision sweep kills on the spawn frame).
+  `+0xac`'s consumer (the collision-grace gate) is decoded — it returns out of the collision resolver
+  outright, so the object has no collision at all inside the window — and unmodelled; `BL-382` owns
+  landing it with the drop timer beside it, so read that before inventing any grace window here. (c) The launched-vehicle mechanism itself
+  (parked roster planes, not fresh spawns) is a separate fidelity gap from this bug; B6's fresh-spawn
   stand-in is documented in its landing commit.
 
 - `BL-074` `[Research]` **PLAYER_INIT fields [3]/[4] semantics + per-plane spawn speed** — story-mission spawns
@@ -3010,11 +3269,82 @@ usual.
   *How you'd know it worked:* a mission-opening aircraft sits still on the strip until its goal
   fires, then rolls at a steady 40 mph, accelerates and climbs out on the last leg, and flies
   normally from the moment it leaves the path.
-  *Cross-refs:* `BL-095`, [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow" —
+  *Cross-refs:* [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow" —
   ground blow's own emitter test reads this byte, so a spawned vehicle put on a path stops repelling
   the player the moment it completes the path and drops into the flight model. Ground blow itself
   shipped without the registry filter (its player probe simply excludes aircraft), so building the
   follower means revisiting whether a path-driven vehicle needs to become an emitter in this build.
+
+- `BL-362` `[Feature]` **Instant Action wingmen never form up on the player.** *Evidence:* the user at the controls,
+  2026-08-15: wingmen fly away instead of staying near the player, with no formation-flying
+  behaviour anywhere in the engine and the placeholder law driving them.
+  *What we do today:* `GameSession.BuildFlightRigs` places wingman `i` on the decoded spawn fan
+  (`InstantActionRuntime.WingmanSlotFor`) and hands it `AiPilot.HoldingCourse`, so it holds the
+  player's spawn heading and altitude for the rest of the mission. The decoded escort chain (0/1/3
+  escort the player, 2/4 escort 1/3) is wired only into `AiGunner.PrimaryTargetName`, which names
+  who to SHOOT, not who to stay near.
+  ⚠ **And that assignment is unreachable in our engine:** `SelectRankedTarget` skips every same-team
+  candidate before it tests `PrimaryTargetName` (`FlightController.cs:2253`), and a wingman sits on
+  `AimAssist.PlayerTeam` exactly like the player it is pointed at. So the chain resolves to nothing,
+  on every wingman, in every mission. Verify that before designing on top of it.
+  *What the decode says:* [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) on
+  `primary_target` says formation-looking behaviour in the original rides nets whose trailer names
+  `player`, and `primary_target`, "not this slot". Both halves turn out to be real, and which one
+  applies depends on whether the wingman has a net.
+  ⚠ **This paragraph used to rest on "a wingman gets no patrol net (`netids` keeps its `-1`)",
+  quoted from `instant-action.md`. That was wrong and the page is corrected** (`BL-364`,
+  2026-08-15): an Instant Action wingman IS given the chapter's first net. So the sentence that
+  followed it here, "a wingman has no net, so the trailer half cannot be the mechanism", was wrong
+  twice over, and is struck: in C1 that first net is `[10, "player"]`, so the trailer half is
+  exactly the mechanism there (`BL-377`, landed and closed).
+  *Fix shape:* answer the decode question first, then a station-keeping input source in `AiPilot`
+  dispatched from `AiModeMachine`. Do not invent a formation offset ahead of it: `WingmanSlotFor`'s
+  fan is decoded as a SPAWN placement, and reusing it as a flying station is a guess wearing a
+  decoded number.
+  ⚠ *Traps.* (a) The nine `AiMode` values are decoded from the engine's own debug readout and none
+  of them is "form up"; a tenth is invented and has to be named as such, out of `NameOf`'s verbatim
+  vocabulary. (b) **Friendly fire is decoded as real** (M4 A2): a wingman holding a tight station
+  will die to the player's guns, which is correct, and must not be papered over with a damage or
+  collision exemption. (c) It is a chain, not a star: 2 and 4 station on 1 and 3, so a dead leader
+  leaves its follower without one, and that case needs an answer rather than a crash.
+  ⚠ **DECODED 2026-08-15, and the blocker above is void.** [`docs/org/aiPilot.md`](docs/org/aiPilot.md):
+  a netless `mode wingman` aircraft flies a fixed formation station on its `primary_target`
+  (`FUN_0041e760`), so `primary_target` on a friendly is a **formation leader**, not a target
+  assignment, and `SelectRankedTarget` skipping same-team candidates never mattered. The station is
+  a body-frame offset from the leader: **(6, 0, 18)** when the leader is the player (6 m out, level,
+  18 m astern) and **(8, −2, −8)** when it is another AI, with an 80 m separation push, a 700 m
+  join threshold and a speed-ramped trail distance of 106.68 m to 259.08 m when it is chasing
+  instead. So `WingmanSlotFor`'s spawn fan was indeed the wrong thing to reuse, and the real offset
+  is now decoded rather than invented.
+  ⚠ **But it is a campaign behaviour, not an Instant Action one.** `BL-364`'s decode shows Instant
+  Action gives every actor a patrol net, and a net demotes a `wingman` to `jet` at spawn, so in the
+  original an IA wingman walks the chapter's first net and does **not** hold station. The shipped
+  netless wingmen are the campaign's `wingman_N` / `bswingman_N` roster blocks. Read off the code
+  path, not observed at the controls of the original, so an IA capture would be worth having before
+  building station-keeping for that mode.
+  ✔ **And Instant Action's half is now DELIVERED, by a different mechanism** (`BL-377`, landed and
+  closed 2026-08-15; [`docs/org/aiPilot.md`](docs/org/aiPilot.md) "The trailer" is the decode, and
+  `git log --grep=BL-377` the work). An IA wingman takes the chapter's first net, and in C1 that
+  net is anchored to the
+  `player`, so the whole graph is carried around the player and the wingman patrols around them
+  without any station-keeping at all. So "wingmen never form up on the player" is answered for
+  Instant Action by the original's own means; what remains here is the CAMPAIGN's netless
+  `mode wingman` station, whose offsets are decoded above and which nothing in `src/` yet flies.
+  ⚠ It is not a formation and should not be judged as one: the wingman walks a figure-eight
+  ~1 km across that happens to travel with the player, so it comes close and then swings out again.
+  ✔ **The Instant Action side was flown 2026-08-15 and passes** (`PT-50`, now retired): the three
+  Fury wingmen spawn as a plausible flight, they start patrolling and are carried along by the
+  player-anchored net rather than drifting off alone, and friendly fire is confirmed possible as
+  Decision 3/A2 requires. That verdict covers Instant Action only, which is why the item stays open
+  on the campaign station below.
+  *Playtest after fix:* fly a CAMPAIGN mission whose roster has netless `wingman_N` blocks and watch
+  one hold the decoded body-frame station on its leader, 6 m out and 18 m astern of the player, from
+  the 700 m join threshold inward, and trail at the speed-ramped distance when it is chasing.
+  *Cross-refs:* [`docs/org/aiPilot.md`](docs/org/aiPilot.md) (the decode), `BL-363` (the other half
+  of the same playtest: an escort with nothing targetable), `BL-364` (the patrol nets, and the
+  correction to `instant-action.md` this rests on),
+  [`docs/formats/ai-nets.md`](docs/formats/ai-nets.md) (the anchored net that delivers the IA half,
+  closed as `BL-377`).
 
 ## Tooling, platform & docs
 
@@ -3028,6 +3358,22 @@ usual.
   hand-killed silently corrupts unattended runs.
   *Workaround on record:* kill the lingering Godot process for that shot; the hash it printed
   is still valid.
+
+- `BL-379` `[Bug]` **`PerfSampleTests.AScopeAllocatesNothing` is flaky — it asserts EXACTLY zero
+  allocated bytes and intermittently reads 4872.** Hit once during PLAN-ai-flight C21 (2026-08-15) on
+  a run whose change touches nothing in `PerfSample`'s path, then **7 consecutive clean runs** of the
+  same tree, so roughly 1 in 8. The measurement is
+  `GC.GetAllocatedBytesForCurrentThread()` either side of a 10,000-iteration scope loop; the loop
+  body genuinely allocates nothing (a ref-struct handle over a fixed enum), so the bytes are almost
+  certainly the runtime's own — tiered JIT re-compilation or OSR firing inside the measured window,
+  which the single warm-up scope above it does not cover. Adding an unrelated test class perturbs it,
+  which fits that reading. **Cost is the false alarm, not the instrument:** a red gate suite on a
+  change that cannot have caused it burns a session's time deciding whether to trust it, which is
+  exactly what happened here. Fix by measuring the delta over a second identical loop (JIT paid on
+  the first), or by asserting a small ceiling with the reason written down rather than an exact 0.
+  ⚠ Do NOT "fix" it by relaxing the assertion to a large tolerance — the exact-zero claim is the
+  point of the test (an instrument that allocates on the frame path manufactures the collections it
+  exists to catch), so the noise floor is what must be excluded, not the property.
 
 - `BL-356` `[Bug]` **`HitchSidecar`'s queue (default depth 8, 3 s flush) loses records under a real
   hitch storm — confirmed at the controls, not just a theoretical TUNE gap.** A user session

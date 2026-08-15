@@ -63,6 +63,10 @@ public sealed class TurretMount
 /// </summary>
 public sealed class PlaneStats
 {
+    /// <summary>The per-spawn jitter's half-width (<see cref="WithAiSpawnJitter"/>): the original's
+    /// own immediate, an independent uniform ±5 % per slot.</summary>
+    public const float AiSpawnJitterSpread = 0.05f;
+
     public string DefName = "";          // vehicle.json def, e.g. "pbloodhawk"
     public string NodeName = "";         // GameZ node, e.g. "player_bhawk"
 
@@ -86,19 +90,46 @@ public sealed class PlaneStats
     public float AiAttackRange = 2000f;
     public float AiReturnRange = 1200f;
 
+    // The AI control law's per-axis output stage (docs/org/aiControlLaw.md, E41): the law's roll,
+    // pitch and yaw commands are multiplied by these three scales and then clamped to these three
+    // limits. Fallbacks are the def initialiser's own compiled defaults, which is what every
+    // airframe in this install actually flies on — no roster block authors them (all twelve slots
+    // are -1.0, the fall-through marker) and the shipped defs author only ai_input_limit_pitch, on
+    // eleven of them, at 0.79-0.91.
+    // ⚠ A scale of 3.5 against a limit of 1.0 saturates for any body-frame aim error over ~0.29, so
+    // this stage is NEAR-BANG-BANG, not proportional. That is the decoded behaviour, not a bug.
+    // ⚠ The original's ai_emerg_input_* set is deliberately NOT mirrored: its compiled defaults are
+    // identical to these and nothing in this install authors a single emergency slot, so crash
+    // recovery would read the same six numbers. Add the six fields only if a data edit makes them
+    // differ.
+    public float AiInputScaleRoll = 3.5f;
+    public float AiInputScalePitch = 3.5f;
+    public float AiInputScaleYaw = 3.5f;
+    public float AiInputLimitRoll = 1f;
+    public float AiInputLimitPitch = 1f;
+    public float AiInputLimitYaw = 1f;
+
+    // rudder_tol: how much horizontal aim error justifies banking rather than ruddering
+    // (docs/org/aiControlLaw.md). ⚠ A HIGHER value means MORE rudder, not less — clearing the
+    // threshold is what selects the bank branch. At the 0.2 default any target ahead is banked
+    // toward and the rudder is reserved for targets nearly dead astern; `autogyro` and `balmoral`
+    // author 1.0, the ceiling the compared quantity can never exceed, which puts a lateral-dominant
+    // error on the rudder even dead ahead. Only `balmoral` reaches this law (the autogyro is class 1).
+    public float RudderTol = 0.2f;
+
     // player.json globals
     public float Gravity = PhysicsConstants.NomGravity; // nom_gravity — the game's arcade gravity, m/s²
     public float StallMag = 1.25f;
 
     // player.json flight globals, plumbed here so the flight model reads authored data instead of
     // hardcoding it: LiftAccelRate/LiftAoaCosLo/Hi feed the lift demand, Yaw* the rudder-authority
-    // curve.
+    // curve, TurnFadeIn/Out the roll-and-pitch base ramp (C24).
     // Unread ON PURPOSE, not pending: MaxAoaCos and HighG/LowG* are the control limiters' authored
     // thresholds and this install puts them out of reach (peak demand 2.13-5.01 G against 9, peak
     // alpha 8.9-25.6 deg against 46, all eleven airframes — ControlLimiterTests pins it), and
     // HighSpeedPitchFadeLo/Hi is the same story at 1000 mph. DragFadeSpeed's key is dead in the
-    // executable. Still genuinely undecoded: TurnFadeIn/Out. Do not implement any of them from the
-    // field names — see docs/org/flightModel.md's corrections table.
+    // executable. Do not implement any of them from the field names — see
+    // docs/org/flightModel.md's corrections table.
     // Mirrors docs/org/flightModel.md's load-time conversions exactly: speeds × 0.44704 (MPH → m/s),
     // angles cosined at load where the original cosines them (liftAOAs, maxAOA), raw where it does
     // not (highGs/lowGs are plain G, yaw_low_speed/yaw_high_speed are dimensionless authority).
@@ -133,11 +164,24 @@ public sealed class PlaneStats
     // this install authors 400 and 10.
     public float GroundBlowElev = 100f;     // groundblow_elev, m — ray length and falloff denominator
     public float GroundBlowMag = 1.5f;      // groundblow_mag, dimensionless
-    // Unread ON PURPOSE: the AI path is a DIFFERENT law, not the player term scaled by this — a fixed
-    // push independent of what the AI commanded, linear in proximity rather than quadratic, and not
-    // dt-scaled, and cut to 0.15 for 2.5 s after a drop and suppressed while the AI is stunned.
-    // Implementing it means writing that law (docs/org/flightModel.md), not multiplying by this.
+    // C23: the AI path is a DIFFERENT law, not the player term scaled by this — a fixed push
+    // independent of what the AI commanded, linear in proximity rather than quadratic, and not
+    // dt-scaled. FlightModel.GroundBlowTerm reads AiGroundBlow · GroundBlowMag as that fixed factor
+    // (5.0 authored, not 0.15 — see that method's own note). The compiled AI branch cuts both the
+    // factor and S to ×0.15 for 2.5 s after a carrier drop (a zeppelin fighter-drop launch is this
+    // engine's carrier drop and IS reachable, but this port tracks no spawn timestamp, so the cut is
+    // an unmodelled gap — backlog.md BL-382) and suppresses the whole term while the AI is stunned
+    // (ported, but at FlightController.ProbeGroundBlow's gate, not here — GroundBlowTerm itself sees
+    // only what the probe already decided to feed it).
     public float AiGroundBlow = 0.9f;       // ai_groundblow, dimensionless
+
+    // The collision restitution ceiling (player.json's `crash` block, docs/org/flightModel.md's
+    // "Collision response and bounce_factor"): a RAW SCALAR, and the ceiling on effective normal
+    // restitution rather than the restitution itself — what a contact actually rebounds at is
+    // f_lin · this, with f_lin the lever arm's rebound/spin partition (FlightModel's
+    // BounceNormalSpeed). The fallback is the executable's compiled default, pre-set before the
+    // block is looked up, so an absent `crash` block leaves it standing; this install authors 0.6.
+    public float BounceFactor = 0.8f;       // bounce_factor, dimensionless
 
     // The near-miss cue's shipped accumulator (warning_shot_*) — see WarningShotCue for the units
     // question. The sound is a SOUND_GROUPS name (bullet_warning_sg → snd_bulletpass1-3), not a
@@ -300,6 +344,14 @@ public sealed class PlaneStats
             FlightCeiling = Prop("flight_ceiling", 2500f),
             AiAttackRange = Prop("attack", 2000f),
             AiReturnRange = Prop("return_range", 1200f),
+            // Fallbacks are the def initialiser's compiled defaults, not guesses — see the fields.
+            AiInputScaleRoll = Prop("ai_input_scale_roll", 3.5f),
+            AiInputScalePitch = Prop("ai_input_scale_pitch", 3.5f),
+            AiInputScaleYaw = Prop("ai_input_scale_yaw", 3.5f),
+            AiInputLimitRoll = Prop("ai_input_limit_roll", 1f),
+            AiInputLimitPitch = Prop("ai_input_limit_pitch", 1f),
+            AiInputLimitYaw = Prop("ai_input_limit_yaw", 1f),
+            RudderTol = Prop("rudder_tol", 0.2f),
         };
         stats.EngineSound = PropStr("engine_sound", stats.EngineSound);
 
@@ -473,6 +525,10 @@ public sealed class PlaneStats
             stats.GroundBlowElev = player.Float("groundblow_elev", stats.GroundBlowElev);
             stats.GroundBlowMag = player.Float("groundblow_mag", stats.GroundBlowMag);
             stats.AiGroundBlow = player.Float("ai_groundblow", stats.AiGroundBlow);
+            // bounce_factor sits inside the `crash` block, beside the two damage ranges; a missing
+            // block keeps the compiled fallback, which is the original's own parse order.
+            if (player.Dict("crash") is { } crash)
+                stats.BounceFactor = crash.Float("bounce_factor", stats.BounceFactor);
 
             // curve blocks hold (x, y) pairs: min_* = ramp start, max_* = ramp end
             static SoundCurve Curve(ZrdrDict d, string minKey, string maxKey, SoundCurve fb) =>
@@ -501,5 +557,57 @@ public sealed class PlaneStats
             }
         }
         return stats;
+    }
+
+    /// <summary>The original's per-spawn dynamics jitter, applied to a non-human-piloted aircraft
+    /// (docs/org/flightModel.md "The per-spawn jitter"; the block at the tail of
+    /// <c>FUN_00476250</c>, <c>0x477340</c>–<c>0x4773f0</c>). Eleven runtime slots are each drawn
+    /// independently and multiplied in place by <c>(2r − 1) · 0.05 + 1</c>, a uniform 1 ± 5 %.
+    /// Returns a jittered COPY: the caller's object is the session's shared per-airframe cache and
+    /// two aircraft off the same airframe must not share a spread.
+    ///
+    /// <para>Seven of the eleven have a field here, in the original's own draw order: the
+    /// whole-vehicle health and armour maxima (<c>+0x2cc</c>/<c>+0x2c4</c>, each mirrored into its
+    /// "current" slot), then <c>fd_speed</c>, <c>ThrustFactor</c> (<see cref="EnginePower"/>),
+    /// <c>drag_factor</c>, <c>pitch_torque</c> and <c>roll_torque</c>. The other four are
+    /// vehicle.json's <c>rates</c> and <c>turns</c> pairs (def <c>+0xe8</c>/<c>+0xec</c> and
+    /// <c>+0xf8</c>/<c>+0xfc</c> → runtime <c>+0x680</c>…<c>+0x68c</c>), the surface-driving
+    /// integrator's acceleration and steering rates with their clamps: <c>basic_airplane</c> authors
+    /// them (10/42 and 4.6/6.5) and so an aeroplane carries them, but the aeroplane arm of the
+    /// original's own class dispatch never reads them, so there is nothing here for them to move.</para>
+    ///
+    /// <para>⚠ The whole-vehicle pair is what the original scales, NOT the per-part pools — a jittered
+    /// aircraft's zones stay at their authored maxima and only the hull pool moves. Where the def
+    /// chain authors no pair (every player airframe, which is what this engine's AI fly too) the
+    /// resolved sum over parts is written out explicitly, so <see cref="PlaneDamage"/> sees the
+    /// scaled hull rather than re-deriving the unscaled one.</para>
+    ///
+    /// <para>⚠ <c>veh_weight</c> and <c>ref_area</c> are NOT among the eleven, which is why
+    /// <c>FlightModel.StallSpeed</c> (computed once from that pair) cannot go stale behind this —
+    /// construct the plant from the jittered stats anyway, since <c>fd_speed</c> is.</para></summary>
+    public PlaneStats WithAiSpawnJitter(Random rng)
+    {
+        // Shallow: DestroyableParts / TurretMounts / VehicleInjureAnims are read-only after Load and
+        // nothing below touches them, so the copy shares them with the cached original on purpose.
+        var jittered = (PlaneStats)MemberwiseClone();
+        jittered.VehicleHealth = (VehicleHealth ?? SumParts(static p => p.MaxHp)) * Factor(rng);
+        jittered.VehicleArmor = (VehicleArmor ?? SumParts(static p => p.MaxArmor)) * Factor(rng);
+        jittered.FdSpeed *= Factor(rng);
+        jittered.EnginePower *= Factor(rng);
+        jittered.DragFactor *= Factor(rng);
+        jittered.PitchTorque *= Factor(rng);
+        jittered.RollTorque *= Factor(rng);
+        return jittered;
+    }
+
+    private static float Factor(Random rng) =>
+        (float)((rng.NextDouble() * 2.0 - 1.0) * AiSpawnJitterSpread + 1.0);
+
+    private float SumParts(Func<DestroyablePart, float> of)
+    {
+        float total = 0f;
+        foreach (var part in DestroyableParts)
+            total += of(part);
+        return total;
     }
 }

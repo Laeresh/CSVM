@@ -16,7 +16,7 @@ namespace CSVM.Flight;
 /// ±11° on every shipped AI aircraft — a hard gate, the AI does not fire off-boresight); and
 /// the quick-draw cone — the shot is taken only within <see cref="QuickDrawAngleDeg"/> of the
 /// TARGET's nose or tail axis (head-on and rear shots are the safe ones; beam shots need a
-/// confident pilot: 50° at rating 1, 89° at 9).</para>
+/// confident pilot: 50° → 89° over the shipped <c>quick_draw_angle</c> pair).</para>
 ///
 /// <para><see cref="Target"/> is a plain mutable field BY DESIGN — the original's mission
 /// script retargets an AI at runtime (<c>ADD_OTHER_TARGET</c>…), so orders are never read-once.

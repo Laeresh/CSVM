@@ -87,7 +87,10 @@ document, so they are shipped-only features.
 | `smokescreen_stun_range` `_angle` `_interval` | 600 m / 170° / 5.0 s | **The smokescreen weapon's blind effect** — who it stuns: within 600 m, inside a 170° arc, re-evaluated every 5 s. Matches the design's stun-recovery pilot skill and the flare/sonic-rocket stun. |
 
 Also worth naming, all data-confirmed: `crash` (`armor_damage_range`, `health_damage_range`,
-`bounce_factor` — see [the hp pair](#the-hp-pair-armor--hit-points));
+`bounce_factor` — see [the hp pair](#the-hp-pair-armor--hit-points); `bounce_factor 0.6` is a raw
+scalar and the CEILING on collision restitution rather than the restitution itself, decoded and
+implemented, see [`org/flightModel.md`](../org/flightModel.md)'s "Collision response". ⚠ It is
+player-only in the original, and what a contact actually rebounds at is `f_lin × bounce_factor`);
 `groundblow_elev 400` / `groundblow_mag 10` / `ai_groundblow 0.5` (ground blow — the design's
 §4.1.7 proximity repulsion from large objects, decoded and implemented, see
 [`org/flightModel.md`](../org/flightModel.md)'s "Ground blow". ⚠ `groundblow_elev` is a ray LENGTH
@@ -418,6 +421,23 @@ NPC's Dead Eye statistic sets the radius of a lead sphere it will shoot into.
 **`bullethole_anims`** — per player plane, the ON_CALL cockpit-glass hit-decal anims
 `bullet1`…`bullet5` (see [anim-definitions.md](anim-definitions.md)).
 
+**`mode`** — the dynamics class, and the one key that decides which AI behaviour an aircraft flies.
+Parsed from a string (`FUN_00479240`, `0x0047afe8`): `jet` 0, `heli` 1, `tank` 2, `ship` 3,
+`wingman` 4, `plane` 5. Only four defs author it and the rest inherit through `kind_of`:
+`basic_airplane` is `jet` (so are all 11 player defs, all 11 base AI aircraft and all 39 militia
+variants, including `autogyro`), `patrolboat` and `t_truck` are `ship`, and 12 defs are `wingman`
+(`wingman`, `bswingman`, and the eleven Instant Action `w<plane>` defs). Nothing ships `heli`,
+`tank` or `plane`. A `wingman` is a full aeroplane on the same integrator as a `jet`; what differs
+is that **a `jet` flies a patrol net and a netless `wingman` flies a formation station on its
+`primary_target`**. A `wingman` that is given a net is demoted to `jet` at spawn.
+[`org/aiPilot.md`](../org/aiPilot.md) has the mechanism, the station offsets and the constants.
+`mode_alt` parses to the def struct alongside it (`0.0` on `basic_airplane`) and no consumer of it
+was found.
+
+**`preferred_engagement_altitude`** (300.0 on `basic_airplane`, inherited by every aircraft) is the
+fallback for the roster's `pref_engage_alt` slot. ⚠ It is a **weight on the evasive-maneuver draw**,
+not an altitude order: nothing steers toward it ([`org/aiPilot.md`](../org/aiPilot.md)).
+
 **AI-combatant tuning** (AI variant defs, M4): pilot skill/personality (`dare_devil`,
 `dead_eye`, `quick_draw`, `steady_hand`, `sixth_sense`, `natural_touch`, `stun_recovery`,
 `talker`, `constitution`, `accentID`) — the same nine-stat vector the mission rosters author
@@ -430,3 +450,38 @@ range). The boat and truck add surface-vehicle motion keys (`platform`, `collisi
 `a_damping`). Paint keys (`paint_pattern`, `paint_colorN`, `paint_decalN`) set the AI
 liveries — see [paint.md](paint.md). A few airframe oddballs round out the set: `fuel`,
 `is_autogyro`, `rudder_tol`, `pilot`, `flight_ceiling`, `title`.
+
+**`ai_input_*` / `ai_emerg_input_*`** are the AI control law's per-axis output stage, decoded in
+[../org/aiControlLaw.md](../org/aiControlLaw.md): the three `scale` keys multiply the law's roll,
+pitch and yaw commands and the three `limit` keys clamp them, with the `emerg` set substituted
+during crash recovery. ⚠ **The def struct holds them in roll/pitch/yaw order** (`+0x264`…`+0x278`)
+while the roster's twelve slots are in pitch/roll/yaw order; a roster value of `-1.0` falls through
+to the def, which is what every shipped roster block does. The shipped defs author only
+`ai_input_limit_pitch` (11 defs, 0.79–0.91) and one `ai_input_limit_yaw` (0.79); the rest inherit
+down the `kind_of` chain as one six-slot block.
+
+**`rudder_tol`** selects between the law's two steering branches, and **a higher value means MORE
+rudder**: clearing the threshold picks the bank branch, so raising it makes banking harder to
+reach. **Default 0.2**, at which any target ahead is banked toward and the rudder is reserved for
+targets nearly dead astern. Exactly two defs author it, `autogyro` and `balmoral`, both at `1.0`,
+which is the ceiling the compared quantity can never exceed: on those two a lateral-dominant aim
+error goes on the rudder even when the target is straight ahead. The `autogyro` is class 1 and
+never reaches this law, so `balmoral` is the one aeroplane that turns onto a target with rudder
+rather than bank.
+
+**Def defaults for the block above** (from the def initialiser, not from any key): scales `3.5`,
+limits `1.0`, the emergency set identical, `rudder_tol` `0.2`. The AI speed clamp that sits beside
+them is fixed at `0`…`111.76 m/s` (250 mph) for every airframe and has no token at all.
+
+**`mode` is the vehicle class**, and the parser maps it to a small enum the whole object update
+dispatches on: **`jet` = 0, `heli` = 1, `tank` = 2, `ship` = 3, `wingman` = 4, `plane` = 5**
+(`0x47afc0`–`0x47b081`; classes 0 and 4 fly the aeroplane path, 1 the autogyro path, 2 the ground
+path, 3/5 the ship path). Only `basic_airplane` (`jet`), `patrolboat`/`t_truck` (`ship`) and the
+eleven `w*`/`wingman`/`bswingman` defs (`wingman`) author it; everything else inherits `jet`.
+The class is what gates the per-spawn ±5 % jitter of eleven runtime slots — `fd_speed`,
+`ThrustFactor`, `drag_factor`, `pitch_torque`, `roll_torque`, the two `rates` and two `turns`
+values, and the whole-vehicle armour/health maxima — which runs on classes 0 and 1 only, for
+vehicles not named `player`, outside a network game (docs/org/flightModel.md, "The per-spawn
+jitter"; implemented C26). `rates` and `turns` are the surface-driving integrator's acceleration
+and steering rates with their clamps: `basic_airplane` authors them (10/42 and 4.6/6.5) and every
+aircraft therefore carries them, but the aeroplane arm never reads them.

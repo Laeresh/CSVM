@@ -31,7 +31,8 @@ public enum AiMode
     /// <summary>Controls neutral for <c>stun_recovery_interval</c> after a failed sixth-sense test.</summary>
     Stunned,
 
-    /// <summary>Terrain-closure override: climb out, everything else waits.</summary>
+    /// <summary>Obstacle-closure override (terrain or another aircraft dead ahead): climb out,
+    /// everything else waits.</summary>
     AvoidCrash,
 
     /// <summary>Danger-zone approach. Never entered yet — see <see cref="AiModeMachine"/>.</summary>
@@ -55,8 +56,9 @@ public enum AiMode
 /// <c>stun_recovery_interval</c>. An evasive maneuver is an eligible library entry
 /// (<see cref="Maneuver.EligibleFor"/>) played to <see cref="ManeuverExecutor.Done"/>, then back
 /// to the prior mode. Lay off is the design's rubber-band assist, deliberate design: a pursued
-/// pilot eases off to let the player catch up, and the shipped <c>sixth_sense_factor</c>
-/// (0.994 at rating 1 → 1.07 at 9) is its decoded ease-off constant.</para>
+/// pilot eases off to let the player catch up, and the shipped <c>sixth_sense_factor</c> pair
+/// (0.994 → 1.07, interpolated <c>rating/9</c> per E42's correction) is its decoded ease-off
+/// constant.</para>
 ///
 /// <para><b>Invented, named as such:</b> the evade behaviour beyond breaking off (timed run,
 /// seeded heading scrambles away from the threat — the decode is thin past "Evading."); the
@@ -76,7 +78,7 @@ public enum AiMode
 /// <para>Config fields are plain and mutable BY DESIGN (the mission-script rule:
 /// <c>SET_AI_ATTACK_RADIUS</c> and friends rewrite them at runtime). All randomness is this
 /// machine's own seeded stream, so a fixed-seed run transitions identically. Engine-free: the
-/// terrain probe is an injected delegate and target state arrives as a snapshot, so the
+/// obstacle probe is an injected delegate and target state arrives as a snapshot, so the
 /// transition table unit-tests without a scene tree (<c>AiModeMachineTests</c>).</para></summary>
 public sealed class AiModeMachine
 {
@@ -86,10 +88,10 @@ public sealed class AiModeMachine
     /// <summary>Invented: seconds between evade heading scrambles.</summary>
     public const float EvadeScrambleIntervalS = 2f;
 
-    /// <summary>Invented: terrain-probe cadence, seconds.</summary>
+    /// <summary>Invented: obstacle-probe cadence, seconds.</summary>
     public const float ProbeIntervalS = 0.25f;
 
-    /// <summary>Invented: terrain-probe lookahead, seconds of current velocity.</summary>
+    /// <summary>Invented: obstacle-probe lookahead, seconds of current velocity.</summary>
     public const float ProbeLookaheadS = 2.5f;
 
     /// <summary>Invented: minimum probe length, metres (a slow plane still looks ahead).</summary>
@@ -152,20 +154,22 @@ public sealed class AiModeMachine
     public float ReturnRange = 1200f;
 
     /// <summary>Probability that a hit's steady-hand test FAILS and the pilot evades —
-    /// <c>steady_hand_chance</c> (0.5 at rating 1 → 0.08 at 9; lower is the better pilot).
+    /// <c>steady_hand_chance</c> (0.5 → 0.08 over the pair; lower is the better pilot). The
+    /// default here is the pair's raw low endpoint, not the rating-1 value (rating/9 interpolation
+    /// puts rating 1 partway toward the high endpoint already — see <see cref="AiSkills.At"/>).
     /// The design's damage weighting on this roll is undecoded and not modelled.</summary>
     public float SteadyHandChance = 0.5f;
 
     /// <summary>Probability that the sixth-sense test PASSES (the pilot follows the target's
-    /// maneuver) — <c>sixth_sense_chance</c> (0.45 at rating 1 → 0.71 at 9). A failure stuns.</summary>
+    /// maneuver) — <c>sixth_sense_chance</c> (0.45 → 0.71 over the pair). A failure stuns.</summary>
     public float SixthSenseChance = 0.45f;
 
-    /// <summary>How long a stun lasts — <c>stun_recovery_interval</c> (4.8 s at rating 1 →
-    /// 0.6 s at 9).</summary>
+    /// <summary>How long a stun lasts — <c>stun_recovery_interval</c> (4.8 s → 0.6 s over the
+    /// pair).</summary>
     public float StunRecoveryIntervalS = 4.8f;
 
     /// <summary>The decoded ease-off factor applied while being pursued —
-    /// <c>sixth_sense_factor</c> (0.994 at rating 1 → 1.07 at 9): the fraction of the
+    /// <c>sixth_sense_factor</c> (0.994 → 1.07 over the pair): the fraction of the
     /// pursuer's speed a laying-off pilot flies at, so a poor pilot lets the player close and
     /// an ace pulls away. The constant is decoded; the speed-matching application point is our
     /// reading (<see cref="AiPilot"/>).</summary>
@@ -189,8 +193,10 @@ public sealed class AiModeMachine
     /// weighted up <see cref="SignatureWeight"/>× during selection; null/empty = none.</summary>
     public IReadOnlyCollection<string>? SignatureManeuvers;
 
-    /// <summary>World-only line-of-sight probe for the avoid-crash test (the host wires
-    /// <c>FlightController.WorldBlocksLine</c>; tests inject a fake). Null = no terrain data,
+    /// <summary>Line-of-sight probe for the avoid-crash test: static world plus other aircraft,
+    /// never the caster's own body — the original's ray has no vehicle filter and excludes only
+    /// itself (docs/org/aiPilot.md, "What the ray can hit"). The host wires
+    /// <c>FlightController.AvoidCrashBlocksLine</c>; tests inject a fake. Null = no world data,
     /// the mode is never entered.</summary>
     public Func<Vector3, Vector3, bool>? ProbeBlocked;
 
@@ -506,9 +512,10 @@ public sealed class AiModeMachine
         return chaseCos >= Mathf.Cos(Mathf.DegToRad(LayOffPursuerConeDeg));
     }
 
-    /// <summary>The terrain-closure override (invented probe, marked above): two world-only rays
-    /// along the velocity lookahead, every <see cref="ProbeIntervalS"/>. Blocked → avoid crash
-    /// (dropping a running maneuver); clear for <see cref="ClearProbesToExit"/> rounds → back.</summary>
+    /// <summary>The obstacle-closure override (invented probe geometry, marked above): two rays
+    /// along the velocity lookahead, every <see cref="ProbeIntervalS"/>, seeing world and other
+    /// aircraft alike (decoded; the caster alone is excluded). Blocked → avoid crash (dropping a
+    /// running maneuver); clear for <see cref="ClearProbesToExit"/> rounds → back.</summary>
     private void UpdateAvoidCrash(Vector3 pos, Vector3 velocity, float dt)
     {
         if (ProbeBlocked is not { } probe)
@@ -528,7 +535,7 @@ public sealed class AiModeMachine
         {
             _clearProbes = blocked ? 0 : _clearProbes + 1;
             if (_clearProbes >= ClearProbesToExit)
-                Transition(_returnMode, "clear of terrain");
+                Transition(_returnMode, "clear of obstacles");
         }
         else if (blocked && Mode != AiMode.Stunned)
         {
@@ -537,7 +544,7 @@ public sealed class AiModeMachine
             Executor = null; // a running maneuver is abandoned to the override
             _clearProbes = 0;
             ClimbOutAltitude = pos.Y + ClimbOutM;
-            Transition(AiMode.AvoidCrash, $"terrain inside {reach:0} m");
+            Transition(AiMode.AvoidCrash, $"obstacle inside {reach:0} m");
         }
     }
 

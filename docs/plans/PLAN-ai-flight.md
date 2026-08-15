@@ -1,0 +1,1092 @@
+# AI flight — the plant, then the pilot
+
+**COMPLETE 2026-08-15** (written 2026-08-15; executed 2026-08-15). All checklist items are ☑,
+Waves A–F. Indexed in [`plans.md`](plans.md); read as history.
+
+M4 delivered the AI's decisions (modes, target ranking, the maneuver library, gunnery, voice) but
+not the AI's flying. `Flight/AiPilot.cs` converts those decisions into stick with an invented
+control law, and the `FlightModel` it drives has no AI branch at all, while the original runs its AI
+aircraft on a measurably different force path. This plan closes both halves, in that order: port the
+AI force path that is already decoded and sitting unimplemented (wave C), then decode the original's
+own AI control law and replace the placeholder with it (waves D and E). The invented constants that
+prop the placeholder up (the altitude leash, `BankPull`, `PatrolThrottle`, `AiNetFollower`'s 200 m
+arrival radius) are retired as a consequence of E, not tuned as an end in themselves.
+
+Three items from `backlog.md` ride in, all of them decoded-and-unimplemented pieces of the same
+force path. `BL-330`'s low-speed control-authority ramp and the reverse-authority factor come from
+`FUN_0048bdd0`, which is shared, and the ramp is the likely reason the AI speed floor exists.
+`BL-172`'s `bounce_factor` restitution carries a sixth decoded player/AI divergence ("only the
+player bounces") and lands on the seam C21 builds. All three affect the player, so this plan changes
+player flight feel as well as AI flight feel, and owes a player-side playtest for it. `BL-330` and
+`BL-172` were both re-verified still-open in this session against the code (`FlightModel.Step`
+applies no speed term to pitch or roll; nothing under `CSVM/src` reads `bounce_factor`) and against
+[`org/flightModel.md`](org/flightModel.md)'s own "decoded and UNIMPLEMENTED" headings.
+
+`BL-095` is deliberately **not** an item here, because it is not work. Its own entry declares the
+physics block "DECODED END TO END. What is left is implementation, not research", and its remaining
+to-do list is `BL-330` plus `BL-172`, both of which this plan lands. It therefore retires as a
+consequence of C24 and C25 rather than through an item of its own. **Retired 2026-08-15 at C25**,
+which split the two live gaps it still carried into `BL-382` (the post-carrier-drop ground-blow cut
+and the collision-grace timer) and `BL-383` (the ≈1.6× banked rotation, with no authored candidate
+left); `git log --grep=BL-095` for the record.
+
+## Milestone goal
+
+- AI aircraft fly the original's force path: its airflow treatment, its weathervane rule, its speed
+  floor and its ground blow, selected by a branch our `FlightModel` does not
+  have today. (The air-density band was the fifth item on this list until A1 disproved it: the
+  atmosphere call is shared, unbranched, and identical for the player.)
+- The original's AI control law is located in the binary, decoded, documented in `docs/org/`, and
+  ported, or its absence is recorded as a named dead end with what was searched.
+- No invented constant survives in `AiPilot` or `AiNetFollower` that exists only to stabilise the
+  placeholder law.
+- The result is judged against footage of the original's AI and at the controls, not only against
+  our own re-pinned suite numbers.
+
+**Mission-layer AI is out of scope.** Formation flying, wingman orders, scripted mission retargeting
+and the danger-zone modes stay unbuilt; this plan is about how one AI aeroplane flies, not about
+what a mission tells it to do.
+
+## Decisions (2026-08-15)
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | Complete `AiPilot` by decoding, by porting the already-decoded physics, or by tuning the placeholder? | **Decode (waves D and E), sequenced through the already-decoded physics (wave C).** C changes what the law is steering, so doing E first means doing it twice |
+| 2 | Trust the static reading that AI aerodynamics run on the thin density band? | **No, verify in Ghidra first (A1).** It is recorded as "static reading, not runtime-verified", and it decides whether the altitude leash is tuned or deleted. **A1 landed 2026-08-15: the reading is wrong, there is no AI/player density split, and C22 lands no density branch** |
+| 3 | Who takes the player force path when 2 to 4 humans fly at once? | **Every human-piloted aircraft (`IsHumanPiloted`).** The original's guard is a single global player pointer, a case our splitscreen makes meaningless; recorded as a named divergence |
+| 4 | How is the AI force path selected in code? | **A `readonly` flag set at construction, branching at the five decoded sites inside `Step`.** It mirrors the original's own one-function-with-guards shape, and a constant field cannot flip under a golden |
+| 5 | What happens to `architecture.md`'s oversized `FlightModel` entry? | **Mechanism rules move into `FlightModel.cs`; the entry keeps purpose, at most three ⚠, and a pointer.** The paragraph-length decode comments already in that file are an accepted exception to the one-line comment rule |
+| 6 | What judges the result? | **A new `CAP-` of the original's AI flying, plus new `PT-` items**, with suite re-pins as records rather than verdicts. The capture asks behavioural and comparative questions only, never absolute distances or speeds |
+| 7 | How is the plant change A/B'd at the controls? | **A temporary CLI switch, removed when the playtest closes.** Not a permanent flag |
+| 8 | Where does the hunt for the control law start? | **The stun function's zeroed offsets first, then the mode-enum writers, then the update dispatcher.** A closed set of write-xrefs cannot miss the function the way a call-tree walk can |
+| 9 | Do `BL-330` and the reverse-authority factor ride in? | **Yes.** Same function, both decoded and unported, and the ramp is the likely reason the AI speed floor exists. **C24 landed 2026-08-15: "same consumer" was wrong** — the ramp is a torque scalar and the factor only scales the visible rudder angle |
+| 10 | Do `BL-095` or `BL-172` go first? | **Neither.** `BL-095` is a tracking umbrella with no work of its own and retires as a consequence of C24 and C25. `BL-172` rides in as C25 gated on C21: landing it first would put a player/AI test in the collision path before the seam and its divergence rationale exist |
+
+## ⚠ Read this before implementing anything
+
+| # | The wrong claim | How it died |
+|---|---|---|
+| 1 | "`AiPilot.cs` is a placeholder", read as a stub to be written | It is a complete 274-line driver wired to `AiModeMachine`, `AiGunner`, `AiNetFollower` and `ManeuverExecutor`. Only its **control law** is invented. Nothing in it needs writing from scratch; the law needs replacing, and its support constants need retiring |
+
+| Confidence | Items | What that means for you |
+|---|---|---|
+| **Traced to an exact mechanism in code, with the data that proves it** | ~~C22~~, ~~C23~~, ~~C24~~, ~~C25~~, ~~C26~~ | Addresses and line cites are in `docs/org/flightModel.md`. Confirm the trace, then implement. ⚠ C25 landed the formulas as decoded but had to correct the PROSE around them, and C26 found its Evidence's slot list right but its consumers unstated: confirm a summary sentence against the formula it cites before building on it |
+| **Traced statically, never verified at runtime** | ~~A1, A2~~ | Both landed 2026-08-15, and both readings were wrong: there is no AI density band and no AI throttle setpoint. Read their landing notes before citing flightModel.md's older AI-path claims, several of which are debug-copy citations |
+| **Leads only, no mechanism yet** | ~~D31, E41~~ | ~~The AI control law has never been located.~~ **Both landed 2026-08-15**: the law is `FUN_0041b560`, decoded in [`org/aiControlLaw.md`](org/aiControlLaw.md) and ported as `Flight/AiControlLaw.cs`. ⚠ E41 had to correct THREE of D31's readings while porting (`rudder_tol`'s direction, the wings-level rule's geometry, and the missing def defaults). Trust the page as it stands now, and trust `AiControlLawTests` over the prose |
+
+**⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees, never use it in a
+worktree session here; use a local commit or a file copy.
+
+## What the data actually ships
+
+Everything below is already recorded in [`org/flightModel.md`](org/flightModel.md), found while
+decoding the **player** path and set aside for M4's AI work. None of it is implemented.
+
+| Fact | Where | Address |
+|---|---|---|
+| ~~AI throttle is read as a target speed, `fd_speed · throttle`~~ **A2: false.** Throttle is a lever for both; the product drives the far-field (>1 km) cruise model | flightModel.md, "A2" | `0x48c593` |
+| ~~AI aerodynamics skip the altitude zeroing, so the thin density band is reachable~~ **A1: false.** The zeroing is the debug copy's; the live atmosphere call is shared and unbranched | flightModel.md, "A1" | `0x48c883` |
+| AI always uses nose-aligned wind, i.e. permanently zero incidence — **C22: landed** | flightModel.md:217 | `0x48c520` |
+| AI does not get weathervane centring — **C22: landed** | flightModel.md:791 | `0x48cd3e` |
+| Forward-velocity floor of 4.4704 m/s (10 mph), player exempt — **C22: landed** | flightModel.md:137 | `0x48e925` |
+| AI ground blow is a fixed push, linear in proximity, not `dt`-scaled, factor 5.0 (0.15 is a further post-carrier-drop cut, not the base factor — corrected landing C23; reachable via a zeppelin fighter-drop but unmodelled) | flightModel.md:1339 | `0x0048c317` |
+| Per-AI random jitter of **eleven** dynamics slots at spawn, not two — **C26: landed.** The gate is name ≠ `player` + not a network game + `mode` class 0/1, which exempts the `w*` wingman family; seven slots have a field here and the other four (`rates`/`turns`) are inert on the aeroplane arm | flightModel.md, "The per-spawn jitter" | inside `FUN_00476250` |
+| The bank-coupling block is inlined a second time on the AI path behind a byte flag | flightModel.md:585 | `0x48cc61`–`0x48ccf4` |
+| Control authority ramp, shared, 0 at `turn_fade_in` = 10 mph — **C24: landed** | flightModel.md, "The low-speed ramp" | `FUN_0048bdd0` |
+| ~~Reverse-authority factor, consumed by `FUN_0048c470`~~ **C24: not a force term.** `FUN_0048c470` only passes it out; its one consumer is the visible rudder angle in `FUN_0048e580` | flightModel.md, "Control authority vs speed" | `FUN_0048bdd0` → `FUN_0048e580` `0x48ec0b` |
+| ~~AI mode enum, with mode 0 sub-dispatched on three flags~~ **D31: two of the three are not flags.** `obj+0x948` is the target pointer, `obj+0xBA` the evade flag set on a failed steady-hand test, `obj+0x2F0` the order enum that picks the driver | aiControlLaw.md, "The dispatch tree" | `obj+0x358`; `FUN_0041c270` |
+| Stun zeroes the AI's control inputs — **D31: this is the anchor that found the law**, naming the six-slot control block | aiControlLaw.md, "The channels" | `FUN_004200d0` |
+| The three stick channels are summed into the torque accumulator — **D31: what writes them is `FUN_0041b560`**, the AI control law | aiControlLaw.md | `FUN_0041b560` → `FUN_0048c470` |
+| Per-object update dispatch on the vehicle class | flightModel.md:1391 | `FUN_00489ea0` |
+| Only the player bounces; AI gets position correction alone — **C25: landed** (and the lever-arm partition reads the other way round: `f_lin` rises with arm length) | `BL-172`, flightModel.md "Collision response" | `FUN_0048d7f0` |
+
+The 11 pinned shots in `analysis/goldens/manifest.json` contain **no AI aircraft**, so wave C cannot
+move a golden hash. The in-engine suites that do fly AI (`ai-modes`, `ai-gunnery`, `air-to-air`,
+`ai-net-follow`, `zeppelin-motion` in `src/Testing/Suites.cs`) all will.
+
+## Ground rules
+
+- **Original-game data drives everything.** Read the reader/compiled JSON before writing a handler;
+  never guess a value. Inventing content is the trap this project falls into most often.
+- **Evidence is a lead to verify, not a finding to implement.** Confirm every claim against the
+  data/code before building on it; **a correct disproof that lands no code is a success here**, not a
+  failure. Mark each item's Evidence with its confidence (traced-to-code / direction-sound-magnitude-
+  TUNE / lead-only).
+- **`PROJECT_CONTEXT.md` + `docs/architecture.md` / `docs/formats/` are updated in the same turn** as each
+  landed item; a landed item gets its record in the landing commit's message (`docs/HISTORY.md` is
+  frozen — never append) and is **deleted** from
+  `backlog.md` (not marked FIXED there). New decodes land with their `docs/formats/` page.
+- **Read `docs/verification.md` before measuring anything** — the instruments here mislead; cite the
+  rule that bites per item.
+- **Verify against a full 8-chapter `--freecam --chapter=<X>` regression** (zero errors, same
+  mesh/node counts unless the change is meant to add coverage) plus a targeted capture at the
+  location the report came from.
+- **Read the module's entry in `docs/architecture.md` before modifying it.** Dead ends are recorded
+  there precisely so they are not re-chased.
+
+## Checklist
+
+Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Keep this in sync as items land.**
+
+### Wave A — Verify the two unverified reads
+
+1. ☑ A1 The thin air-density band on the AI force path (**disproven**, no AI/player divergence)
+2. ☑ A2 Whether AI throttle is a speed setpoint or a lever (**a lever**, unbranched)
+
+### Wave B — Documentation migration
+
+11. ☑ B11 Move `FlightModel`'s mechanism rules out of `architecture.md` into the code (99 → 21 lines, 4 ⚠ → 3)
+
+### Wave C — Port the decoded plant
+
+21. ☑ C21 The AI force-path seam, plus the temporary A/B switch (`UsesAiForcePath`, `--no-ai-plant`)
+22. ☑ C22 The AI aerodynamic deltas: airflow, weathervane, speed floor (three branches, no re-pins)
+23. ☑ C23 The AI ground blow, a different law
+24. ☑ C24 `BL-330`'s authority ramp and the reverse-authority factor (ramp landed unbranched; the factor is not a force term — its one consumer is the visible rudder)
+25. ☑ C25 `BL-172`'s `bounce_factor` restitution, player-only as decoded (landed; the lever-arm partition reads the opposite way round to this plan's Evidence, corrected in `org/flightModel.md`)
+26. ☑ C26 The per-AI spawn jitter of eleven dynamics slots (landed; the gate is on, seven of the eleven have a field here, and the four that do not are inert on the original's own aeroplane arm)
+
+### Wave D — Decode the control law
+
+31. ☑ D31 Locate and decode the original's AI control law (found: `FUN_0041b560`, landed as [`org/aiControlLaw.md`](org/aiControlLaw.md); no dead end)
+
+### Wave E — Replace the placeholder
+
+41. ☑ E41 Port the control law into `AiPilot` (landed as `Flight/AiControlLaw.cs`; three D31 readings corrected in the process, one suite assertion re-pinned)
+42. ☑ E42 Retire the placeholder-support constants (landed: `PatrolThrottle` deleted, `OrderAimRangeM` and lay off's throttle override justified and kept, `AiNetFollower.DefaultArrivalRadius` re-measured and kept at 200 m, and the `AiSkills.At` interpolation-origin bug D31 found is fixed)
+
+### Wave F — Judge it
+
+51. ☑ F51 Capture the original's AI flying (minted `CAP-37`, `playtest.md`)
+52. ☑ F52 The at-the-controls verdict, AI side and player side
+
+## Dependency and parallelism notes
+
+A1 and A2 are read-only Ghidra work and can run together; **both landed 2026-08-15**. A1 gated C22
+(the density branch is now out of that item, and E42's altitude leash cannot be justified by
+near-zero AI aero forces), and A2 gated C21's throttle semantics (a lever, unchanged shape). B11 touches only `docs/architecture.md` and `FlightModel.cs`
+comments and can run at any time before C21, but **not in parallel with C21 or C22**, which edit the
+same file. C21 blocks C22, C23 and C24 (they all branch on its flag), and C25 is gated on it for
+consistency rather than necessity (see that item). C24 and C25 are the items that change player
+flight, so they can land independently of C22 and C23 if the AI half stalls, and `BL-095` retires
+once both are in. C22, C23 and C24 all edit `FlightModel.cs` and must not run in parallel with each
+other; C25's fix site is `FlightController.SurviveHit`, so it is the one C-wave item that can run
+concurrently with the others. C26 was split out of C22 on 2026-08-15 and depends on nothing in this
+wave: its site is the AI spawn path and the session seed, not `FlightModel.cs`, so it too can run
+concurrently. D31 blocks E41; E41 blocks E42. F51 can be shot as soon as the plan
+starts and does not depend on any code item; F52 needs C and E landed, and the switch still present.
+
+---
+
+# Wave A — Verify the two unverified reads
+
+## A1 ☑ The thin air-density band on the AI force path
+
+**Landed 2026-08-15: disproven.** There is no player-versus-AI density divergence. The
+save / store-`0` / restore of `[obj+0x208]` at `0x491250`–`0x491284` is inside `FUN_00490f70`, the
+**debug copy** of the force function, reachable only through `FUN_00491820` → `FUN_00492040`, which
+returns immediately unless the Dynamics-tuner flag `DAT_0071c78a` is set (written only by two dialog
+handlers, `0` in the shipped image). It is the measurement harness pinning itself to sea level, and
+it never runs during flight. The live path is shared by the player and every AI aircraft
+(`FUN_004897c0` → `FUN_00489ea0` → `FUN_0048e580` → `FUN_0048c470` → `FUN_0048fc40` →
+`FUN_0041aca0`), dispatched on the vehicle class and never on the player pointer, and it passes the
+true altitude in both cases. **Write-xref sweep on the threshold `DAT_0071bb3c`: one reference in
+the whole program, the read at `0x41aca4`; writes, none, the empty case; and the little-endian
+address `3c bb 71 00` appears exactly once in the image, as that instruction's own displacement, so
+no pointer table or parser store can reach it (the byte search demonstrably covers `.data`).** The
+consequence for C22 is that it lands **no density branch**: the band is shared, and the dense band
+stands for both on the arithmetic that established it. The literal reading (threshold `0.0` → thin
+band for everything airborne) contradicts the authored `ref_area`/`veh_weight` set and is recorded
+in [`org/flightModel.md`](org/flightModel.md)'s Atmosphere section as a shared-path conflict
+settleable only in a live process, not as an AI question. Full record below; the item's original
+text follows unchanged.
+
+
+**Goal.** Settle whether the original's AI aircraft really fly with air density 16.7× lower than the
+player's, which would mean near-zero aerodynamic forces, or whether the band threshold is written
+somewhere and the AI runs dense like the player.
+
+**Evidence (confidence: traced statically, never verified at runtime).**
+[`org/flightModel.md`](org/flightModel.md):189 records that the force accumulator's second call site
+at `0x48c883`, on the AI-side flight path, does not perform the save / store-0 / restore of
+`[obj+0x208]` that the player call site does at `0x491250`–`0x491284`. With the band threshold read
+as `0.0` and the comparison `alt ≤ threshold → dense` at `0x41aca4`–`0x41acc4`, any AI above sea
+level selects the thin band, ρ = 1.3560e-4 against the dense 2.2688e-3 (flightModel.md:166). The
+document marks this a static reading and flags it for exactly this plan. Already ruled out: the
+player side, which is proven dense from the bytes and independently corroborated by the stall
+arithmetic.
+
+**Approach.** In Ghidra, enumerate every write xref to the band-threshold `DAT` read at
+`0x41aca4`, and confirm none of them runs before AI flight (a constructor-time or config-time write
+would change the answer). Then re-read the AI call site around `0x48c883` and its caller to confirm
+the zeroing really is absent rather than hoisted. Record the result in
+[`org/flightModel.md`](org/flightModel.md)'s Atmosphere section, replacing the ⚠ with a settled
+statement either way. No engine code changes in this item.
+
+**Model recommendation.** high. A binary read where a missed write xref silently produces the wrong
+plant for every AI aircraft in the game.
+
+**Verify.** The answer is the deliverable. State the xref list explicitly, including the empty case,
+so the next reader can see the search was exhaustive rather than trust the conclusion.
+
+**⚠ Traps.** An unwritten `DAT` reading `0.0` in a static dump is not proof that nothing writes it at
+runtime; the point of this item is the xref sweep, not re-reading the same bytes. Do not implement
+anything on this item's finding without it, and do not let a plausible answer here override the
+runtime behaviour observed later in F52.
+
+## A2 ☑ Whether AI throttle is a speed setpoint or a lever
+
+**Landed 2026-08-15: a lever, with no AI branch anywhere.** `FUN_0048fc40` multiplies the Mach
+thrust curve by the current throttle `[obj+0x128]` (`0x48fcc6` loads it, `0x48fce7` multiplies) for
+player and AI alike; boost substitutes a flat `1.8` and scales drag by `0.8`. The commanded/current
+pair and the 0.5/s slew live in the **live** integrator `FUN_0048e580` (`0x48e645`–`0x48e6bd`), also
+unbranched. `fd_speed · throttle` at `0x48c593` is **not** an AI throttle interface: it is the
+far-field model. `FUN_0048c470` skips its whole aerodynamic path when the aircraft is crashed or is
+a non-player more than 1000 m from the player horizontally (`FUN_00538920` returns `Δx² + Δz²`,
+compared against `1e6`), and in that branch drives velocity toward the nose at
+`fd_speed · throttle` plus a flat 5 m/s for non-players (`0x48c5ae`, `[0x6036bc] = 5.0`), emitting
+`target − current` velocity instead of a force. So `AiPilot.Throttle` keeps its lever shape, C21
+needs no setpoint interface, and the far-field model is decoded, unimplemented and deliberately
+unowned (it is invisible inside 1 km, where every AI aircraft we simulate sits). Recorded in
+[`org/flightModel.md`](org/flightModel.md), "A2". The item's original text follows unchanged.
+
+
+**Goal.** Determine whether `fd_speed · throttle` at `0x48c593` is a target speed the AI's engine
+control chases, or a term inside a lever-style thrust calculation. `AiPilot.Throttle` is a lever
+today, and `SteerLayOff` walks it at an invented rate; if the original holds a speed, both are the
+wrong shape.
+
+**Evidence (confidence: traced statically, never verified at runtime).**
+[`org/flightModel.md`](org/flightModel.md):1060 lists `fd_speed · throttle` as "an AI target speed"
+among three uses of `fd_speed` as a normalising reference, and warns that `fd_speed` is
+`FakeDynSpeed`, not a top speed. `[obj+0x124]` and `[obj+0x128]` are recorded at flightModel.md:1065
+as the commanded and current throttle, with a slew at `[obj+0x134] -= dt · throttle · 5` and
+`FUN_00491820` snapping them together, so a two-value throttle with a rate limit already exists on
+the object.
+
+**Approach.** Read `0x48c593` in context: what consumes the product, and whether the result feeds a
+force term directly or an error term against `[obj+0x934]` (the true speed). Follow `[obj+0x124]`
+and `[obj+0x128]` write xrefs on the AI path to see who commands AI throttle and at what rate.
+Record the finding in [`org/flightModel.md`](org/flightModel.md). No engine code in this item.
+
+**Model recommendation.** high. This decides the shape of the AI's throttle interface, which C21
+then builds and E41 depends on.
+
+**Verify.** The answer is the deliverable, cited to addresses.
+
+**⚠ Traps.** `fd_speed` is not the top speed and must not be treated as one; flightModel.md:1062 is
+explicit about this. A "target speed" reading that quietly assumes the AI reaches it is the same
+error in a new place.
+
+# Wave B — Documentation migration
+
+## B11 ☑ Move `FlightModel`'s mechanism rules out of `architecture.md` into the code
+
+**Landed 2026-08-15.** The `architecture.md` entry went from 99 lines and 4 ⚠ to 12 lines of body
+and 3 ⚠, all of them constraints an outside caller or a future editor can actually violate: the
+pinned rates and coefficients, the four recorded decode-vs-footage gaps plus the accepted artifacts,
+and the deliberately-absent features. No behaviour change, and no fact was dropped without first
+being located elsewhere. Five mechanism facts that lived only in the entry moved into
+`FlightModel.cs` at the line that computes them (`high_speed_pitch_fade`'s unreachability and its
+do-not-implement rule; the `highGs`/`lowGs`/`maxAOA` measured margins and the gate-only-opposing-
+input asymmetry owed if one ever comes into reach; `ClimbGravityScale`'s retirement; the
+`KnifeNoseSag`/`KnifeNoseRate` pair's name and its 11.5 °/s wings-level cost; `AttitudeThrustTests`
+by name). Everything else was already duplicated in the code, in `docs/org/flightModel.md`
+(the exponential-decay steady-rate shift at :143, the bank constants' faster-turn note at :1683, the
+`high_speed_pitch_fade` table at :1226, the D33 margin table at :1264, the B15 stall conflict at
+:449), in `analysis/flight-model-baseline/POST-B14.md` (the eleven-airframe stall table at :115, the
+`terminal-dive` promotion at :622), in `FlightEnvelopeTests`' own doc comment (the informational
+rows), in `backlog.md`:927 (the sustained-climb conflict) or in `verification.md`
+(METHOD-21/22/23 hold the measurement traps).
+
+**Goal.** `docs/architecture.md`'s `src/Flight/FlightModel.cs` entry runs about 50 lines against the
+file's own stated ceiling of roughly 12 for the heaviest module, and its hard limit of three ⚠ per
+module. After this item it carries purpose, at most three ⚠ that an outside caller can actually
+violate, and a pointer to [`org/flightModel.md`](org/flightModel.md), with no mechanism prose left
+in it.
+
+**Evidence (confidence: traced).** `docs/architecture.md`:3294 onward, against
+`PROJECT_CONTEXT.md`'s budget rule ("body ≤ ~8 lines, ~12 for the heaviest; max 3 ⚠ per module").
+Much of the entry is already duplicated verbatim in `FlightModel.cs`: thrust availability and the
+attitude scale at lines 78–121, the lift demand and the density band at 129–182, the weathervane
+decode at 309–331.
+
+**Approach.** Apply one rule. If a fact is only needed while editing the line that computes it, it
+becomes a comment at that line, or is deleted where the comment already says it. If it is needed
+before deciding to touch the module at all, it stays in `architecture.md`. Anything that is a
+measurement trap goes to `docs/verification.md` instead of either. `FlightModel.cs`'s existing
+paragraph-length decode comments are an accepted exception to the one-line comment convention, and
+this item may add to them. Land as its own commit with no code change, so wave C's diff is readable.
+
+**Model recommendation.** medium. Mechanical text movement against a stated rule, with judgement
+only at the comment-versus-entry boundary.
+
+**Verify.** `docs/architecture.md`'s entry is under the budget and has at most three ⚠; no fact
+present before the move is absent after it (it is in the code, in `verification.md`, or was a
+duplicate). `.\RunTests.ps1` is untouched by construction, but run it to prove no comment edit
+disturbed a line.
+
+**⚠ Traps.** Do not delete a fact because it "sounds like a decode" and assume
+[`org/flightModel.md`](org/flightModel.md) has it; check that it does before dropping it. The entry
+is what a future session reads *before* deciding to modify the module, so stripping the constraint
+lines defeats the purpose of the file.
+
+# Wave C — Port the decoded plant
+
+## C21 ☑ The AI force-path seam, plus the temporary A/B switch
+
+**Landed 2026-08-15.** `FlightModel(PlaneStats stats, bool aiForcePath = false)` carries the choice
+into a readonly `UsesAiForcePath`, and the two production sites pass it off `IsHumanPiloted`
+(`FlightRigAssembler`:388, `AiAircraftSpawner`:145). The switch is `--no-ai-plant`
+(`SessionSpec.NoAiPlant`), read only at the AI spawn site, so it moves AI aircraft and never a
+player's. Nothing reads the flag yet, which is the point.
+
+⚠ **The citation in this item's Evidence was off.** The pointer compare is at `0x4916fe`
+(`cmp esi, [0x71c298]`), quoted at [`org/flightModel.md`](org/flightModel.md):658 in the
+*Weathervane centring* section, not at :617. It also sits inside `FUN_00490f70` — which A1 identified
+as the **debug copy** of the force function. So it is a sound example of *how* the original phrases
+the player/AI selection (a pointer compare against the single global player object), which is all
+C21 needed, but it is **not** evidence that the live function branches at that address. C22 must
+locate the live guard for each divergence it ports rather than inheriting this address.
+
+**A green suite verifies nothing here on its own** (METHOD-10): with the flag unread, the whole
+regression passes whether it is wired correctly, backwards, or not at all. `ForcePathSeamTests`
+is the falsifiable form, and its `BothPathsStillIntegrateIdentically` deliberately becomes false in
+C22 — rewrite it there rather than deleting it.
+
+**Also corrected in passing:** `--debug-targets` had a `## Flags` bullet but no `cli.md` index entry,
+and `PROJECT_CONTEXT.md`'s flag count read 117 against an actual 132. Both sides are now 133 and
+equal, checked by counting the parser's accepted literals against the index.
+
+**Goal.** `FlightModel` can flow either the player force path or the AI one, selected once at
+construction, with no behaviour change yet. A temporary CLI switch flips AI aircraft back to the
+player path so the change can be A/B'd at the controls.
+
+**Evidence (confidence: traced).** The original branches inside one function on a pointer compare
+against the single global player object (`flightModel.md`:617). Our two production construction
+sites are `Session/FlightRigAssembler.cs`:388 (human) and `Session/AiAircraftSpawner.cs`:145 (AI);
+about 18 test sites use `new FlightModel(stats)`. `FlightController.IsHumanPiloted` already exists
+and is read by `AiPilot.Next` for the lay-off decision.
+
+**Approach.** Add a `readonly bool` set from a constructor parameter, defaulted to the player path so
+the test sites compile unchanged, and pass it from the two production sites off `IsHumanPiloted`.
+Name it for the force path it selects, not for who is flying. Add the temporary switch following the
+existing `--no-assist` pattern, documented in [`cli.md`](cli.md) as temporary and owned by F52.
+Record in `docs/architecture.md` (post-B11) the divergence from the original's single-player guard,
+quoting the original's own compare, so the next reader sees the byte and the reason we did not
+follow it.
+
+**Model recommendation.** medium. Small and mechanical, but it touches the CLI parser's accepted-flag
+count and `docs/cli.md`'s index, which `PROJECT_CONTEXT.md` requires to stay equal.
+
+**Verify.** `.\RunTests.ps1` fully green with no re-pins, because this item changes no arithmetic;
+that is the point of landing it alone. Confirm the flag count and `cli.md`'s index still match.
+
+**⚠ Traps.** The optional default means a future production construction site silently gets the
+player path. With two sites today that is acceptable, but a third one added later is a real risk;
+say so at the constructor. Do not make the flag mutable, a plant that can change mid-flight makes a
+golden or a suite run unreproducible.
+
+## C22 ☑ The AI aerodynamic deltas: airflow, weathervane, speed floor (density band out, per A1)
+
+**Landed 2026-08-15, three branches, all in `FlightModel.Step` and all off `UsesAiForcePath`.** C21's
+warning held: none of the three live guards is at `0x4916fe`, and only one of the three had ever been
+cited by address at all.
+
+| Divergence | Live guard | The block |
+|---|---|---|
+| Airflow blend skipped, wind always down the nose | `cmp esi, ecx` `0x48c520` (player in `ecx` from `0x48c502`) | `0x48c6e9`–`0x48c70a` in `FUN_0048c470`: `−speed · m[2]`, and `m[2]` is `−nose` |
+| Weathervane not summed in | `cmp esi, [0x71c298]` `0x48cd3e` | `0x48cd3e`–`0x48ce45`, the live twin of the debug copy's `0x4916fe` |
+| Nose-axis velocity floor | `cmp edi, [0x71c298]` `0x48e925` | `0x48e95e`–`0x48e998` in `FUN_0048e580`, against `−4.4704` at `0x608128` |
+
+⚠ **The item's own expected direction was wrong, and the code is right.** "AI flies at zero incidence"
+does not mean "the AI pulls harder": the lift demand is
+`lift_accel_rate · (relativeWind − velocity)` **plus weight**, so with the flight path above the nose
+the fully-nose-aligned swing points down and cancels part of the weight term. Measured on the
+Bloodhawk at α = 8°: the AI demands **0.26 G against the player's 2.04 G**. Past `liftAOAs[1]` the two
+agree exactly, because there the player is nose-aligned as well — so the divergence is confined to
+the window, which is the shape the decode predicts and the shape the tests now pin.
+
+The floor is the trap the item named. It is on the velocity's nose component, it is **one-sided**, and
+it **adds along the nose** rather than rescaling, so the perpendicular components survive and `|v|` is
+recomputed from the result. A plane descending at 20 m/s with its nose on the horizon has four times
+the floor in SPEED and none along the nose; a `Speed` clamp is a no-op there and the original is not.
+
+**No re-pins anywhere, and that is a real finding rather than a quiet pass.** `.\RunTests.ps1` was run
+on the unchanged tree first (METHOD-10, since all three branches are skips on the AI side): units
+1294 → 1301 (all seven new ones this item's), engine 59 → 59, goldens 14 hash-identical both times. The AI-flying suites the plan expected
+to move (`ai-modes`, `ai-gunnery`, `air-to-air`, `ai-net-follow`, `zeppelin-motion`) all pass unmoved,
+because every one of them asserts a behaviour — a transition fires, a hop is an edge, a round lands —
+rather than a pinned trajectory number. Nothing was tuned in `AiPilot` to achieve that.
+
+Able-to-fail proved rather than assumed (METHOD-9/15/17), four ablations, each rebuilt and run:
+un-gating the weathervane fails `AiSkipsTheWeathervane` alone; forcing the player blend onto the AI
+fails both airflow rows plus the aggregate; deleting the floor fails the floor test alone; making the
+floor two-sided fails `TheNoseAxisFloorNeverSlowsAnAiAircraft` and all four airflow rows. `git diff`
+confirms no trace of any of them remains.
+
+C21's `BothPathsStillIntegrateIdentically` was turned around rather than deleted, into
+`TheTwoPathsNoLongerIntegrateIdentically` over the same 60-step probe, with the three divergences
+asserted one at a time beside it. The airflow one is stated as an IDENTITY — a third plant on the
+PLAYER path with the cosine window collapsed must land on the AI's lift demand to five places — which
+pins the direction that "they differ" would not.
+
+⚠ **The jitter did not ride in; it is now `C26`.** The item's Evidence offered `FUN_00477280`'s
+`fd_speed`/`ThrustFactor` jitter "if it is cheap". It is not: the block (inside `FUN_00476250`,
+after the `"player"` name compare and `FUN_00440ad0() == 0`) applies an independent `1 ± 0.05` draw
+to **eleven** runtime slots, not two — `+0x2c4`, `+0x2cc`, `+0x644`, `+0x648`, `+0x668` (`fd_speed`),
+`+0x66c` (`ThrustFactor`), `+0x670`, `+0x680`, `+0x684`, `+0x688`, `+0x68c` — at spawn, from `rand()`.
+That is a spawn-time perturbation of most of the dynamics block, not a force-path branch, and it lands
+on the determinism seam (`--det`, the goldens, every suite that flies AI), so it needs its own item.
+Split, per the item's own `<TODO>`.
+
+**Goal.** An AI aircraft flies the original's aerodynamics: nose-aligned wind always (zero
+incidence), no weathervane centring, and a forward-velocity floor of
+4.4704 m/s applied after integration. **A1 removed the density band from this item**: the
+atmosphere call is shared and unbranched, so this is three changes, not four.
+
+**Evidence (confidence: traced; the density band was A1's and is disproven).** flightModel.md:217
+(AI skips the airflow blend and always uses nose-aligned wind), :791 (weathervane is player only),
+:137 (the 10 mph floor along the nose axis, applied after integration, player exempt), :189 with A1
+for the band. `FUN_00477280` (flightModel.md:1004) additionally jitters `fd_speed` and
+`ThrustFactor` per non-player aircraft, which belongs with this item if it is cheap, and is
+otherwise a `<TODO: split into its own item if the jitter's distribution is not readable from the
+function>`.
+
+**Approach.** Four guarded branches at the existing sites in `FlightModel.Step`, each carrying the
+original's address in a one-line comment. The airflow branch bypasses the `liftAOAs` cosine window
+rather than reimplementing it; the weathervane branch skips `WeathervaneTorque()`; the floor is a
+post-integration clamp on the nose-axis component only, not on speed. Re-pin the AI suites, with
+before-and-after numbers in the commit message.
+
+**Model recommendation.** high. Four coupled changes to the force path, each of which changes every
+AI number we have, and where a sign or an axis error flies plausibly and is wrong.
+
+**Verify.** The suites re-pin with a stated reason per moved number. Take the baseline first:
+`docs/verification.md`'s rule that an unchanged number proves nothing unless it was able to fail
+applies directly, since three of these four branches are skips, and a mis-wired flag would show as
+"no change". A/B at the controls with C21's switch is F52's job, not this item's.
+
+**⚠ Traps.** Do not tune anything in `AiPilot` to keep an old suite number green; the plant moving is
+the intended result, and E42 is where the law's constants are addressed. Do not re-add a density
+branch here: A1 disproved it, and the "near-zero AI aero forces" outcome this item once expected is
+**not** what should be seen. The floor is on the
+nose-axis velocity component, not on `Speed`; conflating them changes behaviour in a dive.
+
+## C23 ☑ The AI ground blow, a different law
+
+**Landed 2026-08-15.** `FlightModel.GroundBlowTerm` now branches on `UsesAiForcePath`: the AI push is
+`v * (Stats.AiGroundBlow * Stats.GroundBlowMag)`, independent of `cmd`, never suppressed by command
+direction, and its velocity-steer companion always runs at `2 * proximity`. `FlightController`'s
+`ProbeGroundBlow` — previously gated on `IsHumanPiloted` alone, so it never cast a ray for any AI
+aircraft at all — now also runs for an AI aircraft on the AI force path (`!IsHumanPiloted &&
+_model.UsesAiForcePath`), skipping while `AiModeMachine.Mode == AiMode.Stunned`.
+
+⚠ **The item's own "at factor 0.15" was wrong, and the confirm-the-trace step is what caught it.**
+Decompiling `FUN_0048c220` directly (0x0048c317's containing function) shows the AI branch is
+`fVar4 = ai_groundblow * groundblow_mag` (0.5 × 10 = **5.0** authored), further multiplied by ×0.15
+**only** while the clock is inside `obj+0xB4`, a 2.5 s settling window written solely on the
+carrier-drop spawn path (`FUN_00452450`). `PlaneStats.cs`'s own comment already had this right
+("cut to 0.15 for 2.5 s after a drop") before this item touched it; the plan's Goal/Evidence and the
+"What the data ships" table both mis-stated the settling-window multiplier as the base factor.
+`docs/org/flightModel.md`'s "Ground blow" section is corrected to state the multiplier as "×0.15",
+not "cut to 0.15", which read as a final value.
+
+⚠ **First written up here as "unreachable" — that was wrong too, caught only when the user asked.**
+A zeppelin's fighter-drop launch (`AiGeneratorRuntime` → `AiAircraftSpawner.Spawn`, the F20 mechanism
+the `zeppelin-launch` suite exercises) drops a freshly-spawned AI aircraft, yawed and given a launch
+velocity, onto the exact same `UsesAiForcePath` plant this law reads — this engine's own carrier
+drop, reachable in a normal Instant Action zeppelin run. The settling window is real and un-modelled,
+not moot: nothing in this port tracks a per-aircraft spawn timestamp, so a just-dropped fighter's
+ground blow runs at the full un-cut 5.0 for its first 2.5 s instead of the original's reduced 0.75.
+Recorded as a gap in `backlog.md` `BL-382` (minted when `BL-095` retired at C25), not implemented here — C23 scoped to the response law,
+and closing this needs new state (a spawn-time field) threaded through `AiAircraftSpawner`/
+`FlightController`, alongside the `obj+0xAC` collision-grace timer of the same family (`BL-382` owns both).
+
+**The probe gap was the real blocker, not named in the item's Approach.** "Reuse the probe...
+unchanged; only the response differs" undersold the work: `ProbeGroundBlow`'s pre-existing
+`IsHumanPiloted`-only gate meant an AI aircraft's `FlightInput.GroundBlowNormal` was always the zero
+vector, so a correctly-written AI response law would have been dead code without also widening that
+gate. Fixed by keying the gate on `UsesAiForcePath` for a non-human pilot instead of `IsHumanPiloted`
+alone; an AI aircraft flipped back to the player path by `--no-ai-plant` stays unprobed, a
+pre-existing gap (ground blow was player-only when `BL-359` landed, before this plan started) this
+item does not close, since the switch is temporary and F52 owns retiring it.
+
+**dt: normalised, by construction rather than by choice.** `GroundBlowTerm` still carries no dt on
+either path — the single `BodyRates += cmd * dt` the caller already applies once, uniformly, to
+every torque term (stick, bank coupling, weathervane, both ground-blow laws) is what makes the term
+linear in dt, exactly as it already does for the player law `BL-359` landed. There is no second,
+AI-specific dt multiply to add or omit: the original's own "not multiplied by dt anywhere" describes
+a per-object accumulator this codebase's shared per-frame integration step does not reproduce
+bit-for-bit regardless of this item, so normalising was not a new decision C23 introduced — it falls
+out of reusing the existing accumulator/integration split BL-359 already built.
+
+**Two gates recorded as NOT modelled, both traced to addresses.** The AI branch's mode check
+(`param_1[0xd6] != 4`, `0x0048c220`'s own first line) IS ported — `ProbeGroundBlow` skips while
+stunned, so a stunned AI still flies into terrain as the trap required. Not ported: the per-object
+`obj+0xAC` collision-grace gate (non-player objects only, `(float)param_1[0x2b] <= DAT_0071c470`),
+because nothing in this engine tracks that timer yet — `BL-382` owns it (the same timer
+gates collision response, and C25 ported the impulse rather than the resolver around it), not a new one to invent here.
+
+**No re-pins.** `.\RunTests.ps1` baseline taken first (METHOD-10): units 1301 → 1305 (four new
+`GroundBlowTests`, all this item's), engine 59 → 59, goldens 14 hash-identical both times. The
+AI-flying suites (`ai-modes`, `ai-gunnery`, `air-to-air`, `ai-net-follow`, `zeppelin-motion`) pass
+unmoved, none of them flying an AI aircraft close enough to terrain to trip ground blow — consistent
+with C22's finding that these suites assert behaviours, not pinned trajectory numbers, and with the
+plan's own note that the 11 pinned goldens carry no AI aircraft. The item's Verify step ("an AI
+aircraft flown at terrain... visibly repels") is unit-tested (`TheAiLawIsAFixedPushNotACommandProportionalOne`,
+`TheAiLawIsNeverSuppressedByCommandingIntoTheSurface`, `TheAiFalloffIsLinearInProximityRatherThanQuadratic`,
+`TheAiVelocitySteerNeverSuppresses`) against the decompiled formula rather than by an interactive
+flight, matching how `BL-359`'s player law was verified; an at-the-controls A/B is F52's job once C
+and E have both landed.
+
+**Goal.** AI aircraft get the original's AI ground blow: a fixed push independent of the AI's own
+command, linear in proximity rather than quadratic, at the authored factor **5.0**
+(`ai_groundblow · groundblow_mag`), corrected from this item's own "0.15" during implementation.
+
+**Evidence (confidence: traced; corrected during implementation, see the landing note above).**
+flightModel.md's "Ground blow" section, `0x0048c317`/`FUN_0048c220`, decompiled directly rather than
+taken from the prose summary. `BL-359` landed the player ground blow on 2026-08-15 and closed noting
+the AI law is unbuilt and different.
+
+**Approach.** Branched inside `FlightModel.GroundBlowTerm` on `UsesAiForcePath`. Reused the probe
+math (proximity, escape axis) unchanged; the response differs, and `FlightController.ProbeGroundBlow`
+needed its own gate widened to actually feed an AI aircraft the probe at all (not anticipated by the
+item's own Approach text).
+
+**Model recommendation.** medium (as stated). A single well-bounded branch against a fully traced
+decode, though the probe-gate fix and the factor correction both needed the decompiler rather than
+the prose summary alone.
+
+**Verify.** `.\RunTests.ps1` fully green, no re-pins — see the landing note. `GroundBlowTests` pins
+both laws against the decompiled formula.
+
+**⚠ Traps.** flightModel.md:1346 records that the AI law is **not** multiplied by `dt` anywhere in
+the original, so it is frame-rate dependent there; this port normalises it, matching `BL-359`'s
+already-landed player law rather than introducing a new choice (see the landing note). A stunned AI
+has its ground blow suppressed (flightModel.md:1369) and flies into terrain deliberately — reproduced
+via `ProbeGroundBlow`'s stun gate, not "fixed".
+
+## C24 ☑ `BL-330`'s authority ramp and the reverse-authority factor
+
+**Landed 2026-08-15. The ramp is in; the reverse-authority factor is not a force term.**
+`FlightModel.RollPitchAuthorityAt` scales the pitch and roll components of the stick command by the
+authored `turn_fade_in` 10 / `turn_fade_out` 50 mph ramp, unbranched, player and AI alike, closing
+`BL-330`. Three properties were read off the binary rather than assumed: the scalar multiplies the
+STICK COMMAND only (`FUN_0048c470` applies the three authority scalars inside its three per-axis
+input blocks at `obj+0x114`/`+0x11c`/`+0x120` and nowhere else, so the bank coupling, the
+weathervane and the ground blow enter the accumulator at full strength); the bottom boundary is
+exclusive (`0x48bdd4` tests `speed > turn_fade_in`, so authority is exactly 0 *at* 10 mph); and
+pitch and roll take the SAME scalar (`0x48be20` and `0x48be6c` write it to both outputs).
+
+**The item's second half is a disproof.** This plan's Approach said "add the reverse-authority
+factor at its consumption site in the torque path". There is no such site. `FUN_0048c470` takes the
+fifth output as an out-parameter, writes it once and never reads it; what softens opposing commands
+inside that function is a DIFFERENT local quantity, `min(`the `maxAOA` window, the G limiter`)`,
+gated on the command's sign against the nose→velocity closing axis — both halves authored out of
+reach on all eleven airframes, and the misidentification is what
+[`org/flightModel.md`](org/flightModel.md)'s ⚠ ("do not implement it from this paragraph without
+reading `FUN_0048c470`'s use of the fifth output") was warning about. The factor's real and only
+consumer is `FUN_0048e580` at `0x48ec0b`–`0x48ec1d`: `rudderAngle = factor · yaw · −35°`, smoothed
+at 2/s into `obj+0x634`/`+0x638` and applied as a node rotation by `FUN_004b2fe0`. It scales the
+VISIBLE rudder deflection, player-only, and touches no torque. Ported there
+(`ControlSurfaceAnimator.Advance`), which is `FlightModel.ReverseAuthorityAt`'s one consumer.
+
+**Two things fell out of the same trace and are recorded, not built.** The original's whole
+control-surface block is behind its player guard, so its AI aircraft fly with frozen surfaces while
+ours deflect on every aircraft (a deliberate divergence). And its six angle slots, six node lists,
+±0.5/±0.6 rad clamps, two-channel mix and 2/s exponential smoothing are now decoded — minted as
+`BL-393`, blocked on decoding which physical surface each node list holds, and NOT ported over
+`ControlSurfaceAnimator`'s eye-validated ±20°.
+
+**Verify (METHOD-10, baseline taken before any change).** `.\RunTests.ps1` in full: units
+1305 → 1318 (thirteen new `ControlAuthorityRampTests` — the curve's knees against the shipped data
+rather than the compiled fallback, the rate ratio on both axes at 30 vs 60 mph, roll and pitch
+identically zero at 8 mph while the rudder still bites, the bank coupling surviving zero authority,
+and the factor's curve plus its absence from the force path), engine 59 → 59 unmoved, **goldens 14
+hash-identical, no re-pins**. The flight-envelope suite is blind to this by construction — every row
+settles at 143–300 mph, where the ramp is saturated at 1 — which is why the assertions above are the
+verification and a green suite is not. The 8-chapter `--freecam` regression was not re-run: nothing
+here executes during a world build (no aircraft is stepped under `--freecam`), the same reasoning
+C22 and C23 landed under on the same file. The at-the-controls half is F52's player-side arm.
+
+**Original text follows unchanged.**
+
+**Goal.** Roll and pitch authority fade with airspeed as the original does, for every aircraft, and
+`FUN_0048bdd0`'s fifth output softens control above `yaw_max`. `BL-330` closes here.
+
+**Evidence (confidence: traced, corroborated at the controls).** flightModel.md:465–504: the base
+ramp is 0 below `turn_fade_in` (10 mph), rising linearly to 1 at `turn_fade_out` (fallback 40,
+authored 50), and applies to roll and pitch; roll has no high-speed fade. The reverse-authority
+factor is decoded at flightModel.md:488, returns `max(yawAuthority, 0.2)` above `yaw_max` (authored
+50 mph) and 1.0 at or below it, and is consumed by `FUN_0048c470`. `FUN_0048bdd0` is called from
+`FUN_0048c470` (flightModel.md:78), which is the **shared** force and torque function, so both
+outputs reach AI aircraft as well as the player. `FlightModel.Step` today applies the authored yaw
+curve and no speed term at all to pitch or roll.
+
+**Approach.** Implement the base ramp as a scalar on roll and pitch torque, reading `turn_fade_in`
+and `turn_fade_out` from the authored globals, not the fallbacks, where they are available. Add the
+reverse-authority factor at its consumption site in the torque path. Both are unbranched: they apply
+to player and AI alike. Delete `BL-330` from `backlog.md` in the landing commit, with its record in
+the message.
+
+**Model recommendation.** high. This changes player flight feel, which is the highest-blast-radius
+surface in the project, and `BL-330` carries an explicit warning against filling flight-model holes
+with invented rate limiters.
+
+**Verify.** The golden shots are player-side and *can* move here; take the baseline first, and treat
+any moved hash as requiring an explicit justification rather than a re-pin by reflex.
+`.\RunTests.ps1` in full. The at-the-controls half is F52's player-side arm, judged against
+`BL-330`'s existing corroboration.
+
+**⚠ Traps.** The 10 mph `turn_fade_in` and the AI's 10 mph speed floor are the same number, which is
+this plan's working hypothesis for why the floor exists. It is a hypothesis and not a decode: do not
+write it into `docs/` as a finding unless D31 confirms it. `BL-330`'s own trap applies with full
+force. Do not let this become a speed-versus-bank coupling that quietly costs pitch authority, which
+is the wrong-mechanism fix `BL-124` warns about. `maxAOA` and `liftAOAs` are not part of this item.
+
+## C25 ☑ `BL-172`'s `bounce_factor` restitution, player-only as decoded
+
+**Landed 2026-08-15.** `FlightModel.BounceNormalSpeed` is the decoded impulse and
+`FlightController.SurviveHit` the site, gated on `IsHumanPiloted && !crashed`; `PlaneStats` reads
+`bounce_factor` out of `player.json`'s `crash` block (authored **0.6**, compiled fallback 0.8), which
+nothing under `CSVM/src` did before. The whole formula went in, doubled rotational term included, so
+the second term is present rather than folded into a raised constant. `BL-172` closes and `BL-095`
+retires with it; the residue neither of them had landed was split out rather than deleted —
+`BL-381` (the crash block's two damage ranges, the unexplained vertical-speed kill on a wall, the
+multi-tick scrape), `BL-382` (the post-carrier-drop cut and the collision-grace timer) and `BL-383`
+(the ≈1.6× banked rotation). `PT-53` is the graze-feel test the change now owes at the controls.
+
+**One correction came out of implementing it, and it is this item's other deliverable.** The
+Evidence below says "a short lever arm rebounds at up to 0.6 while a wingtip throws most of the
+impact into rotation". That reads the partition backwards. `Δω = (r × J)/|r|²` has magnitude
+`|I⁻¹|·|J|·sinθ/|r|`, which falls as **1/|r|** — the `/|r|²` is a point-mass moment of inertia, not
+a lever — so `A` shrinks as the arm lengthens and `f_lin` RISES toward 1. A wingtip rebounds harder
+than a contact near the centre. The consequence is that the partition cannot be `CAP-14`'s
+flat-versus-vertical split either: `f_lin` is ≈0.9 in both orientations at any geometry an airframe
+presents, and the `graze-bounce` suite measures `e = 0.56` on flat ground against `e = 0.59` on a
+vertical face. What actually differs on a wall is the AXIS — the rebound is horizontal, so an
+altimeter reads nothing across the contact (`vy 0.00 → 0.00` measured) — which is what a
+vertical-face clip shows. The decoded formulas are untouched; only their reading was wrong, and
+[`org/flightModel.md`](org/flightModel.md) now carries the correction with the arithmetic.
+
+**Verified (METHOD-10).** `.\RunTests.ps1` in full: units 1318 → 1325, engine 59 → 60, 14 goldens
+hash-identical (no re-pins — the pinned shots carry no collision), hitch clean, engine errors clean,
+exit 0. The seven new unit tests are `CSVM.Tests/BounceRestitutionTests.cs` (the restitution
+isolated on an axial contact, the shipped-versus-fallback constant, the doubled rotational term
+exceeding the ceiling, the partition's direction and magnitude, the absence of surface dependence,
+and an outgoing contact damping rather than compounding); the new engine suite is `graze-bounce`,
+which flies real rigs into real geometry for the two things arithmetic cannot reach — the
+player-only gate and the two orientations. The 8-chapter `--freecam` regression was not re-run: no
+aircraft is stepped under `--freecam`, so no collision resolves and mesh/node counts cannot move,
+the same reasoning C22–C24 landed under. The at-the-controls half is F52's player-side arm.
+
+**Goal.** A player aircraft grazing a surface rebounds along the contact normal as the original does.
+AI aircraft keep getting position correction and nothing else, which is what the original gives
+them. `BL-172` closes here, and with C24 it retires `BL-095`.
+
+**Evidence (confidence: traced, and independently measured).** `bounce_factor` is a raw scalar
+(global `0x0071c35c`, parser store `0x00473c38`, fallback 0.8, authored 0.6), applied in the
+collision resolver `FUN_0048d7f0` as a normal-only impulse with no tangential or friction term
+([`org/flightModel.md`](org/flightModel.md), "Collision response and `bounce_factor`"). Three
+decoded properties shape the implementation: effective restitution is `f_lin × bounce_factor` where
+`f_lin = L/(L+A)`, `L = 2.25·|J|`, `A = |Δω|`, so a short lever arm rebounds at up to 0.6 while a
+wingtip throws most of the impact into rotation; there is **no** surface dependence anywhere in the
+code, no verticality test and no material lookup; and **only the player bounces**, the impulse branch
+being entered for the local player alone and only while not already crashed. `CAP-14` measured the
+signature independently on 2026-08-04 (seven contacts, two airframes, three surface orientations,
+139–302 mph): vertical surfaces e = 0.10 ± 0.05, flat ground e = 0.62 ± 0.19 against a shipped 0.60.
+Nothing under `CSVM/src` reads `bounce_factor` today; `FlightController.SurviveHit`
+(`FlightController.cs`:1435-1535) does a friction-scaled tangential slide, a lever-arm attitude kick
+and a fixed 0.15 m push-out, with no normal-direction term at all.
+
+**Approach.** Add the normal-direction restitution impulse in `FlightController.SurviveHit`
+alongside the existing tangential slide, scaled by `f_lin × bounce_factor` from the shipped
+constant, gated on the original's own condition (local player, not already crashed). This is
+binding a shipped constant, not inventing a pushback mechanic. The gate is C21's rationale applied a
+second time, but it is **not** C21's flag: the site is `FlightController`, which already has
+`IsHumanPiloted`, and the original's guard here additionally excludes an already-crashed aircraft.
+Point the gate's comment at C21's recorded divergence so the two decisions read as one.
+
+**Model recommendation.** high. It changes collision feel, which is a player-facing surface with its
+own history of wrong-mechanism fixes, and the impulse's second term is easy to get wrong.
+
+**Verify.** The `CAP-14` split is the acceptance test and it is already measured: a normal-direction
+restitution reproduces flat-ground e ≈ 0.6 while leaving a vertical-wall contact's altimeter nearly
+untouched, because on a wall the sink is tangential. Reproduce both orientations in a scripted run
+before judging feel. `.\RunTests.ps1` in full; the player-side goldens can move here, so baseline
+first.
+
+**⚠ Traps.** The measured 0.75–0.86 on flat ground is **above** what `bounce_factor` can produce, and
+the decode explains why: the impulse is computed from the contact point's velocity with the
+rotational term doubled, then applied in full to the centre of mass with no reaction term
+(`n·v_after = −k·(n·v) − (1+k)·2·n·(ω × r)`, `k = f_lin·bounce_factor`). That second term is
+unbounded and is not restitution. **Reproducing the original's feel needs that term, not a larger
+`bounce_factor`** — raising the constant to chase the measurement is the wrong fix. Already ruled
+out and traced as sources: multiple contacts per frame, successive-frame stacking, a separate
+ground-support path, and gravity ordering. Do not read the vertical-versus-flat split as a
+per-surface coefficient; it is a lever-arm partition, and the code has no surface dependence at all.
+
+## C26 ☑ The per-AI spawn jitter of eleven dynamics slots
+
+**Landed 2026-08-15.** `FUN_00440ad0` is the **network-game flag** (it returns the first dword of
+the `"Network"` subsystem object looked up at `0x44023d`), so the jitter is ON in the mode we
+simulate and the item lands code rather than a finding. `PlaneStats.WithAiSpawnJitter` applies it at
+`AiAircraftSpawner.Spawn`, to a COPY of the session's shared per-airframe stats, drawn off
+`Rng.Spawn` keyed by spawn ordinal (a pure function of the master seed, so a `--det` replay
+reproduces it and no other subsystem's sequence moves).
+
+Seven of the eleven slots have a field in this engine: the whole-vehicle health and armour maxima,
+`fd_speed`, `ThrustFactor`, `drag_factor`, `pitch_torque`, `roll_torque`. The remaining four are
+vehicle.json's `rates` and `turns` pairs (def `+0xe8`/`+0xec`, `+0xf8`/`+0xfc` → runtime
+`+0x680`…`+0x68c`), the **surface-driving integrator's** acceleration and steering rates with their
+clamps: `basic_airplane` authors them so every aircraft carries them, but they are read only by the
+class-2/3/5 arms (`FUN_0048f7d0`/`FUN_0048f720`, reached from `FUN_0048a880`/`FUN_0048b480`) and by
+the class-1 autogyro arm; the aeroplane arm `FUN_0048e580` copies `+0x684` into `+0x178` and never
+reads it back. They are inert on an aeroplane in the original too, so nothing is missing here.
+
+Two things the item's Evidence did not have. The vehicle class the gate tests is the def's **`mode`
+key**, and the parser's own string table settles the enum: `jet` = 0, `heli` = 1, `tank` = 2,
+`ship` = 3, `wingman` = 4, `plane` = 5 — which closes a "not determined" line in
+`org/flightModel.md`. And that gate (classes 0 and 1) **exempts the shipped `w*` wingman family**,
+class 4, even though the dispatch flies it down the aeroplane arm. That exemption has no analogue
+here and is a recorded divergence: this engine flies every aircraft off a player def, all of which
+resolve `mode jet`, so an Instant Action wingman is jittered where the original's own wingman is
+not.
+
+The named trap does not bite: `veh_weight` and `ref_area` are **not** among the eleven, so
+`FlightModel.StallSpeed` cannot go stale behind the jitter. The whole-vehicle damage pair is scaled
+and the per-part pools are not, which is what the original does; since no player def authors a whole
+pair, the port writes the resolved sum-over-parts out explicitly so `PlaneDamage` cannot re-derive
+the unscaled hull. Original text below unchanged.
+
+**Goal.** Decide whether the original's per-non-player spawn jitter of the dynamics block belongs in
+this engine, and if so land it without breaking determinism. Split out of C22, which found it is not
+the two-field change its Evidence described.
+
+**Evidence (confidence: traced; read in C22, not yet ported).** The block sits at the end of
+`FUN_00476250` (the address `FUN_00477280` from flightModel.md:1004 lands inside it). It runs only
+when the object's own name is not `"player"`, `FUN_00440ad0()` returns 0 and the vehicle class
+(`obj+0x67c`) is 0 or 1; then, for each of **eleven** runtime slots, it draws `rand()` and multiplies
+the slot in place by `((2r − 1) · 0.05 + 1)`, i.e. an independent `1 ± 5 %`:
+
+`+0x2c4`/`+0x2c8` and `+0x2cc`/`+0x2d0` (paired, each written twice — the second is a "current"
+mirror), `+0x644` (`RollTorque`), `+0x648`, `+0x668` (`fd_speed`), `+0x66c` (`ThrustFactor`),
+`+0x670`, `+0x680`, `+0x684`, `+0x688`, `+0x68c`. The `+0x644 … +0x678` window is the runtime mirror
+of the def's `dynamics` block (flightModel.md, "the struct slot"), so most of what an airframe
+authors is perturbed per aircraft. `FUN_00440ad0`'s meaning is NOT decoded — read it before assuming
+the jitter is on in single player.
+
+**Approach.** Decode `FUN_00440ad0` first: if it gates the jitter off in the mode we simulate, the
+item ends as a recorded finding with no code. Otherwise the draw has to come from the session seed
+rather than `rand()`, at the spawn site, and the eleven slots have to be named against `PlaneStats`
+one at a time — several of them are not `dynamics` keys at all and must be identified before being
+scaled.
+
+**Model recommendation.** high. It reaches the determinism seam, and an unseeded draw makes every
+golden shot and every AI-flying suite unreproducible.
+
+**Verify.** Two `--det` runs of the same seed must produce identical AI trajectories, and two
+different seeds must not. `.\RunTests.ps1` in full, with the AI suites re-checked: this is the change
+that can genuinely move them, where C22 did not.
+
+**⚠ Traps.** It is eleven slots, not the two `fd_speed`/`ThrustFactor` that flightModel.md:1004 names
+— that line is a summary, not the list. `StallSpeed` is computed once at construction from
+`VehWeight`/`RefArea`, so a jitter applied after construction would silently leave it stale.
+
+# Wave D — Decode the control law
+
+## D31 ☑ Locate and decode the original's AI control law
+
+**Landed 2026-08-15. The law was found, and it is `FUN_0041b560`.** The decode is
+[`org/aiControlLaw.md`](org/aiControlLaw.md); no code shipped, since this item's deliverable is the
+page and `E41` is the port. The decided search order worked as written: the stun handler's zeroed
+offsets gave a six-slot control block, write xrefs on those offsets closed to six functions, and
+five of the six converged on one root, `FUN_0041c270`, called from the world tick per vehicle.
+
+Four things the Evidence did not have. **The AI brain is a sibling of the integrator, not a caller
+of it**, and it runs once per world tick immediately before the same vehicle's integrator, so the
+port needs no cadence change and has no frame lag to reproduce. **`obj+0x948` is the target
+pointer, not a flag**, and `obj+0xBA` is the evade flag the damage handler sets on a failed
+steady-hand test, so two of the three fields the item called "mode-0 flags" are neither flags nor
+mode-0-specific; `obj+0x2F0` is the order enum that picks the driver. **The per-axis gains are
+stored in roll/pitch/yaw order in the def and the runtime but pitch/roll/yaw in the roster**, with
+the spawner transposing slot by slot, which is a swap waiting to happen in `E41`. And
+**`FUN_00460890`, the apparent output smoother, is a two-instruction identity**, so the "smoothed"
+channel copies are plain copies.
+
+Two corrections to shipped documentation fell out. The 1-to-9 skill interpolation is
+`lo + (hi − lo) · rating/9`, putting the endpoints at rating 0 and 9 rather than 1 and 9, so
+`Mech3/AiSkills.At` is a point off below rating 9 (`E42`'s to fix, recorded in
+[`formats/ai-rosters.md`](formats/ai-rosters.md) and `architecture.md`). And `sixth_sense_factor`
+is not a pursuit-conditional ease-off but a flat multiplier on all three stick channels every
+frame.
+
+One named unknown blocks numbers rather than shape: **the compiled default of the `ai_input_*` def
+slots.** No roster block authors them (all `-1.0`) and almost no def does, so nearly every AI flies
+on an inherited default this session did not read. `E41` must recover it before fitting anything.
+
+**Goal.** Identify the function that turns an AI's standing order (a net node, a target, a mode) into
+the three stick channels, decode it, and land it as a page under `docs/org/`. If it cannot be found,
+the deliverable is a recorded dead end naming what was searched and what would settle it next.
+
+**Evidence (confidence: lead-only).** Nothing in `docs/` names this function. Three anchors converge
+on it. `FUN_004200d0`, the stun handler, zeroes the AI's control inputs and therefore names the
+offsets the stick channels live at (flightModel.md:1366). `FUN_0048c470` sums "the three stick
+channels" into the torque accumulator (flightModel.md:1308) and is the consumer. The mode enum
+`obj+0x358`, with mode 0 sub-dispatched on `obj+0x948`, `obj+0xBA` and `obj+0x2F0`
+(flightModel.md:1359), sits inside the AI brain, and `FUN_00489ea0` is the per-object update
+dispatcher (flightModel.md:1391).
+
+**Approach.** In the decided order. First, read `FUN_004200d0` to recover the control-input offsets,
+then take write xrefs on those offsets, subtract the human input path, and the remainder is the AI
+control law. Second, take write xrefs on `obj+0x358` and on the three mode-0 flags to confirm the
+candidate sits in the AI brain and not on a shared path. Third, walk down from `FUN_00489ea0` to
+establish where in the frame the law runs and what it is called with, which matters because our
+`AiPilot.Next` runs once per sim step and the original may not. Land the decode as a `docs/org/`
+page in the same change, per the standing rule that new decodes land with their docs.
+
+**Model recommendation.** high. Open-ended binary archaeology where the shape of the answer is
+unknown.
+
+**Verify.** The recovered law's inputs and outputs account for the flags at `obj+0x948`, `obj+0xBA`
+and `obj+0x2F0`, and for every write to the control-input offsets on the AI path. A decode that
+leaves a writer unexplained is incomplete, and saying so is the honest outcome.
+
+**⚠ Traps.** The mode machine is already ported from data, so finding the state machine is not
+finding the steering; `obj+0x358`'s writers are a corroborator, not the target. Expect the law to be
+frame-rate dependent in the same way C23's ground blow is, and record it rather than silently
+normalising it. If the search fails, say so plainly. A documented dead end is a result here, and E41
+degrades accordingly.
+
+# Wave E — Replace the placeholder
+
+## E41 ☑ Port the control law into `AiPilot`
+
+**Landed 2026-08-15 as `Flight/AiControlLaw.cs`.** The law is ported whole, and `AiPilot` keeps its
+contract: mutable orders, purity over model state and instance fields, and the mode dispatch. What
+changed shape is that each mode now picks an **aim point, that point's velocity and one of the four
+parameter tables**, which is the split the original itself has between its drivers and
+`FUN_0041b560`. The placeholder bank-to-turn law and its altitude leash are both deleted, per this
+item's own trap.
+
+**D31's blocking unknown is closed, and three of its readings were wrong.** The def initialiser
+`FUN_00478a00` carries the `ai_input_*` defaults nothing authors: scales **3.5**, limits **1.0**,
+the emergency set identical, `rudder_tol` **0.2**, and a fixed AI speed clamp of **0 to 111.76 m/s
+(250 mph)** that no parser token can reach. That last one matters most: every AI aircraft in the
+original shares one 250 mph ceiling regardless of airframe. The three corrections, all now pinned
+by `CSVM.Tests/AiControlLawTests`:
+
+1. **`rudder_tol` points the other way round.** Clearing the threshold selects the BANK branch, so
+   a higher value means MORE rudder. At the 0.2 default anything ahead is banked toward; `balmoral`
+   authors 1.0 and is therefore the one aeroplane that turns onto a target with rudder.
+2. **The wings-level rule is the dead-astern case, not the straight-ahead one.** The horizontal
+   pair is renormalised whenever the aim point is ahead, so both components can only be tiny when
+   the aim is within about 5 degrees of directly behind.
+3. **A scale of 3.5 against a limit of 1.0 makes the output stage near-bang-bang**, not
+   proportional, for any aim error past about 0.29.
+
+**Verify.** `RunTests.ps1` green at the final state: units 1334 → 1344, engine 61/61, 14 goldens
+hash-identical, hitch clean, exit 0. `AiPilotTests` passed **unchanged**, which is the useful
+result rather than a re-pin: the two laws agree on course-holding, capture and retargeting. One
+`ai-modes` assertion was re-pinned with its reason in the suite (pursue no longer assigns the lever
+at 1; the law walks it as a speed controller between the engaged table's 0.3 and 1.3).
+
+**Not ported, recorded rather than papered over:** the emergency arm's altitude/velocity assist
+(it writes model state, which this seam must not), the intercept solver's second-root preference
+(unreachable on patrol, and suppressed by the original itself while engaged), and lay off's
+throttle override, which stays D15's invented speed match rather than the decoded break-off arm
+because D15 is a landed and playtested feature. All three are `E42`/`F52` business.
+
+**Goal.** `AiPilot.Next` produces stick by the original's rule rather than by the invented
+bank-to-turn law, through the same class seam the module doc already names.
+
+**Evidence (confidence: lead-only, gated on D31).** `AiPilot.cs`:16–20 and
+`docs/architecture.md`:2424 both state that the current law is a placeholder, and that this class is
+the seam its replacement lands through. What replaces it is D31's output.
+
+**Approach.** Replace the body of `Next`'s steering, keeping the class's existing contract: mutable
+orders (the mission-script rule at `AiPilot.cs`:11), purity over model state and instance fields, and
+the mode dispatch that hands off to `ManeuverExecutor` and the machine's own orders. If D31 came back
+empty, this item degrades to re-fitting the placeholder against F51's capture on the corrected plant,
+and is renamed to say so rather than quietly doing something different from its title.
+
+**Model recommendation.** high. The plan's central item, and the one whose failure mode is a law
+that flies plausibly and is not the original's.
+
+**Verify.** `AiPilotTests` and the `ai-modes`, `ai-net-follow` and `air-to-air` suites re-pinned with
+stated reasons. The real verdict is F52.
+
+**⚠ Traps.** Do not preserve the invented altitude leash "just in case" while porting. If the ported
+law needs it, that is evidence the port is wrong or that C22 is incomplete, and it should be
+diagnosed rather than papered over. Orders must stay mutable fields.
+
+## E42 ☑ Retire the placeholder-support constants
+
+**Landed 2026-08-15.** By the time this item started, the bank-to-turn law itself and its
+`MaxBankDeg`/`BankPerHeadingDeg`/`RollGain`/`RollRateLead`/`MaxPathDeg`/`PathPerMeter`/
+`PitchGain`/`PitchRateLead`/`BankPull`/altitude-leash constants were already gone with it — E41
+deleted the whole placeholder law and everything that stabilised it, per that item's own trap.
+What was left to judge: `AiPilot.PatrolThrottle`, `AiPilot.OrderAimRangeM`, lay off's throttle
+override (`LayOffThrottleRatePerS`/`LayOffMinThrottle`), `AiNetFollower.DefaultArrivalRadius`, and
+— found while reading D31's decode page rather than guessed — `AiSkills.At`'s interpolation-origin
+bug, which `docs/org/aiControlLaw.md` and `docs/formats/ai-rosters.md` had already named as this
+item's business.
+
+**`PatrolThrottle` (0.5) is DELETED, not justified.** Measured rather than argued: seeding
+`Throttle` to any value below a table's `ThrottleMin` is erased on the very first call to
+`AiControlLaw.Steer`, whose own `Mathf.Max(lever, p.ThrottleMin)` clamp (`AiControlLaw.cs`:331)
+overwrites it before the aircraft has flown a single frame. The three call sites that set it
+(`AiGeneratorRuntime.cs`, `GameSession.cs`, `Suites.cs`'s `ai-net-follow` rig) are simplified to
+drop the assignment; `AiPilot`'s own default `Throttle = 0.85f` is already inside the cruise
+table's `[0.8, 1.1]` band and needs no seed.
+
+**`OrderAimRangeM` and lay off's throttle override SURVIVE, both re-justified in place** (their
+in-file comments already carried the reason; unchanged in substance, tightened in `architecture.md`
+to say "survives" rather than "E42's to decide").
+
+**`AiNetFollower.DefaultArrivalRadius` (200 m) SURVIVES, but its justification was wrong and is
+now measured against the real law instead of assumed.** The plan expected wave D's real maneuvering
+to shrink it; a direct measurement disproves that. Built a throwaway harness driving `AiPilot` +
+`AiNetFollower` around C1's real `M4ReinfAce` loop (11 nodes, the same net the old ~200 m figure
+was measured on) under `AiControlLaw`, varying only the capture radius: 300 m completes 135 node
+captures in a 600 s run, 200 m completes 32, 100 m completes 8, 50 m completes 10 — closest-approach
+distances cluster right at the radius threshold at every setting, so the real law's own turning
+circle misses a stationary aim point on roughly the 200–300 m scale regardless, and shrinking the
+radius only makes the patrol slower to advance (measured mean time per leg: 17 s at 200 m vs 65 s
+at 100 m), never tighter. The correct disproof-with-no-code-change the ground rules describe: the
+number is kept, its story corrected in `AiNetFollower.cs` and `architecture.md`.
+
+**`AiSkills.At`'s interpolation origin is fixed.** D31 found while decoding the skill scalar
+(`docs/org/aiControlLaw.md` "The skill scalar…") that the engine's own formula is
+`lo + (hi−lo) · rating/9`, with the endpoints at rating **0** and 9, not 1 and 9 — `At` computed
+`(rating−1)/8` instead, a point off at every rating below 9. Corrected to `rating/9`; every
+xmldoc/test/suite comment asserting a specific "at rating 1" value was re-derived rather than left
+stale (`AiSkillsTests`, `AiModeMachine.cs`, `AiGunner.cs`, `AiVoiceDispatcher.cs`, `Suites.cs`'s
+`ai-gunnery` messages).
+
+**Verify.** `RunTests.ps1` green, unfiltered: units 1344/1344, engine 61/61 (including
+`ai-net-follow`, `ai-modes`, `ai-gunnery`, `ai-actor`, `ai-spawn-jitter`, `ai-voice`,
+`ai-crash-defs`), 14 goldens hash-identical, hitch clean, exit 0. `AiSkillsTests` re-pinned to the
+corrected formula rather than loosened; no suite needed a behavioural re-pin (the `ai-gunnery`
+dead-eye split is unchanged at 6/30 vs 13/30 — the seeded scatter rng dominates over the small
+skill-1 angle shift).
+
+**Goal.** No constant survives whose only justification is stabilising the placeholder law.
+
+**Evidence (confidence: traced, as inventions).** `AiPilot.cs` declares `PatrolThrottle` 0.5,
+`LayOffThrottleRatePerS`, `LayOffMinThrottle`, `MaxBankDeg`, `BankPerHeadingDeg`, `RollGain`,
+`RollRateLead`, `MaxPathDeg`, `PathPerMeter`, `PitchGain`, `PitchRateLead`, `BankPull` 1.2 and the
+150/50 m altitude leash, all documented in-file as invented. `docs/architecture.md`:2361 records
+`AiNetFollower.DefaultArrivalRadius` (200 m) as invented and "sized to the placeholder law's
+tracking error", explicitly to be shrunk when the real law lands.
+
+**Approach.** Delete each constant whose reason for existing is gone. For any that survives, rewrite
+its comment to say what it now is: an original value, a TUNE with a measurement behind it, or an
+invention that is still an invention and why. Shrink `AiNetFollower`'s arrival radius to what the
+ported law actually needs, leaving the zeppelins' wider per-record radius alone. Update the three ⚠
+lines in `architecture.md`'s `AiPilot` entry, which currently assert the law is not original.
+
+**Model recommendation.** medium. Mechanical once E41 lands, with judgement on what survives.
+
+**Verify.** No constant in `AiPilot` or `AiNetFollower` is described as invented without a sentence
+saying why it still has to be. Suites green after re-pins.
+
+**⚠ Traps.** `LayOffThrottleRatePerS` and `LayOffMinThrottle` support D15's lay-off, whose
+`sixth_sense_factor` is decoded but whose speed-match application is invented. That invention is a
+separate question from the steering law and may legitimately survive this item. Zeppelin arrival
+radii are a different consumer of the same follower, do not change them here.
+
+# Wave F — Judge it
+
+## F51 ☑ Capture the original's AI flying
+
+**Landed 2026-08-15.** `CAP-37` minted with `New-ItemId.ps1 -Kind CAP` and added to
+`playtest.md`'s owed-captures table under a new "AI flight" theme section, citing this plan's F52
+as the item it unblocks. No footage is shot yet — that is `playtest.md`'s job, done at the user's
+own pace — this item lands the capture spec itself: what must be in frame, and the behavioural and
+comparative questions it may be used to answer. The spec repeats the ⚠ below verbatim so a future
+reader of `playtest.md` alone (without this plan open) still gets the trap.
+
+**Goal.** Footage of the original's AI aircraft flying, sufficient to judge waves C and E
+behaviourally.
+
+**Evidence (confidence: traced).** `playtest.md` owes no capture of the original's AI at all; every
+existing `CAP-` is player-side or effects-side. There is therefore no instrument today that can
+distinguish a faithful AI port from a merely pleasant one.
+
+**Approach.** Mint a `CAP-` with `New-ItemId.ps1 -Kind CAP` (never assign an ID any other way) and
+add it to `playtest.md`'s owed-captures table citing this plan. The capture asks behavioural and
+comparative questions only: does an AI aircraft gain altitude through a sustained turn or hold it;
+is its turn tighter or wider than the player's in the same airframe; does it hold a speed through
+manoeuvres or bleed and recover like a lever-driven aircraft; does it wallow at low speed or stay
+crisp; what does it do at the end of a patrol leg. Frame so the AI aircraft and, where possible, the
+player's own aircraft are both readable.
+
+**Model recommendation.** medium. Writing a capture spec, where the judgement is in what the capture
+is *not* allowed to be used for.
+
+**Verify.** The spec is judged by whether the answers it yields could change a decision in C or E.
+
+**⚠ Traps.** No absolute distances or speeds are to be read off this footage. Footage-derived
+distances have failed repeatedly on this project, and a decode must never be contested with one. If
+the capture appears to contradict a traced address, the capture is the thing in doubt.
+
+## F52 ☑ The at-the-controls verdict, AI side and player side
+
+**Landed 2026-08-15. Flown, not clean — one confirmed bug, one soft note, otherwise a pass.**
+`PT-54`–`PT-57` minted and flown (`playtest.md`), plus `PT-53`'s player-side graze check.
+
+**AI arm.** `PT-54` (free-flight A/B against `--no-ai-plant`): no felt difference in the plant
+itself, but the merged net behaviour (`BL-377`'s trailer riding, from `main`) reads well —
+aggressive, gets into firing lines. `PT-55` (under `--ai-attack`): gains altitude through a
+sustained turn, turn radius about the same as the player's in the same airframe, bleeds and
+recovers speed like a lever-driven aircraft (matches the decode); low-speed wallow inconclusive
+from the cockpit, but a spectated 5v5 autogyro dogfight looked good. `PT-56` (a wingman on its
+default net, `--debug-spectate`): the net-follow itself looked good, but surfaced a real bug —
+**`BL-387`**, filed and refined across both PT-54 and PT-56: an AI aircraft flying straight and
+level (needing no turn) rolls left-right-left and never settles, confirmed absent from the
+original. Root-caused to `AiControlLaw.Steer`'s bank branch, which renormalises the body-frame aim
+error onto the unit circle whenever the target is ahead — discarding the error's MAGNITUDE and
+keeping only its sign, so a genuinely tiny heading error still commands a near-maximum bank. Not
+reproduced in Instant Action → Dogfight a Squadron, where aircraft are almost always turning hard
+onto a live quarry (large, consistently-signed error) rather than holding a straight leg.
+
+**Player arm.** `PT-57` (autogyro/Balmoral/Fury at low speed, `C24`'s authority ramp): flown
+directly against the original at the controls, and the autogyro "feels the same now" — one soft
+residual, "perhaps the nose pulling down is not as hard as in the original", filed as **`BL-388`**
+(single-session, reporter-uncertain, not a confirmed measurement). `PT-53` (grazing, `C25`): (a)
+the flat-ground belly skim passes; (b) the wall/cliff scrape reads as a graze, "a little light but
+better than before" (the existing `BL-271` re-tune note already covers this); (c) the building-
+corner survival-by-geometry question is, per the user, decodable rather than a feel question —
+already `BL-381`'s first bullet (the unconsumed `armor_damage_range`/`health_damage_range`), no new
+item needed.
+
+**Verdict:** the plant and control-authority work is sound and reads as intended; two real, scoped
+follow-ups (`BL-387`, `BL-388`) are filed rather than fixed here, per this item's own trap. Waves
+C–E stand.
+
+**Original text follows unchanged.**
+
+**Goal.** The plan's changes are judged by the user at the controls, on both arms: how AI aircraft
+now fly, and how the player's own aircraft now flies after C24.
+
+**Evidence (confidence: traced).** C24 changes shared control authority and C25 changes collision
+response, so the player arm is not optional. `BL-330`'s existing at-the-controls corroboration is
+the reference for the authority half; `CAP-14`'s measured restitution split is the reference for the
+collision half.
+
+**Approach.** Mint the `PT-` items with `New-ItemId.ps1 -Kind PT` and add them to `playtest.md`. Fly
+the AI arm with C21's switch to A/B the plant directly, in free flight against `--ai-attack`, and in
+a chapter mission with patrol nets running. Fly the player arm across the airframes `BL-330` was
+corroborated on, low-speed handling especially, plus grazing contacts on flat ground and on a
+vertical face for C25. Remove the temporary switch and its `cli.md` entry in the closing commit.
+
+**Model recommendation.** medium. The work is running sessions and recording the user's verdict; the
+verdict itself is not the agent's to give.
+
+**Verify.** The user's judgement is the verdict, and it outranks the suites. Record it in the closing
+commit message.
+
+**⚠ Traps.** Do not let a green suite table stand in for this item. Do not remove the A/B switch
+before the playtest is answered; it is the only way to compare the two plants without a rebuild.

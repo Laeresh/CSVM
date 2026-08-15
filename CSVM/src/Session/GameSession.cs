@@ -210,6 +210,10 @@ public partial class GameSession : Node3D
     // advanced on the sim dt (never wall time). Null outside Versus — the Downed events then
     // simply have no subscriber. Freed with this node; flight holds no match state.
     private VersusMatch? _versus;
+    // BL-377: the trailer-target resolver every net follower this session builds shares. Built
+    // with the rigs (it needs the player rig), so the F13 overlay, built earlier, reads it through
+    // this field rather than holding a reference it could not have had yet.
+    private NetTrailerTargets? _netTrailers;
     // rolling mirrored-tile window past the map edge
     private Mech3.MapEdgeExtender? _edgeExtender;
     // the splitscreen pane rig (null in single player)
@@ -544,6 +548,7 @@ public partial class GameSession : Node3D
             if (_spec.Fly)
             {
                 BuildFlightRigs(state);
+                ApplyDebugSpectate();
             }
             ApplyDestroyOverride(state);
             LogBuildSummary(state, sw);
@@ -969,6 +974,23 @@ public partial class GameSession : Node3D
             {
                 DebugShow = _spec.DebugAiNets != null,
                 Filter = _spec.DebugAiNets ?? "",
+                // The live leashes: each patrolling AI's own follower state, read per frame off
+                // the list this session keeps (the overlay is built before any AI exists, so it
+                // takes a supplier rather than a snapshot).
+                CollectLeashes = into =>
+                {
+                    foreach (var ai in _aiPlanes)
+                    {
+                        if (ai is { InPlay: true } && ai.Pilot is { Patrol: { CurrentIndex: >= 0 } patrol } pilot)
+                        {
+                            into.Add(new UI.AiNetLeash(ai.WorldPosition, patrol.CurrentTarget,
+                                patrol.Net.Id, pilot.SteeringPatrol));
+                        }
+                    }
+                },
+                // BL-377: an anchored net is drawn where it actually is, not where the file says.
+                // Zero until the rigs are built, which is before anything flies it.
+                TrailerOffsetOf = net => _netTrailers?.OffsetOf(net) ?? Vector3.Zero,
             });
         }
 
@@ -2109,12 +2131,65 @@ public partial class GameSession : Node3D
                 }
             }
         }
+        // BL-377: an anchored net RIDES its trailer target, so every follower built below gets a
+        // supplier for the object its net names. The player is rig 0 (the binary has one 'player'
+        // and no splitscreen at all, so split play matches single player; NetTrailerTargets says so),
+        // anything else is a world node, looked up the same way the zeppelin runtime looks its
+        // hosts up. A name that resolves to nothing leaves the net at its authored coordinates.
+        var netTrailers = _netTrailers = new NetTrailerTargets(
+            () => _rigs.Count > 0 && _rigs[0].Controller is { } trailedRig
+                ? trailedRig.WorldPosition
+                : null,
+            name => rigInputs.WorldRuntime?.FindNodes(name) is { Count: > 0 } trailerHits
+                ? trailerHits[0]
+                : null);
         // Instant Action's authored ace (PLAN-instant-action.md C8) — dogfight_ace only; the
         // wave sequencer (D9/E11) and the zeppelin arm (F12) are later items, so any other
         // mission_type spawns no actor yet. Kept as a local so the end-condition block at the
         // bottom of this method can hang the mode's win signal on it (G13).
         FlightController? iaAce = null;
         int iaWaveEnemies = 0;
+        // BL-364: every Instant Action actor is handed the chapter's FIRST patrol net, the ace,
+        // the wingmen and every wave member alike (FUN_0045a390 writes the same one-entry netids
+        // list in all three of its branches; docs/formats/instant-action.md, corrected
+        // 2026-08-15). "First" is neindex FILE order, not the lowest id (C1B opens on 29 and
+        // C1C on 25 against a lowest of 11), which is what AiNets.ChapterFirst reads.
+        AiNet? iaPatrolNet = null;
+        if (_instantAction != null)
+        {
+            try
+            {
+                iaPatrolNet = AiNets.ChapterFirst(AiNets.Load(rigInputs.ChapterZrdrPath),
+                    rigInputs.ChapterZrdrPath);
+            }
+            catch (Exception e)
+            {
+                GD.PushWarning($"ia: cannot read {_spec.Chapter}'s patrol nets: {e.Message}");
+            }
+            if (iaPatrolNet is { Nodes.Count: 0 })
+            {
+                iaPatrolNet = null;
+            }
+            GD.Print(iaPatrolNet != null
+                ? $"ia: actors patrol '{iaPatrolNet.Name}' (net {iaPatrolNet.Id}), the chapter's first"
+                  + (iaPatrolNet.Trailer is { NodeIndex: >= 0, Name: { } anchorName }
+                      ? $", anchored to '{anchorName}' at node {iaPatrolNet.Trailer.Value.NodeIndex}"
+                      : "")
+                : $"ia: {_spec.Chapter} has no first patrol net, actors fly their spawn course");
+        }
+        // The net IS the standing order (AiPilot.Patrol), and PatrolThrottle comes with it for
+        // the same placeholder-law reason the other two assignment sites carry it. ⚠ The net does
+        // NOT bring its own volumes here: in the original the roster block's volumes are copied
+        // over the net's afterwards (FUN_0047c210 applies the block at 0x48–0x6c after
+        // FUN_00476250 has run the net assignment), and an Instant Action block authors all nine
+        // at ±10000 m, so the block wins outright. ApplyActorVolumes stays the last word.
+        Action<AiPilot> armIaPatrol = pilot =>
+        {
+            if (iaPatrolNet == null)
+                return;
+            pilot.Patrol = new AiNetFollower(iaPatrolNet, Rng.NewSystemRandom(Rng.Ai),
+                trailerTarget: netTrailers.For(iaPatrolNet));
+        };
         if (_instantAction is { } ia
             && string.Equals(ia.Def.MissionType, "dogfight_ace", StringComparison.OrdinalIgnoreCase))
         {
@@ -2136,12 +2211,14 @@ public partial class GameSession : Node3D
                 var (spIndex, sp) = InstantActionRuntime.ChooseAceSpawn(aceSpawns, playerSpawnIndex, draw);
                 var fwd = new Basis(Vector3.Up, Mathf.DegToRad(sp.HeadingDeg)) * Vector3.Forward;
                 var pilot = AiPilot.HoldingCourse(sp.Position, sp.Position + fwd);
+                armIaPatrol(pilot);
                 int rating = InstantActionRuntime.RepresentativeRating(ia.Def.AceStats);
                 var ace = SpawnAiAircraft(aceNode, sp.Position, sp.Position + fwd, pilot,
                     scheme: ia.Def.AceLivery, team: InstantActionRuntime.EnemyTeam, attackRating: rating);
                 RegisterAiVoice(ace, ia.Def.AceAccentId, rating);
                 iaAce = ace;
                 _iaAce = ace;
+                InstantActionRuntime.ApplyActorVolumes(pilot.Machine);
                 if (ace != null)
                 {
                     GD.Print($"ia: ace '{ia.Def.AceName}' ({aceNode}) rating={rating} " +
@@ -2191,6 +2268,11 @@ public partial class GameSession : Node3D
                     var offsetDir = wmFwd.Rotated(Vector3.Up, Mathf.DegToRad(slot.OffsetDeg));
                     var pos = wmLeadPos + offsetDir * slot.MetresOut;
                     var pilot = AiPilot.HoldingCourse(pos, pos + wmFwd);
+                    // The wingman takes the same net the ace and the waves do, and in the
+                    // original that net is exactly what demotes its `mode wingman` airframe to
+                    // `jet` (FUN_00476250), so the escort chain set below is a target
+                    // assignment, not a flown formation (BL-362, docs/org/aiPilot.md).
+                    armIaPatrol(pilot);
                     // attackRating: 5, not null/--ai-attack= — the roster's skill vector is left
                     // UNSET in the original (docs/formats/instant-action.md "The player and the
                     // wingmen"), but a wingman still needs its own Gunner/Machine armed
@@ -2211,12 +2293,10 @@ public partial class GameSession : Node3D
                             ? wingmen[escortIdx]?.Name.ToString()
                             : "player";
                     }
-                    // Every Instant Action actor's activation volumes are authored ±10000 m
+                    // All three of an Instant Action actor's volumes are authored 10000 m
                     // (docs/formats/instant-action.md "Every actor is a synthetic aiv roster
-                    // block"), not the shipped min_ai_active_dist (2000 m) SpawnAiAircraft arms
-                    // by default.
-                    if (pilot.Machine != null)
-                        pilot.Machine.ActivationRange = 10000f;
+                    // block"), not the airframe's 2000/2000/1200 m SpawnAiAircraft arms by default.
+                    InstantActionRuntime.ApplyActorVolumes(pilot.Machine);
                     RegisterAiVoice(wingman, slot.AccentId);
                 }
                 int wmSpawned = wingmen.Count(w => w != null);
@@ -2259,6 +2339,12 @@ public partial class GameSession : Node3D
                             // ActivateInstantActionWave teleports it in, same as the original's
                             // own "deactivated at the world origin" (A3).
                             var pilot = AiPilot.HoldingCourse(Vector3.Zero, Vector3.Forward);
+                            // The net is armed here, at build, but the follower only seats
+                            // itself on the nearest node at its first update, and
+                            // FlightController.Activate re-seats it, so a member teleported (or
+                            // launched from a zeppelin bay) patrols from where it arrives rather
+                            // than from this parking pose.
+                            armIaPatrol(pilot);
                             // A wave's militia livery is a setup-SCREEN-only value
                             // (docs/formats/instant-action.md "The ace and the waves"): unlike
                             // the wingmen (D9, always Fortune Hunter, a decidable constant), a
@@ -2278,12 +2364,9 @@ public partial class GameSession : Node3D
                             {
                                 pilot.Gunner.PrimaryTargetName = "player";
                             }
-                            // Every Instant Action actor's activation volumes are authored
-                            // ±10000 m (docs/formats/instant-action.md), same as the ace/wingmen.
-                            if (pilot.Machine != null)
-                            {
-                                pilot.Machine.ActivationRange = 10000f;
-                            }
+                            // All three of an Instant Action actor's volumes are authored 10000 m
+                            // (docs/formats/instant-action.md), same as the ace/wingmen.
+                            InstantActionRuntime.ApplyActorVolumes(pilot.Machine);
                             int accentId = InstantActionRuntime.ResolveWaveAccentId(
                                 wave.EnemyAccentId, Rng.Stream(Rng.Ai).Randi());
                             RegisterAiVoice(enemy, accentId, rating);
@@ -2353,12 +2436,15 @@ public partial class GameSession : Node3D
                 if (net != null)
                 {
                     // On the net itself, so a scripted run sees it patrolling within seconds; the
-                    // follower flies first to the nearest node, per the design.
-                    var pos = net.Nodes[0].Position + right * lateral;
-                    var look = net.Nodes.Count > 1 ? net.Nodes[1].Position : pos + fwd;
+                    // follower flies first to the nearest node, per the design. Node positions
+                    // come off the follower, not off the record, so an anchored net puts the
+                    // plane on the ring where the ring actually is (BL-377).
+                    var follower = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai),
+                        trailerTarget: netTrailers.For(net));
+                    var pos = follower.NodePosition(0) + right * lateral;
+                    var look = net.Nodes.Count > 1 ? follower.NodePosition(1) : pos + fwd;
                     var pilot = AiPilot.HoldingCourse(pos, look);
-                    pilot.Throttle = AiPilot.PatrolThrottle;
-                    pilot.Patrol = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai));
+                    pilot.Patrol = follower;
                     RegisterAiVoice(SpawnAiAircraft(planeName, pos, look, pilot), accentId);
                 }
                 else
@@ -2394,7 +2480,7 @@ public partial class GameSession : Node3D
             var zepNets = AiNets.Load(rigInputs.ChapterZrdrPath);
             _zeppelins = new ZeppelinRuntime(zepDefs,
                 name => rigInputs.WorldRuntime?.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null,
-                zepNets);
+                zepNets, netTrailers.For);
             _worldRoot!.AddChild(_zeppelins);
             // F18: the multi-zone damage half — per-part pools over the world registry, the
             // survivor-count kill, and the DAMAGES_ZEPPELIN gate on the shared pool.
@@ -2491,7 +2577,8 @@ public partial class GameSession : Node3D
                     : (name, scope) => wr.FindNodes(name, scope) is { Count: > 0 } hits ? hits[0] : null,
                 chapterNets, _spec.GeneratorsPlane, SpawnAiAircraft,
                 wr == null ? null : (name, host) => wr.PlayWithin(host, name, applyReset: false).Count,
-                wr == null ? null : (name, host) => wr.StopWithin(host, name));
+                wr == null ? null : (name, host) => wr.StopWithin(host, name),
+                netTrailers.For);
             _worldRoot!.AddChild(_generators);
             // A dead zeppelin permanently disables its generator (the decoded rule; F18
             // supplies the death the B6 stub waited on).
@@ -3190,6 +3277,69 @@ public partial class GameSession : Node3D
         }
         GD.Print($"ia: wave {waveNumber} ({roster.Count} aircraft) activated at spawn #{spIndex} " +
                   $"of {spawns.Count}");
+    }
+
+    /// <summary><c>--debug-spectate</c>: build the whole session as it would be flown, then take
+    /// every human out of it, so the AI can be watched with nobody provoking it. Runs AFTER
+    /// <see cref="BuildFlightRigs"/> on purpose: the wingman fan, the ace's spawn draw and wave
+    /// 1's own 500-m-from-a-human placement all read the player's position, so removing the
+    /// player earlier would move the very thing being watched.
+    ///
+    /// <para>Each human aircraft goes <see cref="FlightController.Held"/> (pinned where it
+    /// spawned, no longer flying or falling) and <see cref="FlightController.Inert"/> (undrawn,
+    /// uncollidable, and <c>Live == false</c> in every candidate scan, which is what stops the AI
+    /// pursuing it), and the pane's camera becomes a <see cref="SpectatorCamera"/> parked at the
+    /// spawn and following the first AI aircraft. Any translation input releases the follow, so
+    /// the camera is free to go looking. Nothing here is a gameplay path: the mission still runs
+    /// its own end conditions, and a squadron mission whose enemies have nobody to shoot simply
+    /// never resolves, which is the point.</para></summary>
+    private void ApplyDebugSpectate()
+    {
+        if (!_spec.DebugSpectate)
+        {
+            return;
+        }
+        FlightController? follow = null;
+        foreach (var ai in _aiPlanes)
+        {
+            if (ai is { InPlay: true })
+            {
+                follow = ai;
+                break;
+            }
+        }
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller is not { } pilot)
+            {
+                continue;
+            }
+            var eye = pilot.WorldPosition + Vector3.Up * 30f;
+            pilot.Held = true;
+            pilot.Inert = true;
+            pilot.CameraOwned = true;   // D8's seam: the controller writes this pane's camera no more
+            // The cockpit instruments belong to an aircraft nobody is flying; the marker HUD is a
+            // sibling on the same canvas and stays, which is the whole point of the mode.
+            if (pilot.Gauges != null)
+                pilot.Gauges.Visible = false;
+            if (pilot.Reticle != null)
+                pilot.Reticle.Visible = false;
+            if (pilot.WeaponReadout != null)
+                pilot.WeaponReadout.Visible = false;
+            var spectator = new SpectatorCamera(rig.Camera, eye,
+                follow != null ? follow.WorldPosition : eye - rig.Camera.Basis.Z)
+            {
+                ShowReadout = _rigs.Count == 1,   // one pane, so the freecam readout has room
+            };
+            _worldRoot!.AddChild(spectator);
+            if (follow != null)
+            {
+                spectator.FollowNode(follow);
+            }
+        }
+        GD.Print($"--debug-spectate: {_rigs.Count} human(s) pinned, inert and untargetable; " +
+                 (follow != null ? $"camera following {follow.Name}" : "camera free at the spawn") +
+                 $" ({_aiPlanes.Count} AI aircraft flying)");
     }
 
     /// <summary>G13: a pilot has spent its last life. The wreck stays where it fell — the

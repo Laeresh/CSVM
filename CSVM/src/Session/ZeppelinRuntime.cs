@@ -48,8 +48,15 @@ public sealed partial class ZeppelinRuntime : Node
     private float _sinceLog;
     private int _gateLogged;
 
+    /// <param name="trailerTarget">Where an anchored net's trailer target is (`BL-377`), per net;
+    /// null flies every route at its authored coordinates. ⚠ Exactly two of the 222 nets are both
+    /// zeppelin-flown and anchored, and neither is self-referential: C1C's <c>SwanZep1</c>
+    /// (<c>blackswanzep</c>) rides <c>workersvoyagezep</c> and C2B's <c>Gemini2</c>
+    /// (<c>geminizep</c>) rides <c>piratezep</c>, one zeppelin escorting another. Both records are
+    /// <c>deactivated</c>, so this is unobservable until a script layer wakes them; it is wired
+    /// because it is the decoded behaviour, not because anything flies it today.</param>
     public ZeppelinRuntime(IReadOnlyList<ZeppelinDef> defs, Func<string, Node3D?> resolveNode,
-        IReadOnlyList<AiNet> chapterNets)
+        IReadOnlyList<AiNet> chapterNets, Func<AiNet, Func<Vector3?>?>? trailerTarget = null)
     {
         Name = "zeppelins";
         foreach (var def in defs)
@@ -74,7 +81,8 @@ public sealed partial class ZeppelinRuntime : Node
             // radius caveat as AiNetFollower.DefaultArrivalRadius.
             float turnCircle = def.MaxSpeed / Mathf.Max(Mathf.DegToRad(def.MaxRateYawDeg), 1e-3f);
             float arrival = Mathf.Max(AiNetFollower.DefaultArrivalRadius, 1.5f * turnCircle);
-            var follower = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai), arrival);
+            var follower = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai), arrival,
+                trailerTarget?.Invoke(net));
             var motion = new ZeppelinMotion(def, follower);
             Place(host, motion.Position, motion.YawRad, motion.PitchRad);
             _live.Add(new LiveZeppelin(def, motion, host));

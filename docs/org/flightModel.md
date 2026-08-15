@@ -33,6 +33,7 @@ never appear in the data files.
 |---|---|
 | `FUN_004897c0` | World tick: advances the clock, iterates the vehicle list |
 | `FUN_00489ea0` | Vehicle-class dispatch on `obj+0x67c`; the flyable aeroplane classes are 0 and 4 |
+| `FUN_0041c270` | The AI brain, a sibling of the dispatch in the same tick. Writes the stick; see [aiControlLaw.md](aiControlLaw.md) |
 | `FUN_0048e580` | Per-tick integrator |
 | `FUN_0048c470` | Torque accumulation, control limiters, stall flag |
 | `FUN_0048bdd0` | Control authority vs speed |
@@ -93,7 +94,13 @@ Those citations are still re-checkable at those addresses and the behaviour they
 behaviour the game runs, because the two copies are the same code over the same globals. They were
 left alone deliberately: mapping each one to its live-copy address is a separate mechanical pass,
 and inventing the mapping without tracing it would be worse than the inconsistency. When reading an
-address out of this document, check which family it belongs to first.
+address out of this document, check which family it belongs to first. **A1 (2026-08-15) corrected
+the first of them:** the Atmosphere section's "the player force path zeroes the altitude" was a
+debug-copy citation, and with it went the supposed player-versus-AI density divergence. **C22
+(2026-08-15) mapped three more,** the ones it had to port: the player/AI guard on the airflow blend
+(`0x48c520`), on the weathervane (`0x48cd3e`, the live twin of `0x4916fe`) and on the forward-speed
+floor (`0x48e925`, in `FUN_0048e580`). The weathervane's is the only one this document had ever
+quoted, and it quoted the debug copy's.
 
 ## Units and conventions
 
@@ -138,6 +145,19 @@ figures in `dynamics.txt` are 100 Hz results.
 velocity component along the nose axis is clamped to at least **4.4704 m/s (10 mph)** after
 integration. The player is exempt.
 
+**C22 (2026-08-15) read the LIVE site and ported it.** It is in `FUN_0048e580`, not in the debug
+integrator: `cmp edi, [0x71c298]` at `0x48e925` skips the block for the player, and the block itself
+runs `0x48e95e`–`0x48e998`. It compares the velocity's **`m[2]` component against the negated
+constant at `0x608128` (`−4.4704`)** and, when that component is greater, adds
+`(−4.4704 − v·m[2]) · m[2]`. `m[2]` is `−nose`, so both signs flip and the effect is "raise `v·nose`
+to 4.4704 by adding along the nose". Three properties follow from the arithmetic and are easy to get
+wrong: it is **one-sided** (it never slows anything), it **adds along one axis** rather than
+rescaling, so the perpendicular components survive untouched, and it is **not a floor on speed** —
+it sits before the velocity is stored to `obj+0x924` and `|v|` recomputed into `obj+0x934`, so the
+speed that comes out is the length of the floored vector. A plane descending at 20 m/s with its nose
+on the horizon has four times the floor in SPEED and none of it along the nose, and the original
+pushes it forward.
+
 **C24 landing note — the exponential form, implemented, and where it sits.** `FlightModel.Step`
 now matches steps 2–3 exactly: `BodyRates += cmd · dt` (the stick, the bank coupling and the
 weathervane, all three already summed into `cmd` before this line — C21/C22/C23), **then**
@@ -177,21 +197,60 @@ q     = 0.5 · ρ · V_ft/s²          (dynamic pressure, lb/ft²)
 Mach  = V_m/s / (a_ft/s · 0.3048)
 ```
 
-**The dense band is the operative one for the player, and that is now proven from the bytes, not
-just the arithmetic.** The player force path **zeroes the altitude before computing forces**: at
-`0x491250`–`0x491284` the caller saves `[obj+0x208]`, stores `0`, calls the force accumulator and
-restores it. With the band threshold statically `0.0` and the comparison `alt ≤ threshold →
-dense` (`0x41aca4`–`0x41acc4`), an altitude pinned to 0 selects the dense band **always** — the
-threshold's unwritten value is irrelevant to player flight because the altitude never reaches the
-comparison. The stall arithmetic below independently agrees (the dense band produces a correct
-~76 mph stall from the code's own fallback aircraft, the thin band a nonsensical 309 mph).
+**The dense band is the operative one, for every aircraft, and it rests on the arithmetic rather
+than on the bytes.** The comparison is `alt_ft ≤ threshold → dense` (`0x41aca4`–`0x41acc4`) against
+the threshold at `0x0071bb3c`, whose shipped value is `0.0`, so a literal byte reading hands the
+thin band to anything above sea level. The arithmetic rejects that reading and always has: the
+dense band produces a correct ~76 mph stall from the code's own fallback aircraft where the thin
+band gives a nonsensical 309 mph, and the level-equilibrium solve reproduces nine of eleven
+airframes' authored `fd_speed` under the dense band while the thin band misses by ~4× (see "Drag"
+and the thrust curve's note at `0x71bb3c`). Do not "fix" the band on the strength of the unwritten
+threshold.
 
-⚠ **The thin band is reachable on the OTHER call path.** The force accumulator's second call site
-(`0x48c883`, inside the AI-side flight function that also reads `fd_speed·throttle` as the AI
-target speed) does **not** zero `[obj+0x208]` first — so with the threshold read literally as 0.0,
-AI aerodynamics above sea level run on the thin band (ρ 16.7× lower, i.e. near-zero aero forces on
-top of AI's nose-aligned wind and 10 mph speed floor). Static reading, not runtime-verified;
-recorded for M4's AI flight work, and no longer an open question for the player model.
+**A1 (2026-08-15): there is no player-versus-AI density divergence, and the earlier claim that the
+player path pins the dense band was a debug-copy citation.** This paragraph replaces a ⚠ that read
+"AI aerodynamics above sea level run on the thin band".
+
+- The save / store-`0` / restore of `[obj+0x208]` at `0x491250`–`0x491284` is inside
+  `FUN_00490f70`, which is the **debug copy** of the force function (see "There are two
+  integrators"). Its only caller is `FUN_00491820` (`0x49184c`), whose only callers are
+  `FUN_00492040`, `FUN_00491c60` and `FUN_00491d90`; the latter two are called only by
+  `FUN_00492040`, and `FUN_00492040` returns immediately unless `DAT_0071c78a` is set. That is the
+  Dynamics-tuner display flag, written only by the two dialog handlers `FUN_00443750` and
+  `FUN_00445090`, and `0` in the shipped image. The zeroing is the measurement harness pinning
+  itself to sea level for its report. **It never runs during flight, for the player or anyone
+  else.**
+- The live force path is shared: `FUN_004897c0` → `FUN_00489ea0` → `FUN_0048e580` →
+  `FUN_0048c470` → `FUN_0048fc40` (`0x48c883`) → `FUN_0041aca0` (`0x48fc70`), and
+  `FUN_0048fc40` passes `[obj+0x208] · 3.28084` (`0x48fc51`) with no zeroing anywhere in
+  `FUN_0048c470` or `FUN_0048e580` (a program-wide instruction sweep for `+0x208` accesses finds
+  none in either function). The player reaches this path exactly as an AI aircraft does
+  (`FUN_004897c0` dispatches the player object through `FUN_00489ea0` like every other vehicle),
+  and the class dispatch is on the vehicle class `obj+0x67c`, never on the player pointer. So
+  whatever band the atmosphere selects, the player and the AI select the same one.
+- `[obj+0x208]` is world altitude in metres, positive up: gravity is subtracted from world
+  component 1 (`FUN_0048fc40`), the respawn writes `900.0` there or the terrain height when that is
+  higher (`FUN_004969b0`, `0x496b75`), and `FUN_004704b0` pushes the object to terrain + 1 m when it
+  is below the terrain.
+
+**The write-xref sweep on the band threshold `DAT_0071bb3c`, stated in full so the search is
+visible.** Cross-references to `0x0071bb3c`: **one**, the read at `0x41aca4` (`FCOMP`). Writes:
+**none, the empty case.** A byte search for the little-endian address `3c bb 71 00` across the
+whole image returns exactly one hit, `0x41aca6`, the displacement inside that same instruction, so
+no pointer table and no parser store can name it, and the search demonstrably
+covers `.data` (the same search for `dynamics` finds the parser token at `0x627f88`). Its
+neighbours are ordinary separate globals reached by absolute address, not a struct some base
+pointer could walk into: `0x71bb40` is written directly at `0x47f3e2`, and `0x71bb44`–`0x71bb60`
+are read by `FUN_0047f1f0` with no writer at all. `0x0071bb3c` is therefore `0.0f` for the whole life of the process, and this question
+cannot be reopened by a further static pass, only by reading the live process.
+
+⚠ **The literal reading and the arithmetic still disagree, and that conflict is now a
+shared-path question, not an AI one.** Taken at face value the live path gives every airborne
+aircraft the thin band, which no airframe could fly (the authored `ref_area`/`veh_weight` pairs sit
+at ~10 lb/ft² wing loading, tuned for the dense band; under the thin band the aerodynamic ceiling
+`(0.75 − 0.15·M)·q·RefArea` cannot deliver 1 G at any speed those airframes reach). The remake runs
+the dense band for both, which is what the arithmetic supports; what would settle the residue is a
+live read of `0x0071bb3c` and of `[obj+0x208]` in a running process, not another static sweep.
 
 ## Lift — the wings deliver the demanded G
 
@@ -216,6 +275,18 @@ or incidence at all.
 
 ⚠ **This blend is player-only.** AI aircraft skip it and *always* use the nose-aligned wind —
 AI effectively flies permanently at zero incidence.
+
+**C22 (2026-08-15) located the LIVE guard and ported it.** In `FUN_0048c470`, `cmp esi, ecx` at
+`0x48c520` (the player object loaded into `ecx` at `0x48c502`) jumps to `0x48c6e9` for anything that
+is not the player, and `0x48c6e9`–`0x48c70a` builds `−speed · m[2]` — `m[2]` being `−nose`, that is
+`speed · nose` — with no reference to the window constants `_DAT_0071c430`/`_DAT_0071c434` the
+player branch reads. So it really is a skip of the whole block, not a saturated blend.
+⚠ **The sign of the resulting difference is not fixed, and "the AI pulls harder" is wrong.** The
+demand is `lift_accel_rate · (relativeWind − velocity)` **plus weight**, so at a climbing flight path
+the fully-nose-aligned swing points down and partially cancels the weight term: measured on the
+Bloodhawk at α = 8° with the path above the nose, the AI's demanded load factor is **0.26 G against
+the player's 2.04 G**. Past `liftAOAs[1]` the two agree exactly, because there the player is
+nose-aligned as well.
 
 ### Step 2 — the demanded acceleration
 
@@ -485,24 +556,76 @@ the same nine and computes the same curves.) Fallback values shown as authored (
   The rudder is at full authority only in a 22.5–45 mph window and sits at **10 %** for all of
   normal flight. It is a ground-handling and low-speed control, not a flight control.
 
-- **Reverse-authority factor** (decoded 2026-08-14, UNIMPLEMENTED and unowned). `FUN_0048bdd0` has a
-  fifth output the debug copy lacks: above `yaw_max` (`0x0071c414`, authored **50 mph**) it returns
-  `max(yawAuthority, 0.2)`, and **1.0** at or below it. `FUN_0048c470` uses it to soften control
-  forces that oppose the current velocity vector. Because `yaw_max` is the speed at which the yaw
-  curve peaks, this engages across the whole of normal flight: it tracks the declining yaw curve
-  from 1.0 at 50 mph down to the **0.2** floor, which the curve reaches at ≈345 mph. At the
-  Bloodhawk's 302 mph cruise it is ≈0.40. Nothing in `FlightModel` carries it.
-  ⚠ Which axes it reaches, and what "opposing the velocity vector" is tested against, were not
-  traced. Do not implement it from this paragraph without reading `FUN_0048c470`'s use of the fifth
-  output.
+- **Reverse-authority factor** (decoded 2026-08-14; its consumer traced 2026-08-15, C24).
+  `FUN_0048bdd0` has a fifth output the debug copy lacks: above `yaw_max` (`0x0071c414`, authored
+  **50 mph**) it returns `max(yawAuthority, 0.2)`, and **1.0** at or below it
+  (`0x48bf16`–`0x48bf58`; the 0.2 is the immediate at `0x6034fc`). Because `yaw_max` is the speed at
+  which the yaw curve peaks, it engages across the whole of normal flight: it tracks the declining
+  yaw curve from 1.0 at 50 mph down to the **0.2** floor, which the curve reaches at ≈345 mph. At
+  the Bloodhawk's 302 mph cruise it is ≈0.40.
+  ⚠ **It is not a force term, and the "softens control forces that oppose the current velocity
+  vector" this entry used to carry was a misattribution.** `FUN_0048c470` takes it as an
+  out-parameter, writes it once and never reads it again; its own opposing-command softening is a
+  DIFFERENT, local quantity (see "Torques and the limiters" below). The factor is passed out to
+  `FUN_0048c470`'s only caller, `FUN_0048e580`, whose single use of it is at
+  `0x48ec0b`–`0x48ec1d`: `rudderAngle = factor · yawInput · −0.61086524` rad (**−35°**, the
+  immediate at `0x608120`), exponentially smoothed toward that target at 2/s by `FUN_00460490` into
+  the angle slots `obj+0x634`/`+0x638`, which `FUN_004b2fe0` applies as a node rotation to the two
+  rudder node lists at `obj+0xa04`/`+0xa14`. **It scales the VISIBLE rudder deflection, on the
+  player's aircraft only, and touches no torque.** Ported at that site (`ControlSurfaceAnimator`),
+  not in the force path.
 
-### The low-speed ramp is decoded and UNIMPLEMENTED (`BL-330`)
+### The original's control-surface animation, decoded in passing (C24)
 
-The base ramp `f` is the one part of `FUN_0048bdd0` the remake does not carry: `FlightModel.Step`
-applies the authored yaw curve and **no speed term at all** to pitch or roll, so both hold full
-authority down to zero airspeed. The original fades them to **0 at `turn_fade_in`** (10 mph),
-reaching full only at `turn_fade_out` (fallback 40, **authored 50**). Traced, corroborated from the
-controls, and open as `BL-330`.
+The same block in `FUN_0048e580` (`0x48eaf0`–`0x48ec92`, inside a `piVar3 == DAT_0071c298`
+player-only guard) drives **six** angle slots off three stick channels — `obj+0x100` (`a`),
+`obj+0x108` (`b`) and `obj+0x10c` (yaw, the one the reverse-authority factor scales). Each slot is
+smoothed exponentially toward its target at 2/s by `FUN_00460490`, and `FUN_004b2f00` /
+`FUN_004b2f70` / `FUN_004b2fe0` apply the six as node rotations over six node lists:
+
+| Slot | Node list | Target angle | Clamp |
+|---|---|---|---|
+| `+0x63c` / `+0x640` | `+0x9c4` / `+0x9d4` | `−0.5·a` / `+0.5·a` | ±0.5 rad (28.6°) |
+| `+0x62c` / `+0x630` | `+0x9e4` / `+0x9f4` | `−0.6·b − 0.18·a` / `−0.6·b + 0.18·a` | ±0.6 rad (34.4°) |
+| `+0x634` / `+0x638` | `+0xa04` / `+0xa14` | `−0.61086524 · yaw · reverseAuthority` | none (−35° at full) |
+
+Two things fall out of this that are worth having even though the surfaces themselves are cosmetic.
+The second pair MIXES two channels — a common-mode `b` term with a differential `a` term — so those
+surfaces are not driven by one axis each. And the whole block sits behind the player guard, so **the
+original's AI aircraft fly with frozen control surfaces**; ours deflect on every aircraft, a
+deliberate divergence rather than an unported guard.
+⚠ Which physical surface each node list holds is NOT decoded — only `FUN_004d1a30`'s rotation axis
+per list is visible here, and the `a`/`b` channels were not traced back to the pitch and roll
+inputs. Do not map this table onto aileron/elevator names without reading the list population.
+NOT ported beyond the reverse-authority scale: our `ControlSurfaceAnimator` classifies four surface
+kinds rather than six node lists, and its ±20° angles were validated by eye (`backlog.md`
+`BL-393`).
+
+### The low-speed ramp — implemented 2026-08-15 (C24, closing `BL-330`)
+
+The base ramp `f` was the one part of `FUN_0048bdd0` the remake did not carry: `FlightModel.Step`
+applied the authored yaw curve and **no speed term at all** to pitch or roll, so both held full
+authority down to zero airspeed. It is now `FlightModel.RollPitchAuthorityAt`, on the authored
+`turn_fade_in` 10 / `turn_fade_out` 50 mph (the executable's fallback `turn_fade_out` is 40), a
+scalar on the pitch and roll components of the stick command.
+
+Three properties of the port, all read off `FUN_0048bdd0` and `FUN_0048c470` rather than assumed:
+
+- **It scales the STICK COMMAND only.** `FUN_0048c470` multiplies the three authority scalars inside
+  its three per-axis input blocks (`obj+0x114` roll, `obj+0x11c` pitch, `obj+0x120` yaw) and nowhere
+  else, so the bank coupling, the weathervane and the ground blow enter the same accumulator at full
+  strength. A slow aeroplane loses its controls and keeps the coupling.
+- **The boundary is exclusive at the bottom.** `0x48bdd4` tests `speed > turn_fade_in`, so authority
+  is exactly 0 *at* 10 mph, not merely small.
+- **Pitch and roll take the SAME scalar.** `0x48be20` writes it to the pitch output and `0x48be6c`
+  to the roll output; the pitch output is then multiplied by `high_speed_pitch_fade`
+  (`0x48be22`–`0x48be68`), which this install authors at [1000, 1001] mph and is unreachable.
+
+Where 50 mph falls decides how visible this is, and it differs by airframe (stall speeds from
+`PLAN-flight-model-rewrite` B15): nine of the eleven stall at 52–57 mph, i.e. *above* the ramp's
+top, so for them the fade bites only once already stalling; the Balmoral (45.5) reaches its stall at
+≈89 % authority, and the autogyro (18.5) flies a long way inside the ramp and stalls at roughly
+**21 %** of roll and pitch authority.
 
 ⚠ **"Roll never fades" above means never with HIGH speed.** Read as "roll authority is
 speed-independent" it becomes the misreading that had `turn_fade_in`/`turn_fade_out` filed as a
@@ -532,6 +655,18 @@ the existing angular momentum about that axis):
 
 The smaller of the two is used. Note that because the limiter gates *opposing* input, it damps
 recovery from a departure rather than entry into one.
+
+**CORRECTION (C24, from `FUN_0048c470` directly).** The sign test is **not** against the existing
+angular momentum. `FUN_0048c470` builds `unit(nose × v̂)` — the same closing axis the weathervane
+uses — and compares the sign of the commanded torque against the sign of that axis' component on the
+axis being commanded (`0x48ca7a` onward, the pitch and yaw blocks only; roll has no such test). So
+what is softened is a command that swings the nose FURTHER off the flight path. The combined scalar
+is also computed once and shared by both axes, and the AOA half of it is literally
+`(cos α − maxAOACos) / (1 − maxAOACos)` on that same α, which is why it reads as a limiter and an
+alignment window at once. None of this changes the unreachability finding — both halves are authored
+out of reach on all eleven airframes (`ControlLimiterTests`) — and nothing is implemented.
+⚠ This is also the quantity the reverse-authority factor was wrongly identified with; see that
+bullet above.
 
 `return_rate` is a separate centring torque, described below.
 
@@ -617,6 +752,13 @@ a magnitude question where it used to be a mechanism question.
 cmp esi, [0x71c298]        ; 0x4916fe — the PLAYER object. AI skips the whole block.
 fld [ebp-0x10]; fcomp 0    ; 0x49170a — speed ([obj+0x934], the true |v|) must be > 0
 ```
+
+**C22 (2026-08-15): the LIVE copy of this guard is `cmp esi, [0x71c298]` at `0x48cd3e` in
+`FUN_0048c470`**, jumping past the whole block to `0x48ce45`. It is guarded three times there rather
+than twice — player, `[obj+0x384]` (the crashed flag) clear at `0x48cd4a`, and speed > 0 — and the
+block is `0x48cd3e`–`0x48ce45`, reading `return_rate` from `[obj+0x654]`. The addresses in the
+listing above are the debug copy's and remain re-checkable there; this is the one the game runs, and
+it is the guard `FlightModel.UsesAiForcePath` now stands for.
 
 Then, in full:
 
@@ -743,16 +885,17 @@ runs into a real boundary at 0.10, where the knife-edge α reaches 5.36° and cr
 `liftAOAs[0] = 5°`.
 
 ⚠ **CORRECTION (2026-08-09): the authored candidates are exhausted, and this document said
-otherwise for four items running.** C22, C23, D31 and D33 each parked this gap on "`BL-095`'s
-unconsumed `turn_fade_in`/`turn_fade_out`/`highGs` are the only authored fields shaped like it".
+otherwise for four items running.** C22, C23, D31 and D33 each parked this gap on "the unconsumed
+`turn_fade_in`/`turn_fade_out`/`highGs` are the only authored fields shaped like it" (then
+`backlog.md`'s `BL-095`, retired 2026-08-15; the gap itself is now `BL-383`).
 Both halves are now false. `highGs` is measured inert on every airframe (D33). And `turn_fade_*` is
 **already decoded in this very document** — "Control authority vs speed" above: `FUN_00490e10`'s
 base ramp is a function of **airspeed alone**, 0 at `turn_fade_in` (10) rising to 1 at
 `turn_fade_out` (50 authored), **held at 1 above that**, scaling roll and pitch authority with no
 bank or load-factor term anywhere in it. The banked turn settles at 222–260 mph and the knife-edge
 takes are at 143 and 300, so the ramp is saturated across the whole regime where the 1.6× appears
-and cannot be its cause. The ramp is a real unimplemented low-speed behaviour (`BL-330`) — it is
-simply not this. **What remains is not a decode question.** Recorded rather than quietly
+and cannot be its cause. The ramp is a real low-speed behaviour (`BL-330`, implemented 2026-08-15 by
+C24) — it is simply not this, and landing it moved no row of the envelope suite. **What remains is not a decode question.** Recorded rather than quietly
 re-pointed: a gap that has been attributed to the same three fields four times is exactly the kind
 of inherited claim that stops being re-checked.
 
@@ -789,8 +932,8 @@ observed video.
    "Bank coupling — resolved" above, including the inverted case.
 3. **Weathervane centring.** `return_rate` applies a torque along `cross(nose, v̂)` — HALF the
    misalignment angle — pulling the nose onto the velocity vector. **Player aircraft only** — AI
-   does not get it. Fully recovered under "Weathervane centring — resolved" above, where the
-   `−nose` this line used to read is corrected.
+   does not get it (live guard `0x48cd3e`, ported in `C22`). Fully recovered under "Weathervane
+   centring — resolved" above, where the `−nose` this line used to read is corrected.
 
 There is also a **boost state**: it **replaces** the throttle multiplier with a flat **1.8** (not a
 multiply — `mov [ebp+8], 1.8f` on the boost branch at `0x48fcb6`, where the normal branch loads the
@@ -926,9 +1069,10 @@ atm->a   = (k + 1.0) · 558.0        ; 1109.54 ft/s dense, 968.02 thin
 atm->rho = r · 0.002377             ; 2.2688e-3 dense, 1.35603e-4 thin
 ```
 
-⚠ **This does not reopen the band question.** `0x71bb3c` is BSS with a single read reference (the
-`fcomp` itself) and no writer anywhere in `.text`, exactly as recorded under the G/AOA limiters —
-so a byte-level reading says "threshold 0, thin band always". The **dense band is established by
+⚠ **This does not reopen the band question.** `0x71bb3c` sits in `.data` with a single read
+reference (the `fcomp` itself) and no writer anywhere in the image — swept exhaustively under A1,
+see the Atmosphere section — so a byte-level reading says "threshold 0, thin band always". The
+**dense band is established by
 arithmetic, not by that flag** (the thin band puts the fallback airframe's stall at 309 mph), and
 it is corroborated here: with the dense band's `k`, the decoded thrust curve and the decoded drag
 polar put the Bloodhawk's full-throttle level equilibrium at **300.5 mph** against its authored
@@ -1001,8 +1145,7 @@ into 0x18-byte records, searched by id at `0x449140` and by name at `0x449160` �
 `fstp [def+0x128]` at `0x47ad01`. Record `+0x14` is the third JSON column and defaults to `1.0`
 (`0x4490a4`), i.e. **`power`**. The hangar's engine-swap path does the same thing directly to the
 live object: `fld [rec+0x14]; fstp [player+0x66c]` at `0x43e97b`. Nothing else ever writes the
-slot except an AI spread — `FUN_00477280` jitters both `fd_speed` and `ThrustFactor` by a small
-random `1 ± ε` for non-player aircraft.
+slot except the per-spawn AI spread below, which multiplies it by a random `1 ± 5 %`.
 
 **4 — no thrust key exists in the data.** The vehicle parser's token table
 (`0x627f94`–`0x628020`) contains eleven `dynamics` tokens: `pitch_torque`, `roll_torque`,
@@ -1057,8 +1200,9 @@ across most of the set and the Balmoral misses by **+60 %**. Either the unrecove
 strong curvature, or `fd_speed` is not the equilibrium. The second reading has support: the tuner
 calls the field **`FakeDynSpeed`** and *measures* `TopSpeed` separately (if `fd_speed` were the top
 speed there would be nothing to measure), and at runtime `fd_speed` is used as a **normalising
-reference speed** — `speed/fd_speed` for gauge and effect fractions (`0x4b1e54`), an AI target
-speed `fd_speed · throttle` (`0x48c593`), and a speed clamp (`0x46aaf4`) — never as a solved
+reference speed** — `speed/fd_speed` for gauge and effect fractions (`0x4b1e54`), a far-field
+cruise speed `fd_speed · throttle` (`0x48c593`, A2 below; this used to read "an AI target speed",
+which it is not), and a speed clamp (`0x46aaf4`) — never as a solved
 equilibrium. **Do not treat `fd_speed` as the original's top speed in B12/B13 without settling
 this.**
 
@@ -1068,12 +1212,110 @@ at `[obj+0x134] -= dt · throttle · 5`, and `FUN_00491820` snaps them together.
 enters thrust as a **plain multiply** at `0x48fce7`. That is the linear-throttle claim, confirmed
 at source in this item rather than inferred.
 
+### A2 (2026-08-15): throttle is a lever for the AI too, and `fd_speed · throttle` belongs to a far-field model
+
+**The throttle interface has no AI branch.** `FUN_0048fc40` reads the current throttle
+`[obj+0x128]` and multiplies the Mach thrust curve by it (`0x48fcc6` loads it, `0x48fce7`
+multiplies), with no player compare anywhere in the chain; boost (`[obj+0x947]`) replaces the lever
+with a flat `1.8` and scales drag by `0.8` (`0x48fcb6`–`0x48fcbd`). The commanded/current pair
+`[obj+0x124]`/`[obj+0x128]` and the 0.5/s slew below are likewise unbranched, in the **live**
+integrator `FUN_0048e580` (`0x48e645`–`0x48e6bd`), so an AI aircraft's throttle moves under exactly
+the same rate limit as the player's. The player's commanded value is written by the input handler
+`FUN_00487460`; AI commanded values are written at spawn/placement (`FUN_0047f1f0` writes `0.4` at
+`0x47f28b` and `1.0` at `0x47f3fb`). **`AiPilot.Throttle` as a 0..1 lever is the right shape; the
+original has no AI speed-setpoint interface.**
+
+**What `fd_speed · throttle` at `0x48c593` actually is: the far-field aircraft model.**
+`FUN_0048c470` opens with a guard that skips the whole aerodynamic path when the aircraft is flagged
+crashed (`[obj+0x384]`), **or** when it is not the player and its **horizontal** distance from the
+player exceeds 1000 m (`FUN_00538920` returns `Δx² + Δz²`, compared against `1e6`). In that
+branch the aircraft's velocity is driven toward the nose axis at `fd_speed · throttle`
+(`0x48c593`–`0x48c5a0`), plus a flat **5 m/s** for anything that is not the player
+(`0x48c5ae`, `[0x6036bc] = 5.0`), and the function's linear-acceleration output is set to
+`target − current` velocity rather than to a force. So distant traffic cruises along its nose at a
+speed the data sets, with no lift, drag, thrust, ground blow or weathervane computed at all.
+
+This is a level-of-detail model, not the AI's control interface: it is keyed on distance from the
+player and applies to the player's own aircraft only when it is crashed. Nothing in the remake
+implements it, and nothing needs to: it is invisible inside 1 km, which is where every AI aircraft
+we simulate and score sits. **Decoded, unimplemented, and deliberately unowned.**
+
 **The throttle slews at 0.5/s, with no idle floor** (`0x48e652`/`0x48e698`: current ±= `0.5 · dt`
 toward commanded, snapping exactly onto it when the step crosses). Cutting from full to zero takes
 2 s of tapering thrust; slamming open takes the same. The remake applies the lever instantly —
 **decoded, unimplemented**, and the one mechanism that could contaminate the first seconds of any
 throttle-step measurement taken from footage (it is far too fast to explain the CAP-05 deficit,
 whose implied residual lever would have to persist for ~28 s).
+
+## The per-spawn jitter — eleven slots, non-player aircraft only (IMPLEMENTED, C26)
+
+At the tail of the spawn/reset function `FUN_00476250` (`0x477340`–`0x4773f0`) sits a block that
+gives every non-player aircraft its own slightly-different airframe. It runs only when all three
+of these hold:
+
+- the object's own name (`obj+0xc`) is not `"player"` — a 7-byte compare at `0x477326`;
+- `FUN_00440ad0()` returns 0. That function is `return *DAT_0064f750`, the first dword of the
+  **`"Network"` subsystem object** looked up at `0x44023d` and stored at `0x440247`
+  (`docs/org/aim-assist.md` names the same flag) — i.e. **not a network game**;
+- the vehicle class `obj+0x67c` is **0 or 1**. That field is the def's `mode` key, resolved by the
+  parser's own string table at `0x47afc0`–`0x47b081` (`0x62808c` onward): **`jet` = 0, `heli` = 1,
+  `tank` = 2, `ship` = 3, `wingman` = 4, `plane` = 5**, and it is copied to the runtime object at
+  `0x475abf` from def `+0xa4`. So the jitter reaches aeroplanes and autogyros and skips ships,
+  ground vehicles — and **the shipped `w*` wingman family**, which authors `mode wingman` (class 4)
+  and so flies unjittered even though the dispatch flies it down the same aeroplane arm as class 0.
+  Everything else in the shipped file inherits `basic_airplane`'s `jet`; only `basic_airplane`,
+  `patrolboat`, `t_truck` and the eleven `w*`/`wingman`/`bswingman` defs author `mode` at all.
+
+Then, for each of **eleven** runtime slots in this order, it draws `rand()` and multiplies the slot
+in place by `((2r − 1) · 0.05 + 1)` where `r = rand() · 3.051851e-05` (`1/32768`): an independent
+uniform **1 ± 5 %** per slot, eleven separate draws.
+
+| # | Runtime | Def | What it is |
+|---|---|---|---|
+| 1 | `+0x2cc` → mirrored to `+0x2d0` | — | whole-vehicle health max (and its "current" mirror) |
+| 2 | `+0x2c4` → mirrored to `+0x2c8` | — | whole-vehicle armour max (and its "current" mirror) |
+| 3 | `+0x668` | `+0x124` | `fd_speed` |
+| 4 | `+0x66c` | `+0x128` | `ThrustFactor` (the stock engine's `power`) |
+| 5 | `+0x670` | `+0x12c` | `drag_factor` |
+| 6 | `+0x648` | `+0x104` | `pitch_torque` |
+| 7 | `+0x644` | `+0x100` | `roll_torque` |
+| 8 | `+0x680` | `+0xe8` | `rates[0]` |
+| 9 | `+0x684` | `+0xec` | `rates[1]` |
+| 10 | `+0x688` | `+0xf8` | `turns[0]` |
+| 11 | `+0x68c` | `+0xfc` | `turns[1]` |
+
+⚠ **`veh_weight` (`+0x674`) and `ref_area` (`+0x678`) are NOT in the list**, which is why nothing
+computed once from that pair (stall speed) can go stale behind the jitter.
+
+⚠ **The per-part damage pools are not touched either** — only the whole-vehicle pair is, and it is
+the pair the kill test reads (`docs/org/vehicleDamage.md`).
+
+**Slots 8–11 are inert on an aeroplane.** `rates` and `turns` are the surface-driving integrator's
+acceleration and steering rates with their clamps: `FUN_0048f7d0` accelerates toward the throttle
+input at `rates[0]` and clamps to `+0x178` (seeded from `rates[1]`), `FUN_0048f720` does the same
+for steering at `turns[0]` against `+0x17c`. Both are reached only from the class-2 (`FUN_0048a880`)
+and class-3/5 (`FUN_0048b480`) arms of the class dispatch `FUN_00489ea0`, plus the class-1 autogyro
+arm `FUN_0048ffe0` which reads `+0x680`/`+0x684`/`+0x688` directly. The aeroplane arm
+`FUN_0048e580` only copies `+0x684` into `+0x178` at `0x48e8bc` and never reads it back. The keys
+are nonetheless authored on `basic_airplane` (`rates` 10/42, `turns` 4.6/6.5) and so every aircraft
+carries them; the shipped data authors them on exactly three defs — `basic_airplane`, `patrolboat`
+and `t_truck`.
+
+**In the remake:** `PlaneStats.WithAiSpawnJitter` (C26), applied at `AiAircraftSpawner.Spawn` to a
+COPY of the session's shared per-airframe stats. The name test becomes `IsHumanPiloted` (C21's
+recorded divergence, since this engine flies up to four humans); the network gate holds trivially
+(no network play) and the class gate holds by construction (every airframe it can fly is class 0).
+Seven of the eleven have a field to move; slots 8–11 have no consumer here, exactly as they have
+none on the original's aeroplane arm. The draw is keyed by the aircraft's spawn ordinal off
+`Rng.Spawn`, not taken from a shared stream, so a `--det` replay reproduces it and it cannot shift
+any other subsystem's sequence.
+
+⚠ **The class-4 wingman exemption has no analogue here and is a recorded divergence.** This engine
+flies every aircraft, hostile or wingman, off a *player* def (`PlaneStats.Load` requires
+`player_airplane` in the `kind_of` chain), and every one of those resolves `mode jet` — so the class
+gate holds trivially and an Instant Action wingman is jittered where the original's own `w*`
+wingman would not be. Selecting on team instead would be inventing a mapping the data does not
+carry.
 
 ## The measurement harness — a validation route
 
@@ -1107,9 +1349,10 @@ under "There are two integrators" above, and it has collision and ground blow re
 ## ⚠ Authored values vs the executable's fallbacks
 
 **Everything above quotes the fallbacks compiled into `crimson.exe`. This install authors different
-numbers, and in four places the difference changes the conclusion.** The authored set is recorded in
-`backlog.md` `BL-095`; read it as the operative one, and treat the fallbacks as evidence of intent
-only.
+numbers, and in four places the difference changes the conclusion.** The authored set is the table
+below, read back out of `extracted/zrdr/player.zrd.json` and pinned by
+`CSVM.Tests/PlaneStatsFlightGlobalsTests`; read it as the operative one, and treat the fallbacks as
+evidence of intent only.
 
 | Key | Fallback | **Authored** | Why it matters |
 |---|---|---|---|
@@ -1172,9 +1415,9 @@ aerodynamically-settled terminal dive (itself well below it on every airframe me
 The Bloodhawk's own hard ceiling (528.5 mph) is the highest of the eleven and sits at little over
 **half** of `high_speed_pitch_fade[0]` (1000 mph) — every other airframe's ceiling is lower still.
 **Nothing was implemented.** Untestable code on a threshold no capture of the original could ever
-exercise is exactly the invented content this project's ground rules forbid; `backlog.md`'s `BL-095`
-and this document now both carry the closed finding so a future session reading the decode does not
-mistake the fade for a missing feature.
+exercise is exactly the invented content this project's ground rules forbid; this document and
+`CSVM.Tests/ControlLimiterTests` (which fails if a data edit brings one into reach) carry the closed
+finding, so a future session reading the decode does not mistake the fade for a missing feature.
 
 **Corrected — both the G and AOA limiters are inert.** The lift clamp is a hard ±5/9 G, while
 `highGs` begins at 9 G and `lowGs` at −6 G. Neither limiter can engage before lift is already
@@ -1344,8 +1587,14 @@ accum += V · (ai_groundblow · groundblow_mag)           = A · S · 5.0 as aut
 
 It is independent of the AI's own command (a fixed push, where the player's is proportional to what
 the pilot asked for), **linear** in proximity rather than quadratic, and **not multiplied by `dt`**
-anywhere in the chain, so it is frame-rate dependent. Both the factor and `S` are cut to **0.15**
-while the clock is inside `obj+0xB4` (below).
+anywhere in the chain, so it is frame-rate dependent. Both the factor and `S` are cut by a further
+**×0.15** (5.0 → 0.75, not down TO 0.15 — confirmed by decompile, C23) while the clock is inside
+`obj+0xB4` (below), a 2.5 s post-carrier-drop settling window (`FUN_00452450`'s spawn path only).
+⚠ **This window IS reachable in the remake.** A zeppelin's fighter-drop launch
+(`AiGeneratorRuntime` → `AiAircraftSpawner.Spawn`, the "Zeppelins" section below) is this engine's
+carrier drop, and a freshly-dropped fighter flies the same `UsesAiForcePath` plant this law reads.
+The port tracks no per-aircraft spawn timestamp, so the ×0.15 cut is an unmodelled gap
+(`backlog.md` `BL-382`), not an unreachable one: a just-dropped fighter gets the full un-cut 5.0.
 
 **Gates on the whole effect.** `obj[0xd6] != 4`; for non-player objects the clock must be past
 `obj+0xAC`; and `FUN_0048c470` skips the call entirely when the player is flagged crashed
@@ -1362,6 +1611,12 @@ while the clock is inside `obj+0xB4` (below).
 | 3 | avoid crash |
 | **4** | **stunned** |
 | 5 | navigating danger zone |
+
+**What reads this enum, and what writes the stick, is decoded on its own page.** See
+[aiControlLaw.md](aiControlLaw.md) (`D31`, 2026-08-15): the AI brain `FUN_0041c270` runs from the
+world tick just before this vehicle's integrator, dispatches on the order at `obj+0x2f0` and this
+mode, and reaches the stick through `FUN_0041b560`. `obj+0x948` is the target pointer rather than a
+flag, and `obj+0xBA` is the evade flag the damage handler sets.
 
 State 4 is set by `FUN_004200d0` ("Stunned for %f seconds based on stun recovery", `0x00620518`),
 which zeroes the control inputs and sets `obj+0xC0 = clock + duration`; the related tokens are
@@ -1417,20 +1672,38 @@ naming of zeppelins describes the outcome, not a mechanism.
 the AI path nothing is filtered and every hit the sweep returns repels, other aircraft in ordinary
 flight included.
 
-**Implemented 2026-08-15** (`BL-359`, closed; `git log --grep=BL-359`), player path only.
-`FlightController.ProbeGroundBlow` casts the ray and `FlightModel.GroundBlowTerm` applies the law,
-added to the command accumulator after the bank coupling and the weathervane and before
-`BodyRates += cmd * dt`, which is this function's own ordering. Two things the port does differently
-on purpose: the emitter filter is the probe's `CollisionLayers.World` mask rather than a registry
-lookup (only aircraft bodies carry the Aircraft layer, so terrain, scenery and the zeppelin repel
-and aeroplanes do not, which is the same set the filter above produces), and the second effect is
-folded into the model's existing nose-chase as `align + 2·S` — exact rather than approximate, since
-two exponential steers toward the same target compose. `CSVM.Tests`' `GroundBlowTests` pins the law,
-including the `S²` power and the body-frame conversion. **The AI law is not built.**
+**Implemented 2026-08-15** (`BL-359` player path; `C23` AI path; `git log --grep=BL-359`,
+`git log --grep=C23`). `FlightController.ProbeGroundBlow` casts the ray — the SAME cast and falloff
+for both paths — and `FlightModel.GroundBlowTerm` branches the response on `UsesAiForcePath`, added
+to the command accumulator after the bank coupling and the weathervane and before
+`BodyRates += cmd * dt`, which is this function's own ordering. Things the port does differently on
+purpose: the emitter filter is the probe's `CollisionLayers.World` mask rather than a registry lookup
+(only aircraft bodies carry the Aircraft layer, so terrain, scenery and the zeppelin repel and
+aeroplanes do not, which is the same set the filter above produces for both paths — this engine has
+no scripted-path vehicle carrying the original's vehicle-filter mark, so there is nothing for the
+AI's "unfiltered" sweep to disagree with), and the second effect is folded into the model's existing
+nose-chase as `align + 2·S` (player) or `align + 2·S` un-suppressed (AI) — exact rather than
+approximate, since two exponential steers toward the same target compose. `CSVM.Tests`'
+`GroundBlowTests` pins both laws, including the player's `S²` power against the AI's linear `S`, the
+AI's independence from command sign, and the body-frame conversion.
+⚠ **`ai_groundblow` alone is not the AI factor.** `FlightModel.GroundBlowTerm`'s response is
+`ai_groundblow · groundblow_mag` (5.0 authored), matching the correction above; the AI probe is
+additionally gated on `AiModeMachine.Mode != AiMode.Stunned` (`0x0048c317`'s own mode check,
+flightModel.md above), reproducing "a stunned AI flies into terrain". Two gates are NOT modelled,
+both recorded as gaps (`backlog.md` `BL-382`) rather than as moot: the 2.5 s post-carrier-drop ×0.15
+cut — reachable here (a zeppelin fighter-drop launch is this engine's carrier drop, see "Zeppelins"
+above), just not tracked, since nothing carries a per-aircraft spawn timestamp — and the per-object
+`obj+0xAC` collision-grace gate (non-player objects only), the same timer family, which C25 did not
+take on either: it ported the impulse and not the resolver around it.
 
 ## Collision response and `bounce_factor` (`FUN_0048d7f0`)
 
-Decoded 2026-08-14. `bounce_factor` lives in `player.json`'s `crash` block, is a **raw scalar**, and
+Decoded 2026-08-14, **impulse implemented 2026-08-15** (`PLAN-ai-flight` `C25`, retiring `BL-172`):
+`FlightModel.BounceNormalSpeed` is the law and `FlightController.SurviveHit` the site, gated on
+`IsHumanPiloted` and not-already-crashed. The sweep, the placement and the two timers below are
+NOT ported — this engine has its own collision sweep, and what C25 bound is the impulse alone.
+
+`bounce_factor` lives in `player.json`'s `crash` block, is a **raw scalar**, and
 lands in global `0x0071c35c` from the parser store at `0x00473c38`. Its default is pre-set at
 `0x00473bb5` *before* the block is looked up, so an absent `crash` block leaves the fallback
 standing. Fallback **0.8**, this install authors **0.6**.
@@ -1442,7 +1715,10 @@ rather than moving by `v·dt`. One resolution per aircraft per tick, no sub-step
 
 ⚠ **Only the player bounces.** The impulse branch is entered only when `obj == DAT_0071c298` and the
 player is not already crashed. AI aircraft get position correction and an impact cosine, and no
-impulse at all.
+impulse at all. Ported as `IsHumanPiloted && !crashed` (`C25`), the same widening of a single-global-
+player-pointer guard to every human-piloted aircraft that `C21` recorded for the force path; pinned
+by the `graze-bounce` suite, which flies a player rig and an AI rig down the same trajectory into the
+same floor and measures `e = 0.56` against `0.00`.
 
 With `r` the contact point minus `obj+0x204`, `ω` the body rates at `obj+0x16c`, and
 `I⁻¹ = (obj[0x197], obj[0x198], obj[0x199])`:
@@ -1465,6 +1741,16 @@ The `0.5` is the shared literal at `0x006032e0`, also hardcoded. The angular imp
 Effective normal restitution for a non-rotating contact is **`f_lin · bounce_factor`**, bounded by
 `[0, 0.6]` as authored.
 
+⚠ **The partition runs the opposite way round to the summary sentence this decode has been quoted
+with ("a short lever arm rebounds at up to 0.6 while a wingtip throws most of the impact into
+rotation"). Corrected 2026-08-15 while implementing it (`C25`).** `Δω = (r × J)/|r|²` has magnitude
+`|I⁻¹|·|J|·sinθ/|r|`, which **falls as 1/|r|**: the `/|r|²` is a point-mass moment of inertia, not a
+lever. So `A` shrinks as the arm lengthens and `f_lin = L/(L+A)` rises toward 1 — a wingtip rebounds
+HARDER than a contact near the centre, and nothing here converts a wingtip strike into spin. With
+`I⁻¹ ≈ 1.1` it reads `f_lin = 2.25/(2.25 + 1.1·sinθ/|r|)`: ≈0.91 at a 5 m arm, ≈0.67 at 1 m, exactly
+1 when `r ∥ n` (a contact directly under the centre of mass, where `r × J` vanishes). The formulas
+above are unchanged; only their reading was wrong.
+
 ⚠ **The impulse is not a rigid-body impulse, and that defect is the mechanism behind `CAP-14`'s
 split.** It is computed from the *contact point's* velocity, with the rotational term doubled, then
 applied in full to the *centre of mass* with no reaction term removing the rotational share. Taking
@@ -1479,12 +1765,17 @@ belly or nose contact carrying any nose-down pitch rate, the aircraft leaves the
 
 ⚠ **There is no surface dependence anywhere in the code.** No test on the normal's verticality, no
 per-surface-type table, no material lookup, no friction term. `CAP-14`'s measured split (0.75–0.86
-on flat ground against 0.06–0.18 on vertical faces, `BL-172`) is reproduced by the geometry alone: on
-flat ground `r` is long and roughly horizontal against a vertical `n`, so `n·(ω × r)` is large and
-negative while `f_lin` stays high; against a wall `r × J` is large, `f_ang` dominates, `f_lin → 0`,
-and the impact converts to spin instead of rebound. The direction of that split is confirmed; the
-flat-ground magnitude comes from the doubled rotational term, not from `bounce_factor`, which cannot
-produce it.
+on flat ground against 0.06–0.18 on vertical faces, `BL-172`) must therefore never be implemented as
+a per-surface coefficient.
+
+⚠ **The lever-arm partition does not produce that split either, and the claim that it does was
+withdrawn 2026-08-15 (`C25`) on the arithmetic above.** With `A ∝ 1/|r|`, `f_lin` is ≈0.9 in both
+orientations at any contact geometry an airframe actually presents, so the two rebound at nearly the
+same coefficient: the `graze-bounce` suite flies both and measures `e = 0.56` on flat ground against
+`e = 0.59` on a vertical face. What differs on a wall is the AXIS — the rebound is horizontal, so an
+altimeter reads nothing across the contact (measured `vy 0.00 → 0.00` there) — and that, not a
+coefficient, is what a vertical-face clip shows. The flat-ground magnitude above `bounce_factor`
+still comes from the doubled rotational term, which `bounce_factor` cannot produce.
 
 **Ruled out as sources of the excess, each traced:** multiple resolutions per frame (one per aircraft
 per tick, `FUN_004897c0`'s head); successive-frame stacking (once the contact velocity is outgoing
@@ -1604,8 +1895,8 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
    `lift_accel_rate` (fallback 1.2/s) — it should be read from `player.json`, not tuned.
 2. **`liftAOAs` is an airflow blend, not a load-factor ramp.** The remake reads `[5, 9]` as the
    edges of a G ramp; the original uses them as the window over which the relative wind is faked
-   toward the nose. Same numbers, different mechanism. This also **settles `BL-095` for these
-   keys**: the parser takes their cosine, so `liftAOAs` and `maxAOA` are confirmed **degrees**,
+   toward the nose. Same numbers, different mechanism. This also **settles the units question for
+   these keys**: the parser takes their cosine, so `liftAOAs` and `maxAOA` are confirmed **degrees**,
    while `highGs`/`lowGs` are stored raw and are plain **G**.
 3. **The two hardcoded bank constants (0.205, 0.165).** These are in no data file — they are
    developer-console variables — so no amount of data extraction would have surfaced them. Landed
@@ -1644,12 +1935,19 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
   assembly), the linear throttle multiply and its 0.5/s slew, the thrust `pow` operands
   (`MSVCRT!_CIpow`, base `1.33·atm->k`, exponent `1.41·M`), the drag polar's variable being
   **Mach** — the last read off the raw bytes rather than out of a decompiler, which is what
-  corrected it — the conversion-free weight chain ("The force scale — settled"), the player
-  path's altitude-zeroing that pins the dense band, and the weathervane's axis, its half-angle and
+  corrected it — the conversion-free weight chain ("The force scale — settled"), and the
+  weathervane's axis, its half-angle and
   its player-only gate ("Weathervane centring — resolved", which corrects a sign this document
   previously carried).
-- **Inferred, and marked ⚠ in place:** the thin band on the AI call path (static reading of an
-  unwritten threshold, not runtime-verified).
+- **Read directly from the executable, 2026-08-15 (A1/A2):** that the atmosphere call is on the
+  shared live path with no player/AI branch and no altitude zeroing, that the altitude-zeroing site
+  belongs to the debug copy behind a dialog flag, that the band threshold `0x71bb3c` has one read
+  reference and no writer in the whole image, that the throttle lever and its slew are unbranched,
+  and the far-field cruise model behind `fd_speed · throttle`.
+- **Recorded conflict, not an open decode question:** the band threshold reads `0.0`, which would
+  put every airborne aircraft on the thin band, against an authored data set and a stall/equilibrium
+  arithmetic that only work on the dense band. Shared by player and AI; settleable only in a live
+  process.
 - **Recorded conflict, not an open decode question:** the absolute force scale below cruise —
   `CAP-05`'s zero-thrust points read the polar ≈2–3.6× too strong (a constant-ΔC_D deficit), the
   weight chain is byte-verified conversion-free, and the footage's own accel row rejects any
@@ -1667,6 +1965,9 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
   per-object timers; the AI mode enum; the live-versus-debug integrator split. World units are
   metres, identified positively from `nom_gravity`'s 9.82 reference divisor rather than from the
   absence of a conversion.
+- **Read directly from the executable, 2026-08-15:** the per-spawn jitter's full eleven-slot list,
+  its three gates and the `mode`→`obj+0x67c` class table (`jet`/`heli`/`tank`/`ship`/`wingman`/
+  `plane` = 0/1/2/3/4/5), which also settles what was recorded below as an undetermined data token.
 - **Not determined:** which registry entities keep the `+0xcc` emitter flag set permanently, so the
-  GDD's naming of zeppelins as ground-blow emitters is neither confirmed nor refuted; the data-file
-  token naming each `obj+0x67c` vehicle class; which axes the reverse-authority factor reaches.
+  GDD's naming of zeppelins as ground-blow emitters is neither confirmed nor refuted; which axes the
+  reverse-authority factor reaches.

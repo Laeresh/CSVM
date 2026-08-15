@@ -286,7 +286,11 @@ repo's pinned editor: extract the inner `templates/` FILES of
 `%APPDATA%\Godot\export_templates\4.7.stable.mono\` (create the version dir; do not keep the
 `templates/` folder level).
 
-**Export by hand** (a fresh tree needs the build + one import pass first):
+**`ExportRelease.ps1` (repo root)** does the whole sequence: checks the export templates are
+installed at `%APPDATA%\Godot\export_templates\4.7.stable.mono\` (throwing a named error if not,
+rather than letting the export itself fail partway through), creates `.scratch\export\` if it's
+missing, builds, imports headless, then exports. Equivalent by hand (a fresh tree needs the
+build + one import pass first):
 
 ```powershell
 dotnet build CSVM/CSVM.sln

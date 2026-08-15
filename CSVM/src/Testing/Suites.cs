@@ -171,10 +171,13 @@ public static class Suites
             "wingman fan/escort-chain/accent-id table and the decision-8a flight-size clamp are " +
             "pure over their inputs, a real spawn census puts N wingmen on team 1 flying the " +
             "configured airframe with wingmen 2/4's PrimaryTargetName resolving to wingmen 1/3's " +
-            "own spawned name, the wave-member personality/accent draws are pure over theirs, " +
+            "own spawned name, ApplyActorVolumes puts the authored 10000 m on all three of a " +
+            "spawned actor's range gates over the airframe's own 2000/2000/1200, the wave-member " +
+            "personality/accent draws are pure over theirs, " +
             "and a real InstantActionWaves sequence over spawned aircraft advances from wave 1 " +
             "to wave 2 exactly on the last kill, activating wave 2's built-inert member at a " +
-            "drawn spawn point at least 500 m from the human",
+            "drawn spawn point at least 500 m from the human, where its patrol net re-seats on " +
+            "the node by that arrival, not the one by the parking pose it seated on while inert",
             InstantActionAce));
         into.Add(new TestHarness.Suite("instant-action-zeppelin",
             "the F12 zeppelin run over C1/IA1's own data: zeppelin_type selects the objective node " +
@@ -238,6 +241,18 @@ public static class Suites
             "holds fire while tracking through a bored window, parks at the NEARER yaw end stop " +
             "out of arc, treats YAW [0,0] as unrestricted rather than locked, and goes quiet with " +
             "a crashed host — plus the aim assist's turret candidate list is fed", CarriedTurrets));
+        into.Add(new TestHarness.Suite("graze-bounce",
+            "the decoded graze restitution (C25) on real contacts: a player rig flown into a floor " +
+            "rebounds along the contact normal off the shipped bounce_factor, an AI rig on the " +
+            "identical trajectory gets the position correction and nothing else (the original's " +
+            "player-only impulse gate), and the same impulse on a vertical face is entirely " +
+            "horizontal — one coefficient, no surface test anywhere in it", GrazeBounce));
+        into.Add(new TestHarness.Suite("ai-spawn-jitter",
+            "the decoded per-spawn dynamics spread (C26) through the real spawner: two AI aircraft " +
+            "off ONE airframe cache, given the same pose and the same orders, fly measurably apart " +
+            "but by a few percent rather than as different aeroplanes; the same spawn ordinal drawn " +
+            "again replays the same line (the --det property); and the shared per-airframe stats " +
+            "every later spawn and every human rig reads come out unperturbed", AiSpawnJitter));
         into.Add(new TestHarness.Suite("ai-actor",
             "the M4 AI actor seam: an AI-piloted plane (AiPilot input, IsHumanPiloted false, no " +
             "camera/HUD/devices) spawned into an already-running sim flies its orders, takes a " +
@@ -275,9 +290,11 @@ public static class Suites
             + "plays the dead pilot's own death cry through the force flag while an unforced "
             + "dispatch on the same dead speaker stays silent", AiVoice));
         into.Add(new TestHarness.Suite("ai-net-follow",
-            "net following (B5): a real chapter net resolves by id and by name, its trailer and " +
-            "tags ride along unacted-on, and an AI plane with a net-following pilot captures node " +
-            "after node with every hop an EDGE of the graph, never node order", AiNetFollow));
+            "net following (B5): a real chapter net resolves by id and by name, its tags ride " +
+            "along unacted-on, and an AI plane with a net-following pilot captures node after " +
+            "node with every hop an EDGE of the graph, never node order. Then the same net, " +
+            "anchored (BL-377), rides its target 6 km east and the plane laps the MOVED ring at " +
+            "its authored altitude, never seating on the edgeless anchor node", AiNetFollow));
         into.Add(new TestHarness.Suite("zeppelin-motion",
             "zeppelin motion (F17): C1/M04's piratezep record loads, its world node is placed at " +
             "the authored pose and flown along PirateZep1 between manual sim steps — every hop an " +
@@ -358,6 +375,8 @@ public static class Suites
             "a trail emitter under a rotated carrier anchors at world identity and drops puffs where it is fed", TrailWorldAnchor));
         into.Add(new TestHarness.Suite("damage-template-pool",
             "a second panel's tear takes its own pooled gimmeflakes copy and leaves the first burst flying at its site (BL-288)", DamageTemplatePool));
+        into.Add(new TestHarness.Suite("damage-staging-pool",
+            "the injure staging reads health only: a zone stripped of armour tears no panel though its combined fraction has crossed the threshold, and the panel appears once health itself crosses (BL-384)", DamageStagingPool));
         into.Add(new TestHarness.Suite("crash-rig-anchors",
             "binding the crash rig leaves the airframe model under the controller — even the Devastator, whose model root shares the crash defs' authored NAME — and stages every pooled copy in the same reset pose", CrashRigAnchors));
         into.Add(new TestHarness.Suite("ai-crash-defs",
@@ -366,7 +385,10 @@ public static class Suites
             "the H22 targeting HUD outside --vs: the matchless VersusHud tracks the pane's " +
             "nearest LIVE AI hostile off the pool's own aircraft roster (a closer human, dead " +
             "plane or neutral is never picked), switches to a closer hostile, drops a crashed " +
-            "one, and a hud built without a pool (the VS default) never tracks", HostileMarkerHud));
+            "one, and a hud built without a pool (the VS default) never tracks; plus " +
+            "--debug-markers' own selection, which takes EVERY live aircraft instead of the " +
+            "nearest, flags each by team against the pane's own, skips a crashed one and skips " +
+            "the pane's own aircraft", HostileMarkerHud));
         into.Add(new TestHarness.Suite("splitscreen-listeners",
             "every 2–4P pane is a 3D audio listener, which a SubViewport is not by default — the "
             + "pinned listener model (A2), and the one thing standing between splitscreen and a "
@@ -2682,6 +2704,256 @@ public static class Suites
         }
     }
 
+    /// <summary>The decoded graze restitution on real contacts (C25/BL-172): a shallow dive onto a
+    /// floor and a shallow scrape along a vertical wall, on controlled geometry, flown by a real
+    /// flight rig through the real collision sweep.
+    ///
+    /// <para>Two things need a live contact and cannot be read off <c>FlightModel</c> (whose own
+    /// arithmetic <c>BounceRestitutionTests</c> pins): the PLAYER-ONLY gate — an AI rig flown down
+    /// the identical trajectory must get the position correction and nothing else, which is the
+    /// original's sixth decoded player/AI divergence — and the two orientations of CAP-14, where a
+    /// flat contact's rebound is what an altimeter reads and a vertical face's is entirely
+    /// horizontal.</para>
+    ///
+    /// <para>⚠ The wall assertion is about the REBOUND AXIS, not about a per-surface coefficient.
+    /// The impulse has no surface dependence at all; what differs between the two runs is which way
+    /// the contact normal points.</para></summary>
+    private static void GrazeBounce(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        ctx.Check(Mathf.IsEqualApprox(stats.BounceFactor, 0.6f),
+            $"the airframe carries this install's authored bounce_factor={stats.BounceFactor:0.###}");
+
+        var textures = new TextureArchive(texturesPath);
+        StaticBody3D? surface = null;
+        FlightController? rig = null;
+        try
+        {
+            // One contact run: a rig placed `startPos` out, flying `dir` at `speed`, stepped until
+            // the collision resolver answers. Returns the normal-direction speed entering and
+            // leaving that one frame (positive = away from the surface), and the vertical pair
+            // alongside it, so the wall run can be read on the axis the altimeter sees.
+            (float NormalIn, float NormalOut, float VerticalIn, float VerticalOut, bool Contacted,
+             bool Crashed) Run(bool human, Vector3 startPos, Vector3 dir, Vector3 normal, float speed)
+            {
+                var plane = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+                var model = new FlightModel(stats, aiForcePath: !human);
+                rig = new FlightController
+                {
+                    PlaneModel = plane,
+                    Collider = PlaneCollider.Build(plane),
+                    Damage = new PlaneDamage(stats.DestroyableParts),
+                    PlayerIndex = 0,
+                    IsHumanPiloted = human,
+                    // Deliberately pilot-less on both runs: an AiPilot would fly its own course
+                    // (its avoid-crash override climbs off a ground probe) and the two trajectories
+                    // would stop being the same one. Neutral stick on both, so the ONLY differences
+                    // reaching the contact are the gate and the force path.
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                };
+                rig.AddChild(plane);
+                rig.Setup(model, human ? ctx.Camera : null, new CamParams(), startPos, startPos + dir);
+                ctx.Host.AddChild(rig);
+                // Straight onto the approach, past whatever Setup's respawn left: the model is ours,
+                // so the state entering the sweep is stated rather than flown into.
+                model.Reset(startPos, Basis.LookingAt(dir, Vector3.Up), speed, 0f);
+                model.VelocityDir = dir;
+
+                float nIn = 0f, nOut = 0f, yIn = 0f, yOut = 0f;
+                bool contacted = false;
+                for (int i = 0; i < 900 && !contacted && !rig.Crashed; i++)
+                {
+                    var before = model.VelocityDir * model.Speed;
+                    rig.SimStep(1f / 60f);
+                    var after = model.VelocityDir * model.Speed;
+                    // The resolver is the only thing in the frame that can turn the normal
+                    // component around; nothing else moves it by metres per second in one step.
+                    if (after.Dot(normal) - before.Dot(normal) > 0.5f)
+                    {
+                        contacted = true;
+                        nIn = before.Dot(normal);
+                        nOut = after.Dot(normal);
+                        yIn = before.Y;
+                        yOut = after.Y;
+                    }
+                }
+                bool crashed = rig.Crashed;
+                var freed = rig;
+                rig = null;
+                freed.Free();
+                return (nIn, nOut, yIn, yOut, contacted, crashed);
+            }
+
+            // --- flat ground. A 15° descent at 60 m/s puts 15.5 m/s on the normal, under the 25 m/s
+            // crash threshold, so this is the survivable graze the impulse belongs to. Started a few
+            // metres out on purpose: the AI plant's own ground blow (C23) is a fixed push away from
+            // terrain, and given a long approach it flies the AI rig off this trajectory entirely.
+            surface = Plate("graze-floor", new Vector3(600f, 4f, 600f), new Vector3(0f, -2f, 0f));
+            ctx.Host.AddChild(surface);
+            var descent = new Vector3(0f, -Mathf.Sin(Mathf.DegToRad(15f)),
+                                      -Mathf.Cos(Mathf.DegToRad(15f))).Normalized();
+            var start = new Vector3(0f, 6f, 30f);
+
+            var player = Run(true, start, descent, Vector3.Up, 60f);
+            var ai = Run(false, start, descent, Vector3.Up, 60f);
+            surface.Free();
+            surface = null;
+
+            ctx.Check(player.Contacted && !player.Crashed,
+                $"the player rig grazed the floor and survived it vn={-player.NormalIn:0.0} m/s");
+            ctx.Check(ai.Contacted && !ai.Crashed,
+                $"the AI rig grazed the same floor on the same trajectory vn={-ai.NormalIn:0.0} m/s");
+            if (player.Contacted && ai.Contacted)
+            {
+                ctx.Check(player.NormalOut > 0.3f * -player.NormalIn,
+                    $"the player rebounds along the contact normal in={player.NormalIn:0.00} out={player.NormalOut:0.00} m/s (bounce_factor {stats.BounceFactor:0.##} × the lever partition)");
+                ctx.Check(player.VerticalOut > 0f,
+                    $"…and on flat ground that rebound is what the altimeter reads vy {player.VerticalIn:0.00} → {player.VerticalOut:0.00} m/s");
+                // The divergence: same trajectory, same geometry, no impulse at all.
+                ctx.Check(Mathf.Abs(ai.NormalOut) < 0.05f * -ai.NormalIn,
+                    $"an AI aircraft gets the position correction ALONE — no impulse (0x0048d7f0's player gate) in={ai.NormalIn:0.00} out={ai.NormalOut:0.00} m/s");
+                ctx.Note($"floor graze: player {player.NormalIn:0.00} → {player.NormalOut:0.00} m/s on the normal (e={player.NormalOut / -player.NormalIn:0.00}), AI {ai.NormalIn:0.00} → {ai.NormalOut:0.00}");
+            }
+
+            // --- a vertical face, same approach angle, so the only thing that changes is which way
+            // the normal points. The rebound must follow the normal and leave the altimeter alone.
+            surface = Plate("graze-wall", new Vector3(4f, 600f, 600f), new Vector3(-100f, 0f, 0f));
+            ctx.Host.AddChild(surface);
+            var scrape = new Vector3(-Mathf.Sin(Mathf.DegToRad(10f)), 0f,
+                                     -Mathf.Cos(Mathf.DegToRad(10f))).Normalized();
+            var wallNormal = Vector3.Right;
+            var wallStart = new Vector3(-30f, 200f, 300f);
+
+            var alongWall = Run(true, wallStart, scrape, wallNormal, 60f);
+            surface.Free();
+            surface = null;
+
+            ctx.Check(alongWall.Contacted && !alongWall.Crashed,
+                $"the player rig scraped the vertical face and survived it vn={-alongWall.NormalIn:0.0} m/s");
+            if (alongWall.Contacted)
+            {
+                ctx.Check(alongWall.NormalOut > 0.3f * -alongWall.NormalIn,
+                    $"the same impulse fires on a wall — no surface test anywhere in it in={alongWall.NormalIn:0.00} out={alongWall.NormalOut:0.00} m/s");
+                ctx.Check(Mathf.Abs(alongWall.VerticalOut - alongWall.VerticalIn) < 1f,
+                    $"…and it is entirely horizontal: an altimeter reads nothing across the contact vy {alongWall.VerticalIn:0.00} → {alongWall.VerticalOut:0.00} m/s (CAP-14's vertical-face runs)");
+                ctx.Note($"wall scrape: {alongWall.NormalIn:0.00} → {alongWall.NormalOut:0.00} m/s on the normal (e={alongWall.NormalOut / -alongWall.NormalIn:0.00}), vy {alongWall.VerticalIn:0.00} → {alongWall.VerticalOut:0.00}");
+            }
+        }
+        finally
+        {
+            rig?.Free();
+            surface?.Free();
+            textures.Dispose();
+        }
+    }
+
+    /// <summary>The per-spawn jitter (C26) where only a real spawn can show it: through
+    /// <see cref="AiAircraftSpawner"/>, over the session's shared per-airframe stats cache, read out
+    /// as flown trajectory rather than as a field. Two aircraft off one airframe, given the same
+    /// pose and the same orders, must fly apart; the same ordinal drawn again must fly the same
+    /// line; and the cache they were all built from must come out untouched, since every later
+    /// spawn and every human rig reads it.</summary>
+    private static void AiSpawnJitter(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        FlightController? flying = null;
+        ProjectilePool? pool = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            var spec = SessionSpec.Parse(System.Array.Empty<string>());
+            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            // The one cache the real session holds: every aircraft below is built from THIS object.
+            var shared = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+            var inputs = new FlightRigAssembler.Inputs
+            {
+                PlanesGamez = planesGamez,
+                StatsFor = _ => shared,
+                RigCount = 0,
+                PaintRng = new RandomNumberGenerator(),
+                ZrdrPath = ctx.ZrdrPath,
+                StockLoadouts = StockLoadouts.Load(),
+                WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                Textures = textures,
+                Projectiles = live,
+                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            };
+
+            // One aircraft's flown displacement over a fixed window, straight and level on orders it
+            // never has to correct — so what separates two runs is the plant, not the pilot. Freed
+            // at the end of its own run: every run flies the SAME pose, and two aeroplanes in the
+            // same cubic metre would be measuring their collision instead.
+            var start = new Vector3(0f, 500f, 0f);
+            Vector3 Fly(AiAircraftSpawner spawner)
+            {
+                var pilot = AiPilot.HoldingCourse(start, start + Vector3.Forward);
+                var ai = spawner.Spawn(ctx.PlaneName, start, start + Vector3.Forward, pilot);
+                flying = ai;
+                for (int i = 0; i < 240; i++)
+                    ai.SimStep(1f / 60f);
+                var flown = ai.WorldPosition - start;
+                flying = null;
+                ai.Free();
+                return flown;
+            }
+
+            // Two ordinals off one spawner: two aeroplanes, same pose, same orders.
+            var spawner1 = new AiAircraftSpawner(spec, liveries, null!, ctx.Host, inputs);
+            var first = Fly(spawner1);
+            var second = Fly(spawner1);
+
+            // A fresh spawner restarts at ordinal 0, and the draw is keyed by ordinal — so this is
+            // the same aircraft as `first`, which is what a --det replay reproduces.
+            var spawner2 = new AiAircraftSpawner(spec, liveries, null!, ctx.Host, inputs);
+            var replay = Fly(spawner2);
+
+            float spread = (first - second).Length();
+            ctx.Check(spread > 1f,
+                $"two aircraft off one airframe fly apart on identical orders: {spread:0.00} m over 4 s ({first.Length():0.0} m against {second.Length():0.0} m)");
+            ctx.Check(spread < 0.25f * first.Length(),
+                $"…by a 5 % spread, not a different aeroplane: {spread / first.Length() * 100f:0.0} % of the distance flown");
+            ctx.Check(first.IsEqualApprox(replay),
+                $"the same spawn ordinal replays the same line: {(first - replay).Length():0.000} m apart");
+            ctx.Check(Mathf.IsEqualApprox(shared.FdSpeed, PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName).FdSpeed)
+                && Mathf.IsEqualApprox(shared.EnginePower, PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName).EnginePower),
+                $"the session's shared airframe stats came out unperturbed fd_speed={shared.FdSpeed:0.###} thrust={shared.EnginePower:0.###}");
+            ctx.Note($"jitter spread: {first.Length():0.0} / {second.Length():0.0} m flown in 4 s, {spread:0.00} m apart");
+        }
+        finally
+        {
+            flying?.Free();
+            pool?.Free();
+            textures.Dispose();
+        }
+    }
+
+    /// <summary>A static world plate for the graze runs — layer 1 (the world), placed once at its
+    /// final pose because a body MOVED after creation is invisible to space queries this frame.</summary>
+    private static StaticBody3D Plate(string name, Vector3 size, Vector3 at)
+    {
+        var body = new StaticBody3D { Name = name };
+        body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = size } });
+        body.GlobalTransform = new Transform3D(Basis.Identity, at);
+        return body;
+    }
+
     /// <summary>The neighbour-splash repro pair, on controlled geometry: a torpedo detonates against a thin
     /// wall placed right next to one end of a long neighbouring body. The neighbour's transform
     /// origin sits well OUTSIDE the blast radius (the bug's exact symptom — origin-scored falloff
@@ -3533,6 +3805,25 @@ public static class Suites
             ctx.Check(wingmen.All(w => w.Name.ToString().Contains(wingmanNode)),
                 $"every wingman flies the configured airframe: {string.Join(",", wingmen.Select(w => w.Name))}");
 
+            // The synthetic roster block's volumes: FUN_0045a240 writes 10000 m into all THREE, so
+            // the airframe gates the spawner seeds first must not survive on an Instant Action
+            // actor. Overriding activation alone leaves attack as the real engagement gate, since
+            // the mode machine enters pursue on the minimum of the two.
+            var volPos = new Vector3(600f, 500f, 0f);
+            var volPilot = AiPilot.HoldingCourse(volPos, volPos + Vector3.Forward);
+            volPilot.Machine = new AiModeMachine(new System.Random(7));
+            wingmen.Add(spawner.Spawn(wingmanNode, volPos, volPos + Vector3.Forward, volPilot,
+                scheme: null, team: AimAssist.PlayerTeam));
+            var vol = volPilot.Machine;
+            ctx.Check(Mathf.IsEqualApprox(vol.AttackRange, 2000f)
+                && Mathf.IsEqualApprox(vol.ReturnRange, 1200f),
+                $"the spawner seeds the airframe's own gates first: attack={vol.AttackRange:0} return={vol.ReturnRange:0}");
+            InstantActionRuntime.ApplyActorVolumes(vol);
+            ctx.Check(Mathf.IsEqualApprox(vol.ActivationRange, InstantActionRuntime.ActorVolumeRadiusM)
+                && Mathf.IsEqualApprox(vol.AttackRange, InstantActionRuntime.ActorVolumeRadiusM)
+                && Mathf.IsEqualApprox(vol.ReturnRange, InstantActionRuntime.ActorVolumeRadiusM),
+                $"all three volumes take the authored 10000 m: activation={vol.ActivationRange:0} attack={vol.AttackRange:0} return={vol.ReturnRange:0}");
+
             // E11: RandomPilotStats/ResolveWaveAccentId are pure over their draw — row 4 is the
             // flat-4 personality, and only accent 12 (the wingman range's own base) re-rolls.
             var flatRow = InstantActionRuntime.RandomPilotStats(draw: 4);
@@ -3560,9 +3851,28 @@ public static class Suites
                     scheme: null, team: InstantActionRuntime.EnemyTeam));
             }
             var wave2Pilot = AiPilot.HoldingCourse(Vector3.Zero, Vector3.Forward);
+            // BL-364: every Instant Action actor carries the chapter's first patrol net, and an
+            // inert one still ticks, so this two-node stand-in net has a node at the parking
+            // pose and another out at the wave spawn point, to watch which one it flies after
+            // the teleport.
+            var parkNet = new AiNet
+            {
+                Id = 1,
+                Name = "TestWaveNet",
+                Nodes = new[]
+                {
+                    new AiNetNode(Vector3.Zero, System.Array.Empty<float>()),
+                    new AiNetNode(new Vector3(600f, 500f, 0f), System.Array.Empty<float>()),
+                },
+                Edges = new[] { (0, 1) },
+            };
+            wave2Pilot.Patrol = new AiNetFollower(parkNet, new System.Random(3));
             var wave2Member = spawner.Spawn(waveNode, Vector3.Zero, Vector3.Forward, wave2Pilot,
                 scheme: null, team: InstantActionRuntime.EnemyTeam, inert: true);
             waveMembers.Add(wave2Member);
+            wave2Pilot.Patrol.Update(Vector3.Zero);
+            ctx.Check(wave2Pilot.Patrol.CurrentIndex == 0,
+                $"parked inert, the follower seats on the node by the parking pose: idx={wave2Pilot.Patrol.CurrentIndex}");
 
             int aliveWave1 = waveMembers.Take(2).Count(m => m.InPlay);
             ctx.Check(aliveWave1 == 2, $"both wave-1 members InPlay before any kill: {aliveWave1}");
@@ -3594,6 +3904,12 @@ public static class Suites
             float distSq = wave2Member.WorldPosition.DistanceSquaredTo(humanPos);
             ctx.Check(distSq >= InstantActionWaves.MinSpawnDistanceSquared,
                 $"activated at least 500 m from the human: dist={Mathf.Sqrt(distSq):0} m");
+            // The activation snap the original does (FUN_004b0f40 → FUN_00432010): the arrival
+            // re-seats the walk, so the member patrols from where it was put down instead of
+            // flying back to the node by its parking pose.
+            wave2Pilot.Patrol.Update(wave2Member.WorldPosition);
+            ctx.Check(wave2Pilot.Patrol.CurrentIndex == 1,
+                $"activation re-seats it on the node by its ARRIVAL: idx={wave2Pilot.Patrol.CurrentIndex}");
         }
         finally
         {
@@ -5333,6 +5649,39 @@ public static class Suites
             vsHud.UpdateHostile();
             ctx.Check(vsHud.TrackedHostile == null,
                 $"a hud built without a pool (the VS default) never tracks");
+
+            // --debug-markers' own selection: EVERY live aircraft, not the nearest one, each
+            // flagged by team against the pane's own. ai1 is live again (respawned above); ai2 is
+            // still down, so it must not be marked at all.
+            ai2.Team = AimAssist.PlayerTeam;
+            var scan = new AimCandidateSet();
+            live.CollectAircraft(scan);
+            var marks = new List<(FlightController Plane, bool Friendly)>();
+            VersusHud.CollectMarks(AimAssist.PlayerTeam, null, scan, marks);
+            ctx.Check(marks.Count == 1 && ReferenceEquals(marks[0].Plane, ai1),
+                $"a crashed plane is never marked marks={marks.Count}");
+            ctx.Check(!marks[0].Friendly,
+                $"ai1 is on the enemy team, so it marks hostile friendly={marks[0].Friendly}");
+            ai1.Team = AimAssist.PlayerTeam;
+            marks.Clear();
+            scan.Clear();
+            live.CollectAircraft(scan);
+            VersusHud.CollectMarks(AimAssist.PlayerTeam, null, scan, marks);
+            ctx.Check(marks.Count == 1 && marks[0].Friendly,
+                $"the same plane on the pane's own team marks friendly friendly={marks[0].Friendly}");
+            marks.Clear();
+            VersusHud.CollectMarks(AimAssist.PlayerTeam, ai1, scan, marks);
+            ctx.Check(marks.Count == 0, $"the pane's own aircraft is excluded marks={marks.Count}");
+
+            // The mode suffix the marker tag carries, in the engine's own vocabulary. A pilot
+            // with no mode machine (this suite's own bare-orders spawn) adds nothing rather than
+            // inventing a state; armed, it names whatever mode the machine is in.
+            ctx.Check(VersusHud.ModeSuffix(ai1) == "",
+                $"a pilot with no mode machine adds nothing to the tag: '{VersusHud.ModeSuffix(ai1)}'");
+            ai1.Pilot!.Machine = new AiModeMachine(new System.Random(5));
+            ai1.Pilot.Machine.Enter(AiMode.Pursue, "suite");
+            ctx.Check(VersusHud.ModeSuffix(ai1).Trim() == "pursue",
+                $"the marker tag carries the plane's mode: '{VersusHud.ModeSuffix(ai1).Trim()}'");
         }
         finally
         {
@@ -5348,10 +5697,10 @@ public static class Suites
     /// <summary>The D14 AI gunnery, on real engine state: an AI-piloted, stock-armed plane HELD
     /// at fixed poses (the weapon-lab pin — held rigs fire through the normal path) against a
     /// parked hostile target. Pins: nearest-hostile acquisition into the gunner's MUTABLE target
-    /// field; the quick-draw gate (a beam-ish bearing is refused at rating 1's 50° cone and
+    /// field; the quick-draw gate (a beam-ish bearing is refused at rating 1's ~54° cone and
     /// taken at rating 9's 89°); the ±11° forward gun cone as a hard fire gate (nose 30° off the
     /// bearing = no fire, whatever quick draw says); dead-eye scatter as a per-shot cone whose
-    /// interpolated rating-1 angle (4.0°) lands measurably fewer hits than rating 9's (1.45°) at
+    /// interpolated rating-1 angle (~3.7°) lands measurably fewer hits than rating 9's (1.45°) at
     /// fixed range, with the rounds under the AI's own shooter id and none on its own airframe;
     /// the kill attributed to the AI id through Downed; and the IsHumanPiloted assist exclusion
     /// A/B'd in place — the same off-boresight geometry misses as an AI and hits the moment the
@@ -5473,13 +5822,13 @@ public static class Suites
             ctx.Check(ReferenceEquals(gunner.Target, target), $"a cleared target re-acquires next tick");
 
             // --- the quick-draw gate: 80° off the target's tail axis (a beam-ish shot). At
-            // rating 1 the 50° cone refuses it; at rating 9 the 89° cone takes it.
+            // rating 1 the ~54° cone refuses it; at rating 9 the 89° cone takes it.
             var beamPos = targetPos + new Vector3(0.9848f, 0f, 0.1736f) * 500f; // 80° off +Z
             ai.PlaceHeld(beamPos, targetPos);
             int ammoAtBeam = gun.Ammo;
             Step(60);
             ctx.Check(!gunner.WantsFire && gun.Ammo == ammoAtBeam,
-                $"a beam-ish shot is refused at quick-draw rating 1 (50°) rounds={ammoAtBeam - gun.Ammo}");
+                $"a beam-ish shot is refused at quick-draw rating 1 (~54°) rounds={ammoAtBeam - gun.Ammo}");
             gunner.QuickDrawAngleDeg = skills.QuickDrawAngleDeg(9);
             Step(60);
             ctx.Check(gun.Ammo < ammoAtBeam,
@@ -5497,7 +5846,7 @@ public static class Suites
             // --- dead-eye scatter, skill 1 vs 9: same fixed geometry (the high rear quarter at
             // ~212 m, where the planform presents real area — dead astern the airframe is
             // edge-on and both cones mostly miss, drowning the difference), a fixed round
-            // budget each, hits counted off the damage ledger. The rating-1 cone (4.0°) must
+            // budget each, hits counted off the damage ledger. The rating-1 cone (~3.7°) must
             // land measurably fewer than rating 9's (1.45°).
             ai.PlaceHeld(targetPos + new Vector3(0f, 150f, 150f), targetPos);
             (int Rounds, int Hits) Volley(float deadEyeDeg, int roundCap)
@@ -5891,8 +6240,8 @@ public static class Suites
             ctx.Check(transitions.Contains("pursue>lay off"),
                 $"…logged as pursue>lay off transitions=[{string.Join(" ", transitions)}]");
 
-            // The observable assist, through the live pilot: the throttle eases off flat-out
-            // (pursue's is 1) and the gunner's trigger is held for the whole dwell.
+            // The observable assist, through the live pilot: the throttle eases off pursue's own
+            // lever and the gunner's trigger is held for the whole dwell.
             Step(30);
             ctx.Check(machine.Mode == AiMode.LayOff,
                 $"the anti-chatter hold keeps the mode mode={AiModeMachine.NameOf(machine.Mode)}");
@@ -5901,13 +6250,22 @@ public static class Suites
             ctx.Check(!pilot.Gunner.WantsFire, $"fire is held while laying off");
 
             // The parked target is not actually chasing, so once the hold expires the machine
-            // releases back to pursue and the throttle runs flat out again.
+            // releases back to pursue and the lever runs back up to its ceiling.
+            // RE-PINNED AT E41 (was "IsEqualApprox(Throttle, 1f)"): pursue no longer assigns the
+            // lever at all. AiControlLaw WALKS it at 0.35/s toward its own desired speed, between
+            // the engaged table's 0.3 floor and 1.3 ceiling, so it is a speed controller and not a
+            // setpoint: measured 1.295 five frames after release, then back to 1.149 by frame 30
+            // once the desired speed was met. Pinning an exact value would pin the settling
+            // transient, so the check is the behaviour the old one meant — the assist has let go
+            // and the AI is commanding past full again. Above 1 is the original's own range (three
+            // of its four tables put params[1] over 1.0); FlightModel.Step clamps the lever to
+            // [0,1] as it consumes it, so >1 reads as "full, and still wanting more".
             Step(150);
             ctx.Check(machine.Mode == AiMode.Pursue,
                 $"a non-pursuing target releases lay off after the hold mode={AiModeMachine.NameOf(machine.Mode)}");
             Step(5);
-            ctx.Check(Mathf.IsEqualApprox(pilot.Throttle, 1f),
-                $"…and pursue runs flat out again throttle={pilot.Throttle:0.00}");
+            ctx.Check(pilot.Throttle > 1f,
+                $"…and pursue commands past full again throttle={pilot.Throttle:0.000}");
 
             ctx.Note($"transitions: {string.Join(" ", transitions)}");
         }
@@ -6219,10 +6577,17 @@ public static class Suites
             return;
         var net = byId;
 
-        // The trailer is recorded on the net, unacted-on (B5's documented decision: no
-        // target-relative motion until a later wave decodes what to do with it).
+        // The trailer names the player at node 10, and that node carries no edge: the shipped
+        // shape of all 76 anchored nets, and why the seat scan has to skip edgeless nodes.
         ctx.Check(net.Trailer is { NodeIndex: 10, Name: "player" },
             $"the trailer [10, player] rides the net trailer={net.Trailer?.ToString() ?? "-"}");
+        bool anchorEdgeless = true;
+        foreach (var (a, b) in net.Edges)
+        {
+            if (a == 10 || b == 10)
+                anchorEdgeless = false;
+        }
+        ctx.Check(anchorEdgeless, $"…and the anchor node 10 is parked off the ring, edgeless");
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
@@ -6236,7 +6601,6 @@ public static class Suites
             var spawn = net.Nodes[0].Position;
             var look = net.Nodes[1].Position;
             var pilot = AiPilot.HoldingCourse(spawn, look);
-            pilot.Throttle = AiPilot.PatrolThrottle;
             var follower = new AiNetFollower(net, new System.Random(1));
             pilot.Patrol = follower;
             var aiModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
@@ -6284,6 +6648,32 @@ public static class Suites
                 $"every hop is an EDGE of the graph hops={string.Join(" ", hops.ConvertAll(h => $"{h.From}→{h.To}"))}");
             ctx.Check(Mathf.Abs(ai.WorldPosition.Y - 400f) < 250f,
                 $"…within the placeholder law's altitude leash of the net's 400 m y={ai.WorldPosition.Y:0}");
+
+            // BL-377: the same net, now RIDING a stand-in for the player 6 km east of where it
+            // was authored. The ring must move with it and keep its authored 400 m; the plane
+            // must fly the moved ring, not the one in the file.
+            var trailed = net.Nodes[10].Position + new Vector3(6000f, -300f, 0f);
+            var anchoredFollower = new AiNetFollower(net, new System.Random(1),
+                trailerTarget: () => trailed);
+            ctx.Check(anchoredFollower.Anchored
+                && anchoredFollower.NodePosition(0).IsEqualApprox(
+                    net.Nodes[0].Position + new Vector3(6000f, 0f, 0f)),
+                $"the anchored net rides its target 6 km east, Y untouched node0={anchoredFollower.NodePosition(0)}");
+            pilot.Patrol = anchoredFollower;
+            ai.Activate(anchoredFollower.NodePosition(0), anchoredFollower.NodePosition(1));
+            bool seatedOnAnchor = false;
+            for (steps = 0; anchoredFollower.Advances < 3 && steps < budget; steps++)
+            {
+                ai.SimStep(1f / 60f);
+                if (anchoredFollower.CurrentIndex == 10)
+                    seatedOnAnchor = true;   // the edgeless anchor is never a flight target
+            }
+            ctx.Check(anchoredFollower.Advances >= 3 && !seatedOnAnchor,
+                $"…and the plane laps the MOVED ring advances={anchoredFollower.Advances} in {steps / 60f:0} s of sim");
+            float onMoved = ai.WorldPosition.DistanceTo(anchoredFollower.CurrentTarget);
+            float onAuthored = ai.WorldPosition.DistanceTo(net.Nodes[anchoredFollower.CurrentIndex].Position);
+            ctx.Check(onMoved < onAuthored,
+                $"…flying the ridden ring, not the authored one moved={onMoved:0} m authored={onAuthored:0} m");
         }
         finally
         {
@@ -8823,6 +9213,95 @@ public static class Suites
     private static bool AtPoolSite(Node3D? copy, Node3D site) =>
         copy != null
         && copy.GlobalTransform.Origin.DistanceTo(site.GlobalTransform.Origin) < 0.5f;
+
+    // ---- the injure staging is keyed on health, not the combined progression -------------------
+
+    /// <summary>BL-384 items 1 and 2, from BL-297's decode. FUN_004b3d70 divides
+    /// [part+0x30] / [part+0x2c], the part's health over health max, and FUN_004b7f80 blocks health
+    /// damage outright while that part's armour covers the hit — so an armoured zone crosses no
+    /// per-part threshold at all. Driven on a real plane model with the shipped injure_anims: the
+    /// zone's armour is stripped with armour-only damage (combined fraction now past the panel's
+    /// authored threshold, health still full) and NO panel may flip; then health itself is driven
+    /// under the threshold and the panel must appear. The first half is what fails when the staging
+    /// is fed PartState.Fraction, which is how the defect showed at the controls.</summary>
+    private static void DamageStagingPool(TestContext ctx)
+    {
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+
+        // Data-driven, not a hardcoded zone: any part whose authored list flips a pdpanelN, taking
+        // its HIGHEST threshold so one health step crosses exactly one panel.
+        DestroyablePart? part = null;
+        float threshold = 0f;
+        string panelAnim = "";
+        foreach (var p in stats.DestroyableParts)
+            foreach (var (frac, anim) in p.InjureAnims)
+                if (anim.StartsWith("pdpanel", System.StringComparison.OrdinalIgnoreCase)
+                    && frac > threshold)
+                {
+                    part = p;
+                    threshold = frac;
+                    panelAnim = anim;
+                }
+
+        ctx.Check(part != null, $"{ctx.PlaneName} authors a pdpanelN entry on some zone");
+        if (part == null)
+            return;
+        ctx.Check(part.MaxArmor > 0f && part.MaxHp > 0f,
+            $"precondition: {part.Name} carries both pools ({part.MaxArmor:0} armour, {part.MaxHp:0} hp)");
+        if (part.MaxArmor <= 0f || part.MaxHp <= 0f)
+            return;
+
+        // The combined fraction with armour gone is MaxHp/(MaxHp+MaxArmor); the half this suite
+        // pins only means anything when that already sits at or under the panel's threshold.
+        float strippedCombined = part.MaxHp / (part.MaxHp + part.MaxArmor);
+        ctx.Check(strippedCombined <= threshold,
+            $"precondition: armour gone puts the COMBINED fraction at {strippedCombined:0.00}, already past {panelAnim}'s {threshold:0.00} — the early tear this pins");
+        if (strippedCombined > threshold)
+            return;
+
+        var textures = new TextureArchive(texturesPath);
+        // damagePanels: the pdpN nodes are skipped in a plain static build (PlaneBuilder 10c).
+        var builder = new PlaneBuilder(planesGamez, textures, damagePanels: true);
+        var model = builder.Build(ctx.PlaneName);
+        ctx.Host.AddChild(model);
+        try
+        {
+            var visuals = new DamageVisuals(builder.DamagePanels, model, stats);
+            var torn = builder.DamagePanels
+                .Where(p => p.Name.ToString().StartsWith("pdp", System.StringComparison.OrdinalIgnoreCase)
+                            && !p.Name.ToString().EndsWith("_h", System.StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            ctx.Check(torn.Count > 0, $"{ctx.PlaneName} carries {torn.Count} torn-panel nodes");
+            ctx.Check(torn.All(p => !p.Visible), $"…and every one of them starts hidden");
+
+            var damage = new PlaneDamage(stats.DestroyableParts);
+            var state = damage.Apply(part.Name, 0f, part.MaxArmor)!;
+            ctx.Check(state.Armor <= 0f && Mathf.IsEqualApprox(state.HealthFraction, 1f),
+                $"{part.Name}: armour stripped to {state.Armor:0.#}, health untouched at {state.HealthFraction * 100f:0}% (combined {state.Fraction:0.00})");
+
+            visuals.OnPartDamage(part.Name, state.HealthFraction);
+            visuals.OnHullDamage(damage.SummaryHealthFraction);
+            ctx.Check(torn.All(p => !p.Visible),
+                $"no panel tore on the armour spend, though the combined fraction ({state.Fraction:0.00}) is past {panelAnim}'s {threshold:0.00}");
+
+            // Now health itself crosses: drive it just under the threshold.
+            float target = (threshold - 0.02f) * part.MaxHp;
+            state = damage.Apply(part.Name, part.MaxHp - target, 0f)!;
+            ctx.Check(state.HealthFraction <= threshold,
+                $"{part.Name} health driven to {state.HealthFraction:0.00}, under {threshold:0.00}");
+
+            visuals.OnPartDamage(part.Name, state.HealthFraction);
+            ctx.Check(torn.Any(p => p.Visible),
+                $"…and {panelAnim} flipped its torn panel once HEALTH crossed");
+        }
+        finally
+        {
+            model.Free();
+        }
+    }
 
     // ---- binding the crash rig must leave the airframe under the controller --------------------
 

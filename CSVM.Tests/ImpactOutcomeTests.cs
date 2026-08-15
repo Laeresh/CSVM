@@ -52,19 +52,20 @@ public class ImpactOutcomeTests
         Assert.Equal(ImpactStandIn.None, outcome.StandIn);
     }
 
-    /// <summary>Ground gets the tumbling debris burst, gun or rocket alike — every terrain id, not
-    /// only <c>default</c>(0): the ladder stands in for missing assets and keeps the meaning the
-    /// texture-derived <c>Default</c> class had before B11, so <c>dirt</c>(13) ground does not
-    /// start sparking because the key changed.</summary>
+    /// <summary>Ground gets the single spark, gun or rocket alike, at every terrain id — it has no
+    /// arm of its own since BL-313 deleted the chip burst. The assertion that matters is that the
+    /// answer is not <c>None</c>: <c>ProjectilePool</c> gates the world-effects sink (the
+    /// <c>blacksmokepuffer</c>) on <c>StandIn != None</c>, so a terrain hit resolving to nothing
+    /// would silently take the gunhit smoke with it.</summary>
     [Theory]
     [InlineData(SurfaceRegistry.Default)]
     [InlineData(13)]
     [InlineData(8)]
-    public void ARoundOnGroundPicksTheDebrisBurst(int surfaceId)
+    public void ARoundOnGroundPicksTheSpark(int surfaceId)
     {
-        Assert.Equal(ImpactStandIn.DirtDebris,
+        Assert.Equal(ImpactStandIn.Spark,
             ImpactOutcome.Resolve(Gun(), surfaceId, false, hasEffectsRuntime: true).StandIn);
-        Assert.Equal(ImpactStandIn.DirtDebris,
+        Assert.Equal(ImpactStandIn.Spark,
             ImpactOutcome.Resolve(Rocket(), surfaceId, false, hasEffectsRuntime: true).StandIn);
     }
 
@@ -247,7 +248,7 @@ public class ImpactOutcomeTests
         var outcome = ImpactOutcome.Resolve(fake, SurfaceRegistry.Default, false, true);
         Assert.Null(outcome.EffectName);
         Assert.Null(outcome.Sound);
-        Assert.Equal(ImpactStandIn.DirtDebris, outcome.StandIn);
+        Assert.Equal(ImpactStandIn.Spark, outcome.StandIn);
     }
 
     // ---- the 48 weapons x the reachable surfaces ---------------------------------------------

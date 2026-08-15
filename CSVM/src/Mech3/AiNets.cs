@@ -48,13 +48,30 @@ public static class AiNets
         return nets;
     }
 
-    /// <summary>The chapter's id → name map from <c>neindex.zrd.json</c>:
-    /// <c>[[first, id0, "Name0", id1, "Name1", …]]</c>. The first element is NOT the pair
-    /// count — it is an allocation figure ≥ the count (C1: 46 against 29 pairs) and is
-    /// skipped. Empty when the chapter has no index.</summary>
+    /// <summary>The chapter's id → name map from <c>neindex.zrd.json</c>. Order is lost here;
+    /// <see cref="LoadIndexPairs"/> is the ordered read and the one the engine's own table
+    /// follows. Empty when the chapter has no index.</summary>
     public static Dictionary<int, string> LoadIndex(string chapterZrdrPath)
     {
         var names = new Dictionary<int, string>();
+        foreach (var (id, name) in LoadIndexPairs(chapterZrdrPath))
+            names[id] = name;
+        return names;
+    }
+
+    /// <summary>The chapter's id → name pairs from <c>neindex.zrd.json</c>
+    /// (<c>[[first, id0, "Name0", id1, "Name1", …]]</c>), in FILE ORDER. The first element is
+    /// NOT the pair count. It is an allocation figure ≥ the count (C1: 46 against 29 pairs) and
+    /// is skipped.
+    ///
+    /// <para>⚠ File order is not ascending id, and the difference is load-bearing: the engine
+    /// builds its net table by walking this record forward (<c>FUN_004311c0</c>), and every
+    /// consumer that says "the first net" means entry 0 of that table. C1B opens on id 29 and
+    /// C1C on id 25, both against a lowest id of 11, so reading <see cref="Load"/>'s
+    /// sorted-by-id list instead picks the wrong graph on two of the eight chapters.</para></summary>
+    public static List<(int Id, string Name)> LoadIndexPairs(string chapterZrdrPath)
+    {
+        var pairs = new List<(int, string)>();
         List<object?> root;
         try
         {
@@ -62,16 +79,27 @@ public static class AiNets
         }
         catch (IOException)
         {
-            return names;
+            return pairs;
         }
         if (root.Count == 0 || root[0] is not List<object?> list)
-            return names;
+            return pairs;
         for (int i = 1; i + 1 < list.Count; i += 2)
         {
             if (list[i] is float id && list[i + 1] is string name)
-                names[(int)id] = name;
+                pairs.Add(((int)id, name));
         }
-        return names;
+        return pairs;
+    }
+
+    /// <summary>The chapter's FIRST net in index order (<see cref="LoadIndexPairs"/>), or null
+    /// when the chapter has no index or its first id has no net file. This is the net every
+    /// Instant Action actor is handed: <c>FUN_0045a390</c> writes a one-entry <c>netids</c> list
+    /// holding entry 0 of the engine's table in all three of its branches (the wingmen, the ace
+    /// and the waves alike; docs/formats/instant-action.md).</summary>
+    public static AiNet? ChapterFirst(IReadOnlyList<AiNet> nets, string chapterZrdrPath)
+    {
+        var pairs = LoadIndexPairs(chapterZrdrPath);
+        return pairs.Count == 0 ? null : ById(nets, pairs[0].Id);
     }
 
     /// <summary>The net with this id, or null. Ids are how <c>aiv</c> field 0 references nets

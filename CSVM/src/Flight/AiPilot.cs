@@ -13,20 +13,15 @@ namespace CSVM.Flight;
 /// <c>SET_AI_ATTACK_RADIUS</c>…), so nothing here is read-once at spawn: any owner may rewrite
 /// the orders between sim steps and the next <see cref="Next"/> flies them.</para>
 ///
-/// <para>The control law is a placeholder good for straight-and-level and ordered heading/altitude
-/// holds — proportional bank-to-turn with rate damping, path-angle altitude hold with a pull term
-/// covering the lift lost to bank. The behavioural waves (patrol nets, the nine-mode state
-/// machine, the shipped maneuver programs) replace this law; the seam they replace it through is
-/// exactly this class.</para></summary>
+/// <para>The control law is the original's, <see cref="AiControlLaw"/> (decoded as plan D31 in
+/// docs/org/aiControlLaw.md, ported as E41). This class is the DRIVER around it, standing in for
+/// the original's own two: each mode picks an aim point, that point's velocity and one of the four
+/// decoded parameter tables, and the law turns those into stick and throttle. The placeholder
+/// bank-to-turn law it replaced, and the altitude leash that law needed, are both gone — the leash
+/// existed because a sustained placeholder turn ratcheted altitude without bound, which the real
+/// law's own wings-level rule and elevator deadband handle instead.</para></summary>
 public sealed class AiPilot
 {
-    /// <summary>The throttle order a net assignment should come with. Invented, not an original
-    /// value: at the 0.85 default (~125 m/s) the placeholder law's turn radius exceeds the
-    /// tightest fighter rings and the plane limit-cycles around a node forever (measured on C1's
-    /// M4ReinfAce); at 0.5 it laps them. Callers assigning <see cref="Patrol"/> set it
-    /// explicitly, so it stays a visible order rather than a hidden override.</summary>
-    public const float PatrolThrottle = 0.5f;
-
     /// <summary>Invented: how fast lay off walks the throttle toward the ease-off speed, per
     /// second (the decoded constant is the speed factor, not a lever rate).</summary>
     public const float LayOffThrottleRatePerS = 0.4f;
@@ -48,11 +43,12 @@ public sealed class AiPilot
     public AiNetFollower? Patrol;
 
     /// <summary>The forward-gun gunnery (D14), or null for an unarmed pilot. When its target is
-    /// live, each <see cref="Next"/> re-derives the heading/altitude orders from the target's
-    /// position — a plain pursuit through the placeholder law, taking precedence over
-    /// <see cref="Patrol"/> — so the plane turns onto its victim and the gunner's cones get
-    /// geometry to pass. The host <see cref="FlightController"/> drives the gunner's fire
-    /// decision itself; this class only steers. Mutable like every other order.</summary>
+    /// live and there is no <see cref="Machine"/>, each <see cref="Next"/> re-derives the
+    /// heading/altitude orders from the target's position — a plain pursuit through
+    /// <see cref="AiControlLaw"/>, taking precedence over <see cref="Patrol"/> — so the plane
+    /// turns onto its victim and the gunner's cones get geometry to pass. The host
+    /// <see cref="FlightController"/> drives the gunner's fire decision itself; this class only
+    /// steers. Mutable like every other order.</summary>
     public AiGunner? Gunner;
 
     /// <summary>The nine-mode state machine (D11), or null for the bare-orders pilot above.
@@ -66,28 +62,34 @@ public sealed class AiPilot
     /// <summary>Ordered altitude, metres (world Y).</summary>
     public float TargetAltitude = 400f;
 
-    /// <summary>Ordered throttle, 0–1.</summary>
+    /// <summary>The commanded throttle lever, 0–1. ⚠ Since E41 this is the lever's CURRENT state,
+    /// which <see cref="AiControlLaw"/> walks toward its own desired speed each step, not a
+    /// standing order the pilot holds — the original's lever (<c>obj+0x124</c>) works the same way.
+    /// Presetting it still seeds the walk, and <see cref="AiMode.LayOff"/> is the one mode that
+    /// overrides the law's answer (see <see cref="SteerLayOff"/>).</summary>
     public float Throttle = 0.85f;
 
-    // Placeholder-law gains, hand-settled against the shipped airframes (AiPilotTests sweeps a
-    // hard turn and an altitude capture on real stats). Wave D replaces the whole law.
-    private const float MaxBankDeg = 70f;
-    private const float BankPerHeadingDeg = 4f;     // deg of bank per deg of heading error
-    private const float RollGain = 0.05f;           // stick per deg of bank error
-    private const float RollRateLead = 0.35f;       // s of roll rate anticipated
-    private const float MaxPathDeg = 14f;
-    private const float PathPerMeter = 0.12f;       // deg of path per m of altitude error
-    private const float PitchGain = 0.10f;          // stick per deg of path error
-    private const float PitchRateLead = 0.40f;      // s of pitch rate anticipated
-    // 1.2 saturates the stick near full bank on purpose: in this model the climb per DEGREE of
-    // turn falls as pull rises (measured 1.5 m/deg at 0.4 pull, 0.55 at 1.0), so a hard turn at
-    // full pull finishes well inside the altitude leash where a soft one ratchets past it.
-    private const float BankPull = 1.2f;            // pull at full bank; carries the turn
-    private const float AltLeashEnterM = 150f;      // this far above orders, break off the turn
-    private const float AltLeashExitM = 50f;        // and hold off until back within this
-    private const float LeashBankDeg = 20f;         // bank allowed while recovering altitude
+    /// <summary>The player's world position, when the owner knows it, or null. The law's far-field
+    /// throttle branch is keyed on range to the player, so leaving this null keeps the closed-loop
+    /// lever walk, which is the near-player behaviour. Mutable like every other order.</summary>
+    public Vector3? PlayerPosition;
 
-    private bool _altRecovering;
+    // How far ahead an ordered heading is projected to make the aim point the law wants. A PORT
+    // ARTIFACT, not a game value: the original never carries heading/altitude orders, only points
+    // (a net node, a target, or its own position plus a climb-out offset), so this distance exists
+    // only to convert our order representation. It sets the vertical angle of an altitude capture
+    // and nothing else; 1000 m matches the one climb-out offset the original does carry.
+    private const float OrderAimRangeM = 1000f;
+
+    // The original's own avoid-crash aim point: straight up from the aircraft by this much.
+    private const float ClimbOutAimM = 1000f;
+
+    /// <summary>Whether the LAST <see cref="Next"/> actually steered to <see cref="Patrol"/>'s
+    /// node, as opposed to pursuing, evading or holding the bare orders. Reported rather than
+    /// re-derived from the mode: the dispatch in <see cref="Next"/> is the only thing that
+    /// decides it, so an observer (F13's leashes) that asked the mode machine instead could
+    /// drift from it.</summary>
+    public bool SteeringPatrol { get; private set; }
 
     /// <summary>Aims the standing orders at holding the given spawn pose: heading from the
     /// pos→look-at pair, altitude from the position — what a freshly spawned patrol-less AI
@@ -113,6 +115,7 @@ public sealed class AiPilot
     public FlightInput Next(FlightModel model, float dt)
     {
         var quarry = Gunner is { Target: { InPlay: true } t } ? t : null;
+        SteeringPatrol = false;   // SteerPatrol sets it when it actually flies the net
 
         // The mode machine (D11), when present, decides which input source flies this step;
         // without one the pre-D11 priority stands (gunner target, then patrol, then orders).
@@ -135,140 +138,111 @@ public sealed class AiPilot
                 case AiMode.Evade:
                     TargetHeadingDeg = machine.EvadeHeadingDeg;
                     TargetAltitude = machine.EvadeAltitude;
-                    Throttle = 1f;
-                    break;
+                    return Fly(model, dt, OrderAim(model), Vector3.Zero, AiLawParams.Cruise);
 
                 case AiMode.AvoidCrash:
-                    // Climb out on the current heading, flat out; the law's leash is what
-                    // levels the wings for the pull.
+                    // The original's own avoid-crash aim point is straight up from the aircraft,
+                    // flown on its own table with the emergency arm. The machine's climb-out
+                    // altitude stays the ORDER so its release test and callers still read it.
                     TargetHeadingDeg = HeadingDegOf(-model.Attitude.Z);
                     TargetAltitude = machine.ClimbOutAltitude;
-                    Throttle = 1f;
-                    break;
+                    return Fly(model, dt, model.Position + (Vector3.Up * ClimbOutAimM),
+                        Vector3.Zero, AiLawParams.AvoidCrash, emergency: true);
 
-                case AiMode.Pursue:
-                    if (quarry != null)
-                        SteerPursuit(model, quarry);
-                    break;
+                case AiMode.Pursue when quarry != null:
+                    return FlyPursuit(model, dt, quarry);
 
-                case AiMode.LayOff:
-                    if (quarry != null)
-                        SteerLayOff(model, machine, quarry, dt);
-                    break;
+                case AiMode.LayOff when quarry != null:
+                    return FlyLayOff(model, dt, machine, quarry);
 
-                default: // patrol and the never-entered danger-zone modes fly the net/orders
-                    SteerPatrol(model);
-                    break;
+                default: // patrol, the danger-zone modes, and any mode whose quarry went away
+                    return FlyPatrol(model, dt);
             }
         }
-        else if (quarry != null)
-        {
-            SteerPursuit(model, quarry);
-        }
-        else
-        {
-            SteerPatrol(model);
-        }
 
-        var att = model.Attitude;
-        var nose = -att.Z;
-
-        // Signed heading error about world up: + = the ordered course is to the LEFT of the
-        // nose, which is the sign of the stick that banks left (FlightInput Roll + = bank left).
-        var target = new Basis(Vector3.Up, Mathf.DegToRad(TargetHeadingDeg)) * Vector3.Forward;
-        var noseH = new Vector3(nose.X, 0f, nose.Z);
-        noseH = noseH.LengthSquared() > 1e-6f ? noseH.Normalized() : target;
-        float headingErrDeg = Mathf.RadToDeg(Mathf.Atan2(noseH.Cross(target).Y, noseH.Dot(target)));
-
-        // Bank into the turn. Bank is measured + = banked LEFT (the right wingtip, body +X,
-        // above the horizon); the model's coordinated-turn coupling converts bank to turn rate.
-        float bankDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(att.X.Y, -1f, 1f)));
-        float wantBankDeg = Mathf.Clamp(headingErrDeg * BankPerHeadingDeg, -MaxBankDeg, MaxBankDeg);
-
-        // The altitude leash. In this model a sustained turn always climbs (pull is the turn,
-        // and gravity is auto-cancelled), so a long turn ratchets altitude without bound. Past
-        // the leash the pilot breaks off, levels near-wings-flat so the path hold below gets its
-        // authority back, descends, and resumes the turn (hysteresis, so it does not chatter).
-        float altErrM = model.Position.Y - TargetAltitude;
-        if (_altRecovering ? altErrM < AltLeashExitM : altErrM > AltLeashEnterM)
-            _altRecovering = !_altRecovering;
-        if (_altRecovering)
-            wantBankDeg = Mathf.Clamp(wantBankDeg, -LeashBankDeg, LeashBankDeg);
-        float rollRateDegS = Mathf.RadToDeg(model.BodyRates.Z); // + = rolling left
-        float roll = Mathf.Clamp(
-            (wantBankDeg - bankDeg - rollRateDegS * RollRateLead) * RollGain, -1f, 1f);
-
-        // Altitude hold: fly the flight-path angle toward the ordered altitude, with rate
-        // damping, plus a pull covering the vertical lift lost to bank.
-        float pathDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(model.VelocityDir.Y, -1f, 1f)));
-        float wantPathDeg = Mathf.Clamp(
-            (TargetAltitude - model.Position.Y) * PathPerMeter, -MaxPathDeg, MaxPathDeg);
-        float pitchRateDegS = Mathf.RadToDeg(model.BodyRates.X); // + = pitching up
-        // Pull carries the turn: banked, sustained pitch rate is what walks the nose around
-        // (bank alone only yaws at the model's coupling rate). Scaled by the remaining heading
-        // error so the pull relaxes as the course captures. The path-hold term is attenuated by
-        // cos²(bank): at full strength it cancels the pull into a ~4°/s mush that orbits a
-        // patrol node it can never reach (measured); the altitude the turn gains instead is what
-        // the leash above pays back.
-        float turnPull = _altRecovering ? 0f
-            : Mathf.Sin(Mathf.Abs(Mathf.DegToRad(bankDeg))) * BankPull
-            * Mathf.Clamp(Mathf.Abs(headingErrDeg) / 8f, 0f, 1f);
-        float cosBank = Mathf.Cos(Mathf.DegToRad(bankDeg));
-        float pitch = Mathf.Clamp(
-            (wantPathDeg - pathDeg - pitchRateDegS * PitchRateLead) * PitchGain * cosBank * cosBank
-            + turnPull,
-            -1f, 1f);
-
-        return new FlightInput
-        {
-            Pitch = pitch,
-            Roll = roll,
-            Yaw = 0f, // bank carries the turn; the placeholder law never uses rudder
-            Throttle = Mathf.Clamp(Throttle, 0f, 1f),
-        };
+        return quarry != null ? FlyPursuit(model, dt, quarry) : FlyPatrol(model, dt);
     }
 
-    /// <summary>Plain pursuit: fly at the victim's position and altitude, flat out, and let the
-    /// gunner's cones decide the trigger. Wave D's real maneuvering replaces this steering
-    /// through the same seam as the rest of the law.</summary>
-    private void SteerPursuit(FlightModel model, FlightController quarry)
+    /// <summary>Runs the original's law for this step's aim point and keeps the lever it walked.
+    /// The skill factor is the machine's <c>sixth_sense_factor</c>, which the decode shows
+    /// multiplies all three channels every step; a pilot with no machine gets a neutral 1.</summary>
+    private FlightInput Fly(FlightModel model, float dt, Vector3 aimPoint, Vector3 aimVelocity,
+        in AiLawParams p, bool emergency = false, bool engaged = false, bool gunLead = false)
+    {
+        var input = AiControlLaw.Steer(model, aimPoint, aimVelocity, p, Throttle, dt,
+            emergency, engaged, gunLead, Machine?.SixthSenseFactor ?? 1f, PlayerPosition);
+        Throttle = input.Throttle;
+        return input;
+    }
+
+    /// <summary>Pursuit: the aim point is the decoded lead offset ahead of the victim along the
+    /// victim's own facing, flown on the engaged table with its authority bonus. A victim coming
+    /// at us inside its own quick-draw cone is the original's head-on case, which aims at the
+    /// victim itself and lets the law solve the firing problem instead of a fly-to.</summary>
+    private FlightInput FlyPursuit(FlightModel model, float dt, FlightController quarry)
     {
         var toQuarry = quarry.WorldPosition - model.Position;
         if (new Vector2(toQuarry.X, toQuarry.Z).LengthSquared() > 1f)
             TargetHeadingDeg = HeadingDegOf(toQuarry);
         TargetAltitude = quarry.WorldPosition.Y;
-        Throttle = 1f; // a stern chase at cruise never closes; pursuit runs flat out
+
+        var nose = quarry.NoseDirection;
+        var vel = quarry.WorldVelocity;
+        bool headOn = Gunner is { } g && toQuarry.LengthSquared() > 1f
+            && toQuarry.Normalized().Dot(nose) < -Mathf.Cos(Mathf.DegToRad(g.QuickDrawAngleDeg));
+        var aim = headOn
+            ? quarry.WorldPosition
+            : quarry.WorldPosition + (nose * AiControlLaw.LeadOffsetFor(vel.Length()));
+        return Fly(model, dt, aim, vel, AiLawParams.Engaged, engaged: true, gunLead: headOn);
     }
 
-    /// <summary>Lay off (D15, the rubber-band assist): let the pursuer catch up. Holds the
-    /// course captured at mode entry — staying ahead of the pursuer instead of turning back
-    /// into a head-on — and walks the throttle toward a speed of
-    /// <see cref="AiModeMachine.SixthSenseFactor"/> × the pursuer's own speed. The factor is
-    /// the decoded <c>sixth_sense_factor</c> ("the ease-off while being pursued"); reading it
-    /// as a pursuer-speed match, and the lever rate/floor, are invented. Fire is held by the
-    /// host's mode gate — only pursue shoots.</summary>
-    private void SteerLayOff(FlightModel model, AiModeMachine machine, FlightController pursuer,
-        float dt)
+    /// <summary>Lay off (D15, the rubber-band assist): let the pursuer catch up. Steers the course
+    /// captured at mode entry on the cruise table, staying ahead of the pursuer rather than
+    /// turning back into a head-on, and then OVERRIDES the law's lever with D15's own walk toward
+    /// <see cref="AiModeMachine.SixthSenseFactor"/> × the pursuer's speed.
+    /// ⚠ That override is this engine's assist, not the original's lay-off: the decode has the
+    /// break-off arm flying the same cruise table with a 0.8 lever floor and no speed match, and
+    /// reading the factor as a pursuer-speed match is D15's invention. It is kept because D15 is a
+    /// landed, playtested feature with its own suite; revisit it at F52, not here.</summary>
+    private FlightInput FlyLayOff(FlightModel model, float dt, AiModeMachine machine,
+        FlightController pursuer)
     {
         TargetHeadingDeg = machine.LayOffHeadingDeg;
         TargetAltitude = machine.LayOffAltitude;
+        var input = Fly(model, dt, OrderAim(model), Vector3.Zero, AiLawParams.Cruise);
         float desired = machine.SixthSenseFactor * pursuer.WorldVelocity.Length();
         float step = LayOffThrottleRatePerS * dt;
         Throttle = model.Speed > desired
             ? Mathf.Max(LayOffMinThrottle, Throttle - step)
             : Mathf.Min(1f, Throttle + step);
+        input.Throttle = Throttle;
+        return input;
     }
 
-    /// <summary>Patrol: the net follower turns the graph walk into this step's heading and
-    /// altitude orders; without a net the standing orders fly unchanged.</summary>
-    private void SteerPatrol(FlightModel model)
+    /// <summary>Patrol: a net node is already the point-with-no-velocity shape the law wants, so it
+    /// is flown directly; without a net the standing heading/altitude orders are projected into
+    /// one. Both on the cruise table, which is what the original's patrol arm uses.</summary>
+    private FlightInput FlyPatrol(FlightModel model, float dt)
     {
         if (Patrol is not { } patrol)
-            return;
+            return Fly(model, dt, OrderAim(model), Vector3.Zero, AiLawParams.Cruise);
+
+        SteeringPatrol = true;
         patrol.Update(model.Position);
         var toNode = patrol.CurrentTarget - model.Position;
         if (new Vector2(toNode.X, toNode.Z).LengthSquared() > 1f)
             TargetHeadingDeg = HeadingDegOf(toNode);
         TargetAltitude = patrol.CurrentTarget.Y;
+        return Fly(model, dt, patrol.CurrentTarget, Vector3.Zero, AiLawParams.Cruise);
+    }
+
+    /// <summary>The aim point a bare heading/altitude order becomes (see
+    /// <see cref="OrderAimRangeM"/> for why the distance is a port artifact).</summary>
+    private Vector3 OrderAim(FlightModel model)
+    {
+        var dir = new Basis(Vector3.Up, Mathf.DegToRad(TargetHeadingDeg)) * Vector3.Forward;
+        var aim = model.Position + (dir * OrderAimRangeM);
+        aim.Y = TargetAltitude;
+        return aim;
     }
 }

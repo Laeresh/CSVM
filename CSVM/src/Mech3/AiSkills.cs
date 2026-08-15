@@ -93,10 +93,12 @@ public sealed class AiRatingBias
 /// pair per stat, indexed by the roster's 1–9 skill ratings — plus the accessor that reads a
 /// roster block's nine-slot skill vector (slots 22–30) by stat name.
 ///
-/// <para>⚠ Ratings between the endpoints interpolate LINEARLY here. Only the two endpoints are
-/// decoded; the curve between them is a documented assumption, not a read fact. Two stats improve
-/// downward (<c>dead_eye_angle</c>, <c>steady_hand_chance</c>) — do not normalise the direction
-/// away.</para>
+/// <para>⚠ Ratings between the endpoints interpolate LINEARLY, and — decoded, not assumed, as of
+/// E42 — the engine's own origin is rating <b>0</b>, not rating 1: <c>value = lo + (hi-lo) ·
+/// rating/9</c> (<c>FUN_0047c210</c>, docs/org/aiControlLaw.md "The skill scalar"). A rating of 9
+/// gives <c>hi</c> exactly; a rating of 1 gives <c>lo + (hi-lo)/9</c>, not <c>lo</c>. Two stats
+/// improve downward (<c>dead_eye_angle</c>, <c>steady_hand_chance</c>) — do not normalise the
+/// direction away.</para>
 ///
 /// <para><c>natural_touch</c> has no entry BY DESIGN: it compares directly against a maneuver's
 /// own 1–9 difficulty, so asking this table for it throws rather than inventing a curve.</para>
@@ -223,14 +225,15 @@ public sealed class AiSkills
         return blocks;
     }
 
-    /// <summary>The stat parameter at a 1–9 rating: the shipped endpoints at 1 and 9, linear in
-    /// between (the documented assumption above). Out-of-range ratings clamp — the shipped data
-    /// authors nothing outside 1–9 (<c>ace_stats</c> caps at 9).</summary>
+    /// <summary>The stat parameter at a 1–9 rating: the engine's own formula, <c>lo + (hi-lo) ·
+    /// rating/9</c> — the pair's endpoints sit at rating 0 and 9, not 1 and 9, so a rating of 1
+    /// reads <c>lo + (hi-lo)/9</c> rather than <c>lo</c> outright. Out-of-range ratings clamp —
+    /// the shipped data authors nothing outside 1–9 (<c>ace_stats</c> caps at 9).</summary>
     public float At(string key, float rating)
     {
         if (!_params.TryGetValue(key, out var pair))
             throw new KeyNotFoundException($"ai_skill_parameters has no '{key}' (natural_touch has none by design)");
-        float t = (Math.Clamp(rating, 1f, 9f) - 1f) / 8f;
+        float t = Math.Clamp(rating, 1f, 9f) / 9f;
         return pair.At1 + (pair.At9 - pair.At1) * t;
     }
 

@@ -281,7 +281,7 @@ public sealed class AiVoiceDispatcher
         /// <summary>Flipped false on death; only a forced dispatch (the death cries) passes.</summary>
         public bool Alive = true;
 
-        /// <summary>The pilot's <c>talker_chance</c> (0.25 at rating 1 → 0.95 at 9).</summary>
+        /// <summary>The pilot's <c>talker_chance</c> (0.25 → 0.95 over the shipped pair).</summary>
         public float TalkerChance;
 
         /// <summary>The pilot's <c>constitution_chance</c> (0.35 → 0.95) — the invented

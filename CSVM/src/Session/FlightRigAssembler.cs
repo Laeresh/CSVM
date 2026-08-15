@@ -382,6 +382,16 @@ public sealed class FlightRigAssembler
                 GD.Print("targeting HUD: nearest-AI-hostile marker (edge arrow + clock bearing)");
         }
 
+        // --debug-markers: the same HUD marks every live aircraft instead of one hostile. Own is
+        // this pane's own plane, so it never marks the aircraft the camera is sitting on.
+        if (_spec.DebugMarkers)
+        {
+            controller.VersusHud.MarkAll = true;
+            controller.VersusHud.Own = controller;
+            if (verbose)
+                GD.Print("--debug-markers: marking EVERY live aircraft (red hostile / blue own side)");
+        }
+
         // Every player's start comes from ONE call, because a grid start is not decomposable: the
         // fan is centred on the player count and the whole field is lifted by its worst slot, so no
         // single pilot's answer exists until all of them do. Resolved lazily here rather than in the
@@ -389,8 +399,11 @@ public sealed class FlightRigAssembler
         // and so the caller keeps constructing the assembler before the rigs are known.
         var (spawnPos, spawnLookAt) = (_starts ??= _spawns.ChooseStarts(
             _in.SpawnList, _in.MissionZrdrPath, _in.SpawnBase, _in.RigCount))[pi];
-        controller.Setup(new FlightModel(stats), rig.Camera, _in.CamParamsFor(planeName),
-            spawnPos, spawnLookAt);
+        // The plant's force path is chosen once, here, off who is flying (C21) — a person, so the
+        // player path. FlightModel.UsesAiForcePath carries why this is a construction argument
+        // rather than the original's own pointer-compare-against-the-player test.
+        controller.Setup(new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
+            rig.Camera, _in.CamParamsFor(planeName), spawnPos, spawnLookAt);
         // --weapon-lab: the lab is a flight session whose aircraft is pinned at the spawn pose
         // — everything else (world, pool, effects, the trigger itself) runs exactly as in free
         // flight. Set AFTER Setup, which places the plane: the pin is captured at the first held

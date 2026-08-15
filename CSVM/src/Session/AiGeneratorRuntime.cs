@@ -61,17 +61,24 @@ public sealed partial class AiGeneratorRuntime : Node
     private readonly Func<string, Vector3, Vector3, AiPilot, FlightController?> _spawn;
     private readonly Func<string, Node3D, int>? _playAnim;
     private readonly Action<string, Node3D>? _stopAnim;
+    private readonly Func<AiNet, Func<Vector3?>?>? _trailerTarget;
 
+    /// <param name="trailerTarget">Where an anchored net's trailer target is (`BL-377`), per net;
+    /// null leaves every generated patroller on its net's authored coordinates. One generator's
+    /// nets are player-anchored in the shipped data (C5's <c>M4Miles</c>), so this is not
+    /// hypothetical.</param>
     public AiGeneratorRuntime(IReadOnlyList<EnemyGeneratorDef> defs,
         Func<string, Node3D?, Node3D?>? resolveNode, IReadOnlyList<AiNet> chapterNets,
         string planeName, Func<string, Vector3, Vector3, AiPilot, FlightController?> spawn,
-        Func<string, Node3D, int>? playAnim = null, Action<string, Node3D>? stopAnim = null)
+        Func<string, Node3D, int>? playAnim = null, Action<string, Node3D>? stopAnim = null,
+        Func<AiNet, Func<Vector3?>?>? trailerTarget = null)
     {
         Name = "ai_generators";
         _planeName = planeName;
         _spawn = spawn;
         _playAnim = playAnim;
         _stopAnim = stopAnim;
+        _trailerTarget = trailerTarget;
         foreach (var def in defs)
         {
             // Load-drop 1: unresolved host node (decoded rule: dropped, not loaded inert).
@@ -298,8 +305,8 @@ public sealed partial class AiGeneratorRuntime : Node
         SpawnedNet[gen.Def.Node] = net.Name;
 
         var pilot = AiPilot.HoldingCourse(pos, pos + forward);
-        pilot.Throttle = AiPilot.PatrolThrottle;
-        pilot.Patrol = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai));
+        pilot.Patrol = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai),
+            trailerTarget: _trailerTarget?.Invoke(net));
         var controller = _spawn(_planeName, pos, pos + drop, pilot);
         if (controller == null)
         {

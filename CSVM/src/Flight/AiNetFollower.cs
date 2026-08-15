@@ -21,35 +21,60 @@ namespace CSVM.Flight;
 ///
 /// <para><b>Arrival is a capture radius, and it is invented.</b>
 /// <see cref="DefaultArrivalRadius"/> is not an original value: the node counts as reached when
-/// the follower is horizontally (XZ) within the radius. Horizontal, because the placeholder
-/// control law converges on altitude slowly, and the pilot model (wave D) owns real
-/// waypoint-arrival and turn behaviour. Replace, do not tune, when that lands.</para>
+/// the follower is horizontally (XZ) within the radius. Horizontal, because neither the deleted
+/// placeholder law nor the ported <see cref="AiControlLaw"/> (E41) converges on altitude quickly
+/// through a level patrol turn. E42 re-measured the radius against the ported law rather than
+/// assume it would shrink: it does not — on C1's M4ReinfAce the real law's own turning circle
+/// misses a stationary aim point on roughly this same scale, and halving the radius to 100 m
+/// roughly quadruples the mean time between node captures (measured over a 600 s run: 17 s/leg at
+/// 200 m vs 65 s/leg at 100 m). The value stands, re-justified rather than retired.</para>
 ///
-/// <para><b>The trailer and the per-node tags ride along untouched.</b> The net's trailer
-/// (its attach/follow target, e.g. <c>[10, "player"]</c>) is recorded and exposed via
-/// <see cref="AiNet.Trailer"/> but not acted on; target-relative motion is later-wave work.
-/// Per-node tags are preserved raw on <see cref="AiNetNode.Tags"/>; both decoded readings
+/// <para><b>An anchored net RIDES its target (`BL-377`).</b> A trailer such as
+/// <c>[10, "player"]</c> makes the whole graph a PATTERN carried by a moving object rather than a
+/// fixed route: every node position comes back as <c>(node − anchor) + target</c> in X/Z with the
+/// node's <b>authored Y</b> (docs/org/aiPilot.md, "The trailer"). 76 of the 222 nets are anchored,
+/// 11 of them to the player, and six of the eight chapters' first nets. The offset runs through
+/// <see cref="NodePosition"/>, so the nearest-node scan and every consumer move with it, as the
+/// original's single <c>FUN_00432010</c> does. Whether a net actually rides is the CALLER's
+/// choice: without a <c>trailerTarget</c> supplier the authored coordinates are flown, which is
+/// also the engine's own unresolved-target branch.</para>
+///
+/// <para>Per-node tags are preserved raw on <see cref="AiNetNode.Tags"/>; both decoded readings
 /// (stop-point id vs segment id) are still open (F17), so this class acts on neither.</para></summary>
 public sealed class AiNetFollower
 {
-    /// <summary>The capture radius, metres: an invented value, not original behaviour, sized to
-    /// the placeholder control law's tracking error on the tightest fighter rings (measured on
-    /// C1's M4ReinfAce: the law orbits a node at ~200 m; wave D's real maneuvering shrinks
-    /// this).</summary>
+    /// <summary>The capture radius, metres: an invented value, not original behaviour. First
+    /// sized to the (now deleted) placeholder law's tracking error; E42 re-measured it against
+    /// the ported <see cref="AiControlLaw"/> on the same C1 M4ReinfAce loop and found no smaller
+    /// value to prefer — shrinking it makes the patrol slower to advance, not more precise, so it
+    /// stands unchanged (see the class remarks for the measurement).</summary>
     public const float DefaultArrivalRadius = 200f;
 
     private readonly Random _rng;
     private readonly float _arrivalRadius;
     private readonly int[][] _neighbors;
+    private readonly Func<Vector3?>? _trailerTarget;
+    private readonly int _anchorIndex = -1;
     private int _previousIndex = -1;
 
-    public AiNetFollower(AiNet net, Random rng, float arrivalRadius = DefaultArrivalRadius)
+    /// <param name="trailerTarget">Where the net's trailer target is right now, or null when it
+    /// cannot be located this frame. Supplied only by a caller that WANTS the net to ride
+    /// (`BL-377`); omitted, or paired with a net whose trailer has no anchor node, the authored
+    /// coordinates are flown. Called once per node read, so it must be cheap.</param>
+    public AiNetFollower(AiNet net, Random rng, float arrivalRadius = DefaultArrivalRadius,
+        Func<Vector3?>? trailerTarget = null)
     {
         if (net.Nodes.Count == 0)
             throw new ArgumentException($"net '{net.Name}#{net.Id}' has no nodes", nameof(net));
         Net = net;
         _rng = rng;
         _arrivalRadius = arrivalRadius;
+        if (trailerTarget != null && net.Trailer is { NodeIndex: >= 0 } trailer
+            && trailer.NodeIndex < net.Nodes.Count)
+        {
+            _anchorIndex = trailer.NodeIndex;
+            _trailerTarget = trailerTarget;
+        }
 
         // Undirected adjacency off the explicit edge list, never node order (the graph
         // branches; a list-order walk is the documented wrong reading).
@@ -82,9 +107,46 @@ public sealed class AiNetFollower
     /// <summary>How many node captures have advanced the target so far.</summary>
     public int Advances { get; private set; }
 
-    /// <summary>The position of the node currently flown toward. Only valid once
-    /// <see cref="Update"/> has run.</summary>
-    public Vector3 CurrentTarget => Net.Nodes[CurrentIndex].Position;
+    /// <summary>True when this follower rides its net's trailer target (`BL-377`): the net has an
+    /// anchor node AND the caller supplied a target. False is the fixed-route case, which is every
+    /// unanchored net and every caller that did not opt in.</summary>
+    public bool Anchored => _anchorIndex >= 0;
+
+    /// <summary>The position of the node currently flown toward, trailer offset included. Only
+    /// valid once <see cref="Update"/> has run.</summary>
+    public Vector3 CurrentTarget => NodePosition(CurrentIndex);
+
+    /// <summary>How far an anchored net's nodes are carried from their authored coordinates right
+    /// now: <c>target − anchorNode</c> in X and Z, <b>zero in Y</b>, because the pattern keeps its
+    /// authored altitude, so a ring authored at 400 m stays at 400 m over a zeppelin at 200 m.
+    /// <see cref="Vector3.Zero"/> when the net is unanchored or the target cannot be located,
+    /// which is the engine's own no-trailer branch (`FUN_00432010`). Static because the overlay
+    /// needs the same offset for a net nobody is flying.</summary>
+    public static Vector3 TrailerOffset(AiNet net, Vector3? target)
+    {
+        if (target is not { } t || net.Trailer is not { NodeIndex: >= 0 } trailer
+            || trailer.NodeIndex >= net.Nodes.Count)
+            return Vector3.Zero;
+        var anchor = net.Nodes[trailer.NodeIndex].Position;
+        return new Vector3(t.X - anchor.X, 0f, t.Z - anchor.Z);
+    }
+
+    /// <summary>Where node <paramref name="index"/> is right now: its authored position plus the
+    /// live trailer offset. EVERY node read goes through here, because the original's does: a
+    /// follower that offset only its current target would seat itself on the wrong node.</summary>
+    public Vector3 NodePosition(int index) => Net.Nodes[index].Position + LiveOffset();
+
+    /// <summary>Drops the walk back to "nearest node next", so the next <see cref="Update"/>
+    /// re-seats from wherever the follower now is. This is the original's own activation rule:
+    /// <c>FUN_004b0f40</c> snaps a vehicle carrying a net to that net's nearest node
+    /// (<c>FUN_00432010</c>) when it is activated. An Instant Action wave member ticks while it
+    /// is inert (presence is not a sim gate), so without this its first update latches a node
+    /// near the parking pose and it flies back there after the teleport.</summary>
+    public void Reseat()
+    {
+        CurrentIndex = -1;
+        _previousIndex = -1;
+    }
 
     /// <summary>Advances the walk from <paramref name="position"/>: the first call targets the
     /// nearest node (the design's "fly first to the nearest node"); afterwards, reaching the
@@ -132,19 +194,44 @@ public sealed class AiNetFollower
         return candidates[0]; // unreachable; keeps the compiler satisfied
     }
 
+    private Vector3 LiveOffset() =>
+        _anchorIndex < 0 ? Vector3.Zero : TrailerOffset(Net, _trailerTarget!());
+
+    // The seat scan, in authored space: a uniform offset moves every node equally, so the target
+    // moves back instead of all N nodes forward.
+    //
+    // ⚠ Edgeless nodes are SKIPPED, which is the engine's own rule (FUN_00431900 tests the degree
+    // at node +0x18). It matters most on an anchored net, where the anchor is parked off the ring
+    // in every shipped case: seated there, the walk has no neighbour to advance to and the plane
+    // holds that node forever. A net whose nodes are ALL edgeless still gets a seat rather than
+    // nothing.
     private int NearestNode(Vector3 position)
     {
-        int best = 0;
+        var local = position - LiveOffset();
+        int best = -1;
         float bestSq = float.MaxValue;
         for (int i = 0; i < Net.Nodes.Count; i++)
         {
-            float dSq = Net.Nodes[i].Position.DistanceSquaredTo(position);
+            if (_neighbors[i].Length == 0)
+                continue;
+            float dSq = Net.Nodes[i].Position.DistanceSquaredTo(local);
             if (dSq < bestSq)
             {
                 bestSq = dSq;
                 best = i;
             }
         }
-        return best;
+        if (best >= 0)
+            return best;
+        for (int i = 0; i < Net.Nodes.Count; i++)
+        {
+            float dSq = Net.Nodes[i].Position.DistanceSquaredTo(local);
+            if (dSq < bestSq)
+            {
+                bestSq = dSq;
+                best = i;
+            }
+        }
+        return Math.Max(best, 0);
     }
 }
