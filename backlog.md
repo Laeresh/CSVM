@@ -614,6 +614,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   variant. So the original's smoke starts at 40% on an enemy and 50% on a campaign wingman, and the
   `random_remote_damage` stages are part of the same list — the "one stage, not two" reading holds
   only for the trail itself.
+  *Update 2026-08-16 — the `BL-386` blocker is cleared.* An AI spawn now resolves its own def, so
+  `stats.VehicleInjureAnims` on an AI plane IS the seven-entry AI ladder (`pfsmoketrail` at 0.40 on
+  an enemy) rather than the player's two. ⚠ And the threshold input is settled with it: an AI
+  airframe is **zone-less**, so there is no "worst part fraction" to read — `WorstFraction` returns
+  a constant 1f with no parts. Stage this ladder off `PlaneDamage.SummaryHealthFraction`, the
+  whole-vehicle pool, which is what `FUN_004b3800` walks and what `BL-384`'s correction settles.
 
 - `BL-386` `[Bug]` **Every AI aircraft is built from the player def — `PlaneStats.Load` refuses
   the AI defs in `vehicle.zrd.json`, so AI planes carry the player damage model instead of their
@@ -671,6 +677,58 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-385` (the visuals half — it stages whatever list this item resolves),
   `BL-384` (fraction semantics), `docs/org/vehicleDamage.md` (the decoded seeding, incl. the
   parenthetical to correct), `docs/formats/vehicle.md` (the def-family census).
+  *Correction + landed 2026-08-16.* The entry's fix shape above was built on
+  `docs/org/vehicleDamage.md`'s "the `r*` def chain" claim, and that claim was wrong. A census of
+  every def named by all 414 `aiv` blocks (53 files) against all 75 defs in `vehicle.zrd.json`:
+  **no roster names an `r*` def** (they name militia variants like `secfury`/`bhatwarhawk`, or a
+  bare AI def like `devastator`), and **not one roster-named chain resolves `destroyable_parts`**.
+  So the original's AI aircraft is **zone-less** — the authored pair alone, not "72/72 with bare
+  parts". Three further corrections: the bare AI defs author no `nodename` of their own, so the
+  entry's "resolve by nodename" is impossible (resolution is by def name); the 38 militia variants
+  override no damage key, so the base AI def is the whole answer and the `w*`-vs-`r*` open
+  question above is moot; and trap (a) is wrong — the `air-to-air` suite never touches
+  `AiAircraftSpawner` (it hand-builds rigs from `PlaneStats.Load(…, "player_fury")` and its
+  `WholeHealthMax == 90f` pin is a player measurement), so nothing re-pins. Traps (b) and (c)
+  dissolve with the identity split: `DefName` stays the player def.
+  *What landed:* `PlaneStats.LoadForAi` resolves the AI def (player def minus its leading `p`,
+  validated) for the damage trio only — pair, empty parts, the AI seven-entry ladder — while
+  `DefName`, dynamics, turrets and the model stay on the player chain, because `DefName` keys the
+  eleven-entry `stock_loadouts.json` and swapping it would leave every AI plane unarmed. Second
+  cache behind `GameSession.AiStatsFor` → `FlightRigAssembler.Inputs`; `AiAircraftSpawner`'s damage
+  guard now reads "zones OR an authored pair" (a parts-only test left a zone-less plane
+  invulnerable). Pinned by the `ai-plane-defs` suite, both halves. Enemy Fury: authored 72/72
+  against the old 90/90 summed over player zones.
+
+- `BL-394` `[Bug]` **AI aircraft still fly the player's guns, livery and pilot — only the damage
+  model reads their own def.** `BL-386` landed the identity split deliberately narrow: `PlaneStats`
+  resolves the AI def for `armor`/`health`/`injure_anims` and nothing else, so `DefName` (and with
+  it the stock loadout, the display name and the built model) is still `pfury` on an enemy Fury.
+  *What the AI defs actually author (data, 2026-08-16).* A `weapons` block of 5-tuples —
+  `fury`: `[wep_04, 4, 200, 30, 800]`, `[wep_07, 2, 200, 30, 800]`, `[wep_130, 9000, 0.05, 1, 900]`
+  — overridden per militia variant (`secfury` swaps to `[wep_12, 6, 30, 200, 800]`,
+  `bhatwarhawk` to `[wep_14, 8, 5, 350, 800]`). Plus `paint_pattern`/`paint_color1..3`/
+  `paint_decal1..3` (the militia livery), the nine-slot pilot skill vector (`dare_devil`,
+  `dead_eye`, `quick_draw`, `steady_hand`, `sixth_sense`, `natural_touch`, `stun_recovery`,
+  `talker`, `constitution`), `accentID`, and `gun_pitch`/`gun_yaw` (the AI's forward-gun cone,
+  `[-11, 11]` on every AI aircraft).
+  *The militia mapping is already in the tree, undecoded as such.* `UI/LaunchMenu.cs`'s `Militias`
+  table (13 militias × their aircraft) reproduces the militia def names exactly: `bhat*` = Black
+  Hat {Warhawk, Brigand, Autogyro}, `bs*` = Black Swan {Fury}, `blake*` = Blake Aviation, `brit*` =
+  British, `ha*` = Hughes Aviation, `hk*` = Hollywood Knight, `med*` = Medusa, `rus*` = Russian,
+  `sec*` = Studio Security, `sti*`/`german*` = the two Hellhound militias. Two table entries have
+  no def (Sacred Trust's Warhawk, Broadway Bomber's Peacemaker) — expected, since that table comes
+  from `.BM` paint coverage, not from `vehicle.json`.
+  *⚠ Carries decode risk:* the `weapons` 5-tuple's last four fields are unread — count is
+  plausibly slot 2, but the 200/30/800 triple is not decoded. Do that before wiring, or AI planes
+  get wrong ammo counts and ranges.
+  *⚠ Trap:* `stock_loadouts.json` holds the eleven `p*` defs alone. Moving `DefName` to an AI def
+  without giving `Loadout.Bind` an AI path disarms every AI plane **silently** —
+  `AiAircraftSpawner` has no "unarmed" warning branch the way `FlightRigAssembler` does.
+  *Size:* LARGER, and better split — weapons, livery and pilot skills are three independent halves
+  over one resolution change.
+  *Cross-refs:* `BL-386` (the damage half, landed — this builds on its `AiDefName` seam),
+  `docs/formats/vehicle.md` (the def-family census), `docs/formats/instant-action.md` (the militia
+  table's provenance).
 
 ## Weapons & combat
 

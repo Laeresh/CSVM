@@ -1702,6 +1702,22 @@ public partial class GameSession : Node3D
                      $"torques=({loaded.PitchTorque},{loaded.RollTorque},{loaded.RudderTorque})");
             return loaded;
         }
+        // The AI flavour of the same airframe, cached in its own dictionary because it is a
+        // different object off the same key: everything but the damage model matches StatsFor's,
+        // and the damage model is the authored whole pair with no zones at all (BL-386). Loaded
+        // lazily — a session with no AI spawns never parses vehicle.json a second time.
+        var aiStatsCache = new Dictionary<string, PlaneStats>();
+        PlaneStats AiStatsFor(string plane)
+        {
+            if (aiStatsCache.TryGetValue(plane, out var cached))
+                return cached;
+            var loaded = PlaneStats.LoadForAi(state.ZrdrPath, plane);
+            aiStatsCache[plane] = loaded;
+            GD.Print($"ai flight stats [{loaded.DefName} damage:{loaded.AiDefName}]: " +
+                     $"armor={loaded.VehicleArmor:0.#} health={loaded.VehicleHealth:0.#} " +
+                     $"zones={loaded.DestroyableParts.Count} injure_anims={loaded.VehicleInjureAnims.Count}");
+            return loaded;
+        }
         // The camera's per-plane tuning, cached the same way and for the same reason. Only the
         // chase distance is applied; the line names it so a capture's evidence is in its own log.
         var camCache = new Dictionary<string, CamParams>();
@@ -1888,6 +1904,7 @@ public partial class GameSession : Node3D
             Ambience = _ambience,
             PlanesGamez = planesGamez,
             StatsFor = StatsFor,
+            AiStatsFor = AiStatsFor,
             CamParamsFor = CamParamsFor,
             RigCount = _rigs.Count,
             MixGain = mixGain,

@@ -76,7 +76,10 @@ public sealed class AiAircraftSpawner
         // Instant Action wingman flies a player airframe. Divergence recorded in org/flightModel.md.
         // Keyed by spawn ordinal rather than drawn off the shared spawn stream, so a --det replay
         // reproduces it and no other subsystem's sequence moves.
-        var stats = _in.StatsFor(planeName).WithAiSpawnJitter(Rng.NewSystemRandom(Rng.Spawn, index, 0));
+        // BL-386: the AI flavour of the airframe — the player chain for dynamics, loadout key,
+        // turrets and model, the AI def's own chain for the damage model (an authored whole pair,
+        // no zones). Nobody is at these controls, so every aircraft this spawner builds gets it.
+        var stats = _in.AiStatsFor(planeName).WithAiSpawnJitter(Rng.NewSystemRandom(Rng.Spawn, index, 0));
         if (pilot.Machine is { } machine)
         {
             // The airframe's shipped range gates (vehicle.json attack / return_range).
@@ -107,7 +110,12 @@ public sealed class AiAircraftSpawner
                 WingLights = WingLightBlinker.Build(planeBuilder.WingFlares, _spec.AnimLod),
                 Surfaces = ControlSurfaceAnimator.Build(planeModel),
                 Collider = PlaneCollider.Build(planeModel),
-                Damage = stats.DestroyableParts.Count > 0 ? PlaneDamage.For(stats) : null,
+                // Zones OR an authored whole pair: an AI airframe resolves the pair and no zones
+                // at all, and a parts-only test would leave it undamageable (BL-386). PlaneDamage
+                // handles the zone-less case natively — the resolver returns no part and the hit
+                // spends against the whole pair, which is the decoded zone-less route.
+                Damage = stats.DestroyableParts.Count > 0 || stats.VehicleHealth is > 0f
+                    ? PlaneDamage.For(stats) : null,
                 CollideDamageSink = _in.WorldRuntime != null ? _in.WorldRuntime.CollideDamageAt : null,
                 GrazeEffectSink = _in.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
                 TouchdownDefs = _in.TouchdownDefs,

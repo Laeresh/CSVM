@@ -70,6 +70,12 @@ public sealed class PlaneStats
     public string DefName = "";          // vehicle.json def, e.g. "pbloodhawk"
     public string NodeName = "";         // GameZ node, e.g. "player_bhawk"
 
+    /// <summary>The AI def the damage trio came from ("bloodhawk"), or null on a player load
+    /// (<see cref="Load"/>). Set only by <see cref="LoadForAi"/>, and deliberately NOT used as
+    /// <see cref="DefName"/>: that name keys the stock-loadout table, which holds the eleven
+    /// player defs alone, so swapping it would leave every AI plane unarmed (BL-386).</summary>
+    public string? AiDefName;
+
     // dynamics block
     public float PitchTorque = 2.4f;
     public float RollTorque = 6f;
@@ -229,15 +235,19 @@ public sealed class PlaneStats
     public List<DestroyablePart> DestroyableParts = new();
 
     /// <summary>The def-authored whole-vehicle pair ('armor'/'health', nearest def in the
-    /// chain) — the AI base defs carry one (docs/formats/vehicle.md, fighters 64/64…100/100);
-    /// no player def resolves either, so both stay null there and <see cref="PlaneDamage"/>
-    /// seeds the whole pair as the sum over parts instead.</summary>
+    /// damage chain) — the AI base defs carry one (docs/formats/vehicle.md, fighters
+    /// 64/64…100/100) and an AI load resolves it alongside an empty
+    /// <see cref="DestroyableParts"/>, so the pair IS the whole model. No player def resolves
+    /// either, so both stay null on a player load and <see cref="PlaneDamage"/> seeds the whole
+    /// pair as the sum over parts instead.</summary>
     public float? VehicleArmor;
 
     public float? VehicleHealth;
 
     /// <summary>The def-level 'injure_anims' (distinct from each part's): descending
-    /// HP-fraction thresholds → whole-plane effect anims — [0.10 player_smoketrail]
+    /// HP-fraction thresholds → whole-plane effect anims. An AI load resolves the AI def's own
+    /// seven-entry ladder (eight on the balmoral) instead of the player's two below.
+    /// [0.10 player_smoketrail]
     /// (the dying plane's dense_firetrail smoke) and [0.85 player_fuelleak]. Read as
     /// "any part's fraction crosses the threshold" (assumption — the exact original
     /// trigger is undecoded; a total-HP reading could never fire 0.10 before a
@@ -249,7 +259,72 @@ public sealed class PlaneStats
     /// rigs are parsed; CSVM has no cockpit view, so only the <c>thirdp</c> entries are built.</summary>
     public List<TurretMount> TurretMounts = new();
 
-    public static PlaneStats Load(string zrdrPath, string planeNodeName)
+    /// <summary>The player airframe as flown by a person: every property, including the damage
+    /// model, resolves down the <c>player_airplane</c> chain.</summary>
+    public static PlaneStats Load(string zrdrPath, string planeNodeName) =>
+        LoadCore(zrdrPath, planeNodeName, forAi: false);
+
+    /// <summary>The same airframe as flown by the AI. Everything except the damage model still
+    /// resolves down the player chain — the dynamics blocks are byte-identical between a
+    /// <c>p&lt;name&gt;</c> and its <c>&lt;name&gt;</c> pair, and <see cref="DefName"/>,
+    /// <see cref="TurretMounts"/> and the built model must stay on the player def because the
+    /// loadout table, the display name and the rig all key off them.
+    ///
+    /// <para>The damage model instead resolves down the AI def's own chain, which is what the
+    /// original spawns: <b>an authored <c>armor</c>/<c>health</c> pair and no
+    /// <c>destroyable_parts</c> at all</b>. Every one of the 414 shipped <c>aiv</c> roster blocks
+    /// names either a bare AI def (<c>devastator</c>) or a militia variant of one
+    /// (<c>secfury</c> → <c>fury</c>), and not one of those chains resolves a part — so an AI
+    /// aircraft is zone-less and its whole pair is authoritative rather than a sum over zones
+    /// (BL-386; the militia variants override no damage key, so the base def is the whole
+    /// answer). ⚠ The <c>r*</c> family is the only AI-side family carrying parts, and no roster
+    /// spawns one — it is the remote-player family, not the AI one.</para></summary>
+    public static PlaneStats LoadForAi(string zrdrPath, string planeNodeName) =>
+        LoadCore(zrdrPath, planeNodeName, forAi: true);
+
+    /// <summary>The original's per-spawn dynamics jitter, applied to a non-human-piloted aircraft
+    /// (docs/org/flightModel.md "The per-spawn jitter"; the block at the tail of
+    /// <c>FUN_00476250</c>, <c>0x477340</c>–<c>0x4773f0</c>). Eleven runtime slots are each drawn
+    /// independently and multiplied in place by <c>(2r − 1) · 0.05 + 1</c>, a uniform 1 ± 5 %.
+    /// Returns a jittered COPY: the caller's object is the session's shared per-airframe cache and
+    /// two aircraft off the same airframe must not share a spread.
+    ///
+    /// <para>Seven of the eleven have a field here, in the original's own draw order: the
+    /// whole-vehicle health and armour maxima (<c>+0x2cc</c>/<c>+0x2c4</c>, each mirrored into its
+    /// "current" slot), then <c>fd_speed</c>, <c>ThrustFactor</c> (<see cref="EnginePower"/>),
+    /// <c>drag_factor</c>, <c>pitch_torque</c> and <c>roll_torque</c>. The other four are
+    /// vehicle.json's <c>rates</c> and <c>turns</c> pairs (def <c>+0xe8</c>/<c>+0xec</c> and
+    /// <c>+0xf8</c>/<c>+0xfc</c> → runtime <c>+0x680</c>…<c>+0x68c</c>), the surface-driving
+    /// integrator's acceleration and steering rates with their clamps: <c>basic_airplane</c> authors
+    /// them (10/42 and 4.6/6.5) and so an aeroplane carries them, but the aeroplane arm of the
+    /// original's own class dispatch never reads them, so there is nothing here for them to move.</para>
+    ///
+    /// <para>⚠ The whole-vehicle pair is what the original scales, NOT the per-part pools — a jittered
+    /// aircraft's zones stay at their authored maxima and only the hull pool moves. An AI load
+    /// (<see cref="LoadForAi"/>) carries the authored pair and no zones at all, so the scale lands
+    /// on the real pool; where the chain authors no pair (a player airframe) the resolved sum over
+    /// parts is written out explicitly, so <see cref="PlaneDamage"/> sees the scaled hull rather
+    /// than re-deriving the unscaled one.</para>
+    ///
+    /// <para>⚠ <c>veh_weight</c> and <c>ref_area</c> are NOT among the eleven, which is why
+    /// <c>FlightModel.StallSpeed</c> (computed once from that pair) cannot go stale behind this —
+    /// construct the plant from the jittered stats anyway, since <c>fd_speed</c> is.</para></summary>
+    public PlaneStats WithAiSpawnJitter(Random rng)
+    {
+        // Shallow: DestroyableParts / TurretMounts / VehicleInjureAnims are read-only after Load and
+        // nothing below touches them, so the copy shares them with the cached original on purpose.
+        var jittered = (PlaneStats)MemberwiseClone();
+        jittered.VehicleHealth = (VehicleHealth ?? SumParts(static p => p.MaxHp)) * Factor(rng);
+        jittered.VehicleArmor = (VehicleArmor ?? SumParts(static p => p.MaxArmor)) * Factor(rng);
+        jittered.FdSpeed *= Factor(rng);
+        jittered.EnginePower *= Factor(rng);
+        jittered.DragFactor *= Factor(rng);
+        jittered.PitchTorque *= Factor(rng);
+        jittered.RollTorque *= Factor(rng);
+        return jittered;
+    }
+
+    private static PlaneStats LoadCore(string zrdrPath, string planeNodeName, bool forAi)
     {
         var vehicleRoot = Zrdr.LoadFile(zrdrPath, "vehicle.json")[0] as List<object?>
             ?? throw new InvalidOperationException("vehicle.json: unexpected root shape");
@@ -301,6 +376,25 @@ public sealed class PlaneStats
         if (found == null || chain == null)
             throw new ArgumentException($"no player vehicle def with nodename '{planeNodeName}' in vehicle.json");
 
+        // The AI def for the same airframe is the player def's name without its leading 'p'
+        // (pfury -> fury), which lands on all eleven. It cannot be found by nodename the way the
+        // player def above is: the bare AI defs author none of their own and would all resolve
+        // basic_airplane's inherited `firebrand`. Fails loud rather than silently falling back to
+        // the player chain, since a silent fallback is the bug this whole path exists to fix.
+        string? aiName = null;
+        List<ZrdrDict>? aiChain = null;
+        if (forAi)
+        {
+            aiName = found.StartsWith("p", StringComparison.OrdinalIgnoreCase) ? found[1..] : null;
+            if (aiName == null || !defs.ContainsKey(aiName))
+                throw new ArgumentException(
+                    $"no AI vehicle def for player def '{found}' (looked for '{aiName ?? found}') in vehicle.json");
+            aiChain = Chain(aiName);
+        }
+
+        // Where the damage model comes from: the AI chain on an AI load, the player chain otherwise.
+        var damageChain = aiChain ?? chain;
+
         // property lookup: nearest def in the chain wins
         float Prop(string key, float fallback)
         {
@@ -328,6 +422,7 @@ public sealed class PlaneStats
         {
             DefName = found,
             NodeName = planeNodeName,
+            AiDefName = aiName,
             PitchTorque = Dyn("pitch_torque", 2.4f),
             RollTorque = Dyn("roll_torque", 6f),
             RudderTorque = Dyn("rudder_torque", 1.4f),
@@ -359,7 +454,7 @@ public sealed class PlaneStats
         // chains carry neither key, and Prop's fallback would invent a pool).
         float? PropOpt(string key)
         {
-            foreach (var d in chain)
+            foreach (var d in damageChain)
                 if (d.TryFloat(key, out var f))
                     return f;
             return null;
@@ -368,8 +463,9 @@ public sealed class PlaneStats
         stats.VehicleArmor = PropOpt("armor");
         stats.VehicleHealth = PropOpt("health");
 
-        // def-level injure_anims: [frac, animName] pairs (smoke trail / fuel leak)
-        foreach (var d in chain)
+        // def-level injure_anims: [frac, animName] pairs (smoke trail / fuel leak). The player's
+        // two-stage ladder, or the AI defs' own seven (eight on the balmoral).
+        foreach (var d in damageChain)
         {
             if (d.List("injure_anims") is not { } injureList)
                 continue;
@@ -425,8 +521,9 @@ public sealed class PlaneStats
         // is [name, hp, armor, flags…, "got_hit_anim", [anim, root], "injure_anims",
         // [[frac, anim, root], …]] — the pair is (hit points, armor); the two values
         // are equal for the stock player defs (AI variants and the armory diverge
-        // them), and a def carrying only one float has no armor.
-        foreach (var d in chain)
+        // them), and a def carrying only one float has no armor. An AI load resolves none: no
+        // roster-named def chain authors the block, so an AI aircraft is zone-less (BL-386).
+        foreach (var d in damageChain)
         {
             if (d.List("destroyable_parts") is not { } partsList)
                 continue;
@@ -557,47 +654,6 @@ public sealed class PlaneStats
             }
         }
         return stats;
-    }
-
-    /// <summary>The original's per-spawn dynamics jitter, applied to a non-human-piloted aircraft
-    /// (docs/org/flightModel.md "The per-spawn jitter"; the block at the tail of
-    /// <c>FUN_00476250</c>, <c>0x477340</c>–<c>0x4773f0</c>). Eleven runtime slots are each drawn
-    /// independently and multiplied in place by <c>(2r − 1) · 0.05 + 1</c>, a uniform 1 ± 5 %.
-    /// Returns a jittered COPY: the caller's object is the session's shared per-airframe cache and
-    /// two aircraft off the same airframe must not share a spread.
-    ///
-    /// <para>Seven of the eleven have a field here, in the original's own draw order: the
-    /// whole-vehicle health and armour maxima (<c>+0x2cc</c>/<c>+0x2c4</c>, each mirrored into its
-    /// "current" slot), then <c>fd_speed</c>, <c>ThrustFactor</c> (<see cref="EnginePower"/>),
-    /// <c>drag_factor</c>, <c>pitch_torque</c> and <c>roll_torque</c>. The other four are
-    /// vehicle.json's <c>rates</c> and <c>turns</c> pairs (def <c>+0xe8</c>/<c>+0xec</c> and
-    /// <c>+0xf8</c>/<c>+0xfc</c> → runtime <c>+0x680</c>…<c>+0x68c</c>), the surface-driving
-    /// integrator's acceleration and steering rates with their clamps: <c>basic_airplane</c> authors
-    /// them (10/42 and 4.6/6.5) and so an aeroplane carries them, but the aeroplane arm of the
-    /// original's own class dispatch never reads them, so there is nothing here for them to move.</para>
-    ///
-    /// <para>⚠ The whole-vehicle pair is what the original scales, NOT the per-part pools — a jittered
-    /// aircraft's zones stay at their authored maxima and only the hull pool moves. Where the def
-    /// chain authors no pair (every player airframe, which is what this engine's AI fly too) the
-    /// resolved sum over parts is written out explicitly, so <see cref="PlaneDamage"/> sees the
-    /// scaled hull rather than re-deriving the unscaled one.</para>
-    ///
-    /// <para>⚠ <c>veh_weight</c> and <c>ref_area</c> are NOT among the eleven, which is why
-    /// <c>FlightModel.StallSpeed</c> (computed once from that pair) cannot go stale behind this —
-    /// construct the plant from the jittered stats anyway, since <c>fd_speed</c> is.</para></summary>
-    public PlaneStats WithAiSpawnJitter(Random rng)
-    {
-        // Shallow: DestroyableParts / TurretMounts / VehicleInjureAnims are read-only after Load and
-        // nothing below touches them, so the copy shares them with the cached original on purpose.
-        var jittered = (PlaneStats)MemberwiseClone();
-        jittered.VehicleHealth = (VehicleHealth ?? SumParts(static p => p.MaxHp)) * Factor(rng);
-        jittered.VehicleArmor = (VehicleArmor ?? SumParts(static p => p.MaxArmor)) * Factor(rng);
-        jittered.FdSpeed *= Factor(rng);
-        jittered.EnginePower *= Factor(rng);
-        jittered.DragFactor *= Factor(rng);
-        jittered.PitchTorque *= Factor(rng);
-        jittered.RollTorque *= Factor(rng);
-        return jittered;
     }
 
     private static float Factor(Random rng) =>

@@ -503,6 +503,11 @@ public sealed class FlightRigAssembler
         public GameZ PlanesGamez = null!;
         /// This plane's stats, loaded once per distinct aircraft (splitscreen players differ).
         public Func<string, PlaneStats> StatsFor = null!;
+        /// The same aircraft as the AI flies it: the player chain for everything except the damage
+        /// model, which comes from the AI def (PlaneStats.LoadForAi, BL-386). Cached separately
+        /// from <see cref="StatsFor"/> — the two flavours of one airframe are different objects,
+        /// so a single name-keyed cache would hand whichever loaded first to both.
+        public Func<string, PlaneStats> AiStatsFor = null!;
         /// This plane's camera tuning, cached the same way and for the same reason.
         public Func<string, CamParams> CamParamsFor = null!;
         /// How many rigs this session flies — drives the log tags, the verbose-once lines and the

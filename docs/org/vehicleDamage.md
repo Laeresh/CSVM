@@ -430,9 +430,11 @@ What each downstream item consumes:
   resolver's live-only rule and random-survivor fallback are ported exactly. D14 also retires
   the `critical` kill divergence above.
 - **A2's spawned aircraft** seed the ledger exactly as "Where the numbers come from at spawn":
-  the `r*` def chain's `destroyable_parts` plus `armor`/`health`, then the roster's `init_health`
-  (only if > 0) and `armor` (if >= 0). The eight per-zone roster slots are parsed for index
-  alignment and ignored (`-1` on all 414 blocks; the sum-derivation path is dead in this install).
+  the roster-named def chain's `armor`/`health` — and **no `destroyable_parts`, because no such
+  chain authors any** (see the 2026-08-16 correction below; this bullet said "the `r*` def chain's
+  `destroyable_parts` plus `armor`/`health`" and was wrong on both counts) — then the roster's
+  `init_health` (only if > 0) and `armor` (if >= 0). The eight per-zone roster slots are parsed for
+  index alignment and ignored (`-1` on all 414 blocks; the sum-derivation path is dead in this install).
   The difficulty scale (0.875/1.0/1.25) and the aircraft-only per-spawn jitter (uniform 5 %) are
   decoded constants to apply when a difficulty setting exists, not TUNEs.
 - **G21** keys its crash choreography off the vehicle death event (the whole-vehicle kill raising
@@ -488,15 +490,50 @@ method as the rest of this page. This section partially corrects "Taking a hit" 
   the sum over parts — `FUN_0047bd90`'s re-derivation is the decoded precedent for
   sum-over-parts as the whole pair. The player-initialiser open thread below stands; this is a
   documented stand-in, not a decode. Measured: player_bhawk seeds 80/80 (4×20/20), the Fury
-  90/90 (25+25+20+20 — equal to the AI `fury` def's authored 90/90; the AI `bloodhawk` authors
-  64/64 against its parts' 80/80, a difference the remake reaches only when AI spawns read the
-  `r*` def chain).
+  90/90 (25+25+20+20). ⚠ That 90/90 is the parts sum and nothing else: the AI `fury` def authors
+  **72/72**, and 90/90 belongs to `bswingman`. The AI `bloodhawk` likewise authors 64/64 against
+  the player parts' 80/80. Since 2026-08-16 an AI spawn reads its own def and gets the authored
+  pair (`PlaneStats.LoadForAi`), so this sum-over-parts stand-in is the **player** path alone.
 
 What this landed as: `Flight/PlaneDamage.cs` carries the whole pair, the resolver redirect, the
 verbatim spend and the wrapper loop; the `air-to-air` suite pins the one-bearing kill (80 rounds
 of `wep_00`) and the rocket kill (a Fury falls to 5 head-on `wep_06` rockets against the
 reported 9-rocket sponge); `PlaneDamageTests` pins the arithmetic including the overflow kill
 with three zones healthy.
+
+## Correction (2026-08-16): a spawned AI aircraft has no zones at all
+
+The 2026-08-13 pass read the AI spawn path as seeding from the `r*` def chain. It does not, and the
+error mattered: it made an AI aircraft look like a zoned vehicle with an authored summary pair,
+when it is a **zone-less** one. A census of the shipped data settles it, method stated so it can be
+re-run: resolve the `kind_of` chain of every def named by all 414 `aiv` blocks across the 53
+`aiv.zrd.json` files, against all 75 defs in `vehicle.zrd.json`.
+
+- **No roster block names an `r*` def.** Enemies are named by militia variants (`secfury`,
+  `bhatwarhawk`, `habloodhawk`, `blakepeace`) or by a bare AI def directly (`devastator` on 36
+  blocks, `bloodhawk`, `autogyro`, `balmoral`). The `r*` family is the **remote-player** family —
+  `formats/vehicle.md` names it that, and it carries `thirdp`-only turrets to match.
+- **Not one roster-named chain resolves `destroyable_parts`.** `secfury → fury → basic_airplane`
+  carries `armor 72 / health 72` and the seven-entry injure ladder, and no zones anywhere.
+- **The 38 militia variants author no damage key at all** — no pair, no parts, no ladder — so the
+  bare AI def is the whole damage answer for any of them. The eleven `w*` wingman defs likewise.
+  Only `bswingman` (90/90, a one-entry ladder) and `wingman` (100/100) differ, and both are
+  campaign defs.
+- **Exactly 37 of the 75 defs author any damage data**: the 11 player `p*` (4 zones, 2-entry
+  ladder, no pair), the 11 `r*` (4 zones, 7-entry ladder), the 11 bare AI defs (a pair, a 7-entry
+  ladder — 8 on the balmoral — and no zones), plus `bswingman`, `wingman`, `patrolboat` and
+  `t_truck`.
+
+So the whole-vehicle pair is not a summary over a zone ledger on an AI aircraft; it **is** the
+ledger, and every hit takes `FUN_004b9bc0`'s zone-less route to `FUN_004b8070` from the first pass
+rather than only after the wrapper loop's first iteration. The authored pairs: autogyro 60,
+bloodhawk 64, peacemaker 68, fury 72, avenger 76, devastator 80, brigand 84, kestrel 84, firebrand
+88, warhawk 96, balmoral 100.
+
+What this landed as (BL-386): `PlaneStats.LoadForAi` resolves the AI def for the damage trio while
+everything else — `DefName`, dynamics, turrets, the built model — stays on the player chain, since
+`DefName` keys the eleven-entry stock-loadout table. The `ai-plane-defs` suite pins all eleven
+airframes and a real spawn.
 
 ## Open threads
 

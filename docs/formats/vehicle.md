@@ -14,10 +14,10 @@ This page is the current reference for its documented format family.
 
 - [Def structure & inheritance](#def-structure-inheritance)
 - [Units, dynamics & engines](#units-dynamics-engines)
-- [player.json � player-global blocks](#playerjson-player-global-blocks)
+- [player.json � player-global blocks](#playerjson-player-global-blocks)
 - [destroyable_parts (Run-2 item 10)](#destroyableparts-run-2-item-10)
 - [Def-level injure_anims](#def-level-injureanims)
-- [collision — 6 probe points](#collision-�-6-probe-points)
+- [collision — 6 probe points](#collision-�-6-probe-points)
 - [Effect emitters](#effect-emitters)
 - [Weapons, damage & AI keys](#weapons-damage-ai-keys)
 ## Def structure & inheritance
@@ -83,7 +83,7 @@ solving a constant from a Lvl-1 row inflates it by ~30 %. `power` is the plane's
 and the original applies it as `Thrust = power · ref_area · thrustAvailable(Mach) · throttle` —
 scaled by **reference area**, not divided by weight.
 
-## player.json � player-global blocks
+## player.json � player-global blocks
 
 See [player global blocks](vehicle/player-globals.md) for the player-global reader reference.
 
@@ -329,6 +329,12 @@ An `r*` AI variant chains to its base def (`rbloodhawk → bloodhawk → basic_a
 inherits `armor 64` *and* carries its own 4×20/20 `destroyable_parts`. No **player** def resolves
 a whole-vehicle pair at all (`pbloodhawk → player_airplane → basic_airplane` carries none in the
 chain), so for player planes the per-part pools are the whole model.
+
+⚠ **Those 11 both-resolvers are the `r*` remote-player family, and no roster spawns one** — so no
+AI aircraft in the shipped campaign resolves both. Every def named by the 414 `aiv` blocks is a
+bare AI def or a militia variant of one, and none of those chains authors `destroyable_parts`: an
+AI aircraft is **zone-less**, carrying its authored pair alone. Census and consequences in
+[`org/vehicleDamage.md`](../org/vehicleDamage.md)'s 2026-08-16 correction (BL-386).
 
 **A vehicle spends both, in a fixed relationship: the per-part pools are the ledger and the
 whole-vehicle pair is a running summary of them.** Decoded from the executable 2026-08-13, full
