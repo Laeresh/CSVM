@@ -8,7 +8,7 @@ top-level zrdr). Spawn positions and headings are verified byte-exact
 against the data for C1/IA1 `zeppelin_run` and side-by-side in-game for C3/M01. Consumed
 by `CSVM/src/Flight/SpawnPoints.cs`.
 
-## Instant action — `ia.json` `spawn_points`
+## Instant Action spawns
 
 `spawn_points` is a dict mapping scenario name → list of spawn entries
 `[x, y, z, heading°]`. The original picks one entry at **random** per launch (e.g.
@@ -23,7 +23,7 @@ identical across scenarios (analysis in [anim-definitions.md](anim-definitions.m
 `ia.json` also carries the stunt-mode `dzones` (fly-through Danger Zone) list — see
 [missions.md](missions.md).
 
-## `ia.json` is the whole Instant Action configuration
+## Instant Action configuration
 
 The setup and wrap-up **UI** built around this data — the screen's dropdowns and their option
 strings, environment ↔ chapter, the thirteen militias' aircraft lists, and which wrap-up rows are
@@ -73,7 +73,7 @@ corroborate the count and the scale and leave the order where it was.
 [instant-action.md](instant-action.md): the setup record, the mission-type ids, the synthetic roster
 block every actor is spawned from, and which of these keys the engine never reads.
 
-## Story missions — `objectives.json` `PLAYER_INIT`
+## Story mission spawns
 
 ```
 PLAYER_INIT  [1, [x, y, z], [pitch, yaw, roll]°, throttle, speed]
@@ -92,7 +92,7 @@ The remake spawns at throttle 0.5 (correct) and a fixed 53.6 m/s ≈ 120 mph pla
 the plane-dependent start speed is an open question (candidate: a fixed fraction of
 `fd_speed` — 53.6/135 ≈ 0.4 for the Bloodhawk — needs multi-plane measurements).
 
-## Campaign mission ↔ folder map
+## Campaign mission map
 
 Each `objectives.json` carries `BRF_<REGION>M<n>` objective codes — the campaign's own
 mission addressing. (The prose titles are `MSG_` keys resolved from a string table not
