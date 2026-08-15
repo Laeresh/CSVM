@@ -663,7 +663,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-362` (the wingmen half of the same playtest), `AiTargetRanking`,
   [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) "AI modes, engine-side".
 
-- `BL-364` `[Bug]` `[Owed-playtest]` **Our AI aircraft have no patrol net, and the original gives
+- `BL-364` `[Bug]` **Our AI aircraft have no patrol net, and the original gives
   every one of them one. DECODED and the Instant Action half LANDED 2026-08-15; what is left is
   the campaign roster path, which has no spawner to plumb into yet.** *Evidence:* the user at the controls,
   2026-08-15: the default mode of enemy AI is to fly straight in one direction, and an enemy wave
@@ -708,7 +708,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   [`docs/formats/instant-action.md`](docs/formats/instant-action.md) for the per-chapter table.
   ⚠ `--ai=<plane>` without a net ref still spawns a course-holder; that is the debug flag's own
   documented behaviour, kept deliberately, not a leftover of this item.
-  *Playtest:* `PT-51`.
+  ✔ **Flown 2026-08-15 and the landed half PASSES** (`PT-51`, now retired). A wave that loses the
+  player turns and comes back rather than shrinking to a dot; an enemy breaking off an engagement
+  settles back onto the graph instead of orbiting one waypoint, so trap (a)'s known failure did not
+  appear; wave 2 patrols from where it teleports in; and a shared net reads as a busy patrol rather
+  than a conga line. So what remains here is only the campaign roster spawner.
   ⚠ *Traps.* (a) **`AiPilot.PatrolThrottle` (0.5) is an invention that exists because the
   placeholder steering law cannot hold the tightest net rings at cruise** (`architecture.md`). Do
   not read a net-follow regression as a net-data problem before checking it. (b) `pref_engage_alt`
@@ -722,9 +726,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   half, whose blocker this decode voids), `docs/formats/ai-nets.md`, `docs/architecture.md` on
   `AiPilot` and `AiModeMachine`.
 
-- `BL-377` `[Bug]` `[Owed-playtest]` **A net with an anchored trailer RIDES its target in the
-  original, and ours flew it as a fixed route. DECODED and LANDED 2026-08-15; what is left is the
-  splitscreen question and an at-the-controls look.** *Evidence:* the
+- `BL-377` `[Bug]` **A net with an anchored trailer RIDES its target in the
+  original, and ours flew it as a fixed route. DECODED, LANDED and FLOWN 2026-08-15; what is left
+  is the splitscreen question, trap (d).** *Evidence:* the
   user at the controls, 2026-08-15, flying `stunt_flying` with wingmen: the wingmen leave and
   patrol the chapter's default net instead of staying with the player. That is what our code does,
   and the original does not. [`docs/org/aiPilot.md`](docs/org/aiPilot.md) "The trailer":
@@ -777,9 +781,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   Splitscreen has 2–4 players and the engine's `player` is one object; rig 0 is used and no rule
   (nearest player, host, per-plane) is invented, because the binary has none to copy. (e) An absent
   target falls back to the authored positions; done, and asserted.
+  ✔ **Flown 2026-08-15 and it PASSES** (`PT-51`, now retired). With F13 up the graph visibly travels
+  with the player over kilometres rather than staying behind, and the actors on it, wingmen and
+  enemies alike, patrol around the player instead of around a fixed spot. Judged as reading right
+  rather than merely crowded: the enemies arrive in waves, so a team-blind net that brings them onto
+  the player is what the mission wants anyway. The altitude staying authored while the player climbs
+  was confirmed as the decoded behaviour at the controls, not read as a bug.
   *Cross-refs:* `BL-364` (the first net every IA actor takes), `BL-362` (the wingman-station item:
   this is a second, likelier mechanism for "wingmen stay with the player" in Instant Action),
-  [`docs/formats/ai-nets.md`](docs/formats/ai-nets.md), `BL-378` (net altitudes vs terrain), `PT-51`.
+  [`docs/formats/ai-nets.md`](docs/formats/ai-nets.md), `BL-378` (net altitudes vs terrain).
 
 - `BL-378` `[Bug]` **Our AI has no terrain avoidance, so a net authored below a ridge flies AI into
   it. DECODED 2026-08-15; what is left is implementation.** *Evidence:* the user at the controls,
@@ -821,8 +831,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   flight model; do not fold zeppelins into an aircraft crash-avoid mode without checking whether
   the original runs one for them. (e) The throttle-band swap is part of the behaviour, not
   decoration: a climb-out at patrol throttle is a slower climb than the original's.
+  *Playtest after fix:* fly Instant Action in C1 over the high ground east of the spawn with F13 up
+  and `--debug-markers`, and watch a netted enemy cross a ridge that sits above the net's authored
+  400 m: it should pitch up and climb out of the state on its own rather than fly into the slope,
+  and it should return to the graph afterwards rather than stay in the climb.
   *Cross-refs:* `BL-377` (the ride that made this visible), `BL-364`,
-  [`docs/org/aiPilot.md`](docs/org/aiPilot.md), `PT-51`.
+  [`docs/org/aiPilot.md`](docs/org/aiPilot.md).
 
 ## Flight model & collision physics
 
@@ -3269,9 +3283,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   vehicles), `BL-095`, [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow".
 
 - `BL-362` `[Feature]` **Instant Action wingmen never form up on the player.** *Evidence:* the user at the controls,
-  2026-08-15: wingmen fly away instead of staying near the player. `PT-50`'s own check (b) already
-  records that no formation-flying behaviour exists and that the placeholder law is what drives
-  them.
+  2026-08-15: wingmen fly away instead of staying near the player, with no formation-flying
+  behaviour anywhere in the engine and the placeholder law driving them.
   *What we do today:* `GameSession.BuildFlightRigs` places wingman `i` on the decoded spawn fan
   (`InstantActionRuntime.WingmanSlotFor`) and hands it `AiPilot.HoldingCourse`, so it holds the
   player's spawn heading and altitude for the rest of the mission. The decoded escort chain (0/1/3
@@ -3324,7 +3337,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `mode wingman` station, whose offsets are decoded above and which nothing in `src/` yet flies.
   ⚠ It is not a formation and should not be judged as one: the wingman walks a figure-eight
   ~1 km across that happens to travel with the player, so it comes close and then swings out again.
-  *Playtest after fix:* `PT-50`.
+  ✔ **The Instant Action side was flown 2026-08-15 and passes** (`PT-50`, now retired): the three
+  Fury wingmen spawn as a plausible flight, they start patrolling and are carried along by the
+  player-anchored net rather than drifting off alone, and friendly fire is confirmed possible as
+  Decision 3/A2 requires. That verdict covers Instant Action only, which is why the item stays open
+  on the campaign station below.
+  *Playtest after fix:* fly a CAMPAIGN mission whose roster has netless `wingman_N` blocks and watch
+  one hold the decoded body-frame station on its leader, 6 m out and 18 m astern of the player, from
+  the 700 m join threshold inward, and trail at the speed-ramped distance when it is chasing.
   *Cross-refs:* [`docs/org/aiPilot.md`](docs/org/aiPilot.md) (the decode), `BL-363` (the other half
   of the same playtest: an escort with nothing targetable), `BL-364` (the patrol nets, and the
   correction to `instant-action.md` this rests on), `BL-377` (the anchored net that delivers the IA

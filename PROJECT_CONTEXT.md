@@ -197,8 +197,8 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 (frame hitches) completed 2026-08-14,
 [`docs/plans/PLAN-perf-hitches.md`](docs/plans/PLAN-perf-hitches.md); M4
 (Game AI) completed 2026-08-14, [`docs/plans/PLAN-M4-ai.md`](docs/plans/PLAN-M4-ai.md). Owed at the
-controls: `PT-28`, `PT-41`, `PT-43` (4-player pane only), `PT-45`, `PT-46`, `PT-47`, `PT-49` and
-`PT-50` ([`playtest.md`](playtest.md)). Verify any
+controls: `PT-28`, `PT-41`, `PT-43` (4-player pane only), `PT-45`, `PT-46`, `PT-47` and
+`PT-49` ([`playtest.md`](playtest.md)). Verify any
 change with **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit
 code); read [`docs/verification.md`](docs/verification.md) first.
 
