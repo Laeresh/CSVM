@@ -54,6 +54,7 @@ behind [effects.md](effects.md)'s sprites).
 ### Missions and AI
 
 - [spawns.md](spawns.md), [missions.md](missions.md), [mission-entities.md](mission-entities.md), and [instant-action.md](instant-action.md).
+  - [Enemy generators](mission-entities/enemy-generators.md) — host, launch cycle, and capacity rules.
   - [Instant Action wrap-up](instant-action/wrap-up.md) — scoring and friendly-fire rules.
 - [ai-nets.md](ai-nets.md), [ai-rosters.md](ai-rosters.md), and [combat-voice.md](combat-voice.md).
 
