@@ -192,10 +192,10 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt flying, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, world destructibles that take damage, die, lose collision, throw debris and reset — and planes shoot planes down (M4 A1, front-loaded). The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**No plan is currently active.** Instant Action completed 2026-08-15,
-[`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md); `PLAN-perf-hitches`
-(frame hitches) completed 2026-08-14,
-[`docs/plans/PLAN-perf-hitches.md`](docs/plans/PLAN-perf-hitches.md); M4
+**Active plan: [`docs/PLAN-ai-flight.md`](docs/PLAN-ai-flight.md)** (AI flight: the plant, then the
+pilot), written 2026-08-15, at wave A. Next: `A1`, `A2` (read-only Ghidra, run together), then
+`B11`. Instant Action completed 2026-08-15,
+[`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md); M4
 (Game AI) completed 2026-08-14, [`docs/plans/PLAN-M4-ai.md`](docs/plans/PLAN-M4-ai.md). Owed at the
 controls: `PT-28`, `PT-41`, `PT-43` (4-player pane only), `PT-45`, `PT-46`, `PT-47`, `PT-49` and
 `PT-50` ([`playtest.md`](playtest.md)). Verify any
