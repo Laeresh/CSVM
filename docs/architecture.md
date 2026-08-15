@@ -2520,7 +2520,8 @@ forward cone as a hard fire gate, and the quick-draw cone off the TARGET's nose/
 Engine-free (`AiGunnerTests`); the live half is the `ai-gunnery` suite.
 ⚠ `Target`, `PrimaryTargetName` and `RatingBiases` are plain mutable fields BY DESIGN (the
   mission-script rule); `AutoTarget` re-acquires through the host's `SelectRankedTarget` —
-  D12's decoded ranking (`AiTargetRanking`), no longer the nearest hostile.
+  D12's decoded ranking (`AiTargetRanking`), no longer the nearest hostile. `PrimaryTargetName`
+  `"player"` is a ROLE, resolved there to the nearest human of several (BL-367), not a name.
 ⚠ `DeadEyeAngleDeg`/`QuickDrawAngleDeg` are `ai_skill_parameters` values (`Mech3/AiSkills`),
   interpolated from the pilot's 1–9 rating — never invented constants. `quick_draw_chance` (the
   marginal-shot roll) is NOT modelled yet; the angle is the only quick-draw term wired.
@@ -3611,7 +3612,9 @@ old any-critical-part kill; the `critical` flag stays parsed, nothing consults i
 pilot's trigger and lead are its `AiPilot.Gunner` (D14): `SimStep` drives the gunner before
 the fire step (`DriveAiGunner` — standing target kept while live, else re-acquired through
 `SelectRankedTarget`, D12's decoded ranking over the pool roster with the same team gate:
-primary_target outranks, ranking otherwise, activation-cutoff candidates never picked, first
+primary_target outranks — by NAME the first match, by the `player` token the human NEAREST this
+attacker so a wave spreads over the panes instead of converging on P1 (BL-367) — ranking otherwise,
+activation-cutoff candidates never picked, first
 acquisition logged with its rank inputs; with a
 mode machine a standing target is kept in every mode but only pursue/lay off solve and shoot),
 the fire inputs read `WantsFire` instead of the raw controls, and `AssistedGunDirection`'s

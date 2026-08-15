@@ -2263,7 +2263,10 @@ public partial class FlightController : Node3D
     /// (<see cref="Team"/>, PLAN-instant-action B7). An assigned <see cref="AiGunner.PrimaryTargetName"/>
     /// that resolves to a live hostile inside the activation radius is picked outright —
     /// the assumed reading of the decoded "Primary target: %s" semantics: the assignment holds
-    /// while valid, ranking takes over when it dies or leaves. The activation radius is the
+    /// while valid, ranking takes over when it dies or leaves. A by-NAME assignment names one
+    /// aircraft, so the first match is it; the <c>"player"</c> token names a ROLE, and with two to
+    /// four humans it resolves to the human NEAREST this attacker (C22/BL-367) so a wave spreads
+    /// across the panes instead of converging on P1. The activation radius is the
     /// machine's (<c>min_ai_active_dist</c>, 2000 m shipped) — a candidate beyond it never
     /// ranks, but a STANDING target is kept regardless (disengagement is the mode machine's
     /// return-range rule, not acquisition's).
@@ -2289,6 +2292,8 @@ public partial class FlightController : Node3D
         _rankCandidates.Clear();
         _rankSources.Clear();
         FlightController? primary = null;
+        FlightController? nearestHuman = null;
+        float nearestHumanDistSq = float.MaxValue;
         foreach (var c in _gunnerScan.Vehicles)
         {
             if (!c.Live || ReferenceEquals(c.Source, this))
@@ -2297,13 +2302,28 @@ public partial class FlightController : Node3D
                 continue;
             if (c.Source is not FlightController fc)
                 continue;
-            if (primary == null && gunner.PrimaryTargetName is { Length: > 0 } wanted
-                && ownPos.DistanceTo(c.Position) <= activation
-                && (string.Equals(fc.Name, wanted, StringComparison.OrdinalIgnoreCase)
-                    || (fc.IsHumanPiloted
-                        && wanted.Equals("player", StringComparison.OrdinalIgnoreCase))))
+            if (gunner.PrimaryTargetName is { Length: > 0 } wanted
+                && ownPos.DistanceSquaredTo(c.Position) <= activation * activation)
             {
-                primary = fc;
+                if (primary == null
+                    && string.Equals(fc.Name, wanted, StringComparison.OrdinalIgnoreCase))
+                {
+                    primary = fc; // a by-NAME assignment names one aircraft: first match is it
+                }
+                else if (fc.IsHumanPiloted
+                    && wanted.Equals("player", StringComparison.OrdinalIgnoreCase))
+                {
+                    // "player" is a role, not a name (C22/BL-367): with 2-4 humans the first one
+                    // assembled is not the one this attacker is flying at. Nearest-to-the-attacker
+                    // spreads a wave across the panes and is resolved ONCE per acquisition, so the
+                    // retarget cadence (standing target kept while live) is unchanged.
+                    float d = ownPos.DistanceSquaredTo(c.Position);
+                    if (d < nearestHumanDistSq)
+                    {
+                        nearestHumanDistSq = d;
+                        nearestHuman = fc;
+                    }
+                }
             }
 
             // Allied gunners already on this candidate (the deconfliction input).
@@ -2327,13 +2347,15 @@ public partial class FlightController : Node3D
             _rankSources.Add(fc);
         }
 
+        bool byRole = primary == null && nearestHuman != null;
+        primary ??= nearestHuman;
         if (primary != null)
         {
             // Log the assigned pick with its own rank inputs (informational — rank not consulted).
             int idx = _rankSources.IndexOf(primary);
             if (idx >= 0)
                 score = AiTargetRanking.Score(ownPos, ownFwd, activation, _rankCandidates[idx]);
-            how = "primary target";
+            how = byRole ? "primary target: nearest human" : "primary target";
             return primary;
         }
 

@@ -245,7 +245,8 @@ public static class Suites
             "and killable with the kill attributed to the shooter through Downed", AiActor));
         into.Add(new TestHarness.Suite("ai-gunnery",
             "the D14 AI gunner + D12 acquisition: acquires through the decoded target ranking " +
-            "as mutable state (0.7 player weight, primary_target override, 1e21 activation " +
+            "as mutable state (0.7 player weight, primary_target override, a 'player' assignment " +
+            "resolving to the NEAREST human of several, 1e21 activation " +
             "cutoff, all live in the engine), refuses the shot " +
             "outside the ±11° forward gun cone and outside its quick-draw cone off the target's " +
             "nose/tail, fires real rounds through the fire-control path under its own shooter id " +
@@ -5625,6 +5626,31 @@ public static class Suites
             Step(1);
             ctx.Check(ReferenceEquals(gunner.Target, target),
                 $"primary_target 'player' resolves to the human-piloted aircraft");
+
+            // --- C22 (BL-367): with two humans in the scan, 'player' is a ROLE and resolves to
+            // whichever human is NEAREST this attacker, not the first registered. The rival is
+            // flagged human so both pass the token; it registered SECOND, so scan order and
+            // distance disagree in the first half and agree in the second — pulling the pick
+            // across proves distance decides it. Positions are sim poses (the scan reads
+            // WorldPosition), so PlaceHeld is a legitimate move here (INSTR-13 governs the
+            // physics-space queries, which this branch makes none of).
+            rival.IsHumanPiloted = true;
+            var nearRivalPos = targetPos + new Vector3(0f, 0f, 500f); // 300 m from the shooter
+            rival.PlaceHeld(nearRivalPos, nearRivalPos + Vector3.Forward);
+            gunner.Target = null;
+            Step(1);
+            ctx.Check(ReferenceEquals(gunner.Target, rival),
+                $"two humans: 'player' takes the NEARER one (300 m) over the first registered (800 m)");
+            var nearTargetPos = targetPos + new Vector3(0f, 0f, 700f); // 100 m from the shooter
+            target.PlaceHeld(nearTargetPos, nearTargetPos + Vector3.Forward);
+            gunner.Target = null;
+            Step(1);
+            ctx.Check(ReferenceEquals(gunner.Target, target),
+                $"swapping which human is nearer swaps the pick (100 m beats 300 m)");
+            rival.IsHumanPiloted = false;
+            rival.PlaceHeld(rivalPos, rivalPos + Vector3.Forward);
+            target.PlaceHeld(targetPos, targetPos + Vector3.Forward);
+
             gunner.PrimaryTargetName = null;
             gunner.Target = null;
             target.PlaceHeld(targetPos + new Vector3(0f, 0f, -2500f),

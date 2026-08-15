@@ -103,7 +103,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Gameplay "the player" rules
 
 21. ☑ `PLAYER_RANGE` measures from the nearest human (`BL-365`)
-22. ☐ AI `primary_target = "player"` resolves per attacker, not to P1 (`BL-367`)
+22. ☑ AI `primary_target = "player"` resolves per attacker, not to P1 (`BL-367`)
 
 ### Wave D — Audio one-shots
 
@@ -562,7 +562,7 @@ CLI cannot.
 **⚠ Traps.** `AnimRuntime.PlayerPosition` stays a P1 singleton for other consumers until F51/B14
 account for them — do not delete it here, just stop `PlayerRange` reading it.
 
-## C22 ☐ AI `primary_target = "player"` resolves per attacker, not to P1 (`BL-367`)
+## C22 ☑ AI `primary_target = "player"` resolves per attacker, not to P1 (`BL-367`)
 
 **Goal.** A splitscreen Instant Action wave spreads across the humans instead of converging on P1.
 
@@ -571,17 +571,47 @@ account for them — do not delete it here, just stop `PlayerRange` reading it.
 target score is computed but not consulted on that branch (`:2330`). Set for every IA wingman
 (`GameSession.cs:2175`) and wave enemy (`:2244`).
 
-**Approach.** Resolve `"player"` to the nearest human to the attacker (or fold the humans into
-the existing ranked score — prefer whichever keeps the AI code's current retarget cadence), so
-different attackers naturally pick different humans. Depends on A1 only in so far as "human" vs
-"hostile human" — in IA all humans are one team, so no interaction; in plain flight the team
-decision governs who counts as a target at all.
+**Approach (landed).** `SelectRankedTarget`'s `primary_target` arm now splits the two readings of
+the assignment string. A by-NAME assignment still names one aircraft, so the first match in the
+scan is it, unchanged; the `"player"` token names a ROLE, and the loop keeps the nearest human to
+this attacker (`nearestHuman` / `nearestHumanDistSq`, the min-over-candidates pattern the rest of
+the wave items use) instead of the first `IsHumanPiloted` match. Nearest was chosen over folding
+the humans into the ranked score because the score is not consulted on this branch at all — the
+trap's "score-not-consulted is a lead, not a bug" — and because resolution runs ONCE per
+acquisition (`DriveAiGunner` re-acquires only when the standing target dies or leaves), so the
+retarget cadence is untouched and there is no flapping between two near-equidistant humans. The
+activation gate moved to `DistanceSquaredTo` alongside it (same predicate, one sqrt fewer per
+candidate). The breadcrumb log distinguishes the two: `how` reads `primary target: nearest human`
+on the role arm, `primary target` on the by-name arm. No interaction with A1 in IA (all humans are
+one team); in plain flight the team decision still governs who is a candidate at all, upstream of
+this branch.
 
 **Model recommendation.** high — AI behaviour change, judged partly at the controls.
 
-**Verify.** `--ia` with `--players=2` (or `--debug-join=2` for a scripted stand-in): the wave's
-target assignments split across both humans (log the resolution). Single-player IA unchanged.
-`PT-50`'s wingman flight behaviour must not regress.
+**Verify (done 2026-08-15).** `dotnet build CSVM/CSVM.sln` clean, 0 warnings;
+`dotnet format --verify-no-changes` clean. `.\RunTests.ps1`: 1289/1289 units, 61/61 engine suites,
+14/14 goldens hash-identical, engine errors clean, hitch clean. The `ai-gunnery` suite gains two
+chained checks after its existing `primary_target 'player'` one: the AI rival is flagged human and
+pulled to 300 m while the first-registered human sits at 800 m (the pick moves to the rival), then
+the first-registered human is pulled to 100 m (the pick moves back) — scan order and distance
+disagree in the first half and agree in the second, so only distance can produce both. **Both
+halves were run against their own able-to-fail control** (METHOD-9/10, the companion to INSTR-10):
+with the old first-registered rule restored in place, half 1 fails and half 2 passes; with a
+last-registered rule, half 1 passes and half 2 fails. Neither half is an invariant this geometry
+cannot discriminate. Scripted probes (`.\RunProbe.ps1`, a 4-enemy `dogfight_squadron` `--ia=` file,
+900 frames, C1): `--players=2` logs all four wave enemies resolving to **P2** — `ai gunner: shooter
+100 targets P2 at 2439 m (primary target: nearest human: …)` and the same for 101/102/103 — which
+is the nearest human to the wave's spawn and is exactly the assignment the old first-match rule
+could never produce (it returned P1 by construction); the same file with one player logs all four
+on P1, single-player unchanged. `PT-50`'s `--ia=ia-wingmen-test.json` recipe re-run scripted: three
+Fury wingmen on team 1, 0 `ERROR` lines, escort chain untouched (the by-name arm this item did not
+change). 8-chapter `--freecam --chapter=<X> --frames=60 --screenshot=` sweep (C1, C1B, C1C, C2,
+C2B, C3, C4, C5): all exit 0, 0 `ERROR` lines each, node/mesh counts unchanged. The wave enemies
+converging on one human rather than splitting is geometry, not the rule: they activate together at
+one spawn while both humans are still on their shared start line, and no CLI flag can place P1 and
+P2 kilometres apart (the same gap B11/B12/C21 hit) — the discriminating check is the suite above,
+which drives real distinct human positions the CLI cannot. A two-pad pass at the controls stays
+owed and folds into `F52`.
 
 **⚠ Traps.** Do not change the activation-range filter or the scan order itself — only the
 resolution of the `"player"` token. The score-not-consulted observation is a lead about mechanism,
