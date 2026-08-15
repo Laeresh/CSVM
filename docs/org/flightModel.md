@@ -555,24 +555,76 @@ the same nine and computes the same curves.) Fallback values shown as authored (
   The rudder is at full authority only in a 22.5–45 mph window and sits at **10 %** for all of
   normal flight. It is a ground-handling and low-speed control, not a flight control.
 
-- **Reverse-authority factor** (decoded 2026-08-14, UNIMPLEMENTED and unowned). `FUN_0048bdd0` has a
-  fifth output the debug copy lacks: above `yaw_max` (`0x0071c414`, authored **50 mph**) it returns
-  `max(yawAuthority, 0.2)`, and **1.0** at or below it. `FUN_0048c470` uses it to soften control
-  forces that oppose the current velocity vector. Because `yaw_max` is the speed at which the yaw
-  curve peaks, this engages across the whole of normal flight: it tracks the declining yaw curve
-  from 1.0 at 50 mph down to the **0.2** floor, which the curve reaches at ≈345 mph. At the
-  Bloodhawk's 302 mph cruise it is ≈0.40. Nothing in `FlightModel` carries it.
-  ⚠ Which axes it reaches, and what "opposing the velocity vector" is tested against, were not
-  traced. Do not implement it from this paragraph without reading `FUN_0048c470`'s use of the fifth
-  output.
+- **Reverse-authority factor** (decoded 2026-08-14; its consumer traced 2026-08-15, C24).
+  `FUN_0048bdd0` has a fifth output the debug copy lacks: above `yaw_max` (`0x0071c414`, authored
+  **50 mph**) it returns `max(yawAuthority, 0.2)`, and **1.0** at or below it
+  (`0x48bf16`–`0x48bf58`; the 0.2 is the immediate at `0x6034fc`). Because `yaw_max` is the speed at
+  which the yaw curve peaks, it engages across the whole of normal flight: it tracks the declining
+  yaw curve from 1.0 at 50 mph down to the **0.2** floor, which the curve reaches at ≈345 mph. At
+  the Bloodhawk's 302 mph cruise it is ≈0.40.
+  ⚠ **It is not a force term, and the "softens control forces that oppose the current velocity
+  vector" this entry used to carry was a misattribution.** `FUN_0048c470` takes it as an
+  out-parameter, writes it once and never reads it again; its own opposing-command softening is a
+  DIFFERENT, local quantity (see "Torques and the limiters" below). The factor is passed out to
+  `FUN_0048c470`'s only caller, `FUN_0048e580`, whose single use of it is at
+  `0x48ec0b`–`0x48ec1d`: `rudderAngle = factor · yawInput · −0.61086524` rad (**−35°**, the
+  immediate at `0x608120`), exponentially smoothed toward that target at 2/s by `FUN_00460490` into
+  the angle slots `obj+0x634`/`+0x638`, which `FUN_004b2fe0` applies as a node rotation to the two
+  rudder node lists at `obj+0xa04`/`+0xa14`. **It scales the VISIBLE rudder deflection, on the
+  player's aircraft only, and touches no torque.** Ported at that site (`ControlSurfaceAnimator`),
+  not in the force path.
 
-### The low-speed ramp is decoded and UNIMPLEMENTED (`BL-330`)
+### The original's control-surface animation, decoded in passing (C24)
 
-The base ramp `f` is the one part of `FUN_0048bdd0` the remake does not carry: `FlightModel.Step`
-applies the authored yaw curve and **no speed term at all** to pitch or roll, so both hold full
-authority down to zero airspeed. The original fades them to **0 at `turn_fade_in`** (10 mph),
-reaching full only at `turn_fade_out` (fallback 40, **authored 50**). Traced, corroborated from the
-controls, and open as `BL-330`.
+The same block in `FUN_0048e580` (`0x48eaf0`–`0x48ec92`, inside a `piVar3 == DAT_0071c298`
+player-only guard) drives **six** angle slots off three stick channels — `obj+0x100` (`a`),
+`obj+0x108` (`b`) and `obj+0x10c` (yaw, the one the reverse-authority factor scales). Each slot is
+smoothed exponentially toward its target at 2/s by `FUN_00460490`, and `FUN_004b2f00` /
+`FUN_004b2f70` / `FUN_004b2fe0` apply the six as node rotations over six node lists:
+
+| Slot | Node list | Target angle | Clamp |
+|---|---|---|---|
+| `+0x63c` / `+0x640` | `+0x9c4` / `+0x9d4` | `−0.5·a` / `+0.5·a` | ±0.5 rad (28.6°) |
+| `+0x62c` / `+0x630` | `+0x9e4` / `+0x9f4` | `−0.6·b − 0.18·a` / `−0.6·b + 0.18·a` | ±0.6 rad (34.4°) |
+| `+0x634` / `+0x638` | `+0xa04` / `+0xa14` | `−0.61086524 · yaw · reverseAuthority` | none (−35° at full) |
+
+Two things fall out of this that are worth having even though the surfaces themselves are cosmetic.
+The second pair MIXES two channels — a common-mode `b` term with a differential `a` term — so those
+surfaces are not driven by one axis each. And the whole block sits behind the player guard, so **the
+original's AI aircraft fly with frozen control surfaces**; ours deflect on every aircraft, a
+deliberate divergence rather than an unported guard.
+⚠ Which physical surface each node list holds is NOT decoded — only `FUN_004d1a30`'s rotation axis
+per list is visible here, and the `a`/`b` channels were not traced back to the pitch and roll
+inputs. Do not map this table onto aileron/elevator names without reading the list population.
+NOT ported beyond the reverse-authority scale: our `ControlSurfaceAnimator` classifies four surface
+kinds rather than six node lists, and its ±20° angles were validated by eye (`backlog.md`
+`BL-380`).
+
+### The low-speed ramp — implemented 2026-08-15 (C24, closing `BL-330`)
+
+The base ramp `f` was the one part of `FUN_0048bdd0` the remake did not carry: `FlightModel.Step`
+applied the authored yaw curve and **no speed term at all** to pitch or roll, so both held full
+authority down to zero airspeed. It is now `FlightModel.RollPitchAuthorityAt`, on the authored
+`turn_fade_in` 10 / `turn_fade_out` 50 mph (the executable's fallback `turn_fade_out` is 40), a
+scalar on the pitch and roll components of the stick command.
+
+Three properties of the port, all read off `FUN_0048bdd0` and `FUN_0048c470` rather than assumed:
+
+- **It scales the STICK COMMAND only.** `FUN_0048c470` multiplies the three authority scalars inside
+  its three per-axis input blocks (`obj+0x114` roll, `obj+0x11c` pitch, `obj+0x120` yaw) and nowhere
+  else, so the bank coupling, the weathervane and the ground blow enter the same accumulator at full
+  strength. A slow aeroplane loses its controls and keeps the coupling.
+- **The boundary is exclusive at the bottom.** `0x48bdd4` tests `speed > turn_fade_in`, so authority
+  is exactly 0 *at* 10 mph, not merely small.
+- **Pitch and roll take the SAME scalar.** `0x48be20` writes it to the pitch output and `0x48be6c`
+  to the roll output; the pitch output is then multiplied by `high_speed_pitch_fade`
+  (`0x48be22`–`0x48be68`), which this install authors at [1000, 1001] mph and is unreachable.
+
+Where 50 mph falls decides how visible this is, and it differs by airframe (stall speeds from
+`PLAN-flight-model-rewrite` B15): nine of the eleven stall at 52–57 mph, i.e. *above* the ramp's
+top, so for them the fade bites only once already stalling; the Balmoral (45.5) reaches its stall at
+≈89 % authority, and the autogyro (18.5) flies a long way inside the ramp and stalls at roughly
+**21 %** of roll and pitch authority.
 
 ⚠ **"Roll never fades" above means never with HIGH speed.** Read as "roll authority is
 speed-independent" it becomes the misreading that had `turn_fade_in`/`turn_fade_out` filed as a
@@ -602,6 +654,18 @@ the existing angular momentum about that axis):
 
 The smaller of the two is used. Note that because the limiter gates *opposing* input, it damps
 recovery from a departure rather than entry into one.
+
+**CORRECTION (C24, from `FUN_0048c470` directly).** The sign test is **not** against the existing
+angular momentum. `FUN_0048c470` builds `unit(nose × v̂)` — the same closing axis the weathervane
+uses — and compares the sign of the commanded torque against the sign of that axis' component on the
+axis being commanded (`0x48ca7a` onward, the pitch and yaw blocks only; roll has no such test). So
+what is softened is a command that swings the nose FURTHER off the flight path. The combined scalar
+is also computed once and shared by both axes, and the AOA half of it is literally
+`(cos α − maxAOACos) / (1 − maxAOACos)` on that same α, which is why it reads as a limiter and an
+alignment window at once. None of this changes the unreachability finding — both halves are authored
+out of reach on all eleven airframes (`ControlLimiterTests`) — and nothing is implemented.
+⚠ This is also the quantity the reverse-authority factor was wrongly identified with; see that
+bullet above.
 
 `return_rate` is a separate centring torque, described below.
 
@@ -828,8 +892,8 @@ base ramp is a function of **airspeed alone**, 0 at `turn_fade_in` (10) rising t
 `turn_fade_out` (50 authored), **held at 1 above that**, scaling roll and pitch authority with no
 bank or load-factor term anywhere in it. The banked turn settles at 222–260 mph and the knife-edge
 takes are at 143 and 300, so the ramp is saturated across the whole regime where the 1.6× appears
-and cannot be its cause. The ramp is a real unimplemented low-speed behaviour (`BL-330`) — it is
-simply not this. **What remains is not a decode question.** Recorded rather than quietly
+and cannot be its cause. The ramp is a real low-speed behaviour (`BL-330`, implemented 2026-08-15 by
+C24) — it is simply not this, and landing it moved no row of the envelope suite. **What remains is not a decode question.** Recorded rather than quietly
 re-pointed: a gap that has been attributed to the same three fields four times is exactly the kind
 of inherited claim that stops being re-checked.
 

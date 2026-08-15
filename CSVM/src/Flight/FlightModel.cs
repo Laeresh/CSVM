@@ -44,9 +44,10 @@ public struct FlightInput
 /// Gravity acts at full strength in every attitude. Neither carries a fitted constant, and
 /// the level-speed equilibrium is simply where the two cross: that lands within 1%
 /// of the authored fd_speed for nine of the eleven airframes without anything being
-/// tuned to make it. Rudder authority follows the original's own authored speed
-/// table (see <see cref="YawAuthorityAt"/>) — YAW ONLY; pitch and roll carry
-/// their own, different authority curves. Bank additionally couples straight into
+/// tuned to make it. Control authority is a function of airspeed on all three
+/// axes, each following the original's own authored curve: the rudder its
+/// non-monotone speed table (see <see cref="YawAuthorityAt"/>), roll and pitch the
+/// shared low-speed base ramp (see <see cref="RollPitchAuthorityAt"/>). Bank additionally couples straight into
 /// yaw and pitch rate (see <see cref="BankYawCoupling"/>), the original's
 /// coordinated-turn cheat, and <c>return_rate</c> is a restoring torque onto the
 /// flight path rather than extra damping (see <see cref="WeathervaneHalfAngle"/>),
@@ -351,6 +352,11 @@ public sealed class FlightModel
     // all, and the original pushes it forward while a Speed clamp would do nothing.
     private const float AiNoseSpeedFloor = 4.4704f;
 
+    // The reverse-authority factor's floor: FUN_0048bdd0's fifth output is max(yawAuthority, 0.2)
+    // above yaw_max and 1.0 at or below it (0x48bf16-0x48bf58; the 0.2 is the immediate at
+    // 0x6034fc). It is NOT a force term — see ReverseAuthorityAt for where the trace leads.
+    private const float ReverseAuthorityFloor = 0.2f;
+
     /// <param name="aiForcePath">Which of the original's two force paths this instance flows — see
     /// <see cref="UsesAiForcePath"/>. ⚠ Optional, and it defaults to the PLAYER path, so a
     /// production construction site added later gets the player plant silently. Two sites pass it
@@ -476,6 +482,61 @@ public sealed class FlightModel
         return s.YawHighSpeed;
     }
 
+    /// <summary>Roll and pitch authority at an airspeed — the original's base ramp, taken from
+    /// AIRSPEED ALONE (<see cref="PlaneStats.TurnFadeIn"/>/<see cref="PlaneStats.TurnFadeOut"/>):
+    /// 0 at or below turn_fade_in (10 mph), rising LINEARLY to 1 at turn_fade_out (authored 50, the
+    /// executable's fallback 40), and held at 1 above. So the slower the aircraft, the mushier it
+    /// gets, and at 10 mph roll and pitch are gone entirely. <c>FUN_0048bdd0</c> 0x48bdd0-0x48be1a
+    /// writes the same scalar to its pitch output (0x48be20) and its roll output (0x48be6c); the
+    /// yaw output is a different, non-monotone curve (see <see cref="YawAuthorityAt"/>).
+    /// Exposed so an instrument can sample the curve without re-deriving it; Step calls this method.
+    /// <para>⚠ ROLL AND PITCH ONLY, and keyed on airspeed, not on stall. Extending it to the rudder
+    /// double-fades an axis that already carries its own curve, and gating it on
+    /// <see cref="isStalled"/> makes it vanish on the nine airframes whose stall sits above 50 mph
+    /// (BL-330's own traps).</para>
+    /// <para>⚠ It scales the STICK command only. The bank coupling, the weathervane and the ground
+    /// blow enter the same accumulator carrying no authority factor at all — <c>FUN_0048c470</c>
+    /// multiplies these scalars inside the three per-axis input blocks and nowhere else — so a slow
+    /// aircraft still gets the full coupling and the full restoring torque.</para>
+    /// <para>Where 50 mph falls decides how visible this is, and it differs by airframe: nine of the
+    /// eleven stall at 52-57 mph, i.e. above the ramp's top, so the fade only bites once they are
+    /// already stalling; the Balmoral reaches its stall at ≈89 % authority and the autogyro (stall
+    /// 18.5 mph) at roughly 21 %, which for that airframe reads as deliberate.</para>
+    /// <para>The original's HIGH-speed pitch fade sits on the same output (0x48be22-0x48be68) and is
+    /// deliberately not implemented — this install authors it at [1000, 1001] mph, out of reach on
+    /// every airframe. Roll has no high-speed fade in the original at all.</para></summary>
+    public float RollPitchAuthorityAt(float speed)
+    {
+        var s = Stats;
+        if (speed <= s.TurnFadeIn)
+            return 0f;
+        return speed < s.TurnFadeOut && s.TurnFadeOut > s.TurnFadeIn
+            ? (speed - s.TurnFadeIn) / (s.TurnFadeOut - s.TurnFadeIn)
+            : 1f;
+    }
+
+    /// <summary>The reverse-authority factor — <c>FUN_0048bdd0</c>'s fifth output, which the debug
+    /// copy lacks: <c>max(yawAuthority, 0.2)</c> above <c>yaw_max</c> (authored 50 mph) and 1.0 at
+    /// or below it. Because yaw_max is where the yaw curve peaks, it engages across the whole of
+    /// normal flight, tracking the declining yaw curve down to the 0.2 floor (reached at ≈345 mph,
+    /// ≈0.40 at the Bloodhawk's 302 mph cruise).
+    /// <para>⚠ NOTHING IN THE FORCE PATH READS IT, and that is a trace rather than an omission
+    /// (C24). <c>FUN_0048c470</c> takes it as an out-parameter and writes it straight through to its
+    /// only caller, <c>FUN_0048e580</c>, where its single use is <c>0x48ec0b</c>-<c>0x48ec1d</c>:
+    /// <c>rudderAngle = factor · yawInput · −0.61086524 rad</c> (−35°, the immediate at
+    /// <c>0x608120</c>), smoothed toward that target at 2/s (<c>FUN_00460490</c>) into the angle
+    /// slots <c>obj+0x634</c>/<c>+0x638</c>, which <c>FUN_004b2fe0</c> then applies as a node
+    /// rotation to the two rudder node lists at <c>obj+0xa04</c>/<c>+0xa14</c>. It scales the
+    /// VISIBLE rudder deflection, on the player's aircraft only, and touches no torque.</para>
+    /// <para>⚠ What softens opposing control INSIDE <c>FUN_0048c470</c> is a different, local
+    /// quantity — <c>min(</c>the maxAOA window<c>, </c>the G limiter<c>)</c>, applied to pitch and
+    /// yaw when the command's sign opposes the nose→velocity closing axis. Reading the fifth output
+    /// as that scalar is the misattribution this method exists to record.</para>
+    /// <para>Exposed for <see cref="ControlSurfaceAnimator"/>, which is its one consumer here, and
+    /// for an instrument that wants the curve.</para></summary>
+    public float ReverseAuthorityAt(float speed) =>
+        speed > Stats.YawMax ? Mathf.Max(YawAuthorityAt(speed), ReverseAuthorityFloor) : 1f;
+
     /// <summary>The weathervane's restoring torque for the current attitude and flight path, in
     /// BODY axes and in the same units as the stick command (rad/s², before RecInertia and before
     /// the damping) — <c>return_rate · (α/2)</c> about the axis that swings the nose onto the
@@ -533,23 +594,29 @@ public sealed class FlightModel
 
         // --- rotation: torque·recInertia vs momentum damping (all from the dynamics block), plus
         // two decoded torques into the same accumulator — the bank coupling and the weathervane.
-        // Yaw authority follows the original's authored speed table (see YawAuthorityAt) — a
-        // declining function of speed — the original's own shape, not a fitted stand-in. Pitch and
-        // roll carry no HIGH-speed fade here: the original fades neither with speed. Its
-        // high_speed_pitch_fade IS authored, at [1000, 1001] mph, and is unreachable — past even this
-        // model's own hard dive ceiling of 1.75 × fd_speed (528.5 mph at its highest, the Bloodhawk)
-        // on all eleven airframes — so it is deliberately NOT implemented; do not add it "for
-        // completeness". See docs/org/flightModel.md's unreachability table.
-        // ⚠ They do fade at LOW speed in the original and do not here — it ramps roll and pitch
-        // authority from 0 at turn_fade_in (10 mph) to 1 at turn_fade_out (50), flat above.
-        // Traced and corroborated from the controls, but unimplemented; see
-        // docs/org/flightModel.md. Do not read the line above as "roll never fades" — that
-        // misreading is what had turn_fade_* filed as a bank effect.
+        // Each axis carries the original's own authority curve, all three from airspeed alone and
+        // all three the binary's shapes rather than fitted stand-ins: yaw the authored, non-monotone
+        // speed table (see YawAuthorityAt), pitch and roll the shared low-speed base ramp (see
+        // RollPitchAuthorityAt), which is why an aeroplane goes mushy as it slows and has no roll or
+        // pitch left at all at 10 mph.
+        // Pitch and roll carry no HIGH-speed fade. The original's high_speed_pitch_fade IS authored,
+        // at [1000, 1001] mph, and is unreachable — past even this model's own hard dive ceiling of
+        // 1.75 × fd_speed (528.5 mph at its highest, the Bloodhawk) on all eleven airframes — so it
+        // is deliberately NOT implemented; do not add it "for completeness". Roll has no high-speed
+        // fade in the original at all. See docs/org/flightModel.md's unreachability table, and do
+        // not read "roll never fades" as speed-independence: that misreading is what had
+        // turn_fade_* filed as a bank effect for four items.
+        // ⚠ The three scalars multiply the STICK COMMAND only. The bank coupling, the weathervane
+        // and the ground blow are summed into the same accumulator below carrying no authority at
+        // all, which is the original's arrangement (FUN_0048c470 applies them inside the three
+        // per-axis input blocks and nowhere else): a slow aircraft loses its controls but keeps the
+        // coupling and the restoring torque.
         float yawEff = YawAuthorityAt(Speed);
+        float rollPitchEff = RollPitchAuthorityAt(Speed);
         var cmd = new Vector3(
-            Mathf.Clamp(input.Pitch, -1f, 1f) * s.PitchTorque * s.RecInertia.X * pitchTune,
+            Mathf.Clamp(input.Pitch, -1f, 1f) * s.PitchTorque * s.RecInertia.X * pitchTune * rollPitchEff,
             Mathf.Clamp(input.Yaw, -1f, 1f) * s.RudderTorque * s.RecInertia.Y * yawTune * yawEff,
-            Mathf.Clamp(input.Roll, -1f, 1f) * s.RollTorque * s.RecInertia.Z * rollTune);
+            Mathf.Clamp(input.Roll, -1f, 1f) * s.RollTorque * s.RecInertia.Z * rollTune * rollPitchEff);
 
         // Bank coupling (see the two constants): banking yaws the nose the way the wings point and
         // pulls it up, with a further pull once the wings are past vertical. Read off the attitude

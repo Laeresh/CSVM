@@ -57,7 +57,7 @@ what a mission tells it to do.
 | 6 | What judges the result? | **A new `CAP-` of the original's AI flying, plus new `PT-` items**, with suite re-pins as records rather than verdicts. The capture asks behavioural and comparative questions only, never absolute distances or speeds |
 | 7 | How is the plant change A/B'd at the controls? | **A temporary CLI switch, removed when the playtest closes.** Not a permanent flag |
 | 8 | Where does the hunt for the control law start? | **The stun function's zeroed offsets first, then the mode-enum writers, then the update dispatcher.** A closed set of write-xrefs cannot miss the function the way a call-tree walk can |
-| 9 | Do `BL-330` and the reverse-authority factor ride in? | **Yes.** Same function, same consumer, both decoded and unported, and the ramp is the likely reason the AI speed floor exists |
+| 9 | Do `BL-330` and the reverse-authority factor ride in? | **Yes.** Same function, both decoded and unported, and the ramp is the likely reason the AI speed floor exists. **C24 landed 2026-08-15: "same consumer" was wrong** — the ramp is a torque scalar and the factor only scales the visible rudder angle |
 | 10 | Do `BL-095` or `BL-172` go first? | **Neither.** `BL-095` is a tracking umbrella with no work of its own and retires as a consequence of C24 and C25. `BL-172` rides in as C25 gated on C21: landing it first would put a player/AI test in the collision path before the seam and its divergence rationale exist |
 
 ## ⚠ Read this before implementing anything
@@ -68,7 +68,7 @@ what a mission tells it to do.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | ~~C22~~, ~~C23~~, C24, C25, C26 | Addresses and line cites are in `docs/org/flightModel.md`. Confirm the trace, then implement |
+| **Traced to an exact mechanism in code, with the data that proves it** | ~~C22~~, ~~C23~~, ~~C24~~, C25, C26 | Addresses and line cites are in `docs/org/flightModel.md`. Confirm the trace, then implement |
 | **Traced statically, never verified at runtime** | ~~A1, A2~~ | Both landed 2026-08-15, and both readings were wrong: there is no AI density band and no AI throttle setpoint. Read their landing notes before citing flightModel.md's older AI-path claims, several of which are debug-copy citations |
 | **Leads only, no mechanism yet** | D31, E41 | The AI control law has never been located. Budget for investigation; this may end in a documented dead end |
 
@@ -90,8 +90,8 @@ decoding the **player** path and set aside for M4's AI work. None of it is imple
 | AI ground blow is a fixed push, linear in proximity, not `dt`-scaled, factor 5.0 (0.15 is a further post-carrier-drop cut, not the base factor — corrected landing C23; reachable via a zeppelin fighter-drop but unmodelled) | flightModel.md:1339 | `0x0048c317` |
 | Per-AI random jitter of **eleven** dynamics slots at spawn, not two — **C26**, split out of C22 | flightModel.md:1004 | inside `FUN_00476250` |
 | The bank-coupling block is inlined a second time on the AI path behind a byte flag | flightModel.md:585 | `0x48cc61`–`0x48ccf4` |
-| Control authority ramp, shared, 0 at `turn_fade_in` = 10 mph | flightModel.md:471, 499 | `FUN_0048bdd0` |
-| Reverse-authority factor, decoded, unimplemented and unowned | flightModel.md:488 | `FUN_0048bdd0`, consumed by `FUN_0048c470` |
+| Control authority ramp, shared, 0 at `turn_fade_in` = 10 mph — **C24: landed** | flightModel.md, "The low-speed ramp" | `FUN_0048bdd0` |
+| ~~Reverse-authority factor, consumed by `FUN_0048c470`~~ **C24: not a force term.** `FUN_0048c470` only passes it out; its one consumer is the visible rudder angle in `FUN_0048e580` | flightModel.md, "Control authority vs speed" | `FUN_0048bdd0` → `FUN_0048e580` `0x48ec0b` |
 | AI mode enum, with mode 0 sub-dispatched on three flags | flightModel.md:1354 | `obj+0x358`; flags `obj+0x948`, `obj+0xBA`, `obj+0x2F0` |
 | Stun zeroes the AI's control inputs | flightModel.md:1366 | `FUN_004200d0` |
 | The three stick channels are summed into the torque accumulator | flightModel.md:1308 | inside `FUN_0048c470` |
@@ -140,7 +140,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ C21 The AI force-path seam, plus the temporary A/B switch (`UsesAiForcePath`, `--no-ai-plant`)
 22. ☑ C22 The AI aerodynamic deltas: airflow, weathervane, speed floor (three branches, no re-pins)
 23. ☑ C23 The AI ground blow, a different law
-24. ☐ C24 `BL-330`'s authority ramp and the reverse-authority factor
+24. ☑ C24 `BL-330`'s authority ramp and the reverse-authority factor (ramp landed unbranched; the factor is not a force term — its one consumer is the visible rudder)
 25. ☐ C25 `BL-172`'s `bounce_factor` restitution, player-only as decoded
 26. ☐ C26 The per-AI spawn jitter of eleven dynamics slots (split out of C22)
 
@@ -565,7 +565,50 @@ already-landed player law rather than introducing a new choice (see the landing 
 has its ground blow suppressed (flightModel.md:1369) and flies into terrain deliberately — reproduced
 via `ProbeGroundBlow`'s stun gate, not "fixed".
 
-## C24 ☐ `BL-330`'s authority ramp and the reverse-authority factor
+## C24 ☑ `BL-330`'s authority ramp and the reverse-authority factor
+
+**Landed 2026-08-15. The ramp is in; the reverse-authority factor is not a force term.**
+`FlightModel.RollPitchAuthorityAt` scales the pitch and roll components of the stick command by the
+authored `turn_fade_in` 10 / `turn_fade_out` 50 mph ramp, unbranched, player and AI alike, closing
+`BL-330`. Three properties were read off the binary rather than assumed: the scalar multiplies the
+STICK COMMAND only (`FUN_0048c470` applies the three authority scalars inside its three per-axis
+input blocks at `obj+0x114`/`+0x11c`/`+0x120` and nowhere else, so the bank coupling, the
+weathervane and the ground blow enter the accumulator at full strength); the bottom boundary is
+exclusive (`0x48bdd4` tests `speed > turn_fade_in`, so authority is exactly 0 *at* 10 mph); and
+pitch and roll take the SAME scalar (`0x48be20` and `0x48be6c` write it to both outputs).
+
+**The item's second half is a disproof.** This plan's Approach said "add the reverse-authority
+factor at its consumption site in the torque path". There is no such site. `FUN_0048c470` takes the
+fifth output as an out-parameter, writes it once and never reads it; what softens opposing commands
+inside that function is a DIFFERENT local quantity, `min(`the `maxAOA` window, the G limiter`)`,
+gated on the command's sign against the nose→velocity closing axis — both halves authored out of
+reach on all eleven airframes, and the misidentification is what
+[`org/flightModel.md`](org/flightModel.md)'s ⚠ ("do not implement it from this paragraph without
+reading `FUN_0048c470`'s use of the fifth output") was warning about. The factor's real and only
+consumer is `FUN_0048e580` at `0x48ec0b`–`0x48ec1d`: `rudderAngle = factor · yaw · −35°`, smoothed
+at 2/s into `obj+0x634`/`+0x638` and applied as a node rotation by `FUN_004b2fe0`. It scales the
+VISIBLE rudder deflection, player-only, and touches no torque. Ported there
+(`ControlSurfaceAnimator.Advance`), which is `FlightModel.ReverseAuthorityAt`'s one consumer.
+
+**Two things fell out of the same trace and are recorded, not built.** The original's whole
+control-surface block is behind its player guard, so its AI aircraft fly with frozen surfaces while
+ours deflect on every aircraft (a deliberate divergence). And its six angle slots, six node lists,
+±0.5/±0.6 rad clamps, two-channel mix and 2/s exponential smoothing are now decoded — minted as
+`BL-380`, blocked on decoding which physical surface each node list holds, and NOT ported over
+`ControlSurfaceAnimator`'s eye-validated ±20°.
+
+**Verify (METHOD-10, baseline taken before any change).** `.\RunTests.ps1` in full: units
+1305 → 1318 (thirteen new `ControlAuthorityRampTests` — the curve's knees against the shipped data
+rather than the compiled fallback, the rate ratio on both axes at 30 vs 60 mph, roll and pitch
+identically zero at 8 mph while the rudder still bites, the bank coupling surviving zero authority,
+and the factor's curve plus its absence from the force path), engine 59 → 59 unmoved, **goldens 14
+hash-identical, no re-pins**. The flight-envelope suite is blind to this by construction — every row
+settles at 143–300 mph, where the ramp is saturated at 1 — which is why the assertions above are the
+verification and a green suite is not. The 8-chapter `--freecam` regression was not re-run: nothing
+here executes during a world build (no aircraft is stepped under `--freecam`), the same reasoning
+C22 and C23 landed under on the same file. The at-the-controls half is F52's player-side arm.
+
+**Original text follows unchanged.**
 
 **Goal.** Roll and pitch authority fade with airspeed as the original does, for every aircraft, and
 `FUN_0048bdd0`'s fifth output softens control above `yaw_max`. `BL-330` closes here.

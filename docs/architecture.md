@@ -3295,7 +3295,9 @@ way `FlightController.PadDevices`/`UseKeyboard` gives the flying panes one.
 The aircraft's plant: the arcade velocity-vector flight model, decoded from the original and
 parameterised by the vehicle's own `dynamics` block. Rotation is a spring-damper: stick torque, the
 bank→yaw/pitch coupling, the `return_rate` weathervane and the ground blow sum into one accumulator
-decayed EXPONENTIALLY by `ang_momentum_damp`, with an authored speed-authority curve on yaw alone.
+decayed EXPONENTIALLY by `ang_momentum_damp`, with an authored speed-authority curve on each of the
+three axes — yaw its own non-monotone table, roll and pitch the shared low-speed ramp (C24) — scaling
+the STICK COMMAND only, never the coupling or the weathervane.
 Thrust, drag, gravity and lift integrate on the velocity VECTOR, so speed passes through zero — lift
 a demanded load factor, drag a polar in MACH with no induced term, thrust a Mach curve times a
 LINEAR lever scaled by nose attitude. Nothing in that force path is fitted; the nose-chase, the
@@ -3322,7 +3324,8 @@ it; the decode is [`org/flightModel.md`](org/flightModel.md) and the measurement
   and `high_speed_pitch_fade` are unreachable on all eleven airframes (`ControlLimiterTests` fails if
   a data edit brings one into reach), and the fitted `ClimbGravityScale` and the
   `KnifeNoseSag`/`KnifeNoseRate` pair were retired on their own ablations. Do not add any back "for
-  completeness". Still owed, by contrast: the original's LOW-speed roll/pitch authority ramp.
+  completeness". `FUN_0048bdd0`'s fifth output is absent for a different reason: it is not a force
+  term at all, its one consumer being the visible rudder angle (`ReverseAuthorityAt`, C24).
 
 ## src/Flight/PropAnimator.cs
 Spins the flying aircraft's prop/rotor blur discs: Build collects every node PropParts classifies
@@ -3365,6 +3368,13 @@ hard-clears all three on crash/respawn so a teleported aircraft cannot bridge it
 Deflects ailerons/elevators/rudders to an absolute pose: each surface stores its build-time local
 basis and gets Basis = base · Rot(hingeAxis, angle); three channels slew toward the stick at
 SlewPerSec (TUNE), ±20° per kind. --fly only; frozen while paused/crashed, reset on respawn.
+The RUDDER target is additionally scaled by the reverse-authority factor (`FlightModel
+.ReverseAuthorityAt`, C24) — decoded, and this is its ONLY consumer in the original, so the rudder
+barely moves at cruise and swings fully only in the slow-flight window where it has authority.
+⚠ The original's own angles/mix/rate are decoded and deliberately NOT ported (`BL-380`): its six
+  node lists do not map onto our four kinds, and the ±20° pair was validated by eye. Its whole
+  surface block is also player-only, so the original's AI aircraft fly with frozen surfaces and ours
+  do not — a deliberate divergence, not a missing guard.
 ⚠ The per-surface sign bakes three flips: the stick convention (ailerons opposite per side, TE
   against the commanded rotation), a canard flip (hinge z < CanardMaxZ ⇒ nose-mounted ⇒ pull
   deflects TE-down), and a frame flip from the accumulated hinge axis vs its canonical plane-space

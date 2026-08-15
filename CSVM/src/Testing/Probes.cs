@@ -1185,7 +1185,8 @@ public static class Probes
         // turn. turn_fade_in/turn_fade_out: decoded as a base ramp on AIRSPEED ALONE — 0 at 10 mph
         // rising to 1 at 50 and flat above — so it is identically 1 across the 222-260 mph this row
         // settles at, carries no bank or load-factor term, and cannot be a bank effect at all (it is
-        // a real unimplemented LOW-speed behaviour). The capture that was meant to discriminate has
+        // a real LOW-speed behaviour, landed by C24, and it cannot move this row). The capture
+        // that was meant to discriminate has
         // been flown — CAP-33, 2026-08-15, the turn held at ~60-70° — and it answered the ADI
         // question rather than this one: the original was being mis-read off its ADI, and its turn
         // is coordinated after all (see the bank note below). So this row stays open with no

@@ -668,7 +668,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   | Key (authored) | Where it stands |
   |---|---|
   | `yaw_low_speed 0.0625` / `yaw_high_speed 0.17` / `yaw_fade_in 10` / `yaw_max 50` / `yaw_fade_out 400` | Decoded and **implemented** (`PLAN-flight-model-rewrite` C21), retiring `BL-108`'s interim `eff` |
-  | `turn_fade_in 10` / `turn_fade_out 50` | Decoded: the roll/pitch base ramp from airspeed alone. **Unimplemented, owned by `BL-330`** |
+  | `turn_fade_in 10` / `turn_fade_out 50` | Decoded: the roll/pitch base ramp from airspeed alone. **Implemented 2026-08-15** (`PLAN-ai-flight` `C24`, retiring `BL-330`) |
   | `maxAOA 46.0` / `liftAOAs [5,9]` / `lift_accel_rate 0.75` | Decoded. `liftAOAs` is an airflow blend, **not** a load-factor ramp. Consumed by `PLAN-flight-drag-lift` B12 as a **hypothesis under test, not a decode**. ⚠ That plan justifies its lift re-key partly on "the aircraft must hold 100° of bank, which needs `1/\|cos 100°\|` = 5.8 g" (`PLAN-flight-drag-lift.md:486-487`, `:7`, `:32`, `:200`, `:549`). `CAP-33` showed the ADI reads airframe **attitude**, not the turn's bank, so the ~100° attitude is real but the load factor does not follow from it that way — `CAP-01`'s turn banked 58.7°, ~2 g. The re-key is not challenged; its stated arithmetic is |
   | `high_speed_pitch_fade [1000,1001]` / `highGs [9,15]` / `lowGs [-6,-9]` | Decoded as **authored unreachable** (`C24`, `D33`). Nothing implemented, which is the correct outcome |
   | `drag_factor 1.5` (global) / `drag_fade_speed 40` | **Dead in the executable** (B14): parsed, then read by nothing. The per-plane `drag_factor` is the only drag scale |
@@ -756,8 +756,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   **Still to do, all of it downstream of this entry:**
   1. ~~Implement ground blow.~~ **Landed 2026-08-15** (`BL-359`, closed; `git log --grep=BL-359`),
      player path only and confirmed at the controls. The AI law is unbuilt and is a different one.
-  2. **Implement the roll/pitch base ramp** (`BL-330`) and **the `bounce_factor` restitution**
-     (`BL-172`).
+  2. ~~Implement the roll/pitch base ramp~~ **Landed 2026-08-15** (`BL-330`, closed;
+     `git log --grep=BL-330`), unbranched, player and AI alike; the same item traced
+     `FUN_0048bdd0`'s fifth output to the visible rudder angle rather than to any force term.
+     Still open: **the `bounce_factor` restitution** (`BL-172`).
   3. ~~Confirm the zeppelin emitter on any zeppelin mission.~~ **Answered 2026-08-15 from the binary
      and the shipped data, no capture needed.** The emitter test keys on whether a hit node carries
      the spawn mark `0x40000000` and, if so, whether its registry entity is on a scripted path; never
@@ -770,32 +772,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
   When those are homed elsewhere or done, this entry retires: there is no research left in it.
 
-- `BL-330` `[Feature]` **The low-speed control-authority ramp — decoded, corroborated at the
-  controls, and not implemented.** `FUN_0048bdd0` scales **roll and pitch** authority by a base ramp
-  taken from airspeed alone: 0 below `turn_fade_in` (**10 mph**), rising linearly to 1 at
-  `turn_fade_out` (**50 mph** as authored here), flat at 1 above. So the slower the aircraft gets,
-  the mushier it gets — and at 10 mph roll and pitch are gone entirely. Our `FlightModel` applies no
-  such fade on either axis; the only thing that makes our aircraft feel unflyable when slow is the
-  stall block taking the nose, which is a different mechanism. Write-up in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Control authority vs speed".
-  **Two-source support, which is why this is a `[Feature]` and not a `[Research]`:** the trace above,
-  plus a player report from the controls (2026-08-09) that the original hampers the controls at stall
-  speed — offered unprompted while flying the post-`D33` build, i.e. describing the original from
-  memory rather than reading it off ours.
-  ⚠ **Where 50 mph falls decides how visible this is, and it differs by airframe** (stall speeds from
-  `PLAN-flight-model-rewrite` B15): nine of the eleven stall at 52–57 mph, i.e. *above* the ramp's
-  top, so for them the fade only bites once already stalling and falling. The **Balmoral** (45.5)
-  reaches its own stall at ≈89% authority. The **autogyro** (18.5) flies a long way inside the ramp
-  and reaches stall at roughly **21%** of roll and pitch authority — near-inert controls while still
-  flying, which for that airframe reads as deliberate rather than as a bug.
-  ⚠ **Traps.** (a) This is *airspeed*-keyed, not stall-keyed — do not gate it on `isStalled()`, or
-  the two mechanisms compound and the fade vanishes on the airframes whose stall sits above 50 mph.
-  (b) It is roll and pitch **only**: yaw has its own, different curve, already landed (`C21`), and
-  extending this ramp to the rudder would double-fade it. (c) `FlightModel.cs`'s rotation comment
-  currently asserts "roll never fades in the original" — true of *high* speed, false of low, and the
-  same misreading of this function that had `turn_fade_*` filed as a bank fade until 2026-08-09 (see
-  `BL-095`). (d) It reaches into stall recovery and the ground handling the race grid sits on, so it
-  wants a flown check, not only a probe row.
+- `BL-380` `[Tuning]` **The control surfaces' deflection angles, mix and slew are decoded and the
+  TUNEs are still in place.** `ControlSurfaceAnimator` deflects ±20° per kind and slews linearly at
+  3 units/s, both chosen by eye. `PLAN-ai-flight` `C24` decoded what the original does while tracing
+  the reverse-authority factor to this same block — six angle slots, six node lists, exponential
+  smoothing at 2/s, rudder −35°, one pair at ±0.5 rad from a single stick channel and one at ±0.6 rad
+  MIXING two channels — and the table is in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "The original's control-surface animation".
+  Only the rudder's reverse-authority scale was ported.
+  ⚠ **The blocker is the mapping, not the numbers.** We classify four surface kinds by node name;
+  the original drives six node lists whose contents are not decoded, and its two mixed slots are not
+  one-axis-per-surface at all. Decode the list population before assigning any angle from that table,
+  or the mix lands on the wrong surfaces.
+  ⚠ The ±20° pair was validated by eye against the original, so this is an A/B against footage, not a
+  correction of something known wrong.
 
 - `BL-096` `[Feature]` **Angle of attack is now fittable and is not modelled.** The ADI shows hysteresis against
   vertical speed round the loop — expected, since the ball shows attitude while `dh/dt` follows the

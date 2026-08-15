@@ -21,6 +21,25 @@ namespace CSVM.Flight;
 /// conventional tail), and a frame flip for hinge groups mounted rotated (the same
 /// Bloodhawk canard groups have yaw π, so their local X points left) — detected
 /// from the accumulated hinge-axis direction in the plane model's frame.
+///
+/// <para>The rudder's deflection is additionally scaled by the reverse-authority
+/// factor (<see cref="FlightModel.ReverseAuthorityAt"/>) — decoded, and this is its
+/// ONE consumer in the original: <c>FUN_0048bdd0</c>'s fifth output reaches
+/// <c>FUN_0048e580</c> only to multiply the rudder node angle, so the visible rudder
+/// barely moves at cruise (≈0.40 on the Bloodhawk at 302 mph, floored at 0.20 past
+/// ≈345 mph) and swings fully only in the slow-flight window where the rudder has
+/// authority. It is NOT a force term and nothing in <see cref="FlightModel.Step"/>
+/// reads it. The original also drives this whole block for the player's aircraft
+/// alone, so its AI aircraft fly with frozen surfaces; ours deflect on every
+/// aircraft, which is a deliberate divergence and not an unported guard.</para>
+///
+/// <para>The original's own deflection angles are decoded (C24) and NOT ported: the
+/// rudder is ±35°, the ailerons ±0.6 rad mixing roll at 0.6 with pitch at 0.18
+/// (they are elevons), the elevators ±0.5 rad from pitch alone, all smoothed
+/// exponentially at 2/s by <c>FUN_00460490</c> rather than slewed linearly. Adopting
+/// them means mapping our four <see cref="ControlSurfaces.Kind"/> classes onto the
+/// original's six node lists (<c>obj+0x9c4</c>…<c>+0xa14</c>) first, and the angles
+/// below were validated by eye against the original — see backlog.md BL-380.</para>
 /// </summary>
 public sealed class ControlSurfaceAnimator
 {
@@ -53,12 +72,17 @@ public sealed class ControlSurfaceAnimator
 
     /// <summary>Slews the deflection toward this frame's stick input and poses every
     /// surface. Skip while crashed/paused (the pose then just holds).</summary>
-    public void Advance(double delta, FlightInput input)
+    /// <param name="reverseAuthority">The reverse-authority factor at this airspeed
+    /// (<see cref="FlightModel.ReverseAuthorityAt"/>), scaling the RUDDER target only —
+    /// see the class remarks. Defaults to 1 for the callers that have no plant to ask.</param>
+    public void Advance(double delta, FlightInput input, float reverseAuthority = 1f)
     {
         float step = SlewPerSec * (float)delta;
         _defl.X = Mathf.MoveToward(_defl.X, Mathf.Clamp(input.Pitch, -1f, 1f), step);
         _defl.Y = Mathf.MoveToward(_defl.Y, Mathf.Clamp(input.Roll, -1f, 1f), step);
-        _defl.Z = Mathf.MoveToward(_defl.Z, Mathf.Clamp(input.Yaw, -1f, 1f), step);
+        // Scaled BEFORE the slew, as the original scales its target before smoothing toward it:
+        // the deflection then settles at the scaled angle instead of passing through it.
+        _defl.Z = Mathf.MoveToward(_defl.Z, Mathf.Clamp(input.Yaw, -1f, 1f) * reverseAuthority, step);
         Apply();
     }
 
