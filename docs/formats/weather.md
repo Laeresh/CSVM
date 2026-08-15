@@ -106,7 +106,7 @@ Danger-Zones **UI widget** names — `ozonestitle`, `o_radbutzone`). Zone select
 happens engine-side in the binary — the same shape as the `fire2` trigger (see
 [anim-definitions.md](anim-definitions.md#fire-templates-flipbooks-and-a-trigger-that-lives-in-the-exe)).
 
-**`interp.json` neither (re-read in full 2026-08-06).** Four zone-bearing strings in its 98
+**`interp.json` neither.** Four zone-bearing strings in its 98
 scripts, and none of them selects anything:
 
 - `support\c1\load.gw` `CameraSetHorizonXZ zone2_cloud_floor` (×2) and `support\c1b\load.gw`
@@ -166,7 +166,7 @@ either invisible. The remake's one-static-zone `--sky-zone` model is therefore a
 that is exact above the band and wrong below it (a below-deck C1 should wear `ZONE1`'s fog);
 whether that gap is visible enough to chase is a backlog question, not settled here.
 
-> **Landed 2026-08-09 (`PLAN-weather-decompile-match` B11).** The remake now switches the FOG
+> **Reader rule.** The remake switches the FOG
 > block (`FOG_RANGES`, `FOG_ALTITUDE`, `FOG_COLOR` and the `SUNLIGHT`-derived world light) per
 > camera state, on the state edge, exactly as `FUN_00472ea0` does — a below-deck C1 river pose
 > measures a fog wall at **1752 m** against `ZONE1`'s authored 1750, where the static model drew
@@ -204,7 +204,7 @@ zone-switch reading died on C2, whose `ZONE1` band top (1024 m) is routinely flo
 (`PLAN-overcast-match` B11). It is a fade inside one zone's fog, nothing more; see
 [the zone keys](#zone-keys) below.
 
-#### C5 is settled: `zone1` (user A/B against the original, 2026-07-22)
+#### C5 uses `zone1`
 
 The user flew C5/IA1 in the original and **can see across the city**, which `ZONE3`'s 50–250 m
 fog and 300 m clip make impossible. So C5 = `zone1`, and the far-apart candidates above are no
@@ -223,7 +223,7 @@ two orders disagree — C5's weather.json lists `ZONE1` first, its horizon lists
 `BuildHorizon`, which is what keeps the pair consistent; `BuildHorizon`'s own fallback is a
 no-op in that path and exists only for a mission with no weather.json at all.
 
-#### The horizon's own geometry settles three chapters (2026-08-06)
+#### The horizon's own geometry settles three chapters
 
 `ZONE2` being *defined* is not the same as it being *flown*. In **C1B, C2 and C3** the gamez
 `horizon/zone2` node is a bare marker — `model_index: -1`, `child_indices: []` — so the `zone2`
