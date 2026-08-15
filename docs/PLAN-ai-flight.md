@@ -31,8 +31,9 @@ consequence of C24 and C25 rather than through an item of its own.
 ## Milestone goal
 
 - AI aircraft fly the original's force path: its airflow treatment, its weathervane rule, its speed
-  floor, its ground blow, and its air-density band, selected by a branch our `FlightModel` does not
-  have today.
+  floor and its ground blow, selected by a branch our `FlightModel` does not
+  have today. (The air-density band was the fifth item on this list until A1 disproved it: the
+  atmosphere call is shared, unbranched, and identical for the player.)
 - The original's AI control law is located in the binary, decoded, documented in `docs/org/`, and
   ported, or its absence is recorded as a named dead end with what was searched.
 - No invented constant survives in `AiPilot` or `AiNetFollower` that exists only to stabilise the
@@ -49,7 +50,7 @@ what a mission tells it to do.
 | # | Question | Decision |
 |---|---|---|
 | 1 | Complete `AiPilot` by decoding, by porting the already-decoded physics, or by tuning the placeholder? | **Decode (waves D and E), sequenced through the already-decoded physics (wave C).** C changes what the law is steering, so doing E first means doing it twice |
-| 2 | Trust the static reading that AI aerodynamics run on the thin density band? | **No, verify in Ghidra first (A1).** It is recorded as "static reading, not runtime-verified", and it decides whether the altitude leash is tuned or deleted |
+| 2 | Trust the static reading that AI aerodynamics run on the thin density band? | **No, verify in Ghidra first (A1).** It is recorded as "static reading, not runtime-verified", and it decides whether the altitude leash is tuned or deleted. **A1 landed 2026-08-15: the reading is wrong, there is no AI/player density split, and C22 lands no density branch** |
 | 3 | Who takes the player force path when 2 to 4 humans fly at once? | **Every human-piloted aircraft (`IsHumanPiloted`).** The original's guard is a single global player pointer, a case our splitscreen makes meaningless; recorded as a named divergence |
 | 4 | How is the AI force path selected in code? | **A `readonly` flag set at construction, branching at the five decoded sites inside `Step`.** It mirrors the original's own one-function-with-guards shape, and a constant field cannot flip under a golden |
 | 5 | What happens to `architecture.md`'s oversized `FlightModel` entry? | **Mechanism rules move into `FlightModel.cs`; the entry keeps purpose, at most three ⚠, and a pointer.** The paragraph-length decode comments already in that file are an accepted exception to the one-line comment rule |
@@ -68,7 +69,7 @@ what a mission tells it to do.
 | Confidence | Items | What that means for you |
 |---|---|---|
 | **Traced to an exact mechanism in code, with the data that proves it** | C22, C23, C24, C25 | Addresses and line cites are in `docs/org/flightModel.md`. Confirm the trace, then implement |
-| **Traced statically, never verified at runtime** | A1, A2 | The reading is recorded with addresses but explicitly marked unverified. These items exist to settle it, and either answer is a result |
+| **Traced statically, never verified at runtime** | ~~A1, A2~~ | Both landed 2026-08-15, and both readings were wrong: there is no AI density band and no AI throttle setpoint. Read their landing notes before citing flightModel.md's older AI-path claims, several of which are debug-copy citations |
 | **Leads only, no mechanism yet** | D31, E41 | The AI control law has never been located. Budget for investigation; this may end in a documented dead end |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees, never use it in a
@@ -81,8 +82,8 @@ decoding the **player** path and set aside for M4's AI work. None of it is imple
 
 | Fact | Where | Address |
 |---|---|---|
-| AI throttle is read as a target speed, `fd_speed · throttle` | flightModel.md:1060 | `0x48c593` |
-| AI aerodynamics skip the altitude zeroing, so the thin density band is reachable | flightModel.md:189 | `0x48c883` |
+| ~~AI throttle is read as a target speed, `fd_speed · throttle`~~ **A2: false.** Throttle is a lever for both; the product drives the far-field (>1 km) cruise model | flightModel.md, "A2" | `0x48c593` |
+| ~~AI aerodynamics skip the altitude zeroing, so the thin density band is reachable~~ **A1: false.** The zeroing is the debug copy's; the live atmosphere call is shared and unbranched | flightModel.md, "A1" | `0x48c883` |
 | AI always uses nose-aligned wind, i.e. permanently zero incidence | flightModel.md:217 | (in text) |
 | AI does not get weathervane centring | flightModel.md:791 | (in text) |
 | Forward-velocity floor of 4.4704 m/s (10 mph), player exempt | flightModel.md:137 | (in text) |
@@ -127,8 +128,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Verify the two unverified reads
 
-1. ☐ A1 The thin air-density band on the AI force path
-2. ☐ A2 Whether AI throttle is a speed setpoint or a lever
+1. ☑ A1 The thin air-density band on the AI force path (**disproven**, no AI/player divergence)
+2. ☑ A2 Whether AI throttle is a speed setpoint or a lever (**a lever**, unbranched)
 
 ### Wave B — Documentation migration
 
@@ -137,7 +138,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Port the decoded plant
 
 21. ☐ C21 The AI force-path seam, plus the temporary A/B switch
-22. ☐ C22 The AI aerodynamic deltas: airflow, weathervane, density band, speed floor
+22. ☐ C22 The AI aerodynamic deltas: airflow, weathervane, speed floor (density band out, per A1)
 23. ☐ C23 The AI ground blow, a different law
 24. ☐ C24 `BL-330`'s authority ramp and the reverse-authority factor
 25. ☐ C25 `BL-172`'s `bounce_factor` restitution, player-only as decoded
@@ -158,9 +159,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ## Dependency and parallelism notes
 
-A1 and A2 are read-only Ghidra work and can run together. A1 gates C22 (it decides whether the
-density branch is part of that item, and whether E42's altitude leash is deleted or re-derived), and
-A2 gates C21's throttle semantics. B11 touches only `docs/architecture.md` and `FlightModel.cs`
+A1 and A2 are read-only Ghidra work and can run together; **both landed 2026-08-15**. A1 gated C22
+(the density branch is now out of that item, and E42's altitude leash cannot be justified by
+near-zero AI aero forces), and A2 gated C21's throttle semantics (a lever, unchanged shape). B11 touches only `docs/architecture.md` and `FlightModel.cs`
 comments and can run at any time before C21, but **not in parallel with C21 or C22**, which edit the
 same file. C21 blocks C22, C23 and C24 (they all branch on its flag), and C25 is gated on it for
 consistency rather than necessity (see that item). C24 and C25 are the items that change player
@@ -174,7 +175,27 @@ starts and does not depend on any code item; F52 needs C and E landed, and the s
 
 # Wave A — Verify the two unverified reads
 
-## A1 ☐ The thin air-density band on the AI force path
+## A1 ☑ The thin air-density band on the AI force path
+
+**Landed 2026-08-15: disproven.** There is no player-versus-AI density divergence. The
+save / store-`0` / restore of `[obj+0x208]` at `0x491250`–`0x491284` is inside `FUN_00490f70`, the
+**debug copy** of the force function, reachable only through `FUN_00491820` → `FUN_00492040`, which
+returns immediately unless the Dynamics-tuner flag `DAT_0071c78a` is set (written only by two dialog
+handlers, `0` in the shipped image). It is the measurement harness pinning itself to sea level, and
+it never runs during flight. The live path is shared by the player and every AI aircraft
+(`FUN_004897c0` → `FUN_00489ea0` → `FUN_0048e580` → `FUN_0048c470` → `FUN_0048fc40` →
+`FUN_0041aca0`), dispatched on the vehicle class and never on the player pointer, and it passes the
+true altitude in both cases. **Write-xref sweep on the threshold `DAT_0071bb3c`: one reference in
+the whole program, the read at `0x41aca4`; writes, none, the empty case; and the little-endian
+address `3c bb 71 00` appears exactly once in the image, as that instruction's own displacement, so
+no pointer table or parser store can reach it (the byte search demonstrably covers `.data`).** The
+consequence for C22 is that it lands **no density branch**: the band is shared, and the dense band
+stands for both on the arithmetic that established it. The literal reading (threshold `0.0` → thin
+band for everything airborne) contradicts the authored `ref_area`/`veh_weight` set and is recorded
+in [`org/flightModel.md`](org/flightModel.md)'s Atmosphere section as a shared-path conflict
+settleable only in a live process, not as an AI question. Full record below; the item's original
+text follows unchanged.
+
 
 **Goal.** Settle whether the original's AI aircraft really fly with air density 16.7× lower than the
 player's, which would mean near-zero aerodynamic forces, or whether the band threshold is written
@@ -208,7 +229,22 @@ runtime; the point of this item is the xref sweep, not re-reading the same bytes
 anything on this item's finding without it, and do not let a plausible answer here override the
 runtime behaviour observed later in F52.
 
-## A2 ☐ Whether AI throttle is a speed setpoint or a lever
+## A2 ☑ Whether AI throttle is a speed setpoint or a lever
+
+**Landed 2026-08-15: a lever, with no AI branch anywhere.** `FUN_0048fc40` multiplies the Mach
+thrust curve by the current throttle `[obj+0x128]` (`0x48fcc6` loads it, `0x48fce7` multiplies) for
+player and AI alike; boost substitutes a flat `1.8` and scales drag by `0.8`. The commanded/current
+pair and the 0.5/s slew live in the **live** integrator `FUN_0048e580` (`0x48e645`–`0x48e6bd`), also
+unbranched. `fd_speed · throttle` at `0x48c593` is **not** an AI throttle interface: it is the
+far-field model. `FUN_0048c470` skips its whole aerodynamic path when the aircraft is crashed or is
+a non-player more than 1000 m from the player horizontally (`FUN_00538920` returns `Δx² + Δz²`,
+compared against `1e6`), and in that branch drives velocity toward the nose at
+`fd_speed · throttle` plus a flat 5 m/s for non-players (`0x48c5ae`, `[0x6036bc] = 5.0`), emitting
+`target − current` velocity instead of a force. So `AiPilot.Throttle` keeps its lever shape, C21
+needs no setpoint interface, and the far-field model is decoded, unimplemented and deliberately
+unowned (it is invisible inside 1 km, where every AI aircraft we simulate sits). Recorded in
+[`org/flightModel.md`](org/flightModel.md), "A2". The item's original text follows unchanged.
+
 
 **Goal.** Determine whether `fd_speed · throttle` at `0x48c593` is a target speed the AI's engine
 control chases, or a term inside a lever-style thrust calculation. `AiPilot.Throttle` is a lever
@@ -306,13 +342,14 @@ player path. With two sites today that is acceptable, but a third one added late
 say so at the constructor. Do not make the flag mutable, a plant that can change mid-flight makes a
 golden or a suite run unreproducible.
 
-## C22 ☐ The AI aerodynamic deltas: airflow, weathervane, density band, speed floor
+## C22 ☐ The AI aerodynamic deltas: airflow, weathervane, speed floor (density band out, per A1)
 
 **Goal.** An AI aircraft flies the original's aerodynamics: nose-aligned wind always (zero
-incidence), no weathervane centring, its own air-density band per A1, and a forward-velocity floor of
-4.4704 m/s applied after integration.
+incidence), no weathervane centring, and a forward-velocity floor of
+4.4704 m/s applied after integration. **A1 removed the density band from this item**: the
+atmosphere call is shared and unbranched, so this is three changes, not four.
 
-**Evidence (confidence: traced, except the density band which A1 settles).** flightModel.md:217
+**Evidence (confidence: traced; the density band was A1's and is disproven).** flightModel.md:217
 (AI skips the airflow blend and always uses nose-aligned wind), :791 (weathervane is player only),
 :137 (the 10 mph floor along the nose axis, applied after integration, player exempt), :189 with A1
 for the band. `FUN_00477280` (flightModel.md:1004) additionally jitters `fd_speed` and
@@ -335,9 +372,9 @@ applies directly, since three of these four branches are skips, and a mis-wired 
 "no change". A/B at the controls with C21's switch is F52's job, not this item's.
 
 **⚠ Traps.** Do not tune anything in `AiPilot` to keep an old suite number green; the plant moving is
-the intended result, and E42 is where the law's constants are addressed. The thin band, if A1
-confirms it, means near-zero aerodynamic forces, so an AI aircraft that suddenly behaves like a
-thrust-and-torque object is the expected outcome and not evidence of a bug. The floor is on the
+the intended result, and E42 is where the law's constants are addressed. Do not re-add a density
+branch here: A1 disproved it, and the "near-zero AI aero forces" outcome this item once expected is
+**not** what should be seen. The floor is on the
 nose-axis velocity component, not on `Speed`; conflating them changes behaviour in a dive.
 
 ## C23 ☐ The AI ground blow, a different law

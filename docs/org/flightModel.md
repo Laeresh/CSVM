@@ -93,7 +93,9 @@ Those citations are still re-checkable at those addresses and the behaviour they
 behaviour the game runs, because the two copies are the same code over the same globals. They were
 left alone deliberately: mapping each one to its live-copy address is a separate mechanical pass,
 and inventing the mapping without tracing it would be worse than the inconsistency. When reading an
-address out of this document, check which family it belongs to first.
+address out of this document, check which family it belongs to first. **A1 (2026-08-15) corrected
+the first of them:** the Atmosphere section's "the player force path zeroes the altitude" was a
+debug-copy citation, and with it went the supposed player-versus-AI density divergence.
 
 ## Units and conventions
 
@@ -177,21 +179,60 @@ q     = 0.5 · ρ · V_ft/s²          (dynamic pressure, lb/ft²)
 Mach  = V_m/s / (a_ft/s · 0.3048)
 ```
 
-**The dense band is the operative one for the player, and that is now proven from the bytes, not
-just the arithmetic.** The player force path **zeroes the altitude before computing forces**: at
-`0x491250`–`0x491284` the caller saves `[obj+0x208]`, stores `0`, calls the force accumulator and
-restores it. With the band threshold statically `0.0` and the comparison `alt ≤ threshold →
-dense` (`0x41aca4`–`0x41acc4`), an altitude pinned to 0 selects the dense band **always** — the
-threshold's unwritten value is irrelevant to player flight because the altitude never reaches the
-comparison. The stall arithmetic below independently agrees (the dense band produces a correct
-~76 mph stall from the code's own fallback aircraft, the thin band a nonsensical 309 mph).
+**The dense band is the operative one, for every aircraft, and it rests on the arithmetic rather
+than on the bytes.** The comparison is `alt_ft ≤ threshold → dense` (`0x41aca4`–`0x41acc4`) against
+the threshold at `0x0071bb3c`, whose shipped value is `0.0`, so a literal byte reading hands the
+thin band to anything above sea level. The arithmetic rejects that reading and always has: the
+dense band produces a correct ~76 mph stall from the code's own fallback aircraft where the thin
+band gives a nonsensical 309 mph, and the level-equilibrium solve reproduces nine of eleven
+airframes' authored `fd_speed` under the dense band while the thin band misses by ~4× (see "Drag"
+and the thrust curve's note at `0x71bb3c`). Do not "fix" the band on the strength of the unwritten
+threshold.
 
-⚠ **The thin band is reachable on the OTHER call path.** The force accumulator's second call site
-(`0x48c883`, inside the AI-side flight function that also reads `fd_speed·throttle` as the AI
-target speed) does **not** zero `[obj+0x208]` first — so with the threshold read literally as 0.0,
-AI aerodynamics above sea level run on the thin band (ρ 16.7× lower, i.e. near-zero aero forces on
-top of AI's nose-aligned wind and 10 mph speed floor). Static reading, not runtime-verified;
-recorded for M4's AI flight work, and no longer an open question for the player model.
+**A1 (2026-08-15): there is no player-versus-AI density divergence, and the earlier claim that the
+player path pins the dense band was a debug-copy citation.** This paragraph replaces a ⚠ that read
+"AI aerodynamics above sea level run on the thin band".
+
+- The save / store-`0` / restore of `[obj+0x208]` at `0x491250`–`0x491284` is inside
+  `FUN_00490f70`, which is the **debug copy** of the force function (see "There are two
+  integrators"). Its only caller is `FUN_00491820` (`0x49184c`), whose only callers are
+  `FUN_00492040`, `FUN_00491c60` and `FUN_00491d90`; the latter two are called only by
+  `FUN_00492040`, and `FUN_00492040` returns immediately unless `DAT_0071c78a` is set. That is the
+  Dynamics-tuner display flag, written only by the two dialog handlers `FUN_00443750` and
+  `FUN_00445090`, and `0` in the shipped image. The zeroing is the measurement harness pinning
+  itself to sea level for its report. **It never runs during flight, for the player or anyone
+  else.**
+- The live force path is shared: `FUN_004897c0` → `FUN_00489ea0` → `FUN_0048e580` →
+  `FUN_0048c470` → `FUN_0048fc40` (`0x48c883`) → `FUN_0041aca0` (`0x48fc70`), and
+  `FUN_0048fc40` passes `[obj+0x208] · 3.28084` (`0x48fc51`) with no zeroing anywhere in
+  `FUN_0048c470` or `FUN_0048e580` (a program-wide instruction sweep for `+0x208` accesses finds
+  none in either function). The player reaches this path exactly as an AI aircraft does
+  (`FUN_004897c0` dispatches the player object through `FUN_00489ea0` like every other vehicle),
+  and the class dispatch is on the vehicle class `obj+0x67c`, never on the player pointer. So
+  whatever band the atmosphere selects, the player and the AI select the same one.
+- `[obj+0x208]` is world altitude in metres, positive up: gravity is subtracted from world
+  component 1 (`FUN_0048fc40`), the respawn writes `900.0` there or the terrain height when that is
+  higher (`FUN_004969b0`, `0x496b75`), and `FUN_004704b0` pushes the object to terrain + 1 m when it
+  is below the terrain.
+
+**The write-xref sweep on the band threshold `DAT_0071bb3c`, stated in full so the search is
+visible.** Cross-references to `0x0071bb3c`: **one**, the read at `0x41aca4` (`FCOMP`). Writes:
+**none, the empty case.** A byte search for the little-endian address `3c bb 71 00` across the
+whole image returns exactly one hit, `0x41aca6`, the displacement inside that same instruction, so
+no pointer table and no parser store can name it, and the search demonstrably
+covers `.data` (the same search for `dynamics` finds the parser token at `0x627f88`). Its
+neighbours are ordinary separate globals reached by absolute address, not a struct some base
+pointer could walk into: `0x71bb40` is written directly at `0x47f3e2`, and `0x71bb44`–`0x71bb60`
+are read by `FUN_0047f1f0` with no writer at all. `0x0071bb3c` is therefore `0.0f` for the whole life of the process, and this question
+cannot be reopened by a further static pass, only by reading the live process.
+
+⚠ **The literal reading and the arithmetic still disagree, and that conflict is now a
+shared-path question, not an AI one.** Taken at face value the live path gives every airborne
+aircraft the thin band, which no airframe could fly (the authored `ref_area`/`veh_weight` pairs sit
+at ~10 lb/ft² wing loading, tuned for the dense band; under the thin band the aerodynamic ceiling
+`(0.75 − 0.15·M)·q·RefArea` cannot deliver 1 G at any speed those airframes reach). The remake runs
+the dense band for both, which is what the arithmetic supports; what would settle the residue is a
+live read of `0x0071bb3c` and of `[obj+0x208]` in a running process, not another static sweep.
 
 ## Lift — the wings deliver the demanded G
 
@@ -926,9 +967,10 @@ atm->a   = (k + 1.0) · 558.0        ; 1109.54 ft/s dense, 968.02 thin
 atm->rho = r · 0.002377             ; 2.2688e-3 dense, 1.35603e-4 thin
 ```
 
-⚠ **This does not reopen the band question.** `0x71bb3c` is BSS with a single read reference (the
-`fcomp` itself) and no writer anywhere in `.text`, exactly as recorded under the G/AOA limiters —
-so a byte-level reading says "threshold 0, thin band always". The **dense band is established by
+⚠ **This does not reopen the band question.** `0x71bb3c` sits in `.data` with a single read
+reference (the `fcomp` itself) and no writer anywhere in the image — swept exhaustively under A1,
+see the Atmosphere section — so a byte-level reading says "threshold 0, thin band always". The
+**dense band is established by
 arithmetic, not by that flag** (the thin band puts the fallback airframe's stall at 309 mph), and
 it is corroborated here: with the dense band's `k`, the decoded thrust curve and the decoded drag
 polar put the Bloodhawk's full-throttle level equilibrium at **300.5 mph** against its authored
@@ -1057,8 +1099,9 @@ across most of the set and the Balmoral misses by **+60 %**. Either the unrecove
 strong curvature, or `fd_speed` is not the equilibrium. The second reading has support: the tuner
 calls the field **`FakeDynSpeed`** and *measures* `TopSpeed` separately (if `fd_speed` were the top
 speed there would be nothing to measure), and at runtime `fd_speed` is used as a **normalising
-reference speed** — `speed/fd_speed` for gauge and effect fractions (`0x4b1e54`), an AI target
-speed `fd_speed · throttle` (`0x48c593`), and a speed clamp (`0x46aaf4`) — never as a solved
+reference speed** — `speed/fd_speed` for gauge and effect fractions (`0x4b1e54`), a far-field
+cruise speed `fd_speed · throttle` (`0x48c593`, A2 below; this used to read "an AI target speed",
+which it is not), and a speed clamp (`0x46aaf4`) — never as a solved
 equilibrium. **Do not treat `fd_speed` as the original's top speed in B12/B13 without settling
 this.**
 
@@ -1067,6 +1110,34 @@ this.**
 at `[obj+0x134] -= dt · throttle · 5`, and `FUN_00491820` snaps them together. The current throttle
 enters thrust as a **plain multiply** at `0x48fce7`. That is the linear-throttle claim, confirmed
 at source in this item rather than inferred.
+
+### A2 (2026-08-15): throttle is a lever for the AI too, and `fd_speed · throttle` belongs to a far-field model
+
+**The throttle interface has no AI branch.** `FUN_0048fc40` reads the current throttle
+`[obj+0x128]` and multiplies the Mach thrust curve by it (`0x48fcc6` loads it, `0x48fce7`
+multiplies), with no player compare anywhere in the chain; boost (`[obj+0x947]`) replaces the lever
+with a flat `1.8` and scales drag by `0.8` (`0x48fcb6`–`0x48fcbd`). The commanded/current pair
+`[obj+0x124]`/`[obj+0x128]` and the 0.5/s slew below are likewise unbranched, in the **live**
+integrator `FUN_0048e580` (`0x48e645`–`0x48e6bd`), so an AI aircraft's throttle moves under exactly
+the same rate limit as the player's. The player's commanded value is written by the input handler
+`FUN_00487460`; AI commanded values are written at spawn/placement (`FUN_0047f1f0` writes `0.4` at
+`0x47f28b` and `1.0` at `0x47f3fb`). **`AiPilot.Throttle` as a 0..1 lever is the right shape; the
+original has no AI speed-setpoint interface.**
+
+**What `fd_speed · throttle` at `0x48c593` actually is: the far-field aircraft model.**
+`FUN_0048c470` opens with a guard that skips the whole aerodynamic path when the aircraft is flagged
+crashed (`[obj+0x384]`), **or** when it is not the player and its **horizontal** distance from the
+player exceeds 1000 m (`FUN_00538920` returns `Δx² + Δz²`, compared against `1e6`). In that
+branch the aircraft's velocity is driven toward the nose axis at `fd_speed · throttle`
+(`0x48c593`–`0x48c5a0`), plus a flat **5 m/s** for anything that is not the player
+(`0x48c5ae`, `[0x6036bc] = 5.0`), and the function's linear-acceleration output is set to
+`target − current` velocity rather than to a force. So distant traffic cruises along its nose at a
+speed the data sets, with no lift, drag, thrust, ground blow or weathervane computed at all.
+
+This is a level-of-detail model, not the AI's control interface: it is keyed on distance from the
+player and applies to the player's own aircraft only when it is crashed. Nothing in the remake
+implements it, and nothing needs to: it is invisible inside 1 km, which is where every AI aircraft
+we simulate and score sits. **Decoded, unimplemented, and deliberately unowned.**
 
 **The throttle slews at 0.5/s, with no idle floor** (`0x48e652`/`0x48e698`: current ±= `0.5 · dt`
 toward commanded, snapping exactly onto it when the step crosses). Cutting from full to zero takes
@@ -1644,12 +1715,19 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
   assembly), the linear throttle multiply and its 0.5/s slew, the thrust `pow` operands
   (`MSVCRT!_CIpow`, base `1.33·atm->k`, exponent `1.41·M`), the drag polar's variable being
   **Mach** — the last read off the raw bytes rather than out of a decompiler, which is what
-  corrected it — the conversion-free weight chain ("The force scale — settled"), the player
-  path's altitude-zeroing that pins the dense band, and the weathervane's axis, its half-angle and
+  corrected it — the conversion-free weight chain ("The force scale — settled"), and the
+  weathervane's axis, its half-angle and
   its player-only gate ("Weathervane centring — resolved", which corrects a sign this document
   previously carried).
-- **Inferred, and marked ⚠ in place:** the thin band on the AI call path (static reading of an
-  unwritten threshold, not runtime-verified).
+- **Read directly from the executable, 2026-08-15 (A1/A2):** that the atmosphere call is on the
+  shared live path with no player/AI branch and no altitude zeroing, that the altitude-zeroing site
+  belongs to the debug copy behind a dialog flag, that the band threshold `0x71bb3c` has one read
+  reference and no writer in the whole image, that the throttle lever and its slew are unbranched,
+  and the far-field cruise model behind `fd_speed · throttle`.
+- **Recorded conflict, not an open decode question:** the band threshold reads `0.0`, which would
+  put every airborne aircraft on the thin band, against an authored data set and a stall/equilibrium
+  arithmetic that only work on the dense band. Shared by player and AI; settleable only in a live
+  process.
 - **Recorded conflict, not an open decode question:** the absolute force scale below cruise —
   `CAP-05`'s zero-thrust points read the polar ≈2–3.6× too strong (a constant-ΔC_D deficit), the
   weight chain is byte-verified conversion-free, and the footage's own accel row rejects any
