@@ -1869,6 +1869,7 @@ public partial class GameSession : Node3D
             Rigs = _rigs,
             InstantActionPlayerPlaneNode = iaPlayerNode,
             InstantActionActive = _instantAction != null,
+            Coop = _spec.Coop,
             Textures = state.Textures,
             ZrdrPath = state.ZrdrPath,
             ChapterZrdrPath = SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter),

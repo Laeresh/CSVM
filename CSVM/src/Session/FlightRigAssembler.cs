@@ -110,8 +110,10 @@ public sealed class FlightRigAssembler
         // Every human joins team 1 in an Instant Action mission (PLAN-instant-action.md Decision
         // 8), splitscreen included — humans 2-4 would otherwise default to their own team
         // (Team's fallback is AimAssist.TeamOfPilot(PlayerIndex), one team per pilot index) and
-        // collide with an enemy's.
-        if (_in.InstantActionActive)
+        // collide with an enemy's. --coop asks for the same thing in plain flight
+        // (PLAN-splitscreen-polish A1); --vs never reaches here with Coop set (SessionSpec.Resolve
+        // drops it), so its FFA stays untouched.
+        if (_in.InstantActionActive || _in.Coop)
             controller.Team = AimAssist.PlayerTeam;
         // The wobble pivot: the plane model and everything resolved inside it — muzzle nodes,
         // puffer anchors, mounted ordnance — rides the shake, while the controller's own
@@ -530,6 +532,10 @@ public sealed class FlightRigAssembler
         /// Whether an Instant Action mission is active — every human takes team 1 (Decision 8)
         /// regardless of pilot index when this is set.
         public bool InstantActionActive;
+        /// <c>--coop</c> (PLAN-splitscreen-polish A1): every human takes <see cref="AimAssist.PlayerTeam"/>
+        /// in a plain flight session, same as Instant Action. <see cref="SessionSpec.Resolve"/>
+        /// already drops this when <c>--vs</c> is also given, so the two never race here.
+        public bool Coop;
 
         /// The session's wind and active camera (see Effects/WorldWind.cs), for the throttle-slam
         /// exhaust and speed-cue puffers assembled here. Still air unless the session hands its own over.

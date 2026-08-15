@@ -89,7 +89,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Decisions and the seam
 
-1. ☐ Decide the team model for plain splitscreen free flight (`BL-368`)
+1. ☑ Decide the team model for plain splitscreen free flight (`BL-368`)
 2. ☐ Decide and pin the 3D audio listener model (`BL-369`)
 3. ☐ Promote the viewer set to a session service
 
@@ -138,7 +138,7 @@ state.
 
 # Wave A — Decisions and the seam
 
-## A1 ☐ Decide the team model for plain splitscreen free flight (`BL-368`)
+## A1 ☑ Decide the team model for plain splitscreen free flight (`BL-368`)
 
 **Goal.** A decided, wired default for who is hostile to whom in a plain `--players=N --fly`
 session, plus a way to opt into the other mode.
@@ -149,17 +149,35 @@ Instant Action overrides via `AimAssist.PlayerTeam` (`FlightRigAssembler.cs:114`
 today: aim assist snaps onto your friend, world turrets acquire every human, AI gunners treat the
 humans as separate enemies.
 
-**Approach.** Present the user the call: co-op (one human team) as the plain-flight default with
-FFA opted in (a flag, or later a menu toggle), or keep FFA. Then wire the chosen default where IA
-already does it (`FlightRigAssembler`), so `--vs` keeps its explicit FFA and IA keeps its explicit
-co-op. <TODO: user decision — recommended default is co-op for plain flight; FFA stays what `--vs`
-means.>
+**Decision (2026-08-15, user call).** FFA stays the plain-flight default — no behaviour change to
+`AimAssist.TeamOfPilot`'s per-pilot fallback. `--coop` is the opt-in: a new `SessionSpec` flag that
+gives every human `AimAssist.PlayerTeam` in a plain `--fly`/`--stunt` session, wired at the same
+site Instant Action already uses (`FlightRigAssembler.Assemble`: `if (_in.InstantActionActive ||
+_in.Coop) controller.Team = AimAssist.PlayerTeam;`). `--vs`'s FFA is explicit and outranks it —
+`SessionSpec.Resolve` drops `Coop` with a warning when `Versus` is also set, so the two flags never
+race at the assembler.
+
+**Approach (landed).** `SessionSpec._coopArg`/`--coop` parses directly (not a mode vote, so it
+carries no `HasContentArg`); `Resolve()` sets `Coop` alongside `Stunt`/`Versus` and clears it with a
+`Warn("core", …)` when `Versus` is also true. `GameSession.BuildFlightRigs` copies `_spec.Coop` into
+`FlightRigAssembler.Inputs.Coop`; `Assemble` ORs it into the existing `InstantActionActive` branch
+that sets `controller.Team`.
 
 **Model recommendation.** medium — small wiring once decided.
 
-**Verify.** With the co-op default: `--players=2 --fly`, aim assist does not track the other
-human and a world turret does not fire on either (compare a turret's acquisition log before/after).
-`--vs` unchanged (VersusMatch still scores kills). `.\RunTests.ps1` green.
+**Verify (done 2026-08-15).** `dotnet build CSVM/CSVM.sln` clean. Added three `SessionSpecTests`
+cases (`--coop` parses, defaults false, and `--vs` drops it with a warning in either flag order).
+`.\RunTests.ps1`: 59/59 engine suites green (`team-model`/`aim-assist`/`world-turrets` unchanged —
+this item reuses their proven `controller.Team` seam, not a new mechanism), 1289/1289 unit tests,
+14/14 goldens hash-identical. Scripted probes via `.\RunProbe.ps1` (no hardware controllers on
+hand, so the plan's at-the-controls repro is substituted with a scripted boot + log check):
+`--players=2 --fly --coop`
+boots clean, no new warnings/errors beyond the pre-existing `pir_spinner.tif` texture-absent line;
+`--players=2 --vs --coop` logs `WARN [core] --coop has no effect with --vs (its FFA is explicit);
+ignoring --coop` and boots clean, confirming the precedence rule fires. Aim-assist/turret behaviour
+itself was not re-verified live (that's what `team-model`/`aim-assist`/`world-turrets` already pin
+for the `Team` field this change writes to) — an at-the-controls pass with two pads is still owed
+and folds into `F52`'s playtest.
 
 **⚠ Traps.** Do not gate aim assist on `PlayerIndex == 0` while in there — the assist follows
 whichever human the AI engages, decided M4 (architecture.md's AimAssist ⚠).

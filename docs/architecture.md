@@ -1925,9 +1925,12 @@ over the rounds in flight, `DetonationDistance > AimAssist.MinFuseDistance`, not
 own).
 ⚠ **The team model is `FlightController.Team`** (PLAN-instant-action B7), not a per-call derivation:
   every consumer here reads that field, which falls back to `AimAssist.TeamOfPilot` = `PlayerIndex +
-  1` (every pane hostile to every other, what `--vs`/free flight run on) only when nothing overrode
-  it. `NeutralTeam` 0 is for a round nobody owns, `WorldTeam` for the destructibles. Team 0 on EITHER
-  side rejects the pair — it is "never a target", not a wildcard.
+  1` (every pane hostile to every other, what `--vs`/free flight run on by default) only when
+  nothing overrode it. `NeutralTeam` 0 is for a round nobody owns, `WorldTeam` for the destructibles.
+  Team 0 on EITHER side rejects the pair — it is "never a target", not a wildcard. `--coop`
+  (PLAN-splitscreen-polish A1) is the plain-flight opt-in to `AimAssist.PlayerTeam` for every human,
+  the same override `FlightRigAssembler` gives Instant Action; `--vs` drops `--coop` at parse time
+  (`SessionSpec.Resolve`), so Dogfight's FFA is never at risk of the override racing it.
 ⚠ `dist_factor` **ships at 0.0**, which deletes the distance term outright: selection is purely
   most-aligned, and a distant on-axis target beats a near off-axis one at any range inside `RANGE`.
   The executable's compiled default is `2.5e-4`; "restoring" it during tuning re-enables something
@@ -3601,7 +3604,8 @@ registration (the assembler sets it at construction, not in the stunt block). `T
 candidate scan, `SelectRankedTarget`, carried `TurretController`s and `AiVoiceDispatcher`
 registration all read it, none re-derives one from `PlayerIndex` — and defaults to
 `AimAssist.TeamOfPilot(PlayerIndex)` until a mission sets it explicitly, so free flight and `--vs`
-are unchanged.
+are unchanged; plain flight's `--coop` (PLAN-splitscreen-polish A1) is the one other explicit
+setter, `FlightRigAssembler` giving it `AimAssist.PlayerTeam` the same way Instant Action does.
 `Inert` (PLAN-instant-action E10) is this aircraft's other lifecycle state: BUILT but held
 completely out of the session — not stepped (`SimStep` and `_Process` return at once), not drawn,
 not on the aircraft collision layer, not hittable, not a targeting candidate, and not counted as
@@ -5497,7 +5501,10 @@ runtime built after the controller joins the tree. An active Instant Action miss
 (PLAN-instant-action.md C8) overrides two things here: `Inputs.InstantActionPlayerPlaneNode`, when
 set, replaces `PlaneRoster.PlaneFor` for every human alike (the def carries one `player_plane`,
 not a per-player list), and `Inputs.InstantActionActive` puts every human on
-`AimAssist.PlayerTeam` (Decision 8) regardless of pilot index. Constructed
+`AimAssist.PlayerTeam` (Decision 8) regardless of pilot index. Plain flight's `--coop`
+(PLAN-splitscreen-polish A1) gives every human the same team the same way — the two flags are
+independent inputs to one `if`, since Instant Action always implies its own co-op regardless of
+`--coop`. Constructed
 once per session build from
 `(SessionSpec, LiveryResolver, SpawnPicker, WorldEffectsFactory, worldRoot, Inputs)`, then
 `Assemble(pi, rig)` once per rig; `MeshInstances`/`WhatSuffix` accumulate across the rigs for the
