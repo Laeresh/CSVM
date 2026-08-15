@@ -24,10 +24,6 @@ Both files use the standard flat alternating `KEY, [values…]` shape
 
 This page is the current reference for its documented format family.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## `zeppelins.json` — one entry per zeppelin instance
 
 The root is a list of instances, each an alternating property list. 15 keys are on all 58
@@ -401,6 +397,3 @@ nothing about the campaign case; the raw-byte read above is still the instrument
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

@@ -13,10 +13,6 @@ trailer ridden (`BL-377`), per-node tags preserved unacted-on.
 
 This page is the current reference for its documented format family.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## Where they live
 
 Each chapter's zrdr scope (`<Cx>/zrdr.zbd`) carries:
@@ -229,6 +225,3 @@ lobe and about a kilometre away through the other.
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

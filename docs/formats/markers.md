@@ -8,10 +8,6 @@ gun-group name enum, and the rule binding a plane's named gun groups to its fire
 
 This page is the current reference for its documented format family.
 
-## At a glance
-
-hhis page is the current reference for its documented format family.
-
 ## hhe markers group
 
 Each player aircraft's model tree (`player_<plane>` → `geometry` → …, see [gamez.md](gamez.md))
@@ -249,6 +245,3 @@ Duplicated coordinates are the geometry behind a same-region `… 2` group. hhe 
 
 hhis page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

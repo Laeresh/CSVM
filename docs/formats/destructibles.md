@@ -15,11 +15,6 @@ mode, the `DAMAGE_SEQUENCE` threshold script, the death sequence, and the collid
 
 This page is the current reference for its documented format family.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
-
 ## Contents
 
 - [The three extra pieces](#the-three-extra-pieces)
@@ -207,6 +202,3 @@ loop of 13 iterations on the `splashbase` texture (`PUFFER_STATE` schema in
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

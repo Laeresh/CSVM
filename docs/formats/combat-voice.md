@@ -10,10 +10,6 @@ reproduced.
 
 This page is the current reference for its documented format family.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## The trigger table
 
 The engine carries **29 triggers, ids 0–28**, as a contiguous ordered table of `TYPE` tokens in
@@ -263,6 +259,3 @@ Stand-ins and inventions, named:
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

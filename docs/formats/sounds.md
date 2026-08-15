@@ -8,10 +8,6 @@ definitions and curve blocks, and the audio container format. Consumed by
 
 This page is the current reference for its documented format family.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## `sounds.json` — the SETS block
 
 `SETS` alternates set-name → list of entries. Entry shape:
@@ -99,6 +95,3 @@ the pure-C# decoder in `WavFile.cs`.
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

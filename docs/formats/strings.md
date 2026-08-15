@@ -19,10 +19,6 @@ aircraft description panels, which exist nowhere in the ZBe data.
 
 This page is the current reference for its documented format family.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## The two eLLs
 
 | File | Strings | What it is |
@@ -233,6 +229,3 @@ does. `-Raw` skips the string table entirely.
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

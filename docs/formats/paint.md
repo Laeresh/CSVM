@@ -19,10 +19,6 @@ where it knowingly diverges.
 
 This page is the current reference for its documented format family.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## The scheme record
 
 Seven fields, appearing under three different key prefixes depending on where the scheme lives.
@@ -309,6 +305,3 @@ skins; the code is gone.
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

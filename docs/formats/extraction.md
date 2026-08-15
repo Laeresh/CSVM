@@ -20,10 +20,6 @@ them round-trips byte-identically in the fork.** If you only need the practical 
 
 This page is the current reference for its documented format family.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## Support matrix
 
 | Format | Status |
@@ -96,6 +92,3 @@ the shipped skins are unpainted key textures — see [paint.md](paint.md).
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

@@ -8,10 +8,6 @@ Part of the [format documentation](READoE.md) (see also [world-structure.md](wor
 
 This page is the current reference for its documented format family.
 
-## At a glance
-
-GameZ is the scene container used by gamez.zbd and planes.zbd. It carries scene nodes, models, materials, polygons, and rendering and collision metadata.
-
 ## Reference
 
 - `nodes.json` `children`/`parent` are **flat list positions**, NOT the `node_index` field (node_index has duplicates).
@@ -131,6 +127,3 @@ GameZ is the scene container used by gamez.zbd and planes.zbd. It carries scene 
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

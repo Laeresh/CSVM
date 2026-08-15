@@ -25,26 +25,6 @@ This page is the current reference for its documented format family.
 - [Ordnance effects and projectile prototypes](#ordnance-effects-and-projectile-prototypes)
 - [Muzzle & tracer textures â€” the ammo-type axis](#muzzle-tracer-textures-â-the-ammo-type-axis)
 - [Binding resolution â€” 5 unresolved names](#binding-resolution-â-5-unresolved-names)
-## At a glance
-
-This page is the current reference for its documented format family.
-
-
-
-## Contents
-
-- [Muzzle flashes â€” `muzzle_burst.zrd.json`](#muzzle-flashes-â-muzzleburstzrdjson)
-- [Bullet impacts â€” `gunhit.zrd.json`](#bullet-impacts-â-gunhitzrdjson)
-- [Ordnance effects and projectile prototypes](#ordnance-effects-and-projectile-prototypes)
-- [Muzzle & tracer textures â€” the ammo-type axis](#muzzle-tracer-textures-â-the-ammo-type-axis)
-- [Binding resolution â€” 5 unresolved names](#binding-resolution-â-5-unresolved-names)
-## Contents
-
-- [Muzzle flashes â€” `muzzle_burst.zrd.json`](#muzzle-flashes-â-muzzleburstzrdjson)
-- [Bullet impacts â€” `gunhit.zrd.json`](#bullet-impacts-â-gunhitzrdjson)
-- [Ordnance effects and projectile prototypes](weapon-effects/ordnance.md)
-- [Muzzle & tracer textures â€” the ammo-type axis](#muzzle-tracer-textures-â-the-ammo-type-axis)
-- [Binding resolution â€” 5 unresolved names](#binding-resolution-â-5-unresolved-names)
 ## Muzzle flashes â€” `muzzle_burst.zrd.json`
 
 `FIRE`'s `ANIMATION` slot names one of these. All are `ON_CALL`, `EXECUTION_PRIORITY 6`, and
@@ -376,6 +356,3 @@ a gamez model root, so `ProjectilePool` instances nothing for them and the stand
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

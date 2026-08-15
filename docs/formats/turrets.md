@@ -23,28 +23,6 @@ This page is the current reference for its documented format family.
 - [Weapons](#weapons)
 - [Values across the 42](#values-across-the-42)
 - [What this is not](#what-this-is-not)
-## At a glance
-
-This page is the current reference for its documented format family.
-
-
-
-## Contents
-
-- [The two families, and what actually splits them](#the-two-families-and-what-actually-splits-them)
-- [Field table](#field-table)
-- [What the engine does each tick](#what-the-engine-does-each-tick)
-- [Weapons](#weapons)
-- [Values across the 42](#values-across-the-42)
-- [What this is not](#what-this-is-not)
-## Contents
-
-- [The two families, and what actually splits them](#the-two-families-and-what-actually-splits-them)
-- [Field table](#field-table)
-- [What the engine does each tick](#what-the-engine-does-each-tick)
-- [Weapons](#weapons)
-- [Values across the 42](#values-across-the-42)
-- [What this is not](#what-this-is-not)
 ## The two families, and what actually splits them
 
 The 42 entries divide 16 / 26, and the discriminator is `CREATE_STANDALONE`:
@@ -390,6 +368,3 @@ persists across save/restore.
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

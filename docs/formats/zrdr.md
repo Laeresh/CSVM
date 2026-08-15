@@ -13,10 +13,6 @@ This page maps the archives and their reader families to the pages documenting t
 
 This page is the current reference for its documented format family.
 
-## At a glance
-
-unzbd cs reader extracts the three archive scopes into nested-array JSON reader files. This page routes those reader families.
-
 ## Contents
 
 - [The three scopes](#the-three-scopes)
@@ -61,6 +57,3 @@ be scanned across all three:
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

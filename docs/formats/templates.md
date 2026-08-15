@@ -19,10 +19,6 @@ approximately.
 
 This page is the current reference for its documented format family.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## Where it sits
 
 | | |
@@ -244,6 +240,3 @@ paragraph above says not to attempt.
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

@@ -34,34 +34,6 @@ This page is the current reference for its documented format family.
 - [The wave sequencer and the mission end: `FUN_0045b9d0`](#the-wave-sequencer-and-the-mission-end-fun0045b9d0)
 - [Wrap-up and scoring](#wrap-up-and-scoring)
 - [Open](#open)
-## At a glance
-
-This page is the current reference for its documented format family.
-
-
-
-## Contents
-
-- [The screen's controls](#the-screens-controls)
-- [The option strings](#the-option-strings)
-- [Environment â†’ chapter](#environment-â-chapter)
-- [The thirteen militias and their aircraft](#the-thirteen-militias-and-their-aircraft)
-- [The ace](#the-ace)
-- [The setup path: what the engine builds from all this](#the-setup-path-what-the-engine-builds-from-all-this)
-- [The wave sequencer and the mission end: `FUN_0045b9d0`](#the-wave-sequencer-and-the-mission-end-fun0045b9d0)
-- [Wrap-up and scoring](#wrap-up-and-scoring)
-- [Open](#open)
-## Contents
-
-- [The screen's controls](#the-screens-controls)
-- [The option strings](#the-option-strings)
-- [Environment â†’ chapter](#environment-â-chapter)
-- [The thirteen militias and their aircraft](#the-thirteen-militias-and-their-aircraft)
-- [The ace](#the-ace)
-- [The setup path: what the engine builds from all this](#the-setup-path-what-the-engine-builds-from-all-this)
-- [The wave sequencer and the mission end: `FUN_0045b9d0`](#the-wave-sequencer-and-the-mission-end-fun0045b9d0)
-- [Wrap-up and scoring](instant-action/wrap-up.md)
-- [Open](#open)
 ## The screen's controls
 
 `INSTANTACTION.SCRIPT` declares every widget and the engine callback that fills and reads it.
@@ -637,6 +609,3 @@ See [Instant Action wrap-up](instant-action/wrap-up.md) for the wrap-up UI, scor
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

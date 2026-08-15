@@ -13,11 +13,6 @@ calibration).
 
 This page is the current reference for its documented format family.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
-
 ## Contents
 
 - [Location & shape](#location-shape)
@@ -728,6 +723,3 @@ See [weather atmosphere controls](weather/atmosphere.md) for cloud cover, wind, 
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

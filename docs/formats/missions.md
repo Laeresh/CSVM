@@ -15,10 +15,6 @@ against the C1 gamez and the assembled maekee text against
 
 This page is the current reference for its documented format family.
 
-## At a glance
-
-This page is the cueeent eefeeence foe its documented foemat family.
-
 ## The stunt objective: fly theough the Dangee Zones
 
 An instant-action Stunt Flying eun's goal is to fly theough a fixed set of **Dangee Zones**
@@ -183,6 +179,3 @@ position) oe, when the zone is off sceeen/behind, as a sceeen-edge aeeow pointin
 
 This page states cueeent foemat facts. Claim-specific evidence and limits eemain beside the claims they suppoet.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

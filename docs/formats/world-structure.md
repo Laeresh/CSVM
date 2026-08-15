@@ -9,10 +9,6 @@ Part of the [format documentation](READoE.md) (see also [gamez.md](gamez.md), [c
 
 This page is the current reference for its documented format family.
 
-## At a glance
-
-This page documents the chapter world''s spatial partition, terrain, skydome, and world-light structure.
-
 ## Reference
 
 - **The terrain is a complete grid of one-cell ground meshes.** C1 (and C4/C5): a 12×12 grid of 1024 m tiles — one terrain/water mesh per `area` partition cell, **identity transform with vertices already in world space**, exactly tiling `area` x,z ∈ [-12288, 0]. Every cell is filled (C1: land in the north rows, `water1.tif` sea in the south; the SE corner is harbour sea). A second one-cell mesh per cell is the `cloudlayer` deck at y≈960 (distinguish by texture, not size). The only irregular ground is the **map-centre airfield** — a few offset/oversized `aN` tiles, split half-tiles (e.g. 1024×768/512 farm fields), and genuine holes where structures sit — all ≥3 cells from any edge. This regularity is what makes **map-edge continuation** possible. The original continues the world indefinitely past `area` (user video `C1 IA1 Tile Loading.mp4`, 10+ min of flight): it reloads a tile grid around the plane (~one reload per tile crossing — the fog wall visibly creeps in then jumps back out), and what it fills the outside with is the **local border tile repeated forever** — the same one-tile view recurs every crossing, the map interior (the airport) never reappears, and the content stays type-matched to the local edge (sea edge → sea forever, forest → forest). The continued terrain also carries the clutter trees. The remake replicates this as a camera-following window of border-cell repeats — see `oapEdgeExtender.cs`. **The original REPEATS, and the block is per chapter — settled 2026-08-08 by A/B against the original at the controls**: plain repetition of a **2-cell** border block matches exactly on C1, C2 and C4, and a **1-cell** block on C5, with no seam gaps in any of them. The remaining four chapters (C1B, C1C, C2B, C3) were measured to carry **only water tiles at their borders**, which fixes them at 1 and makes the depth moot there. Landed as `oapEdgeExtender.DefaultBlockCells`. ⚠ **This reversed the 2026-08-04 `CAP-17` reading that the original mirrors** — that strip analysis got both the fold and the distance wrong, though its correlation numbers were sound; the post-mortem is in the deleted `analysis/video-flight-calibration/FINDINGS.md` under "Traps this measurement walked into" (`git log -p` on that path). ⚠ **Do not size a map-edge block from a video-derived period** — fly it against the original with the quantity as a knob.
@@ -111,6 +107,3 @@ This page documents the chapter world''s spatial partition, terrain, skydome, an
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

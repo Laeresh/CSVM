@@ -21,10 +21,6 @@ executable-resident — so this file supplies what the data cannot.
 
 This page is the current reference for its documented format family.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## Schema
 
 ```json
@@ -150,6 +146,3 @@ stands, and the widening is only worth doing when the configurator lands.
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

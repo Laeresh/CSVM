@@ -17,10 +17,6 @@ weights and ranges rather than `AddClutterTemplates`. Template-root lookup is sh
 
 This page is the current reference for its documented format family.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## `interp.json` — the engine boot scripts
 
 `interp.zbd` (extracted by `unzbd cs interp`) is a JSON array of scripts
@@ -219,6 +215,3 @@ trimesh on that frame would have been a visible hitch. See
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

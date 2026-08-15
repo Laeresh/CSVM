@@ -20,32 +20,6 @@ This page is the current reference for its documented format family.
 - [collision â€” 6 probe points](#collision-â-6-probe-points)
 - [Effect emitters](#effect-emitters)
 - [Weapons, damage & AI keys](#weapons-damage-ai-keys)
-## At a glance
-
-This page is the current reference for its documented format family.
-
-
-
-## Contents
-
-- [Def structure & inheritance](#def-structure-inheritance)
-- [Units, dynamics & engines](#units-dynamics-engines)
-- [player.json — player-global blocks](#playerjson-player-global-blocks)
-- [destroyable_parts (Run-2 item 10)](#destroyableparts-run-2-item-10)
-- [Def-level injure_anims](#def-level-injureanims)
-- [collision â€” 6 probe points](#collision-â-6-probe-points)
-- [Effect emitters](#effect-emitters)
-- [Weapons, damage & AI keys](#weapons-damage-ai-keys)
-## Contents
-
-- [Def structure & inheritance](#def-structure-inheritance)
-- [Units, dynamics & engines](#units-dynamics-engines)
-- [Player global blocks](vehicle/player-globals.md)
-- [destroyable_parts (Run-2 item 10)](#destroyableparts-run-2-item-10)
-- [Def-level injure_anims](#def-level-injureanims)
-- [collision â€” 6 probe points](#collision-â-6-probe-points)
-- [Effect emitters](#effect-emitters)
-- [Weapons, damage & AI keys](#weapons-damage-ai-keys)
 ## Def structure & inheritance
 
 Each def's property list is an alternating key/value-list dict. `kind_of` names the parent
@@ -491,6 +465,3 @@ aircraft therefore carries them, but the aeroplane arm never reads them.
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
 
-## Evidence & limits
-
-This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
