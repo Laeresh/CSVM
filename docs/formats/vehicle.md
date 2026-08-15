@@ -9,11 +9,33 @@ extraction (mech3ax v0.6.1), decoded across Milestone-2 flight work and Run-2 it
 
 This page is the current reference for its documented format family.
 
+
+## Contents
+
+- [Def structure & inheritance](#def-structure-inheritance)
+- [Units, dynamics & engines](#units-dynamics-engines)
+- [player.json — player-global blocks](#playerjson-player-global-blocks)
+- [destroyable_parts (Run-2 item 10)](#destroyableparts-run-2-item-10)
+- [Def-level injure_anims](#def-level-injureanims)
+- [collision â€” 6 probe points](#collision-â-6-probe-points)
+- [Effect emitters](#effect-emitters)
+- [Weapons, damage & AI keys](#weapons-damage-ai-keys)
 ## At a glance
 
 This page is the current reference for its documented format family.
 
 
+
+## Contents
+
+- [Def structure & inheritance](#def-structure-inheritance)
+- [Units, dynamics & engines](#units-dynamics-engines)
+- [player.json — player-global blocks](#playerjson-player-global-blocks)
+- [destroyable_parts (Run-2 item 10)](#destroyableparts-run-2-item-10)
+- [Def-level injure_anims](#def-level-injureanims)
+- [collision â€” 6 probe points](#collision-â-6-probe-points)
+- [Effect emitters](#effect-emitters)
+- [Weapons, damage & AI keys](#weapons-damage-ai-keys)
 ## Contents
 
 - [Def structure & inheritance](#def-structure-inheritance)

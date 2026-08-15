@@ -13,11 +13,41 @@ definitions, so scanning them is a full substitute for state purposes.
 
 This page is the current reference for its documented format family.
 
+
+## Contents
+
+- [Where definitions live](#where-definitions-live)
+- [File shape](#file-shape)
+- [ANIMATION_DEFINITION fields](#animationdefinition-fields)
+- [State ops (the part-1 subset)](#state-ops-the-part-1-subset)
+- [`CALL_ANIMATION` carries a target node â€” this is the template-instancing mechanism](#callanimation-carries-a-target-node-â-this-is-the-template-instancing-mechanism)
+- [`STOP_SEQUENCE` halts the named sequence, and does nothing else](#stopsequence-halts-the-named-sequence-and-does-nothing-else)
+- [Fire: a texture cycle on a material, and behaviours nothing calls](#fire-a-texture-cycle-on-a-material-and-behaviours-nothing-calls)
+- [`LIGHT_STATE` / `LIGHT_ANIMATION` â€” the world's point lights](#lightstate-lightanimation-â-the-worlds-point-lights)
+- [`SOUND_NODE` is a three-event triple â€” the world's ambient audio](#soundnode-is-a-three-event-triple-â-the-worlds-ambient-audio)
+- [The mission zrdr scope is a LIBRARY, not a manifest](#the-mission-zrdr-scope-is-a-library-not-a-manifest)
+- [startanims.json](#startanimsjson)
+- [zepstate.json](#zepstatejson)
 ## At a glance
 
 This family documents reader and compiled animation definitions for world state, motion, lights, sound, and template calls.
 
 
+
+## Contents
+
+- [Where definitions live](#where-definitions-live)
+- [File shape](#file-shape)
+- [ANIMATION_DEFINITION fields](#animationdefinition-fields)
+- [State ops (the part-1 subset)](#state-ops-the-part-1-subset)
+- [`CALL_ANIMATION` carries a target node â€” this is the template-instancing mechanism](#callanimation-carries-a-target-node-â-this-is-the-template-instancing-mechanism)
+- [`STOP_SEQUENCE` halts the named sequence, and does nothing else](#stopsequence-halts-the-named-sequence-and-does-nothing-else)
+- [Fire: a texture cycle on a material, and behaviours nothing calls](#fire-a-texture-cycle-on-a-material-and-behaviours-nothing-calls)
+- [`LIGHT_STATE` / `LIGHT_ANIMATION` â€” the world's point lights](#lightstate-lightanimation-â-the-worlds-point-lights)
+- [`SOUND_NODE` is a three-event triple â€” the world's ambient audio](#soundnode-is-a-three-event-triple-â-the-worlds-ambient-audio)
+- [The mission zrdr scope is a LIBRARY, not a manifest](#the-mission-zrdr-scope-is-a-library-not-a-manifest)
+- [startanims.json](#startanimsjson)
+- [zepstate.json](#zepstatejson)
 ## Contents
 
 - [Where definitions live](#where-definitions-live)
