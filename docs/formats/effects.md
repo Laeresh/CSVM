@@ -212,8 +212,7 @@ because they share the same frame sets (`fire101-112` etc.), so:
 1. **Puffer flipbooks** - `PUFFER_STATE`'s `TEXTURES`/`TEXTURE_SEQUENCE`, played per *particle*.
    Implemented (`src/Effects/Puffer.cs`); this is what animates crash fireballs and damage trails.
 2. **Material cycles** - a gamez material's own `cycle` block: `texture_indices` (the frame
-   list), `speed` (fps), `looping`. Played on the *surface*. 
-   (`src/Mech3/TextureCycler.cs`). Only 1-7 materials per chapter carry one, but they cover the
+   list), `speed` (fps), `looping`. Played on the *surface*.`r`n   (`src/Mech3/TextureCycler.cs`). Only 1-7 materials per chapter carry one, but they cover the
    animated sea: C1B has `wtr00000` x16 @10 fps over 695 polygons and `srf0001` x16 @9 over 375,
    plus `wakefront1` x5 @12 (boat wakes) and `turb01` x6 @12 (turbulence); C1 has `splash01` x3
    @4 and the `bmanwalk`/`bmanrun` x6 @9 crowd sprites. `ObjectCycleTexture{name, reset}` (144
