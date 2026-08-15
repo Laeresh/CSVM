@@ -2904,6 +2904,15 @@ colours.
 ⚠ A neutral-team aircraft marks HOSTILE here, unlike `NearestHostile`'s engine gate which rejects
   the pair. A debugging overlay that silently omitted a plane would be worse than one that
   mis-colours it.
+⚠ **The module doc's "no reference to copy" claim is false** and is corrected by `PLAN-targeting.md`
+  C21. The original has a full player-targeting system, decoded in
+  [`org/targeting.md`](org/targeting.md): a sticky player-chosen target in plane `+0x948` over three
+  classes, a per-frame rebuilt and angularly sorted candidate list, a fixed 20x16 px bracket box
+  gated on the selected gun's authored `RANGE` through a lead solve, and a three-line label
+  (`<name> [<category>] -` / proper name / `%d o'clock`) placed BELOW the box. Our edge-arrow +
+  clock-hour branch is already the original's behaviour; the auto-nearest re-pick, the tag above the
+  point, and `HostileTag`'s node-name parse are the parts that are ours. Read that page before
+  changing anything here.
 
 ## src/Flight/VersusBoard.cs
 The dogfight's shared results overlay (`PLAN-vs-mode.md` C25) — `StuntRaceBoard`'s construction

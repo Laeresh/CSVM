@@ -224,7 +224,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Decode and clear the ground
 
-1. ☐ Decode the original's player targeting into `docs/org/targeting.md`
+1. ☑ Decode the original's player targeting into `docs/org/targeting.md`
 2. ☐ Drop `A` from `RespawnPressed()` — respawning fires a rocket
 3. ☐ Move the node-name label overlay from `T` to the `F13+` debug range
 
@@ -266,7 +266,34 @@ Wave C provided the items it documents have landed.
 
 # Wave A — Decode and clear the ground
 
-## A1 ☐ Decode the original's player targeting into `docs/org/targeting.md`
+## A1 ☑ Decode the original's player targeting into `docs/org/targeting.md`
+
+**Landed 2026-08-16.** [`docs/org/targeting.md`](org/targeting.md) answers every question in list
+(A) and the bracket gate in list (B). Four results change later items and are called out here so
+nobody builds against the pre-decode assumptions:
+
+- **The bracket range gate is not a distance constant.** The box draws when the *selected gun
+  group* could reach the target's lead-solved intercept inside its authored `RANGE`
+  (`FUN_004574d0`, def `+0x20`), which is `RANGE 1000` for the player guns. C22 must implement a
+  weapon-dependent gate, not a metres figure, and the ~50 m hysteresis it proposes is still ours.
+- **"Nearest" is the head of the cycle, not the nearest thing.** The cycle sorts objectives first,
+  then by 90° sector (ahead, behind, left, right) with distance as the tie-break inside a sector
+  (`FUN_004bbd60`). B13 implements that order; "nearest" is `head-of-list`.
+- **Nearest-crosshairs scores against the NOSE axis**, a hard 15° half-angle cone with a 2000 m
+  cap, not against the pipper (`FUN_00488ce0`). B13's `ImpactReticle` TODO is answered: use the
+  nose.
+- **Turrets and structures are selectable only when the mission flags them** `otherTarget` /
+  `objectiveTarget`, and there is **no sub-part enumeration anywhere in the targeting path**. A
+  zeppelin gasbag is selectable because it is its own `MStruct` carrying that flag. B12's
+  "enumerate zeppelin sub-parts" is therefore a port invention, not the original's behaviour, and
+  should be re-scoped or marked as a deliberate divergence.
+
+Also settled: friendly targets are **green**, not blue (blue is a non-destructive objective);
+selection is per-frame re-resolved so target death drops to the head of the cycle; `Target Nothing`
+clears the class flags too, which is why it stays cleared; and Next Enemy/Objective walks a queue of
+whoever has shot you before it touches the ordinary cycle.
+
+*Original item text follows.*
 
 **Goal.** A `docs/org/` entry that answers how the original picks, holds and drops a player target,
 and how it draws one — enough that Waves B and C implement from a decode rather than from
@@ -305,8 +332,13 @@ confident wrong reading, and every later item builds on this one.
 
 **Verify.** The doc answers every question in list (A) or explicitly records which it could not, and
 carries the bracket threshold as a number with the function and constant it came from.
-<TODO: name a concrete cross-check for the threshold — e.g. an in-engine `--target=` shot at a
-measured range compared against `Targeting HUD Kestrel.png`.>
+**Cross-check used (2026-08-16):** the bracket *geometry* constants were measured off two
+independent screenshots. `Targeting HUD Kestrel.png` puts the vertical strokes at x 1943/1963 over
+rows 202–218 and `C1 M04 Zeppelin.png` at x 1839/1859 over rows 834–850 — both a 20 x 16 px box
+with 4 px arms, matching `0x00607a0c`/`0x00607a14`/`0x00607a10` exactly, and both label blocks sit
+at `boxBottom + 3` with a 15 px line pitch, matching `FUN_004574d0`/`FUN_004579e0`. The *range*
+gate is a weapon `RANGE` test rather than a constant, so an in-engine `--target=` shot at a measured
+range is owed once B15/C24 exist; it is recorded as the open cross-check there.
 
 **⚠ Traps.** (a) **`docs/org/aiPilot.md` is about the AI, not the player.** `FUN_0041fe10` writes
 `+0x948` for an AI actor; do not assume the player's selection lives in the same field or follows
