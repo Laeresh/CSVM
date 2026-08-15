@@ -1,10 +1,17 @@
-# camparam.json — the chase/third-person camera tuning
+# Chase-camera tuning - `camparam.json`
 
-One of the shared-scope zrdr readers ([zrdr.md](zrdr.md)); in an extraction it lands as
-`extracted/zrdr/camparam.zrd.json`. It carries the original's camera geometry and easing: chase
-distance, catch-up rates, third-person eye height/pitch, and the geometry of the look-behind,
-death, crash and flyby cameras.
+Part of the [format documentation](README.md). This shared zrdr reader defines chase distance,
+catch-up rates, third-person eye height and pitch, and look-behind, death, crash, and flyby camera
+geometry.
 
+## Contents
+
+- [Shape](#shape)
+- [Per-plane overrides](#per-plane-overrides)
+- [Default block](#default-block)
+- [Known limits](#known-limits)
+- [Throttle transient](#throttle-transient)
+- [Engine-read fields](#engine-read-fields)
 ## Shape
 
 The root is a plain alternating `name, properties` list — the same layout `vehicle.json` uses for
@@ -42,7 +49,7 @@ Hellhound and Brigand — have none and take `default`'s 13.0.
 The distance tracks airframe size: the Kestrel is the smallest number and the Balmoral — a heavy
 two-turret aircraft — the largest.
 
-## The `default` block
+## Default block
 
 | Key | Value | Reading |
 |---|---|---|
@@ -66,7 +73,7 @@ two-turret aircraft — the largest.
 | `flyby_min_switch_dist` / `_max_` | 70 / 85 | Distance at which the flyby camera hands over. |
 | `flyby_z` / `flyby_y` / `flyby_min_alt` | 0 / 0.1 / 0.1 | Flyby placement offsets. |
 
-## Open questions
+## Known limits
 
 ⚠ **`dist_min` (15.7) is LARGER than `dist` (13.0) in the `default` block.** In all seven
 per-plane blocks the two are equal instead. So the rule cannot be "clamp `dist` into
@@ -89,7 +96,7 @@ this file and leaves the chase offset's *direction* as a hand-picked value. `thi
 = 16.6° sits suggestively close to the engine's hand-picked 15.7° elevation, but one near-match is
 not a decode.
 
-## The throttle transient — measured off CAP-21, authored nowhere
+## Throttle transient
 
 Beyond the authored `d = dist + dist_factor·V`, the original's chase distance carries a **transient
 in the along-path acceleration**: slam the throttle open and the camera falls back, cut it and the
@@ -120,7 +127,7 @@ is 1.54× it.
 `dist` 13.0 sits *below* its `dist_min` 15.7, and the footage's realised distances never reach
 `dist_max`. `dist_vary` has no identified input either — the capture footage never moves it.
 
-## What the engine reads
+## Engine-read fields
 
 `CSVM/src/Flight/CamParams.cs` parses the whole file and exposes every field;
 `CSVM/src/Flight/CameraController.cs` applies:
