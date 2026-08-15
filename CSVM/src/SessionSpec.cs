@@ -495,6 +495,19 @@ public sealed record SessionSpec
     /// build.</summary>
     public string? DebugAiNets { get; private set; }
     public bool DebugScoreboard { get; private set; }
+
+    /// <summary><c>--debug-markers</c>: mark EVERY live aircraft on the targeting HUD at once,
+    /// red for a hostile team and blue for your own, instead of the shipped single
+    /// nearest-hostile marker. A watching aid for AI work (whose plane is where), never a
+    /// gameplay feature.</summary>
+    public bool DebugMarkers { get; private set; }
+
+    /// <summary><c>--debug-spectate</c>: build the session exactly as it would be flown, then take
+    /// every human OUT of it: the aircraft goes inert (undrawn, uncollidable, and absent from
+    /// every AI's live candidate list, so nothing pursues you) and the pane switches to the
+    /// <c>SpectatorCamera</c>. The way to watch what the AI does when no player is provoking
+    /// it.</summary>
+    public bool DebugSpectate { get; private set; }
     public int? DebugLivery { get; private set; }
     public string? DebugMesh { get; private set; }
     public string? DebugNames { get; private set; }
@@ -711,6 +724,8 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--paint-seed=")) { s.PaintSeed = ulong.Parse(arg["--paint-seed=".Length..]); s.PaintSeedExplicit = true; }
             else if (arg.StartsWith("--rof=")) { s.Rof = arg["--rof=".Length..]; }
             else if (arg == "--debug-scoreboard") { s.DebugScoreboard = true; }
+            else if (arg == "--debug-markers") { s.DebugMarkers = true; }
+            else if (arg == "--debug-spectate") { s.DebugSpectate = true; }
             else if (arg == "--debug-livery") { s.DebugLivery ??= 0; }
             else if (arg.StartsWith("--debug-livery=")) { s.DebugLivery = int.Parse(arg["--debug-livery=".Length..]); }
             else if (arg == "--debug-mesh") { s.DebugMesh ??= ""; }

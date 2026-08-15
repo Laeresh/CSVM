@@ -532,6 +532,7 @@ public partial class GameSession : Node3D
             if (_spec.Fly)
             {
                 BuildFlightRigs(state);
+                ApplyDebugSpectate();
             }
             ApplyDestroyOverride(state);
             LogBuildSummary(state, sw);
@@ -3133,6 +3134,69 @@ public partial class GameSession : Node3D
         }
         GD.Print($"ia: wave {waveNumber} ({roster.Count} aircraft) activated at spawn #{spIndex} " +
                   $"of {spawns.Count}");
+    }
+
+    /// <summary><c>--debug-spectate</c>: build the whole session as it would be flown, then take
+    /// every human out of it, so the AI can be watched with nobody provoking it. Runs AFTER
+    /// <see cref="BuildFlightRigs"/> on purpose: the wingman fan, the ace's spawn draw and wave
+    /// 1's own 500-m-from-a-human placement all read the player's position, so removing the
+    /// player earlier would move the very thing being watched.
+    ///
+    /// <para>Each human aircraft goes <see cref="FlightController.Held"/> (pinned where it
+    /// spawned, no longer flying or falling) and <see cref="FlightController.Inert"/> (undrawn,
+    /// uncollidable, and <c>Live == false</c> in every candidate scan, which is what stops the AI
+    /// pursuing it), and the pane's camera becomes a <see cref="SpectatorCamera"/> parked at the
+    /// spawn and following the first AI aircraft. Any translation input releases the follow, so
+    /// the camera is free to go looking. Nothing here is a gameplay path: the mission still runs
+    /// its own end conditions, and a squadron mission whose enemies have nobody to shoot simply
+    /// never resolves, which is the point.</para></summary>
+    private void ApplyDebugSpectate()
+    {
+        if (!_spec.DebugSpectate)
+        {
+            return;
+        }
+        FlightController? follow = null;
+        foreach (var ai in _aiPlanes)
+        {
+            if (ai is { InPlay: true })
+            {
+                follow = ai;
+                break;
+            }
+        }
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller is not { } pilot)
+            {
+                continue;
+            }
+            var eye = pilot.WorldPosition + Vector3.Up * 30f;
+            pilot.Held = true;
+            pilot.Inert = true;
+            pilot.CameraOwned = true;   // D8's seam: the controller writes this pane's camera no more
+            // The cockpit instruments belong to an aircraft nobody is flying; the marker HUD is a
+            // sibling on the same canvas and stays, which is the whole point of the mode.
+            if (pilot.Gauges != null)
+                pilot.Gauges.Visible = false;
+            if (pilot.Reticle != null)
+                pilot.Reticle.Visible = false;
+            if (pilot.WeaponReadout != null)
+                pilot.WeaponReadout.Visible = false;
+            var spectator = new SpectatorCamera(rig.Camera, eye,
+                follow != null ? follow.WorldPosition : eye - rig.Camera.Basis.Z)
+            {
+                ShowReadout = _rigs.Count == 1,   // one pane, so the freecam readout has room
+            };
+            _worldRoot!.AddChild(spectator);
+            if (follow != null)
+            {
+                spectator.FollowNode(follow);
+            }
+        }
+        GD.Print($"--debug-spectate: {_rigs.Count} human(s) pinned, inert and untargetable; " +
+                 (follow != null ? $"camera following {follow.Name}" : "camera free at the spawn") +
+                 $" ({_aiPlanes.Count} AI aircraft flying)");
     }
 
     /// <summary>G13: a pilot has spent its last life. The wreck stays where it fell — the

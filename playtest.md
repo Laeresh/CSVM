@@ -434,13 +434,21 @@ you to put the file "next to the repo", where nothing would find it. Absolute pa
 
   ```powershell
   cd Z:\CSVM\.claude\worktrees\ia-patrol-nets
-  ./RunGame.ps1 --ia=Z:\CSVM\.claude\worktrees\ia-patrol-nets\playtest\PT-51\ia-patrol-test.json --chapter=C1
+  ./RunGame.ps1 --ia=Z:\CSVM\.claude\worktrees\ia-patrol-nets\playtest\PT-51\ia-patrol-test.json --chapter=C1 --debug-markers --debug-spectate
   ```
 
-  Confirm the launch log says `ia: actors patrol 'M4ReinfAce' (net 10), the chapter's first`
-  before judging anything: without that line the actors have no net and (a)–(d) are moot.
-  *Variations:* another chapter to see a different first net (C1B walks `Patrolboat3`, C1C
-  `M1Defense`); `"mission_type": "dogfight_ace"` for the ace alone on the same net.
+  `--debug-spectate` takes you out of the mission entirely (your plane is pinned, inert and
+  untargetable, the pane becomes the free camera following an AI), because a player in the air
+  pulls the whole first wave onto themselves within seconds and there is then no patrolling left
+  to watch. `--debug-markers` marks every plane at once, red hostile / blue own side, with its
+  range. **F13** draws the nets themselves, which is what turns (a) into a direct read: the
+  markers should be walking the drawn graph. Confirm the launch log says
+  `ia: actors patrol 'M4ReinfAce' (net 10), the chapter's first` before judging anything: without
+  that line the actors have no net and (a)–(d) are moot.
+  *Variations:* drop both debug flags and fly it yourself for the (b) judgement, which needs you
+  to engage and break off; `"num_wingmen": 0` leaves the enemies nothing to chase at all, the
+  cleanest look at pure patrol; another chapter to see a different first net (C1B walks
+  `Patrolboat3`, C1C `M1Defense`).
 
 ---
 

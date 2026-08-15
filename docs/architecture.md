@@ -2753,6 +2753,16 @@ and drops a crashed hostile (listed but not live) with no extra plumbing. Acquir
 transitions log one `targeting hud:` breadcrumb each. Pinned by the `hostile-marker-hud` suite +
 `HostileTagTests`; a hud built without a pool never tracks, which keeps the golden VS path
 byte-identical.
+`--debug-markers` (`MarkAll`, set by the rig assembler alongside `Own`) widens that to EVERY live
+aircraft in the same scan: `CollectMarks` is the pure selection (live, a `FlightController`, not
+`Own`), each drawn through the same `DrawOpponent` in HUD blue on the pane's own team and HUD red
+otherwise, tagged with its slant range, and off-screen tags stepped along the screen edge
+(`RefStaggerStep`) so a flight sharing one bearing does not stack into one string. It REPLACES the
+single-hostile draw rather than adding to it, so the tracked plane is never drawn twice in two
+colours.
+⚠ A neutral-team aircraft marks HOSTILE here, unlike `NearestHostile`'s engine gate which rejects
+  the pair. A debugging overlay that silently omitted a plane would be worse than one that
+  mis-colours it.
 
 ## src/Flight/VersusBoard.cs
 The dogfight's shared results overlay (`PLAN-vs-mode.md` C25) — `StuntRaceBoard`'s construction
@@ -4443,7 +4453,17 @@ cannot arrive is disabled and WARNS at build rather than silently never ending.
 `BeginInstantActionSpectate` pins the wreck (`FlightController.Spectating`), takes the pane with
 `CameraOwned` and gives it a `SpectatorCamera` locked onto a still-flying human where there is one;
 the target is picked once, so if that pilot later goes out too (3+ players) the watcher orbits a
-wreck until any movement input releases the lock. An `--ia=` `stunt_flying` mission also loads the
+wreck until any movement input releases the lock.
+`ApplyDebugSpectate` (`--debug-spectate`) is the deliberate twin of that path, for watching the AI
+with nobody provoking it: every human aircraft goes `Held` + `Inert` (pinned, undrawn, and absent
+from every candidate scan's live set, which is what stops the pursuit) and its pane takes a
+`SpectatorCamera` following the first AI aircraft, cockpit instruments hidden and the marker HUD
+kept. It runs AFTER `BuildFlightRigs` because the wingman fan, the ace's spawn draw and wave 1's
+500-m-from-a-human placement all read the player's position; removing the player earlier would move
+what is being watched. The mission's own end conditions are untouched, so a squadron mission whose
+enemies have nobody to shoot never resolves, which is the expected outcome of taking the target
+away rather than a hang.
+An `--ia=` `stunt_flying` mission also loads the
 danger zones itself, `--stunt` or not — the mission type is what asks for them, the way a zeppelin
 run asks for the zeppelin and generator runtimes.
 G14 adds the wrap-up board, built once right after G13's own block (same `_instantAction is { }

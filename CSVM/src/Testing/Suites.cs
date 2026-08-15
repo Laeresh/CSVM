@@ -361,7 +361,10 @@ public static class Suites
             "the H22 targeting HUD outside --vs: the matchless VersusHud tracks the pane's " +
             "nearest LIVE AI hostile off the pool's own aircraft roster (a closer human, dead " +
             "plane or neutral is never picked), switches to a closer hostile, drops a crashed " +
-            "one, and a hud built without a pool (the VS default) never tracks", HostileMarkerHud));
+            "one, and a hud built without a pool (the VS default) never tracks; plus " +
+            "--debug-markers' own selection, which takes EVERY live aircraft instead of the " +
+            "nearest, flags each by team against the pane's own, skips a crashed one and skips " +
+            "the pane's own aircraft", HostileMarkerHud));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------
@@ -5182,6 +5185,29 @@ public static class Suites
             vsHud.UpdateHostile();
             ctx.Check(vsHud.TrackedHostile == null,
                 $"a hud built without a pool (the VS default) never tracks");
+
+            // --debug-markers' own selection: EVERY live aircraft, not the nearest one, each
+            // flagged by team against the pane's own. ai1 is live again (respawned above); ai2 is
+            // still down, so it must not be marked at all.
+            ai2.Team = AimAssist.PlayerTeam;
+            var scan = new AimCandidateSet();
+            live.CollectAircraft(scan);
+            var marks = new List<(FlightController Plane, bool Friendly)>();
+            VersusHud.CollectMarks(AimAssist.PlayerTeam, null, scan, marks);
+            ctx.Check(marks.Count == 1 && ReferenceEquals(marks[0].Plane, ai1),
+                $"a crashed plane is never marked marks={marks.Count}");
+            ctx.Check(!marks[0].Friendly,
+                $"ai1 is on the enemy team, so it marks hostile friendly={marks[0].Friendly}");
+            ai1.Team = AimAssist.PlayerTeam;
+            marks.Clear();
+            scan.Clear();
+            live.CollectAircraft(scan);
+            VersusHud.CollectMarks(AimAssist.PlayerTeam, null, scan, marks);
+            ctx.Check(marks.Count == 1 && marks[0].Friendly,
+                $"the same plane on the pane's own team marks friendly friendly={marks[0].Friendly}");
+            marks.Clear();
+            VersusHud.CollectMarks(AimAssist.PlayerTeam, ai1, scan, marks);
+            ctx.Check(marks.Count == 0, $"the pane's own aircraft is excluded marks={marks.Count}");
         }
         finally
         {

@@ -378,6 +378,16 @@ public sealed class FlightRigAssembler
                 GD.Print("targeting HUD: nearest-AI-hostile marker (edge arrow + clock bearing)");
         }
 
+        // --debug-markers: the same HUD marks every live aircraft instead of one hostile. Own is
+        // this pane's own plane, so it never marks the aircraft the camera is sitting on.
+        if (_spec.DebugMarkers)
+        {
+            controller.VersusHud.MarkAll = true;
+            controller.VersusHud.Own = controller;
+            if (verbose)
+                GD.Print("--debug-markers: marking EVERY live aircraft (red hostile / blue own side)");
+        }
+
         // Every player's start comes from ONE call, because a grid start is not decomposable: the
         // fan is centred on the player count and the whole field is lifted by its worst slot, so no
         // single pilot's answer exists until all of them do. Resolved lazily here rather than in the
