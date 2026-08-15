@@ -31,7 +31,7 @@ flip at 1047, core 1032–1062. See `WeatherRig.DeckRegime` and `docs/architectu
 
 **Correction (2026-08-09, decompile): the behaviour was measured right, but "one mesh relocated
 by the engine" is not the mechanism — it is two different objects, swapped by the `zone_id`
-gate** ([decoded above](#the-engines-rule-decompiled-zones-are-camera-states-switched-in-flight-crimsonexe-via-ghidra-2026-08-09),
+gate** ([decoded above](../weather.md#zone-selection-at-runtime),
 `PLAN-weather-decompile-match` A7/B13/B14). Above the deck, what renders is the **authored
 world-fixed tiles at their own authored altitude** — C1/C1C/C2B 960 m, C4 1050 m — not a
 mesh re-pinned to the band centre; A7's "exactly on the centre" reading was **C4's own
@@ -39,23 +39,23 @@ coincidence**, because C4 happens to author `CLOUD_COVER` centre = 1050 = its ti
 centre is 1047, its tiles 960 — an 87 m gap the centre-pin model was silently absorbing. Below
 the deck, the ceiling the player sees is **not the deck mesh at all** — it is
 `horizon/zone1`'s own geometry, camera-anchored and UV-scrolled (`tex_fx.gw`, `Object3DSetScroll
-on 0.07 0.0`, [the horizon's own geometry](#the-horizons-own-geometry-settles-three-chapters-2026-08-06)
+on 0.07 0.0`, [the horizon's own geometry](../weather.md#horizon-geometry)
 section above). ~~In C1 that geometry (`h_zone1scroll`, model 768) has an authored cap centre of
 **396.4 m dome-local** (`bbox_mid.y` of the model, spanning Y −2000…2792.8), which is A7's
 measured "~400 m above the camera" to instrument precision.~~ **Corrected 2026-08-09 (`B14`): 396.4
 is that bbox's MIDPOINT and no polygon sits near it — the mesh's flat ceiling cap is at
 +2792.8 m dome-local, and the agreement with A7's "~400 m" was a coincidence twice over (A7 was
 measuring the deck sheet, and `C25` later re-fit that same reading to 110–155 m).** See
-[the zone-1 ceiling table](#-the-3964-m-cap-centre-is-disproven--it-is-a-bbox-midpoint-not-geometry-2026-08-09-b14).
+[the zone-1 ceiling table](../weather.md#the-3964-m-cap-centre-is-a-bounding-box-midpoint).
 The two objects are swapped by the
 gate, not carried/relocated by `WeatherRig.Tick` — the deck tiles are `zone_id 2` (culled below
 the deck), the zone-1 dome is `zone_id 1` (culled above it), and each renders only when the
 camera state makes it visible. The install-wide survey — [the deck census
-below](#the-deck-census-zone_id-across-all-eight-chapters-2026-08-09) — found C1's `h_zone1scroll`
+below](#deck-census-zone_id-across-all-eight-chapters) — found C1's `h_zone1scroll`
 + `o28` skirt pairing is **not** reproduced identically in C1C/C2B/C4: those three each carry a
 **single** zone-1 mesh (not the two-piece dome+skirt), so the ceiling geometry is per chapter, not a
 shared constant — `B14` measured all five (the four deck chapters plus C5's `zone3`) into
-[the zone-1 ceiling table](#-the-3964-m-cap-centre-is-disproven--it-is-a-bbox-midpoint-not-geometry-2026-08-09-b14).
+[the zone-1 ceiling table](../weather.md#the-3964-m-cap-centre-is-a-bounding-box-midpoint).
 
 > **Landed 2026-08-09 (`PLAN-weather-decompile-match` B14).** The remake builds a dome per gateable
 > horizon zone (`WorldBuilder.DomeZonesToBuild`) and shows the one matching each camera's own
@@ -90,7 +90,7 @@ original; the remake does not reproduce it). The shipped data alone could never 
 (of the reachable bands only C4 authors colours, and equal ones), which is why this stayed
 marked inferred until the decompile.
 
-## Wind (`WIND`) — decoded and consumed (2026-08-10, `PLAN-puffer-engine-deltas` B6)
+## Wind (`WIND`)
 
 Bare-scalar block, four keys, **all four present in all 53 `weather.zrd.json` files in the
 install and all 53 authoring the same values**:

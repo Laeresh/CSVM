@@ -37,7 +37,7 @@ Keys the remake consumes (see `src/Flight/PlaneStats.cs`):
 | `injure_anims` | def-level damage thresholds (below) |
 | `destroyable_parts` | the damage model (below) |
 | `collision` | 6 collision probe points (below) |
-| `bullethole_anims`, `weapons`, `turrets`, `cannon_jam`, `armor`/`health`, AI tuning | only `turrets` consumed (M4 C9a) — [Weapons, damage & AI keys](#weapons-damage--ai-keys) below |
+| `bullethole_anims`, `weapons`, `turrets`, `cannon_jam`, `armor`/`health`, AI tuning | only `turrets` consumed (M4 C9a) — [Weapons, damage & AI keys](#weapons-damage-and-ai-keys) below |
 
 ## Units, dynamics, and engines
 
@@ -93,7 +93,7 @@ A list of part entries:
 
 - `name`: `nose` / `tail` / `leftwing` / `rightwing` for every player plane.
 - **The pair is (hit points, armor)** — `[1]` is the zone's hit points, `[2]` its **armor pool**,
-  spent first. Settled against the original's armory; see [below](#the-hp-pair-armor--hit-points).
+  spent first. Settled against the original's armory; see [below](#armor-and-hit-points).
 - **The two values are equal in every entry** — all 88 parts across the 22 defs that carry
   `destroyable_parts` (11 player `p*` + 11 AI `r*`), measured; values 15/20/25/30/35/40. Equal
   because armor is **purchasable** and these are the *stock* allocations, not because the number is
@@ -172,7 +172,7 @@ engine must hide the healthy skins at damage time by an engine-side rule. Beware
 `pdpN`↔`pdpN_h` numbering is crossed on three plane models — pair torn↔healthy by mesh
 position, not by name (measurements in `gamez.md`, "Player-plane damage states").
 
-### The hp pair: armor + hit points
+### Armor and hit points
 
 **The two numbers on a `destroyable_parts` entry are that zone's hit points `[1]` and its armor
 pool `[2]`, armor spent first.** Settled 2026-08-03.

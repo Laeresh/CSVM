@@ -23,7 +23,7 @@ toggle a gamez node of the same name active for one frame:
 | `muzzle_burst2` | the heavy mounts | a larger flash with `muzzle_lt2` (range up to 16 m) |
 
 The flash animation and the flash *node* share a name; the reader animates the prototype node
-listed under [Projectile prototypes](#projectile-prototypes-gamez-roots).
+listed under [Projectile prototypes](#ordnance-effects-and-projectile-prototypes).
 
 ### Engine wiring (M3, C22) — casing, muzzle smoke, muzzle light
 
@@ -298,7 +298,7 @@ ammo types**. In each chapter's `texture/`:
   pair traces `textures.json` 104/105 → `materials.json` 108/109 (`Textured`) → `models.json`
   model 60 → the `g1` node, whose `parent_indices` names `gunshell` as its only parent, so they are
   the skin of the very casing mesh the C22 ejection wiring instances per shot (see the footnote
-  under [Projectile prototypes](#projectile-prototypes-gamez-roots)). The `rabbit_blur` nodes near
+  under [Projectile prototypes](#ordnance-effects-and-projectile-prototypes)). The `rabbit_blur` nodes near
   `g1` in the node list are neighbouring ammo prototypes' streak children, not its parents.
 
 ### Engine wiring (M3, C24; A3) — flash shape + ammo texture

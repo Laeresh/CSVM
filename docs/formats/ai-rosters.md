@@ -49,7 +49,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 21 | `deactivated` | |
 | 22–30 | **the skill vector** | `dare_devil natural_touch sixth_sense dead_eye quick_draw steady_hand stun_recovery talker constitution` — see [below](#the-skill-vector) |
 | 31 | `pref_engage_alt` | **preferred engagement altitude in metres**, not a radius; `-1.0` on 384, else 350 / 1100 / 1500 / 1550 / 1600. Spelled `preferred_engagement_altitude` in `vehicle.json`, which is also the fallback when this slot is `-1.0` (`basic_airplane` authors 300.0). ⚠ **It is a maneuver-selection weight, not an altitude order:** its one reader (`FUN_004201a0`, `0x004204da`) adds 1.0 to a candidate evasive maneuver's weight when the aircraft is on the wrong side of it. Nothing steers toward it ([`org/aiPilot.md`](../org/aiPilot.md)) |
-| 32 | `signature_maneuvers` | **bitmask over the maneuver library** — see [below](#signature_maneuvers-is-a-bitmask) |
+| 32 | `signature_maneuvers` | **bitmask over the maneuver library** — see [below](#signature-maneuvers-bitmask) |
 | 33 | `rating_biases` | target-selection weights: a list of `[nodeNamePattern, bias]` pairs, wildcards allowed (`["fuel_truck*", -1.0]`). List on 321 blocks, null on 93; 1–9 entries (697 total); biases run `-1.0`…`1.0`, both signs, `-1.0` on 389. ⚠ The exe's comment admits a third element per entry, but this install authors none (0 across all 414 blocks) — read defensively, preserve a third raw if one ever appears |
 | 34 | `nitro` | |
 | 35 | `engine` | engines.json row id ([vehicle.md](vehicle.md)) |
@@ -63,7 +63,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 43 | `pilot` | pilot def name (`P_Wingman` and friends; see `pilots.zrd`) |
 | 44–55 | `sclp sclr scly limp limr limy` + `esclp esclr escly elimp elimr elimy` | per-axis **scale** and **limit** factors on the AI's control output — pitch/roll/yaw, then the `e`-prefixed *emergency* set. These are `vehicle.json`'s `ai_input_*` / `ai_emerg_input_*` at roster scope. `-1.0` (which is what all 414 blocks author) means "fall through to the def". ⚠ **The def and the runtime hold these in roll/pitch/yaw order, not this file's pitch/roll/yaw** — the spawner transposes, slot by slot. Both orders are real; see [aiControlLaw.md](../org/aiControlLaw.md#where-the-gains-come-from) for the slot-to-offset table and the exact fallback |
 | 56 | `attack_time_factor` | |
-| 57–64 | `anose hnose atail htail aleft hleft aright hright` | **per-zone armour + health**, in `(armor, health)` pairs over the four damage zones nose / tail / left / right — the same zone set and the same armour-first two-pool model as the player's `destroyable_parts` ([vehicle.md](vehicle.md#the-hp-pair-armor--hit-points)) |
+| 57–64 | `anose hnose atail htail aleft hleft aright hright` | **per-zone armour + health**, in `(armor, health)` pairs over the four damage zones nose / tail / left / right — the same zone set and the same armour-first two-pool model as the player's `destroyable_parts` ([vehicle.md](vehicle.md#armor-and-hit-points)) |
 | 65 | `accentID` | **the voice id** → row in `voice.zrd` → `soundsh/VO_id<N>_*` clips |
 | 66 | `armor` | |
 | 67 | `ace` | |
@@ -181,7 +181,7 @@ order** — the chapter directories are not story order.
 ⚠ **Three of the design's twelve pilot stats are not in this vector**: preferred engagement altitude
 is slot 31, signature maneuvers is slot 32, and there is no signature-*approach* field at all.
 
-### `ai_skill_parameters` — what a 1–9 rating actually means
+### AI skill parameters
 
 `extracted/zrdr/player.zrd.json` carries an `ai_skill_parameters` block: **one `[value@1, value@9]`
 pair per stat**, the endpoints the rating interpolates between.
@@ -275,7 +275,7 @@ The difficulty column matches the original design document's own 1–9 table exa
 maneuvers the two have in common. `nitro_evade` and `high_yo_yo` are shipped-only additions the
 design text does not list.
 
-### `signature_maneuvers` is a bitmask
+### Signature maneuvers bitmask
 
 `aiv` slot 32 is a bitmask over the maneuver library, weighting the marked maneuvers up during
 selection. ⚠ **The bit order is the exe's internal table order, which is NOT the order the JSON file

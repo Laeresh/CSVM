@@ -12,7 +12,7 @@ has ground airfields `eairg31`/`eairg32`, a ship `eshipg31`, and a submarine `ba
 |---|---|---|
 | `node` | 23/23 | the host world node |
 | `vehicle` | 23/23 | nested: `params` (a designer label in the `aiv.json` HEADER's `(slotId, label)` pairs, e.g. `Eairg31_params`; authored on 15 of 23, see the typo note below), `nets` (one or more AI net names), `choose_nets` (`cyclic` throughout) |
-| `capacity` | 23/23 | `0` throughout — a lifetime spawn budget, decremented per launch. ⚠ **`0` does not obviously mean "unbounded"** — see [the capacity puzzle](#the-capacity-puzzle) |
+| `capacity` | 23/23 | `0` throughout — a lifetime spawn budget, decremented per launch. ⚠ **`0` does not obviously mean "unbounded"** — see [the capacity puzzle](#capacity-rule-and-limit) |
 | `max_active` | 23/23 | concurrent live spawns (1/4/5/6/10) |
 | `wave_size` | 23/23 | planes per wave (1, once 3) |
 | `wave_period` | 23/23 | seconds between waves (1–20) |

@@ -11,8 +11,8 @@ This page maps the archives and their reader families to the pages documenting t
 
 ## Contents
 
-- [The three scopes](#the-three-scopes)
-- [Reader family index](#reader-family-index)
+- [The three scopes](#archive-scopes)
+- [Reader family index](#reader-family-map)
 
 ## Archive scopes
 

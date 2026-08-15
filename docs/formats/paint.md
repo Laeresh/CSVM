@@ -266,16 +266,7 @@ colour, and all of them are gone:
 - **It is faster.** A flat multiply-add per texel replaced per-texel HSV conversion plus a
   percentile pass; painting four aircraft is now within measurement noise of not painting.
 
-### Superseded — the hue-window approach (2026-07-19 → 2026-07-20)
-
-Before the masks were found, the remake inferred regions from a hand-authored per-aircraft
-table of hue windows, keyed on the "What the regions actually look like" table above. It
-produced a correct-looking red Bloodhawk and twelve distinguishable liveries, but could not
-express a colourless region, could not paint the Fury at all, and had to guess slot order. The
-table and its measurements are kept above because they remain a true description of the ZBD
-skins; the code is gone.
-
-## Open
+## Known limits
 
 - ~~**The "Shade" column.**~~ *Answered 2026-07-20 (user): Shade is simply the **brightness** of
   the chosen colour.* The UI's Colour dropdown picks the hue family and Shade picks how light

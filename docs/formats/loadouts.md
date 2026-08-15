@@ -44,7 +44,7 @@ Keyed by **vehicle def name** (`vehicle.json`), matching `PlaneStats`. Per plane
 | `guns[].markers` | the firepoint node(s) this group fires from (see binding rule) |
 | `guns[].turret` | present + `true` on turret slots — parsed but **inert in M3** (see below) |
 | `hardpoints.count` | number of underwing pylons carried; **which** physical `pylonN` markers get used is `Loadout.PylonFillOrder`, not `1..count` (below) |
-| `hardpoints.stock` | the `wep_*` id every pylon carries in stock fit (`wep_06`, HE) — one id for all pylons, see the [schema limitation](#the-uniform-he-stock-load-is-an-observation-and-a-schema-limit) |
+| `hardpoints.stock` | the `wep_*` id every pylon carries in stock fit (`wep_06`, HE) — one id for all pylons, see the [schema limitation](#schema-limit) |
 
 ## Resolution rules
 

@@ -138,7 +138,7 @@ Note what it is *not*: it carries its fog parameters **inline** and matches neit
 weather.json zones (zone1 1000–1750 alt 970–1047, zone2 1000–4000 alt 4000–5000). So it is an
 ad-hoc third fog state applied to a cutscene camera, **not a zone selector** — it does not answer
 "which zone does a mission fly", which remains engine-side (see
-[weather.md](weather.md#which-zone-a-mission-flies-is-not-in-any-file-searched-exhaustively-2026-07-22)).
+[weather.md](weather.md#mission-zone-selection)).
 `AnimRuntime` therefore does not implement it: one occurrence, on the one cutscene camera the
 remake does not run, and implementing it would mean a second write path onto the `csky_fog_*`
 globals that `Session.WeatherRig.Build` owns. If the user ever observes fog visibly changing
@@ -808,7 +808,7 @@ sequences M3 now produces, and 21 of its names are not plain `sounds.json` entri
 their own decode. The ambient half landed first; the one-shot half **landed in M3 D31** —
 `AnimRuntime.HandleSound` fires a fire-and-forget `WorldSounds.PlayOneShot` at the event's
 AT_NODE, resolving a `SOUND_GROUPS` name through the decode now in
-[sounds.md](sounds.md#soundsjson--the-sound_groups-block). The event's NAME is a sound
+[sounds.md](sounds.md#sound-groups). The event's NAME is a sound
 *definition* or a group, never a gamez node (the lone reader-scope one-shot names
 `snd_waterfall`, a definition, and resolves zero node targets — see the C3 note in
 `PLAN-anim-rendering-followups.md`).
@@ -886,7 +886,7 @@ mission that compiles `tethertower`.
 which was generalised from C1/IA1. It is compiled into the missions that use it; being
 uncompiled is exactly the signal that the mission does not instantiate it.
 
-### Mission-spawned entities — SOLVED 2026-07-22, and not by a roster
+### Mission-spawned entities
 
 Scenery props are hidden by compiled `zepstate` defs as above. *Entities* — the zeppelins,
 the CTF props, the vehicles and guns — are governed by a different system entirely: the
@@ -998,7 +998,7 @@ abort without completing, restart, load the next mission), and a direct A/B sepa
 flags (destroy a `PERSIST_LOG` object and a save-only one in the same campaign mission, then load
 an IA — the first should carry, the second should not).
 
-## Scenario dimension (analyzed 2026-07-18 — negative)
+## Scenario dimension limit
 
 Instant-action scenario names (`zeppelin_run`, `dogfight_ace`, …) appear **only** in
 `ia.json` spawn lists (plus `disallow_missions`). No reader carries scenario-conditional
@@ -1174,7 +1174,7 @@ are not visible from the byte format alone, each measured against this install.
   (C1's `truck1dust_puffer` and `black_exhaust_puffer`). A `textures[]` entry's `run_time` is a
   **fraction of the sprite's lifetime**, not a second count — the survey that settles it, and what
   reading it as seconds did to `large_30sec_fire`, are in
-  [effects.md](effects.md#puffer_state-schema). `at_node` is the attach point, and is
+  [effects.md](effects.md#emitter-schema). `at_node` is the attach point, and is
   NOT the event's `name` (that is the puffer's own name, a separate namespace). `ACTIVE_STATE`
   1 starts a continuous emitter and 0 stops it; definitions re-assert their puffers on every
   loop iteration, so a consumer must treat re-assertion as idempotent.

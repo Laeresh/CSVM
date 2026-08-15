@@ -230,7 +230,7 @@ because they share the same frame sets (`fire101-112` etc.), so:
    `common\effects\models\` by `support\load.gw`.
 
    **The entry names a node, but what it animates is that node's MATERIAL** (decoded out of
-   `crimson.exe`, see [`anim-definitions.md`](anim-definitions.md#fire-a-texture-cycle-on-a-material-and-behaviours-nothing-calls)).
+   `crimson.exe`, see [`anim-definitions.md`](anim-definitions.md#fire-animations)).
    The engine resolves the node, walks to the first mesh under it, and installs the frame list on
    surface 0's material record, which is the same per-material cycle block as (2); the draw loop
    then tests the material's own cycled bit per polygon. Materials are one record per texture, so

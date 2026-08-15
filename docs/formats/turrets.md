@@ -217,7 +217,7 @@ no objectives script, that builder call is the only reason the zeppelin you atta
 
 Separately, **both loaders bail out entirely if a global world-state flag is clear** — the same
 flag that gates the `capacity` read in the generator loader
-([mission-entities.md](mission-entities.md#the-capacity-puzzle)). In retail it must be set, or no
+([mission-entities.md](mission-entities/enemy-generators.md#capacity-rule-and-limit)). In retail it must be set, or no
 turret would exist at all; it is noted because the two subsystems share it.
 
 An entry with no resolvable `WEAPON` ticks no further.

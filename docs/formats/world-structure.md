@@ -29,7 +29,7 @@ Part of the [format documentation](README.md) (see also [gamez.md](gamez.md), [c
   regions: `-1` renders always, `1`/`2`/`3` only when that zone is active. C1B, C2 and C3 have
   1–2 nodes in their second zone and are effectively single-zone; C1C, C2B and C4 are
   zone2-dominant; C1 and C5 zone1-dominant. The zone numbering is the same one
-  [weather.md](weather.md#the-zone-names-are-per-chapter-not-a-fixed-zone1zone2-pair-2026-07-22)
+  [weather.md](weather.md#the-zone-names-are-per-chapter-not-a-fixed-zone1zone2-pair)
   documents — hence C5's `3`. **What activates a zone was the open question, and it is answered:**
   `FUN_0056c430` is a per-frame, per-node *camera-state* filter — a node draws iff its `zone_id` is
   `−1`, or is in the set `{0, camera weather state}` armed each frame (1 below the cloud deck /
