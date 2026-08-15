@@ -244,6 +244,40 @@ whole-vehicle-health stages, so `player_smoketrail` means "the hull is at 10%", 
 is still near full. Decoded 2026-08-15 (`BL-246`); our implementation's three deltas against this
 are `BL-384`.
 
+### One start per downward crossing
+
+The handle arrays (inst`+0x890`, part`+0x4c`) are the whole lifetime rule. An entry starts only when
+its slot reads zero, and the slot is written with the instance `FUN_004edda0` returns. The slot is
+cleared on the **upward** crossing alone (`threshold < fraction`, via `FUN_004ed480`), never when the
+anim finishes by itself. So a stage fires exactly once per downward crossing and cannot fire again
+until a repair lifts the fraction back over its threshold.
+
+`FUN_004b3e20` (per-part) and `FUN_004b3910` (def-level) are the wipes: each stops every live anim in
+its array and zeroes the slots. `FUN_004b8180`, the set-health path behind repairs and cheats, calls
+the per-part wipe before re-running `FUN_004b3d70`, so a repair un-stages and then restages from the
+new fractions.
+
+Two consequences for a per-part list. Each part carries its own copy of a shared entry, with its own
+slot, so an entry authored on all four player zones fires up to four times over a flight, once as
+each zone first crosses. And because the fraction is health-only while `FUN_004b7f80` blocks health
+damage outright until a part's armour is spent, a fully-armoured part crosses nothing at all: even a
+0.99 entry waits for the armour pool. Decoded 2026-08-15 (`BL-297`).
+
+### Where a stage's effects land
+
+Node names in a started anim are bound in `FUN_00521180`, which walks the anim's node tables and
+resolves each reference through `FUN_004efa40`. An entry naming an explicit parent is searched under
+that parent; everything else goes to `FUN_004efaf0`, which tries, in order, the instance's context
+subtree (inst`+0x6c`), the context node (inst`+0x48`), the anim's two local tables (`FUN_004ee7e0`,
+`FUN_004ee770`), and finally a global by-name lookup (`FUN_004d0280(7, name)`). The subtree search is
+`FUN_004efa70`, a recursive name compare down `+0x56`/`+0x5c`.
+
+⚠ **The context does not redirect a name, it only disambiguates one.** A name that is unique on the
+airframe resolves to the same node whichever context started the anim, because a miss in the context
+subtree falls through to the global lookup. The `pdpN` panel nodes are unique, so a stage naming
+`pdp1` sparks at `pdp1` regardless of which part's list started it. There is no part-relative
+retarget on this path. Decoded 2026-08-15 (`BL-297`).
+
 ## Death
 
 `FUN_004b82d0` starts the anim reference the def supplied at `+0x158` (instance `+0x6d0`), keeps its

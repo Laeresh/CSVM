@@ -403,7 +403,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   13 `break*`, the crash-sink motions) — that is its own M4-sized feature for when zeppelins
   matter to gameplay, not this item.
 
-- `BL-297` `[Research]` `[Blocked: CAP-29]` **Panel-damage semantics: what the original actually
+- `BL-297` `[Research]` `[Owed-playtest]` **Panel-damage semantics: what the original actually
   shows when a part is damaged — the user's re-test verdict is that our authored-data reading has
   the feature wrong.** User at the controls 2026-08-06, after `BL-288`'s pooling fix landed
   (bursts no longer teleport — that mechanical fix stands and is not in question): (1) nose
@@ -420,16 +420,40 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `player_fuelleak` (ANY part's fraction) plays a gunhit flash + fuel vapor at a random `pdp1–3`.
   The "repeats" have two shapes: `pdpanel7` (nose) is authored to throw FOUR `gimmeflakes` bursts
   within 0.4 s (one extended burst), and every panel's burst uses the same 7-flake `planeflakes`
-  template, so successive panels' bursts look identical. The armor question is a scale ambiguity:
-  we consume threshold fractions as COMBINED armor+HP (`DamageLab.Combined`); stock parts are
-  25 armor/25 HP so `pdpanelN` thresholds ≤ 0.5 do imply armor exhausted under armor-first — but
-  armor upgrades shift the combined scale, `--damage` presets floor armor, and health-only vs
-  combined is undecoded.
-  *Fix shape:* answer `CAP-29` first; then either close as faithful-as-authored, or change
-  mechanism — e.g. resolve `random_gun_impact`/`player_fuelleak`'s panel pick to the pdpN nearest
-  the struck part instead of the authored random, and/or re-base injure thresholds on health-only.
-  Any such change is a deliberate deviation or a re-decode — not a bug fix — until the capture
-  says which.
+  template, so successive panels' bursts look identical.
+  *Decoded 2026-08-15 (`crimson.exe`). All three symptoms are settled without the capture.*
+  Write-up: `docs/org/vehicleDamage.md` ("Damage staging", the two new subsections).
+  **(2) armor, answered; ours is wrong.** Not a scale ambiguity: `FUN_004b3d70` keys the per-part
+  `injure_anims` on `[part+0x30] / [part+0x2c]`, health only, and `FUN_004b7f80` zeroes the health
+  damage outright while the part's armour pool covers the incoming armour damage. So a fully-armoured
+  part crosses NO per-part threshold, not even the 0.99 `<part>_damage_effects` shim: the original
+  shows nothing at all on a fresh armoured plane. Our combined armour+HP scale
+  (`PartState.Fraction`, `PlaneDamage.cs:273-275`) is why panels tear early; the fix is `BL-384`
+  item (2), re-basing on `PartState.HealthFraction` (`PlaneDamage.cs:277`).
+  **(1) location, answered; ours is faithful in mechanism and wrong in timing.** `FUN_00521180` binds
+  an anim's node names through `FUN_004efaf0`, which searches the instance's context subtree, then
+  the anim's local tables, then a GLOBAL by-name lookup (`FUN_004d0280(7, name)`). `pdpN` names are
+  unique on the airframe, so a context miss falls through and finds the same node anyway: the
+  context disambiguates a name, it never redirects one. There is no part-relative retarget on this
+  path, so the original really does spark wing sites on a nose hit. It just does not do it until
+  that part's armour is gone.
+  **(3) repetition, answered; a panel tears once.** The handle arrays (part`+0x4c`, inst`+0x890`)
+  start an entry only when its slot reads zero and clear the slot on the UPWARD crossing alone,
+  never when the anim ends. So each entry fires once per downward crossing and can only re-fire
+  after a repair (`FUN_004b3e20` wipes, `FUN_004b8180` restages). The `pdp4` repeat the user saw is
+  authored and faithful: `<part>_damage_effects` is a separate entry on each of the four zones with
+  its own slot, so `pdp4` legitimately sparks up to four times a flight, once as each zone first
+  crosses.
+  *Fix shape:* no code change is owned here. Symptom (2) is `BL-384` item (2). Symptoms (1) and (3)
+  are faithful-as-authored and this item closes on them once `CAP-29` confirms the look. Do NOT
+  resolve `random_gun_impact`/`player_fuelleak`'s panel pick to the nearest pdpN. The decode says
+  the original does not do that.
+  *What `CAP-29` still owes:* the look only. Does the flung debris read as a piece of that panel or
+  as generic flakes, and what visibly changes on the airframe. Questions (a) and (b) are now
+  confirmation, not decision.
+  *Not decoded:* whether the interpreter's selection event really is the 40/40/always-`pdp4`
+  weighted pick our data reading describes. The exe executes the authored def; what was verified is
+  where the nodes resolve, not how the random branch is evaluated.
   *⚠ Traps:* do not "fix" by suppressing the authored shims wholesale (`CAP-27` already probes
   whether the spark shim exists at all in the original — coordinate, don't overlap). Do not
   re-open `BL-288`'s pooling — the theft mechanism was real and its fix is verified independent
@@ -516,7 +540,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   retract.
   *Cross-refs:* `BL-246` (the decode that produced this), `BL-259` (landed the anchor/staging this
   mis-keys), `BL-297` (the panel-damage semantics re-test — `pdpanelN` thresholds are on the same
-  health-only scale, so panels currently tear earlier than the original tears them).
+  health-only scale, so panels currently tear earlier than the original tears them; its 2026-08-15
+  decode confirms this and hands the fix to item (2) here).
+  *⚠ One more trap, from `BL-297`'s decode:* item (3)'s replacement of `_applied` must keep
+  ONCE-per-downward-crossing. The original's slot is cleared on the upward crossing alone, never
+  when the anim ends (`FUN_004b3e20` / `FUN_004b8180` are the repair wipe/restage), so a stage that
+  re-fires whenever the fraction stays below its threshold is a different bug, not the fix.
 
 - `BL-385` `[Bug]` **Enemy and wingman aircraft show no damage at all — the whole progressive-damage
   layer is wired for the player only, and their crash is silent.** User at the controls 2026-08-15:
