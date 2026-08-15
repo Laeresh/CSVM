@@ -57,6 +57,13 @@ public class PlaneStatsFlightGlobalsTests
         Assert.Equal(1000f * PhysicsConstants.MphToMs, s.HighSpeedPitchFadeLo, 2);
         Assert.Equal(1001f * PhysicsConstants.MphToMs, s.HighSpeedPitchFadeHi, 2);
 
+        // groundblow_elev 400 / groundblow_mag 10 / ai_groundblow 0.5 against fallbacks
+        // 100 / 1.5 / 0.9 — all three raw scalars, and elev is METRES, so no conversion applies
+        // to any of them. A 400 read back as 400 × MphToMs would be a 179 m ray.
+        Assert.Equal(400f, s.GroundBlowElev, 3);
+        Assert.Equal(10f, s.GroundBlowMag, 3);
+        Assert.Equal(0.5f, s.AiGroundBlow, 3);
+
         // drag_fade_speed: authored 40 mph — happens to equal this field's
         // documented-as-unconfirmed fallback, so this only proves the read did not error,
         // not that the read (versus the fallback) took effect; see the field's comment.

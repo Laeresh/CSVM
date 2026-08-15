@@ -672,7 +672,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   | `maxAOA 46.0` / `liftAOAs [5,9]` / `lift_accel_rate 0.75` | Decoded. `liftAOAs` is an airflow blend, **not** a load-factor ramp. Consumed by `PLAN-flight-drag-lift` B12 as a **hypothesis under test, not a decode**. ⚠ That plan justifies its lift re-key partly on "the aircraft must hold 100° of bank, which needs `1/\|cos 100°\|` = 5.8 g" (`PLAN-flight-drag-lift.md:486-487`, `:7`, `:32`, `:200`, `:549`). `CAP-33` showed the ADI reads airframe **attitude**, not the turn's bank, so the ~100° attitude is real but the load factor does not follow from it that way — `CAP-01`'s turn banked 58.7°, ~2 g. The re-key is not challenged; its stated arithmetic is |
   | `high_speed_pitch_fade [1000,1001]` / `highGs [9,15]` / `lowGs [-6,-9]` | Decoded as **authored unreachable** (`C24`, `D33`). Nothing implemented, which is the correct outcome |
   | `drag_factor 1.5` (global) / `drag_fade_speed 40` | **Dead in the executable** (B14): parsed, then read by nothing. The per-plane `drag_factor` is the only drag scale |
-  | `groundblow_elev 400` / `groundblow_mag 10` / `ai_groundblow 0.5` | Decoded 2026-08-14. **Unimplemented, owned by `BL-359`**; its emitter set settled 2026-08-15 |
+  | `groundblow_elev 400` / `groundblow_mag 10` / `ai_groundblow 0.5` | Decoded 2026-08-14, emitter set settled 2026-08-15, **implemented and flown 2026-08-15** (`git log --grep=BL-359`). `ai_groundblow` is loaded and deliberately unread: the AI path is a different law |
   | `bounce_factor 0.6` | Decoded 2026-08-14. Units settled; implementation owned by `BL-172` |
   | `nom_gravity 20.0` / `stall_mag 1.25` | Already consumed |
 
@@ -689,10 +689,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ The Bloodhawk's 5.01 G peak is 0.2 % **past** the executable's fallback `highGs[0] = 5`, so under
   the fallbacks the limiter would fire, barely. The disproof rests on the authored 9.
 
-  **Ground blow: DECODED from the binary 2026-08-14.** Mechanism, constants and gates are in
+  **Ground blow: DECODED from the binary 2026-08-14, IMPLEMENTED and flown 2026-08-15**
+  (`git log --grep=BL-359`). Mechanism, constants, gates and emitter rule are in
   [`docs/org/flightModel.md`](docs/org/flightModel.md); `CAP-02` closed 2026-08-07 and the GDD's
-  §4.1.7 *mechanism* is confirmed by the code, though its emitter list is not (below). In short:
-  `FUN_0048bf60` casts a ray of
+  §4.1.7 *mechanism* is confirmed by the code, its emitter *list* replaced by the rule that produces
+  it. In short: `FUN_0048bf60` casts a ray of
   `groundblow_elev` **metres** along the nose, and `FUN_0048c220` adds a rotation away from the hit
   surface into the **same accumulator the stick writes to**, one call after the stick terms in
   `FUN_0048c470`. It is a bias on control response, not an applied force. A command *into* the
@@ -700,7 +701,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   is amplified by up to `1 + 10·S²`; and on a dead-on approach the bias axis `n × b` collapses to
   zero, so a head-on gets no help at all. The AI path is a different law, not a scaled one: a fixed
   push of `ai_groundblow × groundblow_mag × S`, independent of what the AI commanded, linear in
-  proximity, and not `dt`-scaled.
+  proximity, and not `dt`-scaled. **The AI half is not built** — the player term is, in
+  `FlightModel.GroundBlowTerm` off `FlightController.ProbeGroundBlow`.
 
   ⚠ **`groundblow_elev` 400 is 400 METRES of ray length, not a 400 ft trigger range, and the
   footage agreement was a coincidence of digits.** The `CAP-02` onset bracketed at 427 → 376 ft sits
@@ -709,11 +711,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `analysis/video-flight-calibration/FINDINGS.md`, was deleted 2026-08-14 as superseded.
   ⚠ **`groundblow_mag` 10 is not a TUNE** and must not be fitted to the cliff clip's 17° step. It is
   an authored constant with a traced consumer, 6.7× the engine's own fallback of 1.5.
-  ⚠ **Zeppelins as emitters is still unconfirmed.** Terrain and unregistered scenery always qualify,
-  but registered entities are filtered on a byte that is a "placed but not yet simulated" transient,
-  cleared every frame for anything running a flight update. Which entities keep it set permanently
-  was not determined, so the GDD's emitter list is neither confirmed nor refuted. A free check
-  whenever a zeppelin mission is flown.
+  ⚠ **The proximity power is `S²`, settled at `0x0048c30f` on 2026-08-15**: `FUN_0048bf60` hands
+  back the axis ALREADY scaled (`A·S`) plus `S` as its return value, and the caller uses that one
+  scaled vector twice, once in the dot and once in the add. Reading the write-up's `p` as
+  `dot(accum, A·S)` *and* keeping an `S²` in the add counts it three times. `CSVM.Tests`'
+  `GroundBlowTests` pins the quadratic against the linear reading.
   One `CAP-02` anomaly stands unexplained and is now moot for implementing: `Up Down` recovery #1
   reads 2.30× free air with 28–30 % of samples gated at γ ≈ −63°, suspected estimator artifact, and
   every clip designed to reproduce it came back flat.
@@ -741,17 +743,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   reconcile.
 
   **Still to do, all of it downstream of this entry:**
-  1. **Implement ground blow** (`BL-359`, minted 2026-08-14). Nothing blocks it.
+  1. ~~Implement ground blow.~~ **Landed 2026-08-15** (`BL-359`, closed; `git log --grep=BL-359`),
+     player path only and confirmed at the controls. The AI law is unbuilt and is a different one.
   2. **Implement the roll/pitch base ramp** (`BL-330`) and **the `bounce_factor` restitution**
      (`BL-172`).
   3. ~~Confirm the zeppelin emitter on any zeppelin mission.~~ **Answered 2026-08-15 from the binary
      and the shipped data, no capture needed.** The emitter test keys on whether a hit node carries
      the spawn mark `0x40000000` and, if so, whether its registry entity is on a scripted path; never
      on vehicle type. IA1's zeppelin is a plain gamez node with no spawn mark, so it repels exactly
-     like terrain. Recorded on `BL-359`'s trap (h) and in
+     like terrain. Written up in
      [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow"; the path mechanism it
-     surfaced is `BL-361`. (`CAP-33` was flown 2026-08-15; it settled the ADI-vs-implied-bank
-     question, not the banked-turn rate gap.)
+     surfaced is `BL-361`. In the build, the rule is the `CollisionLayers.World` mask on the probe,
+     which is why an aeroplane does not repel and the zeppelin does. (`CAP-33` was flown 2026-08-15;
+     it settled the ADI-vs-implied-bank question, not the banked-turn rate gap.)
 
   When those are homed elsewhere or done, this entry retires: there is no research left in it.
 
@@ -1221,79 +1225,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   source. Check `shakes.zrd.json`/`docs/formats/shakes.md` for an ambient source before inventing
   one; if no data carries it, magnitude and cadence are a TUNE against feel. Low priority; pairs
   with `BL-266`'s open shake data questions.
-
-- `BL-359` `[Feature]` **Ground blow is decoded and entirely unmodelled — the original biases your
-  controls away from anything large you are closing on.**
-  *Evidence:* decoded from `crimson.exe` 2026-08-14, write-up in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow". `FUN_0048bf60` casts a ray
-  of `groundblow_elev` metres (authored **400 m**) along the nose; `FUN_0048c220` adds a rotation
-  away from the hit surface into the same accumulator the stick fills, one call after the stick
-  terms in `FUN_0048c470`, on the player's aeroplane every frame. Nothing in `CSVM/src` carries it
-  (grep for `groundblow` returns no hits) and `FlightModel.Step` has no such term. The design side
-  is GDD §4.1.7, and `CAP-02` (closed 2026-08-07) saw the behaviour at the controls: a wings-level
-  full pull at a cliff steps heading 17° away with nothing in the vertical plane.
-  *The rule*, with `n` the hit normal, `b` the backward body axis (`Attitude.Z`), `d` the distance
-  to the hit point, `c = dot(b, n)`:
-
-      require c > 0                     the surface must face back at you
-      S = sqrt(c) · (elev − d) / elev   1 at contact, 0 at the ray's end
-      V = normalize(n × b) · S          world axis rotating the nose away, scaled by proximity
-      p = dot(cmd, V)
-      cmd += V · (p ≥ 0 ? p : −0.05·p) · groundblow_mag
-
-  With `groundblow_mag` authored **10**, commanding away is amplified by up to `1 + 10·S²` and
-  commanding into the obstacle is met with `0.05 × 10`, halved and never reversed.
-  *Fix shape:* the probe belongs in `FlightController`, which has the world
-  (`IntersectRay` with `CollisionLayers.World`, `FlightController.cs:1830,1851`), and its result is
-  handed to `FlightModel`, which has no world access at all. Add the term to `cmd` in
-  `FlightModel.Step` (`FlightModel.cs:475-495`) after the bank coupling and the weathervane, which
-  is the original's ordering, and before `BodyRates += cmd * dt`.
-  ⚠ *Traps:*
-  (a) **Add it to `cmd`, not to `BodyRates`, and do not introduce a `dt` of your own.** The
-  original's accumulator already carries `dt` when the term is formed, so the effect is linear in
-  `dt`; ours lands in the same place because `FlightModel.cs:507` multiplies `cmd` by `dt`
-  afterwards. A second `dt` makes it vanish at small steps.
-  (b) **Frame mismatch.** The axis is built from a world normal and `Attitude.Z`, so it is a world
-  axis, while `cmd` is body-frame (X pitch, Y yaw, Z roll). Project it onto the body axes before
-  the dot and the add. Mixing frames gives a term that is right wings-level and wrong everywhere
-  else, which is the hardest version of this bug to see.
-  (c) **It is not a force and not a terrain-altitude effect.** No push on velocity, and no
-  `HeightAboveWorldGround` gate. A world-frame force is refuted by the original behaving the same
-  inverted, and canyon runs held at 165–336 ft never trip it because nothing is close *ahead*.
-  (d) **`groundblow_elev` 400 is a ray LENGTH in metres.** Not feet, not a trigger altitude, and it
-  is also the falloff's denominator, so shortening it steepens the ramp rather than just shrinking
-  the reach (`BL-095`).
-  (e) **Do not calibrate `groundblow_mag` against the cliff clip's 17° step.** It is an authored
-  constant with a traced consumer, not a TUNE.
-  (f) **The AI path is a different law, not a scaled one:** a fixed push of
-  `ai_groundblow × groundblow_mag × S` independent of what the AI commanded, linear in `S`, cut to
-  15 % for 2.5 s after a drop, and suppressed entirely while the AI is stunned. Only relevant if AI
-  aircraft get ground avoidance; do not reuse the player term scaled by `ai_groundblow`.
-  (g) **A dead-on approach must get nothing.** As `n → b` the axis `n × b` collapses and the whole
-  term goes to zero. That is the original's "never saves a head-on collision", so special-casing or
-  renormalising the degenerate case would break the behaviour it is there to produce.
-  (h) **Emitters, settled 2026-08-15 in `crimson.exe`** (write-up in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow"). The test is not on vehicle
-  type. A hit node repels **unless** it carries the spawn mark `0x40000000` at `node+0x28` *and* its
-  vehicle-registry entity (`0x0071dab8`, found by `FUN_004afee0`) has a **zero** byte at `+0xcc`.
-  That byte means "following a scripted path instead of being flight-simulated" (`FUN_00489ea0`
-  calls the follower `FUN_0048a110` in its place, see `BL-361`), which is why an ordinary flying
-  aeroplane does not repel you and a path-driven one does. The mark itself is applied at spawn by
-  `FUN_004848f0` and appears on no authored node, so terrain and all scenery repel by default.
-  **Zeppelins do repel:** `extracted/zrdr/vehicle.zrd.json` names no zeppelin type, so IA1's is the
-  plain gamez node `multiplayer1zep` with `active` and `intersect_surface` set and no spawn mark, an
-  emitter by the same rule as terrain. The GDD's naming of zeppelins describes the outcome, not a
-  mechanism. ⚠ **The whole filter is player-only** (it sits inside the `param_1 == DAT_0071c298` test
-  at `0x0048c047`), so on the AI path every hit repels, other aircraft included; the aircraft
-  exemption is player behaviour, not a property of the emitter set. Build the AI term (trap (f)) with
-  no filter at all.
-  *Playtest after fix:* fly a wings-level full pull straight at a cliff at ~300 mph and look for a
-  one-off heading offset away from the wall that then holds, with no change in pitch rate. Hands off
-  must still end in a crash, and inverted must behave the same. The smaller second effect (the
-  velocity direction steered toward the nose at `2.0 · S` per second) rides along with it.
-  *Cross-refs:* `BL-095` (the decode and the authored values), `BL-172` (the collision impulse from
-  the same neighbourhood of the flight loop), `CAP-02` (closed; footage staged under
-  `playtest/CAP-02/`).
 
 ## Environment & world
 
@@ -3034,9 +2965,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
 
 - `BL-361` `[Feature]` {CAMPAIGN} **Scripted-path vehicles: a second movement law, decoded, with
-  nothing in `CSVM/src` for it.** Surfaced 2026-08-15 by the ground-blow emitter decode (`BL-359`
-  trap (h)), which had to establish what the byte at `+0xcc` means before it could say whether
-  zeppelins repel the player. Write-up in
+  nothing in `CSVM/src` for it.** Surfaced 2026-08-15 by the ground-blow emitter decode (`BL-359`,
+  since closed — `git log --grep=BL-359`), which had to establish what the byte at `+0xcc` means
+  before it could say whether zeppelins repel the player. Write-up in
   [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow".
   *What it is:* the aircraft update dispatcher `FUN_00489ea0` branches on `obj+0xcc` **before** it
   reaches any flight law. Non-zero, and the object is driven by the path follower `FUN_0048a110`;
@@ -3079,8 +3010,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *How you'd know it worked:* a mission-opening aircraft sits still on the strip until its goal
   fires, then rolls at a steady 40 mph, accelerates and climbs out on the last leg, and flies
   normally from the moment it leaves the path.
-  *Cross-refs:* `BL-359` (which surfaced it, and whose emitter set depends on it for spawned
-  vehicles), `BL-095`, [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow".
+  *Cross-refs:* `BL-095`, [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow" —
+  ground blow's own emitter test reads this byte, so a spawned vehicle put on a path stops repelling
+  the player the moment it completes the path and drops into the flight model. Ground blow itself
+  shipped without the registry filter (its player probe simply excludes aircraft), so building the
+  follower means revisiting whether a path-driven vehicle needs to become an emitter in this build.
 
 ## Tooling, platform & docs
 

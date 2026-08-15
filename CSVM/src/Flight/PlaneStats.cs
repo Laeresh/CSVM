@@ -126,6 +126,19 @@ public sealed class PlaneStats
     // unchanged turn_fade_out/yaw_fade_in pattern, not a read fallback — flag if this proves wrong.
     public float DragFadeSpeed = 40f * PhysicsConstants.MphToMs; // drag_fade_speed, m/s
 
+    // Ground blow (docs/org/flightModel.md, "Ground blow"): the nose-forward probe that biases the
+    // player's control response away from what it hits. Both are RAW SCALARS — groundblow_elev is a
+    // length in METRES and needs no conversion, and it is the ray's length AND the falloff's
+    // denominator, so it is not a trigger range. Fallbacks are the executable's compiled defaults;
+    // this install authors 400 and 10.
+    public float GroundBlowElev = 100f;     // groundblow_elev, m — ray length and falloff denominator
+    public float GroundBlowMag = 1.5f;      // groundblow_mag, dimensionless
+    // Unread ON PURPOSE: the AI path is a DIFFERENT law, not the player term scaled by this — a fixed
+    // push independent of what the AI commanded, linear in proximity rather than quadratic, and not
+    // dt-scaled, and cut to 0.15 for 2.5 s after a drop and suppressed while the AI is stunned.
+    // Implementing it means writing that law (docs/org/flightModel.md), not multiplying by this.
+    public float AiGroundBlow = 0.9f;       // ai_groundblow, dimensionless
+
     // The near-miss cue's shipped accumulator (warning_shot_*) — see WarningShotCue for the units
     // question. The sound is a SOUND_GROUPS name (bullet_warning_sg → snd_bulletpass1-3), not a
     // sounds.json def, so it resolves through the group table like every other one.
@@ -456,6 +469,10 @@ public sealed class PlaneStats
             stats.HighSpeedPitchFadeLo = player.Float("high_speed_pitch_fade", stats.HighSpeedPitchFadeLo / mph, 0) * mph;
             stats.HighSpeedPitchFadeHi = player.Float("high_speed_pitch_fade", stats.HighSpeedPitchFadeHi / mph, 1) * mph;
             stats.DragFadeSpeed = player.Float("drag_fade_speed", stats.DragFadeSpeed / mph) * mph;
+            // Raw scalars, metres already — no MPH conversion on any of the three.
+            stats.GroundBlowElev = player.Float("groundblow_elev", stats.GroundBlowElev);
+            stats.GroundBlowMag = player.Float("groundblow_mag", stats.GroundBlowMag);
+            stats.AiGroundBlow = player.Float("ai_groundblow", stats.AiGroundBlow);
 
             // curve blocks hold (x, y) pairs: min_* = ramp start, max_* = ramp end
             static SoundCurve Curve(ZrdrDict d, string minKey, string maxKey, SoundCurve fb) =>

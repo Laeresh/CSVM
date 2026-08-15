@@ -8,6 +8,16 @@ namespace CSVM.Flight;
 public struct FlightInput
 {
     public float Pitch, Roll, Yaw, Throttle;
+
+    /// <summary>Ground blow's probe result, filled by the caller because only it has the world:
+    /// the WORLD-frame surface normal of the nearest hit on a ray cast forward along the nose,
+    /// and the distance to it in metres. <see cref="Vector3.Zero"/> means no hit — and it is the
+    /// only "no hit" signal, matching the original, which leaves its zero-initialised output vector
+    /// alone on a miss, a back-facing surface or a filtered emitter and so adds nothing.</summary>
+    public Vector3 GroundBlowNormal;
+
+    /// <inheritdoc cref="GroundBlowNormal"/>
+    public float GroundBlowDistM;
 }
 
 /// <summary>
@@ -204,6 +214,13 @@ public sealed class FlightModel
                                                   // runs into a real boundary: at 0.10 the knife-edge α peaks at
                                                   // 5.36°, past liftAOAs[0] = 5°, so the airflow blend starts
                                                   // engaging in a knife-edge, which no capture supports.
+
+    // Ground blow's two constants that are NOT in player.json (the three that are live on
+    // PlaneStats). Both are decoded, neither is a TUNE: the 0.05 is an immediate in the player
+    // branch, and the 2.0 is a global whose only writer is the original's `gbc` debug console
+    // command, so no data key can move it.
+    private const float GroundBlowIntoFactor = 0.05f;  // what a command INTO the obstacle is met with
+    private const float GroundBlowVelocitySteer = 2f;  // 1/s at contact: velocity steered onto the nose
 
     // Drag is a parabolic polar in MACH:
     //
@@ -494,6 +511,12 @@ public sealed class FlightModel
         // and the bank coupling, which is the original's own ordering.
         cmd += WeathervaneTorque() * s.RecInertia;
 
+        // Ground blow (see GroundBlowTerm): the nose-forward probe biasing the command away from
+        // what it is closing on. Last of the three torques and after both of the above, which is
+        // the original's own ordering — it reads the accumulator the stick, the bank coupling and
+        // the weathervane have already been summed into, and multiplies THAT.
+        cmd += GroundBlowTerm(input, cmd, out float groundBlowSteer);
+
         // Damping is the authored ang_momentum_damp alone. return_rate is NOT a damping term — it is
         // the weathervane torque above, applied whether or not a stick is deflected.
         // The original's own order: accumulate this tick's torque onto BodyRates
@@ -670,8 +693,14 @@ public sealed class FlightModel
         // with speed, the resulting angular rate does not).
         // (Skip when path ≈ opposite the nose — slerp axis degenerates; gravity will
         // swing the path around within a few frames anyway.)
+        // Ground blow's second, smaller effect rides on this same chase: the velocity direction is
+        // steered toward the nose at GroundBlowVelocitySteer · S per second, in ADDITION to the
+        // chase, and it is not weakened by wing verticality. Adding the rates is exact rather than
+        // approximate — two exponential steers toward the same target compose as
+        // exp(−a·dt)·exp(−b·dt) = exp(−(a+b)·dt).
         float align = s.LiftAccelRate
-                      * (knifeAlignFloor + (1f - knifeAlignFloor) * wingVert);
+                      * (knifeAlignFloor + (1f - knifeAlignFloor) * wingVert)
+                      + groundBlowSteer;
         // Near-parallel is the normal cruise state, and there Slerp is unusable: it builds its
         // rotation axis from the cross product, whose float error swamps a sub-degree angle, and
         // Godot then throws "Argument is not normalized" — which aborts the whole physics frame,
@@ -738,4 +767,57 @@ public sealed class FlightModel
         }
         return vFps * MetresPerFoot;
     }
+
+    /// <summary>Ground blow: the original's bias of the player's control response away from
+    /// anything large the nose is closing on (docs/org/flightModel.md's "Ground blow"). The probe
+    /// itself belongs to the caller, which has the world; this is the law it feeds.
+    /// <para>With <c>n</c> the hit normal, <c>b</c> the backward body axis, <c>d</c> the distance to
+    /// the hit and <c>c = dot(b, n)</c>: the surface must face back at the aircraft (<c>c &gt; 0</c>),
+    /// proximity is <c>S = sqrt(c)·(elev − d)/elev</c> (1 at contact, 0 at the ray's end), and the
+    /// escape axis is <c>V = normalize(n × b)·S</c>. The command's own component along <c>V</c> is
+    /// then amplified when it points away from the surface and cut when it points into it, so this
+    /// is a bias on the STICK, never a force and never a rate of its own.</para>
+    /// <para>⚠ It returns a torque to add to the command accumulator, NOT to BodyRates, and carries
+    /// no dt: the caller's <c>cmd * dt</c> is what makes it linear in dt, as the original's is. A dt
+    /// applied here as well would make the whole effect vanish at a small step.</para>
+    /// <para>⚠ The escape axis is built from a WORLD normal and is converted to the body frame here,
+    /// once, before both the dot and the return. Skipping that gives a term that is right
+    /// wings-level and wrong at every other attitude.</para>
+    /// <para>⚠ A dead-on approach must get nothing: as <c>n → b</c> the cross product collapses and
+    /// the term goes to zero. That is the original's "never saves a head-on collision", so the
+    /// degenerate case is returned as zero rather than special-cased or renormalised.</para></summary>
+    /// <param name="cmd">This step's command accumulator, with the stick, the bank coupling and the
+    /// weathervane already summed in — the original reads exactly that.</param>
+    /// <param name="velocitySteerRate">The second, smaller effect: the rate in 1/s at which the
+    /// velocity direction is steered onto the nose, zero while the pilot commands into the
+    /// obstacle (the original zeroes its proximity on that branch, which suppresses this).</param>
+    private Vector3 GroundBlowTerm(in FlightInput input, Vector3 cmd, out float velocitySteerRate)
+    {
+        velocitySteerRate = 0f;
+        var n = input.GroundBlowNormal;
+        float elev = Stats.GroundBlowElev;
+        if (n.LengthSquared() < 1e-12f || elev <= 0f)
+            return Vector3.Zero;
+        var b = Attitude.Z;                        // backward body axis, in world coordinates
+        float c = b.Dot(n);
+        if (c <= 0f)
+            return Vector3.Zero;
+        float proximity = Mathf.Sqrt(c) * (elev - input.GroundBlowDistM) / elev;
+        if (proximity <= 0f)
+            return Vector3.Zero;
+        var axis = n.Cross(b);
+        if (axis.LengthSquared() < 1e-12f)
+            return Vector3.Zero;
+        // ONE scaled axis, built once and used TWICE — once in the dot, once in the add. That is
+        // where the second power of proximity comes from, and building it once is what stops it
+        // from silently becoming a third.
+        var v = Attitude.Transposed() * (axis.Normalized() * proximity);
+        float p = cmd.Dot(v);
+        velocitySteerRate = p < 0f ? 0f : GroundBlowVelocitySteer * proximity;
+        // Both branches push along +v, away from the surface: commanding away is amplified by
+        // 1 + mag·S², commanding into is cut to 1 − 0.05·mag·S² (halved at contact with the
+        // authored 10) and never reversed.
+        return v * ((p >= 0f ? p : GroundBlowIntoFactor * -p) * Stats.GroundBlowMag);
+    }
+
 }
