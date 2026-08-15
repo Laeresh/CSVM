@@ -243,3 +243,7 @@ lockstep with it. Its `LIGHT_STATE` flicker is real and separate - `refinery_fir
 its texture and pulses its spill. ⚠ This entry previously claimed `flame01` was a static billboard
 whose apparent motion was only the light; that was wrong, and the muzzle-flash observation behind it
 did not survive the draw-loop decode.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

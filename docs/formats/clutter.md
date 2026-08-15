@@ -210,3 +210,7 @@ per building (measured: 0.5–0.6 ms for the ~3,900 buildings of a boundary-cros
 rebuild, inside a rebuild that already cost ~4.1 ms), where rebuilding a merged region
 trimesh on that frame would have been a visible hitch. See
 [world-structure.md](world-structure.md).
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

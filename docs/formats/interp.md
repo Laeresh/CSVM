@@ -270,3 +270,7 @@ rosters. Both are wrong: `aiv.zrd.json` is the AI vehicle table (its only mentio
 `zeppelins.zrd.json` is the flyable-zeppelin gameplay config, which never names `hk_zep` in
 the one mission that shows it. Entities are present by default and switched off by the boot
 script — the same polarity as `zepstate`, not the mirror image of it.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

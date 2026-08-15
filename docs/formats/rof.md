@@ -221,3 +221,7 @@ at its archive path, and additionally decodes each `.BM` to `<name>.png` (shadin
 `<name>_mask.png` (R/G/B = slots 1/2/3). It also emits the string table — see
 [strings.md](strings.md). Run `.\ExtractRof.ps1`; `-Raw` skips the decoding, `-Force` re-runs
 an up-to-date extraction.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

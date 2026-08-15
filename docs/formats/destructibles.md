@@ -531,3 +531,7 @@ GROUP of the *healthy* harbour refuel tanks — "destructible", not "destroyed".
 rule fails the same way. The healthy/destroyed pairing is a convention on node *roles*, not a
 guarantee about substrings; resolve it through the definition's own `ANIMATION_ROOT_NAME` and its
 sequences' explicit `OBJECT_ACTIVE_STATE` targets, never by scanning names.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

@@ -132,3 +132,7 @@ Seven of eight chapters name the same `map_c1m04` minimap. C1, C1C and C2B ship 
 four plus a `Race Start` — Sea Haven airport bookmarks on two Hollywood maps. (C1B reuses C3's
 list.) They are dev bookmarks left un-updated; use gamez node names or danger zones to identify
 a world.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

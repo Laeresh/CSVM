@@ -224,3 +224,7 @@ included.
 `id`, `symbol` (from `RESOURCE.H`, or null), `font` (the parsed `[FONTID]`), `text` (tag
 stripped) and `dll`. It needs the `.rof` extracted first for `RESOURCE.H`, which the same run
 does. `-Raw` skips the string table entirely.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

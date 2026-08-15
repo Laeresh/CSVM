@@ -78,3 +78,7 @@ loadout mounts it. So the flag is **not** the player-gunfire shake mechanism (th
 `fire_bullet` source above, which no flag gates) — it reads as "this scripted weapon's
 detonation shakes the camera", presumably through the `explosion`/`missile_impact` source, for
 missions that rattle the player without hurting them.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

@@ -893,3 +893,7 @@ Rendered by `CSVM/src/Effects/Precipitation.cs` as one camera-following MultiMes
 field the plane flies through (SNOW = billboarded flakes, RAIN = fall-aligned streak quads);
 the data→look scale factors (fall m/s, particle count, box size, streak length) are marked
 `TUNE` there.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

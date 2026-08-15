@@ -220,3 +220,7 @@ lobe and about a kilometre away through the other.
 - The stunt/danger-zone route ribbons (`dzpathN` gamez meshes, [missions.md](missions.md))
   are guide *geometry*, not AI nets — a separate system with its own `--debug-dzpaths`
   overlay.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

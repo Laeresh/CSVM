@@ -429,3 +429,7 @@ These are **leads for Wave D**, not confirmed content: each is a named binding w
 not found in this install's extraction. **D30 confirmed all five inert for impacts:** none names
 a gamez model root, so `ProjectilePool` instances nothing for them and the stand-in spark shows
 (no crash) — measured on C4/C5 building hits (`bld_damage.flt`, `large_fireball`).
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

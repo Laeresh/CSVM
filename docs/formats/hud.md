@@ -320,3 +320,7 @@ sets where a toed-in mount would harmonise and the pipper's parallax off screen-
 Which world axis is compass **north**: the remake assumes **−Z** (consistent with the
 map layout and motion), but the original's convention has not been verified in-game.
 If it differs, the fix is the one heading line in `FlightController`.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

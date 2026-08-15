@@ -1457,3 +1457,7 @@ carry, the depth-free IF scan, the condition flag word (fourteen kinds, of which
 authors ten), `CALL_SEQUENCE`/`STOP_SEQUENCE`, `WAIT_FOR_COMPLETION`, `FBFX_COLOR_FROM_TO`, the four
 shipped event kinds with no handler, and the list of places CSVM deliberately differs. This file
 keeps the authored side: what the bytes mean and how the reader and compiled forms diverge.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

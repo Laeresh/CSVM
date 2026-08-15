@@ -489,3 +489,6 @@ vehicles not named `player`, outside a network game (docs/org/flightModel.md, "T
 jitter"; implemented C26). `rates` and `turns` are the surface-driving integrator's acceleration
 and steering rates with their clamps: `basic_airplane` authors them (10/42 and 4.6/6.5) and every
 aircraft therefore carries them, but the aeroplane arm never reads them.
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

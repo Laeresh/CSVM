@@ -516,3 +516,7 @@ volume, 112× the 16 m ramp (predicted before the run, pinned in
   describe as "no edge anywhere a player can reach it" — that phrase described the ABSENCE of
   interior seams between the nine slab pieces, which still holds; the map's OUTER rim used to be a
   real edge, and now is not, for C1/C1C/C2B/C4 only.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

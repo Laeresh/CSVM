@@ -174,3 +174,7 @@ The remake's marker HUD (Milestone 2.5 item 2, `src/Flight/MarkerHud.cs`) append
 clock bearing (`… 7 o'clock`) — computed from the plane's heading, not stored in the data — and
 renders the assembled string either as a projected on-screen marker (at the zone's screen
 position) or, when the zone is off screen/behind, as a screen-edge arrow pointing toward it.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

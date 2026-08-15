@@ -240,3 +240,7 @@ coordinates**:
 Duplicated coordinates are the geometry behind a same-region `… 2` group. The converse does
 **not** hold: a `… 2` name is not always coincident — Fury, Hoplite and Warhawk place their
 `… 2` group at a distinct, nearby firepoint.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

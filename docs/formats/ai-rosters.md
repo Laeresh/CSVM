@@ -347,3 +347,7 @@ exclusion, not a penalty.
 ⚠ **The ±0.2 terms are aircraft-only.** There are two scorers, chosen on the *scoring* vehicle's
 `mode`: `jet` and `wingman` take all three, and every other mode scores on base weight and the two
 class terms alone.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

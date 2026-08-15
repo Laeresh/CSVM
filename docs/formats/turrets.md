@@ -354,3 +354,7 @@ persists across save/restore.
 - Zeppelin **broadside cannons** are a separate system with their own arc and fire logic, in
   `zeppelins.json` ([mission-entities.md](mission-entities.md)). `WAKEUP_ZEP_TURRETS` and
   `COMPLETED_ZEPCANNONS` are different script ops for a reason.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

@@ -300,3 +300,7 @@ skins; the code is gone.
 - **`BROADWAY` and `ITSTAXI`** ship masks (Peacemaker and Autogyro) but no `paint_pattern`
   names them, so they have no canonical colours; the remake offers them with whatever colours
   are current.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

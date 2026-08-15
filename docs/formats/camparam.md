@@ -141,3 +141,7 @@ The death and flyby cameras stay **capture-gated dormant**: their triggers exist
 and the flyby's 12 fields describe a re-siting roadside pass) but no death or flyby footage is
 on disk — `BL-260` owes those captures. Everything else is carried deliberately dormant behind
 the warnings above.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

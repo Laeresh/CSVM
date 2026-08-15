@@ -254,3 +254,7 @@ Stand-ins and inventions, named:
 - **Mission-scripted dialogue** (`VO_<chapter>-<faction>-<mission>_<Character>_<n>.wav`, 990 clips)
   is a different system, driven by objectives scripting, and does not go through the trigger table.
 - The **sound format and the SETS table** are [sounds.md](sounds.md).
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

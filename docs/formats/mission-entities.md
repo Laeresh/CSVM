@@ -392,3 +392,7 @@ with that wave's member count (`GrantCapacity`). Nothing launches before the fir
 exactly one wave's worth launches after it, which is the shape `capacity 0` plus a live top-up
 produces and the one place in this install where the decoded rule can be run as decoded. It says
 nothing about the campaign case; the raw-byte read above is still the instrument for that.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

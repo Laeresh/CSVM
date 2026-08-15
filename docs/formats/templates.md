@@ -235,3 +235,7 @@ One nuance for whoever implements step 10's rotation: the engine draws three `ra
 it **even when `rotation_range` is absent**, so the key is inert in its effect, not skipped in the
 stream. That only matters to somebody trying to match the original's draw order, which the
 paragraph above says not to attempt.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

@@ -141,3 +141,7 @@ Expressing a mixed fit means widening that to a per-pylon list (e.g. `"pylons": 
 "wep_06", "wep_08"]`), with `{count, stock}` kept as the shorthand. **Record this as a schema
 limitation of our own config file, not a bug** — nothing is wrong with the stock table as it
 stands, and the widening is only worth doing when the configurator lands.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

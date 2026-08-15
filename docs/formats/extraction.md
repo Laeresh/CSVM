@@ -87,3 +87,7 @@ firepoints and cockpits.
 
 Note that **plane skin pixels live in each chapter's `texture.zbd`, not in `planes.zbd`**, and that
 the shipped skins are unpainted key textures — see [paint.md](paint.md).
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

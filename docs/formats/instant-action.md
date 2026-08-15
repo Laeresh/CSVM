@@ -738,3 +738,7 @@ on [turrets.md](turrets.md).
   with C1C as the omitted chapter.)*
 - **"Total Kills" is defined but unwired** in the shipped UI (see "The wrap-up screen" above); G14
   should not build a fifth row for it.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
