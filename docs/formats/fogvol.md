@@ -16,6 +16,17 @@ gamez does not carry.
 
 This page is the current reference for its documented format family.
 
+
+## Contents
+
+- [Half 1 â€” `extracted/<chapter>/zrdr/fogvol.zrd.json`](#half-1-â-extractedchapterzrdrfogvolzrdjson)
+- [Half 2 â€” the gamez `fvol*` nodes](#half-2-â-the-gamez-fvol-nodes)
+- [What the engine does with the volumes (crimson.exe decompile, 2026-08-09)](#what-the-engine-does-with-the-volumes-crimsonexe-decompile-2026-08-09)
+- [The map-edge continuation (`A5`) â€” engine-side, NOT authored data](#the-map-edge-continuation-a5-â-engine-side-not-authored-data)
+- [The sprite templates](#the-sprite-templates)
+- [What is decoded and what is inferred](#what-is-decoded-and-what-is-inferred)
+- [Consumed by the remake](#consumed-by-the-remake)
+- [Visible consequences to know about](#visible-consequences-to-know-about)
 ## Half 1 â€” `extracted/<chapter>/zrdr/fogvol.zrd.json`
 
 One chapter-scope reader file, root = an [alternating key/list dict](README.md#shared-conventions-zrdr-readers).

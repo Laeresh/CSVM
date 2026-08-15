@@ -10,6 +10,16 @@ label; gauges decoded 2026-07-19 from the planes.zbd `gauges` subtrees +
 
 This page is the current reference for its documented format family.
 
+
+## Contents
+
+- [Textures](#textures)
+- [Rendering model (measured, not decompiled)](#rendering-model-measured-not-decompiled)
+- [The cockpit gauges (altimeter / speedometer / damage display)](#the-cockpit-gauges-altimeter-speedometer-damage-display)
+- [The weapon gauges (gun / missile)](#the-weapon-gauges-gun-missile)
+- [The HUD bitmap font (`5pointhud`)](#the-hud-bitmap-font-5pointhud)
+- [The gun aiming reticle (`impact_point.png`)](#the-gun-aiming-reticle-impactpointpng)
+- [Open question](#open-question)
 ## Textures
 
 The compass ships as two small textures in **every chapter's `texture.zbd`** (not in

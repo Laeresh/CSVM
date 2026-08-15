@@ -13,6 +13,16 @@ calibration).
 
 This page is the current reference for its documented format family.
 
+
+## Contents
+
+- [Location & shape](#location-shape)
+- [Colour-triple encoding (the item-3 decode, 2026-07-18)](#colour-triple-encoding-the-item-3-decode-2026-07-18)
+- [Per-zone fog (`ZONE<n>`)](#per-zone-fog-zonen)
+- [World lighting (`SUNLIGHT_*`, the item-6 decode, 2026-07-18)](#world-lighting-sunlight-the-item-6-decode-2026-07-18)
+- [Cloud cover (`CLOUD_COVER`)](#cloud-cover-cloudcover)
+- [Wind (`WIND`) â€” decoded and consumed (2026-08-10, `PLAN-puffer-engine-deltas` B6)](#wind-wind-â-decoded-and-consumed-2026-08-10-plan-puffer-engine-deltas-b6)
+- [Precipitation (the item-5 decode, 2026-07-18)](#precipitation-the-item-5-decode-2026-07-18)
 ## Location & shape
 
 One `weather.json` per mission folder, in the mission's own zrdr archive

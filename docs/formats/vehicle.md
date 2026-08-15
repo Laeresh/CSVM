@@ -9,6 +9,17 @@ extraction (mech3ax v0.6.1), decoded across Milestone-2 flight work and Run-2 it
 
 This page is the current reference for its documented format family.
 
+
+## Contents
+
+- [Def structure & inheritance](#def-structure-inheritance)
+- [Units, dynamics & engines](#units-dynamics-engines)
+- [`player.json` â€” the player-global blocks](#playerjson-â-the-player-global-blocks)
+- [destroyable_parts (Run-2 item 10)](#destroyableparts-run-2-item-10)
+- [Def-level injure_anims](#def-level-injureanims)
+- [collision â€” 6 probe points](#collision-â-6-probe-points)
+- [Effect emitters](#effect-emitters)
+- [Weapons, damage & AI keys](#weapons-damage-ai-keys)
 ## Def structure & inheritance
 
 Each def's property list is an alternating key/value-list dict. `kind_of` names the parent

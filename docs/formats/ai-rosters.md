@@ -17,6 +17,12 @@ extraction; where the two disagree this page says so. See
 
 This page is the current reference for its documented format family.
 
+
+## Contents
+
+- [`<Cx>/<mission>/zrdr/aiv.zrd` â€” the AI vehicle roster](#cxmissionzrdraivzrd-â-the-ai-vehicle-roster)
+- [`zrdr/maneuvers.zrd` â€” the maneuver library](#zrdrmaneuverszrd-â-the-maneuver-library)
+- [AI modes, engine-side](#ai-modes-engine-side)
 ## `<Cx>/<mission>/zrdr/aiv.zrd` â€” the AI vehicle roster
 
 One file per mission directory (53 in this install), **414 vehicle blocks** total. The root list is:

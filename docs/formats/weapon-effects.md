@@ -17,6 +17,15 @@ firepoint/impact point). This page maps every binding target to its source.
 
 This page is the current reference for its documented format family.
 
+
+## Contents
+
+- [Muzzle flashes â€” `muzzle_burst.zrd.json`](#muzzle-flashes-â-muzzleburstzrdjson)
+- [Bullet impacts â€” `gunhit.zrd.json`](#bullet-impacts-â-gunhitzrdjson)
+- [Ordnance effect readers](#ordnance-effect-readers)
+- [Projectile prototypes (gamez roots)](#projectile-prototypes-gamez-roots)
+- [Muzzle & tracer textures â€” the ammo-type axis](#muzzle-tracer-textures-â-the-ammo-type-axis)
+- [Binding resolution â€” 5 unresolved names](#binding-resolution-â-5-unresolved-names)
 ## Muzzle flashes â€” `muzzle_burst.zrd.json`
 
 `FIRE`'s `ANIMATION` slot names one of these. All are `ON_CALL`, `EXECUTION_PRIORITY 6`, and

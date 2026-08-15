@@ -15,6 +15,16 @@ mode, the `DAMAGE_SEQUENCE` threshold script, the death sequence, and the collid
 
 This page is the current reference for its documented format family.
 
+
+## Contents
+
+- [The three extra pieces](#the-three-extra-pieces)
+- [`ACTIVATION` â€” weapon vs collide](#activation-â-weapon-vs-collide)
+- [`ANIM_HEALTH` is an absolute threshold, and the order matters](#animhealth-is-an-absolute-threshold-and-the-order-matters)
+- [Death sequence vs damage sequence](#death-sequence-vs-damage-sequence)
+- [Binding a def to its object(s)](#binding-a-def-to-its-objects)
+- [Worked example â€” the water tower (`ap_h2otwr`)](#worked-example-â-the-water-tower-aph2otwr)
+- [Engine status â€” Wave C complete: objects damage, die, throw debris, break on contact, and reset](#engine-status-â-wave-c-complete-objects-damage-die-throw-debris-break-on-contact-and-reset)
 ## The three extra pieces
 
 A destructible is any animation definition whose header carries these:

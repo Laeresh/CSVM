@@ -33,6 +33,15 @@ to at runtime — they are not world scenery (see [world-structure.md](world-str
 
 This page is the current reference for its documented format family.
 
+
+## Contents
+
+- [`PUFFER_STATE` schema](#pufferstate-schema)
+- [The emission accumulator (`FUN_0054f8b0`)](#the-emission-accumulator-fun0054f8b0)
+- [The camera-distance fade (`FADE_RANGE` + `NEAR_FADE`)](#the-camera-distance-fade-faderange-nearfade)
+- [Aircraft speed-cue wisps](#aircraft-speed-cue-wisps)
+- [Hard-coded aircraft throttle-rise exhaust](#hard-coded-aircraft-throttle-rise-exhaust)
+- [Texture flipbooks, layer by layer (2026-07-21)](#texture-flipbooks-layer-by-layer-2026-07-21)
 ## `PUFFER_STATE` schema
 
 A state is a **fully-defined emitter iff it has `NUMBER` (burst) or `DISTANCE_INTERVAL`
