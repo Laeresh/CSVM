@@ -1,4 +1,4 @@
-# GameZ format facts (validated on this install, planes.zbd)
+# GameZ format facts
 
 Part of the [format documentation](README.md) (see also [world-structure.md](world-structure.md)). Validated against this install with mech3ax v0.6.1; moved from CLAUDE.md on 2026-07-18. Documents formats only — no game asset data (see the repo's hard rule).
 

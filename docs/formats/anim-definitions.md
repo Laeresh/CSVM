@@ -9,6 +9,16 @@ The original compiles these reader sources into per-mission `mis_anim.zbd` archi
 it** — see the compiled-archives section below); the zrdr JSON sources carry the same
 definitions, so scanning them is a full substitute for state purposes.
 
+## At a glance
+
+This family documents reader and compiled animation definitions for world state, motion, lights, sound, and template calls.
+
+## Contents
+
+- [Definition sources](#where-definitions-live)
+- [Reader reference](#animation_definition-fields)
+- [State operations](#state-ops-the-part-1-subset)
+
 ## Where definitions live
 
 Three zrdr scopes are visible to a mission (the remake scans all reader files in each
