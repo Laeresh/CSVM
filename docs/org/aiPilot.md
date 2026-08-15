@@ -260,6 +260,43 @@ position plus **1000 m** of altitude, and stunned (`+0x358 == 4`) returns immedi
 at all. The net follower's avoid-crash case does the same 1000 m climb-out with its own parameter
 block, so **avoid crash is "aim 1000 m above yourself" in both laws**.
 
+## Crash avoidance is a STATE, not an altitude rule
+
+Decoded 2026-08-15 to answer "the nets are authored at 400 m, what stops an AI flying into high
+ground?". Nothing in the net does: node altitudes are absolute and authored, and neither
+`FUN_00432010` nor the follower `FUN_0041d1f0` samples terrain. The answer is a separate
+per-plane check that flips the AI substate at vehicle `+0x358`.
+
+`FUN_0041f810`, reading the vehicle's own Y at `+0x208`:
+
+| Y | What happens |
+|---|---|
+| below `DAT_0071c3f0` (**20.0**) | state `+0x358` = **3** outright |
+| `DAT_0071c3f0` … `DAT_0071c3f4` (**8000.0**) | cast a ray, hit sets state 3 |
+| above `DAT_0071c3f4` | no check, and a state of 3 is CLEARED to 0 |
+
+The ray is the vector the vehicle's virtual `+0x04` accessor returns, scaled by **4.5**, passed to
+`FUN_004c8f70`. ⚠ That accessor is velocity by shape and by use, which makes the ray about 4.5
+seconds of travel, but the identification is inferred rather than read off a name; the 4.5 itself
+is exact. The check is throttled per plane by `+0xf0` against the game clock `DAT_0071c470` to
+**clock + 0.5…1.0 s**, the fraction drawn as `rand() × 3.051851e-05` (that is `rand()/32767`), so
+it is not a per-frame cast.
+
+State 3 is consumed by the follower's own switch on `+0x358` (`FUN_0041d1f0` case 3, and the same
+case in the `+0x67c == 1` arm): the steering target becomes **the plane's own position with
+Y + 1000**, flown through parameter block `DAT_0061fb48` rather than patrol's `DAT_0061fb68`, i.e.
+a throttle band of 0.6–1.3 instead of 0.8–1.1. So the climb-out is both a different target and a
+hotter lever, and it ends when the check stops setting the state.
+
+Two neighbouring facts about the same floor. `FUN_0041b560`, the shared steering law, reads
+`DAT_0071c3f0` directly (`0x0041b5c5`, `0x0041b5d5`), so the floor is enforced inside the control
+law as well as by this check. And `FUN_004216e0` (the `+0x358 == 2` maneuver) SUSPENDS both bounds
+for its duration: it stashes `DAT_0071c3f0` and writes −FLT_MAX, with a paired per-vehicle ceiling
+at `+0x314` written +FLT_MAX, restoring both when it finishes.
+
+⚠ **The floor is a flat world-Y value, not a terrain follow.** 20 m saves a plane over water and
+flat ground and does nothing over a 600 m ridge; the raycast is the only terrain-aware part.
+
 ## The steering law both behaviours call
 
 `FUN_0041b560(this, stationPoint, desiredVelocity, params, emergencyFlag, leadFlag)` turns a target

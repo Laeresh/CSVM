@@ -467,6 +467,10 @@ you to put the file "next to the repo", where nothing would find it. Absolute pa
   hands out the same mission asset. Other chapters are stranger still (C1B gives fighters a patrol
   BOAT's route, C2B the pirate zeppelin's own course); the table is in
   [`docs/formats/instant-action.md`](docs/formats/instant-action.md).
+  ⚠ **Expect AI to fly into high ground, and do not raise it here.** Node altitudes are absolute
+  and authored (400 m and 350 m on these two), the trailer offsets X and Z only, and we have none
+  of the original's crash-avoidance state, so a net carried over a ridge takes planes into it.
+  Decoded and owned by `BL-378`; it is not a fault in the net following this test judges.
   ⚠ **Neither is a ring.** Both are closed cycles whose geometry crosses itself, so each is a
   **figure eight**, and the anchor sits at the centre of ONE lobe rather than at the middle. A
   plane on it therefore passes close to you through one lobe and about a kilometre out through the

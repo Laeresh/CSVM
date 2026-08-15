@@ -779,7 +779,50 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   target falls back to the authored positions; done, and asserted.
   *Cross-refs:* `BL-364` (the first net every IA actor takes), `BL-362` (the wingman-station item:
   this is a second, likelier mechanism for "wingmen stay with the player" in Instant Action),
-  [`docs/formats/ai-nets.md`](docs/formats/ai-nets.md), `PT-51`.
+  [`docs/formats/ai-nets.md`](docs/formats/ai-nets.md), `BL-378` (net altitudes vs terrain), `PT-51`.
+
+- `BL-378` `[Bug]` **Our AI has no terrain avoidance, so a net authored below a ridge flies AI into
+  it. DECODED 2026-08-15; what is left is implementation.** *Evidence:* the user at the controls,
+  2026-08-15, on the `BL-377` build: C1's patrol nets sit at an authored 400 m (`M4ReinfAce`) and
+  350 m (`M2Ace`), which clashes with elevated terrain, and the nets now ride the player into any
+  part of the map.
+  ⚠ **The two natural fixes are both wrong, and the binary says so outright.** A net node's
+  altitude is neither above-ground nor target-relative: `FUN_00432010` returns `out.y = node.y`
+  verbatim, with the trailer offset applied to X and Z only
+  ([`docs/org/aiPilot.md`](docs/org/aiPilot.md) "The trailer"). There is no terrain sample anywhere
+  in the node read, and none in the patrol follower `FUN_0041d1f0` either. Making our Y
+  terrain-relative or player-relative would put every AI on a different route from the original's,
+  on all 222 nets, to paper over a missing behaviour.
+  **The behaviour that is actually missing is a crash-avoidance MODE.** `FUN_0041f810` is a
+  per-plane ground-proximity check that writes the AI substate at vehicle `+0x358`:
+  - below the global altitude floor `DAT_0071c3f0` (**20.0** in the image, the only unconditional
+    store) it sets state **3** outright;
+  - between that floor and `DAT_0071c3f4` (**8000.0**) it casts a ray **4.5 ×** the vector the
+    vehicle's virtual `+0x04` accessor returns (velocity by shape and use, so ~4.5 s of travel,
+    which is the one inferred step here) through `FUN_004c8f70`, and sets state 3 on a hit;
+  - above 8000 m it runs no check and CLEARS state 3 back to 0.
+  The re-check is throttled per plane to the game clock plus `0.5–1.0 s`, drawn from
+  `rand()/32767`, so it is not a per-frame cast. State 3 is then handled by the follower's own
+  switch (`FUN_0041d1f0` case 3): the steering target becomes the plane's own position with
+  **Y + 1000**, flown through parameter block `DAT_0061fb48` (throttle band 0.6–1.3) instead of
+  patrol's `DAT_0061fb68` (0.8–1.1). `FUN_0041b560`, the shared steering law, reads the same
+  `DAT_0071c3f0` floor directly, and `FUN_004216e0`'s maneuver suspends it (writing −FLT_MAX, with
+  a paired per-vehicle ceiling at `+0x314` set to +FLT_MAX) for its duration.
+  *Fix shape:* a mode in `AiModeMachine`, not a change to `AiNetFollower`. `AiPilot` currently sets
+  `TargetAltitude = patrol.CurrentTarget.Y` and its only altitude leash handles being too HIGH
+  (`_altRecovering`, `AltLeashEnterM`), so there is no floor and no lookahead at all. The ray needs
+  a world collision query; `GameSession.GroundSampler()` is a height sampler, not a ray, so decide
+  which of the two to use rather than assuming the sampler is enough on a cliff face.
+  ⚠ *Traps.* (a) **Do not clamp the net.** The climb-out is a state that overrides steering and
+  then releases; a clamped node altitude would permanently move the route. (b) The 20 m floor is a
+  flat world-Y floor, NOT terrain-following, so it does not by itself save a plane over a 600 m
+  ridge; the raycast is what does. (c) The +1000 m target is relative to the PLANE, not to the
+  terrain or the net. (d) `ZeppelinMotion` shares the follower but is a different actor with no
+  flight model; do not fold zeppelins into an aircraft crash-avoid mode without checking whether
+  the original runs one for them. (e) The throttle-band swap is part of the behaviour, not
+  decoration: a climb-out at patrol throttle is a slower climb than the original's.
+  *Cross-refs:* `BL-377` (the ride that made this visible), `BL-364`,
+  [`docs/org/aiPilot.md`](docs/org/aiPilot.md), `PT-51`.
 
 ## Flight model & collision physics
 
