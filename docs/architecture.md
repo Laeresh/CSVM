@@ -2838,6 +2838,31 @@ every rig respawns), owned only while the board is visible via `FlightController
 ⚠ Scales on raw window height / 720, NOT HudMetrics — same reason `StuntRaceBoard` does: pane
   damping would shrink a full-window overlay for no reason.
 
+## src/Flight/PauseState.cs
+Splitscreen pause bookkeeping (E43, `BL-373`) — `VersusMatch`'s engine-free shape: no `GD.*`, no
+`Godot.` type, no `Node`. One instance per session, built by `GameSession.BuildFlightRigs` right
+after the rig loop and assigned to every rig's `FlightController.PauseState` (the same broadcast
+`Match` uses). `TryToggle(playerIndex)` is the whole surface: not paused → pauses and claims
+`OwnerPlayerIndex`, always accepted; paused → resumes only if `playerIndex` matches the owner,
+otherwise a silent no-op (`Changed` does not fire on a rejected attempt, so `PauseBoard` never
+flickers on another player's futile press). Off-engine coverage: `CSVM.Tests/PauseStateTests.cs`
+(any player pauses, only the owner resumes, a rejected attempt changes nothing and fires nothing).
+⚠ Owns none of the halt itself — `FlightController._Process` mirrors `Paused` into
+  `GameClock.Halted` every frame; this class only decides who is allowed to flip it.
+
+## src/Flight/PauseBoard.cs
+The shared pause overlay (E43, `BL-373`) — `VersusBoard`'s WHOLE-window construction (pausing
+stops the game for everybody at once, not one pane), built once by `GameSession` on its own
+CanvasLayer (`UI.HudLayers.Board`, same layer the race/dogfight/wrap-up boards share) and wired to
+`PauseState.Changed` instead of a match/race completion event. Shows "PAUSED", the pausing
+player's tag in their own `SplitScreen.PlayerColor`, and a footer naming that same player as the
+only one who can resume — everyone else is told to wait rather than shown a prompt they cannot
+act on. `Populate()` runs only on a fresh pause (mirrors `VersusBoard`'s snapshot discipline);
+`Visible` tracks `PauseState.Paused` directly on every `Changed` event, no polling in `_Process`
+(unlike the match/race boards, which poll `Completed` each frame to catch a rematch — `PauseState`
+has no such external-reset case, so the event is sufficient).
+⚠ Scales on raw window height / 720, NOT HudMetrics — same reason `StuntRaceBoard`/`VersusBoard` do.
+
 ## src/Flight/IaWrapupBoard.cs
 Instant Action's wrap-up board (`PLAN-instant-action.md` G14) — `VersusBoard`'s WHOLE-window
 construction, since the mission ends for every human at once (decisions 10/14), not
@@ -3613,6 +3638,16 @@ hull pair. Collaborators:
 FlightModel, CameraController + CamParams, SpeedCue, Loadout + ProjectilePool (guns/rockets),
 `CollideDamageSink` →
 `AnimRuntime.CollideDamageAt` (fly-through facades), CrashRuntime, every HUD widget and animator.
+Pause (E43, `BL-373`): `AllowPause` gates whether THIS rig's P/gamepad-Start reads at all (true for
+every human rig, false for AI rigs and the suites' bare test rigs); the edge-detected press then
+goes through `PauseState` — every human rig in a session shares the SAME instance (`GameSession`
+assigns it, the way `Match` is), so any player can pause but `PauseState.TryToggle` only lets
+`OwnerPlayerIndex` resume it. `_Process` mirrors `PauseState.Paused` into the session's
+`GameClock.Halted` every frame (a no-op write once every rig agrees), which is the one field every
+other halt-aware consumer (animation, puffers, the projectile pool, `.`'s single-step) already
+reads — `PauseState` only decides who may flip it, not how a halt behaves once flipped. A rig built
+with no `PauseState` (the suites) falls back to the pre-E43 unconditional toggle, unreachable there
+since `AllowPause` is false on every such rig. `PauseBoard` is the shared "PAUSED" overlay.
 `Crash` reads the struck body's numeric surface id (`SceneBuilder.SurfaceIdMeta`) and indexes
 `CrashDefs` (`SurfaceDefTable`) with it, the original's own cascade: `dirt`(13) plays
 `player_crash_dirt` + `snd_exp_ground_a`, `water`(1) `player_crash_water` + `snd_exp_water_a`, and
@@ -4524,7 +4559,10 @@ the ace (`dogfight_ace` only; F12 adds the zeppelin arm) right after the player 
 through that overload, with the authored `PaintScheme`/`InstantActionRuntime.EnemyTeam`/rating —
 the ace's own spawn-point draw is `InstantActionRuntime.ChooseAceSpawn` over
 `Rng.Stream(Rng.Spawn)`, one call after the player's own `ChooseSpawnBase` draw in the same
-stream, so a `--det` run reproduces it. Right after the ace block, D9's wingman block spawns
+stream, so a `--det` run reproduces it. Right after the rig loop, `BuildFlightRigs` also builds one
+`PauseState` (E43, `BL-373`) and assigns it to every rig's `FlightController.PauseState`, then
+`PauseBoard.Build`s the shared "PAUSED" overlay on its own CanvasLayer — single player included, so
+there is one pause path rather than a solo one plus a splitscreen one. Right after the ace block, D9's wingman block spawns
 `InstantActionRuntime.FlownWingmen(NumWingmen, _rigs.Count)` wingmen (`NumWingmen` is 0 on
 `dogfight_ace`, so the two blocks never both fire) on `AimAssist.PlayerTeam`, fanned off
 `_rigs[0]`'s pose by `WingmanSlotFor`, wearing the paint catalog's `player_fortune` entry (no

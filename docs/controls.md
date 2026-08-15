@@ -36,7 +36,7 @@ Flags are specified in [`cli.md`](cli.md).
 
 | Input | Does |
 |---|---|
-| `P` | pause — halts the sim; `.` steps one frame |
+| `P` | pause — halts the sim; `.` steps one frame. Splitscreen: any player's `P`/pad Start pauses everyone, and shows a shared "PAUSED" board naming who paused (E43, `BL-373`) — only that player's `P`/Start resumes it |
 | `.` | step one frame while paused |
 | `T` | node-name labels |
 | `F12` | screenshot |

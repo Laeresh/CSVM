@@ -114,7 +114,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 41. ☑ Pad assignment follows the phantom-device policy (`BL-374`)
 42. ☑ Camera views and look-back for players 2–4 (`BL-372`)
-43. ☐ Splitscreen pause (`BL-373`)
+43. ☑ Splitscreen pause (`BL-373`)
 44. ☐ Per-seat spectator control (`BL-375`)
 
 ### Wave F — Cleanup and playtest
@@ -801,26 +801,48 @@ gamepad to reproduce it with. Folds into F52's playtest pass, same as E41.
 `PadPressed`/`PadAxis`, the same per-player polling seam every other pad control uses, so that
 migration stays mechanical; no half-ActionMap was built here.
 
-## E43 ☐ Splitscreen pause (`BL-373`)
+## E43 ☑ Splitscreen pause (`BL-373`)
 
 **Goal.** A decided pause behaviour exists in 2–4 player sessions.
 
-**Evidence (confidence: traced; scope is a decision).** `FlightRigAssembler.cs:108` hard-codes
-`AllowPause = _in.RigCount == 1`; `FlightController.cs:2165` consumes it; Esc tears the session
-down. M2.5 explicitly decided "P debug pause stays single-player-only", so this is a revisit.
+**Evidence (confidence: traced; scope is a decision).** `FlightRigAssembler.cs:108` hard-coded
+`AllowPause = _in.RigCount == 1`; `FlightController.cs:2179` consumed it; Esc tears the session
+down (unaffected here). M2.5 explicitly decided "P debug pause stays single-player-only", so this
+was a revisit.
 
-**Approach.** Decision first: any player's Start/P pauses everyone (splitscreen pause is
-inherently global); who may unpause (recommended: anyone). Then lift the `RigCount == 1` gate and
-route the pause input per player. <TODO: user decision, including whether pause stays a debug
-facility or becomes a real pause menu hook later.>
+**Approach (landed).** Decision: pause becomes a real pause-menu hook, not just the debug freeze
+left as-is — a shared full-window "PAUSED" board (`PauseBoard`, `VersusBoard`'s construction),
+and only the player who paused may resume (not "anyone"). `PauseState` (engine-free, `VersusMatch`'s
+shape) is the new seam: `TryToggle(playerIndex)` pauses unconditionally from running, but only lets
+`OwnerPlayerIndex` resume it — a rejected attempt from another player is a silent no-op. One
+instance per session (`GameSession.BuildFlightRigs`, right after the rig loop), assigned to every
+rig's `FlightController.PauseState`, single player included, so there is one pause path rather than
+a solo one plus a splitscreen one. `FlightRigAssembler`'s `AllowPause` gate is now unconditionally
+`true` for every human rig (it only decides whether THIS rig's P/Start reads at all — AI rigs and
+the suites' bare test rigs still pass `false`); `FlightController._Process` still owns the actual
+halt, mirroring `PauseState.Paused` into `GameClock.Halted` every frame exactly as the pre-E43
+toggle did, so the fixed-tick/anim-clock relationship this item's trap warned about is untouched —
+only *who* may flip the bit changed, not how a halt behaves once flipped. `docs/controls.md`
+updated (mandatory for a player-input change).
 
 **Model recommendation.** medium.
 
-**Verify.** At the controls, 2 players: P2's Start pauses both panes, unpause resumes cleanly;
-the sim clock and `--det` scripted runs are unaffected (pause is wall-clock territory).
+**Verify (done 2026-08-15).** `dotnet build CSVM/CSVM.sln` clean, 0 warnings; `dotnet format
+--verify-no-changes` clean. `.\RunTests.ps1`: 1302/1302 units (4 new — `PauseStateTests`: any
+player pauses, only the owner resumes, a rejected attempt changes and fires nothing), 61/61 engine
+suites, 14/14 goldens hash-identical, engine errors clean, hitch clean. A scripted `--fly
+--players=2 --chapter=C1 --mission=IA1 --no-pads --det --frames=120 --screenshot=` probe exits 0
+with 0 ERROR lines (no pad/key input in a `--det` run, so pause never triggers — the
+`--hold`-equivalent confirmation that the baseline flight/sim path is unaffected). An 8-chapter
+`--freecam --chapter=<X> --frames=60 --screenshot=` sweep (C1, C1B, C1C, C2, C2B, C3, C4, C5) all
+exit 0 with 0 ERROR lines each. **The at-the-controls pass — 2 players, P2's Start pauses both
+panes, only P2's Start resumes — is still owed**: this environment has no gamepad to reproduce it
+with, and no `--det` hook exists to script a mid-run key/pad press. Folds into F52's playtest pass,
+same as E41/E42.
 
-**⚠ Traps.** The pause path must not desync the fixed-tick sim from the anim clock — check how
-single-player pause handles `Clock` before copying it wider.
+**⚠ Traps.** The pause path must not desync the fixed-tick sim from the anim clock — resolved by
+leaving `GameClock.Halted` the single source of truth every halt-aware consumer already read;
+`PauseState` only gates who may write it, never how the write behaves.
 
 ## E44 ☐ Per-seat spectator control (`BL-375`)
 

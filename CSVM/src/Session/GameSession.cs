@@ -1913,6 +1913,21 @@ public partial class GameSession : Node3D
         state.MeshInstances += assembler.MeshInstances;
         state.What += assembler.WhatSuffix;
 
+        // Splitscreen pause (E43, `BL-373`): one shared PauseState on every rig — any human's
+        // Start/P pauses everybody, but PauseState.TryToggle only lets the pauser resume it.
+        // Single player gets the exact same wiring (one rig, one owner), so there is one pause
+        // path rather than a solo one plus a splitscreen one. The board covers the WHOLE window
+        // like VersusBoard/StuntRaceBoard — pausing stops the game for everybody at once, not one
+        // pane — on its own CanvasLayer above the splitscreen panes.
+        var pauseState = new PauseState();
+        foreach (var rig in _rigs)
+            if (rig.Controller is { } pausable)
+                pausable.PauseState = pauseState;
+        var pauseBoard = PauseBoard.Build(pauseState, exitsToMenu: _menuDriven);
+        var pauseLayer = new CanvasLayer { Name = "pause_board", Layer = UI.HudLayers.Board };
+        pauseLayer.AddChild(pauseBoard);
+        _worldRoot!.AddChild(pauseLayer);
+
         // Damage lab in flight (F5): the same panel --viewer hosts, bound to P1's real
         // PlaneDamage instead of visuals alone — so a dialled-in state drives the HUD DMG line,
         // the damaged-engine mix and the gauge dial, and can then be flown. The sim keeps

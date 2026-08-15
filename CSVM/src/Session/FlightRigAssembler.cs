@@ -99,13 +99,15 @@ public sealed class FlightRigAssembler
             GrazeEffectSink = _in.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
             // The level's one touchdown vector (the original's global), not one per plane.
             TouchdownDefs = _in.TouchdownDefs,
-            // splitscreen: this player's own device(s), own pane for the HUD,
-            // and no debug freeze (it would halt the shared world for everyone)
+            // splitscreen: this player's own device(s), own pane for the HUD.
+            // Start/P reads on every rig, splitscreen included (E43, `BL-373`) — GameSession wires
+            // every rig's PauseState to the same shared instance, so any human can pause the
+            // world but only the pauser can resume it.
             PadDevices = _in.PadAssignment?[pi],
             UseKeyboard = pi == 0,
             PinnedView = _spec.View,
             HudParent = rig.Viewport,
-            AllowPause = _in.RigCount == 1,
+            AllowPause = true,
         };
         // Every human joins team 1 in an Instant Action mission (PLAN-instant-action.md Decision
         // 8), splitscreen included — humans 2-4 would otherwise default to their own team

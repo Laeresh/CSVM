@@ -268,6 +268,14 @@ public partial class FlightController : Node3D
     /// dogfight results board.</summary>
     public Action? RestartMatch;
 
+    /// <summary>Splitscreen pause bookkeeping (E43, `BL-373`) — the SAME instance on every rig
+    /// (assigned by <c>GameSession</c>, the same way <see cref="Match"/> is), so any player's
+    /// Start/P here can pause everyone but only <see cref="PauseState.OwnerPlayerIndex"/> can
+    /// resume. Null only where no session builds one (the suites' bare rigs), in which case
+    /// <see cref="AllowPause"/> is always false there too, so <see cref="PauseTogglePressed"/>
+    /// never fires and the null is never read.</summary>
+    public PauseState? PauseState;
+
     /// <summary>0-based player index — this plane's seat in the race and its pane, and the
     /// identity a round it fired carries (<c>ProjectilePool.Spawn</c>'s shooter id).</summary>
     public int PlayerIndex;
@@ -317,8 +325,11 @@ public partial class FlightController : Node3D
     /// the dials/compass draw in that player's pane only.</summary>
     public Node? HudParent;
 
-    /// <summary>Whether P / gamepad-Start toggles the debug screenshot freeze. Off in splitscreen:
-    /// the freeze halts the shared simulation, so it is not one player's to press.</summary>
+    /// <summary>Whether P / gamepad-Start reads on this rig at all. True for every human rig,
+    /// splitscreen included (E43, `BL-373`): the freeze halts the shared simulation for everyone
+    /// regardless of who pressed it, and <see cref="PauseState"/> is what keeps a second player
+    /// from stealing the resume. False for AI rigs and the suites' bare test rigs, which have no
+    /// pause key to read.</summary>
     public bool AllowPause = true;
 
     /// <summary>Debug/testing (--debug-scoreboard): force-complete the stunt run on the first
@@ -1289,17 +1300,25 @@ public partial class FlightController : Node3D
             return;
 
         var clock = GameClock.Current;
-        // Debug screenshot freeze: toggle with P / gamepad Start, then hold the whole simulation
-        // in place (physics, input, collision, audio, props) so successive screenshots frame the
-        // plane from the same spot. Polled here rather than in the sim step because a halted sim
-        // takes no steps and could never resume itself. Checked even while crashed.
+        // Pause: toggle with P / gamepad Start, then hold the whole simulation in place (physics,
+        // input, collision, audio, props) so successive screenshots frame the plane from the same
+        // spot — also E43's splitscreen pause menu now, same freeze. Polled here rather than in
+        // the sim step because a halted sim takes no steps and could never resume itself. Checked
+        // even while crashed. With a shared PauseState (every real session builds one, E43), only
+        // the player who paused can resume it; a bare test rig with none falls back to the
+        // original unconditional toggle, which AllowPause=false already keeps unreachable there.
         bool pausePressed = PauseTogglePressed();
-        if (pausePressed && !_pausePrev && clock != null)
+        if (pausePressed && !_pausePrev)
         {
-            clock.Halted = !clock.Halted;
+            if (PauseState != null)
+                PauseState.TryToggle(PlayerIndex);
+            else if (clock != null)
+                clock.Halted = !clock.Halted;
         }
         _pausePrev = pausePressed;
-        bool halted = clock?.Halted ?? false;
+        bool halted = PauseState?.Paused ?? (clock?.Halted ?? false);
+        if (clock != null)
+            clock.Halted = halted;
         if (halted != _haltPrev)
         {
             _haltPrev = halted;
@@ -2173,8 +2192,8 @@ public partial class FlightController : Node3D
     private bool RespawnPressed() =>
         KeyDown(Key.R) || PadPressed(JoyButton.Y) || PadPressed(JoyButton.A);
 
-    /// <summary>P (or gamepad Start), edge-detected so one press toggles once. Splitscreen
-    /// disables it (<see cref="AllowPause"/>): the freeze halts the shared world.</summary>
+    /// <summary>P (or gamepad Start), edge-detected so one press toggles once, gated on
+    /// <see cref="AllowPause"/> (false for AI rigs and the suites' bare test rigs).</summary>
     private bool PauseTogglePressed() =>
         AllowPause && (KeyDown(Key.P) || PadPressed(JoyButton.Start));
 
