@@ -15,11 +15,7 @@ affects a decoration's position or orientation at all**, which is why an unseede
 reimplementation of the lattice walk reproduces C1's tree positions *exactly* rather than
 approximately.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
-## Where it sits
+## Archive location
 
 | | |
 |---|---|
@@ -118,7 +114,7 @@ at 0.4598).
 that list subtracting from one uniform draw. So C1's `firtree1` at `[[9, firtree1], [1,
 firtree2]]` is **90 % / 10 %**, not "nine of something". Weight sums in the shipped data run
 8.5 to 20, and the extreme case is C5's `hotelsign0`, which weights *itself* 0.1 against two
-alternatives at 5.0: it is replaced 99 % of the time.
+alternatives at 5.0: it is selected 99 % of the time.
 
 Every shipped list names its own model as one of the alternatives — that is how "usually
 stays itself" is expressed. ⚠ **The roll rewrites the model and nothing else: properties
@@ -131,7 +127,7 @@ and **places nothing** when drawn. Two C5 targets (`cb05det02.flt`, `cb06det03.f
 block of their own, which is legal — a missing block means all defaults, never "do not
 place".
 
-## What the eight shipped files actually author
+## Authored data
 
 Every number below is measured off the retail install and pinned per chapter
 in `CSVM.Tests/ClutterTemplatesTests.cs`.
@@ -199,7 +195,7 @@ the second carries only `scale_range` and `far_fade_range`. The engine's lookup
 and the loader appends, so **the first block is the one that is used** — the substitute
 survives, and the second block is unreachable. It is the only duplicate in the install.
 
-## What the remake reads, and what it does with it
+## Reader behavior
 
 `ClutterTemplateSpec.Load` / `.Parse` read every key on this page, including the eight no
 chapter authors — the negative is only a measurement if the reader would have seen them.
@@ -208,7 +204,7 @@ chapter authors — the negative is only a measurement if the reader would have 
 
 `ClutterBuilder` consumes `substitute` and `scale_range` (C22): a stamp rolls its model against
 the kind's table and takes a uniform scale from its range. `far_fade_range` is read and **not
-applied** — deferred to `BL-337` (C23, 2026-08-10). It is a rendering-side feature, not a
+applied** — deferred to `BL-337` (C23, ). It is a rendering-side feature, not a
 placement one: the runtime's `CameraSetClutterFadeScaleSq` (`0x0063f5bc`) writes one global that
 scales *every* type-5 scene node's LOD/distance fade, defaulted by the graphics detail level
 (×1/×2/×3, `FUN_00440750`) and overridable per mission — so the authored metres in this file are a

@@ -11,13 +11,9 @@ flies a **red** one: the remake draws the unpainted key texture.
 
 Extracted data and the user's reference screenshots show
 (`OriginalScreenshots/CustomPlane Paint1 Bloodhawk.png` = the in-game paint UI,
-`OriginalScreenshots/Kestrel.png` = a painted plane in flight). **Implemented 2026-07-20** —
+`OriginalScreenshots/Kestrel.png` = a painted plane in flight). **Implemented ** —
 see "Implementing this in the remake" at the bottom for what the remake actually does and
 where it knowingly diverges.
-
-## At a glance
-
-This page is the current reference for its documented format family.
 
 ## The scheme record
 
@@ -96,12 +92,12 @@ time; the shipped 16×16 image is a placeholder, not artwork to render. Placehol
 are both `alpha=Full`, so the swap does not disturb a renderer's alpha classification.
 
 **Not every aircraft has all three.** The Firebrand ships no `fir_noselogo` (only
-`fir_taillogo` / `fir_winglogo`) — corrected 2026-07-20, after keying the remake's aircraft
+`fir_taillogo` / `fir_winglogo`) — , after keying the remake's aircraft
 detection on the nose slot alone left the Firebrand unpainted. Detect on any of the three.
 
 Index → texture is unambiguous: in both C1 and C5 exactly 50 textures match "two digits
 followed by a non-digit, not an `_1` LOD twin", one per index 00–49, with no collisions
-anywhere else in the archive (verified 2026-07-20).
+anywhere else in the archive (verified ).
 
 ## Base skins are unpainted key textures
 
@@ -122,7 +118,6 @@ Evidence, on the Bloodhawk:
 
 ### The palette is not organised into reserved ramps
 
-An earlier reading of this page claimed the palette holds "contiguous index ramps, one per
 paint region", based on `blo_fin`'s indices **0–31** being a clean 32-step blue-gray ramp
 covering the fin body. **That generalisation is wrong**, and an implementation must not key
 on palette index:
@@ -139,14 +134,14 @@ on palette index:
 So the engine cannot be doing an index-range palette swap. Whatever table it uses to decide
 "this texel is paint slot 2" is keyed on something else and is not in the ZBD data.
 
-> **Found, 2026-07-20 — it is in `crimson.rof`.** The region table exists after all, in the UI
+> **Found,  — it is in `crimson.rof`.** The region table exists after all, in the UI
 > resource archive rather than the ZBD set: each `ASSETS/GRAPHICS/<PATTERN>/<SKIN>.BM` carries
 > a greyscale shading map plus **three 8-bit per-pixel weight masks, one per paint colour slot,
 > summing to 255**. That is a direct answer to "how the engine identifies a region", and it is
 > per *pattern* — which also answers "what a pattern actually varies" below. Full decode in
 > [rof.md](rof.md); `ExtractRof.ps1` writes each mask out as `<SKIN>_mask.png` (R/G/B = slots
-> 1/2/3). **The remake was reworked onto these masks on 2026-07-20** — the hue-window sections
-> below describe the approach they replaced; see "Superseded" at the bottom.
+> 1/2/3). **The remake was reworked onto these masks on ** — the hue-window sections
+> below describe the source-skin analysis; the runtime uses the mask-based mapping described in this page.
 
 ### What the regions actually look like
 
@@ -190,7 +185,7 @@ record is only needed to *import* a player's saved planes, which nothing depends
 
 ## Implementing this in the remake
 
-**Reworked onto the original's own masks 2026-07-20**, replacing the hue-window workaround
+**Reworked onto the original's own masks **, replacing the hue-window workaround
 below. `src/Mech3/PatternLibrary.cs` reads the `.BM` region masks out of the extracted UI
 archive, `src/Mech3/PlanePainter.cs` composites them, `src/Mech3/PaintScheme.cs` holds the
 record, and the result reaches the renderer through a `SceneBuilder` texture-substitution hook
@@ -267,21 +262,12 @@ colour, and all of them are gone:
 - **Slot order is data, not area rank.**
 - **Borders come antialiased** in the masks themselves, so the soft hue falloff that existed
   only to stop borders speckling is gone.
-- **It is faster.** A flat multiply-add per texel replaced per-texel HSV conversion plus a
+- **It is faster.** A flat multiply-add per texel uses a flat multiply-add per texel instead of HSV conversion plus a
   percentile pass; painting four aircraft is now within measurement noise of not painting.
 
-### Superseded — the hue-window approach (2026-07-19 → 2026-07-20)
+## Known limits
 
-Before the masks were found, the remake inferred regions from a hand-authored per-aircraft
-table of hue windows, keyed on the "What the regions actually look like" table above. It
-produced a correct-looking red Bloodhawk and twelve distinguishable liveries, but could not
-express a colourless region, could not paint the Fury at all, and had to guess slot order. The
-table and its measurements are kept above because they remain a true description of the ZBD
-skins; the code is gone.
-
-## Open
-
-- ~~**The "Shade" column.**~~ *Answered 2026-07-20 (user): Shade is simply the **brightness** of
+- ~~**The "Shade" column.**~~ *Answered  (user): Shade is simply the **brightness** of
   the chosen colour.* The UI's Colour dropdown picks the hue family and Shade picks how light
   or dark it is; their product is the single RGB that ends up in `paint_colorN`. There is no
   fourth stored field and nothing extra to model — a scheme really is three colours, and the

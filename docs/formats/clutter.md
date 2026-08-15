@@ -13,11 +13,7 @@ are a separate file**, `templates.zrd`, keyed by decoration model rather than by
 weights and ranges rather than `AddClutterTemplates`. Template-root lookup is shared
 (`ClutterBuilder.FindTemplateRoot`); everything else is separate — see [fogvol.md](fogvol.md).
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
-## `interp.json` — the engine boot scripts
+## Boot scripts
 
 `interp.zbd` (extracted by `unzbd cs interp`) is a JSON array of scripts
 `{ "name": "support\\<chapter>\\adjust.gw", "lines": [ … ] }` — the engine's boot/setup
@@ -70,9 +66,8 @@ The engine dresses **every world polygon textured with a template's ground textu
 template's decorations. The decorations are single one-sided cards, so the original must render
 them as upright (Y-axis) billboards.
 
-## ✅ Decoded 2026-08-09/10: the placement is a UV lattice, and there is no world grid
+## Placement model
 
-This section previously said the original's alignment of the pattern to the terrain was
 **undecoded**, and that UV-space placement was ruled out because "the world's UV tiling is wildly
 non-uniform on hillsides, so it would visibly stretch the clutter". Both claims are dead.
 Stretching with the UV is precisely what the original does.
@@ -104,7 +99,7 @@ in local Z; every 3D building decoration is `model_type: "Default"` with 2–27 
 **Do not classify on `facade_mode` alone** — the 3D building decorations carry a *stale*
 `CylindricalY` in that field while being `Default`, so the type is the discriminator.
 
-## Non-sprite decorations: the city blocks
+## Three-dimensional decorations
 
 C2's `filmblock*` / `resblock*` / `parklot*` and C5's `cblock*` templates carry **3D
 building meshes** as decorations, not sprite quads. They are placed by exactly the same
@@ -155,7 +150,7 @@ collision triangles, so an implementation looking to cut collision cost will be 
 drop them — note first that they are geometry, not decoration, and that "det" is a name
 heuristic with nothing in the data behind it.
 
-## Sprites are not collidable; 3D decorations are
+## Collision
 
 
 
@@ -205,7 +200,7 @@ intends a facade.
 
 The map-edge continuation carries the border tiles' clutter along, sprites and buildings
 alike. Sprites stay pass-through there as everywhere; **the buildings are solid** since
-2026-07-22 — attaching an existing shared shape at each mirrored placement costs one call
+ — attaching an existing shared shape at each mirrored placement costs one call
 per building (measured: 0.5–0.6 ms for the ~3,900 buildings of a boundary-crossing
 rebuild, inside a rebuild that already cost ~4.1 ms), where rebuilding a merged region
 trimesh on that frame would have been a visible hitch. See

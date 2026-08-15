@@ -29,20 +29,16 @@ The gamez effect-prototype nodes (`ball_of_fire`, `flak_explosion`, `dense_firet
 `explode_here1–9`, …) are mostly empty parentless Object3d anchors the emitters attach
 to at runtime — they are not world scenery (see [world-structure.md](world-structure.md)).
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 
 ## Contents
 
-- [`PUFFER_STATE` schema](#pufferstate-schema)
-- [The emission accumulator (`FUN_0054f8b0`)](#the-emission-accumulator-fun0054f8b0)
-- [The camera-distance fade (`FADE_RANGE` + `NEAR_FADE`)](#the-camera-distance-fade-faderange-nearfade)
+- [Emitter schema](#emitter-schema)
+- [Emission accumulator](#emission-accumulator)
+- [Camera-distance fade](#camera-distance-fade)
 - [Aircraft speed-cue wisps](#aircraft-speed-cue-wisps)
-- [Hard-coded aircraft throttle-rise exhaust](#hard-coded-aircraft-throttle-rise-exhaust)
-- [Texture flipbooks, layer by layer](#texture-flipbooks-layer-by-layer)
-## `PUFFER_STATE` schema
+- [Aircraft throttle-rise exhaust](#aircraft-throttle-rise-exhaust)
+- [Texture flipbooks](#texture-flipbooks)
+## Emitter schema
 
 A state is a **fully-defined emitter iff it has `NUMBER` (burst) or `DISTANCE_INTERVAL`
 (trail)**; the readers also hold *stop stubs* sharing the same `NAME` but carrying only
@@ -51,7 +47,7 @@ A state is a **fully-defined emitter iff it has `NUMBER` (burst) or `DISTANCE_IN
 | Key | Value | Meaning |
 |---|---|---|
 | `NAME` | string | referenced by anims' `PUFFER_STATE` calls |
-| `AT_NODE` | `[nodeName, dx?, dy?, dz?]` | attach point; the optional trailing offset is in the host node's own frame, same convention as `LOCAL_VELOCITY` — what spreads C1's three waterfall splash puffers ±11 m either side of the shared anchor `waterfall01` instead of stacking them on one point (2026-07-21 fix: the offset was parsed nowhere and silently dropped, in both the compiled-event and reader-event front-ends — 862 of 4387 PUFFER_STATE events in this install carry a non-zero one) |
+| `AT_NODE` | `[nodeName, dx?, dy?, dz?]` | attach point; the optional trailing offset is in the host node's own frame, same convention as `LOCAL_VELOCITY` — what spreads C1's three waterfall splash puffers ±11 m either side of the shared anchor `waterfall01` instead of stacking them on one point ( fix: the offset was parsed nowhere and silently dropped, in both the compiled-event and reader-event front-ends — 862 of 4387 PUFFER_STATE events in this install carry a non-zero one) |
 | `NUMBER` | int | burst mode: sprites spawned per `TIME_INTERVAL` |
 | `TIME_INTERVAL` | s | burst/sustained spawn period. ⚠ The **engine's** unauthored default is **1.0** (the puffer ctor `FUN_00550100` writes `0x3f800000` to `+0x40` and to its reciprocal at `+0x44`); ours is an invented 0.1 — `BL-336`. The smallest authored value in the install is 0.001 s (`torpufferblast`, the torpedo trail) |
 | `DISTANCE_INTERVAL` | m | trail mode: one sprite per N meters of the followed node's motion (`dense_firetrail`: smoke 1.0 m / fire 0.25 m). ⚠ Only accumulated when the frame's motion is **under 200 m** — the teleport guard, see the emission-accumulator section below |
@@ -72,7 +68,7 @@ A state is a **fully-defined emitter iff it has `NUMBER` (burst) or `DISTANCE_IN
 | `WIND_FACTOR` | float | how strongly the world's wind carries this puffer's particles; **defaults to 1, not 0**, and is inert unless `FRICTION` is non-zero. **Implemented** (B6) — see [architecture.md](../architecture.md)'s `Effects/WorldWind.cs` entry |
 | `PRIORITY` | float | a per-puffer sprite-size nudge, `1 + K·PRIORITY` with `K = 0.02` (the hardware-path constant — this project has no software path), folded into `BaseSize` at spawn. **Implemented** (`PufferState.Priority`, `Puffer.PriorityScaleDefault`, `PLAN-puffer-engine-deltas` C8) — 192 compiled events over 47 puffers; default 0, so an unauthored puffer's factor is exactly 1. Almost certainly a depth-priority constant reused for size — this trace found only the size use |
 
-## The emission accumulator (`FUN_0054f8b0`)
+## Emission accumulator
 
 Both continuous modes run one accumulator on the emitter object, and the branch that feeds it is
 where they differ: a **distance** emitter adds the frame's motion length, but only when that length
@@ -101,7 +97,7 @@ Distance mode is 1,523 of the install's 4,535 compiled `PufferState` events (33.
 debris trails `spurtpuffer1..5` are among them, which is the pooled-and-teleported case the guard
 was written for.
 
-## The camera-distance fade (`FADE_RANGE` + `NEAR_FADE`)
+## Camera-distance fade
 
 Decoded from the head of `FUN_0054e6e0`, the original's per-particle draw, and implemented in
 `Puffer.DistanceAlpha` (C7). The distance `d` is the **view-space DEPTH** along the camera's forward
@@ -183,7 +179,7 @@ with airspeed. This effect is separate from both chapter cloud-card populations 
 hard-coded throttle-rise exhaust below. CSVM implements it in `Flight.SpeedCue`, loading the
 chapter reader verbatim and assigning one private renderer set to each player rig.
 
-## Hard-coded aircraft throttle-rise exhaust
+## Aircraft throttle-rise exhaust
 
 `crimson.exe` also constructs one puffer outside the authored `PUFFER_STATE` readers. Aircraft
 initialization (`FUN_00476250`) resolves `exhaust%d` model nodes (`exhaust1`, `exhaust2`, …)
@@ -204,7 +200,7 @@ This is the executable counterpart of the throttle-rise smoke described in
 `analysis/bl-317-plane-wisps/FINDINGS.md`.
 
 
-## Texture flipbooks, layer by layer
+## Texture flipbooks
 
 The install animates textures through **three** distinct mechanisms. They are easy to confuse
 because they share the same frame sets (`fire101-112` etc.), so:
@@ -234,7 +230,7 @@ because they share the same frame sets (`fire101-112` etc.), so:
    `common\effects\models\` by `support\load.gw`.
 
    **The entry names a node, but what it animates is that node's MATERIAL** (decoded out of
-   `crimson.exe`, see [`anim-definitions.md`](anim-definitions.md#fire-a-texture-cycle-on-a-material-and-behaviours-nothing-calls)).
+   `crimson.exe`, see [`anim-definitions.md`](anim-definitions.md#fire-animations)).
    The engine resolves the node, walks to the first mesh under it, and installs the frame list on
    surface 0's material record, which is the same per-material cycle block as (2); the draw loop
    then tests the material's own cycled bit per polygon. Materials are one record per texture, so
@@ -248,7 +244,7 @@ because they share the same frame sets (`fire101-112` etc.), so:
 looping, from load, with no trigger. `mb1` and `mb_spinflame` are on the same material and flip in
 lockstep with it. Its `LIGHT_STATE` flicker is real and separate - `refinery_fire.zrd.json` cycles
 `orange_light`'s range 2->11, 3->15, 1.5->10, 2.5->14 in a tight loop - so the flare both animates
-its texture and pulses its spill. ⚠ This entry previously claimed `flame01` was a static billboard
+its texture and pulses its spill. ⚠ This entry claimed `flame01` was a static billboard
 whose apparent motion was only the light; that was wrong, and the muzzle-flash observation behind it
 did not survive the draw-loop decode.
 

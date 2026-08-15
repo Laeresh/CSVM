@@ -1,29 +1,18 @@
-# Turrets and AA emplacements — `zrdr/ai.zrd`
+# Turrets and AA emplacements - `ai.zrd`
 
-Part of the [format documentation](README.md). One shared file, one `TURRET` section, **42
-entries**, covering both the world's fixed anti-aircraft emplacements and the turrets carried by
-aircraft and zeppelins. The file is self-describing; what it does *not* say is what the engine does
-with each key. The behaviour below is read from `crimson.exe`
-(`D:\zipper\Crimson\turret.cpp` — the retail binary retains the source path), and every claim names
-the field it decodes. No code is reproduced.
-
-The file is **install-global**: there is exactly one `ai.zrd`, in the shared `zrdr` scope. There is
-no per-chapter or per-mission override ([zrdr.md](zrdr.md)).
-
-## At a glance
-
-This page is the current reference for its documented format family.
-
+Part of the [format documentation](README.md). The shared `ai.zrd` reader defines 42 `TURRET`
+entries for fixed anti-aircraft emplacements and turrets carried by aircraft or zeppelins. This
+page pairs its field schema with the engine behavior that reads each key.
 
 ## Contents
 
-- [The two families, and what actually splits them](#the-two-families-and-what-actually-splits-them)
+- [Turret families](#turret-families)
 - [Field table](#field-table)
-- [What the engine does each tick](#what-the-engine-does-each-tick)
+- [Runtime behavior](#runtime-behavior)
 - [Weapons](#weapons)
-- [Values across the 42](#values-across-the-42)
-- [What this is not](#what-this-is-not)
-## The two families, and what actually splits them
+- [Value census](#value-census)
+- [Scope limit](#scope-limit)
+## Turret families
 
 The 42 entries divide 16 / 26, and the discriminator is `CREATE_STANDALONE`:
 
@@ -70,7 +59,6 @@ mounts **`firstp`** / **`thirdp`**, and the `firstp` entries name the `_G1` titl
 `kestrel_turret2` with `hturret2`/`hgun2`/`hfirepoint2` beside `kestrel_turret1` with
 `hturret`/`hgun`/`hfirepoint`), one drawn in the cockpit view and one externally. The AI and
 remote-player models carry only the `thirdp` rig, which is why only the player defs reference a
-`_G1` row. (An earlier draft of this page read the suffix as an `IDS_AIRFRAMEGUNGROUPNAMES`
 gun-group slot; the `firstp`/`thirdp` keys refute that.) Reading `G3` as "grade 3" and scaling
 accuracy off it invents a difficulty system the data does not have.
 
@@ -196,7 +184,7 @@ as "fixed" points that turret permanently down its rest bearing and it will neve
 At load the turret is posed at the **centre of its arc** — `min + (max-min)/2` on each axis — and an
 axis whose limits are equal is left unrotated.
 
-## What the engine does each tick
+## Runtime behavior
 
 ### Being alive, and being awake
 
@@ -228,7 +216,7 @@ no objectives script, that builder call is the only reason the zeppelin you atta
 
 Separately, **both loaders bail out entirely if a global world-state flag is clear** — the same
 flag that gates the `capacity` read in the generator loader
-([mission-entities.md](mission-entities.md#the-capacity-puzzle)). In retail it must be set, or no
+([mission-entities.md](mission-entities/enemy-generators.md#capacity-rule-and-limit)). In retail it must be set, or no
 turret would exist at all; it is noted because the two subsystems share it.
 
 An entry with no resolvable `WEAPON` ticks no further.
@@ -348,14 +336,14 @@ of a ballistics record and is a different thing.
 `WEAPON.AMMO` is only ever `9999` or `12000` — effectively unlimited, but it is real state: it
 persists across save/restore.
 
-## Values across the 42
+## Value census
 
 `INACCURACY` 2.5–15.0 (8 distinct) · `PITCH` −60…85 · `YAW` −180…269 · `ATTACK_INTERVAL` 2.0–30.0 ·
 `BORED_INTERVAL` 2.0–10.0 · `DETECTION_RANGE` 350–1000 · `FIRE_RATE` 0.15–12.0 · `AMMO` 9999 or
 12000 · `TEAM` always 1 · `HEALTH` 2 / 8 / 10 / 30 · `SOUNDS.CANNON` always `snd_chaingun` ·
 `TITLE` 32 distinct `MSG_TUR_*` keys, all resolving in `messages.json`.
 
-## What this is not
+## Scope limit
 
 - Turret **airframes** — the five aircraft that carry a turret, and the marker rig that mounts it —
   are [markers.md](markers.md) and [vehicle.md](vehicle.md). `ai.zrd` supplies the gunner, not the

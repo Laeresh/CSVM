@@ -1,25 +1,19 @@
-# HUD: compass tape + cockpit gauges
+# HUD: compass tape and cockpit gauges
 
-Part of the [format documentation](README.md). Validated against
-`OriginalScreenshots/HUD.png` (2556×1440, dgVoodoo) by pixel-probing every tick and
-label; gauges are read from the planes.zbd `gauges` subtrees +
-`OriginalScreenshots/HUD with dmg.png`. Remake implementations:
-`src/Flight/CompassTape.cs`, `src/Flight/GaugeCluster.cs`.
-
-## At a glance
-
-This page is the current reference for its documented format family.
-
+Part of the [format documentation](README.md). This page records the HUD textures, compass-tape
+rendering, cockpit and weapon gauges, bitmap font, and aiming reticle. Evidence comes from the
+HUD captures and aircraft gauge subtrees; the implementation lives in `CompassTape.cs` and
+`GaugeCluster.cs`.
 
 ## Contents
 
 - [Textures](#textures)
-- [Rendering model (measured, not decompiled)](#rendering-model-measured-not-decompiled)
-- [The cockpit gauges (altimeter / speedometer / damage display)](#the-cockpit-gauges-altimeter-speedometer-damage-display)
-- [The weapon gauges (gun / missile)](#the-weapon-gauges-gun-missile)
-- [The HUD bitmap font (`5pointhud`)](#the-hud-bitmap-font-5pointhud)
-- [The gun aiming reticle (`impact_point.png`)](#the-gun-aiming-reticle-impactpointpng)
-- [Open question](#open-question)
+- [Compass rendering](#compass-rendering)
+- [Cockpit gauges](#cockpit-gauges)
+- [Weapon gauges](#weapon-gauges)
+- [Bitmap font](#bitmap-font)
+- [Aiming reticle](#aiming-reticle)
+- [Known uncertainty](#known-uncertainty)
 ## Textures
 
 The compass ships as two small textures in **every chapter's `texture.zbd`** (not in
@@ -39,7 +33,7 @@ The compass ships as two small textures in **every chapter's `texture.zbd`** (no
   from the pairs). A 5 px white→black vertical gradient block sits at x 123–127 —
   purpose unknown; it does not appear in the in-flight compass.
 
-## Rendering model (measured, not decompiled)
+## Compass rendering
 
 - The tape is a **cylindrical drum viewed edge-on** showing exactly 180° of heading:
   a mark Δ° from the current heading renders at `x = center − R·sin(Δ)`. At 1440p the
@@ -64,7 +58,7 @@ The compass ships as two small textures in **every chapter's `texture.zbd`** (no
 - Labels every 45° (octants), no numeric readout, no lubber line — the current
   heading is read from the centered, brightest label.
 
-## The cockpit gauges (altimeter / speedometer / damage display)
+## Cockpit gauges
 
 **The gauge dials are 3D models inside each player plane's tree in planes.zbd** — a
 `gauges` subtree under the (otherwise skipped) cockpit, one per plane, with the same
@@ -92,7 +86,6 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   the base `texture.zbd` copy is a 32×128 RGB flat full-width slab with no alpha,
   but every `rtextureN` tier ships a same-size **RGBA** copy with different art
   (beveled lance, rimmed hub discs) whose alpha channel is the complete antialiased
-  silhouette — pointed tip, tapering shaft, waist, two hub discs. An earlier note
   here claimed the shape was applied engine-side; it is simply in the archives the
   engine actually renders from (see `docs/tooling.md` on the tiers).
 - **Warning overlays** `lowalt_on` / `stallwarning_on` (priority 7 — *under* the
@@ -170,7 +163,7 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   artificial-horizon `horizn` and drum `comp` compass. The `gungauge` /
   `missilegauge` are decoded below.
 
-## The weapon gauges (gun / missile)
+## Weapon gauges
 
 Read from the planes.zbd `gungauge` / `missilegauge` subtrees +
 `support\cockpit.gw` (the interp boot script that wires their texture cycles);
@@ -264,9 +257,9 @@ selected group's per-group rounds / the next-to-fire pylon's per-pylon rounds. I
 `5pointhud` font at the pane's bottom centre. The placeholder grammar (`%N`, a trailing `!spec!`
 consumed, `%%` → literal `%`) is handled by `Messages.Fill`.
 
-## The HUD bitmap font (`5pointhud`)
+## Bitmap font
 
-Decoded 2026-07-24 by pixel-probing the atlas; remake reader `src/Flight/HudFont.cs`.
+Decoded  by pixel-probing the atlas; remake reader `src/Flight/HudFont.cs`.
 
 Two textures in **`extracted/rimage/`** (the menu/UI image set — *not* the chapter texture
 archives that carry the compass/gauge art):
@@ -295,7 +288,7 @@ reproduces the original green), and draws each glyph with `DrawTextureRectRegion
 space / unrepresented codes as a **3 px** advance. Sizing routes through `HudMetrics` like every
 other HUD element, so a splitscreen pane damps the text the same way the dials do.
 
-## The gun aiming reticle (`impact_point.png`)
+## Aiming reticle
 
 The aiming pipper is a single image in **`extracted/rimage/`** (the UI set, alongside the
 `5pointhud` font — *not* the chapter archives): **`impact_point.png`**, a **32×32 RGBA**
@@ -325,7 +318,7 @@ pending an original-game playtest. Note the on-screen *trailing angle* is set by
 velocity/bullet-speed ratio and is essentially independent of this distance; the distance mainly
 sets where a toed-in mount would harmonise and the pipper's parallax off screen-centre.
 
-## Open question
+## Known uncertainty
 
 Which world axis is compass **north**: the remake assumes **−Z** (consistent with the
 map layout and motion), but the original's convention has not been verified in-game.

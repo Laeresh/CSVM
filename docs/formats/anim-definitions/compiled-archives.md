@@ -4,15 +4,15 @@ Part of: [animation definitions](../anim-definitions.md).
 
 ## Compiled archive reference
 
-The binary archives upstream mech3ax does not support for CS. Surveyed 2026-07-18 while
+The binary archives upstream mech3ax does not support for CS. Surveyed  while
 scoping the anim-playback engine (Run-2 item 9); since then the project's mech3ax fork
 (`tools/mech3ax`, plan `docs/plans/PLAN-mech3ax-cs-revival.md`) has implemented them in
-`crates/anim/src/cs/`: the container (item 3, 2026-07-20), the full semantic
-`AnimDef` + event decode (item 4, 2026-07-21), and the SI-script frame decode (item 5,
-2026-07-21) round-trip **byte-identically on all 61 archives of this install** with no
+`crates/anim/src/cs/`: the container (item 3, ), the full semantic
+`AnimDef` + event decode (item 4, ), and the SI-script frame decode (item 5,
+) round-trip **byte-identically on all 61 archives of this install** with no
 raw regions left except the per-axis spline coefficient blocks (kept as bytes by
 upstream's own MW/PM convention; their semantics are decoded below). The CLI landed with
-item 6 (2026-07-21): `unzbd cs anim <archive> <zip>` / `rezbd cs anim <zip> <archive>`
+item 6 (): `unzbd cs anim <archive> <zip>` / `rezbd cs anim <zip> <archive>`
 extract to the same zip-of-JSON shape as MW/PM/RC (per-def JSONs + per-script `*.zan.json`
 + `metadata.json`; the CS-only container data — the two base-file entries and the raw
 runtime pointers `defs_ptr`/`scripts_ptr`/`world_ptr`/`unk40`/`zero_def_flags`, which vary
@@ -31,7 +31,7 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   vehicle SI scripts** (C1: the 4 train cars, 2 fueltrucks, mission-intro cameras,
   `cpilot_eject` body parts — 48 scripts total).
 - **Container** (same family as MW3/PM `anim.zbd`, which mech3ax fully supports — **PM is
-  the closest sibling**, verified 2026-07-20 against mech3ax's own structs): 16-byte header
+  the closest sibling**, verified  against mech3ax's own structs): 16-byte header
   `{signature u32 = 0x08170616` (identical to MW3), `version u32 = 53` (RC 28 / MW 39 /
   PM 50), `nBase u32 = 2, nAnimFiles u32}` (byte order confirmed: C1 = `16 06 17 08 | 35 |
   02 | AA`); then nBase × `{path char[128], mtime u32}` (the gamez.zbd + planes.zbd the
@@ -46,7 +46,7 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   (C1 cam_anim: defs 0x048F631C / scripts 0x048BB5DC / world 0x03B8000C — mech3ax's
   per-game `Mission` tables preserve these for byte-identical round-trip). Then `def_count`
   AnimDef records, then the SI-script pool, which runs byte-exactly to EOF.
-- **AnimDef records (semantic decode COMPLETE 2026-07-21, fork plan item 4** — every field,
+- **AnimDef records (semantic decode COMPLETE , fork plan item 4** — every field,
   support array and sequence event is decoded into mech3ax's API types in
   `crates/anim/src/cs/`; round-trip **byte-identical on all 61 archives**, and the decoded
   `hangar3_doors` matches its reader-JSON source field-for-field — activation, SAVE_LOG,
@@ -78,7 +78,7 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   (same name, different pointers — the mech3ax fork disambiguates with a reversible `~N`
   suffix since events reference nodes by index); light/puffer/dynamic-sound 44 bytes;
   static-sound refs **40 bytes** = one garbage-padded name field (the garbage runs past
-  byte 32); **activation prereqs (48 B) ARE used** (contra the earlier survey note): object
+  byte 32); **activation prereqs (48 B) ARE used** (contra the survey note): object
   prereqs carry `active` ∈ {0,1,2} and real pointers, `min_to_satisfy` up to the count;
   anim refs 72 B — `ref_ty` **1 = CALL_ANIMATION with LOCAL_NAME** (name + local_name
   halves, both garbage-padded), 0 = plain CALL_ANIMATION. Object/node name fields use MW/PM's
@@ -120,7 +120,7 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   17 (rare; firetrucks/flak), 18 (nearly all defs), 21, 22 (nearly all defs), 23
   (camera/intro defs). The fork stores the raw dword (`flags_raw`) since the unknown bits
   make reconstruction impossible.
-- **SI-script pool (fully decoded, fork plan item 5, 2026-07-21):** all 28-byte
+- **SI-script pool (fully decoded, fork plan item 5, ):** all 28-byte
   `SiScriptC` headers first (name pointers/lengths, `spline_interp`, `frame_count`,
   `script_data_len` — PM's format verbatim), then per script `{source path\0, object
   name\0, frames…}` with names exactly `strlen+1` (single nul, no garbage) and sizes
@@ -129,13 +129,13 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   to which def is declared too: the def's u32 list (above) holds its pool indices, and
   each e12 event names its slot in that list. Frame = `{flags u32: 1=translate, 2=rotate,
   4=scale; start f32, end f32}` + one **76-byte block per set flag** (`flags=0` frames
-  exist — 8,596 of 76,845 frames — and carry no blocks; this is what broke the 2026-07-18
+  exist — 8,596 of 76,845 frames — and carry no blocks; this is what broke the
   sentinel-guessing walker). Translate block (verified): `base Vec3` + 4 floats
   `(0, avgVel x,y,z)` + per-axis `{value, c1, c2, c3}` where `component(t) = value + c1·t
   + c2·t² + c3·t³`, `t` seconds since frame start, constant term = the base component
   (absolute) — verified exact against each next frame's base value and C1-continuous;
   the u32 at offset 12 is usually 0 but carries garbage in places (preserved). **Rotate
-  block (decoded 2026-07-21):** `base quaternion (w,x,y,z)` + `delta Vec3` + the same
+  block (decoded ):** `base quaternion (w,x,y,z)` + `delta Vec3` + the same
   three per-axis `{value, c1, c2, c3}` cubic blocks, but **relative and in half-angle
   radians**: the constant term is 0 (the cubics give each axis's half-angle offset from
   the frame's base), `delta` = the cubic's average rate over the frame
@@ -151,7 +151,7 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   the reason spline blocks must stay raw bytes for round-trip, which is also upstream's
   own MW/PM choice). Scale block: translate's shape (rare — 477 frames set scale).
 - **`spline_interp: false` means the spline blocks are GARBAGE, not merely unused
-  (2026-07-22).** The uninitialized-memory quirk above is not a one-off: `pfighter11.zan`
+  ().** The uninitialized-memory quirk above is not a one-off: `pfighter11.zan`
   is simply one of the **15** `spline_interp: false` scripts, and *every* one of them
   carries junk in its coefficient blocks — leftover pointers, frame times, whatever the
   compiler's stack held. `piratezep.zan` (C1/M04) is the worst: its scale block's constant
@@ -181,7 +181,7 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
 - **Validation state:** the fork's semantic decode round-trips **all 61 archives
   byte-identically** with every one of the install's **1090 scripts frame-decoded**
   (76,845 frames) — since item 6 also through the real CLI zip pipeline (test.py
-  `--- ALL OK ---`, which additionally exercises the JSON layer). The 2026-07-18 survey's
+  `--- ALL OK ---`, which additionally exercises the JSON layer). The  survey's
   "24 of 48 C1 scripts fail to parse" was an artifact of not knowing the record delimiting
   (resolved by the headers + flags=0 frames); no camera/`cpilot_eject` frame-data variant
   exists. A second uninitialized-data quirk besides `pfighter11.zan` surfaced at the JSON

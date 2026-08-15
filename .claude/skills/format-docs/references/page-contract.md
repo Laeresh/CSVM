@@ -2,7 +2,7 @@
 
 ## Landing pages
 
-Use this order where applicable: **At a glance**, **Contents**, **Conceptual model**, **Reference**, **Reader rules and edge cases**, then **Evidence & limits**. Retain accurate existing material; an existing heading may satisfy a role.
+Use this order where applicable: **Contents**, **Conceptual model**, **Reference**, **Reader rules and edge cases**, then **Evidence & limits**. Add **At a glance** only for a distinct, page-specific quick reference; never use a generic placeholder. Retain accurate existing material; an existing heading may satisfy a role.
 
 ## Child pages
 

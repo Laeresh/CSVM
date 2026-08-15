@@ -9,16 +9,12 @@ colour encoding, `kind_of` inheritance, wildcards, everything-is-float) are in t
 
 This page maps the archives and their reader families to the pages documenting them.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## Contents
 
-- [The three scopes](#the-three-scopes)
-- [Reader family index](#reader-family-index)
+- [The three scopes](#archive-scopes)
+- [Reader family index](#reader-family-map)
 
-## The three scopes
+## Archive scopes
 
 A mission sees three zrdr archives; readers with mission relevance (anims, states) must
 be scanned across all three:
@@ -29,7 +25,7 @@ be scanned across all three:
 | chapter | `<Cx>/zrdr.zbd` | chapter scenery anims (`hangar3`, `train`, `fuel_tanks`, `st_light`, `dock_light`, `ap_*`), `cars_moving`/`trucks_moving`, the `ne0NNNNN.zrd` patrol nets + `neindex.zrd` |
 | mission | `<Cx>/<mission>/zrdr.zbd` | `ia.json`, `objectives.json`, `weather.json`, `zepstate.json`, `startanims.json`, `mis_anim.json`, `zeppelins.json`, `egen.json`, `dzones.json`, `aiv.json`, `location.json`, `map.json`, `Briefing` |
 
-## Reader family index
+## Reader family map
 
 | Reader file(s) | Documented in |
 |---|---|

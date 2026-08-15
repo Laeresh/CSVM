@@ -24,10 +24,6 @@ reference screenshots — and, most usefully, where the **paint region masks** a
 The text those screens display is *not* here; it is a Win32 string table in
 `BINARIES\langui.dll` — see [strings.md](strings.md).
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## Container
 
 All fields are little-endian `u32`. The file is a tree of directory nodes; the root node sits
@@ -72,7 +68,7 @@ length, so the layout is fully accounted for with no slack.
 the base one, so the patched script wins. `ExtractRof.ps1` unpacks it to `_crimptch/` rather
 than over the base extraction, so both versions are available to diff.
 
-## What is inside
+## Archive contents
 
 | Count | Type | Notes |
 |---|---|---|
@@ -104,7 +100,7 @@ rows (`af_t_title`, `af_s_airframedesc`). The customisation flow is `PLANESELECT
 where `ResID` is the `IDS_*` string ID. Its header comments document the column meanings,
 which is how the widget types (`B`utton, `T`ext, `S`crolltext, `D`ropdown) were identified.
 
-## `.BM` textures
+## Bitmap textures
 
 The 184 `.BM` files are the per-pattern aircraft skins, in `ASSETS/GRAPHICS/<PATTERN>/`.
 Fourteen pattern folders exist — the twelve `paint_pattern` names from [paint.md](paint.md)
@@ -192,12 +188,12 @@ overlay, so a pattern can leave a part plain.
 Channel order within the overlay is unconfirmed: the content inspected so far is greyscale, so
 RGBA and BGRA are indistinguishable on it.
 
-## Open
+## Known limits
 
 - **Overlay channel order and blend mode.** Greyscale content leaves RGBA vs BGRA
   undetermined. The remake composites it as straight alpha-over-RGB and renders correctly on
   everything inspected, which is consistent with but does not prove that reading.
-- **Slot order.** *Confirmed 2026-07-20* — file order **is** `paint_color1..3`. Rendering the
+- **Slot order.** *Confirmed * — file order **is** `paint_color1..3`. Rendering the
   Fortune Hunters Bloodhawk with all three plausible assignments against
   `OriginalScreenshots/CustomPlane Paint1 Bloodhawk.png` singled one out: only
   *(red, black, white)* puts black on the outer wing panels with the white swoosh between

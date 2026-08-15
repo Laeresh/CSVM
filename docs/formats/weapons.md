@@ -5,10 +5,6 @@ whole install's projectile catalogue — guns, rockets, ordnance — under a sin
 `BALLISTICS` block. Validated against this install's zrdr extraction; the allotment and
 damage semantics were cross-checked against the original game.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## Structure
 
 The file's one root object is an alternating key/list dict (the [shared conventions](README.md#shared-conventions-zrdr-readers)
@@ -57,7 +53,7 @@ that carry the key. A gun-only key is absent on rockets and vice-versa.
 | `CLUSTER_SIZE` | 46 | 1–2800 | rounds carried **per slot** — per gun group for guns, per pylon for ordnance |
 | `AMMO_LIMIT` | 37 | 100–9999 | a **purchase cap**, not a carried count |
 
-See [CLUSTER_SIZE vs AMMO_LIMIT](#cluster_size-vs-ammo_limit) for which entries carry which.
+See [CLUSTER_SIZE vs AMMO_LIMIT](#cluster-size-and-ammo-limit) for which entries carry which.
 
 ### Ballistics
 
@@ -82,7 +78,7 @@ See [CLUSTER_SIZE vs AMMO_LIMIT](#cluster_size-vs-ammo_limit) for which entries 
 | `DAMAGE` | 2 | 0.0 | a single combined value used *instead of* the armor/health split on the two non-damaging specials (`FLASH` `wep_09`, `FLARE` `wep_15`) |
 
 `ARMOR_DAMAGE`/`HEALTH_DAMAGE` feed the `destroyable_parts` armor+health model in
-[vehicle.md](vehicle.md#the-hp-pair-armor--hit-points) — two sequential pools per damage zone,
+[vehicle.md](vehicle.md#armor-and-hit-points) — two sequential pools per damage zone,
 armor spent first. **Both figures are absolute per-hit damage, not multipliers**: there is no
 multiplier field anywhere in `BALLISTICS`, and the 0.5×/1.5× ammo pattern below is a derived ratio
 against each caliber's slug, not something the engine computes.
@@ -151,7 +147,7 @@ reading is wrong. `TanglerData` is parsed and unused — nothing is choked in M3
 | `FLYOUT` | 48 | projectile model / anim / sound (below) |
 | `IMPACT` | 47 | per-surface hit effect (below) |
 
-## `CLUSTER_SIZE` vs `AMMO_LIMIT`
+## Cluster size and ammo limit
 
 Two allotment numbers with different meaning, long indistinguishable because on guns they
 are equal:
@@ -202,7 +198,7 @@ or any other type — another secondary-source claim the data refutes. The in-ga
 `ui_strings.json` ids 3370 (slug), 3371 (dum-dum), 3372 (AP), 3373 (magnesium/"EX"); 3372's
 "AP rounds tend to punch clean through unarmored surfaces, inflicting very little damage" is retail
 confirmation that armor is a **gate**, not a damage reducer — see
-[vehicle.md](vehicle.md#the-hp-pair-armor--hit-points).
+[vehicle.md](vehicle.md#armor-and-hit-points).
 
 ## The AI detune (`wep_130`–`170`)
 
@@ -226,7 +222,7 @@ slot values may be `null`.
 
 **`FLYOUT`** — the projectile itself, over slots `MODEL` (the `.flt` handle), `MODEL_ANIMATION`
 (spin/trail while in flight — decoded per type in
-[weapon-effects.md](weapon-effects.md#flyout-model_animation--the-in-flight-smoke-trails)), and
+[weapon-effects.md](weapon-effects.md#bullet-impacts)), and
 `SOUND` (looped in-flight sound, e.g. the torpedo). Present on all 48 entries.
 
 **`IMPACT`** — keyed by **surface name**, one value per name. The names are the game's global

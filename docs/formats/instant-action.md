@@ -1,40 +1,24 @@
-# Instant Action — the configurable mission surface
+# Instant Action
 
-Part of the [format documentation](README.md). The description of record for what an Instant
-Action mission can be configured to: the seven environments and the chapter each names, the four
-mission types the UI offers (of five the data defines), the thirteen militias and their aircraft
-lists, the wingman/wave/skill ranges, and the ace and wrap-up records. Anyone implementing
-`PLAN-instant-action.md`'s waves B onward reads this page instead of re-deriving it.
-
-Sourced from `ASSETS/SCRIPTS/INSTANTACTION.SCRIPT`, `ASSETS/SCRIPTS/IA_WRAPUP.SCRIPT` and
-`ASSETS/LAYOUT.CSV` inside `crimson.rof` (see [rof.md](rof.md)), `ui_strings.json`'s `langui`
-table (see [strings.md](strings.md)), and the per-chapter `<chapter>/IA1/zrdr/ia.zrd.json`. The
-latter's full key census — every field an `ia.json` carries, including the ace's livery keys —
-already lives in [spawns.md](spawns.md); this page does not restate it, only what feeds the
-**setup UI** and the **wrap-up UI** around that data.
-
-The "setup path" and "built-in defaults" sections below are what `Mech3.InstantActionDef` and
-its two readers (`Mech3/InstantAction.cs`, PLAN-instant-action.md B6) implement — every optional
-key resolves to the defaults recorded here rather than to a null, matching the original's own
-reset-then-overlay parse.
-
-## At a glance
-
-This page is the current reference for its documented format family.
-
+Part of the [format documentation](README.md). This page describes the Instant Action mission
+configuration surface: environments, mission types, militias and aircraft, wingman/wave/skill
+ranges, the ace, and mission setup. Its sources are the Instant Action and wrap-up scripts,
+layout data, UI strings, and each chapter's `IA1` reader data. [Spawns](spawns.md) holds the full
+`ia.json` field census; [Instant Action wrap-up](instant-action/wrap-up.md) covers scoring and
+friendly-fire rules.
 
 ## Contents
 
-- [The screen's controls](#the-screens-controls)
-- [The option strings](#the-option-strings)
-- [Environment → chapter](#environment-�-chapter)
-- [The thirteen militias and their aircraft](#the-thirteen-militias-and-their-aircraft)
-- [The ace](#the-ace)
-- [The setup path: what the engine builds from all this](#the-setup-path-what-the-engine-builds-from-all-this)
-- [The wave sequencer and the mission end: `FUN_0045b9d0`](#the-wave-sequencer-and-the-mission-end-fun0045b9d0)
-- [Wrap-up and scoring](#wrap-up-and-scoring)
-- [Open](#open)
-## The screen's controls
+- [Screen controls](#screen-controls)
+- [Option strings](#option-strings)
+- [Environment mapping](#environment-mapping)
+- [Militias and aircraft](#militias-and-aircraft)
+- [Ace](#ace)
+- [Mission setup](#mission-setup)
+- [Wave sequencer and mission end](#wave-sequencer-and-mission-end)
+- [Wrap-up and scoring](instant-action/wrap-up.md)
+- [Known UI limit](#known-ui-limit)
+## Screen controls
 
 `INSTANTACTION.SCRIPT` declares every widget and the engine callback that fills and reads it.
 `LAYOUT.CSV`'s last column on a `D` (dropdown) row is the **visible-row count**, which for these
@@ -67,7 +51,7 @@ same count each frame to decide whether the default selection is index 0 (no cus
 index 11 (the first custom plane). 20 is `LAYOUT.CSV`'s visible-row window for that variable-length
 list, not an item count — the only row in this table where the two differ.
 
-## The option strings
+## Option strings
 
 From the `langui` table, read out of `extracted/rof/ui_strings.json`.
 
@@ -90,7 +74,7 @@ would make the plane list look like it has twelve entries.
 `ground_target` is a fifth mission type every chapter's `ia.json` disallows (see the table below),
 which is why the UI offers only four.
 
-## Environment → chapter
+## Environment mapping
 
 Seven strings, eight chapters. **The mapping is decoded, and so is the dropdown's order**: the
 launcher `FUN_004174d0` switches on the environment dropdown index and writes a chapter id, so the
@@ -125,7 +109,7 @@ reintroduce either claim.
 `num_wingmen` is `3` in all seven chapters that carry it (the eighth, C2B, carries neither
 `player_plane` nor `num_wingmen`); the wingman range is 0 to 5 per `ia_d_nwing`'s row count above.
 
-## The thirteen militias and their aircraft
+## Militias and aircraft
 
 Inverted from [paint.md](paint.md)'s "Patterns are per aircraft" table (measured over the `.BM`
 skins each pattern ships in `crimson.rof`), matched to the militia strings above by their pattern
@@ -158,7 +142,7 @@ reading Fortune Hunter covers all eleven, which is what `ia_d_planeeN`'s eleven-
 requires (`LAYOUT.CSV`, above). The two readings also disagree on Sacred Trust (defs give
 Hellhound alone, coverage gives Warhawk and Hellhound).
 
-## The ace
+## Ace
 
 Every chapter's `ia.zrd.json` names one ace in full, not a random draw: `ace_name`, `ace_plane`,
 `ace_skill` (always `"ace"`), `ace_stats` (always `[9,9,9,9,9,9,9,9,9]`), `ace_accentID`, and a
@@ -166,7 +150,7 @@ complete `ace_pattern`/`ace_colorN`/`ace_decalN` livery — authored in all 8 of
 The full field table, the `PaintScheme` mapping and the `ace_stats` order inference are
 already on [spawns.md](spawns.md); this page does not repeat them.
 
-## The setup path: what the engine builds from all this
+## Mission setup
 
 `crimson.exe` establishes this. The file half is loaded by `FUN_0045a150` (opens `ia.zrd`,
 fills the per-mission-type spawn table, then calls the key parser `FUN_00459390` on the setup
@@ -233,7 +217,6 @@ The offsets confirm M4 B7's decode from the other direction: team at `+0x34`, gr
 band of **±10000 m** for every Instant Action actor, which is the engine's own way of saying they
 are always awake, always willing to engage, and never return.
 
-⚠ **Every actor is also given a patrol net** (corrected 2026-08-15; this page previously said
 `netids` kept its `-1`). All three branches of `FUN_0045a390` write a one-entry `netids` list
 holding the **first id in the chapter's net table** (`0x0045a8b4` for the wingmen, `0x0045ab18` for
 the ace, `0x0045ae85` for the waves), so every Instant Action aircraft walks the chapter's first
@@ -289,7 +272,7 @@ Wingman `i` (0-based) is built as:
 `<plane>` is `wingman_plane`'s index through the two name columns above; the roster name format is
 `%s_ia%d` over the def and the index. **So the flight is not five aircraft on the player: 0, 1 and
 3 escort the player, while 2 and 4 escort 1 and 3.** That is `primary_target` doing the work M4 B7
-said it does, and it is the shipped Instant Action wingman mechanism. ⚠ **Corrected 2026-08-15: a
+said it does, and it is the shipped Instant Action wingman mechanism. ⚠ **a
 patrol net IS assigned** (see above), and the net demotes the `w<plane>` def's `wingman` mode to
 `jet`, so on this path the chain is a target assignment rather than a flown formation. **The
 nine-value skill vector is left unset**, so wingmen fly on the airframe's own AI defaults.
@@ -362,7 +345,7 @@ and health maxima multiplied by **0.875 / 1.0 / 1.25** on difficulty 0 / 1 / 2
 ([`org/vehicleDamage.md`](../org/vehicleDamage.md)). So the skill names are a **hit-point** scale in
 Instant Action, and nothing else. Nothing on this path converts them to a 1-to-9 rating.
 
-## The wave sequencer and the mission end: `FUN_0045b9d0`
+## Wave sequencer and mission end
 
 One function, ticked every frame, does two jobs. It advances the wave counter when the current wave
 is gone, and it decides whether the mission is over. M4 B7 traced its main path
@@ -477,7 +460,7 @@ blocks call the same three functions with inverted arguments:
 | `FUN_0045a2a0(zep->node)` — recursive teardown of the vehicle/AI objects under that node | called | **not called** |
 
 The objective then also gets byte `+0x4d` set on the object `FUN_004a3360` finds by its name — the
-same "this is the mission's target" byte the stunt zones and the ground target get earlier in this
+same "this is the mission's target" byte the stunt zones and the ground target get in this
 function — and a `FUN_004edc50(…, 0, 0, 0)` motion reset on a third per-type slot
 (`0x00718fc4 + type·4`) which the record reset zeroes (`param_1[0xbb..0xbd] = 0`) and nothing on the
 `ia.json` path writes, so that last call does not fire in a file-driven launch.
@@ -572,7 +555,7 @@ record authors a threshold: the count is "all of them", because the test is on a
 load, and nothing distinguishes that from having emptied it. Unobservable in the shipped data (all
 58 records author 12 or 14 engines) but it is the behaviour, not an accident.
 
-⚠ **This was decoded 2026-08-15, after G13 had already shipped the hull kill as the only path.**
+⚠ **This was decoded , after G13 had already shipped the hull kill as the only path.**
 The tell was in play: every engine on the objective zeppelin destroyed and the mission ran on.
 The reason the error survived review is that the gasbags are behind the `DAMAGES_ZEPPELIN` gate
 ([weapons.md](weapons.md)) while engines are ordinary destructibles, so the hull-only reading made
@@ -597,13 +580,9 @@ enemy has `accentID` -1 and skill `veteran`, and the wave livery is whatever the
 
 See [Instant Action wrap-up](instant-action/wrap-up.md) for the wrap-up UI, scoring, and friendly-fire rules.
 
-## Open
+## Known UI limit
 
-- *(The environment dropdown's order and its chapter mapping were open here until A5 decoded the
-  launcher's own index-to-chapter-id switch; both are now settled in "Environment → chapter" above,
-  with C1C as the omitted chapter.)*
-- **"Total Kills" is defined but unwired** in the shipped UI (see "The wrap-up screen" above); G14
-  should not build a fifth row for it.
+**"Total Kills" is defined but unwired** in the shipped UI. Do not add a fifth wrap-up row for it.
 
 ## Evidence & limits
 

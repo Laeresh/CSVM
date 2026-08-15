@@ -1,31 +1,17 @@
-# Weapon effect readers & projectile prototypes
+# Weapon effect readers and projectile prototypes
 
-Part of the [format documentation](README.md). The muzzle, flyout and impact assets that a
-weapon's [`FIRE` / `FLYOUT` / `IMPACT`](weapons.md#fire--flyout--impact-bindings) bindings name:
-the effect-reader files (`ON_CALL` `ANIMATION_DEFINITION`s) and the gamez node prototypes each
-binding resolves to.
-
-Each weapon in [weapons.md](weapons.md) points at its effects by name — `FIRE` names a muzzle
-animation, `FLYOUT` a projectile `MODEL`, `IMPACT` a per-surface hit animation. Those names
-resolve to one of two places: an **effect reader** in `extracted/zrdr/` (a named animation
-built from `PUFFER_STATE`/`LIGHT_STATE`/`OBJECT_MOTION` events — the event vocabulary is in
-[anim-definitions.md](anim-definitions.md), the particle system in [effects.md](effects.md)),
-or a **gamez node prototype** (a model root under a chapter's `nodes.json`, instanced at the
-firepoint/impact point). This page maps every binding target to its source.
-
-## At a glance
-
-This page is the current reference for its documented format family.
-
+Part of the [format documentation](README.md). This page maps the `FIRE`, `FLYOUT`, and `IMPACT`
+bindings in [weapons.md](weapons.md) to their effect readers or GameZ node prototypes. Effect
+readers are named animations; prototypes are model roots instantiated at a firepoint or impact.
 
 ## Contents
 
-- [Muzzle flashes — `muzzle_burst.zrd.json`](#muzzle-flashes-�-muzzleburstzrdjson)
-- [Bullet impacts — `gunhit.zrd.json`](#bullet-impacts-�-gunhitzrdjson)
-- [Ordnance effects and projectile prototypes](#ordnance-effects-and-projectile-prototypes)
-- [Muzzle & tracer textures — the ammo-type axis](#muzzle-tracer-textures-�-the-ammo-type-axis)
-- [Binding resolution — 5 unresolved names](#binding-resolution-�-5-unresolved-names)
-## Muzzle flashes — `muzzle_burst.zrd.json`
+- [Muzzle flashes](#muzzle-flashes)
+- [Bullet impacts](#bullet-impacts)
+- [Ordnance effects and projectile prototypes](weapon-effects/ordnance.md)
+- [Muzzle and tracer textures](#muzzle-and-tracer-textures)
+- [Unresolved bindings](#unresolved-bindings)
+## Muzzle flashes
 
 `FIRE`'s `ANIMATION` slot names one of these. All are `ON_CALL`, `EXECUTION_PRIORITY 6`, and
 toggle a gamez node of the same name active for one frame:
@@ -37,7 +23,7 @@ toggle a gamez node of the same name active for one frame:
 | `muzzle_burst2` | the heavy mounts | a larger flash with `muzzle_lt2` (range up to 16 m) |
 
 The flash animation and the flash *node* share a name; the reader animates the prototype node
-listed under [Projectile prototypes](#projectile-prototypes-gamez-roots).
+listed under [Projectile prototypes](#ordnance-effects-and-projectile-prototypes).
 
 ### Engine wiring (M3, C22) — casing, muzzle smoke, muzzle light
 
@@ -67,7 +53,7 @@ effect  .
 (`BL-261`, A2): the casing now flies bare and the muzzlepuffer plays at its authored 6-puffs/0.3 s
 window instead.
 
-## Bullet impacts — `gunhit.zrd.json`
+## Bullet impacts
 
 `IMPACT`'s `default` `ANIMATION` for a gun names a `<caliber><ammo>_gunhit` — `3040` (30/40-cal),
 `5060` (50/60-cal) or `70`, crossed with `slug` / `dum` / `ap` / `mag`, i.e. the same
@@ -81,10 +67,10 @@ bound name (`3040slug_gunhit`, …) and whose body is distance-gated:
 - **`PLAYER_RANGE 200`** adds flung debris via ballistic `OBJECT_MOTION` (`bit1`/`bit2`/`bit3`/
   `chunk`, `RUN_TIME` 1–4 s). Four bodies fly, but only one is visible: `chunk` has one 4-vertex
   quad, while `bit1`–`bit3` carry **0 vertices and 0 polygons** in this install (measured C1/C2)
-  and each renders as **one 1-pixel, near-black point**. That matches the original 2026-08-07:
+  and each renders as **one 1-pixel, near-black point**. That matches the original :
   `OriginalScreenshots/Videos/70 DD Dirt.mp4` shows a 70-slug dirt hit producing only the `chunk`
   and one faint black `blacksmokepuffer` puff.
-  ⚠ **They draw a point, not nothing** (decoded 2026-08-15, `BL-313`). Models 24–26 carry
+  ⚠ **They draw a point, not nothing** (decoded , `BL-313`). Models 24–26 carry
   `lights: 1` with a non-null light array, and both draw functions gate the light block on the light
   **count** alone, not on vertices or polygons — software `FUN_005524d0` at `00552be2`, D3D
   `FUN_00554550` at `005445f1`, the latter ending in `DrawPrimitive(D3DPT_POINTLIST, …)` via
@@ -92,7 +78,7 @@ bound name (`3040slug_gunhit`, …) and whose body is distance-gated:
   constants set in `FUN_0054d9c0`), colour word `0x020B` unpacked by `FUN_0059e0e0` to R=0 G=16 B=11
   of 255, and one position at the node origin. There is no sprite, billboard or texture-quad
   substitution anywhere in either draw function.
-  ⚠ **RETRACTED 2026-08-07 (`BL-313`):** this line used to read *"the debris art is the `bit01`–
+  ⚠ **RETRACTED  (`BL-313`):** this line used to read *"the debris art is the `bit01`–
   `bit04` textures every chapter archive ships"* — i.e. the zero-vertex nodes were taken as
   pointers to those textures. The binary refutes it outright: no string `bit01`–`bit04` or
   `bit1`–`bit3` exists in `crimson.exe`, neither draw function resolves anything by name, and no
@@ -137,7 +123,7 @@ effect **animation**, splits by what the bound name resolves to:
   runtime already proves (`BuildFlightCrashRuntime`) and that **destruction effects (D32)** share,
   so the impact-puffer wiring folds into D32. The per-class stand-ins these names fall to (A2):
   dirt → the single spark, i.e. no arm of its own (the tumbling chips on the `bit01–04` textures
-  were **deleted 2026-08-15, `BL-313`**, see the `PLAYER_RANGE 200` note above; ground still
+  were **deleted , `BL-313`**, see the `PLAYER_RANGE 200` note above; ground still
   resolves to a non-`None` stand-in because the world-effects sink is gated on it); a gun round on a
   buildings-classed surface → a ricochet spark burst + flash (judged by eye — `bld_damage.flt`
   and the `rcochet1` `EFFECT` are both install-missing, see the unresolved-names table).
@@ -230,8 +216,7 @@ opposite, and the shared fireball is authored, not a lookup collapse.** Measured
    uses the `SURFACE_ANIMATION` slot, not `ANIMATION`; a reader that reads only `ANIMATION` would
    see nothing there, which is why `WeaponDef` keeps both slots.
 2. The engine's per-surface lookup **does** differentiate, though not where this measurement
-   expected. It selects on the struck material's surface **id**, not on the texture name (corrected
-   2026-08-13, see the ⚠ below), and the C1 `g306` hangar's colliding polygons carry `default`(0),
+   expected. It selects on the struck material's surface **id**, not on the texture name, and the C1 `g306` hangar's colliding polygons carry `default`(0),
    not `buildings`(11) — so the same shot now logs `-> 0/default … fx=he_ground_effect`, measured.
    The `buildings` row (`large_fireball`) needs a material actually tagged the `buildings` soil
    type, which almost nothing in this install is. The two rows differ; what changed is which
@@ -245,13 +230,12 @@ the light flashes. Both surfaces are *supposed* to show the same fireball, and i
 visual — which is exactly what makes them read as "identical" in the air. Making dirt a light flash
 would mean deleting the fireball the data calls, i.e. inventing content.
 
-⚠ **The material `soil` field IS what the IMPACT lookup keys on** — corrected **2026-08-13**, and
+⚠ **The material `soil` field IS what the IMPACT lookup keys on** — ****, and
 the reverse of what this page said until then. The `IMPACT` block's names are the game's global
 surface registry, the block is an array indexed by surface id, and the struck material's `soil` id
 picks the row (`analysis/surface-classification/FINDINGS.md`; the
 `weapons.md` `IMPACT` section has the shipped per-id counts). The polygon's **texture name**
-(`SceneBuilder.ClassifySurface`) decides nothing about a weapon impact any more. The earlier
-"MechWarrior-3 leftover" gloss on the field is not used; the same field
+(`SceneBuilder.ClassifySurface`) decides nothing about a weapon impact any more. The "MechWarrior-3 leftover" gloss on the field is not used; the same field
 turned out to drive the crash/touchdown choreography vectors; it drives both families.
 
 ⚠ **An id no weapon NAMES plays the `default` row** ([weapons.md](weapons.md#an-id-the-weapon-never-names-inherits-the-default-row)).
@@ -295,7 +279,7 @@ Effect templates are presentation only and are built with collision suppressed.
 
 See [ordnance effects and projectile prototypes](weapon-effects/ordnance.md).
 
-## Muzzle & tracer textures — the ammo-type axis
+## Muzzle and tracer textures
 
 The per-ammo appearance is texture-driven, on the **same four-way axis as the `wep_X0`–`X3`
 ammo types**. In each chapter's `texture/`:
@@ -312,7 +296,7 @@ ammo types**. In each chapter's `texture/`:
   pair traces `textures.json` 104/105 → `materials.json` 108/109 (`Textured`) → `models.json`
   model 60 → the `g1` node, whose `parent_indices` names `gunshell` as its only parent, so they are
   the skin of the very casing mesh the C22 ejection wiring instances per shot (see the footnote
-  under [Projectile prototypes](#projectile-prototypes-gamez-roots)). The `rabbit_blur` nodes near
+  under [Projectile prototypes](#ordnance-effects-and-projectile-prototypes)). The `rabbit_blur` nodes near
   `g1` in the node list are neighbouring ammo prototypes' streak children, not its parents.
 
 ### Engine wiring (M3, C24; A3) — flash shape + ammo texture
@@ -326,12 +310,12 @@ the plane as the def's `AT_NODE` placement implies (a world-fixed flash is flown
 speed). The def authors ONE `mb_spinflame` node with a 3-way `RANDOM_WEIGHT` roll (30°/80°/140°);
 what the original engine renders from that — one picked branch or all three at once — is not
 recoverable from the data. The pick-one reading (one rolled quad playing the
-`_muzzle1`→`_muzzle2` flipbook) was implemented and **rejected at the controls (2026-08-05,
+`_muzzle1`→`_muzzle2` flipbook) was implemented and **rejected at the controls (,
 `BL-263`)**: it does not reproduce the stills, and the deviation is recorded here as deliberate.
 The `_muzzle2` frame is not played by the flash; the impact stand-in spark keeps reusing it
 through its own separate pool.
 
-## Binding resolution — 5 unresolved names
+## Unresolved bindings
 
 Of the **57** distinct asset names referenced across all 48 weapons' `FIRE`/`FLYOUT`/`IMPACT`
 bindings, **52 resolve** to a reader above or a gamez prototype root, and all **23** referenced

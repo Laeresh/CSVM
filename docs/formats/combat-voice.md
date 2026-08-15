@@ -6,10 +6,6 @@ The clip inventory and its naming are surveyed in `docs/plans/PLAN-M4-ai.md` § 
 dispatch, read from `crimson.exe`. Claims name the evidence at the point of use; no code is
 reproduced.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## The trigger table
 
 The engine carries **29 triggers, ids 0–28**, as a contiguous ordered table of `TYPE` tokens in
@@ -63,13 +59,13 @@ the victim's health has just crossed zero). The dispatch runs the predicate twic
 shooter and victim: friendly, and **no gloat is chosen at all**, so a friendly kill is silent.
 Otherwise over victim and the local player: friendly picks 22, hostile picks 23, and either way the
 call is made with the **shooter** as the speaker. The one exception is a kill by the local player,
-which takes 24 instead and broadcasts. This closes the polarity question the page previously left
+which takes 24 instead and broadcasts. This closes the polarity question the page left
 open.
 
 **Trigger 28 has two dispatch arms**, both in `FUN_004b9770` and both on a hit rather than a death.
 The first (`0x004b98e0`) fires when the local player's round damages an aircraft the predicate calls
 friendly: the **struck** aircraft speaks, if it owns a line for the trigger. The second
-(`0x004b98fc`) is the previously-recorded one, and it fires when exactly one of three globally
+(`0x004b98fc`) is the recorded one, and it fires when exactly one of three globally
 tracked planes (`DAT_0071c4e4`/`e8`/`ec`) is still alive; it also installs a default sound set
 (`DAT_0071c4f4`) into the speaker's slot 28 first. ⚠ **The second arm sits on the *hostile* side of
 the same predicate**, so the three tracked planes are not on the player's team and the
@@ -209,14 +205,14 @@ site is recorded here:
 | 0 | unwired | turret acquisition is `TurretController`'s event; owned by C9's thread, not wired from here |
 | 15 | unwired | the danger-zone modes are never entered (their gate data is undecoded — F17) |
 | 16 | unwired | no dispatch site located in the binary (above) |
-| 22–24 | unwired | the polarity is decoded (above) and the 22/23 split is answerable now that a team model exists (`PLAN-instant-action` B7, 2026-08-14) — no dispatch site chosen yet, left for a future item |
+| 22–24 | unwired | the polarity is decoded (above) and the 22/23 split is answerable now that a team model exists (`PLAN-instant-action` B7, ) — no dispatch site chosen yet, left for a future item |
 | 26 | unwired | the original's shake-attempt check is undecoded; no machine transition maps to it without force-fitting |
 | 28 | unwired | both arms (above) are answerable now that a team model exists (B7) — no dispatch site chosen yet, left for a future item |
 
 Stand-ins and inventions, named:
 
 - **Speakers register on their real `FlightController.Team`** (`PLAN-instant-action` B7,
-  2026-08-14) — the earlier teamless stand-in is retired. Free flight and
+  ) — the teamless stand-in is retired. Free flight and
   `--vs` still give every pilot its own default team (`AimAssist.TeamOfPilot`, pilot N = team
   N+1), so a broadcast only ever elects a "teamless" match there in practice; it goes live the
   moment a mission puts two AI, or an AI and the player, on the same explicit team.
@@ -239,11 +235,11 @@ Stand-ins and inventions, named:
 - **What the three globals `DAT_0071c4e4`/`e8`/`ec` are.** Trigger 28's second arm counts their
   survivors, and they are on the hostile side of the team predicate, so the "the player's wingmen"
   reading of them does not hold (see the gloat/28 section above). *(Trigger 22–24's polarity, which
-  this list previously carried as open, was settled there.)*
+  this list carried as open, was settled there.)*
 - **Trigger 16 (`PR-EnemyDwn`) has no located dispatch site.** It may be reached through a path not
   covered, or be unused.
 - **How `Bail`/`NoBail` is chosen** below the family root (the natural candidate is the
-  constitution roll, unconfirmed). The `-A`/`-B`/`-C` half closed 2026-08-13: the shipped
+  constitution roll, unconfirmed). The `-A`/`-B`/`-C` half closed : the shipped
   `snd_<FAMILY>-A_id<N>_random` groups pick the take, weighted-random with recency 0.5 (see
   "The clips are sounds.json entries" above).
 
