@@ -663,7 +663,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-362` (the wingmen half of the same playtest), `AiTargetRanking`,
   [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) "AI modes, engine-side".
 
-- `BL-364` `[Bug]` **Our AI aircraft have no patrol net, and the original gives
+- `BL-364` `[Bug]` `[Blocked: campaign missions]` **Our AI aircraft have no patrol net, and the original gives
   every one of them one. DECODED and the Instant Action half LANDED 2026-08-15; what is left is
   the campaign roster path, which has no spawner to plumb into yet.** *Evidence:* the user at the controls,
   2026-08-15: the default mode of enemy AI is to fly straight in one direction, and an enemy wave
