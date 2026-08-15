@@ -9,6 +9,10 @@ extraction (mech3ax v0.6.1), decoded across Milestone-2 flight work and Run-2 it
 
 This page is the current reference for its documented format family.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 
 ## Contents
 

@@ -12,6 +12,10 @@ by `CSVM/src/Flight/SpawnPoints.cs`.
 
 This page is the current reference for its documented format family.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## Instant action — `ia.json` `spawn_points`
 
 `spawn_points` is a dict mapping scenario name → list of spawn entries

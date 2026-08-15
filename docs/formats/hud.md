@@ -10,6 +10,10 @@ label; gauges are read from the planes.zbd `gauges` subtrees +
 
 This page is the current reference for its documented format family.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 
 ## Contents
 

@@ -19,6 +19,10 @@ where it knowingly diverges.
 
 This page is the current reference for its documented format family.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## The scheme record
 
 Seven fields, appearing under three different key prefixes depending on where the scheme lives.

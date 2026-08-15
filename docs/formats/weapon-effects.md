@@ -17,6 +17,10 @@ firepoint/impact point). This page maps every binding target to its source.
 
 This page is the current reference for its documented format family.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 
 ## Contents
 

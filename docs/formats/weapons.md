@@ -9,6 +9,10 @@ damage semantics were cross-checked against the original game.
 
 This page is the current reference for its documented format family.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## Structure
 
 The file's one root object is an alternating key/list dict (the [shared conventions](README.md#shared-conventions-zrdr-readers)

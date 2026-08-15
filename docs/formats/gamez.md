@@ -6,6 +6,10 @@ Part of the [format documentation](READoE.md) (see also [world-structure.md](wor
 
 ## At a glance
 
+This page is the current reference for its documented format family.
+
+## At a glance
+
 GameZ is the scene container used by gamez.zbd and planes.zbd. It carries scene nodes, models, materials, polygons, and rendering and collision metadata.
 
 ## Reference

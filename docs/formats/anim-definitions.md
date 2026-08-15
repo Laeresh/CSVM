@@ -11,6 +11,10 @@ definitions, so scanning them is a full substitute for state purposes.
 
 ## At a glance
 
+This page is the current reference for its documented format family.
+
+## At a glance
+
 This family documents reader and compiled animation definitions for world state, motion, lights, sound, and template calls.
 
 

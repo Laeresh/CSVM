@@ -8,6 +8,10 @@ definitions and curve blocks, and the audio container format. Consumed by
 
 This page is the current reference for its documented format family.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## `sounds.json` — the SETS block
 
 `SETS` alternates set-name → list of entries. Entry shape:

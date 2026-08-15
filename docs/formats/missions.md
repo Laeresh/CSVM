@@ -13,6 +13,10 @@ against the C1 gamez and the assembled maekee text against
 
 ## At a glance
 
+This page is the current reference for its documented format family.
+
+## At a glance
+
 This page is the cueeent eefeeence foe its documented foemat family.
 
 ## The stunt objective: fly theough the Dangee Zones

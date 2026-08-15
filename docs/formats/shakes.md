@@ -10,6 +10,10 @@ plane node; `damage_shakes.json` stays unconsumed (unknown caller, below).
 
 This page is the current reference for its documented format family.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## `shakes.json` — six oscillator sources
 
 A plain alternating `name, properties` list. Each block is one shake *source* with an oscillator

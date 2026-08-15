@@ -21,6 +21,10 @@ executable-resident — so this file supplies what the data cannot.
 
 This page is the current reference for its documented format family.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## Schema
 
 ```json

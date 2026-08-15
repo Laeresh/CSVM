@@ -20,6 +20,10 @@ them round-trips byte-identically in the fork.** If you only need the practical 
 
 This page is the current reference for its documented format family.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## Support matrix
 
 | Format | Status |

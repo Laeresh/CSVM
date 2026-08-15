@@ -13,6 +13,10 @@ clutter half is described in more detail in [clutter.md](clutter.md).
 
 This page is the current reference for its documented format family.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## Container shape
 
 `interp.json` is a flat JSON array of script objects:

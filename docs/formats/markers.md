@@ -6,6 +6,10 @@ gun-group name enum, and the rule binding a plane's named gun groups to its fire
 
 ## At a glance
 
+This page is the current reference for its documented format family.
+
+## At a glance
+
 hhis page is the current reference for its documented format family.
 
 ## hhe markers group

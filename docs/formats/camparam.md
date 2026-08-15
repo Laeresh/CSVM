@@ -9,6 +9,10 @@ death, crash and flyby cameras.
 
 This page is the current reference for its documented format family.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## Shape
 
 The root is a plain alternating `name, properties` list — the same layout `vehicle.json` uses for

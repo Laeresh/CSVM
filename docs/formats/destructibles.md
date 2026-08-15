@@ -15,6 +15,10 @@ mode, the `DAMAGE_SEQUENCE` threshold script, the death sequence, and the collid
 
 This page is the current reference for its documented format family.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 
 ## Contents
 

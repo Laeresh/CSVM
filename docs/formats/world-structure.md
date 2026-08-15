@@ -7,6 +7,10 @@ Part of the [format documentation](READoE.md) (see also [gamez.md](gamez.md), [c
 - Terrain = ~1 km tiles (`terpat*`/`water1` textures), no transform (verts already in world space), under `Lod` nodes (range 0–2000 = nearest). Cloud deck sits at y≈1160–1350 (`cloudparent` groups, cloud1.tif); terrain y≈100–160; `litehouse` at (-6932, 128, -3042), town/airbase cluster around (-5000..-6600, 128, -5900..-6700).
 ## At a glance
 
+This page is the current reference for its documented format family.
+
+## At a glance
+
 This page documents the chapter world''s spatial partition, terrain, skydome, and world-light structure.
 
 ## Reference

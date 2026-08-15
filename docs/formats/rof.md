@@ -28,6 +28,10 @@ The text those screens display is *not* here; it is a Win32 string table in
 
 This page is the current reference for its documented format family.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## Container
 
 All fields are little-endian `u32`. The file is a tree of directory nodes; the root node sits
