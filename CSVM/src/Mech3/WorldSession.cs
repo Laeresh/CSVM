@@ -280,7 +280,8 @@ public sealed class WorldSession
         if (animRuntime.Sounds is { } worldSounds)
         {
             o.EffectsParent.AddChild(worldSounds);
-            worldSounds.SetListener(o.PlayerPosition);
+            worldSounds.SetListeners(o.ListenerPositions
+                                     ?? (() => new[] { o.PlayerPosition() }));
         }
         // A death-triggered CALL_ANIMATION whose callee anchors on a "library root" gamez node —
         // staged with the game but never PLACED in it (docs/formats/gamez.md; GameZ.IsLibraryRoot)
@@ -449,10 +450,15 @@ public sealed class WorldSession
         /// itself.</summary>
         public required Node3D EffectsParent { get; init; }
 
-        /// <summary>Where PLAYER_RANGE conditions and the sound listener measure from. Resolved
+        /// <summary>Where PLAYER_RANGE conditions measure from. Resolved
         /// per call because no camera exists yet at build time; player 1's camera is the honest
         /// answer in every mode (chase cam, free camera, or the orbit eye).</summary>
         public required Func<Vector3> PlayerPosition { get; init; }
+
+        /// <summary>Every 3D audio listener's position — one per pane, since every pane camera is
+        /// listener-enabled (UI.SplitScreen). Read only by the debug sound log's distance column;
+        /// the engine reads the listeners themselves. Null → <see cref="PlayerPosition"/> alone.</summary>
+        public Func<IReadOnlyList<Vector3>>? ListenerPositions { get; init; }
 
         /// <summary>Every player's position, for the EXECUTION_BY_RANGE proximity gate — the
         /// aircraft themselves in flight, not the chase cameras (a chase camera trails ~25 m

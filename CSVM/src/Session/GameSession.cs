@@ -857,12 +857,23 @@ public partial class GameSession : Node3D
                 InterpPath = state.InterpPath,
                 MissionZrdrPath = state.MissionZrdrPath,
                 EffectsParent = _worldRoot!,
-                // PLAYER_RANGE conditions + the sound listener measure from player 1's
-                // camera — the honest answer in every mode (chase cam, free camera, orbit
-                // eye); resolved per call because none of those cameras exist yet here.
+                // PLAYER_RANGE conditions measure from player 1's camera — the honest answer in
+                // every mode (chase cam, free camera, orbit eye); resolved per call because none
+                // of those cameras exist yet here.
                 PlayerPosition = () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam
                     ? cam.GlobalPosition
                     : Vector3.Zero,
+                // Every pane camera is a 3D audio listener, so the world is heard from the nearest
+                // of them (UI.SplitScreen). Same set as the rigs, for the debug log's column only.
+                ListenerPositions = () =>
+                {
+                    if (_rigs.Count == 0)
+                        return _camera is { } cam ? new[] { cam.GlobalPosition } : System.Array.Empty<Vector3>();
+                    var positions = new Vector3[_rigs.Count];
+                    for (int i = 0; i < _rigs.Count; i++)
+                        positions[i] = _rigs[i].Camera.GlobalPosition;
+                    return positions;
+                },
                 // The EXECUTION_BY_RANGE gate measures from the aircraft themselves (every
                 // player, nearest wins) — the chase camera trails far enough behind the plane
                 // to eat most of a 50 m radius. Camera fallback for the plane-less modes.

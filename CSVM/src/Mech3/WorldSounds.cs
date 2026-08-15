@@ -70,7 +70,7 @@ public sealed partial class WorldSounds : Node3D
     private readonly List<OneShot> _oneShots = new();
 
     private float _logClock;
-    private Func<Vector3>? _listener;
+    private Func<IReadOnlyList<Vector3>>? _listeners;
 
     public WorldSounds(Dictionary<string, SoundDef> defs,
         IReadOnlyDictionary<string, SoundGroup>? groups = null)
@@ -223,8 +223,8 @@ public sealed partial class WorldSounds : Node3D
     /// the one-shot rides <paramref name="source"/>'s world pose each <see cref="Tick"/>. For a
     /// voice line from a moving aircraft, where a once-written position would fall behind within a
     /// second. When the source is freed mid-clip the sound holds its last position and finishes
-    /// there. ⚠ The listener is still player one only (the known <c>WorldSession</c> limitation);
-    /// following the source does not change who hears it from where.</summary>
+    /// there. Who hears it is the pinned per-pane listener model (<c>UI.SplitScreen</c>): the
+    /// nearest pane's volume wins, and following the source only keeps the range honest.</summary>
     public string? PlayOneShot(string name, Node3D source, Random rng)
     {
         var pos = IsInstanceValid(source) && source.IsInsideTree()
@@ -273,8 +273,11 @@ public sealed partial class WorldSounds : Node3D
         _oneShots.Clear();
     }
 
-    /// <summary>Where the player is, for the debug log's distance column only.</summary>
-    public void SetListener(Func<Vector3> listener) => _listener = listener;
+    /// <summary>Where the session's audio listeners are — one camera per pane, since every pane is
+    /// listener-enabled (UI.SplitScreen). For the debug log's distance column only: the engine reads
+    /// the listeners itself, and reports the NEAREST one here because that is the pane whose volume
+    /// wins the mix.</summary>
+    public void SetListeners(Func<IReadOnlyList<Vector3>> listeners) => _listeners = listeners;
 
     /// <summary>
     /// Positions every live emitter from its host's current world pose and gates it on the host
@@ -359,6 +362,25 @@ public sealed partial class WorldSounds : Node3D
         LogOnce();
     }
 
+    /// <summary>Range from the closest listener to <paramref name="at"/>, or -1 with no listeners —
+    /// which is not a formatting quirk but the state that silences every 3D emitter, so the log says
+    /// it rather than printing a distance from the world origin.</summary>
+    private static (float Range, int Index) NearestEar(IReadOnlyList<Vector3> ears, Vector3 at)
+    {
+        float best = -1f;
+        int which = -1;
+        for (int i = 0; i < ears.Count; i++)
+        {
+            float d = ears[i].DistanceTo(at);
+            if (best < 0f || d < best)
+            {
+                best = d;
+                which = i;
+            }
+        }
+        return (best, which);
+    }
+
     private string? Spawn(string name, Vector3 worldPos, Node3D? source, Random rng)
     {
         string resolved = _groups.TryGetValue(name, out var group)
@@ -426,16 +448,24 @@ public sealed partial class WorldSounds : Node3D
         if (_logClock < 1f)
             return;
         _logClock = 0f;
-        var ear = _listener?.Invoke() ?? Vector3.Zero;
+        var ears = _listeners?.Invoke() ?? Array.Empty<Vector3>();
+        // Names the reference of the dist column: it is the nearest LISTENER (pane camera), which is
+        // the one whose volume the engine's per-channel max keeps, not player one's.
+        var where = new System.Text.StringBuilder();
+        for (int i = 0; i < ears.Count; i++)
+            where.Append(i == 0 ? " at " : ", ").Append(ears[i].Snapped(Vector3.One));
+        GD.Print($"sound: {ears.Count} listener{(ears.Count == 1 ? "" : "s")}{where} "
+                 + $"(dist below = range to the NEAREST pane camera)");
         foreach (var e in _emitters)
         {
             string host = e.Host is { } h && IsInstanceValid(h)
                 ? (h.HasMeta("cs_name") ? h.GetMeta("cs_name").AsString() : h.Name.ToString())
                 : "UNATTACHED";
             bool hidden = e.Host is { } hv && IsInstanceValid(hv) && !hv.IsVisibleInTree();
+            var near = NearestEar(ears, e.Player.GlobalPosition);
             GD.Print($"sound: {e.Name} @ {host}{(hidden ? " (host hidden)" : "")} "
                      + $"pos {e.Player.GlobalPosition.Snapped(Vector3.One)} "
-                     + $"dist {ear.DistanceTo(e.Player.GlobalPosition):0} m "
+                     + $"dist {near.Range:0} m (P{near.Index + 1}) "
                      + $"max {e.Player.MaxDistance:0} m "
                      + (e.Player.Playing ? "PLAYING" : e.Active ? "silent" : "off"));
         }

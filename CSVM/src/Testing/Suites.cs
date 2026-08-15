@@ -365,6 +365,10 @@ public static class Suites
             "nearest LIVE AI hostile off the pool's own aircraft roster (a closer human, dead " +
             "plane or neutral is never picked), switches to a closer hostile, drops a crashed " +
             "one, and a hud built without a pool (the VS default) never tracks", HostileMarkerHud));
+        into.Add(new TestHarness.Suite("splitscreen-listeners",
+            "every 2–4P pane is a 3D audio listener, which a SubViewport is not by default — the "
+            + "pinned listener model (A2), and the one thing standing between splitscreen and a "
+            + "world with no listener at all", SplitscreenListeners));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------
@@ -10083,6 +10087,49 @@ public static class Suites
         return null;
     }
 
+    /// <summary>Asserts every pane of a 2-, 3- and 4-player rig is a 3D audio listener.
+    ///
+    /// <para>The check reads trivial and is not: a fresh <c>SubViewport</c> is NOT a listener, and
+    /// in splitscreen the main camera stands down (<c>GameSession.BuildRigs</c>), which takes it out
+    /// of the World3D listener set — a camera joins that set on becoming current and leaves it on
+    /// losing current (Godot 4.7 <c>Camera3D::_notification</c>). With no listener-enabled viewport
+    /// left, <c>AudioStreamPlayer3D::_update_panning</c> finds no listener in range, clears its bus
+    /// volumes, and every 3D emitter in the world is silent — with nothing logged or counted to say
+    /// so. That is the state this one property prevents.</para></summary>
+    private static void SplitscreenListeners(TestContext ctx)
+    {
+        var main = ctx.Host.GetViewport();
+        ctx.Check(main.AudioListenerEnable3D,
+            $"the main viewport is a 3D audio listener (the untouched 1P path)");
+
+        // The default the rig has to override, proved rather than assumed.
+        using (var bare = new SubViewport())
+        {
+            ctx.Check(!bare.AudioListenerEnable3D,
+                $"a fresh SubViewport is NOT an audio listener, so each pane must set it");
+        }
+
+        for (int players = 2; players <= SplitScreen.MaxPlayers; players++)
+        {
+            var split = SplitScreen.Build(players, main);
+            ctx.Host.AddChild(split);
+            try
+            {
+                ctx.Same(players, split.Views.Count, $"{players}P panes");
+                foreach (var view in split.Views)
+                {
+                    ctx.Check(view.AudioListenerEnable3D,
+                        $"{players}P pane {view.Name} is a 3D audio listener");
+                }
+            }
+            finally
+            {
+                ctx.Host.RemoveChild(split);
+                split.Free();
+            }
+        }
+    }
+
     /// <summary>One authored event on an <c>ordnance-burst-timeline</c> lane: where it sits in its
     /// sequence, what it is, and the instant the JSON says it fires — a cumulative sum of the
     /// preceding events' <c>run_time</c>s and start offsets, read off the definition by hand.
@@ -10101,5 +10148,4 @@ public static class Suites
     /// which is how the timeline says the second call restarted a parked sequence rather than
     /// being swallowed or running a second concurrent copy.</summary>
     private sealed record BurstLane(string Sequence, BurstStep[] Steps);
-
 }

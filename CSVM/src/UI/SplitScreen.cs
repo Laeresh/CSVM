@@ -25,6 +25,14 @@ namespace CSVM.UI;
 /// (<see cref="PlayerCullMask"/>). Everything the world builds stays on the default layer 1 and
 /// is therefore visible in every pane — including the other players' aircraft.</para>
 ///
+/// <para><b>Every pane is a 3D audio listener</b> (<see cref="Viewport.AudioListenerEnable3D"/>
+/// on each SubViewport). Godot's <c>AudioStreamPlayer3D</c> takes the per-channel MAXIMUM over all
+/// listener-enabled viewports of its World3D, so an emitter is heard at its NEAREST pane's volume
+/// with no N-fold buildup and no manual attenuation; the price is that panning is unioned across
+/// panes, since the panes share one stereo output. Without this a splitscreen session has NO
+/// listener at all — the main camera stands down below, and a camera only joins the World3D
+/// listener set while it is current — and every 3D emitter in the world goes silent.</para>
+///
 /// <para><b>The zone-gate band</b> (<c>Mech3.ZoneGate.LayerBand</c>, layers 14–16) is the other
 /// named allocation out of the same 20, and it is not per player either: three SHARED layers, one
 /// per gamez <c>zone_id</c> 1/2/3, carrying every mesh built for a node of that zone — the placed
@@ -162,6 +170,9 @@ public sealed partial class SplitScreen : CanvasLayer
                 Msaa3D = msaa,
                 RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
                 HandleInputLocally = false, // input is polled per device, never routed per pane
+                // This pane's camera is a 3D audio listener: the world is heard from whichever
+                // pane is nearest it (Godot maxes the listeners per channel), not from P1.
+                AudioListenerEnable3D = true,
             };
             pane.AddChild(view);
             _root.AddChild(pane);

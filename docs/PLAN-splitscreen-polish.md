@@ -90,7 +90,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Decisions and the seam
 
 1. ☑ Decide the team model for plain splitscreen free flight (`BL-368`)
-2. ☐ Decide and pin the 3D audio listener model (`BL-369`)
+2. ☑ Decide and pin the 3D audio listener model (`BL-369`)
 3. ☐ Promote the viewer set to a session service
 
 ### Wave B — Draw rules (`BL-338`'s class)
@@ -182,7 +182,7 @@ and folds into `F52`'s playtest.
 **⚠ Traps.** Do not gate aim assist on `PlayerIndex == 0` while in there — the assist follows
 whichever human the AI engages, decided M4 (architecture.md's AimAssist ⚠).
 
-## A2 ☐ Decide and pin the 3D audio listener model (`BL-369`)
+## A2 ☑ Decide and pin the 3D audio listener model (`BL-369`)
 
 **Goal.** The session sets its listener(s) explicitly; who hears the 3D world in splitscreen is a
 recorded decision, not an engine default.
@@ -193,24 +193,55 @@ current either (`GameSession.cs:2979`). `WorldSounds.cs:226` records "the listen
 one only"; M2.5 decided "no positional audio" for player one-shots; PLAN-M4-ai lists the listener
 as a known player-one singleton.
 
-**Approach.** Present the option space: (a) single listener pinned to P1 (today's accident, made
-explicit), (b) nearest-pane listener per emitter (needs manual attenuation, no Godot listener),
-(c) per-pane listeners with the 1/√N mix (Godot supports `AudioListenerEnable3D` per SubViewport;
-check how it mixes multiple listeners before promising this). Decide, implement the pin, and record
-it in `docs/architecture.md`'s audio entry. <TODO: user decision. TODO: verify Godot 4.7's actual
-behaviour with multiple `AudioListenerEnable3D` viewports before the decision round, so the options
-are real.>
+**Engine behaviour (verified 2026-08-15, before the decision round).** Read verbatim off the Godot
+`4.7` tag (our binary is `Godot_v4.7-stable_mono_win64`); the class docs cover none of it.
+`AudioStreamPlayer3D::_update_panning` builds its listener set as `World3D::get_cameras()` ∪
+`get_viewport()->get_camera_3d()`, keeps only those whose viewport `is_audio_listener_3d()`, and
+combines them with `_apply_max_volume_from_vector` — the per-channel **MAXIMUM**, not a sum, so
+there is no N-fold buildup and the plan's "1/√N mix" premise was wrong. `max_distance` culling is
+per listener (`continue` skips that listener alone) and the attenuation lowpass takes the max too.
+With no listener the volume vector stays `AudioFrame(0,0)` and `bus_volumes` is cleared: silence.
+`Camera3D` joins the `World3D` set on `NOTIFICATION_BECAME_CURRENT` and leaves it on
+`NOTIFICATION_LOST_CURRENT`. Consequence for the rig as it stood: the main camera stands down
+(`GameSession.cs:2980`) and the panes never set `AudioListenerEnable3D`, so a 2–4 player session had
+**no listener at all** and every `AudioStreamPlayer3D` was silent — not P1-pinned, as
+`WorldSounds.cs:226` assumed. Option (a) was therefore never "today's accident".
+
+**Decision (2026-08-15, user call).** **Per-pane listeners**: every pane `SubViewport` sets
+`AudioListenerEnable3D`. The engine's max rule then means an emitter is heard at its NEAREST pane's
+volume with no manual attenuation, which is the plan's own nearest/union boundary rule applied to
+audio. Accepted cost: panning is unioned across panes (a sound to P1's left and P2's right comes out
+of both sides), the panes sharing one stereo out.
+
+**Approach (landed).** One property in `SplitScreen.Init`, plus the record in
+`docs/architecture.md` (`UI/SplitScreen` carries the model, `Mech3/WorldSounds` points at it) and a
+`splitscreen-listeners` suite that pins all three pane counts and proves the default it overrides
+(a fresh `SubViewport` is not a listener). `WorldSounds.SetListener(Func<Vector3>)` became
+`SetListeners(Func<IReadOnlyList<Vector3>>)`, fed by a new `WorldSession.Options.ListenerPositions`
+off the rig cameras, so the `--debug-anim` sound line reports range to the NEAREST listener and
+names its pane. That column was F51's to relabel; it is done here because A2's own verify needs it.
 
 **Model recommendation.** high — the option space needs engine-behaviour research and the outcome
 shapes D31/D32.
 
-**Verify.** A scripted 2-player run with one `WorldSounds` emitter near P2 and far from P1:
-`.scratch/logs/` sound lines show the decided attenuation. `--volume=0` keeps logging, so the run
-is assertable headless (cli.md's volume note).
+**Verify (done 2026-08-15).** `.\RunTests.ps1`: 1289/1289 units, 60/60 engine suites (the new
+`splitscreen-listeners` included), 14/14 goldens hash-identical — the 1P path is untouched by
+construction (it never builds this rig). Scripted probes through `.\RunProbe.ps1` on C1, exit
+condition per SHELL-12 (`--screenshot=` + `--frames=150`, never a bare `--debug-anim`):
+`--players=4 --fly --chapter=C1 --debug-anim` logs `sound: 4 listeners at (-7034, 331, -5548),
+(-7776, 376, -5879), (-6576, 266, -4138), (-2465, 205, -4028)` and resolves `snd_waterfall` to
+**1488 m (P3)** against its own 1200/1500 m RANGE while P1 sits 2282 m away — past the emitter's
+`max_distance`, so under a P1-pinned listener that waterfall is culled for everyone and under the
+pinned model P3 hears it. `snd_train`/`snd_police` resolve to P1 in the same block, so the column
+is discriminating, not a constant. The 2P run shows the same shape with two listeners.
+**What this cannot show:** the log reads our own `Play()` state, never audibility — the mix itself
+is the user's to judge (verification.md's "what this project cannot verify itself"), and the
+2026-07-30 playtest's "per-pane audio mix is fine by ear" was almost certainly about the
+non-positional `FlightAudio` loops, which no listener change touches. F52 settles it at the controls.
 
 **⚠ Traps.** `--mute` is load-time and blind (nothing is counted or logged); use `--volume=0` for
-baselines. The `--debug-anim` distance column reports range from P1 (F51) — do not read it as
-evidence about another pane's audio until F51 lands.
+baselines. Do not read the `--debug-anim` sound `dist` column as a per-pane audio *level*: it is
+range to the nearest listener, and the engine's own attenuation curve sits between it and loudness.
 
 ## A3 ☐ Promote the viewer set to a session service
 
@@ -412,7 +443,9 @@ far, per the A2 listener model.
 `AudioStreamPlayer`s at `def.Volume * 0.2f`, no distance term, no per-player gain; round-robin
 voice stealing cuts samples in a 4-player firefight.
 
-**Approach.** Per A2's decision: either route through a shared one-shot helper that applies
+**Approach.** A2 pinned per-pane listeners, so a positional player now attenuates against whichever
+pane is nearest it with no work of ours — the choice below is real, not blocked. Either route
+through a shared one-shot helper that applies
 `MixGain` and a distance term against the nearest human, or convert the pool to positional
 players. Keep the 8-voice pool and its stealing policy unless A2 chose positional (then re-judge
 the pool size as TUNE). D32 reuses whatever helper this creates.
@@ -548,13 +581,13 @@ pilot.
 (`GameSession.cs:1901`, `:1926`); `NodeLabels` projects through P1's camera onto a whole-window
 layer (`GameSession.cs:2889`); `MarkerOverlay.Relayout` never runs in splitscreen
 (`GetViewport().GetCamera3D()` resolves to the non-current main camera, `MarkerOverlay.cs:243`);
-the F15 targeting overlay's text roll-call is whole-window (`TargetingOverlay.cs:236`); the
-`--debug-anim` sound distance column reports range from P1 (`WorldSounds.cs:277`).
+the F15 targeting overlay's text roll-call is whole-window (`TargetingOverlay.cs:236`). (The
+`--debug-anim` sound distance column was the sixth site; A2 landed it — the column now reports the
+range to the nearest listener and names its pane, and `docs/cli.md` says so.)
 
 **Approach.** Per site, the cheap verdict: labs stay P1-only (document in `docs/cli.md`);
 `MarkerOverlay` takes an explicit camera instead of `GetViewport()` (fixes the silent no-op);
-`NodeLabels` documents P1-only; the `--debug-anim` distance column names its reference ("range
-from P1") in the log header so it stops misleading audio investigations.
+`NodeLabels` documents P1-only.
 
 **Model recommendation.** medium, low effort — mechanical, tool-only.
 

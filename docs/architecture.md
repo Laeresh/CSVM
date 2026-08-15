@@ -1148,7 +1148,9 @@ half (D31): fire-and-forget destruction/impact audio, resolving a `SOUND_GROUPS`
 first; the `Sound` anim event calls it. The `PlayOneShot(name, Node3D source, rng)` overload rides
 the source's pose per Tick (a voice line from a moving aircraft; a freed source leaves it finishing
 at its last position). `HasStream(name)` answers clip availability after the prewarm, which a def
-alone cannot (B8).
+alone cannot (B8). Who hears these emitters is the pinned per-pane listener model (`UI/SplitScreen`);
+`SetListeners` feeds the `--debug-anim` log alone, whose `dist` column names the NEAREST listener and
+the pane it belongs to, because that is the pane whose volume wins the engine's mix.
 ⚠ Pooled emitters are never parented into world subtrees — AnimRuntime's FindAll memoization forbids runtime reparenting.
 ⚠ `Prewarm` (SoundNode + one-shot `Sound` names, expanded through `SOUND_GROUPS`) must run BEFORE
   the sound archive closes — the Loader dies with the world build and most events first fire at
@@ -3902,6 +3904,14 @@ Wingmen's count/aircraft (H16) all read it — every other screen ignores it.
 The splitscreen rig for 2–4 players (1P never constructs it, keeping that path untouched): black
 gutter backdrop, one `SubViewport` pane per player sharing the main `World3D`, plus the
 `PlayerColor`/`PlayerTag` identity table.
+**The pinned 3D audio listener model (A2, 2026-08-15): every pane is a listener**
+(`AudioListenerEnable3D`). Godot 4.7 takes the per-channel MAXIMUM over all listener-enabled
+viewports of the `World3D` and culls `max_distance` per listener, so an emitter is heard at its
+NEAREST pane's volume with no N-fold buildup and no manual attenuation; the cost is that panning is
+unioned across panes, which share one stereo out. Without it a splitscreen session has NO listener —
+the main camera stands down here and a camera is in the `World3D` listener set only while current —
+and every `AudioStreamPlayer3D` in the world goes silent, uncounted and unlogged. Pinned by the
+`splitscreen-listeners` suite.
 ⚠ `PaneRect(index, players, size)` is the ONE pane-layout definition — the launchscreen aircraft
   select uses the identical call, so the menu pane you pick in is exactly the flight pane you get.
 ⚠ `SubViewport.Msaa3D` does not inherit the project msaa_3d setting (root viewport only) — copy it
