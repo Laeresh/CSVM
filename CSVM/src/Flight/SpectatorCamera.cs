@@ -16,6 +16,12 @@ namespace CSVM.Flight;
 /// Deliberately has NO collision — flying through terrain to get a vantage point is the
 /// feature. Pitch is clamped just short of vertical and roll is never applied, so the
 /// horizon stays level and the view cannot tumble into an unrecoverable attitude.
+///
+/// Every non-splitscreen call site (`--freecam`, the anim lab, the weapon lab) takes the
+/// default device filter — every connected pad plus the keyboard, unchanged from before E44.
+/// A splitscreen instant-action spectator (E44, `BL-375`) is constructed with its downed
+/// pilot's own `PadDevices`/`UseKeyboard`, so two seats watching at once move independently;
+/// mouse look has no such split (one physical mouse) and stays shared.
 /// </summary>
 public sealed partial class SpectatorCamera : Node
 {
@@ -38,6 +44,12 @@ public sealed partial class SpectatorCamera : Node
     private const float OrbitPitchLimit = 1.396f; // ~80°
 
     private readonly Camera3D _camera;
+    // The device filter (E44, `BL-375`): null/true (the default) reads every connected pad plus
+    // the keyboard, matching every pre-E44 call site (--freecam, the anim lab, the weapon lab —
+    // all single-seat). A downed splitscreen pilot's spectator gets its rig's own PadDevices/
+    // UseKeyboard instead, so two pilots watching at once no longer move together.
+    private readonly int[]? _padDevices;
+    private readonly bool _useKeyboard;
 
     private float _yaw, _pitch;
     private float _speed = DefaultSpeed;
@@ -46,9 +58,12 @@ public sealed partial class SpectatorCamera : Node
     // Spherical offset of the eye from the target: distance, azimuth, elevation.
     private float _orbitYaw, _orbitPitch, _orbitDist;
 
-    public SpectatorCamera(Camera3D camera, Vector3 position, Vector3 lookAt)
+    public SpectatorCamera(Camera3D camera, Vector3 position, Vector3 lookAt,
+        int[]? padDevices = null, bool useKeyboard = true)
     {
         _camera = camera;
+        _padDevices = padDevices;
+        _useKeyboard = useKeyboard;
         _camera.Position = position;
         var to = lookAt - position;
         // Derive the starting yaw/pitch from the requested look direction so --pos/--direction
@@ -199,17 +214,20 @@ public sealed partial class SpectatorCamera : Node
     }
 
     // -1 when only `negative` is down, +1 when only `positive` is, 0 for neither or both.
-    private static float Axis(Key negative, Key positive) =>
+    // Honors _useKeyboard (E44): a pad-only spectator seat reads no keys at all.
+    private float Axis(Key negative, Key positive) =>
+        !_useKeyboard ? 0f :
         (Input.IsKeyPressed(positive) ? 1f : 0f) - (Input.IsKeyPressed(negative) ? 1f : 0f);
 
-    // Any-pad reads, matching the project's phantom-device policy (never pads[0]): take the
-    // largest-magnitude value across every connected pad, so idle/phantom devices read ~0.
-    // Through Pads.For(null) rather than Pads.Connected(): these are input *reads*, so they are
-    // gated on window focus as well as on --no-pads.
-    private static float PadAxis(JoyAxis axis)
+    // Pad reads restricted to _padDevices (E44) — null (every pre-E44 call site) is every
+    // connected pad, matching the project's phantom-device policy (never pads[0]): take the
+    // largest-magnitude value across the device set, so idle/phantom devices read ~0.
+    // Through Pads.For(_padDevices) rather than Pads.Connected(): these are input *reads*, so
+    // they are gated on window focus as well as on --no-pads.
+    private float PadAxis(JoyAxis axis)
     {
         float best = 0f;
-        foreach (int device in Pads.For(null))
+        foreach (int device in Pads.For(_padDevices))
         {
             float v = Input.GetJoyAxis(device, axis);
             if (Mathf.Abs(v) > Mathf.Abs(best))
@@ -218,18 +236,18 @@ public sealed partial class SpectatorCamera : Node
         return Mathf.Abs(best) < PadDeadzone ? 0f : best;
     }
 
-    private static float PadTrigger(JoyAxis axis)
+    private float PadTrigger(JoyAxis axis)
     {
         float best = 0f;
-        foreach (int device in Pads.For(null))
+        foreach (int device in Pads.For(_padDevices))
             best = Mathf.Max(best, Input.GetJoyAxis(device, axis));
         return best;
     }
 
-    private static float PadButtonAxis()
+    private float PadButtonAxis()
     {
         bool up = false, down = false;
-        foreach (int device in Pads.For(null))
+        foreach (int device in Pads.For(_padDevices))
         {
             up |= Input.IsJoyButtonPressed(device, JoyButton.RightShoulder);
             down |= Input.IsJoyButtonPressed(device, JoyButton.LeftShoulder);
@@ -292,7 +310,7 @@ public sealed partial class SpectatorCamera : Node
         // Keyboard fallback (IJKL) and the right stick both feed the same yaw/pitch as the
         // mouse, so any of the three can drive a session — including a pad-only machine.
         // They keep their own rates (a stick deflects proportionally, a key is on or off).
-        float kb = KeyboardCaptured ? 0f : 1f;
+        float kb = (_useKeyboard && !KeyboardCaptured) ? 1f : 0f;
         float yaw = kb * Axis(Key.J, Key.L) * KeyLookRate + PadAxis(JoyAxis.RightX) * PadLookRate;
         float pitch = kb * Axis(Key.K, Key.I) * KeyLookRate + PadAxis(JoyAxis.RightY) * PadLookRate;
         if (yaw == 0f && pitch == 0f)
@@ -304,8 +322,9 @@ public sealed partial class SpectatorCamera : Node
 
     private void Move(float dt)
     {
-        // Keyboard is silenced while typing a filter (KeyboardCaptured); the pad is not.
-        float kb = KeyboardCaptured ? 0f : 1f;
+        // Keyboard is silenced while typing a filter (KeyboardCaptured) or unassigned to this
+        // seat (_useKeyboard, E44); the pad is not.
+        float kb = (_useKeyboard && !KeyboardCaptured) ? 1f : 0f;
         var basis = _camera.Basis;
         // Forward is the camera's -Z (the project's convention everywhere); strafe its +X.
         var move = basis.Z * -(kb * (Axis(Key.S, Key.W) + Axis(Key.Down, Key.Up)) - PadAxis(JoyAxis.LeftY))

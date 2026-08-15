@@ -193,8 +193,8 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt flying, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, world destructibles that take damage, die, lose collision, throw debris and reset — and planes shoot planes down (M4 A1, front-loaded). The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
 **Active plan: [`docs/PLAN-splitscreen-polish.md`](docs/PLAN-splitscreen-polish.md)** (written
-2026-08-15) — the Splitscreen backlog theme, 15 items in waves A–F; next: E44 (`BL-375`); Waves A,
-B, C and D landed, E41, E42 and E43 landed. Instant Action completed 2026-08-15,
+2026-08-15) — the Splitscreen backlog theme, 15 items in waves A–F; next: F51 (`BL-376`); Waves A,
+B, C and D landed, E41, E42, E43 and E44 landed. Instant Action completed 2026-08-15,
 [`docs/plans/PLAN-instant-action.md`](docs/plans/PLAN-instant-action.md). Owed at the
 controls: `PT-28`, `PT-41`, `PT-43` (4-player pane only), `PT-45`, `PT-46`, `PT-47`, `PT-49`,
 `PT-50` and `PT-52` ([`playtest.md`](playtest.md)). Verify any

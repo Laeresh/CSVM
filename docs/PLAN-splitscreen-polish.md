@@ -115,7 +115,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 41. ☑ Pad assignment follows the phantom-device policy (`BL-374`)
 42. ☑ Camera views and look-back for players 2–4 (`BL-372`)
 43. ☑ Splitscreen pause (`BL-373`)
-44. ☐ Per-seat spectator control (`BL-375`)
+44. ☑ Per-seat spectator control (`BL-375`)
 
 ### Wave F — Cleanup and playtest
 
@@ -844,7 +844,7 @@ same as E41/E42.
 leaving `GameClock.Halted` the single source of truth every halt-aware consumer already read;
 `PauseState` only gates who may write it, never how the write behaves.
 
-## E44 ☐ Per-seat spectator control (`BL-375`)
+## E44 ☑ Per-seat spectator control (`BL-375`)
 
 **Goal.** Two downed IA pilots spectate independently.
 
@@ -852,15 +852,37 @@ leaving `GameClock.Halted` the single source of truth every halt-aware consumer 
 `Input.IsKeyPressed`/any-pad reads with no `PadDevices`/`UseKeyboard` split; architecture.md's
 entry records the lockstep symptom.
 
-**Approach.** Give the spectator the same per-player device filter the flying panes have
-(`PadDevices`/`UseKeyboard` from the downed pilot's rig), one spectator instance per downed
-pilot.
+**Approach (landed).** `SpectatorCamera`'s constructor takes optional `padDevices`/`useKeyboard`
+params (default `null`/`true` — every connected pad plus the keyboard, so every pre-existing call
+site — `--freecam`, the anim lab, the weapon lab — is unaffected). The four raw-read sites the
+Evidence named (`Axis`, `PadAxis`, `PadTrigger`, `PadButtonAxis`, plus the `Shift`/`Ctrl` boost
+checks in `Move`) became instance methods gated on those fields.
+`GameSession.BeginInstantActionSpectate` passes the downed pilot's own
+`FlightController.PadDevices`/`UseKeyboard` — the same filter the flying panes use — when it
+constructs that pilot's spectator; one instance per downed pilot already existed (the method runs
+once per rig crossing into `Spectating`), so no new fan-out was needed there. Mouse look (RMB
+drag) has no per-seat equivalent — one physical mouse — and stays shared, same as before; noted
+in the class doc comment rather than worked around. `docs/controls.md` updated (mandatory for a
+player-input change).
 
 **Model recommendation.** medium, low effort.
 
-**Verify.** At the controls, 2 players both out of lives: each moves their own spectator view.
+**Verify (done 2026-08-15).** `dotnet build CSVM/CSVM.sln` clean, 0 warnings; `dotnet format
+CSVM/CSVM.csproj` (the pre-commit hook's own command) leaves both changed files unmodified.
+`.\RunTests.ps1`: 1302/1302 units, 61/61 engine suites (including `instant-action-end`, which
+exercises `BeginInstantActionSpectate`'s lives-ledger → spectate transition end to end and stayed
+green, unchanged), 14/14 goldens hash-identical, engine errors clean, hitch clean — no suite
+covers pad/key device filtering (no pad-axis fixture exists, same gap E41/E42 hit), so this is
+"did not break the spectate transition" evidence, not a positive check of the new split. An
+8-chapter `--freecam --chapter=<X> --frames=60 --screenshot=` sweep (C1, C1B, C1C, C2, C2B, C3,
+C4, C5) all exit 0 with 0 ERROR lines each — the default-filter path (every pre-existing call
+site) is unaffected. **The at-the-controls pass — 2 players both out of lives, each moving their
+own spectator view independently on real pads — is still owed**: this environment has no gamepad
+to reproduce it with, and no `--det` hook exists to script a mid-run key/pad press (same gap
+E41/E42/E43 hit). Folds into F52's playtest pass.
 
-**⚠ Traps.** None known beyond keeping the single-player spectator identical.
+**⚠ Traps.** None known beyond keeping the single-player spectator identical (confirmed: default
+params reproduce the pre-E44 `Pads.For(null)`/always-on-keyboard behaviour exactly).
 
 # Wave F — Cleanup and playtest
 

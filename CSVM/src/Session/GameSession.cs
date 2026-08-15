@@ -3199,10 +3199,10 @@ public partial class GameSession : Node3D
     /// same one the anim lab uses and it releases on any translation input, so the watcher can fly
     /// off rather than being stuck on one aircraft.
     ///
-    /// <para>⚠ The spectator camera polls raw keyboard/any-pad input, so in splitscreen two
-    /// downed pilots watching at once move together — one keyboard, no per-seat binding. Named
-    /// rather than worked around: the per-device split is <see cref="FlightController"/>'s
-    /// (<c>PadDevices</c>/<c>UseKeyboard</c>) and this camera has no equivalent.</para></summary>
+    /// <para>The spectator gets this pilot's own device filter (E44, `BL-375`):
+    /// <see cref="FlightController.PadDevices"/>/<see cref="FlightController.UseKeyboard"/>, the
+    /// same split the flying panes use, so in splitscreen two downed pilots watching at once move
+    /// independently rather than lockstep. Mouse look stays shared (one physical mouse).</para></summary>
     private void BeginInstantActionSpectate(PlayerRig rig)
     {
         if (rig.Controller is not { Spectating: false } pilot)
@@ -3222,7 +3222,8 @@ public partial class GameSession : Node3D
         }
         var eye = rig.Camera.Position;   // where Crash's own cut left it (CameraController.CrashView)
         var spectator = new SpectatorCamera(rig.Camera, eye,
-            follow != null ? follow.WorldPosition : eye - rig.Camera.Basis.Z)
+            follow != null ? follow.WorldPosition : eye - rig.Camera.Basis.Z,
+            pilot.PadDevices, pilot.UseKeyboard)
         {
             ShowReadout = false,   // the freecam's own label would sit over a splitscreen pane
         };

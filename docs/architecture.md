@@ -3386,14 +3386,17 @@ are procedural `MakeFlakeTexture`/`MakeStreakTexture` (the original drew untextu
 
 ## src/Flight/SpectatorCamera.cs
 The `--freecam`/`--anim-lab` observation camera: WASD move, RMB-held mouse look (captured only
-while held), wheel speed, pads via `Pads.For(null)`; lab additions `Frame(Aabb)`, the
+while held), wheel speed, pads via `Pads.For(_padDevices)`; lab additions `Frame(Aabb)`, the
 `FollowNode` orbit-lock (released by any translation input; `ExitFollow` keeps orientation) and
 a public `Camera` accessor — all inert in plain `--freecam`. Rates TUNE.
 It is also the pane an Instant Action pilot out of lives watches from (PLAN-instant-action G13,
 `GameSession.BeginInstantActionSpectate`): the lab's own `FollowNode` orbit is what "follow a live
-aircraft" needed, so nothing was added for it. In splitscreen it reads raw keyboard/any-pad input,
-so two downed pilots watching at once move together — there is no per-seat device split here, the
-way `FlightController.PadDevices`/`UseKeyboard` gives the flying panes one.
+aircraft" needed, so nothing was added for it. Constructor params `padDevices`/`useKeyboard` (E44,
+`BL-375`) default to null/true — every connected pad plus the keyboard, unchanged for `--freecam`,
+the anim lab and the weapon lab — but `BeginInstantActionSpectate` passes its rig's own
+`FlightController.PadDevices`/`UseKeyboard`, the same filter the flying panes use, so two
+splitscreen pilots watching at once move independently instead of lockstep. Mouse look has no such
+split (one physical mouse) and stays shared.
 ⚠ Default start is the mission spawn — RANDOM per launch; pass `--pos`/`--direction` for comparisons.
 ⚠ `KeyboardCaptured` zeroes keyboard axes while a text field owns focus — raw key polls bypass GUI focus.
 ⚠ Vertical is Q/E plus the **Z/U** alternate — not C/Space: C toggles the collider overlay and

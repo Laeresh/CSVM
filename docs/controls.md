@@ -37,6 +37,7 @@ Flags are specified in [`cli.md`](cli.md).
 | Input | Does |
 |---|---|
 | `P` | pause — halts the sim; `.` steps one frame. Splitscreen: any player's `P`/pad Start pauses everyone, and shows a shared "PAUSED" board naming who paused (E43, `BL-373`) — only that player's `P`/Start resumes it |
+| — | a pilot out of lives watches from the `--freecam` controls (WASD/QE move, RMB look) on its own pane. Splitscreen: each downed pilot's spectator reads only its own pad/keyboard (E44, `BL-375`) — two players watching at once move independently, not lockstep. Mouse look stays shared (one physical mouse) |
 | `.` | step one frame while paused |
 | `T` | node-name labels |
 | `F12` | screenshot |
