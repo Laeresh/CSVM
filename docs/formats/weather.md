@@ -5,7 +5,7 @@ Part of the [format documentation](README.md) (see also [zrdr.md](zrdr.md),
 whiteout band, wind, and the shared **colour-triple encoding rule**. Consumed by
 `CSVM/src/Flight/Weather.cs` (`WeatherState`) + `Session.WeatherRig.Build`.
 
-Seeded 2026-07-18 with the item-3 fog-colour decode; grown the same day with precipitation
+This reference covers fog colour, precipitation
 (item 5) and the `SUNLIGHT_*` world-lighting decode (item 6, the night/overcast brightness
 calibration).
 
@@ -17,12 +17,12 @@ This page is the current reference for its documented format family.
 ## Contents
 
 - [Location & shape](#location-shape)
-- [Colour-triple encoding (the item-3 decode, 2026-07-18)](#colour-triple-encoding-the-item-3-decode-2026-07-18)
+- [Colour-triple encoding](#colour-triple-encoding-the-item-3-decode-2026-07-18)
 - [Per-zone fog (`ZONE<n>`)](#per-zone-fog-zonen)
-- [World lighting (`SUNLIGHT_*`, the item-6 decode, 2026-07-18)](#world-lighting-sunlight-the-item-6-decode-2026-07-18)
+- [World lighting (`SUNLIGHT_*`)](#world-lighting-sunlight-the-item-6-decode-2026-07-18)
 - [Cloud cover (`CLOUD_COVER`)](#cloud-cover-cloudcover)
 - [Wind (`WIND`) — decoded and consumed (2026-08-10, `PLAN-puffer-engine-deltas` B6)](#wind-wind-�-decoded-and-consumed-2026-08-10-plan-puffer-engine-deltas-b6)
-- [Precipitation (the item-5 decode, 2026-07-18)](#precipitation-the-item-5-decode-2026-07-18)
+- [Precipitation](#precipitation-the-item-5-decode-2026-07-18)
 ## Location & shape
 
 One `weather.json` per mission folder, in the mission's own zrdr archive
@@ -46,7 +46,7 @@ the uniform `key,[list]` the dict view assumes — so `ZrdrDict.FromAlternating`
 them; Weather.cs walks them as raw key/next-element pairs (`ScalarAfter`/`ListAfter`/
 `Vec3After`). The per-zone blocks are all list-valued and go through the normal dict.
 
-## Colour-triple encoding (the item-3 decode, 2026-07-18)
+## Colour-triple encoding
 
 Colour triples in weather.json use **two coexisting encodings**, even within one file:
 
@@ -75,7 +75,7 @@ was a blown-white wall with a hard horizon cut instead of its data's 192 haze.
 
 ## Per-zone fog (`ZONE<n>`)
 
-### The zone names are per chapter, not a fixed `ZONE1`/`ZONE2` pair (2026-07-22)
+### The zone names are per chapter, not a fixed `ZONE1`/`ZONE2` pair
 
 Surveyed across all 53 `weather.json` in the install:
 
@@ -97,7 +97,7 @@ whatever `ZONE<digits>` keys the file carries (the `SW_*` twins stay excluded), 
 request falls back to the file's first zone (`WeatherState.ResolveZone`), logged once.
 **The default stays `zone2`** — see the selection note below.
 
-### Which zone a mission flies is not in any file (searched exhaustively 2026-07-22)
+### Which zone a mission flies is not in any file
 
 Not in the mission `zrdr` (`ia`, `objectives`, `targets`, `dzones`, `aiv`, `location`, `map`,
 `egen`, `net`, `startanims`), not in the 53 mission `.gw` interp scripts (1,215 statements,
@@ -124,7 +124,7 @@ remaining `BL-100` A/B. The two C1 strings are not two zone selections: one name
 not have, the other scrolls a texture. Nothing in `interp.json` bears on which zone a mission
 flies.
 
-#### The engine's rule, decompiled: zones are camera STATES, switched in flight (crimson.exe via Ghidra, 2026-08-09)
+#### The engine's rule: zones are camera states switched in flight
 
 The binary answers the selection question, and the answer is that **nothing selects one zone per
 mission — the engine switches between them at runtime, per camera position**. The per-frame
@@ -628,7 +628,7 @@ tell one altitude rule from another. A degenerate census is a fact about the ins
 the question (`INSTR-7`): measure any change to the altitude term in C2, and do not tune it
 against a scene that cannot exercise it.
 
-## World lighting (`SUNLIGHT_*`, the item-6 decode, 2026-07-18)
+## World lighting (`SUNLIGHT_*`)
 
 Each zone also carries a `SUNLIGHT_*` block — the directional light the original uses to
 light the baked-vertex world. List-valued keys:
@@ -865,7 +865,7 @@ It still does **not** move the cloud clutter. It used to drive the drift of the 
 `CloudPuffs` field, which the authored `fogvol.zrd` clutter replaced on 2026-08-06 (`BL-273`,
 [fogvol.md](fogvol.md)) — that field is static world geometry and no reader says wind moves it.
 
-## Precipitation (the item-5 decode, 2026-07-18)
+## Precipitation
 
 Some missions end with a precipitation block — the last thing in the root dict, **after
 `SHADOW_ANGLES`**, as bare-scalar top-level siblings (not nested under a key, and not a
