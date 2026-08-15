@@ -33,10 +33,21 @@ public sealed class CameraController
     /// <summary>LogView's marker for the look-behind view (the numpad views log their digit).</summary>
     public const int BackViewLog = -2;
 
+    /// <summary>LogView's marker for the pad look-around (E42, BL-372) — a continuously variable
+    /// twin of the numbered views rather than one of their digits.</summary>
+    public const int PadLookLog = -3;
+
     // The chase offset's DIRECTION: behind and above the nose, at atan2(4.5, 16) ≈ 15.7° of
     // elevation. Hand-picked and still a TUNE — camparam ships a distance per plane, not an angle,
     // so only the radius below comes from the data.
     private const float BaseBack = 16f, BaseUp = 4.5f;
+
+    // E42's pad look-around range: how far the right stick swings the view left/right and up/down
+    // from the ordinary chase direction. Not decoded — the original binds no such control — so
+    // this is a UX judgement call for the port, not authored data. Kept well short of vertical
+    // (baseDir sits ~74° off the up axis; ±60° pitch leaves a comfortable margin before
+    // Basis.LookingAt's up hint goes parallel to the view direction).
+    private const float PadLookYawMaxDeg = 150f, PadLookPitchMaxDeg = 60f;
     private const float CamLookAhead = 40f;
     private const float CamSmooth = 8f;         // 1/s — position catch-up
     private const float CamRotSmooth = 7f;      // 1/s — orientation (basis) catch-up; a touch of
@@ -133,10 +144,13 @@ public sealed class CameraController
         _backMax = cam.BackDistMax;
     }
 
-    /// <summary>The look-behind view is on: numpad 0 held, or the run pinned it with
-    /// <c>--view=back</c>. A held numpad 1–9 key still wins (the host checks
-    /// <see cref="ActiveView"/> first), same rule as the pinned numpad views.</summary>
-    public bool BackActive() => _keyDown(Key.Kp0) || _pinnedView == PinnedBackView;
+    /// <summary>The look-behind view is on: numpad 0 held, the run pinned it with
+    /// <c>--view=back</c>, or (E42, BL-372) <paramref name="padClick"/> — this player's right-stick
+    /// click, read by the host the same way it reads every other pad button. A held numpad 1–9 key
+    /// still wins (the host checks <see cref="ActiveView"/> first), same rule as the pinned numpad
+    /// views.</summary>
+    public bool BackActive(bool padClick = false) =>
+        _keyDown(Key.Kp0) || _pinnedView == PinnedBackView || padClick;
 
     /// <summary>Which fixed view the camera should hold this frame, as an index into
     /// <see cref="Views"/>, or −1 for the chase camera. A held numpad key beats the scripted
@@ -198,6 +212,28 @@ public sealed class CameraController
         float r = Mathf.Clamp(_radius, _backMin, _backMax);
         var dir = new Vector3(0f, 0f, -1f);     // ahead of the nose, plane frame
         _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * r));
+        _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
+    }
+
+    /// <summary>Analog look-around for the flying pane (E42, BL-372): the right stick swings the
+    /// external view around the plane at the SAME dynamic radius the chase camera and the numpad
+    /// views share — a continuous version of those fixed perspectives rather than one more digit.
+    /// <paramref name="stickX"/>/<paramref name="stickY"/> arrive already curved and dead-zoned
+    /// (the host's <c>StickCurve</c>, same one <c>OrbitInput</c> uses), so BOTH read exactly 0 at
+    /// centre and this reduces to the ordinary chase direction there — the caller only reaches
+    /// this method once one of them is nonzero. Rigid and instant like <see cref="FixedView"/>, so
+    /// releasing the stick reads as an immediate snap: nothing here eases, and <see cref="Chase"/>
+    /// resuming next frame does its own (short) catch-up from <c>_offset</c>'s last chase value,
+    /// same as releasing a numpad view already does. Not a decode: the original binds no such
+    /// control, so the yaw/pitch range is a UX judgement call for this port (see
+    /// docs/controls.md), not authored data.</summary>
+    public void PadLook(in Transform3D renderPose, float stickX, float stickY)
+    {
+        float yaw = Mathf.DegToRad(stickX * PadLookYawMaxDeg);
+        float pitch = Mathf.DegToRad(-stickY * PadLookPitchMaxDeg);  // stick up = look up
+        var baseDir = new Vector3(0f, BaseUp, BaseBack).Normalized();
+        var dir = new Basis(Vector3.Up, yaw) * (new Basis(Vector3.Right, pitch) * baseDir);
+        _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * _radius));
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
     }
 
@@ -370,7 +406,9 @@ public sealed class CameraController
         var toPlane = attitude.Inverse();
         var offset = toPlane * (_camera.Position - planePos);
         var aim = toPlane * -_camera.Basis.Z;   // the camera's forward axis, in the plane's frame
-        string n = view == BackViewLog ? "back" : (view < 0 ? "0" : Views[view].Digit.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        string n = view == BackViewLog ? "back"
+            : view == PadLookLog ? "padlook"
+            : (view < 0 ? "0" : Views[view].Digit.ToString(System.Globalization.CultureInfo.InvariantCulture));
         Log.Debug("flight", $"view n={n} offset=({offset.X:0.000},{offset.Y:0.000},{offset.Z:0.000}) dist={offset.Length():0.000} aim=({aim.X:0.000},{aim.Y:0.000},{aim.Z:0.000})");
     }
 

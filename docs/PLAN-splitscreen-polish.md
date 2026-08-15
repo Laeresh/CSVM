@@ -113,7 +113,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave E — Seats and input
 
 41. ☑ Pad assignment follows the phantom-device policy (`BL-374`)
-42. ☐ Camera views and look-back for players 2–4 (`BL-372`)
+42. ☑ Camera views and look-back for players 2–4 (`BL-372`)
 43. ☐ Splitscreen pause (`BL-373`)
 44. ☐ Per-seat spectator control (`BL-375`)
 
@@ -756,7 +756,7 @@ it. Folds into F52's playtest pass.
 `--no-pads`: `Connected()` returns empty, so every assignment (P1's included) is empty — unchanged.
 `--debug-join`: menu-only, never reaches `AssignPads` at all — unchanged.
 
-## E42 ☐ Camera views and look-back for players 2–4 (`BL-372`)
+## E42 ☑ Camera views and look-back for players 2–4 (`BL-372`)
 
 **Goal.** Every player can check their six and use fixed views from the pad.
 
@@ -766,20 +766,40 @@ it. Folds into F52's playtest pass.
 is taken by the weapon selectors (class comment), so the binding is a real design question.
 `--view=` also pins one view on every pane.
 
-**Approach.** First the decision: which pad control gets look-back and view select (candidates:
-click-stick, a shoulder+D-pad chord, or none-for-now with only look-back added). Then wire it
-through today's polling seam per player. Make `--view=` per-pane-capable only if trivial;
-otherwise document it as all-panes in `docs/cli.md`. Update `docs/controls.md` (mandatory when
-player input changes). <TODO: user decision on the binding.>
+**Approach (landed).** Decision: the right stick, unused by the flying pane (left stick is
+roll/pitch, shoulders are yaw, triggers are throttle, A/B/X/Y/Start/D-pad-left/right are all taken
+— confirmed by grepping every `JoyButton`/`JoyAxis` read in `src/Flight`). Deflecting it
+(`CameraController.PadLook`) swings the external view around the plane at the SAME dynamic radius
+the chase camera and numpad views share — a continuous twin of the fixed views rather than a
+discrete list — and clicking it (`JoyButton.RightStick`) holds the look-behind view, the pad twin
+of holding numpad 0 (`CameraController.BackActive`'s new `padClick` parameter). Both are read in
+`FlightController` (`PadLookInput`, alongside the view-selection block), never in
+`CameraController`, the same "no pad devices in the camera" rule `OrbitInput` already follows —
+stick values arrive pre-curved through the existing `StickCurve` deadzone, so centring the stick
+reads as exactly `(0, 0)` and the view snaps back to the ordinary chase pose with nothing to ease.
+This is a genuinely new binding — the original names no such control — so the yaw/pitch range and
+which stick/button own it are a UX call for this port, not a decode. `--view=` stays all-panes
+(documented already in `docs/cli.md`); making it per-pane wasn't trivial and is out of scope here.
+`docs/controls.md` updated (mandatory for a player-input change).
 
 **Model recommendation.** medium.
 
-**Verify.** At the controls, 2 players: each seat switches its own view and looks back
-independently. `--hold` scripted input still drives P1 unchanged.
+**Verify (done 2026-08-15).** `dotnet build CSVM/CSVM.sln` clean, 0 warnings; `dotnet format
+--verify-no-changes` clean. `.\RunTests.ps1`: 1298/1298 units, 61/61 engine suites, 14/14 goldens
+hash-identical, engine errors clean, hitch clean — none of the new code is exercised by an
+automated suite (no pad-axis fixture exists, same gap E41 hit), so this is "did not break
+anything" evidence, not a positive check of the new behaviour. A scripted `--fly --players=2
+--chapter=C1 --mission=IA1 --no-pads --det --frames=120 --screenshot=` probe exits 0 with 0 ERROR
+lines and no `padlook`/back-view log activity (no pads attached, both stick axes read 0 —
+confirms the baseline chase path is unaffected, the `--hold`-equivalent check for this item). An
+8-chapter `--freecam --chapter=<X> --frames=60 --screenshot=` sweep (C1, C1B, C1C, C2, C2B, C3, C4,
+C5) all exit 0 with 0 ERROR lines each. **The at-the-controls pass — 2 players each switching their
+own look-around/look-back independently on a real pad — is still owed**: this environment has no
+gamepad to reproduce it with. Folds into F52's playtest pass, same as E41.
 
-**⚠ Traps.** `BL-296`'s ActionMap is the eventual home for the binding — add it through the
-polling seam consistently with the existing style so the later ActionMap migration lifts it
-cleanly; do not build a half-ActionMap here.
+**⚠ Traps.** `BL-296`'s ActionMap is the eventual home for the binding — it is wired through
+`PadPressed`/`PadAxis`, the same per-player polling seam every other pad control uses, so that
+migration stays mechanical; no half-ActionMap was built here.
 
 ## E43 ☐ Splitscreen pause (`BL-373`)
 

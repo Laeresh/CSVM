@@ -2099,12 +2099,15 @@ the session log distinguishes "the data says 13" from "we guessed 13".
 ## src/Flight/CameraController.cs
 The flown aircraft's camera, split out of `FlightController`: the roll-following chase camera, the
 numpad fixed views (`Views`, `ActiveView`, `FixedView`, `LogView`), the look-behind view
-(`BackView`, numpad 0 / `--view=back`, at the chase radius bounded into the authored
-`back_dist_min/max`), the authored crash camera (`CrashView`, a hard cut to a static elevated
-vantage `crash_horiz` behind / `crash_y` above the impact, held until respawn — framing decoded
-off the original's crash footage; `crash_elev`/`crash_chord_y` stay capture-gated on `BL-260`,
-as do the death and flyby cameras) and the free orbit used while the debug freeze holds the
-world. Steers a `Camera3D` it does not own, as `UI/OrbitCamera` does for the static viewer. The chase RADIUS is dynamic per plane (BL-248): `d = Dist + DistFactor·V` (both
+(`BackView`, numpad 0 / `--view=back` / a pad click, at the chase radius bounded into the authored
+`back_dist_min/max`), the E42 (`BL-372`) analog look-around (`PadLook`, the right stick — a
+continuous twin of the fixed views at the SAME dynamic radius, rigid and instant so releasing the
+stick reads as a snap back to the ordinary chase pose), the authored crash camera (`CrashView`, a
+hard cut to a static elevated vantage `crash_horiz` behind / `crash_y` above the impact, held until
+respawn — framing decoded off the original's crash footage; `crash_elev`/`crash_chord_y` stay
+capture-gated on `BL-260`, as do the death and flyby cameras) and the free orbit used while the
+debug freeze holds the world. Steers a `Camera3D` it does not own, as `UI/OrbitCamera` does for the
+static viewer. The chase RADIUS is dynamic per plane (BL-248): `d = Dist + DistFactor·V` (both
 authored) plus a first-order acceleration transient relaxing at the MEASURED 0.65 /sim-s
 (`UpdateDynamics`, host-called once per sim step); the offset's DIRECTION (behind and above at
 ~15.7° elevation) is not in the data and stays hand-picked. Collaborators: `FlightController`
@@ -2112,8 +2115,16 @@ authored) plus a first-order acceleration transient relaxing at the MEASURED 0.6
 ⚠ Deliberately passive — no clock, no input devices. The host passes the dt, because which clock a
   camera runs on is behaviour: `Chase` takes the SIM clock's dt so a scripted capture is frame-rate
   independent, `Orbit` takes WALL dt because the point of the freeze is to fly around a stopped
-  world. The orbit's axes arrive pre-mixed and `ActiveView` takes a `Func<Key,bool>` that already
-  folds in `UseKeyboard`, so pad devices and window focus stay out of here.
+  world. The orbit's axes arrive pre-mixed, `ActiveView` takes a `Func<Key,bool>` that already
+  folds in `UseKeyboard`, `BackActive` takes an already-read pad-click bool, and `PadLook` takes
+  stick floats already run through `FlightController`'s `StickCurve` — so pad devices, window
+  focus and the stick response curve all stay out of here (`FlightController.PadLookInput` is
+  `OrbitInput`'s twin for the same reason).
+⚠ E42's pad look-around/look-back binding is NOT a decode — the original names no such control, so
+  the right-stick assignment, its yaw/pitch range and the deadzone are a UX judgement call for this
+  port (`docs/controls.md`), not authored data. `BL-296`'s eventual `ActionMap` migration is meant
+  to lift this binding wholesale; it is wired through the same per-player `PadPressed`/`PadAxis`
+  polling seam as every other pad control precisely so that migration is mechanical.
 ⚠ The chase camera slerps its BASIS, never a re-derived LookAt — that is what lets inverted flight
   render upside down. On the realtime clock the DRAWN pose is `_renderPose`, interpolated between
   the last two sim poses (DET-10), and anything bolted to the plane (the rigid numpad views) must

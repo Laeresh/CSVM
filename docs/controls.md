@@ -27,6 +27,8 @@ Flags are specified in [`cli.md`](cli.md).
 | `Tab` | | cycle stunt target |
 | `numpad 1–9` (not `5`) | | hold a fixed camera view around the plane (P1's keyboard) — `--view=` |
 | `numpad 0` | | hold the look-behind view: ahead of the nose looking back, at the authored `back_dist` range — `--view=back` |
+| | right stick | swing the external view around the plane while deflected, snapping back to the ordinary chase view the instant the stick returns to centre (E42, `BL-372`) — not in the original, a UX call for this port |
+| | click right stick | hold to look back — the pad twin of `numpad 0` (E42, `BL-372`) |
 | `C` | | show the built colliders, coloured by the surface id they resolve to (see `--collision`) — `--debug-colliders` |
 | `X` | | colour world objects by class (destructible/facade/clutter/scenery) — `--debug-classoverlay` |
 

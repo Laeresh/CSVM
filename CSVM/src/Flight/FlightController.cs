@@ -1356,22 +1356,36 @@ public partial class FlightController : Node3D
             {
                 _cam.FixedView(view, _renderPose);
             }
-            else if (_cam.BackActive())
+            // E42 (BL-372): this player's right-stick click looks back, the pad twin of holding
+            // numpad 0 — read here, not in CameraController, same "no pad devices in the camera"
+            // rule OrbitInput/PadLookInput follow.
+            else if (_cam.BackActive(PadPressed(JoyButton.RightStick)))
             {
                 _cam.BackView(_renderPose);
                 view = CameraController.BackViewLog;
             }
             else
             {
-                // The chase camera trails the plane by exponential smoothing, so its pose is a
-                // function of the dt it is fed. On wall time that makes a scripted flight capture
-                // frame-rate dependent even when the simulation underneath it is pinned — the pose
-                // has to come off the same clock as the plane it follows. The POSE it composes
-                // from is the DRAWN one, same rule as the rigid views above: the camera rides the
-                // plane exactly (offset smoothing only), so basing it on the raw sim pose while
-                // the plane renders interpolated makes the plane jump back and forth in frame by
-                // one sim step's travel — invisible parked, a blur at speed.
-                _cam.Chase(simDt, _renderPose.Origin, _renderPose.Basis);
+                var (lookX, lookY) = PadLookInput();
+                if (lookX != 0f || lookY != 0f)
+                {
+                    // E42 (BL-372): the right stick swings the view around the plane instead of
+                    // the usual chase pose — see CameraController.PadLook.
+                    _cam.PadLook(_renderPose, lookX, lookY);
+                    view = CameraController.PadLookLog;
+                }
+                else
+                {
+                    // The chase camera trails the plane by exponential smoothing, so its pose is a
+                    // function of the dt it is fed. On wall time that makes a scripted flight capture
+                    // frame-rate dependent even when the simulation underneath it is pinned — the pose
+                    // has to come off the same clock as the plane it follows. The POSE it composes
+                    // from is the DRAWN one, same rule as the rigid views above: the camera rides the
+                    // plane exactly (offset smoothing only), so basing it on the raw sim pose while
+                    // the plane renders interpolated makes the plane jump back and forth in frame by
+                    // one sim step's travel — invisible parked, a blur at speed.
+                    _cam.Chase(simDt, _renderPose.Origin, _renderPose.Basis);
+                }
             }
             _cam.LogView(view, _model.Position, _model.Attitude);
         }
@@ -2713,5 +2727,13 @@ public partial class FlightController : Node3D
                 KeyAxis(Key.W, Key.S) + KeyAxis(Key.Up, Key.Down) + padPitch,
                 KeyAxis(Key.KpSubtract, Key.KpAdd) + padZoom); // Kp- out, Kp+ in, RT out, LT in
     }
+
+    /// <summary>E42's (BL-372) pad look-around stick: this player's right stick, curved the same
+    /// way <see cref="OrbitInput"/>'s is. Read here, not in <see cref="CameraController"/>, for the
+    /// same reason <c>OrbitInput</c> is — the camera never learns about pad devices or the stick
+    /// response curve. Both components read exactly 0 inside the deadzone, which is what tells the
+    /// caller the look-around is inactive.</summary>
+    private (float X, float Y) PadLookInput() =>
+        (StickCurve(PadAxis(JoyAxis.RightX)), StickCurve(PadAxis(JoyAxis.RightY)));
 
 }
