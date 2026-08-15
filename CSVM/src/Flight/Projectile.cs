@@ -423,16 +423,19 @@ public sealed partial class ProjectilePool : Node3D
         Name = "projectiles";
     }
 
-    /// <summary>Every camera that can see this pool's tracers — one per player pane in splitscreen.
-    /// Used only by the <see cref="TracerMinPixels"/> distance floor, which is a SCREEN-space rule
-    /// applied to ONE shared world-space mesh, so it can only ever be satisfied exactly for one
-    /// viewer. ⚠ Bind them ALL. Binding player 1's alone (as this did until the splitscreen fix)
-    /// floors every round against P1's distance and P1's pane height and then draws that same
-    /// inflated geometry in every other pane, where a round 1000 m from P1 but 100 m from P2 is
-    /// blown up roughly 10x in P2's view. The floor now takes the NEAREST viewer, so a round is
-    /// never inflated for anyone — at worst it is under-floored for a distant pane, which is just
-    /// the un-floored look.</summary>
-    public List<Camera3D> Viewers { get; } = new();
+    /// <summary>Every camera that can see this pool's tracers — one per player pane in splitscreen,
+    /// GameSession's own <see cref="ViewerSet"/> (A3) by default so binding it once, right after the
+    /// rigs are built, is the whole wiring. Used only by the <see cref="TracerMinPixels"/> distance
+    /// floor, which is a SCREEN-space rule applied to ONE shared world-space mesh, so it can only
+    /// ever be satisfied exactly for one viewer. ⚠ Bind them ALL. Binding player 1's alone (as this
+    /// did until the splitscreen fix) floors every round against P1's distance and P1's pane height
+    /// and then draws that same inflated geometry in every other pane, where a round 1000 m from P1
+    /// but 100 m from P2 is blown up roughly 10x in P2's view. The floor now takes the NEAREST
+    /// viewer, so a round is never inflated for anyone — at worst it is under-floored for a distant
+    /// pane, which is just the un-floored look. A fresh, unbound set (every non-session caller: the
+    /// weapon bench, the `Suites.cs` labs) means no viewers and so no floor — see
+    /// <see cref="TracerFloor"/>.</summary>
+    public ViewerSet Viewers { get; set; } = new();
 
     /// <summary>The aircraft each round's swept step is measured against for the near-miss cue
     /// one per flight rig. Empty in every build that has no player aircraft (the weapon
@@ -2198,7 +2201,7 @@ public sealed partial class ProjectilePool : Node3D
     private float TracerFloor(Vector3 worldPos, float pixels)
     {
         _viewerScratch.Clear();
-        foreach (var cam in Viewers)
+        foreach (var cam in Viewers.Cameras)
         {
             if (cam == null || !GodotObject.IsInstanceValid(cam))
                 continue;

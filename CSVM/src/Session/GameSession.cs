@@ -71,6 +71,10 @@ public partial class GameSession : Node3D
     // sees (skydome / cloud deck / whiteout). Exactly one entry in single player,
     // wrapping the main-viewport _camera below — so the 1P render path is unchanged.
     private readonly List<PlayerRig> _rigs = new();
+    // Every pane's camera, bound once right after BuildRigs (A3) — the session-owned "what do the
+    // cameras see" registry draw rules read instead of `_rigs[0]`/`GetViewport().GetCamera3D()`.
+    // ProjectilePool.Viewers takes this same instance; B11/B13 are its next consumers.
+    private readonly ViewerSet _viewers = new();
 
     // Every AI aircraft spawned into this session (M4 A2) — stepped in DriveSimSteps after the
     // player rigs, freed with the world subtree.
@@ -435,6 +439,12 @@ public partial class GameSession : Node3D
         // One rig per rendered view, before anything camera-anchored is built (the skydome and
         // weather visuals below are per-rig). Single player reuses the main-viewport camera.
         BuildRigs(_spec.Fly ? _spec.Players : 1);
+        // A3: the viewer-set seam, bound once here so every later draw-rule consumer (starting with
+        // ProjectilePool.Viewers below) shares one registration instead of re-deriving it from
+        // _rigs. Same fallback shape BuildRigs itself guarantees — _rigs always has an entry once it
+        // returns — kept explicit for the same defensiveness the old per-pool loop had.
+        _viewers.Bind(_rigs.Count > 0 ? _rigs.Select(r => r.Camera)
+            : _camera != null ? new[] { _camera } : System.Array.Empty<Camera3D>());
         // The FBFX_COLOR_FROM_TO wash: one ramp state, one overlay per rendered view, built
         // as soon as the rigs exist so every runtime below can be handed the same sink. Screen-space
         // and session-scoped on purpose — an AnimRuntime is world-scoped and is instanced per effect
@@ -1576,7 +1586,7 @@ public partial class GameSession : Node3D
             var benchPool = new ProjectilePool(state.Textures, null, null);
             _worldRoot!.AddChild(benchPool);
             if (_camera != null)
-                benchPool.Viewers.Add(_camera);
+                benchPool.Viewers.Bind(new[] { _camera });
             // Mount and fire every one of the 48 weapons once per mount and report any that throw,
             // then quit (windowless under --headless). The report is synchronous (Spawn does the
             // muzzle math + pool insert without needing a frame), so no world tick is required.
@@ -1752,18 +1762,10 @@ public partial class GameSession : Node3D
         // over one shared world mesh, so binding P1 alone sized every round against P1's distance
         // and pane and then drew that geometry in all the other panes — the splitscreen bug where
         // P1's tracers looked right and everyone else's were far too big. The pool takes the
-        // nearest viewer; the rigs are built before this point and are not rebuilt on respawn.
-        if (_rigs.Count > 0)
-        {
-            foreach (var rig in _rigs)
-            {
-                projectiles.Viewers.Add(rig.Camera);
-            }
-        }
-        else if (_camera != null)
-        {
-            projectiles.Viewers.Add(_camera);
-        }
+        // nearest viewer; the rigs are built before this point and are not rebuilt on respawn. A3:
+        // the shared _viewers registry already carries this same set (bound once, right after
+        // BuildRigs), so the pool takes that instance instead of collecting its own.
+        projectiles.Viewers = _viewers;
         _worldRoot!.AddChild(projectiles);
         _projectiles = projectiles;
 

@@ -140,6 +140,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/GaugeCluster.cs` — the cockpit dials as HUD (altimeter/speedo/damage + gun/missile), geometry from the plane's `gauges` subtree.
 - `src/Flight/FlightController.cs` — the flying-aircraft node: input → FlightModel → transform, chase camera, HUD, collision/crash, respawn; `FireControl`'s engine adapter.
 - `src/Flight/PlayerRig.cs` — one rendered view's state: camera, SubViewport, HUD parent, visual layer, controller, own sky/deck/puffs.
+- `src/Flight/ViewerSet.cs` — session-owned "every pane's camera" registry (A3): `GameSession` binds it once after the rigs are built; `ProjectilePool.Viewers` is its first consumer.
 
 ### `src/Effects/` — particle systems
 
@@ -2230,7 +2231,10 @@ deliberate conflict with the decode**, which measures a hard 600 m LOD past whic
 nothing at all. It stays until a shot fired at a *known* range settles which reading is right; the
 tip disc is deliberately left unfloored.
 ⚠ **The floor is a screen-space rule over ONE shared world-space mesh, so bind every pane's camera
-to `ProjectilePool.Viewers`, not just player 1's.** `ScreenSize.NearestFloor` sizes each round for
+to `ProjectilePool.Viewers`, not just player 1's.** `Viewers` is a `ViewerSet` (A3, this file's own
+entry below) — `GameSession`'s own shared instance for the real session build, so binding it is one
+assignment, not a per-rig loop; a pool built outside a session (the weapon bench, `Suites.cs`'s
+labs) gets a fresh unbound one and so no floor. `ScreenSize.NearestFloor` sizes each round for
 the **nearest** viewer, measuring every camera with its own FOV and its own pane height. Binding P1
 alone (as this did until the splitscreen fix) sized every round against P1's distance and then drew
 that geometry in all the other panes — a round 1000 m from P1 but 100 m from P2 came out ~10×
@@ -3967,6 +3971,22 @@ those re-anchor to the view's camera every frame, so N players need N of each.
 regime: a per-rig field, not shared, because splitscreen panes can sit in different states at the
 same instant. Written each frame by `Session/WeatherRig.Tick`; rig 0's value drives the per-state
 fog switch there (B11) — the fog globals are session-wide, so only rig 0's is read for them.
+
+## src/Flight/ViewerSet.cs
+`ViewerSet` (`PLAN-splitscreen-polish.md` A3) — the "what do the cameras see" seam promoted out of
+`ProjectilePool.Viewers`/`ScreenSize.NearestFloor`, the pattern the tracer floor proved 2026-08-10
+([`org/tracers.md`](org/tracers.md)). `GameSession` owns one instance (`_viewers`) and `Bind`s it
+once, right after `BuildRigs` returns (`StartSession`) — the same rig-camera list every rig loop
+reads, single player included (one entry wrapping the main camera). `Cameras` hands back the raw
+bound list unfiltered, for a consumer (`ProjectilePool.TracerFloor`) that needs each viewer's own
+FOV and pane height alongside its position and already skips a freed instance itself; `Positions`/
+`Poses` are the two derived shapes B13 and B11 consume, respectively — position only, or position
+plus forward for a view-space depth comparison. `ScreenSize`'s arithmetic did not move: this class
+carries cameras, not the screen-size/view-depth math itself.
+⚠ Not `PlayerPositions` (`GameSession`'s gameplay seam feeding `WorldSession.Options`, C21's) —
+that answers "where are the humans" for proximity gameplay rules off each rig's `Controller`/camera
+fallback; this answers "what do the cameras see" for draw rules. A3's own trap: do not fold them
+together.
 
 ## src/UI/LiveryLab.cs
 The `--viewer` livery editor (key L): squadron stepper (loads the squadron's whole livery via

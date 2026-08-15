@@ -91,7 +91,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Decide the team model for plain splitscreen free flight (`BL-368`)
 2. ☑ Decide and pin the 3D audio listener model (`BL-369`)
-3. ☐ Promote the viewer set to a session service
+3. ☑ Promote the viewer set to a session service
 
 ### Wave B — Draw rules (`BL-338`'s class)
 
@@ -243,7 +243,7 @@ non-positional `FlightAudio` loops, which no listener change touches. F52 settle
 baselines. Do not read the `--debug-anim` sound `dist` column as a per-pane audio *level*: it is
 range to the nearest listener, and the engine's own attenuation curve sits between it and loudness.
 
-## A3 ☐ Promote the viewer set to a session service
+## A3 ☑ Promote the viewer set to a session service
 
 **Goal.** One session-owned "all pane cameras" service answering nearest-distance / nearest-depth
 queries, so draw rules stop caring how many panes exist.
@@ -253,17 +253,31 @@ queries, so draw rules stop caring how many panes exist.
 chosen over per-pane geometry when the tracer floor was fixed 2026-08-10
 ([`docs/org/tracers.md`](../docs/org/tracers.md)).
 
-**Approach.** Extract the viewer-registration/nearest-query shape into a small service owned by
-`GameSession` (populated once from the rigs, same lifecycle as `ProjectilePool.Viewers` today);
-`ProjectilePool` becomes its first consumer, B11/B13 the next two. Keep `ScreenSize`'s arithmetic
-where it is — the service carries cameras and nearest queries, not HUD math. <TODO: exact API
-shape (positions only vs camera+pane-height tuples) — B11 needs position+forward for view-space
-depth, B13 needs position only; design for those two consumers, no more.>
+**Approach (landed).** `src/Flight/ViewerSet.cs`: a small sealed class holding a bound
+`List<Camera3D>`. `Bind(IEnumerable<Camera3D>)` replaces the set wholesale (never incremental).
+Three read shapes, resolving the TODO by building only what the two named consumers need: `Cameras`
+(the raw unfiltered list — `ProjectilePool.TracerFloor`'s shape today, since it already needs each
+viewer's own FOV/pane-height alongside position and already skips a freed instance per sample),
+`Positions()` (position only — B13), `Poses()` (position + `-Basis.Z` forward — B11's view-space
+depth). `GameSession` owns one instance (`_viewers`), `Bind`s it once right after `BuildRigs`
+returns (mirroring the exact `_rigs.Count > 0 ? … : _camera != null ? … : Array.Empty<Camera3D>()`
+fallback the old per-pool loop had), and assigns it to `ProjectilePool.Viewers` — now a
+`ViewerSet { get; set; }` instead of an owned `List<Camera3D>` — in place of the per-rig `.Add` loop
+at the pool's build site. The standalone weapon-bench pool (`GameSession.cs`'s `--weapon-test`
+path) and every `Suites.cs` lab pool get a fresh unbound `ViewerSet` by construction (the property's
+default), so their "no viewers ⇒ no floor" behaviour is untouched. `PlayerPositions` (the gameplay
+seam) is untouched, per the ⚠ below.
 
 **Model recommendation.** medium — refactor with an existing test pinning the behaviour.
 
-**Verify.** `.\RunTests.ps1` green, `TracerScreenSizeTests` unchanged; golden hashes unchanged
-(pure refactor).
+**Verify (done 2026-08-15).** `dotnet build CSVM/CSVM.sln` clean, `dotnet format --verify-no-changes`
+clean. `.\RunTests.ps1`: 1289/1289 units, 60/60 engine suites (`TracerScreenSizeTests` untouched —
+it pins `ScreenSize`'s statics only, which did not move — and `puffer-distance-fade`/
+`splitscreen-listeners` unaffected), 14/14 goldens hash-identical, engine errors clean — a pure
+refactor by construction (`TracerFloor` reads `Viewers.Cameras` instead of `Viewers` directly, same
+filter, same `ScreenSize.NearestFloor` call). Scripted probe: `--players=2 --fly --chapter=C1
+--screenshot=… --frames=60` boots clean, no warnings or errors in the log at all (not even the
+pre-existing `pir_spinner.tif` line, which this run's asset selection didn't hit).
 
 **⚠ Traps.** Do not fold `PlayerPositions` (gameplay seam) into it — one answers "where are the
 humans", the other "what do the cameras see"; C21 keeps consuming `PlayerPositions`.
