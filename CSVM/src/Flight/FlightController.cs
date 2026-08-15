@@ -969,9 +969,12 @@ public partial class FlightController : Node3D
         string struckPart = state?.Def.Name ?? dataPart;
         if (state != null)
         {
-            Visuals?.OnPartDamage(struckPart, state.Fraction);
+            Visuals?.OnPartDamage(struckPart, state.HealthFraction);
             Gauges?.OnPartDamage(struckPart); // damage dial: hit zone blinks 5 s
         }
+
+        // the def-level stages run off the hull pool even when the round went zone-less
+        Visuals?.OnHullDamage(Damage.SummaryHealthFraction);
 
         if (_projectileHitsLogged < 6)
         {
@@ -2405,9 +2408,12 @@ public partial class FlightController : Node3D
             string struckPart = state?.Def.Name ?? dataPart; // the resolver may redirect
             if (state != null)
             {
-                Visuals?.OnPartDamage(struckPart, state.Fraction);
+                Visuals?.OnPartDamage(struckPart, state.HealthFraction);
                 Gauges?.OnPartDamage(struckPart); // damage dial: hit zone blinks 5 s
             }
+
+            // the def-level stages run off the hull pool even when the graze went zone-less
+            Visuals?.OnHullDamage(Damage.SummaryHealthFraction);
 
             if (Damage.IsDestroyed)
             {

@@ -2579,10 +2579,13 @@ unread by FlightModel.cs), the `engine_sound` def name with its
 volume/pitch `SoundCurve`s (clamped two-point ramps), `destroyable_parts` → `DestroyablePart`
 records (name, max HP, max armor, `critical`/`engine` flags, `got_hit_anim`, per-part
 `injure_anims`), and the def-level `VehicleInjureAnims`. Schema: docs/formats/vehicle.md.
-⚠ Def-level injure_anims are consumed as ANY-part HP fractions, not per-part — see DamageVisuals.
-  This is a known DEFECT, not the original's rule: `FUN_004b3800` keys them on the whole-vehicle
-  health fraction, health-only and reversibly (`docs/org/vehicleDamage.md`, decoded 2026-08-15).
-  `BL-384` carries the fix; this line moves with it.
+Both lists are consumed on the decoded pools (`DamageVisuals.OnHullDamage` off
+  `PlaneDamage.SummaryHealthFraction`, `OnPartDamage` off the struck part's `HealthFraction`):
+  health-only at both levels, armour in neither, per `FUN_004b3800` / `FUN_004b3d70`
+  (`docs/org/vehicleDamage.md`).
+⚠ The staging does not yet RETRACT: `DamageVisuals._applied` latches each entry one-way, where the
+  original clears its handle on the upward crossing and stops the anim. `BL-384` item (3) carries
+  that; this line moves with it.
 ⚠ `damaged_engine_sound` is now parsed (`DamagedEngineSound` + `DamagedEngineGain`); only
   `cockpit_engine_sound` remains unparsed — it needs a cockpit view (`BL-161`).
 ⚠ `DamagedEngineGain`'s two source floats (0.0, 1.0 for every plane — one shared `basic_airplane`

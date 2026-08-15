@@ -6,9 +6,11 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// Visible damage on the aircraft, driven by the data's thresholds: as a part's
-/// combined armor+HP fraction crosses an entry of its 'injure_anims' (see
-/// <see cref="DestroyablePart"/>), the entry's authored animation plays. The
+/// Visible damage on the aircraft, driven by the data's thresholds against two separate pools,
+/// as the original does: a part's own HEALTH fraction crosses an entry of its 'injure_anims'
+/// (see <see cref="DestroyablePart"/>, <see cref="OnPartDamage"/>), and the whole vehicle's
+/// health fraction crosses an entry of the def-level list (<see cref="OnHullDamage"/>). Armour
+/// is in neither quotient. The
 /// pdpanelN entries flip the torn-skin panel (pdpN shown, the healthy skin covering
 /// the same spot hidden) and, in flight, play the authored pdpanelN def through the
 /// player's own rig runtime (<see cref="DamageEffectSink"/>) — gimmeflakes debris
@@ -41,8 +43,8 @@ namespace CSVM.Flight;
 /// runtime either — and a parked plane travels no distance, so the authored
 /// distance-interval trails would emit nothing anyway; it keeps stand-in Puffer
 /// trails burning in place (<see cref="UpdateStatic"/>) at the panels and at the
-/// authored prop1 anchor. FlightController notifies <see cref="OnPartDamage"/>
-/// after each hit and calls <see cref="Reset"/> on respawn.
+/// authored prop1 anchor. FlightController notifies <see cref="OnPartDamage"/> and
+/// <see cref="OnHullDamage"/> after each hit and calls <see cref="Reset"/> on respawn.
 /// </summary>
 public sealed class DamageVisuals
 {
@@ -164,14 +166,19 @@ public sealed class DamageVisuals
             : null;
     }
 
-    /// <summary>Applies every visual whose threshold the part's new HP fraction has
-    /// crossed (fraction ≤ entry). Idempotent per anim name.</summary>
-    public void OnPartDamage(string partName, float fraction)
+    /// <summary>Applies every per-part visual whose threshold the struck part's new HEALTH
+    /// fraction has crossed (fraction ≤ entry). Idempotent per anim name.
+    /// <paramref name="healthFraction"/> is health current over health max for that part alone
+    /// (FUN_004b3d70's [part+0x30] / [part+0x2c]), not the combined armour+HP progression: armour
+    /// never enters the quotient, and FUN_004b7f80 blocks health damage outright while the part's
+    /// armour covers the hit, so an armoured part crosses nothing. The whole-plane stages are
+    /// <see cref="OnHullDamage"/>, off a different pool.</summary>
+    public void OnPartDamage(string partName, float healthFraction)
     {
         if (_parts.TryGetValue(partName, out var def))
             foreach (var (frac, anim) in def.InjureAnims)
             {
-                if (fraction > frac || !_applied.Add(anim))
+                if (healthFraction > frac || !_applied.Add(anim))
                     continue;
                 if (anim.StartsWith("pdpanel", StringComparison.OrdinalIgnoreCase))
                 {
@@ -179,7 +186,7 @@ public sealed class DamageVisuals
                     if (_panels.TryGetValue("pdp" + n, out var torn))
                     {
                         torn.Visible = true;
-                        GD.Print($"damage panel: {anim} on ({partName} {fraction * 100f:0}%)");
+                        GD.Print($"damage panel: {anim} on ({partName} {healthFraction * 100f:0}%)");
                         // the parked stand-in: a firepuffer burning in place at the panel
                         // (the flight path plays the authored def through the sink below)
                         if (DamageEffectSink == null && _panelTrailPool.Count > _panelTrails.Count)
@@ -190,24 +197,33 @@ public sealed class DamageVisuals
                     if (_pairedHealthy.TryGetValue("pdp" + n, out var healthySkins))
                         foreach (var healthy in healthySkins)
                             healthy.Visible = false;
-                    PlayStage(anim, partName, fraction);
+                    PlayStage(anim, partName, healthFraction);
                 }
                 else if (anim.EndsWith("_damage_effects", StringComparison.OrdinalIgnoreCase))
                 {
                     // The per-impact spark burst. The authored chain discards the part: all four
                     // <part>_damage_effects defs are the same one-event shim calling
                     // random_gun_impact, which picks pdp1 (40%) or pdp2 (40%) and ALWAYS also
-                    // sparks pdp4 — so a hit can light one panel or two, never none.
-                    PlayStage(anim, partName, fraction);
+                    // sparks pdp4 — so a hit can light one panel or two, never none. Health-gated
+                    // like every other entry: an armoured part never reaches this 0.99 threshold.
+                    PlayStage(anim, partName, healthFraction);
                 }
                 // else: *_damage_green/yellow/red cockpit indicator and got_hit_anim's nosedamage
                 // blink — unwired (no cockpit; GaugeCluster.OnPartDamage approximates the latter)
             }
+    }
 
-        // whole-plane thresholds (any part qualifies — see PlaneStats.VehicleInjureAnims)
+    /// <summary>Applies every def-level visual whose threshold the WHOLE VEHICLE's health fraction
+    /// has crossed. FUN_004b3800 divides [inst+0x2d0] / [inst+0x2cc], hull health current over max,
+    /// so player_smoketrail's 0.10 entry means "the hull is at 10%", not "some zone is at 10%";
+    /// PlaneDamage.SummaryHealthFraction is that quotient. Takes no part name because the original's
+    /// def-level driver has none. Runs on every spend, including a zone-less hit that only drains
+    /// the hull pair.</summary>
+    public void OnHullDamage(float healthFraction)
+    {
         foreach (var (frac, anim) in _vehicleInjure)
         {
-            if (fraction > frac || !_applied.Add(anim))
+            if (healthFraction > frac || !_applied.Add(anim))
                 continue;
             if (RigAnimFor(anim) is not { } stage)
                 continue;
@@ -215,10 +231,25 @@ public sealed class DamageVisuals
                 && anim.Equals("player_smoketrail", StringComparison.OrdinalIgnoreCase))
             {
                 _smoking = true; // the parked stand-in pair burns at prop1 (UpdateStatic)
-                GD.Print($"smoke trail: on ({partName} {fraction * 100f:0}%)");
+                GD.Print($"smoke trail: on (hull {healthFraction * 100f:0}%)");
             }
-            PlayStage(stage, partName, fraction);
+            PlayStage(stage, "hull", healthFraction);
         }
+    }
+
+    /// <summary>The hull health fraction the parked damage lab has no ledger to read: FUN_004b3bf0's
+    /// sum over parts, health current over health max, weighted by each part's authored MaxHp.
+    /// Parts the caller omits count as untouched.</summary>
+    public float HullHealthFractionFrom(IReadOnlyDictionary<string, float> partHealthFractions)
+    {
+        float health = 0f, max = 0f;
+        foreach (var (name, def) in _parts)
+        {
+            float frac = partHealthFractions.TryGetValue(name, out var f) ? f : 1f;
+            health += frac * def.MaxHp;
+            max += def.MaxHp;
+        }
+        return max > 0f ? health / max : 1f;
     }
 
     /// <summary>Damage-lab drive (static viewer): the parked plane never moves, so the authored

@@ -361,6 +361,8 @@ public static class Suites
             "a trail emitter under a rotated carrier anchors at world identity and drops puffs where it is fed", TrailWorldAnchor));
         into.Add(new TestHarness.Suite("damage-template-pool",
             "a second panel's tear takes its own pooled gimmeflakes copy and leaves the first burst flying at its site (BL-288)", DamageTemplatePool));
+        into.Add(new TestHarness.Suite("damage-staging-pool",
+            "the injure staging reads health only: a zone stripped of armour tears no panel though its combined fraction has crossed the threshold, and the panel appears once health itself crosses (BL-384)", DamageStagingPool));
         into.Add(new TestHarness.Suite("crash-rig-anchors",
             "binding the crash rig leaves the airframe model under the controller — even the Devastator, whose model root shares the crash defs' authored NAME — and stages every pooled copy in the same reset pose", CrashRigAnchors));
         into.Add(new TestHarness.Suite("ai-crash-defs",
@@ -8663,6 +8665,95 @@ public static class Suites
     private static bool AtPoolSite(Node3D? copy, Node3D site) =>
         copy != null
         && copy.GlobalTransform.Origin.DistanceTo(site.GlobalTransform.Origin) < 0.5f;
+
+    // ---- the injure staging is keyed on health, not the combined progression -------------------
+
+    /// <summary>BL-384 items 1 and 2, from BL-297's decode. FUN_004b3d70 divides
+    /// [part+0x30] / [part+0x2c], the part's health over health max, and FUN_004b7f80 blocks health
+    /// damage outright while that part's armour covers the hit — so an armoured zone crosses no
+    /// per-part threshold at all. Driven on a real plane model with the shipped injure_anims: the
+    /// zone's armour is stripped with armour-only damage (combined fraction now past the panel's
+    /// authored threshold, health still full) and NO panel may flip; then health itself is driven
+    /// under the threshold and the panel must appear. The first half is what fails when the staging
+    /// is fed PartState.Fraction, which is how the defect showed at the controls.</summary>
+    private static void DamageStagingPool(TestContext ctx)
+    {
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+
+        // Data-driven, not a hardcoded zone: any part whose authored list flips a pdpanelN, taking
+        // its HIGHEST threshold so one health step crosses exactly one panel.
+        DestroyablePart? part = null;
+        float threshold = 0f;
+        string panelAnim = "";
+        foreach (var p in stats.DestroyableParts)
+            foreach (var (frac, anim) in p.InjureAnims)
+                if (anim.StartsWith("pdpanel", System.StringComparison.OrdinalIgnoreCase)
+                    && frac > threshold)
+                {
+                    part = p;
+                    threshold = frac;
+                    panelAnim = anim;
+                }
+
+        ctx.Check(part != null, $"{ctx.PlaneName} authors a pdpanelN entry on some zone");
+        if (part == null)
+            return;
+        ctx.Check(part.MaxArmor > 0f && part.MaxHp > 0f,
+            $"precondition: {part.Name} carries both pools ({part.MaxArmor:0} armour, {part.MaxHp:0} hp)");
+        if (part.MaxArmor <= 0f || part.MaxHp <= 0f)
+            return;
+
+        // The combined fraction with armour gone is MaxHp/(MaxHp+MaxArmor); the half this suite
+        // pins only means anything when that already sits at or under the panel's threshold.
+        float strippedCombined = part.MaxHp / (part.MaxHp + part.MaxArmor);
+        ctx.Check(strippedCombined <= threshold,
+            $"precondition: armour gone puts the COMBINED fraction at {strippedCombined:0.00}, already past {panelAnim}'s {threshold:0.00} — the early tear this pins");
+        if (strippedCombined > threshold)
+            return;
+
+        var textures = new TextureArchive(texturesPath);
+        // damagePanels: the pdpN nodes are skipped in a plain static build (PlaneBuilder 10c).
+        var builder = new PlaneBuilder(planesGamez, textures, damagePanels: true);
+        var model = builder.Build(ctx.PlaneName);
+        ctx.Host.AddChild(model);
+        try
+        {
+            var visuals = new DamageVisuals(builder.DamagePanels, model, stats);
+            var torn = builder.DamagePanels
+                .Where(p => p.Name.ToString().StartsWith("pdp", System.StringComparison.OrdinalIgnoreCase)
+                            && !p.Name.ToString().EndsWith("_h", System.StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            ctx.Check(torn.Count > 0, $"{ctx.PlaneName} carries {torn.Count} torn-panel nodes");
+            ctx.Check(torn.All(p => !p.Visible), $"…and every one of them starts hidden");
+
+            var damage = new PlaneDamage(stats.DestroyableParts);
+            var state = damage.Apply(part.Name, 0f, part.MaxArmor)!;
+            ctx.Check(state.Armor <= 0f && Mathf.IsEqualApprox(state.HealthFraction, 1f),
+                $"{part.Name}: armour stripped to {state.Armor:0.#}, health untouched at {state.HealthFraction * 100f:0}% (combined {state.Fraction:0.00})");
+
+            visuals.OnPartDamage(part.Name, state.HealthFraction);
+            visuals.OnHullDamage(damage.SummaryHealthFraction);
+            ctx.Check(torn.All(p => !p.Visible),
+                $"no panel tore on the armour spend, though the combined fraction ({state.Fraction:0.00}) is past {panelAnim}'s {threshold:0.00}");
+
+            // Now health itself crosses: drive it just under the threshold.
+            float target = (threshold - 0.02f) * part.MaxHp;
+            state = damage.Apply(part.Name, part.MaxHp - target, 0f)!;
+            ctx.Check(state.HealthFraction <= threshold,
+                $"{part.Name} health driven to {state.HealthFraction:0.00}, under {threshold:0.00}");
+
+            visuals.OnPartDamage(part.Name, state.HealthFraction);
+            ctx.Check(torn.Any(p => p.Visible),
+                $"…and {panelAnim} flipped its torn panel once HEALTH crossed");
+        }
+        finally
+        {
+            model.Free();
+        }
+    }
 
     // ---- binding the crash rig must leave the airframe under the controller --------------------
 

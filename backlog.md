@@ -428,8 +428,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   damage outright while the part's armour pool covers the incoming armour damage. So a fully-armoured
   part crosses NO per-part threshold, not even the 0.99 `<part>_damage_effects` shim: the original
   shows nothing at all on a fresh armoured plane. Our combined armour+HP scale
-  (`PartState.Fraction`, `PlaneDamage.cs:273-275`) is why panels tear early; the fix is `BL-384`
-  item (2), re-basing on `PartState.HealthFraction` (`PlaneDamage.cs:277`).
+  (`PartState.Fraction`) was why panels tore early; **fixed 2026-08-15** as `BL-384` items (1) and
+  (2), re-basing the per-part loop on `PartState.HealthFraction` and splitting the hull loop out
+  onto `SummaryHealthFraction`. Owed at the controls with `BL-384`'s playtest line.
   **(1) location, answered; ours is faithful in mechanism and wrong in timing.** `FUN_00521180` binds
   an anim's node names through `FUN_004efaf0`, which searches the instance's context subtree, then
   the anim's local tables, then a GLOBAL by-name lookup (`FUN_004d0280(7, name)`). `pdpN` names are
@@ -503,41 +504,44 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `docs/HISTORY.md:5295` records the old behaviour landing) and `docs/formats/destructibles.md`'s
   `ACTIVATION` reading (⚠-noted in place).
 
-- `BL-384` `[Bug]` **Our `injure_anims` staging is keyed on the wrong pool, the wrong scope and the
-  wrong lifetime — the whole-plane damage trail fires while the hull is still near full.** Filed
-  2026-08-15 from `BL-246`'s decode; the original's rules are `docs/org/vehicleDamage.md`
-  ("Damage staging").
+- `BL-384` `[Bug]` `[Owed-playtest]` **Our `injure_anims` staging latches one-way where the original
+  retracts.** Filed 2026-08-15 from `BL-246`'s decode; the original's rules are
+  `docs/org/vehicleDamage.md` ("Damage staging"). **Items (1) scope and (2) pool landed 2026-08-15**
+  (`DamageVisuals.OnHullDamage` split out from `OnPartDamage`, the two call sites in
+  `FlightController.cs` and both damage-lab targets moved onto the decoded quotients, engine suite
+  `damage-staging-pool`); what remains is item (3), and what is owed is the flight A/B below.
   *Evidence (decode, `crimson.exe`, 2026-08-15).* `FUN_004b3800` drives the **def-level** list off
   `[inst+0x2d0] / [inst+0x2cc]` — whole-vehicle health current over health max. `FUN_004b3d70`
   drives the **per-part** list off `[part+0x30] / [part+0x2c]` — that part's health over its max.
   Both start an entry's anim at `fraction <= threshold` and **stop it again** at
   `threshold < fraction`, keeping one handle per entry (`inst+0x890`, `part+0x4c`).
-  Three deltas:
-  (1) **Scope.** `DamageVisuals.cs:208-221` walks the def-level list against whatever per-part
-  fraction the caller passed (`FlightController.cs:972` passes `state.Fraction`), commented "any
-  part qualifies". So one wing at 10% lights `player_damage_trail` with the hull untouched. The
-  faithful input already exists: `PlaneDamage.SummaryHealthFraction` (`PlaneDamage.cs:73`) is
-  literally the quotient `FUN_004b3800` computes.
-  (2) **Pool.** Both levels use the combined armour+health progression (`PartState.Fraction`,
-  `PlaneDamage.cs:273-275`). The original divides health only, at both levels — armour never enters
-  either quotient. `PartState.HealthFraction` (`PlaneDamage.cs:277`) is the faithful per-part input.
-  (3) **Lifetime.** The `_applied` set (`DamageVisuals.cs:174,210`) latches every stage one-way. The
+  Three deltas were filed; two are closed.
+  (1) **Scope — LANDED 2026-08-15.** The def-level list was walked against whatever per-part
+  fraction the caller passed, commented "any part qualifies", so one wing at 10% lit
+  `player_damage_trail` with the hull untouched. `DamageVisuals.OnHullDamage` is now its own call
+  site off `PlaneDamage.SummaryHealthFraction`, the quotient `FUN_004b3800` computes, and it runs
+  even on a zone-less hit.
+  (2) **Pool — LANDED 2026-08-15.** Both levels used the combined armour+health progression
+  (`PartState.Fraction`). The original divides health only at both levels, armour never entering
+  either quotient, so the per-part loop now takes `PartState.HealthFraction`. Because
+  `FUN_004b7f80` blocks health damage outright while a part's armour covers the hit, an armoured
+  part now crosses nothing at all, including the 0.99 spark shim.
+  (3) **Lifetime — OPEN.** The `_applied` set (`DamageVisuals.cs`) latches every stage one-way. The
   original retracts: heal back above a threshold and the anim stops and its handle clears.
-  *Fix shape:* split the two loops' inputs — vehicle loop on `SummaryHealthFraction`, part loop on
-  the struck part's `HealthFraction` — and replace `_applied` with a per-entry handle the stop path
-  can clear, mirroring the two `+0x890`/`+0x4c` arrays. The vehicle loop then no longer needs a
-  part name at all, so it wants its own call site off the hull pool rather than riding
-  `OnPartDamage`.
+  *Fix shape (item 3):* replace `_applied` with a per-entry handle the stop path can clear,
+  mirroring the two `+0x890` / `+0x4c` arrays.
   *⚠ Traps.* (a) The combined armour+health fraction is **correct** for the gauge dial
   (`docs/architecture.md:3780`) — fix the staging inputs without touching `GaugeCluster`'s scale.
   (b) Do not change the shipped 0.10 / 0.85 / 0.99 thresholds; they are authored data and they are
-  right — only what is divided is wrong. (c) `docs/architecture.md:2582`'s "def-level `injure_anims`
-  are consumed as ANY-part HP fractions" documents the defect, not the original; it must move with
-  the code. (d) Retraction makes the F5 damage lab's repair path visibly un-stage, which is
+  right — only what is divided is wrong. (c) `docs/architecture.md` around the `injure_anims` bullet
+  carried the old defect note; it moved with items (1) and (2) and now records the open retraction
+  gap instead. (d) Retraction makes the F5 damage lab's repair path visibly un-stage, which is
   faithful, not a regression — `DamageVisuals.Reset` stays for respawn.
-  *Playtest after fix:* take sustained fire until the hull gauge reads ~10% and confirm
-  `player_damage_trail` starts there and not before; then repair in the F5 lab and watch the stage
-  retract.
+  *Playtest after fix (items 1 and 2, owed):* take sustained fire and confirm nothing at all shows
+  on a zone while its armour still absorbs, that a panel tears only once that zone's HEALTH crosses
+  its threshold, and that `player_damage_trail` starts when the hull gauge reads ~10% and not
+  before. The 0.99 spark shim going quiet on early hits is the most visible change.
+  *Playtest after fix (item 3):* repair in the F5 lab and watch the stage retract.
   *Cross-refs:* `BL-246` (the decode that produced this), `BL-259` (landed the anchor/staging this
   mis-keys), `BL-297` (the panel-damage semantics re-test — `pdpanelN` thresholds are on the same
   health-only scale, so panels currently tear earlier than the original tears them; its 2026-08-15
