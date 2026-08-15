@@ -14,7 +14,8 @@ namespace CSVM.Flight;
 /// scale (so a 4K screen gets a big HUD and a 720p one a small one), and the
 /// pane's share of that window is damped through a square root — a half-height 2P pane draws at
 /// ~71% instead of 50%, a quarter-height 4P pane at 50% instead of 25%. Console splitscreen does
-/// the same thing for the same reason. The damping exponent is TUNE; what is NOT tunable is the
+/// the same thing for the same reason. **Confirmed at the controls (`BL-126`, 2026-08-15): the
+/// sqrt damping reads right at both 2P and 4P, no retune owed.** What is NOT tunable is the
 /// single-player identity: with one full-screen view the pane fraction is exactly 1, so
 /// <see cref="PaneFactor"/> is 1 and <see cref="Scale"/> returns plain
 /// <c>viewportHeight / reference</c> unchanged — the pane damping cannot move a

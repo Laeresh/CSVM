@@ -61,7 +61,7 @@ public sealed partial class SplitScreen : CanvasLayer
     // OFF, never something a new camera has to remember to switch on. It is allocated in Mech3
     // rather than here because SceneBuilder stamps it at build time, node by node.
 
-    private const int Gutter = 2;   // px between panes (TUNE)
+    private const int Gutter = 2;   // px between panes — confirmed at the controls, BL-126 2026-08-15
 
     // Per-player identity colours: the launchscreen's join strip and plane-select
     // cursors, and later the race HUD/scoreboard rows, all key off these so a player

@@ -49,7 +49,8 @@ public sealed class MenuInput
     /// evidence that this player owns the pad.</summary>
     public int LastActivePad = -1;
 
-    // Auto-repeat while a direction is held (TUNE; carried over from the original LaunchMenu).
+    // Auto-repeat while a direction is held (carried over from the original LaunchMenu). Confirmed
+    // at the controls (BL-126, 2026-08-15): join/lock feel reads right at 2P and 4P, no retune owed.
     private const float RepeatInitial = 0.42f;   // s before the first repeat
     private const float RepeatInterval = 0.12f;  // s between repeats after that
     private const float StickDeadzone = 0.5f;    // |LeftY| past this counts as a d-pad press

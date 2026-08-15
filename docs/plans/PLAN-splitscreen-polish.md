@@ -1,8 +1,7 @@
 # Splitscreen polish — retire the single-player assumptions
 
-**ACTIVE PLAN** (written 2026-08-15). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE 2026-08-15** (written 2026-08-15; executed 2026-08-15). All 17 checklist items are
+☑, Waves A–F. Indexed in [`plans.md`](plans.md); read as history.
 
 This plan schedules the entire Splitscreen backlog theme created 2026-08-15: the four
 single-viewer draw bugs (`BL-338` class: `BL-339`, `BL-340`, `BL-366`), the gameplay and audio
@@ -120,7 +119,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave F — Cleanup and playtest
 
 51. ☑ Debug tooling binds the right pane or documents P1-only (`BL-376`)
-52. ☐ Splitscreen chrome playtest (`BL-126`)
+52. ☑ Splitscreen chrome playtest (`BL-126`)
 
 ## Dependency and parallelism notes
 
@@ -942,7 +941,7 @@ rather than a log line, confirmed by reading the source at that call site.
 **⚠ Traps.** `docs/cli.md` is the description of record — the flag bullets change there, not in
 PROJECT_CONTEXT's gloss table.
 
-## F52 ☐ Splitscreen chrome playtest (`BL-126`)
+## F52 ☑ Splitscreen chrome playtest (`BL-126`)
 
 **Goal.** The splitscreen chrome constants get their owed at-the-controls verdict on the
 post-plan build: `HudMetrics` sqrt pane damping, `MixGain` (as re-shaped by D31/D32),
@@ -964,3 +963,15 @@ commands.
 
 **⚠ Traps.** Needs a second controller pair for the 4-player cases (PT-43(d) stalled on exactly
 that); schedule when the hardware is on hand.
+
+**Verdict (2026-08-15, 4 pads on hand).** Sessions run: 2P Dogfight, 4P Dogfight, and a 4P
+`--pos`-override free flight for `SpawnAbreast`. **Held (TUNE tags cleared):** `HudMetrics` sqrt
+pane damping, join/lock feel (`LaunchMenu`/`MenuInput`), tag-gutter width (2 px exactly right),
+`SpawnAbreast`'s 60 m fan. `PT-43(d)` and `PT-49` both settled and retired from `playtest.md`.
+**Didn't hold — new items minted:** `BL-389` (splitscreen weapon mix: rockets too quiet, guns too
+loud especially four at once — the `1/√N` term itself is fine, the per-weapon balance under it is
+not), `BL-390` (`PerfHud` overlaps player 1's VS HUD status text — both anchor top-left), `BL-392`
+(VS HUD status-line font size wants a config knob — a preference `PT-43(d)` surfaced, not a
+defect). **Out of splitscreen scope, minted anyway:** `BL-391` (own-ship engine loop reads too
+loud even in 1P, where `MixGain` is unattenuated — a base-level tuning question, not a splitscreen
+one).

@@ -214,47 +214,6 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
 ./RunGame.ps1 --vs --players=2 --chapter=C1
 ```
 
-- `PT-43` `[Own]` **Dogfight v1 feel (PLAN-vs-mode landed 2026-08-06).** The invented splitscreen
-  deathmatch — no original splitscreen reference exists, so every call here is a judgement on our
-  own remake. Two pads (or pad + keyboard); menu path: Dogfight → any chapter → both press Start.
-  **(a)/(b)/(e)/(f) flown 2026-08-13 (`BL-342`'s C7) — settled, see below. (c) confirmed a real
-  problem, folded into `BL-301`. Still owed: (d) at 4 players.**
-  *Look for:*
-  - (a) ~~damage balance plane-vs-plane~~ — settled 2026-08-13: good, 70-cal shreds planes;
-  - (b) ~~hitting at all without the original's aim assistance~~ — settled 2026-08-13: `BL-342`
-    built the decoded sticky-bullet assist and landing guns is markedly easier now, even on a
-    straight-flying target; `BL-301`'s strength call is closed too (no retune);
-  - (c) spawn camping viability after the 3 s auto-respawn (no invulnerability by design) —
-    **confirmed 2026-08-13: every player has a fixed spawn point and camping one is very much
-    viable.** Tracked as `BL-301`'s existing spawn-protection deferral, now evidenced rather than
-    speculative;
-  - (d) opponent edge-arrows + the status line: readable at 2- and 4-player pane sizes, arrows
-    flip to the right edge, marker vanishes while the opponent is down — **2-player confirmed
-    2026-08-13 (small but readable); 4-player still owed, no second controller pair on hand that
-    session;**
-  - (e) ~~kill banners, the end board's rows/winner/draw, and the R-rematch flow~~ — settled
-    2026-08-13: all good;
-  - (f) ~~draw frequency at the 5-kills / 5-minutes defaults~~ — settled 2026-08-13: good.
-
-  *Blocks:* the `BL-301` tuning decisions; a structural fail mints its own `BL` item.
-  *Variations:* `--players=4` for pane-size readability; `--vs-kills=1` for a fast board check;
-  `--scenario=zeppelin_run` to judge whether `dogfight_ace` spawns are actually the better pick.
-
-- `PT-49` `[Own]` **`PerfHud` legibility in a 4-player pane (PLAN-perf-hitches D10/D11).** The
-  frame-cost readout (F14, `--debug-fps=`) sizes off the whole window's height, not the pane it
-  happens to be drawn over — it draws once for the window, not once per pane — so a full-window
-  screenshot at 1P cannot say whether it is still readable once the window is quartered. Full's
-  five-line panel plus the frame-time strip below it is taller than Compact's single line, so it
-  is the one more likely to run into a pane edge. No original reference; this is a judgement call
-  on our own instrument.
-  *Look for:* Compact's `perf [F14]: compact — … fps  frame … ms  worst … ms` line, and Full's
-  five lines plus its bar-graph strip, top-left of the window, both stay legible (not too small to
-  read at a glance, not clipped by a pane edge) with `--players=4`.
-  *Blocks:* nothing existing tracks this; a fail mints a new `BL` item against `PerfHud`'s
-  `ReferenceFontSize`/`WindowScale`/strip sizing.
-  *Variations:* `--debug-fps --players=4 --vs --chapter=C1`; `--debug-fps=full --players=4` for the
-  taller panel specifically; also worth a glance at `--players=2`.
-
 - `PT-52` `[Own]` **The puffer distance fade in two panes (`BL-339` landed 2026-08-15, plan B11).**
   The fade now runs its bands against every pane's camera and each particle takes the most
   favourable pane's alpha, so a trail near player 2 draws in player 2's pane. What no instrument
@@ -268,7 +227,7 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
   the OTHER player turns or flies away (the shared-alpha tell); (c) flying through an emitter still
   culls it in the pane that flew through it rather than filling that screen.
   *Blocks:* the fidelity verdict the plan's nearest/union boundary rule asks for
-  (`docs/PLAN-splitscreen-polish.md`'s Milestone goal) — per-pane alpha (one MultiMesh per pane) is
+  (`docs/plans/PLAN-splitscreen-polish.md`'s Milestone goal) — per-pane alpha (one MultiMesh per pane) is
   reached for only if (b) visibly fails, and a fail mints its own `BL` item.
   *Variations:* C3 (`--chapter=C3`, the waterfalls' `spew_puffer` is the tightest authored band);
   `--players=4` for the same question with four alphas competing.

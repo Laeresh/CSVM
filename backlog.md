@@ -2277,6 +2277,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   testing, not assume the 1P level. `snd_propstart` (the other half of this A/B) is unchanged —
   D32 kept it raw, "your prop" on respawn stays loud on purpose.
 
+- `BL-391` `[Tuning]` **Own-ship engine loop reads too loud, including single-player.** Found
+  2026-08-15 at the `BL-126` splitscreen chrome playtest — a 4-player Dogfight session flagged the
+  stacked engines as too loud, but the user confirmed on a follow-up single-player listen that the
+  base engine level itself, not just the splitscreen stacking, is too hot. Not a splitscreen item:
+  `FlightAudio.MixGain` is `1` in 1P (no attenuation applies), so this is the vehicle.json
+  `engine_sound` mix level (or the detuned dual-voice stack's combined gain, `EngineDetuneRatio`)
+  read too loud on its own terms. *Fix shape:* a level match by ear against the reference video,
+  same method `BL-223` and `BL-269` already used for this signal chain.
+
 ## Cameras & views
 
 - `BL-080` `[Feature]` **Future cockpit view** would consume a mix of already-parsed and still-raw data: `pcdpN`
@@ -2596,9 +2605,10 @@ their own system: `BL-231` (per-player pool term), `BL-296` (per-player ActionMa
 (MP spawn maps), `BL-301` (Dogfight tuning), `BL-314` (race countdown), `BL-351` (per-pane target
 cycling), `BL-358` (board stacking).
 
-The theme's thirteen open items (`BL-126`, `BL-365`–`BL-376`) are all
-scheduled in [`docs/PLAN-splitscreen-polish.md`](docs/PLAN-splitscreen-polish.md) (2026-08-15) and
-live there per the scheduled-items rule. New splitscreen findings mint here as usual.
+The theme's first batch (`BL-126`, `BL-365`–`BL-376`) landed via
+[`docs/plans/PLAN-splitscreen-polish.md`](docs/plans/PLAN-splitscreen-polish.md) (2026-08-15,
+complete — the chrome playtest F52/`BL-126` closed it out). New splitscreen findings mint here as
+usual.
 
 - `BL-380` `[Bug]` `[Blocked: per-instance fog shader uniforms]` **Fog-zone selection stays
   player-1-only in splitscreen: `csky_fog_color`/`_range`/`_alt`/`csky_world_light` are one GLOBAL
@@ -2620,6 +2630,36 @@ live there per the scheduled-items rule. New splitscreen findings mint here as u
   to `shaders/csky_instance_uniforms.gdshaderinc` must be APPENDED, never inserted — Godot assigns
   instance-uniform slots by declaration order per shader, and the file's own header names the
   2026-07-17 `csky_fog_on` index-collision bug this ordering contract exists to prevent.
+
+- `BL-389` `[Tuning]` **Splitscreen weapon mix needs a retune: rockets too quiet, guns too loud,
+  especially four guns firing at once.** Found at the `BL-126` chrome playtest (F52,
+  2026-08-15) — `FlightAudio.MixGain`/`Projectile.cs`'s pool `MixGain` (the `1/sqrt(N)` equal-power
+  attenuation D31/D32 landed) reads right in isolation but the per-weapon balance under it does
+  not: a 4-player Dogfight with simultaneous gunfire is too loud relative to rocket explosions,
+  which read as too quiet against it. *Look for:* rocket vs. gun relative level across 2P/4P,
+  specifically four guns firing together. *Fix shape:* a judgement call at the controls on the
+  per-def volume terms feeding `Projectile.cs`'s `def.Volume * 0.2f * MixGain * distanceGain`
+  (line ~2238) — not the `1/sqrt(N)` splitscreen term itself, which is confirmed correct.
+
+- `BL-390` `[Bug]` **`PerfHud` (`--debug-fps`) overlaps player 1's VS HUD status text — both anchor
+  top-left.** Found at the `BL-126` chrome playtest (F52, 2026-08-15; folds in `PT-49`) at both 2P
+  and 4P: `PerfHud.cs:237` anchors its label `Control.LayoutPreset.TopLeft`, the same corner
+  `VersusBoard`'s status line uses for player 1's pane, so the two draw on top of each other
+  whenever `--debug-fps` is live in a VS session. Otherwise legible (font size, Compact/Full
+  content all read fine — the pane-size legibility question `PT-49` asked is answered: readable).
+  *Fix shape:* anchor `PerfHud` to a different corner (top-right reads as the natural pick, clear
+  of every pane's own status text) or give its label an outline/backdrop that survives sitting
+  over other text — pick whichever also serves NodeLabels/MarkerOverlay's existing debug-overlay
+  precedent, if any.
+
+- `BL-392` `[Feature]` **VS HUD status-line font size wants a config knob.** Found at the `BL-126`
+  chrome playtest (F52, 2026-08-15; folds in `PT-43(d)`): the opponent edge-arrows + status line
+  (`VersusBoard.cs`) read fine at 2P and 4P as currently sized, but the user asked for a way to
+  size them up/down rather than accept the fixed `HudMetrics`-scaled default — a legibility
+  preference, not a defect. *Fix shape:* a `Config` key (matching the `versusBoard.*`-style naming
+  already in use elsewhere) multiplying `VersusBoard`'s font-size call (`VersusBoard.cs:85`),
+  defaulting to today's unscaled size so single-player and the default splitscreen case are
+  unaffected.
 
 ## Missions, modes & campaign
 
@@ -2801,8 +2841,9 @@ live there per the scheduled-items rule. New splitscreen findings mint here as u
   options (kill target and time limit are CLI-only), `dogfight_ace` vs `zeppelin_run` spawn
   spacing, the self-blast exemption (own rockets can't hurt you — the guns invariant applied
   consistently, not a balance call), VS HUD line/arrow sizing at 4-player panes (`PT-43`(d):
-  readable and correctly edge-flipping at 2 players; 4-player still untested, no second controller
-  pair available yet). Related, not absorbed: `BL-126` (splitscreen chrome). ⚠ The stunt race's
+  confirmed readable and correctly edge-flipping at both 2 and 4 players, `BL-126` chrome playtest
+  2026-08-15 — no retune owed; a font-size preference surfaced separately as `BL-392`). Related,
+  not absorbed: `BL-126` (splitscreen chrome, closed 2026-08-15). ⚠ The stunt race's
   abreast starting grid landed 2026-08-08 and deliberately did **not** touch `--vs` — it is
   selected only when a race exists, so Dogfight still walks the scattered `dogfight_ace` list.
   Spawn spacing here stays this item's call from `PT-43`, and copying the grid over is the wrong
