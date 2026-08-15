@@ -6,8 +6,8 @@ AI-consuming reader family. First surveyed in `docs/plans/PLAN-M4-ai.md` (2026-0
 numbers below were re-measured against the same install on 2026-08-06 and are asserted by
 `CSVM.Tests/AiNetsTests.cs`. Engine reader: `CSVM/src/Mech3/AiNets.cs`; the
 `--debug-ainets` overlay (F13) renders them, and `CSVM/src/Flight/AiNetFollower.cs` (M4 B5)
-flies them as a patrol behaviour (`--ai=<plane>:<net>`), traversal along the edge list, tags
-and trailer preserved unacted-on.
+flies them as a patrol behaviour (`--ai=<plane>:<net>`), traversal along the edge list, an anchored
+trailer ridden (`BL-377`), per-node tags preserved unacted-on.
 
 ## Where they live
 
@@ -34,10 +34,10 @@ The **name** is the join key everything else uses: `egen.json` `vehicle.nets`,
 `zeppelins.json` `net`, and `objectives.json` reference nets by name. `aiv.json` field 0
 references them by **id** ([PLAN-M4-ai.md](../plans/PLAN-M4-ai.md), decoded slots table).
 
-⚠ **An anchored trailer makes the whole net RIDE its target** (decoded 2026-08-15, `BL-377`,
-[`org/aiPilot.md`](../org/aiPilot.md) "The trailer"). `[nodeIndex, "name"]` is not decoration: the
-named object is resolved at net build and every node position the engine hands out is offset by
-it, so the graph is a PATTERN carried around a moving thing rather than a fixed route. 76 of the
+⚠ **An anchored trailer makes the whole net RIDE its target** (decoded and implemented 2026-08-15,
+`BL-377`, [`org/aiPilot.md`](../org/aiPilot.md) "The trailer"). `[nodeIndex, "name"]` is not
+decoration: the named object is resolved at net build and every node position the engine hands out is
+offset by it, so the graph is a PATTERN carried around a moving thing rather than a fixed route. 76 of the
 222 nets are anchored this way, and their targets say what the mechanism is for: `piratezep` (25),
 `workersvoyagezep` (11), **`player` (11)**, `cargozep2` (10), `sprucegoose` (5), `cargozep1` (3),
 `mptrailer` (3), and one each of `train01`, `cargozep3`, `beowulfzep`, `dantezep`,
@@ -52,6 +52,13 @@ block that flies one (2026-08-15): **12 blocks, 8 of them team 2 and 4 team 1.**
 `stihellhound_5_1..4` (C5/M02); the friendlies are `devastator_1/2` (C3/M05 and C5/M03). One
 enemy generator also names one (C5's `M4Miles`). So the mechanism is team-blind: it is how the
 original puts a flight ON the player, whether that flight is escorting or hunting.
+
+⚠ **Two anchored nets are flown by ZEPPELINS, and neither is self-referential.** C1C's `SwanZep1`
+(flown by `blackswanzep`) rides `workersvoyagezep`, and C2B's `Gemini2` (flown by `geminizep`) rides
+`piratezep`. That is one zeppelin's route carried around another zeppelin, a rendezvous or an
+escort. Both records are `deactivated`, so a mission script is what would wake them and nothing
+flies either today. Worth knowing because a zeppelin net anchored to its OWN node would pin the
+zeppelin in place, and the shipped data never does that.
 
 ⚠ **Pair order is meaningful and is not id order.** The engine builds its whole net table by
 walking this list forward and indexes the nets themselves by table position (`FUN_004311c0`,

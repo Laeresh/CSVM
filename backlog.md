@@ -713,8 +713,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   half, whose blocker this decode voids), `docs/formats/ai-nets.md`, `docs/architecture.md` on
   `AiPilot` and `AiModeMachine`.
 
-- `BL-377` `[Bug]` **A net with an anchored trailer RIDES its target in the original, and ours
-  flies it as a fixed route. DECODED 2026-08-15; what is left is implementation.** *Evidence:* the
+- `BL-377` `[Bug]` `[Owed-playtest]` **A net with an anchored trailer RIDES its target in the
+  original, and ours flew it as a fixed route. DECODED and LANDED 2026-08-15; what is left is the
+  splitscreen question and an at-the-controls look.** *Evidence:* the
   user at the controls, 2026-08-15, flying `stunt_flying` with wingmen: the wingmen leave and
   patrol the chapter's default net instead of staying with the player. That is what our code does,
   and the original does not. [`docs/org/aiPilot.md`](docs/org/aiPilot.md) "The trailer":
@@ -722,8 +723,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`FUN_004d0280(7, name)` → net `+0x1c`) and keeps the anchor node index at `+0x18`; every node
   position then goes through `FUN_00432010`, which returns
   `(node − anchor) + target` in X and Z with the node's **authored Y**. So an anchored net is a
-  PATTERN carried by a moving object, not a route. `AiNetFollower` records `Net.Trailer` and acts
-  on nothing (`docs/architecture.md`, and the class doc says so outright).
+  PATTERN carried by a moving object, not a route.
   *Scale:* 76 of 222 nets are anchored. Targets: `piratezep` ×25, `workersvoyagezep` ×11,
   **`player` ×11**, `cargozep2` ×10, `sprucegoose` ×5, `cargozep1`/`mptrailer` ×3, and one each of
   `train01`, `cargozep3`, `beowulfzep`, `dantezep`, `passenger_trengine`, `tanker`,
@@ -737,19 +737,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   and C5/M03). Four of the 11 player-anchored nets are named `*Ace*`. So this is not "wingmen
   escort you", it is "this flight operates on the player", and implementing it makes enemy aces
   and reinforcement flights arrive on the player as much as it makes wingmen stay with them.
-  *Fix shape:* `AiNetFollower` takes an optional anchor index + a target-position supplier and
-  offsets every node read (its nearest-node scan included, since the engine's does). The name
-  resolve is the session's job, not the follower's: `player` to the player rig, anything else to a
-  world node.
-  ⚠ *Traps.* (a) **Y is never offset.** The pattern keeps its authored altitude, so a ring at
-  400 m stays at 400 m over a zeppelin at 200 m. (b) The offset applies to EVERY node read, so a
-  follower that offsets `CurrentTarget` but not its nearest-node pick will seat itself on the wrong
-  node. (c) `ZeppelinMotion` shares the follower: a zeppelin whose own net is anchored would start
-  riding its target, so check the zeppelin nets before switching this on for them. (d) Splitscreen
-  has 2–4 players and the engine's `player` is one object; whose position an anchored net follows
-  with a split field is undecided and is not in the binary. (e) An absent target (a `--fly` session
-  with no such world node) must fall back to the authored positions, which is the engine's own
-  no-trailer branch.
+  ✔ **Landed 2026-08-15** (`git log --grep=BL-377`). `AiNetFollower` takes an optional
+  target-position supplier and offsets EVERY node read through `NodePosition`, the seat scan
+  included; `Session/NetTrailerTargets` resolves the name, `player` to the player rig and anything
+  else to a world node through the same `FindNodes` lookup the zeppelins use, lazily and cached
+  because the AI is armed before the zeppelin hosts are placed. Riding is the caller's opt-in, so a
+  follower built without a supplier flies the authored coordinates, which is the engine's own
+  unresolved-target branch. Wired at all four assignment sites: Instant Action (ace, wingmen,
+  waves), `--ai=<plane>:<net>`, the egen generators and the zeppelins. The F13 overlay draws an
+  anchored graph where it actually is (each net is one `Node3D`, so the offset is that root's
+  position), which is what makes the leashes readable at all.
+  ✔ **The seat scan now skips edgeless nodes**, which is `FUN_00431900`'s own rule and was the
+  hidden half of the bug: the anchor is parked off the ring in all 76 anchored nets, and a plane
+  that seats on it has no neighbour to advance to and holds it forever.
+  ⚠ *Traps, and where each one stands.* (a) **Y is never offset**, so a ring at 400 m stays at
+  400 m over a zeppelin at 200 m; done, and asserted. (b) The offset applies to EVERY node read; done via
+  the single `NodePosition`, asserted by a seat-scan test. (c) `ZeppelinMotion` shares the follower:
+  checked, and switched on. Exactly two of the 222 nets are both zeppelin-flown and anchored (C1C's
+  `SwanZep1` on `workersvoyagezep`, C2B's `Gemini2` on `piratezep`, one zeppelin escorting
+  another); neither is self-referential and both records are
+  `deactivated`, so nothing exercises it until a script layer wakes them. (d) **STILL OPEN.**
+  Splitscreen has 2–4 players and the engine's `player` is one object; rig 0 is used and no rule
+  (nearest player, host, per-plane) is invented, because the binary has none to copy. (e) An absent
+  target falls back to the authored positions; done, and asserted.
   *Cross-refs:* `BL-364` (the first net every IA actor takes), `BL-362` (the wingman-station item:
   this is a second, likelier mechanism for "wingmen stay with the player" in Instant Action),
   [`docs/formats/ai-nets.md`](docs/formats/ai-nets.md), `PT-51`.

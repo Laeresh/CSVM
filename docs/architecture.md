@@ -93,7 +93,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery (M4 D14): intercept lead via `AimAssist.TryIntercept`, the ±11° gun cone and the quick-draw cone as fire gates, per-shot dead-eye scatter; mutable target, primary-target name and rating biases (the D12 script seams).
 - `src/Flight/AiVoiceDispatcher.cs` — the combat-voice trigger dispatch (M4 E16), engine-free: the talker roll, the 15 s per-slot cooldown armed on failure too, the bearing halving, the broadcast election, the DI tiers, the death cries with force, the computed bearing index.
 - `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula (M4 D12): rank = weight × 1200 + distance + objectiveBias, minimised; player base weight 0.7, ±0.2 bearing/altitude/facing terms, 1e21 beyond activation; rating-bias matching and the allied-attacker deconfliction pick.
-- `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints (M4 B5): nearest node first, then edge-list neighbours, seeded branch draws; aircraft-agnostic, shared by `AiPilot` and `ZeppelinMotion`.
+- `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints (M4 B5): nearest node first, then edge-list neighbours, seeded branch draws, and an anchored net offset onto its live trailer target (`BL-377`); aircraft-agnostic, shared by `AiPilot` and `ZeppelinMotion`.
 - `src/Flight/ZeppelinBroadside.cs` — the pure broadside law (M4 F19): the decoded 90° side arc (dot > 0.707 on the moving hull's lateral axis), the per-cannon stowed→deploy→ready→fire machine with its own re-fire timer, the ballistic lead solve (skip on no solution) and the seeded gasbag pick.
 - `src/Flight/ZeppelinDamage.cs` — the pure zeppelin kill arithmetic (M4 F18): the decoded survivor threshold over the `healthy` list, the engine recount, the DAMAGES_ZEPPELIN gasbag gate, the record-stage crossing helper.
 - `src/Flight/ZeppelinMotion.cs` — the kinematic zeppelin motion law (M4 F17): forward-only flight along a net under the record's speed/accel/rate/pitch limits, plus the decoded sqrt engine-loss curve behind the `AliveEngines` seam.
@@ -227,6 +227,7 @@ clusters they delegate to.
 - `src/Session/InstantActionRuntime.cs` — owns one Instant Action mission's actor set (PLAN-instant-action.md C8/D9/E11/F12): the loaded `InstantActionDef`, the ace's own spawn draw and team/rating, the wingmen's fan placement/escort chain/flight-size clamp, E11's two per-wave-member draws (the five-row pilot-personality table, the accent-12 re-roll), and F12's objective-zeppelin selection.
 - `src/Session/InstantActionWaves.cs` — the decoded wave sequencer's own selection/trigger/geometry (PLAN-instant-action.md E11), pure and engine-free: the wave counter (advance-on-last-kill, 0-enemy fall-through, no advance past wave 4), the 500-m-from-nearest-human spawn draw with its literal-index-0 fallback, and the 100 m/45° fan.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in and F12's wave-credit budget that switches it back off.
+- `src/Session/NetTrailerTargets.cs` — resolves a patrol net's trailer name (`player`, a zeppelin, a train) to a live position, so an anchored net rides its target (`BL-377`).
 - `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (M4 B6, `--generators`): load-time drop rules, per-cycle stepping, spawns through `GameSession.SpawnAiAircraft` — or, on an Instant Action zeppelin run (F12), releases an already-built wave member instead.
 - `src/Session/AiVoiceRuntime.cs` — wires E16's dispatch into a session: the decoded event sources (hit-path DI, Downed death cries, acquisition call-outs, taunts) played through `CombatVoice` + `WorldSounds.PlayOneShot`.
 - `src/Session/ZeppelinRuntime.cs` — runs a mission's zeppelins (M4 F17+F18+F19, `--zeppelins`): places each record's world node at its authored pose, flies it along its net through `ZeppelinMotion`, owns the multi-zone damage (per-part registry pools, the survivor-count kill, the authored hull death) and fires the broadside (`ZeppelinRuntime.Cannons.cs`: real unowned `wep_28` rounds through `ZeppelinBroadside`).
@@ -2355,12 +2356,15 @@ positions in, target node out; its two consumers are `AiPilot.Patrol` (aircraft)
 ⚠ `DefaultArrivalRadius` (200 m, XZ-only) is INVENTED, sized to the placeholder law's tracking
   error; wave D's real maneuvering shrinks it. Zeppelins pass a wider per-record radius that
   clears their turning circle (`ZeppelinRuntime`).
-⚠ **The trailer is DECODED (`BL-377`) and still not acted on.** An anchored trailer means the net
-  RIDES its target: `(node − anchor) + target` in X/Z, authored Y (`org/aiPilot.md` "The trailer").
-  76 of 222 nets are anchored, 11 to the `player`, and six of the eight chapters' FIRST nets (the
-  net every Instant Action actor takes), so today an IA wingman patrols a ring at fixed world
-  coordinates where the original patrols one centred on the player. Per-node tags ride along raw;
-  stop-point vs segment id is still open (F17's remaining item).
+⚠ **An anchored net RIDES its target (`BL-377`).** Every node read goes through `NodePosition`,
+  which adds `target − anchorNode` in X/Z and **nothing in Y** (`org/aiPilot.md` "The trailer"),
+  the seat scan included, since the original's single `FUN_00432010` serves both. Riding is the
+  CALLER's opt-in: no `trailerTarget` supplier, authored coordinates, which is also the engine's
+  unresolved-target branch. `Session/NetTrailerTargets` is what resolves the name.
+⚠ The seat scan SKIPS edgeless nodes (`FUN_00431900`, degree at node `+0x18`). The anchor is
+  parked off the ring in all 76 anchored nets, so without the skip a plane seats on it and, having
+  no neighbour to advance to, holds it forever. A net whose nodes are all edgeless still gets a seat.
+⚠ Per-node tags ride along raw; stop-point vs segment id is still open (F17's remaining item).
 
 ## src/Flight/ZeppelinBroadside.cs
 The pure zeppelin broadside law (M4 F19), engine-free: the decoded 90° arc
@@ -4166,6 +4170,10 @@ each pilot's own `AiNetFollower.CurrentTarget` (built before any AI exists, henc
 not a snapshot). `AiNetLeash.Steering` is `AiPilot.SteeringPatrol`, which the pilot REPORTS off its
 own dispatch rather than the overlay re-deriving it from the mode: a leash for a plane that only
 holds its node while pursuing draws dimmed, and the HUD line counts the two separately.
+An ANCHORED net is drawn where it actually is, not where the file says (`BL-377`): each net is one
+`Node3D` of authored-space children, so `TrailerOffsetOf` (the session's `NetTrailerTargets`) is
+applied per frame as that root's `Position` and nothing is rebuilt. Without the supplier every net
+draws at its authored coordinates.
 ⚠ Never draw node order as the route — the graph branches; only the edge list is connectivity.
 ⚠ The filter field is a deliberate PanelFocus exception (a text filter cannot work unfocusable):
   focus arrives only by clicking the field, and Enter releases it back to the aircraft.
@@ -5396,6 +5404,24 @@ last state (the decoded loop early-outs before any door rule).
 ⚠ The first post-load threshold is an assumption (full inter-wave gap); the decode does not pin
   it, and F20 revisits.
 
+## src/Session/NetTrailerTargets.cs
+Resolves a patrol net's TRAILER name to a live position supplier (`BL-377`), the session half of
+"an anchored net rides its target", so `Flight/AiNetFollower` can do the arithmetic knowing nothing
+about players or world nodes. `For(net)` returns a `Func<Vector3?>` only for the anchored-and-named
+shape (`[nodeIndex, "name"]`, 76 nets); the other three shipped shapes get null, which means "fly
+the authored coordinates". `player` is the player rig; anything else is a world node through the
+same `WorldRuntime.FindNodes` lookup `ZeppelinRuntime` uses. `OffsetOf(net)` is the overlay's read
+of the same offset. Every follower the session builds shares one instance (`GameSession._netTrailers`).
+Pinned by `NetTrailerTargetsTests` + the `ai-net-follow` suite.
+⚠ The name resolve is lazy-once and CACHED, hit or miss. The original resolves at net build
+  (`FUN_004314e0`); here the nets are read and the AI armed before `ZeppelinRuntime` has placed its
+  hosts, so a build-time resolve would miss targets that exist a few hundred lines later.
+⚠ `player` is ONE object in the binary and 2–4 rigs here. Splitscreen is outside what the
+  executable can answer, so rig 0 is handed back and nothing is invented (nearest player, host
+  player, per-plane pick). This is `BL-377` trap (d), still open as a design question.
+⚠ A freed target (a killed zeppelin's node) falls back to the authored coordinates rather than
+  throwing on a stale handle.
+
 ## src/Session/AiGeneratorRuntime.cs
 Runs a mission's egen generators (M4 B6 + F20, behind `--generators[=plane]`): one
 `GeneratorCycle` per surviving `EnemyGeneratorDef`, host altitude read live off the resolved host
@@ -5459,6 +5485,11 @@ authored deploy/retract anims scoped to the hull, and spawns unowned rounds
 ⚠ A `deactivated` record (value 1) is PLACED but held — mission-script wake-up is out of M4's
   scope. A record whose net misses neindex is also placed-not-flown (the pose is real data and
   B6's altitude gate reads the node's Y). Stop nodes are NOT implemented (F17's open item).
+⚠ Zeppelins ride an anchored net too (`BL-377`, via `NetTrailerTargets`), but only two of the 222
+  nets are both zeppelin-flown and anchored: C1C's `SwanZep1` on `workersvoyagezep` and C2B's
+  `Gemini2` on `piratezep`, one zeppelin escorting another, neither self-referential. Both records
+  are `deactivated`, so nothing exercises it today. Wired because it is the decoded behaviour
+  (`formats/ai-nets.md`).
 `Hold(node)` (F12) is the runtime counterpart of that flag for a zeppelin Instant Action's own
 builder switched off: placed, but no longer stepped, so it neither flies its net nor fires an
 invisible broadside. It stands in for `FUN_0045a390`'s `FUN_0045a2a0`, which deletes the vehicle/AI

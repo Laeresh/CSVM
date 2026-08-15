@@ -147,6 +147,11 @@ An escort-target failover for that mission, nothing more.
 degree at `+0x18`), which is how an anchor node parked off the ring never becomes a flight target
 itself.
 
+Implemented 2026-08-15 (`BL-377`): `AiNetFollower.NodePosition` applies the offset to every node
+read and `Session/NetTrailerTargets` resolves the name, `player` to the player rig and anything else
+to a world node. The one thing the binary cannot answer is whose position `player` means with a
+split field; rig 0 is used and nothing else is invented.
+
 ## The patrol-net follower has no netless branch
 
 `FUN_0041d1f0` resolves the net before it does anything else (`0x0041d1f9`–`0x0041d237`): it scans

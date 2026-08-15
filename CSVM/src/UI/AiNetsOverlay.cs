@@ -51,6 +51,7 @@ public sealed partial class AiNetsOverlay : Node
 
     private readonly List<AiNetLeash> _leashes = new();
     private readonly HashSet<int> _drawnIds = new();
+    private readonly List<(AiNet Net, Node3D Root)> _anchored = new();
 
     private List<AiNet>? _nets;
     private List<AiNet>? _cliSelected;
@@ -85,6 +86,13 @@ public sealed partial class AiNetsOverlay : Node
     /// overlay is up. Null draws no leashes, which is every session that has no AI.</summary>
     public Action<List<AiNetLeash>>? CollectLeashes { get; init; }
 
+    /// <summary>How far this net's nodes sit from their authored coordinates right now: the
+    /// trailer offset an anchored net rides its target by (`BL-377`, supplied by the session from
+    /// <c>NetTrailerTargets</c>). The drawn graph is moved by it every frame, so the ring on screen
+    /// is the ring the AI is flying rather than the one in the file. Null draws every net at its
+    /// authored coordinates, which is also what an unanchored or unresolved net gets.</summary>
+    public Func<AiNet, Vector3>? TrailerOffsetOf { get; init; }
+
     public override void _Process(double delta)
     {
         if (DebugShow && !_debugDone)
@@ -94,7 +102,17 @@ public sealed partial class AiNetsOverlay : Node
             _debugDone = true;
             Toggle();
         }
-        if (_shown && _leashMesh != null)
+        if (!_shown)
+        {
+            return;
+        }
+        // The anchored graphs ride their targets: the whole net is one Node3D of authored-space
+        // children, so the offset is a translation of that root and nothing has to be rebuilt.
+        foreach (var (net, root) in _anchored)
+        {
+            root.Position = TrailerOffsetOf!(net);
+        }
+        if (_leashMesh != null)
         {
             RedrawLeashes();
         }
@@ -121,6 +139,7 @@ public sealed partial class AiNetsOverlay : Node
             _holder?.QueueFree();
             _holder = null;
             _leashMesh = null;   // it belonged to the freed holder; _Process must not touch it
+            _anchored.Clear();   // ditto: those roots are the freed holder's children
             _shown = false;
             HideNotice();
             Log.Info("world", $"ai nets overlay off");
@@ -289,6 +308,7 @@ public sealed partial class AiNetsOverlay : Node
         _holder?.QueueFree();
         _holder = null;
         _leashMesh = null;
+        _anchored.Clear();
         Build(Visible());
         ShowNotice(_summary);
     }
@@ -347,10 +367,16 @@ public sealed partial class AiNetsOverlay : Node
         _holder.SetMeta(SelectionService.OverlayMeta, true);
         int nodes = 0, edges = 0;
         _drawnIds.Clear();
+        _anchored.Clear();
         foreach (var net in nets)
         {
             var color = ColorOf(net.Id);
-            _holder.AddChild(BuildNet(net, color));
+            var root = BuildNet(net, color);
+            _holder.AddChild(root);
+            if (TrailerOffsetOf != null && net.Trailer is { NodeIndex: >= 0, Name: { Length: > 0 } })
+            {
+                _anchored.Add((net, root));
+            }
             _drawnIds.Add(net.Id);
             nodes += net.Nodes.Count;
             edges += net.Edges.Count;

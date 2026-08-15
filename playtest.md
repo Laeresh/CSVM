@@ -406,11 +406,11 @@ you to put the file "next to the repo", where nothing would find it. Absolute pa
   *Variations:* `"num_wingmen": 5` with 1–2 `--players=` to see decision 8a's clamp in the spawn
   log; any other `mission_type` besides `dogfight_ace` (which forces wingmen to 0).
 
-- `PT-51` `[Own]` **Every Instant Action actor now patrols the chapter's first net (`BL-364`,
-  landed 2026-08-15).** The symptom that raised it was enemies flying straight in one direction and
+- `PT-51` `[Own]` **Every Instant Action actor now patrols the chapter's first net (`BL-364`), and
+  in C1 that net rides the player (`BL-377`). Both landed 2026-08-15.** The symptom that raised it was enemies flying straight in one direction and
   a wave out of engagement range never turning back. The ace, the wingmen and every wave member are
   now given C1's net 10 (`M4ReinfAce`, a ring at 400 m), which the launch log names as
-  `ia: actors patrol 'M4ReinfAce' (net 10), the chapter's first`. The steering law underneath is
+  `ia: actors patrol 'M4ReinfAce' (net 10), the chapter's first, anchored to 'player' at node 10`. The steering law underneath is
   still the placeholder, so this is a judgement on whether the behaviour reads right, not on
   whether the path is exact. *Look for:*
   - (a) **do they come back**: let a wave lose you and watch. It should turn and circle rather
@@ -423,9 +423,9 @@ you to put the file "next to the repo", where nothing would find it. Absolute pa
   - (d) **the ring is shared**: every actor walks the SAME net, so some clustering is expected and
     correct. Judge whether it reads as a busy patrol or as a conga line.
 
-  *Blocks:* a pass closes `BL-364`'s landed half, leaving only its campaign-roster remainder. A
-  fail on (b) is evidence for the placeholder law (Wave D/E scope), not for the net data; a fail on
-  (a) or (c) is a fresh `BL` item.
+  *Blocks:* a pass closes `BL-364`'s landed half (leaving only its campaign-roster remainder) and
+  `BL-377` apart from its splitscreen question. A fail on (b) is evidence for the placeholder law
+  (Wave D/E scope), not for the net data; a fail on (a) or (c) is a fresh `BL` item.
   ⚠ **Fly this from the worktree, not the main checkout**, until `worktree-ia-patrol-nets` is
   merged: the fix is on that branch. `$env:CSVM_DATA_ROOT` already points at `Z:\CSVM`, so
   `./RunGame.ps1` there finds Godot and the game data by itself. Its own mission file (the
@@ -444,17 +444,25 @@ you to put the file "next to the repo", where nothing would find it. Absolute pa
   range and its current AI mode. **F13** draws the nets themselves plus a live leash from each
   plane to the node it is flying at (dimmed when it only holds that node while fighting), which
   is what turns (a) into a direct read rather than an impression.
-  ⚠ **The ring is in the wrong place until `BL-377` lands.** C1's first net is anchored to the
-  `player` (`[10, "player"]`), which in the original carries the whole ring around the player;
-  ours flies it at its authored coordinates, so wingmen and enemies alike patrol a fixed ring in
-  the middle of the map. Judge (a)–(d) as "does it walk the graph", not as "is the graph in the
-  right place".
+  **The ring now RIDES you** (`BL-377`, landed 2026-08-15). C1's first net is anchored to the
+  `player` (`[10, "player"]`), so the whole 11-node ring is carried around your own aircraft at its
+  authored 400 m, and every Instant Action actor on it, wingman and enemy alike, patrols around
+  you rather than around a fixed spot on the map. F13 draws the ring where it actually is, so it
+  should visibly travel with you as you fly. That is worth its own look:
+  - (e) **does the ring follow you**: with F13 up, fly a few kilometres and watch the graph move
+    with you rather than staying behind. Its altitude must NOT follow you: climb and the ring
+    stays at 400 m, which is the decoded behaviour, not a bug;
+  - (f) **and does that read as intended**: it is team-blind in the original, so enemies arriving
+    on you is correct, not a mistake. Judge whether it makes the mission better or just crowded.
+  ⚠ **`--debug-spectate` moves the ring's centre with your PINNED plane**, which sits still. That
+  is the right way to watch (a)–(d) undisturbed, but (e) needs you flying, so do that pass without
+  the flag.
   ⚠ **With wingmen configured, the two sides fight each other and nobody patrols.** Measured
   2026-08-15: three wingmen and three enemies with no player present read `0 plane(s) flying it,
   3 holding a node` and every marker said `pursue`. That is correct behaviour, not a failure of
   the net. `"num_wingmen": 0` is the configuration that shows patrol at all: same run, `3 plane(s)
   flying it, 0 holding a node`, every marker `patrol`. Confirm the launch log says
-  `ia: actors patrol 'M4ReinfAce' (net 10), the chapter's first` before judging anything: without
+  `ia: actors patrol 'M4ReinfAce' (net 10), the chapter's first, anchored to 'player' at node 10` before judging anything: without
   that line the actors have no net and (a)–(d) are moot.
   *Variations:* drop both debug flags and fly it yourself for the (b) judgement, which needs you
   to engage and break off; `"num_wingmen": 0` leaves the enemies nothing to chase at all, the

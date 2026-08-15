@@ -114,7 +114,7 @@ public class AiNetFollowerTests
     }
 
     [Fact]
-    public void TrailerAndTagsRideAlongUntouched()
+    public void TagsRideAlongUntouchedAndAnAnchoredNetIsFixedWithoutASupplier()
     {
         var net = new AiNet
         {
@@ -129,10 +129,88 @@ public class AiNetFollowerTests
             Trailer = new AiNetTrailer(1, "piratezep"),
         };
         var f = new AiNetFollower(net, new Random(1));
-        // Exposed raw for later waves; the follower acts on neither (stop-point vs segment id
-        // is still open, F17 owns resolving it, and the trailer target is not flown to).
+        // Tags are exposed raw and acted on by nothing (stop-point vs segment id is still open,
+        // F17 owns resolving it). The trailer IS decoded (BL-377), but riding it is the caller's
+        // opt-in: no supplier, no offset.
         Assert.Equal(new[] { 3f, 1f }, f.Net.Nodes[0].Tags);
         Assert.Equal(new AiNetTrailer(1, "piratezep"), f.Net.Trailer);
+        Assert.False(f.Anchored);
+        f.Update(Vector3.Zero);
+        Assert.Equal(new Vector3(0f, 400f, 0f), f.CurrentTarget);
+    }
+
+    [Fact]
+    public void AnAnchoredNetRidesItsTargetAndKeepsItsAuthoredAltitude()
+    {
+        // BL-377: out = (node − anchor) + target in X/Z, node.y untouched. The target sits at
+        // 50 m; the ring stays at its authored 400 m.
+        var target = new Vector3(5000f, 50f, -2000f);
+        var f = new AiNetFollower(Anchored(), new Random(1), trailerTarget: () => target);
+        Assert.True(f.Anchored);
+        // Anchor node 4 is at (500,500), so the offset is (4500, 0, −2500).
+        Assert.Equal(new Vector3(4500f, 400f, -2500f), f.NodePosition(0));
+        Assert.Equal(new Vector3(5500f, 400f, -2500f), f.NodePosition(1));
+        // Moving the target moves the whole pattern, live.
+        target = new Vector3(0f, 900f, 1000f);
+        Assert.Equal(new Vector3(-500f, 400f, 500f), f.NodePosition(0));
+    }
+
+    [Fact]
+    public void TheOffsetMovesTheSeatScanToo()
+    {
+        // Trap (b) on the entry: a follower that offset only its current target would seat on the
+        // node nearest in AUTHORED space. Standing beside the ridden node 2 must seat on node 2.
+        var target = new Vector3(10000f, 0f, 10000f);   // offset (9500, 0, 9500)
+        var f = new AiNetFollower(Anchored(), new Random(1), trailerTarget: () => target);
+        Assert.True(f.Update(new Vector3(10400f, 400f, 10600f)));
+        Assert.Equal(2, f.CurrentIndex);
+        Assert.Equal(new Vector3(10500f, 400f, 10500f), f.CurrentTarget);
+    }
+
+    [Fact]
+    public void TheEdgelessAnchorNodeIsNeverSeatedOn()
+    {
+        // FUN_00431900 skips nodes of degree 0, and the anchor is parked off the ring in every
+        // shipped case. Seated there the walk would have no neighbour and the plane would hold
+        // that node forever, which is the failure this skip exists to prevent.
+        var f = new AiNetFollower(Anchored(), new Random(1));
+        f.Update(new Vector3(500f, 400f, 500f)); // standing ON node 4, the nearest node outright
+        Assert.NotEqual(4, f.CurrentIndex);
+        Assert.True(f.Update(f.CurrentTarget));  // and it advances, rather than holding
+    }
+
+    [Fact]
+    public void AnUnlocatableTargetFallsBackToTheAuthoredCoordinates()
+    {
+        // The engine's own unresolved-target branch, and what a --fly session with no such world
+        // node must do rather than collapsing the net onto the origin.
+        Vector3? target = null;
+        var f = new AiNetFollower(Anchored(), new Random(1), trailerTarget: () => target);
+        Assert.Equal(new Vector3(1000f, 400f, 0f), f.NodePosition(1));
+        target = new Vector3(200f, 0f, 300f);   // offset (−300, 0, −200)
+        Assert.Equal(new Vector3(700f, 400f, -200f), f.NodePosition(1));
+    }
+
+    [Fact]
+    public void TrailerOffsetIsZeroForEveryShapeThatCarriesNoAnchor()
+    {
+        var ring = Loop();   // no trailer at all
+        Assert.Equal(Vector3.Zero, AiNetFollower.TrailerOffset(ring, new Vector3(5000f, 0f, 5000f)));
+        // [-1, "name"]: a named target with no attach node (4 shipped nets).
+        var unattached = new AiNet
+        {
+            Id = 12, Name = "TestUnattached", Nodes = ring.Nodes, Edges = ring.Edges,
+            Trailer = new AiNetTrailer(-1, "piratezep"),
+        };
+        Assert.Equal(Vector3.Zero, AiNetFollower.TrailerOffset(unattached, new Vector3(5000f, 0f, 5000f)));
+        // An out-of-range anchor index is unseen in this install and must not throw either.
+        var broken = new AiNet
+        {
+            Id = 13, Name = "TestBrokenAnchor", Nodes = ring.Nodes, Edges = ring.Edges,
+            Trailer = new AiNetTrailer(99, "player"),
+        };
+        Assert.Equal(Vector3.Zero, AiNetFollower.TrailerOffset(broken, Vector3.Zero));
+        Assert.False(new AiNetFollower(broken, new Random(1), trailerTarget: () => Vector3.Zero).Anchored);
     }
 
     [Fact]
@@ -168,6 +246,21 @@ public class AiNetFollowerTests
         Name = "TestPath",
         Nodes = new[] { Node(0f, 0f), Node(1000f, 0f), Node(2000f, 0f) },
         Edges = new[] { (0, 1), (1, 2) },
+    };
+
+    /// <summary>C1's <c>M4ReinfAce</c> in miniature: a square ring 0-1-2-3-0 plus an EDGELESS
+    /// anchor node parked off it, and a <c>[4, "player"]</c> trailer. That is the shipped shape of
+    /// all 76 anchored nets: the anchor is the last node and carries no edge.</summary>
+    private static AiNet Anchored() => new()
+    {
+        Id = 10,
+        Name = "TestAnchored",
+        Nodes = new[]
+        {
+            Node(0f, 0f), Node(1000f, 0f), Node(1000f, 1000f), Node(0f, 1000f), Node(500f, 500f),
+        },
+        Edges = new[] { (0, 1), (1, 2), (2, 3), (0, 3) },
+        Trailer = new AiNetTrailer(4, "player"),
     };
 
     /// <summary>A hub with three spokes: node 0 connects to 1, 2 and 3 (the branch case).</summary>

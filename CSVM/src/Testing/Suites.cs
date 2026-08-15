@@ -270,9 +270,11 @@ public static class Suites
             + "plays the dead pilot's own death cry through the force flag while an unforced "
             + "dispatch on the same dead speaker stays silent", AiVoice));
         into.Add(new TestHarness.Suite("ai-net-follow",
-            "net following (B5): a real chapter net resolves by id and by name, its trailer and " +
-            "tags ride along unacted-on, and an AI plane with a net-following pilot captures node " +
-            "after node with every hop an EDGE of the graph, never node order", AiNetFollow));
+            "net following (B5): a real chapter net resolves by id and by name, its tags ride " +
+            "along unacted-on, and an AI plane with a net-following pilot captures node after " +
+            "node with every hop an EDGE of the graph, never node order. Then the same net, " +
+            "anchored (BL-377), rides its target 6 km east and the plane laps the MOVED ring at " +
+            "its authored altitude, never seating on the edgeless anchor node", AiNetFollow));
         into.Add(new TestHarness.Suite("zeppelin-motion",
             "zeppelin motion (F17): C1/M04's piratezep record loads, its world node is placed at " +
             "the authored pose and flown along PirateZep1 between manual sim steps — every hop an " +
@@ -6079,10 +6081,17 @@ public static class Suites
             return;
         var net = byId;
 
-        // The trailer is recorded on the net, unacted-on (B5's documented decision: no
-        // target-relative motion until a later wave decodes what to do with it).
+        // The trailer names the player at node 10, and that node carries no edge: the shipped
+        // shape of all 76 anchored nets, and why the seat scan has to skip edgeless nodes.
         ctx.Check(net.Trailer is { NodeIndex: 10, Name: "player" },
             $"the trailer [10, player] rides the net trailer={net.Trailer?.ToString() ?? "-"}");
+        bool anchorEdgeless = true;
+        foreach (var (a, b) in net.Edges)
+        {
+            if (a == 10 || b == 10)
+                anchorEdgeless = false;
+        }
+        ctx.Check(anchorEdgeless, $"…and the anchor node 10 is parked off the ring, edgeless");
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
@@ -6144,6 +6153,32 @@ public static class Suites
                 $"every hop is an EDGE of the graph hops={string.Join(" ", hops.ConvertAll(h => $"{h.From}→{h.To}"))}");
             ctx.Check(Mathf.Abs(ai.WorldPosition.Y - 400f) < 250f,
                 $"…within the placeholder law's altitude leash of the net's 400 m y={ai.WorldPosition.Y:0}");
+
+            // BL-377: the same net, now RIDING a stand-in for the player 6 km east of where it
+            // was authored. The ring must move with it and keep its authored 400 m; the plane
+            // must fly the moved ring, not the one in the file.
+            var trailed = net.Nodes[10].Position + new Vector3(6000f, -300f, 0f);
+            var anchoredFollower = new AiNetFollower(net, new System.Random(1),
+                trailerTarget: () => trailed);
+            ctx.Check(anchoredFollower.Anchored
+                && anchoredFollower.NodePosition(0).IsEqualApprox(
+                    net.Nodes[0].Position + new Vector3(6000f, 0f, 0f)),
+                $"the anchored net rides its target 6 km east, Y untouched node0={anchoredFollower.NodePosition(0)}");
+            pilot.Patrol = anchoredFollower;
+            ai.Activate(anchoredFollower.NodePosition(0), anchoredFollower.NodePosition(1));
+            bool seatedOnAnchor = false;
+            for (steps = 0; anchoredFollower.Advances < 3 && steps < budget; steps++)
+            {
+                ai.SimStep(1f / 60f);
+                if (anchoredFollower.CurrentIndex == 10)
+                    seatedOnAnchor = true;   // the edgeless anchor is never a flight target
+            }
+            ctx.Check(anchoredFollower.Advances >= 3 && !seatedOnAnchor,
+                $"…and the plane laps the MOVED ring advances={anchoredFollower.Advances} in {steps / 60f:0} s of sim");
+            float onMoved = ai.WorldPosition.DistanceTo(anchoredFollower.CurrentTarget);
+            float onAuthored = ai.WorldPosition.DistanceTo(net.Nodes[anchoredFollower.CurrentIndex].Position);
+            ctx.Check(onMoved < onAuthored,
+                $"…flying the ridden ring, not the authored one moved={onMoved:0} m authored={onAuthored:0} m");
         }
         finally
         {

@@ -205,6 +205,10 @@ public partial class GameSession : Node3D
     // advanced on the sim dt (never wall time). Null outside Versus — the Downed events then
     // simply have no subscriber. Freed with this node; flight holds no match state.
     private VersusMatch? _versus;
+    // BL-377: the trailer-target resolver every net follower this session builds shares. Built
+    // with the rigs (it needs the player rig), so the F13 overlay, built earlier, reads it through
+    // this field rather than holding a reference it could not have had yet.
+    private NetTrailerTargets? _netTrailers;
     // rolling mirrored-tile window past the map edge
     private Mech3.MapEdgeExtender? _edgeExtender;
     // the splitscreen pane rig (null in single player)
@@ -964,6 +968,9 @@ public partial class GameSession : Node3D
                         }
                     }
                 },
+                // BL-377: an anchored net is drawn where it actually is, not where the file says.
+                // Zero until the rigs are built, which is before anything flies it.
+                TrailerOffsetOf = net => _netTrailers?.OffsetOf(net) ?? Vector3.Zero,
             });
         }
 
@@ -2089,6 +2096,18 @@ public partial class GameSession : Node3D
                 }
             }
         }
+        // BL-377: an anchored net RIDES its trailer target, so every follower built below gets a
+        // supplier for the object its net names. The player is rig 0 (the binary has one 'player'
+        // and splitscreen has up to four; NetTrailerTargets says why that is not invented here),
+        // anything else is a world node, looked up the same way the zeppelin runtime looks its
+        // hosts up. A name that resolves to nothing leaves the net at its authored coordinates.
+        var netTrailers = _netTrailers = new NetTrailerTargets(
+            () => _rigs.Count > 0 && _rigs[0].Controller is { } trailedRig
+                ? trailedRig.WorldPosition
+                : null,
+            name => rigInputs.WorldRuntime?.FindNodes(name) is { Count: > 0 } trailerHits
+                ? trailerHits[0]
+                : null);
         // Instant Action's authored ace (PLAN-instant-action.md C8) — dogfight_ace only; the
         // wave sequencer (D9/E11) and the zeppelin arm (F12) are later items, so any other
         // mission_type spawns no actor yet. Kept as a local so the end-condition block at the
@@ -2118,6 +2137,9 @@ public partial class GameSession : Node3D
             }
             GD.Print(iaPatrolNet != null
                 ? $"ia: actors patrol '{iaPatrolNet.Name}' (net {iaPatrolNet.Id}), the chapter's first"
+                  + (iaPatrolNet.Trailer is { NodeIndex: >= 0, Name: { } anchorName }
+                      ? $", anchored to '{anchorName}' at node {iaPatrolNet.Trailer.Value.NodeIndex}"
+                      : "")
                 : $"ia: {_spec.Chapter} has no first patrol net, actors fly their spawn course");
         }
         // The net IS the standing order (AiPilot.Patrol), and PatrolThrottle comes with it for
@@ -2131,7 +2153,8 @@ public partial class GameSession : Node3D
             if (iaPatrolNet == null)
                 return;
             pilot.Throttle = AiPilot.PatrolThrottle;
-            pilot.Patrol = new AiNetFollower(iaPatrolNet, Rng.NewSystemRandom(Rng.Ai));
+            pilot.Patrol = new AiNetFollower(iaPatrolNet, Rng.NewSystemRandom(Rng.Ai),
+                trailerTarget: netTrailers.For(iaPatrolNet));
         };
         if (_instantAction is { } ia
             && string.Equals(ia.Def.MissionType, "dogfight_ace", StringComparison.OrdinalIgnoreCase))
@@ -2379,12 +2402,16 @@ public partial class GameSession : Node3D
                 if (net != null)
                 {
                     // On the net itself, so a scripted run sees it patrolling within seconds; the
-                    // follower flies first to the nearest node, per the design.
-                    var pos = net.Nodes[0].Position + right * lateral;
-                    var look = net.Nodes.Count > 1 ? net.Nodes[1].Position : pos + fwd;
+                    // follower flies first to the nearest node, per the design. Node positions
+                    // come off the follower, not off the record, so an anchored net puts the
+                    // plane on the ring where the ring actually is (BL-377).
+                    var follower = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai),
+                        trailerTarget: netTrailers.For(net));
+                    var pos = follower.NodePosition(0) + right * lateral;
+                    var look = net.Nodes.Count > 1 ? follower.NodePosition(1) : pos + fwd;
                     var pilot = AiPilot.HoldingCourse(pos, look);
                     pilot.Throttle = AiPilot.PatrolThrottle;
-                    pilot.Patrol = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai));
+                    pilot.Patrol = follower;
                     RegisterAiVoice(SpawnAiAircraft(planeName, pos, look, pilot), accentId);
                 }
                 else
@@ -2420,7 +2447,7 @@ public partial class GameSession : Node3D
             var zepNets = AiNets.Load(rigInputs.ChapterZrdrPath);
             _zeppelins = new ZeppelinRuntime(zepDefs,
                 name => rigInputs.WorldRuntime?.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null,
-                zepNets);
+                zepNets, netTrailers.For);
             _worldRoot!.AddChild(_zeppelins);
             // F18: the multi-zone damage half — per-part pools over the world registry, the
             // survivor-count kill, and the DAMAGES_ZEPPELIN gate on the shared pool.
@@ -2508,7 +2535,8 @@ public partial class GameSession : Node3D
                     : (name, scope) => wr.FindNodes(name, scope) is { Count: > 0 } hits ? hits[0] : null,
                 chapterNets, _spec.GeneratorsPlane, SpawnAiAircraft,
                 wr == null ? null : (name, host) => wr.PlayWithin(host, name, applyReset: false).Count,
-                wr == null ? null : (name, host) => wr.StopWithin(host, name));
+                wr == null ? null : (name, host) => wr.StopWithin(host, name),
+                netTrailers.For);
             _worldRoot!.AddChild(_generators);
             // A dead zeppelin permanently disables its generator (the decoded rule; F18
             // supplies the death the B6 stub waited on).
