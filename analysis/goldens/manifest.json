@@ -71,28 +71,28 @@
     {
       "name": "viewer-bhawk",
       "frame": 30,
-      "hash": "d952186fbb529953ce2eb38d72dd7488",
-      "exercises": "one aircraft built and painted: PlaneBuilder, the pinned livery seed, decals, the orbit camera's framing, and the launcher-default light (--viewer loads no weather); static by construction, 0 px at 30 vs 360.",
+      "hash": "9fda0b12d0c4601c9cf28b91f6ccbf47",
+      "exercises": "one aircraft built and painted: PlaneBuilder, the default Fortune Hunters livery and its decals, the orbit camera's framing, and the launcher-default light (--viewer loads no weather); static by construction, 0 px at 30 vs 360.",
       "args": ["--viewer", "--plane=player_bhawk", "--det", "--mute"]
     },
     {
       "name": "empty-stage",
       "frame": 120,
-      "hash": "7155ea3eef7e03714d7c39174d41e25b",
+      "hash": "d2b7c9fa043add5c82a3e0e7d7aea46e",
       "exercises": "the synthetic stage with no gamez at all — code-drawn grid, default sky and sun, flight model, HUD; frame-sensitive 12.21 %, and the one shot that still renders with extracted/ absent.",
       "args": ["--stage=empty", "--plane=player_bhawk", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "b877166ecf2242346a1048f474196538",
-      "exercises": "a flying plane, the only shaded surface in a flight: chase camera on the sim clock, prop and surface animators, the sun bearing, gauges, compass tape, weapon readout, the gun pipper's range, an exhaust puffer, SpeedCue; frame-sensitive.",
+      "hash": "1498402a9c07ff29e7abb38baa0c599b",
+      "exercises": "a flying plane in its default livery, the only shaded surface in a flight: chase camera on the sim clock, prop and surface animators, sun bearing, gauges, compass tape, weapon readout, the pipper's range, an exhaust puffer, SpeedCue; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "6a5fb1df741038b1d06b2aa65ddc1834",
+      "hash": "cde9a31c2963658f0f0d8dee59fa781b",
       "exercises": "the world-effects runtime rendering a puffer: a kill of the single ap_radiotwr instance calls great_balls_of_fire onto the world-effects stage, plus that rig's SpeedCue; frame-sensitive, and moves off its Rng.Effects seed.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },

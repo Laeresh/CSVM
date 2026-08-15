@@ -1386,8 +1386,8 @@ public partial class GameSession : Node3D
         _spectator = labCam;
 
         // Optional stage prop: --plane= parks that aircraft at the mission spawn
-        // point. No FlightController — unpainted by default like every static view
-        // (--paint still applies one).
+        // point. No FlightController — in the Fortune Hunters livery like every other
+        // aircraft (--paint= picks another, --paint=none the bare shipped skins).
         if (_spec.PlaneNames.Count > 0)
         {
             long mark = StartupProfile.Mark();
@@ -1395,7 +1395,7 @@ public partial class GameSession : Node3D
             StartupProfile.Record("gamez", mark);
             mark = StartupProfile.Mark();
             var parkedBuilder = new PlaneBuilder(planesGamez, state.Textures,
-                scheme: _liveryResolver.SchemeFor(0, state.ZrdrPath, randomByDefault: false, _liveryResolver.NewPaintRng(),
+                scheme: _liveryResolver.SchemeFor(0, state.ZrdrPath, _liveryResolver.NewPaintRng(),
                     _liveryResolver.PatternsForPlane(planesGamez, _spec.PlaneName)),
                 patterns: _liveryResolver.Patterns);
             var parked = parkedBuilder.Build(_spec.PlaneName);
@@ -1449,13 +1449,12 @@ public partial class GameSession : Node3D
         // to toggle; --damage only decides whether it opens straight away. Built
         // hidden otherwise, and the panels are built hidden regardless, so a plain
         // --viewer still renders byte-identically.
-        // Static views build unpainted unless --paint asks (randomByDefault: false),
-        // so every existing orbit/damage screenshot renders exactly as before.
-        // Resolved once: the livery lab below opens on exactly the scheme the plane
-        // wears, not a second roll of --paint=random.
+        // Static views wear the Fortune Hunters default like everything else unless --paint
+        // asks otherwise. Resolved once: the livery lab below opens on exactly the scheme the
+        // plane wears, not a second roll of --paint=random.
         long mark = StartupProfile.Mark();
         var staticPatterns = _liveryResolver.PatternsForPlane(state.Gamez, _spec.PlaneName);
-        var staticScheme = _liveryResolver.SchemeFor(0, state.ZrdrPath, randomByDefault: false, _liveryResolver.NewPaintRng(), staticPatterns);
+        var staticScheme = _liveryResolver.SchemeFor(0, state.ZrdrPath, _liveryResolver.NewPaintRng(), staticPatterns);
         // In --viewer the LIVERY LAB owns the livery and applies it itself, so the
         // model is built bare and there is one write path for paint (its Repaint).
         // Everywhere else the builder paints at construction as usual.
@@ -2252,7 +2251,7 @@ public partial class GameSession : Node3D
                 // values ride the setup SCREEN in the original, not ia.json, so the catalog's own
                 // inferred red/black/white (docs/formats/paint.md) stands in for every wingman.
                 var wingmanScheme = _liveryResolver.PaintCatalog(_zrdrPath)
-                    .Find(s => string.Equals(s.Pattern, "player_fortune", StringComparison.OrdinalIgnoreCase));
+                    .Find(s => string.Equals(s.Pattern, LiveryResolver.DefaultPattern, StringComparison.OrdinalIgnoreCase));
                 if (wingmanScheme == null)
                 {
                     GD.PushWarning("ia: no 'player_fortune' entry in the paint catalog — wingmen " +

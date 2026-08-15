@@ -5335,6 +5335,12 @@ never across a menu rebuild — a relaunch gets a fresh instance over the fresh 
   reshuffles every pinned livery and moves golden hashes. Verified unchanged by the 11 goldens.
 ⚠ `SchemeFor`'s `index` parameter is the PLAYER index into `_spec.PaintNames`/the paint RNG draw
   order — keep call sites passing the same per-player index they did before the move.
+With no `--paint=`, every aircraft wears `LiveryResolver.DefaultPattern` (`player_fortune`, the
+Fortune Hunters livery the original's stock planes wear, and the only pattern covering all eleven
+airframes): flight rigs, AI spawns and the static `--plane`/`--damage`/`--viewer` views alike. That
+default is a straight catalog lookup and consumes no RNG draw, so pinned liveries are unmoved by it;
+`--paint=none` is the only way to the bare shipped skins, and an absent `player_fortune` catalog
+entry (no vehicle.json) falls back to them with a one-line note.
 
 ## src/Session/SpawnPicker.cs
 Resolves each player's flight spawn:

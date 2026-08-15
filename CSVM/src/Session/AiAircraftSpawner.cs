@@ -92,7 +92,7 @@ public sealed class AiAircraftSpawner
         using (PerfSample.Scope(PerfSite.AiSpawn))
         {
             var planeBuilder = new PlaneBuilder(_in.PlanesGamez, _in.Textures, spinningProps: true,
-                scheme: scheme ?? _liveries.SchemeFor(_in.RigCount + index, _in.ZrdrPath, randomByDefault: false,
+                scheme: scheme ?? _liveries.SchemeFor(_in.RigCount + index, _in.ZrdrPath,
                     _in.PaintRng, _liveries.PatternsForPlane(_in.PlanesGamez, planeName)),
                 patterns: _liveries.Patterns);
             planeModel = planeBuilder.Build(planeName);

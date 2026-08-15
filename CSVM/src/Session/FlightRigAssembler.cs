@@ -63,11 +63,11 @@ public sealed class FlightRigAssembler
         string planeName = _in.InstantActionPlayerPlaneNode ?? PlaneRoster.PlaneFor(_spec, pi);
         var stats = _in.StatsFor(planeName);
 
-        // Flight repaints the field on every map load: each player draws their
-        // own random livery (colours + decals) unless --paint pins one.
+        // Every player flies the Fortune Hunters livery unless --paint says otherwise,
+        // as the original's stock planes do.
         long mark = StartupProfile.Mark();
         var planeBuilder = new PlaneBuilder(_in.PlanesGamez, _in.Textures, spinningProps: true,
-            scheme: _liveries.SchemeFor(pi, _in.ZrdrPath, randomByDefault: false, _in.PaintRng,
+            scheme: _liveries.SchemeFor(pi, _in.ZrdrPath, _in.PaintRng,
                 _liveries.PatternsForPlane(_in.PlanesGamez, planeName)),
             patterns: _liveries.Patterns);
         var planeModel = planeBuilder.Build(planeName);
