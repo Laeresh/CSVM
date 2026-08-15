@@ -39,11 +39,11 @@ Flags are specified in [`cli.md`](cli.md).
 | `P` | pause — halts the sim; `.` steps one frame. Splitscreen: any player's `P`/pad Start pauses everyone, and shows a shared "PAUSED" board naming who paused (E43, `BL-373`) — only that player's `P`/Start resumes it |
 | — | a pilot out of lives watches from the `--freecam` controls (WASD/QE move, RMB look) on its own pane. Splitscreen: each downed pilot's spectator reads only its own pad/keyboard (E44, `BL-375`) — two players watching at once move independently, not lockstep. Mouse look stays shared (one physical mouse) |
 | `.` | step one frame while paused |
-| `T` | node-name labels |
 | `F12` | screenshot |
-| `F13` | AI patrol-net overlay (chapter worlds only) — `--debug-ainets`. First tenant of the F13–F24 range reserved for debug overlays; the letter-key overlays (`C`/`X`/`T`/…) are to migrate there |
+| `F13` | AI patrol-net overlay (chapter worlds only) — `--debug-ainets`. First tenant of the F13–F24 range reserved for debug overlays; the letter-key overlays (`C`/`X`/…) are to migrate there |
 | `F14` | frame-cost readout: fps / current frame cost / worst recent frame, cycling Off → Compact → Full — `--debug-fps=`. Works at the launchscreen too |
 | `F15` | targeting overlay — `--debug-targets`. A line from every turret gunner and AI gunner to the target it has acquired: red firing, amber tracking, grey held; the HUD names the gate holding each one (blocked / slewing / shot clock / bored / no solution) |
+| `F16` | node-name labels — `--debug-names[=meshes\|all]`. Migrated off `T`, which is free for targeting (`PLAN-targeting` A3) |
 | `F11` | print the mode's subject placement as ready-to-paste `--pos=` / `--direction=` (in `--viewer`: `--pos=` / `--lookat=`, the orbit pivot) |
 | `F10` | export the plane on screen (current livery + damage) to a timestamped `.glb` under `Exports/` — the `--export-gltf=` twin |
 | `Esc` | quit |

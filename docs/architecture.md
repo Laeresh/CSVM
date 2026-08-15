@@ -167,7 +167,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/TileGridOverlay.cs` — the map-edge tile-grid overlay, **flag-only** (`--debug-tilegrid`; no key is bound — `F14`/`F15`/`F16` were freed by `PLAN-perf-hitches` A1): every ground tile tinted 20 % by repetition band, so one colour band is one block; `--map-edge-block=`/`--map-edge-mode=` set the depth/fold once at launch. The instrument that settled the map-edge fold.
 - `src/UI/WeaponLab.cs` — the weapon lab panel (B): steppers that arm the held plane's live loadout, click-to-place on a real world surface. Fires nothing itself.
 - `src/UI/PanelFocus.cs` — the one-line rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
-- `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
+- `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (F16): Off/Meshes/All, anchored on mesh centres, de-cluttered.
 - `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels.
 - `src/UI/PerfHud.cs` — the frame-cost readout (F14, `--debug-fps=`): fps/current-frame-cost/worst-recent-frame, once for the window, drawn above the launchscreen too.
 - `src/UI/TargetingOverlay.cs` — the targeting overlay (F15, `--debug-targets`): a per-frame line from every turret gunner (`TurretController.TargetPosition`) and AI gunner (`AiGunner.Target`) to its acquired target, coloured by the gate holding the trigger (`TurretController.Gate`), with the gate named per shooter in the HUD. Depth test off, since the line into a hull is the one worth seeing. Splitscreen (F51, `BL-376`): the world-space lines draw in every pane on their own (default render layer, in every camera's `CullMask`); the HUD roll-call is once for the window, like `PerfHud`, since it is process-wide combat state.
@@ -4193,7 +4193,7 @@ The `--viewer` livery editor (key L): squadron stepper (loads the squadron's who
   `CliArgs()` resolves the canonical entry by NAME and emits bare `--paint=` only on a verbatim match.
 
 ## src/UI/NodeLabels.cs
-Floating node-name labels (key T) in both the static viewer and flight, cycling Off → Meshes → All;
+Floating node-name labels (key F16) in both the static viewer and flight, cycling Off → Meshes → All;
 `--debug-names[=meshes|all]` presets the mode at launch.
 ⚠ Labels anchor at the mesh-AABB centre in node-local space, not the node origin — origins sit far
   from the geometry and are shared, which collapsed all labels into a single screen cell.

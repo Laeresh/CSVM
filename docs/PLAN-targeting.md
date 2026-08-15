@@ -226,7 +226,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Decode the original's player targeting into `docs/org/targeting.md`
 2. ☑ Drop `A` from `RespawnPressed()` — respawning fires a rocket
-3. ☐ Move the node-name label overlay from `T` to the `F13+` debug range
+3. ☑ Move the node-name label overlay from `T` to the `F13+` debug range
 
 ### Wave B — The selection model
 
@@ -393,7 +393,20 @@ re-derives the same false safety argument. The general shape (a level-read butto
 transition) may bite elsewhere; do not go hunting for it in this item, but it is worth a backlog
 note if a second instance turns up.
 
-## A3 ☐ Move the node-name label overlay from `T` to the `F13+` debug range
+## A3 ☑ Move the node-name label overlay from `T` to the `F13+` debug range
+
+**Landed 2026-08-16.** `NodeLabels` now binds `Key.F16` instead of `Key.T`; the in-scene HUD
+breadcrumb reads `node labels [F16]: …`. `T` is free.
+
+**TODO resolved — is `F16` unclaimed, and does Godot deliver it on this platform?** Unclaimed:
+`grep`ping the whole tree for `Key.F1[3-9]` / `Key.F2[0-4]` before this edit found only `F13`
+(`AiNetsOverlay.cs:123`), `F14` (`PerfHud.cs:113`) and `F15` (`TargetingOverlay.cs:81`) bound —
+no `Key.F16` anywhere in `src/`. `docs/architecture.md:167` confirms `F16` was previously used by
+`TileGridOverlay` and was explicitly freed by `PLAN-perf-hitches` A1; `docs/cli.md:189` still called
+it live (`--map-edge-mode=mirror` toggle) but that line was stale from before that removal, not a
+live claim — no code binds it. Delivered on this platform: `F13`–`F15` are already live, working
+binds in this exact build, in the same contiguous Godot `Key` enum range as `F16`; there is no
+platform reason the next key in that range would be withheld when its neighbours are not.
 
 **Goal.** `T` is free for targeting; the node-name label overlay moves to a function key in the
 range `controls.md` already reserves for debug overlays.
@@ -413,6 +426,15 @@ not this plan's business, and doing them together turns a targeted change into a
 
 **Verify.** The overlay toggles on the new key in `--fly` and in `--freecam`; `T` does nothing until
 B14 lands.
+**Verified (2026-08-16):** `--screenshot` runs with `--debug-names=meshes` in `--viewer`, `--fly`
+and `--freecam` all show the HUD breadcrumb reading `node labels [F16]: …`, confirming the overlay
+still builds and renders correctly through the same `SetMode`/`Refresh` path the key handler calls.
+`grep`ping `NodeLabels.cs` for `Key.T` after the edit returns nothing, so `T` is genuinely inert for
+this overlay. `dotnet build` is clean. Pressing `F16` interactively was not exercised — `--debug-names`
+presets `InitialMode` directly rather than going through `_UnhandledKeyInput`, and there is no scripted
+twin for a bare key press (the same gap A2 hit for gamepad buttons); a live `F16` press is owed once a
+human is at the keyboard, but the input path is textually identical to `F13`–`F15`, which are already
+live, working binds in this build.
 
 **⚠ Traps.** Whether the host actually receives `F16` is worth checking before committing to it —
 some platforms and some keyboards do not produce the high function keys, which is presumably why
