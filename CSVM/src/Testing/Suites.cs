@@ -175,7 +175,8 @@ public static class Suites
             "personality/accent draws are pure over theirs, " +
             "and a real InstantActionWaves sequence over spawned aircraft advances from wave 1 " +
             "to wave 2 exactly on the last kill, activating wave 2's built-inert member at a " +
-            "drawn spawn point at least 500 m from the human",
+            "drawn spawn point at least 500 m from the human, where its patrol net re-seats on " +
+            "the node by that arrival, not the one by the parking pose it seated on while inert",
             InstantActionAce));
         into.Add(new TestHarness.Suite("instant-action-zeppelin",
             "the F12 zeppelin run over C1/IA1's own data: zeppelin_type selects the objective node " +
@@ -3481,9 +3482,28 @@ public static class Suites
                     scheme: null, team: InstantActionRuntime.EnemyTeam));
             }
             var wave2Pilot = AiPilot.HoldingCourse(Vector3.Zero, Vector3.Forward);
+            // BL-364: every Instant Action actor carries the chapter's first patrol net, and an
+            // inert one still ticks, so this two-node stand-in net has a node at the parking
+            // pose and another out at the wave spawn point, to watch which one it flies after
+            // the teleport.
+            var parkNet = new AiNet
+            {
+                Id = 1,
+                Name = "TestWaveNet",
+                Nodes = new[]
+                {
+                    new AiNetNode(Vector3.Zero, System.Array.Empty<float>()),
+                    new AiNetNode(new Vector3(600f, 500f, 0f), System.Array.Empty<float>()),
+                },
+                Edges = new[] { (0, 1) },
+            };
+            wave2Pilot.Patrol = new AiNetFollower(parkNet, new System.Random(3));
             var wave2Member = spawner.Spawn(waveNode, Vector3.Zero, Vector3.Forward, wave2Pilot,
                 scheme: null, team: InstantActionRuntime.EnemyTeam, inert: true);
             waveMembers.Add(wave2Member);
+            wave2Pilot.Patrol.Update(Vector3.Zero);
+            ctx.Check(wave2Pilot.Patrol.CurrentIndex == 0,
+                $"parked inert, the follower seats on the node by the parking pose: idx={wave2Pilot.Patrol.CurrentIndex}");
 
             int aliveWave1 = waveMembers.Take(2).Count(m => m.InPlay);
             ctx.Check(aliveWave1 == 2, $"both wave-1 members InPlay before any kill: {aliveWave1}");
@@ -3515,6 +3535,12 @@ public static class Suites
             float distSq = wave2Member.WorldPosition.DistanceSquaredTo(humanPos);
             ctx.Check(distSq >= InstantActionWaves.MinSpawnDistanceSquared,
                 $"activated at least 500 m from the human: dist={Mathf.Sqrt(distSq):0} m");
+            // The activation snap the original does (FUN_004b0f40 → FUN_00432010): the arrival
+            // re-seats the walk, so the member patrols from where it was put down instead of
+            // flying back to the node by its parking pose.
+            wave2Pilot.Patrol.Update(wave2Member.WorldPosition);
+            ctx.Check(wave2Pilot.Patrol.CurrentIndex == 1,
+                $"activation re-seats it on the node by its ARRIVAL: idx={wave2Pilot.Patrol.CurrentIndex}");
         }
         finally
         {

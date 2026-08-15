@@ -86,6 +86,18 @@ public sealed class AiNetFollower
     /// <see cref="Update"/> has run.</summary>
     public Vector3 CurrentTarget => Net.Nodes[CurrentIndex].Position;
 
+    /// <summary>Drops the walk back to "nearest node next", so the next <see cref="Update"/>
+    /// re-seats from wherever the follower now is. This is the original's own activation rule:
+    /// <c>FUN_004b0f40</c> snaps a vehicle carrying a net to that net's nearest node
+    /// (<c>FUN_00432010</c>) when it is activated. An Instant Action wave member ticks while it
+    /// is inert (presence is not a sim gate), so without this its first update latches a node
+    /// near the parking pose and it flies back there after the teleport.</summary>
+    public void Reseat()
+    {
+        CurrentIndex = -1;
+        _previousIndex = -1;
+    }
+
     /// <summary>Advances the walk from <paramref name="position"/>: the first call targets the
     /// nearest node (the design's "fly first to the nearest node"); afterwards, reaching the
     /// capture radius steps to a connected neighbour. Returns true when the target changed.</summary>

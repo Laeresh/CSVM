@@ -663,8 +663,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-362` (the wingmen half of the same playtest), `AiTargetRanking`,
   [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) "AI modes, engine-side".
 
-- `BL-364` `[Bug]` **Our AI aircraft have no patrol net, and the original gives every one of them
-  one. DECODED 2026-08-15; what is left is implementation.** *Evidence:* the user at the controls,
+- `BL-364` `[Bug]` `[Owed-playtest]` **Our AI aircraft have no patrol net, and the original gives
+  every one of them one. DECODED and the Instant Action half LANDED 2026-08-15; what is left is
+  the campaign roster path, which has no spawner to plumb into yet.** *Evidence:* the user at the controls,
   2026-08-15: the default mode of enemy AI is to fly straight in one direction, and an enemy wave
   out of engagement range never turns back. `AiPilot.SteerPatrol` returns immediately when `Patrol`
   is null (`AiPilot.cs:266`), leaving `TargetHeadingDeg`/`TargetAltitude` at whatever
@@ -685,6 +686,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Fix shape:* give AI aircraft a patrol net, which is `AiNets` data we already parse
   (`src/Mech3/AiNets.cs`) plumbed into `AiPilot.Patrol` at spawn. Instant Action actors take the
   chapter's first net, exactly as the original does. Campaign rosters take their authored `netids`.
+  ✔ **The Instant Action half landed 2026-08-15** (`git log --grep=BL-364`): the ace, the wingmen
+  and every wave member take the chapter's first net, `AiNets.ChapterFirst` reads it in `neindex`
+  FILE order (**not** ascending id: C1B opens on 29 and C1C on 25 against a lowest of 11, decoded
+  from `FUN_004311c0` and pinned in `AiNetsTests`), `FlightController.Activate` re-seats the walk
+  the way the original's activation snap does, and `SteerPatrol` re-asserts `PatrolThrottle` so a
+  plane leaving pursue does not patrol at the chase throttle. Two more decodes are in
+  [`docs/org/aiPilot.md`](docs/org/aiPilot.md): the roster block's volumes are copied over the
+  net's afterwards (so trap (d) below cannot bite an Instant Action actor, whose block authors all
+  nine at ±10000 m), and `min_ai_active_dist` (2000 m, `player.zrd.json`) floors every activation
+  volume twice over. **What is left:** a campaign roster spawner reading each block's authored
+  `netids`. Nothing in `src/` reads `aiv` as a spawn roster today, so there is no seam to plumb.
+  ⚠ `--ai=<plane>` without a net ref still spawns a course-holder; that is the debug flag's own
+  documented behaviour, kept deliberately, not a leftover of this item.
+  *Playtest:* `PT-51`.
   ⚠ *Traps.* (a) **`AiPilot.PatrolThrottle` (0.5) is an invention that exists because the
   placeholder steering law cannot hold the tightest net rings at cruise** (`architecture.md`). Do
   not read a net-follow regression as a net-data problem before checking it. (b) `pref_engage_alt`

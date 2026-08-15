@@ -221,7 +221,12 @@ are always awake, always willing to engage, and never return.
 `netids` kept its `-1`). All three branches of `FUN_0045a390` write a one-entry `netids` list
 holding the **first id in the chapter's net table** (`0x0045a8b4` for the wingmen, `0x0045ab18` for
 the ace, `0x0045ae85` for the waves), so every Instant Action aircraft walks the chapter's first
-patrol graph. Two consequences, both read off the code path rather than observed at the controls of
+patrol graph. That table is built in `neindex.zrd.json` FILE order, not sorted, so "first" is its
+first pair: **net 10 `M4ReinfAce` (C1), 29 `Patrolboat3` (C1B), 25 `M1Defense` (C1C), net 1 in the
+other five**. On C1B and C1C that is not the lowest id, which is 11 on both. The 10000 m
+volumes above survive the net assignment: the net can overwrite a vehicle's volumes, but the roster
+block is copied over it afterwards and this block authors all nine
+([`org/aiPilot.md`](../org/aiPilot.md), "Net assignment"). Two consequences, both read off the code path rather than observed at the controls of
 the original: the wingmen's `w<plane>` defs carry `mode wingman`, but a net demotes a wingman to
 `jet` at spawn, so **the escort chain below is not flown as a formation in this mode**; it survives
 as a target assignment only. [`org/aiPilot.md`](../org/aiPilot.md) has the demotion rule and the

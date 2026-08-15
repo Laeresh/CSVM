@@ -86,12 +86,30 @@ The AI mode enum lives at `+0x358` and is a different thing from the task: 1 eva
 `+0x2f0 == 1` prints `pursue` and anything else prints `lay off`. So "lay off" is literally *has a
 target and is flying its net*, and "patrol" is *has no target*.
 
+## The chapter's net table, and what "the first net" means
+
+`DAT_0064f610` points at a 16-byte header built by `FUN_004311c0`: an allocation figure at `+0x00`,
+the entry count at `+0x04`, the array of entry pointers at `+0x08`, a flag at `+0x0c`. Each entry is
+12 bytes: the net **id**, a strdup'd **name**, and the loaded net object. The count is
+`(recordElements − 2) / 2` and the loop walks the parsed `neindex` record forward from element 1,
+so **entry order is the file's pair order** (`FUN_00431300` is the matching teardown).
+
+That order is what indexes the nets themselves: a lookup scans the table for a matching id and uses
+its **position** to reach the net record at `*(DAT_0064f614 + 4) + index × 100`, 100 bytes per net.
+Nothing sorts, so the table's first entry is simply the first pair in `neindex.zrd.json`, which is
+**not** the lowest id: in this install C1B opens on id 29 (`Patrolboat3`) and C1C on id 25
+(`M1Defense`), both against a lowest id of 11. Every consumer that takes "the first net" (Instant
+Action's three branches below) means this entry.
+
+`FUN_00475f30` is the by-name form (`SET_AI_NET`'s string arm): it walks the same table comparing
+each entry's name, then calls `FUN_00475fc0` with the entry's id.
+
 ## The patrol-net follower has no netless branch
 
 `FUN_0041d1f0` resolves the net before it does anything else (`0x0041d1f9`–`0x0041d237`): it scans
-the net-id table `DAT_0064f610` for the vehicle's `netids` value at `+0x2e4` and, **on no match,
-uses index −1**, indexing 100 bytes before the first element of the net array `DAT_0064f614` and
-dereferencing the node and edge pointers it finds there. There is no guard and no fallback path.
+the net-id table for the vehicle's `netids` value at `+0x2e4` and, **on no match, uses index −1**,
+indexing 100 bytes before the first element of the net array and dereferencing the node and edge
+pointers it finds there. There is no guard and no fallback path.
 
 This is latent rather than reachable: the shipped data never gives a `jet` a missing net (below),
 so the index −1 read is never executed by the retail game. It is recorded here because it is the
@@ -107,6 +125,19 @@ untouched. On a valid net it:
   activation from net `+0x24`² / `+0x28` / `+0x2c` into `+0x318` / `+0x31c` / `+0x320`, attack from
   net `+0x34`² / `+0x38` / `+0x3c` into `+0x328` / `+0x32c` / `+0x330`, and return from net `+0x40`²
   / `+0x44` / `+0x48` into `+0x334` / `+0x338` / `+0x33c`. Radii are stored squared.
+
+⚠ **The roster block outranks the net on all nine.** The spawn runs the net assignment first
+(`FUN_0047c210` calls `FUN_00476250` at `0x0047c77b`, and the net assignment is inside it) and only
+then copies the block's own volumes from `+0x48`–`+0x6c` over the same nine fields, each guarded by
+the same non-zero test, the last of them at `0x0047c91c`. So a net's volumes reach a vehicle only
+where its roster block leaves that slot at 0.0, which is the campaign case. An Instant Action
+block authors all nine at ±10000 m (`FUN_0045a240`), so there the net contributes none of them.
+
+**No activation volume is smaller than `min_ai_active_dist`**, the `player.zrd.json` key read into
+`_DAT_0071c3ec` by `FUN_004735b0` (`0x00474139`), **2000.0** in this install and 0 when the key is
+absent. The clamp runs twice over the same three fields, once after the net assignment
+(`0x004763f4`) and once after the block copy (`0x0047c922`): radius floored to `min_ai_active_dist`,
+the low bound to −it and the high bound to +it. The attack and return volumes have no such floor.
 
 ⚠ **A net demotes a wingman.** `FUN_00476250` (`0x00476382`–`0x004763c3`): if `mode == 4` and
 `netids >= 0`, the escort buffer at `+0x2f8` is freed and `+0x67c` is forced to **0**, after which
@@ -247,8 +278,13 @@ block +0x10 = 1                                   the netids count
 block +0x14 = malloc(4), holding the first entry of the chapter net-id table DAT_0064f610
 ```
 
-at `0x0045a8b4` (the wingmen), `0x0045ab18` (the ace) and `0x0045ae85` (the waves). So every
-Instant Action actor is handed **the chapter's first patrol net**.
+at `0x0045a8b4` (the wingmen), `0x0045ab18` (the ace) and `0x0045ae85` (the waves). Each reads the
+table's **entry 0** and takes that entry's id, so every Instant Action actor is handed the id of
+the first pair in the chapter's `neindex` (see "The chapter's net table" above): net 10
+(`M4ReinfAce`) in C1, 29 (`Patrolboat3`) in C1B, 25 (`M1Defense`) in C1C, and net 1 in each of the
+remaining five.
+
+Their volumes are `FUN_0045a240`'s ±10000 m, not the net's: the block wins the overwrite (above).
 
 Two consequences follow from the demotion rule above, and both are read off the code path rather
 than observed at the controls of the original:
@@ -275,7 +311,10 @@ is where to start.
 | `FUN_0041d9f0` | pursue |
 | `FUN_0041e760` | the formation escort law |
 | `FUN_0041b560` | the shared steering law: point in, stick and throttle out |
+| `FUN_004311c0` | builds the chapter net table from `neindex`, in file order (`FUN_00431300` frees it) |
 | `FUN_00475fc0` | net assignment (`SET_AI_NET`), including the volume overwrite |
+| `FUN_00475f30` | the by-name net assignment: table scan on the entry name, then `FUN_00475fc0` |
+| `FUN_004735b0` | the `player.zrd.json` loader, including `min_ai_active_dist` |
 | `FUN_0049c920` | script-side net assignment, always forces `mode` to `jet` |
 | `FUN_00475820` | def to vehicle copy, including `mode` |
 | `FUN_00476250` | post-spawn vehicle init, including the wingman demotion |

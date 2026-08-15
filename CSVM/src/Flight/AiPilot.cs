@@ -24,7 +24,9 @@ public sealed class AiPilot
     /// value: at the 0.85 default (~125 m/s) the placeholder law's turn radius exceeds the
     /// tightest fighter rings and the plane limit-cycles around a node forever (measured on C1's
     /// M4ReinfAce); at 0.5 it laps them. Callers assigning <see cref="Patrol"/> set it
-    /// explicitly, so it stays a visible order rather than a hidden override.</summary>
+    /// explicitly at spawn, and <see cref="SteerPatrol"/> re-asserts it every step a net is being
+    /// flown, so a plane returning from pursue does not patrol at the chase throttle. The
+    /// original clamps into a decoded 0.8–1.1 band instead (docs/org/aiPilot.md).</summary>
     public const float PatrolThrottle = 0.5f;
 
     /// <summary>Invented: how fast lay off walks the throttle toward the ease-off speed, per
@@ -265,6 +267,12 @@ public sealed class AiPilot
     {
         if (Patrol is not { } patrol)
             return;
+        // Patrol owns the throttle while it is flying, not just at assignment: pursue leaves the
+        // lever at 1.0 and a plane that drops back to patrol there limit-cycles around the
+        // tightest rings. The original does the same thing structurally (its patrol parameter
+        // block DAT_0061fb68 clamps the throttle into a 0.8–1.1 band every step, walked at
+        // 0.35/s), but the MAGNITUDE here is PatrolThrottle's invented one, not that band.
+        Throttle = PatrolThrottle;
         patrol.Update(model.Position);
         var toNode = patrol.CurrentTarget - model.Position;
         if (new Vector2(toNode.X, toNode.Z).LengthSquared() > 1f)

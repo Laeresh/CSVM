@@ -400,6 +400,29 @@ Save this as `ia-wingmen-test.json` next to the repo, then:
   *Variations:* `"num_wingmen": 5` with 1–2 `--players=` to see decision 8a's clamp in the spawn
   log; any other `mission_type` besides `dogfight_ace` (which forces wingmen to 0).
 
+- `PT-51` `[Own]` **Every Instant Action actor now patrols the chapter's first net (`BL-364`,
+  landed 2026-08-15).** The symptom that raised it was enemies flying straight in one direction and
+  a wave out of engagement range never turning back. The ace, the wingmen and every wave member are
+  now given C1's net 10 (`M4ReinfAce`, a ring at 400 m), which the launch log names as
+  `ia: actors patrol 'M4ReinfAce' (net 10), the chapter's first`. The steering law underneath is
+  still the placeholder, so this is a judgement on whether the behaviour reads right, not on
+  whether the path is exact. *Look for:*
+  - (a) **do they come back**: let a wave lose you and watch. It should turn and circle rather
+    than shrink to a dot on the horizon;
+  - (b) **after a fight**: break off an engagement and watch an enemy return to patrol. It should
+    settle back onto the ring, not orbit one waypoint forever (that limit cycle is the invented
+    `PatrolThrottle`'s known failure, `BL-364` trap (a));
+  - (c) **the wave teleport**: when wave 2 arrives, does it patrol from where it appeared rather
+    than turning back toward the map origin;
+  - (d) **the ring is shared**: every actor walks the SAME net, so some clustering is expected and
+    correct. Judge whether it reads as a busy patrol or as a conga line.
+
+  *Blocks:* a pass closes `BL-364`'s landed half, leaving only its campaign-roster remainder. A
+  fail on (b) is evidence for the placeholder law (Wave D/E scope), not for the net data; a fail on
+  (a) or (c) is a fresh `BL` item.
+  *Variations:* add `"group1": { "num_enemies": 3, "enemy_plane": "Fury" }` to the section's
+  mission file. The section's own file has no enemies, so (a)–(d) need it.
+
 ---
 
 ## Everything else

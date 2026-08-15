@@ -882,12 +882,17 @@ The chapter patrol-net reader (`docs/formats/ai-nets.md`): every `ne0NNNNN.zrd.j
 zrdr scope joined with its `neindex.zrd.json` name — nodes, the explicit edge list, raw per-node
 tags, and the trailer attach target. Plus the lookups both ways the data references nets:
 `ById` (aiv field 0), `ByName` (egen/zeppelins/objectives, case-insensitive), `Resolve` (either
-spelling). Consumers: `UI/AiNetsOverlay.cs` and `Flight/AiNetFollower.cs` (B5). Golden counts
-asserted in `CSVM.Tests/AiNetsTests.cs`.
+spelling), and `ChapterFirst` (the net an Instant Action actor is given). Consumers:
+`UI/AiNetsOverlay.cs` and `Flight/AiNetFollower.cs` (B5). Golden counts asserted in
+`CSVM.Tests/AiNetsTests.cs`.
 ⚠ A net is a GRAPH: only `Edges` is connectivity — node order is not a route, loops are one
   authoring choice. Tags and the trailer are exposed raw, never interpreted (undecoded).
 ⚠ The `neindex` first element is NOT the pair count (C1: 46 over 29 pairs) — parse pairs to the
   list's end.
+⚠ `neindex` PAIR ORDER is meaningful and is not id order: the engine indexes nets by their
+  position in it, so "the chapter's first net" is the first pair (C1B 29, C1C 25, both above
+  their chapter's lowest id of 11). `LoadIndexPairs`/`ChapterFirst` keep that order; `Load`
+  sorts by id and `LoadIndex` is an unordered map.
 
 ## src/Mech3/Maneuvers.cs
 The shared maneuver-library reader (`docs/formats/ai-rosters.md`): `zrdr/maneuvers.zrd`'s 17
@@ -2344,6 +2349,9 @@ positions in, target node out; its two consumers are `AiPilot.Patrol` (aircraft)
 `ai-net-follow` suite.
 ⚠ Traversal treats EDGES as undirected (our reading, not decoded: the worked C1 loop dead-ends
   under a directed one). Never walk node order; only the edge list is connectivity.
+⚠ `Reseat` drops the walk back to "nearest node next" and is the original's own activation snap
+  (`FUN_004b0f40` → `FUN_00432010`); `FlightController.Activate` calls it, which is what makes a
+  teleported Instant Action wave member patrol from where it ARRIVES.
 ⚠ `DefaultArrivalRadius` (200 m, XZ-only) is INVENTED, sized to the placeholder law's tracking
   error; wave D's real maneuvering shrinks it. Zeppelins pass a wider per-record radius that
   clears their turning circle (`ZeppelinRuntime`).
@@ -2414,10 +2422,14 @@ own fields, seeded randomness only, so a fixed-dt run is deterministic (`AiPilot
 ⚠ What the ORIGINAL flies is decoded in [`org/aiPilot.md`](org/aiPilot.md): the engine has no
   netless patrol at all, and `Patrol == null` here models nothing it does. A roster aeroplane is
   either a `jet` on a patrol net or a netless `wingman` holding a formation station on its
-  `primary_target`. `BL-364` owns giving ours the net; `BL-362` owns the station.
+  `primary_target`. Every Instant Action actor now takes the chapter's first net at spawn
+  (`GameSession`, `BL-364`); a campaign roster's authored `netids` waits on a roster spawn path,
+  and `BL-362` owns the station.
 ⚠ `PatrolThrottle` (0.5) and the leash/gain constants are INVENTED placeholder-law values, never
   original behaviour; at the 0.85 default the turn radius exceeds the tightest fighter rings and
-  the plane limit-cycles around a node forever (measured on C1's `M4ReinfAce`).
+  the plane limit-cycles around a node forever (measured on C1's `M4ReinfAce`). `SteerPatrol`
+  re-asserts it every step a net is flown, so a plane leaving pursue (throttle 1.0) does not
+  patrol at the chase throttle. The original clamps into a decoded 0.8–1.1 band instead.
 
 ## src/Flight/AiModeMachine.cs
 The nine-mode AI state machine (M4 D11), owned by `AiPilot.Machine` and stepped from its `Next`:
@@ -5235,6 +5247,9 @@ THREE of a spawned actor's gates — activation, attack and return — over the 
 2000/2000/1200 m, which `AiAircraftSpawner.Spawn` seeds first and which is the fallback only for a
 roster leaving its volume slots at 0.0. Setting activation alone leaves the airframe's attack
 radius as the real engagement gate, since `AiModeMachine` enters pursue on the minimum of the two.
+⚠ It stays the last word even though every actor now also carries a patrol net (`BL-364`): a net
+  can overwrite a vehicle's volumes, but the original copies the roster block over the net's
+  afterwards and this block authors all nine at ±10000 m (`org/aiPilot.md`, "Net assignment").
 E11 adds `RandomPilotStats(draw)` — the decoded five-row personality table
 (docs/formats/instant-action.md "A wave enemy's nine pilot stats are drawn at random from a table
 of five, not from its skill"), `row = draw % 5`, fed straight into `RepresentativeRating` for the

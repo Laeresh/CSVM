@@ -2080,6 +2080,44 @@ public partial class GameSession : Node3D
         // bottom of this method can hang the mode's win signal on it (G13).
         FlightController? iaAce = null;
         int iaWaveEnemies = 0;
+        // BL-364: every Instant Action actor is handed the chapter's FIRST patrol net, the ace,
+        // the wingmen and every wave member alike (FUN_0045a390 writes the same one-entry netids
+        // list in all three of its branches; docs/formats/instant-action.md, corrected
+        // 2026-08-15). "First" is neindex FILE order, not the lowest id (C1B opens on 29 and
+        // C1C on 25 against a lowest of 11), which is what AiNets.ChapterFirst reads.
+        AiNet? iaPatrolNet = null;
+        if (_instantAction != null)
+        {
+            try
+            {
+                iaPatrolNet = AiNets.ChapterFirst(AiNets.Load(rigInputs.ChapterZrdrPath),
+                    rigInputs.ChapterZrdrPath);
+            }
+            catch (Exception e)
+            {
+                GD.PushWarning($"ia: cannot read {_spec.Chapter}'s patrol nets: {e.Message}");
+            }
+            if (iaPatrolNet is { Nodes.Count: 0 })
+            {
+                iaPatrolNet = null;
+            }
+            GD.Print(iaPatrolNet != null
+                ? $"ia: actors patrol '{iaPatrolNet.Name}' (net {iaPatrolNet.Id}), the chapter's first"
+                : $"ia: {_spec.Chapter} has no first patrol net, actors fly their spawn course");
+        }
+        // The net IS the standing order (AiPilot.Patrol), and PatrolThrottle comes with it for
+        // the same placeholder-law reason the other two assignment sites carry it. ⚠ The net does
+        // NOT bring its own volumes here: in the original the roster block's volumes are copied
+        // over the net's afterwards (FUN_0047c210 applies the block at 0x48–0x6c after
+        // FUN_00476250 has run the net assignment), and an Instant Action block authors all nine
+        // at ±10000 m, so the block wins outright. ApplyActorVolumes stays the last word.
+        Action<AiPilot> armIaPatrol = pilot =>
+        {
+            if (iaPatrolNet == null)
+                return;
+            pilot.Throttle = AiPilot.PatrolThrottle;
+            pilot.Patrol = new AiNetFollower(iaPatrolNet, Rng.NewSystemRandom(Rng.Ai));
+        };
         if (_instantAction is { } ia
             && string.Equals(ia.Def.MissionType, "dogfight_ace", StringComparison.OrdinalIgnoreCase))
         {
@@ -2101,6 +2139,7 @@ public partial class GameSession : Node3D
                 var (spIndex, sp) = InstantActionRuntime.ChooseAceSpawn(aceSpawns, playerSpawnIndex, draw);
                 var fwd = new Basis(Vector3.Up, Mathf.DegToRad(sp.HeadingDeg)) * Vector3.Forward;
                 var pilot = AiPilot.HoldingCourse(sp.Position, sp.Position + fwd);
+                armIaPatrol(pilot);
                 int rating = InstantActionRuntime.RepresentativeRating(ia.Def.AceStats);
                 var ace = SpawnAiAircraft(aceNode, sp.Position, sp.Position + fwd, pilot,
                     scheme: ia.Def.AceLivery, team: InstantActionRuntime.EnemyTeam, attackRating: rating);
@@ -2157,6 +2196,11 @@ public partial class GameSession : Node3D
                     var offsetDir = wmFwd.Rotated(Vector3.Up, Mathf.DegToRad(slot.OffsetDeg));
                     var pos = wmLeadPos + offsetDir * slot.MetresOut;
                     var pilot = AiPilot.HoldingCourse(pos, pos + wmFwd);
+                    // The wingman takes the same net the ace and the waves do, and in the
+                    // original that net is exactly what demotes its `mode wingman` airframe to
+                    // `jet` (FUN_00476250), so the escort chain set below is a target
+                    // assignment, not a flown formation (BL-362, docs/org/aiPilot.md).
+                    armIaPatrol(pilot);
                     // attackRating: 5, not null/--ai-attack= — the roster's skill vector is left
                     // UNSET in the original (docs/formats/instant-action.md "The player and the
                     // wingmen"), but a wingman still needs its own Gunner/Machine armed
@@ -2223,6 +2267,12 @@ public partial class GameSession : Node3D
                             // ActivateInstantActionWave teleports it in, same as the original's
                             // own "deactivated at the world origin" (A3).
                             var pilot = AiPilot.HoldingCourse(Vector3.Zero, Vector3.Forward);
+                            // The net is armed here, at build, but the follower only seats
+                            // itself on the nearest node at its first update, and
+                            // FlightController.Activate re-seats it, so a member teleported (or
+                            // launched from a zeppelin bay) patrols from where it arrives rather
+                            // than from this parking pose.
+                            armIaPatrol(pilot);
                             // A wave's militia livery is a setup-SCREEN-only value
                             // (docs/formats/instant-action.md "The ace and the waves"): unlike
                             // the wingmen (D9, always Fortune Hunter, a decidable constant), a

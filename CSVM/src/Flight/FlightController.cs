@@ -857,6 +857,10 @@ public partial class FlightController : Node3D
         if (dir.LengthSquared() > 1e-6f)
             _spawnAttitude = Basis.LookingAt(dir.Normalized(), Vector3.Up);
         Inert = false;
+        // The original snaps an activated vehicle to its net's nearest node (FUN_004b0f40 →
+        // FUN_00432010), which is what makes a teleported wave patrol where it ARRIVED rather
+        // than fly back to wherever it was parked.
+        Pilot?.Patrol?.Reseat();
         Respawn();
     }
 

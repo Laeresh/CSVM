@@ -34,6 +34,14 @@ The **name** is the join key everything else uses: `egen.json` `vehicle.nets`,
 `zeppelins.json` `net`, and `objectives.json` reference nets by name. `aiv.json` field 0
 references them by **id** ([PLAN-M4-ai.md](../plans/PLAN-M4-ai.md), decoded slots table).
 
+⚠ **Pair order is meaningful and is not id order.** The engine builds its whole net table by
+walking this list forward and indexes the nets themselves by table position (`FUN_004311c0`,
+[`org/aiPilot.md`](../org/aiPilot.md)), so "the chapter's first net" (what every Instant Action
+actor is given) is the first PAIR here: 10 `M4ReinfAce` (C1), 29 `Patrolboat3` (C1B),
+25 `M1Defense` (C1C), 1 elsewhere. C1B and C1C open on something other than their lowest id (11
+on both), so a sorted-by-id read answers the wrong net on two of the eight chapters.
+`AiNets.LoadIndexPairs` is the ordered read; `AiNets.Load` sorts by id and `LoadIndex` is a map.
+
 ## `ne0NNNNN.zrd` — one net
 
 ```

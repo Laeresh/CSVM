@@ -27,6 +27,20 @@ public class AiNetFollowerTests
     }
 
     [Fact]
+    public void ReseatPicksTheNearestNodeAgainFromWhereverItNowIs()
+    {
+        // The activation snap (BL-364): a wave member seats itself while parked, is teleported,
+        // and must patrol from its arrival rather than fly back to the parking pose's node.
+        var f = new AiNetFollower(Loop(), new Random(1));
+        f.Update(Vector3.Zero);
+        Assert.Equal(0, f.CurrentIndex);
+        f.Reseat();
+        Assert.Equal(-1, f.CurrentIndex);
+        Assert.True(f.Update(new Vector3(900f, 400f, 1100f)));
+        Assert.Equal(2, f.CurrentIndex);
+    }
+
+    [Fact]
     public void LapsALoopAlongItsEdgesWithoutBacktracking()
     {
         // From 0 the seed picks 1 or 3; every later step has exactly one onward neighbour, so
