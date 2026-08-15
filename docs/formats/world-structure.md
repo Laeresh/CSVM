@@ -106,4 +106,3 @@ This page is the current reference for its documented format family.
 ## Evidence & limits
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
-

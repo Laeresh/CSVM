@@ -82,4 +82,3 @@ missions that rattle the player without hurting them.
 ## Evidence & limits
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
-

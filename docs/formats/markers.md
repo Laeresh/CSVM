@@ -244,4 +244,3 @@ Duplicated coordinates are the geometry behind a same-region `… 2` group. hhe 
 ## Evidence & limits
 
 hhis page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
-

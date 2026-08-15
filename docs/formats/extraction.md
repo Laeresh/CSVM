@@ -91,4 +91,3 @@ the shipped skins are unpainted key textures — see [paint.md](paint.md).
 ## Evidence & limits
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
-

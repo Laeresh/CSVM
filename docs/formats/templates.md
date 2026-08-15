@@ -239,4 +239,3 @@ paragraph above says not to attempt.
 ## Evidence & limits
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
-

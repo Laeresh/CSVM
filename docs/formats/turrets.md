@@ -367,4 +367,3 @@ persists across save/restore.
 ## Evidence & limits
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
-

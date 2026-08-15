@@ -355,4 +355,3 @@ a gamez model root, so `ProjectilePool` instances nothing for them and the stand
 ## Evidence & limits
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
-
