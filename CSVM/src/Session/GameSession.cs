@@ -299,11 +299,12 @@ public partial class GameSession : Node3D
     /// reports its death through <c>Downed</c>. Null when this session built no flight rigs
     /// (viewer/freecam/anim-lab have no spawner).
     ///
-    /// <para>Kept at exactly this arity (no optional parameters) so the method GROUP still
-    /// converts to <c>AiGeneratorRuntime</c>'s spawn delegate — C# does not extend that
-    /// conversion over a method's optional trailing parameters. <see cref="SpawnAiAircraft(string,
-    /// Vector3, Vector3, AiPilot, PaintScheme?, int?, int?)"/> is the actor-authoring overload
-    /// (PLAN-instant-action.md C8).</para></summary>
+    /// <para>This is the <c>--ai=</c> overload: an aircraft with no authored identity, so it wears
+    /// the ordinary Fortune Hunters default. <see cref="SpawnAiAircraft(string, Vector3, Vector3,
+    /// AiPilot, PaintScheme?, int?, int?, bool, bool)"/> is the actor-authoring one
+    /// (PLAN-instant-action.md C8), and every enemy goes through it — the generator runtime's
+    /// spawn delegate is a lambda over it, not this method group, because a mission's generated
+    /// enemies need its <c>shippedSkins</c>.</para></summary>
     public FlightController? SpawnAiAircraft(string planeName, Vector3 pos, Vector3 lookAt, AiPilot pilot) =>
         SpawnAiAircraft(planeName, pos, lookAt, pilot, scheme: null, team: null, attackRating: null);
 
@@ -315,9 +316,13 @@ public partial class GameSession : Node3D
     /// own authored rating, not the session's). <paramref name="inert"/> builds the aircraft held
     /// out of the session (E10) — its pilot, gunner and mode machine are wired exactly as a live
     /// one's, it simply takes no step until <see cref="FlightController.Activate"/> puts it in
-    /// play, which is how a wave can be built at session time and arrive later.</summary>
+    /// play, which is how a wave can be built at session time and arrive later.
+    /// <paramref name="shippedSkins"/> forwards to <see cref="AiAircraftSpawner.Spawn"/>: the
+    /// aircraft wears its own shipped textures rather than the Fortune Hunters default, for an
+    /// actor flying for a militia the mission data never names.</summary>
     public FlightController? SpawnAiAircraft(string planeName, Vector3 pos, Vector3 lookAt,
-        AiPilot pilot, PaintScheme? scheme, int? team, int? attackRating, bool inert = false)
+        AiPilot pilot, PaintScheme? scheme, int? team, int? attackRating, bool inert = false,
+        bool shippedSkins = false)
     {
         if (_aiSpawner == null)
         {
@@ -380,7 +385,7 @@ public partial class GameSession : Node3D
                 GD.PushWarning($"ai: no mode machine — cannot load skills/maneuvers: {e.Message}");
             }
         }
-        var ai = _aiSpawner.Spawn(planeName, pos, lookAt, pilot, scheme, team, inert);
+        var ai = _aiSpawner.Spawn(planeName, pos, lookAt, pilot, scheme, team, inert, shippedSkins);
         _aiPlanes.Add(ai);
         // Mode transitions and reaction rolls, in the engine's own vocabulary — the D11
         // observability lines. Through Log (not GD.Print) so a play session's file sink
@@ -2229,8 +2234,12 @@ public partial class GameSession : Node3D
                 var pilot = AiPilot.HoldingCourse(sp.Position, sp.Position + fwd);
                 armIaPatrol(pilot);
                 int rating = InstantActionRuntime.RepresentativeRating(ia.Def.AceStats);
+                // shippedSkins for the same reason as a wave member below: the ace flies for an
+                // enemy militia, so an ia.json without ace_pattern (hand-authored only) falls back
+                // to its own textures, never the player militia's Fortune Hunters default.
                 var ace = SpawnAiAircraft(aceNode, sp.Position, sp.Position + fwd, pilot,
-                    scheme: ia.Def.AceLivery, team: InstantActionRuntime.EnemyTeam, attackRating: rating);
+                    scheme: ia.Def.AceLivery, team: InstantActionRuntime.EnemyTeam,
+                    attackRating: rating, shippedSkins: true);
                 RegisterAiVoice(ace, ia.Def.AceAccentId, rating);
                 iaAce = ace;
                 _iaAce = ace;
@@ -2365,13 +2374,15 @@ public partial class GameSession : Node3D
                             // (docs/formats/instant-action.md "The ace and the waves"): unlike
                             // the wingmen (D9, always Fortune Hunter, a decidable constant), a
                             // wave's militia varies per chapter and ia.json never carries it, so
-                            // wave members build through the ordinary AI livery path (unpainted
-                            // unless --paint=) rather than invent a mapping.
+                            // wave members keep their shipped skins (shippedSkins: true, still
+                            // overridable by --paint=) rather than invent a mapping. ⚠ NOT the
+                            // Fortune Hunters default every unauthored aircraft otherwise wears:
+                            // an enemy in the player militia's own colours reads as friendly.
                             int rating = InstantActionRuntime.RepresentativeRating(
                                 InstantActionRuntime.RandomPilotStats(Rng.Stream(Rng.Ai).Randi()));
                             var enemy = SpawnAiAircraft(waveNode, Vector3.Zero, Vector3.Forward,
                                 pilot, scheme: null, team: InstantActionRuntime.EnemyTeam,
-                                attackRating: rating, inert: true);
+                                attackRating: rating, inert: true, shippedSkins: true);
                             if (enemy == null)
                             {
                                 continue;
@@ -2591,7 +2602,14 @@ public partial class GameSession : Node3D
             _generators = new AiGeneratorRuntime(egenDefs,
                 wr == null ? null
                     : (name, scope) => wr.FindNodes(name, scope) is { Count: > 0 } hits ? hits[0] : null,
-                chapterNets, _spec.GeneratorsPlane, SpawnAiAircraft,
+                // shippedSkins: a generated aircraft is the mission's enemy, so it keeps its own
+                // textures rather than the player militia's Fortune Hunters default (the same rule
+                // as an Instant Action wave member; the F12 launch path releases those directly).
+                // A lambda, not the SpawnAiAircraft method group, because the flag rides the
+                // authoring overload.
+                chapterNets, _spec.GeneratorsPlane,
+                (plane, pos, look, pilot) => SpawnAiAircraft(plane, pos, look, pilot,
+                    scheme: null, team: null, attackRating: null, shippedSkins: true),
                 wr == null ? null : (name, host) => wr.PlayWithin(host, name, applyReset: false).Count,
                 wr == null ? null : (name, host) => wr.StopWithin(host, name),
                 netTrailers.For);

@@ -63,9 +63,13 @@ public sealed class AiAircraftSpawner
     /// <paramref name="inert"/> builds the aircraft straight into
     /// <see cref="FlightController.Inert"/> (PLAN-instant-action.md E10) — complete but held out of
     /// the session, so it never has a live frame between construction and its own activation; the
-    /// caller puts it in play with <see cref="FlightController.Activate"/>.</summary>
+    /// caller puts it in play with <see cref="FlightController.Activate"/>.
+    /// <paramref name="shippedSkins"/> builds the aircraft in its own shipped textures instead of
+    /// the Fortune Hunters default an unauthored livery otherwise resolves to — for an actor that
+    /// flies for another militia (an Instant Action wave enemy) whose pattern is not decidable
+    /// from the mission data; --paint= still overrides it.</summary>
     public FlightController Spawn(string planeName, Vector3 pos, Vector3 lookAt, AiPilot pilot,
-        PaintScheme? scheme = null, int? team = null, bool inert = false)
+        PaintScheme? scheme = null, int? team = null, bool inert = false, bool shippedSkins = false)
     {
         int index = _spawned++;
         // C26: the original's per-spawn ±5 % spread (PlaneStats.WithAiSpawnJitter), on a copy of the
@@ -96,7 +100,8 @@ public sealed class AiAircraftSpawner
         {
             var planeBuilder = new PlaneBuilder(_in.PlanesGamez, _in.Textures, spinningProps: true,
                 scheme: scheme ?? _liveries.SchemeFor(_in.RigCount + index, _in.ZrdrPath,
-                    _in.PaintRng, _liveries.PatternsForPlane(_in.PlanesGamez, planeName)),
+                    _in.PaintRng, _liveries.PatternsForPlane(_in.PlanesGamez, planeName),
+                    useDefaultPattern: !shippedSkins),
                 patterns: _liveries.Patterns);
             planeModel = planeBuilder.Build(planeName);
 

@@ -4637,10 +4637,13 @@ failure or when neither was given, which is what keeps every other mode untouche
 existence. Both producers converge on the identical `new InstantActionRuntime(def)` call — "one
 build path from wizard and CLI" (H16's own goal) is this one line, not two similar ones.
 `SpawnAiAircraft` has a second overload
-(`string, Vector3, Vector3, AiPilot, PaintScheme?, int?, int?, bool inert = false`) for this: the
-four-parameter one must keep NO optional parameters, because the method GROUP passed
-to `AiGeneratorRuntime`'s constructor must stay at exactly four parameters, since C# does not
-extend a method-group-to-delegate conversion over trailing optional ones. That overload's `inert:`
+(`string, Vector3, Vector3, AiPilot, PaintScheme?, int?, int?, bool inert = false,
+bool shippedSkins = false`) for this; the four-parameter one is the `--ai=` route, for an aircraft
+with no authored identity. `AiGeneratorRuntime`'s constructor takes a LAMBDA over the authoring
+overload rather than that method group (a generated enemy needs `shippedSkins: true`), so the
+four-parameter one no longer has to stay free of optional parameters — C# does not extend a
+method-group-to-delegate conversion over trailing optional ones, which is why the lambda is
+required. That overload's `inert:`
 (E10) forwards to `AiAircraftSpawner.Spawn` and is how a wave is built at session time and arrives
 later; `--crash`'s sweep over `_aiPlanes` leaves an inert plane alone, since `DebugForceCrash` is
 gated on `InPlay`. `BuildFlightRigs` spawns
@@ -5356,6 +5359,11 @@ airframes): flight rigs, AI spawns and the static `--plane`/`--damage`/`--viewer
 default is a straight catalog lookup and consumes no RNG draw, so pinned liveries are unmoved by it;
 `--paint=none` is the only way to the bare shipped skins, and an absent `player_fortune` catalog
 entry (no vehicle.json) falls back to them with a one-line note.
+⚠ The Instant Action enemies are the exception: the ace and every wave member spawn with
+`shippedSkins: true` (`SchemeFor`'s `useDefaultPattern: false`), because `player_fortune` is the
+PLAYER militia's pattern and an enemy wearing it reads as friendly. Their real militia is a
+setup-screen value `ia.json` never carries, so they keep their own textures unless `--paint=` names
+a pattern. The wingmen, on the player's team, do wear it.
 
 ## src/Session/SpawnPicker.cs
 Resolves each player's flight spawn:
@@ -5560,10 +5568,12 @@ Fortune Hunter, a decidable constant D9 could hardcode), a wave's militia varies
 nothing in the shipped data to recover it from (`enemy_name`'s `MSG_*` key is a per-chapter
 object/mission name, not a reliable militia abbreviation — censused across all 8 chapters when
 this note was written: `MSG_VEH_<ABBREV>_<PLANE>` in five of them, `MSG_OBJ_*`/`MSG_DH_*` mission
-names in the other three). `GameSession` therefore spawns a wave member with `scheme: null`, the
-same ordinary AI livery path (unpainted unless `--paint=`) every other militia-unknown AI actor
-already takes, rather than invent a mapping. The novice/veteran/ace difficulty tier (a 0.875/1.0/
-1.25 HP multiplier, docs/formats/instant-action.md "What novice/veteran/ace becomes") is the same
+names in the other three). `GameSession` therefore spawns a wave member with `scheme: null` and
+`shippedSkins: true` — its own textures unless `--paint=` names a pattern — rather than invent a
+mapping. The `shippedSkins` flag exists for exactly this: the ordinary no-`--paint=` default is
+`player_fortune`, the PLAYER militia's pattern, and an enemy wearing the player's colours reads as
+friendly. The novice/veteran/ace difficulty tier (a 0.875/1.0/1.25 HP multiplier,
+docs/formats/instant-action.md "What novice/veteran/ace becomes") is the same
 shape: it is decoded but not wired, because `enemy_skill` is confirmed unread by the wave parser
 (`FUN_00458e00`) and the live value the original actually applies comes from the setup screen
 alone — wiring the multiplier today would be a no-op with no way to test it (every file-launched

@@ -66,18 +66,23 @@ public sealed class LiveryResolver
     /// <summary>The livery player <paramref name="index"/> flies, or null to build the
     /// shipped unpainted skins. With no --paint= this is <see cref="DefaultPattern"/>
     /// everywhere — flight, AI spawns and static views alike; --paint=none is how a caller
-    /// asks for the bare shipped skins.</summary>
+    /// asks for the bare shipped skins. <paramref name="useDefaultPattern"/> false drops that
+    /// implicit default for an aircraft that must NOT wear the player militia's colours: an
+    /// Instant Action wave enemy flies for another militia whose pattern ia.json never carries,
+    /// so it keeps the shipped skins unless --paint= names one.</summary>
     public PaintScheme? SchemeFor(int index, string zrdrPath, RandomNumberGenerator rng,
-        IReadOnlyList<string>? available = null)
+        IReadOnlyList<string>? available = null, bool useDefaultPattern = true)
     {
         // --paint= takes one name per player like --plane=; the last covers any remainder.
         string? name = _spec.PaintNames is { Count: > 0 }
             ? _spec.PaintNames[Math.Min(index, _spec.PaintNames.Count - 1)]
             : null;
 
-        // Resolve the no-paint case before touching vehicle.json, so an unpainted view does
+        // Resolve the no-paint cases before touching vehicle.json, so an unpainted view does
         // no extra work and logs nothing (it is the pre-paint behaviour verbatim).
         if (string.Equals(name, "none", StringComparison.OrdinalIgnoreCase))
+            return null;
+        if (name == null && !useDefaultPattern)
             return null;
 
         var catalog = PaintCatalog(zrdrPath);
