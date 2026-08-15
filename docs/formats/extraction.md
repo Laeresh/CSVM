@@ -30,7 +30,7 @@ them round-trips byte-identically in the fork.** If you only need the practical 
 | `GOSDATA/ASSETS/*.rof` | ✅ **not a ZBD, not mech3ax** — decoded by this project and extracted by `ExtractRof.ps1`. 846 members, all inflating to their exact declared size. Holds the customisation UI and the per-pattern **paint region masks** ([rof.md](rof.md)) |
 | `BINARIES/langui.dll` | ✅ Win32 STRINGTABLE, extracted by `ExtractRof.ps1` — 1,247 UI strings including the aircraft names and descriptions ([strings.md](strings.md)) |
 
-## The anim archives
+## Animation archives
 
 `cam_anim.zbd`/`mis_anim.zbd` were **net-new** work in the fork — upstream mech3ax has no CS anim
 support at all. Every `AnimDef` field, support array and sequence event is **semantically decoded**
@@ -46,7 +46,7 @@ JSON-layer quirk — six NaN deltas in C5/M02's `carneypkup_cam.zan` — is pres
 
 The schema itself is documented in [anim-definitions.md](anim-definitions.md).
 
-## Two extraction shapes
+## Supported extraction shapes
 
 The fork's extraction JSON is **intentionally not shape-compatible** with v0.6.1's. Same data,
 different spelling:
@@ -74,7 +74,7 @@ duplicated (v0.6.1's `node_index`) while `child_indices` are **not** in that spa
 stay flat list positions; and unified `scale` is unit everywhere measured, so it is deliberately
 ignored.
 
-## Extracted aircraft data
+## Aircraft extraction data
 
 Confirmed usable: `nodes.json` holds **3,317 nodes**, including full hierarchies for
 `player_bhawk`, `player_peacemaker`, `player_kestrel`, `player_autogyro`, `player_avenger`,

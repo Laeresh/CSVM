@@ -15,7 +15,7 @@ affects a decoration's position or orientation at all**, which is why an unseede
 reimplementation of the lattice walk reproduces C1's tree positions *exactly* rather than
 approximately.
 
-## Where it sits
+## Archive location
 
 | | |
 |---|---|
@@ -127,7 +127,7 @@ and **places nothing** when drawn. Two C5 targets (`cb05det02.flt`, `cb06det03.f
 block of their own, which is legal — a missing block means all defaults, never "do not
 place".
 
-## What the eight shipped files actually author
+## Authored data
 
 Every number below is measured off the retail install and pinned per chapter
 in `CSVM.Tests/ClutterTemplatesTests.cs`.
@@ -195,7 +195,7 @@ the second carries only `scale_range` and `far_fade_range`. The engine's lookup
 and the loader appends, so **the first block is the one that is used** — the substitute
 survives, and the second block is unreachable. It is the only duplicate in the install.
 
-## What the remake reads, and what it does with it
+## Reader behavior
 
 `ClutterTemplateSpec.Load` / `.Parse` read every key on this page, including the eight no
 chapter authors — the negative is only a measurement if the reader would have seen them.

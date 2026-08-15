@@ -13,13 +13,13 @@ mode, the `DAMAGE_SEQUENCE` threshold script, the death sequence, and the collid
 
 ## Contents
 
-- [The three extra pieces](#the-three-extra-pieces)
-- [`ACTIVATION` — weapon vs collide](#activation-�-weapon-vs-collide)
-- [`ANIM_HEALTH` is an absolute threshold, and the order matters](#animhealth-is-an-absolute-threshold-and-the-order-matters)
-- [Death sequence vs damage sequence](#death-sequence-vs-damage-sequence)
-- [Binding a def to its object(s)](#binding-a-def-to-its-objects)
-- [Worked example — the water tower (`ap_h2otwr`)](#worked-example-�-the-water-tower-aph2otwr)
-## The three extra pieces
+- [Destructible pieces](#destructible-pieces)
+- [Activation](#activation)
+- [Health thresholds](#health-thresholds)
+- [Damage and death sequences](#damage-and-death-sequences)
+- [Definition binding](#definition-binding)
+- [Water-tower example](#water-tower-example)
+## Destructible pieces
 
 A destructible is any animation definition whose header carries these:
 
@@ -36,7 +36,7 @@ Across the compiled archives of this install, **2,603 defs carry `health > 0`**;
 **2,565 are `WeaponHit`** and **44 are `WeaponOrCollideHit`**. The `ANIM_HEALTH` conditions live
 exclusively inside `DAMAGE_SEQUENCE` (4,131 of them, none anywhere else).
 
-## `ACTIVATION` — weapon vs collide
+## Activation
 
 The reader source usually omits `ACTIVATION` on a destructible entirely (the water-tower def
 below has no `ACTIVATION` key); the compiler assigns the default `WeaponHit`. The compiled form
@@ -71,7 +71,7 @@ collide mode. The collide behaviour is carried entirely by the `activation` enum
 touch: they exist to break when you fly through them, not to be a combat target. Everything
 outside this set is solid on contact — but still takes collision damage (see the ⚠ above).
 
-## `ANIM_HEALTH` is an absolute threshold, and the order matters
+## Health thresholds
 
 A `DAMAGE_SEQUENCE` is a single sequence whose body is an `IF`/`ELSEIF`/`ELSE`/`ENDIF` chain
 (the condition and control-flow events themselves are documented in
@@ -97,7 +97,7 @@ progressions dominate:
   (48 defs use each).
 - **Three-stage `{0.85, 0.50, 0.25}`**.
 
-## Death sequence vs damage sequence
+## Damage and death sequences
 
 The two are different sequences with different jobs:
 
@@ -135,7 +135,7 @@ every non-empty slot sits on a `health > 0` destructible (none elsewhere), and 1
 ~all of `large_30sec_fire`'s 1,035 death calls live, so before it dispatched, the game's
 most-called death fire never played from a compiled death site at all.
 
-## Binding a def to its object(s)
+## Definition binding
 
 A destructible def anchors to scene nodes exactly like any animation definition (full rules in
 [anim-definitions.md](anim-definitions.md)), and two of those rules do the load-bearing work:
@@ -156,7 +156,7 @@ A destructible def anchors to scene nodes exactly like any animation definition 
   `_healthy`/`_destroyed` (also bare `healthy`/`destroyed`, and object-specific spellings) pairing
   is pervasive: C1's gamez alone carries hundreds of such nodes.
 
-## Worked example — the water tower (`ap_h2otwr`)
+## Water-tower example
 
 `extracted/C1/zrdr/ap_h2otwr.zrd.json` is one reader definition, `NAME ap_h2otwr*`,
 `HEALTH 60`, no `ACTIVATION` key (the compiler assigns `WeaponHit`). Its structure, with the

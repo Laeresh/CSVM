@@ -29,7 +29,7 @@ in **metres**, not a trigger range, and the design's named emitter list — grou
 zeppelins — is the outcome of a rule that never tests vehicle type, not the rule itself.
 `ai_groundblow` scales a *different* law on the AI path, so it is not the player term's magnitude);
 `autohead_turn_time`/`_max`/`_min_pitch` (the padlock/look camera's head-turn rate limits — see
-the [command inventory](strings.md#the-bindable-command-table-messagesjson)); `rogue` (three
+the [command inventory](../strings.md#the-bindable-command-table-messagesjson)); `rogue` (three
 `[fameThreshold, soundName]` steps warning a player who is shooting allies);
 `respawn_rad`/`respawn_el` (multiplayer respawn ring); `score_kill`/`_zep`/`_suicide`/
 `_return_flag`/`_enemy_flag` (multiplayer scoring); `min_ai_active_dist` 2000 m — the AI
@@ -39,5 +39,5 @@ them).
 **`ai_skill_parameters` is now decoded** — one `[value@skill1, value@skill9]` pair per pilot stat,
 the endpoints a 1–9 rating interpolates between, covering aiming cone, shot-angle cone, break-off
 chance, stun duration, bail-out chance and more. Full table, and the roster slots that index it, in
-[ai-rosters.md](ai-rosters.md#ai_skill_parameters--what-a-19-rating-actually-means). It settles
+[ai-rosters.md](../ai-rosters.md#ai_skill_parameters--what-a-19-rating-actually-means). It settles
 that the pilot-skill scale is **1–9 and nothing else**.

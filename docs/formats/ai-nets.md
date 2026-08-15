@@ -9,7 +9,7 @@ numbers below were re-measured against the same install on 2026-08-06 and are as
 flies them as a patrol behaviour (`--ai=<plane>:<net>`), traversal along the edge list, an anchored
 trailer ridden (`BL-377`), per-node tags preserved unacted-on.
 
-## Where they live
+## Archive locations
 
 Each chapter's zrdr scope (`<Cx>/zrdr.zbd`) carries:
 
@@ -19,7 +19,7 @@ Each chapter's zrdr scope (`<Cx>/zrdr.zbd`) carries:
 - **`neindex.zrd`** — the chapter's id → name table. 222 names install-wide, a perfect
   1:1 with the files, both directions, per chapter.
 
-## `neindex.zrd` — the name table
+## Net name table
 
 ```
 [ [ first, id0, "Name0", id1, "Name1", … ] ]
@@ -91,7 +91,7 @@ therefore some mission's asset rather than a patrol area meant for free play. Th
 of what that is (a patrol boat's route on C1B, the pirate zeppelin's own course on C2B, a net no
 mission uses on C5) is in [`instant-action.md`](instant-action.md).
 
-## `ne0NNNNN.zrd` — one net
+## Net data
 
 ```
 [ [ null, 10.0, f×9, NODES, EDGES, TRAILER ] ]
@@ -207,7 +207,7 @@ centre of one of the two lobes, 255 m from the cycle's centroid. C1's other play
 read "closed cycle" as "ring": a plane flying one of these passes close to its target through one
 lobe and about a kilometre away through the other.
 
-## What this is not
+## Scope limit
 
 - **`<Cx>/<mission>/zrdr/net.zrd` is a different, unnamed, edgeless file** — node counts
   quantised by mission type (8/48/80), payloads shared across missions, coordinates
