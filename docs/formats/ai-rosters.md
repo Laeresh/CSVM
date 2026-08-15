@@ -60,7 +60,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 41 | `stickiness` | |
 | 42 | `bait` | |
 | 43 | `pilot` | pilot def name (`P_Wingman` and friends; see `pilots.zrd`) |
-| 44–55 | `sclp sclr scly limp limr limy` + `esclp esclr escly elimp elimr elimy` | per-axis **scale** and **limit** factors on the AI's control output — pitch/roll/yaw, then the `e`-prefixed *emergency* set. These are `vehicle.json`'s `ai_input_*` / `ai_emerg_input_*` at roster scope |
+| 44–55 | `sclp sclr scly limp limr limy` + `esclp esclr escly elimp elimr elimy` | per-axis **scale** and **limit** factors on the AI's control output — pitch/roll/yaw, then the `e`-prefixed *emergency* set. These are `vehicle.json`'s `ai_input_*` / `ai_emerg_input_*` at roster scope. `-1.0` (which is what all 414 blocks author) means "fall through to the def". ⚠ **The def and the runtime hold these in roll/pitch/yaw order, not this file's pitch/roll/yaw** — the spawner transposes, slot by slot. Both orders are real; see [aiControlLaw.md](../org/aiControlLaw.md#where-the-gains-come-from) for the slot-to-offset table and the exact fallback |
 | 56 | `attack_time_factor` | |
 | 57–64 | `anose hnose atail htail aleft hleft aright hright` | **per-zone armour + health**, in `(armor, health)` pairs over the four damage zones nose / tail / left / right — the same zone set and the same armour-first two-pool model as the player's `destroyable_parts` ([vehicle.md](vehicle.md#the-hp-pair-armor--hit-points)) |
 | 65 | `accentID` | **the voice id** → row in `voice.zrd` → `soundsh/VO_id<N>_*` clips |
@@ -170,7 +170,7 @@ pair per stat**, the endpoints the rating interpolates between.
 |---|---|---|---|
 | `daredevil_chance` | 0.35 | 0.99 | probability of taking an available Danger Zone run |
 | `sixth_sense_chance` | 0.45 | 0.71 | passing the test to follow a target's maneuver (a failure leaves the AI stunned) |
-| `sixth_sense_factor` | 0.994 | 1.07 | the ease-off factor applied while being pursued |
+| `sixth_sense_factor` | 0.994 | 1.07 | ~~the ease-off factor applied while being pursued~~ **decoded 2026-08-15 (`D31`): a flat multiplier on the AI's three stick channels, applied every frame on the non-emergency path** ([aiControlLaw.md](../org/aiControlLaw.md#the-skill-scalar-and-how-a-1-to-9-rating-interpolates)). Not conditional on being pursued |
 | `dead_eye_angle` | 4.0° | 1.45° | half-angle of the aiming-error cone around the lead point |
 | `quick_draw_angle` | 50° | 89° | half-angle of the cones off the target's nose/tail within which a shot is taken |
 | `quick_draw_chance` | 0.05 | 0.44 | probability of taking a marginal shot |
@@ -181,9 +181,15 @@ pair per stat**, the endpoints the rating interpolates between.
 
 Notes that matter to anyone implementing this:
 
-- **Only the two endpoints are decoded.** How the engine moves between value@1 and value@9 is not
-  traced; linear interpolation over the 1–9 scale is the working assumption (CSVM's `AiSkills`
-  reader implements exactly that, marked as an assumption).
+- ~~**Only the two endpoints are decoded.**~~ **Traced 2026-08-15 (`D31`), and the working assumption
+  was the right shape with the wrong origin.** The engine computes
+  `value = lo + (hi − lo) · rating · 1/9` (`FUN_0047c210` at `0x47d0c1`–`0x47d101`, the constant at
+  `0x608028` being exactly `0.11111112`). The endpoints therefore sit at rating **0 and 9**, not 1
+  and 9: a 9 yields `hi` exactly, but a 1 yields `lo + (hi − lo)/9`, not `lo`. Two of the ten pairs
+  are confirmed on this path by name (`sixth_sense_chance` → `obj+0x970`, `sixth_sense_factor` →
+  `obj+0x974`); the other eight are assumed to share it, since one interpolation site serves the
+  block. ⚠ **CSVM's `AiSkills` reader still implements the old assumption** and is a point off at
+  every rating below 9; correcting it is plan item `E42`.
 - **The scale is 1–9 and nothing else.** Ratings are an index into this table; there is no 0–100
   scale anywhere in the shipped data. (The original *design document* gives a Danger-Zone poll
   interval of `100 − DareDevil` seconds, which only type-checks on 0–100. That formula is design-era:
@@ -279,6 +285,11 @@ engine's debug readout dispatches on a single mode field with these states:
 ⚠ **`lay off` is a first-class mode, not a hidden fudge.** It is the "let the player catch up"
 behaviour — the same idea as `sixth_sense_factor` — and being a distinct mode makes it directly
 observable and switchable rather than something buried in the steering maths.
+
+⚠ **At most one AI per frame can be laying off.** The combat driver's break-off branch is gated on
+a global (`DAT_0064ee4d`) that the world tick clears once a frame and the first AI through the
+branch sets ([aiControlLaw.md](../org/aiControlLaw.md#dat_0064ee4c-and-dat_0064ee4d)). The steering
+of the mode itself is that page's subject; the mode dispatch is `obj+0x358`, not this file.
 
 The same readout recomputes the **target ranking** inline, which fixes its shape:
 `rank = weight × 1200 + distance + objectiveBias`, minimised. The weight starts at **1.0 for any

@@ -991,7 +991,10 @@ slot 6; `RosterRatingBiases`: slot 33 as `AiRatingBias` — wildcard `Matches`, 
 a third element accepted and preserved raw, never acted on) and the thin per-mission
 roster loader (`LoadRoster`). Units + shipped-constant goldens in `AiSkillsTests`;
 slot 6/33 census goldens in `AiTargetRankingTests`.
-⚠ Between the endpoints the curve is LINEAR BY ASSUMPTION — only the two endpoints are decoded.
+⚠ Between the endpoints the curve is LINEAR BY ASSUMPTION, and D31 traced the real one: the engine
+  computes `lo + (hi − lo) · rating/9`, so the endpoints sit at rating 0 and 9, not 1 and 9. `At`
+  is therefore a point off at every rating below 9. Correcting it is plan E42; see
+  `docs/org/aiControlLaw.md` and `docs/formats/ai-rosters.md`.
 ⚠ Two stats improve DOWNWARD (`dead_eye_angle`, `steady_hand_chance`); never normalise the
   direction. `natural_touch` has no entry by design and asking for it throws.
 ⚠ A null roster slot means "fall back to the airframe def's own stat keys"
@@ -2425,6 +2428,10 @@ own fields, seeded randomness only, so a fixed-dt run is deterministic (`AiPilot
   flight model bank alone yaws only at the coupling rate and any sustained pull climbs. D11's
   machine dispatches WHICH orders it flies; the shipped maneuver programs play through
   `ManeuverExecutor` only during `evasive maneuver` — the law itself is still not original.
+  ⚠ The original's law IS now decoded, in `docs/org/aiControlLaw.md` (`FUN_0041b560`, plan D31),
+  and replacing this body with it is plan E41. Read that page before touching the law: the
+  placeholder's shape (bank-to-turn) is right and its output stage, cadence and gain source are
+  not.
 ⚠ `PatrolThrottle` (0.5) and the leash/gain constants are INVENTED placeholder-law values, never
   original behaviour; at the 0.85 default the turn radius exceeds the tightest fighter rings and
   the plane limit-cycles around a node forever (measured on C1's `M4ReinfAce`).
@@ -2468,6 +2475,9 @@ engine-free; deterministic on a fixed dt (`ManeuverExecutorTests` demonstrates a
 flying the shipped dive and split_s).
 ⚠ The tracking law (body-frame quaternion error × gain, rate lead) and `ZeroDurationTimeoutS`
   are placeholder/invented values, not original behaviour — same status as `AiPilot`'s law.
+  ⚠ The original's executor (`FUN_004209b0`, D31) shares its per-axis scale/limit output stage and
+  its skill multiplier with the steering law, so E41's port covers both or neither; see
+  `docs/org/aiControlLaw.md`.
 ⚠ A positive-yaw step turns LEFT (FlightInput's sign). Whether the original mirrors maneuvers
   left/right at selection time is undecided — D11's question, do not bake a side in here.
 

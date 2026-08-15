@@ -33,6 +33,7 @@ never appear in the data files.
 |---|---|
 | `FUN_004897c0` | World tick: advances the clock, iterates the vehicle list |
 | `FUN_00489ea0` | Vehicle-class dispatch on `obj+0x67c`; the flyable aeroplane classes are 0 and 4 |
+| `FUN_0041c270` | The AI brain, a sibling of the dispatch in the same tick. Writes the stick; see [aiControlLaw.md](aiControlLaw.md) |
 | `FUN_0048e580` | Per-tick integrator |
 | `FUN_0048c470` | Torque accumulation, control limiters, stall flag |
 | `FUN_0048bdd0` | Control authority vs speed |
@@ -1610,6 +1611,12 @@ The port tracks no per-aircraft spawn timestamp, so the ×0.15 cut is an unmodel
 | 3 | avoid crash |
 | **4** | **stunned** |
 | 5 | navigating danger zone |
+
+**What reads this enum, and what writes the stick, is decoded on its own page.** See
+[aiControlLaw.md](aiControlLaw.md) (`D31`, 2026-08-15): the AI brain `FUN_0041c270` runs from the
+world tick just before this vehicle's integrator, dispatches on the order at `obj+0x2f0` and this
+mode, and reaches the stick through `FUN_0041b560`. `obj+0x948` is the target pointer rather than a
+flag, and `obj+0xBA` is the evade flag the damage handler sets.
 
 State 4 is set by `FUN_004200d0` ("Stunned for %f seconds based on stun recovery", `0x00620518`),
 which zeroes the control inputs and sets `obj+0xC0 = clock + duration`; the related tokens are

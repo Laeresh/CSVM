@@ -73,7 +73,7 @@ what a mission tells it to do.
 |---|---|---|
 | **Traced to an exact mechanism in code, with the data that proves it** | ~~C22~~, ~~C23~~, ~~C24~~, ~~C25~~, ~~C26~~ | Addresses and line cites are in `docs/org/flightModel.md`. Confirm the trace, then implement. ⚠ C25 landed the formulas as decoded but had to correct the PROSE around them, and C26 found its Evidence's slot list right but its consumers unstated: confirm a summary sentence against the formula it cites before building on it |
 | **Traced statically, never verified at runtime** | ~~A1, A2~~ | Both landed 2026-08-15, and both readings were wrong: there is no AI density band and no AI throttle setpoint. Read their landing notes before citing flightModel.md's older AI-path claims, several of which are debug-copy citations |
-| **Leads only, no mechanism yet** | D31, E41 | The AI control law has never been located. Budget for investigation; this may end in a documented dead end |
+| **Leads only, no mechanism yet** | ~~D31~~, E41 | ~~The AI control law has never been located.~~ **D31 landed 2026-08-15 and it is not a dead end**: the law is `FUN_0041b560`, decoded in [`org/aiControlLaw.md`](org/aiControlLaw.md). E41 is now a port against a traced mechanism, not a search. Read that page's "What this page does not settle" list before fitting any number, and read its gain-ordering warning before wiring any axis |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees, never use it in a
 worktree session here; use a local commit or a file copy.
@@ -95,9 +95,9 @@ decoding the **player** path and set aside for M4's AI work. None of it is imple
 | The bank-coupling block is inlined a second time on the AI path behind a byte flag | flightModel.md:585 | `0x48cc61`–`0x48ccf4` |
 | Control authority ramp, shared, 0 at `turn_fade_in` = 10 mph — **C24: landed** | flightModel.md, "The low-speed ramp" | `FUN_0048bdd0` |
 | ~~Reverse-authority factor, consumed by `FUN_0048c470`~~ **C24: not a force term.** `FUN_0048c470` only passes it out; its one consumer is the visible rudder angle in `FUN_0048e580` | flightModel.md, "Control authority vs speed" | `FUN_0048bdd0` → `FUN_0048e580` `0x48ec0b` |
-| AI mode enum, with mode 0 sub-dispatched on three flags | flightModel.md:1354 | `obj+0x358`; flags `obj+0x948`, `obj+0xBA`, `obj+0x2F0` |
-| Stun zeroes the AI's control inputs | flightModel.md:1366 | `FUN_004200d0` |
-| The three stick channels are summed into the torque accumulator | flightModel.md:1308 | inside `FUN_0048c470` |
+| ~~AI mode enum, with mode 0 sub-dispatched on three flags~~ **D31: two of the three are not flags.** `obj+0x948` is the target pointer, `obj+0xBA` the evade flag set on a failed steady-hand test, `obj+0x2F0` the order enum that picks the driver | aiControlLaw.md, "The dispatch tree" | `obj+0x358`; `FUN_0041c270` |
+| Stun zeroes the AI's control inputs — **D31: this is the anchor that found the law**, naming the six-slot control block | aiControlLaw.md, "The channels" | `FUN_004200d0` |
+| The three stick channels are summed into the torque accumulator — **D31: what writes them is `FUN_0041b560`**, the AI control law | aiControlLaw.md | `FUN_0041b560` → `FUN_0048c470` |
 | Per-object update dispatch on the vehicle class | flightModel.md:1391 | `FUN_00489ea0` |
 | Only the player bounces; AI gets position correction alone — **C25: landed** (and the lever-arm partition reads the other way round: `f_lin` rises with arm length) | `BL-172`, flightModel.md "Collision response" | `FUN_0048d7f0` |
 
@@ -149,7 +149,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Decode the control law
 
-31. ☐ D31 Locate and decode the original's AI control law
+31. ☑ D31 Locate and decode the original's AI control law (found: `FUN_0041b560`, landed as [`org/aiControlLaw.md`](org/aiControlLaw.md); no dead end)
 
 ### Wave E — Replace the placeholder
 
@@ -797,7 +797,35 @@ that can genuinely move them, where C22 did not.
 
 # Wave D — Decode the control law
 
-## D31 ☐ Locate and decode the original's AI control law
+## D31 ☑ Locate and decode the original's AI control law
+
+**Landed 2026-08-15. The law was found, and it is `FUN_0041b560`.** The decode is
+[`org/aiControlLaw.md`](org/aiControlLaw.md); no code shipped, since this item's deliverable is the
+page and `E41` is the port. The decided search order worked as written: the stun handler's zeroed
+offsets gave a six-slot control block, write xrefs on those offsets closed to six functions, and
+five of the six converged on one root, `FUN_0041c270`, called from the world tick per vehicle.
+
+Four things the Evidence did not have. **The AI brain is a sibling of the integrator, not a caller
+of it**, and it runs once per world tick immediately before the same vehicle's integrator, so the
+port needs no cadence change and has no frame lag to reproduce. **`obj+0x948` is the target
+pointer, not a flag**, and `obj+0xBA` is the evade flag the damage handler sets on a failed
+steady-hand test, so two of the three fields the item called "mode-0 flags" are neither flags nor
+mode-0-specific; `obj+0x2F0` is the order enum that picks the driver. **The per-axis gains are
+stored in roll/pitch/yaw order in the def and the runtime but pitch/roll/yaw in the roster**, with
+the spawner transposing slot by slot, which is a swap waiting to happen in `E41`. And
+**`FUN_00460890`, the apparent output smoother, is a two-instruction identity**, so the "smoothed"
+channel copies are plain copies.
+
+Two corrections to shipped documentation fell out. The 1-to-9 skill interpolation is
+`lo + (hi − lo) · rating/9`, putting the endpoints at rating 0 and 9 rather than 1 and 9, so
+`Mech3/AiSkills.At` is a point off below rating 9 (`E42`'s to fix, recorded in
+[`formats/ai-rosters.md`](formats/ai-rosters.md) and `architecture.md`). And `sixth_sense_factor`
+is not a pursuit-conditional ease-off but a flat multiplier on all three stick channels every
+frame.
+
+One named unknown blocks numbers rather than shape: **the compiled default of the `ai_input_*` def
+slots.** No roster block authors them (all `-1.0`) and almost no def does, so nearly every AI flies
+on an inherited default this session did not read. `E41` must recover it before fitting anything.
 
 **Goal.** Identify the function that turns an AI's standing order (a net node, a target, a mode) into
 the three stick channels, decode it, and land it as a page under `docs/org/`. If it cannot be found,

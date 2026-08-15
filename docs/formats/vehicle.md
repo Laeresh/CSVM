@@ -434,6 +434,21 @@ range). The boat and truck add surface-vehicle motion keys (`platform`, `collisi
 liveries — see [paint.md](paint.md). A few airframe oddballs round out the set: `fuel`,
 `is_autogyro`, `rudder_tol`, `pilot`, `flight_ceiling`, `title`.
 
+**`ai_input_*` / `ai_emerg_input_*`** are the AI control law's per-axis output stage, decoded in
+[../org/aiControlLaw.md](../org/aiControlLaw.md): the three `scale` keys multiply the law's roll,
+pitch and yaw commands and the three `limit` keys clamp them, with the `emerg` set substituted
+during crash recovery. ⚠ **The def struct holds them in roll/pitch/yaw order** (`+0x264`…`+0x278`)
+while the roster's twelve slots are in pitch/roll/yaw order; a roster value of `-1.0` falls through
+to the def, which is what every shipped roster block does. The shipped defs author only
+`ai_input_limit_pitch` (11 defs, 0.79–0.91) and one `ai_input_limit_yaw` (0.79); the rest inherit
+down the `kind_of` chain as one six-slot block.
+
+**`rudder_tol`** selects between the law's two steering branches: above it the aim error is flown
+with rudder, below it with bank. ⚠ **Inert as shipped** — it is authored `1.0` and the quantity
+compared against it is a unit-vector component that cannot exceed 1.0, so the branch is always
+chosen by the alternative test. Real code on an unreachable threshold, like
+`high_speed_pitch_fade` ([../org/flightModel.md](../org/flightModel.md)).
+
 **`mode` is the vehicle class**, and the parser maps it to a small enum the whole object update
 dispatches on: **`jet` = 0, `heli` = 1, `tank` = 2, `ship` = 3, `wingman` = 4, `plane` = 5**
 (`0x47afc0`–`0x47b081`; classes 0 and 4 fly the aeroplane path, 1 the autogyro path, 2 the ground
