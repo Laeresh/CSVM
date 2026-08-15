@@ -1,9 +1,8 @@
 # Crimson Skies format documentation
 
 Reverse-engineered format reference for **Crimson Skies** (2000, Zipper Interactive /
-Microsoft), validated against a retail install with [mech3ax](https://github.com/TerranMechworks/mech3ax)
-(`unzbd cs <mode>` â€” originally v0.6.1, and since 2026-07-21 this project's fork; see
-[extraction.md](extraction.md)). This is the project's public deliverable under the XWVM legal
+Microsoft), validated against a retail install with this project's [mech3ax](https://github.com/TerranMechworks/mech3ax)
+fork (`unzbd cs <mode>`; see [extraction.md](extraction.md)). This is the project's public deliverable under the XWVM legal
 model: **format documentation and code only â€” no game asset data.** Pages carry field
 tables and tiny excerpt values, never bulk extracted content.
 
@@ -41,16 +40,21 @@ behind [effects.md](effects.md)'s sprites).
 ### World and scene
 
 - [gamez.md](gamez.md), [world-structure.md](world-structure.md), [interp.md](interp.md), [clutter.md](clutter.md), [templates.md](templates.md), and [fogvol.md](fogvol.md).
-- [weather.md](weather.md), [anim-definitions.md](anim-definitions.md),`r`n  - [Weather atmosphere controls](weather/atmosphere.md) — cloud cover, wind, and precipitation. [destructibles.md](destructibles.md), and [effects.md](effects.md).`r`n  - [Compiled animation archives](anim-definitions/compiled-archives.md) — the compiled archive and SI-script reference.
+- [weather.md](weather.md), [anim-definitions.md](anim-definitions.md), [destructibles.md](destructibles.md), and [effects.md](effects.md).
+  - [Weather atmosphere controls](weather/atmosphere.md) — cloud cover, wind, and precipitation.
+  - [Compiled animation archives](anim-definitions/compiled-archives.md) — the compiled archive and SI-script reference.
 
 ### Aircraft and combat
 
-- [vehicle.md](vehicle.md), [markers.md](markers.md),`r`n  - [Player global blocks](vehicle/player-globals.md) — `player.json` globals. [loadouts.md](loadouts.md), [paint.md](paint.md), and [camparam.md](camparam.md).
-- [weapons.md](weapons.md), [weapon-effects.md](weapon-effects.md),`r`n  - [Ordnance effects and projectile prototypes](weapon-effects/ordnance.md). [turrets.md](turrets.md), [shakes.md](shakes.md), and [sounds.md](sounds.md).
+- [vehicle.md](vehicle.md), [markers.md](markers.md), [loadouts.md](loadouts.md), [paint.md](paint.md), and [camparam.md](camparam.md).
+  - [Player global blocks](vehicle/player-globals.md) — `player.json` globals.
+- [weapons.md](weapons.md), [weapon-effects.md](weapon-effects.md), [turrets.md](turrets.md), [shakes.md](shakes.md), and [sounds.md](sounds.md).
+  - [Ordnance effects and projectile prototypes](weapon-effects/ordnance.md).
 
 ### Missions and AI
 
-- [spawns.md](spawns.md), [missions.md](missions.md), [mission-entities.md](mission-entities.md), and [instant-action.md](instant-action.md).`r`n  - [Instant Action wrap-up](instant-action/wrap-up.md) — scoring and friendly-fire rules.
+- [spawns.md](spawns.md), [missions.md](missions.md), [mission-entities.md](mission-entities.md), and [instant-action.md](instant-action.md).
+  - [Instant Action wrap-up](instant-action/wrap-up.md) — scoring and friendly-fire rules.
 - [ai-nets.md](ai-nets.md), [ai-rosters.md](ai-rosters.md), and [combat-voice.md](combat-voice.md).
 
 ### Presentation and UI
