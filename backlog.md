@@ -518,6 +518,61 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   mis-keys), `BL-297` (the panel-damage semantics re-test — `pdpanelN` thresholds are on the same
   health-only scale, so panels currently tear earlier than the original tears them).
 
+- `BL-385` `[Bug]` **Enemy and wingman aircraft show no damage at all — the whole progressive-damage
+  layer is wired for the player only, and their crash is silent.** User at the controls 2026-08-15:
+  "the destruction animation only plays for the player but not enemies or wingmen". An AI plane
+  flies pristine until the frame it explodes.
+  *Evidence (code, 2026-08-15).* `controller.Visuals` is assigned at exactly two sites —
+  `FlightRigAssembler.cs:294` (the player rig) and `GameSession.cs:1477` (the parked damage lab).
+  `AiAircraftSpawner.Spawn` never assigns it, so `Visuals` is null on every AI controller, and all
+  three call sites are null-conditional (`FlightController.cs:972` projectile hit, `:2408` graze,
+  `:798` respawn reset). The `DamageEffectSink`/`DamageEffectStop` wiring is likewise inside
+  `if (controller.Visuals != null && …)` at `FlightRigAssembler.cs:452-488`. AI planes DO get
+  `Damage` (`AiAircraftSpawner.cs:102`) and DO get a rig runtime with the damage-stage defs bound
+  (`AiAircraftSpawner.cs:153-158`, `EffectCatalogue.cs:228-235`) — the stages are staged and
+  playable, just never triggered.
+  *Evidence (data, 2026-08-15) — the original authors a separate AI trail and we play none of it.*
+  `basic_airplane` carries a def-level `injure_anims` of **`[[0.5, "pfsmoketrail"]]`**
+  (`extracted/zrdr/vehicle.zrd.json:4108-4114`), inherited by every non-player airframe
+  (`bloodhawk`, `avenger`, `fury`, `brigand`, `devastator`, `autogyro`, `peacemaker`, the `r*`
+  variants, and `bswingman` — wingmen included). The def ships in every chapter as
+  `extracted/<ch>/cam_anim/piratefighter-pfsmoketrail.json`: a `smokepuffer` + `firepuffer` pair at
+  `prop1`. So in the original **an enemy starts trailing smoke at half hull health** — a combat read
+  the player uses to tell a hurt bandit from a fresh one — and it is one stage, not the player's
+  two (no `pfsmoketrail` counterpart to `player_fuelleak`).
+  *⚠ The threshold is whole-vehicle health, not a part fraction* — same decoded driver as the
+  player's (`FUN_004b3800`, `docs/org/vehicleDamage.md`), so this item lands on top of `BL-384`'s
+  correction rather than beside it. Doing this one first would wire the AI list to the same wrong
+  input.
+  *Fix shape:* give `AiAircraftSpawner.Spawn` the `DamageVisuals` construction and the sink/stop
+  pair that `FlightRigAssembler.cs:284-299,452-488` build, and a `FlightAudio` (see the audio half
+  below). Both blocks are near-verbatim; the shared shape wants extracting rather than copying.
+  *The audio half.* `FlightAudio` is built only at `FlightRigAssembler.cs:304-309`; the AI spawner
+  never sets `controller.Audio`, so `PlayCrashBoom` (`FlightController.cs:2027-2048`) and
+  `OnEngineStop` never run for an AI kill — **an AI fireball is completely silent** — even though
+  the `ai_crash_dirt` / `ai_crash_water` arms already exist in that switch. Note the crash
+  CHOREOGRAPHY is not missing: `Crash()` is one path for everyone and
+  `EffectCatalogue.CrashDefTableFor` (`WorldEffectsFactory.cs:311-319`) keys off `IsHumanPiloted`
+  onto the original's own `ai_crash_*` family. If an AI kill shows no fireball either, suspect that
+  family and its meshless `kestrel` scaffold anchor, not a missing call.
+  *⚠ Traps.* (a) Per-AI-plane panel pairing and puffer pools at spawn time is a real cost on a
+  chapter holding many aircraft — measure before wiring it unconditionally, and consider gating the
+  panel-flip half on distance or aircraft count. The trail half is one puffer pair and is cheap.
+  (b) `pfsmoketrail`'s `anim_root_name` is `piratefighter`; whether it retargets onto every AI
+  airframe through the runtime's root fallback (the `player_pfighter` shape noted at
+  `FlightRigAssembler.cs:458-459`) or needs an explicit OPERAND_NODE retarget is **unverified** —
+  check before assuming the player path's resolution carries over. (c) Do not give AI planes the
+  `player_*` stage menu; their data names one stage and a different anim.
+  *Open question, not part of this item:* an AI wreck never leaves. `Crash` arms `_autoRespawnIn`
+  but the respawn gate (`FlightController.cs:1090-1107`) needs a key press or
+  `HoldSegments`/`AutoRespawnAfter`, none of which the spawner sets, and nothing calls `QueueFree`
+  on an AI controller — so wrecks accumulate for the session. Whether the original also leaves them
+  is unchecked; do not "fix" it without that check.
+  *Playtest after fix:* shoot down a wingman and an enemy in C1 — smoke should start around half
+  health and the fireball should be audible.
+  *Cross-refs:* `BL-384` (the fraction correction this depends on), `BL-246` (the decode),
+  `BL-343` (wreck momentum — the other AI-wreck item).
+
 ## Weapons & combat
 
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
