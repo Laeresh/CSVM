@@ -123,7 +123,7 @@ times are seconds; distances metres.
 | `DEACTIVATE` | **0** | a second node whose destruction *disables* the turret |
 | `EFFECT` | **0** | `[node, duration]` — an effect node shown while firing |
 | `FIRE_LIMITS` | **0** | `[burst, cooldown]` duty cycle on the gun itself |
-| `STICKINESS` | **0** | an angle, degrees: this turret's own gun-aim-assist cone, overriding the firing weapon's. Consumer decoded 2026-08-12, see [`org/aim-assist.md`](../org/aim-assist.md); a value not greater than 0 is stored as "no override" |
+| `STICKINESS` | **0** | an angle, degrees: this turret's own gun-aim-assist cone, overriding the firing weapon's. See [`org/aim-assist.md`](../org/aim-assist.md); a value not greater than 0 is stored as "no override" |
 | `SHOOT_UP_ONLY` | **0** | reject targets below the turret's own altitude |
 | `CATEGORY_LABEL` | **0** | a raw (unlocalised) label string |
 | `HELP_LABEL` | **0** | a string-table id, localised at load |
@@ -140,7 +140,7 @@ teams**, and the turret loader's default for an **absent `TEAM` key is the first
 id 2** — which is why the 22 no-TEAM world emplacements all engage the player. Every authored
 value install-wide is `1`: the 16 carried entries (whose team the host overrides anyway) and the
 four `piratezep` entries — the player's own zeppelin's defensive rings are allied on purpose,
-three of them also the only standalone entries shipped awake. Decoded 2026-08-14 from the
+three of them also the only standalone entries shipped awake. The retail data establishes
 loader's TEAM arm (an absent key takes the enemy-from-index constructor at index 0; a present
 integer is stored raw) and the zeppelin parser's `enemy`/`ally`/`neutral` string mapping.
 
@@ -148,7 +148,7 @@ integer is stored raw) and the zeppelin parser's `enemy`/`ally`/`neutral` string
 
 ⚠ **Neither turret loader reads the `HEALTH` key** — the world placement pass and the by-`TITLE`
 carried pass parse the same 20-key entry routine, and `HEALTH` is not among its lookups
-(measured 2026-08-14; no `HEALTH` string exists in the turret module's key cluster). A
+(no `HEALTH` string exists in the turret module's key cluster). A
 standalone emplacement's real hit points are its **own node's gamez destroy definition** —
 `aagun32` authors `HEALTH 8.0` in `ai.zrd` while its `destroy_aagun32` anim def carries
 `health: 30`, and the 30 is what kills it. The turret dies through gate 1 above: the destroy
