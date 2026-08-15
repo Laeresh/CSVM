@@ -731,6 +731,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   every Instant Action actor is handed, `BL-364`): C1 `[10, player]`, C1C `[6, workersvoyagezep]`,
   C2 `[11, sprucegoose]`, C3 `[9, cargozep1]`, C4 `[9, train01]`; C1B and C5's are unanchored and
   C2B's is `[-1]`. The anchor is the last node in every shipped case, parked off the ring.
+  ⚠ **It is team-blind, and mostly used on ENEMIES.** Of the 12 campaign `aiv` blocks flying a
+  player-anchored net, 8 are team 2 (`blakebloodhawk_8` on C1/M04's `M4ReinfAce`, C4/M02's three
+  `bhatbrigand_*`, C5/M02's four `stihellhound_5_*`) and 4 are team 1 (`devastator_1/2` in C3/M05
+  and C5/M03). Four of the 11 player-anchored nets are named `*Ace*`. So this is not "wingmen
+  escort you", it is "this flight operates on the player", and implementing it makes enemy aces
+  and reinforcement flights arrive on the player as much as it makes wingmen stay with them.
   *Fix shape:* `AiNetFollower` takes an optional anchor index + a target-position supplier and
   offsets every node read (its nearest-node scan included, since the engine's does). The name
   resolve is the session's job, not the follower's: `player` to the player rig, anything else to a

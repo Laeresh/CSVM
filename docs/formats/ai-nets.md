@@ -44,6 +44,15 @@ it, so the graph is a PATTERN carried around a moving thing rather than a fixed 
 `passenger_trengine`, `tanker`, `britbalmoral_2`, `barracuda`. The anchor is the LAST node in
 every shipped case, sitting off the ring the other nodes form.
 
+⚠ **A player-anchored net is not a friendly thing.** The 11 are `M4ReinfAce` and `M2Ace` (C1),
+`M4MedusaAce` / `M3BritAce` / `M5Bravo` / `M5Charlie` / `M5Postpick` (C3), `M2Blacke` (C4),
+`M2STI` / `M3Bravo` / `M4Miles` (C5), four of them `*Ace*` boss flights. Census of every `aiv`
+block that flies one (2026-08-15): **12 blocks, 8 of them team 2 and 4 team 1.** The enemies are
+`blakebloodhawk_8` (C1/M04, on `M4ReinfAce`), `bhatbrigand_1/2/3` (C4/M02) and
+`stihellhound_5_1..4` (C5/M02); the friendlies are `devastator_1/2` (C3/M05 and C5/M03). One
+enemy generator also names one (C5's `M4Miles`). So the mechanism is team-blind: it is how the
+original puts a flight ON the player, whether that flight is escorting or hunting.
+
 ⚠ **Pair order is meaningful and is not id order.** The engine builds its whole net table by
 walking this list forward and indexes the nets themselves by table position (`FUN_004311c0`,
 [`org/aiPilot.md`](../org/aiPilot.md)), so "the chapter's first net" (what every Instant Action
