@@ -133,7 +133,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Documentation migration
 
-11. ☐ B11 Move `FlightModel`'s mechanism rules out of `architecture.md` into the code
+11. ☑ B11 Move `FlightModel`'s mechanism rules out of `architecture.md` into the code (99 → 21 lines, 4 ⚠ → 3)
 
 ### Wave C — Port the decoded plant
 
@@ -275,7 +275,24 @@ error in a new place.
 
 # Wave B — Documentation migration
 
-## B11 ☐ Move `FlightModel`'s mechanism rules out of `architecture.md` into the code
+## B11 ☑ Move `FlightModel`'s mechanism rules out of `architecture.md` into the code
+
+**Landed 2026-08-15.** The `architecture.md` entry went from 99 lines and 4 ⚠ to 12 lines of body
+and 3 ⚠, all of them constraints an outside caller or a future editor can actually violate: the
+pinned rates and coefficients, the four recorded decode-vs-footage gaps plus the accepted artifacts,
+and the deliberately-absent features. No behaviour change, and no fact was dropped without first
+being located elsewhere. Five mechanism facts that lived only in the entry moved into
+`FlightModel.cs` at the line that computes them (`high_speed_pitch_fade`'s unreachability and its
+do-not-implement rule; the `highGs`/`lowGs`/`maxAOA` measured margins and the gate-only-opposing-
+input asymmetry owed if one ever comes into reach; `ClimbGravityScale`'s retirement; the
+`KnifeNoseSag`/`KnifeNoseRate` pair's name and its 11.5 °/s wings-level cost; `AttitudeThrustTests`
+by name). Everything else was already duplicated in the code, in `docs/org/flightModel.md`
+(the exponential-decay steady-rate shift at :143, the bank constants' faster-turn note at :1683, the
+`high_speed_pitch_fade` table at :1226, the D33 margin table at :1264, the B15 stall conflict at
+:449), in `analysis/flight-model-baseline/POST-B14.md` (the eleven-airframe stall table at :115, the
+`terminal-dive` promotion at :622), in `FlightEnvelopeTests`' own doc comment (the informational
+rows), in `backlog.md`:927 (the sustained-climb conflict) or in `verification.md`
+(METHOD-21/22/23 hold the measurement traps).
 
 **Goal.** `docs/architecture.md`'s `src/Flight/FlightModel.cs` entry runs about 50 lines against the
 file's own stated ceiling of roughly 12 for the heaviest module, and its hard limit of three ⚠ per

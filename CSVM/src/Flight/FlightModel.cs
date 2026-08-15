@@ -130,7 +130,13 @@ public sealed class FlightModel
     // diverges at the limits.
     // ⚠ Distinct from the authored highGs/lowGs control limiters, which are a WIDER pair
     // ([9, 15] / [−6, −9] in this install) and therefore sit at or past this clamp — they can never
-    // engage before lift is already capped here. Do not fold the two together.
+    // engage before lift is already capped here. Do not fold the two together. Neither they nor the
+    // authored maxAOA (46°) is reachable on any of the eleven airframes, so neither is implemented
+    // (D33; ControlLimiterTests asserts each airframe's measured peaks against its OWN loaded
+    // thresholds, so a data edit or per-plane override that brings one into reach fails the suite
+    // rather than passing silently). If one ever does, the asymmetry is the thing to get right and
+    // docs/org/flightModel.md has it: the original gates only input OPPOSING the current rotation,
+    // so the limiter damps recovery from a departure rather than entry into one.
     // ⚠ The demanded load factor is the LENGTH of the projected demand, so it is never negative and
     // the lower bound is unreachable in practice. It is written out because it is what the model
     // clamps to, not because this code path can reach it.
@@ -371,8 +377,9 @@ public sealed class FlightModel
     /// <para>⚠ The argument is the world-up component of the BODY Z AXIS, and the nose points along
     /// <b>−Z</b>: pass <c>Attitude.Z.Y</c>, which is <c>−nose.Y</c> and therefore NEGATIVE in a
     /// climb. This is the one place in the force path where a dropped sign produces flight that still
-    /// looks entirely plausible — it merely swaps climb for dive — so it is asserted by a test that
-    /// fails under the flip rather than left to review.</para></summary>
+    /// looks entirely plausible — it merely swaps climb for dive — so <c>AttitudeThrustTests</c> reads
+    /// the term back out of the integrator and fails under the flip, rather than leaving it to
+    /// review.</para></summary>
     public static float AttitudeThrustScale(float bodyZUp)
     {
         float a = Mathf.Clamp(bodyZUp, -1f, 1f);
@@ -481,8 +488,11 @@ public sealed class FlightModel
         // two decoded torques into the same accumulator — the bank coupling and the weathervane.
         // Yaw authority follows the original's authored speed table (see YawAuthorityAt) — a
         // declining function of speed — the original's own shape, not a fitted stand-in. Pitch and
-        // roll carry no HIGH-speed fade here: the original fades neither with speed (its pitch fade
-        // is authored unreachable).
+        // roll carry no HIGH-speed fade here: the original fades neither with speed. Its
+        // high_speed_pitch_fade IS authored, at [1000, 1001] mph, and is unreachable — past even this
+        // model's own hard dive ceiling of 1.75 × fd_speed (528.5 mph at its highest, the Bloodhawk)
+        // on all eleven airframes — so it is deliberately NOT implemented; do not add it "for
+        // completeness". See docs/org/flightModel.md's unreachability table.
         // ⚠ They do fade at LOW speed in the original and do not here — it ramps roll and pitch
         // authority from 0 at turn_fade_in (10 mph) to 1 at turn_fade_out (50), flat above.
         // Traced and corroborated from the controls, but unimplemented; see
@@ -581,8 +591,10 @@ public sealed class FlightModel
         // gives the original's own shape — a drift with no equilibrium — and its onset: at the
         // original's +3 s sample the coupling alone reads −4.94° against a measured −4.9°, sinking
         // 5.7 ft/s against a measured 0.5. ⚠ Do not add a nose-sag term to deepen the knife-edge:
-        // a bounded ≈4° drop keyed on wing verticality, stacked on top, takes that same sample to
-        // −7.28° and 12.7 ft/s. The remaining divergence is that the whole banked rotation runs
+        // a bounded ≈4° drop keyed on wing verticality — the retired KnifeNoseSag/KnifeNoseRate pair
+        // — stacked on top, takes that same sample to −7.28° and 12.7 ft/s, and being keyed on
+        // 1 − |bodyUp·up| it fought every WINGS-LEVEL pull too, at up to 11.5 °/s.
+        // The remaining divergence is that the whole banked rotation runs
         // ≈1.6× fast (see KnifeAlignFloor), and a second nose-down term would double-count what is
         // already there. See docs/org/flightModel.md.
 
@@ -666,6 +678,9 @@ public sealed class FlightModel
         // was one half of. There is no climb-retention scale on it: the original's own gravity term
         // is a plain nom_gravity/9.82 × Weight with nothing attitude-dependent anywhere near it, and
         // what the original DOES scale by attitude is the thrust above — in the opposite direction.
+        // The fitted ClimbGravityScale = 0.6 that used to sit here is retired with its config key: on
+        // the post-B14 drag/thrust shapes it was making the sustained climb WORSE, the error it was
+        // absorbing having moved (docs/verification.md METHOD-22).
         //
         // The polar's variable is MACH. A pull therefore costs speed only through the lift vector's
         // own backward tilt in the force sum below — there is no induced-drag term here at all, and
