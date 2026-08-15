@@ -382,12 +382,17 @@ public sealed class FlightRigAssembler
                 GD.Print("targeting HUD: nearest-AI-hostile marker (edge arrow + clock bearing)");
         }
 
-        // --debug-markers: the same HUD marks every live aircraft instead of one hostile. Own is
-        // this pane's own plane, so it never marks the aircraft the camera is sitting on.
+        // Bound on EVERY pane, not just under --debug-markers: it is what the HUD's team tests read
+        // this pane's side off (VersusHud.OwnTeam). Deriving the side from the pilot index instead
+        // is right for P1 by coincidence and wrong for P2-P4 in any session that sets teams
+        // explicitly, which is what put a wingman in the marker.
+        controller.VersusHud.Own = controller;
+
+        // --debug-markers: the same HUD marks every live aircraft instead of one hostile. Own also
+        // keeps it from marking the aircraft the camera is sitting on.
         if (_spec.DebugMarkers)
         {
             controller.VersusHud.MarkAll = true;
-            controller.VersusHud.Own = controller;
             if (verbose)
                 GD.Print("--debug-markers: marking EVERY live aircraft (red hostile / blue own side)");
         }

@@ -398,6 +398,15 @@ public static class Suites
             + "four format strings; Classify reproduces FUN_004b5cd0's order (objective over "
             + "otherTarget over the team split, an unflagged turret not selectable at all); and "
             + "identity is the SOURCE object, not the wrapper", TargetRefModel));
+        into.Add(new TestHarness.Suite("target-pool",
+            "B12's classed candidate pool: the three cycles built off the aim assist's own typed "
+            + "lists. A wingman lands in Ally and an enemy in Enemy off the TEAM FIELD (never the "
+            + "pilot-index derivation, which is the wingman-in-the-marker bug), the selecting plane "
+            + "is excluded from its own pool, a dead plane and a destroyed zeppelin engine are "
+            + "absent, the destructible registry contributes nothing however full "
+            + "AimCandidateSet.Structures is, live ordnance is not walked, and a zeppelin "
+            + "contributes one entry per gasbag/engine/cannon with its hull's velocity; plus C1's "
+            + "real emplacements landing on the Non-Aircraft cycle", TargetPoolModel));
         into.Add(new TestHarness.Suite("splitscreen-listeners",
             "every 2–4P pane is a 3D audio listener, which a SubViewport is not by default — the "
             + "pinned listener model (A2), and the one thing standing between splitscreen and a "
@@ -4951,6 +4960,13 @@ public static class Suites
                       && candidates.Turrets[0].Team == AimAssist.TeamOfPilot(host.PlayerIndex)
                       && candidates.Turrets[0].Live,
                 $"CollectTurrets feeds the candidate scan count={candidates.Turrets.Count}");
+            // B12: the same list feeds the player's target pool, which takes emplacements only. A
+            // carried gunner's host is already a target in its own right, so offering both would put
+            // two entries on one silhouette; the discriminator is the placement Site.
+            var carriedPool = new TargetPool();
+            carriedPool.Rebuild(candidates, null, AimAssist.TeamOfPilot(host.PlayerIndex + 1), null);
+            ctx.Check(turret.Site == null && carriedPool.Count == 0,
+                $"a CARRIED turret is never selectable, though the same scan entry is a live aim-assist candidate on a hostile team pool={carriedPool.Count}");
 
             // --- track and fire: two seconds inside the initial 4 s attack window. The barrel
             // slews onto the target and the shots land — under the host's shooter id, so the
@@ -5660,6 +5676,155 @@ public static class Suites
             $"two different sources never match, and a null source matches nothing — including another null, which would otherwise make every sourceless ref the same target");
     }
 
+    /// <summary>B12's <see cref="TargetPool"/>. The pure half runs over a hand-built
+    /// <see cref="AimCandidateSet"/> with no world at all: bare <see cref="FlightController"/>s and
+    /// <see cref="DestructibleRegistry.Instance"/>s on plain <see cref="Node3D"/> anchors, which is
+    /// enough to pin every membership and exclusion rule the plan asks for. The world half then runs
+    /// C1's REAL emplacement census through the same pool, because "a turret emplacement is
+    /// selectable" is a claim about the objects the session actually builds, not about a stand-in.
+    ///
+    /// <para>⚠ The carried-gunner exclusion (a turret with no placement <c>Site</c>) is pinned in the
+    /// <c>turret-gunner</c> suite instead, where a real carried turret already exists — building one
+    /// here would mean a whole plane rig for one boolean.</para></summary>
+    private static void TargetPoolModel(TestContext ctx)
+    {
+        var self = new FlightController { PlayerIndex = 1, Team = AimAssist.PlayerTeam };
+        var wingman = new FlightController { IsHumanPiloted = false, Team = AimAssist.PlayerTeam };
+        var enemy = new FlightController { IsHumanPiloted = false, Team = InstantActionRuntime.EnemyTeam };
+        var deadEnemy = new FlightController { IsHumanPiloted = false, Team = InstantActionRuntime.EnemyTeam };
+        var neutral = new FlightController { IsHumanPiloted = false, Team = AimAssist.NeutralTeam };
+        var crate = new Node3D { Name = "crate1" };
+        var gasbag = new Node3D { Name = "gasbag1" };
+        var deadEngine = new Node3D { Name = "engine2" };
+        try
+        {
+            ctx.Host.AddChild(crate);
+            ctx.Host.AddChild(gasbag);
+            ctx.Host.AddChild(deadEngine);
+
+            var scan = new AimCandidateSet();
+            scan.AddVehicle(Vector3.Zero, Vector3.Zero, self.Team, live: true, self);
+            scan.AddVehicle(new Vector3(0f, 0f, -100f), Vector3.Zero, wingman.Team, live: true, wingman);
+            scan.AddVehicle(new Vector3(0f, 0f, -400f), Vector3.Zero, enemy.Team, live: true, enemy);
+            scan.AddVehicle(new Vector3(0f, 0f, -450f), Vector3.Zero, deadEnemy.Team, live: false, deadEnemy);
+            scan.AddVehicle(new Vector3(0f, 0f, -500f), Vector3.Zero, neutral.Team, live: true, neutral);
+
+            // The registry, fed the way the GUN assist feeds it. The pool must ignore all of it.
+            var registry = new DestructibleRegistry();
+            var crateInst = registry.Register(
+                new AnimDefinition { Name = "crate", AnimName = "crate_blow" }, crate, 30f);
+            scan.AddStructures(registry);
+            scan.AddOrdnance(new Vector3(0f, 0f, -50f), Vector3.Zero, InstantActionRuntime.EnemyTeam,
+                new object());
+
+            var pool = new TargetPool();
+            pool.Rebuild(scan, null, self.Team, self);
+            ctx.Check(pool.Enemy.Count == 1 && ReferenceEquals(pool.Enemy[0].Source, enemy),
+                $"the hostile-team plane is the only Enemy entry count={pool.Enemy.Count}");
+            ctx.Check(pool.Ally.Count == 2
+                      && pool.Ally.Any(t => ReferenceEquals(t.Source, wingman))
+                      && pool.Ally.Any(t => ReferenceEquals(t.Source, neutral)),
+                $"a wingman lands in ALLY, not Enemy, and so does a neutral (either side unaffiliated is Ally) count={pool.Ally.Count}");
+            ctx.Check(!pool.Enemy.Concat(pool.Ally).Concat(pool.NonAircraft)
+                    .Any(t => ReferenceEquals(t.Source, self)),
+                $"the selecting plane is excluded from its own pool");
+            ctx.Check(!pool.Enemy.Any(t => ReferenceEquals(t.Source, deadEnemy)),
+                $"a dead plane is listed by the collector but absent from the cycles");
+            ctx.Check(pool.NonAircraft.Count == 0 && scan.Structures.Count == 1
+                      && scan.Ordnance.Count == 1,
+                $"the registry and the ordnance list contribute NOTHING though both are populated structures={scan.Structures.Count} ordnance={scan.Ordnance.Count} nonAircraft={pool.NonAircraft.Count}");
+            ctx.Check(!pool.Enemy.Concat(pool.Ally).Concat(pool.NonAircraft)
+                    .Any(t => ReferenceEquals(t.Source, crateInst)),
+                $"…and specifically the crate never becomes selectable (decision 8: ours would walk every crate and fence, the original's walks a curated targets.zrd list)");
+
+            // The able-to-fail control for the team read: derive the side from the pilot index the
+            // way the HUD used to, and P2's own wingman turns hostile.
+            pool.Rebuild(scan, null, AimAssist.TeamOfPilot(self.PlayerIndex), self);
+            ctx.Check(pool.Enemy.Any(t => ReferenceEquals(t.Source, wingman))
+                      && !pool.Enemy.Any(t => ReferenceEquals(t.Source, enemy)),
+                $"CONTROL: deriving P2's side from its pilot index puts the wingman in Enemy and drops the real enemy — the bug this item diagnosed");
+
+            // Sub-parts: the only channel by which a structure becomes selectable.
+            var gasbagInst = registry.Register(
+                new AnimDefinition { Name = "gasbag1", AnimName = "zep_zone_gasbag1" }, gasbag, 200f);
+            var engineInst = registry.Register(
+                new AnimDefinition { Name = "engine2", AnimName = "zep_zone_engine2" }, deadEngine, 100f);
+            engineInst.Status = DestructibleRegistry.State.Destroyed;
+            var hullVel = new Vector3(0f, 0f, -12f);
+            var parts = new List<AimCandidate>
+            {
+                new() { Position = gasbag.GlobalPosition, Velocity = hullVel, Team = AimAssist.WorldTeam, Live = true, Source = gasbagInst },
+                new() { Position = deadEngine.GlobalPosition, Velocity = hullVel, Team = AimAssist.WorldTeam, Live = false, Source = engineInst },
+            };
+            pool.Rebuild(scan, parts, self.Team, self);
+            ctx.Check(pool.NonAircraft.Count == 1
+                      && ReferenceEquals(pool.NonAircraft[0].Source, gasbagInst),
+                $"a zeppelin contributes its live parts to Non-Aircraft count={pool.NonAircraft.Count}");
+            ctx.Check(!pool.NonAircraft.Any(t => ReferenceEquals(t.Source, engineInst)),
+                $"a DESTROYED engine is absent");
+            var bag = pool.NonAircraft[0];
+            ctx.Check(bag.Kind == AimTargetKind.Structure && bag.Velocity == hullVel
+                      && bag.Name == "gasbag1"
+                      && bag.Health is { } bh && Mathf.IsEqualApprox(bh, 1f) && bag.Armor == null,
+                $"…carrying its hull's velocity (never zero — the bracket gate has to lead it), its part node's name and health with no armor pool name='{bag.Name}' v={bag.Velocity}");
+
+            // --- C1's real emplacements through the same pool --------------------------------
+            ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+            string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+            ctx.RequireData(texturesPath, $"C1 textures");
+            var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+            var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+            ctx.WithWorld("C1", collision: false, world =>
+            {
+                var textures = new TextureArchive(texturesPath);
+                ProjectilePool? live = null;
+                Session.TurretEmplacementRuntime? emplacements = null;
+                try
+                {
+                    live = new ProjectilePool(textures, null, null);
+                    ctx.Host.AddChild(live);
+                    emplacements = new Session.TurretEmplacementRuntime(turretDefs, weapons,
+                        (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live,
+                        world.Runtime.WorldRoot);
+                    // The runtime registers its own emplacements with the pool; a second
+                    // RegisterWorldTurrets here would list every gun twice.
+                    var worldScan = new AimCandidateSet();
+                    live.CollectTurrets(worldScan);
+                    var worldPool = new TargetPool();
+                    worldPool.Rebuild(worldScan, null, AimAssist.PlayerTeam, null);
+                    int aliveEmplacements = emplacements.Emplacements.Count(t => t.Alive);
+                    ctx.Check(worldScan.Turrets.Count == emplacements.Count && aliveEmplacements > 0,
+                        $"C1's whole emplacement census reaches the scan turrets={worldScan.Turrets.Count} of {emplacements.Count}");
+                    ctx.Check(worldPool.NonAircraft.Count > 0
+                              && worldPool.NonAircraft.All(t => t.Kind == AimTargetKind.Turret)
+                              && worldPool.Enemy.Count == 0 && worldPool.Ally.Count == 0,
+                        $"every selectable emplacement lands on the NON-AIRCRAFT cycle, never Enemy or Ally, whatever its team nonAircraft={worldPool.NonAircraft.Count}");
+                    ctx.Check(worldPool.NonAircraft.All(t => t.Health == null && t.Armor == null
+                                  && t.Name.Length > 0),
+                        $"…each with its TITLE@site label and no health figure at all (the retail loaders read no HEALTH key)");
+                    ctx.Note($"C1 target pool: {worldPool.NonAircraft.Count} selectable emplacements of {emplacements.Count} placed, {aliveEmplacements} alive");
+                }
+                finally
+                {
+                    emplacements?.Free();
+                    live?.Free();
+                    textures.Dispose();
+                }
+            });
+        }
+        finally
+        {
+            self.Free();
+            wingman.Free();
+            enemy.Free();
+            deadEnemy.Free();
+            neutral.Free();
+            crate.Free();
+            gasbag.Free();
+            deadEngine.Free();
+        }
+    }
+
     /// <summary>The H22 targeting HUD on AI hostiles. Two halves: the pure selection
     /// (<see cref="VersusHud.NearestHostile"/> over a constructed candidate set, no scene) pins
     /// the filters (live only, AI-piloted only, the engine's either-side-neutral rejection,
@@ -5703,6 +5868,32 @@ public static class Suites
             ctx.Check(VersusHud.HostileTag("ai1_player_fury") == "AI1"
                 && VersusHud.HostileTag("bandit") == "BANDIT" && VersusHud.HostileTag("") == "AI",
                 $"the marker tag is the name's first segment uppercased, 'AI' as the fallback");
+
+            // B12 trap (a), the wingman-in-the-marker bug: OwnTeam must read the pane's own Team
+            // FIELD. Deriving it from the pilot index is right for P1 by coincidence
+            // (TeamOfPilot(0) == PlayerTeam) and wrong for P2-P4 the moment a mission sets teams,
+            // which is every Instant Action and every --coop session.
+            var p2 = new VersusHud { PlayerIndex = 1 };
+            ctx.Check(p2.OwnTeam == AimAssist.TeamOfPilot(1),
+                $"with no aircraft bound the HUD still falls back to the pilot-index derivation own={p2.OwnTeam}");
+            p2.Own = pureHuman;
+            pureHuman.Team = AimAssist.PlayerTeam;
+            ctx.Check(p2.OwnTeam == AimAssist.PlayerTeam
+                      && AimAssist.TeamOfPilot(1) != AimAssist.PlayerTeam,
+                $"P2 flying an Instant Action mission is on the PLAYER team, which its pilot index would have derived as {AimAssist.TeamOfPilot(1)} — the wingman-in-the-marker bug");
+            var wingScan = new AimCandidateSet();
+            wingScan.AddVehicle(new Vector3(0f, 0f, -80f), Vector3.Zero, AimAssist.PlayerTeam,
+                live: true, pureNear);                                  // P2's own wingman
+            wingScan.AddVehicle(new Vector3(0f, 0f, -900f), Vector3.Zero,
+                InstantActionRuntime.EnemyTeam, live: true, pureFar);   // the actual enemy
+            ctx.Check(ReferenceEquals(
+                    VersusHud.NearestHostile(Vector3.Zero, p2.OwnTeam, wingScan), pureFar),
+                $"…so the far ENEMY is tracked and the near wingman is not");
+            ctx.Check(ReferenceEquals(
+                    VersusHud.NearestHostile(Vector3.Zero, AimAssist.TeamOfPilot(1), wingScan),
+                    pureNear),
+                $"CONTROL: the old derivation tracks the WINGMAN instead, and skips the enemy as own-team");
+            p2.Free();
         }
         finally
         {

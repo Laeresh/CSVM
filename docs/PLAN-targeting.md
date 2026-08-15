@@ -231,7 +231,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — The selection model
 
 11. ☑ `TargetRef` — one abstraction over every selectable thing
-12. ☐ The classed candidate pool, including zeppelin sub-parts and turret emplacements
+12. ☑ The classed candidate pool, including zeppelin sub-parts and turret emplacements
 13. ☐ `TargetSelection` — sticky choice, cycles, nearest queries, lifecycle
 14. ☐ Input: `D-pad Up` tap/hold, and the curated keyboard set
 15. ☐ `--target=` scripted twin
@@ -515,7 +515,29 @@ differently-shaped health, and some selectable things may have none at all. Deci
 figure silently where there is no source rather than printing a misleading `100%` — that means
 health/armor must be genuinely optional on `TargetRef`, not defaulted.
 
-## B12 ☐ The classed candidate pool
+## B12 ☑ The classed candidate pool
+
+**Landed 2026-08-16.** [`CSVM/src/Flight/TargetPool.cs`](../CSVM/src/Flight/TargetPool.cs), plus
+`ZeppelinRuntime.CollectTargetParts` and the one-line team fix trap (a) turned up. Four things later
+items should build against rather than re-decide:
+
+- **The pool reads `Vehicles` and `Turrets` and NOTHING else.** `Structures` is never walked, so
+  feeding a scan `AddStructures(registry)` cannot leak a crate into the cycles; selectable
+  structures arrive through `Rebuild`'s separate `subParts` argument. That turns "do not feed
+  `Structures`" from a wiring convention into a property of the pool, which the suite proves by
+  populating `Structures` and asserting nothing comes out. `Ordnance` is not walked either.
+- **`Rebuild` takes the selecting plane's `Team` FIELD.** See trap (a) below: the derivation is the
+  bug, and the suite keeps it as a named able-to-fail CONTROL.
+- **Sub-part enumeration ships as a marked divergence**, per A1's finding. Zeppelin gasbags, engines
+  and cannons are enumerated off the F18 zones, each carrying the hull's velocity so C22's bracket
+  gate has something to lead.
+- **Turret emplacements are selectable; carried gunners are not.** A carried gunner's host is already
+  a target, so offering both would put two entries on one silhouette. The discriminator is
+  `TurretController.Site`, and B13's cycles get one entry per emplacement.
+
+The aircraft display name is the plain node name for now; C22 replaces it with the airframe's common
+name, which needs an accessor `FlightController` does not have yet. Trap (b) is fixed: the
+`AimCandidateSet.Turrets` doc comment no longer claims the list is empty.
 
 **Goal.** Each frame (or on demand) the pool yields three lists — Enemy/Objective, Ally,
 Non-Aircraft — of `TargetRef`, including one entry per zeppelin gasbag, engine and cannon, and one
@@ -534,6 +556,11 @@ Non-Aircraft — is **A1's** to answer.
 the reason is in "What the data actually ships". Split into classes by team plus the class rule A1
 returns; until A1 lands, leave the class rule behind a single function so it is one edit.
 
+**As built:** the class rule is B11's `TargetRef.Classify`, so the pool writes no split of its own.
+"Do not feed `Structures`" became "the pool does not READ `Structures`", which is the stronger form
+and is directly testable. `Turrets` is filtered to emplacements: `ProjectilePool.CollectTurrets`
+fills that list with carried gunners as well, and a carried gunner's host is already a target.
+
 **Model recommendation.** high — spans three subsystems and the correctness bar is "the cycle
 contains exactly what it should".
 
@@ -541,13 +568,49 @@ contains exactly what it should".
 Ally not Enemy, a destroyed engine is absent, `Structures` contributes nothing, a zeppelin
 contributes its parts. Plus an in-engine count log, the way `ApplyFireOutcome` already prints its
 one-time candidate-list breadcrumb (`FlightController.cs:1906`).
+**Verified (2026-08-16):** the new `target-pool` suite covers all four in its world-free half, over a
+hand-built `AimCandidateSet` with bare `FlightController`s and `DestructibleRegistry.Instance`s: the
+wingman and a neutral land in Ally while the hostile-team plane is the only Enemy, the selecting plane
+is excluded from its own pool, a dead plane and a destroyed engine are absent, the registry and the
+ordnance list contribute nothing though both are populated, and the live gasbag arrives with its
+hull's velocity, its part-node name and health with no armor. Its world half then runs C1's **real**
+74-emplacement census through the same pool and asserts every one lands on Non-Aircraft with no health
+figure; that census note is this item's count log, since the pool has no live call site until B13 owns
+an instance. ⚠ That half asserts a *shape* (`> 0`, and every entry Non-Aircraft), not a hard count, on
+purpose: the note reads 74 of 74 alive when the suite runs alone and 73 when the whole set runs, so an
+earlier suite in the same process leaves one emplacement dead. A pinned number there would be a flake. The carried-gunner exclusion rides the existing `turret-gunner` suite, where a real
+carried turret already exists. `hostile-marker-hud` gains the trap (a) regression.
+**Able to fail:** two named CONTROLs are permanent parts of the suites — re-deriving P2's side from
+its pilot index puts the wingman in Enemy and drops the real enemy (`target-pool`), and the same
+derivation makes `NearestHostile` track the wingman (`hostile-marker-hud`). Plus a one-off flip:
+adding a `scan.Structures` walk back into `Rebuild` turns `target-pool` FAIL and exit 1; removed, it
+passes. Full run: 1378/1378 units, 66/66 in-engine suites, engine errors clean, `dotnet build` clean
+of new warnings. No freecam regression is owed — the pool has no call site, and the only shipped
+behaviour that moved is the HUD team read, which the suite covers.
 
 **⚠ Traps.** (a) The wingman-in-the-cycle complaint that started this work should already be handled
 by `NearestHostile`'s team gate (`VersusHud.cs:155`) — so either the gate is right and a wingman's
 `Team` is being set wrong at spawn, or the gate is being bypassed. **Find out which before writing new
 filtering**, or the same bug reappears behind a new abstraction.
-<TODO: reproduce the wingman-selected symptom and identify the cause.> (b) `AimCandidateSet.Turrets`'
-doc comment claiming it is empty in every build is stale — fix it here. (c) Sub-parts multiply the
+
+**TODO resolved — the gate is right and was being bypassed.** Not a spawn problem: `AiAircraftSpawner`
+sets every wingman to `AimAssist.PlayerTeam` and the suite already pinned that
+(`Suites.cs:3812`). The bypass is `VersusHud`, which derived the pane's OWN side per call as
+`AimAssist.TeamOfPilot(PlayerIndex)` (`UpdateHostile`, and `CollectMarks` under `--debug-markers`)
+instead of reading `FlightController.Team` — the field `architecture.md`'s own AimAssist entry says
+every consumer must read, precisely because "shooter ids are not team ids".
+
+The arithmetic: `TeamOfPilot(0)` is 1, which *is* `AimAssist.PlayerTeam`, so **P1 was correct by
+coincidence**. `FlightRigAssembler.cs:119` puts every human on `PlayerTeam` in Instant Action and
+under `--coop`, so **P2 derived team 2** — `InstantActionRuntime.EnemyTeam`. Its own wingmen (team 1)
+then failed the same-team test and read hostile, while the real enemies (team 2) matched and were
+skipped as own-team. So P2 tracked a wingman and could not track an enemy at all, and under
+`--debug-markers` the colours were inverted with it. Fixed here: `VersusHud.OwnTeam` reads
+`Own?.Team`, `FlightRigAssembler` binds `Own` on every pane rather than only under
+`--debug-markers`, and `TargetPool.Rebuild` takes the team as a parameter documented as the field.
+
+(b) `AimCandidateSet.Turrets`' doc comment claiming it is empty in every build is stale — fix it
+here. **Done.** (c) Sub-parts multiply the
 pool fast; a zeppelin with a gasbag, four engines and six cannons is eleven entries, and several
 zeppelins make the Non-Aircraft cycle long. That is the original's behaviour as far as we know, but
 watch it in playtest.

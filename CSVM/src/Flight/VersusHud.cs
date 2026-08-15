@@ -63,9 +63,10 @@ public sealed partial class VersusHud : Control
     /// feature: the shipped marker is exactly one hostile.</summary>
     public bool MarkAll;
 
-    /// <summary>This pane's own aircraft, excluded from <see cref="MarkAll"/>'s sweep. Null marks
-    /// everything the pool lists, which is what the suite wants and what a pane with no aircraft
-    /// of its own (a spectator) should see.</summary>
+    /// <summary>This pane's own aircraft: the side every team test here runs against
+    /// (<see cref="OwnTeam"/>), and the plane excluded from <see cref="MarkAll"/>'s sweep. Null
+    /// marks everything the pool lists, which is what the suite wants and what a pane with no
+    /// aircraft of its own (a spectator) should see.</summary>
     public FlightController? Own;
 
     // 1440p reference metrics (scaled by HudMetrics — matches MarkerHud's calibration).
@@ -108,6 +109,18 @@ public sealed partial class VersusHud : Control
     /// <summary>This pane's tracked AI hostile, or null with none in the pool. Read by the
     /// suite; the marker draws off the same field.</summary>
     public FlightController? TrackedHostile => _hostile;
+
+    /// <summary>The side this pane is on: <see cref="Own"/>'s own <see cref="FlightController.Team"/>
+    /// field, falling back to the pilot-index derivation only when no aircraft is bound (a
+    /// spectator, or a suite rig built without one).
+    ///
+    /// <para>⚠ Reading the FIELD is the whole point. This HUD used to derive
+    /// <c>AimAssist.TeamOfPilot(PlayerIndex)</c> per call, which is right for P1 by coincidence
+    /// (<c>TeamOfPilot(0)</c> == <see cref="AimAssist.PlayerTeam"/>) and wrong for everyone else the
+    /// moment a mission sets teams explicitly: in Instant Action or <c>--coop</c> every human is
+    /// team 1, so P2 derived team 2, marked its own wingmen hostile and skipped the real enemies as
+    /// "own team". That is the wingman-in-the-marker bug.</para></summary>
+    public int OwnTeam => Own?.Team ?? AimAssist.TeamOfPilot(PlayerIndex);
 
     /// <summary>Binds the match + this pane's own camera (opponent markers project through it).
     /// Add to the HUD canvas; <see cref="Rigs"/> is attached once the whole field is built, and
@@ -243,7 +256,7 @@ public sealed partial class VersusHud : Control
         {
             _hostileScan.Clear();
             HostilePool.CollectAircraft(_hostileScan);
-            next = NearestHostile(PlanePos, AimAssist.TeamOfPilot(PlayerIndex), _hostileScan);
+            next = NearestHostile(PlanePos, OwnTeam, _hostileScan);
         }
         if (ReferenceEquals(next, _hostile))
             return;
@@ -290,7 +303,7 @@ public sealed partial class VersusHud : Control
         if (MarkAll && HostilePool != null)
         {
             _marks.Clear();
-            CollectMarks(AimAssist.TeamOfPilot(PlayerIndex), Own, _hostileScan, _marks);
+            CollectMarks(OwnTeam, Own, _hostileScan, _marks);
             int stagger = 0;
             foreach (var (plane, friendly) in _marks)
             {

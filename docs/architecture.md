@@ -87,6 +87,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/FireControl.cs` — the engine-free fire-control state machine (BL-295): trigger edges, fire clocks, ammo draw-down, both selectors, dry cues; `FlightController` performs its `FireOutcome`.
 - `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the forget + catch-up pass (B2), the intercept solver (B3), the four-list candidate scan (B4), and the fire call's step order + 1° launch scatter (B5).
 - `src/Flight/TargetRef.cs` — the player-targeting abstraction (`PLAN-targeting.md` B11): one value over every selectable thing (aircraft, mission structure, turret), wrapping an `AimCandidate` for the pose/team/liveness/source half and adding class, label, optional health/armor, plus `Classify` (the decoded class model) and source-identity matching.
+- `src/Flight/TargetPool.cs` — the player's classed candidate pool (`PLAN-targeting.md` B12): the three cycles (Enemy/Objective, Ally, Non-Aircraft) of `TargetRef`, rebuilt from scratch off the aim assist's `Vehicles`/`Turrets` lists plus an explicit sub-part list; the one place a concrete source type is read.
 - `src/Flight/TurretDefs.cs` — typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
 - `src/Flight/TurretController.cs` — one carried turret gunner (M4 C9a): acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
 - `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; each mode picks the aim point and table `AiControlLaw` steers on. `SteeringPatrol` reports whether the last step actually flew the net (F13's leashes read it).
@@ -2046,6 +2047,50 @@ onto, not the world, and that is why `DestructibleRegistry` never feeds this poo
   in the decode, so there is nothing to port it to.
 Pinned by the `target-ref` suite (`Suites.cs`), which is deliberately tree-free and data-free.
 
+## src/Flight/TargetPool.cs
+The player's classed candidate pool (`PLAN-targeting.md` B12), decoded in
+[org/targeting.md](org/targeting.md) "The candidate list". Three lists of `TargetRef` (`Enemy`,
+`Ally`, `NonAircraft`, reachable by name through `Of(TargetClass)`), rebuilt from scratch on every
+`Rebuild` call. That is the original's own contract: `FUN_004b5fb0` releases the previous frame's
+list before walking the pools again and nothing about it persists, which is why a runtime spawn
+appears and a death disappears with no extra plumbing. `Rebuild` takes the selecting plane's
+`FlightController.Team`, classes each candidate through `TargetRef.Classify`, and drops `self` by
+reference.
+**Two of the assist's four lists are read and two are not.** `Vehicles` and `Turrets` are walked;
+`Structures` is **never touched** (it is `DestructibleRegistry`, an approximation of the original's
+curated `targets.zrd` list, and walking it would put every crate and fence in the world on the
+Non-Aircraft cycle, decision 8) and `Ordnance` is not either (the original offers a live fused round
+only when its `+0x6c` tracking byte is set, and CSVM has no such per-round flag). Selectable
+structures arrive through `Rebuild`'s separate `subParts` argument, filled only by
+`ZeppelinRuntime.CollectTargetParts`. That separation is deliberate and testable: feeding a scan
+`AddStructures(registry)` cannot leak a crate into the cycles, and the suite proves it by doing
+exactly that.
+CSVM carries no mission `otherTarget`/`objectiveTarget` data, so the per-entity flag the original
+reads is stood in for by what the candidate IS: a world turret **emplacement** is selectable, a
+**carried** gunner is not (its host is already a target in its own right, and offering both would put
+two entries on one silhouette; the discriminator is `TurretController.Site`), and a sub-part is
+selectable by construction. `Describe` is the ONLY place in the targeting path that reads a concrete
+source type — the kind picks the shape, the source supplies only the name and the health figures.
+⚠ **Read `FlightController.Team`, never `AimAssist.TeamOfPilot(PlayerIndex)`.** Deriving the side
+  from the pilot index is right for P1 by coincidence (`TeamOfPilot(0)` == `PlayerTeam`) and wrong
+  for P2–P4 in any session that sets teams explicitly. That is the wingman-in-the-marker bug this
+  item diagnosed: see the `VersusHud.OwnTeam` entry. The suite carries the derivation as a named
+  able-to-fail CONTROL so the wrong read cannot quietly come back.
+⚠ The aircraft display name is the plain **node** name here (`ai1_player_fury`). C22 replaces it with
+  the airframe's common name (`Fury`), which needs an accessor `FlightController` does not have yet.
+  Do not build that accessor here.
+⚠ **Zeppelin sub-part enumeration is a deliberate divergence, not a port.** The decode found no
+  sub-part enumeration anywhere in the original's targeting path: a gasbag is selectable there only
+  because the mission authored it as its own `MStruct` carrying the flag. Decision 8 asked for the
+  parts, so CSVM enumerates what it already models as damageable. Do not "correct" it back by citing
+  the decode.
+⚠ No live call site yet. B13's `TargetSelection` owns the instance and the per-session count
+  breadcrumb; wiring it here would mean choosing that owner early. The `target-pool` suite's note
+  over C1's real 74-emplacement census is this item's count log.
+Pinned by the `target-pool` suite (a synthetic half with no world, plus C1's real emplacement census
+through the same pool); the carried-gunner exclusion rides the `turret-gunner` suite, where a real
+carried turret already exists.
+
 ## src/Flight/TurretDefs.cs
 Typed reader over the shared `ai.zrd`'s `TURRET` section — 42 `TurretDef`s (docs/formats/turrets.md):
 the carried/standalone split (`CREATE_STANDALONE` present-and-zero = carried, looked up by `TITLE`
@@ -2950,6 +2995,16 @@ colours.
 ⚠ A neutral-team aircraft marks HOSTILE here, unlike `NearestHostile`'s engine gate which rejects
   the pair. A debugging overlay that silently omitted a plane would be worse than one that
   mis-colours it.
+⚠ **`OwnTeam` is `Own?.Team`, not `AimAssist.TeamOfPilot(PlayerIndex)`** — the fix for the
+  wingman-in-the-marker bug (`PLAN-targeting.md` B12 trap (a)). Both team tests here (`UpdateHostile`
+  and `--debug-markers`' `CollectMarks`) used to derive the pane's side from its pilot index, which
+  is right for P1 by coincidence (`TeamOfPilot(0)` == `AimAssist.PlayerTeam`) and wrong for everyone
+  else the moment a mission sets teams: in Instant Action and under `--coop` every human is team 1
+  (`FlightRigAssembler.cs`), so P2 derived team 2, marked its own wingmen hostile and skipped the
+  real enemies as own-team. `FlightRigAssembler` now binds `Own` on **every** pane, not only under
+  `--debug-markers`; with no aircraft bound (a spectator, a suite rig) `OwnTeam` still falls back to
+  the derivation. The `hostile-marker-hud` suite carries both the fix and the old derivation as a
+  named CONTROL. The gate itself was always right — it was being handed the wrong own-team.
 ⚠ **The module doc's "no reference to copy" claim is false** and is corrected by `PLAN-targeting.md`
   C21. The original has a full player-targeting system, decoded in
   [`org/targeting.md`](org/targeting.md): a sticky player-chosen target in plane `+0x948` over three
@@ -5772,6 +5827,18 @@ aimed at a rand()-picked in-arc gasbag), gates on `cannon_fire_range` + the arc,
 authored deploy/retract anims scoped to the hull, and spawns unowned rounds
 (`ProjectilePool.NoShooter`, C9b's convention) scattered by `cannon_inaccuracy`. Pinned by
 `zeppelin-motion` + `zeppelin-damage` + `zeppelin-broadside` suites.
+`CollectTargetParts(List<AimCandidate>)` (`PLAN-targeting.md` B12) offers those same F18 zones —
+gasbags, engines, cannons — to the player's `TargetPool`, one candidate per part, each carrying the
+hull's own velocity (`Motion.Forward * Motion.Speed`) rather than zero so the bracket gate has
+something to lead; a destroyed zone is offered but not live, and a part whose anchor has left the
+tree is skipped rather than read. It fills a plain list, deliberately not an
+`AimCandidateSet.Structures`, because `TargetPool` never reads that list — this is the only channel
+by which a structure becomes selectable.
+⚠ Sub-part enumeration is a **deliberate divergence**. `docs/org/targeting.md` found none anywhere in
+  the original's targeting path: a gasbag is selectable there only because the mission authored it as
+  its own `MStruct` carrying `otherTarget`/`objectiveTarget`. Decision 8 asked for the parts and CSVM
+  has no mission flag data, so it enumerates what it already models as damageable. Do not "correct"
+  this back by citing the decode.
 ⚠ A `deactivated` record (value 1) is PLACED but held — mission-script wake-up is out of M4's
   scope. A record whose net misses neindex is also placed-not-flown (the pose is real data and
   B6's altitude gate reads the node's Y). Stop nodes are NOT implemented (F17's open item).
