@@ -2270,7 +2270,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `startprops` authored 2.0 s and the crash/destruction wind-down plays `snd_propstop` — judge
   both by ear. ⚠ Trap: `BL-268` (`docs/plans/PLAN-m3-polish-10.md` C21, landed 2026-08-06) removed
   the blanket ×0.2 mix scale on these same paths, raising the own-ship mix ~5× — judge the
-  ramp/stop cue against the new, unscaled level, not the old ×0.2 one.
+  ramp/stop cue against the new, unscaled level, not the old ×0.2 one. ⚠ Second trap, added by
+  `PLAN-splitscreen-polish.md` D32 (`BL-371`, landed 2026-08-15): `snd_propstop` (the wind-down
+  half of this A/B) now carries splitscreen's `MixGain` too — 1 in 1P, so this pending single-pilot
+  judgement is unaffected, but a splitscreen listen must judge it at whatever `N` the pilot is
+  testing, not assume the 1P level. `snd_propstart` (the other half of this A/B) is unchanged —
+  D32 kept it raw, "your prop" on respawn stays loud on purpose.
 
 ## Cameras & views
 

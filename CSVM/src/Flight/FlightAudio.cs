@@ -270,10 +270,17 @@ public partial class FlightAudio : Node
         var (name, stream, volume) = _crashSounds[
             (int)(Rng.Stream(Rng.FlightAudio).Randi() % (uint)_crashSounds.Count)];
         _crash.Stream = stream;
-        _crash.VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold, volume));
+        // D32 (BL-371), re-judging M2.5's "crash one-shots global": a splitscreen pile-up
+        // (a mutual shootdown) fires this boom once per downed rig in the same instant, so it
+        // takes MixGain now — 1 in 1P, unchanged; 1/√N in splitscreen so N simultaneous booms
+        // don't sum into a clipped wall of noise. No distance term (D31's): this is own-ship,
+        // non-positional cockpit audio, always heard at "distance 0" from whichever pilot it is.
+        float gain = volume * MixGain;
+        _crash.VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold, gain));
         _crash.Play();
-        // Which of the four explosions played — the only trace this pick leaves outside the speakers.
-        GD.Print($"crash sound: {name}");
+        // Which of the four explosions played, plus D32's (BL-371) computed gain — the only
+        // trace this pick leaves outside the speakers.
+        GD.Print($"crash sound: {name} MixGain={MixGain:0.00} vol={gain:0.000}");
     }
 
     /// <summary>The `dirt`(13) crash's earth-impact boom (snd_exp_ground_a), layered over the
@@ -281,13 +288,26 @@ public partial class FlightAudio : Node
     /// is the resolved def (FlightController.PlayCrashBoom), so it does not sound on a sea dive,
     /// the `player_crash_default` fallback, or a future mid-air destruct (which plays no
     /// `player_crash_*` def at all).</summary>
-    public void OnGroundExplosion() => PlayOneShot(_groundExp, _groundExpVol);
+    // D32 (BL-371): layers over OnCrash's boom in the same instant, so it takes MixGain for the
+    // same reason — a pile-up stacks this once per downed rig too.
+    public void OnGroundExplosion()
+    {
+        float gain = _groundExpVol * MixGain;
+        PlayOneShot(_groundExp, gain);
+        GD.Print($"crash sound: snd_exp_ground_a MixGain={MixGain:0.00} vol={gain:0.000}");
+    }
 
     /// <summary>The sea dive's counterpart (snd_exp_water_a — the `_a` pair, not the graze's
     /// lighter `_b`), layered over the plane explosion the same way. Authored one level down, in
     /// the plane_big_splash player_crash_water calls; the crash runtime renders effects only, so
     /// the sound comes from here.</summary>
-    public void OnWaterExplosion() => PlayOneShot(_waterExp, _waterExpVol);
+    // D32 (BL-371): same crash-instant stacking as OnGroundExplosion; MixGain for the same reason.
+    public void OnWaterExplosion()
+    {
+        float gain = _waterExpVol * MixGain;
+        PlayOneShot(_waterExp, gain);
+        GD.Print($"crash sound: snd_exp_water_a MixGain={MixGain:0.00} vol={gain:0.000}");
+    }
 
     /// <summary>The survivable scrape's authored bark, alongside the <c>touchdown_*</c> effect the
     /// world-effects runtime renders: snd_exp_water_b off water, snd_exp_ground_b off everything
@@ -327,8 +347,11 @@ public partial class FlightAudio : Node
         _whine?.Stop();
         _rattle?.Stop();
         _damagedEngine?.Stop();
-        PlayOneShot(_propStop, _propStopVol);
-        GD.Print("engine stop: snd_propstop");
+        // D32 (BL-371): fires right after OnCrash's boom, the same crash instant — MixGain for
+        // the same pile-up reason, not the "your prop" respawn cue StartEngine plays below.
+        float gain = _propStopVol * MixGain;
+        PlayOneShot(_propStop, gain);
+        GD.Print($"engine stop: snd_propstop MixGain={MixGain:0.00} vol={gain:0.000}");
     }
 
     private static void PlayOneShot(AudioStreamPlayer? player, float volume)
@@ -403,6 +426,10 @@ public partial class FlightAudio : Node
         _engineRamp = 0f;
         _engine?.Play();
         _engine2?.Play();
+        // D32 (BL-371): the "your prop" respawn cue — deliberately stays at raw volume. Unlike
+        // the crash-boom family above, a spawn/respawn is this pilot's own moment, not one that
+        // naturally coincides with N other rigs' at the same instant (spawns/respawns stagger by
+        // mission timing and skill, not physics frame), so there is no pile-up to guard against.
         PlayOneShot(_propStart, _propStartVol);
     }
 }

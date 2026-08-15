@@ -2927,7 +2927,15 @@ loudness.
   `Respawn`/`Crash`), not this class — `StartEngine`/`OnEngineStop` are audio-only; keep both halves
   in step by hand, there is no shared trigger.
 ⚠ `MixGain` (1/√N in splitscreen, TUNE) covers the four loops and the per-player cues
-  (`PlayEmptyClip`, `OnGraze`); the crash/prop one-shots are deliberately left unscaled.
+  (`PlayEmptyClip`, `OnGraze`). **D32 (`BL-371`, re-judging M2.5's "crash one-shots global"):**
+  `OnCrash`/`OnGroundExplosion`/`OnWaterExplosion`/`OnEngineStop`'s `snd_propstop` now take it too
+  — all four fire in the SAME instant on a downed rig (`OnEngineStop`'s own doc: "right after the
+  boom"), so a splitscreen pile-up (a mutual shootdown) stacked N of each at raw volume before this;
+  1 in 1P, unchanged. `StartEngine`'s `snd_propstart` is the one exception, deliberately left raw —
+  a respawn is this pilot's own moment and does not naturally coincide with N other rigs' at the
+  same instant the way a crash does. No `ProjectilePool.DistanceGain` (D31) term anywhere here:
+  this class stays non-positional own-ship audio, always heard at "distance 0" from whichever pilot
+  it is, so a distance term against the nearest human is meaningless for it.
 ⚠ `BL-268`: `MakeLoop`/`MakeOneShot` and the gun-loop/warning-shot one-offs used to multiply
   `def.Volume` by a blanket, uncommented-beyond-"Temporary fix" ×0.2 before any of the named
   mix gains above were applied. Audited against every other own-ship/world reader of the same

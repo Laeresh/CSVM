@@ -108,7 +108,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — Audio one-shots
 
 31. ☑ Projectile one-shots get mix gain and a distance term (`BL-370`)
-32. ☐ `FlightAudio` one-shots respect `MixGain` where they should (`BL-371`)
+32. ☑ `FlightAudio` one-shots respect `MixGain` where they should (`BL-371`)
 
 ### Wave E — Seats and input
 
@@ -663,7 +663,7 @@ for P1) stays owed and folds into `F52`, the same deferral A1/A2 already recorde
 **⚠ Traps.** The `* 0.2f` factor is the current tuned balance — carry it into the new path, do
 not silently drop or double-apply it.
 
-## D32 ☐ `FlightAudio` one-shots respect `MixGain` where they should (`BL-371`)
+## D32 ☑ `FlightAudio` one-shots respect `MixGain` where they should (`BL-371`)
 
 **Goal.** A splitscreen pile-up does not stack N full-volume crashes over a mix tuned quieter;
 your own pane's crash stays prominent.
@@ -674,15 +674,38 @@ def volume; `Update`, `OnGraze`, `OnWarningShot`, `PlayEmptyClip`, `StartGunLoop
 `MixGain`. M2.5 recorded "crash one-shots global" as a decision, so this is a re-judgement, not a
 bug hunt.
 
-**Approach.** Per event: own-player events (your crash, your prop) may deliberately stay loud;
-other-player events take `MixGain` (and D31's distance term if A2 chose one). Write the per-event
-verdict into the code as the one-line why. Reuse D31's helper.
+**Approach (landed).** Per-event verdict, written into the code as a one-line why at each site:
+`OnCrash`, `OnGroundExplosion`, `OnWaterExplosion` and `OnEngineStop`'s `snd_propstop` all fire in
+the SAME instant on a downed rig (`OnEngineStop`'s own doc: "right after the boom") — exactly the
+"N full-volume crashes" pile-up the Goal names, so all four now take `MixGain`. `StartEngine`'s
+`snd_propstart` is the one exception, deliberately kept raw: a respawn is this pilot's own moment
+and does not naturally coincide with N other rigs' at the same physics frame the way a crash does.
+No `ProjectilePool.DistanceGain` (D31's helper) anywhere here — that term measures distance to the
+nearest human, and this class is non-positional own-ship audio, always heard at "distance 0" from
+whichever pilot it is, so a distance term is meaningless for it; D31's *reused piece* is the
+`MixGain` convention itself (`FlightAudio.MixGain` already existed, unchanged in shape), not the
+distance math. Both the crash-family multiply calls and their existing `GD.Print` breadcrumbs
+(`crash sound: …`, `engine stop: …`) now report the computed `MixGain`/`vol`, D31's logging
+convention, satisfying this item's own scripted-gain verify.
 
 **Model recommendation.** medium.
 
-**Verify.** Scripted `--volume=0` crash run logging gains; at the controls, a 2-player mutual
-shootdown: neither pane's mix clips, each pilot's own crash reads loudest in their pane. `BL-126`'s
-`MixGain` TUNE note is re-checked in F52.
+**Verify (done 2026-08-15).** `dotnet build CSVM/CSVM.sln` clean, `dotnet format --verify-no-changes`
+clean. `.\RunTests.ps1`: 1292/1292 unit tests, 61/61 engine suites, 14/14 goldens hash-identical —
+unchanged from D31's numbers, since this item adds no new pure-function surface (a re-judged
+multiply at 5 existing Node-bound call sites, not a novel algorithm; the class has never had unit
+coverage — `MixGain` was already TUNE, judged at the controls). Scripted `--det --ia=<same
+dogfight_ace fixture as D31> --chapter=C1 --volume=0 --frames=3600` crash run logging gains, both
+player counts: 1P (`--players=1`, the default) shows `MixGain=1,00 vol=1,000` for
+`snd_exp_plane4`/`snd_exp_ground_a`/`snd_propstop` — unchanged, as the item requires; 2P
+(`--players=2`) shows `MixGain=0,71 vol=0,707` for the same three sounds in the same instant on P1's
+death, confirming the crash-family scales together rather than one layer slipping through unscaled.
+**What this cannot show:** a live multi-player mix is the user's own call
+(`verification.md`'s "what this project cannot verify itself"), so the at-the-controls 2-player
+mutual shootdown (neither pane's mix clips) stays owed and folds into `F52`, the same deferral
+A1/A2/D31 already recorded. `BL-285` (the `snd_propstop`/`EngineStartRamp` A/B) now carries a note
+that its splitscreen listen must judge `snd_propstop` at whatever `N` is under test, not the 1P
+level — `snd_propstart` is unaffected.
 
 **⚠ Traps.** The ramp/stop cue tuning in the Audio backlog theme was judged against the current
 unscaled levels — if this item changes crash levels, note it there rather than re-tuning blind.
