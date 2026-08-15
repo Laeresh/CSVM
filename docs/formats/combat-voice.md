@@ -51,7 +51,7 @@ Two entries in the table settle questions the clip survey could only guess at:
 - **`TA-FailTail` is a real engine trigger with a real dispatch site**, not an orphan clip family.
   The survey noted the design's taunt table omits it; the engine does not.
 
-### The gloat triggers and trigger 28, read from the take-hit path (2026-08-14)
+### The gloat triggers and trigger 28
 
 Both were traced out of the vehicle damage path while settling `PLAN-instant-action` A2
 ([`org/vehicleDamage.md`](../org/vehicleDamage.md), "Teams and friendly fire"), which is where the
@@ -117,7 +117,7 @@ single-player path is the one that needs `accentID`.
 
 ### The clips are sounds.json entries, and the data picks the variants itself
 
-Measured against the extraction while building the B8 runtime (2026-08-13):
+The extraction shows:
 
 - **Every combat clip has an ordinary `SETS` entry**: sounds.json carries one set per pilot id
   (`id1` … `id48`, 35 sets), whose entries are `snd_id<N>_<TYPE>` → `VO_id<N>_<TYPE>.wav` with
@@ -190,9 +190,9 @@ So the flight speaks with one voice per event, and a quiet pilot passes the line
 swallowing it. Triggers 0, 13, 15, 24 and the bearing call-outs dispatch this way; the distress,
 death and taunt triggers address a specific aircraft.
 
-## The remake's dispatch sites (E16, 2026-08-13)
+## The remake's dispatch sites
 
-The rules above are implemented in `CSVM/src/Flight/AiVoiceDispatcher.cs` (the gate, cooldowns,
+The rules above are represented in `CSVM/src/Flight/AiVoiceDispatcher.cs` (the gate, cooldowns,
 halving, election, DI tiers, bearing index — engine-free, seeded) and wired by
 `CSVM/src/Session/AiVoiceRuntime.cs` over the B8 seam. Where the original's dispatch site is
 decoded, the remake uses it; where only the trigger's meaning is decoded, the chosen stand-in
