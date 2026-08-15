@@ -13,7 +13,7 @@ worth writing down, not a reason to stop parsing; but nothing in the install can
 them. The consequence is structural: the original's placement has **no random input that
 affects a decoration's position or orientation at all**, which is why an unseeded
 reimplementation of the lattice walk reproduces C1's tree positions *exactly* rather than
-approximately (confirmed at the controls, 2026-08-10).
+approximately.
 
 ## At a glance
 
@@ -32,7 +32,7 @@ This page is the current reference for its documented format family.
 
 ## Shape
 
-A reader list of blocks, each an alternating key/value list. Decoded 2026-08-10 from the
+A reader list of blocks, each an alternating key/value list. The retail data establishes the
 parser, key by key.
 
 ```
@@ -110,7 +110,7 @@ the thing they bound.
 The defaults are ±1.0 — **no cull** — and no chapter authors either key, so no clutter in
 the install is ever slope-culled. The remake's old `MinSlopeCos = 0.25f` had no counterpart
 here and never fired anyway (the steepest clutter-eligible triangle in the install is C1's
-at 0.4598); it was deleted in 2026-08-10's B13.
+at 0.4598).
 
 ### ⚠ `substitute` weights are relative, and the file never normalises them
 
@@ -133,7 +133,7 @@ place".
 
 ## What the eight shipped files actually author
 
-Every number below is measured off the retail install (2026-08-10), and pinned per chapter
+Every number below is measured off the retail install and pinned per chapter
 in `CSVM.Tests/ClutterTemplatesTests.cs`.
 
 | chapter | bytes | blocks | distinct models | `scale_range` | `far_fade_range` | `substitute` | the other eight keys |
