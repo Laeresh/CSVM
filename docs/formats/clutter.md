@@ -51,7 +51,7 @@ templateRoot (parentless Object3d, e.g. terpat02)
 ```
 
 **The chain is always exactly two nodes deep, and only the decoration node carries a
-transform.** Measured over every decoration of every template in C2 and C5 (2026-07-22):
+transform.** Across every decoration of every template in C2 and C5:
 `deco → mesh` in 249 of 249 cases, and 0 of them put a non-identity transform on the mesh
 node. So one node's local transform is the whole placement.
 
@@ -88,7 +88,7 @@ block lands.
 There is **no world-space grid and no global clutter origin** in the original at all. The remake's
 fixed X/Z grid was a fiction with no counterpart, and it cost C1 roughly 4× its trees — its terrain
 is painted with `terpat02` at half the template quad's scale, so one repeat spans ~260 m where the
-grid stepped 512. Rewritten 2026-08-10; the measurements are in
+grid stepped 512. The measurements are in
 `analysis/bl-305-clutter-uv/FINDINGS-A1.md` / `-A2.md` and `docs/PLAN-clutter-uv-placement.md`.
 
 **Which polygons get dressed is a per-polygon decision**, made by the `no_clutter` flag (raw
@@ -110,11 +110,11 @@ C2's `filmblock*` / `resblock*` / `parklot*` and C5's `cblock*` templates carry 
 building meshes** as decorations, not sprite quads. They are placed by exactly the same
 rule as the sprites — the same UV lattice, the same containment test, the same affine recovery of
 the world position — and differ only in what is drawn and whether it is solid (a 3D decoration also
-keeps its authored basis and Y, which a sprite drops). Implemented 2026-07-22 (polish-3
+keeps its authored basis and Y, which a sprite drops). The remake uses this model (polish-3
 item 6); before that they were skipped, which is why C2 and C5 rendered painted city-block
 ground with nothing standing on it.
 
-Counts are the remake's, after the UV-lattice rewrite (2026-08-10); the pre-rewrite grid produced
+Counts are the remake's; a grid approach produced
 10,261/37,167 and 71,326/124,072 respectively.
 
 | chapter | templates | 3D decorations placed | sprites placed |
@@ -134,7 +134,7 @@ from 11 distinct models; each is stamped once per integer UV repeat of `cblock1.
 every triangle painted with it.
 
 **C5's `cblock4/5/6` are placed like every other district**, and the map-wide
-`BuriedClutterDistricts` exemption that used to remove them is **gone** (2026-08-10). It existed
+`BuriedClutterDistricts` does not remove them. It
 because the remake stamped both members of every coplanar overlay/base pair — matching a template
 to a polygon by texture name only, never reading the polygon's flag — which doubled the city's
 buildings (`analysis/bl-058-clutter-doubling/FINDINGS.md`). The real mechanism is the `no_clutter`
@@ -157,7 +157,7 @@ heuristic with nothing in the data behind it.
 
 ## Sprites are not collidable; 3D decorations are
 
-**Corrected 2026-07-22.** This page previously stated:
+
 
 > Trees are collidable in the original (`spruce_destroy` anims exist; destruction is
 > weapons-era behavior).
@@ -172,15 +172,15 @@ Hughes' flying boat and the C2/M01 mission object, whose folder siblings are
 
 **There is no spruce-*tree* animation, and no tree-destruction animation of any kind,
 anywhere in the install.** The remake therefore gives clutter **sprites** no collider at
-all (user decision, 2026-07-22) — consistent with every other billboard, which is a flat
+all  — consistent with every other billboard, which is a flat
 card whose collider would be a phantom wall wherever the card happens to be facing.
 
-**The 3D decorations are the opposite case and DO collide** (user decision, 2026-07-22):
+**The 3D decorations are the opposite case and DO collide** :
 they are real multi-polygon geometry with real sides, they do not turn, and flying through
 a skyscraper is not something the original permits.
 
 **How they collide: one shared shape per model, attached per placement** (reworked
-2026-07-22, the same day it first landed). The first implementation transformed every
+The first implementation transformed every
 vertex of every placement into world space and merged the result into one trimesh per
 1024 m region — 2,554,455 collision triangles in C5 and 202,303 in C2, built from about
 2,300 and 1,400 distinct ones respectively. It was written that way to avoid ~80k
@@ -191,7 +191,7 @@ and attaches it once per placement, keeping the per-region body split only for b
 locality and for a locating name in the crash log.
 
 That distinction matters to any reimplementation because **the cost was never in the
-vertex arithmetic**. Measured in C5, 2026-07-22: 3,796 ms to build the merged version, of
+vertex arithmetic**. In C5: 3,796 ms to build the merged version, of
 which only 271 ms was transforming those 2.55M vertices and **3,403 ms was building the
 concave shapes' BVHs**. Sharing the shapes removed essentially all of it — the BVHs being
 built are ~40 triangles each — and C5's `--fly` load fell from ~7,100 ms to ~3,550 ms.
