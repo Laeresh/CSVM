@@ -3300,12 +3300,14 @@ Thrust, drag, gravity and lift integrate on the velocity VECTOR, so speed passes
 a demanded load factor, drag a polar in MACH with no induced term, thrust a Mach curve times a
 LINEAR lever scaled by nose attitude. Nothing in that force path is fitted; the nose-chase, the
 stall nose-drop and the altitude clamp are ours. There are TWO force paths, fixed per instance at
-construction (`UsesAiForcePath`, C21/C22): the AI one skips the `liftAOAs` airflow blend and the
-weathervane and floors its post-integration nose-axis velocity at 10 mph, and air density is NOT
+construction (`UsesAiForcePath`, C21/C22/C23): the AI one skips the `liftAOAs` airflow blend and the
+weathervane, floors its post-integration nose-axis velocity at 10 mph, and applies a fixed,
+command-independent ground blow instead of the player's command-proportional one; air density is NOT
 branched. The original selected inside the force function on a compare against its single global
-player (`0x48c520`, `0x48cd3e`, `0x48e925`) — not copied, because that presumes ONE player and this
-engine flies four. Every mechanism and trap is documented at the line that computes it; the decode is
-[`org/flightModel.md`](org/flightModel.md) and the measurement rules are `verification.md`.
+player (`0x48c520`, `0x48cd3e`, `0x48e925`, `0x48c317`) — not copied, because that presumes ONE
+player and this engine flies four. Every mechanism and trap is documented at the line that computes
+it; the decode is [`org/flightModel.md`](org/flightModel.md) and the measurement rules are
+`verification.md`.
 ⚠ The three `*Tune` rates and the decoded coefficients here are all PINNED, not free TUNEs — the
   rates to cockpit-gauge video of the original (`analysis/video-flight-calibration/`), the
   coefficients to the binary's own bytes. Re-pin a rate only when a decoded mechanism moves the

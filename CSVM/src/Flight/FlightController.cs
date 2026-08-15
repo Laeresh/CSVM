@@ -1968,23 +1968,34 @@ public partial class FlightController : Node3D
         return true;
     }
 
-    /// <summary>Ground blow's probe (`BL-359`, docs/org/flightModel.md's "Ground blow"): a ray of
-    /// <c>groundblow_elev</c> metres from the aircraft origin along the nose, whose nearest hit's
-    /// WORLD normal and distance <see cref="FlightModel"/> turns into a bias on control response.
+    /// <summary>Ground blow's probe (`BL-359` player, C23 AI; docs/org/flightModel.md's "Ground
+    /// blow"): a ray of <c>groundblow_elev</c> metres from the aircraft origin along the nose, whose
+    /// nearest hit's WORLD normal and distance <see cref="FlightModel"/> turns into a bias on
+    /// control response — the SAME cast and falloff feed both the player's and the AI's law
+    /// (<see cref="FlightModel.GroundBlowTerm"/> branches on the response, not the probe).
     /// No hit leaves the input's normal at zero, which is the model's own "nothing there".
     /// <para>⚠ The mask is <see cref="CollisionLayers.World"/>, and that is the EMITTER RULE rather
     /// than an optimisation. In the original an aeroplane flying its own flight update never repels
-    /// the player, while terrain, scenery and the zeppelin all do — and the zeppelin does it as a
-    /// plain world node there exactly as it is one here. World holds precisely that set, since
-    /// <see cref="AircraftBody"/> is the only thing that carries the Aircraft layer.</para>
-    /// <para>⚠ Player-only, gated on <see cref="IsHumanPiloted"/> — the original's filter sits inside
-    /// its own human-versus-AI test. The AI's ground avoidance is a DIFFERENT law (a fixed push,
-    /// linear in proximity, unfiltered), not this one, so an AI plane must not be fed this
-    /// probe.</para></summary>
+    /// another aircraft, while terrain, scenery and the zeppelin all do — and the zeppelin does it as
+    /// a plain world node there exactly as it is one here. World holds precisely that set for both
+    /// paths: the original's vehicle-registry filter (excluding a scripted-path vehicle) sits inside
+    /// the PLAYER branch only, and this engine has no scripted-path vehicles carrying that filter's
+    /// mark to begin with, so there is nothing for the AI's "unfiltered" sweep to disagree with here.
+    /// <see cref="AircraftBody"/> is the only thing that carries the Aircraft layer, on both
+    /// paths.</para>
+    /// <para>⚠ Gated on <see cref="FlightModel.UsesAiForcePath"/> for a non-human pilot, not on
+    /// <see cref="IsHumanPiloted"/> alone: an AI aircraft flipped back to the player path by the
+    /// temporary <c>--no-ai-plant</c> switch stays unprobed, a pre-existing gap (ground blow was
+    /// player-only when that switch landed) this item does not close. Also skipped while
+    /// <see cref="AiPilot.Machine"/> reads <see cref="AiMode.Stunned"/> — <c>0x0048c317</c>'s own
+    /// gate, mode == stunned, so a stunned AI flies into terrain (flightModel.md:1369). Do not lift
+    /// this for a "fix"; the original does the same.</para></summary>
     private void ProbeGroundBlow(ref FlightInput input)
     {
         float elev = _model.Stats.GroundBlowElev;
-        if (!IsHumanPiloted || elev <= 0f)
+        if (elev <= 0f)
+            return;
+        if (!IsHumanPiloted && (!_model.UsesAiForcePath || Pilot?.Machine?.Mode == AiMode.Stunned))
             return;
         var space = GetWorld3D()?.DirectSpaceState;
         if (space == null)

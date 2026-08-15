@@ -133,10 +133,15 @@ public sealed class PlaneStats
     // this install authors 400 and 10.
     public float GroundBlowElev = 100f;     // groundblow_elev, m — ray length and falloff denominator
     public float GroundBlowMag = 1.5f;      // groundblow_mag, dimensionless
-    // Unread ON PURPOSE: the AI path is a DIFFERENT law, not the player term scaled by this — a fixed
-    // push independent of what the AI commanded, linear in proximity rather than quadratic, and not
-    // dt-scaled, and cut to 0.15 for 2.5 s after a drop and suppressed while the AI is stunned.
-    // Implementing it means writing that law (docs/org/flightModel.md), not multiplying by this.
+    // C23: the AI path is a DIFFERENT law, not the player term scaled by this — a fixed push
+    // independent of what the AI commanded, linear in proximity rather than quadratic, and not
+    // dt-scaled. FlightModel.GroundBlowTerm reads AiGroundBlow · GroundBlowMag as that fixed factor
+    // (5.0 authored, not 0.15 — see that method's own note). The compiled AI branch cuts both the
+    // factor and S to ×0.15 for 2.5 s after a carrier drop (a zeppelin fighter-drop launch is this
+    // engine's carrier drop and IS reachable, but this port tracks no spawn timestamp, so the cut is
+    // an unmodelled gap — backlog.md BL-095) and suppresses the whole term while the AI is stunned
+    // (ported, but at FlightController.ProbeGroundBlow's gate, not here — GroundBlowTerm itself sees
+    // only what the probe already decided to feed it).
     public float AiGroundBlow = 0.9f;       // ai_groundblow, dimensionless
 
     // The near-miss cue's shipped accumulator (warning_shot_*) — see WarningShotCue for the units

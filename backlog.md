@@ -672,7 +672,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   | `maxAOA 46.0` / `liftAOAs [5,9]` / `lift_accel_rate 0.75` | Decoded. `liftAOAs` is an airflow blend, **not** a load-factor ramp. Consumed by `PLAN-flight-drag-lift` B12 as a **hypothesis under test, not a decode**. ⚠ That plan justifies its lift re-key partly on "the aircraft must hold 100° of bank, which needs `1/\|cos 100°\|` = 5.8 g" (`PLAN-flight-drag-lift.md:486-487`, `:7`, `:32`, `:200`, `:549`). `CAP-33` showed the ADI reads airframe **attitude**, not the turn's bank, so the ~100° attitude is real but the load factor does not follow from it that way — `CAP-01`'s turn banked 58.7°, ~2 g. The re-key is not challenged; its stated arithmetic is |
   | `high_speed_pitch_fade [1000,1001]` / `highGs [9,15]` / `lowGs [-6,-9]` | Decoded as **authored unreachable** (`C24`, `D33`). Nothing implemented, which is the correct outcome |
   | `drag_factor 1.5` (global) / `drag_fade_speed 40` | **Dead in the executable** (B14): parsed, then read by nothing. The per-plane `drag_factor` is the only drag scale |
-  | `groundblow_elev 400` / `groundblow_mag 10` / `ai_groundblow 0.5` | Decoded 2026-08-14, emitter set settled 2026-08-15, **implemented and flown 2026-08-15** (`git log --grep=BL-359`). `ai_groundblow` is loaded and deliberately unread: the AI path is a different law |
+  | `groundblow_elev 400` / `groundblow_mag 10` / `ai_groundblow 0.5` | Decoded 2026-08-14, emitter set settled 2026-08-15, **player law implemented and flown 2026-08-15** (`git log --grep=BL-359`), **AI law implemented 2026-08-15** (`PLAN-ai-flight` `C23`). `ai_groundblow` is now read, off `FlightModel.UsesAiForcePath` |
   | `bounce_factor 0.6` | Decoded 2026-08-14. Units settled; implementation owned by `BL-172` |
   | `nom_gravity 20.0` / `stall_mag 1.25` | Already consumed |
 
@@ -700,9 +700,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   obstacle is met with `0.05 × groundblow_mag`, so it is halved and never reversed; a command *away*
   is amplified by up to `1 + 10·S²`; and on a dead-on approach the bias axis `n × b` collapses to
   zero, so a head-on gets no help at all. The AI path is a different law, not a scaled one: a fixed
-  push of `ai_groundblow × groundblow_mag × S`, independent of what the AI commanded, linear in
-  proximity, and not `dt`-scaled. **The AI half is not built** — the player term is, in
-  `FlightModel.GroundBlowTerm` off `FlightController.ProbeGroundBlow`.
+  push of `ai_groundblow × groundblow_mag × S` = **5.0 authored** (not the 0.15 the plan first misread
+  from this row — that is a further post-carrier-drop cut, see below), independent of what the AI
+  commanded, linear in proximity, and not `dt`-scaled. **Both laws are built** (`PLAN-ai-flight` `C23`
+  landed the AI half 2026-08-15), branched in `FlightModel.GroundBlowTerm` off `UsesAiForcePath`,
+  fed by the same `FlightController.ProbeGroundBlow` cast for both paths.
+  ⚠ **Reachable-but-unmodelled gap: the 2.5 s post-carrier-drop ×0.15 cut.** `FUN_00452450`'s
+  `obj+0xB4` timer, decoded above, DOES have a live analogue in this engine — a zeppelin's fighter-drop
+  launch (`AiGeneratorRuntime` → `AiAircraftSpawner.Spawn`) puts a freshly-dropped AI aircraft on the
+  same `UsesAiForcePath` plant this law reads, the same "carrier drop" the original's timer guards.
+  This port tracks no per-aircraft spawn timestamp, so a just-dropped fighter gets the full un-cut 5.0
+  rather than the original's reduced 0.75 for its first 2.5 s. Narrow (needs terrain close enough to
+  repel within 2.5 s of a drop) and not implemented by `C23`, which scoped to the response law only;
+  would need a spawn-time field threaded through `AiAircraftSpawner`/`FlightController`, closest in
+  kind to `BL-172`'s `obj+0xAC` collision-grace timer (the same per-object clock family).
 
   ⚠ **`groundblow_elev` 400 is 400 METRES of ray length, not a 400 ft trigger range, and the
   footage agreement was a coincidence of digits.** The `CAP-02` onset bracketed at 427 → 376 ft sits
@@ -2751,11 +2762,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   before launch, so the geometry the plane flies through is open. Ours never plays it, the door
   stays closed, and the collision sweep kills the plane on frame one.
   ⚠ **Traps.** (a) Do NOT "fix" the spawn placement — it matches the decode; the missing piece is
-  the door animation, not the position. (b) Leads preserved from a partial decode, unimplemented:
-  the launch also sets two timers (`+0xac = now + 1.5`, `+0xb4 = now + 2.5`, consumers untraced)
-  and an initial velocity with a −22.352 m/s vertical component (the zeppelin drop case); read
-  those before inventing any grace window. (c) The launched-vehicle mechanism itself (parked
-  roster planes, not fresh spawns) is a separate fidelity gap from this bug; B6's fresh-spawn
+  the door animation, not the position. (b) Leads preserved from a partial decode: the launch also
+  sets two timers (`+0xac = now + 1.5`, `+0xb4 = now + 2.5`) and an initial velocity with a
+  −22.352 m/s vertical component (the zeppelin drop case). `+0xb4`'s consumer is now traced
+  (`PLAN-ai-flight` `C23`): it cuts the AI ground-blow factor to ×0.15 for its 2.5 s span, reachable
+  in this engine via the same launch routine (`AiGeneratorRuntime` → `AiAircraftSpawner.Spawn`) but
+  not yet ported — a recorded gap, not a fix for THIS bug (ground blow is a control-response bias on
+  an already-flying aircraft; it cannot save a plane the collision sweep kills on the spawn frame).
+  `+0xac`'s consumer (the collision-grace gate) is still untraced for the AI path — `BL-172`/C25's
+  turf, read that before inventing any grace window there. (c) The launched-vehicle mechanism itself
+  (parked roster planes, not fresh spawns) is a separate fidelity gap from this bug; B6's fresh-spawn
   stand-in is documented in its landing commit.
 
 - `BL-074` `[Research]` **PLAYER_INIT fields [3]/[4] semantics + per-plane spawn speed** — story-mission spawns

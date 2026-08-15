@@ -68,7 +68,7 @@ what a mission tells it to do.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | ~~C22~~, C23, C24, C25, C26 | Addresses and line cites are in `docs/org/flightModel.md`. Confirm the trace, then implement |
+| **Traced to an exact mechanism in code, with the data that proves it** | ~~C22~~, ~~C23~~, C24, C25, C26 | Addresses and line cites are in `docs/org/flightModel.md`. Confirm the trace, then implement |
 | **Traced statically, never verified at runtime** | ~~A1, A2~~ | Both landed 2026-08-15, and both readings were wrong: there is no AI density band and no AI throttle setpoint. Read their landing notes before citing flightModel.md's older AI-path claims, several of which are debug-copy citations |
 | **Leads only, no mechanism yet** | D31, E41 | The AI control law has never been located. Budget for investigation; this may end in a documented dead end |
 
@@ -87,7 +87,7 @@ decoding the **player** path and set aside for M4's AI work. None of it is imple
 | AI always uses nose-aligned wind, i.e. permanently zero incidence — **C22: landed** | flightModel.md:217 | `0x48c520` |
 | AI does not get weathervane centring — **C22: landed** | flightModel.md:791 | `0x48cd3e` |
 | Forward-velocity floor of 4.4704 m/s (10 mph), player exempt — **C22: landed** | flightModel.md:137 | `0x48e925` |
-| AI ground blow is a fixed push, linear in proximity, not `dt`-scaled, factor 0.15 | flightModel.md:1339 | `0x0048c317` |
+| AI ground blow is a fixed push, linear in proximity, not `dt`-scaled, factor 5.0 (0.15 is a further post-carrier-drop cut, not the base factor — corrected landing C23; reachable via a zeppelin fighter-drop but unmodelled) | flightModel.md:1339 | `0x0048c317` |
 | Per-AI random jitter of **eleven** dynamics slots at spawn, not two — **C26**, split out of C22 | flightModel.md:1004 | inside `FUN_00476250` |
 | The bank-coupling block is inlined a second time on the AI path behind a byte flag | flightModel.md:585 | `0x48cc61`–`0x48ccf4` |
 | Control authority ramp, shared, 0 at `turn_fade_in` = 10 mph | flightModel.md:471, 499 | `FUN_0048bdd0` |
@@ -139,7 +139,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ C21 The AI force-path seam, plus the temporary A/B switch (`UsesAiForcePath`, `--no-ai-plant`)
 22. ☑ C22 The AI aerodynamic deltas: airflow, weathervane, speed floor (three branches, no re-pins)
-23. ☐ C23 The AI ground blow, a different law
+23. ☑ C23 The AI ground blow, a different law
 24. ☐ C24 `BL-330`'s authority ramp and the reverse-authority factor
 25. ☐ C25 `BL-172`'s `bounce_factor` restitution, player-only as decoded
 26. ☐ C26 The per-AI spawn jitter of eleven dynamics slots (split out of C22)
@@ -471,31 +471,99 @@ branch here: A1 disproved it, and the "near-zero AI aero forces" outcome this it
 **not** what should be seen. The floor is on the
 nose-axis velocity component, not on `Speed`; conflating them changes behaviour in a dive.
 
-## C23 ☐ The AI ground blow, a different law
+## C23 ☑ The AI ground blow, a different law
+
+**Landed 2026-08-15.** `FlightModel.GroundBlowTerm` now branches on `UsesAiForcePath`: the AI push is
+`v * (Stats.AiGroundBlow * Stats.GroundBlowMag)`, independent of `cmd`, never suppressed by command
+direction, and its velocity-steer companion always runs at `2 * proximity`. `FlightController`'s
+`ProbeGroundBlow` — previously gated on `IsHumanPiloted` alone, so it never cast a ray for any AI
+aircraft at all — now also runs for an AI aircraft on the AI force path (`!IsHumanPiloted &&
+_model.UsesAiForcePath`), skipping while `AiModeMachine.Mode == AiMode.Stunned`.
+
+⚠ **The item's own "at factor 0.15" was wrong, and the confirm-the-trace step is what caught it.**
+Decompiling `FUN_0048c220` directly (0x0048c317's containing function) shows the AI branch is
+`fVar4 = ai_groundblow * groundblow_mag` (0.5 × 10 = **5.0** authored), further multiplied by ×0.15
+**only** while the clock is inside `obj+0xB4`, a 2.5 s settling window written solely on the
+carrier-drop spawn path (`FUN_00452450`). `PlaneStats.cs`'s own comment already had this right
+("cut to 0.15 for 2.5 s after a drop") before this item touched it; the plan's Goal/Evidence and the
+"What the data ships" table both mis-stated the settling-window multiplier as the base factor.
+`docs/org/flightModel.md`'s "Ground blow" section is corrected to state the multiplier as "×0.15",
+not "cut to 0.15", which read as a final value.
+
+⚠ **First written up here as "unreachable" — that was wrong too, caught only when the user asked.**
+A zeppelin's fighter-drop launch (`AiGeneratorRuntime` → `AiAircraftSpawner.Spawn`, the F20 mechanism
+the `zeppelin-launch` suite exercises) drops a freshly-spawned AI aircraft, yawed and given a launch
+velocity, onto the exact same `UsesAiForcePath` plant this law reads — this engine's own carrier
+drop, reachable in a normal Instant Action zeppelin run. The settling window is real and un-modelled,
+not moot: nothing in this port tracks a per-aircraft spawn timestamp, so a just-dropped fighter's
+ground blow runs at the full un-cut 5.0 for its first 2.5 s instead of the original's reduced 0.75.
+Recorded as a gap in `backlog.md` `BL-095`, not implemented here — C23 scoped to the response law,
+and closing this needs new state (a spawn-time field) threaded through `AiAircraftSpawner`/
+`FlightController`, closest in kind to `BL-172`'s own `obj+0xAC` timer.
+
+**The probe gap was the real blocker, not named in the item's Approach.** "Reuse the probe...
+unchanged; only the response differs" undersold the work: `ProbeGroundBlow`'s pre-existing
+`IsHumanPiloted`-only gate meant an AI aircraft's `FlightInput.GroundBlowNormal` was always the zero
+vector, so a correctly-written AI response law would have been dead code without also widening that
+gate. Fixed by keying the gate on `UsesAiForcePath` for a non-human pilot instead of `IsHumanPiloted`
+alone; an AI aircraft flipped back to the player path by `--no-ai-plant` stays unprobed, a
+pre-existing gap (ground blow was player-only when `BL-359` landed, before this plan started) this
+item does not close, since the switch is temporary and F52 owns retiring it.
+
+**dt: normalised, by construction rather than by choice.** `GroundBlowTerm` still carries no dt on
+either path — the single `BodyRates += cmd * dt` the caller already applies once, uniformly, to
+every torque term (stick, bank coupling, weathervane, both ground-blow laws) is what makes the term
+linear in dt, exactly as it already does for the player law `BL-359` landed. There is no second,
+AI-specific dt multiply to add or omit: the original's own "not multiplied by dt anywhere" describes
+a per-object accumulator this codebase's shared per-frame integration step does not reproduce
+bit-for-bit regardless of this item, so normalising was not a new decision C23 introduced — it falls
+out of reusing the existing accumulator/integration split BL-359 already built.
+
+**Two gates recorded as NOT modelled, both traced to addresses.** The AI branch's mode check
+(`param_1[0xd6] != 4`, `0x0048c220`'s own first line) IS ported — `ProbeGroundBlow` skips while
+stunned, so a stunned AI still flies into terrain as the trap required. Not ported: the per-object
+`obj+0xAC` collision-grace gate (non-player objects only, `(float)param_1[0x2b] <= DAT_0071c470`),
+because nothing in this engine tracks that timer yet — it is `BL-172`/C25's object (the same timer
+gates collision response), not a new one to invent here.
+
+**No re-pins.** `.\RunTests.ps1` baseline taken first (METHOD-10): units 1301 → 1305 (four new
+`GroundBlowTests`, all this item's), engine 59 → 59, goldens 14 hash-identical both times. The
+AI-flying suites (`ai-modes`, `ai-gunnery`, `air-to-air`, `ai-net-follow`, `zeppelin-motion`) pass
+unmoved, none of them flying an AI aircraft close enough to terrain to trip ground blow — consistent
+with C22's finding that these suites assert behaviours, not pinned trajectory numbers, and with the
+plan's own note that the 11 pinned goldens carry no AI aircraft. The item's Verify step ("an AI
+aircraft flown at terrain... visibly repels") is unit-tested (`TheAiLawIsAFixedPushNotACommandProportionalOne`,
+`TheAiLawIsNeverSuppressedByCommandingIntoTheSurface`, `TheAiFalloffIsLinearInProximityRatherThanQuadratic`,
+`TheAiVelocitySteerNeverSuppresses`) against the decompiled formula rather than by an interactive
+flight, matching how `BL-359`'s player law was verified; an at-the-controls A/B is F52's job once C
+and E have both landed.
 
 **Goal.** AI aircraft get the original's AI ground blow: a fixed push independent of the AI's own
-command, linear in proximity rather than quadratic, at factor 0.15.
+command, linear in proximity rather than quadratic, at the authored factor **5.0**
+(`ai_groundblow · groundblow_mag`), corrected from this item's own "0.15" during implementation.
 
-**Evidence (confidence: traced).** flightModel.md:1339, `0x0048c317`, describing the AI path as "a
-different law, not a scaled one", with both the factor and `S` cut to 0.15, and `ai_groundblow`
-authored at 0.5 against the 0.9 fallback (flightModel.md:1128). `BL-359` landed the player ground
-blow on 2026-08-15 and closed noting the AI law is unbuilt and different.
+**Evidence (confidence: traced; corrected during implementation, see the landing note above).**
+flightModel.md's "Ground blow" section, `0x0048c317`/`FUN_0048c220`, decompiled directly rather than
+taken from the prose summary. `BL-359` landed the player ground blow on 2026-08-15 and closed noting
+the AI law is unbuilt and different.
 
-**Approach.** Branch inside the existing ground-blow implementation on C21's flag. Reuse the probe
-and its falloff unchanged; only the response differs.
+**Approach.** Branched inside `FlightModel.GroundBlowTerm` on `UsesAiForcePath`. Reused the probe
+math (proximity, escape axis) unchanged; the response differs, and `FlightController.ProbeGroundBlow`
+needed its own gate widened to actually feed an AI aircraft the probe at all (not anticipated by the
+item's own Approach text).
 
-**Model recommendation.** medium. A single well-bounded branch against a fully traced decode, in
-code that landed this month.
+**Model recommendation.** medium (as stated). A single well-bounded branch against a fully traced
+decode, though the probe-gate fix and the factor correction both needed the decompiler rather than
+the prose summary alone.
 
-**Verify.** An AI aircraft flown at terrain in `--stage=empty` and in a chapter world visibly repels
-without the player law's command-proportional term. Re-pin whatever in `air-to-air` moves.
+**Verify.** `.\RunTests.ps1` fully green, no re-pins — see the landing note. `GroundBlowTests` pins
+both laws against the decompiled formula.
 
-**⚠ Traps.** flightModel.md:1346 records that the AI law is **not** multiplied by `dt` anywhere, so
-it is frame-rate dependent in the original. At our fixed 60 Hz sim that is a choice: reproduce it
-literally, or normalise it and say so. Decide when the code is in front of you, and record which,
-because a silent `dt` insertion is exactly the kind of quiet correction that makes a later
-comparison against footage unfalsifiable. A stunned AI has its ground blow suppressed
-(flightModel.md:1369) and flies into terrain deliberately; do not "fix" that.
+**⚠ Traps.** flightModel.md:1346 records that the AI law is **not** multiplied by `dt` anywhere in
+the original, so it is frame-rate dependent there; this port normalises it, matching `BL-359`'s
+already-landed player law rather than introducing a new choice (see the landing note). A stunned AI
+has its ground blow suppressed (flightModel.md:1369) and flies into terrain deliberately — reproduced
+via `ProbeGroundBlow`'s stun gate, not "fixed".
 
 ## C24 ☐ `BL-330`'s authority ramp and the reverse-authority factor
 

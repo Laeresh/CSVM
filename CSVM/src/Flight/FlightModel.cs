@@ -56,7 +56,7 @@ public struct FlightInput
 /// the three *Tune rates, which are pinned to measurements of the original
 /// decoded from cockpit-gauge video and must not be retuned by feel.
 /// An instance flies one of the original's TWO force paths, fixed at construction — see
-/// <see cref="UsesAiForcePath"/> for the three places the AI one diverges.
+/// <see cref="UsesAiForcePath"/> for the four places the AI one diverges.
 /// </summary>
 public sealed class FlightModel
 {
@@ -380,12 +380,13 @@ public sealed class FlightModel
     /// <para>⚠ Immutable by construction. A plant that could change path mid-flight would make a
     /// golden shot or a suite run unreproducible, since the trajectory would depend on WHEN the
     /// switch happened rather than on the inputs.</para>
-    /// <para>Three divergences hang off it today, all in <see cref="Step"/> and each carrying its
-    /// own live address (C22): the airflow blend is skipped so the wind always comes straight down
-    /// the nose, the weathervane torque is not summed in, and the post-integration velocity carries
-    /// the <see cref="AiNoseSpeedFloor"/>. There is no density branch — A1 disproved it, the
-    /// atmosphere call is shared and unbranched, so both paths fly the dense band. C23 adds the
-    /// ground blow.</para></summary>
+    /// <para>Four divergences hang off it today, all in <see cref="Step"/> and each carrying its
+    /// own live address: the airflow blend is skipped so the wind always comes straight down
+    /// the nose, the weathervane torque is not summed in, the post-integration velocity carries
+    /// the <see cref="AiNoseSpeedFloor"/> (all C22), and <see cref="GroundBlowTerm"/> applies a
+    /// fixed, command-independent push instead of the player's command-proportional one (C23).
+    /// There is no density branch — A1 disproved it, the atmosphere call is shared and unbranched,
+    /// so both paths fly the dense band.</para></summary>
     public bool UsesAiForcePath { get; }
 
     /// <summary>Airspeed as a fraction of fd_speed — the single stall-proximity scale both stall
@@ -855,29 +856,49 @@ public sealed class FlightModel
         return vFps * MetresPerFoot;
     }
 
-    /// <summary>Ground blow: the original's bias of the player's control response away from
-    /// anything large the nose is closing on (docs/org/flightModel.md's "Ground blow"). The probe
-    /// itself belongs to the caller, which has the world; this is the law it feeds.
+    /// <summary>Ground blow: the original's bias of aircraft control response away from anything
+    /// large the nose is closing on (docs/org/flightModel.md's "Ground blow"). The probe itself
+    /// belongs to the caller, which has the world; this is the law it feeds. Two DIFFERENT laws
+    /// share the same probe and falloff, branching on <see cref="UsesAiForcePath"/> exactly as
+    /// <c>FUN_0048c220</c> does (<c>0x0048c30f</c> player, <c>0x0048c317</c> AI).
     /// <para>With <c>n</c> the hit normal, <c>b</c> the backward body axis, <c>d</c> the distance to
     /// the hit and <c>c = dot(b, n)</c>: the surface must face back at the aircraft (<c>c &gt; 0</c>),
     /// proximity is <c>S = sqrt(c)·(elev − d)/elev</c> (1 at contact, 0 at the ray's end), and the
-    /// escape axis is <c>V = normalize(n × b)·S</c>. The command's own component along <c>V</c> is
-    /// then amplified when it points away from the surface and cut when it points into it, so this
-    /// is a bias on the STICK, never a force and never a rate of its own.</para>
-    /// <para>⚠ It returns a torque to add to the command accumulator, NOT to BodyRates, and carries
-    /// no dt: the caller's <c>cmd * dt</c> is what makes it linear in dt, as the original's is. A dt
-    /// applied here as well would make the whole effect vanish at a small step.</para>
+    /// escape axis is <c>V = normalize(n × b)·S</c>. On the PLAYER path the command's own component
+    /// along <c>V</c> is then amplified when it points away from the surface and cut when it points
+    /// into it, so it is a bias on the STICK. On the AI path it is a fixed push, independent of the
+    /// AI's own command and linear in <c>S</c> rather than quadratic (<c>V</c> already carries one
+    /// factor of <c>S</c>; the player law gets its second one from dotting into the command, which
+    /// the AI law never does) — <c>accum += V · (ai_groundblow · groundblow_mag)</c>. Neither is
+    /// ever a force or a rate of its own; both return a torque to add to the command accumulator.</para>
+    /// <para>⚠ <c>ai_groundblow · groundblow_mag</c> is the AI factor, not <c>ai_groundblow</c> alone
+    /// (5.0 authored, not 0.15 — decompiled 2026-08-15). The compiled AI branch cuts BOTH this
+    /// factor and the velocity-steer's <c>S</c> to ×0.15 only while the per-object clock sits inside
+    /// <c>obj+0xB4</c>, a 2.5 s settling window written on the carrier-drop spawn path
+    /// (<c>FUN_00452450</c>) alone. ⚠ That window IS reachable here — a zeppelin's fighter-drop
+    /// launch (<c>AiGeneratorRuntime</c> → <c>AiAircraftSpawner.Spawn</c>) is this engine's carrier
+    /// drop, and it lands a freshly-spawned AI aircraft on this same <c>UsesAiForcePath</c> plant —
+    /// but nothing here tracks a per-aircraft spawn timestamp, so the cut is NOT modelled: a
+    /// just-dropped fighter gets the full un-cut 5.0 rather than the original's 0.75 for its first
+    /// 2.5 s. Recorded as a known gap (`backlog.md` `BL-095`), not implemented by this method.</para>
+    /// <para>⚠ It carries no dt on either path: the caller's <c>cmd * dt</c> is what makes it linear
+    /// in dt, as the original's is. A dt applied here as well would make the whole effect vanish at
+    /// a small step.</para>
     /// <para>⚠ The escape axis is built from a WORLD normal and is converted to the body frame here,
     /// once, before both the dot and the return. Skipping that gives a term that is right
     /// wings-level and wrong at every other attitude.</para>
-    /// <para>⚠ A dead-on approach must get nothing: as <c>n → b</c> the cross product collapses and
-    /// the term goes to zero. That is the original's "never saves a head-on collision", so the
-    /// degenerate case is returned as zero rather than special-cased or renormalised.</para></summary>
+    /// <para>⚠ A dead-on approach must get nothing on EITHER path: as <c>n → b</c> the cross product
+    /// collapses and the term goes to zero. That is the original's "never saves a head-on
+    /// collision", so the degenerate case is returned as zero rather than special-cased or
+    /// renormalised.</para></summary>
     /// <param name="cmd">This step's command accumulator, with the stick, the bank coupling and the
-    /// weathervane already summed in — the original reads exactly that.</param>
+    /// weathervane already summed in — the original reads exactly that. Read only on the player
+    /// path; the AI law does not consult it.</param>
     /// <param name="velocitySteerRate">The second, smaller effect: the rate in 1/s at which the
-    /// velocity direction is steered onto the nose, zero while the pilot commands into the
-    /// obstacle (the original zeroes its proximity on that branch, which suppresses this).</param>
+    /// velocity direction is steered onto the nose. On the player path it is zero while the pilot
+    /// commands into the obstacle (the original zeroes its proximity on that branch, which
+    /// suppresses this); the AI path never suppresses it, matching "independent of the AI's own
+    /// command".</param>
     private Vector3 GroundBlowTerm(in FlightInput input, Vector3 cmd, out float velocitySteerRate)
     {
         velocitySteerRate = 0f;
@@ -895,10 +916,19 @@ public sealed class FlightModel
         var axis = n.Cross(b);
         if (axis.LengthSquared() < 1e-12f)
             return Vector3.Zero;
-        // ONE scaled axis, built once and used TWICE — once in the dot, once in the add. That is
-        // where the second power of proximity comes from, and building it once is what stops it
-        // from silently becoming a third.
+        // ONE scaled axis, built once and used TWICE on the player path — once in the dot, once in
+        // the add — which is where the second power of proximity comes from. The AI path uses it
+        // only once, so it stays linear in S.
         var v = Attitude.Transposed() * (axis.Normalized() * proximity);
+
+        if (UsesAiForcePath)
+        {
+            // AI law (0x0048c317): a fixed push, independent of the AI's own command, never
+            // suppressed by command direction — unlike the player law below.
+            velocitySteerRate = GroundBlowVelocitySteer * proximity;
+            return v * (Stats.AiGroundBlow * Stats.GroundBlowMag);
+        }
+
         float p = cmd.Dot(v);
         velocitySteerRate = p < 0f ? 0f : GroundBlowVelocitySteer * proximity;
         // Both branches push along +v, away from the surface: commanding away is amplified by

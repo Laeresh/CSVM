@@ -1451,8 +1451,14 @@ accum += V · (ai_groundblow · groundblow_mag)           = A · S · 5.0 as aut
 
 It is independent of the AI's own command (a fixed push, where the player's is proportional to what
 the pilot asked for), **linear** in proximity rather than quadratic, and **not multiplied by `dt`**
-anywhere in the chain, so it is frame-rate dependent. Both the factor and `S` are cut to **0.15**
-while the clock is inside `obj+0xB4` (below).
+anywhere in the chain, so it is frame-rate dependent. Both the factor and `S` are cut by a further
+**×0.15** (5.0 → 0.75, not down TO 0.15 — confirmed by decompile, C23) while the clock is inside
+`obj+0xB4` (below), a 2.5 s post-carrier-drop settling window (`FUN_00452450`'s spawn path only).
+⚠ **This window IS reachable in the remake.** A zeppelin's fighter-drop launch
+(`AiGeneratorRuntime` → `AiAircraftSpawner.Spawn`, the "Zeppelins" section below) is this engine's
+carrier drop, and a freshly-dropped fighter flies the same `UsesAiForcePath` plant this law reads.
+The port tracks no per-aircraft spawn timestamp, so the ×0.15 cut is an unmodelled gap
+(`backlog.md` `BL-095`), not an unreachable one: a just-dropped fighter gets the full un-cut 5.0.
 
 **Gates on the whole effect.** `obj[0xd6] != 4`; for non-player objects the clock must be past
 `obj+0xAC`; and `FUN_0048c470` skips the call entirely when the player is flagged crashed
@@ -1524,16 +1530,29 @@ naming of zeppelins describes the outcome, not a mechanism.
 the AI path nothing is filtered and every hit the sweep returns repels, other aircraft in ordinary
 flight included.
 
-**Implemented 2026-08-15** (`BL-359`, closed; `git log --grep=BL-359`), player path only.
-`FlightController.ProbeGroundBlow` casts the ray and `FlightModel.GroundBlowTerm` applies the law,
-added to the command accumulator after the bank coupling and the weathervane and before
-`BodyRates += cmd * dt`, which is this function's own ordering. Two things the port does differently
-on purpose: the emitter filter is the probe's `CollisionLayers.World` mask rather than a registry
-lookup (only aircraft bodies carry the Aircraft layer, so terrain, scenery and the zeppelin repel
-and aeroplanes do not, which is the same set the filter above produces), and the second effect is
-folded into the model's existing nose-chase as `align + 2·S` — exact rather than approximate, since
-two exponential steers toward the same target compose. `CSVM.Tests`' `GroundBlowTests` pins the law,
-including the `S²` power and the body-frame conversion. **The AI law is not built.**
+**Implemented 2026-08-15** (`BL-359` player path; `C23` AI path; `git log --grep=BL-359`,
+`git log --grep=C23`). `FlightController.ProbeGroundBlow` casts the ray — the SAME cast and falloff
+for both paths — and `FlightModel.GroundBlowTerm` branches the response on `UsesAiForcePath`, added
+to the command accumulator after the bank coupling and the weathervane and before
+`BodyRates += cmd * dt`, which is this function's own ordering. Things the port does differently on
+purpose: the emitter filter is the probe's `CollisionLayers.World` mask rather than a registry lookup
+(only aircraft bodies carry the Aircraft layer, so terrain, scenery and the zeppelin repel and
+aeroplanes do not, which is the same set the filter above produces for both paths — this engine has
+no scripted-path vehicle carrying the original's vehicle-filter mark, so there is nothing for the
+AI's "unfiltered" sweep to disagree with), and the second effect is folded into the model's existing
+nose-chase as `align + 2·S` (player) or `align + 2·S` un-suppressed (AI) — exact rather than
+approximate, since two exponential steers toward the same target compose. `CSVM.Tests`'
+`GroundBlowTests` pins both laws, including the player's `S²` power against the AI's linear `S`, the
+AI's independence from command sign, and the body-frame conversion.
+⚠ **`ai_groundblow` alone is not the AI factor.** `FlightModel.GroundBlowTerm`'s response is
+`ai_groundblow · groundblow_mag` (5.0 authored), matching the correction above; the AI probe is
+additionally gated on `AiModeMachine.Mode != AiMode.Stunned` (`0x0048c317`'s own mode check,
+flightModel.md above), reproducing "a stunned AI flies into terrain". Two gates are NOT modelled,
+both recorded as gaps (`backlog.md` `BL-095`) rather than as moot: the 2.5 s post-carrier-drop ×0.15
+cut — reachable here (a zeppelin fighter-drop launch is this engine's carrier drop, see "Zeppelins"
+above), just not tracked, since nothing carries a per-aircraft spawn timestamp — and the per-object
+`obj+0xAC` collision-grace gate (non-player objects only), which is `BL-172`/C25's object (the same
+timer family), not C23's.
 
 ## Collision response and `bounce_factor` (`FUN_0048d7f0`)
 
