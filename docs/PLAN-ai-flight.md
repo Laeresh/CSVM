@@ -71,7 +71,7 @@ what a mission tells it to do.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | ~~C22~~, ~~C23~~, ~~C24~~, ~~C25~~, C26 | Addresses and line cites are in `docs/org/flightModel.md`. Confirm the trace, then implement. ⚠ C25 landed the formulas as decoded but had to correct the PROSE around them: confirm a summary sentence against the formula it cites before building on it |
+| **Traced to an exact mechanism in code, with the data that proves it** | ~~C22~~, ~~C23~~, ~~C24~~, ~~C25~~, ~~C26~~ | Addresses and line cites are in `docs/org/flightModel.md`. Confirm the trace, then implement. ⚠ C25 landed the formulas as decoded but had to correct the PROSE around them, and C26 found its Evidence's slot list right but its consumers unstated: confirm a summary sentence against the formula it cites before building on it |
 | **Traced statically, never verified at runtime** | ~~A1, A2~~ | Both landed 2026-08-15, and both readings were wrong: there is no AI density band and no AI throttle setpoint. Read their landing notes before citing flightModel.md's older AI-path claims, several of which are debug-copy citations |
 | **Leads only, no mechanism yet** | D31, E41 | The AI control law has never been located. Budget for investigation; this may end in a documented dead end |
 
@@ -91,7 +91,7 @@ decoding the **player** path and set aside for M4's AI work. None of it is imple
 | AI does not get weathervane centring — **C22: landed** | flightModel.md:791 | `0x48cd3e` |
 | Forward-velocity floor of 4.4704 m/s (10 mph), player exempt — **C22: landed** | flightModel.md:137 | `0x48e925` |
 | AI ground blow is a fixed push, linear in proximity, not `dt`-scaled, factor 5.0 (0.15 is a further post-carrier-drop cut, not the base factor — corrected landing C23; reachable via a zeppelin fighter-drop but unmodelled) | flightModel.md:1339 | `0x0048c317` |
-| Per-AI random jitter of **eleven** dynamics slots at spawn, not two — **C26**, split out of C22 | flightModel.md:1004 | inside `FUN_00476250` |
+| Per-AI random jitter of **eleven** dynamics slots at spawn, not two — **C26: landed.** The gate is name ≠ `player` + not a network game + `mode` class 0/1, which exempts the `w*` wingman family; seven slots have a field here and the other four (`rates`/`turns`) are inert on the aeroplane arm | flightModel.md, "The per-spawn jitter" | inside `FUN_00476250` |
 | The bank-coupling block is inlined a second time on the AI path behind a byte flag | flightModel.md:585 | `0x48cc61`–`0x48ccf4` |
 | Control authority ramp, shared, 0 at `turn_fade_in` = 10 mph — **C24: landed** | flightModel.md, "The low-speed ramp" | `FUN_0048bdd0` |
 | ~~Reverse-authority factor, consumed by `FUN_0048c470`~~ **C24: not a force term.** `FUN_0048c470` only passes it out; its one consumer is the visible rudder angle in `FUN_0048e580` | flightModel.md, "Control authority vs speed" | `FUN_0048bdd0` → `FUN_0048e580` `0x48ec0b` |
@@ -145,7 +145,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 23. ☑ C23 The AI ground blow, a different law
 24. ☑ C24 `BL-330`'s authority ramp and the reverse-authority factor (ramp landed unbranched; the factor is not a force term — its one consumer is the visible rudder)
 25. ☑ C25 `BL-172`'s `bounce_factor` restitution, player-only as decoded (landed; the lever-arm partition reads the opposite way round to this plan's Evidence, corrected in `org/flightModel.md`)
-26. ☐ C26 The per-AI spawn jitter of eleven dynamics slots (split out of C22)
+26. ☑ C26 The per-AI spawn jitter of eleven dynamics slots (landed; the gate is on, seven of the eleven have a field here, and the four that do not are inert on the original's own aeroplane arm)
 
 ### Wave D — Decode the control law
 
@@ -728,7 +728,38 @@ out and traced as sources: multiple contacts per frame, successive-frame stackin
 ground-support path, and gravity ordering. Do not read the vertical-versus-flat split as a
 per-surface coefficient; it is a lever-arm partition, and the code has no surface dependence at all.
 
-## C26 ☐ The per-AI spawn jitter of eleven dynamics slots
+## C26 ☑ The per-AI spawn jitter of eleven dynamics slots
+
+**Landed 2026-08-15.** `FUN_00440ad0` is the **network-game flag** (it returns the first dword of
+the `"Network"` subsystem object looked up at `0x44023d`), so the jitter is ON in the mode we
+simulate and the item lands code rather than a finding. `PlaneStats.WithAiSpawnJitter` applies it at
+`AiAircraftSpawner.Spawn`, to a COPY of the session's shared per-airframe stats, drawn off
+`Rng.Spawn` keyed by spawn ordinal (a pure function of the master seed, so a `--det` replay
+reproduces it and no other subsystem's sequence moves).
+
+Seven of the eleven slots have a field in this engine: the whole-vehicle health and armour maxima,
+`fd_speed`, `ThrustFactor`, `drag_factor`, `pitch_torque`, `roll_torque`. The remaining four are
+vehicle.json's `rates` and `turns` pairs (def `+0xe8`/`+0xec`, `+0xf8`/`+0xfc` → runtime
+`+0x680`…`+0x68c`), the **surface-driving integrator's** acceleration and steering rates with their
+clamps: `basic_airplane` authors them so every aircraft carries them, but they are read only by the
+class-2/3/5 arms (`FUN_0048f7d0`/`FUN_0048f720`, reached from `FUN_0048a880`/`FUN_0048b480`) and by
+the class-1 autogyro arm; the aeroplane arm `FUN_0048e580` copies `+0x684` into `+0x178` and never
+reads it back. They are inert on an aeroplane in the original too, so nothing is missing here.
+
+Two things the item's Evidence did not have. The vehicle class the gate tests is the def's **`mode`
+key**, and the parser's own string table settles the enum: `jet` = 0, `heli` = 1, `tank` = 2,
+`ship` = 3, `wingman` = 4, `plane` = 5 — which closes a "not determined" line in
+`org/flightModel.md`. And that gate (classes 0 and 1) **exempts the shipped `w*` wingman family**,
+class 4, even though the dispatch flies it down the aeroplane arm. That exemption has no analogue
+here and is a recorded divergence: this engine flies every aircraft off a player def, all of which
+resolve `mode jet`, so an Instant Action wingman is jittered where the original's own wingman is
+not.
+
+The named trap does not bite: `veh_weight` and `ref_area` are **not** among the eleven, so
+`FlightModel.StallSpeed` cannot go stale behind the jitter. The whole-vehicle damage pair is scaled
+and the per-part pools are not, which is what the original does; since no player def authors a whole
+pair, the port writes the resolved sum-over-parts out explicitly so `PlaneDamage` cannot re-derive
+the unscaled hull. Original text below unchanged.
 
 **Goal.** Decide whether the original's per-non-player spawn jitter of the dynamics block belongs in
 this engine, and if so land it without breaking determinism. Split out of C22, which found it is not

@@ -115,11 +115,15 @@ middle tier skipping the block entirely. Enemy vehicles are therefore on **0.875
 their authored pools. Current is re-seeded from max afterwards.
 
 **4. The per-spawn jitter, aircraft only.** At the end of `FUN_00476250`, a vehicle whose name is
-not `player`, in single player, and whose dynamics mode is 0 (airplane) or 1 (autogyro), gets each
+not `player`, in single player, and whose `mode` is `jet` (0) or `heli` (1), gets each
 of armour max and health max multiplied by a uniform random factor in `[0.95, 1.05]`, current
 re-seeded from max, and the same treatment applied to nine other def-derived numbers. **Ships (mode
-3) and ground vehicles (mode 2) are excluded**, so no patrol boat or truck is ever jittered and no
-player plane is either.
+3), ground vehicles (mode 2) and the `w*` wingman family (mode `wingman`, 4) are excluded**, so no
+patrol boat, truck or shipped wingman is ever jittered and no player plane is either. The full
+eleven-slot list, the gates and the class table are decoded in
+[`flightModel.md`](flightModel.md)'s "The per-spawn jitter"; the whole-vehicle pair here is slots 1
+and 2 of it, and **the per-part pools are not touched**. Implemented as
+`PlaneStats.WithAiSpawnJitter`, applied at `AiAircraftSpawner.Spawn` (PLAN-ai-flight C26).
 
 ## Taking a hit
 

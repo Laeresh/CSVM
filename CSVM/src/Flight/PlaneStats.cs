@@ -63,6 +63,10 @@ public sealed class TurretMount
 /// </summary>
 public sealed class PlaneStats
 {
+    /// <summary>The per-spawn jitter's half-width (<see cref="WithAiSpawnJitter"/>): the original's
+    /// own immediate, an independent uniform ±5 % per slot.</summary>
+    public const float AiSpawnJitterSpread = 0.05f;
+
     public string DefName = "";          // vehicle.json def, e.g. "pbloodhawk"
     public string NodeName = "";         // GameZ node, e.g. "player_bhawk"
 
@@ -518,5 +522,57 @@ public sealed class PlaneStats
             }
         }
         return stats;
+    }
+
+    /// <summary>The original's per-spawn dynamics jitter, applied to a non-human-piloted aircraft
+    /// (docs/org/flightModel.md "The per-spawn jitter"; the block at the tail of
+    /// <c>FUN_00476250</c>, <c>0x477340</c>–<c>0x4773f0</c>). Eleven runtime slots are each drawn
+    /// independently and multiplied in place by <c>(2r − 1) · 0.05 + 1</c>, a uniform 1 ± 5 %.
+    /// Returns a jittered COPY: the caller's object is the session's shared per-airframe cache and
+    /// two aircraft off the same airframe must not share a spread.
+    ///
+    /// <para>Seven of the eleven have a field here, in the original's own draw order: the
+    /// whole-vehicle health and armour maxima (<c>+0x2cc</c>/<c>+0x2c4</c>, each mirrored into its
+    /// "current" slot), then <c>fd_speed</c>, <c>ThrustFactor</c> (<see cref="EnginePower"/>),
+    /// <c>drag_factor</c>, <c>pitch_torque</c> and <c>roll_torque</c>. The other four are
+    /// vehicle.json's <c>rates</c> and <c>turns</c> pairs (def <c>+0xe8</c>/<c>+0xec</c> and
+    /// <c>+0xf8</c>/<c>+0xfc</c> → runtime <c>+0x680</c>…<c>+0x68c</c>), the surface-driving
+    /// integrator's acceleration and steering rates with their clamps: <c>basic_airplane</c> authors
+    /// them (10/42 and 4.6/6.5) and so an aeroplane carries them, but the aeroplane arm of the
+    /// original's own class dispatch never reads them, so there is nothing here for them to move.</para>
+    ///
+    /// <para>⚠ The whole-vehicle pair is what the original scales, NOT the per-part pools — a jittered
+    /// aircraft's zones stay at their authored maxima and only the hull pool moves. Where the def
+    /// chain authors no pair (every player airframe, which is what this engine's AI fly too) the
+    /// resolved sum over parts is written out explicitly, so <see cref="PlaneDamage"/> sees the
+    /// scaled hull rather than re-deriving the unscaled one.</para>
+    ///
+    /// <para>⚠ <c>veh_weight</c> and <c>ref_area</c> are NOT among the eleven, which is why
+    /// <c>FlightModel.StallSpeed</c> (computed once from that pair) cannot go stale behind this —
+    /// construct the plant from the jittered stats anyway, since <c>fd_speed</c> is.</para></summary>
+    public PlaneStats WithAiSpawnJitter(Random rng)
+    {
+        // Shallow: DestroyableParts / TurretMounts / VehicleInjureAnims are read-only after Load and
+        // nothing below touches them, so the copy shares them with the cached original on purpose.
+        var jittered = (PlaneStats)MemberwiseClone();
+        jittered.VehicleHealth = (VehicleHealth ?? SumParts(static p => p.MaxHp)) * Factor(rng);
+        jittered.VehicleArmor = (VehicleArmor ?? SumParts(static p => p.MaxArmor)) * Factor(rng);
+        jittered.FdSpeed *= Factor(rng);
+        jittered.EnginePower *= Factor(rng);
+        jittered.DragFactor *= Factor(rng);
+        jittered.PitchTorque *= Factor(rng);
+        jittered.RollTorque *= Factor(rng);
+        return jittered;
+    }
+
+    private static float Factor(Random rng) =>
+        (float)((rng.NextDouble() * 2.0 - 1.0) * AiSpawnJitterSpread + 1.0);
+
+    private float SumParts(Func<DestroyablePart, float> of)
+    {
+        float total = 0f;
+        foreach (var part in DestroyableParts)
+            total += of(part);
+        return total;
     }
 }

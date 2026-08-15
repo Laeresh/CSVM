@@ -2561,6 +2561,11 @@ records (name, max HP, max armor, `critical`/`engine` flags, `got_hit_anim`, per
 ⚠ `DamagedEngineGain`'s two source floats (0.0, 1.0 for every plane — one shared `basic_airplane`
   entry) are undecoded; read here as a fade window over accumulated damage fraction, a TUNE
   candidate not a confirmed mechanic — see `FlightAudio.cs`.
+⚠ `WithAiSpawnJitter` (C26) is the original's per-spawn ±5 % spread of eleven runtime slots, seven
+  of which have a field here. It returns a COPY because the session shares one `PlaneStats` per
+  airframe, and it writes the whole-vehicle damage pair out explicitly (the parts' sum, scaled) so
+  `PlaneDamage` cannot re-derive the unscaled hull. `veh_weight`/`ref_area` are deliberately not in
+  it — see the method's own note before adding a slot.
 
 ## src/Flight/SpawnPoints.cs
 Reads the flight spawn from a mission's OWN zrdr (`extracted/<chapter>/<mission>/zrdr/` — a
@@ -5162,6 +5167,11 @@ outside every player index and `IncomingFire.ShooterId`. The crash runtime it bu
 too, so the split is readable off the `CRASH … def=` line headlessly.
 ⚠ Liveries draw from the session paint stream AFTER every player (players draw at build, AI at
   spawn) — player paint is unchanged by AI existing; keep that ordering.
+⚠ Every spawn flies a JITTERED COPY of the session's shared per-airframe `PlaneStats`
+  (`WithAiSpawnJitter`, C26): the original's per-spawn ±5 % spread, drawn off `Rng.Spawn` keyed by
+  spawn ORDINAL rather than off the shared stream, so a `--det` replay reproduces it and it shifts
+  no other subsystem's sequence. Read the gate and the divergences on that method before touching
+  either — the cache must come out unperturbed, and a human rig never sees this path.
 ⚠ The spawned subtree is deliberately NOT indexed into the world runtime's `NameResolver` (same
   as a player's plane): planes.zbd gamez indices collide with the chapter's by-index map — the
   `NameResolveFallback` case. A later item making AI aircraft addressable by mission animations

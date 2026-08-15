@@ -243,6 +243,12 @@ public static class Suites
             "identical trajectory gets the position correction and nothing else (the original's " +
             "player-only impulse gate), and the same impulse on a vertical face is entirely " +
             "horizontal — one coefficient, no surface test anywhere in it", GrazeBounce));
+        into.Add(new TestHarness.Suite("ai-spawn-jitter",
+            "the decoded per-spawn dynamics spread (C26) through the real spawner: two AI aircraft " +
+            "off ONE airframe cache, given the same pose and the same orders, fly measurably apart " +
+            "but by a few percent rather than as different aeroplanes; the same spawn ordinal drawn " +
+            "again replays the same line (the --det property); and the shared per-airframe stats " +
+            "every later spawn and every human rig reads come out unperturbed", AiSpawnJitter));
         into.Add(new TestHarness.Suite("ai-actor",
             "the M4 AI actor seam: an AI-piloted plane (AiPilot input, IsHumanPiloted false, no " +
             "camera/HUD/devices) spawned into an already-running sim flies its orders, takes a " +
@@ -2741,6 +2747,95 @@ public static class Suites
         {
             rig?.Free();
             surface?.Free();
+            textures.Dispose();
+        }
+    }
+
+    /// <summary>The per-spawn jitter (C26) where only a real spawn can show it: through
+    /// <see cref="AiAircraftSpawner"/>, over the session's shared per-airframe stats cache, read out
+    /// as flown trajectory rather than as a field. Two aircraft off one airframe, given the same
+    /// pose and the same orders, must fly apart; the same ordinal drawn again must fly the same
+    /// line; and the cache they were all built from must come out untouched, since every later
+    /// spawn and every human rig reads it.</summary>
+    private static void AiSpawnJitter(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        FlightController? flying = null;
+        ProjectilePool? pool = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            var spec = SessionSpec.Parse(System.Array.Empty<string>());
+            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            // The one cache the real session holds: every aircraft below is built from THIS object.
+            var shared = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+            var inputs = new FlightRigAssembler.Inputs
+            {
+                PlanesGamez = planesGamez,
+                StatsFor = _ => shared,
+                RigCount = 0,
+                PaintRng = new RandomNumberGenerator(),
+                ZrdrPath = ctx.ZrdrPath,
+                StockLoadouts = StockLoadouts.Load(),
+                WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                Textures = textures,
+                Projectiles = live,
+                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            };
+
+            // One aircraft's flown displacement over a fixed window, straight and level on orders it
+            // never has to correct — so what separates two runs is the plant, not the pilot. Freed
+            // at the end of its own run: every run flies the SAME pose, and two aeroplanes in the
+            // same cubic metre would be measuring their collision instead.
+            var start = new Vector3(0f, 500f, 0f);
+            Vector3 Fly(AiAircraftSpawner spawner)
+            {
+                var pilot = AiPilot.HoldingCourse(start, start + Vector3.Forward);
+                var ai = spawner.Spawn(ctx.PlaneName, start, start + Vector3.Forward, pilot);
+                flying = ai;
+                for (int i = 0; i < 240; i++)
+                    ai.SimStep(1f / 60f);
+                var flown = ai.WorldPosition - start;
+                flying = null;
+                ai.Free();
+                return flown;
+            }
+
+            // Two ordinals off one spawner: two aeroplanes, same pose, same orders.
+            var spawner1 = new AiAircraftSpawner(spec, liveries, null!, ctx.Host, inputs);
+            var first = Fly(spawner1);
+            var second = Fly(spawner1);
+
+            // A fresh spawner restarts at ordinal 0, and the draw is keyed by ordinal — so this is
+            // the same aircraft as `first`, which is what a --det replay reproduces.
+            var spawner2 = new AiAircraftSpawner(spec, liveries, null!, ctx.Host, inputs);
+            var replay = Fly(spawner2);
+
+            float spread = (first - second).Length();
+            ctx.Check(spread > 1f,
+                $"two aircraft off one airframe fly apart on identical orders: {spread:0.00} m over 4 s ({first.Length():0.0} m against {second.Length():0.0} m)");
+            ctx.Check(spread < 0.25f * first.Length(),
+                $"…by a 5 % spread, not a different aeroplane: {spread / first.Length() * 100f:0.0} % of the distance flown");
+            ctx.Check(first.IsEqualApprox(replay),
+                $"the same spawn ordinal replays the same line: {(first - replay).Length():0.000} m apart");
+            ctx.Check(Mathf.IsEqualApprox(shared.FdSpeed, PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName).FdSpeed)
+                && Mathf.IsEqualApprox(shared.EnginePower, PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName).EnginePower),
+                $"the session's shared airframe stats came out unperturbed fd_speed={shared.FdSpeed:0.###} thrust={shared.EnginePower:0.###}");
+            ctx.Note($"jitter spread: {first.Length():0.0} / {second.Length():0.0} m flown in 4 s, {spread:0.00} m apart");
+        }
+        finally
+        {
+            flying?.Free();
+            pool?.Free();
             textures.Dispose();
         }
     }

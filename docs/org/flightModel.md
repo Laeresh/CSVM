@@ -1144,8 +1144,7 @@ into 0x18-byte records, searched by id at `0x449140` and by name at `0x449160` �
 `fstp [def+0x128]` at `0x47ad01`. Record `+0x14` is the third JSON column and defaults to `1.0`
 (`0x4490a4`), i.e. **`power`**. The hangar's engine-swap path does the same thing directly to the
 live object: `fld [rec+0x14]; fstp [player+0x66c]` at `0x43e97b`. Nothing else ever writes the
-slot except an AI spread — `FUN_00477280` jitters both `fd_speed` and `ThrustFactor` by a small
-random `1 ± ε` for non-player aircraft.
+slot except the per-spawn AI spread below, which multiplies it by a random `1 ± 5 %`.
 
 **4 — no thrust key exists in the data.** The vehicle parser's token table
 (`0x627f94`–`0x628020`) contains eleven `dynamics` tokens: `pitch_torque`, `roll_torque`,
@@ -1246,6 +1245,76 @@ toward commanded, snapping exactly onto it when the step crosses). Cutting from 
 **decoded, unimplemented**, and the one mechanism that could contaminate the first seconds of any
 throttle-step measurement taken from footage (it is far too fast to explain the CAP-05 deficit,
 whose implied residual lever would have to persist for ~28 s).
+
+## The per-spawn jitter — eleven slots, non-player aircraft only (IMPLEMENTED, C26)
+
+At the tail of the spawn/reset function `FUN_00476250` (`0x477340`–`0x4773f0`) sits a block that
+gives every non-player aircraft its own slightly-different airframe. It runs only when all three
+of these hold:
+
+- the object's own name (`obj+0xc`) is not `"player"` — a 7-byte compare at `0x477326`;
+- `FUN_00440ad0()` returns 0. That function is `return *DAT_0064f750`, the first dword of the
+  **`"Network"` subsystem object** looked up at `0x44023d` and stored at `0x440247`
+  (`docs/org/aim-assist.md` names the same flag) — i.e. **not a network game**;
+- the vehicle class `obj+0x67c` is **0 or 1**. That field is the def's `mode` key, resolved by the
+  parser's own string table at `0x47afc0`–`0x47b081` (`0x62808c` onward): **`jet` = 0, `heli` = 1,
+  `tank` = 2, `ship` = 3, `wingman` = 4, `plane` = 5**, and it is copied to the runtime object at
+  `0x475abf` from def `+0xa4`. So the jitter reaches aeroplanes and autogyros and skips ships,
+  ground vehicles — and **the shipped `w*` wingman family**, which authors `mode wingman` (class 4)
+  and so flies unjittered even though the dispatch flies it down the same aeroplane arm as class 0.
+  Everything else in the shipped file inherits `basic_airplane`'s `jet`; only `basic_airplane`,
+  `patrolboat`, `t_truck` and the eleven `w*`/`wingman`/`bswingman` defs author `mode` at all.
+
+Then, for each of **eleven** runtime slots in this order, it draws `rand()` and multiplies the slot
+in place by `((2r − 1) · 0.05 + 1)` where `r = rand() · 3.051851e-05` (`1/32768`): an independent
+uniform **1 ± 5 %** per slot, eleven separate draws.
+
+| # | Runtime | Def | What it is |
+|---|---|---|---|
+| 1 | `+0x2cc` → mirrored to `+0x2d0` | — | whole-vehicle health max (and its "current" mirror) |
+| 2 | `+0x2c4` → mirrored to `+0x2c8` | — | whole-vehicle armour max (and its "current" mirror) |
+| 3 | `+0x668` | `+0x124` | `fd_speed` |
+| 4 | `+0x66c` | `+0x128` | `ThrustFactor` (the stock engine's `power`) |
+| 5 | `+0x670` | `+0x12c` | `drag_factor` |
+| 6 | `+0x648` | `+0x104` | `pitch_torque` |
+| 7 | `+0x644` | `+0x100` | `roll_torque` |
+| 8 | `+0x680` | `+0xe8` | `rates[0]` |
+| 9 | `+0x684` | `+0xec` | `rates[1]` |
+| 10 | `+0x688` | `+0xf8` | `turns[0]` |
+| 11 | `+0x68c` | `+0xfc` | `turns[1]` |
+
+⚠ **`veh_weight` (`+0x674`) and `ref_area` (`+0x678`) are NOT in the list**, which is why nothing
+computed once from that pair (stall speed) can go stale behind the jitter.
+
+⚠ **The per-part damage pools are not touched either** — only the whole-vehicle pair is, and it is
+the pair the kill test reads (`docs/org/vehicleDamage.md`).
+
+**Slots 8–11 are inert on an aeroplane.** `rates` and `turns` are the surface-driving integrator's
+acceleration and steering rates with their clamps: `FUN_0048f7d0` accelerates toward the throttle
+input at `rates[0]` and clamps to `+0x178` (seeded from `rates[1]`), `FUN_0048f720` does the same
+for steering at `turns[0]` against `+0x17c`. Both are reached only from the class-2 (`FUN_0048a880`)
+and class-3/5 (`FUN_0048b480`) arms of the class dispatch `FUN_00489ea0`, plus the class-1 autogyro
+arm `FUN_0048ffe0` which reads `+0x680`/`+0x684`/`+0x688` directly. The aeroplane arm
+`FUN_0048e580` only copies `+0x684` into `+0x178` at `0x48e8bc` and never reads it back. The keys
+are nonetheless authored on `basic_airplane` (`rates` 10/42, `turns` 4.6/6.5) and so every aircraft
+carries them; the shipped data authors them on exactly three defs — `basic_airplane`, `patrolboat`
+and `t_truck`.
+
+**In the remake:** `PlaneStats.WithAiSpawnJitter` (C26), applied at `AiAircraftSpawner.Spawn` to a
+COPY of the session's shared per-airframe stats. The name test becomes `IsHumanPiloted` (C21's
+recorded divergence, since this engine flies up to four humans); the network gate holds trivially
+(no network play) and the class gate holds by construction (every airframe it can fly is class 0).
+Seven of the eleven have a field to move; slots 8–11 have no consumer here, exactly as they have
+none on the original's aeroplane arm. The draw is keyed by the aircraft's spawn ordinal off
+`Rng.Spawn`, not taken from a shared stream, so a `--det` replay reproduces it and it cannot shift
+any other subsystem's sequence.
+
+⚠ **The class-4 wingman exemption has no analogue here and is a recorded divergence.** This engine
+flies every aircraft, hostile or wingman, off a *player* def (`PlaneStats.Load` requires
+`player_airplane` in the `kind_of` chain), and every one of those resolves `mode jet` — so the class
+gate holds trivially and an Instant Action wingman is jittered where the original's own `w*`
+wingman would not be. Selecting on team instead would be inventing a mapping the data does not
+carry.
 
 ## The measurement harness — a validation route
 
@@ -1889,6 +1958,9 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
   per-object timers; the AI mode enum; the live-versus-debug integrator split. World units are
   metres, identified positively from `nom_gravity`'s 9.82 reference divisor rather than from the
   absence of a conversion.
+- **Read directly from the executable, 2026-08-15:** the per-spawn jitter's full eleven-slot list,
+  its three gates and the `mode`→`obj+0x67c` class table (`jet`/`heli`/`tank`/`ship`/`wingman`/
+  `plane` = 0/1/2/3/4/5), which also settles what was recorded below as an undetermined data token.
 - **Not determined:** which registry entities keep the `+0xcc` emitter flag set permanently, so the
-  GDD's naming of zeppelins as ground-blow emitters is neither confirmed nor refuted; the data-file
-  token naming each `obj+0x67c` vehicle class; which axes the reverse-authority factor reaches.
+  GDD's naming of zeppelins as ground-blow emitters is neither confirmed nor refuted; which axes the
+  reverse-authority factor reaches.

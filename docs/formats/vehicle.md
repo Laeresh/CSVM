@@ -433,3 +433,16 @@ range). The boat and truck add surface-vehicle motion keys (`platform`, `collisi
 `a_damping`). Paint keys (`paint_pattern`, `paint_colorN`, `paint_decalN`) set the AI
 liveries — see [paint.md](paint.md). A few airframe oddballs round out the set: `fuel`,
 `is_autogyro`, `rudder_tol`, `pilot`, `flight_ceiling`, `title`.
+
+**`mode` is the vehicle class**, and the parser maps it to a small enum the whole object update
+dispatches on: **`jet` = 0, `heli` = 1, `tank` = 2, `ship` = 3, `wingman` = 4, `plane` = 5**
+(`0x47afc0`–`0x47b081`; classes 0 and 4 fly the aeroplane path, 1 the autogyro path, 2 the ground
+path, 3/5 the ship path). Only `basic_airplane` (`jet`), `patrolboat`/`t_truck` (`ship`) and the
+eleven `w*`/`wingman`/`bswingman` defs (`wingman`) author it; everything else inherits `jet`.
+The class is what gates the per-spawn ±5 % jitter of eleven runtime slots — `fd_speed`,
+`ThrustFactor`, `drag_factor`, `pitch_torque`, `roll_torque`, the two `rates` and two `turns`
+values, and the whole-vehicle armour/health maxima — which runs on classes 0 and 1 only, for
+vehicles not named `player`, outside a network game (docs/org/flightModel.md, "The per-spawn
+jitter"; implemented C26). `rates` and `turns` are the surface-driving integrator's acceleration
+and steering rates with their clamps: `basic_airplane` authors them (10/42 and 4.6/6.5) and every
+aircraft therefore carries them, but the aeroplane arm never reads them.
