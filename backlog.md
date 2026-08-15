@@ -17,12 +17,14 @@ counter lives in `.git/item-id-counters.json` (shared by every worktree, outside
 control) and the script increments it under an exclusive file lock, so two concurrent sessions
 cannot be handed the same number.
 
-**Structure.** Items are grouped into eleven theme sections, in this fixed order: Damage &
+**Structure.** Items are grouped into twelve theme sections, in this fixed order: Damage &
 destruction · Weapons & combat · Flight model & collision physics · Environment & world · Effects
-& animation runtime · Audio · Cameras & views · HUD & UI · Missions, modes & campaign · Tooling,
-platform & docs · Misc. Within a theme, items sort by ascending ID. A straddler goes to the theme
+& animation runtime · Audio · Cameras & views · HUD & UI · Splitscreen · Missions, modes &
+campaign · Tooling, platform & docs · Misc. Within a theme, items sort by ascending ID. A straddler goes to the theme
 whose system you would open to fix it; Misc is the escape hatch for items with no such system —
-if it grows past a handful, that is a missing theme, not a working bucket.
+if it grows past a handful, that is a missing theme, not a working bucket. Splitscreen is the one
+cross-cutting exception: an item whose subject is the single-viewer/single-player assumption goes
+there, even though the fix opens another theme's system.
 
 Every item is one flat bullet:
 
@@ -1611,29 +1613,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Effects & animation runtime
 
-- `BL-339` `[Bug]` **In splitscreen only player 1 sees the rocket smoke trails — the puffer distance
-  fade is evaluated against P1's camera and the alpha is written into the shared sprite.** Reported
-  at the controls 2026-08-10 alongside `BL-340`; both are instances of `BL-338`'s class.
-  **Mechanism, exactly:** `WeatherRig.Tick` publishes ONE camera pose per frame —
-  `_ambience.SetCamera(rigs[0].Camera…)`, with a comment saying "Player 1's camera, not one per
-  pane" — and `Puffer` reads `_ambience.CameraPosition`/`CameraForward` to compute
-  `DistanceAlpha` per particle (C7), then writes that alpha into the one `MultiMesh` instance every
-  pane draws. A trail 50 m from P2 but far behind P1 is drawn with P1's alpha, in P2's pane too.
-  ⚠ **The near band is a hard CULL, not a dim, which is why the symptom reads as "invisible" rather
-  than "faint".** The unauthored `NEAR_FADE` default is `(0, 0)` — a cull at view-space depth 0 — so
-  every particle BEHIND player 1's camera is dropped outright for everyone. A second player flying
-  behind P1 sees no trail at all, however close they are to it. That also predicts the sharpest
-  repro: two players, P2 astern of P1, P2 fires a rocket.
-  ⚠ **Fidelity is genuinely ambiguous here and must be decided before coding.** The fade is decoded
-  verbatim from the original ([`docs/org/puffer.md`](docs/org/puffer.md)) — but the original has one
-  view, so "the camera" is not a choice it ever made. Per-pane alpha means per-pane sprite
-  instances (N× the emitter's `MultiMesh` cost); a nearest-viewer rule, as the tracer floor took, is
-  one instance and never culls a particle someone can see up close. Neither is "what the original
-  does", because the question does not arise there. Pick one, write down why.
-  ⚠ Do not "fix" this by disabling the fade: `puffer-distance-fade` pins the decoded bands against
-  C3's own `spew_puffer`/`volcanosmoke`, and the near cull is what stops a camera flying through an
-  emitter from filling the screen.
-
 - `BL-335` `[Fidelity]` **Our puffer blend verdict reads the sprite's darkness; the original reads a
   flag in the texture's own header.** Reported at the controls 2026-08-10 (the refuel-tank flames),
   traced the same day and **fully decoded 2026-08-13**. The decode is
@@ -2295,39 +2274,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Cameras & views
 
-- `BL-338` `[Bug]` **plan-sized — the single-viewer assumption is a CLASS, not three bugs. Sweep
-  every draw rule that measures against "the camera" and make it per-pane.** The original is a
-  single-view engine, so every screen-space rule it authors — LOD bands, distance fades, the
-  frame-buffer wash — has exactly one camera to mean. We inherited those rules and, in several
-  places, one camera: **player 1's**. In splitscreen the rule is then evaluated for P1 and the
-  RESULT is baked into world-space geometry or shared state that every pane draws, so the other
-  panes get P1's answer to their own question. Three instances are known, and the pattern is what
-  makes a fourth likely:
-  - **The tracer pixel floor** — FIXED 2026-08-10 (`ProjectilePool.Viewers` /
-    `ScreenSize.NearestFloor`). Symptom at the controls: P1's tracers looked right, everyone else's
-    were much larger. A round 1000 m from P1 but 100 m from P2 was floored for P1 and came out ~10×
-    oversized in P2's pane. Worked example and the arithmetic:
-    [`docs/org/tracers.md`](docs/org/tracers.md), and `TracerScreenSizeTests` pins the rule.
-  - **The puffer distance fade** — `BL-339`, open.
-  - **The `FBFX_COLOR_FROM_TO` screen wash** — `BL-340`, open. (Not a camera rule at all, which is
-    why it belongs in the same sweep: it is the same *shape* — one piece of state the original could
-    only have one of, painted into N views.)
-  **The sweep is the work.** Every consumer of a camera pose or viewport that feeds a DRAWN result:
-  the LOD bands, `Puffer.DistanceAlpha`, the cloud whiteout, the lens flare's sun wash, fog-zone
-  selection, `SelectionService`'s pick, any `GetViewport()` in a draw path. For each: does it decide
-  something per-pane, and if so is it reading one camera? The answer will not always be "make it
-  per-pane" — a shared `MultiMesh` instance genuinely cannot hold two sizes at once, which is why
-  the tracer fix took the *nearest* viewer rather than per-pane geometry — so each site needs its
-  own verdict: per-pane state, a nearest/union rule, or documented as fine.
-  ⚠ **Not every one-camera decision is a bug.** The mission wind is stepped ONCE per frame outside
-  the rig loop deliberately (`WeatherRig.Tick`, B6) — the original has one wind for the world, and
-  stepping it per rig would make a splitscreen gust walk twice as fast. Sim state stays global; it
-  is *draw* rules that owe each pane its own answer. Keep that line or the sweep will break physics
-  to fix pixels.
-  ⚠ **Cost of a per-pane rule is real.** Anything that becomes per-pane geometry multiplies its
-  instance count by the pane count. Prefer a nearest/union rule where the visual difference does not
-  justify N copies, and say which was chosen and why at each site.
-
 - `BL-080` `[Feature]` **Future cockpit view** would consume a mix of already-parsed and still-raw data: `pcdpN`
   cockpit damage panels and the `*_damage_green/yellow/red` indicator anims are already parsed
   (PlaneStats parses them, DamageVisuals skips them). `cockpit_engine_sound` (`*_cp` WAVs, e.g.
@@ -2592,34 +2538,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
-- `BL-340` `[Bug]` **A rocket hit washes EVERY player's pane, not the pane of the player who was
-  hit.** Reported at the controls 2026-08-10 alongside `BL-339`; both are instances of `BL-338`'s
-  class. `ScreenFlash` builds one overlay per rendered view (`Build(hudParents)` — correct, and it
-  is why the gutters and the empty 3P quadrant stay out of the wash) but holds **one ramp state**
-  for the whole session: `_from`/`_to`/`_runTime`/`_elapsed`/`_running` are single fields and `Play`
-  paints them into every pane's `ColorRect`. So any `FBFX_COLOR_FROM_TO` — a close HE, AP or flak
-  burst — whites out all four players when one of them is near the blast.
-  **Why it is built that way, and what actually needs deciding.** The class doc is explicit: the
-  original keeps a single frame-buffer-effect object (`crimson.exe` 0x9c8a98) whose colour and alpha
-  the handler overwrites, so a second burst mid-wash REPLACES the first rather than compositing.
-  That replace-not-composite rule is decoded and should survive. What does not carry over is the
-  *scope*: the original is single-view, so it never had to say whose picture washes. Splitting the
-  state per pane keeps the decoded rule (each pane still replaces its own running ramp) and answers
-  the question the original never asked.
-  *Fix shape:* per-pane ramp state (the fields become one struct per view), plus a **player index on
-  the play call** so the burst reaches the right pane(s). The routing is the substance, not the
-  state split: the event is authored by an effect def played at a world point, so "who was hit" has
-  to be derived where the burst is dispatched — `ProjectilePool`'s blast/impact path knows the
-  aircraft and the distance, `AnimRuntime` firing the `FBFX` event does not.
-  ⚠ **Distance, not just the victim.** The authored wash is a proximity effect, not a damage
-  receipt: a rocket detonating near a bystander should presumably wash the bystander too. Deciding
-  "the hit player only" vs "every player within the burst's own radius" is a design call — the
-  second is closer to what the effect is for, and the first is what was reported. Settle it before
-  wiring, and note that only the second needs a distance term at all.
-  ⚠ `fbfx-flash` pins the six-step wash's authored run times through `ScreenFlash.Current`, a single
-  session-wide readout. Splitting the state per pane changes that suite's seam — extend it to assert
-  the right pane rather than deleting the timing check it already guards.
-
 - `BL-113` `[Tuning]` `[Owed-playtest]` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).
 
@@ -2658,6 +2576,224 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   key cycles hostile aircraft; the non-aircraft key walks the zeppelin and turrets; each pane
   tracks its own pick. Depends on H22's target-tracking plumbing; `docs/controls.md` gains the
   bindings when it lands.
+
+## Splitscreen
+
+Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
+against "the player" or "the camera" needs an explicit splitscreen verdict: generalise it, take a
+nearest/union rule, or record it as deliberately single/global. This theme collects that work
+(sweep of 2026-08-15). **Route fixes through the two existing seams instead of minting new ones:**
+`GameSession.PlayerPositions` (nearest human) for gameplay rules that say "the player", and the
+viewer set behind `ProjectilePool.Viewers` / `ScreenSize.NearestFloor` for draw rules that say
+"the camera". Sim state stays global (`BL-338`'s ⚠). Splitscreen-scoped items that live with
+their own system: `BL-231` (per-player pool term), `BL-296` (per-player ActionMap), `BL-299`
+(MP spawn maps), `BL-301` (Dogfight tuning), `BL-314` (race countdown), `BL-351` (per-pane target
+cycling), `BL-358` (board stacking).
+
+- `BL-126` `[Tuning]` `[Owed-playtest]` **Splitscreen** — the `HudMetrics` sqrt pane damping, `MixGain`, `SpawnAbreast`, join/lock
+  feel, tag-gutter widths.
+
+- `BL-338` `[Bug]` **plan-sized — the single-viewer assumption is a CLASS, not three bugs. Sweep
+  every draw rule that measures against "the camera" and make it per-pane.** The original is a
+  single-view engine, so every screen-space rule it authors — LOD bands, distance fades, the
+  frame-buffer wash — has exactly one camera to mean. We inherited those rules and, in several
+  places, one camera: **player 1's**. In splitscreen the rule is then evaluated for P1 and the
+  RESULT is baked into world-space geometry or shared state that every pane draws, so the other
+  panes get P1's answer to their own question. Three instances are known, and the pattern is what
+  makes a fourth likely:
+  - **The tracer pixel floor** — FIXED 2026-08-10 (`ProjectilePool.Viewers` /
+    `ScreenSize.NearestFloor`). Symptom at the controls: P1's tracers looked right, everyone else's
+    were much larger. A round 1000 m from P1 but 100 m from P2 was floored for P1 and came out ~10×
+    oversized in P2's pane. Worked example and the arithmetic:
+    [`docs/org/tracers.md`](docs/org/tracers.md), and `TracerScreenSizeTests` pins the rule.
+  - **The puffer distance fade** — `BL-339`, open.
+  - **The `FBFX_COLOR_FROM_TO` screen wash** — `BL-340`, open. (Not a camera rule at all, which is
+    why it belongs in the same sweep: it is the same *shape* — one piece of state the original could
+    only have one of, painted into N views.)
+  **The sweep is the work.** Every consumer of a camera pose or viewport that feeds a DRAWN result:
+  the LOD bands, `Puffer.DistanceAlpha`, the cloud whiteout, the lens flare's sun wash, fog-zone
+  selection, `SelectionService`'s pick, any `GetViewport()` in a draw path. For each: does it decide
+  something per-pane, and if so is it reading one camera? The answer will not always be "make it
+  per-pane" — a shared `MultiMesh` instance genuinely cannot hold two sizes at once, which is why
+  the tracer fix took the *nearest* viewer rather than per-pane geometry — so each site needs its
+  own verdict: per-pane state, a nearest/union rule, or documented as fine.
+  ⚠ **Not every one-camera decision is a bug.** The mission wind is stepped ONCE per frame outside
+  the rig loop deliberately (`WeatherRig.Tick`, B6) — the original has one wind for the world, and
+  stepping it per rig would make a splitscreen gust walk twice as fast. Sim state stays global; it
+  is *draw* rules that owe each pane its own answer. Keep that line or the sweep will break physics
+  to fix pixels.
+  ⚠ **Cost of a per-pane rule is real.** Anything that becomes per-pane geometry multiplies its
+  instance count by the pane count. Prefer a nearest/union rule where the visual difference does not
+  justify N copies, and say which was chosen and why at each site.
+  *Cross-refs:* the 2026-08-15 sweep landed its findings as sibling items in this theme
+  (`BL-365`, `BL-366`, `BL-376` are further instances of this class); fog-zone selection and the
+  remaining unaudited sites stay inside this sweep. The sweep also confirmed the world billboards
+  are NOT an instance: every billboard orients in the shader (`INV_VIEW_MATRIX` /
+  `CAMERA_POSITION_WORLD`, per-view built-ins), so orientation is already correct per pane.
+
+- `BL-339` `[Bug]` **In splitscreen only player 1 sees the rocket smoke trails — the puffer distance
+  fade is evaluated against P1's camera and the alpha is written into the shared sprite.** Reported
+  at the controls 2026-08-10 alongside `BL-340`; both are instances of `BL-338`'s class.
+  **Mechanism, exactly:** `WeatherRig.Tick` publishes ONE camera pose per frame —
+  `_ambience.SetCamera(rigs[0].Camera…)`, with a comment saying "Player 1's camera, not one per
+  pane" — and `Puffer` reads `_ambience.CameraPosition`/`CameraForward` to compute
+  `DistanceAlpha` per particle (C7), then writes that alpha into the one `MultiMesh` instance every
+  pane draws. A trail 50 m from P2 but far behind P1 is drawn with P1's alpha, in P2's pane too.
+  Confirmed at the controls 2026-08-15: shooting at P1 from behind, the trail streaks appear only
+  as the rocket passes P1.
+  ⚠ **The near band is a hard CULL, not a dim, which is why the symptom reads as "invisible" rather
+  than "faint".** The unauthored `NEAR_FADE` default is `(0, 0)` — a cull at view-space depth 0 — so
+  every particle BEHIND player 1's camera is dropped outright for everyone. A second player flying
+  behind P1 sees no trail at all, however close they are to it. That also predicts the sharpest
+  repro: two players, P2 astern of P1, P2 fires a rocket.
+  ⚠ **Fidelity is genuinely ambiguous here and must be decided before coding.** The fade is decoded
+  verbatim from the original ([`docs/org/puffer.md`](docs/org/puffer.md)) — but the original has one
+  view, so "the camera" is not a choice it ever made. Per-pane alpha means per-pane sprite
+  instances (N× the emitter's `MultiMesh` cost); a nearest-viewer rule, as the tracer floor took, is
+  one instance and never culls a particle someone can see up close. Neither is "what the original
+  does", because the question does not arise there. Pick one, write down why.
+  ⚠ Do not "fix" this by disabling the fade: `puffer-distance-fade` pins the decoded bands against
+  C3's own `spew_puffer`/`volcanosmoke`, and the near cull is what stops a camera flying through an
+  emitter from filling the screen.
+
+- `BL-340` `[Bug]` **A rocket hit washes EVERY player's pane, not the pane of the player who was
+  hit.** Reported at the controls 2026-08-10 alongside `BL-339`; both are instances of `BL-338`'s
+  class. `ScreenFlash` builds one overlay per rendered view (`Build(hudParents)` — correct, and it
+  is why the gutters and the empty 3P quadrant stay out of the wash) but holds **one ramp state**
+  for the whole session: `_from`/`_to`/`_runTime`/`_elapsed`/`_running` are single fields and `Play`
+  paints them into every pane's `ColorRect`. So any `FBFX_COLOR_FROM_TO` — a close HE, AP or flak
+  burst — whites out all four players when one of them is near the blast.
+  **Why it is built that way, and what actually needs deciding.** The class doc is explicit: the
+  original keeps a single frame-buffer-effect object (`crimson.exe` 0x9c8a98) whose colour and alpha
+  the handler overwrites, so a second burst mid-wash REPLACES the first rather than compositing.
+  That replace-not-composite rule is decoded and should survive. What does not carry over is the
+  *scope*: the original is single-view, so it never had to say whose picture washes. Splitting the
+  state per pane keeps the decoded rule (each pane still replaces its own running ramp) and answers
+  the question the original never asked.
+  *Fix shape:* per-pane ramp state (the fields become one struct per view), plus a **player index on
+  the play call** so the burst reaches the right pane(s). The routing is the substance, not the
+  state split: the event is authored by an effect def played at a world point, so "who was hit" has
+  to be derived where the burst is dispatched — `ProjectilePool`'s blast/impact path knows the
+  aircraft and the distance, `AnimRuntime` firing the `FBFX` event does not.
+  ⚠ **Distance, not just the victim.** The authored wash is a proximity effect, not a damage
+  receipt: a rocket detonating near a bystander should presumably wash the bystander too. Deciding
+  "the hit player only" vs "every player within the burst's own radius" is a design call — the
+  second is closer to what the effect is for, and the first is what was reported. Settle it before
+  wiring, and note that only the second needs a distance term at all.
+  ⚠ `fbfx-flash` pins the six-step wash's authored run times through `ScreenFlash.Current`, a single
+  session-wide readout. Splitting the state per pane changes that suite's seam — extend it to assert
+  the right pane rather than deleting the timing check it already guards.
+
+- `BL-365` `[Bug]` **`PLAYER_RANGE` animation conditions measure from player 1's camera only, so
+  proximity-triggered world animations ignore players 2–4.** An authored set piece stays dormant
+  while P2 flies through its trigger range, and pops for P4 when P1 approaches something far away.
+  *Evidence:* `AnimRuntime.cs:3399` evaluates the condition via `PlayerPos()` (`:3632`), fed
+  `_rigs[0].Camera.GlobalPosition` by `GameSession.cs:863`; the sibling `EXECUTION_BY_RANGE` gate
+  was already converted to the nearest-human `PlayerPositions` seam (`AnimRuntime.cs:2025`,
+  `GameSession.cs:869`), this condition was not. The same rig-0 closure feeds `WorldEffectsFactory`
+  (`GameSession.cs:417`), so effect-runtime range checks inherit the bug.
+  *Fix shape:* route `PlayerRange` through `PlayerPositions` (nearest human). Run/don't-run is
+  shared world state visible in every pane, so nearest is the right rule, not per-pane evaluation.
+  *Cross-refs:* [`docs/org/sequences.md`](docs/org/sequences.md) (the original defines
+  `PLAYER_RANGE`, `PLAYER_UNDERCOVER` and the `0x200` angular condition against a singular player,
+  so each needs the same verdict when decoded); PLAN-M4-ai already names this singleton.
+
+- `BL-366` `[Bug]` **Animated world point lights are budgeted and distance-faded against player 1,
+  then uploaded as one global shader uniform, so a fire next to P4 casts no light if P1 is far
+  away.** *Evidence:* `AnimRuntime.cs:3211` calls `WorldLights.Commit(PlayerPos())`;
+  `WorldLights.cs:94-118` fades 900–1500 m against that single position, ranks `Significance` into
+  the 16-slot `csky_light_data`/`csky_light_count` globals, and every pane's shaders read the
+  result. *Fix shape:* fade and rank against the nearest rig (union over the pane cameras, via the
+  viewer-set seam). Cheap: the uniform stays global and `MaxActive` is rarely binding.
+
+- `BL-367` `[Bug]` **AI with `primary_target = "player"` locks onto the first human in scan order,
+  in practice always player 1, so a splitscreen Instant Action wave converges on P1 and the other
+  panes get an empty sky.** *Evidence:* `FlightController.cs:2300-2307` takes the first
+  `IsHumanPiloted` match in `_gunnerScan.Vehicles`; the ranked target score is computed but not
+  consulted on this branch (`:2330`). Set for every IA wingman (`GameSession.cs:2175`) and wave
+  enemy (`:2244`). *Fix shape:* resolve `"player"` to the nearest human (or run the humans through
+  the existing ranked score), re-evaluated on the normal retarget cadence so a wave spreads across
+  the players.
+
+- `BL-368` `[Research]` **Decision: the team model for plain splitscreen free flight — today every
+  human is hostile to every other human outside `--vs` and Instant Action.** *Evidence:*
+  `AimAssist.TeamOfPilot` defaults each pilot to their own team (`AimAssist.cs:317`);
+  `FlightController.Team` falls back to it (`FlightController.cs:507`); only IA overrides via
+  `AimAssist.PlayerTeam` (`FlightRigAssembler.cs:114`). In a plain `--players=2 --fly` session the
+  gun aim assist snaps onto your friend, world turrets acquire every human, and AI treats the
+  humans as separate enemies. Deliverable: decide whether plain splitscreen flight is co-op (one
+  human team) by default and how FFA is opted into (flag or menu), then wire the chosen default.
+
+- `BL-369` `[Research]` **Decision: pin the 3D audio listener model for splitscreen — nothing sets
+  a listener today, so who "hears" the world rests on a Godot default.** *Evidence:* no
+  `AudioListener3D` exists in the repo; `SplitScreen.cs:158` builds the SubViewports without
+  `AudioListenerEnable3D`; in splitscreen the main camera is not current either
+  (`GameSession.cs:2979`). `WorldSounds.cs:226` records "the listener is still player one only";
+  M2.5 decided "no positional audio" for the player one-shots; PLAN-M4-ai lists the listener as a
+  known player-one singleton. Deliverable: choose the model (single listener at P1, nearest-pane
+  listener per emitter, or per-pane listeners with a 1/√N mix) and set it explicitly, so the
+  behaviour stops being an accident of engine defaults. *Cross-refs:* `BL-370`/`BL-371` (one-shot
+  mixing), `BL-126` (`MixGain` tuning).
+
+- `BL-370` `[Bug]` **Projectile impact and explosion one-shots are non-positional, unattenuated and
+  skip `MixGain`, so four players firing gives four times the impact chatter, all at point-blank
+  volume.** *Evidence:* `Projectile.cs:2173-2190` plays through an 8-voice pool of plain
+  `AudioStreamPlayer`s at `def.Volume * 0.2f`, no distance term, no per-player gain; the pool
+  round-robins, so a 4-player firefight also cuts voices mid-sample. *Fix shape:* route through a
+  one-shot path that applies `MixGain` and a distance term against the nearest human, or make them
+  positional — which needs `BL-369` decided first. *Cross-refs:* `BL-369`.
+
+- `BL-371` `[Bug]` **`FlightAudio`'s crash, explosion and prop one-shots skip `MixGain` while the
+  loops apply it, so a splitscreen pile-up plays several full-volume explosions over an engine mix
+  tuned quieter.** *Evidence:* `OnCrash` (`FlightAudio.cs:261`), `OnGroundExplosion` (`:284`),
+  `OnWaterExplosion` (`:290`), `OnEngineStop` (`:330`) and `StartEngine` (`:406`) pass raw def
+  volume; `Update`, `OnGraze`, `OnWarningShot`, `PlayEmptyClip` and `StartGunLoop` all multiply by
+  `MixGain`. ⚠ M2.5 recorded "crash one-shots global" as a decision, so re-judge rather than
+  blanket-scale: your own pane's crash should arguably stay loud. *Cross-refs:* `BL-369`, `BL-126`.
+
+- `BL-372` `[Feature]` **Players 2–4 cannot change camera view or look behind: both controls are
+  keyboard-only and only player 1 has the keyboard.** *Evidence:* `CameraController.cs:139-167`
+  reads `_keyDown` for `BackActive`/`ActiveView`; `FlightController.KeyDown` requires
+  `UseKeyboard` (`FlightController.cs:2153`), granted only to player 1
+  (`FlightRigAssembler.cs:105`). The class comment notes the D-pad is taken by the weapon
+  selectors, so which pad control (if any) gets look-back and view select is a design decision,
+  not an oversight; `--view=` also pins the same view on every pane. Decide the binding first,
+  then wire it. *Cross-refs:* `BL-296` (the ActionMap is the natural seam for the new binding);
+  update `docs/controls.md` when it lands.
+
+- `BL-373` `[Feature]` **Pause does not exist in splitscreen: `AllowPause` is hard-coded to single
+  player, and Esc tears the whole session down.** *Evidence:* `FlightRigAssembler.cs:108`
+  (`AllowPause = _in.RigCount == 1`), consumed at `FlightController.cs:2165`; neither P nor any
+  pad's Start does anything with 2–4 players. ⚠ M2.5 explicitly decided "P debug pause stays
+  single-player-only", so this is a revisit, not a regression. Decision: any player's Start/P
+  pauses everyone (splitscreen pause is inherently global) and who may unpause. *Cross-refs:*
+  `BL-296`.
+
+- `BL-374` `[Bug]` **`Pads.AssignPads` hands out pads in raw roster order, abandoning the
+  phantom-device policy the menu follows, so a sleeping dongle can bind a player to a dead pad
+  slot.** *Evidence:* `Pads.cs:76-86` assigns `pads[i]` to player i; `Pads.cs:11-15` documents why
+  raw order is untrustworthy (the 8BitDo dongle enumerates twice while asleep, a Razer HID exposes
+  a joypad interface); `MenuInput` keeps the policy (`MenuInput.cs:27`). Assignment is also taken
+  once at session build, so a pad unplugged mid-flight stays dead for the session. *Fix shape:*
+  reuse the menu's claim/filter logic for flight assignment; mid-session reconnect handling is a
+  separate, smaller decision to note when this is picked up.
+
+- `BL-375` `[Bug]` **The Instant Action spectator camera reads raw keyboard and any-pad input, so
+  two downed pilots spectating at once steer one shared view in lockstep.** *Evidence:*
+  `SpectatorCamera.cs:128, 203, 324` uses `Input.IsKeyPressed` and any-pad reads with no
+  `PadDevices`/`UseKeyboard` split; the architecture.md entry records it. *Fix shape:* one
+  spectator instance per downed pilot bound to that pilot's devices, or route the existing one
+  through the per-player device filter.
+
+- `BL-376` `[Cleanup]` **The in-flight labs and debug overlays bind player 1 or the wrong viewport
+  in splitscreen.** *Evidence:* the F5 damage lab and the weapon lab take `_rigs[0]`
+  (`GameSession.cs:1901`, `:1926`); `NodeLabels` projects world labels through P1's camera onto a
+  whole-window layer (`GameSession.cs:2889`); `MarkerOverlay.Relayout` never runs at all in
+  splitscreen because `GetViewport().GetCamera3D()` resolves to the non-current main camera
+  (`MarkerOverlay.cs:243`); the F15 targeting overlay's text roll-call is whole-window
+  (`TargetingOverlay.cs:236`); the `--debug-anim` sound distance column reports range from P1
+  (`WorldSounds.cs:277`). Tool-only, so low priority. Per site: either bind the pane whose player
+  pressed the key, or document P1-only in [`docs/cli.md`](docs/cli.md).
 
 ## Missions, modes & campaign
 
@@ -2806,9 +2942,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Unlocked by the grid, noted here rather than promised:* race best-times become feasible once a
   race has a defined start (`StuntRace.cs`, `ScoreStore.GetBest`/`RecordIfBest`) — and would want
   their own key namespace, since a countdown makes race and solo totals diverge again.
-
-- `BL-126` `[Tuning]` `[Owed-playtest]` **Splitscreen** — the `HudMetrics` sqrt pane damping, `MixGain`, `SpawnAbreast`, join/lock
-  feel, tag-gutter widths.
 
 - `BL-299` `[Research]` **Decode `net.zrd.json` as the multiplayer spawn table → the retail MP1–MP3 maps for
   Dogfight.** 45 files, one flat group each, node counts quantised by mission type (MP1→80,
