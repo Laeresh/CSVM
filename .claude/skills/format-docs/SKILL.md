@@ -15,7 +15,7 @@ Read `PROJECT_CONTEXT.md`, `docs/formats/README.md`, and the target family befor
 
 ## Contract
 
-Read [the page contract](references/page-contract.md). Keep each existing `family.md` as its canonical landing page. Create an independent child topic under `family/`, never solely because of length; assess a page above 25–30 KB. Keep every child’s parent link and the root index nested link in sync.
+Read [the page contract](references/page-contract.md). Keep each existing `family.md` as its canonical landing page. Create an independent child topic under `family/`, never solely because of length; assess a page above 25-30 KB. Keep every childï¿½s parent link and the root index nested link in sync.
 
 Use the reader path where applicable: At a glance, conceptual model, reference, reader rules and edge cases, Evidence & limits. Preserve claims and local-capture citations. State what is true now; remove change-history narration and past-state comparisons. Retain dates only when they identify evidence needed to assess a claim. Put proof beside disputed claims and a compact evidence map at the end of a landing page.
 
