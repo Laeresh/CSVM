@@ -9,7 +9,7 @@ the player's customised plane.
 This is why a naively-rendered Bloodhawk comes out **desaturated blue-gray** while the original
 flies a **red** one: the remake draws the unpainted key texture.
 
-Decoded 2026-07-19 by inspecting extracted data + the user's reference screenshots
+Extracted data and the user's reference screenshots show
 (`OriginalScreenshots/CustomPlane Paint1 Bloodhawk.png` = the in-game paint UI,
 `OriginalScreenshots/Kestrel.png` = a painted plane in flight). **Implemented 2026-07-20** —
 see "Implementing this in the remake" at the bottom for what the remake actually does and
@@ -120,7 +120,7 @@ Evidence, on the Bloodhawk:
   white swoosh on the red Bloodhawk, the black-and-white wing striping on the red Kestrel.
 - Neutral (unsaturated) areas are unpainted structure — cowl metal, canopy frames, panel lines.
 
-### The palette is NOT organised into reserved ramps (corrected 2026-07-20)
+### The palette is not organised into reserved ramps
 
 An earlier reading of this page claimed the palette holds "contiguous index ramps, one per
 paint region", based on `blo_fin`'s indices **0–31** being a clean 32-step blue-gray ramp

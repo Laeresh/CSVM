@@ -8,12 +8,12 @@ the scrapbook. Two archives ship in `GOSDATA\ASSETS\`:
 | `crimson.rof` | ~57 MB | 846 files in 21 directories — the whole UI resource set |
 | `crimptch.rof` | 797 bytes | 1 file — a patch overlay that overrides the base archive at the same path |
 
-mech3ax does not handle `.rof`; it is unrelated to the ZBD family. Decoded 2026-07-20 with
+mech3ax does not handle `.rof`; it is unrelated to the ZBD family. This project decodes it with
 `crimptch.rof` as the Rosetta Stone — one file, one directory chain, small enough to read by
 hand. The reader it belongs to ships as `GOSDATA\ASSETS\BINARIES\roffile.dll`, which is where
 the format's name comes from.
 
-**Consumed by the remake since 2026-07-20**: `src/Mech3/PatternLibrary.cs` reads the `.BM`
+**Consumed by the remake**: `src/Mech3/PatternLibrary.cs` reads the `.BM`
 masks straight out of this extraction and `src/Mech3/PlanePainter.cs` composites them, which
 is how aircraft get their liveries (see [paint.md](paint.md)).
 
@@ -123,7 +123,7 @@ plus `BROADWAY` and `ITSTAXI`. Filenames are the aircraft skin names (`BLO_WING.
 The order was settled by comparing against the game's own textures of the same name in
 `texture.zbd`: **170 of 173 same-named skins match on `(width, height)` = `(second, first)`**.
 
-**Row order is BOTTOM-UP** (corrected 2026-07-20). Rows are stored last-to-first relative to
+**Row order is BOTTOM-UP.** Rows are stored last-to-first relative to
 the ZBD textures and to PNG, so a consumer must read source row `height-1-y` when writing row
 `y`. Rendering the masks without this mirrors every livery along the texture's V axis — found
 by the user in-game ("the stripes are on the wrong sides of the wings and tail", with the
