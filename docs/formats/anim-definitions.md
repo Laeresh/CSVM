@@ -1186,7 +1186,7 @@ are not visible from the byte format alone, each measured against this install.
   `max` labels are the mech3ax field names, not a range: `min` is the hard discard cutoff and `max`
   the distance alpha would reach 1, so almost every event in the install has `max < min`. The
   semantics live in [effects.md](effects.md).
-- **`growth_factors[i]` is `(age_i, scale_i)`, not `(min, max)`** — corrected 
+- **`growth_factors[i]` is `(age_i, scale_i)`, not `(min, max)`**
   (`PLAN-puffer-engine-deltas.md` item B3, which closed as a disproof). This bullet previously
   read the entry as a size *range* and cited a "matches 172 of 177 puffers" survey; **both
   statements are withdrawn** — the reading was wrong and the survey does not reproduce (see the
