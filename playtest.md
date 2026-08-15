@@ -382,27 +382,46 @@ you to put the file "next to the repo", where nothing would find it. Absolute pa
 
 - `PT-50` `[Own]` **D9's wingman flight (`docs/plans/PLAN-instant-action.md` D9, landed 2026-08-14).**
   Three Fury wingmen spawn on team 1 alongside the player's Bloodhawk, fanned 100/100/200 m off
-  its spawn heading at ±45°, escorting per the decoded `primary_target` chain (0/1 escort the
-  player directly; 2 escorts wingman 1). No original splitscreen/Instant Action reference exists
+  its spawn heading at ±45°, carrying the decoded `primary_target` chain (0/1 name the player;
+  2 names wingman 1). No original splitscreen/Instant Action reference exists
   for this — every call here is a judgement on our own remake, and this is not a thing a suite can
-  answer (the suite only proves the count/team/airframe/pure math). *Look for:*
+  answer (the suite only proves the count/team/airframe/pure math).
+  ⚠ **Partly SUPERSEDED by `worktree-ia-patrol-nets`; re-fly (b) on that branch.** Two changes reach
+  the wingmen there. `BL-364`: an Instant Action wingman is now given the chapter's first patrol
+  net, as the original does, instead of holding its spawn course forever. `BL-377`: in C1 that net
+  is anchored to the `player`, so it is carried around the player and the wingman patrols around
+  them. "Escorting per the `primary_target` chain" is therefore the wrong description of what you
+  will see, and it was the wrong description of the ORIGINAL too: a net demotes a `mode wingman`
+  airframe to `jet` at spawn (`FUN_00476250`), so in Instant Action that chain is a target
+  assignment only and no formation is ever flown. The chain itself is untouched by the branch,
+  still wired into `AiGunner.PrimaryTargetName` alone, and (a) and (c) below are untouched.
+  *Look for:*
   - (a) **does it read as a flight** — do the three Fury wingmen sit in a plausible formation
     around the Bloodhawk at spawn, or does the fan look wrong (too tight, too spread, overlapping,
     behind rather than beside);
   - (b) **do they actually fly** — watch a minute or two: do the wingmen hold a sensible course
     near the player rather than drifting off alone or diving into terrain (the D11 mode machine is
-    driving them, not a scripted formation, so some independent movement is expected and correct);
+    driving them, not a scripted formation, so some independent movement is expected and correct).
+    ⚠ On `worktree-ia-patrol-nets` this is a DIFFERENT question and worth re-flying: they now walk
+    a net that travels with you, so "near the player" is delivered by the graph rather than by
+    station-keeping. It is not a formation and must not be judged as one: the C1 net is a figure
+    eight about a kilometre across, so a wingman comes close, swings out, and comes back. Judge
+    whether that reads as a flight staying with you or as three planes wandering;
   - (c) **A2's decoded friendly fire** — shoot a wingman down. This is supposed to be possible
     (Decision 3/A2: the original applies friendly damage) — confirm it feels like a bug in the
     HUD/feedback (no distinguishing "friendly" cue) rather than in the mechanic itself, since no
     gate was added on purpose.
 
-  *Blocks:* (b) is now answered in the negative and filed as `BL-362` (no station-keeping exists,
-  and the `primary_target` escort chain is unreachable because same-team candidates are skipped
-  before it is tested), so fly (b) as a judgement on how badly it reads, not as an open question.
-  (a) and (c) stand: a fail on (a) is fresh evidence for the placeholder `AiPilot` law (Wave D/E's
-  own open scope, not this item's decode) or a new `BL` item; (c) reads confirm Decision 3/A2 rather
-  than opening anything.
+  *Blocks:* (b) was answered in the negative and filed as `BL-362`, on two grounds that have both
+  since been overturned: that no station-keeping exists, and that the `primary_target` chain is
+  unreachable because same-team candidates are skipped before it is tested. The chain is a
+  formation-leader reference on a NETLESS `mode wingman`, not a target assignment, so the
+  same-team skip never mattered (`BL-362`'s own decode, 2026-08-15); and Instant Action's half of
+  what `BL-362` wanted is delivered by `BL-377` instead. `BL-362` now owns the CAMPAIGN station
+  only. So fly (b) on the branch as a fresh judgement, not as a closed question.
+  (a) and (c) stand unchanged: a fail on (a) is fresh evidence for the placeholder `AiPilot` law
+  (Wave D/E's own open scope, not this item's decode) or a new `BL` item; (c) reads confirm
+  Decision 3/A2 rather than opening anything.
   *Variations:* `"num_wingmen": 5` with 1–2 `--players=` to see decision 8a's clamp in the spawn
   log; any other `mission_type` besides `dogfight_ace` (which forces wingmen to 0).
 

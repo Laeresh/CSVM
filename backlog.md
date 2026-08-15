@@ -3281,13 +3281,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   candidate before it tests `PrimaryTargetName` (`FlightController.cs:2253`), and a wingman sits on
   `AimAssist.PlayerTeam` exactly like the player it is pointed at. So the chain resolves to nothing,
   on every wingman, in every mission. Verify that before designing on top of it.
-  *What the decode says:* [`docs/formats/instant-action.md`](docs/formats/instant-action.md) "The
-  player and the wingmen" is explicit that a wingman gets no patrol net (`netids` keeps its `-1`)
-  and no skill vector. [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) on
+  *What the decode says:* [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) on
   `primary_target` says formation-looking behaviour in the original rides nets whose trailer names
-  `player`, and `primary_target`, "not this slot". A wingman has no net, so the trailer half cannot
-  be the mechanism, which leaves `primary_target` on a FRIENDLY doing something other than
-  target assignment. That is the thing to decode.
+  `player`, and `primary_target`, "not this slot". Both halves turn out to be real, and which one
+  applies depends on whether the wingman has a net.
+  ⚠ **This paragraph used to rest on "a wingman gets no patrol net (`netids` keeps its `-1`)",
+  quoted from `instant-action.md`. That was wrong and the page is corrected** (`BL-364`,
+  2026-08-15): an Instant Action wingman IS given the chapter's first net. So the sentence that
+  followed it here, "a wingman has no net, so the trailer half cannot be the mechanism", was wrong
+  twice over, and is struck: in C1 that first net is `[10, "player"]`, so the trailer half is
+  exactly the mechanism there (`BL-377`, landed).
   *Fix shape:* answer the decode question first, then a station-keeping input source in `AiPilot`
   dispatched from `AiModeMachine`. Do not invent a formation offset ahead of it: `WingmanSlotFor`'s
   fan is decoded as a SPAWN placement, and reusing it as a flying station is a guess wearing a
@@ -3313,10 +3316,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   netless wingmen are the campaign's `wingman_N` / `bswingman_N` roster blocks. Read off the code
   path, not observed at the controls of the original, so an IA capture would be worth having before
   building station-keeping for that mode.
+  ✔ **And Instant Action's half is now DELIVERED, by a different mechanism** (`BL-377`, landed
+  2026-08-15). An IA wingman takes the chapter's first net, and in C1 that net is anchored to the
+  `player`, so the whole graph is carried around the player and the wingman patrols around them
+  without any station-keeping at all. So "wingmen never form up on the player" is answered for
+  Instant Action by the original's own means; what remains here is the CAMPAIGN's netless
+  `mode wingman` station, whose offsets are decoded above and which nothing in `src/` yet flies.
+  ⚠ It is not a formation and should not be judged as one: the wingman walks a figure-eight
+  ~1 km across that happens to travel with the player, so it comes close and then swings out again.
   *Playtest after fix:* `PT-50`.
   *Cross-refs:* [`docs/org/aiPilot.md`](docs/org/aiPilot.md) (the decode), `BL-363` (the other half
   of the same playtest: an escort with nothing targetable), `BL-364` (the patrol nets, and the
-  correction to `instant-action.md` this rests on).
+  correction to `instant-action.md` this rests on), `BL-377` (the anchored net that delivers the IA
+  half).
 
 ## Tooling, platform & docs
 
