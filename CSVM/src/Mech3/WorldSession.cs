@@ -266,6 +266,7 @@ public sealed class WorldSession
             // exists yet here.
             PlayerPosition = o.PlayerPosition,
             PlayerPositions = o.PlayerPositions,
+            LightViewerPositions = o.LightViewerPositions,
             // On a single-subtree stage most definitions legitimately resolve nothing, so the bind
             // has to SAY which of "no handler ever fires" and "the node is not here" happened —
             // from outside they are the same still object.
@@ -465,6 +466,12 @@ public sealed class WorldSession
         /// behind, which is most of the spiderweb's 50 m radius). Null → the gate falls back
         /// to <see cref="PlayerPosition"/>.</summary>
         public Func<IReadOnlyList<Vector3>>? PlayerPositions { get; init; }
+
+        /// <summary>Every pane's camera, for budgeting the world's <c>LIGHT_STATE</c> spill
+        /// against the nearest one (B13, `BL-366`) — the draw-rule seam (`ViewerSet.Positions`),
+        /// not <see cref="PlayerPositions"/>. Null → the runtime falls back to
+        /// <see cref="PlayerPosition"/> alone.</summary>
+        public Func<IReadOnlyList<Vector3>>? LightViewerPositions { get; init; }
 
         /// <summary>Build world colliders (true in flight; false for a static or lab view).</summary>
         public bool Collision { get; init; }

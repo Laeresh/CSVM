@@ -900,6 +900,10 @@ public partial class GameSession : Node3D
                             : _rigs[i].Camera.GlobalPosition;
                     return positions;
                 },
+                // The world lights' own nearest-viewer budget (B13) — the draw-rule seam A3
+                // promoted, so a light beside player 4's pane stays lit even while player 1 is
+                // far from it. Single player: one entry, same as every other _viewers consumer.
+                LightViewerPositions = () => _viewers.Positions(),
                 // The damage-test needs the collidable world (its census measures which
                 // destructible geometry is solid and whether death removes it) even though it
                 // runs in the freecam (non-fly) harness. Two interactive levers switch the

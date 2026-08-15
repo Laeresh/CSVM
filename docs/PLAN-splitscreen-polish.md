@@ -97,7 +97,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Puffer distance fade answers every pane (`BL-339`)
 12. ☑ Screen wash routed to the hit pane(s) (`BL-340`)
-13. ☐ World point lights budgeted against the nearest rig (`BL-366`)
+13. ☑ World point lights budgeted against the nearest rig (`BL-366`)
 14. ☐ Close out `BL-338`: residual sweep + fog verdict recorded
 
 ### Wave C — Gameplay "the player" rules
@@ -406,7 +406,7 @@ must stay out of the wash (the per-view rect build already guarantees this; don'
 100 m from P4 and 2 km from P1 plays no wash for anyone to route. B12 decides who sees a wash that
 happened; C21 decides that it happens.
 
-## B13 ☐ World point lights budgeted against the nearest rig (`BL-366`)
+## B13 ☑ World point lights budgeted against the nearest rig (`BL-366`)
 
 **Goal.** A burning refinery next to P4 spills light in P4's pane even with P1 far away.
 
@@ -414,21 +414,50 @@ happened; C21 decides that it happens.
 `WorldLights.cs:94-118` fades 900–1500 m against that single position and `Significance`-ranks
 into the 16-slot `csky_light_data`/`csky_light_count` globals every pane reads.
 
-**Approach.** Fade and rank each light against its nearest viewer (A3's service, positions
-suffice). The uniform stays global — a light lit for one pane is lit for all, which is correct
-(light exists in the world); only the selection was wrong. `MaxActive` is rarely binding, so the
-union costs little; if slot pressure appears with 4 spread-out players, that is a new TUNE item,
-not this one.
+**Approach (landed).** `WorldLights.Commit` takes `IReadOnlyList<Vector3> viewerPositions` instead
+of one `Vector3`; both the fade (`NearestDistance`) and `Significance`'s ranking now measure to the
+nearest of the set, one small helper shared by both, so a light beside player 4 no longer fades or
+loses its budget slot for being far from player 1. The uniform stays global exactly as scoped — a
+light lit for one pane stays lit for all. `AnimRuntime` grows `LightViewerPositions`
+(`Func<IReadOnlyList<Vector3>>?`), the same resolved-per-call shape as `PlayerPosition`/
+`PlayerPositions`/A2's `ListenerPositions`, threaded through `WorldSession.Options` and fed by
+`GameSession`'s `() => _viewers.Positions()` — A3's service, read fresh every frame since a pane's
+camera moves. Null/empty falls back to `PlayerPos()` alone (a lab or test runtime with no viewer
+seam), matching the pre-existing fallback shape. `MaxActive` stayed unbinding in every measurement
+taken here, as expected — no new TUNE item was needed.
 
 **Model recommendation.** medium — contained change with a clear rule.
 
-**Verify.** Scripted: a 2-player-position `Commit` unit case if `WorldLights` is testable
-engine-free, else a `--debug-anim` run asserting a far-from-P1 light stays committed. <TODO: check
-whether `WorldLights` has an existing test seam before choosing.> Golden hashes: single-player
-shots unchanged (nearest-of-one is identical).
+**TODO resolved.** `WorldLights` has no `CSVM.Tests` seam and cannot get one: `Commit` calls
+`RenderingServer.GlobalShaderParameterSet`/`ImageTexture.CreateFromImage`, engine calls that only
+run inside a live Godot process (`CSVM.Tests` is engine-free by the repo's own split — anything
+reaching `GD.*` belongs in `src/Testing/` instead). The fitting seam is the one B11/B12 already
+used for this exact shape (a splitscreen draw-rule class needing real engine state): a `--run-tests`
+engine suite. A `--debug-anim` scripted run was also tried and rejected for the same reason B11/B12
+hit — there is no per-player placement flag, so two scripted panes spawn near-coincident off the
+same spawn list and can't discriminate "near P1, far from P2" geometry; the CLI run only proves the
+wiring boots (below), the rule itself is pinned by the suite.
+
+**Verify (done 2026-08-15).** `dotnet build CSVM/CSVM.sln` clean, `dotnet format
+--verify-no-changes` clean. `.\RunTests.ps1`: 1289/1289 units, 61/61 engine suites (60 prior +
+`world-lights-nearest-viewer`), 14/14 goldens hash-identical (single-player: one viewer position is
+the pre-B13 rule exactly, so the shots don't move), hitch clean. The new suite drives a real
+`WorldLights` instance directly: a light 2000 m from a lone P1 (past the 1500 m `FadeEnd`) is
+dropped — able-to-fail control — and stays committed once a second viewer sits 100 m from it; a
+16-light `MaxActive` budget with a 17th light beside P2 drops that 17th against P1 alone (past
+`FadeEnd`, never reaching the budget) but wins a slot over the farthest filler once P2 is a viewer,
+proving `Significance`'s ranking uses the same nearest-viewer distance, not just the fade; and a
+lone viewer reads exactly the pre-B13 result. 8-chapter `--freecam` sweep (C1, C1B, C1C, C2, C2B,
+C3, C4, C5): all exit 0, no errors beyond the pre-existing `pir_spinner.tif` texture-absent line.
+Scripted `--players=2 --fly --chapter=C1 --debug-anim --frames=90` boots clean, exit 0, logs `world
+lights 15 rendered of 35 live` — the wired path fires under a real session; the visual verdict
+(does a far light near P2 actually spill in P2's pane) needs independently-placed panes and is not
+reachable from the CLI, same gap B11/B12 hit — folded into `PT-52` alongside theirs.
 
 **⚠ Traps.** Keep the fade curve and `Significance` arithmetic untouched; only the reference
-position generalises.
+position generalises. Do not fold `LightViewerPositions` into `PlayerPositions` (the gameplay seam,
+C21's) — this is A3's draw-rule seam, the same separation `ViewerSet`'s own trap and B12's dispatch
+already keep.
 
 ## B14 ☐ Close out `BL-338`: residual sweep + fog verdict recorded
 

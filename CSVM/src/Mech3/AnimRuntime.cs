@@ -117,6 +117,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <see cref="PlayerPosition"/>.</summary>
     public Func<IReadOnlyList<Vector3>>? PlayerPositions;
 
+    /// <summary>Every pane's camera position, for budgeting <see cref="Lights"/> (B13, `BL-366`):
+    /// a world light must not fade or lose its slot just because player 1 is far from it. This is
+    /// the draw-rule seam (<c>ViewerSet.Positions</c>), not <see cref="PlayerPositions"/> (the
+    /// gameplay one) — null or empty falls back to <see cref="PlayerPos"/> alone, keeping a
+    /// runtime built without a viewer seam (a lab, a test) on today's single-camera behaviour.</summary>
+    public Func<IReadOnlyList<Vector3>>? LightViewerPositions;
+
     /// <summary>Answers the data's <c>PLAYER_1ST_PERSON</c> condition. No cockpit view
     /// exists yet, so false.</summary>
     public bool FirstPerson;
@@ -3257,7 +3264,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 continue;
             Lights.Add(host.GlobalTransform * light.Offset, light.Color, light.RangeMin, light.RangeMax);
         }
-        Lights.Commit(PlayerPos());
+        var viewers = LightViewerPositions?.Invoke();
+        Lights.Commit(viewers != null && viewers.Count > 0 ? viewers : new[] { PlayerPos() });
         if (DebugMotions)
             Lights.LogOnce();
     }

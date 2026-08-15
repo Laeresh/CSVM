@@ -49,6 +49,7 @@ public sealed class WorldLights : IDisposable
 
     private readonly List<Entry> _pending = new();
     private readonly byte[] _buffer = new byte[MaxActive * FloatsPerLight * sizeof(float)];
+    private readonly List<Vector3> _committedPositions = new();
     private ImageTexture? _texture;
     private int _lastCount = -1;
     private int _loggedSubmitted = -1;
@@ -59,6 +60,12 @@ public sealed class WorldLights : IDisposable
 
     /// <summary>Lights active this frame before the fade and budget are applied (diagnostics).</summary>
     public int LiveCount { get; private set; }
+
+    /// <summary>The positions actually packed into the shader texture by the last
+    /// <see cref="Commit"/> — never read by anything that draws (the shader reads the texture,
+    /// not this); it exists so the nearest-viewer budget (B13, `BL-366`) can be asserted directly
+    /// instead of decoding the packed texture back out.</summary>
+    public IReadOnlyList<Vector3> CommittedPositions => _committedPositions;
 
     /// <summary>Registers the global shader parameters the world shader references. Called once
     /// per process, before any material using them is built — the defaults (no texture, count 0)
@@ -89,16 +96,19 @@ public sealed class WorldLights : IDisposable
     }
 
     /// <summary>Packs the frame's lights and uploads them. When more than
-    /// <see cref="MaxActive"/> are live the nearest to the camera win — the dropped ones are
-    /// the farthest, whose pools are the smallest on screen.</summary>
-    public void Commit(Vector3 cameraPos)
+    /// <see cref="MaxActive"/> are live the nearest to any viewer win — the dropped ones are
+    /// the farthest, whose pools are the smallest on screen in every pane.</summary>
+    public void Commit(IReadOnlyList<Vector3> viewerPositions)
     {
         LiveCount = _pending.Count;
         // Distance fade, then nearest-first, then the budget. Order matters: fading before the
         // sort is what lets the budget cut only lights that are already contributing nothing.
+        // "Distance" is to the NEAREST viewer, not a single camera — a light beside player 4 must
+        // not fade out because player 1 is far away (B13, BL-366); one viewer (single player)
+        // reduces to the original rule exactly, so the goldens don't move.
         for (int i = _pending.Count - 1; i >= 0; i--)
         {
-            float fade = 1f - Mathf.SmoothStep(FadeStart, FadeEnd, _pending[i].Pos.DistanceTo(cameraPos));
+            float fade = 1f - Mathf.SmoothStep(FadeStart, FadeEnd, NearestDistance(_pending[i].Pos, viewerPositions));
             if (fade <= 0f)
                 _pending.RemoveAt(i);
             else if (fade < 1f)
@@ -113,9 +123,13 @@ public sealed class WorldLights : IDisposable
             // size, range/distance — not by distance alone. The ranges here span 2 m to 22 m, so
             // a nearby pinpoint and a big refinery flare at the same distance are not equally
             // worth a slot, and plain nearest-N would drop the one you can see.
-            _pending.Sort((a, b) => Significance(b, cameraPos).CompareTo(Significance(a, cameraPos)));
+            _pending.Sort((a, b) => Significance(b, viewerPositions).CompareTo(Significance(a, viewerPositions)));
             n = MaxActive;
         }
+
+        _committedPositions.Clear();
+        for (int i = 0; i < n; i++)
+            _committedPositions.Add(_pending[i].Pos);
 
         if (n == 0)
         {
@@ -170,16 +184,33 @@ public sealed class WorldLights : IDisposable
     public void Dispose()
     {
         _pending.Clear();
+        _committedPositions.Clear();
         RenderingServer.GlobalShaderParameterSet(CountParam, 0);
         _lastCount = 0;
         _texture = null;
     }
 
     // Angular size of the light's pool, scaled by its (already fade-applied) intensity — the
-    // cheapest honest proxy for "how much of this frame does it change".
-    private static float Significance(Entry e, Vector3 cameraPos) =>
-        e.Max / Mathf.Max(e.Pos.DistanceTo(cameraPos), 1f)
+    // cheapest honest proxy for "how much of this frame does it change". Distance is to the
+    // nearest viewer, matching Commit's own fade rule.
+    private static float Significance(Entry e, IReadOnlyList<Vector3> viewerPositions) =>
+        e.Max / Mathf.Max(NearestDistance(e.Pos, viewerPositions), 1f)
         * Mathf.Max(e.Color.R, Mathf.Max(e.Color.G, e.Color.B));
+
+    // The closest of every live viewer — never the average or the first — so the fade and the
+    // budget both answer to whichever pane is actually near, the same per-pane rule B11 applies
+    // to the puffer fade. Empty (no viewers) reads as "infinitely far", fading everything out.
+    private static float NearestDistance(Vector3 pos, IReadOnlyList<Vector3> viewerPositions)
+    {
+        float best = float.MaxValue;
+        for (int i = 0; i < viewerPositions.Count; i++)
+        {
+            float d = pos.DistanceTo(viewerPositions[i]);
+            if (d < best)
+                best = d;
+        }
+        return best;
+    }
 
     private void Write(int offset, float value) =>
         BitConverter.TryWriteBytes(_buffer.AsSpan(offset, sizeof(float)), value);

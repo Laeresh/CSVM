@@ -1161,7 +1161,12 @@ the pane it belongs to, because that is the pane whose volume wins the engine's 
 
 ## src/Mech3/WorldLights.cs
 Packs the animated world's `LIGHT_STATE` point lights into the 2×N RGBAF texture the fullbright
-world shader reads as spill (global `csky_light_data`, loop bounded by `csky_light_count`).
+world shader reads as spill (global `csky_light_data`, loop bounded by `csky_light_count`); the
+uniform is session-global (a lit light is lit for every pane), but `Commit`'s 900–1500 m fade and
+its `MaxActive`-slot significance rank both answer to the NEAREST of every viewer position handed
+in, not one camera — a light beside player 4 stays lit even with player 1 far away (B13, `BL-366`;
+`AnimRuntime.LightViewerPositions`, fed from `GameSession`'s `ViewerSet`). One position (single
+player) reduces to the pre-B13 rule exactly.
 ⚠ Not OmniLight3D — the unshaded world ignores dynamic lights, and the flare at each light is
   already gamez Facade geometry (a glow sprite would double-draw); spill is the missing behaviour.
 ⚠ Packed via BitConverter, never Image.SetPixel/Color — world-metre positions would hit the 0..1 clamp.
@@ -4021,7 +4026,10 @@ Consumers today: `ProjectilePool.Viewers` (tracer floor), `WeatherRig.Tick` → 
 (the puffer distance fade), both handed the session's one instance at construction, and
 `UI.ScreenFlash` (B12's wash routing), handed it at `Build`. That last one reads `Cameras` rather
 than `Positions` because it needs the index to stay aligned with its own per-pane rects, and
-`Positions` skips a freed camera.
+`Positions` skips a freed camera. `Positions()` also feeds `AnimRuntime.LightViewerPositions` (B13's world-light budget,
+`WorldLights.Commit`) via `GameSession`'s `() => _viewers.Positions()` closure — the same
+resolved-per-call shape `PlayerPosition`/`PlayerPositions`/`ListenerPositions` already use, since a
+pane's own camera moves every frame and the runtime is built before any rig's transform is final.
 ⚠ Not `PlayerPositions` (`GameSession`'s gameplay seam feeding `WorldSession.Options`, C21's) —
 that answers "where are the humans" for proximity gameplay rules off each rig's `Controller`/camera
 fallback; this answers "what do the cameras see" for draw rules. A3's own trap: do not fold them

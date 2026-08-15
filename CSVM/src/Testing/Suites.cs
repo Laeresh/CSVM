@@ -370,6 +370,12 @@ public static class Suites
             "every 2–4P pane is a 3D audio listener, which a SubViewport is not by default — the "
             + "pinned listener model (A2), and the one thing standing between splitscreen and a "
             + "world with no listener at all", SplitscreenListeners));
+        into.Add(new TestHarness.Suite("world-lights-nearest-viewer",
+            "WorldLights budgets its 900-1500 m distance fade and its MaxActive significance rank "
+            + "against the NEAREST of every pane's camera, not player 1's alone (B13, BL-366): a "
+            + "light 2000 m from a lone P1 stays committed once a second viewer sits 100 m from it, "
+            + "the able-to-fail control against P1 alone drops the same light, and the one-viewer "
+            + "case reads exactly what it read before", WorldLightsNearestViewer));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------
@@ -10326,6 +10332,67 @@ public static class Suites
                 split.Free();
             }
         }
+    }
+
+    /// <summary>The B13 rule (<c>BL-366</c>): <see cref="WorldLights.Commit"/> fades and ranks
+    /// each light against the NEAREST of every pane's camera, not a single position. Driven
+    /// straight against a real <see cref="WorldLights"/> instance with synthetic positions —
+    /// there is no per-player placement flag to give two scripted panes independent spots (the
+    /// same CLI gap B11/B12 hit), so the rule is pinned here instead and the visual verdict is
+    /// PT-52's, alongside B11/B12's own owed at-the-controls check.</summary>
+    private static void WorldLightsNearestViewer(TestContext ctx)
+    {
+        var p1 = Vector3.Zero;
+        // Well past FadeEnd (1500 m) from P1 alone, but 100 m from a second viewer.
+        var farFromP1 = new Vector3(0f, 0f, -2000f);
+        var p2 = new Vector3(0f, 0f, -2100f);
+
+        var lights = new WorldLights();
+
+        lights.Begin();
+        lights.Add(farFromP1, Colors.White, 1f, 10f);
+        lights.Commit(new[] { p1 });
+        ctx.Check(!lights.CommittedPositions.Contains(farFromP1),
+            $"ABLE-TO-FAIL CONTROL: 2000 m from a lone P1 is past the 1500 m FadeEnd, so the light drops");
+
+        lights.Begin();
+        lights.Add(farFromP1, Colors.White, 1f, 10f);
+        lights.Commit(new[] { p1, p2 });
+        ctx.Check(lights.CommittedPositions.Contains(farFromP1),
+            $"the same light stays committed once a second viewer sits 100 m from it — nearest, not P1 alone");
+
+        // The MaxActive budget's Significance rank must answer to the same nearest-viewer rule,
+        // not just the fade: pack the 16-slot budget with 16 filler lights strictly farther from
+        // P1 (7-20 m) than besideP2 sits from P2 (5 m), so a correct nearest-viewer rank always
+        // keeps besideP2 and cuts the filler farthest from ITS nearest viewer. Under P1 alone
+        // besideP2 is 2100+ m away — past FadeEnd, so it never reaches the budget at all; once P2
+        // is a viewer it is the closest light to ANY viewer and must win a slot over some filler.
+        var besideP2 = new Vector3(0f, 5f, -2100f);
+        lights.Begin();
+        for (int i = 0; i < WorldLights.MaxActive; i++)
+            lights.Add(new Vector3(5f + i, 0f, -5f), Colors.White, 1f, 10f);
+        lights.Add(besideP2, Colors.White, 1f, 10f);
+        lights.Commit(new[] { p1 });
+        ctx.Check(lights.CommittedPositions.Count == WorldLights.MaxActive
+                  && !lights.CommittedPositions.Contains(besideP2),
+            $"ABLE-TO-FAIL CONTROL: against P1 alone the 17th light (right beside where P2 will be) is past FadeEnd and never reaches the budget");
+
+        lights.Begin();
+        for (int i = 0; i < WorldLights.MaxActive; i++)
+            lights.Add(new Vector3(5f + i, 0f, -5f), Colors.White, 1f, 10f);
+        lights.Add(besideP2, Colors.White, 1f, 10f);
+        lights.Commit(new[] { p1, p2 });
+        ctx.Check(lights.CommittedPositions.Count == WorldLights.MaxActive
+                  && lights.CommittedPositions.Contains(besideP2),
+            $"with P2 present the same light is nearest to a viewer and outranks the farthest filler for a slot in the budget");
+
+        // Single viewer must read exactly as it did before this item — the goldens' own invariant.
+        var nearP1 = new Vector3(0f, 0f, -5f);
+        lights.Begin();
+        lights.Add(nearP1, Colors.White, 1f, 10f);
+        lights.Commit(new[] { p1 });
+        ctx.Check(lights.CommittedPositions.Count == 1 && lights.CommittedPositions.Contains(nearP1),
+            $"one viewer (single player) is the unchanged, pre-B13 rule");
     }
 
     /// <summary>One authored event on an <c>ordnance-burst-timeline</c> lane: where it sits in its
