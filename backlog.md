@@ -663,30 +663,40 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-362` (the wingmen half of the same playtest), `AiTargetRanking`,
   [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) "AI modes, engine-side".
 
-- `BL-364` `[Research]` **A netless AI in `patrol` flies one straight line forever, and we do not
-  know what the original flies instead.** *Evidence:* the user at the controls, 2026-08-15: the
-  default mode of enemy AI is to fly straight in one direction, and an enemy wave out of engagement
-  range never turns back. `AiPilot.SteerPatrol` returns immediately when `Patrol` is null
-  (`AiPilot.cs:266`), leaving `TargetHeadingDeg`/`TargetAltitude` at whatever `HoldingCourse` set at
-  spawn, so the aircraft holds one course and one altitude until something retargets it.
-  **Every Instant Action actor is in that state, and correctly so:**
-  [`docs/formats/instant-action.md`](docs/formats/instant-action.md) "Every actor is a synthetic
-  `aiv` roster block" leaves `netids` at its `-1` default for all of them. A patrol net is therefore
-  NOT the missing wiring. What is missing is the behaviour a netless roster vehicle actually flies,
-  on top of a steering law that is an admitted placeholder (`docs/architecture.md` on `AiPilot`:
-  bank-to-turn plus a turn pull plus an altitude leash, gains hand-settled, "the law itself is still
-  not original").
-  *Fix shape:* decode first, build second. If the original holds course too, this closes as correct
-  and the answer is the deliverable. If it orbits, loiters, or climbs toward `pref_engage_alt` (aiv
-  slot 31, authored 350/1100/1500/1550/1600 across the shipped rosters and read by nothing of ours),
-  that is what gets built.
-  ⚠ *Traps.* (a) **Do not assign a chapter patrol net to Instant Action actors to make this look
-  better.** The decode says they have none; the change would pass every test and still be wrong.
-  (b) `pref_engage_alt` is an altitude in metres, not a radius (`ai-rosters.md`), so anything built
-  on it is an altitude order and not a loiter circle. (c) The engagement gate was 2000 m until the
-  10000 m volume fix (`git log --grep=ApplyActorVolumes`), which is most of why waves read as flying
-  away. Re-judge the symptom with that in before building a loiter.
-  *Cross-refs:* `BL-362`, `docs/architecture.md` on `AiPilot` and `AiModeMachine`.
+- `BL-364` `[Bug]` **Our AI aircraft have no patrol net, and the original gives every one of them
+  one. DECODED 2026-08-15; what is left is implementation.** *Evidence:* the user at the controls,
+  2026-08-15: the default mode of enemy AI is to fly straight in one direction, and an enemy wave
+  out of engagement range never turns back. `AiPilot.SteerPatrol` returns immediately when `Patrol`
+  is null (`AiPilot.cs:266`), leaving `TargetHeadingDeg`/`TargetAltitude` at whatever
+  `HoldingCourse` set at spawn.
+  **The research half is answered, in [`docs/org/aiPilot.md`](docs/org/aiPilot.md).** The engine has
+  no netless patrol at all: `FUN_0041d1f0`, the net follower, resolves the net unconditionally and
+  has no fallback branch. A netless aircraft is instead a `mode wingman` aircraft flying a fixed
+  formation station on its `primary_target` (`FUN_0041e760`), and a `wingman` that is given a net is
+  demoted to `jet` at spawn. Two censuses settle who is which: of 414 shipped `aiv` blocks, the only
+  106 netless ones are `player`, `wingman_N` and `bswingman_N`, and every enemy, boat and truck
+  carries a real net id; of 75 `vehicle.json` defs, only 12 author `mode wingman` and every enemy
+  resolves `jet` through `basic_airplane`.
+  ⚠ **The entry's own premise was wrong, and so was the doc it rested on.** Instant Action does
+  NOT leave `netids` at `-1`: all three branches of `FUN_0045a390` write a one-entry list holding
+  the chapter's first net id (`0x0045a8b4` / `0x0045ab18` / `0x0045ae85`), so in the original the
+  ace, the waves and the wingmen all walk that graph.
+  [`docs/formats/instant-action.md`](docs/formats/instant-action.md) is corrected.
+  *Fix shape:* give AI aircraft a patrol net, which is `AiNets` data we already parse
+  (`src/Mech3/AiNets.cs`) plumbed into `AiPilot.Patrol` at spawn. Instant Action actors take the
+  chapter's first net, exactly as the original does. Campaign rosters take their authored `netids`.
+  ⚠ *Traps.* (a) **`AiPilot.PatrolThrottle` (0.5) is an invention that exists because the
+  placeholder steering law cannot hold the tightest net rings at cruise** (`architecture.md`). Do
+  not read a net-follow regression as a net-data problem before checking it. (b) `pref_engage_alt`
+  is decoded and is **not** an altitude order: its one reader weights the evasive-maneuver draw
+  (`FUN_004201a0`). Nothing steers toward it, so do not build an altitude hold on it. (c) The
+  engagement gate was 2000 m until the 10000 m volume fix (`git log --grep=ApplyActorVolumes`),
+  which is part of why waves read as flying away. (d) A net assignment also **overwrites the
+  vehicle's three volumes** from the net's own where the net authors non-zero values
+  (`FUN_00475fc0`), which interacts with that fix and must not be dropped.
+  *Cross-refs:* [`docs/org/aiPilot.md`](docs/org/aiPilot.md) (the decode), `BL-362` (the wingman
+  half, whose blocker this decode voids), `docs/formats/ai-nets.md`, `docs/architecture.md` on
+  `AiPilot` and `AiModeMachine`.
 
 ## Flight model & collision physics
 
@@ -3132,8 +3142,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-359` (which surfaced it, and whose emitter set depends on it for spawned
   vehicles), `BL-095`, [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow".
 
-- `BL-362` `[Feature]` **Instant Action wingmen never form up on the player, and the decoded
-  escort chain that should hold them there is unreachable.** *Evidence:* the user at the controls,
+- `BL-362` `[Feature]` **Instant Action wingmen never form up on the player.** *Evidence:* the user at the controls,
   2026-08-15: wingmen fly away instead of staying near the player. `PT-50`'s own check (b) already
   records that no formation-flying behaviour exists and that the placeholder law is what drives
   them.
@@ -3163,9 +3172,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   will die to the player's guns, which is correct, and must not be papered over with a damage or
   collision exemption. (c) It is a chain, not a star: 2 and 4 station on 1 and 3, so a dead leader
   leaves its follower without one, and that case needs an answer rather than a crash.
+  ⚠ **DECODED 2026-08-15, and the blocker above is void.** [`docs/org/aiPilot.md`](docs/org/aiPilot.md):
+  a netless `mode wingman` aircraft flies a fixed formation station on its `primary_target`
+  (`FUN_0041e760`), so `primary_target` on a friendly is a **formation leader**, not a target
+  assignment, and `SelectRankedTarget` skipping same-team candidates never mattered. The station is
+  a body-frame offset from the leader: **(6, 0, 18)** when the leader is the player (6 m out, level,
+  18 m astern) and **(8, −2, −8)** when it is another AI, with an 80 m separation push, a 700 m
+  join threshold and a speed-ramped trail distance of 106.68 m to 259.08 m when it is chasing
+  instead. So `WingmanSlotFor`'s spawn fan was indeed the wrong thing to reuse, and the real offset
+  is now decoded rather than invented.
+  ⚠ **But it is a campaign behaviour, not an Instant Action one.** `BL-364`'s decode shows Instant
+  Action gives every actor a patrol net, and a net demotes a `wingman` to `jet` at spawn, so in the
+  original an IA wingman walks the chapter's first net and does **not** hold station. The shipped
+  netless wingmen are the campaign's `wingman_N` / `bswingman_N` roster blocks. Read off the code
+  path, not observed at the controls of the original, so an IA capture would be worth having before
+  building station-keeping for that mode.
   *Playtest after fix:* `PT-50`.
-  *Cross-refs:* `BL-363` (the other half of the same playtest: an escort with nothing targetable),
-  `BL-364` (what a netless AI flies at all).
+  *Cross-refs:* [`docs/org/aiPilot.md`](docs/org/aiPilot.md) (the decode), `BL-363` (the other half
+  of the same playtest: an escort with nothing targetable), `BL-364` (the patrol nets, and the
+  correction to `instant-action.md` this rests on).
 
 ## Tooling, platform & docs
 

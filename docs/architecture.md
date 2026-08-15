@@ -2411,6 +2411,10 @@ own fields, seeded randomness only, so a fixed-dt run is deterministic (`AiPilot
   flight model bank alone yaws only at the coupling rate and any sustained pull climbs. D11's
   machine dispatches WHICH orders it flies; the shipped maneuver programs play through
   `ManeuverExecutor` only during `evasive maneuver` — the law itself is still not original.
+⚠ What the ORIGINAL flies is decoded in [`org/aiPilot.md`](org/aiPilot.md): the engine has no
+  netless patrol at all, and `Patrol == null` here models nothing it does. A roster aeroplane is
+  either a `jet` on a patrol net or a netless `wingman` holding a formation station on its
+  `primary_target`. `BL-364` owns giving ours the net; `BL-362` owns the station.
 ⚠ `PatrolThrottle` (0.5) and the leash/gain constants are INVENTED placeholder-law values, never
   original behaviour; at the 0.85 default the turn radius exceeds the tightest fighter rings and
   the plane limit-cycles around a node forever (measured on C1's `M4ReinfAce`).

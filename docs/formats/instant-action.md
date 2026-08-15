@@ -217,6 +217,16 @@ The offsets confirm M4 B7's decode from the other direction: team at `+0x34`, gr
 band of **±10000 m** for every Instant Action actor, which is the engine's own way of saying they
 are always awake, always willing to engage, and never return.
 
+⚠ **Every actor is also given a patrol net** (corrected 2026-08-15; this page previously said
+`netids` kept its `-1`). All three branches of `FUN_0045a390` write a one-entry `netids` list
+holding the **first id in the chapter's net table** (`0x0045a8b4` for the wingmen, `0x0045ab18` for
+the ace, `0x0045ae85` for the waves), so every Instant Action aircraft walks the chapter's first
+patrol graph. Two consequences, both read off the code path rather than observed at the controls of
+the original: the wingmen's `w<plane>` defs carry `mode wingman`, but a net demotes a wingman to
+`jet` at spawn, so **the escort chain below is not flown as a formation in this mode**; it survives
+as a target assignment only. [`org/aiPilot.md`](../org/aiPilot.md) has the demotion rule and the
+formation law it suppresses.
+
 ### The player and the wingmen
 
 The player is placed at a **uniformly random** entry of the scenario's own `spawn_points` list.
@@ -236,9 +246,10 @@ Wingman `i` (0-based) is built as:
 `<plane>` is `wingman_plane`'s index through the two name columns above; the roster name format is
 `%s_ia%d` over the def and the index. **So the flight is not five aircraft on the player: 0, 1 and
 3 escort the player, while 2 and 4 escort 1 and 3.** That is `primary_target` doing the work M4 B7
-said it does, and it is the shipped Instant Action wingman mechanism. No patrol net is assigned
-(`netids` keeps its `-1`), and **the nine-value skill vector is left unset**, so wingmen fly on the
-airframe's own AI defaults.
+said it does, and it is the shipped Instant Action wingman mechanism. ⚠ **Corrected 2026-08-15: a
+patrol net IS assigned** (see above), and the net demotes the `w<plane>` def's `wingman` mode to
+`jet`, so on this path the chain is a target assignment rather than a flown formation. **The
+nine-value skill vector is left unset**, so wingmen fly on the airframe's own AI defaults.
 
 Every wingman is **team 1, group 0, not deactivated**, and is placed `100 · ((i >> 1) + 1)` metres
 from the player's spawn at `±45°` off its heading, the sign being `+` when `i & 3` is 1 or 2 and

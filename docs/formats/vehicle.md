@@ -416,6 +416,23 @@ NPC's Dead Eye statistic sets the radius of a lead sphere it will shoot into.
 **`bullethole_anims`** — per player plane, the ON_CALL cockpit-glass hit-decal anims
 `bullet1`…`bullet5` (see [anim-definitions.md](anim-definitions.md)).
 
+**`mode`** — the dynamics class, and the one key that decides which AI behaviour an aircraft flies.
+Parsed from a string (`FUN_00479240`, `0x0047afe8`): `jet` 0, `heli` 1, `tank` 2, `ship` 3,
+`wingman` 4, `plane` 5. Only four defs author it and the rest inherit through `kind_of`:
+`basic_airplane` is `jet` (so are all 11 player defs, all 11 base AI aircraft and all 39 militia
+variants, including `autogyro`), `patrolboat` and `t_truck` are `ship`, and 12 defs are `wingman`
+(`wingman`, `bswingman`, and the eleven Instant Action `w<plane>` defs). Nothing ships `heli`,
+`tank` or `plane`. A `wingman` is a full aeroplane on the same integrator as a `jet`; what differs
+is that **a `jet` flies a patrol net and a netless `wingman` flies a formation station on its
+`primary_target`**. A `wingman` that is given a net is demoted to `jet` at spawn.
+[`org/aiPilot.md`](../org/aiPilot.md) has the mechanism, the station offsets and the constants.
+`mode_alt` parses to the def struct alongside it (`0.0` on `basic_airplane`) and no consumer of it
+was found.
+
+**`preferred_engagement_altitude`** (300.0 on `basic_airplane`, inherited by every aircraft) is the
+fallback for the roster's `pref_engage_alt` slot. ⚠ It is a **weight on the evasive-maneuver draw**,
+not an altitude order: nothing steers toward it ([`org/aiPilot.md`](../org/aiPilot.md)).
+
 **AI-combatant tuning** (AI variant defs, M4): pilot skill/personality (`dare_devil`,
 `dead_eye`, `quick_draw`, `steady_hand`, `sixth_sense`, `natural_touch`, `stun_recovery`,
 `talker`, `constitution`, `accentID`) — the same nine-stat vector the mission rosters author

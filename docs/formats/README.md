@@ -22,8 +22,11 @@ visual runtime behind [weapons.md](weapons.md)), [objectMotion.md](../org/object
 launch/contact/run-time model behind the `OBJECT_MOTION` sections of
 [anim-definitions.md](anim-definitions.md) and [destructibles.md](destructibles.md)),
 [aim-assist.md](../org/aim-assist.md) (the sticky-bullet gun assist behind
-[vehicle.md](vehicle.md)'s `player.json` table) and [textures.md](../org/textures.md) (the texture
-header layout and the additive-vs-mix blend rule behind [effects.md](effects.md)'s sprites).
+[vehicle.md](vehicle.md)'s `player.json` table), [aiPilot.md](../org/aiPilot.md) (what a roster
+vehicle actually flies: the `mode` classes, the patrol-net follower and the formation escort,
+behind [ai-rosters.md](ai-rosters.md) and [ai-nets.md](ai-nets.md)) and
+[textures.md](../org/textures.md) (the texture header layout and the additive-vs-mix blend rule
+behind [effects.md](effects.md)'s sprites).
 
 ## Pages
 

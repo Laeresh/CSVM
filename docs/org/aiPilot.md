@@ -1,0 +1,295 @@
+# The AI pilot: what a roster vehicle flies, decoded from `crimson.exe`
+
+Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
+`crimson.exe`, `language x86:LE:32:default`), 2026-08-15, settling `BL-364` and the decode half of
+`BL-362`. Every claim below names the function or address it came from, and the two data censuses
+name the files they counted.
+
+Everything here is a description of *behaviour*. No decompiler output is reproduced; the addresses
+are given so any claim can be re-checked at source.
+
+**Where the other halves live.** The authored roster side is
+[`formats/ai-rosters.md`](../formats/ai-rosters.md) (`netids`, `primary_target`, the skill vector);
+the authored airframe side is [`formats/vehicle.md`](../formats/vehicle.md) (`mode`, `attack`,
+`return_range`, `preferred_engagement_altitude`); the patrol graphs themselves are
+[`formats/ai-nets.md`](../formats/ai-nets.md). The flight physics an AI shares with the player is
+[`flightModel.md`](flightModel.md). CSVM's implementation seam is `src/Flight/AiPilot.cs`, whose
+steering law is a placeholder and is **not** what this page describes.
+
+## The headline: there is no netless patrol
+
+The engine has two AI flight behaviours for an aeroplane, and which one it runs is decided at spawn
+by one authored key and one authored field:
+
+- a **patrol-net follower**, which requires a net and has no fallback if it has none;
+- a **formation escort**, which requires a `primary_target` and never looks at a net.
+
+An aircraft with no patrol net does not fly a degenerate straight line and does not loiter. It
+either flies a formation station on its leader, or it is a `jet` with no net, which is a state the
+shipped data never produces.
+
+## `mode`, the dynamics class
+
+`vehicle.json` carries a per-def key **`mode`** (the string at `0x628084`), parsed by
+`FUN_00479240` at `0x0047afe8`–`0x0047b081` into the def struct at `+0xa4`. `FUN_00475820`
+(`0x00475abf`) copies it to the vehicle at `+0x67c` when the vehicle is built.
+
+| `mode` | value | debug readout | flight update |
+|---|---|---|---|
+| `jet` | 0 | airplane | `FUN_0048e580`, the aeroplane integrator |
+| `heli` | 1 | autogyro | `FUN_0048ffe0` |
+| `tank` | 2 | ground vehicle | `FUN_0048a880` |
+| `ship` | 3 | ship | `FUN_0048b480` |
+| **`wingman`** | **4** | airplane | `FUN_0048e580`, the same as `jet` |
+| `plane` | 5 | bomber | `FUN_0048b480` |
+
+The physics dispatch is `FUN_00489ea0`; the readout names are the engine's own, from the debug
+overlay `FUN_0041c470` (`0x0041c852`). **A `wingman` is a full aeroplane**, flying the same
+integrator, aerodynamics and collision sweep as the player. Only its AI differs.
+
+The shipped `vehicle.json` authors `mode` on four defs and inherits the rest through `kind_of`
+(census of all 75 defs, 2026-08-15):
+
+- **`jet`**: `basic_airplane` and therefore all 11 player defs, all 11 base AI aircraft, and all 39
+  militia variants (`r*`, `bhat*`, `sti*`, `blake*`, `ha*`, `sec*`, `med*`, `brit*`, `rus*`, `bs*`,
+  `germanhellhound`, `hkfirebrand`). ⚠ `autogyro` and `pautogyro` are `jet`, not `heli`.
+- **`wingman`**: exactly 12 defs, being `wingman`, `bswingman`, and the eleven `w<plane>`
+  (`wbloodhawk`, `wfirebrand`, `wbrigand`, `wfury`, `wautogyro`, `wavenger`, `wkestrel`,
+  `wpeacemaker`, `wbalmoral`, `wwarhawk`, and `wingman` itself off `devastator`).
+- **`ship`**: `patrolboat` and `t_truck`.
+- Nothing ships `heli`, `tank` or `plane`.
+
+A sibling key `mode_alt` parses to def `+0xa8` (`0x0047b0a6`) and is `0.0` on `basic_airplane`. No
+consumer of it was identified.
+
+## The per-frame AI update
+
+The world tick `FUN_004897c0` walks the vehicle list and, for each vehicle that is present
+(`+0x91d == 0`) and awake (`+0x944`), calls the AI update `FUN_0041c270`. That function forks in
+this order:
+
+1. Byte `+0xcc` set suppresses the AI entirely and the function returns.
+2. `FUN_0041fe10` runs target selection and writes the selected target to `+0x948`.
+3. If the selected target was lost and the current task is pursue, the task reverts to the vehicle's
+   default task `+0x2f4` and a timer at `+0x300` is set to now plus `+0x308` (`0x0041c299`).
+4. **`+0x67c == 4` dispatches to `FUN_0041e760`, the escort law, and nothing else runs.**
+5. Otherwise the AI task `+0x2f0` selects the steering (`0x0041c2e6`): `1` is pursue
+   (`FUN_0041d9f0`), `0` and `2` are both the patrol-net follower (`FUN_0041d1f0`), and any other
+   value returns without steering.
+6. After the net follower, a live selected target promotes the task to pursue (`FUN_0041f040` sets
+   `+0x2f0 = 1`).
+
+The AI mode enum lives at `+0x358` and is a different thing from the task: 1 evasive maneuver,
+2 approaching danger zone, 3 avoid crash, 4 stunned, 5 navigating danger zone, 0 otherwise.
+⚠ **`patrol`, `pursue` and `lay off` are not stored states.** The debug readout derives them
+(`FUN_0041c470`, the `AI mode:` string block at `0x0041c98b`): no selected target prints `patrol`; with a target,
+`+0x2f0 == 1` prints `pursue` and anything else prints `lay off`. So "lay off" is literally *has a
+target and is flying its net*, and "patrol" is *has no target*.
+
+## The patrol-net follower has no netless branch
+
+`FUN_0041d1f0` resolves the net before it does anything else (`0x0041d1f9`–`0x0041d237`): it scans
+the net-id table `DAT_0064f610` for the vehicle's `netids` value at `+0x2e4` and, **on no match,
+uses index −1**, indexing 100 bytes before the first element of the net array `DAT_0064f614` and
+dereferencing the node and edge pointers it finds there. There is no guard and no fallback path.
+
+This is latent rather than reachable: the shipped data never gives a `jet` a missing net (below),
+so the index −1 read is never executed by the retail game. It is recorded here because it is the
+positive proof that "netless patrol" is not a behaviour the engine has.
+
+Net assignment is `FUN_00475fc0`. On `netids == -1` it returns immediately, leaving the task
+untouched. On a valid net it:
+
+- sets the current node `+0x2e8` to the nearest node to the spawn position (`FUN_00431900`) and the
+  current edge `+0x2ec` (`FUN_00431e40`);
+- sets the task `+0x2f0` to **2 when the net record's `+0x10` field is non-zero, else 0**;
+- **overwrites the vehicle's three volumes from the net's own**, where the net authors a non-zero:
+  activation from net `+0x24`² / `+0x28` / `+0x2c` into `+0x318` / `+0x31c` / `+0x320`, attack from
+  net `+0x34`² / `+0x38` / `+0x3c` into `+0x328` / `+0x32c` / `+0x330`, and return from net `+0x40`²
+  / `+0x44` / `+0x48` into `+0x334` / `+0x338` / `+0x33c`. Radii are stored squared.
+
+⚠ **A net demotes a wingman.** `FUN_00476250` (`0x00476382`–`0x004763c3`): if `mode == 4` and
+`netids >= 0`, the escort buffer at `+0x2f8` is freed and `+0x67c` is forced to **0**, after which
+the vehicle takes the net like any other `jet`. The script-side net assignment `FUN_0049c920` ends
+with `+0x67c = 0` on every path, including the failure path where the net id did not resolve.
+
+So `mode wingman` is not "this aircraft escorts". It is **"this aircraft escorts when it has no
+net"**, and the net wins whenever one is authored.
+
+## The escort law, `FUN_0041e760`
+
+Its leader is `primary_target` at `+0x2fc`, dereferenced through `+4` to the leader's vehicle with
+no null check, so the mode requires an assigned target.
+
+**Station offsets**, in the leader's own body frame (basis at `+0x180`, translation the leader's
+position). Axis 2 of that basis is the leader's *backward* axis, derived from `FUN_00476250` setting
+the forward vector to its negation (`0x00476339`):
+
+| leader | offset | reading |
+|---|---|---|
+| the player | `DAT_0061fb88` = (6.0, 0.0, 18.0) | 6 m out, level, 18 m astern |
+| another AI | `DAT_0061fb98` = (8.0, −2.0, −8.0) | 8 m out, 2 m low, 8 m ahead |
+
+⚠ Escorting a non-player leader also forces the state to 2 every frame and sets byte `+0xdd`
+(`0x0041e7b6`), which suppresses the radio call that the player-escort path plays. The effect is
+that a wingman-of-a-wingman has no persistent state machine: it trails its selected target when it
+has one and flies the station when it does not.
+
+**The state machine** at `+0xd8`, five states, evaluated twice per frame (once to transition, once
+to compute the station):
+
+| state | station | leaves when |
+|---|---|---|
+| 0 | trail the selected target, or the leader's position +200 m of altitude when the target is beyond **1800 m** | leader live, within **700 m**, own speed above **20.576 m/s** → 1 |
+| 1 | the formation offset above | (set from 0, 2 or 4) |
+| 2 | trail the selected target | no target → 1; or `(3 × altitude error)² + range²` above **1200 m** squared for a player leader, **800 m** squared for an AI leader → 1 |
+| 3 | re-join | within **50 m** of the station → 4; target acquired → 2 |
+| 4 | the formation offset | within **50 m** → 1; target acquired → 2 |
+
+Nothing inside this function enters state 3.
+
+**The trail station** behind the selected target (states 0 and 2) ramps with the *target's* speed,
+placed along the target's backward axis:
+
+```
+d = 106.68                                   for v <= 20.576 m/s
+d = 106.68 + (v - 20.576) * 1.8516719        for 20.576 < v < 102.880005 m/s
+d = 259.08                                   for v >= 102.880005 m/s
+```
+
+Those are imperial figures in metric storage: 350 ft at 46 mph ramping to 850 ft at 230 mph.
+
+**Separation.** Inside **80 m** of the leader (6400 m² compared before the square root), the station
+is pushed away from the leader along the leader-to-follower vector scaled by `80 / distance`.
+
+**Two AI modes short-circuit the law.** Avoid crash (`+0x358 == 3`) steers at the aircraft's own
+position plus **1000 m** of altitude, and stunned (`+0x358 == 4`) returns immediately with no input
+at all. The net follower's avoid-crash case does the same 1000 m climb-out with its own parameter
+block, so **avoid crash is "aim 1000 m above yourself" in both laws**.
+
+## The steering law both behaviours call
+
+`FUN_0041b560(this, stationPoint, desiredVelocity, params, emergencyFlag, leadFlag)` turns a target
+point into stick and throttle. It is the original's AI control law and CSVM has no implementation of
+it; a full decode is separate work, not attempted here. What is settled is its parameter table:
+three 8-float blocks that differ only in their first two entries.
+
+| block | first two | used by |
+|---|---|---|
+| `DAT_0061fb28` | 0.4, 1.5 | the escort law, and its avoid-crash climb-out |
+| `DAT_0061fb48` | 0.6, 1.3 | the net follower's avoid-crash climb-out |
+| `DAT_0061fb68` | 0.8, 1.1 | the net follower's normal patrol |
+
+Shared tail on all three: `0.06, 0.06, 0.15, 0.025, 0.35, 0.0`. Entries 0 and 1 are the throttle
+floor and ceiling, which the law walks toward at **0.35 per second** and then clamps; entries 2 and
+3 are the stick thresholds below which the second control axis is
+added; entries 4 and 5 weight the along-track and across-track components of the intercept; entry 6
+is the bank-authority threshold. The law also clamps its own speed demand to a ±**26.8224 m/s**
+(60 mph) band around the current speed, and floors it at **22.352 m/s** (50 mph).
+
+## `netids` is a list, and the engine picks one at random
+
+The roster spawn `FUN_0047c210` reads the count at block `+0x10` and the array at block `+0x14`
+(`0x0047c733`–`0x0047c76d`):
+
+- count 1 takes that id;
+- count above 1 takes **`rand() % count`**, drawn once at spawn;
+- count 0 or less writes `-1`.
+
+This install authors a scalar per block, so the draw never fires in the campaign, but the reader is
+the list reader and the editor comment quoted in [`ai-rosters.md`](../formats/ai-rosters.md) is
+right to call it a list.
+
+Activation is separate from all of this. `FUN_004b0f40(vehicle, deactivated)` is the
+activate/deactivate primitive, clearing or setting `+0x945`, `+0x91d`, `+0x91e` and `+0x91f`, and is
+called from the spawn with the roster's `deactivated` field. On activation, a vehicle that has a net
+is snapped to that net's nearest node (`FUN_00432010`).
+
+## `preferred_engagement_altitude` is a maneuver-selection weight
+
+The roster's `pref_engage_alt` (the editor comment's name; `vehicle.json` spells it
+`preferred_engagement_altitude`) is block `+0x98`. `FUN_0047c210` (`0x0047d44b`) copies it to the
+vehicle at `+0x98c`, falling back to the airframe def's own value when the block leaves it at
+`-1.0`. `basic_airplane` authors **300.0** and every aircraft def inherits it; the vehicle
+constructor's own default is also 300.0 (`0x004b0434`).
+
+Its **one reader in the image** is `FUN_004201a0` at `0x004204da`, the evasive-maneuver selector: a
+candidate maneuver's weight gains **+1.0** when the aircraft's altitude (`+0x208`) sits on the wrong
+side of the preferred altitude. It is a bias on the maneuver library draw and **not** an altitude
+order. Nothing steers toward it.
+
+## What the shipped rosters actually do
+
+Census of all 53 `aiv.zrd.json` files, 414 blocks, 2026-08-15:
+
+| | blocks | `netids` |
+|---|---|---|
+| `player` | 53 | −1 |
+| `wingman_N` | 50 | −1 |
+| `bswingman_N` | 3 | −1 |
+| everything else | 308 | a real net id, every one |
+
+**Every enemy, boat and truck in the campaign is netted, and the only netless AI in the campaign is
+the player's wingmen.** Their node names are `wingman_N` and `bswingman_N`, which are exactly the
+two non-`w<plane>` defs that author `mode wingman`. The two halves agree: netless is the wingman
+case, and the wingman case is the escort law.
+
+## Instant Action gives every actor a net
+
+⚠ This corrects [`instant-action.md`](../formats/instant-action.md), which recorded that an Instant
+Action actor leaves `netids` at its `-1` default.
+
+`FUN_0045a390` builds each actor's roster block on the stack and, in **all three** of its branches
+(the wingmen loop, the ace, and the wave loop), writes:
+
+```
+block +0x10 = 1                                   the netids count
+block +0x14 = malloc(4), holding the first entry of the chapter net-id table DAT_0064f610
+```
+
+at `0x0045a8b4` (the wingmen), `0x0045ab18` (the ace) and `0x0045ae85` (the waves). So every
+Instant Action actor is handed **the chapter's first patrol net**.
+
+Two consequences follow from the demotion rule above, and both are read off the code path rather
+than observed at the controls of the original:
+
+- Instant Action **wingmen are demoted from `wingman` to `jet` at spawn** and walk that net like
+  everything else. The `w<plane>` defs contribute their pilot and airframe values, not their mode.
+- The Instant Action escort chain that `instant-action.md` decodes from `primary_target`
+  (0/1/3 on the player, 2/4 on 1/3) is therefore **not** flown as a formation in that mode. It
+  survives as a target assignment.
+
+The escort law is a campaign behaviour. If a future decode shows Instant Action wingmen holding
+station on the player in the original, the fault is in one of the three facts above and this section
+is where to start.
+
+## Function map
+
+| Address | What |
+|---|---|
+| `FUN_004897c0` | the world tick: iterates vehicles, gates on `+0x91d` / `+0x944`, calls the AI update and the physics |
+| `FUN_00489ea0` | physics dispatch on `mode` |
+| `FUN_0041c270` | the per-frame AI update and its behaviour fork |
+| `FUN_0041fe10` | target selection, writes `+0x948` |
+| `FUN_0041d1f0` | the patrol-net follower |
+| `FUN_0041d9f0` | pursue |
+| `FUN_0041e760` | the formation escort law |
+| `FUN_0041b560` | the shared steering law: point in, stick and throttle out |
+| `FUN_00475fc0` | net assignment (`SET_AI_NET`), including the volume overwrite |
+| `FUN_0049c920` | script-side net assignment, always forces `mode` to `jet` |
+| `FUN_00475820` | def to vehicle copy, including `mode` |
+| `FUN_00476250` | post-spawn vehicle init, including the wingman demotion |
+| `FUN_0047c210` | the roster spawn: `netids` draw, `preferred_engagement_altitude`, activation |
+| `FUN_004b0f40` | activate / deactivate |
+| `FUN_00479240` | the `vehicle.json` def parser, including the `mode` string table |
+| `FUN_004201a0` | evasive-maneuver selection, the one reader of `preferred_engagement_altitude` |
+| `FUN_0041c470` | the debug overlay that names the modes and recomputes the target ranking |
+
+## Open
+
+- `FUN_0041b560` is described by its parameter table only. The law itself (how it converts a station
+  point into bank, pitch and rudder) is a separate decode, and it is what would replace
+  `AiPilot`'s placeholder.
+- `mode_alt` has no identified consumer.
+- Whether the original's Instant Action wingmen visibly hold station is untested. The code path says
+  they do not.
