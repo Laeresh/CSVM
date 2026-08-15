@@ -225,7 +225,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Decode and clear the ground
 
 1. ☑ Decode the original's player targeting into `docs/org/targeting.md`
-2. ☐ Drop `A` from `RespawnPressed()` — respawning fires a rocket
+2. ☑ Drop `A` from `RespawnPressed()` — respawning fires a rocket
 3. ☐ Move the node-name label overlay from `T` to the `F13+` debug range
 
 ### Wave B — The selection model
@@ -349,34 +349,46 @@ a day into a blitter. That is how `tracers.md` and `shadows.md` went. (c) `Versu
 to copy" doc comment is **false** (⚠ table row 1) and should be corrected as part of this item's
 docs, so the next reader does not repeat the mistake.
 
-## A2 ☐ Drop `A` from `RespawnPressed()` — respawning fires a rocket
+## A2 ☑ Drop `A` from `RespawnPressed()` — respawning fires a rocket
 
-**Goal.** Pressing gamepad `A` to respawn no longer launches a rocket the moment the plane comes
-live. `Y` remains the respawn button.
+**Landed 2026-08-16.** Pressing gamepad `A` to respawn no longer launches a rocket the moment the
+plane comes live. `Y` remains the respawn button.
 
-**Evidence (confidence: traced).** `RespawnPressed()` (`FlightController.cs:2225`) reads
+**Evidence (confidence: traced).** `RespawnPressed()` (`FlightController.cs:2225`) read
 `KeyDown(Key.R) || PadPressed(JoyButton.Y) || PadPressed(JoyButton.A)`, and `RocketFirePressed()`
 (`FlightController.cs:1615`) reads `KeyDown(Key.F) || PadPressed(JoyButton.A)`. `PadPressed` is a
 **level** read (`FlightController.cs:2196`), not edge-detected. `RocketFirePressed`'s doc comment
-argues the two are safe because they belong to states that never overlap — which is true of the
+argued the two are safe because they belong to states that never overlap — which is true of the
 *states* and false of the *button press*, since `A` is still held on the frame after respawn, when
 the plane is live. Reported from live play.
 
-**Approach.** Remove `|| PadPressed(JoyButton.A)` from `RespawnPressed()`. Correct
-`RocketFirePressed()`'s doc comment: the reason the two no longer collide is that `A` is no longer a
-respawn button, not that their states are disjoint. Check whether the results-board rematch path
-reads the same helper and would lose its `A` binding as a side effect —
-<TODO: confirm which paths call `RespawnPressed()` and whether the Dogfight results board needs `A`
-kept.>
+**Approach.** Removed `|| PadPressed(JoyButton.A)` from `RespawnPressed()`. Corrected
+`RocketFirePressed()`'s doc comment and the crash-branch comment above it: the reason the two no
+longer collide is that `A` is no longer a respawn button, not that their states are disjoint.
+
+**TODO resolved — which paths call `RespawnPressed()`, and does the Dogfight results board need `A`
+kept?** Four call sites (`FlightController.cs:1073,1089,1100,1120`): the crash respawn, the solo
+stunt-run restart, the race rematch, and the Dogfight results-board rematch. All four ultimately run
+through `GameSession.RestartRace`/`RestartMatch` (`GameSession.cs:3172-3189`), and both call
+`rig.Controller?.Respawn()` on every rig — the identical "plane goes live this frame, `A` is still
+held, `RocketFirePressed` reads it" mechanism as the crash case. **The results board does not need
+`A` kept**; keeping it there would reproduce the exact bug this item removes, just on the rematch
+path instead of the crash path. `controls.md`'s respawn row also had no pad button documented at
+all (a pre-existing gap, since `Y` was never listed) — fixed to `Y` in the same edit.
 
 **Model recommendation.** medium, low effort — a one-line change with a comment correction; the
 judgement is in the doc comment, not the code.
 
 **Verify.** With a pad: crash, hold `A` to respawn, and confirm the rocket count is unchanged after
-the plane comes live. Confirm `Y` still respawns. <TODO: name the suite case, if one covers respawn
-input.>
+the plane comes live. Confirm `Y` still respawns. **No suite case covers respawn input** — `Suites.cs`
+calls `FlightController.Respawn()` directly everywhere it exercises a respawn (e.g. `target.Respawn()`
+at `Suites.cs:3303` etc.) and contains no `JoyButton`/`RespawnPressed`/`RocketFirePressed` reference,
+so the button-press decoding this item touches is untested by the suite; live pad play is the only
+check per the plan's own "what this project cannot verify itself" gap (`docs/verification.md`). This
+mirrors A2's own evidence trail: the bug was reported from live play, not caught by the suite, because
+the suite never reads a gamepad.
 
-**⚠ Traps.** The stale comment is the actual hazard here — leaving it in place means the next reader
+**⚠ Traps.** The stale comment was the actual hazard here — leaving it in place means the next reader
 re-derives the same false safety argument. The general shape (a level-read button spanning a state
 transition) may bite elsewhere; do not go hunting for it in this item, but it is worth a backlog
 note if a second instance turns up.

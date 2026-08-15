@@ -1109,7 +1109,7 @@ public partial class FlightController : Node3D
             // _Process through this crash freeze (motions, the played def, every puffer) — but not
             // through a clock halt, which stops that runtime with everything else, so P during a
             // crash catches the wreck mid-break-up. The airframe stays frozen at the impact point
-            // until the pilot respawns (R / gamepad Y or A); unattended HoldSegments runs and
+            // until the pilot respawns (R / gamepad Y); unattended HoldSegments runs and
             // AutoRespawnAfter sessions (Versus) respawn on the timer armed at Crash instead
             //
             // Out of lives (G13): neither trigger applies — the wreck stays and the pane watches,
@@ -1610,8 +1610,11 @@ public partial class FlightController : Node3D
 
     /// <summary>F / gamepad A — the rocket trigger. One discrete pull launches one rocket (holding
     /// does NOT auto-repeat; only the 1.0 s cooldown gates it), and <c>--fire-rockets</c> auto-repeats
-    /// for unattended runs. Gamepad A also respawns, but only from the crashed / run-complete screens
-    /// — states this live-flight firing path never shares — so the two never collide.</summary>
+    /// for unattended runs. Gamepad A no longer respawns (<see cref="RespawnPressed"/>), because
+    /// <c>PadPressed</c> is a level read: the button stays held on the frame respawn/rematch goes
+    /// live, and that frame is inside this method's own live-flight state, so A firing a rocket the
+    /// instant the plane spawns was not a state collision to design around — it was this trigger
+    /// reading a button respawn had no business sharing.</summary>
     private bool RocketFirePressed() => KeyDown(Key.F) || PadPressed(JoyButton.A);
 
     /// <summary>G / gamepad D-pad Left — cycles the gun selector through the firable groups (1 → 2 →
@@ -2223,7 +2226,7 @@ public partial class FlightController : Node3D
         (KeyDown(positive) ? 1f : 0f) - (KeyDown(negative) ? 1f : 0f);
 
     private bool RespawnPressed() =>
-        KeyDown(Key.R) || PadPressed(JoyButton.Y) || PadPressed(JoyButton.A);
+        KeyDown(Key.R) || PadPressed(JoyButton.Y);
 
     /// <summary>P (or gamepad Start), edge-detected so one press toggles once, gated on
     /// <see cref="AllowPause"/> (false for AI rigs and the suites' bare test rigs).</summary>
