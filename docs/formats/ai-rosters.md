@@ -131,7 +131,7 @@ one of the 414 blocks — the volumes are never authored, so every AI falls back
 `activation` / `attack` / `return_range` in `vehicle.json` and to `player.json`'s
 `min_ai_active_dist` (2000 m). Do not spend time on it; do not invent values for it.
 
-**Closed 2026-08-10 — treat them as inherited padding.** The likeliest explanation is that they are
+**Closed  — treat them as inherited padding.** The likeliest explanation is that they are
 a remnant: this engine is a descendant of Zipper's earlier `mech3` lineage (the same lineage the
 extraction toolchain targets — [extraction.md](extraction.md)), and a record layout that outlived
 the fields it was written for is exactly what a carried-over roster format looks like. That is a
@@ -190,7 +190,7 @@ pair per stat**, the endpoints the rating interpolates between.
 |---|---|---|---|
 | `daredevil_chance` | 0.35 | 0.99 | probability of taking an available Danger Zone run |
 | `sixth_sense_chance` | 0.45 | 0.71 | passing the test to follow a target's maneuver (a failure leaves the AI stunned) |
-| `sixth_sense_factor` | 0.994 | 1.07 | ~~the ease-off factor applied while being pursued~~ **decoded 2026-08-15 (`D31`): a flat multiplier on the AI's three stick channels, applied every frame on the non-emergency path** ([aiControlLaw.md](../org/aiControlLaw.md#the-skill-scalar-and-how-a-1-to-9-rating-interpolates)). Not conditional on being pursued |
+| `sixth_sense_factor` | 0.994 | 1.07 | ~~the ease-off factor applied while being pursued~~ **decoded  (`D31`): a flat multiplier on the AI's three stick channels, applied every frame on the non-emergency path** ([aiControlLaw.md](../org/aiControlLaw.md#the-skill-scalar-and-how-a-1-to-9-rating-interpolates)). Not conditional on being pursued |
 | `dead_eye_angle` | 4.0° | 1.45° | half-angle of the aiming-error cone around the lead point |
 | `quick_draw_angle` | 50° | 89° | half-angle of the cones off the target's nose/tail within which a shot is taken |
 | `quick_draw_chance` | 0.05 | 0.44 | probability of taking a marginal shot |
@@ -201,14 +201,14 @@ pair per stat**, the endpoints the rating interpolates between.
 
 Notes that matter to anyone implementing this:
 
-- ~~**Only the two endpoints are decoded.**~~ **Traced 2026-08-15 (`D31`), and the working assumption
+- ~~**Only the two endpoints are decoded.**~~ **Traced  (`D31`), and the working assumption
   was the right shape with the wrong origin.** The engine computes
   `value = lo + (hi − lo) · rating · 1/9` (`FUN_0047c210` at `0x47d0c1`–`0x47d101`, the constant at
   `0x608028` being exactly `0.11111112`). The endpoints therefore sit at rating **0 and 9**, not 1
   and 9: a 9 yields `hi` exactly, but a 1 yields `lo + (hi − lo)/9`, not `lo`. Two of the ten pairs
   are confirmed on this path by name (`sixth_sense_chance` → `obj+0x970`, `sixth_sense_factor` →
   `obj+0x974`); the other eight are assumed to share it, since one interpolation site serves the
-  block. **Corrected 2026-08-15 (`E42`): `AiSkills.At` now computes `rating/9` directly** rather
+  block. **`AiSkills.At` now computes `rating/9` directly** rather
   than `(rating-1)/8`, matching the engine at every rating rather than only at 9.
 - **The scale is 1–9 and nothing else.** Ratings are an index into this table; there is no 0–100
   scale anywhere in the shipped data. (The original *design document* gives a Danger-Zone poll

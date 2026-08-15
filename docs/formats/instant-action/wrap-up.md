@@ -149,5 +149,5 @@ two teams are: the path from impact to the drained pool carries no team test, an
 the target scan and the radio lines instead. A wingman on the player's side can therefore be shot
 down by the player or by another wingman, and an Instant Action flight needs no damage gate of its
 own. The decode is [`org/vehicleDamage.md`](../../org/vehicleDamage.md)'s "Teams and friendly fire"
-section (2026-08-14); the team space it reads (0 neutral, 1 the player's side, 2 and up enemy) is
+section (); the team space it reads (0 neutral, 1 the player's side, 2 and up enemy) is
 on [turrets.md](../turrets.md).

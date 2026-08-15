@@ -205,14 +205,14 @@ site is recorded here:
 | 0 | unwired | turret acquisition is `TurretController`'s event; owned by C9's thread, not wired from here |
 | 15 | unwired | the danger-zone modes are never entered (their gate data is undecoded — F17) |
 | 16 | unwired | no dispatch site located in the binary (above) |
-| 22–24 | unwired | the polarity is decoded (above) and the 22/23 split is answerable now that a team model exists (`PLAN-instant-action` B7, 2026-08-14) — no dispatch site chosen yet, left for a future item |
+| 22–24 | unwired | the polarity is decoded (above) and the 22/23 split is answerable now that a team model exists (`PLAN-instant-action` B7, ) — no dispatch site chosen yet, left for a future item |
 | 26 | unwired | the original's shake-attempt check is undecoded; no machine transition maps to it without force-fitting |
 | 28 | unwired | both arms (above) are answerable now that a team model exists (B7) — no dispatch site chosen yet, left for a future item |
 
 Stand-ins and inventions, named:
 
 - **Speakers register on their real `FlightController.Team`** (`PLAN-instant-action` B7,
-  2026-08-14) — the earlier teamless stand-in is retired. Free flight and
+  ) — the earlier teamless stand-in is retired. Free flight and
   `--vs` still give every pilot its own default team (`AimAssist.TeamOfPilot`, pilot N = team
   N+1), so a broadcast only ever elects a "teamless" match there in practice; it goes live the
   moment a mission puts two AI, or an AI and the player, on the same explicit team.
@@ -239,7 +239,7 @@ Stand-ins and inventions, named:
 - **Trigger 16 (`PR-EnemyDwn`) has no located dispatch site.** It may be reached through a path not
   covered, or be unused.
 - **How `Bail`/`NoBail` is chosen** below the family root (the natural candidate is the
-  constitution roll, unconfirmed). The `-A`/`-B`/`-C` half closed 2026-08-13: the shipped
+  constitution roll, unconfirmed). The `-A`/`-B`/`-C` half closed : the shipped
   `snd_<FAMILY>-A_id<N>_random` groups pick the take, weighted-random with recency 0.5 (see
   "The clips are sounds.json entries" above).
 

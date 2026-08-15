@@ -47,7 +47,7 @@ always states it explicitly. The two values:
 - **`WeaponOrCollideHit`** — the object **breaks and the plane flies through unharmed**. Exactly
   **44 defs** in the whole install, and they are a deliberate, hand-picked set (below).
 
-> ⚠ **Superseded reading (corrected 2026-08-07, `BL-302`).** This page originally read the enum as
+> ⚠ **Superseded reading (corrected , `BL-302`).** This page originally read the enum as
 > "what can damage it" — `WeaponHit` = weapon fire only, ramming damages the plane and leaves the
 > object intact. Original-game tests refute that: ramming a C1 hangar (a plain `WeaponHit` def)
 > plays both the plane crash and the hangar's destruction, and a survivable graze advances its

@@ -146,7 +146,7 @@ remake ignoring it stays correct.
 **Every settled per-chapter verdict above is consistent with this rule** — the renders that
 settled C1/C1C/C2B/C4 on `zone2` were all shot *above the deck* (state 2), the below-deck
 reference is literally named `Zone1 environment`, C1B/C2/C3 author their `CLOUD_COVER` band out
-of reach (C1B/C3 10000–11000, C2 19024–20124 — checked in the extracted files 2026-08-09), so
+of reach (C1B/C3 10000–11000, C2 19024–20124 — checked in the extracted files ), so
 state 2 never fires and they fly zone 1 always — which is also why C2's empty `zone2` dome is
 never a hole, and why the controls saw `ZONE1` haze persist above its 1024 m `FOG_ALTITUDE` top
 (B13: the fade is per fragment *within* a zone; the *switch* is `CLOUD_COVER`, a different key) —
@@ -176,12 +176,7 @@ Decompiled sources are reproducible from `crimson.exe` in Ghidra at the addresse
 (loader `FUN_004bc680` = `weather.cpp`, zone parser `FUN_004bc3e0`, per-frame `FUN_0042ee40`,
 zone applier `FUN_00472ea0`, world init `FUN_004735b0`).
 
-So the remake selects it via `--sky-zone` (default `zone2` = night). **Every chapter is now
-settled**, in three passes and by three different instruments:
-[the horizon's own geometry](#horizon-geometry) decides
-C1B, C2 and C3 from the data; C5 fell to a user A/B in 2026-07; and
-[the last four](#deck-chapters-use-zone2-at-the-documented-camera-state) fell to
-a dome-identity render in 2026-08. C5's two candidates were the far-apart pair:
+So the remake selects it via `--sky-zone` (default `zone2` = night). **Every chapter is settled.** [Horizon geometry](#horizon-geometry) identifies C1B, C2, and C3; the C5 evidence distinguishes its two candidates; and [the deck chapters](#deck-chapters-use-zone2-at-the-documented-camera-state) use `zone2` at the documented camera state. C5's two candidates were the far-apart pair:
 
 | | `ZONE1` | `ZONE3` |
 |---|---|---|
@@ -375,7 +370,7 @@ targets while `zone_id 2` holds the entire cloud deck, all 9 `fvol` volumes and 
 draw-only-the-flown-zone gate leaves mission content unbuilt whichever zone is chosen. It is a
 partition tag of one world whose runtime meaning is unknown. Do not re-cite it.~~
 
-**Correction (2026-08-09, decompile).** `zone_id` is not a per-mission zone selector and was
+**Correction (, decompile).** `zone_id` is not a per-mission zone selector and was
 never claimed to be one by anything that reads it at runtime — it is the **per-frame visibility
 gate** [decoded above](#zone-selection-at-runtime):
 `FUN_0056c430(node_zone_id)` draws a node iff `zone_id` is −1, or `zone_id` is in the camera's
@@ -424,7 +419,7 @@ not a reading error (re-run, same result). Neither breaks the visibility-gate me
 node), but a `zone_id`-gate implementation (`B12`) must not assume every deck chapter's `fvol*`
 population is gated.
 
-**`B12` landed the gate on exactly this reading (2026-08-09).** The remake now reads the zone off
+**`B12` landed the gate on exactly this reading ().** The remake now reads the zone off
 each chapter's own volumes (`WorldBuilder.FogVolumeZoneIdOf`) instead of assuming one, and C2B is
 the chapter that proves it: at `(-7325, 192, -3829)` its ambient cloud field measures **123,989
 sprite px with the gate on against 0 with `--no-zone-cull`** — the gate makes it *more* visible,
@@ -584,7 +579,7 @@ shortens a range. The remake used to halve them with a `fogRangeFactor = 2.0` in
 is **deleted**. Measured at C1's river pose, the halved range washed the overcast ceiling to flat
 fog at ~1.8 km against the original still's ~12.6 km; the authored range takes that to ~3.7 km.
 
-**The fade is by FRAGMENT altitude, not by the camera's** (2026-08-08, `PLAN-overcast-match`
+**The fade is by FRAGMENT altitude, not by the camera's** (, `PLAN-overcast-match`
 B13). Settled at the controls of the original in **C2** — the only chapter whose flown band sits
 inside the flight envelope, so the only place the two readings differ at all: climbing well above
 `ZONE1`'s 1024 m top, the distant city **"still dissolves into haze"**. A camera-altitude fade
@@ -603,7 +598,7 @@ WeatherState.CloudBandCentre]` — but it is an identity in the **unflown** zone
 cannot be evidence for what `FOG_ALTITUDE` does at runtime. It is recorded here as a real and
 unexplained property of the authoring, not deleted (`PLAN-overcast-match` B11/B12).
 
-**Un-retired (2026-08-09, decompile): `zone1` is not unflown in the deck chapters.** The
+**Un-retired (, decompile): `zone1` is not unflown in the deck chapters.** The
 "belongs to a zone C1 never flies" reading assumed one static zone per mission; the decompile
 [settles that a deck chapter flies both zones, switched by camera altitude at runtime](#zone-selection-at-runtime) —
 below the deck the camera is in state 1 and wears `ZONE1`'s fog, `zone1`'s dome geometry is what

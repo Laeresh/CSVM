@@ -217,7 +217,7 @@ The offsets confirm M4 B7's decode from the other direction: team at `+0x34`, gr
 band of **±10000 m** for every Instant Action actor, which is the engine's own way of saying they
 are always awake, always willing to engage, and never return.
 
-⚠ **Every actor is also given a patrol net** (corrected 2026-08-15; this page previously said
+⚠ **Every actor is also given a patrol net** (corrected ; this page previously said
 `netids` kept its `-1`). All three branches of `FUN_0045a390` write a one-entry `netids` list
 holding the **first id in the chapter's net table** (`0x0045a8b4` for the wingmen, `0x0045ab18` for
 the ace, `0x0045ae85` for the waves), so every Instant Action aircraft walks the chapter's first
@@ -273,7 +273,7 @@ Wingman `i` (0-based) is built as:
 `<plane>` is `wingman_plane`'s index through the two name columns above; the roster name format is
 `%s_ia%d` over the def and the index. **So the flight is not five aircraft on the player: 0, 1 and
 3 escort the player, while 2 and 4 escort 1 and 3.** That is `primary_target` doing the work M4 B7
-said it does, and it is the shipped Instant Action wingman mechanism. ⚠ **Corrected 2026-08-15: a
+said it does, and it is the shipped Instant Action wingman mechanism. ⚠ **a
 patrol net IS assigned** (see above), and the net demotes the `w<plane>` def's `wingman` mode to
 `jet`, so on this path the chain is a target assignment rather than a flown formation. **The
 nine-value skill vector is left unset**, so wingmen fly on the airframe's own AI defaults.
@@ -556,7 +556,7 @@ record authors a threshold: the count is "all of them", because the test is on a
 load, and nothing distinguishes that from having emptied it. Unobservable in the shipped data (all
 58 records author 12 or 14 engines) but it is the behaviour, not an accident.
 
-⚠ **This was decoded 2026-08-15, after G13 had already shipped the hull kill as the only path.**
+⚠ **This was decoded , after G13 had already shipped the hull kill as the only path.**
 The tell was in play: every engine on the objective zeppelin destroyed and the mission ran on.
 The reason the error survived review is that the gasbags are behind the `DAMAGES_ZEPPELIN` gate
 ([weapons.md](weapons.md)) while engines are ordinary destructibles, so the hull-only reading made

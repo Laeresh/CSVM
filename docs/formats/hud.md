@@ -260,7 +260,7 @@ consumed, `%%` → literal `%`) is handled by `Messages.Fill`.
 
 ## Bitmap font
 
-Decoded 2026-07-24 by pixel-probing the atlas; remake reader `src/Flight/HudFont.cs`.
+Decoded  by pixel-probing the atlas; remake reader `src/Flight/HudFont.cs`.
 
 Two textures in **`extracted/rimage/`** (the menu/UI image set — *not* the chapter texture
 archives that carry the compass/gauge art):

@@ -9,7 +9,7 @@ One shared reader, flat alternating `KEY, [values…]`, ~45 top-level keys. Flig
 `stall_mag`, `drag_factor`) feed `PlaneStats`; the sound curve blocks (`engine_sound`,
 `prop_sound`, `rattle`) are in [sounds.md](../sounds.md). Three whole subsystems in it are
 **undocumented elsewhere**, and they stand on different evidence: the aim assist is **decoded from
-the executable** ([`org/aim-assist.md`](../../org/aim-assist.md), 2026-08-10); the other two have
+the executable** ([`org/aim-assist.md`](../../org/aim-assist.md), ); the other two have
 data-confirmed key names and values with meanings **inferred** from those names, one of which (the
 near-miss counter) is implemented on that inferred reading. None appears in the original design
 document, so they are shipped-only features.
@@ -17,7 +17,7 @@ document, so they are shipped-only features.
 | Keys | Values | Reading |
 |---|---|---|
 | `sticky_bullet_catchup_rate` `_inaccuracy` `_forget_interval` `_dist_factor` | 5.0 / 1.0 / 1.5 / 0.0 | **The player's gun aim assist — decoded from `crimson.exe`, [`org/aim-assist.md`](../../org/aim-assist.md).** ⚠ **Nothing steers a round in flight**; the assist rotates the *firing vector* at spawn. Per muzzle, the engine picks the most gun-axis-aligned enemy whose constant-velocity intercept is inside `RANGE` and inside an assist cone, slerps a plane-local gun line toward that intercept at `catchup_rate` per second, and scatters the result inside a cone of `inaccuracy` **degrees** (× π/180 at parse). `forget_interval` unwinds the gun line to centre that many seconds after the barrel **last fired** (not after a lock is lost). `dist_factor` is a per-metre penalty in target *selection*, not range scaling, and 0 disables it — the executable's own default is `2.5e-4`. AI gunnery does **not** use this path. |
-| `warning_shot_max` `_dissipation` `_interval` `_sound` | 2.0 / 2.0 / 1.0 / `bullet_warning_sg` | **Near-miss feedback — implemented** (`WarningShotCue`, 2026-08-02). A counter of rounds passing close by, capped at `max`, decaying at `dissipation` per second, with the sound group re-triggering no faster than `interval`. **The units are not in the data**: the remake accrues 1.0 per pass, which makes `interval` the term a pilot hears. **Nor is the trigger distance** — nothing here says how close is close, and the sound def's `RANGE [20,200]` is the 3D falloff window, not a radius. Pairs with `bullet_hit_sound`, still unbuildable (nothing can strike an aircraft). |
+| `warning_shot_max` `_dissipation` `_interval` `_sound` | 2.0 / 2.0 / 1.0 / `bullet_warning_sg` | **Near-miss feedback — implemented** (`WarningShotCue`, ). A counter of rounds passing close by, capped at `max`, decaying at `dissipation` per second, with the sound group re-triggering no faster than `interval`. **The units are not in the data**: the remake accrues 1.0 per pass, which makes `interval` the term a pilot hears. **Nor is the trigger distance** — nothing here says how close is close, and the sound def's `RANGE [20,200]` is the 3D falloff window, not a radius. Pairs with `bullet_hit_sound`, still unbuildable (nothing can strike an aircraft). |
 | `smokescreen_stun_range` `_angle` `_interval` | 600 m / 170° / 5.0 s | **The smokescreen weapon's blind effect** — who it stuns: within 600 m, inside a 170° arc, re-evaluated every 5 s. Matches the design's stun-recovery pilot skill and the flare/sonic-rocket stun. |
 
 Also worth naming, all data-confirmed: `crash` (`armor_damage_range`, `health_damage_range`,

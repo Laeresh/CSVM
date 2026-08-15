@@ -193,7 +193,7 @@ RGBA and BGRA are indistinguishable on it.
 - **Overlay channel order and blend mode.** Greyscale content leaves RGBA vs BGRA
   undetermined. The remake composites it as straight alpha-over-RGB and renders correctly on
   everything inspected, which is consistent with but does not prove that reading.
-- **Slot order.** *Confirmed 2026-07-20* — file order **is** `paint_color1..3`. Rendering the
+- **Slot order.** *Confirmed * — file order **is** `paint_color1..3`. Rendering the
   Fortune Hunters Bloodhawk with all three plausible assignments against
   `OriginalScreenshots/CustomPlane Paint1 Bloodhawk.png` singled one out: only
   *(red, black, white)* puts black on the outer wing panels with the white swoosh between

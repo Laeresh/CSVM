@@ -99,12 +99,12 @@ A list of part entries:
   because armor is **purchasable** and these are the *stock* allocations, not because the number is
   duplicated. `PlaneStats` reads both values (`DestroyablePart.MaxHp`/`MaxArmor`); the two-pool
   `PlaneDamage.Apply(part, healthDamage, armorDamage)` — armour first, 1:1 overflow — landed
-  2026-08-04 (`PLAN-armour-layer`).
+   (`PLAN-armour-layer`).
   *(An earlier version of this page said AI variants differ 25/20 — that is wrong; nothing in
   this install has an unequal pair.)*
 - Flags: `critical` — the plane is destroyed when this part reaches 0 HP (all four player
   parts carry it); `engine` — engine damage/power loss on that part.
-  ⚠ **The `critical` reading is from the flag's name and the 2026-08-13 executable decode does not
+  ⚠ **The `critical` reading is from the flag's name and the  executable decode does not
   support it** ([`org/vehicleDamage.md`](../org/vehicleDamage.md)): the death path tests only
   whole-vehicle health, no code on it reads a part flag, and one zone at zero leaves the
   whole-vehicle summary at 75 %. Either the flag is consumed somewhere not yet found, or the
@@ -146,7 +146,7 @@ A list of part entries:
     At 0.99 it fires on the *first scratch*, which is authored, not a threshold to retune.
 
     ⚠ **`random_gun_impact`'s real home is `weapons.json`, not here — read this entry as a probable
-    authoring leftover (hypothesis, 2026-08-01).** It is the `player` **IMPACT surface animation**
+    authoring leftover (hypothesis, ).** It is the `player` **IMPACT surface animation**
     for `wep_03` (60slug) — "what a bullet does when it hits the player's aircraft"
     ([weapons.md](weapons.md)), the counterpart of the `enemy` and `default`/`buildings` classes.
     That is a general mechanism gated on being shot at, which nothing can do in M3. One plane of
@@ -175,16 +175,16 @@ position, not by name (measurements in `gamez.md`, "Player-plane damage states")
 ### Armor and hit points
 
 **The two numbers on a `destroyable_parts` entry are that zone's hit points `[1]` and its armor
-pool `[2]`, armor spent first.** Settled 2026-08-03.
+pool `[2]`, armor spent first.** Settled .
 
 **How it was settled.** Every pair in this install is *equal*, so no measurement over the shipped
 data can separate (armor, hp) from (hp, hp) or (max, current) — the reading stood as a hypothesis
 for that reason. The original's **armory breaks the tie, because it varies armor independently of
 health**: its per-zone allocation is in units that are armor points 1:1, and a **stock** airframe
 reads the same per-zone numbers the zrdr def carries (a stock Bloodhawk shows ~20 units on each of
-its four zones; `pbloodhawk`'s parts are 20/20/20/20). Observed at the controls, 2026-08-03.
+its four zones; `pbloodhawk`'s parts are 20/20/20/20). Observed at the controls, .
 
-**Confirmed end-to-end by `CAP-19`** (observed at the controls, 2026-08-03). Three results:
+**Confirmed end-to-end by `CAP-19`** (observed at the controls, ). Three results:
 
 1. **Armor depletes before health.** The ordering retail string 3372 states and
    [`PLAN-M3-weapons.md`](../plans/PLAN-M3-weapons.md) C23 derives from a dominance argument is now
@@ -253,7 +253,7 @@ weight model can carry. The armory's own constants — per-unit cost and weight,
 ```
 
 Whole-plane effects. **The fractions are the whole-vehicle health fraction**, decoded from the
-executable 2026-08-13 ([`org/vehicleDamage.md`](../org/vehicleDamage.md)); an earlier reading here
+executable  ([`org/vehicleDamage.md`](../org/vehicleDamage.md)); an earlier reading here
 had them as any single part's fraction, on the argument that a total-HP reading could never reach
 0.10 if a critical part killed the plane at 75 % total. The decode removes that argument: the
 whole-vehicle fraction is itself the parts-weighted total, and nothing on the death path reads the
@@ -306,7 +306,7 @@ fighters, 500 for the boat/truck). Positions 3–4 are inferred, not confirmed.
 **`cannon_jam`** (`player_airplane`) — `heat_safe_limit 1000`, `heat_dissipation_rate 50`,
 `jam_chance 0.1`; reads as a gun-overheating model paired with `FIRING_HEAT` in
 [weapons.md](weapons.md). ⚠ **Dead data: the original executable has no reader for it**
-(decoded 2026-08-14). None of `cannon_jam`, `heat_safe_limit`, `heat_dissipation_rate` or
+(decoded ). None of `cannon_jam`, `heat_safe_limit`, `heat_dissipation_rate` or
 `jam_chance` exists as a string in `crimson.exe`, and the zrdr readers look keys up by string
 (`FUN_0057a090(dict, "KEY")`), so no lookup is possible. Sibling keys `bullethole_anims`
 (`0x00627ec4`) and `destroyable_parts` (`0x00627d7c`) are present, which is the calibration
@@ -325,7 +325,7 @@ a whole-vehicle pair at all (`pbloodhawk → player_airplane → basic_airplane`
 chain), so for player planes the per-part pools are the whole model.
 
 **A vehicle spends both, in a fixed relationship: the per-part pools are the ledger and the
-whole-vehicle pair is a running summary of them.** Decoded from the executable 2026-08-13, full
+whole-vehicle pair is a running summary of them.** Decoded from the executable , full
 write-up in [`org/vehicleDamage.md`](../org/vehicleDamage.md). A weapon hit carries two damage
 numbers (armour and health, not one figure) and, sometimes, a zone id. When it names a zone, the
 damage is spent against that zone's pools, armour first with 1:1 overflow into health, and the
@@ -335,7 +335,7 @@ directly, through the same armour-first helper. So the `armor 64 / health 64` on
 not a second, competing pool; it is the scale its four 20/20 zones are expressed in.
 
 Everything downstream reads the summary rather than the parts. **Death is one test: whole-vehicle
-health at or below zero.** (Corrected 2026-08-14: the take-hit wrapper loops the unabsorbed
+health at or below zero.** (Corrected : the take-hit wrapper loops the unabsorbed
 leftover back into the whole pair zone-less, and a dead zone redirects to a surviving one, so the
 kill can arrive with zones still healthy — every zone exhausted is sufficient, not necessary;
 [`org/vehicleDamage.md`](../org/vehicleDamage.md)'s correction section has the full contract.) The
@@ -353,7 +353,7 @@ the same type are never quite identical. Ships and ground vehicles are excluded 
 a patrol boat is exactly its authored 40 times the difficulty factor: 35, 40 or 50.
 
 **The patrol boat has two sets of hit points because it is authored as two things, and both are
-live** (settled 2026-08-13; the decode is [`org/vehicleDamage.md`](../org/vehicleDamage.md)). A boat
+live** (settled ; the decode is [`org/vehicleDamage.md`](../org/vehicleDamage.md)). A boat
 spawned from an `aiv` roster is a **vehicle** and reads the 40 on this page, with the 0.60/0.30
 `injure_anims` above it; a boat *placed* in the world is a **destructible** and reads the `HEALTH 20`
 of the anim def whose wildcard `NAME` catches it, with that def's own `ANIM_HEALTH` stages. C1 ships

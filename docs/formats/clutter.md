@@ -201,7 +201,7 @@ intends a facade.
 
 The map-edge continuation carries the border tiles' clutter along, sprites and buildings
 alike. Sprites stay pass-through there as everywhere; **the buildings are solid** since
-2026-07-22 — attaching an existing shared shape at each mirrored placement costs one call
+ — attaching an existing shared shape at each mirrored placement costs one call
 per building (measured: 0.5–0.6 ms for the ~3,900 buildings of a boundary-crossing
 rebuild, inside a rebuild that already cost ~4.1 ms), where rebuilding a merged region
 trimesh on that frame would have been a visible hitch. See
