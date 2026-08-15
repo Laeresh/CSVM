@@ -169,7 +169,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
 - `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels.
 - `src/UI/PerfHud.cs` — the frame-cost readout (F14, `--debug-fps=`): fps/current-frame-cost/worst-recent-frame, once for the window, drawn above the launchscreen too.
-- `src/UI/TargetingOverlay.cs` — the targeting overlay (F15, `--debug-targets`): a per-frame line from every turret gunner (`TurretController.TargetPosition`) and AI gunner (`AiGunner.Target`) to its acquired target, coloured by the gate holding the trigger (`TurretController.Gate`), with the gate named per shooter in the HUD. Depth test off, since the line into a hull is the one worth seeing.
+- `src/UI/TargetingOverlay.cs` — the targeting overlay (F15, `--debug-targets`): a per-frame line from every turret gunner (`TurretController.TargetPosition`) and AI gunner (`AiGunner.Target`) to its acquired target, coloured by the gate holding the trigger (`TurretController.Gate`), with the gate named per shooter in the HUD. Depth test off, since the line into a hull is the one worth seeing. Splitscreen (F51, `BL-376`): the world-space lines draw in every pane on their own (default render layer, in every camera's `CullMask`); the HUD roll-call is once for the window, like `PerfHud`, since it is process-wide combat state.
 - `src/UI/SelectionService.cs` — the shared `--freecam`/`--anim-lab` selection: click-pick + the `cs_name` ancestor ladder, breadcrumb + highlight box.
 - `src/UI/NodeLab.cs` — the `--freecam`/`--anim-lab` node lab (N, `--debug-nodelab`): lazy `cs_name` tree, search, frame/hide, dependencies, destructibles.
 - `src/UI/WorldDamageLab.cs` — the `--freecam`/`--anim-lab` world damage lab (F5, `--debug-damage`): HP slider + kill/reset on the selection's destructible pool.
@@ -3890,6 +3890,10 @@ only decides when to rebuild them.
   ~1024) — a chaptered `--fly --damage=` still builds and presets the panel, just hidden behind F5,
   not open on launch; only a chapter-less `--viewer --damage=` opens it immediately. Pre-existing,
   not a B12 change.
+⚠ **Splitscreen (F51, `BL-376`): P1-only, by design.** In flight `GameSession` binds one
+  `FlightDamageTarget` to `_rigs[0]`'s controller — one panel, not one per pane — and tags it
+  `"P1"` in splitscreen (`GameSession.cs:1940`) so the panel's own subtitle says whose HP it
+  drives; the other panes are unaffected.
 
 ## src/Flight/CompassTape.cs
 The original's top-centre heading tape rebuilt from the game's own compassticks2/compasstxt
@@ -4145,6 +4149,10 @@ Floating node-name labels (key T) in both the static viewer and flight, cycling 
   from the geometry and are shared, which collapsed all labels into a single screen cell.
 ⚠ The nearest-first grid de-clutter (3×3 neighbourhood) is the readability limiter, not `Radius` (1500 m).
 ⚠ Own plane deprioritised, not excluded; rescans on a 0.35 s timer.
+⚠ **Splitscreen (F51, `BL-376`): selection is P1-only, rendering is every pane.** `GameSession`
+  hands the constructor `_rigs[0].Camera` (`GameSession.cs:2924`), so the nearest/de-clutter pick
+  is computed from P1's viewpoint alone; the `Label3D` nodes it builds are ordinary world-space
+  children of `_worldRoot`, so every pane's own camera still renders them.
 
 ## src/UI/MarkerOverlay.cs
 The `--viewer` marker overlay (key K): draws every firepoint / pylon / target on the parked
@@ -4155,6 +4163,12 @@ magenta, pylons cyan, target green); `--markers` opens it at launch. Reuses `Mar
   `NodeLabels` reads; a co-located pair's labels are stacked up the airframe so both survive.
 ⚠ Gizmo dots always show (no mount position is ever lost); only the LABELS de-clutter, nearest-
   first with firepoints prioritised over pylons — the full named table stays in `--dump-markers`.
+⚠ **Splitscreen (F51, `BL-376`): not reachable, not a bug.** `Relayout` calls
+  `GetViewport().GetCamera3D()` (`MarkerOverlay.cs:243`) rather than taking an explicit camera —
+  normally a splitscreen bug signal (`BL-338`) — but the overlay only builds under `--viewer`
+  (`GameSession.cs:1554`), and `--viewer` forces `--players=1` (`SessionSpec.cs`), so the session's
+  main camera never stands down for it. Disproven at F51 rather than fixed; do not re-open without
+  new evidence that `--viewer` gained a splitscreen path.
 
 ## src/UI/PerfHud.cs
 The frame-cost readout (PLAN-perf-hitches D10, key **F14**): fps, current frame cost and the
@@ -4248,6 +4262,9 @@ hand-off are the only things this node does per frame.
   swap leaves a body under each pylon; `ordnance_nodes=` on the `weapons` debug line is the tripwire
   (it must equal `mounted=`). A weapon whose `FLYOUT` model this chapter's gamez lacks mounts
   nothing — `Build` returns null and the wings go empty, never a throw.
+⚠ **Splitscreen (F51, `BL-376`): P1-only, by design.** The lab is one panel on `_rigs[0]`'s
+  aircraft, camera-hand-off included (`--weapon-camera`); with `_rigs.Count > 1` a log line says
+  so (`GameSession.cs:1991`) and the other panes fly normally.
 
 ## src/UI/PanelFocus.cs
 `Strip(subtree, who)` — makes every `Control` under a panel unfocusable and logs the tally

@@ -51,7 +51,7 @@ campaign).
 | # | The wrong claim | How it died |
 |---|---|---|
 | 1 | "Billboards are all oriented to player 1 and need per-player copies" | Code sweep 2026-08-15: every world billboard orients in the shader (`INV_VIEW_MATRIX` / `CAMERA_POSITION_WORLD`, per-view built-ins evaluated once per camera) or via Godot `BillboardMode`; a repo-wide grep found no CPU-side rotate-toward-camera in the world render path. The at-the-controls symptom was `BL-339`'s puffer cull, confirmed same day. Do not add per-player billboard nodes. |
-| 2 | "The whole-window `GetViewport().GetCamera3D()` fallback works in splitscreen" | In splitscreen the main viewport's camera has `Current = false` (`GameSession.cs:2979`), so the call returns null or a non-rendering camera. `MarkerOverlay.Relayout` silently never runs because of it (F51). Treat any `GetViewport()` in a draw path as a bug signal (`BL-338`). |
+| 2 | "The whole-window `GetViewport().GetCamera3D()` fallback works in splitscreen" | In splitscreen the main viewport's camera has `Current = false`, so the call returns null or a non-rendering camera — treat any `GetViewport()` in a draw path as a bug signal (`BL-338`). **`MarkerOverlay.Relayout`'s copy of it is the one exception, disproven at F51**: the overlay only builds under `--viewer` (`GameSession.cs:1554`), and `--viewer` forces `--players=1` (`SessionSpec.cs`), so `BuildRigs` never takes the splitscreen branch for it and the main camera stays `Current`. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -119,7 +119,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave F — Cleanup and playtest
 
-51. ☐ Debug tooling binds the right pane or documents P1-only (`BL-376`)
+51. ☑ Debug tooling binds the right pane or documents P1-only (`BL-376`)
 52. ☐ Splitscreen chrome playtest (`BL-126`)
 
 ## Dependency and parallelism notes
@@ -886,27 +886,58 @@ params reproduce the pre-E44 `Pads.For(null)`/always-on-keyboard behaviour exact
 
 # Wave F — Cleanup and playtest
 
-## F51 ☐ Debug tooling binds the right pane or documents P1-only (`BL-376`)
+## F51 ☑ Debug tooling binds the right pane or documents P1-only (`BL-376`)
 
 **Goal.** Each in-flight lab/overlay either acts on a stated pane or says P1-only in
 `docs/cli.md`; nothing silently no-ops.
 
 **Evidence (confidence: traced).** F5 damage lab and weapon lab take `_rigs[0]`
-(`GameSession.cs:1901`, `:1926`); `NodeLabels` projects through P1's camera onto a whole-window
-layer (`GameSession.cs:2889`); `MarkerOverlay.Relayout` never runs in splitscreen
-(`GetViewport().GetCamera3D()` resolves to the non-current main camera, `MarkerOverlay.cs:243`);
-the F15 targeting overlay's text roll-call is whole-window (`TargetingOverlay.cs:236`). (The
-`--debug-anim` sound distance column was the sixth site; A2 landed it — the column now reports the
-range to the nearest listener and names its pane, and `docs/cli.md` says so.)
+(`GameSession.cs:1901`, `:1926`, stale line refs — waves A–E moved the file; current sites are
+`GameSession.cs:1936` and `:1961`); `NodeLabels` projects through P1's camera onto a whole-window
+layer (`GameSession.cs:2889`, stale — current site `:2924`); `MarkerOverlay.Relayout` never runs
+in splitscreen (`GetViewport().GetCamera3D()` resolves to the non-current main camera,
+`MarkerOverlay.cs:243`); the F15 targeting overlay's text roll-call is whole-window
+(`TargetingOverlay.cs:236`). (The `--debug-anim` sound distance column was the sixth site; A2
+landed it — the column now reports the range to the nearest listener and names its pane, and
+`docs/cli.md` says so.)
 
-**Approach.** Per site, the cheap verdict: labs stay P1-only (document in `docs/cli.md`);
-`MarkerOverlay` takes an explicit camera instead of `GetViewport()` (fixes the silent no-op);
-`NodeLabels` documents P1-only.
+**Approach (landed).** Per site, the cheap verdict, re-verified against current code rather than
+the stale line numbers above:
+- **Damage lab / weapon lab (`GameSession.cs:1936`, `:1961`)** — already P1-only in code (bind
+  `_rigs[0]`, tag `"P1"` in the damage target, print the P1-only binding to the log when
+  `_rigs.Count > 1`). Only `docs/cli.md`'s `--damage`/`--weapon-lab` bullets were missing the
+  splitscreen clause; added.
+- **`NodeLabels` (`GameSession.cs:2924`)** — already bound to `_rigs[0].Camera` with an in-code
+  comment ("the selection follows P1's camera; the labels themselves render in every pane").
+  `docs/cli.md`'s `--debug-names` bullet was missing the clause; added.
+- **`MarkerOverlay.Relayout` (`MarkerOverlay.cs:243`) — disproven, no code change.** The overlay
+  only builds under `--viewer` (`GameSession.cs:1554`), and `--viewer` forces `--players=1`
+  (`SessionSpec.cs`, "`--players=N needs flight (nothing to fly in --viewer); using 1`"), so
+  `BuildRigs` (`GameSession.cs:3013`) always takes its `count <= 1` branch for a viewer session
+  and the main camera keeps `Current = true`. The splitscreen branch that sets `Current = false`
+  (`GameSession.cs:3032`) is reachable only through `--fly`, which `MarkerOverlay` never attaches
+  to. Corrected in the plan's own "Read this before implementing" trap table (item 2) and in
+  `docs/cli.md`'s `--markers` bullet, so the disproof is on record rather than silently dropped.
+- **`TargetingOverlay` roll-call (`TargetingOverlay.cs:236`) — intentional, no code change.** The
+  sight lines are world-space `MeshInstance3D` geometry on the default render layer, which every
+  splitscreen camera's `CullMask` includes (`SplitScreen.PlayerCullMask`), so they already draw in
+  every pane. The HUD roll-call text is a single `CanvasLayer` covering every shooter across every
+  player — the same "one readout for the window" call `PerfHud`/`--debug-fps` already makes for
+  process-wide state, not a per-pane fact. Documented as such in `docs/cli.md`'s `--debug-targets`
+  bullet; no per-pane split needed.
 
 **Model recommendation.** medium, low effort — mechanical, tool-only.
 
-**Verify.** `--screenshot=` probe runs unchanged (these overlays are all debug-flag-gated);
-`docs/cli.md` bullets updated for each documented-P1-only flag.
+**Verify (done 2026-08-15).** No `.cs` file changed — doc-only item — so `.\RunTests.ps1` and the
+golden regression are unaffected by construction; `dotnet build CSVM/CSVM.sln` still comes back
+clean (0 warnings/errors) as a sanity check. (`dotnet format --verify-no-changes` currently fails
+on `CSVM.Tests/PauseStateTests.cs` line-ending markers — pre-existing in this worktree, untouched
+by this item, not introduced or fixed here.) Confirmed the two labs' P1-only binding at the
+controls: `.\RunProbe.ps1 --fly --players=2 --chapter=C1 --weapon-lab --headless --log=weapons:debug`
+logs `weapon lab: 2 players — the lab binds P1's aircraft and P1's pane only; the other panes fly
+normally`, matching the `docs/cli.md` clause added above. `--damage`'s splitscreen tag
+(`FlightDamageTarget(p1, _rigs.Count > 1 ? "P1" : null)`, `GameSession.cs:1940`) is a UI subtitle
+rather than a log line, confirmed by reading the source at that call site.
 
 **⚠ Traps.** `docs/cli.md` is the description of record — the flag bullets change there, not in
 PROJECT_CONTEXT's gloss table.
