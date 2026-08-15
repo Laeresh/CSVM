@@ -16,6 +16,10 @@ them round-trips byte-identically in the fork.** If you only need the practical 
 - mech3ax's own README support matrix is **outdated** for Crimson Skies — actual support, even at
   v0.6.1, is far better than it advertises.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## Support matrix
 
 | Format | Status |

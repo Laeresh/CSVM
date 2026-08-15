@@ -17,6 +17,10 @@ The data is the user's stock table read off the original's Ammo Selection / conf
 inherit a capability *catalogue* (every gun + 1,000 of each rocket), and the per-plane fit is
 executable-resident — so this file supplies what the data cannot.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## Schema
 
 ```json

@@ -5,6 +5,10 @@ whole install's projectile catalogue — guns, rockets, ordnance — under a sin
 `BALLISTICS` block. Validated against this install's zrdr extraction; the allotment and
 damage semantics were cross-checked against the original game.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## Structure
 
 The file's one root object is an alternating key/list dict (the [shared conventions](README.md#shared-conventions-zrdr-readers)

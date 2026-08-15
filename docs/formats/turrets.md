@@ -10,6 +10,10 @@ the field it decodes. No code is reproduced.
 The file is **install-global**: there is exactly one `ai.zrd`, in the shared `zrdr` scope. There is
 no per-chapter or per-mission override ([zrdr.md](zrdr.md)).
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## The two families, and what actually splits them
 
 The 42 entries divide 16 / 26, and the discriminator is `CREATE_STANDALONE`:

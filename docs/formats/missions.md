@@ -11,6 +11,10 @@ against the C1 gamez and the assembled marker text against
 `CSVM/src/Mech3/Messages.cs`, `CSVM/src/Flight/MissionTargets.cs`, and
 `CSVM/src/Flight/StuntMission.cs`.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## The stunt objective: fly through the Danger Zones
 
 An instant-action Stunt Flying run's goal is to fly through a fixed set of **Danger Zones**

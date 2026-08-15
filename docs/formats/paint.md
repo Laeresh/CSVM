@@ -15,6 +15,10 @@ Decoded 2026-07-19 by inspecting extracted data + the user's reference screensho
 see "Implementing this in the remake" at the bottom for what the remake actually does and
 where it knowingly diverges.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## The scheme record
 
 Seven fields, appearing under three different key prefixes depending on where the scheme lives.

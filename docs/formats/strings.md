@@ -15,6 +15,10 @@ because it is the definitive inventory of the retail game's player-facing comman
 Decoded 2026-07-20, alongside `.rof`. It is where the plane customisation screens get their
 aircraft description panels, which exist nowhere in the ZBD data.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## The two DLLs
 
 | File | Strings | What it is |

@@ -15,6 +15,10 @@ affects a decoration's position or orientation at all**, which is why an unseede
 reimplementation of the lattice walk reproduces C1's tree positions *exactly* rather than
 approximately (confirmed at the controls, 2026-08-10).
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## Where it sits
 
 | | |

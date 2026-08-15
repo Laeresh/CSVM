@@ -9,6 +9,10 @@ numbers below were re-measured against the same install on 2026-08-06 and are as
 flies them as a patrol behaviour (`--ai=<plane>:<net>`), traversal along the edge list, an anchored
 trailer ridden (`BL-377`), per-node tags preserved unacted-on.
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## Where they live
 
 Each chapter's zrdr scope (`<Cx>/zrdr.zbd`) carries:

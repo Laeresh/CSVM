@@ -9,6 +9,10 @@ Seeded 2026-07-18 with the item-3 fog-colour decode; grown the same day with pre
 (item 5) and the `SUNLIGHT_*` world-lighting decode (item 6, the night/overcast brightness
 calibration).
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## Location & shape
 
 One `weather.json` per mission folder, in the mission's own zrdr archive

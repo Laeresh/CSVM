@@ -6,6 +6,10 @@ Two of the shared-scope zrdr readers ([zrdr.md](zrdr.md)); in an extraction they
 `ShakeDefs` and plays five of the six sources through `PlaneShake` as visual-only roll on the
 plane node; `damage_shakes.json` stays unconsumed (unknown caller, below).
 
+## At a glance
+
+This page is the current reference for its documented format family.
+
 ## `shakes.json` — six oscillator sources
 
 A plain alternating `name, properties` list. Each block is one shake *source* with an oscillator
