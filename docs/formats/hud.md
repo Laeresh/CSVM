@@ -1,8 +1,8 @@
 # HUD: compass tape + cockpit gauges
 
-Part of the [format documentation](README.md). Validated 2026-07-18 against
+Part of the [format documentation](README.md). Validated against
 `OriginalScreenshots/HUD.png` (2556×1440, dgVoodoo) by pixel-probing every tick and
-label; gauges decoded 2026-07-19 from the planes.zbd `gauges` subtrees +
+label; gauges are read from the planes.zbd `gauges` subtrees +
 `OriginalScreenshots/HUD with dmg.png`. Remake implementations:
 `src/Flight/CompassTape.cs`, `src/Flight/GaugeCluster.cs`.
 
@@ -88,7 +88,7 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   `thousands` (short/wider: x ±0.07, y −0.181…0.368, priority 8, z 0.025 — same
   texture); the speedometer one (`speed`, priority 8). The nodes' modeled rest
   rotations are arbitrary; the engine sets absolute angles. ⚠ **The pointer shape
-  lives only in the `rtexture*` tiers' copy of `needle.tif`** (decoded 2026-08-04):
+  lives only in the `rtexture*` tiers' copy of `needle.tif`** :
   the base `texture.zbd` copy is a 32×128 RGB flat full-width slab with no alpha,
   but every `rtextureN` tier ships a same-size **RGBA** copy with different art
   (beveled lance, rimmed hub discs) whose alpha channel is the complete antialiased
@@ -100,7 +100,7 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   red bezel slashes** (`redhilite.tif` quads at the dial edge, left+right of the
   window's side). The whole node toggles/blinks.
 - **The STALL lamp's blink is a RATE ramp on its own threshold** (`BL-148`, `CAP-06`
-  + the two `CAP-05` stall clips, decoded 2026-08-04). Three separate facts, each
+  + the two `CAP-05` stall clips, ). Three separate facts, each
   measured across four clips:
   - **Brightness is binary** — the lit plate reads 211.0 ± 0.2 red and the unlit one
     41.7 ± 0.2 at *every* speed, and the duty cycle is 0.50 throughout. There is no
@@ -126,7 +126,7 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   measured against the original, and nothing here applies to it.
 - **Damage display**: the dial's face is a single untextured 12-gon (the dark backing
   disc). ⚠ **Where it is parented differs per aircraft** — verified across the whole
-  roster 2026-07-19: on `player_bhawk` it is the `damageindicator` node's *own* mesh,
+  roster: on `player_bhawk` it is the `damageindicator` node's *own* mesh,
   but on **every other player plane** that node is mesh-less (`mesh_index` −1) and the
   identical 12-gon hangs off an extra generically-named child instead (`g951` on the
   Fury, `g927` Kestrel, `g1156` Balmoral, `g992` Warhawk, `g843` Devastator, …). A
@@ -145,7 +145,7 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
 - **Thresholds**: every player part's vehicle.json `injure_anims` carry
   `*_damage_green` at 0.72, `*_damage_yellow` at 0.46, `*_damage_red` at 0.20 (the
   anims themselves live in the undecoded cam_anim.zbd). The display uses **all four
-  cycle colors** (orange user-confirmed in the original, 2026-07-19) — each anim
+  cycle colors** (orange confirmed in the original) — each anim
   threshold steps to the *next* color: green > 0.72, yellow ≤ 0.72, orange ≤ 0.46,
   red ≤ 0.20 (red on a still-flying plane matches the damage reference shot; the
   anim names lag their effect by one state). **The scale is the zone's COMBINED
@@ -172,7 +172,7 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
 
 ## The weapon gauges (gun / missile)
 
-Decoded 2026-07-24 from the planes.zbd `gungauge` / `missilegauge` subtrees +
+Read from the planes.zbd `gungauge` / `missilegauge` subtrees +
 `support\cockpit.gw` (the interp boot script that wires their texture cycles);
 remake implementation extends `src/Flight/GaugeCluster.cs`. Screen placement is
 ours (measured off `OriginalScreenshots/HUD.png`, the Warhawk): the **ROCKETS**
@@ -220,7 +220,7 @@ The functional children, and how `cockpit.gw` drives each:
   shows. The
   green/yellow/red **thresholds are a TUNE** pending an original playtest. Guns are the only class
   with a yellow tier at all (`GunIndicatorColor`, `BL-024`) — hardpoints/pylons step straight
-  green→red. The gun yellow threshold (`GaugeCluster.IndicatorLowFrac`) was retuned 2026-08-04
+  green→red. The gun yellow threshold (`GaugeCluster.IndicatorLowFrac`) is tuned
   (`BL-142`) from 0.34 — a value inherited from the unrelated 3-round rocket-pylon coincidence
   (1/3), never watched against a real gun belt — to **0.15**, judged from a screenshot sweep of a
   scaled belt drain (`--ammo=200 --gun-select=0 --fire`): at 0.34 yellow lit with ~119 sim s of
@@ -233,7 +233,7 @@ The functional children, and how `cockpit.gw` drives each:
   Unlike the dial needles, the arrow's shape IS its mesh: a single 5-vertex polygon
   (pointed tip at +y, two shoulders, a base) whose wrapping UVs (u 0.98–2.02,
   v 0.50–3.10) smear the tiny 16×16 texture across it. **The pointer sweeps, it does
-  not snap** (`BL-184`, `CAP-18`, decoded 2026-08-04): a single constant rate shared
+  not snap** (`BL-184`, `CAP-18`, : a single constant rate shared
   by both gauges, **168.7 ± 1.6 °/sim-s**, routed the shortest way round
   (`GaugeCluster.TweenArrow`); the numeric readout above still snaps on the sweep's
   first frame. CAP-18's own end-to-end capture also carries a ~97 ms sim ease at each
