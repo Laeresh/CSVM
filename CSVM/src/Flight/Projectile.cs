@@ -169,18 +169,6 @@ public sealed partial class ProjectilePool : Node3D
     private const float MuzzleLightLife = 0.03f;   // s
     private const float MuzzleLightEnergy = 2.5f;  // the def carries range/colour only; magnitude judged at the controls in the weapon lab
 
-    // A dirt impact's tumbling-debris burst: a few small chips that fly outward and arc under
-    // gravity, in place of the single 3 m stand-in spark. Count/size/speed/spin are TUNE; the
-    // life leans on the gunhit def's own debris OBJECT_MOTIONs (bit1 RUN_TIME 1 s, bit2/3/chunk
-    // 2 s). Drawn on the authored chip textures below, alpha-blended — through the additive
-    // muzzle-flash-textured impact pool they read as a small flame, not debris.
-    private const int DirtDebrisSprites = 5;
-    private const float DirtDebrisSize = 0.45f;   // m
-    private const float DirtDebrisLife = 0.9f;    // s
-    private const float DirtDebrisSpeed = 4f;     // m/s launch speed
-    private const float DirtDebrisSpreadDeg = 60f; // cone half-angle around the surface normal
-    private const float DirtDebrisSpinMax = 25f;  // rad/s, random per-chip tumble rate
-
     // A gun hit on a buildings-classed surface: a ricochet spark burst. Both authored assets are
     // confirmed missing from the install (`bld_damage.flt` and the `rcochet1` EFFECT are 2 of the
     // 5 referenced-but-undefined names — weapon-effects.md), so this stand-in is judged by eye:
@@ -237,7 +225,6 @@ public sealed partial class ProjectilePool : Node3D
     private static readonly string[] SplashFlipbookTextures = { "splash01", "splash02", "splash03" };
 
     private static readonly Color RicochetTint = new(1f, 0.95f, 0.6f); // white-hot spark yellow
-    private static readonly Color DirtTint = new(1f, 1f, 1f); // the bit textures carry the colour
     private static readonly Color MuzzleSmokeTint = new(0.85f, 0.85f, 0.85f);
 
     // Muzzle-flash sprite tint — unrelated to the tracer tint below, which is a separate,
@@ -271,12 +258,6 @@ public sealed partial class ProjectilePool : Node3D
     private static readonly string[] TipTextures =
         { "slugtip", "dumdumtip", "armourpiercetip", "magnesiumtip" };
 
-    // The dirt-debris chip textures: the gunhit def's flung-debris art. The def's bit1/bit2/bit3
-    // gamez nodes carry no geometry in this install (0 vertices, measured C1/C2) — the bit0N
-    // textures in every chapter archive are the chips themselves, so the burst draws them on
-    // alpha-blended quads, one MultiMesh per texture (a MultiMesh's material is shared).
-    private static readonly string[] DirtDebrisTextures = { "bit01", "bit02", "bit03", "bit04" };
-
     // The reset value for _ray.Exclude between shots — shared and never mutated.
     private static readonly Godot.Collections.Array<Rid> NoExclude = new();
 
@@ -286,8 +267,6 @@ public sealed partial class ProjectilePool : Node3D
     private readonly List<Sprite>[] _muzzle = { new(), new(), new(), new() };
     private readonly List<Sprite> _impact = new();
     private readonly List<Sprite> _smoke = new();   // muzzlepuffer smoke (alpha-blended)
-    // One sprite list per dirt-debris chip texture (DirtDebrisTextures), same split as _muzzle.
-    private readonly List<Sprite>[] _debris = { new(), new(), new(), new() };
 
     private readonly TextureArchive _textures;
     private readonly SoundArchive? _sounds;
@@ -382,8 +361,6 @@ public sealed partial class ProjectilePool : Node3D
     // The tip discs, index-parallel to the streak pools above: one instance per round, so one
     // shared count array serves both and _tracerCounts is reused for the tip pools too.
     private readonly MultiMesh[] _tipMm = new MultiMesh[TipTextures.Length];
-    // One MultiMesh per dirt-debris chip texture (DirtDebrisTextures) — built in _Ready.
-    private readonly MultiMesh[] _debrisMm = new MultiMesh[DirtDebrisTextures.Length];
     // The per-round working set behind the TracerMinPixels floor: one sample per bound viewer,
     // cleared and refilled per round (distance is per round), so the floor allocates nothing
     // after the first frame.
@@ -606,10 +583,6 @@ public sealed partial class ProjectilePool : Node3D
         // Smoke (the muzzlepuffer puffs): the authored puffer textures (smoke101), alpha-blended
         // rather than additive so the puffs read as smoke.
         _smokeMm = AddMultiMesh("smoke101", MaxSmoke, additive: false, billboard: false, out _);
-        // Dirt-debris chips: the authored bit0N art, alpha-blended so the chips read as debris
-        // rather than glowing through the additive flash pool.
-        for (int i = 0; i < DirtDebrisTextures.Length; i++)
-            _debrisMm[i] = AddMultiMesh(DirtDebrisTextures[i], MaxFlashes, additive: false, billboard: false, out _);
         _flyoutModels = new Node3D { Name = "flyout" };
         AddChild(_flyoutModels);
         _impactFxModels = new Node3D { Name = "impact_fx" };
@@ -916,8 +889,6 @@ public sealed partial class ProjectilePool : Node3D
             AgeSprites(m, dt);
         AgeSprites(_impact, dt);
         AgeSprites(_smoke, dt);
-        foreach (var d in _debris)
-            AgeSprites(d, dt);
         AgeCasings(dt);
         AgeLights(dt);
         for (int i = _impactFx.Count - 1; i >= 0; i--)
@@ -944,8 +915,6 @@ public sealed partial class ProjectilePool : Node3D
             RenderSprites(_muzzleMm[i], _muzzle[i]);
         RenderSprites(_impactMm, _impact);
         RenderSprites(_smokeMm, _smoke);
-        for (int i = 0; i < _debris.Length; i++)
-            RenderSprites(_debrisMm[i], _debris[i]);
     }
 
     /// <summary>Deactivates every live round (R / respawn: no tracers hang in the air).</summary>
@@ -962,8 +931,6 @@ public sealed partial class ProjectilePool : Node3D
             m.Clear();
         _impact.Clear();
         _smoke.Clear();
-        foreach (var d in _debris)
-            d.Clear();
         foreach (var c in _casings)
         {
             c.InUse = false;
@@ -1593,9 +1560,6 @@ public sealed partial class ProjectilePool : Node3D
             case ImpactStandIn.Explosion:
                 SpawnExplosion(point, orient);
                 break;
-            case ImpactStandIn.DirtDebris:
-                SpawnDirtDebris(point, orient);
-                break;
             case ImpactStandIn.Ricochet:
                 SpawnRicochet(point, orient);
                 break;
@@ -1811,39 +1775,6 @@ public sealed partial class ProjectilePool : Node3D
                 Size = ExplosionSize * (0.7f + 0.6f * t),
                 Tint = new Color(1f, 0.45f + 0.4f * t, 0.12f * t), // deep orange → yellow core
                 Orient = orient,
-            });
-        }
-    }
-
-    /// <summary>A dirt impact's stand-in: a few small, randomly-rotated chips launched outward
-    /// from the surface normal and arcing under gravity, replacing the single 3 m spark so a
-    /// gun/rocket round hitting terrain reads as scattered debris rather than one orange flash.
-    /// Drawn on the gunhit def's own <c>bit0N</c> chip textures, alpha-blended (their own pools) —
-    /// through the additive muzzle-flash-textured impact pool they read as a small flame.</summary>
-    private void SpawnDirtDebris(Vector3 point, Basis orient)
-    {
-        for (int i = 0; i < DirtDebrisSprites; i++)
-        {
-            var pool = _debris[i % _debris.Length]; // cycle the chip art without an extra RNG draw
-            if (pool.Count >= MaxFlashes)
-                continue;
-            var dir = ApplySpread(orient.Z, DirtDebrisSpreadDeg);
-            float speed = DirtDebrisSpeed * (0.5f + 0.5f * _rng.Randf());
-            var spinAxis = new Vector3(
-                _rng.Randf() - 0.5f, _rng.Randf() - 0.5f, _rng.Randf() - 0.5f).Normalized();
-            // A random starting roll so the chips don't all share the impact's surface-facing
-            // orientation before their own tumble (SpinRate) takes over.
-            var startOrient = orient.Rotated(spinAxis, _rng.Randf() * Mathf.Tau);
-            pool.Add(new Sprite
-            {
-                Pos = point,
-                Life = DirtDebrisLife * (0.75f + 0.5f * _rng.Randf()),
-                Size = DirtDebrisSize * (0.7f + 0.6f * _rng.Randf()),
-                Tint = DirtTint,
-                Orient = startOrient,
-                Vel = dir * speed,
-                SpinAxis = spinAxis,
-                SpinRate = (_rng.Randf() * 2f - 1f) * DirtDebrisSpinMax,
             });
         }
     }

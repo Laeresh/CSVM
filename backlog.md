@@ -696,8 +696,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   rejected at the controls — do not re-land it without new footage evidence.
 
 - `BL-289` `[Tuning]` `[Owed-playtest]` **Gun-impact looks (A2/`BL-203`, landed 2026-08-01)** —
-  ⚠ **The six `DirtDebris*` constants left this entry 2026-08-07: `BL-313` deletes the effect they
-  tune, so there is nothing to A/B.** What remains here is the building ricochet:
+  ⚠ **The six `DirtDebris*` constants left this entry: the dirt-chip effect they tuned was deleted
+  2026-08-15 (`BL-313`, closed), so there is nothing to A/B.** Dirt now takes the single spark.
+  What remains here is the building ricochet:
   `RicochetSparks` **8**, `RicochetSparkSize` **0.55 m**,
   `RicochetSparkLife` **0.55 s**, `RicochetSparkSpeed` **22 m/s**, `RicochetSpreadDeg` **90°** (a
   stand-in — both authored assets are missing from the install). The water-splash column width
@@ -705,33 +706,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   2026-08-06 with the fades in (`BL-265` closed — the authored quad is 5 cm wide, sub-pixel past
   ~30 m; the reference ticks measure ~0.35 m, which 8× matches). A/B the rest against
   `Dirt Splash.png` at the controls; the splash *height/timing* curves are authored data, not TUNE.
-
-- `BL-313` `[Bug]` **Our gun hits on dirt fling `bit01`–`bit04` chips the original never draws — delete
-  the sprite half of `SpawnDirtDebris`** (`PT-27` at the controls + `OriginalScreenshots/Videos/70 DD
-  Dirt.mp4`, 2026-08-07). Three independent lines agree, which is why this is a deletion and not a
-  tune:
-  - **The data, read literally.** The slug gunhit defs fling `bit1`/`bit2`/`bit3`/`chunk` at
-    `PLAYER_RANGE 200`, and **`bit1`–`bit3` carry 0 vertices in this install** (measured C1/C2)
-    while **`chunk` has one 4-vertex quad** (`docs/formats/weapon-effects.md`). Read as written,
-    that draws the chunk quad — the perforated `gun_barrel` shroud band — and nothing else.
-  - **The footage.** `70 DD Dirt.mp4`: a 70-slug burst into dirt shows **only the chunk and one
-    very faint black puff**, no chips. The puff is the authored slug `blacksmokepuffer`
-    (`TIME_INTERVAL` 1.1 s, one puff per hit), so both visible elements are accounted for.
-  - **The inference's motive is answered elsewhere.** `architecture.md` recorded the leap as *"the
-    def's bit1–3 gamez nodes carry no geometry, the textures ARE the chips"* — motivated by the
-    `bit01`–`bit04` textures shipping in every chapter archive. They are **not** orphans, but their
-    consumer is **`zep_skin_fire3`/`zepskinfire_3`** (user, 2026-08-07), a pooled template whose
-    siblings each carry a real child mesh index (`gamez.md:48–53`). The textures earn their place
-    without the zero-vertex gunhit nodes drawing anything, so the leap has nothing left holding it
-    up.
-  *Fix shape:* delete `SpawnDirtDebris`'s sprite emission and `Projectile.cs:245`'s
-  `DirtDebrisTextures`; the `chunk` quad stays exactly as it draws today (`CAP-25` retired
-  2026-08-07 having confirmed the original shows it). Retract the inference in
-  `docs/architecture.md` and `docs/formats/weapon-effects.md` rather than silently overwriting it.
-  `BL-289`'s six `DirtDebris*` constants go with the effect.
-  ⚠ Trap: **do not generalise "zero-vertex node ⇒ draw its texture as a sprite" anywhere else** —
-  that is the reading this item retracts. If another effect is found relying on it, it needs its
-  own evidence, not this precedent.
 
 - `BL-290` `[Bug]` `[Blocked: CAP-28]` **Torpedo flight dynamics: the original's torpedo has a max/cruise speed and
   visibly slows after firing; ours flies the generic projectile model** (PT-38, 2026-08-06). Data
