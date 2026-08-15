@@ -12,7 +12,7 @@ consumes: it resolves each slot's `markers` against a built plane and each `cali
 hardpoints. Inspect the binding for any plane with `--dump-loadout`.
 
 The data is the user's stock table read off the original's Ammo Selection / configurator UI
-(delivered 2026-07-22), corroborated by `OriginalScreenshots/Ammo Selector Hoplite.png` /
+corroborated by `OriginalScreenshots/Ammo Selector Hoplite.png` /
 `… Balmoral.png`. There is **no player loadout in the extraction** — all 12 `p*` vehicle defs
 inherit a capability *catalogue* (every gun + 1,000 of each rocket), and the per-plane fit is
 executable-resident — so this file supplies what the data cannot.
@@ -120,7 +120,7 @@ pylon carries `wep_06` (HE) in stock fit.
 ## The uniform-HE stock load is an observation, and a schema limit
 
 **`hardpoints.stock` being a single HE id per plane is what the retail Ammo Selection UI shows**
-(user-read 2026-07-22, corroborated by `OriginalScreenshots/Ammo Selector Hoplite.png` /
+corroborated by `OriginalScreenshots/Ammo Selector Hoplite.png` /
 `… Balmoral.png`) — it is an observation of the shipped default, not a statement that a plane
 *can only* carry one ordnance type. It cannot be checked against the extraction, because there
 is no player loadout in the data at all (above).

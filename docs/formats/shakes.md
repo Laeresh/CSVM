@@ -2,7 +2,7 @@
 
 Two of the shared-scope zrdr readers ([zrdr.md](zrdr.md)); in an extraction they land as
 `extracted/zrdr/shakes.zrd.json` and `extracted/zrdr/damage_shakes.zrd.json`. First read
-2026-08-05, decoded and wired 2026-08-07 (`BL-266`): the engine reads `shakes.json` through
+The engine reads the engine reads `shakes.json` through
 `ShakeDefs` and plays five of the six sources through `PlaneShake` as visual-only roll on the
 plane node; `damage_shakes.json` stays unconsumed (unknown caller, below).
 
@@ -31,7 +31,7 @@ self-evidently airspeed — it carries a `min_speed` gate). `nitro` is the only 
 **absolute** magnitude, 0.05.
 
 **`fire_bullet`'s magnitude is `magnitude_factor × CALIBER`, in radians of roll — measured, not
-inferred** (2026-08-07, `analysis/gun-wobble-shake/`). A dead-astern chase clip of the original
+inferred** (`analysis/gun-wobble-shake/`). A dead-astern chase clip of the original
 firing 40-cal slugs shows a roll-dominated wobble (left/right wing vertical motion
 anti-correlated at −0.86) of 2.8e-3 rad RMS / ~4.0e-3 rad peak; the dead-astern view makes the
 screen angle the world roll angle with no projection model. Candidates: caliber 40 × 7e-5 =

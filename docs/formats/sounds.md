@@ -76,11 +76,11 @@ All are clamped two-point ramps `(inStart→inEnd maps outStart→outEnd)`:
 | Block | Meaning |
 |---|---|
 | `engine_sound` | pitch 0.6→1.0 over throttle 0.1→1.0; volume flat 1.0 |
-| `prop_sound` | the **overspeed dive whine**: volume 0→0.5 over speed 1.0→1.1× `fd_speed`, pitch 0.65→1.25 over 1.0→1.2×. The WAV is not named anywhere in the readers (the remake uses `snd_enginewhine`, the only pitch-shiftable candidate — re-confirmed by an all-archive comb sweep against a reference recording, 2026-07-19) |
+| `prop_sound` | the **overspeed dive whine**: volume 0→0.5 over speed 1.0→1.1× `fd_speed`, pitch 0.65→1.25 over 1.0→1.2×. The WAV is not named anywhere in the readers (the remake uses `snd_enginewhine`, the only pitch-shiftable candidate — identified by an all-archive comb sweep against a reference recording) |
 | `rattle` | `snd_planeshake`: volume 0→1 over speed 1.0→1.2× `fd_speed` |
 
 **Caveat — the curve volume is not a linear mix amplitude.** Spectral analysis of a
-reference dive recording (2026-07-19) shows the original plays the whine 12–18 dB below
+reference dive recording shows the original plays the whine 12–18 dB below
 what `prop_sound`'s 0.5 volume cap would give as a linear gain against the engine loop —
 the engine applies scaling of its own between the curve value and the mixer. Treat these
 volume numbers as relative shapes, not absolute amplitudes.

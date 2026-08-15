@@ -4,7 +4,7 @@ Part of the [format documentation](README.md). Covers where a mission places the
 an instant-action mission is configured:
 `ia.json` (instant action) and `objectives.json` (story missions), both in the **mission's
 own zrdr archive** (`<chapter>/<mission>/zrdr.zbd` — a different archive than the shared
-top-level zrdr). Decoded + wired 2026-07-15; spawn positions/headings verified byte-exact
+top-level zrdr). Spawn positions and headings are verified byte-exact
 against the data for C1/IA1 `zeppelin_run` and side-by-side in-game for C3/M01. Consumed
 by `CSVM/src/Flight/SpawnPoints.cs`.
 
@@ -87,7 +87,7 @@ Five elements; field[0] is `1` across all 50 missions; only the yaw of the rotat
 varies; `throttle` ∈ {0.5, 0.8, 1.0}; `speed` ∈ {150, 180, 580}.
 
 **Fields [3]/[4] are NOT the player's spawn throttle/speed.** Confirmed in-game
-(2026-07-15): the original always spawns at **throttle 0.5** regardless of mission
+the original always spawns at **throttle 0.5** regardless of mission
 (while PLAYER_INIT[3] varies), and the start *speed* is **plane-dependent** (while
 PLAYER_INIT[4] varies per mission). Their real meaning is unidentified. Position + yaw
 ([1]/[2]) are confirmed correct — C3/M01's spawn matched the original side-by-side.
