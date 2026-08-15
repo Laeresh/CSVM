@@ -1,7 +1,7 @@
 # ANIMATION_DEFINITION readers (zepstate, startanims, building/vehicle anims)
 
 Part of the [format documentation](README.md). Validated against this install's zrdr
-extraction (mech3ax v0.6.1), 2026-07-18, while implementing the anim-state engine part 1
+extraction (mech3ax v0.6.1)
 (mission start states). Field tables + tiny excerpt values only — no bulk game data.
 
 The original compiles these reader sources into per-mission `mis_anim.zbd` archives
@@ -110,7 +110,7 @@ five spellings occur: `["ON", 0.6]`, `[0.4, "ON"]`, `["OFF", 1]`, `[1, "OFF"]` a
 `OBJECT_OPACITY_FROM_TO` tweens the same pair with a `RUN_TIME`; a fade-out is
 `(true,1.0) → (false,0.0)` ×5073 and a fade-in `(true,0.0) → (false,1.0)` ×4609, i.e. the end
 state disables translucency once the object is fully opaque again (or is deactivated outright).
-**Implemented 2026-07-23** (`AnimRuntime.OpacityFade`, the biggest un-handled kind at 9,917
+**`AnimRuntime.OpacityFade`** handles the largest kind (9,917
 events): a linear lerp of the two `opacity` numbers over `RUN_TIME`, driven through the same
 per-instance `csky_opacity` parameter `OBJECT_OPACITY_STATE` writes. ⚠ **The endpoint `state`
 flag does NOT invert the value** — surveyed across all 9,917, `(state=false, opacity=0)` fades to
@@ -140,7 +140,7 @@ obvious — 74,129 px change, the clouds going from hard opaque white to translu
 The compiled archives carry a `FogState` event kind: mid-mission weather change is a real engine
 capability. **The data uses it exactly once install-wide** —
 `extracted/C1/M04/mis_anim/camera1-mission_intro_animation.json`, `reset_state/events[4]`
-(surveyed across all 12,746 `mis_anim` + 3,368 `cam_anim` files, 2026-07-22):
+(across all 12,746 `mis_anim` + 3,368 `cam_anim` files):
 
 ```json
 {"FogState": {"name": "drop_fog", "type_": null,
@@ -163,7 +163,7 @@ should be revisited.
 ### `OBJECT_MOTION` is two ops sharing one event
 
 `OBJECT_MOTION` is the original's rigid-body descriptor, and its 7,442 uses split cleanly into
-two jobs that have nothing to do with each other. Surveyed across all 8 chapters, 2026-07-22:
+two jobs that have nothing to do with each other. Across all 8 chapters:
 
 | Shape | Count | What it is |
 |---|---:|---|
@@ -187,7 +187,7 @@ live pose walked every repeat explosion's debris further from the blast than the
   vector-form events).
 - `TRANSLATION_RANGE` is a ballistic launch in **polar form** — **`xz` is an AZIMUTH and `y` an
   ELEVATION, both in DEGREES, and `initial` is the launch SPEED in m/s** (`delta` the same constant
-  acceleration, non-zero on 233 of 1,226). **Decoded 2026-08-01**, replacing a distance reading that
+  acceleration, non-zero on 233 of 1,226). This is an acceleration, not a distance reading:
   threw debris hundreds of metres; census + evidence in `analysis/object-motion-range/`.
   ⚠ **The elevation is LINEAR, not spherical**, and that was corrected on 2026-08-13: the direction
   is `dirY = elevation/90` with the horizontal taking the remainder `1 − |elevation|/90`, so it is
