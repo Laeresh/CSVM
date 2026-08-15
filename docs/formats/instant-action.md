@@ -32,8 +32,7 @@ This page is the current reference for its documented format family.
 - [The ace](#the-ace)
 - [The setup path: what the engine builds from all this](#the-setup-path-what-the-engine-builds-from-all-this)
 - [The wave sequencer and the mission end: `FUN_0045b9d0`](#the-wave-sequencer-and-the-mission-end-fun0045b9d0)
-- [The wrap-up screen](#the-wrap-up-screen)
-- [Friendly fire](#friendly-fire)
+- [Wrap-up and scoring](instant-action/wrap-up.md)
 - [Open](#open)
 ## The screen's controls
 
