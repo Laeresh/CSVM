@@ -8,8 +8,15 @@ colour encoding, `kind_of` inheritance, wildcards, everything-is-float) are in t
 [README](README.md#shared-conventions-zrdr-readers).
 
 This page maps the archives and their reader families to the pages documenting them.
-(Until 2026-07-19 it was a single coarse flight-stats/spawns/sounds/effects page — that
-content now lives in the per-family pages below.)
+
+## At a glance
+
+unzbd cs reader extracts the three archive scopes into nested-array JSON reader files. This page routes those reader families.
+
+## Contents
+
+- [The three scopes](#the-three-scopes)
+- [Reader family index](#reader-family-index)
 
 ## The three scopes
 
