@@ -1,9 +1,17 @@
 # GameZ format facts
 
-Part of the [format documentation](READoE.md) (see also [world-structure.md](world-structure.md)). Validated against this install with mech3ax v0.6.1; moved from CLAUDE.md on 2026-07-18. Documents formats only — no game asset data (see the repo's hard rule).
+Part of the [format documentation](README.md); see also [world-structure.md](world-structure.md).
+This page documents format facts only and contains no game asset data.
 
-> **JSON field names below are mech3ax v0.6.1's.** Since 2026-07-21 this project extracts with the [fork](../plans/PLAN-mech3ax-cs-revival.md) instead, whose JSON is deliberately shape-incompatible — the *format facts* are unchanged, only their spelling. oapping: `{"Object3d": {…}}` → flat node with the variant under `data`; `mesh_index`→`model_index`; `children`→`child_indices`; `transformation`→`transform` (no-transform is the string `"Initial"`; `matrix.a…i`→`original.r00…r22`, plus a `scale`, unit everywhere measured); `meshes.json`→`models.json`; polygon `unk04`→`priority`, `triangle_strip`→`tri_strip`; mesh light `extra`→`vertices`; material `texture` (name) → `texture_index` into `textures.json`, whose entries went `{original, renamed}`→`{name}`; partition cell `nodes[].index`→`values[].node_index`. **One trap:** the fork *also* has a per-node `index` field — 1-based and duplicated, i.e. v0.6.1's `node_index` renamed — which is NOT what `child_indices` point at. The Godot loader reads both shapes; see `GameZ.cs` in [architecture.md](../architecture.md).
-
+> **The extracted JSON has two supported shapes.** The project fork emits a flat node with the
+> variant under `data`: `mesh_index` -> `model_index`; `children` -> `child_indices`;
+> `transformation` -> `transform` (no transform is the string `"Initial"`); `matrix.a...i` ->
+> `original.r00...r22` plus `scale`; `meshes.json` -> `models.json`; polygon `unk04` -> `priority`;
+> `triangle_strip` -> `tri_strip`; mesh light `extra` -> `vertices`; material texture names become
+> `texture_index` into `textures.json`; and partition-cell `nodes[].index` becomes
+> `values[].node_index`. The legacy shape wraps variants in `{"Object3d": {...}}`. In the fork,
+> a node's own 1-based, duplicated `index` is not the value `child_indices` reference. The Godot
+> loader accepts both shapes; see `GameZ.cs` in [architecture.md](../architecture.md).
 ## Reference
 
 - `nodes.json` `children`/`parent` are **flat list positions**, NOT the `node_index` field (node_index has duplicates).
