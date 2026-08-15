@@ -645,7 +645,7 @@ per-mission scalar `WorldLight = clamp(AMBIENT + DIFFUSE·k, 0.15, 1)`, with `k 
 average up-facing sun incidence — **one TUNE constant** calibrated to the C1/IA1 reference
 (`OriginalScreenshots/C1 IA1 Zone1 environment Spawn3.png`: overcast deck 210→169, terrain
 →~57). It then self-scales from the data: C1/IA1 → 0.80, C1B night → 0.43, C1C day →
-clamp 1.0. **Confirmed against original footage 2026-08-07** (`CAP-11`, matched-pose A/B at
+clamp 1.0. **Matched-pose footage supports the calibration** (`CAP-11`, at
 0.426 / 0.784 / clamp 1.0 — C1B terrain −12%, C2B deck tops −9%, C2 suburb +5–15%;
 `git log --grep=BL-110`, evidence `playtest/CAP-11/README.md`). Two exemptions the original
 applies that we don't yet: water renders unmodulated (`BL-304`), and night cloud sprites are
@@ -657,7 +657,7 @@ lands 210→169). Applied before the fog mix, so `FOG_COLOR` is unaffected. Pair
 **gamma-space vertex modulate** (the other item-6 half — see `SceneBuilder.cs`), which fixes
 the terrain's washed-yellow → saturated-green hue independent of brightness.
 
-### `SUNLIGHT_ORIENTATION` — the shading direction (consumed 2026-08-09, `BL-324`)
+### `SUNLIGHT_ORIENTATION` - the shading direction
 
 Read per zone into `ZoneWeather.SunOrientation` and written to the world's one
 `DirectionalLight3D` by the same zone-apply that writes the fog, so it follows a zone change
@@ -699,8 +699,8 @@ no ground shadow at all yet (`BL-331`).
 nor shadow from this — which is why the eight `--freecam` goldens did not move when it landed and
 the three flight goldens did. Its *intensity* is still hardcoded (`BL-332`).
 
-⚠ **It does not reach every surface, and that is the data's decision, not a special case.** Since
-2026-08-02 a model authored `flags.lighting: false` skips the multiply entirely — the original turns
+⚠ **It does not reach every surface, and that is the data's decision, not a special case.** A
+model authored `flags.lighting: false` skips the multiply entirely — the original turns
 D3D lighting off for it, so it draws at full brightness ([gamez.md](gamez.md)). That is 3,003 models
 install-wide: the sprite cards, clutter trees, glows, effect meshes, lit signage and the whole
 skydome. Light-source glow flares were already exempt by a hand-rolled rule; the flag turns out to
