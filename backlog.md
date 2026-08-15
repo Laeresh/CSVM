@@ -604,7 +604,73 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* shoot down a wingman and an enemy in C1 — smoke should start around half
   health and the fireball should be audible.
   *Cross-refs:* `BL-384` (the fraction correction this depends on), `BL-246` (the decode),
-  `BL-343` (wreck momentum — the other AI-wreck item).
+  `BL-343` (wreck momentum — the other AI-wreck item), `BL-386` (which def the AI list is READ
+  from — wiring the visuals before that fix would stage the player ladder on AI planes).
+  *Correction 2026-08-15 (found minting `BL-386`):* the `[[0.5, pfsmoketrail]]` cited above is NOT
+  on `basic_airplane` — `vehicle.zrd.json:4108-4114` sits inside the `bswingman` def (line 3993),
+  and `basic_airplane` (lines 3–224) authors no `injure_anims` at all. Each AI airframe authors its
+  own SEVEN-entry ladder instead (`fury` 4738–4768: `random_remote_damage` at
+  0.95/0.80/0.65/0.50/0.45/0.25 plus `pfsmoketrail` at **0.40**), restated verbatim on its `r*`
+  variant. So the original's smoke starts at 40% on an enemy and 50% on a campaign wingman, and the
+  `random_remote_damage` stages are part of the same list — the "one stage, not two" reading holds
+  only for the trail itself.
+
+- `BL-386` `[Bug]` **Every AI aircraft is built from the player def — `PlaneStats.Load` refuses
+  the AI defs in `vehicle.zrd.json`, so AI planes carry the player damage model instead of their
+  own authored one.** An AI Fury flies with `pfury`'s four pdpanel-wired parts summing 90/90 where
+  the original seeds `armor 72 / health 72` with bare zones — AI planes are ~15–25% too tough and
+  stage the wrong anims.
+  *Evidence (code, 2026-08-15).* `PlaneStats.Load` (`Flight/PlaneStats.cs:235-258`) accepts only a
+  def whose `kind_of` chain contains `player_airplane` — deliberate, "skip the AI wingman
+  variants". It is the sole stats loader (`GameSession.cs:1673` `StatsFor`), and
+  `AiAircraftSpawner.Spawn` (`Session/AiAircraftSpawner.cs:71`) resolves through it with the
+  player node names (`InstantAction.PlaneNodeFor` maps to the eleven `player_*` nodes;
+  `GameSession.cs:2163/2203/2323/2416`). Since no player def authors `armor`/`health`,
+  `PlaneStats.VehicleArmor`/`VehicleHealth` stay null and `PlaneDamage` seeds the whole pair as
+  the sum over the player parts.
+  *Evidence (data, 2026-08-15) — the def families per airframe, Fury as the worked example.*
+  `pfury` (`extracted/zrdr/vehicle.zrd.json:1801`): no whole pair, parts 25/25 nose (+`engine`),
+  25/25 tail, 20/20 wings, each with the green/yellow/red + `pdpanelN` injure lists and
+  `got_hit_anim`s. `fury` (`:4613`): `armor 72 / health 72`, NO parts, the 7-entry AI injure
+  ladder (see `BL-385`'s correction), own AI `weapons`/`gun_pitch`/`gun_yaw`/`activation`.
+  `rfury` (`:9271`): `kind_of fury`, `nodename fury`, own BARE parts — same pool numbers but
+  `critical` flags only, no injure lists, no `got_hit_anim`, and the `engine` flag on the TAIL
+  where `pfury` puts it on the nose. `wfury` (`:9949`): `kind_of fury`, `mode wingman`, no parts
+  of its own. `bswingman` (`:3993`): `nodename fury`, 90/90. The decoded seeding rule
+  (`docs/org/vehicleDamage.md` "Where the numbers come from at spawn" and the A4 section's A2
+  bullet): a spawned AI aircraft seeds from **the `r*` def chain's `destroyable_parts` plus its
+  inherited `armor`/`health`** — parts as the ledger, the authored pair as the summary scale.
+  ⚠ That page's correction section has one wrong parenthetical: it calls 90/90 "the AI `fury`
+  def's authored" pair; `fury` authors 72/72, and 90/90 is `bswingman`'s (and the parts sum).
+  Fix the doc line when this lands.
+  *The concrete deltas:* (1) whole pair 90/90 vs authored 72/72 Fury, 80/80 vs 64/64 Bloodhawk —
+  the summary the death test, radio lines and def-level staging all read; (2) AI parts carry the
+  player's cockpit-indicator/pdpanel injure lists and got-hit sparks the original never gives
+  them; (3) the def-level ladder is the player's two stages instead of the AI seven; (4) the
+  `engine` flag sits on the wrong part (nose vs tail, Fury pair; other airframes unchecked).
+  *What is coincidentally fine:* the `dynamics` blocks are byte-identical between `p<name>` and
+  `<name>` (checked fury and bloodhawk pairs in full), `engine` ids match, and both chains bottom
+  out at `basic_airplane` so `flight_ceiling`/`attack`/`return_range` resolve the same — flight
+  behaviour is unaffected today, but by authoring discipline, not by code.
+  *Fix shape:* give `PlaneStats` an AI resolution path — resolve the `r*` def whose chain's
+  `nodename` matches the AI model (or by def name), keep the player path for rigs and the launch
+  menu — and have `AiAircraftSpawner` request it; `PlaneDamage` already prefers an authored
+  `VehicleArmor`/`VehicleHealth` pair by design, so the seeding largely follows. Decide per spawn
+  context which flavour applies: the decode names the `r*` chain for roster spawns; whether IA
+  wingmen should read `w*` (no parts — whole-pair-only, zone-less spends) is open.
+  *⚠ Traps:* (a) the `air-to-air` suite's pinned kill counts (5 head-on `wep_06` rockets, 80
+  `wep_00` rounds) were measured against the 90/90 seeding — original-correct 72/72 re-pins them;
+  that is the re-measure, not a regression. (b) Turret planes: the `turrets` block ships on the
+  player defs (both viewpoints) AND the six AI/five `r*` variants (`thirdp` only,
+  `docs/formats/vehicle.md`) — after the switch `TurretMounts` must still find the `thirdp`
+  entries. (c) `PlaneRoster.PlaneDisplayName` strips a leading `p`; an `r*`/bare def name breaks
+  that heuristic if it ever reaches the scoreboard. (d) The difficulty scale (0.875/1.0/1.25) and
+  the ±5% aircraft jitter are adjacent decoded spawn steps, deliberately NOT this item.
+  *Playtest after fix:* IA waves — an enemy Fury should fall noticeably faster (whole pair 72,
+  not 90), and with `BL-385`'s visuals landed its smoke trail should start near 40%.
+  *Cross-refs:* `BL-385` (the visuals half — it stages whatever list this item resolves),
+  `BL-384` (fraction semantics), `docs/org/vehicleDamage.md` (the decoded seeding, incl. the
+  parenthetical to correct), `docs/formats/vehicle.md` (the def-family census).
 
 ## Weapons & combat
 
