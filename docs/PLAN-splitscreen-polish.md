@@ -102,7 +102,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Gameplay "the player" rules
 
-21. ☐ `PLAYER_RANGE` measures from the nearest human (`BL-365`)
+21. ☑ `PLAYER_RANGE` measures from the nearest human (`BL-365`)
 22. ☐ AI `primary_target = "player"` resolves per attacker, not to P1 (`BL-367`)
 
 ### Wave D — Audio one-shots
@@ -514,7 +514,7 @@ recorded hazard (`csky_instance_uniforms.gdshaderinc` ordering) and deserve thei
 
 # Wave C — Gameplay "the player" rules
 
-## C21 ☐ `PLAYER_RANGE` measures from the nearest human (`BL-365`)
+## C21 ☑ `PLAYER_RANGE` measures from the nearest human (`BL-365`)
 
 **Goal.** Proximity-triggered world animations respond to whichever human is near them.
 
@@ -524,17 +524,40 @@ recorded hazard (`csky_instance_uniforms.gdshaderinc` ordering) and deserve thei
 (`AnimRuntime.cs:2025`, `GameSession.cs:869`); this condition was left behind. The rig-0 closure
 also feeds `WorldEffectsFactory` (`GameSession.cs:417`).
 
-**Approach.** Route `PlayerRange` (and the `WorldEffectsFactory` copy) through `PlayerPositions`.
-Run/don't-run is shared world state visible in every pane, so nearest is the right rule. While
-there, check the other player-singular conditions the original defines
-([`docs/org/sequences.md`](../docs/org/sequences.md): `PLAYER_UNDERCOVER`, the `0x200` angular
-condition) — generalise any that are implemented, note the rest on their decode page.
+**Approach (landed).** Routed `PlayerRange` through `PlayerPositions`: `EvaluateCondition`'s
+`"PlayerRange"` arm now calls a new `NearestPlayerDistanceSquared`, the same
+min-over-`PlayerPositions` pattern `TickDeferredByRange`'s `EXECUTION_BY_RANGE` gate already used,
+falling back to the old single `PlayerPos()` only when no `PlayerPositions` seam is wired (a lab,
+a unit test). `PlayerPosition`/`PlayerPos()` survive unchanged as that fallback — the trap below
+held. `WorldEffectsFactory` grew its own `_playerPositions` (optional, defaulting null) and now
+sets `PlayerPositions` on the world-effects `AnimRuntime` it builds, so an ordnance wash's own
+`If PlayerRange` gate answers the same nearest-human question the world runtime's does; `GameSession`
+feeds both `WorldSession.Options.PlayerPositions` and the factory from one new
+`PlayerPositionsSnapshot()` method (previously two copies of the same closure), so the two seams
+can never disagree about who is nearest. Checked the other player-singular conditions
+([`docs/org/sequences.md`](../docs/org/sequences.md)): `PLAYER_UNDERCOVER` (`0x8`) and
+`PLAYER_LINED_UP` (`0x200`) are both in the doc's "never authored, 0 occurrences" set and neither
+has a case in `EvaluateCondition`'s switch (confirmed by grep) — nothing to generalise, the
+decode page already carries the note.
 
 **Model recommendation.** medium — the seam exists and has a worked example one function over.
 
-**Verify.** `--run-tests` anim suites green; a `--debug-anim` 2-position check that a
-`PLAYER_RANGE` def flips its condition when only the second position is in range. Single-player
-behaviour identical (nearest-of-one).
+**Verify (done 2026-08-15).** `dotnet build CSVM/CSVM.sln` clean, `dotnet format --verify-no-changes`
+clean. `.\RunTests.ps1`: 1289/1289 units, 61/61 engine suites (`fbfx-flash` gains
+`PlayerRangeNearestHuman`, chained after B12's `WashPaintsOnlyThePanesItReached`: a burst plays no
+wash at all while every `PlayerPositions` entry sits 5 km off the def's own 100 m gate — 0 fired
+over 2.5 s of `Advance` — then fires its full six-step chain once a second `PlayerPositions` entry
+is placed at the burst, the NEAREST-not-first entry deciding it), 14/14 goldens hash-identical,
+engine errors clean, hitch clean. 8-chapter `--freecam --chapter=<X> --screenshot= --frames=60`
+sweep (C1, C1B, C1C, C2, C2B, C3, C4, C5): all exit 0; each log's one `ERROR` line is the same
+benign screenshot-path artifact of the probe's relative output path, not an engine or anim error
+(freecam has no `_rigs`, so `PlayerPositionsSnapshot` falls back to the single spectator camera —
+this item is a no-op there by construction, single-camera nearest-of-one). Scripted 2-player
+sanity: `--fly --players=2 --chapter=C1 --debug-anim --screenshot= --frames=90` boots clean, 0
+`ERROR` lines, screenshot saved — no per-player placement flag exists to force a discriminating
+"P4 near, P1 far" geometry from the CLI (the same CLI gap B11/B12 hit), so the discriminating
+check is the unit suite above instead, which drives real distinct `PlayerPositions` entries the
+CLI cannot.
 
 **⚠ Traps.** `AnimRuntime.PlayerPosition` stays a P1 singleton for other consumers until F51/B14
 account for them — do not delete it here, just stop `PlayerRange` reading it.

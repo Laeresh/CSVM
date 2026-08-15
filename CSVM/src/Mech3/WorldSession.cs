@@ -262,8 +262,9 @@ public sealed class WorldSession
                     Debug = o.DebugAnim,
                 }
                 : null,
-            // PLAYER_RANGE conditions measure from the player, resolved per call because no camera
-            // exists yet here.
+            // PLAYER_RANGE conditions measure from the nearest player (PlayerPositions, C21);
+            // PlayerPosition is only the fallback for a runtime with no PlayerPositions wired.
+            // Both resolved per call because no camera exists yet here.
             PlayerPosition = o.PlayerPosition,
             PlayerPositions = o.PlayerPositions,
             LightViewerPositions = o.LightViewerPositions,
@@ -451,9 +452,10 @@ public sealed class WorldSession
         /// itself.</summary>
         public required Node3D EffectsParent { get; init; }
 
-        /// <summary>Where PLAYER_RANGE conditions measure from. Resolved
-        /// per call because no camera exists yet at build time; player 1's camera is the honest
-        /// answer in every mode (chase cam, free camera, or the orbit eye).</summary>
+        /// <summary>The PLAYER_RANGE fallback for a runtime with no <see cref="PlayerPositions"/>
+        /// wired (C21, `BL-365`: a real session always wires both). Resolved per call because no
+        /// camera exists yet at build time; player 1's camera is the honest single-camera answer
+        /// in every mode (chase cam, free camera, or the orbit eye).</summary>
         public required Func<Vector3> PlayerPosition { get; init; }
 
         /// <summary>Every 3D audio listener's position — one per pane, since every pane camera is
@@ -461,10 +463,10 @@ public sealed class WorldSession
         /// the engine reads the listeners themselves. Null → <see cref="PlayerPosition"/> alone.</summary>
         public Func<IReadOnlyList<Vector3>>? ListenerPositions { get; init; }
 
-        /// <summary>Every player's position, for the EXECUTION_BY_RANGE proximity gate — the
-        /// aircraft themselves in flight, not the chase cameras (a chase camera trails ~25 m
-        /// behind, which is most of the spiderweb's 50 m radius). Null → the gate falls back
-        /// to <see cref="PlayerPosition"/>.</summary>
+        /// <summary>Every player's position, for the EXECUTION_BY_RANGE proximity gate and every
+        /// PLAYER_RANGE condition (C21, `BL-365`) — the aircraft themselves in flight, not the
+        /// chase cameras (a chase camera trails ~25 m behind, which is most of the spiderweb's
+        /// 50 m radius). Null → both fall back to <see cref="PlayerPosition"/>.</summary>
         public Func<IReadOnlyList<Vector3>>? PlayerPositions { get; init; }
 
         /// <summary>Every pane's camera, for budgeting the world's <c>LIGHT_STATE</c> spill

@@ -421,7 +421,7 @@ public partial class GameSession : Node3D
         _ambience = new Effects.EffectAmbience();
         _worldEffectsFactory = new WorldEffectsFactory(_spec, _worldRoot,
             () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam ? cam.GlobalPosition : Vector3.Zero,
-            _ambience);
+            _ambience, PlayerPositionsSnapshot);
         // Re-derive every subsystem RNG from the master before anything in the session draws, so a
         // rebuild (Esc to the launchscreen and back) repeats the run rather than continuing it.
         Rng.Reset(_masterSeed, _spec.SeedPinned);
@@ -869,9 +869,10 @@ public partial class GameSession : Node3D
                 InterpPath = state.InterpPath,
                 MissionZrdrPath = state.MissionZrdrPath,
                 EffectsParent = _worldRoot!,
-                // PLAYER_RANGE conditions measure from player 1's camera — the honest answer in
-                // every mode (chase cam, free camera, orbit eye); resolved per call because none
-                // of those cameras exist yet here.
+                // The PLAYER_RANGE fallback for a runtime with no PlayerPositions wired (never
+                // true in a real session — PlayerPositions below is always set) — player 1's
+                // camera in every mode (chase cam, free camera, orbit eye); resolved per call
+                // because none of those cameras exist yet here.
                 PlayerPosition = () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam
                     ? cam.GlobalPosition
                     : Vector3.Zero,
@@ -886,20 +887,12 @@ public partial class GameSession : Node3D
                         positions[i] = _rigs[i].Camera.GlobalPosition;
                     return positions;
                 },
-                // The EXECUTION_BY_RANGE gate measures from the aircraft themselves (every
-                // player, nearest wins) — the chase camera trails far enough behind the plane
-                // to eat most of a 50 m radius. Camera fallback for the plane-less modes.
-                PlayerPositions = () =>
-                {
-                    if (_rigs.Count == 0)
-                        return _camera is { } cam ? new[] { cam.GlobalPosition } : System.Array.Empty<Vector3>();
-                    var positions = new Vector3[_rigs.Count];
-                    for (int i = 0; i < _rigs.Count; i++)
-                        positions[i] = _rigs[i].Controller is { } fc
-                            ? fc.GlobalPosition
-                            : _rigs[i].Camera.GlobalPosition;
-                    return positions;
-                },
+                // The EXECUTION_BY_RANGE gate and every PLAYER_RANGE condition (C21, `BL-365`)
+                // measure from the aircraft themselves (every player, nearest wins) — the chase
+                // camera trails far enough behind the plane to eat most of a 50 m radius. Camera
+                // fallback for the plane-less modes. Same closure the world-effects runtime gets
+                // (WorldEffectsFactory's own `_playerPositions`, wired below).
+                PlayerPositions = PlayerPositionsSnapshot,
                 // The world lights' own nearest-viewer budget (B13) — the draw-rule seam A3
                 // promoted, so a light beside player 4's pane stays lit even while player 1 is
                 // far from it. Single player: one entry, same as every other _viewers consumer.
@@ -2971,6 +2964,24 @@ public partial class GameSession : Node3D
             }
             return null;
         };
+    }
+
+    /// <summary>Every player's own position: the flown aircraft where a rig has a bound
+    /// <see cref="FlightController"/>, that rig's camera otherwise, the single main-viewport
+    /// camera outside splitscreen. The nearest-human seam behind <c>PlayerPositions</c> for both
+    /// <see cref="WorldSession.Options"/> (EXECUTION_BY_RANGE) and <see cref="WorldEffectsFactory"/>
+    /// (C21's <c>PLAYER_RANGE</c>, `BL-365`) — one snapshot, shared, so the two never answer
+    /// "who is nearest" differently.</summary>
+    private IReadOnlyList<Vector3> PlayerPositionsSnapshot()
+    {
+        if (_rigs.Count == 0)
+            return _camera is { } cam ? new[] { cam.GlobalPosition } : Array.Empty<Vector3>();
+        var positions = new Vector3[_rigs.Count];
+        for (int i = 0; i < _rigs.Count; i++)
+            positions[i] = _rigs[i].Controller is { } fc
+                ? fc.GlobalPosition
+                : _rigs[i].Camera.GlobalPosition;
+        return positions;
     }
 
     /// <summary>Creates this session's <see cref="PlayerRig"/>s — one per rendered view.

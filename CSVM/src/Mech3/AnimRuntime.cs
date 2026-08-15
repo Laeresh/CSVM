@@ -104,17 +104,20 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// </summary>
     public int QualityLod = HighLod;
 
-    /// <summary>Where the player is, for <c>PLAYER_RANGE</c> conditions. Supplied by the
-    /// session (the flown aircraft, or the spectator camera); absent → the viewport camera,
-    /// and failing that the world origin. During the bootstrap passes there is no camera
-    /// yet, which is harmless: every PLAYER_RANGE definition in this install re-polls from a
-    /// <c>Loop{-1}</c>, so a bootstrap-time miss corrects on the next frame.</summary>
+    /// <summary>Where the player is, for a <c>PLAYER_RANGE</c> condition with no
+    /// <see cref="PlayerPositions"/> wired (a lab, a unit test). Supplied by the session (the
+    /// flown aircraft, or the spectator camera); absent → the viewport camera, and failing
+    /// that the world origin. During the bootstrap passes there is no camera yet, which is
+    /// harmless: every PLAYER_RANGE definition in this install re-polls from a <c>Loop{-1}</c>,
+    /// so a bootstrap-time miss corrects on the next frame.</summary>
     public Func<Vector3>? PlayerPosition;
 
-    /// <summary>Every player's position, for the EXECUTION_BY_RANGE proximity gate (nearest
-    /// player wins). In flight this is the aircraft themselves — the chase camera trails far
-    /// enough behind the plane to eat most of a 50 m radius. Null → the gate measures from
-    /// <see cref="PlayerPosition"/>.</summary>
+    /// <summary>Every player's position, for the EXECUTION_BY_RANGE proximity gate and (C21,
+    /// `BL-365`) every <c>PLAYER_RANGE</c> condition — both measure from the nearest human, not
+    /// one camera. In flight this is the aircraft themselves — the chase camera trails far
+    /// enough behind the plane to eat most of a 50 m radius. Null → both fall back to
+    /// <see cref="PlayerPosition"/> alone, keeping a runtime built without this seam (a lab, a
+    /// test) on the pre-C21 single-camera behaviour.</summary>
     public Func<IReadOnlyList<Vector3>>? PlayerPositions;
 
     /// <summary>Every pane's camera position, for budgeting <see cref="Lights"/> (B13, `BL-366`):
@@ -3454,7 +3457,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             "HwRender" => true,
             "PlayerFirstPerson" => FirstPerson,
             "PlayerRange" => anchor != null
-                             && WorldPos(anchor).DistanceSquaredTo(PlayerPos()) <= num,
+                             && NearestPlayerDistanceSquared(WorldPos(anchor)) <= num,
             // ANIM_HEALTH gates damage effects: "if this object has been worn down to N".
             // Read against the LIVE per-instance HP, not the def's authored value, so a
             // tower damaged to 30 smokes while its undamaged siblings do not.
@@ -3691,6 +3694,23 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (PlayerPosition != null)
             return PlayerPosition();
         return IsInsideTree() && GetViewport().GetCamera3D() is { } cam ? cam.GlobalPosition : Vector3.Zero;
+    }
+
+    /// <summary>The nearest human's squared distance to a world point — a <c>PLAYER_RANGE</c>
+    /// condition's own answer (C21, `BL-365`), the same nearest-of-every-player rule
+    /// <see cref="TickDeferredByRange"/>'s EXECUTION_BY_RANGE gate already uses, so a wash or
+    /// door gated by a burst near player 4 fires even while player 1 sits kilometres off. Falls
+    /// back to <see cref="PlayerPos"/> when no <see cref="PlayerPositions"/> seam is wired.</summary>
+    private float NearestPlayerDistanceSquared(Vector3 point)
+    {
+        if (PlayerPositions?.Invoke() is { Count: > 0 } positions)
+        {
+            float d2 = float.MaxValue;
+            foreach (var p in positions)
+                d2 = Mathf.Min(d2, point.DistanceSquaredTo(p));
+            return d2;
+        }
+        return point.DistanceSquaredTo(PlayerPos());
     }
 
     private Node3D? ConditionNode(object? reference, AnimDefinition def, Node3D? anchor)

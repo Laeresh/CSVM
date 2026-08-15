@@ -8076,7 +8076,12 @@ public static class Suites
     ///
     /// <para>Then the routing half (B12): each step must also report WHERE the burst was and the
     /// def's own <c>PlayerRange</c> gate, and <see cref="ScreenFlash"/> must paint only the panes
-    /// that gate admits.</para></summary>
+    /// that gate admits.</para>
+    ///
+    /// <para>Then the gate's own source (C21, `BL-365`): the <c>If PlayerRange</c> that decides
+    /// whether the wash fires AT ALL must answer to the nearest human, not one camera — otherwise
+    /// B12's routing has nothing to route for a burst near player 4 while player 1 is
+    /// kilometres away.</para></summary>
     private static void FbfxFlash(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -8145,6 +8150,7 @@ public static class Suites
             });
         });
         WashPaintsOnlyThePanesItReached(ctx);
+        PlayerRangeNearestHuman(ctx);
     }
 
     /// <summary>
@@ -8230,6 +8236,44 @@ public static class Suites
             p2.Free();
             p1.Free();
         }
+    }
+
+    /// <summary>The wash's own gate — `If PlayerRange 10000` — answers to the NEAREST human, not
+    /// one camera (C21, `BL-365`): a burst still fires while the camera this stage was built
+    /// against sits 5 km off, as long as SOME entry in `PlayerPositions` is inside the 100 m
+    /// gate. This is upstream of B12's routing (which panes a fired wash reaches) — here nothing
+    /// has fired yet, so no pane would have anything to route.</summary>
+    private static void PlayerRangeNearestHuman(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            WithEffectStage(ctx, world, "he_ground_effect", new[] { "he_ring", "he_ring1", "he_trails" },
+                (stage, runtime, point) =>
+            {
+                const float dt = 1f / 60f;
+                var fired = new List<float>();
+                runtime.ScreenFlash = (from, to, seconds, at, gateSq) => fired.Add(seconds);
+
+                // Every known human 5 km out: nowhere near the def's own 100 m gate. 150 steps
+                // (2.5 s) is the same margin FbfxFlash drives the full chain for above — long
+                // enough that a gate wrongly left open would have fired well within it.
+                runtime.PlayerPositions = () => new[] { point + new Vector3(0f, 0f, -5000f) };
+                runtime.PlayEffectAt("he_ground_effect", point);
+                for (int i = 0; i < 150; i++)
+                    runtime.Advance(dt);
+                ctx.Check(fired.Count == 0,
+                    $"the burst's own PLAYER_RANGE gate stays closed while every PlayerPositions entry is 5 km off ({fired.Count} fired)");
+
+                // A second human standing at the burst: the NEAREST of the two is now in range,
+                // and the def's gate is asked against that one, not the far singleton.
+                runtime.PlayerPositions = () => new[] { point + new Vector3(0f, 0f, -5000f), point };
+                runtime.PlayEffectAt("he_ground_effect", point);
+                for (int i = 0; i < 150; i++)
+                    runtime.Advance(dt);
+                ctx.Check(fired.Count == 6,
+                    $"the same def fires its six-step wash once the NEAREST PlayerPositions entry stands at the burst ({fired.Count})");
+            });
+        });
     }
 
     /// <summary>A two-pane <see cref="ScreenFlash"/> over bare HUD parents — the shape

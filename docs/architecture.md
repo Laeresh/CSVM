@@ -1233,7 +1233,15 @@ satisfies its `ISequenceHost` seam by explicit interface implementation (`Dispat
   site** (residual sweep, `PLAN-splitscreen-polish` B14): `GameSession` always wires `PlayerPosition`
   (`GameSession.cs:875`), so the branch only ever runs for an `AnimRuntime` built standalone (a lab
   or a unit test with no session behind it) — never in a real `--fly` session, splitscreen or not.
-  The live P1-singleton concern here is `PlayerPosition` itself, tracked by `BL-365`/C21.
+  A `PLAYER_RANGE` condition (`EvaluateCondition`'s `"PlayerRange"` arm) no longer reads this
+  singleton at all when `PlayerPositions` is wired (C21, `BL-365`): it calls
+  `NearestPlayerDistanceSquared`, the min-over-`PlayerPositions` pattern `TickDeferredByRange`'s
+  `EXECUTION_BY_RANGE` gate already used, so a wash or door gated by a burst near player 4 fires
+  even while player 1 sits kilometres off. `PlayerPosition`/`PlayerPos()` survive as the fallback
+  for a runtime with no `PlayerPositions` wired (a lab, a unit test) and as the source the
+  `--debug-anim` condition-flip log still prints for every condition kind, not just this one. The
+  world-effects runtime (`WorldEffectsFactory.ForEffects`, its own second `AnimRuntime`) carries
+  the same `PlayerPositions` seam now too — see that class's own entry.
 `Targets` reads the event payloads and resolves through the resolver's symbol authority
 (`SymbolClaims`); a claimed-but-unbuilt index falls back to a strictly anchor-scoped name match
 (never global) — how a re-anchored exploder template (`genx12`) binds its meshless `pt*` parameter
@@ -5725,11 +5733,17 @@ This module still does the staging: `Subset` handles 8/30 destruction targets; 2
 choreography names remain local (`analysis/death-effect-closure/`), and the stage-call closure
 excludes C4's train-anchored `b_steamtrail`. Constructed once per session (`_worldEffectsFactory`,
 same lifetime as `LiveryResolver`/`SpawnPicker`) from
-`(SessionSpec, Node3D worldRoot, Func<Vector3> playerPosition)`, plus a settable `ScreenFlash`
+`(SessionSpec, Node3D worldRoot, Func<Vector3> playerPosition, EffectAmbience?, Func<IReadOnlyList<Vector3>>? playerPositions)`,
+plus a settable `ScreenFlash`
 sink it hands to the effects runtime — the three defs carrying an `FBFX_COLOR_FROM_TO`
 (`he_ground_effect`/`ap_ground_effect`/`flak_effect`) all play there. The sink's last two arguments
 are the burst point and the def's own gate radius squared, B12's pane routing; this class only
-forwards them.
+forwards them. `playerPositions` (C21, `BL-365`; null → the single `playerPosition` alone, the
+pre-C21 behaviour a caller with no seam — `AiCrashDefs`' test rig — still gets) is set as
+`PlayerPositions` on the built world-effects runtime, so its own `If PlayerRange` gates (the same
+three washes) answer to the nearest human rather than one camera; `GameSession` feeds the identical
+snapshot this factory gets and `WorldSession.Options.PlayerPositions` gets, from one
+`PlayerPositionsSnapshot()` method, so the two runtimes can never disagree about who is nearest.
 The effects runtime's puffer factory passes `softParticles: false` for MIX-ramp states — these effects
 emit at ground-level sites, where the depth fade zeroes fresh dark puffs against the terrain (the
 crash-smokeball lesson; the damage-stage smoke measured near-invisible with it on) — and keeps the
