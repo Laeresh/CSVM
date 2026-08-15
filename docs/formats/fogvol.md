@@ -21,7 +21,7 @@ This page is the current reference for its documented format family.
 
 - [Half 1 — `extracted/<chapter>/zrdr/fogvol.zrd.json`](#half-1-�-extractedchapterzrdrfogvolzrdjson)
 - [Half 2 — the gamez `fvol*` nodes](#half-2-�-the-gamez-fvol-nodes)
-- [What the engine does with the volumes (crimson.exe decompile, 2026-08-09)](#what-the-engine-does-with-the-volumes-crimsonexe-decompile-2026-08-09)
+- [What the engine does with the volumes](#what-the-engine-does-with-the-volumes)
 - [The map-edge continuation (`A5`) — engine-side, NOT authored data](#the-map-edge-continuation-a5-�-engine-side-not-authored-data)
 - [The sprite templates](#the-sprite-templates)
 - [What is decoded and what is inferred](#what-is-decoded-and-what-is-inferred)
@@ -33,7 +33,7 @@ One chapter-scope reader file, root = an [alternating key/list dict](README.md#s
 
 | Key | Value | Meaning |
 |---|---|---|
-| `fog_zone` | `[int]` | **A bool, decoded 2026-08-09**: non-zero arms the engine's in-volume whiteout + `ZONE3` camera state — see [the decompile section](#what-the-engine-does-with-the-volumes-crimsonexe-decompile-2026-08-09). Consumed (`A2`, `C21`) |
+| `fog_zone` | `[int]` | **A bool**: non-zero arms the engine's in-volume whiteout + `ZONE3` camera state — see [the decompile section](#what-the-engine-does-with-the-volumes). Consumed (`A2`, `C21`) |
 | `distance` | `[float]` | The scatter's mean spacing, metres — an areal density, not a lattice phase. Engine default **206.25** |
 | `fog_fade_dist` | `[float]` | *(C5 only, **16**)* whiteout approach ramp, metres before the volume wall. Engine default **400**. Consumed (`C21`) |
 | `interior_fog_fade_dist` | `[float]` | *(C5 only, **16**)* whiteout decay depth inside the volume. Engine default **20**. Consumed (`C21`) |
@@ -101,7 +101,7 @@ what makes the density authored rather than an artifact of measuring a rotated s
 1060–1181) and C5 (9950–10150 vs −463–183) all disagree. The volumes are their own authored
 geometry; do not re-derive them from the weather file.
 
-## What the engine does with the volumes (crimson.exe decompile, 2026-08-09)
+## What the engine does with the volumes
 
 Decompiled from `crimson.exe` (Ghidra; loader `FUN_0044e010`, volume evaluator `FUN_0044e6f0`,
 per-frame consumer `FUN_0042ee40` — the same frame update that runs the `CLOUD_COVER` whiteout,
