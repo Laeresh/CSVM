@@ -6,10 +6,6 @@ label; gauges are read from the planes.zbd `gauges` subtrees +
 `OriginalScreenshots/HUD with dmg.png`. Remake implementations:
 `src/Flight/CompassTape.cs`, `src/Flight/GaugeCluster.cs`.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 
 ## Contents
 

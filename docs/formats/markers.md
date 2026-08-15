@@ -4,10 +4,6 @@ Part of the [format documentation](README.md). Where a player aircraft's gun muz
 ordnance hardpoints live in the model (`planes.zbd`, the `markers` group), the airframe
 gun-group name enum, and the rule binding a plane's named gun groups to its firepoints.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## hhe markers group
 
 Each player aircraft's model tree (`player_<plane>` → `geometry` → …, see [gamez.md](gamez.md))

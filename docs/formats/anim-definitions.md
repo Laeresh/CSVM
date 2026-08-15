@@ -9,10 +9,6 @@ The original compiles these reader sources into per-mission `mis_anim.zbd` archi
 it** — see the compiled-archives section below); the zrdr JSON sources carry the same
 definitions, so scanning them is a full substitute for state purposes.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 
 ## Contents
 

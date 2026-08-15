@@ -12,10 +12,6 @@ scatter and *how densely*; the gamez says *where*. Neither alone tells you a cha
 three chapters ship a reader file and no volumes, and their reader file names a template their
 gamez does not carry.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 
 ## Contents
 

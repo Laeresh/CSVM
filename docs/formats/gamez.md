@@ -4,10 +4,6 @@ Part of the [format documentation](READoE.md) (see also [world-structure.md](wor
 
 > **JSON field names below are mech3ax v0.6.1's.** Since 2026-07-21 this project extracts with the [fork](../plans/PLAN-mech3ax-cs-revival.md) instead, whose JSON is deliberately shape-incompatible — the *format facts* are unchanged, only their spelling. oapping: `{"Object3d": {…}}` → flat node with the variant under `data`; `mesh_index`→`model_index`; `children`→`child_indices`; `transformation`→`transform` (no-transform is the string `"Initial"`; `matrix.a…i`→`original.r00…r22`, plus a `scale`, unit everywhere measured); `meshes.json`→`models.json`; polygon `unk04`→`priority`, `triangle_strip`→`tri_strip`; mesh light `extra`→`vertices`; material `texture` (name) → `texture_index` into `textures.json`, whose entries went `{original, renamed}`→`{name}`; partition cell `nodes[].index`→`values[].node_index`. **One trap:** the fork *also* has a per-node `index` field — 1-based and duplicated, i.e. v0.6.1's `node_index` renamed — which is NOT what `child_indices` point at. The Godot loader reads both shapes; see `GameZ.cs` in [architecture.md](../architecture.md).
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## Reference
 
 - `nodes.json` `children`/`parent` are **flat list positions**, NOT the `node_index` field (node_index has duplicates).

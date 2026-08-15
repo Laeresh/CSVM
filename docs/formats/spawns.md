@@ -8,10 +8,6 @@ top-level zrdr). Spawn positions and headings are verified byte-exact
 against the data for C1/IA1 `zeppelin_run` and side-by-side in-game for C3/M01. Consumed
 by `CSVM/src/Flight/SpawnPoints.cs`.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## Instant action — `ia.json` `spawn_points`
 
 `spawn_points` is a dict mapping scenario name → list of spawn entries

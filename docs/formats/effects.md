@@ -29,10 +29,6 @@ The gamez effect-prototype nodes (`ball_of_fire`, `flak_explosion`, `dense_firet
 `explode_here1–9`, …) are mostly empty parentless Object3d anchors the emitters attach
 to at runtime — they are not world scenery (see [world-structure.md](world-structure.md)).
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 
 ## Contents
 

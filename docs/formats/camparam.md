@@ -5,10 +5,6 @@ One of the shared-scope zrdr readers ([zrdr.md](zrdr.md)); in an extraction it l
 distance, catch-up rates, third-person eye height/pitch, and the geometry of the look-behind,
 death, crash and flyby cameras.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## Shape
 
 The root is a plain alternating `name, properties` list — the same layout `vehicle.json` uses for

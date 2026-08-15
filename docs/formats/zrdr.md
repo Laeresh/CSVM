@@ -9,10 +9,6 @@ colour encoding, `kind_of` inheritance, wildcards, everything-is-float) are in t
 
 This page maps the archives and their reader families to the pages documenting them.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## Contents
 
 - [The three scopes](#the-three-scopes)

@@ -5,10 +5,6 @@ extraction (mech3ax v0.6.1), decoded across Milestone-2 flight work and Run-2 it
 (2026-07-19). One reader file, shared by every mission scope; the root list alternates
 `defName, [properties…]`.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 
 ## Contents
 

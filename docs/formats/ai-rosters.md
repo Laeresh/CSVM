@@ -13,10 +13,6 @@ comment's, verbatim. Field *positions* and *values* are then confirmed against t
 extraction; where the two disagree this page says so. See
 [the field-list gap](#the-three-unnamed-slots) for the one place they do.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 
 ## Contents
 

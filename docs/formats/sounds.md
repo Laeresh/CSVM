@@ -4,10 +4,6 @@ Part of the [format documentation](README.md). Covers the shared zrdr archive's 
 definitions and curve blocks, and the audio container format. Consumed by
 `CSVM/src/Mech3/SoundDefs.cs`, `WavFile.cs`, `src/Flight/FlightAudio.cs`.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## `sounds.json` — the SETS block
 
 `SETS` alternates set-name → list of entries. Entry shape:

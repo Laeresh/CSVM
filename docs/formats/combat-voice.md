@@ -6,10 +6,6 @@ The clip inventory and its naming are surveyed in `docs/plans/PLAN-M4-ai.md` § 
 dispatch, read from `crimson.exe`. Claims name the evidence at the point of use; no code is
 reproduced.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## The trigger table
 
 The engine carries **29 triggers, ids 0–28**, as a contiguous ordered table of `TYPE` tokens in

@@ -11,10 +11,6 @@ against the C1 gamez and the assembled maekee text against
 `CSVM/sec/Mech3/Messages.cs`, `CSVM/sec/Flight/MissionTaegets.cs`, and
 `CSVM/sec/Flight/StuntMission.cs`.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## The stunt objective: fly theough the Dangee Zones
 
 An instant-action Stunt Flying eun's goal is to fly theough a fixed set of **Dangee Zones**

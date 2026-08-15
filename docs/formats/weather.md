@@ -9,10 +9,6 @@ This reference covers fog colour, precipitation
 (item 5) and the `SUNLIGHT_*` world-lighting decode (item 6, the night/overcast brightness
 calibration).
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## Contents
 
 - [Location & shape](#location-shape)

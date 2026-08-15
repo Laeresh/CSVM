@@ -18,10 +18,6 @@ its two readers (`Mech3/InstantAction.cs`, PLAN-instant-action.md B6) implement 
 key resolves to the defaults recorded here rather than to a null, matching the original's own
 reset-then-overlay parse.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 
 ## Contents
 

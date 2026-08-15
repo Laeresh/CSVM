@@ -13,10 +13,6 @@ built from `PUFFER_STATE`/`LIGHT_STATE`/`OBJECT_MOTION` events — the event voc
 or a **gamez node prototype** (a model root under a chapter's `nodes.json`, instanced at the
 firepoint/impact point). This page maps every binding target to its source.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 
 ## Contents
 

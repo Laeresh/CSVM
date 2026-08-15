@@ -11,10 +11,6 @@ A destructible object is not a separate file type and has no format of its own. 
 covers only the extra layer that makes one destructible: the `HEALTH` pool, the `ACTIVATION`
 mode, the `DAMAGE_SEQUENCE` threshold script, the death sequence, and the collide set.
 
-## At a glance
-
-This page is the current reference for its documented format family.
-
 ## Contents
 
 - [The three extra pieces](#the-three-extra-pieces)
