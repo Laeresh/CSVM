@@ -494,6 +494,12 @@ public sealed record SessionSpec
     /// launch. Null = flag absent; empty = every net; else the comma-separated net names to
     /// build.</summary>
     public string? DebugAiNets { get; private set; }
+
+    /// <summary><c>--debug-targets</c>: open the targeting overlay (F14) at launch — a line from
+    /// every turret gunner and AI gunner to the target it has acquired, coloured by the gate that
+    /// is holding its trigger.</summary>
+    public bool DebugTargets { get; private set; }
+
     public bool DebugScoreboard { get; private set; }
     public int? DebugLivery { get; private set; }
     public string? DebugMesh { get; private set; }
@@ -702,6 +708,7 @@ public sealed record SessionSpec
             else if (arg == "--debug-dzpaths") { s.DebugDzPaths = true; }
             else if (arg == "--debug-ainets") { s.DebugAiNets ??= ""; }
             else if (arg.StartsWith("--debug-ainets=")) { s.DebugAiNets = arg["--debug-ainets=".Length..]; }
+            else if (arg == "--debug-targets") { s.DebugTargets = true; }
             else if (arg.StartsWith("--debug-join=")) { s.DebugJoin = int.Parse(arg["--debug-join=".Length..]); }
             else if (arg.StartsWith("--debug-waves=")) { s.DebugWaves = int.Parse(arg["--debug-waves=".Length..]); }
             else if (arg.StartsWith("--debug-wingmen=")) { s.DebugWingmen = int.Parse(arg["--debug-wingmen=".Length..]); }

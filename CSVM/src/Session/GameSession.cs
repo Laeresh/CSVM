@@ -2678,6 +2678,29 @@ public partial class GameSession : Node3D
             }
         }
 
+        // F15 / --debug-targets: who is aiming at whom. Reads the live gunners through closures
+        // rather than a snapshot — waves activate, AI planes spawn and emplacements die long
+        // after this line runs. The shooter list is reused, not rebuilt per frame.
+        var targetScan = new List<FlightController>();
+        _worldRoot!.AddChild(new UI.TargetingOverlay(
+            () => _turretEmplacements?.Emplacements ?? Array.Empty<TurretController>(),
+            () =>
+            {
+                targetScan.Clear();
+                foreach (var rig in _rigs)
+                {
+                    if (rig.Controller is { } c)
+                    {
+                        targetScan.Add(c);
+                    }
+                }
+                targetScan.AddRange(_aiPlanes);
+                return targetScan;
+            })
+        {
+            DebugShow = _spec.DebugTargets,
+        });
+
         if (_rigs.Count > 1)
         {
             var flown = new List<string>(_rigs.Count);

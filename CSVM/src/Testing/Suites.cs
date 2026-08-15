@@ -223,7 +223,8 @@ public static class Suites
             "enemy-default team), take the Instant Action builder's subtree-scoped ACTIVATED " +
             "write on the objective zeppelin (14 rings armed and shooting back, nothing outside " +
             "the hull touched, the same call with the flag cleared stowing them again), keep " +
-            "their own mount and the hull they ride out of their own sight line, skip " +
+            "their own mounting SECTION out of their own sight line while the rest of the hull " +
+            "stays cover, skip " +
             "same-team targets, join the aim-assist candidate list, and go permanently quiet " +
             "when the emplacement's own destructible dies", WorldTurrets));
         into.Add(new TestHarness.Suite("carried-turrets",
@@ -4712,34 +4713,29 @@ public static class Suites
                     ctx.Check(!aagun.Activated && mp2Rings.All(t => !t.Activated),
                         $"…and nothing outside that subtree woke with it");
 
-                    // The platform rule: a ring's world object is the HULL, not its own mount,
-                    // which is what its line-of-sight test has to stop treating as cover.
-                    ctx.Check(mp1Rings.All(t =>
-                            TurretController.PlatformOf(t.Site, world.Runtime.WorldRoot) == mp1[0]),
-                        $"every ring's platform resolves to the zeppelin hull it is bolted to");
-
-                    // What that exclusion has to contain, which is what the line-of-sight test
-                    // spends it on. ⚠ The complement (a ray across the hull coming back CLEAR once
-                    // excluded) cannot be asserted in this world: every unplaced vehicle loads at
-                    // the map corner (interp.md), so piratezep and multiplayer2zep sit inside
-                    // multiplayer1zep here and their colliders block the same line. The end of
-                    // that story is a flown session, where the 14 rings do engage.
+                    // The sight-line rule, both halves. A ring's own MOUNTING SECTION (the hull
+                    // group its site hangs off) is out of its sight line, because the ray starts
+                    // inside that geometry and would report blocked in every direction; the rest
+                    // of the hull stays in, which is what keeps a ring from shooting through its
+                    // own zeppelin. ⚠ Neither half is asserted through ray outcomes here: every
+                    // unplaced vehicle loads at the map corner (interp.md), so piratezep and
+                    // multiplayer2zep sit INSIDE multiplayer1zep in this world and block any line
+                    // whatever is excluded. The flown check is a session — where the near rings
+                    // engage and the ones firing across the hull report blocked.
                     var ring = mp1Rings[0];
+                    var section = TurretController.PlatformOf(ring.Site, world.Runtime.WorldRoot);
+                    ctx.Check(section != null && section != mp1[0] && mp1[0].IsAncestorOf(section)
+                              && section.IsAncestorOf(ring.Site!),
+                        $"a ring's mounting section is a piece OF the hull ('{section?.Name}'), never the whole hull and never just its own rig");
                     var excluded = ring.PlatformColliderRids();
                     var ownMount = ring.Site!.FindChildren("*", "CollisionObject3D", true, false)
                         .OfType<CollisionObject3D>().ToList();
                     var hullBodies = mp1[0].FindChildren("*", "CollisionObject3D", true, false)
                         .OfType<CollisionObject3D>().ToList();
                     ctx.Check(ownMount.Count > 0 && ownMount.All(b => excluded.Contains(b.GetRid())),
-                        $"the gun's own mount is out of its sight line: {ownMount.Count} body/bodies, the ones the ray starts inside and the ones that blocked every ring in the field");
-                    ctx.Check(hullBodies.Count > 0 && hullBodies.Count == excluded.Count,
-                        $"…and so is the whole hull it rides, exactly and no further: {excluded.Count} of {hullBodies.Count} collider(s)");
-                    var hullSpace = mp1[0].GetWorld3D().DirectSpaceState;
-                    var hullCentre = mp1[0].GlobalPosition;
-                    var acrossHull = hullCentre + (hullCentre - ring.WorldPosition) * 1.1f;
-                    ctx.Check(hullSpace.IntersectRay(PhysicsRayQueryParameters3D.Create(
-                            ring.WorldPosition, acrossHull, CollisionLayers.World)).Count > 0,
-                        $"those colliders are real cover: an unexcluded ray across the hull is blocked");
+                        $"the gun's own mount is out of its sight line: {ownMount.Count} body/bodies, the ones the ray starts inside");
+                    ctx.Check(excluded.Count > ownMount.Count && excluded.Count < hullBodies.Count,
+                        $"…with its own section but NOT the whole hull: {excluded.Count} excluded of the hull's {hullBodies.Count}");
 
                     // What the player actually feels: an armed hull shoots back. Its own rig, so
                     // the rounds it eats do not touch the aagun measurements below. ⚠ The hull is

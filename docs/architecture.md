@@ -168,6 +168,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
 - `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels.
 - `src/UI/PerfHud.cs` — the frame-cost readout (F14, `--debug-fps=`): fps/current-frame-cost/worst-recent-frame, once for the window, drawn above the launchscreen too.
+- `src/UI/TargetingOverlay.cs` — the targeting overlay (F15, `--debug-targets`): a per-frame line from every turret gunner (`TurretController.TargetPosition`) and AI gunner (`AiGunner.Target`) to its acquired target, coloured by the gate holding the trigger (`TurretController.Gate`), with the gate named per shooter in the HUD. Depth test off, since the line into a hull is the one worth seeing.
 - `src/UI/SelectionService.cs` — the shared `--freecam`/`--anim-lab` selection: click-pick + the `cs_name` ancestor ladder, breadcrumb + highlight box.
 - `src/UI/NodeLab.cs` — the `--freecam`/`--anim-lab` node lab (N, `--debug-nodelab`): lazy `cs_name` tree, search, frame/hide, dependencies, destructibles.
 - `src/UI/WorldDamageLab.cs` — the `--freecam`/`--anim-lab` world damage lab (F5, `--debug-damage`): HP slider + kill/reset on the selection's destructible pool.
@@ -1986,12 +1987,15 @@ nodes, then the fire gates: `Activated`, attack window, 15° barrel-on-solution 
   caller scope an activation to one hull's subtree, the shape of the engine's own node-keyed
   turret lookup; `SetActivated` writes the gate both ways, because the engine's walk stores a flag
   rather than only ever setting it.
-⚠ **An emplacement's own platform is never its own cover.** `PlatformOf` resolves the top-level
-  world child its `Site` sits under (the zeppelin hull, the balloon, or a ground gun's own node)
-  and `PlatformColliderRids` excludes that whole collider tree from the line-of-sight ray. Without
-  it the ray starts inside the gun's own body and reports blocked at 0.5 m, so a zeppelin's rings
-  track the player forever and never shoot — which is exactly what a playtest found. A carried
-  gunner needs none of this: its host is an aircraft, and aircraft are not on the world layer.
+⚠ **An emplacement's own MOUNTING SECTION is never its own cover, and the rest of the hull still
+  is.** `PlatformOf` resolves the node its `Site` hangs off (a zeppelin ring's own gasbag group, a
+  ground gun's own node) and `PlatformColliderRids` excludes that subtree's colliders from the
+  line-of-sight ray. Without any exclusion the ray starts inside the gun's own body and reports
+  blocked at 0.5 m, so the rings track forever and never shoot — the playtest symptom. Excluding
+  the whole vehicle instead lets a ring shoot through its own zeppelin, which the section rule
+  restores: a line crossing the far side reports blocked, visible live on the F15 overlay. A
+  carried gunner needs none of this: its host is an aircraft, and aircraft are not on the world
+  layer.
 ⚠ PARTS names resolve inside the mount's/matched node's subtree with TRIMMED cs_names (the
   shipped `"brigturret2 "` carries a trailing space); a global or exact match drives the wrong
   rig or none. An emplacement's kill switch is its healthy node's visibility — ai.zrd HEALTH is

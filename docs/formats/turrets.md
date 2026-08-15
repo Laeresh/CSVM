@@ -256,12 +256,18 @@ occlusion test at all.
 
 ⚠ **Whatever that cast hits, it cannot be the thing the gun is bolted to.** Every standalone entry
 stands on modelled geometry: a zeppelin hull, a balloon, a boat, an AA gun's own body. A test that
-counted the mount as cover would silence all 26 of them from the first frame, so the platform is
-not in the cast. The decode does not say by which mechanism (a partition holding only static world
+counted the mount as cover would silence all 26 of them from the first frame, so the mount is not
+in the cast. The decode does not say by which mechanism (a partition holding only static world
 geometry, or an explicit exclusion of the owning object), and the two are indistinguishable from
-the data; the remake excludes the platform's own collider tree and nothing else. Measured the hard
-way: with the mount in the cast, C1/IA1's zeppelin rings reported blocked by their own `turret`
-body at 0.5 m and by their own hull panels at 19–25 m of a 150–400 m shot.
+the data. Measured the hard way in the remake: with the mount in the cast, C1/IA1's zeppelin rings
+reported blocked by their own `turret` body at 0.5 m and by their own hull panels at 19–25 m of a
+150–400 m shot.
+
+What the remake excludes is the gun's own **mounting section** (the hull group its node hangs
+off), not the whole vehicle: excluding a zeppelin entire lets its rings shoot straight through
+their own hull, and excluding only the gun's own rig still blocks all 14 of them, because the
+panel colliders engulf the ring they carry. Neither extreme is decoded either; the section is the
+smallest unit that separates a gun's own clutter from the far side of the same hull.
 
 ### Aiming
 
