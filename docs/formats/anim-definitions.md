@@ -697,7 +697,7 @@ has `CreateUniqueMaterials` for the case where sharing is *not* wanted; `support
 the only caller, de-sharing the gauge materials so each instrument indexes its own frame set
 (those run at `SPEED 0`, i.e. a frame set the game indexes explicitly rather than a flipbook).
 
-### What changed, 2026-08-13
+### Effect-cycle mechanism
 
 The 2026-07-21 reading said "EFFECTS binds to the NODE, not the texture or material", concluded
 that `flame01` is a static base flame, and that the animated fire the user saw was a placed
@@ -949,7 +949,7 @@ deactivates `dliner1` (the passenger zeppelin in the shed) and `cargotrain`. The
 chapter gamez contains *every* mission's objects; without applying these states,
 phantom zeppelins/trains render in every mission.
 
-## `SAVE_LOG` / `PERSIST_LOG` are the cross-mission state log (decoded 2026-08-02)
+## `SAVE_LOG` / `PERSIST_LOG` are the cross-mission state log
 
 A mission does not always start from `RESET_STATE`. The engine keeps a **state log** of
 flagged definitions, and a mission load applies it on top of the bootstrap — which is how the
@@ -1221,7 +1221,7 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   hangar-door motions; the train's steam `PUFFER_STATE` is fully inline in `train.json`
   (all emitter params + `smokestack` attach node). Firetrucks / fueltrucks / patrol boat
   are `ON_CALL` only (mission-event driven — nothing calls them in free flight).
-## Consuming the extraction (playback, 2026-07-21)
+## Consuming the extraction
 
 Everything above is about *decoding* the archives. This section is what the Godot side needed
 in order to **run** them (`docs/plans/PLAN-anim-playback.md`, revival-plan item 7) — four facts that
