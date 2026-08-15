@@ -15,21 +15,21 @@ gamez does not carry.
 
 ## Contents
 
-- [Half 1 — `extracted/<chapter>/zrdr/fogvol.zrd.json`](#half-1-�-extractedchapterzrdrfogvolzrdjson)
-- [Half 2 — the gamez `fvol*` nodes](#half-2-�-the-gamez-fvol-nodes)
+- [Reader data](#reader-data)
+- [GameZ volume nodes](#gamez-volume-nodes)
 - [What the engine does with the volumes](#what-the-engine-does-with-the-volumes)
-- [The map-edge continuation (`A5`) — engine-side, NOT authored data](#the-map-edge-continuation-a5-�-engine-side-not-authored-data)
+- [Map-edge continuation](#map-edge-continuation)
 - [The sprite templates](#the-sprite-templates)
 - [What is decoded and what is inferred](#what-is-decoded-and-what-is-inferred)
 - [Consumed by the remake](#consumed-by-the-remake)
 - [Visible consequences to know about](#visible-consequences-to-know-about)
-## Half 1 — `extracted/<chapter>/zrdr/fogvol.zrd.json`
+## Reader data
 
 One chapter-scope reader file, root = an [alternating key/list dict](README.md#shared-conventions-zrdr-readers).
 
 | Key | Value | Meaning |
 |---|---|---|
-| `fog_zone` | `[int]` | **A bool**: non-zero arms the engine's in-volume whiteout + `ZONE3` camera state — see [the decompile section](#what-the-engine-does-with-the-volumes). Consumed (`A2`, `C21`) |
+| `fog_zone` | `[int]` | **A bool**: non-zero arms the engine's in-volume whiteout + `ZONE3` camera state — see [the decompile section](#what-the-engine-does-with-the-volumes). Consumed by the reader and weather runtime |
 | `distance` | `[float]` | The scatter's mean spacing, metres — an areal density, not a lattice phase. Engine default **206.25** |
 | `fog_fade_dist` | `[float]` | *(C5 only, **16**)* whiteout approach ramp, metres before the volume wall. Engine default **400**. Consumed (`C21`) |
 | `interior_fog_fade_dist` | `[float]` | *(C5 only, **16**)* whiteout decay depth inside the volume. Engine default **20**. Consumed (`C21`) |
@@ -55,7 +55,7 @@ lets "this chapter renders no clouds" be a proven lookup failure rather than a p
 Their ranges are degenerate too (`perp_dist_range [151.25, 151.25]`), which is the second sign
 the file is vestigial.
 
-## Half 2 — the gamez `fvol*` nodes
+## GameZ volume nodes
 
 Every chapter that scatters anything carries `fvol1`…`fvol34`: parentless-in-effect volumes
 directly under the `World` node, each with its own model of 8–56 vertices, invisible (the world
@@ -125,7 +125,7 @@ per-frame consumer `FUN_0042ee40` — the same frame update that runs the `CLOUD
   `perp_dist_range` [151.25, 151.25], `scale_range` [0.85, 1.15] — the degenerate copies simply
   restate the hardcoded defaults, a third sign those files are boilerplate rather than authored.
 
-## The map-edge continuation (`A5`) — engine-side, NOT authored data
+## Map-edge continuation
 
 ⚠ **Everything above this section is what `fogvol.zrd` + the gamez author. This section is not
 that.** The original's field reads as everywhere, past the map the way `cloudparent` does NOT
