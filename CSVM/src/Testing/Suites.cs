@@ -222,7 +222,8 @@ public static class Suites
             "the --wake-turrets stand-in wakes it, then acquires and fires under its own " +
             "enemy-default team), take the Instant Action builder's subtree-scoped ACTIVATED " +
             "write on the objective zeppelin (14 rings armed and shooting back, nothing outside " +
-            "the hull touched, the same call with the flag cleared stowing them again), skip " +
+            "the hull touched, the same call with the flag cleared stowing them again), keep " +
+            "their own mount and the hull they ride out of their own sight line, skip " +
             "same-team targets, join the aim-assist candidate list, and go permanently quiet " +
             "when the emplacement's own destructible dies", WorldTurrets));
         into.Add(new TestHarness.Suite("carried-turrets",
@@ -4592,7 +4593,7 @@ public static class Suites
                   && TurretController.EngineTeamFor(TurretDef.DefaultTeamId) > AimAssist.WorldTeam,
             $"the team mapping: neutral 0, ally = P1's team, enemy default past every pilot team");
 
-        ctx.WithWorld("C1", collision: false, world =>
+        ctx.WithWorld("C1", collision: true, world =>
         {
             var textures = new TextureArchive(texturesPath);
             ProjectilePool? pool = null;
@@ -4608,7 +4609,8 @@ public static class Suites
                 pool = live;
                 ctx.Host.AddChild(live);
                 var runtime = new Session.TurretEmplacementRuntime(turretDefs, weapons,
-                    (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live);
+                    (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live,
+                    world.Runtime.WorldRoot);
 
                 // The placement census: one entry instantiates as many turrets as its patterns
                 // match, so the counts are properties of C1's world model. Pinned as goldens.
@@ -4710,8 +4712,41 @@ public static class Suites
                     ctx.Check(!aagun.Activated && mp2Rings.All(t => !t.Activated),
                         $"…and nothing outside that subtree woke with it");
 
+                    // The platform rule: a ring's world object is the HULL, not its own mount,
+                    // which is what its line-of-sight test has to stop treating as cover.
+                    ctx.Check(mp1Rings.All(t =>
+                            TurretController.PlatformOf(t.Site, world.Runtime.WorldRoot) == mp1[0]),
+                        $"every ring's platform resolves to the zeppelin hull it is bolted to");
+
+                    // What that exclusion has to contain, which is what the line-of-sight test
+                    // spends it on. ⚠ The complement (a ray across the hull coming back CLEAR once
+                    // excluded) cannot be asserted in this world: every unplaced vehicle loads at
+                    // the map corner (interp.md), so piratezep and multiplayer2zep sit inside
+                    // multiplayer1zep here and their colliders block the same line. The end of
+                    // that story is a flown session, where the 14 rings do engage.
+                    var ring = mp1Rings[0];
+                    var excluded = ring.PlatformColliderRids();
+                    var ownMount = ring.Site!.FindChildren("*", "CollisionObject3D", true, false)
+                        .OfType<CollisionObject3D>().ToList();
+                    var hullBodies = mp1[0].FindChildren("*", "CollisionObject3D", true, false)
+                        .OfType<CollisionObject3D>().ToList();
+                    ctx.Check(ownMount.Count > 0 && ownMount.All(b => excluded.Contains(b.GetRid())),
+                        $"the gun's own mount is out of its sight line: {ownMount.Count} body/bodies, the ones the ray starts inside and the ones that blocked every ring in the field");
+                    ctx.Check(hullBodies.Count > 0 && hullBodies.Count == excluded.Count,
+                        $"…and so is the whole hull it rides, exactly and no further: {excluded.Count} of {hullBodies.Count} collider(s)");
+                    var hullSpace = mp1[0].GetWorld3D().DirectSpaceState;
+                    var hullCentre = mp1[0].GlobalPosition;
+                    var acrossHull = hullCentre + (hullCentre - ring.WorldPosition) * 1.1f;
+                    ctx.Check(hullSpace.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                            ring.WorldPosition, acrossHull, CollisionLayers.World)).Count > 0,
+                        $"those colliders are real cover: an unexcluded ray across the hull is blocked");
+
                     // What the player actually feels: an armed hull shoots back. Its own rig, so
-                    // the rounds it eats do not touch the aagun measurements below.
+                    // the rounds it eats do not touch the aagun measurements below. ⚠ The hull is
+                    // SHOWN first, exactly as the Instant Action builder shows it: C1/IA1's script
+                    // hides multiplayer1zep, and a hidden hull has no live colliders, so a suite
+                    // that skips this line cannot see a turret blocked by its own zeppelin.
+                    mp1[0].Visible = true;
                     int ZepShots() => mp1Rings.Sum(t => t.ShotsFired);
                     var ringPos = mp1Rings.Count > 0 ? mp1Rings[0].WorldPosition : Vector3.Zero;
                     zepBait = BuildRig(ctx.PlaneName, 0, ringPos + new Vector3(0f, -80f, 200f), ringPos);
@@ -4806,7 +4841,8 @@ public static class Suites
             try
             {
                 var runtime = new Session.TurretEmplacementRuntime(turretDefs, weapons,
-                    (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live);
+                    (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live,
+                    world.Runtime.WorldRoot);
                 var census = new List<string>();
                 foreach (var g in runtime.Emplacements.GroupBy(t => t.Def.Title).OrderBy(g => g.Key))
                     census.Add($"{g.Key}={g.Count()}");

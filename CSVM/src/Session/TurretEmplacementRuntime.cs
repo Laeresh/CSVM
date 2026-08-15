@@ -33,10 +33,14 @@ public sealed class TurretEmplacementRuntime
 {
     private readonly TurretController[] _turrets;
 
+    /// <param name="worldRoot">The built world's root, so each emplacement knows which top-level
+    /// world object it stands on. Omitted, an emplacement treats only its own site subtree as its
+    /// platform, and a gun on a modelled hull is blocked by that hull.</param>
     public TurretEmplacementRuntime(TurretDefs defs, WeaponDefs weapons,
-        Func<string, Node3D?, IReadOnlyList<Node3D>> findNodes, ProjectilePool pool)
+        Func<string, Node3D?, IReadOnlyList<Node3D>> findNodes, ProjectilePool pool,
+        Node3D? worldRoot = null)
     {
-        _turrets = TurretController.BuildEmplacements(defs, weapons, findNodes, pool);
+        _turrets = TurretController.BuildEmplacements(defs, weapons, findNodes, pool, worldRoot);
         pool.RegisterWorldTurrets(_turrets);
     }
 

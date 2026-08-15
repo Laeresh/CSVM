@@ -1986,6 +1986,12 @@ nodes, then the fire gates: `Activated`, attack window, 15° barrel-on-solution 
   caller scope an activation to one hull's subtree, the shape of the engine's own node-keyed
   turret lookup; `SetActivated` writes the gate both ways, because the engine's walk stores a flag
   rather than only ever setting it.
+⚠ **An emplacement's own platform is never its own cover.** `PlatformOf` resolves the top-level
+  world child its `Site` sits under (the zeppelin hull, the balloon, or a ground gun's own node)
+  and `PlatformColliderRids` excludes that whole collider tree from the line-of-sight ray. Without
+  it the ray starts inside the gun's own body and reports blocked at 0.5 m, so a zeppelin's rings
+  track the player forever and never shoot — which is exactly what a playtest found. A carried
+  gunner needs none of this: its host is an aircraft, and aircraft are not on the world layer.
 ⚠ PARTS names resolve inside the mount's/matched node's subtree with TRIMMED cs_names (the
   shipped `"brigturret2 "` carries a trailing space); a global or exact match drives the wrong
   rig or none. An emplacement's kill switch is its healthy node's visibility — ai.zrd HEALTH is

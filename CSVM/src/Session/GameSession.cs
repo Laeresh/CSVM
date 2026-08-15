@@ -2651,7 +2651,8 @@ public partial class GameSession : Node3D
         {
             var placedRt = worldRt;
             _turretEmplacements = new TurretEmplacementRuntime(turretDefs, weaponDefs,
-                (pattern, scope) => placedRt.FindNodes(pattern, scope), projectiles);
+                (pattern, scope) => placedRt.FindNodes(pattern, scope), projectiles,
+                placedRt.WorldRoot);
             int awakeByData = _turretEmplacements.AwakeCount;
             // The Instant Action builder's zeppelin turret arm, recorded above: the objective
             // zeppelin's rings come up armed, the switched-off zeppelins' go quiet. Runs BEFORE

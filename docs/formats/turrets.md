@@ -254,6 +254,15 @@ carried turret) to a point 0.2 m above the target, and **caches the result for a
 seconds** before re-testing. A failed test blocks firing. Against non-player targets there is no
 occlusion test at all.
 
+⚠ **Whatever that cast hits, it cannot be the thing the gun is bolted to.** Every standalone entry
+stands on modelled geometry: a zeppelin hull, a balloon, a boat, an AA gun's own body. A test that
+counted the mount as cover would silence all 26 of them from the first frame, so the platform is
+not in the cast. The decode does not say by which mechanism (a partition holding only static world
+geometry, or an explicit exclusion of the owning object), and the two are indistinguishable from
+the data; the remake excludes the platform's own collider tree and nothing else. Measured the hard
+way: with the mount in the cast, C1/IA1's zeppelin rings reported blocked by their own `turret`
+body at 0.5 m and by their own hull panels at 19–25 m of a 150–400 m shot.
+
 ### Aiming
 
 1. **Lead.** If the weapon is flagged as a leading weapon, the engine solves a true intercept from

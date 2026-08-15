@@ -675,6 +675,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// runtime finding the hull-death def by its activation prerequisite, M4 F18).</summary>
     public IReadOnlyList<AnimDefinition> ProgramDefs => _program.Defs;
 
+    /// <summary>The built world's own root, the node every world subtree hangs under. Exposed so
+    /// a caller can ask which top-level world object a node belongs to (a turret gunner's "which
+    /// platform am I bolted to"); null before <see cref="Bind"/>.</summary>
+    public Node3D? WorldRoot => _root;
+
     /// <summary>Pins the runtime's RNG for a reproducible run. Every session sets one, derived from
     /// the master seed (<see cref="Utils.Rng"/>); null leaves it drawn from .NET's own entropy. Set
     /// at construction through the object initializer, before <see cref="Bind"/>.</summary>

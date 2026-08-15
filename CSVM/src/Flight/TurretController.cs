@@ -62,6 +62,7 @@ public sealed class TurretController
     private readonly int _team;            // engine-space team (AimAssist convention)
     private readonly Node3D? _healthyNode; // emplacement kill switch; null on a carried turret
     private readonly Node3D? _site;        // emplacement placement node; null on a carried turret
+    private readonly Node3D? _platform;    // the world object the emplacement is bolted to
 
     private float _windowLeft;   // s left in the current attack/bored window
     private float _fireIn;       // s until the next shot is allowed
@@ -72,11 +73,12 @@ public sealed class TurretController
     private Vector3 _lastPos;
     private bool _hasLastPos;
     private bool _firstShotLogged;
+    private Godot.Collections.Array<Rid>? _platformColliders;
 
     private TurretController(TurretDef def, WeaponDef weapon, FlightController? host,
         ProjectilePool pool, Node3D? yawNode, Node3D pitchNode, Node3D[] firepoints,
         RandomNumberGenerator rng, int team, bool activated, Node3D? healthyNode, Node3D? site,
-        string label)
+        Node3D? platform, string label)
     {
         Def = def;
         Weapon = weapon;
@@ -90,6 +92,7 @@ public sealed class TurretController
         Activated = activated;
         _healthyNode = healthyNode;
         _site = site;
+        _platform = platform ?? site;
         Label = label;
         _yawRest = yawNode?.Transform ?? Transform3D.Identity;
         _pitchRest = pitchNode.Transform;
@@ -238,7 +241,7 @@ public sealed class TurretController
             }
             var rng = new RandomNumberGenerator { Seed = (ulong)(uint)Utils.Rng.NewIntSeed(Utils.Rng.Weapons) };
             built.Add(new TurretController(def, weapon, host, pool, yaw, pitch, fps.ToArray(), rng,
-                host.Team, activated: true, healthyNode: null, site: null,
+                host.Team, activated: true, healthyNode: null, site: null, platform: null,
                 label: mount.Title));
         }
         return built.ToArray();
@@ -271,7 +274,8 @@ public sealed class TurretController
     /// with a warning (the world carries grouping nodes like C5's <c>thugs</c> beside
     /// <c>thug1..3</c> that the patterns also match).</summary>
     public static TurretController[] BuildEmplacements(TurretDefs defs, WeaponDefs weapons,
-        Func<string, Node3D?, IReadOnlyList<Node3D>> findNodes, ProjectilePool pool)
+        Func<string, Node3D?, IReadOnlyList<Node3D>> findNodes, ProjectilePool pool,
+        Node3D? worldRoot = null)
     {
         var built = new List<TurretController>();
         foreach (var def in defs.All)
@@ -338,11 +342,29 @@ public sealed class TurretController
                     var rng = new RandomNumberGenerator { Seed = (ulong)(uint)Utils.Rng.NewIntSeed(Utils.Rng.Weapons) };
                     built.Add(new TurretController(def, weapon, host: null, pool, yaw, pitch,
                         fps.ToArray(), rng, EngineTeamFor(def.TeamId),
-                        def.Activated, healthy, site, label));
+                        def.Activated, healthy, site, PlatformOf(site, worldRoot), label));
                 }
             }
         }
         return built.ToArray();
+    }
+
+    /// <summary>The world object an emplacement is bolted to: the top-level world child its site
+    /// sits under (a zeppelin hull, a balloon, or the gun's own node for a gun standing on the
+    /// ground). What its own line-of-sight test must not treat as cover, and the reason that test
+    /// needs the world root at all.</summary>
+    public static Node3D? PlatformOf(Node3D? site, Node3D? worldRoot)
+    {
+        if (site == null || worldRoot == null)
+        {
+            return site;
+        }
+        var node = site;
+        for (var p = node.GetParent() as Node3D; p != null && p != worldRoot; p = p.GetParent() as Node3D)
+        {
+            node = p;
+        }
+        return node;
     }
 
     /// <summary>The pitch clamp — plain, and only when the axis is limited at all: the engine
@@ -496,6 +518,36 @@ public sealed class TurretController
         _fireIn = RandRange(Def.FireRateMin, Def.FireRateMax);
     }
 
+    /// <summary>The platform's own colliders, collected once: the RIDs this gunner's
+    /// line-of-sight ray excludes. Internal so the suite can cast the same ray both ways and show
+    /// the hull is real cover for everyone except the gun standing on it. RIDs are stable for the
+    /// world's lifetime and the subtree gains no colliders after the build (a destroyed part
+    /// hides, it is not re-parented). Empty for a platform that resolved to nothing.</summary>
+    internal Godot.Collections.Array<Rid> PlatformColliderRids()
+    {
+        if (_platformColliders != null)
+        {
+            return _platformColliders;
+        }
+        _platformColliders = new Godot.Collections.Array<Rid>();
+        if (_platform != null && GodotObject.IsInstanceValid(_platform))
+        {
+            void Walk(Node node)
+            {
+                if (node is CollisionObject3D body)
+                {
+                    _platformColliders.Add(body.GetRid());
+                }
+                foreach (var child in node.GetChildren())
+                {
+                    Walk(child);
+                }
+            }
+            Walk(_platform);
+        }
+        return _platformColliders;
+    }
+
     private static float AngularDistance(float a, float b) =>
         Mathf.Abs(Mathf.Wrap(a - b, -180f, 180f));
 
@@ -586,7 +638,10 @@ public sealed class TurretController
     }
 
     // FlightController.WorldBlocksLine's twin for a gunner with no host rig: the same
-    // world-layer-only ray off the turret's own node.
+    // world-layer-only ray off the turret's own node, minus its own platform. A carried gunner
+    // needs no such exclusion because its host is an aircraft and aircraft are not on the world
+    // layer; an emplacement's platform IS world geometry, and a gun standing on a zeppelin whose
+    // own hull counts as cover can never fire at anything.
     private bool WorldRayBlocked(Vector3 from, Vector3 to)
     {
         var space = (YawNode ?? PitchNode).GetWorld3D()?.DirectSpaceState;
@@ -594,8 +649,8 @@ public sealed class TurretController
         {
             return false;
         }
-        return space.IntersectRay(
-            PhysicsRayQueryParameters3D.Create(from, to, CollisionLayers.World)).Count > 0;
+        return space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+            from, to, CollisionLayers.World, PlatformColliderRids())).Count > 0;
     }
 
     // The bounded slew: the barrel chases the clamped aim direction at SlewRate per second,
