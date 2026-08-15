@@ -112,7 +112,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E — Seats and input
 
-41. ☐ Pad assignment follows the phantom-device policy (`BL-374`)
+41. ☑ Pad assignment follows the phantom-device policy (`BL-374`)
 42. ☐ Camera views and look-back for players 2–4 (`BL-372`)
 43. ☐ Splitscreen pause (`BL-373`)
 44. ☐ Per-seat spectator control (`BL-375`)
@@ -712,7 +712,7 @@ unscaled levels — if this item changes crash levels, note it there rather than
 
 # Wave E — Seats and input
 
-## E41 ☐ Pad assignment follows the phantom-device policy (`BL-374`)
+## E41 ☑ Pad assignment follows the phantom-device policy (`BL-374`)
 
 **Goal.** Flight pad assignment survives phantom devices; no player is bound to a dead pad slot.
 
@@ -721,17 +721,40 @@ unscaled levels — if this item changes crash levels, note it there rather than
 HID exposes a joypad interface); `MenuInput.cs:27` keeps the claim/filter policy the flight path
 abandons. Assignment is taken once at session build.
 
-**Approach.** Reuse the menu's claim/filter logic for flight assignment (launchscreen sessions
-already know the claimed pads — carry the claims through `SessionSpec` into `AssignPads` instead
-of re-enumerating raw). Mid-session reconnect is out of scope; note it in the landing commit.
+**Approach (landed).** The proposed route — carrying the menu's *interactive* claims through
+`SessionSpec` — turned out not to fit: menu-driven sessions already bypass `AssignPads` entirely
+(`GameSession.cs:1703`, `_menuPads ?? Pads.AssignPads(...)`), and `SessionSpec` deliberately keeps
+pad bindings out of itself (`Launcher.cs:827-830`, "they come from the join flow rather than from
+args"). The only path still hitting raw `AssignPads` is a **direct CLI multiplayer launch**
+(`--fly --players=N` with no `--menu`), which has no join screen to claim pads interactively in the
+first place — `StartSession()` builds synchronously, so there is no frame loop to wait on a Start
+press. Reused what *is* interaction-free in `LaunchMenu`'s policy instead: `SyncDevices` hands
+player 1 "every pad nobody else has claimed" rather than `pads[0]`
+(`LaunchMenu.cs:617-621`) — a set-difference, computable in one synchronous pass. `AssignPads` now
+does the same: P2–P4 still take one raw-roster slot each (unchanged, still a raw-index guess), and
+P1 gets every connected pad none of them claimed, unioned through the same `Pads.For` any-pad read
+FlightController already gives a null-bound single player. Split into a pure
+`AssignPads(players, IReadOnlyList<int>)` overload (no `Input.*` calls) so the rule is unit-testable
+without a running engine (`PadsTests.cs`), with `AssignPads(players)` supplying `Connected()` and
+logging. P2–P4 stay exposed to a phantom device at their specific slot — fixing that needs the
+menu's interactive claim, which needs a join screen this launch path doesn't have; out of scope
+here, same as mid-session reconnect.
 
 **Model recommendation.** medium.
 
-**Verify.** `SessionSpecTests`/menu tests green; at the controls with the actual 8BitDo dongle
-asleep: P1's pad works in flight. (This hardware repro is the reason the policy exists — the user
-has the devices.)
+**Verify (done 2026-08-15).** `dotnet build CSVM/CSVM.sln` clean, 0 warnings; `dotnet format
+--verify-no-changes` clean. `.\RunTests.ps1`: units/engine/goldens/hitch all PASS (six new
+`PadsTests` cover the leftover-pool rule, including the exact repro shape — a phantom pad at slot 0
+plus an unclaimed real pad at a later slot — asserting P1's read set contains the real one).
+`SessionSpecTests`/`SessionSpecMenuTests` green (untouched by this change — menu launches never hit
+`AssignPads`). **The hardware repro (the actual 8BitDo dongle asleep, `--fly --players=N` at the
+controls) is still owed** — this environment has no gamepad to reproduce it with; the fix is
+reasoned from the roster the dongle is documented to present (`Pads.cs:11-15`), not measured against
+it. Folds into F52's playtest pass.
 
 **⚠ Traps.** `--no-pads` and `--debug-join` paths must keep working (scripted runs rely on them).
+`--no-pads`: `Connected()` returns empty, so every assignment (P1's included) is empty — unchanged.
+`--debug-join`: menu-only, never reaches `AssignPads` at all — unchanged.
 
 ## E42 ☐ Camera views and look-back for players 2–4 (`BL-372`)
 

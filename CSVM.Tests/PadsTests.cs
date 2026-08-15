@@ -1,0 +1,65 @@
+using System.Collections.Generic;
+using CSVM;
+using Xunit;
+
+namespace CSVM.Tests;
+
+/// <summary>
+/// <see cref="Pads.AssignPads(int, IReadOnlyList{int})"/> — the pure half of BL-374's fix, engine-
+/// free so a phantom-device scenario can be asserted without real hardware. The IDs below are
+/// arbitrary; what matters is which slot in the roster they occupy.
+/// </summary>
+public class PadsTests
+{
+    [Fact]
+    public void SinglePlayerReturnsNull()
+        => Assert.Null(Pads.AssignPads(1, new List<int> { 5, 6, 7 }));
+
+    [Fact]
+    public void P2ToP4TakeTheNextRosterSlotEach()
+    {
+        var a = Pads.AssignPads(3, new List<int> { 10, 20, 30, 40 });
+        Assert.Equal(new[] { 20 }, a![1]);
+        Assert.Equal(new[] { 30 }, a[2]);
+    }
+
+    [Fact]
+    public void P1GetsEveryPadNobodyElseClaimed()
+    {
+        // 4 connected devices, 3 players: P2/P3 claim slots 1/2, P1 gets slot 0 AND the
+        // leftover slot 3 — not just the first slot, so P1 flies as long as ANY unclaimed
+        // pad is real, exactly the union LaunchMenu already hands unclaimed player 1.
+        var a = Pads.AssignPads(3, new List<int> { 10, 20, 30, 40 });
+        Assert.Equal(new[] { 10, 40 }, a![0]);
+    }
+
+    [Fact]
+    public void APhantomAtSlotZeroNoLongerStrandsP1()
+    {
+        // BL-374's repro: the roster's first slot (10) is a phantom device (the 8BitDo dongle
+        // enumerating asleep) that never produces input; a real extra pad (30) is also
+        // connected but unclaimed. The old pads[0]-only rule bound P1 to just the phantom;
+        // this rule hands P1 the whole leftover set, so the real pad still reaches P1.
+        var a = Pads.AssignPads(2, new List<int> { 10, 20, 30 });
+        Assert.Equal(new[] { 20 }, a![1]);
+        Assert.Equal(new[] { 10, 30 }, a[0]);
+        Assert.Contains(30, a[0]); // the real device is in P1's read set even though it's not pads[0]
+    }
+
+    [Fact]
+    public void APlayerWithNoPadLeftGetsAnEmptyList()
+    {
+        var a = Pads.AssignPads(3, new List<int> { 10 });
+        Assert.Equal(new[] { 10 }, a![0]); // unclaimed, so it still roams to P1
+        Assert.Empty(a[1]);
+        Assert.Empty(a[2]);
+    }
+
+    [Fact]
+    public void NoPadsConnectedLeavesEveryoneEmpty()
+    {
+        var a = Pads.AssignPads(2, new List<int>());
+        Assert.Empty(a![0]);
+        Assert.Empty(a[1]);
+    }
+}

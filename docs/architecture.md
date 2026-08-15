@@ -1183,6 +1183,12 @@ Owns the phantom policy (span every pad, never `pads[0]`), `Disabled` (`--no-pad
   un-join menu players and break `Pads.AssignPads` at session build.
 ⚠ Every joy read sits in a `Pads.For` loop except `MenuInput.JoinPressed`; `GameSession._menuPads`
   still overrides `AssignPads` when the launchscreen's join flow bound pads itself.
+⚠ (BL-374) `AssignPads(players)` binds P2–P4 to one raw-roster slot each but P1 to every slot
+  NONE of them claimed, not `pads[0]` — the same leftover-pool rule `LaunchMenu.SyncDevices` hands
+  unclaimed player 1, reused here via the pure, engine-free `AssignPads(players, IReadOnlyList<int>)`
+  overload (`PadsTests.cs`) so a phantom device at slot 0 can't strand a direct CLI multiplayer
+  launch's P1 the way it could a solo `pads[0]` bind. P2–P4 keep the plain raw-slot guess — only the
+  menu's interactive Start-press claim protects them too, out of this item's scope.
 
 ## src/Mech3/MissionSetup.cs
 Parses + applies the per-mission `.gw` interp script that decides which world entities a mission
