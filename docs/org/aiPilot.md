@@ -401,6 +401,29 @@ at `+0x314` written +FLT_MAX, restoring both when it finishes.
 ⚠ **The floor is a flat world-Y value, not a terrain follow.** 20 m saves a plane over water and
 flat ground and does nothing over a 600 m ridge; the raycast is the only terrain-aware part.
 
+**What the ray can hit: other aircraft included** (decoded 2026-08-15, asked as "does crash
+avoidance see other planes?"). `FUN_004c8f70` tests terrain plus every scene node whose flag word
+at `+0x24` carries `ACTIVE` (0x4) and `INTERSECT_SURFACE` (0x10) (see
+[`flightModel.md`](flightModel.md), "Emitters"); it has no vehicle filter. Plane models qualify:
+3151 of 3317 nodes in `extracted/planes/nodes.json` carry both flags, including the
+`player_pfighter` and `piratefighter` roots. The check itself proves the point: before casting,
+`FUN_0041f810` reads its own node's flag word, deactivates the node through `FUN_004cca30`
+(`gwNodeSetActive`, named by its own error string at `0x0062cd28`), casts, and restores the
+previous active state (`0x41f91e`/`0x41f982`), so the one aircraft excluded from the ray is the
+caster. The collision sweep `FUN_0048d7f0` wraps the same query in the same self-exclusion
+(`0x48d9c7`/`0x48da3e`), corroborating that aircraft are expected hits. An AI plane whose
+4.5-second velocity ray passes through another aircraft therefore enters state 3 and flies the
+same 1000 m climb-out as for terrain.
+
+Three bounds on how effective that is in a head-on: the ray is a zero-width line against the other
+plane's node volumes, so a small or crossing target can slip between checks; the cadence is one
+cast per 0.5…1.0 s per plane, and head-on closure at fighter speeds spends the whole 4.5 s
+lookahead in roughly two seconds; and both parties answer with the same straight-ahead climb, so a
+mutual detection can still merge. Head-ons in the original are rare, not impossible.
+
+⚠ **This is a remake gap, not an original one.** CSVM's probe (`FlightController.WorldBlocksLine`)
+masks to `CollisionLayers.World`, so our avoid-crash ray cannot see aircraft at all.
+
 ## The steering law both behaviours call
 
 `FUN_0041b560(this, stationPoint, desiredVelocity, params, emergencyFlag, leadFlag)` turns a target
