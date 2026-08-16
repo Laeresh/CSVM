@@ -64,7 +64,7 @@ previews, debug dumps, golden-test captures, etc. — always write them into
 ## Coding conventions
 - Comments state what and why, briefly — never provenance (dates, plan/milestone/item references), never history, never instructions to a reviewer. If a comment's only content is where a change came from, it should not exist.
 - **Use the terms in [`CONTEXT.md`](CONTEXT.md)**, and never a word that file lists under `_Avoid_`.
-- **Comment length is capped, in `CSVM/src` and `CSVM.Tests`.** A comment block over its cap fails the commit.
+- **Comment length is capped, in `CSVM/src` and `CSVM.Tests`.** A comment block over its cap fails the commit; [`CheckCommentCaps.ps1`](CheckCommentCaps.ps1) is what the hook runs, and what you run yourself while editing.
 
   | comment | cap |
   |---|---|
@@ -105,6 +105,7 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `RunProbe.ps1` — **every ad-hoc scripted Godot launch goes through this** (`--screenshot=`, `--dump-*`, one-off `--run-tests=`): hidden desktop + streams redirected to files, so nothing flashes on screen or prints over the calling terminal. Never invoke the Godot exe directly for a probe. Details: `docs/tooling.md`.
 - `HiddenDesktop.ps1` — dot-sourced by `RunTests.ps1`: runs every launch on a separate Windows desktop so no test window ever appears on screen. Details: `docs/tooling.md`.
 - `CleanScratch.ps1` — sweeps `.scratch/` artifacts **and finished `.claude/worktrees/` agent worktrees** (`-?` lists its switches). Spares backups and dirty worktrees; leaves branches alone by default.
+- `CheckCommentCaps.ps1` — the comment-length caps above, over `CSVM/src` and `CSVM.Tests`. Bare for the file:line list, `-Summary` for one line per file worst-first, or with paths for just those files. A pre-commit hook runs it; run it yourself while editing.
 - `New-ItemId.ps1` — mints the next `BL-`/`CAP-`/`PT-` item ID (`-Kind BL`, optional `-Count n` to reserve a block). The counter sits in `.git/item-id-counters.json` — shared by all worktrees, incremented under an exclusive lock — so concurrent sessions can't mint the same number. **Never assign an item ID any other way.** A pre-commit hook fails the commit if `backlog.md`/`playtest.md` define an ID twice.
 - `tools/` — downloaded binaries (git-ignored): pinned mech3ax v0.6.1, the mech3ax fork, the Godot 4.7 .NET editor.
 - `analysis/` — **committed** read-only analysis scripts + their `FINDINGS.md`, one dir per question. For instruments whose result `docs/` cites, because `.scratch/` is swept. No game data in them, ever.

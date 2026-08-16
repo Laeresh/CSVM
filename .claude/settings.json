@@ -75,6 +75,18 @@
             "statusMessage": "golden exercises prose check..."
           }
         ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "$j = [Console]::In.ReadToEnd() | ConvertFrom-Json; if ($j.tool_input.command -notmatch 'git\\s+commit') { exit 0 }; $root = git rev-parse --show-toplevel 2>$null; if (-not $root) { exit 0 }; $s = Join-Path $root 'CheckCommentCaps.ps1'; if (-not (Test-Path -LiteralPath $s)) { exit 0 }; $out = & $s 2>&1; if ($LASTEXITCODE -eq 0) { exit 0 }; $out | ForEach-Object { [Console]::Error.WriteLine([string]$_) }; [Console]::Error.WriteLine('Comment blocks over cap above (PROJECT_CONTEXT.md coding conventions: /// on a type 12 lines, /// on a member 6, // above a declaration 6, // above a statement 3). A block over cap has outgrown its subject - do not reflow it. Move the decode into docs/ and leave the prohibition on the member it binds, then re-run ./CheckCommentCaps.ps1.'); exit 2",
+            "timeout": 120,
+            "statusMessage": "comment-cap check..."
+          }
+        ]
       }
     ]
   }

@@ -88,4 +88,14 @@ if (Test-Path -LiteralPath $manifest -PathType Leaf) {
         exit 2
     }
 }
+
+$capCheck = Join-Path $repo 'CheckCommentCaps.ps1'
+if (Test-Path -LiteralPath $capCheck) {
+    $out = & $capCheck 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        $out | ForEach-Object { [Console]::Error.WriteLine([string]$_) }
+        [Console]::Error.WriteLine('Comment blocks over cap above (PROJECT_CONTEXT.md coding conventions). A block over cap has outgrown its subject - move the decode into docs/ and leave the prohibition on the member it binds, then re-run ./CheckCommentCaps.ps1.')
+        exit 2
+    }
+}
 exit 0
