@@ -74,18 +74,18 @@ public sealed partial class LaunchMenu : CanvasLayer
         ("a movie studio", "C2"),
     };
 
-    // The four Instant Action mission types, in the UI dropdown's own order (`IDS_IA_MISSIONTYPE`,
+    // The four Instant Action mission types in the UI dropdown's own order (`IDS_IA_MISSIONTYPE`,
     // 3660) — NOT the internal id order (`docs/formats/instant-action.md` "Mission types have
-    // internal ids"). Key is the ia.json `mission_type` string every consumer (InstantActionDef,
-    // --scenario=) already uses. Every environment offers all four except that Stunt Flying is
-    // hidden where the chapter's own `disallow_missions` bars it (decoded: only C2B among the seven
-    // offered here) — CurrentMissionTypes applies that filter; this table is the unfiltered set.
+    // internal ids"). Key is the ia.json `mission_type` string every consumer already uses; the
+    // LABELS come from InstantAction.MissionTypeLabel, so this screen, the load screen and the
+    // wrap-up board cannot name one mission three ways. Unfiltered: CurrentMissionTypes drops
+    // Stunt Flying where the chapter's `disallow_missions` bars it (decoded: only C2B of the seven).
     private static readonly (string Label, string Key)[] MissionTypes =
     {
-        ("Dogfighting an Ace", "dogfight_ace"),
-        ("Dogfighting a Squadron", "dogfight_squadron"),
-        ("Stunt Flying", "stunt_flying"),
-        ("Attacking a Zeppelin", "zeppelin_run"),
+        (Mech3.InstantAction.MissionTypeLabel("dogfight_ace"), "dogfight_ace"),
+        (Mech3.InstantAction.MissionTypeLabel("dogfight_squadron"), "dogfight_squadron"),
+        (Mech3.InstantAction.MissionTypeLabel("stunt_flying"), "stunt_flying"),
+        (Mech3.InstantAction.MissionTypeLabel("zeppelin_run"), "zeppelin_run"),
     };
 
     // The eight chapter worlds (mirrors RunDev.ps1's roster). The lettered codes are separate
@@ -1141,8 +1141,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         for (int i = 0; i < Planes.Length; i++)
         {
             bool sel = i == slot.PlaneIndex;
-            box.AddChild(Label((sel ? "▶  " : "     ") + Planes[i].Name, (int)(RowFont * paneScale),
-                sel ? color : RowColor, HorizontalAlignment.Center));
+            box.AddChild(CursorRow.Build(Planes[i].Name, (int)(RowFont * paneScale),
+                sel ? color : RowColor, sel));
         }
 
         box.AddChild(Label(PlaneStat(Planes[slot.PlaneIndex].Node), (int)(DetailFont * paneScale),
@@ -1209,8 +1209,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             _ => Planes[index].Name,
         };
         bool sel = index == CurrentIndex;
-        return Label((sel ? "▶  " : "     ") + text, (int)(RowFont * s),
-            sel ? RowFocusColor : RowColor, HorizontalAlignment.Center);
+        return CursorRow.Build(text, (int)(RowFont * s), sel ? RowFocusColor : RowColor, sel);
     }
 
     // One Waves-screen row: an unconfigured slot reads "empty" (decision 1's own "starts

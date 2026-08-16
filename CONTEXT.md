@@ -67,9 +67,21 @@ A player-requested halt, as distinct from a halt any other reason caused.
 _Avoid_: using it for a halt a results board caused
 
 **Rerun**:
-Resetting the running mode in place to its start, same seed and same world, with no session
-teardown. Distinct from a respawn, which returns one plane to the air mid-run.
-_Avoid_: restart (ambiguous with rebuilding the session), soft restart, reset
+Resetting the running mode in place to its start, same world, with no session teardown. What the
+race, the dogfight and a free flight do. Distinct from a respawn, which returns one plane to the
+air mid-run.
+_Avoid_: restart (that is the other mechanism, below), soft restart, reset
+
+**Restart**:
+Freeing the session and building a fresh one from the same settings, behind the load screen. What
+an Instant Action mission does, because its opposition lives in the world and cannot be put back
+in place. An unpinned restart draws a new mission; a pinned one repeats.
+_Avoid_: relaunch, reload, hard reset
+
+**Load screen**:
+The board drawn over the whole window while a session builds. Carries no progress: a build is one
+synchronous block.
+_Avoid_: loading screen, splash, please-wait
 
 ## Format documentation
 

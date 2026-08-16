@@ -70,6 +70,19 @@ public static class InstantAction
     /// <see cref="InstantActionWave"/> values — one build path for both.</summary>
     public static InstantActionWave EmptyWave => MakeWave(null, forceZero: false);
 
+    /// <summary>What a <c>mission_type</c> is called on screen (<c>IDS_IA_MISSIONTYPE</c>, 3660) —
+    /// the wizard's own four labels, so the launchscreen, the load screen and the wrap-up board all
+    /// name a mission the same way. An unknown key (a hand-authored <c>--ia=</c> file) reads back
+    /// verbatim rather than throwing: it is a label, not a lookup anything branches on.</summary>
+    public static string MissionTypeLabel(string missionType) => missionType.ToLowerInvariant() switch
+    {
+        "dogfight_ace" => "Dogfighting an Ace",
+        "dogfight_squadron" => "Dogfighting a Squadron",
+        "stunt_flying" => "Stunt Flying",
+        "zeppelin_run" => "Attacking a Zeppelin",
+        _ => missionType,
+    };
+
     /// <summary>The gamez node an Instant Action display name (an
     /// <see cref="InstantActionDef.PlayerPlane"/>/<see cref="InstantActionDef.AcePlane"/> value,
     /// e.g. <c>"Bloodhawk"</c>) builds — null when the name matches none of the eleven airframes

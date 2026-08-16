@@ -20,20 +20,25 @@ public sealed partial class BoardMenuView : VBoxContainer
     private static readonly Color LegendColor = new(0.68f, 0.74f, 0.82f);
 
     private BoardMenu _menu = null!;
-    private Label[] _rows = System.Array.Empty<Label>();
+    private CursorRow[] _rows = System.Array.Empty<CursorRow>();
 
     /// <summary>Builds the rows and the button legend for <paramref name="menu"/>, scaled by the
     /// board's own <paramref name="s"/> so a menu matches the panel it sits in.</summary>
     public static BoardMenuView Build(BoardMenu menu, float s)
     {
-        var view = new BoardMenuView { _menu = menu, MouseFilter = MouseFilterEnum.Ignore };
+        var view = new BoardMenuView
+        {
+            _menu = menu,
+            MouseFilter = MouseFilterEnum.Ignore,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
         view.AddThemeConstantOverride("separation", Mathf.RoundToInt(4f * s));
 
-        var rows = new Label[menu.Items.Count];
+        var rows = new CursorRow[menu.Items.Count];
         for (int i = 0; i < rows.Length; i++)
         {
-            rows[i] = Row(menu.Items[i].Label, (int)(RowFont * s));
-            view.AddChild(Centered(rows[i]));
+            rows[i] = CursorRow.Build(menu.Items[i].Label, (int)(RowFont * s), RowColor, selected: false);
+            view.AddChild(rows[i]);
         }
         view._rows = rows;
 
@@ -54,8 +59,7 @@ public sealed partial class BoardMenuView : VBoxContainer
         for (int i = 0; i < _rows.Length; i++)
         {
             bool selected = i == _menu.Index;
-            _rows[i].Text = (selected ? "▶  " : "     ") + _menu.Items[i].Label;
-            _rows[i].AddThemeColorOverride("font_color", selected ? RowFocusColor : RowColor);
+            _rows[i].Set(_menu.Items[i].Label, selected ? RowFocusColor : RowColor, selected);
         }
     }
 

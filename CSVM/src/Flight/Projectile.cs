@@ -443,14 +443,6 @@ public sealed partial class ProjectilePool : Node3D
         return Mathf.Clamp(1f - (distance - rangeMin) / (rangeMax - rangeMin), 0f, 1f);
     }
 
-    /// <summary>Zeroes the two Shot % counters for a rerun, so the next run's percentage is its
-    /// own. The scored-shooter set is left alone: it is the seat roster, not run state.</summary>
-    public void ResetShotCounters()
-    {
-        CannonRoundsFired = 0;
-        CannonHits = 0;
-    }
-
     /// <summary>Registers a flying aircraft's body as a strikeable target: rounds from every
     /// OTHER identity can hit it, and this plane's own rounds exclude it per shot (the body's
     /// <see cref="AircraftBody.PlayerIndex"/> is matched against each round's shooter id).</summary>

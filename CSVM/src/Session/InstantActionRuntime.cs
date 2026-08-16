@@ -332,21 +332,6 @@ public sealed class InstantActionRuntime
         }
     }
 
-    /// <summary>Puts the mission back at its start for a rerun: the clock, the outcome and every
-    /// registered pilot's lives. ⚠ <see cref="ObjectiveEnabled"/> is deliberately not reset; it
-    /// records that this mission's win signal can never arrive, which is a fact about the def and
-    /// not about the run just finished.</summary>
-    public void Rerun()
-    {
-        Outcome = InstantActionOutcome.Running;
-        Elapsed = 0f;
-        _spectators.Clear();
-        foreach (int playerIndex in new List<int>(_lives.Keys))
-        {
-            _lives[playerIndex] = Def.Lives;
-        }
-    }
-
     /// <summary>Records that this mission's win signal can never arrive; see
     /// <see cref="ObjectiveEnabled"/>.</summary>
     public void DisableObjective() => ObjectiveEnabled = false;

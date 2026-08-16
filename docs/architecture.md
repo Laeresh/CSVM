@@ -1643,7 +1643,9 @@ built at all, which is how `BL-358`'s two stacked boards became one. Safe becaus
 only ever existed single-pane: several pilots take the race branch, which builds none.
 Raises `HaltReason.Ended` on `Present` and carries a Restart · Exit `BoardMenu` driven by player 1.
 Nothing else retires this board — a mission that has ended stays ended — so unlike the race and
-dogfight boards the hide and the clock release happen on the menu's own Restart.
+dogfight boards the hide and the clock release happen on the menu's own Restart. That Restart is a
+restart and not a rerun: it reaches the Launcher's `RestartSession`, which rebuilds the world,
+because the mission's waves, ace and zeppelin cannot be put back in place (`BL-410`).
 
 ## src/Flight/Weather.cs
 `WeatherState`: per-mission atmosphere from the flown mission's own weather.json — per-zone
@@ -2208,15 +2210,40 @@ beats back in the same frame, the row having already been chosen. A results boar
 `Dismissable`: dismissing it would leave the player in a halted world with no way back, so it
 answers no back key and advertises none. Off-engine coverage: `CSVM.Tests/BoardMenuTests.cs`.
 
+## src/UI/LoadBoard.cs
+The load screen drawn over the whole window while a session builds, in the same board style as the
+pause and results boards but carrying no menu. Opaque rather than translucent: the outgoing session
+is still in the tree for the one frame it is up, and a half-seen dead world is worse than a plain
+screen. Populated in `_Ready` rather than `Build`, since the text is sized off the viewport and a
+node outside the tree has none to read. Its subject line names the chapter and the flight the way a
+player picked it — `Launcher.LaunchSubject` takes an Instant Action mission's name from
+`InstantAction.MissionTypeLabel` ("Attacking a Zeppelin"), never `SessionSpec.ModeName`, which is
+the log file's internal tag ("fly", "stunt") and not a player's word. ⚠ No progress bar, ever, while the build stays one
+synchronous block — `StartupProfile` reports its phases only after the fact, so a bar would be a
+fiction. The original's own load screens are artwork in `crimson.rof` and are not matched yet
+(`BL-409`). The Launcher owns the show/free pair; see its entry for the deferred-build handshake.
+
 ## src/UI/BoardMenuItem.cs
 The rows a board menu can offer — Resume, Restart, Exit. The board owning the menu decides which it
 carries and what each does; Resume appears only on the pause board, and Exit's label follows
 whether the session can return to the launchscreen or only quit.
 
+## src/UI/CursorRow.cs
+One centred list row with a ▶ cursor, shared by every menu that has one: the launchscreen's screens
+(`LaunchMenu.Row`), its per-player aircraft panes, and every board menu through `BoardMenuView`.
+⚠ The marker is a cell of its own, never a prefix on the row's text. Prefixing a centred label with
+`"▶  "` when selected and `"     "` when not centres it on the PADDING too, and the two are not the
+same width, so every unselected row drifted sideways — which is what made these menus read as
+uncentred. A fixed-width marker cell plus an identical mirror cell on the right puts the label on
+the panel's centre line in both states, and centring the three as a GROUP (label at its natural
+width, not expanding) is what keeps the marker beside the text instead of out at the panel edge.
+The marker is emptied rather than hidden when unselected: a Godot container skips invisible
+children, which would collapse the cell.
+
 ## src/UI/BoardMenuView.cs
-Draws a `BoardMenu`'s rows in `LaunchMenu`'s cursor idiom (dim rows, the highlighted one gold
-behind a marker) inside the board style all five boards already share, so the cursor reads the same
-wherever it appears and a layout fix lands once. `Refresh()` recolours from the current highlight,
+Draws a `BoardMenu`'s rows as `CursorRow`s (dim rows, the highlighted one gold behind a marker)
+inside the board style all five boards already share, so the cursor reads the same wherever it
+appears and a layout fix lands once — in `CursorRow`, which the launchscreen draws too. `Refresh()` recolours from the current highlight,
 touching only label overrides. The footer is the button legend, since nothing else on a board
 teaches the cursor; a results board's has no back key to name.
 
@@ -2619,10 +2646,10 @@ stream, so a `--det` run reproduces it. `BuildFlightRigs` builds one `PauseState
 board, then assigns the state to every rig's `FlightController.PauseState` and `PauseBoard.Build`s
 the shared pause board — single player included, so there is one pause path rather than a solo one
 plus a splitscreen one. `MenuInputFor(playerIndex)` is the seam every board menu takes its owner's
-reader from. `Rerun()` is the Restart item's session-wide arm: the race and the match reset their
-own bookkeeping, anything else resets per plane. `RerunInstantAction` is the mission's own —
-runtime, Shot % counters, spectator panes and every plane. ⚠ It does NOT reset the enemy waves;
-see the backlog's rerun reset audit. Right after the ace block, D9's wingman block spawns
+reader from. `Rerun()` is the Restart item's session-wide arm, and it routes by mode: an Instant
+Action mission calls the Launcher's `RestartSession` (the world is rebuilt — the waves, the ace and
+a killed zeppelin cannot be put back in place), the race and the match reset their own bookkeeping,
+anything else resets per plane. Right after the ace block, D9's wingman block spawns
 `InstantActionRuntime.FlownWingmen(NumWingmen, _rigs.Count)` wingmen (`NumWingmen` is 0 on
 `dogfight_ace`, so the two blocks never both fire) on `AimAssist.PlayerTeam`, fanned off
 `_rigs[0]`'s pose by `WingmanSlotFor`, wearing the paint catalog's `player_fortune` entry (no
@@ -2989,6 +3016,19 @@ item, handed down through `LauncherContext`: back to the launchscreen when the p
 into it, out of the game otherwise. The routing Esc used to do — Esc now opens the pause board
 instead, so leaving a flight is reachable from a pad, and this one rule lives here rather than
 being restated per board.
+`RestartSession` is its sibling for the boards' Restart on an Instant Action mission: `QueueFree`
+this session, step the sortie seed exactly as flying again from the menu does (so an unpinned
+restart draws a new mission and a pinned one repeats), and build a fresh session from the same
+spec. A mission's opposition lives in the world, so putting it back means rebuilding the world.
+Both interactive paths in — the launchscreen's Fly and that Restart — go through `BeginLaunch`,
+which shows the `LoadBoard` and owes the build to `RunOwedLaunch` at the tail of the NEXT
+`_Process`: a build is one synchronous block, so the load screen cannot be drawn during it, and
+the outgoing session (freed at the end of the requesting frame) is gone before the new one builds,
+which is what stops its exit-tree duties (the published clock, the world lights, the camera
+restore) landing on top of the new session. The load screen is freed in the same tick the build
+returns, before anything renders, so it can never draw over the world's first frame or a
+`--screenshot` capture. ⚠ The CLI launch in `_Ready` deliberately does NOT come through here: it
+stays inline, so no scripted, golden or perf run gains a frame it did not have before.
 `ReportPerf`'s window line carries `max_ms`/`p95_ms` beside its means:
 a preallocated `_perfFrameMs` ring holds each frame's unaveraged wall cost, sorted into scratch
 at window close. No `p99_ms` — at `PerfWindowFrames` = 60 it would equal `max_ms` by construction.

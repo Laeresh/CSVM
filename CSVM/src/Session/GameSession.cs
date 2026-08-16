@@ -96,6 +96,9 @@ public partial class GameSession : Node3D
     private readonly bool _menuDriven;
     // The boards' Exit item, routed by the Launcher (launchscreen or quit).
     private readonly Action _exitSession;
+    // The boards' Restart item on an Instant Action mission: the Launcher frees this session and
+    // builds a fresh one. Nothing here can put a mission's opposition back on its own.
+    private readonly Action _restartSession;
     // Base (chapter-independent) paths, settled by the Launcher once per process and handed in via
     // the context; StartSession reads them each build and recomputes the chapter-dependent
     // gamez/texture/mission paths from _spec.Chapter.
@@ -279,6 +282,7 @@ public partial class GameSession : Node3D
         _menuDriven = ctx.MenuDriven;
         _menuPads = ctx.MenuPads;
         _exitSession = ctx.ExitSession;
+        _restartSession = ctx.RestartSession;
     }
 
     /// <summary>Whether the build completed — the Launcher's Esc routing reads it (return to the
@@ -2540,9 +2544,10 @@ public partial class GameSession : Node3D
             // never per pane: the mission ends for every human at once. ⚠ Danger Zones Completed
             // and Shot % are summed across every human seat, never picked from one pane.
             var wrapupBoard = IaWrapupBoard.Build(
-                $"{_spec.Chapter}   ·   {iaEnd.Def.MissionType}", exitsToMenu: _menuDriven,
+                $"{_spec.Chapter}   ·   {InstantAction.MissionTypeLabel(iaEnd.Def.MissionType)}",
+                exitsToMenu: _menuDriven,
                 _pauseState!, MenuInputFor);
-            wrapupBoard.Restart = () => RerunInstantAction(iaEnd);
+            wrapupBoard.Restart = _restartSession;
             wrapupBoard.Exit = _exitSession;
             var wrapupLayer = new CanvasLayer { Name = "ia_wrapup_board", Layer = UI.HudLayers.Board };
             wrapupLayer.AddChild(wrapupBoard);
@@ -2926,11 +2931,16 @@ public partial class GameSession : Node3D
         return playerIndex >= 0 && playerIndex < inputs.Length ? inputs[playerIndex] : inputs[0];
     }
 
-    // Rerun the running mode in place, from a board menu's Restart item: the race and the match
-    // own session-wide bookkeeping, and anything else is per-plane. Same seed and same world in
-    // every case — nothing here rebuilds the session.
+    // A board menu's Restart item. An Instant Action mission is REBUILT by the Launcher, because
+    // its opposition lives in the world and nothing here can put it back; every other mode reruns
+    // in place, the race and the match through their own bookkeeping and anything else per-plane.
     private void Rerun()
     {
+        if (_instantAction != null)
+        {
+            _restartSession();
+            return;
+        }
         if (_race is { } race)
         {
             RestartRace(race);
@@ -2959,32 +2969,6 @@ public partial class GameSession : Node3D
         float? prevBest = store.GetBest(key);
         bool newBest = store.RecordIfBest(key, run.Elapsed);
         return new StuntSummary(run, run.Elapsed, prevBest, newBest);
-    }
-
-    // Rerun an Instant Action mission from the wrap-up board: the mission clock, outcome and lives
-    // ledger back to their start, the Shot % counters zeroed, every downed pilot's pane taken back
-    // from its spectator, then every plane respawned with a fresh stunt run.
-    // ⚠ The enemy waves are NOT reset — a rerun flies the same mission against whatever the waves
-    // were left as. See the backlog's rerun reset audit.
-    private void RerunInstantAction(InstantActionRuntime runtime)
-    {
-        GD.Print($"ia: rerun — {runtime.Def.MissionType} from the top, same seed and same world");
-        runtime.Rerun();
-        _projectiles?.ResetShotCounters();
-        foreach (var spectator in _spectatorCameras)
-        {
-            spectator.QueueFree();
-        }
-        _spectatorCameras.Clear();
-        foreach (var rig in _rigs)
-        {
-            if (rig.Controller is { } pilot)
-            {
-                pilot.Spectating = false;
-                pilot.CameraOwned = false;   // hands the pane back to the chase camera
-                pilot.Rerun();
-            }
-        }
     }
 
     // Rematch from the shared race board (R): every player's zones, clock and placing cleared, then

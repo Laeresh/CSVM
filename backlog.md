@@ -2759,6 +2759,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   tracks its own pick. Depends on H22's target-tracking plumbing; `docs/controls.md` gains the
   bindings when it lands.
 
+- `BL-409` `[Feature]` **The load screen shows a plain panel, not the original's artwork.** A
+  session build stalls the frame loop for several seconds, so both interactive paths into one (the
+  launchscreen's Fly and an Instant Action Restart) draw `UI/LoadBoard` first: the shared board
+  style, the chapter and mode named, no progress. The original showed real load screens, and that
+  artwork ships in `crimson.rof` — decode which screen it picks per environment or mission type and
+  draw that instead.
+  ⚠ *Traps:* (a) Do NOT add a progress bar to the existing board on the way: the build is one
+  synchronous block and `StartupProfile` reports its phases only after the fact, so any bar is a
+  fiction. Real progress needs an incremental build first, which is a much larger item. (b) The
+  board must stay cheap to construct — it is built on the frame BEFORE the build, and anything slow
+  there just moves the stall earlier. (c) Whatever it draws, the Launcher frees it in the same tick
+  the build returns, so it can never draw over the world's first frame or a `--screenshot` capture.
+  *Cross-refs:* `UI/LoadBoard.cs`, `Launcher.BeginLaunch`/`RunOwedLaunch`, `docs/architecture.md`.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -2898,25 +2912,6 @@ usual.
   "Saved custom planes"). Importing a player's existing planes needs that finished; creating our own
   does not, and the two should not be conflated. (b) `PURCHASE` implies an economy, which belongs to
   the campaign and not to Instant Action.
-
-- `BL-410` `[Bug]` **A rerun does not reset the enemy waves, so the second run of an Instant Action
-  mission is not the first one again.** The wrap-up board's Restart item reruns the mission in place:
-  `InstantActionRuntime.Rerun` clears the clock, the outcome and the lives ledger,
-  `ProjectilePool.ResetShotCounters` zeroes Shot %, the spectator panes go back to their pilots and
-  every plane respawns. The wave runtimes are untouched, so a rerun flies against whatever the waves
-  were left as — cleared waves stay cleared on a `dogfight_squadron`, and a downed ace stays down.
-  ⚠ *Traps:* (a) The reset ledger is the whole item, not the wave list alone — audit every runtime a
-  mission touches (`InstantActionWaves`, the generator arms, the objective zeppelin's damage state,
-  `AiAircraftSpawner`'s spawned roster, `GameClock.Frame`/`Time`) and say for each whether it resets,
-  deliberately persists, or cannot. (b) `ObjectiveEnabled` must NOT reset: it records that this
-  mission's win signal can never arrive, a fact about the def rather than about the run
-  (`InstantActionEndTests.ARerunLeavesAnUnwinnableMissionUnwinnable` pins it). (c) A rerun must stay
-  a rerun — same seed, same world, no session teardown — so anything that can only be fixed by
-  rebuilding belongs in a separate relaunch item, not here.
-  *How you'd know it worked:* a `dogfight_squadron` rerun presents the same wave count it started
-  with, and a `dogfight_ace` rerun has an ace to shoot down.
-  *Cross-refs:* `GameSession.RerunInstantAction` (which carries the same warning),
-  `InstantActionRuntime.Rerun`, `docs/architecture.md`.
 
 - `BL-350` `[Bug]` `[Blocked: mission animations]` **Generator-spawned planes crash inside closed hangars
   (C1/M04 `--generators`, user-reported 2026-08-13).** The spawn position is decoded-correct: the
