@@ -2079,16 +2079,21 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
 12. **The throttle lever slews at 0.5/s with no idle floor** (2 s full-to-idle); the remake applies
     it instantly. Decoded, unimplemented — a feel/transient gap, not a steady-state one, and the
     one mechanism that could contaminate the first seconds of any throttle-step footage.
-13. **Spawn speed is a fixed 53.6 m/s (≈120 mph) for every airframe, and the original's is not
-    plane-dependent either.** ⚠ This item previously read "the original's is plane-dependent";
-    that is false at source. The player spawn routine `FUN_0047f1f0` takes its speed from the
+13. **Spawn speed is the mission's own, and it is not plane-dependent.** ⚠ This item previously
+    read "the original's is plane-dependent"; that is false at source, and the remake now reads
+    the authored value. The player spawn routine `FUN_0047f1f0` takes its speed from the
     mission's own `PLAYER_INIT[4] × 0.1` (18 m/s in 48 of 51 records) and touches no per-aircraft
     data at all: no reference to `fd_speed` (object `+0x668`) or to the def pointer appears in any
     of its 349 instructions. The remake's 53.6 m/s traces to `−53.6448` at `0060803c`, read only
     by the cheat dispatcher `FUN_0047e080`'s case `0x3b7` (teleport player to camera), which is
-    120.000 mph exactly. Spawn throttle is `PLAYER_INIT[3]` (0.8 in 49 of 51 records), against the
-    remake's 0.5. Full decode, including the mode-3 Instant Action branch and the reset paths:
+    120.000 mph exactly. Spawn throttle is `PLAYER_INIT[3]` (0.8 in 49 of 51 records), replacing
+    the remake's 0.5. Full decode, including the mode-3 Instant Action branch and the reset paths:
     [../formats/spawns.md](../formats/spawns.md), "Story mission spawns".
+    ⚠ **This makes the spawn depend on the force-scale conflict recorded above.** A start at 18 m/s
+    sits well below cruise, where the polar reads 2–3.6× too strong against `CAP-05`, and the
+    aircraft accelerates through its own computed stall speed at about 4.4 G rather than dropping.
+    Whether that climb-out is right is a live-cockpit question; it is not a reason to tune the
+    spawn speed, which is authored data.
     The per-airframe spawn rule that does exist belongs to **AI** aircraft: the vehicle factory
     `FUN_0047c210` gives a pathless aircraft `min(plane_speed_max, fd_speed)` along its nose
     (comparison at `0047d84f`) and gives one with an authored waypoint path zero velocity and

@@ -367,8 +367,13 @@ public partial class FlightController : Node3D
     public bool Spectating;
 
     private const float ThrottleRate = 0.5f;    // full sweep in 2 s
-    private const float SpawnThrottle = 0.5f;   // the original always spawns at half throttle (confirmed in-game, all planes)
-    private const float SpawnSpeed = 53.6f;     // m/s ≈ 120 mph. Remake placeholder: docs/org/flightModel.md, "What this changes" #13
+    // Spawn throttle/speed come from the mission's PLAYER_INIT via Setup (docs/formats/spawns.md).
+    // ⚠ These two are only the no-mission fallback (labs, tests, AI rigs), and they are the OLD
+    // placeholder, deliberately: the original gives an AI aircraft min(plane_speed_max, fd_speed),
+    // which is decoded but not landed, so moving them to the player's 18 m/s would be a third
+    // invented answer rather than that rule (BL-074).
+    private const float FallbackSpawnThrottle = 0.5f;
+    private const float FallbackSpawnSpeed = 53.6f;
     // The pipper's placement and smoothing are decoded (docs/org/aim-assist.md "What the pipper follows"); no TUNE left in it.
     private const float ReticleFlightTime = 0.5f;      // s of flight the pipper marks
     private const float ReticleDefaultSpeed = 860f;    // m/s used when no weapon def resolves
@@ -444,6 +449,8 @@ public partial class FlightController : Node3D
     private float _hudPaneFactor = 1f;            // last applied splitscreen shrink (1 = single player)
     private Vector3 _spawnPos;
     private Basis _spawnAttitude;
+    private float _spawnThrottle = FallbackSpawnThrottle;
+    private float _spawnSpeed = FallbackSpawnSpeed;
     private float _throttle;
     private double _sinceTelemetry;
     private bool _crashed;                       // frozen at the impact point, waiting for respawn
@@ -624,15 +631,21 @@ public partial class FlightController : Node3D
 
     /// <summary>Wires the flight model and (for a piloted view) the chase camera, then spawns.
     /// <paramref name="camera"/> is null on an AI rig: no camera rides the plane and every camera
-    /// write below is skipped — the flight half is identical either way.</summary>
+    /// write below is skipped — the flight half is identical either way.
+    /// <paramref name="spawnThrottle"/>/<paramref name="spawnSpeed"/> are the mission's own
+    /// PLAYER_INIT values (docs/formats/spawns.md), defaulting to the fallback for callers with no
+    /// mission, and persist for every later respawn on this rig.</summary>
     public void Setup(FlightModel model, Camera3D? camera, CamParams camParams,
-        Vector3 spawnPos, Vector3 spawnLookAt)
+        Vector3 spawnPos, Vector3 spawnLookAt,
+        float spawnThrottle = FallbackSpawnThrottle, float spawnSpeed = FallbackSpawnSpeed)
     {
         _model = model;
         _viewCamera = camera;
         _cam = camera != null ? new CameraController(camera, camParams, KeyDown, PinnedView) : null;
         _spawnPos = spawnPos;
         _spawnAttitude = Basis.LookingAt((spawnLookAt - spawnPos).Normalized(), Vector3.Up);
+        _spawnThrottle = spawnThrottle;
+        _spawnSpeed = spawnSpeed;
         _warningShots = new WarningShotCue(model.Stats.WarningShotMax,
             model.Stats.WarningShotDissipation, model.Stats.WarningShotInterval);
         Respawn();
@@ -841,16 +854,16 @@ public partial class FlightController : Node3D
         // ⚠ An INERT airframe must stay off-screen and off the aircraft layer through a respawn too.
         // Setup() calls Respawn before _Ready builds the body, so this is also that first assertion.
         ApplyPresence();
-        _throttle = SpawnThrottle;
+        _throttle = _spawnThrottle;
         // The start choreography (snd_propstart already re-fires from FlightAudio's own
         // Null on the very first spawn (Setup runs before FlightRigAssembler builds this); that
         // assembler plays "startprops" once more there for that one case.
         CrashRuntime?.Play("startprops", PlaneModel, applyReset: false);
-        // A fresh engine has no in-flight plume, and the spawn throttle jump (0 → SpawnThrottle)
-        // must never itself read as a slam.
+        // A fresh engine has no in-flight plume, and the spawn throttle jump (0 → the spawn
+        // throttle) must never itself read as a slam.
         ThrottleSmoke?.Reset(_throttle);
         SpeedCue?.Reset();
-        _model.Reset(_spawnPos, _spawnAttitude, SpawnSpeed, _throttle);
+        _model.Reset(_spawnPos, _spawnAttitude, _spawnSpeed, _throttle);
         _simPrev = _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
         GlobalTransform = _simCurr;
         if (_cam != null && IsInsideTree())

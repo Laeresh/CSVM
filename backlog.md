@@ -3001,7 +3001,7 @@ usual.
   stand-in is documented in its landing commit.
 
 - `BL-074` `[Research]` **PLAYER_INIT fields [3]/[4] semantics + per-plane spawn speed.**
-  **The research half is answered; what is left is landing it.** Fields [3] and [4] *are* the
+  **Decoded and landed; what is left is one judgement at the controls.** Fields [3] and [4] *are* the
   player's spawn throttle and spawn speed, one reader each: [3] goes to the throttle lever
   (parsed `00467879` → `0071bb5c`, read `0047f450`, stored to aircraft `+0x124`), and [4] is
   scaled by `0.1` on parse (`0046788b` → `0071bb60`, read `0047f4da`) to give the speed in m/s
@@ -3012,18 +3012,32 @@ usual.
   rule. Full decode with the branch table and the Instant Action case:
   [`docs/formats/spawns.md`](docs/formats/spawns.md), "Story mission spawns"; the correction to the
   flight-model page is item 13 of [`docs/org/flightModel.md`](docs/org/flightModel.md).
-  **What remains:** `FlightController.SpawnSpeed`/`SpawnThrottle` become reads off the mission's
-  `PLAYER_INIT` (`SpawnPoints.LoadPlayerInit` already parses the record and discards both fields),
-  consumed at the single `_model.Reset(...)` call site.
-  ⚠ **Traps.** (a) Do not land it unflown. 18 m/s is below the Bloodhawk's computed stall speed
-  (~25 m/s), so the decoded spawn drops the player in below the wing's own stall to accelerate out
-  of it; that is what the code and the data say together, and it is the first second of every
-  mission. (b) The two claims this entry used to rest on are false at source, so do not restore
+  **What landed.** `SpawnPoints.LoadPlayerInit` returns the whole record as a `PlayerStart`,
+  `SpawnPicker.StartState` answers the throttle and speed for the whole field (Instant Action
+  substituting its 1.0), `FlightStart` carries them, and `FlightController.Setup` takes them
+  through to the single `_model.Reset(...)` call. Story and multiplayer missions therefore start
+  on the authored throttle, Instant Action on 1.0, and everything on the authored speed.
+  **What remains: the sitting.** Only a live judgement is left, and it is a real question rather
+  than a formality (see trap (a)).
+  ⚠ **Traps.** (a) **The decoded start puts every mission's first seconds in the speed band the
+  flight model is least trusted in.** Measured on the re-pinned goldens, the Bloodhawk goes 18 →
+  61 m/s in the first second, essentially level (`path=-1°`), which is about 4.4 G of longitudinal
+  acceleration; the aircraft accelerates straight through its own computed stall speed (~25 m/s)
+  rather than dropping. That may be the original's behaviour, but this is exactly where
+  [`docs/org/flightModel.md`](docs/org/flightModel.md) records an unresolved force-scale conflict
+  (the polar reads 2–3.6× too strong against `CAP-05`'s sub-cruise decelerations), so the spawn now
+  *depends* on an open question it did not depend on at 53.6 m/s. Judge the climb-out at the
+  controls before treating it as settled, and do not tune the spawn speed to fix a force-scale
+  problem. (b) The two claims this entry used to rest on are false at source, so do not restore
   them from an older reading: "always throttle 0.5 regardless of mission" (no `0.5` is written to
   the lever anywhere in the image) and "the start speed is plane-dependent". (c) The per-airframe
   rule `min(plane_speed_max, fd_speed)` is real but belongs to **AI** aircraft in the vehicle
-  factory (`FUN_0047c210`); it is not the player's. (d) Every `--det` golden moves, since spawn
-  speed is the initial condition of every scripted run: the re-pin is part of the landing.
+  factory (`FUN_0047c210`); it is not the player's, it is not landed, and the AI rigs plus the labs
+  and unit tests deliberately keep the old 53.6/0.5 fallback rather than borrow the player's
+  numbers. (d) Five `--det` goldens moved and were re-pinned with the landing: `empty-stage`,
+  `c1-flight`, `c1-destroy-effects`, `c1-crash`, `c1-targeting-hud`. Exactly the shots that fly a
+  player aircraft moved and nothing else, which is the signature to expect from a spawn-state
+  change; a sixth would have meant something other than this was in the diff.
 
 - `BL-314` `[Feature]` `[Blocked: PT-45]` **Race countdown — a rolling start on rails before the run clock
   opens.** The abreast starting grid landed 2026-08-08 (`RaceGrid`), so every pilot in a splitscreen

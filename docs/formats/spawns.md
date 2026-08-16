@@ -158,14 +158,22 @@ pathless aircraft at `min(plane_speed_max, fd_speed)`, and is documented in
 exactly. The retired "candidate: 0.4 × `fd_speed` for the Bloodhawk" was a coincidence of that
 number against one airframe, not a mechanism.
 
-**The remake does not yet match either field**: `FlightController` starts every airframe at
-53.6 m/s on throttle 0.5, against the original's 18 m/s on throttle 0.8 in all but three
-missions, and `SpawnPoints.LoadPlayerInit` reads position and yaw only. ⚠ Landing the decoded
-values needs a sitting first: 18 m/s is below the Bloodhawk's computed stall speed (about
-25 m/s, [../org/flightModel.md](../org/flightModel.md)), so the original drops the player in
-below the wing's own stall and the aircraft accelerates out of it. That is what the data and the
-code say together, and it is a large change to the first seconds of every mission, so it is
-flown before it is believed.
+**The remake reads both fields.** `SpawnPoints.LoadPlayerInit` returns the whole record,
+`SpawnPicker.StartState` answers the throttle and speed for the whole field (substituting 1.0 for
+Instant Action), and `FlightController.Setup` carries them to the flight model's reset. Rigs with
+no mission to read (AI aircraft, the labs, the unit tests) keep an older fixed start instead: the
+original gives an AI aircraft `min(plane_speed_max, fd_speed)`, so borrowing the player's number
+there would be a third invented answer rather than that rule.
+
+⚠ **The decoded start lands in the speed band the flight model is least trusted in.** 18 m/s is
+below the Bloodhawk's computed stall speed of about 25 m/s
+([../org/flightModel.md](../org/flightModel.md)), so the original drops the player in below the
+wing's own stall. In this engine the aircraft accelerates straight through it rather than
+dropping: 18 to 61 m/s in the first second, essentially level, which is roughly 4.4 G along the
+flight path. That may be the original's behaviour too, but it is the same sub-cruise band where
+the force scale is a recorded decode-versus-footage conflict, so the spawn now depends on an open
+question. Judge the climb-out at the controls, and do not tune the spawn speed to compensate for
+a force-scale problem.
 
 ## Campaign mission map
 

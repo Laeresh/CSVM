@@ -21,7 +21,10 @@ public interface IFlightStarts
         int spawnBase, int playerCount);
 }
 
-/// <summary>One pilot's start: a world position and a look-at point one unit ahead along the spawn
-/// heading — the pair <see cref="FlightController.Setup"/> already takes, carried unchanged so no
-/// call site has to reinterpret it.</summary>
-public readonly record struct FlightStart(Vector3 Pos, Vector3 LookAt);
+/// <summary>One pilot's start: a world position, a look-at point one unit ahead along the spawn
+/// heading, and the throttle and speed to begin on — the four values
+/// <see cref="FlightController.Setup"/> takes, carried unchanged so no call site has to
+/// reinterpret them. ⚠ Throttle and speed come from the mission's own PLAYER_INIT record and are
+/// therefore per-mission, NOT per-airframe; the original has no per-plane spawn speed for the
+/// player (docs/formats/spawns.md).</summary>
+public readonly record struct FlightStart(Vector3 Pos, Vector3 LookAt, float ThrottleFrac, float SpeedMps);
