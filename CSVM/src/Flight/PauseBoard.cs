@@ -26,9 +26,7 @@ public sealed partial class PauseBoard : Control
     private Func<int, MenuInput> _inputFor = null!;
     private CenterContainer _center = null!;
     private PanelContainer? _panel;
-    private BoardMenu? _menu;
-    private BoardMenuView? _menuView;
-    private MenuInput? _input;
+    private BoardMenuHost? _host;
 
     /// <summary>Rerun the running mode in place, chosen from the menu.</summary>
     public Action? Restart { get; set; }
@@ -73,16 +71,8 @@ public sealed partial class PauseBoard : Control
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
 
-        if (!Visible || _menu == null || _input == null)
-            return;
-
-        // Wall time, not sim time: the clock this menu is holding does not advance, so the cursor's
-        // auto-repeat would never fire on sim dt.
-        _input.Poll((float)delta);
-        // Escape and Start are the pause toggle FlightController already polls, so only the pad's
-        // B is read here; reading both would resume and dismiss on one press.
-        if (_menu.Handle(_input.Move, _input.Accept, _input.PadBack))
-            _menuView?.Refresh();
+        if (Visible)
+            _host?.Poll((float)delta);
     }
 
     private static Label Label(string text, int fontSize, Color color)
@@ -168,20 +158,15 @@ public sealed partial class PauseBoard : Control
         body.AddChild(Centered(Label($"{ownerTag} paused", (int)(ContextFont * s), ownerColor)));
 
         // A fresh menu each pause: the cursor starts on Resume, so a stray confirm on a board that
-        // just appeared cannot restart or leave the session.
-        _menu = new BoardMenu(
+        // just appeared cannot restart or leave the session. The owner's own reader drives it.
+        var menu = new BoardMenu(
             dismissable: true,
             (BoardMenuItem.Resume, "Resume"),
             (BoardMenuItem.Restart, "Restart"),
             (BoardMenuItem.Exit, _exitLabel));
-        _menu.Activated += OnActivated;
-        _menu.Dismissed += () => _state.ForceResume();
-        _menuView = BoardMenuView.Build(_menu, s);
-        body.AddChild(_menuView);
-
-        // Primed against the owner's live device state, so the Start or B still held from the press
-        // that opened this board is not read as a fresh one on the next frame.
-        _input = _inputFor(owner);
-        _input.Prime();
+        menu.Activated += OnActivated;
+        menu.Dismissed += () => _state.ForceResume();
+        _host = BoardMenuHost.Build(menu, _inputFor(owner), s);
+        body.AddChild(_host.View);
     }
 }

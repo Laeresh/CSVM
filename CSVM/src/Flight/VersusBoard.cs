@@ -11,10 +11,9 @@ namespace CSVM.Flight;
 /// covers the WHOLE window on its own CanvasLayer over the splitscreen panes, not a per-pane
 /// overlay. Winner (or "DRAW" on a tie) on top, then one ranked row per player — tag, kills,
 /// deaths — in their own identity colour; the winner's row is highlighted the same way the race
-/// board highlights first place. Live flying continues underneath (nothing scores post-match);
-/// R (any player's respawn button) is a rematch — every score and the clock reset, every plane
-/// respawns — routed through <see cref="Session.GameSession.RestartMatch"/> exactly as the race
-/// board routes through <c>RestartRace</c>; Esc leaves.
+/// board highlights first place. The world halts underneath it, and the board's own menu offers
+/// the rematch (every score and the clock reset, every plane respawns) and the way out. R and pad
+/// Y still reach the rematch directly, for the muscle memory and for the hold-test harness.
 /// </summary>
 public sealed partial class VersusBoard : Control
 {
@@ -24,31 +23,41 @@ public sealed partial class VersusBoard : Control
     private const int ContextFont = 15;
     private const int HeaderFont = 14;
     private const int RowFont = 20;
-    private const int FooterFont = 15;
 
     private static readonly Color TitleColor = new(0.93f, 0.96f, 1f);
     private static readonly Color ContextColor = new(0.60f, 0.75f, 0.95f);
     private static readonly Color HeaderColor = new(0.50f, 0.62f, 0.80f);
     private static readonly Color RowColor = new(0.86f, 0.89f, 0.94f);
-    private static readonly Color FooterColor = new(0.68f, 0.74f, 0.82f);
 
     private VersusMatch _match = null!;
     private string _context = "";
-    private string _exitHint = "";
+    private string _exitLabel = "";
+    private PauseState _state = null!;
+    private System.Func<int, MenuInput> _inputFor = null!;
 
     private CenterContainer _center = null!;
     private PanelContainer? _panel;
+    private BoardMenuHost? _host;
+
+    /// <summary>Rerun the match in place, chosen from the menu.</summary>
+    public System.Action? Restart { get; set; }
+
+    /// <summary>Leave the session, chosen from the menu.</summary>
+    public System.Action? Exit { get; set; }
 
     /// <summary>Builds the (hidden) board and subscribes to the match's completion. Add it to a
     /// CanvasLayer above the splitscreen panes; it wakes itself on
     /// <see cref="VersusMatch.MatchCompleted"/> and retires on a rematch.</summary>
-    public static VersusBoard Build(VersusMatch match, string context, bool exitsToMenu)
+    public static VersusBoard Build(VersusMatch match, string context, bool exitsToMenu,
+        PauseState state, System.Func<int, MenuInput> inputFor)
     {
         var board = new VersusBoard
         {
             _match = match,
             _context = context,
-            _exitHint = exitsToMenu ? "Esc — Menu" : "Esc — Quit",
+            _exitLabel = exitsToMenu ? "Exit to Menu" : "Quit Game",
+            _state = state,
+            _inputFor = inputFor,
             MouseFilter = MouseFilterEnum.Ignore,
             FocusMode = FocusModeEnum.None,
             Visible = false,
@@ -74,9 +83,18 @@ public sealed partial class VersusBoard : Control
         // Track the window (resizable) so the backdrop always covers it.
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
-        // A rematch clears Completed — retire the board until the next match ends.
+        // A rematch clears Completed — retire the board and release the clock until the next
+        // match ends. R and pad Y reach the rematch without going through the menu, so the release
+        // belongs here rather than only on the menu's own Restart.
         if (Visible && !_match.Completed)
+        {
             Visible = false;
+            _host = null;
+            _state.Clear(HaltReason.Ended);
+            return;
+        }
+        if (Visible)
+            _host?.Poll((float)delta);
     }
 
     private static Label Label(string text, int fontSize, Color color)
@@ -114,6 +132,17 @@ public sealed partial class VersusBoard : Control
         return sep;
     }
 
+    private void OnActivated(BoardMenuItem item)
+    {
+        if (item == BoardMenuItem.Exit)
+        {
+            Exit?.Invoke();
+            return;
+        }
+        // The rematch clears Completed, which _Process turns into the hide and the release.
+        Restart?.Invoke();
+    }
+
     private void OnMatchCompleted()
     {
         // Log the final standings too, so a match is reviewable from a headless run's log.
@@ -123,6 +152,9 @@ public sealed partial class VersusBoard : Control
                 $"  #{st.Rank}  {SplitScreen.PlayerTag(st.PlayerIndex)}  {st.Kills}K/{st.Deaths}D");
         Populate();
         Visible = true;
+        // The match stops the world now. It used to keep running underneath, which left the losers
+        // flying around a scoreboard that had already counted them.
+        _state.Raise(HaltReason.Ended);
     }
 
     private void Populate()
@@ -194,6 +226,13 @@ public sealed partial class VersusBoard : Control
         }
 
         body.AddChild(Separator(s));
-        body.AddChild(Centered(Label($"R — Rematch        {_exitHint}", (int)(FooterFont * s), FooterColor)));
+
+        var menu = new BoardMenu(
+            dismissable: false,
+            (BoardMenuItem.Restart, "Restart"),
+            (BoardMenuItem.Exit, _exitLabel));
+        menu.Activated += OnActivated;
+        _host = BoardMenuHost.Build(menu, _inputFor(0), s);
+        body.AddChild(_host.View);
     }
 }

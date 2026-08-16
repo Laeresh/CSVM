@@ -1,3 +1,4 @@
+using CSVM.UI;
 using CSVM.Utils;
 using Godot;
 
@@ -8,7 +9,8 @@ namespace CSVM.Flight;
 /// (<see cref="StuntMission.RunCompleted"/>) this shows a centred panel: per-zone splits, the
 /// total, plane + chapter, and a best-time comparison against <see cref="ScoreStore"/>. A plain
 /// Godot-UI overlay, distinct from the in-flight HUD's hand-drawn marker/dials.
-/// R starts a fresh run; Esc quits. Construction detail: this module's entry in
+/// The world halts underneath it, and the board's own menu offers a fresh run and the way out;
+/// R and pad Y still start a fresh run directly. Construction detail: this module's entry in
 /// docs/architecture.md.</summary>
 public sealed partial class StuntScoreboard : Control
 {
@@ -20,7 +22,6 @@ public sealed partial class StuntScoreboard : Control
     private const int RowFont = 17;
     private const int TotalFont = 23;
     private const int BestFont = 16;
-    private const int FooterFont = 15;
 
     private static readonly Color TitleColor = new(0.93f, 0.96f, 1f);
     private static readonly Color ContextColor = new(0.60f, 0.75f, 0.95f);
@@ -29,22 +30,32 @@ public sealed partial class StuntScoreboard : Control
     private static readonly Color TotalColor = new(0.96f, 0.98f, 1f);
     private static readonly Color BestColor = new(0.60f, 0.75f, 0.95f);
     private static readonly Color NewBestColor = new(1f, 0.82f, 0.28f);
-    private static readonly Color FooterColor = new(0.68f, 0.74f, 0.82f);
 
     private StuntMission _mission = null!;
     private ScoreStore _store = null!;
     private string _scoreKey = "";
     private string _planeDisplay = "";
     private string _context = "";
+    private string _exitLabel = "";
+    private PauseState _state = null!;
+    private System.Func<int, MenuInput> _inputFor = null!;
 
     private CenterContainer _center = null!;
     private PanelContainer? _panel;
+    private BoardMenuHost? _host;
+
+    /// <summary>Start a fresh run, chosen from the menu.</summary>
+    public System.Action? Restart { get; set; }
+
+    /// <summary>Leave the session, chosen from the menu.</summary>
+    public System.Action? Exit { get; set; }
 
     /// <summary>Builds the (hidden) overlay and subscribes to the run's completion. Add it to the
     /// HUD canvas last so it draws over the marker/dials; feed nothing per-frame — it wakes itself
     /// on <see cref="StuntMission.RunCompleted"/>.</summary>
     public static StuntScoreboard Build(StuntMission mission, string planeDisplay, string context,
-        ScoreStore store, string scoreKey)
+        ScoreStore store, string scoreKey, bool exitsToMenu, PauseState state,
+        System.Func<int, MenuInput> inputFor)
     {
         var board = new StuntScoreboard
         {
@@ -53,6 +64,9 @@ public sealed partial class StuntScoreboard : Control
             _scoreKey = scoreKey,
             _planeDisplay = planeDisplay,
             _context = context,
+            _exitLabel = exitsToMenu ? "Exit to Menu" : "Quit Game",
+            _state = state,
+            _inputFor = inputFor,
             MouseFilter = MouseFilterEnum.Ignore,
             FocusMode = FocusModeEnum.None,
             Visible = false,
@@ -78,9 +92,18 @@ public sealed partial class StuntScoreboard : Control
         // Track the viewport so the backdrop covers a resized window.
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
-        // A restart (StuntMission.Reset) clears AllComplete — retire the board until the next run.
+        // A rerun (StuntMission.Reset) clears AllComplete — retire the board and release the clock
+        // until the next run ends. R and pad Y reach the rerun without the menu, so the release
+        // belongs here rather than only on the menu's own Restart.
         if (Visible && !_mission.AllComplete)
+        {
             Visible = false;
+            _host = null;
+            _state.Clear(HaltReason.Ended);
+            return;
+        }
+        if (Visible)
+            _host?.Poll((float)delta);
     }
 
     private static Label Label(string text, int fontSize, Color color)
@@ -119,6 +142,17 @@ public sealed partial class StuntScoreboard : Control
         return sep;
     }
 
+    private void OnActivated(BoardMenuItem item)
+    {
+        if (item == BoardMenuItem.Exit)
+        {
+            Exit?.Invoke();
+            return;
+        }
+        // The rerun clears AllComplete, which _Process turns into the hide and the release.
+        Restart?.Invoke();
+    }
+
     private void OnRunCompleted()
     {
         float total = _mission.Elapsed;
@@ -141,6 +175,9 @@ public sealed partial class StuntScoreboard : Control
         }
         Populate(total, prevBest, newBest);
         Visible = true;
+        // The run stops the world now. It used to freeze this plane alone by skipping its sim step,
+        // which left the rest of the world moving behind a board that had already timed the run.
+        _state.Raise(HaltReason.Ended);
     }
 
     private void Populate(float total, float? prevBest, bool newBest)
@@ -230,6 +267,13 @@ public sealed partial class StuntScoreboard : Control
         }
 
         body.AddChild(Separator(s));
-        body.AddChild(Centered(Label("R — New Run        Esc — Quit", (int)(FooterFont * s), FooterColor)));
+
+        var menu = new BoardMenu(
+            dismissable: false,
+            (BoardMenuItem.Restart, "Restart"),
+            (BoardMenuItem.Exit, _exitLabel));
+        menu.Activated += OnActivated;
+        _host = BoardMenuHost.Build(menu, _inputFor(0), s);
+        body.AddChild(_host.View);
     }
 }

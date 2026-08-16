@@ -1,4 +1,6 @@
+using System;
 using CSVM.Session;
+using CSVM.UI;
 using Godot;
 
 namespace CSVM.Flight;
@@ -21,7 +23,6 @@ public sealed partial class IaWrapupBoard : Control
     private const int TitleFont = 30;
     private const int ContextFont = 15;
     private const int RowFont = 20;
-    private const int FooterFont = 15;
 
     // The shipped row titles, langui ids 1134-1137 (docs/formats/instant-action.md "The wrap-up
     // screen") — literal text, not read off ui_strings.json at runtime: that table is a build-time
@@ -37,23 +38,34 @@ public sealed partial class IaWrapupBoard : Control
     private static readonly Color LostColor = new(0.92f, 0.45f, 0.45f);
     private static readonly Color ContextColor = new(0.60f, 0.75f, 0.95f);
     private static readonly Color RowColor = new(0.86f, 0.89f, 0.94f);
-    private static readonly Color FooterColor = new(0.68f, 0.74f, 0.82f);
 
     private string _context = "";
-    private string _exitHint = "";
+    private string _exitLabel = "";
+    private PauseState _state = null!;
+    private Func<int, MenuInput> _inputFor = null!;
 
     private CenterContainer _center = null!;
     private PanelContainer? _panel;
+    private BoardMenuHost? _host;
+
+    /// <summary>Rerun the mission in place, chosen from the menu.</summary>
+    public Action? Restart { get; set; }
+
+    /// <summary>Leave the session, chosen from the menu.</summary>
+    public Action? Exit { get; set; }
 
     /// <summary>Builds the (hidden) board. Add it to a <c>CanvasLayer</c> above the splitscreen
     /// panes; the caller calls <see cref="Present"/> once, from
     /// <see cref="InstantActionRuntime.MissionEnded"/>.</summary>
-    public static IaWrapupBoard Build(string context, bool exitsToMenu)
+    public static IaWrapupBoard Build(string context, bool exitsToMenu, PauseState state,
+        Func<int, MenuInput> inputFor)
     {
         var board = new IaWrapupBoard
         {
             _context = context,
-            _exitHint = exitsToMenu ? "Esc — Menu" : "Esc — Quit",
+            _exitLabel = exitsToMenu ? "Exit to Menu" : "Quit Game",
+            _state = state,
+            _inputFor = inputFor,
             MouseFilter = MouseFilterEnum.Ignore,
             FocusMode = FocusModeEnum.None,
             Visible = false,
@@ -73,11 +85,13 @@ public sealed partial class IaWrapupBoard : Control
 
     public override void _Process(double delta)
     {
-        // Track the window (resizable) so the backdrop always covers it. Unlike VersusBoard/
-        // StuntRaceBoard there is no rematch to retire this on — once a mission has ended it stays
-        // ended — so nothing here ever re-hides the board.
+        // Track the window (resizable) so the backdrop always covers it. Only the menu's own
+        // Restart retires this board; a mission that has ended stays ended until then.
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
+
+        if (Visible)
+            _host?.Poll((float)delta);
     }
 
     /// <summary>Shows the board with the mission's four final counters
@@ -89,6 +103,9 @@ public sealed partial class IaWrapupBoard : Control
     {
         Populate(won, elapsedSeconds, enemiesShotDown, zonesCompleted, shotPercent);
         Visible = true;
+        // The world stops under the board rather than flying on beneath a screen that has already
+        // counted the mission. The pause key is refused while this reason is set.
+        _state.Raise(HaltReason.Ended);
     }
 
     private static Label Label(string text, int fontSize, Color color)
@@ -124,6 +141,21 @@ public sealed partial class IaWrapupBoard : Control
         var sep = new HSeparator();
         sep.AddThemeConstantOverride("separation", Mathf.RoundToInt(8f * s));
         return sep;
+    }
+
+    // Nothing else retires this board: a mission that has ended stays ended, so unlike the race
+    // and dogfight boards the hide and the clock release happen here rather than on a live flag.
+    private void OnActivated(BoardMenuItem item)
+    {
+        if (item == BoardMenuItem.Exit)
+        {
+            Exit?.Invoke();
+            return;
+        }
+        Visible = false;
+        _host = null;
+        _state.Clear(HaltReason.Ended);
+        Restart?.Invoke();
     }
 
     private void Populate(bool won, float elapsedSeconds, int enemiesShotDown, int zonesCompleted, int shotPercent)
@@ -183,6 +215,15 @@ public sealed partial class IaWrapupBoard : Control
         AddCell(grid, $"{shotPercent}%", font, RowColor, HorizontalAlignment.Right, valueW);
 
         body.AddChild(Separator(s));
-        body.AddChild(Centered(Label(_exitHint, (int)(FooterFont * s), FooterColor)));
+
+        // No Resume: the mission is over and there is nothing to resume to. Player 1 drives it —
+        // Restart and Exit are session-wide decisions, and no player raised this board.
+        var menu = new BoardMenu(
+            dismissable: false,
+            (BoardMenuItem.Restart, "Restart"),
+            (BoardMenuItem.Exit, _exitLabel));
+        menu.Activated += OnActivated;
+        _host = BoardMenuHost.Build(menu, _inputFor(0), s);
+        body.AddChild(_host.View);
     }
 }

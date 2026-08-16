@@ -54,6 +54,9 @@ public partial class GameSession : Node3D
     // Per-player pad binding chosen in the launchscreen's join flow (null = derive from the
     // connected roster in AssignPads, which is what every CLI launch does).
     private readonly int[][]? _menuPads;
+    // The panes handed to a spectator when their pilot ran out of lives, so a rerun can take them
+    // back. Freed with this node otherwise.
+    private readonly List<SpectatorCamera> _spectatorCameras = new();
     // The --screenshot=/--shots=/--frames= state machine — see
     // src/Testing/CaptureDirector.cs's entry. Process-scoped and owned by the Launcher (which
     // Ticks it); held here for the Pending reads that gate display choices during the build.
@@ -213,6 +216,9 @@ public partial class GameSession : Node3D
     // One menu reader per player, built with that player's own pad binding, so a board menu can be
     // driven by its owner alone. Null before the rigs exist.
     private UI.MenuInput[]? _menuInputs;
+    // Who is holding the sim clock and why — shared by every rig and by every board that halts.
+    // Null before the rigs exist.
+    private PauseState? _pauseState;
     // The trailer-target resolver every net follower this session builds shares. Built
     // with the rigs (it needs the player rig), so the F13 overlay, built earlier, reads it through
     // this field rather than holding a reference it could not have had yet.
@@ -1575,6 +1581,9 @@ public partial class GameSession : Node3D
         // The launchscreen's join flow binds the pads; a CLI launch derives them
         // from the connected roster instead.
         var padAssignment = _menuPads ?? Pads.AssignPads(_rigs.Count);
+        // Ahead of the rigs, because the assembler hands both to the per-pane stunt board.
+        _menuInputs = BuildMenuInputs(padAssignment);
+        _pauseState = new PauseState();
         if (_menuPads != null)
             Pads.LogPads(_menuPads);
         // One livery RNG for the session, so P1..P4 draw distinct colours from one
@@ -1709,6 +1718,10 @@ public partial class GameSession : Node3D
             RigCount = _rigs.Count,
             MixGain = mixGain,
             PadAssignment = padAssignment,
+            PauseState = _pauseState!,
+            MenuInputFor = MenuInputFor,
+            ExitsToMenu = _menuDriven,
+            ExitSession = _exitSession,
             PaintRng = paintRng,
             SpawnList = spawnList,
             SpawnBase = spawnBase,
@@ -1756,11 +1769,10 @@ public partial class GameSession : Node3D
         // One shared PauseState on every rig: any human pauses everybody, and only the pauser may
         // resume. ⚠ Wire single player the same way, so there is one pause path and not two. The
         // board covers the whole window on its own CanvasLayer, since a pause stops every pane.
-        var pauseState = new PauseState();
+        var pauseState = _pauseState!;
         foreach (var rig in _rigs)
             if (rig.Controller is { } pausable)
                 pausable.PauseState = pauseState;
-        _menuInputs = BuildMenuInputs(padAssignment);
         var pauseBoard = PauseBoard.Build(pauseState, exitsToMenu: _menuDriven, MenuInputFor);
         pauseBoard.Restart = Rerun;
         pauseBoard.Exit = _exitSession;
@@ -1852,7 +1864,9 @@ public partial class GameSession : Node3D
         {
             _race = race;
             var board = StuntRaceBoard.Build(race, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
-                exitsToMenu: _menuDriven);
+                exitsToMenu: _menuDriven, _pauseState!, MenuInputFor);
+            board.Restart = () => RestartRace(race);
+            board.Exit = _exitSession;
             var boardLayer = new CanvasLayer { Name = "race_board", Layer = UI.HudLayers.Board };
             boardLayer.AddChild(board);
             _worldRoot!.AddChild(boardLayer);
@@ -1900,7 +1914,9 @@ public partial class GameSession : Node3D
             // one CanvasLayer over the whole window (the match ends for everybody at once), R
             // routed back through this session via RestartMatch.
             var board = VersusBoard.Build(match, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
-                exitsToMenu: _menuDriven);
+                exitsToMenu: _menuDriven, _pauseState!, MenuInputFor);
+            board.Restart = () => RestartMatch(match);
+            board.Exit = _exitSession;
             var boardLayer = new CanvasLayer { Name = "dogfight_board", Layer = UI.HudLayers.Board };
             boardLayer.AddChild(board);
             _worldRoot!.AddChild(boardLayer);
@@ -2524,7 +2540,10 @@ public partial class GameSession : Node3D
             // never per pane: the mission ends for every human at once. ⚠ Danger Zones Completed
             // and Shot % are summed across every human seat, never picked from one pane.
             var wrapupBoard = IaWrapupBoard.Build(
-                $"{_spec.Chapter}   ·   {iaEnd.Def.MissionType}", exitsToMenu: _menuDriven);
+                $"{_spec.Chapter}   ·   {iaEnd.Def.MissionType}", exitsToMenu: _menuDriven,
+                _pauseState!, MenuInputFor);
+            wrapupBoard.Restart = () => RerunInstantAction(iaEnd);
+            wrapupBoard.Exit = _exitSession;
             var wrapupLayer = new CanvasLayer { Name = "ia_wrapup_board", Layer = UI.HudLayers.Board };
             wrapupLayer.AddChild(wrapupBoard);
             _worldRoot!.AddChild(wrapupLayer);
@@ -2926,6 +2945,32 @@ public partial class GameSession : Node3D
             rig.Controller?.Rerun();
     }
 
+    // Rerun an Instant Action mission from the wrap-up board: the mission clock, outcome and lives
+    // ledger back to their start, the Shot % counters zeroed, every downed pilot's pane taken back
+    // from its spectator, then every plane respawned with a fresh stunt run.
+    // ⚠ The enemy waves are NOT reset — a rerun flies the same mission against whatever the waves
+    // were left as. See the backlog's rerun reset audit.
+    private void RerunInstantAction(InstantActionRuntime runtime)
+    {
+        GD.Print($"ia: rerun — {runtime.Def.MissionType} from the top, same seed and same world");
+        runtime.Rerun();
+        _projectiles?.ResetShotCounters();
+        foreach (var spectator in _spectatorCameras)
+        {
+            spectator.QueueFree();
+        }
+        _spectatorCameras.Clear();
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller is { } pilot)
+            {
+                pilot.Spectating = false;
+                pilot.CameraOwned = false;   // hands the pane back to the chase camera
+                pilot.Rerun();
+            }
+        }
+    }
+
     // Rematch from the shared race board (R): every player's zones, clock and placing cleared, then
     // every plane back to its own spawn. The session owns the planes, so the restart lands here
     // rather than in the FlightController that read the button.
@@ -3112,6 +3157,7 @@ public partial class GameSession : Node3D
             ShowReadout = false,   // the freecam's own label would sit over a splitscreen pane
         };
         _worldRoot!.AddChild(spectator);
+        _spectatorCameras.Add(spectator);   // tracked so a rerun can hand the panes back
         if (follow != null)
         {
             spectator.FollowNode(follow);

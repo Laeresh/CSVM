@@ -208,6 +208,56 @@ public class InstantActionEndTests
         Assert.Equal(2f, ia.Elapsed, 3);
     }
 
+    [Fact]
+    public void ARerunPutsTheClockOutcomeAndLivesBackToTheStart()
+    {
+        var ia = new InstantActionRuntime(Def("dogfight_ace", lives: 2));
+        ia.RegisterPilot(0);
+        ia.Advance(9f);
+        ia.NotifyPilotDown(0);
+        ia.NotifyPilotDown(0);
+        Assert.Equal(InstantActionOutcome.Lost, ia.Outcome);
+        Assert.True(ia.IsSpectating(0));
+
+        ia.Rerun();
+
+        Assert.Equal(InstantActionOutcome.Running, ia.Outcome);
+        Assert.False(ia.Ended);
+        Assert.Equal(0f, ia.Elapsed, 3);
+        Assert.Equal(2, ia.LivesLeft(0));
+        Assert.False(ia.IsSpectating(0));
+    }
+
+    [Fact]
+    public void ARerunLeavesAnUnwinnableMissionUnwinnable()
+    {
+        // ObjectiveEnabled records a fact about the def (no wave enemy, no dzones, no zeppelin),
+        // not about the run just finished, so a rerun must not hand the win condition back.
+        var ia = new InstantActionRuntime(Def("dogfight_squadron"));
+        ia.DisableObjective();
+
+        ia.Rerun();
+
+        Assert.False(ia.ObjectiveEnabled);
+        ia.ReportObjective(InstantActionObjective.WavesCleared);
+        Assert.False(ia.Ended);
+    }
+
+    [Fact]
+    public void ARerunCanBeWonAgain()
+    {
+        var ia = new InstantActionRuntime(Def("dogfight_ace"));
+        ia.ReportObjective(InstantActionObjective.AceDown);
+        ia.Rerun();
+
+        int ended = 0;
+        ia.MissionEnded += _ => ended++;
+        ia.ReportObjective(InstantActionObjective.AceDown);
+
+        Assert.Equal(InstantActionOutcome.Won, ia.Outcome);
+        Assert.Equal(1, ended);
+    }
+
     // The real --ia= reader over a minimal hand-authored file: everything not named here takes the
     // original's own reset defaults, lives included (1).
     private static InstantActionDef Def(string missionType, int? lives = null)
