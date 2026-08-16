@@ -14,12 +14,17 @@ namespace CSVM.Flight;
 /// retargets an AI at runtime, so orders are never read-once.</summary>
 public sealed class AiGunner
 {
-    /// <summary>The shipped forward-gun cone half-angle: <c>gun_pitch</c>/<c>gun_yaw</c> are
+    /// <summary>The shipped forward-gun traverse limit: <c>gun_pitch</c>/<c>gun_yaw</c> are
     /// <c>[-11, 11]</c> degrees on every AI aircraft def (docs/formats/vehicle.md).
-    /// ⚠ In the original those limits clamp the mount's aim, they do not veto the shot, so the
-    /// hard gate below fires in a cone roughly half the original's
-    /// (<c>BL-396</c>, docs/org/aiPilot/aiWeapons.md).</summary>
+    /// ⚠ These CLAMP the aim, they do not veto the shot: what fires is the residual left over
+    /// after clamping, against <see cref="AimQualityCos"/> (docs/org/aiPilot/aiWeapons.md).</summary>
     public const float GunConeHalfAngleDeg = 11f;
+
+    /// <summary>The gun aim-quality gate: the clamped mount aim must sit within
+    /// <c>acos(0.9848)</c>, 10°, of the lead direction. The original's own literal, per weapon
+    /// class (ordnance takes a tighter 0.9962); the ordnance one lands with its
+    /// trigger (<c>BL-395</c>).</summary>
+    public const float AimQualityCos = 0.9848f;
 
     /// <summary>The standing target — mutable at any time (the mission-script seam). Null with
     /// <see cref="AutoTarget"/> set lets the host re-acquire through the D12 target ranking
@@ -57,11 +62,20 @@ public sealed class AiGunner
     /// </summary>
     public float QuickDrawAngleDeg = 50f;
 
-    /// <summary>Forward-cone yaw half-limit, degrees (<c>gun_yaw</c>).</summary>
+    /// <summary>Traverse yaw half-limit, degrees (<c>gun_yaw</c>).</summary>
     public float GunYawLimitDeg = GunConeHalfAngleDeg;
 
-    /// <summary>Forward-cone pitch half-limit, degrees (<c>gun_pitch</c>).</summary>
+    /// <summary>Traverse pitch half-limit, degrees (<c>gun_pitch</c>).</summary>
     public float GunPitchLimitDeg = GunConeHalfAngleDeg;
+
+    /// <summary>The engagement window, metres: the separation the gun is willing to shoot
+    /// across. Authored per weapon slot in the vehicle def's <c>weapons</c> tuple, and 1 to 900 m
+    /// on every AI gun the game ships (docs/org/aiPilot/aiWeapons.md); a per-vehicle window
+    /// arrives with the tuple itself (<c>BL-394</c>). The floor is authored, not a sentinel.</summary>
+    public float MinRangeM = 1f;
+
+    /// <summary>The engagement window's far end, metres (see <see cref="MinRangeM"/>).</summary>
+    public float MaxRangeM = 900f;
 
     private readonly RandomNumberGenerator _rng;
 
@@ -86,36 +100,46 @@ public sealed class AiGunner
     /// <summary>Clears the trigger — no target, no fire step this tick.</summary>
     public void HoldFire() => WantsFire = false;
 
-    /// <summary>One tick's fire decision. All world-space; <paramref name="ownBasis"/> is the
-    /// firing airframe's attitude (the gun cone is measured against ITS nose, not the muzzle
-    /// axis), <paramref name="targetForward"/> the target's nose axis (the quick-draw cones
-    /// project fore and aft from the target).</summary>
+    /// <summary>One tick's fire decision, in the original's gate order. All world-space;
+    /// <paramref name="ownBasis"/> is the firing airframe's attitude (the traverse clamp is
+    /// measured against ITS nose, not the muzzle axis), <paramref name="targetForward"/> the
+    /// target's nose axis (the quick-draw cones project fore and aft from the target).</summary>
     public void Solve(Vector3 muzzlePos, Vector3 ownVelocity, Basis ownBasis,
         Vector3 targetPos, Vector3 targetVelocity, Vector3 targetForward,
-        float roundSpeed, float range)
+        float roundSpeed)
     {
         WantsFire = false;
+        if (!QuickDrawAccepts(muzzlePos, targetPos, targetForward))
+            return; // too oblique an attack for this pilot's quick draw
+        // The engine gates on the separation ITSELF against the slot's authored window, both
+        // ends squared at parse time — not on whether the round reaches the intercept.
+        float sep2 = muzzlePos.DistanceSquaredTo(targetPos);
+        if (sep2 < MinRangeM * MinRangeM || sep2 > MaxRangeM * MaxRangeM)
+            return;
         if (!AimAssist.TryIntercept(muzzlePos, roundSpeed, targetPos,
                 targetVelocity - ownVelocity, out var aim, out float t))
             return; // a target outrunning the round is simply not shot at
-        float reach = roundSpeed * t;
-        if (reach * reach > range * range)
-            return; // the round cannot reach the intercept inside authored RANGE
         AimDirWorld = aim;
         InterceptPoint = targetPos + targetVelocity * t; // where the target will be at impact
+        // Clamp the aim into the airframe's traverse limits, then gate on what the clamp had to
+        // give away. A lead past the limits still fires while the residual stays inside the
+        // gate, which is why the employable cone is the limit PLUS 10°, not the limit.
         var local = (ownBasis.Orthonormalized().Transposed() * aim).Normalized();
         var (yawDeg, pitchDeg) = TurretController.AnglesOfLocal(local);
-        if (Mathf.Abs(yawDeg) > GunYawLimitDeg || Mathf.Abs(pitchDeg) > GunPitchLimitDeg)
-            return; // outside the forward gun cone: keep maneuvering, do not fire
-        if (!QuickDrawAccepts(muzzlePos, targetPos, targetForward))
-            return; // too oblique an attack for this pilot's quick draw
+        var clamped = TurretController.LocalDir(
+            Mathf.Clamp(yawDeg, -GunYawLimitDeg, GunYawLimitDeg),
+            Mathf.Clamp(pitchDeg, -GunPitchLimitDeg, GunPitchLimitDeg));
+        if (clamped.Dot(local) < AimQualityCos)
+            return; // the mount cannot be brought close enough: keep maneuvering
         WantsFire = true;
     }
 
     /// <summary>The quick-draw gate alone: true when the shooter sits inside the cone of
     /// <see cref="QuickDrawAngleDeg"/> about the target's nose axis or its tail axis. A
     /// degenerate zero separation passes (the geometry is meaningless there and the range gate
-    /// owns that case).</summary>
+    /// owns that case). ⚠ The original applies this only aircraft-against-aircraft, a condition
+    /// <see cref="Target"/>'s type satisfies for us; re-check it when a gasbag or a ground
+    /// target becomes targetable (<c>BL-395</c>).</summary>
     public bool QuickDrawAccepts(Vector3 ownPos, Vector3 targetPos, Vector3 targetForward)
     {
         var away = ownPos - targetPos;

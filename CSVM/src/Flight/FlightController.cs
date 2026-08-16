@@ -2348,7 +2348,7 @@ public partial class FlightController : Node3D
         muzzlePos /= group.Muzzles.Count;
         gunner.Solve(muzzlePos, WorldVelocity, _model.Attitude,
             target.WorldPosition, target.WorldVelocity, target.NoseDirection,
-            group.Weapon.Velocity ?? ProjectilePool.DefaultVelocity, group.Weapon.Range ?? 0f);
+            group.Weapon.Velocity ?? ProjectilePool.DefaultVelocity);
         if (gunner.WantsFire && !_gunnerLoggedFire)
         {
             _gunnerLoggedFire = true; // verification breadcrumb: the gates first opened

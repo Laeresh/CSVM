@@ -9,12 +9,11 @@ namespace CSVM.Tests;
 /// (the seeded rng feeds only the per-shot scatter, which these tests never draw — the rng is
 /// null here on purpose, and the scatter cone itself is pinned by the in-engine
 /// <c>ai-gunnery</c> suite and the aim-assist suite's Scatter cases). Geometry: shooter and
-/// target static unless stated, round at 500 m/s with 1000 m RANGE.
+/// target static unless stated, round at 500 m/s inside the gun's shipped 1 to 900 m window.
 /// </summary>
 public class AiGunnerTests
 {
     private const float Speed = 500f;
-    private const float Range = 1000f;
 
     private static readonly Vector3 TargetPos = Vector3.Zero;
     private static readonly Vector3 TargetForward = Vector3.Forward; // nose on -Z
@@ -26,7 +25,7 @@ public class AiGunnerTests
         var g = Gunner();
         var ownPos = new Vector3(0f, 0f, 500f);
         g.Solve(ownPos, Vector3.Zero, Basis.LookingAt(TargetPos - ownPos, Vector3.Up),
-            TargetPos, Vector3.Zero, TargetForward, Speed, Range);
+            TargetPos, Vector3.Zero, TargetForward, Speed);
         Assert.True(g.WantsFire);
         // Static target, static shooter: the lead IS the bearing.
         Assert.True(g.AimDirWorld.Dot((TargetPos - ownPos).Normalized()) > 0.9999f);
@@ -39,36 +38,40 @@ public class AiGunnerTests
         var ownPos = new Vector3(0f, 0f, 500f);
         var targetVel = new Vector3(60f, 0f, 0f); // sliding left-to-right, nose still on -Z
         g.Solve(ownPos, Vector3.Zero, Basis.LookingAt(TargetPos - ownPos, Vector3.Up),
-            TargetPos, targetVel, TargetForward, Speed, Range);
+            TargetPos, targetVel, TargetForward, Speed);
         Assert.True(g.WantsFire);
         Assert.True(g.AimDirWorld.X > 0.01f, $"the lead swings toward the target's motion x={g.AimDirWorld.X}");
     }
 
-    [Fact]
-    public void OutsideTheForwardGunConeTheShotIsRefused()
+    // The traverse clamp costs aim quality rather than vetoing: a lead past the ±11° limits
+    // still fires while what the clamp gave away stays inside the gun's 10° gate.
+    [Theory]
+    [InlineData(10f, true)]   // inside the limits: nothing is given away
+    [InlineData(18f, true)]   // clamps to 11°, 7° residual
+    [InlineData(22f, false)]  // clamps to 11°, 11° residual, past the gate
+    [InlineData(30f, false)]
+    public void TheAimGateIsTheResidualLeftByTheTraverseClamp(float noseOffDeg, bool fires)
     {
         var g = Gunner();
         var ownPos = new Vector3(0f, 0f, 500f);
-        // Nose 30° off the bearing: the lead sits outside the ±11° gun cone.
-        var offNose = (TargetPos - ownPos).Normalized().Rotated(Vector3.Up, Mathf.DegToRad(30f));
+        var offNose = (TargetPos - ownPos).Normalized().Rotated(Vector3.Up, Mathf.DegToRad(noseOffDeg));
         g.Solve(ownPos, Vector3.Zero, Basis.LookingAt(offNose, Vector3.Up),
-            TargetPos, Vector3.Zero, TargetForward, Speed, Range);
-        Assert.False(g.WantsFire);
-        // Just inside the cone fires: 10° off.
-        var nearNose = (TargetPos - ownPos).Normalized().Rotated(Vector3.Up, Mathf.DegToRad(10f));
-        g.Solve(ownPos, Vector3.Zero, Basis.LookingAt(nearNose, Vector3.Up),
-            TargetPos, Vector3.Zero, TargetForward, Speed, Range);
-        Assert.True(g.WantsFire);
+            TargetPos, Vector3.Zero, TargetForward, Speed);
+        Assert.Equal(fires, g.WantsFire);
     }
 
-    [Fact]
-    public void BeyondTheWeaponsRangeTheShotIsRefused()
+    // The gate is the slot's authored window against the separation itself, both ends live.
+    [Theory]
+    [InlineData(0.5f, false)]  // inside the 1 m floor
+    [InlineData(500f, true)]
+    [InlineData(1200f, false)] // past the 900 m ceiling
+    public void OnlyASeparationInsideTheEngagementWindowIsShotAt(float separation, bool fires)
     {
         var g = Gunner();
-        var ownPos = new Vector3(0f, 0f, 1200f); // past the 1000 m RANGE
+        var ownPos = new Vector3(0f, 0f, separation);
         g.Solve(ownPos, Vector3.Zero, Basis.LookingAt(TargetPos - ownPos, Vector3.Up),
-            TargetPos, Vector3.Zero, TargetForward, Speed, Range);
-        Assert.False(g.WantsFire);
+            TargetPos, Vector3.Zero, TargetForward, Speed);
+        Assert.Equal(fires, g.WantsFire);
     }
 
     [Fact]
@@ -95,7 +98,7 @@ public class AiGunnerTests
         var g = Gunner();
         var ownPos = new Vector3(0f, 0f, 500f);
         g.Solve(ownPos, Vector3.Zero, Basis.LookingAt(TargetPos - ownPos, Vector3.Up),
-            TargetPos, Vector3.Zero, TargetForward, Speed, Range);
+            TargetPos, Vector3.Zero, TargetForward, Speed);
         Assert.True(g.WantsFire);
         g.HoldFire();
         Assert.False(g.WantsFire);
