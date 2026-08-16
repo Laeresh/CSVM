@@ -564,11 +564,19 @@ is `2.5 × 0.115` = **0.29** of full travel. The original's fast pitch cadences 
 much smaller stick than its slow ones, which is roll-off produced in the input stage before any
 aerodynamics are involved — see the landing note below.
 
-**Landing note — it closes about a third of the residual roll-off, and does not close the item.**
+**Landing note — it closes about a third of the residual roll-off, and a 1.57× gap survives it.**
 Ported as `StickRamp`, applied to the keyboard axes in `FlightController.ReadKeyboard` (the
 gamepad's analogue axes add on top, unramped, matching the joystick path). Driving `ZzCadenceSweep`
 through the ramp moves the 1300 → 570 ms roll-off from **20.5× to 26.8×** against the original's
-**42×**, so the deficit falls from 2.05× to **1.57×**.
+**42×**, so the deficit falls from 2.05× to **1.57×**. That remainder is outside the ±20% amplitude
+systematics and the ±12% spread in the clips' mean airspeed, so it is a real difference and not
+measurement slack; the pitch transient nonetheless reads right at the controls, which is why no
+constant is chased for it. Three candidates have never been examined: the original's 0.5/s throttle
+slew (decoded, unimplemented — it contaminates the first seconds of any manoeuvre), the `liftAOAs`
+airflow blend under a rapidly reversing demand, and the possibility that the original's 570 ms point
+(a 4.9× drop from 700 ms over a 1.23 frequency ratio) is a resonance rather than a point on a smooth
+roll-off, which no monotone transfer function produces and which the corpus cannot separate from
+noise at 0.63 ± 0.13 ft.
 ⚠ **Quote the sweep's WALL reading, not its sim reading.** The macro drove the keys in wall
 milliseconds, so the period the game saw is that × 1.390 (`docs/verification.md` DET-11); the sim
 column answers a question nobody flew. It used to be defensible to quote either, because with a
@@ -843,13 +851,14 @@ attitude** — a weathervane cannot bank an aeroplane.
 
 **C23 landing note — what implementing it settled, and what it did not.**
 
-- **`BL-147` does not close.** The square-wave pitch-cadence sweep run through our own build (same
-  input, same estimator, so no transfer function is assumed on either side) falls **19.6×** between
-  the 1300 ms and 570 ms cadences before the change and **23.3×** after, against the original's
-  **42×**. Right direction, about a sixth of the gap. A second-order response is part of the answer
-  and demonstrably not the whole of it.
-- ⚠ **And the sweep corrects `BL-147`'s own arithmetic.** Its "42× is 3.5× steeper than any single
-  first-order lag permits" reasoning assumed the chain is *double integration + one lag*. The
+- **It moves the pitch transient the right way and does not account for all of it.** The square-wave
+  pitch-cadence sweep run through our own build (same input, same estimator, so no transfer function
+  is assumed on either side) falls **19.6×** between the 1300 ms and 570 ms cadences before the
+  change and **23.3×** after, against the original's **42×** — about a sixth of the gap, on the sim
+  reading the sweep then quoted. A second-order response is part of the answer and demonstrably not
+  the whole of it; the stick ramp is most of the rest.
+- ⚠ **The sweep also refutes a "3.5× steeper than any single first-order lag permits" reading of
+  the original's roll-off.** That reasoning assumed the chain is *double integration + one lag*. The
   remake's is not, and never was: the flight path chases the nose through a **second** first-order
   lag (`lift_accel_rate`, τ = 1.33 s), so the pre-C23 build already rolled off 19.6× — 1.65× past
   that "ceiling" — with `return_rate` still folded into the damping. The 3.5× figure is therefore
@@ -2045,9 +2054,10 @@ high-speed fade" above.
 The refits are **Bloodhawk-pinned**, as they always were; the other ten airframes have no measured
 target of their own and simply move with them.
 
-⚠ **Do not chase `BL-147`'s transient gap through these constants.** They set the STEADY rate,
-which matches; a transient chased through them breaks the thing that currently works. The
-square-wave cadence sweep is the measurement that belongs to that gap — see the C23 landing note.
+⚠ **Do not chase the pitch transient's residual roll-off through these constants.** They set the
+STEADY rate, which matches; a transient chased through them breaks the thing that currently works.
+The square-wave cadence sweep is the measurement that belongs to that gap — see the stick-ramp
+section's landing note.
 
 ## What the test suite pins, and why each test can fail
 

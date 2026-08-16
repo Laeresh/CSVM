@@ -14,7 +14,7 @@ namespace CSVM.Tests;
 /// The square-wave pitch-cadence sweep, run against our own flight model, drives the same input
 /// the original was filmed at into a throwaway <see cref="FlightModel"/> and measures the ripple
 /// the same way. Each cadence runs twice: through <see cref="StickRamp"/>, the deflection the
-/// original's aircraft saw, and raw. Decode and the BL-147 result: docs/org/flightModel.md.
+/// original's aircraft saw, and raw. Decode and the measured roll-off: docs/org/flightModel.md.
 /// ⚠ Fit the trend and the sinusoid simultaneously; see docs/verification.md METHOD-24.
 /// ⚠ Quote the WALL reading: the macro drove the keys in wall milliseconds, so the period the
 /// game saw is that × 1.390 (docs/verification.md DET-11). The sim reading is kept only because
@@ -61,7 +61,7 @@ public class ZzCadenceSweep
         var stats = PlaneStats.Load(ZrdrPath, "player_bhawk");
 
         var sb = new StringBuilder();
-        sb.AppendLine("# BL-147 square-wave pitch-cadence sweep — player_bhawk");
+        sb.AppendLine("# square-wave pitch-cadence sweep — player_bhawk");
         sb.AppendLine("# alternating full pitch-up / full pitch-down, 300 mph level entry, full throttle");
         sb.AppendLine($"# {SettlePeriods} periods settled, {FitPeriods} periods fitted "
                       + "(cubic + sin + cos simultaneously — never detrend first)");
