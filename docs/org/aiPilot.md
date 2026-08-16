@@ -429,15 +429,37 @@ The precedence is in the caller, `FUN_004897c0`, not in either function, and it 
 per vehicle per frame:
 
 ```
-if (state < 4)                    FUN_0041f810(v);   // the crash check
-if (state == 4 && clock >= +0xc0) state = 0;         // stun expiry
-if (+0x9bc != 0 && state < 2)     state = 2;         // a queued maneuver starts
+if (mode is 0, 1 or 4) {                             // the dynamics class gate, 0x00489a90
+    if (state < 4)                    FUN_0041f810(v);   // the crash check
+    if (state == 4 && clock >= +0xc0) state = 0;         // stun expiry
+    if (+0x9bc != 0 && state < 2)     state = 2;         // a queued maneuver starts
+}
+FUN_0041c270(v);                                     // the AI brain, and so the net follower
 ```
 
-Three rules fall out. The crash check runs in states 0 to 3 only, so **stunned (4) and state 5
-suppress it entirely**. It writes 3 without consulting the prior state, so it **pre-empts a running
-maneuver**. And a maneuver only starts from state 0 or 1, so once crash avoidance holds state 3 the
-maneuver stays queued until the climb-out releases.
+Three rules fall out of the inner block. The crash check runs in states 0 to 3 only, so **stunned
+(4) and state 5 suppress it entirely**. It writes 3 without consulting the prior state, so it
+**pre-empts a running maneuver**. And a maneuver only starts from state 0 or 1, so once crash
+avoidance holds state 3 the maneuver stays queued until the climb-out releases.
+
+### Only three dynamics classes get crash avoidance at all
+
+The whole block above sits behind a test of `+0x67c`, the def's `mode` key (`jet` 0, `heli` 1,
+`tank` 2, `ship` 3, `wingman` 4, `plane` 5; see [`flightModel.md`](flightModel.md)). At
+`0x00489a90` the class is read and compared against 0, 4 and 1; anything else jumps to
+`0x00489b12`, which is the `FUN_0041c270` call itself. So a vehicle of any other class **still
+steers its net every frame and simply never runs the crash check**, never expires a stun and never
+starts a maneuver. Since `FUN_0041f810` is the only writer of state 3, the follower's own
+avoid-crash case is dead code for those classes.
+
+**Zeppelins therefore have no crash avoidance, and could not have it in this install.** They are
+not registry vehicles at all: `extracted/zrdr/vehicle.zrd.json` names no zeppelin, blimp or airship
+type, so a zeppelin is a gamez scene node driven by `mis_anim` rather than an object in the vehicle
+list this tick walks ([`flightModel.md`](flightModel.md), "Zeppelins"). It has no `+0x67c` to pass
+the gate with and no `+0x358` to hold a state in. The one direction that does work is the other
+one: the zeppelin node carries `active` and `intersect_surface`, which is exactly what
+`FUN_004c8f70` tests, so **an aeroplane's crash-avoidance ray sees a zeppelin** and climbs out for
+it the way it does for a hillside.
 
 ⚠ **The floor is a flat world-Y value, not a terrain follow.** 20 m saves a plane over water and
 flat ground and does nothing over a 600 m ridge; the raycast is the only terrain-aware part.
