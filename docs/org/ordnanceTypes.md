@@ -55,9 +55,32 @@ enumerates what the data carries. They still shape the shipped behaviour by thei
 `MINE` being unset is why every blast has a falloff, and `RANDOM_DEVIATION` being unset is why no
 shipped round wanders.
 
-That last group is the more interesting half of this decode: the engine supports mines, wandering
-rounds, wire-guided rounds with a ceiling, remote detonation and multi-target seeking, and **the
-shipped weapon table uses none of it**.
+Six of the ten have traced behaviour; four were only ever seen parsed:
+
+| Key | Where | What setting it would do |
+|---|---|---|
+| `TURN_SUSPEND_TIME` | `+0x5c` | Suspends guidance for N seconds after launch, then ramps turn authority as `(age − N) / LOCK_ON`. |
+| `PITCH_RATE` | `+0x34` | Terrain avoidance: a guided round within 10 m of the ground adds `PITCH_RATE × 2/π` of "up" to its desired heading. |
+| `TETHER_GUIDED` | `0x200000` | Swaps that pull-up for a ceiling clamp: the round may not climb past a global altitude. |
+| `INSTANT` | `0x800` | The round resolves in one step instead of travelling. Hitscan. |
+| `MINE` | `0x4000` | No acceleration; accumulates half of each step, so it flies twice its nominal range; its own motion routine; and its blast applies full damage with **no falloff** anywhere in the radius. |
+| `RANDOM_DEVIATION` | `0x8000000` | A bounded random walk when the round has no target or its target is far. |
+| `REMOTE_DETONATE` | `0x100000` | **Reader not traced.** |
+| `MULTI_TARGET` | — | **Reader not traced.** |
+| `EXPIRES` | — | **Reader not traced.** |
+| `IMPACT_TYPE` | `+0x190` | **Reader not traced.** |
+
+⚠ Four of those defaults are load-bearing, and one is easy to miss: **`PITCH_RATE` defaulting to 0
+means no shipped round avoids terrain.** The avoidance code runs on every guided round; it just adds
+zero. That is why rockets fly into hillsides rather than nosing over them.
+
+**Why the set looks like this.** Read together, these ten describe mines, wire-guided rounds held
+under a ceiling, multi-target seeking and hitscan weapons. That is a **MechWarrior** weapon roster
+rather than an aerial-combat one, and this is the MechWarrior 3 engine: the extractor these decodes
+lean on is `mech3ax`, and `CSVM/src/Mech3/` is named for it. The economical explanation is that these
+keys are the other game's features carried in a shared codebase and never authored here.
+⚠ That is an inference from the key set plus the engine lineage, not a decode. It is recorded because
+it explains the shape of the data, and it should not be cited as evidence for anything.
 
 ## The weapon-extension struct
 
@@ -270,8 +293,12 @@ ballistics keys. In order:
   acceleration of magnitude `5 * dt`, sign-flipped to keep pushing outward, integrated into an offset
   bounded at ±1.0, ±0.75, ±1.0 with a restoring `10 * dt`. An unguided or far-from-target round
   wobbles rather than flying a perfect line.
-- **Reveal distance.** A `FLYOUT_HEALTH` round with `+0x74` bit `0x80000000` is made visible only
-  once it has travelled weapon `+0x24`, so the flyout does not pop into view on the rail.
+- **Reveal distance, which is what `RANGE_MINIMUM` actually is.** The key sets `+0x74` bit
+  `0x80000000` and stores at `+0x24` (`FUN_005ad630` at `0x005adfbb`), and a `FLYOUT_HEALTH` round
+  carrying that bit is made **visible** only once it has travelled `+0x24`. So `wep_14`'s
+  `RANGE_MINIMUM [300]` hides the torpedo for its first 300 m rather than disarming it.
+  ⚠ [`formats/weapons.md`](../formats/weapons.md) glosses the key as "minimum arming range". That
+  reading is contradicted here: nothing on this path gates arming.
 - **The ceiling.** `TETHER_GUIDED` clamps the vertical step so the round cannot climb past a global
   limit, confirming the reading in the guidance section.
 

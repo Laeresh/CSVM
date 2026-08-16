@@ -63,7 +63,7 @@ See [CLUSTER_SIZE vs AMMO_LIMIT](#cluster-size-and-ammo-limit) for which entries
 | `VELOCITY` | 47 | 1.0–1200 | muzzle / flyout speed, m/s |
 | `ACCELERATION` | 16 | 0–150 | rocket-motor acceleration, m/s² (0 = constant velocity) |
 | `RANGE` | 46 | 900–10000 | max effective / despawn range, m (Seeker 10000) |
-| `RANGE_MINIMUM` | 1 | `[300, 0]` | minimum arming range (torpedo) |
+| `RANGE_MINIMUM` | 1 | `[300, 0]` | **a visibility gate, not an arming range** (torpedo): the flyout is hidden until it has travelled this far. Decoded in [`org/ordnanceTypes.md`](../org/ordnanceTypes.md); nothing on that path gates arming |
 | `GRAVITY` | 5 | 0.0 | projectile-gravity scale (0 throughout this install) |
 | `CANNON_SPREAD` | 31 | 6.0 | **not a dispersion cone** — the gun aim assist's acceptance-cone half-angle, degrees (constant). See [`org/aim-assist.md`](../org/aim-assist.md) |
 | `FIRING_HEAT` | 4 | 5.0 | nominally heat added per shot; only the base guns `wep_00`–`03`. **Parsed but never consumed by the original** : `FUN_004ba6f0` stores it at `+0x14` of the game-side weapon-extension struct (0x38 bytes, hung off the ZWEP record at `+0x210`), defaulting to 0 when the key is absent, and no consumer of that struct reads the field. Its partner `cannon_jam` is dead data too, see [vehicle.md](vehicle.md) |

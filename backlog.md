@@ -1032,6 +1032,44 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   gate", and its "Open" note on the muzzle-position branch),
   [`docs/org/aim-assist.md`](docs/org/aim-assist.md).
 
+- `BL-411` `[Feature]` **Force feedback is unimplemented, and it is the only thing the `TORPEDO` flag
+  does.** *Evidence:* `FUN_00480f50` drives the Immersion TouchSense API (`CImmCompoundEffect`) and
+  picks one of three launch effects, gated on `ROCKET`: `TORPEDO` gets direction 0 at magnitude 1.0,
+  a `REAR` weapon 180 at 0.58, ordinary ordnance 0 at 0.79
+  ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md)). Nothing in `CSVM/src` mentions force
+  feedback, vibration or haptics.
+  *Fix shape:* Godot exposes `Input.StartJoyVibration(device, weak, strong, duration)`.
+  ⚠ *Traps:* (a) **Godot's API has no direction**, so the original's 0°/180° split cannot be
+  reproduced; a rear weapon's kick-from-behind would be lost and the result is a partial
+  reproduction that reads as complete. Decide that explicitly before building. (b) Do not substitute
+  a camera shake: the original's launch shake is **guns-only**, sized by `CALIBER`, so an ordnance
+  shake is content the game never had. (c) Survey the other `CImmCompoundEffect` carriers before
+  scoping; ordnance launch is unlikely to be the only one.
+  *Cross-refs:* `BL-406` (which excludes `TORPEDO` for this reason).
+
+- `BL-412` `[Research]` **What does `CRATER` do? Six weapons author it and it drives a whole
+  terrain-deformation subsystem.** *Evidence:* the flag sets weapon `+0x74` bit `0x2000` and parses a
+  sub-block into `+0x194` (`FUN_005ad630` at `0x005ada98`); the effect runtime reads the same
+  `CRATER` block at `FUN_004e5590`. The binary carries `D:\zipper\gamez\zdeclient\zdec_crater.cpp`
+  with three distinct failure strings ("Tesselation Failed", "Clip Failed", "Build Failed"), a
+  `Crater%d` instance name, an `OnCrater` hook and a `MAX_CRATER_RADIUS` key. That is mesh carving,
+  not a decal. Carriers: `wep_04`, `wep_12`, `wep_25`, `wep_26`, `wep_27`, `wep_28`.
+  *Fix shape:* decode `FUN_004e5590` and the `zdec_crater` routines into `docs/org/craters.md`:
+  what the sub-block authors, what `MAX_CRATER_RADIUS` bounds, whether the carve is persistent or
+  pooled, and what happens on the three failure paths.
+  ⚠ *Trap:* `+0x74` bit `0x2000` is **not** the extension struct's `0x2000` (`SHAKES_CAMERA`). The
+  two flag words are unrelated bit spaces.
+  *Cross-refs:* `BL-413` (the implementation), `BL-406` (which excludes it).
+
+- `BL-413` `[Feature]` `[Blocked: BL-412]` **Ground-attack ordnance leaves no crater.** *Evidence:*
+  six weapons author `CRATER` and the original carves terrain geometry for it; we do nothing. Blocked
+  on `BL-412` because the mechanism is unread, so neither the size nor the approach can be stated
+  yet.
+  ⚠ *Trap:* this is a **terrain and renderer** change triggered by ordnance, not an ordnance change.
+  Scope it against the terrain system's constraints (chunking, LOD, the golden manifest's mesh
+  counts), not against the weapon table.
+  *Cross-refs:* `BL-412`, `BL-406`.
+
 - `BL-408` `[Bug]` **A player's ordnance leaves along the pylon marker's axis; the original launches
   it along the aircraft's axis.** *Evidence:* decoded, `FUN_004b6820`'s player ordnance branch builds
   the direction it hands the spawn `FUN_005aef40` from the **aircraft's own basis axis**, negated
@@ -1159,9 +1197,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   health pair spent armour-then-health; zero destroys it, playing `DESTROY_ANIMATION`.
   (**G**) *Gates.* `DAMAGES_ZEPPELIN` refuses its weapon against non-zeppelins as well as the
   reverse, and the AI's aim gate is cos 5° for ordnance against cos 10° for guns.
-  *Size:* **LARGER, plan-sized.** Seven landings across `Projectile`, `WeaponDefs`, the damage path
-  and the AI fire path, several of which want their own playtest. Scaffold it with `/new-plan` rather
-  than starting at A.
+  *Size:* **LARGER, plan-sized.** ▶ **Scheduled: [`docs/PLAN-ordnance-types.md`](docs/PLAN-ordnance-types.md)**
+  (22 items, six waves), which carries the decisions, the wrong-claims table and the per-item
+  evidence. Work from the plan, not from this entry.
+  *Out of scope there, each with its own item:* `TORPEDO` (`BL-411`, force feedback), `CRATER`
+  (`BL-412` decode, `BL-413` implementation), and the ten unauthored keys.
   *⚠ Traps:* (a) **Do not implement the ten unauthored keys.** `MINE`, `RANDOM_DEVIATION`, `INSTANT`,
   `TETHER_GUIDED`, `PITCH_RATE`, `TURN_SUSPEND_TIME`, `REMOTE_DETONATE`, `MULTI_TARGET`, `EXPIRES`
   and `IMPACT_TYPE` are parsed by the original and authored by no shipped weapon. Their **defaults**
