@@ -125,7 +125,7 @@ public sealed partial class AiGeneratorRuntime : Node
     /// <summary>Generators that survived the load drops.</summary>
     public int LiveCount => _live.Count;
 
-    /// <summary>Instant Action's zeppelin arm (PLAN-instant-action.md F12): every generator hosted
+    /// <summary>Instant Action's zeppelin arm: every generator hosted
     /// on <paramref name="hostNode"/> goes onto the wave-credit budget
     /// (<see cref="GeneratorCycle.UseWaveCredits"/> — nothing launches until
     /// <see cref="GrantWaveCapacity"/> credits it) and releases an ALREADY-BUILT wave member

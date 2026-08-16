@@ -434,8 +434,8 @@ public sealed partial class ProjectilePool : Node3D
     /// lab, the dump probes), which costs the scan nothing.</summary>
     public List<NearMissTarget> NearMissTargets { get; } = new();
 
-    /// <summary>Instant Action's wrap-up "Shot %" (PLAN-instant-action.md G14,
-    /// docs/formats/instant-action.md "What the four numbers count"): the decode counts a cannon
+    /// <summary>Instant Action's wrap-up "Shot %" (docs/formats/instant-action.md "What the four
+    /// numbers count"): the decode counts a cannon
     /// round fired/hit only when the shooter is <c>the local player</c>; a shooter id in this set
     /// is that filter generalised to every human pilot for splitscreen (empty — nothing scored —
     /// outside Instant Action). <see cref="CannonRoundsFired"/>/<see cref="CannonHits"/> below are
@@ -656,7 +656,7 @@ public sealed partial class ProjectilePool : Node3D
     /// re-run scan that would diverge (`BL-342`/B6).</para>
     ///
     /// <para><paramref name="team"/> is the round's team for <see cref="CollectFusedOrdnance"/>'s
-    /// candidate stamp (PLAN-instant-action B7) — stamped ONCE at spawn, not re-derived from
+    /// candidate stamp — stamped ONCE at spawn, not re-derived from
     /// <paramref name="shooterId"/> on every scan, so a caller with a real
     /// <c>FlightController.Team</c> (a mission override, not the pilot-index default) is
     /// answered faithfully for the round's whole flight. Omitted, it falls back to

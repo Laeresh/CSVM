@@ -1317,7 +1317,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         float bound = ttl > 0f ? ttl : EffectTtl;
         bool matched = false;
-        // PLAN-perf-hitches C9: the checkout (TakeNextSlot) plus the Start it feeds, coarse over
+        // The checkout (TakeNextSlot) plus the Start it feeds, coarse over
         // the (usually one) def this anim name resolves to — not per particle.
         using (PerfSample.Scope(PerfSite.EffectCheckout))
         {
@@ -3570,7 +3570,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         _dyingInstances.Push(inst);
         try
         {
-            // PLAN-perf-hitches C9: the same span _deathCallDepth already brackets as "the whole
+            // The same span _deathCallDepth already brackets as "the whole
             // burst" — the damage lab's reproducible case.
             using (PerfSample.Scope(PerfSite.DebrisSpawn))
             {

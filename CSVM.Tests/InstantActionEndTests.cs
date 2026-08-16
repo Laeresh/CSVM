@@ -7,7 +7,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The Instant Action mission end (PLAN-instant-action.md G13): the per-mission-type win
+/// The Instant Action mission end: the per-mission-type win
 /// condition, the INVENTED per-pilot lives ledger and the one-way outcome. Runs engine-free —
 /// <see cref="InstantActionRuntime"/>'s end half holds no engine type and logs nothing, the same
 /// construction rule <c>VersusMatch</c> follows — so every rule here is pinned without a session.

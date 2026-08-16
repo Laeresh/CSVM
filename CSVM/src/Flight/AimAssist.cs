@@ -64,7 +64,7 @@ public struct AimCandidate
 
     /// <summary>Team id (the engine's <c>+0x08</c>). Matching the shooter's rejects the pair, and
     /// so does <see cref="AimAssist.NeutralTeam"/> on EITHER side — read off
-    /// <see cref="FlightController.Team"/> (PLAN-instant-action B7) for a live aircraft, or
+    /// <see cref="FlightController.Team"/> for a live aircraft, or
     /// <see cref="AimAssist.TeamOfPilot"/> for that field's own default.</summary>
     public int Team;
 
@@ -166,7 +166,7 @@ public static class AimAssist
     public const int NeutralTeam = 0;
 
     /// <summary>The player's side, id 1 — the decoded turret convention (M4 C9b: 0 neutral, 1
-    /// ally, 2+ enemy) that <c>PLAN-instant-action</c> Decision 4 carries into the team model:
+    /// ally, 2+ enemy) carried into the team model:
     /// every human and every wingman is this team, regardless of pilot index. Use this rather than
     /// <see cref="TeamOfPilot"/>(0) wherever "the player's side" is a fixed identity, not a
     /// particular pilot's default.</summary>
@@ -248,8 +248,8 @@ public static class AimAssist
     /// Substituting <c>u = 1/t</c> flips the roles of leading and constant coefficient, so the
     /// leading coefficient becomes <c>|displacement|²</c> instead, essentially never near zero for
     /// a real separation. That substitution, not the quadratic formula's own cancellation
-    /// avoidance, is what "numerically stable" refers to here — see the trap on
-    /// <c>docs/PLAN-sticky-bullets.md</c>'s B3 before "fixing" it.</para></summary>
+    /// avoidance, is what "numerically stable" refers to here — read that before "fixing"
+    /// it.</para></summary>
     public static bool TryIntercept(Vector3 muzzlePos, float speed, Vector3 targetPos, Vector3 relVel,
         out Vector3 aimDir, out float t)
     {
@@ -272,7 +272,7 @@ public static class AimAssist
 
         // The stable (Citardauq) quadratic form: avoids subtracting near-equal quantities when b
         // and sqrt(disc) are close in magnitude, which the textbook (-b±sqrt(disc))/2a form does
-        // not — do not replace this with the textbook formula (docs/PLAN-sticky-bullets.md B3's trap).
+        // not — do not replace this with the textbook formula.
         float sq = Mathf.Sqrt(disc);
         float q = -0.5f * (b + (b >= 0f ? sq : -sq));
         float u1 = q / a;
@@ -310,13 +310,13 @@ public static class AimAssist
     /// half-angle in RADIANS) when it advertises one, else the firing weapon's. No shipped entity
     /// sets it — the only authored writer is the turret key <c>STICKINESS</c>, which ships zero
     /// times — but the branch is ported anyway, since dropping it is a silent behaviour change the
-    /// moment a mission authors one (Decision 2 in docs/PLAN-sticky-bullets.md).</summary>
+    /// moment a mission authors one.</summary>
     public static float ConeCosFor(in AimCandidate candidate, float weaponConeCos) =>
         candidate.ConeOverride >= 0f ? Mathf.Cos(candidate.ConeOverride) : weaponConeCos;
 
     /// <summary>The DEFAULT team for a pilot index with no mission-assigned team: pilot N is team
     /// N+1, which makes every pane hostile to every other pane — what <c>--vs</c> and free flight
-    /// run on. <see cref="FlightController.Team"/> (PLAN-instant-action B7) falls back to this when
+    /// run on. <see cref="FlightController.Team"/> falls back to this when
     /// nothing has set it explicitly; a mission overrides it per aircraft (Instant Action's
     /// wingmen and enemies both land on a fixed team, never one derived from pilot index — see
     /// <see cref="PlayerTeam"/>). A round nobody owns (<see cref="ProjectilePool.NoShooter"/>, and

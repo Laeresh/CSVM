@@ -6,7 +6,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The decoded collision restitution (PLAN-ai-flight C25, closing BL-172): <c>FUN_0048d7f0</c>'s
+/// The decoded collision restitution (closing BL-172): <c>FUN_0048d7f0</c>'s
 /// normal-only impulse, scaled by <c>f_lin · bounce_factor</c>, ported as
 /// <see cref="FlightModel.BounceNormalSpeed"/>.
 ///

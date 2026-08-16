@@ -40,7 +40,7 @@ public readonly record struct FrameSample(
 /// 60 Hz cap this plan's defaults elsewhere assume, that fixed threshold is 4 x 16.67 ms = 66.7 ms,
 /// ABOVE the 40 ms floor, so the RELATIVE term is what fires there, not the floor — only a refresh
 /// at or above 100 Hz brings <c>medianMultiple x refresh_interval</c> under the floor and hands it
-/// the job (PLAN-perf-hitches B5's <c>--hitch-inject=</c> verification ran on a 120 Hz box, where
+/// the job (the <c>--hitch-inject=</c> verification ran on a 120 Hz box, where
 /// the floor did decide). Either way this is expected, not a fault: the whole sub-cap range is
 /// invisible under vsync, which is what <c>display.vsync</c>/<c>--no-vsync</c> exist for.</para>
 ///
@@ -150,8 +150,8 @@ public sealed class HitchMonitor
 
     /// <summary>How many frames <see cref="Tick"/> has been fed so far — the same counter
     /// <see cref="HitchRecord.Frame"/> reports, exposed one call early so a caller can act on
-    /// "the next <see cref="Tick"/> will be frame N" (the <c>--hitch-inject=</c> synthetic stall,
-    /// PLAN-perf-hitches B5). Never reset by <see cref="Rearm"/>: it counts from process start,
+    /// "the next <see cref="Tick"/> will be frame N" (the <c>--hitch-inject=</c> synthetic
+    /// stall). Never reset by <see cref="Rearm"/>: it counts from process start,
     /// same as <see cref="HitchRecord.Frame"/> itself.</summary>
     public long FrameCount => _frames;
 
@@ -168,12 +168,12 @@ public sealed class HitchMonitor
 
     /// <summary>Ring capacity: how many entries <see cref="CopyRing"/> can return at most, the same
     /// depth <see cref="Fill"/> copies into a triggered record's <see cref="HitchRecord.Ring"/>.
-    /// PLAN-perf-hitches D11's frame-time strip sizes its own buffer off this once, at build.</summary>
+    /// The frame-time strip sizes its own buffer off this once, at build.</summary>
     public int RingFrames => _ringFrames;
 
     /// <summary>Copies the LIVE ring buffer into <paramref name="destination"/>, oldest first —
     /// unlike <see cref="Last"/>'s <c>Ring</c>, which only advances on a trigger, this reflects every
-    /// <see cref="Tick"/> regardless of whether anything has ever tripped (PLAN-perf-hitches D11: the
+    /// <see cref="Tick"/> regardless of whether anything has ever tripped (the
     /// frame-time strip reads this directly rather than keeping its own history, so the display and a
     /// hitch record can never disagree about the same frame). A <paramref name="destination"/> shorter
     /// than what has been collected gets the MOST RECENT that many entries, not the oldest. Returns
@@ -284,7 +284,7 @@ public sealed class HitchMonitor
         _last.Gc2Delta = _hasPrevious ? gc2 - _prevGc2 : 0;
         _last.AllocatedBytesDelta = _hasPrevious ? allocated - _prevAllocated : 0;
 
-        // The one thing this class does not have handed to it (PLAN-perf-hitches C8): the frame's
+        // The one thing this class does not have handed to it: the frame's
         // named work comes from an ambient static, because a scope in some far-off call path has no
         // way to be handed an accumulator by whoever ticks the monitor. Taken here rather than by
         // the caller so a record can never carry a stale frame's attribution.
@@ -375,7 +375,7 @@ public sealed class HitchRecord
     public FrameSample[] Ring { get; }
 
     /// <summary>What the frame could NAME: per-site times from the scopes that ran in it, plus the
-    /// remainder no scope claimed (PLAN-perf-hitches C8). <see cref="PerfSampleFrame.AttributedMs"/>
+    /// remainder no scope claimed. <see cref="PerfSampleFrame.AttributedMs"/>
     /// plus <see cref="PerfSampleFrame.UnattributedMs"/> is <see cref="FrameMs"/> by
     /// construction.</summary>
     public PerfSampleFrame Samples { get; } = new();

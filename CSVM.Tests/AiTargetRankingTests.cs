@@ -228,7 +228,7 @@ public class AiTargetRankingTests
     [ExtractedDataFact]
     public void TheShippedSlotSixAndThirtyThreeCensusesHold()
     {
-        // The plan's measured counts (docs/PLAN-M4-ai.md §2 + the 2026-08-10 delta): 414 blocks;
+        // The measured counts: 414 blocks;
         // primary_target authored on 68 (27 of them "player"); rating_biases a list on 321.
         int blocks = 0, primaries = 0, playerPrimaries = 0, biased = 0, thirds = 0;
         int entries = 0, minusOnes = 0;

@@ -20,7 +20,7 @@ using Godot;
 /// <para>⚠ Not `PlayerPositions` (`GameSession`'s gameplay seam, fed to `WorldSession.Options`):
 /// that one answers "where are the humans" off each rig's `Controller`/camera fallback for
 /// proximity gameplay rules; this one answers "what do the cameras see" for draw rules. Keep them
-/// separate — PLAN-splitscreen-polish.md A3's own trap.</para></summary>
+/// separate.</para></summary>
 public sealed class ViewerSet
 {
     private readonly List<Camera3D> _cameras = new();

@@ -36,7 +36,7 @@ public sealed class MenuInput
     /// <summary>−1 left, +1 right, 0 none (auto-repeat already applied) — a second, independent
     /// axis from <see cref="Move"/> so a screen can carry a list cursor (vertical) and a numeric
     /// stepper (horizontal) at once, the way the Instant Action wizard's mission-type screen reads
-    /// mission choice and lives together (PLAN-instant-action.md H15).</summary>
+    /// mission choice and lives together.</summary>
     public int MoveX;
     public bool Accept;     // pressed this frame (edge)
     public bool Back;       // pressed this frame (edge)

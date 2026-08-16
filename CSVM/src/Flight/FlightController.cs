@@ -284,8 +284,7 @@ public partial class FlightController : Node3D
     /// (<c>BL-342</c>/B6): true runs <see cref="AimAssist"/> as normal, false takes the muzzle axis
     /// unassisted, the same fallback a barrel with no slot already uses. Defaults true; the AI
     /// spawner sets it false. It is the original's human-versus-AI split (`FUN_004b6530`'s
-    /// else-branch), not "pane 1 only" — see Decision 7 in
-    /// `docs/plans/PLAN-sticky-bullets.md`.</summary>
+    /// else-branch), not "pane 1 only".</summary>
     public bool IsHumanPiloted = true;
 
     /// <summary>This plane's carried turret gunners (C9a): built by the rig assembler from the
@@ -352,7 +351,7 @@ public partial class FlightController : Node3D
     /// <see cref="AutoRespawnDelay"/> unless this says otherwise.</summary>
     public float? AutoRespawnAfter;
 
-    /// <summary>Out of lives (PLAN-instant-action.md G13): this pilot stays crashed for the rest of
+    /// <summary>Out of lives: this pilot stays crashed for the rest of
     /// the mission — neither R nor <see cref="AutoRespawnAfter"/>'s timer brings it back — while
     /// the session hands its pane to a <see cref="SpectatorCamera"/> and the others fly on. Set by
     /// the session's own lives ledger (<c>InstantActionRuntime.NotifyPilotDown</c>), never from
@@ -507,7 +506,7 @@ public partial class FlightController : Node3D
     /// sites are the combat hit path's.</summary>
     public event Action<FlightController>? DamageApplied;
 
-    /// <summary>This aircraft's team (PLAN-instant-action B7), replacing <c>AimAssist.TeamOfPilot</c>
+    /// <summary>This aircraft's team, replacing <c>AimAssist.TeamOfPilot</c>
     /// as a stand-in everywhere "is this hostile" is asked: <see cref="AimAssist"/>'s candidate
     /// scan, <see cref="SelectRankedTarget"/>, <see cref="TurretController"/>'s target selection and
     /// <see cref="AiVoiceDispatcher"/> registration all read this instead of deriving a team from
@@ -552,7 +551,7 @@ public partial class FlightController : Node3D
     /// for respawn. The fact the session (and the in-engine suites) read; only Respawn clears it.</summary>
     public bool Crashed => _crashed;
 
-    /// <summary>The inert state (PLAN-instant-action.md E10): an aircraft that has been BUILT but
+    /// <summary>The inert state: an aircraft that has been BUILT but
     /// is held completely out of the session — not stepped, not drawn, not collidable, not
     /// hittable, not a targeting candidate for anything, and not counted as living by whatever
     /// asks "is this wave clear". The original's own wave sequencer builds waves 2 to 4 this way
@@ -1881,7 +1880,7 @@ public partial class FlightController : Node3D
         // The aim assist's candidate set, built ONCE for this tick's rounds rather than per barrel:
         // the four lists are the same for every muzzle firing this frame. Two of the four have real
         // contents today (aircraft, live proximity-fused ordnance); structures need a world runtime,
-        // and turrets arrive with M4 (docs/PLAN-sticky-bullets.md B4).
+        // and turrets arrive with M4.
         if (outcome.GunShots.Count > 0 && Projectiles != null)
         {
             _aimCandidates.Clear();
@@ -2160,7 +2159,7 @@ public partial class FlightController : Node3D
             // splash, its ripple and the steam spray over the crash trails instead of the dirt
             // burst and the fireball cluster.
             CrashRuntime.InheritedWorldVelocity = _model.VelocityDir * _model.Speed * WreckMomentum;
-            // PLAN-perf-hitches C9: the wreck-piece launch — "the other half" of the debris case,
+            // The wreck-piece launch — "the other half" of the debris case,
             // this plane's own parts detaching rather than a world destructible's.
             using (PerfSample.Scope(PerfSite.PartDetach))
             {
@@ -2326,7 +2325,7 @@ public partial class FlightController : Node3D
 
     /// <summary>The D12 acquisition: the decoded ranking formula over the pool's registered
     /// aircraft, same roster and team gate as the aim assist and the turret gunners
-    /// (<see cref="Team"/>, PLAN-instant-action B7). An assigned <see cref="AiGunner.PrimaryTargetName"/>
+    /// (<see cref="Team"/>). An assigned <see cref="AiGunner.PrimaryTargetName"/>
     /// that resolves to a live hostile inside the activation radius is picked outright —
     /// the assumed reading of the decoded "Primary target: %s" semantics: the assignment holds
     /// while valid, ranking takes over when it dies or leaves. A by-NAME assignment names one

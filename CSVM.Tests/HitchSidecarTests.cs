@@ -8,9 +8,9 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// PLAN-perf-hitches B6's write path: the queue's copy-not-reference semantics, the flush-interval
-/// gate, drop-oldest overflow, the JSON line's shape and culture-invariance, and C8's per-site
-/// attribution riding along inside the record. Every test opens a
+/// The always-on detector's write path: the queue's copy-not-reference semantics, the
+/// flush-interval gate, drop-oldest overflow, the JSON line's shape and culture-invariance, and
+/// C8's per-site attribution riding along inside the record. Every test opens a
 /// real file under <see cref="TestData.TempDir"/> — the sidecar's whole job is the write, so a fake
 /// sink would not verify it — and reads it back with <see cref="JsonDocument"/> rather than string
 /// matching, so a field reorder cannot make an assertion pass by accident.

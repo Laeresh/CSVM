@@ -5,7 +5,7 @@ using CSVM.Mech3;
 
 namespace CSVM.Session;
 
-/// <summary>How an Instant Action mission finished (PLAN-instant-action.md G13). One-way: the
+/// <summary>How an Instant Action mission finished. One-way: the
 /// first outcome reached stands, so a win and the last human's death landing in the same sim step
 /// cannot overwrite each other.</summary>
 public enum InstantActionOutcome
@@ -15,8 +15,8 @@ public enum InstantActionOutcome
     Lost,
 }
 
-/// <summary>The one thing that has to happen for a mission to be WON — one per mission type
-/// (PLAN-instant-action.md G13). Every signal source reports the objective it has just satisfied
+/// <summary>The one thing that has to happen for a mission to be WON — one per mission type.
+/// Every signal source reports the objective it has just satisfied
 /// and <see cref="InstantActionRuntime.ReportObjective"/> drops the ones this mission does not run
 /// on, which is what lets a zeppelin run clear all four of its waves (F12 credits them either way)
 /// without that counting as the win.</summary>
@@ -33,7 +33,7 @@ public enum InstantActionObjective
 }
 
 /// <summary>Owns one Instant Action mission's actor set, as it grows across the plan's later
-/// waves (PLAN-instant-action.md: E11 the wave sequencer, F12 the zeppelin arm). C8 wired
+/// waves (E11 the wave sequencer, F12 the zeppelin arm). C8 wired
 /// <c>dogfight_ace</c>'s authored ace; D9 added the wingmen; E11 adds the two per-wave-member
 /// draws (<see cref="RandomPilotStats"/>, <see cref="ResolveWaveAccentId"/>) that the actual
 /// selection/trigger/geometry logic (<see cref="InstantActionWaves"/>, a separate engine-free
@@ -51,7 +51,7 @@ public enum InstantActionObjective
 /// dt) and reads the verdict back, and every log line about it is the session's.</para></summary>
 public sealed class InstantActionRuntime
 {
-    /// <summary>Every Instant Action enemy's team (PLAN-instant-action.md Decision 4: "the
+    /// <summary>Every Instant Action enemy's team ("the
     /// decoded turret convention... every Instant Action enemy is team 2"). Waves (E11) are
     /// cohorts inside this one team, not teams of their own.</summary>
     public const int EnemyTeam = AimAssist.PlayerTeam + 1;
@@ -140,7 +140,7 @@ public sealed class InstantActionRuntime
     public bool IsZeppelinRun =>
         string.Equals(Def.MissionType, ZeppelinRunMissionType, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>The mission type's own win condition (PLAN-instant-action.md G13's goal): the ace
+    /// <summary>The mission type's own win condition: the ace
     /// down, every configured wave cleared, every player's zone set flown, or the zeppelin
     /// disabled. Null for a type with no end condition here — see <see cref="Objective"/>.
     ///
@@ -425,7 +425,7 @@ public sealed class InstantActionRuntime
     }
 
     /// <summary>One wingman's standing order (docs/formats/instant-action.md "The player and the
-    /// wingmen", PLAN-instant-action.md D9): its fan placement off the player's spawn heading —
+    /// wingmen"): its fan placement off the player's spawn heading —
     /// <c>100 · ((i &gt;&gt; 1) + 1)</c> metres out, at ±45°, the same 100 m/45° pattern the wave
     /// sequencer uses — its <see cref="PrimaryTargetIsWingman"/> escort chain (0, 1 and 3 escort
     /// the player; 2 and 4 escort wingmen 1 and 3), and its authored accent id.</summary>

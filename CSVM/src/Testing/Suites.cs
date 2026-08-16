@@ -1997,7 +1997,7 @@ public static class Suites
     /// B4's candidate scan, the first three in isolation — no plane, no pool,
     /// <see cref="AimAssist"/> is engine-free by design — plus a golden check that the player.json
     /// and weapons.json values the assist consumes parse at their documented shipped figures
-    /// (docs/PLAN-sticky-bullets.md "What the data actually ships"). B4's ordnance list is the one
+    /// at their shipped figures. The ordnance list is the one
     /// case that needs a live pool, since the list IS a filter over the rounds in flight.</summary>
     private static void AimAssistSuite(TestContext ctx)
     {
@@ -4703,8 +4703,8 @@ public static class Suites
         return InstantAction.LoadFromJson(Path.Combine(ctx.ScratchDir, name));
     }
 
-    /// <summary>The G14 wrap-up board's two shot counters (PLAN-instant-action.md,
-    /// docs/formats/instant-action.md "What the four numbers count"): <c>ProjectilePool</c> is the
+    /// <summary>The G14 wrap-up board's two shot counters (docs/formats/instant-action.md "What the
+    /// four numbers count"): <c>ProjectilePool</c> is the
     /// single choke point for both, so this fires real rounds through the real pool at a real
     /// target rather than asserting on the arithmetic in isolation. The board's other two rows —
     /// Danger Zones Completed (a live read of <c>StuntMission.CompletedCount</c>) and Enemies Shot
@@ -4795,7 +4795,7 @@ public static class Suites
         }
     }
 
-    /// <summary>The E10 inert state (PLAN-instant-action.md): an aircraft built complete and then
+    /// <summary>The E10 inert state: an aircraft built complete and then
     /// held out of the session until it is activated. Every claim is measured by ONE instrument run
     /// over three subjects — a live control, the inert aircraft, and that same aircraft after
     /// <c>Activate</c> — because "did not appear in the list" is precisely the check that passes for

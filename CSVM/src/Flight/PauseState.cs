@@ -3,7 +3,7 @@ using System;
 namespace CSVM.Flight;
 
 /// <summary>
-/// Splitscreen pause bookkeeping (PLAN-splitscreen-polish E43, `BL-373`): one instance shared by
+/// Splitscreen pause bookkeeping (`BL-373`): one instance shared by
 /// every human rig in the session (assigned to <see cref="FlightController.PauseState"/> the same
 /// way <see cref="VersusMatch"/> is), so any player's Start/P freezes the shared
 /// <c>GameClock</c> for everybody, but only the player who paused may resume it — a second

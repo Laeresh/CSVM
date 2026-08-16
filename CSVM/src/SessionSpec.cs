@@ -131,7 +131,7 @@ public sealed record SessionSpec
     public bool Versus { get; private set; }
     /// <summary><c>--coop</c>: plain splitscreen free flight (no <see cref="Versus"/>, no Instant
     /// Action) puts every human on <see cref="AimAssist.PlayerTeam"/> instead of the per-pilot
-    /// default (PLAN-splitscreen-polish A1 — plain flight's default stays FFA, this is the opt-in
+    /// default (plain flight's default stays FFA, this is the opt-in
     /// to co-op). Dropped with a warning when combined with <c>--vs</c>, whose FFA is explicit and
     /// outranks it.</summary>
     public bool Coop { get; private set; }
@@ -213,11 +213,11 @@ public sealed record SessionSpec
     /// <summary><c>--ia=&lt;path&gt;</c>: fly a mission described by a hand-authored
     /// <c>InstantActionDef</c> JSON file (<c>Mech3.InstantAction.LoadFromJson</c>) instead of the
     /// chapter's own shipped <c>ia.zrd.json</c>. Null when the flag was absent — the value is only
-    /// the path; loading it is the runtime's job (PLAN-instant-action.md B6/C8), which keeps this
+    /// the path; loading it is the runtime's job, which keeps this
     /// type free of file I/O.</summary>
     public string? IaPath { get; private set; }
     /// <summary><b>Set only by <see cref="FromMenu"/>.</b> The launchscreen's Instant Action
-    /// wizard's own built <c>InstantActionDef</c> (PLAN-instant-action.md H16) — null on every CLI
+    /// wizard's own built <c>InstantActionDef</c> — null on every CLI
     /// launch, since <c>--ia=</c> carries a path instead. Already resolved: building it is the
     /// menu's job, not this type's, the same purity contract <see cref="IaPath"/> keeps (no file
     /// I/O here). When set, <c>GameSession</c> builds its <c>InstantActionRuntime</c> straight from
@@ -523,7 +523,7 @@ public sealed record SessionSpec
     public int? DebugLivery { get; private set; }
     public string? DebugMesh { get; private set; }
     public string? DebugNames { get; private set; }
-    /// <summary><c>--debug-fps[=compact|full]</c> (PLAN-perf-hitches D10): start the frame-cost
+    /// <summary><c>--debug-fps[=compact|full]</c>: start the frame-cost
     /// readout (<c>F14</c>) at launch, the scripted twin for a deterministic screenshot of it.
     /// Null = flag absent (off); no value = compact.</summary>
     public string? DebugFps { get; private set; }
@@ -641,7 +641,7 @@ public sealed record SessionSpec
     public bool Perf { get; private set; }
     public bool NoFocus { get; private set; }
 
-    /// <summary><c>--hitch-inject=</c> (PLAN-perf-hitches B5): a synthetic stall of known
+    /// <summary><c>--hitch-inject=</c>: a synthetic stall of known
     /// magnitude, in milliseconds, so every later item in the plan has something deterministic to
     /// verify against instead of an incidental hitch. Null when the flag was absent.</summary>
     public float? HitchInjectMs { get; private set; }

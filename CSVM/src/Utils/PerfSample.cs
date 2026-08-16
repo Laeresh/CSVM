@@ -58,7 +58,7 @@ public readonly ref struct PerfScope
 }
 
 /// <summary>
-/// PLAN-perf-hitches C8: ambient timed leaf scopes. Any code path can declare that it ran and how
+/// ambient timed leaf scopes. Any code path can declare that it ran and how
 /// long it took — <c>using (PerfSample.Scope(PerfSite.DebrisSpawn)) { … }</c> — without knowing
 /// anything about the hitch monitor, the readout, or whether anything is listening. The totals
 /// accumulate per site into a preallocated array, are frozen once per frame by

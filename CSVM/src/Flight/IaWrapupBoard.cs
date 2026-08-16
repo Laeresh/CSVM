@@ -4,7 +4,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// Instant Action's wrap-up board (PLAN-instant-action.md G14): the shipped screen's four rows —
+/// Instant Action's wrap-up board: the shipped screen's four rows —
 /// Time to Complete Mission, Enemies Shot Down, Danger Zones Completed, Shot % — the ones
 /// <c>IA_WRAPUP.SCRIPT</c> and <c>LAYOUT.CSV</c> actually wire (docs/formats/instant-action.md,
 /// "The wrap-up screen"; a fifth title, "Total Kills", is decoded but never wired to a row and is

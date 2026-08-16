@@ -199,7 +199,7 @@ public class SessionSpecParserTests
         Assert.Contains(s.Warnings, w => w.Category.Length == 0);
     }
 
-    /// <summary>PLAN-perf-hitches B5: `[alloc:]&lt;ms&gt;[@frame]` — a bare `&lt;ms&gt;` is the
+    /// <summary><c>--hitch-inject=</c>: `[alloc:]&lt;ms&gt;[@frame]` — a bare `&lt;ms&gt;` is the
     /// busy-wait form at the default frame, `@frame` overrides it, and `alloc:` switches to the
     /// allocation-burst form without disturbing either the magnitude or the frame.</summary>
     [Fact]

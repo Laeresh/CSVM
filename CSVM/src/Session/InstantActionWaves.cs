@@ -6,8 +6,8 @@ using Godot;
 namespace CSVM.Session;
 
 /// <summary>
-/// The decoded wave sequencer's own selection and trigger logic (PLAN-instant-action.md E11,
-/// <c>FUN_0045b9d0</c>, traced whole by A4 over M4 B7's main-path read): pure state over
+/// The decoded wave sequencer's own selection and trigger logic (<c>FUN_0045b9d0</c>, traced whole
+/// by A4 over M4 B7's main-path read): pure state over
 /// <see cref="Start"/>/<see cref="Step"/> calls, no <c>GD.*</c>, no <c>Godot.</c> node, no clock,
 /// so <c>CSVM.Tests</c> pins it off-engine. <c>GameSession</c> feeds it the caller's own
 /// "still alive" counts and takes back which wave to activate and where.

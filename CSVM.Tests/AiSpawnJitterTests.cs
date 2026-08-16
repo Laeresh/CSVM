@@ -7,7 +7,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The original's per-spawn dynamics jitter (PLAN-ai-flight C26): the block at the tail of
+/// The original's per-spawn dynamics jitter: the block at the tail of
 /// <c>FUN_00476250</c> that multiplies eleven runtime slots of a non-player aircraft by an
 /// independent uniform 1 ± 5 %, ported as <see cref="PlaneStats.WithAiSpawnJitter"/>.
 ///

@@ -8,7 +8,7 @@ using Godot;
 namespace CSVM.Utils;
 
 /// <summary>
-/// PLAN-perf-hitches B6: the always-on detector's write path. Every tripped <see cref="HitchMonitor"/>
+/// the always-on detector's write path. Every tripped <see cref="HitchMonitor"/>
 /// record gets ONE human-readable line in the <c>perf</c> log category and ONE JSON line in a
 /// sidecar sharing the main log's <c>&lt;mode&gt;-&lt;stamp&gt;</c> stem — but never inline on the
 /// hitching frame itself: both a string interpolation and a file write are avoidable allocation-heavy

@@ -774,7 +774,7 @@ if ($SkipGoldens) {
 
 # ---- hitch ---------------------------------------------------------------------------------
 
-# PLAN-perf-hitches B7. HitchMonitor only trips on a real rendered frame measured over wall time
+# HitchMonitor only trips on a real rendered frame measured over wall time
 # (Launcher._Process), so this cannot be a --run-tests suite: that harness runs every suite to
 # completion inside one _Ready call and never yields a frame (same reason goldens is a scripted
 # pass, above). Two launches instead, mirroring the goldens/perf shape: one clean, one carrying a
@@ -880,8 +880,8 @@ if ($SkipHitch) {
         }
     }
 
-    # Injected run: --hitch-inject=50@300 is B5's own verified-safe pair (@120 sits inside the
-    # grace window on the dev machine and is not portable -- PLAN-perf-hitches disproven-claim 5).
+    # Injected run: --hitch-inject=50@300 is the verified-safe pair (@120 sits inside the
+    # grace window on the dev machine and is not portable).
     # Must trip exactly once, with a full ring and a sidecar record matching the printed line.
     $inject = Read-HitchRun -RunName "inject" -RunArgs @("--det", "--no-vsync", "--mute",
         "--hitch-inject=50@300") -ExpectFrame 310
@@ -1122,7 +1122,7 @@ if (-not $Perf) {
                 } elseif ($line -match 'shot pixmd5=\w+ size=\S+ gpu=(.*)$') {
                     $gpuName = $Matches[1].Trim()
                 } elseif ($line -match '\[perf\] hitch ') {
-                    # HitchMonitor tripped during this launch (PLAN-perf-hitches B4). Counted, never
+                    # HitchMonitor tripped during this launch. Counted, never
                     # judged (E12's own Trap): no threshold here can fail a build.
                     $hitchLineCount++
                 } elseif ($line -match '\[perf\] vsync (on|off)') {

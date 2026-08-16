@@ -180,7 +180,7 @@ public partial class GameSession : Node3D
     // DriveSimSteps before the AI planes it spawns into _aiPlanes, freed with the world subtree.
     private AiGeneratorRuntime? _generators;
     private ZeppelinRuntime? _zeppelins;
-    // The active Instant Action mission (PLAN-instant-action.md C8), loaded once at the top of
+    // The active Instant Action mission, loaded once at the top of
     // StartSession from --ia=<path> — null outside one, which is what keeps every other session
     // mode (free flight, Dogfight) untouched by its existence.
     private InstantActionRuntime? _instantAction;
@@ -301,8 +301,8 @@ public partial class GameSession : Node3D
     ///
     /// <para>This is the <c>--ai=</c> overload: an aircraft with no authored identity, so it wears
     /// the ordinary Fortune Hunters default. <see cref="SpawnAiAircraft(string, Vector3, Vector3,
-    /// AiPilot, PaintScheme?, int?, int?, bool, bool)"/> is the actor-authoring one
-    /// (PLAN-instant-action.md C8), and every enemy goes through it — the generator runtime's
+    /// AiPilot, PaintScheme?, int?, int?, bool, bool)"/> is the actor-authoring one,
+    /// and every enemy goes through it — the generator runtime's
     /// spawn delegate is a lambda over it, not this method group, because a mission's generated
     /// enemies need its <c>shippedSkins</c>.</para></summary>
     public FlightController? SpawnAiAircraft(string planeName, Vector3 pos, Vector3 lookAt, AiPilot pilot) =>
@@ -312,7 +312,7 @@ public partial class GameSession : Node3D
     /// authored actor's own identity: <paramref name="scheme"/>/<paramref name="team"/> forward to
     /// <see cref="AiAircraftSpawner.Spawn"/> unchanged (an authored livery is worn as-is, no RNG
     /// draw); <paramref name="attackRating"/>, given, arms the D14 gunner/mode machine at that
-    /// rating regardless of <c>--ai-attack=</c> (PLAN-instant-action.md C8: the ace fights at its
+    /// rating regardless of <c>--ai-attack=</c> (the ace fights at its
     /// own authored rating, not the session's). <paramref name="inert"/> builds the aircraft held
     /// out of the session (E10) — its pilot, gunner and mode machine are wired exactly as a live
     /// one's, it simply takes no step until <see cref="FlightController.Activate"/> puts it in
@@ -484,8 +484,8 @@ public partial class GameSession : Node3D
             ?? (_spec.WorldMode ? SessionPaths.ChapterGamez(_dataRoot, _spec.Chapter) : _planesGamezPath);
         state.MissionZrdrPath = SessionPaths.MissionZrdr(_dataRoot, _spec.Chapter, _spec.Mission);
 
-        // Instant Action's def: the wizard's own build (SessionSpec.IaDef, H16) or --ia=<path>
-        // (PLAN-instant-action.md C8), loaded before anything chapter-dependent builds — no
+        // Instant Action's def: the wizard's own build (SessionSpec.IaDef, H16) or --ia=<path>,
+        // loaded before anything chapter-dependent builds — no
         // archives needed, so this can run first. Either producer converges on the same
         // InstantActionRuntime construction from here on ("one build path from wizard and CLI",
         // H16's own goal); a failed --ia= load fails soft (a warning, no def) rather than aborting
@@ -1748,7 +1748,7 @@ public partial class GameSession : Node3D
         // One livery RNG for the session, so P1..P4 draw distinct colours from one
         // stream and --paint-seed reproduces the whole field.
         var paintRng = _liveryResolver.NewPaintRng();
-        // Instant Action (PLAN-instant-action.md C8): the mission's own mission_type IS the
+        // Instant Action: the mission's own mission_type IS the
         // scenario key (the same string domain --scenario= already uses — "--vs forces
         // dogfight_ace"), and the mission's player_plane overrides whichever --plane= was given,
         // so a --ia= launch does not also need a redundant --scenario=/--plane= pair.
@@ -2164,7 +2164,7 @@ public partial class GameSession : Node3D
             name => rigInputs.WorldRuntime?.FindNodes(name) is { Count: > 0 } trailerHits
                 ? trailerHits[0]
                 : null);
-        // Instant Action's authored ace (PLAN-instant-action.md C8) — dogfight_ace only; the
+        // Instant Action's authored ace — dogfight_ace only; the
         // wave sequencer (D9/E11) and the zeppelin arm (F12) are later items, so any other
         // mission_type spawns no actor yet. Kept as a local so the end-condition block at the
         // bottom of this method can hang the mode's win signal on it (G13).
@@ -2252,7 +2252,7 @@ public partial class GameSession : Node3D
                 }
             }
         }
-        // Instant Action's wingmen (PLAN-instant-action.md D9). NumWingmen is forced to 0 on
+        // Instant Action's wingmen. NumWingmen is forced to 0 on
         // dogfight_ace by InstantAction.BuildDef's own parse-time rule, so this and the ace block
         // above are mutually exclusive without an extra mission-type test.
         if (_instantAction is { } iaWingmen && iaWingmen.Def.NumWingmen > 0
@@ -2332,7 +2332,7 @@ public partial class GameSession : Node3D
                 }
             }
         }
-        // Instant Action's wave sequencer (PLAN-instant-action.md E10/E11/F12): up to four
+        // Instant Action's wave sequencer: up to four
         // configured waves, EVERY one built inert right here (Decision 6 folds "wave 1 spawns
         // live" into the same build-then-activate path every later wave takes) and released one at
         // a time as InstantActionWaves finds the current wave cleared (DriveSimSteps). The
@@ -2531,7 +2531,7 @@ public partial class GameSession : Node3D
             state.What += $" + {_zeppelins.LiveCount} zeppelin(s)";
         }
 
-        // Instant Action's own zeppelin switch (PLAN-instant-action.md F12, FUN_0045a390's tail,
+        // Instant Action's own zeppelin switch (FUN_0045a390's tail,
         // decoded 2026-08-14). The builder resolves all three *_zeppelin nodes and deactivates
         // each one — EXCEPT, on zeppelin_run, the node zeppelin_type selects, which it explicitly
         // ACTIVATES: gwNodeSetActive(node, TRUE) at 0x0045b937, the exact inverse of the
@@ -2656,7 +2656,7 @@ public partial class GameSession : Node3D
             }
         }
 
-        // Instant Action's end conditions, lives and spectating (PLAN-instant-action.md G13).
+        // Instant Action's end conditions, lives and spectating.
         // Every signal this needs already exists and is built by the blocks above — the ace's own
         // Downed report, the wave sequencer's exhausted counter (StepInstantAction), the stunt
         // run's all-finished path and ZeppelinRuntime's two zeppelin signals — so this only routes them

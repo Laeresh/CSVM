@@ -58,7 +58,7 @@ public sealed class FlightRigAssembler
         string tag = _in.RigCount > 1 ? $"P{pi + 1} " : "";
         // Each player flies their own pick (the launchscreen's join flow / a --plane= list);
         // with one name given, that is the same plane for everyone as before. An active Instant
-        // Action mission (PLAN-instant-action.md C8) overrides this for every human alike — the
+        // Action mission overrides this for every human alike — the
         // def carries one player_plane, not a per-player list.
         string planeName = _in.InstantActionPlayerPlaneNode ?? PlaneRoster.PlaneFor(_spec, pi);
         var stats = _in.StatsFor(planeName);
@@ -109,12 +109,11 @@ public sealed class FlightRigAssembler
             HudParent = rig.Viewport,
             AllowPause = true,
         };
-        // Every human joins team 1 in an Instant Action mission (PLAN-instant-action.md Decision
-        // 8), splitscreen included — humans 2-4 would otherwise default to their own team
-        // (Team's fallback is AimAssist.TeamOfPilot(PlayerIndex), one team per pilot index) and
-        // collide with an enemy's. --coop asks for the same thing in plain flight
-        // (PLAN-splitscreen-polish A1); --vs never reaches here with Coop set (SessionSpec.Resolve
-        // drops it), so its FFA stays untouched.
+        // Every human joins team 1 in an Instant Action mission, splitscreen included — humans 2-4
+        // would otherwise default to their own team (Team's fallback is
+        // AimAssist.TeamOfPilot(PlayerIndex), one team per pilot index) and collide with an
+        // enemy's. --coop asks for the same thing in plain flight; --vs never reaches here with
+        // Coop set (SessionSpec.Resolve drops it), so its FFA stays untouched.
         if (_in.InstantActionActive || _in.Coop)
             controller.Team = AimAssist.PlayerTeam;
         // The wobble pivot: the plane model and everything resolved inside it — muzzle nodes,
@@ -546,13 +545,13 @@ public sealed class FlightRigAssembler
         /// Every rig in the session (--vs opponent markers) — the same list GameSession
         /// keeps live for the whole session, not a snapshot; see the Assemble call site.
         public IReadOnlyList<PlayerRig>? Rigs;
-        /// The active Instant Action mission's player_plane node (PLAN-instant-action.md C8),
+        /// The active Instant Action mission's player_plane node,
         /// overriding --plane= for every human alike; null outside one.
         public string? InstantActionPlayerPlaneNode;
         /// Whether an Instant Action mission is active — every human takes team 1 (Decision 8)
         /// regardless of pilot index when this is set.
         public bool InstantActionActive;
-        /// <c>--coop</c> (PLAN-splitscreen-polish A1): every human takes <see cref="AimAssist.PlayerTeam"/>
+        /// <c>--coop</c>: every human takes <see cref="AimAssist.PlayerTeam"/>
         /// in a plain flight session, same as Instant Action. <see cref="SessionSpec.Resolve"/>
         /// already drops this when <c>--vs</c> is also given, so the two never race here.
         public bool Coop;

@@ -56,12 +56,12 @@ public sealed class AiAircraftSpawner
     /// Callable at any point in the session's life; the returned controller is live (ticking,
     /// hittable, damageable) as soon as its <c>_Ready</c> has run. <paramref name="scheme"/>,
     /// given, is worn AS-IS instead of a resolver draw — no RNG consumed, so an authored livery
-    /// (PLAN-instant-action.md C8's ace) never shifts another spawn's pinned paint under
+    /// (an Instant Action ace's) never shifts another spawn's pinned paint under
     /// <c>--det</c>. <paramref name="team"/>, given, overrides
-    /// <see cref="FlightController.Team"/>'s pilot-index-derived default (PLAN-instant-action.md
-    /// B7/C8: an Instant Action actor's side is authored, not derived from its shooter id).
+    /// <see cref="FlightController.Team"/>'s pilot-index-derived default (an Instant Action
+    /// actor's side is authored, not derived from its shooter id).
     /// <paramref name="inert"/> builds the aircraft straight into
-    /// <see cref="FlightController.Inert"/> (PLAN-instant-action.md E10) — complete but held out of
+    /// <see cref="FlightController.Inert"/> — complete but held out of
     /// the session, so it never has a live frame between construction and its own activation; the
     /// caller puts it in play with <see cref="FlightController.Activate"/>.
     /// <paramref name="shippedSkins"/> builds the aircraft in its own shipped textures instead of
@@ -92,7 +92,7 @@ public sealed class AiAircraftSpawner
         }
         FlightController controller;
         Node3D planeModel;
-        // PLAN-perf-hitches C9: the whole build — model, controller, loadout, crash runtime and
+        // The whole build — model, controller, loadout, crash runtime and
         // adding it to the tree. Includes the plane's own decal paint (ResourceLoad), reached
         // deeper in PlaneBuilder.Build — a nested scope there is suppressed and folded into this
         // one, per PerfSample's flat-leaves rule.

@@ -11,7 +11,7 @@ namespace CSVM.UI;
 /// The in-game launchscreen: a keyboard/controller-driven menu shown
 /// when the viewer is launched with no content-selecting CLI arg (a bare launch, e.g.
 /// RunGame.ps1). <b>Mode</b> (Free Flight / Instant Action / Dogfight) branches two ways
-/// (PLAN-instant-action.md decision 17). Free Flight and Dogfight go straight to <b>Chapter</b>
+/// two ways. Free Flight and Dogfight go straight to <b>Chapter</b>
 /// (the eight chapter worlds, unchanged) → <b>Plane</b>. Instant Action instead opens its own
 /// five-step wizard (H15/H16): <b>Environment</b> (the seven decoded Instant Action environments,
 /// each naming one chapter) → <b>MissionType</b> (the four mission types that environment's
@@ -95,8 +95,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     private const int MaxLives = 9;
 
     // The three top-level modes, in MenuMode's ordinal order (Free/Stunt/Versus) so the row index
-    // doubles as the enum value with no separate lookup. Row 1 reads "Instant Action" (decision 17,
-    // PLAN-instant-action.md): Stunt Flying is no longer offered here on its own — it is one of the
+    // doubles as the enum value with no separate lookup. Row 1 reads "Instant Action":
+    // Stunt Flying is no longer offered here on its own — it is one of the
     // four Instant Action mission types (Screen.MissionType, below), reachable only where the
     // picked environment's chapter carries dzones. The MenuMode enum value stays named Stunt
     // (SessionSpec.cs, out of this item's file-contention scope) — only the label changes; picking
@@ -230,7 +230,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string _dataRoot = "";
     private Screen _screen = Screen.Mode;
     private int _modeIndex, _chapterIndex;
-    // Instant Action wizard state, steps 1-2 (PLAN-instant-action.md H15): the picked environment
+    // Instant Action wizard state, steps 1-2: the picked environment
     // row, the picked mission type row within CurrentMissionTypes, and the lives stepper beside it
     // (decision 18).
     private int _environmentIndex, _missionTypeIndex;

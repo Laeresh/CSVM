@@ -13,14 +13,14 @@ namespace CSVM.Mech3;
 /// SETUP SCREEN rather than this key (docs/formats/instant-action.md "What novice/veteran/ace
 /// becomes"). This reports the authored value verbatim, the same treatment
 /// <see cref="EnemyGeneratorDef.Capacity"/> gives its own unresolved key. <c>EnemyAccentId</c>
-/// (PLAN-instant-action.md E11) IS read by the wave parser and IS this wave's voice, subject to
+/// IS read by the wave parser and IS this wave's voice, subject to
 /// the decoded re-roll: an authored 12 (the wingman accent range's own base) becomes
 /// <c>12 + rand() % 5</c> at spawn, not at parse time — <see cref="Session.InstantActionRuntime.ResolveWaveAccentId"/>.</summary>
 public readonly record struct InstantActionWave(
     int NumEnemies, string EnemyName, string EnemyPlane, string EnemySkill, int EnemyAccentId);
 
 /// <summary>
-/// Builds an <see cref="InstantActionDef"/> the three ways decision 2 (PLAN-instant-action.md)
+/// Builds an <see cref="InstantActionDef"/> the three ways decision 2
 /// names: the shipped <c>ia.zrd.json</c> (<see cref="Load"/>), a hand-authored <c>--ia=&lt;path&gt;</c>
 /// file using the same field names as an ordinary JSON object rather than the zrdr archive's
 /// flat-alternating shape (<see cref="LoadFromJson"/>), and the launchscreen's Instant Action
@@ -28,8 +28,8 @@ public readonly record struct InstantActionWave(
 /// <see cref="Load"/> result and overlays only what the wizard actually lets a pilot configure.
 /// The first two share one field-population path (<c>BuildDef</c>, over <see cref="ZrdrDict"/>) —
 /// <see cref="LoadFromJson"/>'s only job is the small mapping from a plain JSON object onto the
-/// same key/[values…] shape <see cref="ZrdrDict"/> already wraps (PLAN-instant-action.md B6:
-/// "a small hand-written mapping and not a second schema"), so a JSON object's nested
+/// same key/[values…] shape <see cref="ZrdrDict"/> already wraps ("a small hand-written mapping and
+/// not a second schema"), so a JSON object's nested
 /// <c>group1</c>…<c>group4</c> records parse through exactly the same <c>ZrdrDict.Dict</c> call
 /// a real reader's does. The wizard converges on the same record type rather than this same
 /// parse — <c>GameSession</c> builds one <c>InstantActionRuntime</c> from an
@@ -55,10 +55,10 @@ public static class InstantAction
 
     // Display name -> planes.zbd root node (docs/formats/instant-action.md "The built-in
     // defaults": the IDS_IA_PLANES order). Deliberately duplicates UI.LaunchMenu.Planes rather
-    // than sharing it — PLAN-instant-action.md's file-contention notes reserve LaunchMenu.cs for
-    // H15/H16 alone. CSVM ships one gamez node per airframe (extracted/planes/nodes.json carries
-    // no bare "bhawk", only "player_bhawk"), reused for the player and every AI/generator spawn
-    // alike, so there is no separate "plain" or wingman model to pick between.
+    // than sharing it, which keeps the launchscreen file free of this table. CSVM ships one gamez
+    // node per airframe (extracted/planes/nodes.json carries no bare "bhawk", only "player_bhawk"),
+    // reused for the player and every AI/generator spawn alike, so there is no separate "plain" or
+    // wingman model to pick between.
     private static readonly Dictionary<string, string> PlaneNodes = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Devastator"] = "player_pfighter",
@@ -78,8 +78,7 @@ public static class InstantAction
     /// (<c>FUN_00458d00</c>'s per-wave reset, read through <see cref="MakeWave"/> with nothing to
     /// overlay). What an unconfigured launchscreen wizard wave slot resolves to, so a wizard wave
     /// left at 0 enemies and a JSON file's own omitted/null <c>groupN</c> produce byte-identical
-    /// <see cref="InstantActionWave"/> values (PLAN-instant-action.md H16's own "one build path"
-    /// check).</summary>
+    /// <see cref="InstantActionWave"/> values — one build path for both.</summary>
     public static InstantActionWave EmptyWave => MakeWave(null, forceZero: false);
 
     /// <summary>The gamez node an Instant Action display name (an
@@ -115,13 +114,13 @@ public static class InstantAction
     /// <summary>Every field at its built-in default (<see cref="BuildDef"/>'s own reset, no key
     /// overlaid) — an empty <c>{}</c> object read through <see cref="LoadFromJson"/> would produce
     /// the same record; this skips the JSON round-trip. The launchscreen wizard's fallback
-    /// (PLAN-instant-action.md H16) when an Instant Action environment's own <c>ia.zrd.json</c>
+    /// when an Instant Action environment's own <c>ia.zrd.json</c>
     /// somehow fails to load — should not happen for the seven environments Instant Action offers,
     /// kept for the same reason <c>--ia=</c>'s own load catches and warns rather than crashing.</summary>
     public static InstantActionDef Defaults() => BuildDef(ZrdrDict.FromAlternating(new List<object?>()));
 
     /// <summary>Builds an <see cref="InstantActionDef"/> from the launchscreen's Instant Action
-    /// wizard (PLAN-instant-action.md H15/H16) — the third of the three producers decision 2 names,
+    /// wizard — the third of the three producers decision 2 names,
     /// converging on the same record the shipped-file reader and <c>--ia=</c> build. The wizard
     /// owns <paramref name="missionType"/>, <paramref name="playerPlane"/>, the wingmen and
     /// <paramref name="waves"/>, and <paramref name="lives"/> — everything else (the ace, the
@@ -347,13 +346,13 @@ public static class InstantAction
 ///
 /// <para><see cref="Flight.SpawnPoints.LoadIa"/> and <see cref="Flight.StuntMission"/> already
 /// read this same file's <c>spawn_points</c> and <c>dzones</c> keys directly — this record does
-/// not repeat either, by design (PLAN-instant-action.md B6: "keep both where they are and have
+/// not repeat either, by design ("keep both where they are and have
 /// the def carry the rest").</para>
 ///
 /// <para><c>ground_target_name</c>/<c>ground_target_node</c> belong to the <c>ground_target</c>
 /// mission type, which every chapter's own <c>disallow_missions</c> bars and this milestone does
 /// not implement, so they are left out entirely rather than modelled for a mode nothing can
-/// reach. The wave-only <c>enemy_accentID</c> (PLAN-instant-action.md E11) IS modelled, on
+/// reach. The wave-only <c>enemy_accentID</c> IS modelled, on
 /// <see cref="InstantActionWave"/> itself rather than here — it varies per wave, unlike every
 /// other field on this record.</para>
 /// </summary>
@@ -374,8 +373,8 @@ public sealed class InstantActionDef
     public required int NumWingmen { get; init; }
 
     /// <summary>The wingmen's aircraft, the UI's singular display name — defaults to
-    /// <c>"Devastator"</c> when unauthored, same as <see cref="PlayerPlane"/>/<see cref="AcePlane"/>
-    /// (PLAN-instant-action.md D9).</summary>
+    /// <c>"Devastator"</c> when unauthored, same as
+    /// <see cref="PlayerPlane"/>/<see cref="AcePlane"/>.</summary>
     public required string WingmanPlane { get; init; }
 
     /// <summary>Waves 1 to 4, in order (<c>group1</c>…<c>group4</c>) — always 4 entries; a wave
@@ -412,8 +411,8 @@ public sealed class InstantActionDef
     /// carries one; only reachable via a hand-authored <c>--ia=</c> file).</summary>
     public PaintScheme? AceLivery { get; init; }
 
-    /// <summary>INVENTED — no <c>ia.json</c> key carries this (decision 15,
-    /// PLAN-instant-action.md). Default 1 is the faithful one-life run; N gives N-1 respawns on
+    /// <summary>INVENTED — no <c>ia.json</c> key carries this. Default 1 is the faithful
+    /// one-life run; N gives N-1 respawns on
     /// the existing 3s <c>VersusRespawnDelay</c> path; 0 is unlimited. Per pilot, not shared.</summary>
     public int Lives { get; init; } = 1;
 }

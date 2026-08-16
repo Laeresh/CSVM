@@ -99,14 +99,14 @@ public sealed class GeneratorCycle
     /// <summary>The host died: disable permanently (decoded rule, never re-enabled).</summary>
     public void HostDied() => Disabled = true;
 
-    /// <summary>Puts this cycle on Instant Action's wave-credit budget (PLAN-instant-action.md
-    /// F12): the DECODED capacity rule is enforced from here on regardless of the authored
-    /// <c>capacity</c> — the stand-in above does not apply — starting from zero remaining, so the
-    /// generator launches nothing at all until <see cref="GrantCapacity"/> credits it. This is the
-    /// resolution of the capacity puzzle for this one mode (docs/formats/mission-entities.md "The
-    /// capacity puzzle"): on a <c>zeppelin_run</c> the wave sequencer is the generator's only
-    /// source of budget, which is exactly what <c>capacity 0</c> plus a live top-up produces.
-    /// Idempotent enough to call once at wire time; calling it again re-zeroes the budget.</summary>
+    /// <summary>Puts this cycle on Instant Action's wave-credit budget: the DECODED capacity rule
+    /// is enforced from here on regardless of the authored <c>capacity</c> — the stand-in above
+    /// does not apply — starting from zero remaining, so the generator launches nothing at all
+    /// until <see cref="GrantCapacity"/> credits it. This is the resolution of the capacity puzzle
+    /// for this one mode (docs/formats/mission-entities.md "The capacity puzzle"): on a
+    /// <c>zeppelin_run</c> the wave sequencer is the generator's only source of budget, which is
+    /// exactly what <c>capacity 0</c> plus a live top-up produces. Idempotent enough to call once at
+    /// wire time; calling it again re-zeroes the budget.</summary>
     public void UseWaveCredits()
     {
         _waveCredited = true;

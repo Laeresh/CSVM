@@ -126,7 +126,7 @@ public partial class Launcher : Node3D
     // and measured render time is opt-in per viewport, so both have to happen before the first
     // frame rather than lazily on one.
     private HitchMonitor _hitchMonitor = null!;
-    // PLAN-perf-hitches D10: the F14 / --debug-fps frame-cost readout, ticked every frame like
+    // The F14 / --debug-fps frame-cost readout, ticked every frame like
     // the instrument above it, but drawing (if switched on) is its own concern, not this class's.
     private UI.PerfHud _perfHud = null!;
     private Rid _viewportRid;
@@ -284,7 +284,7 @@ public partial class Launcher : Node3D
         _pendingJoin = _spec.DebugJoin;
         _pendingWaves = _spec.DebugWaves;
         _pendingWingmen = _spec.DebugWingmen;
-        // The frame-hitch instrument, live from here on in every mode (PLAN-perf-hitches B4). Built
+        // The frame-hitch instrument, live from here on in every mode. Built
         // alongside the other process-scoped services, which is ahead of every probe's early quit
         // (a quit takes effect at the end of the iteration, so _Process can still run once) and
         // ahead of --dump-config: its constructor is what reads, and therefore registers, the five
@@ -362,7 +362,7 @@ public partial class Launcher : Node3D
         {
             Log.Warn("core", $"deprecated flag={old} use={replacement}");
         }
-        // PLAN-perf-hitches B6: ahead of --dump-config, same reason as _hitchMonitor above — this
+        // Ahead of --dump-config, same reason as _hitchMonitor above — this
         // constructor is what registers the two hitchSidecar.* keys. Log.SinkPath is set by the
         // Open() call just above; the synthetic fallback only matters on the rare run where that
         // open itself failed (Log.Open already degrades gracefully rather than crashing the launch).
@@ -554,7 +554,7 @@ public partial class Launcher : Node3D
             return;
         }
 
-        // PLAN-perf-hitches D10: the F14 / --debug-fps readout, a child of this node rather than
+        // The F14 / --debug-fps readout, a child of this node rather than
         // of any GameSession — process-wide like the camera above it, so it works at the
         // launchscreen too. Built after the --run-tests/--dump-* early exits, since none of them
         // renders a frame it would have anything to show.
@@ -597,7 +597,7 @@ public partial class Launcher : Node3D
         }
     }
 
-    // PLAN-perf-hitches B6: the root node's own teardown, reached on an ordinary quit
+    // The root node's own teardown, reached on an ordinary quit
     // (GetTree().Quit() or the window's close button) — never on a kill/crash, which is what the
     // sidecar's flush-interval loss bound (HitchSidecar's own doc) covers instead.
     public override void _ExitTree()
@@ -667,7 +667,7 @@ public partial class Launcher : Node3D
         // reports nothing. One counter read per frame feeds both: the hitch monitor wants them
         // unaveraged and the --perf window wants them summed, but they are the same eight numbers.
         var counters = ReadFrameCounters();
-        // PLAN-perf-hitches B5: --hitch-inject= fires here, one QPC read before the stamp below, so
+        // --hitch-inject= fires here, one QPC read before the stamp below, so
         // the stall inflates THIS frame's wall cost rather than leaking into the next one. The
         // frame ordinal it matches is HitchMonitor's own counter (FrameCount + 1 — the value this
         // Tick call is about to stamp its record with), never the sim frame: the injector has to
@@ -700,7 +700,7 @@ public partial class Launcher : Node3D
             _hitchSidecar.Enqueue(_hitchMonitor.Last);
         }
         _hitchSidecar.Tick(frameMs);
-        // PLAN-perf-hitches D10/D11: same raw frameMs and the same counters read HitchMonitor
+        // Same raw frameMs and the same counters read HitchMonitor
         // just judged, fed to the readout regardless of whether it is currently drawn — see
         // PerfHud.Tick's own doc comment.
         _perfHud.Tick(frameMs, counters);
@@ -949,7 +949,7 @@ public partial class Launcher : Node3D
         Nodes: (long)Performance.GetMonitor(Performance.Monitor.ObjectNodeCount),
         MemBytes: (long)Performance.GetMonitor(Performance.Monitor.MemoryStatic));
 
-    /// <summary><c>--hitch-inject=</c> (PLAN-perf-hitches B5): burns wall time synchronously for
+    /// <summary><c>--hitch-inject=</c>: burns wall time synchronously for
     /// about <paramref name="ms"/> milliseconds, so every later item in the plan has a stall of
     /// known magnitude to verify against instead of an incidental one. The busy-wait form (default)
     /// proves the timing path; <paramref name="alloc"/> burns the same wall time allocating and

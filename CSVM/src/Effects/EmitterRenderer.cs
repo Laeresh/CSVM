@@ -119,7 +119,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 
     public void Attach(Node3D owner, int capacity, float cullMargin)
     {
-        // PLAN-perf-hitches C9: the ShaderMaterial/Shader built here is the runtime one — a new
+        // The ShaderMaterial/Shader built here is the runtime one — a new
         // Puffer's first draw, never a load-time material. Usually reached from
         // EmitterDirector's EffectPoolMiss scope, which suppresses this one (flat leaves); it
         // fires on its own only when a Puffer is built with nothing else already open.

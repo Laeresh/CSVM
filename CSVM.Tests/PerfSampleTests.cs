@@ -7,7 +7,7 @@ using Xunit.Abstractions;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The accumulate / freeze / snapshot cycle behind <see cref="PerfSample"/> (PLAN-perf-hitches C8):
+/// The accumulate / freeze / snapshot cycle behind <see cref="PerfSample"/>:
 /// what a scope adds, what <see cref="PerfSample.EndFrame"/> hands to the next record, the
 /// remainder arithmetic, and the two properties the instrument's honesty rests on — a nested scope
 /// cannot double-count, and a scope allocates nothing.

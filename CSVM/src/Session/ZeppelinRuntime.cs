@@ -122,7 +122,7 @@ public sealed partial class ZeppelinRuntime : Node
     public bool IsDead(string node) => Find(node)?.Dead ?? false;
 
     /// <summary>Instant Action's builder holds a zeppelin it has switched off
-    /// (PLAN-instant-action.md F12, <c>FUN_0045a390</c>'s tail): the record stays placed at its
+    /// (<c>FUN_0045a390</c>'s tail): the record stays placed at its
     /// authored pose, but its motion, broadside and damage poll stop from here on. That is the
     /// CSVM stand-in for the builder's own <c>FUN_0045a2a0</c>, which tears down the vehicle/AI
     /// objects under the deactivated node — CSVM has no equivalent object graph to delete, and a
