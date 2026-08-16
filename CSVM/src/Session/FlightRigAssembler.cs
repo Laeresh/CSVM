@@ -382,6 +382,11 @@ public sealed class FlightRigAssembler
                 GD.Print("targeting HUD: nearest-AI-hostile marker (edge arrow + clock bearing)");
         }
 
+        // The player's target selection (PLAN-targeting.md B13/B14): one per human pane, each with
+        // its own pool — the cycles are sorted against THIS plane's pose, so they cannot be shared.
+        // GameSession binds TargetSubParts later, once the zeppelins exist.
+        controller.Targeting = new TargetSelection();
+
         // Bound on EVERY pane, not just under --debug-markers: it is what the HUD's team tests read
         // this pane's side off (VersusHud.OwnTeam). Deriving the side from the pilot index instead
         // is right for P1 by coincidence and wrong for P2-P4 in any session that sets teams

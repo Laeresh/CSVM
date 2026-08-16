@@ -416,6 +416,14 @@ public static class Suites
             + "attitude changes never dropping one, Target Nothing STAYING cleared through repeated "
             + "rebuilds, nearest-crosshairs scoring the NOSE cone (not the pipper) with its 2 km cap "
             + "and reaching an ally, and 0x24's attacker queue walked backwards", TargetSelectionModel));
+        into.Add(new TestHarness.Suite("target-input",
+            "B14's decoding, which is what the suite CAN read (a gamepad and a bare key press it "
+            + "cannot): TapHoldButton's resolve-on-release rule — a short press taps, crossing 250 "
+            + "ms fires the hold ONCE mid-press and the release is then spent, a held button never "
+            + "repeats, and an up button with no press reports nothing; plus the attacker queue's "
+            + "live wiring, where a real hostile round through TakeProjectileHit records its "
+            + "shooter, a friendly-fire round and an unowned one record nothing, and "
+            + "ProjectilePool.RigOfShooter resolves a shooter id to its plane", TargetInputModel));
         into.Add(new TestHarness.Suite("splitscreen-listeners",
             "every 2–4P pane is a 3D audio listener, which a SubViewport is not by default — the "
             + "pinned listener model (A2), and the one thing standing between splitscreen and a "
@@ -5683,6 +5691,134 @@ public static class Suites
                   && !TargetRef.ForTurret(default, TargetClass.NonAircraft, "")
                       .IsSameTarget(TargetRef.ForTurret(default, TargetClass.NonAircraft, "")),
             $"two different sources never match, and a null source matches nothing — including another null, which would otherwise make every sourceless ref the same target");
+    }
+
+    /// <summary>B14's decoding. The suite reads no gamepad and no bare key press (A2 and A3 both
+    /// recorded that gap), so what is pinned here is everything BETWEEN the device read and the
+    /// action: <see cref="TapHoldButton"/>'s tap-versus-hold rule, and the attacker queue's live
+    /// wiring through a real <see cref="FlightController.TakeProjectileHit"/> on real rigs in a real
+    /// pool. The key and pad reads themselves are owed as live play.</summary>
+    private static void TargetInputModel(TestContext ctx)
+    {
+        // --- the tap/hold decision: pure, no device involved --------------------------------
+        const float dt = 1f / 60f;
+        (int Taps, int Holds) Press(TapHoldButton b, int downFrames)
+        {
+            int taps = 0, holds = 0;
+            void Count(TapHold r)
+            {
+                if (r == TapHold.Tap)
+                {
+                    taps++;
+                }
+                else if (r == TapHold.Hold)
+                {
+                    holds++;
+                }
+            }
+
+            for (int i = 0; i < downFrames; i++)
+            {
+                Count(b.Step(true, dt));
+            }
+
+            Count(b.Step(false, dt));
+            return (taps, holds);
+        }
+
+        var btn = new TapHoldButton(0.25f);
+        ctx.Check(btn.Step(false, dt) == TapHold.None,
+            $"a button that is simply up reports nothing — a release with no press is not a tap");
+        ctx.Check(Press(btn, 12) == (1, 0),
+            $"a 0.20 s press taps once on RELEASE and never holds");
+        ctx.Check(Press(btn, 18) == (0, 1),
+            $"a 0.30 s press holds once and the release is then SPENT — it does not also tap, which is the flicker decision 7 exists to avoid");
+        ctx.Check(Press(btn, 120) == (0, 1),
+            $"holding for two seconds still fires exactly once — this is a tap/hold split, not a repeat");
+        ctx.Check(Press(btn, 6) == (1, 0),
+            $"and the next press taps again, so a hold leaves no state behind");
+
+        // --- the attacker queue, wired through a real hit ------------------------------------
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var gun = weapons.All.FirstOrDefault(w => w.IsGun && w.ArmorDamage is > 0f);
+        ctx.Check(gun != null, $"a gun with ARMOR_DAMAGE exists in the data");
+        if (gun == null)
+        {
+            return;
+        }
+
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightController? self = null;
+        FlightController? hostile = null;
+        FlightController? friendly = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            FlightController BuildRig(int playerIndex, int team, Vector3 pos)
+            {
+                var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+                var rig = new FlightController
+                {
+                    PlaneModel = model,
+                    Collider = PlaneCollider.Build(model),
+                    Damage = new PlaneDamage(stats.DestroyableParts),
+                    PlayerIndex = playerIndex,
+                    Team = team,
+                    Projectiles = live,
+                    UseKeyboard = false,
+                    AllowPause = false,
+                };
+                rig.AddChild(model);
+                rig.Setup(new FlightModel(stats), ctx.Camera, new CamParams(), pos, pos + Vector3.Forward);
+                ctx.Host.AddChild(rig);
+                return rig;
+            }
+
+            self = BuildRig(0, AimAssist.PlayerTeam, Vector3.Zero);
+            friendly = BuildRig(1, AimAssist.PlayerTeam, new Vector3(0f, 0f, -200f));
+            hostile = BuildRig(2, InstantActionRuntime.EnemyTeam, new Vector3(0f, 0f, -400f));
+            self.Targeting = new TargetSelection();
+
+            ctx.Check(ReferenceEquals(live.RigOfShooter(2), hostile)
+                      && ReferenceEquals(live.RigOfShooter(0), self),
+                $"RigOfShooter resolves a shooter id to the plane that fired — the ids are unique across the session, so it names one plane and not a class of them");
+            ctx.Check(live.RigOfShooter(ProjectilePool.NoShooter) == null
+                      && live.RigOfShooter(9999) == null,
+                $"…and an unowned round or an unregistered id resolves to nothing");
+
+            var impact = new Vector3(0f, 0f, -2f);
+            self.TakeProjectileHit(gun, impact, "nose", ProjectilePool.NoShooter);
+            ctx.Check(self.Targeting.Attackers.Count == 0,
+                $"an unowned round (a turret's, a zeppelin broadside) records no attacker — there is nobody to target");
+            self.TakeProjectileHit(gun, impact, "nose", friendly.PlayerIndex);
+            ctx.Check(self.Targeting.Attackers.Count == 0,
+                $"friendly fire records no attacker either: the engine's gate is a shooter on a DIFFERENT, non-zero team");
+            self.TakeProjectileHit(gun, impact, "nose", hostile.PlayerIndex);
+            ctx.Check(self.Targeting.Attackers.Count == 1
+                      && ReferenceEquals(self.Targeting.Attackers[0], hostile),
+                $"a hostile round puts its shooter on the queue Next Enemy walks first count={self.Targeting.Attackers.Count}");
+            self.TakeProjectileHit(gun, impact, "nose", hostile.PlayerIndex);
+            ctx.Check(self.Targeting.Attackers.Count == 1,
+                $"…and a second round from the same shooter does not list it twice");
+        }
+        finally
+        {
+            self?.Free();
+            friendly?.Free();
+            hostile?.Free();
+            pool?.Free();
+            textures.Dispose();
+        }
     }
 
     /// <summary>B13's <see cref="TargetSelection"/>, entirely tree-free and data-free: plain

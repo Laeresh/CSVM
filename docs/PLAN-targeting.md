@@ -233,7 +233,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ `TargetRef` — one abstraction over every selectable thing
 12. ☑ The classed candidate pool, including zeppelin sub-parts and turret emplacements
 13. ☑ `TargetSelection` — sticky choice, cycles, nearest queries, lifecycle
-14. ☐ Input: `D-pad Up` tap/hold, and the curated keyboard set
+14. ☑ Input: `D-pad Up` tap/hold, and the curated keyboard set
 15. ☐ `--target=` scripted twin
 
 ### Wave C — The HUD
@@ -696,7 +696,35 @@ freecam regression is owed — nothing in a live session constructs a `TargetSel
 death are the only two automatic transitions, and if a third creeps in ("nothing selected, so pick
 one") then `Target Nothing` silently stops working. Test that case specifically.
 
-## B14 ☐ Input: `D-pad Up` tap/hold, and the curated keyboard set
+## B14 ☑ Input: `D-pad Up` tap/hold, and the curated keyboard set
+
+**Landed 2026-08-16.** This is the item that first puts targeting in a live session, so it carries
+the wiring as well as the binds. `FlightRigAssembler` builds one `TargetSelection` per human pane;
+`FlightController.StepTargeting` feeds it every frame; `GameSession` binds the zeppelin sub-part feed
+once the zeppelins exist (they are built after the rigs, which is why it is a delegate and not a
+runtime reference). A live `--fly --chapter=C1 --zeppelins --ai=player_fury` run now prints
+`target pool: enemy=1 ally=0 nonAircraft=99 class=Enemy acquired=ai1_player_fury` — the auto-acquire,
+the 74 C1 emplacements and the 25 zeppelin parts, all through the real path.
+
+Five things later items should build against:
+
+- **The tap/hold decision is its own module.** `Utils/TapHoldButton` owns the timing and the
+  resolve-on-release rule, so the *decoding* is unit-tested even though the device read is not. Reuse
+  it for any later two-action button rather than hand-rolling a timer.
+- **Input is gated on `InPlay`; the rebuild is not.** A downed pilot watches from the freecam
+  controls, which bind `U` among WASD/QE — reading targeting keys from a spectator would fight the
+  camera. The selection keeps re-resolving, so it survives the pilot's own respawn.
+- **The attacker queue is wired** in `TakeProjectileHit`, through the new
+  `ProjectilePool.RigOfShooter`, behind the engine's own different-and-non-zero-team gate.
+  `ForgetTarget` is called from `StepTargeting`'s own prune rather than from a session-wide death
+  broadcast, because outside `--vs` no such broadcast exists.
+- **`sg_switchtarget` cannot ship, and that is a data finding, not a preference.** The string is in
+  the executable; the name appears nowhere in `extracted/zrdr/sounds.zrd.json` (whose entries are all
+  `snd_*`) nor among the 2521 assets in `extracted/soundsh/`. `snd_select` exists and is a plausible
+  candidate, but no resolution to it has been traced, so choosing it would be an invention. Targeting
+  ships silent.
+- **250 ms is TUNE**, ours not the original's — the original needs no threshold because it has a key
+  per action.
 
 **Goal.** `D-pad Up` tap steps to the next enemy; holding it past 250 ms selects the target nearest
 the crosshair. `T` `Y` `U` `I` `O` do next-enemy / next-ally / next-non-aircraft / nearest-crosshair /
@@ -723,6 +751,33 @@ not a scheme — they become rebindable when that item lands.
 **Verify.** In `--fly` with a pad: tap cycles enemies, hold selects the plane nearest the pipper
 including a friendly, `D-pad Down` does nothing. On keyboard, each of the six keys performs its
 action. Confirm holding `D-pad Up` does not also fire a tap on release.
+**Verified (2026-08-16), and what is NOT.** The suite reads no gamepad and no bare key press — the
+same gap A2 and A3 both recorded — so the split is explicit:
+
+*Pinned by tests.* The new `target-input` suite covers everything between the device read and the
+action. `TapHoldButton`: a 0.20 s press taps once on release and never holds; a 0.30 s press holds
+once and the release is **spent**, so the hold does not also fire a tap (the exact thing this item's
+Verify step asks a human to check); a two-second press still fires exactly once, so it is a tap/hold
+split and not a key-repeat; the next press taps again, so a hold leaves no state behind; and a button
+that is simply up reports nothing. The attacker queue is exercised through the real path — three
+rigs in a live pool, `TakeProjectileHit` called with each shooter id — proving `RigOfShooter` resolves
+an id to its plane (and to nothing for `NoShooter` or an unregistered id), that a hostile round
+records its shooter, that friendly fire and unowned rounds record nothing, and that a repeat shooter
+is not listed twice.
+
+*Pinned in-engine, end to end.* `--fly --chapter=C1 --zeppelins --ai=player_fury --frames=400` prints
+`target pool: enemy=1 ally=0 nonAircraft=99 class=Enemy acquired=ai1_player_fury` with no script
+errors: the per-pane instance, the per-frame rebuild, the sub-part feed and the auto-acquire all run
+in a real session.
+
+*Regression.* 1378/1378 units, 68/68 in-engine suites, engine errors clean, and **14/14 golden shots
+hash-identical** — the first item in this plan to touch a live frame path, so the goldens were run
+rather than skipped. The full 8-chapter `--freecam` sweep (C1, C1B, C1C, C2, C2B, C3, C4, C5) is clean
+at zero errors with unchanged node/mesh counts. `dotnet format --verify-no-changes` clean.
+
+*Owed as live play, and only this.* Pressing the physical buttons: that `D-pad Up` and `T`/`Y`/`U`/
+`I`/`O` are actually delivered, that `D-pad Down` stays inert, and how 250 ms feels in the hand. The
+logic behind each of those reads is pinned above; what is untested is the read itself.
 
 **⚠ Traps.** (a) Splitscreen: input must read **this pane's own** device list via `Pads.For(PadDevices)`
 the way `PadPressed` does (`FlightController.cs:2196`) — never `pads[0]`, and P2–P4 are pad-only

@@ -28,10 +28,16 @@ public sealed class TargetSelection
     /// so nothing past it can ever win.</summary>
     public const float CrosshairMaxRange = 2000f;
 
+    /// <summary>Rebuilds to wait before reporting an empty pool in the count breadcrumb — a few
+    /// seconds at 60 Hz, long enough for the AI spawner, the zeppelins and a generator's first drop
+    /// to have happened.</summary>
+    private const int EmptyPoolReport = 300;
+
     private readonly List<TargetRef> _ordered = new();  // the active cycle, in cycle order
     private readonly List<object> _attackers = new();   // the queue 0x24 walks backwards
     private object? _selected;                          // the SOURCE object, never a TargetRef
     private bool _countsLogged;                         // verification breadcrumb: the cycle sizes log once
+    private int _emptyRebuilds;                         // rebuilds seen with an empty pool, for that breadcrumb
 
     /// <summary>The pool this selector cycles over, rebuilt by <see cref="Rebuild"/>.</summary>
     public TargetPool Pool { get; } = new();
@@ -92,16 +98,22 @@ public sealed class TargetSelection
 
         Pool.Rebuild(scan, subParts, ownTeam, self);
         Resolve(position, basis);
-        if (!_countsLogged)
+        // Verification breadcrumb, once per selector: WHICH cycles this session actually has
+        // anything in. The gun assist prints the same shape for its own four lists
+        // (FlightController.ApplyFireOutcome) and for the same reason — a pool that silently
+        // collected nothing looks identical to one nobody built.
+        //
+        // It waits for the first NON-EMPTY pool rather than firing on frame one, because the things
+        // that fill it (AI spawns, the zeppelins, a generator drop) are built after the rigs are:
+        // a frame-one line would report zeroes in every session and say nothing. The empty case is
+        // still reported, once, after EmptyPoolReport rebuilds, so "nothing was ever selectable" is
+        // a line you can read rather than a line you have to notice is missing.
+        if (!_countsLogged && (Pool.Count > 0 || ++_emptyRebuilds >= EmptyPoolReport))
         {
-            // Verification breadcrumb, once per selector: WHICH cycles this session actually has
-            // anything in. The gun assist prints the same shape for its own four lists
-            // (FlightController.ApplyFireOutcome) and for the same reason — a pool that silently
-            // collected nothing looks identical to one nobody built.
             _countsLogged = true;
             GD.Print($"target pool: enemy={Pool.Enemy.Count} ally={Pool.Ally.Count} " +
                      $"nonAircraft={Pool.NonAircraft.Count} class={ActiveClass} " +
-                     $"acquired={(Current is { } t ? t.Name : "-")}");
+                     $"acquired={(Current is { } t && t.Name.Length > 0 ? t.Name : "-")}");
         }
     }
 

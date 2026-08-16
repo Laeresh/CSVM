@@ -88,6 +88,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the forget + catch-up pass (B2), the intercept solver (B3), the four-list candidate scan (B4), and the fire call's step order + 1° launch scatter (B5).
 - `src/Flight/TargetRef.cs` — the player-targeting abstraction (`PLAN-targeting.md` B11): one value over every selectable thing (aircraft, mission structure, turret), wrapping an `AimCandidate` for the pose/team/liveness/source half and adding class, label, optional health/armor, plus `Classify` (the decoded class model) and source-identity matching.
 - `src/Flight/TargetPool.cs` — the player's classed candidate pool (`PLAN-targeting.md` B12): the three cycles (Enemy/Objective, Ally, Non-Aircraft) of `TargetRef`, rebuilt from scratch off the aim assist's `Vehicles`/`Turrets` lists plus an explicit sub-part list; the one place a concrete source type is read.
+- `src/Utils/TapHoldButton.cs` — one button carrying two actions, split by hold duration (`PLAN-targeting.md` B14): edge-detects a level read, times it over `HoldToRepeat`, and answers tap / hold / nothing. The tap resolves on RELEASE; a press whose hold fired is spent. Pure, so the decoding unit-tests even though a gamepad does not.
 - `src/Flight/TargetSelection.cs` — the sticky player selection (`PLAN-targeting.md` B13): owns a `TargetPool`, sorts it into the decoded cycle order, re-finds the selection by entity each frame, and carries every action (next/previous/nearest per class, nearest-crosshairs, target-nothing) plus the attacker queue and the lifecycle.
 - `src/Flight/TurretDefs.cs` — typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
 - `src/Flight/TurretController.cs` — one carried turret gunner (M4 C9a): acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
@@ -2086,8 +2087,8 @@ source type — the kind picks the shape, the source supplies only the name and 
   parts, so CSVM enumerates what it already models as damageable. Do not "correct" it back by citing
   the decode.
 ⚠ `TargetSelection` (B13) owns the instance and prints the per-session `target pool:` count
-  breadcrumb. Nothing in a live session constructs one yet — that wiring rides B14, with the input
-  binds.
+  breadcrumb; B14 wires one per human pane in `FlightRigAssembler` and feeds it every frame from
+  `FlightController.StepTargeting`.
 Pinned by the `target-pool` suite (a synthetic half with no world, plus C1's real emplacement census
 through the same pool); the carried-gunner exclusion rides the `turret-gunner` suite, where a real
 carried turret already exists.
@@ -2144,6 +2145,15 @@ the Z column IS `row2` (the negated forward axis), so no sign fixing is needed.
   zeppelin) from reordering between frames and walking the cycle under the pilot.
 ⚠ Nothing sets `TargetRef.Objective` yet, so the −1 key never fires in a real session — no mission
   `objectiveTarget` data is plumbed. The suite files one by hand to exercise the rule.
+⚠ The count breadcrumb waits for the first NON-EMPTY pool (or reports the empty case once, after
+  `EmptyPoolReport` rebuilds). Firing it on frame one would print zeroes in every session and say
+  nothing, because the AI spawner, the zeppelins and the generators all build after the rigs do.
+⚠ `sg_switchtarget`, the sound the original plays on the nine class actions, **is not shipped and
+  cannot be**: the string is in the executable, but neither `extracted/zrdr/sounds.zrd.json` (whose
+  entries are all `snd_*`) nor the 2521 assets under `extracted/soundsh/` carry it. `snd_select`
+  exists and is a plausible candidate, but no resolution from `sg_switchtarget` to it has been
+  traced, so picking it would be an invention. B14 ships silent; the original is silent for
+  nearest-crosshairs, Target Nothing and Next Enemy's attacker-queue branch anyway.
 ⚠ The player's own death/respawn was **not traced** (`FUN_00421500` and `FUN_00469e20` both zero the
   field; neither was tied to the respawn path). Doing nothing on own respawn already gives the
   required behaviour — a live selection survives the rebuild, a dead one drops to the head — so no
@@ -2151,6 +2161,20 @@ the Z column IS `row2` (the negated forward axis), so no sign fixing is needed.
 Pinned by the `target-selection` suite, which is tree-free and data-free; its geometry deliberately
 makes the sector order and a plain range order DISAGREE, so an implementation that quietly sorted by
 distance fails it.
+
+## src/Utils/TapHoldButton.cs
+One button carrying two actions, split by how long it is held (`PLAN-targeting.md` B14, decision 7).
+Feed it the button's LEVEL each frame; it edge-detects, times over `HoldToRepeat` (zero repeat
+interval, so no second timer), and answers `TapHold.Tap` / `Hold` / `None`. Engine-free: the input
+read stays with the caller, which is what makes the *decoding* unit-testable when the device is not.
+⚠ **The tap resolves on RELEASE, and a press whose hold already fired is spent.** Firing the tap on
+  press instead means every long press begins by performing the wrong action and visibly flickers a
+  wrong selection before correcting itself. `Hold` fires exactly once, on the frame the threshold is
+  crossed, and never repeats however long the button is held — this is a tap/hold split, not a
+  key-repeat.
+⚠ A release with no press reports nothing, so a button already down when the caller starts reading
+  (or held through a state change) cannot produce a phantom tap.
+Pinned by the `target-input` suite.
 
 ## src/Flight/TurretDefs.cs
 Typed reader over the shared `ai.zrd`'s `TURRET` section — 42 `TurretDef`s (docs/formats/turrets.md):
@@ -3983,6 +4007,31 @@ free camera left the eye.
   that still differs between them (`dt`). `UpdateReticle` marches it exactly the decoded distance
   (0.5 s of flight; see `ImpactReticle.cs`), so the two agree for every gun and the reticle does not
   grow a second integration.
+
+`StepTargeting` is the player-targeting frame (`PLAN-targeting.md` B14), run for every human pane
+whose `Targeting` is set: rebuild the pool and re-resolve, prune the attacker queue, then dispatch
+input. That order is the original's — its candidate pass runs in the sim step and a handler steps the
+list it just built, which is why a class change reads one frame late and self-heals. The scan is
+**its own** `AimCandidateSet`, not `ApplyFireOutcome`'s: the gun assist's is built only on a frame
+that fires, and targeting needs one every frame. `TargetSubParts` is the delegate that adds the
+zeppelin sub-parts (bound by `GameSession`, not the assembler — the zeppelins are built after the
+rigs are). D-pad Up runs through `TapHoldButton` (tap = next enemy, hold = nearest-crosshair);
+`T`/`Y`/`U`/`I`/`O` are the curated keyboard set, each edge-detected in its own `_targetKeyPrev` slot.
+⚠ **The team comes off the `Team` FIELD**, not `AimAssist.TeamOfPilot(PlayerIndex)`. That derivation
+  is the wingman-in-the-marker bug (see `VersusHud.OwnTeam`), and it is right for P1 by coincidence,
+  which is exactly why it survived.
+⚠ **Input is gated on `InPlay`, the rebuild is not.** A downed pilot watches from the freecam
+  controls (E44), which bind WASD/QE including `U` — reading targeting keys from a spectator would
+  both re-target a plane that is not there and fight the camera. The selection itself keeps
+  re-resolving, so it survives the pilot's own respawn and a dead target has already dropped to the
+  head of the cycle.
+⚠ The collection pass is skipped entirely while `ActiveClass` is null. That is the original's own
+  short-circuit and the mechanism that keeps `Target Nothing` cleared, not a saving.
+`TakeProjectileHit` also feeds the attacker queue: a hit whose shooter resolves through
+`ProjectilePool.RigOfShooter` to a plane on a **different, non-zero team** is recorded, so
+`Next Enemy/Objective` reaches whoever just shot you before it touches the ordinary cycle. Friendly
+fire and unowned rounds (a turret's, a zeppelin broadside) record nothing, which is the engine's own
+gate.
 
 `ApplyFireOutcome` is where the gun aim assist meets the world (`BL-342`/B5): it rebuilds
 `AimAssist`'s candidate set ONCE per tick (aircraft + fused ordnance off the pool, the world's
