@@ -52,10 +52,10 @@ public static class EffectCatalogue
 
     // The ai_crash_* defs' authored NAME/anim-root: `kestrel`, the AI airframe they were written
     // against (the player family's counterpart is `player`). All 24 shipped defs (3 per chapter)
-    // carry it. The AI crash rig stages a meshless scaffold of this name so the anchor closure
-    // resolves on every airframe; on the actual Kestrel the name resolves to the aircraft model
-    // itself, which is why it is also in CrashScaffoldAnchors (never placed like a template).
-    public const string AiCrashScaffoldName = "kestrel";
+    // carry it. ⚠ Do not build a node for it. NAME equals ANIMATION_ROOT_NAME here, so the caller's
+    // context node replaces both at play time (org/vehicleDamage.md, "Which airframe a stage's anim
+    // binds to"). AirframeScopedAnchors is what drops it from the stage closure.
+    public const string AiCrashAnimRoot = "kestrel";
 
     // The graze family's vector prefix: slot i is "touchdown_" + SurfaceRegistry.Names[i].
     // ⚠ Unlike the crash family it has no bare last-resort anim: an unanswerable slot plays
@@ -133,19 +133,19 @@ public static class EffectCatalogue
     // ⚠ Extend this list, never the mechanical closure walk itself.
     public static readonly string[] CallSuppliedAnchors = { "zep_can_dstry1.flt", "warhawk" };
 
-    // The crash defs' authored airframe anchor: `plane_reset`/`pdpanel5` are written against the
-    // Devastator's own model root, inert on the other ten airframes. No gamez ships a
-    // `player_pfighter` node, so there is no template to stage either way.
-    // ⚠ Also the crash stage's place-exempt set (WorldEffectsFactory.NewCrashTemplateStage): on
-    // the Devastator this name resolves to the aircraft itself, and a relocating CALL would
-    // TopLevel-pin the whole plane at the call site.
-    public static readonly string[] AirframeScopedAnchors = { "player_pfighter" };
+    // The crash defs' authored airframe anchors: `plane_reset`/`pdpanel5` are written against the
+    // Devastator's own model root and `ai_crash_*` against the Kestrel's, inert on every other
+    // airframe. No gamez ships a `player_pfighter` or `kestrel` node, and our model roots are
+    // `player_*`, so neither is a template to stage; the caller's context node carries the def.
+    // ⚠ Also the crash stage's place-exempt set (WorldEffectsFactory.NewCrashTemplateStage): where
+    // such a name does resolve it is the aircraft, and a relocating CALL would TopLevel-pin it.
+    public static readonly string[] AirframeScopedAnchors = { "player_pfighter", AiCrashAnimRoot };
 
-    // The crash rigs' own anim-root scaffold names: `player` (the `player_crash_*` family's crash
-    // root) and `kestrel` (the ai_crash_* family's scaffold, see AiCrashScaffoldName).
-    // ⚠ A relocating CALL must never place either scaffold like a template: TopLevel-pinning it
+    // The crash rig's own anim-root scaffold name: `player`, the crash root every rig builds and
+    // the `player_crash_*` family's authored NAME.
+    // ⚠ A relocating CALL must never place it like a template: TopLevel-pinning the crash root
     // drags the wreck and every pooled template copy to the first crash's site.
-    public static readonly string[] CrashScaffoldAnchors = { "player", AiCrashScaffoldName };
+    public static readonly string[] CrashScaffoldAnchors = { "player" };
 
     /// <summary>The crash-def vector this program can play, built over the whole surface registry
     /// with <see cref="CrashDefPrefix"/> — what <c>BuildFlightCrashRuntime</c> binds and what

@@ -156,7 +156,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Replace `_applied` with per-entry slots, and add retraction (absorbs `BL-384` item 3)
 2. ☑ Derive panel-pairing need from the data, and let `DamageVisuals` be built hull-only
-3. ☐ Play `ai_crash_*` on the aircraft: drop the `kestrel` scaffold for a context node
+3. ☑ Play `ai_crash_*` on the aircraft: drop the `kestrel` scaffold for a context node
 
 ### Wave B — Wire the AI up
 
@@ -282,9 +282,13 @@ caller supplies the **vehicle's own node** as context, and because these defs ha
 to").
 
 **Approach.** Drop the scaffold and play the `ai_crash_*` family with the AI plane as the context
-node. Check that `CrashScaffoldAnchors`' place-exemption (⚠ TopLevel-pinning the scaffold would drag
-the wreck and every pooled template copy to the first crash's site) is either no longer needed or is
-transferred to whatever now anchors the family.
+node. The place-exemption (⚠ TopLevel-pinning the scaffold would drag the wreck and every pooled
+template copy to the first crash's site) is **transferred, not dropped**: `kestrel` moves from
+`CrashScaffoldAnchors` to `AirframeScopedAnchors`, whose entries are both dropped from the stage-root
+closure (`EffectCatalogue.SuppliedElsewhere`, which is what keeps the closure from throwing on a
+name no rig carries) and place-exempt. `NewCrashTemplateStage` concatenates the two lists, so the
+exempt set is unchanged; `CrashScaffoldAnchors` shrinks to `player`, the crash root that actually
+parents the wreck and the pool containers.
 
 **Model recommendation.** high — it removes a workaround in the crash-rig assembly, and the failure
 mode (a pinned wreck at the first crash site) is spectacular and easy to miss in a headless run.
@@ -294,8 +298,16 @@ shoot down a second one somewhere else and confirm its effects play at *its* sit
 one's. Full 8-chapter `--freecam` regression.
 
 **⚠ Traps.** `destroyed` is built into the crash root by `BuildDestroyed` while `healthy` is on the
-aircraft, so the def spans two subtrees — the context node must be chosen so both resolve.
-<TODO: confirm which node satisfies both, or whether the two subtrees need reparenting.>
+aircraft, so the def spans two subtrees — the context node must be chosen so both resolve. **The
+crash root satisfies both, and no reparenting is needed**: the crash runtime binds the whole
+controller (`crashRuntime.Bind(controller, …)`), and with `NameResolveFallback` set every rig is one
+name scope, so `NameResolver.ResolveScoped`'s third tier answers a name the anchor's own subtree
+lacks. `destroyed` resolves in tier 1 under the crash root and `healthy` in tier 3 across the rig.
+The able-to-fail control is the bind scope, not the anchor: narrowing `Bind` to the crash root
+leaves `healthy=on destroyed=off` on a real AI crash. The `kestrel` NAME resolves nowhere in a rig
+(our model roots are `player_*`), so `AnimRuntime.Play`'s placeless-def arm falls back to the
+caller's anchor, which is the crash root — the same shape as the player family, where the `player`
+NAME matches that node outright.
 Do not "fix" this by hiding the aircraft from `Crash()` in code; that moves authored behaviour into
 code, which is the pattern this codebase keeps decoding its way out of.
 

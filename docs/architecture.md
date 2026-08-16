@@ -3228,8 +3228,9 @@ Builds the impact/destruction effect stages and the per-plane crash runtime: the
 playable slot of the crash-def vector (`EffectCatalogue.CrashDefTableFor` — `player_crash_*` for a
 human rig, `ai_crash_*` for an AI plane, keyed on `IsHumanPiloted`; handed to the
 controller as `CrashDefs`; the struck surface is only known at impact, so the whole vector is
-bound and `FlightController.Crash` indexes it with the struck body's surface id — an AI rig also
-gets a meshless `kestrel` scaffold under the crash root, the ai family's authored NAME)
+bound and `FlightController.Crash` indexes it with the struck body's surface id — the ai family's
+authored NAME `kestrel` resolves nowhere in a rig, so those defs take the crash root as their
+context node the way the original's caller supplies one)
 **plus** `EffectCatalogue.PlaneDamageEffectAnims` (the four `<part>_damage_effects` shims →
 `random_gun_impact` → `yellow_sparks_follow`) **plus** `EffectCatalogue.PropChoreographyAnims`
 (`startprops`/`stopprops`), because those need exactly what it already has — the

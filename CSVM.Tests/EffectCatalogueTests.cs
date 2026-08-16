@@ -129,8 +129,8 @@ public class EffectCatalogueTests
 
     /// <summary>The per-chapter census, as a golden: every chapter's compiled anim program defines
     /// exactly the three <c>ai_crash_*</c> defs (<c>default</c>/<c>dirt</c>/<c>water</c>) — the
-    /// same trio as the player and touchdown families — anchored on the shared <c>kestrel</c>
-    /// scaffold NAME, and the family pick follows the pilot: a human rig binds
+    /// same trio as the player and touchdown families — carrying the shared <c>kestrel</c>
+    /// anim-root NAME, and the family pick follows the pilot: a human rig binds
     /// <c>player_crash_*</c>, an AI plane <c>ai_crash_*</c> off the same program.</summary>
     [ExtractedDataFact]
     public void EveryChapterShipsExactlyTheThreeAiCrashDefs()
@@ -154,7 +154,7 @@ public class EffectCatalogueTests
             foreach (var def in ai.PlayableDefs)
             {
                 Assert.All(program.ByAnimName(def),
-                    d => Assert.Equal(EffectCatalogue.AiCrashScaffoldName, d.Name));
+                    d => Assert.Equal(EffectCatalogue.AiCrashAnimRoot, d.Name));
             }
 
             var human = EffectCatalogue.CrashDefTableFor(program, humanPiloted: true, "bloodhawk");

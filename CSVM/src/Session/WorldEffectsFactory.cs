@@ -283,15 +283,6 @@ public sealed class WorldEffectsFactory
         // before the stage derivation, because the root closure is over THIS family's defs.
         var crashDefs = EffectCatalogue.CrashDefTableFor(crashProgram, controller.IsHumanPiloted,
             planeName);
-        if (!controller.IsHumanPiloted)
-        {
-            // The ai_crash_* defs' authored NAME is `kestrel` (the AI airframe they were written
-            // against); a meshless scaffold of that name under the crash root anchors them on
-            // every airframe. Place-exempt via CrashScaffoldAnchors, like `player`.
-            var aiScaffold = new Node3D { Name = EffectCatalogue.AiCrashScaffoldName };
-            aiScaffold.SetMeta(AnimRuntime.NameMeta, EffectCatalogue.AiCrashScaffoldName);
-            crashRoot.AddChild(aiScaffold);
-        }
 
         // Effect-template roots, one instance per player; an unresolved anchor throws, naming
         // the def instead of silently playing nothing.
@@ -305,6 +296,8 @@ public sealed class WorldEffectsFactory
             rootNames, _pools);
 
         // The plane's destroyed wreck (pieceN meshes), built hidden; the crash def shows + flings it.
+        // ⚠ Keep the whole rig one name scope: a crash def spans this subtree and the plane model's
+        // (`healthy`), and only the bind's rig-wide fallback tier resolves both off one context node.
         var destroyed = planeBuilder.BuildDestroyed(planeName);
         var restPoses = new List<(Node3D, Transform3D)>();
         if (destroyed != null)
@@ -350,6 +343,9 @@ public sealed class WorldEffectsFactory
         controller.AddChild(crashRuntime);
         controller.CrashRuntime = crashRuntime;
         controller.CrashDefs = crashDefs;
+        // The context node both families play against: the ai_crash_* NAME `kestrel` resolves
+        // nowhere in a rig, so Play falls back to this anchor, which is the node the original's
+        // own caller supplies (org/vehicleDamage.md).
         controller.CrashAnchor = crashRoot;
         controller.CrashRestPoses = restPoses;
         // The plane model's built visibility, so respawn can undo the crash def's healthy/markers

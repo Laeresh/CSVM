@@ -377,7 +377,7 @@ public static class Suites
         into.Add(new TestHarness.Suite("crash-rig-anchors",
             "binding the crash rig leaves the airframe model under the controller — even the Devastator, whose model root shares the crash defs' authored NAME — and stages every pooled copy in the same reset pose", CrashRigAnchors));
         into.Add(new TestHarness.Suite("ai-crash-defs",
-            "an AI plane's crash rig binds the ai_crash_* family and its crash indexes it by the struck surface id — dirt(13) plays ai_crash_dirt, no material plays ai_crash_default — while a human rig off the same factory keeps player_crash_* (G21)", AiCrashDefs));
+            "an AI plane's crash rig binds the ai_crash_* family and its crash indexes it by the struck surface id — dirt(13) plays ai_crash_dirt, no material plays ai_crash_default, and the def switches off both the airframe's healthy subtree and the crash root's wreck — while a human rig off the same factory keeps player_crash_* (G21)", AiCrashDefs));
         into.Add(new TestHarness.Suite("hostile-marker-hud",
             "the targeting HUD (TargetHud, every flight session): the tracker picks the " +
             "pane's nearest LIVE AI hostile off the pool's own aircraft roster (a closer human, " +
@@ -10283,6 +10283,16 @@ public static class Suites
                               d.StartsWith(Session.EffectCatalogue.AiCrashDefPrefix, System.StringComparison.Ordinal)),
                     $"the AI table's playable slots are the ai_crash_* trio [{string.Join(", ", ai.CrashDefs.PlayableDefs)}]");
 
+                // The two subtrees one context node has to reach: `healthy` sits on the plane
+                // model, `destroyed` under the crash root. Both shown first, or the wreck's
+                // built-hidden state would answer for the deactivation instead of the def.
+                var healthy = ai.PlaneModel?.FindChild("healthy", true, false) as Node3D;
+                var wreck = ai.CrashAnchor?.FindChild("destroyed", true, false) as Node3D;
+                if (healthy != null)
+                    healthy.Visible = true;
+                if (wreck != null)
+                    wreck.Visible = true;
+
                 // A crash on a known surface: a struck body stamped dirt(13) — the id cascade's
                 // own-slot arm, through the production Crash path.
                 dirt = new StaticBody3D { Name = "dirt_probe" };
@@ -10291,6 +10301,10 @@ public static class Suites
                 ai.DebugForceCrash(null, dirt);
                 ctx.Check(ai.Crashed && ai.LastCrashDef == Session.EffectCatalogue.AiCrashDefPrefix + "dirt",
                     $"an AI crash on dirt(13) plays ai_crash_dirt def={ai.LastCrashDef ?? "-"}");
+                string healthyState = healthy == null ? "-" : healthy.Visible ? "on" : "off";
+                string wreckState = wreck == null ? "-" : wreck.Visible ? "on" : "off";
+                ctx.Check(healthy is { Visible: false } && wreck is { Visible: false },
+                    $"…and the def's own OBJECT_ACTIVE_STATE events reach BOTH subtrees off one context node: healthy={healthyState} destroyed={wreckState}");
 
                 // No struck body: the null-material arm resolves slot 0 of the SAME family.
                 ai.Respawn();
