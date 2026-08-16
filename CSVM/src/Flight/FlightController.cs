@@ -1313,7 +1313,7 @@ public partial class FlightController : Node3D
                 clock.Halted = !clock.Halted;
         }
         _pausePrev = pausePressed;
-        bool halted = PauseState?.Paused ?? (clock?.Halted ?? false);
+        bool halted = PauseState?.Halted ?? (clock?.Halted ?? false);
         if (clock != null)
             clock.Halted = halted;
         if (halted != _haltPrev)
