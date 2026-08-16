@@ -1938,21 +1938,19 @@ vector instead (M4 G21 — `BuildFlightCrashRuntime` keys the family on `IsHuman
 cascade, same trio per chapter, and its defs hide the wreck rather than flinging pieces);
 `LastCrashDef` records the selection and the `CRASH … def=` line prints it, which is how the
 `ai-crash-defs` suite and a headless run read which family fired.
-**The original's death is two-stage; this build's `Crash` only ever models the second stage.**
-`FUN_00498bf0` forks on a signed field of the death event: negative plays a canned mid-air destruct
-(`FUN_004b82d0` — no `player_crash_*` def, sets the byte `this+0x91f`) and defers the surface pick
-to ground contact; non-negative builds a synthetic impact record carrying that same field as the
-surface id and drives the id cascade directly, which is the only arm `Crash` implements. The
-handshake lives in `FUN_0048b920` `0x0048bb0a`–`0x0048bb30`: with `0x91f` set, a resolved bare-
-`player` handle suppresses the anim; otherwise the running mid-air anim at `this+0x6d8` is released
-before the crash anim starts. Nothing in this build's M3 slice shoots a plane down, so the negative
-arm has no trigger today — `Crash` fires once, at first (and only) contact, and always takes the
-cascade above. `player_crash_default` is the cascade's **fallback arm**, reached by a null material,
-an out-of-range id or an empty slot — it is NOT the original's air/no-impact variant, a reading
-`BL-059` disproved; the mid-air destruct is a separate, unwired anim with
-no `player_crash_*` def of its own. Modelling the two-stage split — wiring a trigger for the negative
-arm — is future work for when the player becomes killable; `this+0x19f ∈ {0,4}` inside
-`FUN_004b82d0` is undecoded and stays unmodelled.
+**Death is two-stage, and the two stages are two methods.** `Destroy` is stage one: whole-vehicle
+health at zero starts `DestroyDef`, the airframe's own self-named def (`fury-fury`, `player-player`),
+leaves the wreck VISIBLE, cuts the camera and raises `Downed`. `Crash` is stage two, the ground
+contact — a live aircraft flown into terrain, or that wreck landing. Which system carries the wreck
+down is asked of the data (`EffectCatalogue.FliesOwnHull`): the eleven airframe defs author an
+`ObjectMotion` on `MAIN_ROOT_NODE` with their own bounce landing and own the fall outright, so no
+`*_crash_*` follows; `player` authors none, so `_wreckFalling` keeps the hull in the flight model
+(no input, no weapons) until `StepWreckFall`'s sweep reaches the world and `Crash` plays
+`player_crash_*`. That second call is the one re-entry `Crash` allows while `_crashed`, and it
+re-fires neither `Downed` nor the camera cut. `player_crash_default` is the cascade's **fallback
+arm**, reached by a null material, an out-of-range id or an empty slot — it is NOT an air/no-impact
+variant, a reading `BL-059` disproved. `this+0x19f ∈ {0,4}` inside `FUN_004b82d0` is undecoded and
+stays unmodelled.
 It also fires `Audio.OnEngineStop` (the wind-down cue, layered over the explosion) and plays
 `stopprops` on `CrashRuntime` — the one call site every engine-death path shares, whether the
 collision resolver called it for a full-speed impact, for whole-vehicle health exhausting on a
@@ -3250,7 +3248,9 @@ The record of which authored anims are playable effects, and what their defs nee
 tables every effect producer must stay inside, static and engine-free. Owns `EffectAnimNames`, the
 crash-rig's own name sets (`CrashDefTable`/`AiCrashDefTable`/`TouchdownDefTable`,
 `PlaneDamageEffectAnims`, `PropChoreographyAnims`, and the two damage-stage menus
-`PlayerDamageStageAnims`/`AiDamageStageAnims` with their union `DamageStageAnims`), `ResolvedSurfaceIds`
+`PlayerDamageStageAnims`/`AiDamageStageAnims` with their union `DamageStageAnims`), the death
+path's OTHER slot (`AirframeDestroyAnims`/`DestroyAnimFor`, the self-named destroy def, with
+`FliesOwnHull` asking the data which family owns the landing), `ResolvedSurfaceIds`
 (the collider overlay's colour key, `BL-345`), and the anchor-root derivation
 (`StageRootsFor`/`WorldStageRoots`/`CrashStageRoots`) — this IS `WorldEffectsFactory`'s stage
 source; an unstageable anchor fails the build rather than leaving a def anchored on nothing. Every
@@ -3266,6 +3266,8 @@ controller as `CrashDefs`; the struck surface is only known at impact, so the wh
 bound and `FlightController.Crash` indexes it with the struck body's surface id — the ai family's
 authored NAME `kestrel` resolves nowhere in a rig, so those defs take the crash root as their
 context node the way the original's caller supplies one)
+**plus** this rig's destroy def (`EffectCatalogue.DestroyAnimFor` → `DestroyDef`, with
+`DestroyDefFliesWreck` recording whether that def carries the wreck's fall and landing itself)
 **plus** `EffectCatalogue.PlaneDamageEffectAnims` (the four `<part>_damage_effects` shims →
 `random_gun_impact` → `yellow_sparks_follow`) **plus** `EffectCatalogue.PropChoreographyAnims`
 (`startprops`/`stopprops`), because those need exactly what it already has — the

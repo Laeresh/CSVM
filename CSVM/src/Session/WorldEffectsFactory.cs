@@ -160,9 +160,9 @@ public sealed class WorldEffectsFactory
     /// can ask it on a replica rig (the wreck and part names vary by airframe, so the answer is
     /// per-plane).</summary>
     public static IReadOnlyList<string> CrashStageRootNames(AnimProgram program, GameZ gamez,
-        Node3D rigScope, SurfaceDefTable? crashDefs = null) =>
+        Node3D rigScope, SurfaceDefTable? crashDefs = null, string? destroyAnim = null) =>
         EffectCatalogue.CrashStageRoots(program, StageRootResolver(gamez, rigScope),
-            crashDefs ?? EffectCatalogue.CrashDefTable(program));
+            crashDefs ?? EffectCatalogue.CrashDefTable(program), destroyAnim);
 
     /// <summary>Stages the crash rig's pooled effect-template copies under
     /// <paramref name="crashRoot"/>, one <c>poolN</c> container per depth level, every copy hidden.
@@ -284,11 +284,20 @@ public sealed class WorldEffectsFactory
         var crashDefs = EffectCatalogue.CrashDefTableFor(crashProgram, controller.IsHumanPiloted,
             planeName);
 
+        // The other slot on the death path (org/vehicleDamage.md): the self-named destroy def,
+        // played when health reaches zero while the *_crash_* family above waits for ground contact.
+        var destroyAnim = EffectCatalogue.DestroyAnimFor(controller.IsHumanPiloted, planeName);
+        if (destroyAnim != null && crashProgram.ByAnimName(destroyAnim).Count == 0)
+        {
+            Log.Warn("anim", $"crash rig '{planeName}': no destroy def '{destroyAnim}' in this chapter's program — a kill will leave no wreck");
+            destroyAnim = null;
+        }
+
         // Effect-template roots, one instance per player; an unresolved anchor throws, naming
         // the def instead of silently playing nothing.
         // ⚠ Parent the crash root first: `player` is the defs' own anchor, and an unparented scope reports the whole rig unanchorable.
         controller.AddChild(crashRoot);
-        var rootNames = CrashStageRootNames(crashProgram, gamez, controller, crashDefs);
+        var rootNames = CrashStageRootNames(crashProgram, gamez, controller, crashDefs, destroyAnim);
         // Staged in pool slots: a single shared copy would be relocated onto every new tear,
         // discarding the previous panel's burst mid-flight. Sizes come from effect_pools.json's
         // crash section; AnimRuntime.AssignCallerSlot pins each call anchor to its own slot.
@@ -349,10 +358,15 @@ public sealed class WorldEffectsFactory
         // Bind only the closure of names that play ON this aircraft (CrashRigAnimNames), never the
         // full ~800-def world program — its ~150 generic-named defs would mis-anchor onto this
         // plane's parts and run their reset states on it.
-        crashRuntime.Bind(controller, crashProgram.Subset(EffectCatalogue.CrashRigAnimNames(crashDefs)));
+        crashRuntime.Bind(controller,
+            crashProgram.Subset(EffectCatalogue.CrashRigAnimNames(crashDefs, destroyAnim)));
         controller.AddChild(crashRuntime);
         controller.CrashRuntime = crashRuntime;
         controller.CrashDefs = crashDefs;
+        controller.DestroyDef = destroyAnim;
+        // Which of the two families owns the landing, asked of the data rather than of who is
+        // flying: a def that takes the hull over also authors its own bounce sequences.
+        controller.DestroyDefFliesWreck = EffectCatalogue.FliesOwnHull(crashProgram, destroyAnim);
         // The context node both families play against: the ai_crash_* NAME `kestrel` resolves
         // nowhere in a rig, so Play falls back to this anchor, which is the node the original's
         // own caller supplies (org/vehicleDamage.md).

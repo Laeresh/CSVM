@@ -178,8 +178,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — The destroy anim and the falling wreck
 
 18. ☑ Handle `Callback` events, 16 (velocity into the instance) and 15 (stop the stage anims)
-19. ☐ Play the self-named destroy anim on death, and move `*_crash_*` to ground impact
-20. ☐ The parachute: `chuteman` at 3.0 s, and the wreck's own landing sequences
+19. ☑ Play the self-named destroy anim on death, and move `*_crash_*` to ground impact
+20. ◐ The parachute: `chuteman` at 3.0 s, and the wreck's own landing sequences — the landing lands
+    with D19; the chute is **blocked**, `chuteman` is a template root of the **planes** gamez and the
+    crash rig stages from the **chapter** gamez only
 21. ☐ Evidence for the fall, against the two reference recordings
 
 ## ⚠ Wave D — what Waves A to C got wrong
@@ -687,10 +689,17 @@ the death event (`FlightController.cs:2103`), so the ground-impact def IS our de
 **Approach.** A second def reference beside `CrashDefs`, resolved by the airframe's own name, played
 on the death event; the existing surface-indexed table moves to the wreck's ground contact. The
 destroy anim's own `destroyed_dirt` / `destroyed_water` / `bounce_effects` sequences already carry a
-landing, so establish which of the two actually fires on impact in the original before wiring both
-and double-playing the explosion. <TODO: resolve whether the destroy anim's own landing sequences and
-`FUN_0048b920`'s table both run, or whether the table is the fallback the decode describes when the
-material index is out of range.>
+landing. **Resolved from the authored data: they never both run on one event.** `randomdestseq`'s
+`ObjectMotion` names `MAIN_ROOT_NODE` with `bounce_sequence { default: bounce_effects, water:
+destroyed_water }` and `do_intersections`, so on all eleven airframe defs the destroy anim takes the
+hull over and owns the fall AND the landing; the vehicle stops moving itself, `FUN_0048b920` never
+sees a contact, and `ai_crash_*` stays what it is for, a live aircraft flown into terrain.
+`player-player` authors no hull `ObjectMotion`, only the four `pieceNseq` launches, so the player's
+hull keeps falling as a vehicle and its ground contact does run the table — which is why
+`player-player_crash_dirt` leaves `destroyed` active with `large_10sec_fire` on it. The split is
+therefore derived per def (`EffectCatalogue.FliesOwnHull`), not keyed on who is flying.
+`destroyed_dirt` is authored but unreferenced in every airframe def; the default bounce branch names
+`bounce_effects`.
 
 **Model recommendation.** high — it re-times the whole death path and it is the item the reference
 recordings judge.
@@ -721,6 +730,15 @@ sequences are `destroyed_dirt` (`snd_exp_ground_a` + `call_car_trails`), `destro
 
 **Approach.** Falls out of D19 if the def is played whole; this item is the check that it did, plus
 whatever anchoring `chuteman` needs. Report rather than invent if the parachute has no anchor.
+
+**Standing after D19.** The timed 3.0 s `CallAnimation` and the landing sequences do fall out: the
+def is played whole and its `bounce_sequence` carries `bounce_effects`/`destroyed_water`.
+`chuteman` does NOT. Its anchor is a parentless template root of the **planes** gamez
+(`extracted/planes`), and the crash rig stages template roots from the CHAPTER gamez only, so
+`EffectCatalogue.StageRootsFor` reported it unstageable and the rig build threw. D19 parked it in
+`CallSuppliedAnchors`, which keeps the def bound and called but stages no copy, so the parachute
+draws nothing. Making it draw means giving `WorldEffectsFactory.BuildFlightCrashRuntime` the planes
+gamez as a second stage source, which changes both spawners' call sites.
 
 **Model recommendation.** medium — mostly verification, unless `chuteman` needs its own anchoring.
 

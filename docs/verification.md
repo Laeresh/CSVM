@@ -156,6 +156,13 @@ and leave gaps when retiring old ones.
   regression. The A/B against the undamaged control is the cheap check, and it answers both ways:
   it is also how a shot that IS worth pinning proves it.
 
+- **SHOT-30** — **A headless AI shootdown is reachable, and it writes `DESTROYED …`, not
+  `CRASH into …`.** `RunProbe.ps1 --chapter=C1 --plane=player_bhawk --ai=player_fury
+  --ai-damage=0.02 --fire --frames=1200` kills the AI plane in about a second and logs
+  `DESTROYED by gunfire (…) def=fury wreck=falling (anim)`. Grepping a run for `CRASH` alone
+  reads a working shootdown as nothing having happened, because the two death stages are two
+  different log lines and only the ground contact writes the second.
+
 ## GOLD — golden images
 
 - **GOLD-1** — **Update moved hashes with the visual change, and explain each moved shot in the

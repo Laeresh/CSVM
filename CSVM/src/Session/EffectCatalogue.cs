@@ -58,6 +58,10 @@ public static class EffectCatalogue
     // binds to"). AirframeScopedAnchors is what drops it from the stage closure.
     public const string AiCrashAnimRoot = "kestrel";
 
+    // The human player's DESTROY def, the anim FUN_00476250 resolves into the death slot for the
+    // vehicle named `player`. Same NAME as the crash root, so it needs no anchor of its own.
+    public const string PlayerDestroyAnim = "player";
+
     // The graze family's vector prefix: slot i is "touchdown_" + SurfaceRegistry.Names[i].
     // ⚠ Unlike the crash family it has no bare last-resort anim: an unanswerable slot plays
     // nothing, so TouchdownDefTable passes a null lastResort. Built once per level (a global),
@@ -142,21 +146,47 @@ public static class EffectCatalogue
 
     // Anchors the closure below reports that no bind stages, because the CALL reaching the
     // definition supplies its anchor instead of its own NAME: `zep_can_dstry1.flt` (absent from
-    // C2's gamez entirely) and `warhawk` (startprops/stopprops' own NAME, a shared authoring
-    // label no real airframe carries). Curation, not derivation.
-    // ⚠ Extend this list, never the mechanical closure walk itself.
-    public static readonly string[] CallSuppliedAnchors = { "zep_can_dstry1.flt", "warhawk" };
+    // C2's gamez entirely), `warhawk` (startprops/stopprops' own NAME, a shared authoring
+    // label no real airframe carries) and `chuteman`, the destroy def's parachute. Curation.
+    // ⚠ `chuteman` is a template root of the PLANES gamez, which the crash rig does not stage
+    // from, so the pilot's chute is bound and called but draws nothing yet.
+    public static readonly string[] CallSuppliedAnchors =
+        { "zep_can_dstry1.flt", "warhawk", "chuteman" };
 
-    // Airframe model-root names authored as anchors, none of which any chapter gamez ships:
-    // `player_pfighter` (plane_reset, pdpanelN, random_remote_damage), `piratefighter`
-    // (pfsmoketrail) and `kestrel` (ai_crash_*). The anchor is whichever airframe stages the def
-    // (org/vehicleDamage.md, "Which airframe a stage's anim binds to"), so none is a template.
+    // The DESTROY def each of the eleven airframes ships under its own name, keyed by the plane
+    // model node a rig is built from. Slot one of the two on the death path
+    // (org/vehicleDamage.md, "What happens to the wreck"), started when health reaches zero.
+    // ⚠ Curated, and never derived by stripping `player_`: the original keys the slot on the AI
+    // vehicle def's own `nodename` (`devastator` authors `piratefighter`), which diverges from the
+    // player node on three airframes. Extend the map; the resolver below stays mechanical.
+    public static readonly IReadOnlyDictionary<string, string> AirframeDestroyAnims =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["player_autogyro"] = "autogyro",
+            ["player_avenger"] = "avenger",
+            ["player_balmoral"] = "balmoral",
+            ["player_bhawk"] = "bloodhawk",
+            ["player_brigand"] = "brigand",
+            ["player_fbrand"] = "firebrand",
+            ["player_fury"] = "fury",
+            ["player_kestrel"] = "kestrel",
+            ["player_peacemaker"] = "peacemaker",
+            ["player_pfighter"] = "piratefighter",
+            ["player_warhawk"] = "warhawk",
+        };
+
+    // Airframe model-root names authored as anchors, none of which any chapter gamez ships: the
+    // eleven `player_*` roots, `piratefighter` (pfsmoketrail), `kestrel` (ai_crash_*) and the
+    // eleven destroy defs' own names. The anchor is whichever airframe stages the def
+    // (org/vehicleDamage.md), so none is a template.
     // ⚠ Also the crash stage's place-exempt set (WorldEffectsFactory.NewCrashTemplateStage): where
     // such a name does resolve it is the aircraft, and a relocating CALL would TopLevel-pin it.
     public static readonly string[] AirframeScopedAnchors =
-    {
-        "player_pfighter", "piratefighter", AiCrashAnimRoot,
-    };
+        new[] { "piratefighter", AiCrashAnimRoot }
+            .Concat(AirframeDestroyAnims.Keys)
+            .Concat(AirframeDestroyAnims.Values)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
     // The crash rig's own anim-root scaffold name: `player`, the crash root every rig builds and
     // the `player_crash_*` family's authored NAME.
@@ -189,18 +219,48 @@ public static class EffectCatalogue
         string planeName) =>
         humanPiloted ? CrashDefTable(program) : AiCrashDefTable(program, planeName);
 
+    /// <summary>The DESTROY def this rig plays when its hull reaches zero: the fixed
+    /// <see cref="PlayerDestroyAnim"/> for a human rig, the airframe's own self-named def
+    /// otherwise (<see cref="AirframeDestroyAnims"/>). Null for a plane node the map does not
+    /// carry, which leaves that rig with no destroy anim rather than a guessed one.</summary>
+    public static string? DestroyAnimFor(bool humanPiloted, string planeNodeName) =>
+        humanPiloted ? PlayerDestroyAnim
+            : AirframeDestroyAnims.TryGetValue(planeNodeName, out var name) ? name : null;
+
+    /// <summary>Whether <paramref name="destroyAnim"/> flies the hull itself — it authors an
+    /// <c>ObjectMotion</c> on the <c>MAIN_ROOT_NODE</c> sentinel, which takes the wreck over and
+    /// carries its own <c>bounce_sequence</c> landing. The eleven airframe defs do; <c>player</c>
+    /// does not, and its hull falls under the flight model to a <c>player_crash_*</c> instead.
+    /// Asked of the data, so neither landing is wired twice.</summary>
+    public static bool FliesOwnHull(AnimProgram program, string? destroyAnim)
+    {
+        if (string.IsNullOrEmpty(destroyAnim))
+            return false;
+        foreach (var def in program.ByAnimName(destroyAnim))
+            foreach (var seq in def.Sequences)
+                foreach (var ev in seq.Events)
+                    if (ev.Kind == "ObjectMotion"
+                        && string.Equals(ev.Data.Str("node"), "MAIN_ROOT_NODE",
+                            StringComparison.OrdinalIgnoreCase))
+                        return true;
+        return false;
+    }
+
     /// <summary>Everything the per-player crash rig binds — every playable crash-vector slot (the
     /// struck surface is only known at impact, so the whole vector is bound), the four damage
-    /// shims, the prop choreography and both authored damage-stage menus, i.e. every def that plays
-    /// ON one aircraft — and therefore the name set whose anchor-root closure that rig's own
-    /// template stage must satisfy (<see cref="CrashStageRoots"/>). Both menus regardless of who is
-    /// at the controls: the rig is built before its ladder is read.</summary>
-    public static IReadOnlyList<string> CrashRigAnimNames(SurfaceDefTable crashDefs)
+    /// shims, the prop choreography, both authored damage-stage menus and this rig's destroy def,
+    /// i.e. every def that plays ON one aircraft — and therefore the name set whose anchor-root
+    /// closure that rig's own template stage must satisfy (<see cref="CrashStageRoots"/>). Both
+    /// menus regardless of who is at the controls: the rig is built before its ladder is read.</summary>
+    public static IReadOnlyList<string> CrashRigAnimNames(SurfaceDefTable crashDefs,
+        string? destroyAnim = null)
     {
         var names = new List<string>(crashDefs.PlayableDefs);
         names.AddRange(PlaneDamageEffectAnims);
         names.AddRange(PropChoreographyAnims);
         names.AddRange(DamageStageAnims);
+        if (!string.IsNullOrEmpty(destroyAnim))
+            names.Add(destroyAnim);
         return names;
     }
 
@@ -265,8 +325,9 @@ public static class EffectCatalogue
     /// own family (player or AI); the no-table overload keeps the player family for callers that
     /// predate the split.</summary>
     public static IReadOnlyList<string> CrashStageRoots(AnimProgram program,
-        Func<string, AnchorPlacement> resolveRoot, SurfaceDefTable crashDefs) =>
-        StageRootsFor(program, CrashRigAnimNames(crashDefs), resolveRoot);
+        Func<string, AnchorPlacement> resolveRoot, SurfaceDefTable crashDefs,
+        string? destroyAnim = null) =>
+        StageRootsFor(program, CrashRigAnimNames(crashDefs, destroyAnim), resolveRoot);
 
     /// <inheritdoc cref="CrashStageRoots(AnimProgram, Func{string, AnchorPlacement}, SurfaceDefTable)"/>
     public static IReadOnlyList<string> CrashStageRoots(AnimProgram program,

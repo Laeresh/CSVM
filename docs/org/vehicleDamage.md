@@ -433,6 +433,18 @@ which family a def belongs to: the player's three `player_crash_*` defs also car
 authors a `Callback` of 12, a code the vehicle-death handler does not take. The authored VALUE is
 what decides what a callback means, never the def it sits in.
 
+**The two slots never both fire on one event, and which one carries the landing is authored per
+family.** `randomdestseq`'s `ObjectMotion` names `MAIN_ROOT_NODE` with `impact_force`, gravity
+-9.8, `do_intersections`, `run_time 20` and `bounce_sequence { default: bounce_effects, water:
+destroyed_water }`, so on all eleven airframe defs the destroy anim takes the hull over and owns
+both the fall and the ground explosion; the vehicle no longer moves itself, so `FUN_0048b920` never
+sees a contact and the `ai_crash_*` table is left to what it is for, a LIVE aircraft flown into
+terrain. `player-player` authors no hull `ObjectMotion` at all — only `piece1seq`..`piece4seq`,
+each with its own `pNgrndhit` bounce — so the player's hull keeps falling as a vehicle and its
+ground contact does run the table. That is why `player-player_crash_dirt` leaves `destroyed` active
+and plays `large_10sec_fire` on it: the node is only active because `destroy_craft` switched it on.
+Wiring both families to the kill would play the ground explosion twice.
+
 **Nothing removes a destroyed vehicle.** There is no timeout, no distance cull, no count cap and no
 recycling on the death path. The wreck stops being visible when the GROUND-IMPACT anim switches its
 nodes off, and the object stays allocated, dead and hidden, until the mission tears down.
