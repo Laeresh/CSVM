@@ -63,7 +63,7 @@ public class BallisticsTests
         var pos = Vector3.Zero;
         var vel = new Vector3(0f, 0f, -100f);
         for (int i = 0; i < 100; i++)
-            Ballistics.Step(ref pos, ref vel, 0f, 20f, 0.01f);
+            Ballistics.Step(ref pos, ref vel, 0f, 20f, 100f, 0.01f);
 
         Assert.Equal(-10.1f, pos.Y, 3);
         Assert.Equal(-100f, pos.Z, 3);   // gravity is vertical: the horizontal run is untouched
@@ -79,11 +79,75 @@ public class BallisticsTests
         var pos = Vector3.Zero;
         var vel = new Vector3(0f, 0f, -450f);
         for (int i = 0; i < 10; i++)
-            Ballistics.Step(ref pos, ref vel, 150f, 0f, 0.1f);
+            Ballistics.Step(ref pos, ref vel, 150f, 0f, 1000f, 0.1f);
 
         Assert.Equal(-532.5f, pos.Z, 2);
         Assert.Equal(-600f, vel.Z, 3);   // 450 + 10 × 15
         Assert.Equal(0f, pos.Y, 3);
+    }
+
+    /// <summary>The motor stops at the cap and leaves the round there: 150 m/s² from 450 m/s
+    /// against a 500 m/s cap reaches it on the fourth step and holds, so the run is
+    /// <c>0.1 · (465 + 480 + 495 + 500 + 500) = 244 m</c> rather than the uncapped 247.5.</summary>
+    [Fact]
+    public void TheMotorClampsAtTheCapAndHoldsThere()
+    {
+        var pos = Vector3.Zero;
+        var vel = new Vector3(0f, 0f, -450f);
+        for (int i = 0; i < 5; i++)
+            Ballistics.Step(ref pos, ref vel, 150f, 0f, 500f, 0.1f);
+
+        Assert.Equal(-500f, vel.Z, 3);
+        Assert.Equal(-244f, pos.Z, 2);
+    }
+
+    /// <summary>Nothing in the integrator reduces a round's own speed: neither a round already
+    /// FASTER than its cap (the original leaves it alone rather than clamping down) nor one
+    /// flying with no motor at all loses a metre per second over a long flight. The absence of
+    /// drag is a decoded fact and the reason the original's rounds carry so far.</summary>
+    [Fact]
+    public void NoStepEverSlowsARound()
+    {
+        var pos = Vector3.Zero;
+        var overspeed = new Vector3(0f, 0f, -700f);
+        var coasting = new Vector3(0f, 0f, -400f);
+        for (int i = 0; i < 600; i++)
+        {
+            Ballistics.Step(ref pos, ref overspeed, 150f, 0f, 500f, 1f / 60f);
+            Ballistics.Step(ref pos, ref coasting, 0f, 0f, 400f, 1f / 60f);
+        }
+
+        Assert.Equal(-700f, overspeed.Z, 3);
+        Assert.Equal(-400f, coasting.Z, 3);
+    }
+
+    /// <summary>A weapon's GRAVITY is the round's vertical acceleration in m/s², not a scale on
+    /// world gravity: 1.0 costs the round 1 m/s of climb per second, not 9.8. Every shipped entry
+    /// authors 0.0, so this pins the unit rather than any shipped flight.</summary>
+    [Fact]
+    public void WeaponGravityIsMetresPerSecondSquaredNotAScale()
+    {
+        var bomb = new WeaponDef { Velocity = 100f, Gravity = 1f, Range = 10000f };
+        var p = Ballistics.March(bomb, Vector3.Zero, new Vector3(0f, 0f, -1f), Vector3.Zero, 100f, 0.01f);
+
+        // 1 s of flight at 100 m/s: the discrete drop is 1 · 0.0001 · (100·101/2) = 0.505 m.
+        Assert.Equal(-0.505f, p.Y, 3);
+        Assert.Equal(-100f, p.Z, 1);
+    }
+
+    /// <summary>The launch pair the pool and the march share: a round with no motor is seeded AT
+    /// its cap (so nothing accelerates it, however fast its launcher), while one with a motor
+    /// leaves at the launcher's speed and climbs to VELOCITY above it.</summary>
+    [Fact]
+    public void AMotorRoundLeavesAtTheLaunchersSpeedAndClimbsToVelocityAboveIt()
+    {
+        var dumb = Ballistics.LaunchSpeed(450f, 0f, 120f);
+        Assert.Equal(450f, dumb.Speed, 3);
+        Assert.Equal(450f, dumb.Cap, 3);
+
+        var motor = Ballistics.LaunchSpeed(450f, 150f, 120f);
+        Assert.Equal(120f, motor.Speed, 3);
+        Assert.Equal(570f, motor.Cap, 3);
     }
 
     /// <summary>The march stops at the weapon's RANGE, not at the distance the caller asked for —

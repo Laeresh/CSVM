@@ -280,12 +280,30 @@ time; that is the one job this decode did **not** find it doing.
 `FUN_005afd50` moves every round that is not being steered, and it holds most of the remaining
 ballistics keys. In order:
 
-- **Acceleration.** While the round's speed is below its cap (`+0x644`), speed increases by
-  `ACCELERATION * dt` (weapon `+0x38`) and is clamped to the cap. Nothing anywhere reduces speed
-  except the steering step's turn penalty, so **there is no drag term in the original**.
+- **Acceleration.** While the round's speed (`+0x640`) is below its cap (`+0x644`), speed increases
+  by `ACCELERATION * dt` (weapon `+0x38`) and is clamped to the cap (the test at `0x005afd76`, the
+  clamp at `0x005afd98`). A round already at or past its cap is left alone rather than clamped down.
+  Nothing anywhere reduces speed except the steering step's turn penalty, so **there is no drag term
+  in the original**.
+- **What the cap is, and where a motor round starts.** Both are seeded in the spawn,
+  `FUN_005aef40`. The cap takes the weapon's `VELOCITY` (`+0x2c`) at `0x005af0ea`. A weapon with no
+  `ACCELERATION` (and without `INSTANT`) then has its speed seeded at `VELOCITY` too
+  (`0x005af147`), **equal to its cap**, which is why nothing accelerates it. A weapon that does
+  author `ACCELERATION` has its speed seeded at `1e-4` instead (`0x005af318`) and the **launcher's
+  own speed** `|launcherVelocity|` added to both the cap (`0x005af356`) and the speed
+  (`0x005af371`). So a motor round leaves at the speed of the aircraft that fired it and climbs to
+  `VELOCITY` **above** that, rather than starting at `VELOCITY`: `wep_04` off a standing launcher
+  takes its full 3 s to reach 450 m/s, and `wep_27`'s flak leaves an emplacement at nothing and is
+  still short of its authored 850 when its 900 m `RANGE` runs out.
+  ⚠ For a `LOCK_ON` motor round the launcher's speed therefore arrives twice: once as this scalar
+  and once as the inherited vector at `+0x30`.
 - **Gravity.** When the weapon authors `GRAVITY` (weapon `+0x54`), the round's vertical velocity
-  loses `GRAVITY * dt` each frame. The reader exists and works; every entry in this install authors
-  0.0, which is why the shipped rounds fly flat.
+  loses `GRAVITY * dt` each frame. It is an acceleration in m/s², not a scale on world gravity. The
+  reader exists and works; every entry in this install authors 0.0, which is why the shipped rounds
+  fly flat. ⚠ The one path that would expose it is broken in the original: an accelerating round
+  with a non-zero `GRAVITY` rebuilds its velocity as `velocity + heading * speed` each frame
+  (`FUN_005389a0` called on `+0x60` rather than on the inherited vector at `+0x30`), which
+  compounds. No shipped weapon reaches it.
 - **First-frame guard.** On the frame a round is spawned, the integration delta uses `1e-6` instead
   of the real frame time, so a round never jumps a full step on its birth frame.
 - **Wander.** Under `RANDOM_DEVIATION`, and only when the round has no target or its target is
@@ -787,9 +805,11 @@ code, and were not opened.
 - `FUN_00538ca0` (bearing), `FUN_0053e56d` (the intercept solve), `FUN_00538d70` (slerp) and
   `FUN_004c7630` (the terrain probe) were not opened; their roles are inferred from arguments and
   from the arithmetic around the call.
-- `FUN_0042c070`, `FUN_0042e840`, `FUN_0042e9d0`, `FUN_0048f5e0`, `FUN_004b8ce0`, `FUN_004b8d50`,
-  `FUN_005aef40`, `FUN_004b15c0` and `FUN_004b1630` were not opened; their roles above are inferred
-  from their arguments and call sites, and are labelled as such.
+- `FUN_0042c070`, `FUN_0048f5e0`, `FUN_004b8ce0`, `FUN_004b15c0` and `FUN_004b1630` were not opened;
+  their roles above are inferred from their arguments and call sites, and are labelled as such.
+  `FUN_005aef40` **was** opened for the speed-cap seeding, and `FUN_005389a0` with it: it is
+  `out = a + b * scale`, which is what makes the motion step's velocity rebuild
+  `inherited + heading * speed`.
 - Weapon-record offsets `+0x40` (an effect radius), `+0x44` (the fuse trigger distance) and `+0x74`
   (a second flags word) are named by use. Which authored key writes each one was not traced back
   through the `.zrd` parse, so the mapping to `IMPACT_PROXIMITY` and `DETONATION_DISTANCE` is

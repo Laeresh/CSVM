@@ -140,6 +140,13 @@ public static class Suites
             "the decay obeys the steering step's gate, so a round holding no target keeps its " +
             "launcher's speed; and neither a gun nor a rocket without LOCK_ON changes",
             LaunchVelocityDecay));
+        into.Add(new TestHarness.Suite("motor-acceleration",
+            "a round authoring ACCELERATION climbs to its speed cap and stops there (A3): wep_04 " +
+            "off a standing launcher reads 150/300/450 m/s at 1/2/3 s and holds 450 from then on, " +
+            "the same weapon off a 100 m/s launcher caps 100 higher, and no step of any round's " +
+            "flight — motor, coasting rocket or gun — ever reduces its own speed, because the " +
+            "original carries no drag term",
+            MotorAcceleration));
         into.Add(new TestHarness.Suite("air-to-air",
             "a round strikes the target plane's body, maps to the data part, moves armor/HP by the " +
             "weapon's own values, downs it when whole-vehicle health exhausts (a lone dead critical " +
@@ -3188,6 +3195,98 @@ public static class Suites
             float gunExpected = (gun.Velocity ?? 0f) + 120f;
             ctx.Check(Mathf.Abs(gun0 - gunExpected) < 0.5f && Mathf.Abs(gunLater - gunExpected) < 0.5f,
                 $"a gun round still carries its launcher's velocity, undecayed launch={gun0:0.##} later={gunLater:0.##} expected={gunExpected:0.##}");
+        }
+        finally
+        {
+            pool?.Free();
+            textures.Dispose();
+        }
+    }
+
+    // A3's motor on a live pool with no world around it: the four ACCELERATION carriers climb to a
+    // cap seeded from VELOCITY plus the launcher's speed, hold there, and nothing anywhere slows a
+    // round down. wep_26 is the launcher-speed case because it authors no LOCK_ON, so its sampled
+    // world velocity is its own velocity with nothing inherited riding on top.
+    private static void MotorAcceleration(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        if (!weapons.TryGet("wep_04", out var incendiary) || !weapons.TryGet("wep_26", out var fake)
+            || !weapons.TryGet("wep_12", out var choker) || !weapons.TryGet("wep_00", out var gun))
+        {
+            ctx.Check(false, $"wep_04, wep_26, wep_12 and wep_00 all resolve");
+            return;
+        }
+        float motor = incendiary.Acceleration ?? 0f;
+        float cruise = incendiary.Velocity ?? 0f;
+        ctx.Check(Mathf.IsEqualApprox(motor, 150f) && Mathf.IsEqualApprox(cruise, 450f),
+            $"wep_04 authors ACCELERATION {motor:0.#} m/s² and VELOCITY {cruise:0.#} m/s");
+        ctx.Check((choker.Acceleration ?? 0f) == 0f && (gun.Acceleration ?? 0f) == 0f,
+            $"the choker and the gun author no motor at all, so they fly at VELOCITY throughout");
+
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        try
+        {
+            pool = new ProjectilePool(textures, null, null);
+            ctx.Host.AddChild(pool);
+            var muzzle = new Transform3D(Basis.LookingAt(Vector3.Forward, Vector3.Up),
+                new Vector3(0f, 2000f, 0f));
+            var live = new List<(Vector3 Pos, Vector3 Velocity)>();
+
+            // Steps one round to `seconds`, returning its speed there and the lowest speed seen
+            // along the way relative to the step before it (negative = something slowed it).
+            (float Speed, float WorstDrop) Fly(WeaponDef weapon, float launchSpeed, float seconds)
+            {
+                pool!.Clear();
+                pool.Spawn(weapon, muzzle, Vector3.Forward * launchSpeed);
+                float last = -1f, worst = 0f, speed = 0f;
+                for (int i = 0; i < Mathf.RoundToInt(seconds * 60f); i++)
+                {
+                    pool.SimStep(1f / 60f);
+                    live.Clear();
+                    pool.CollectLiveRounds(live);
+                    if (live.Count == 0)
+                        break;
+                    speed = live[0].Velocity.Length();
+                    if (last >= 0f)
+                        worst = Mathf.Min(worst, speed - last);
+                    last = speed;
+                }
+                return (speed, worst);
+            }
+
+            var atOne = Fly(incendiary, 0f, 1f);
+            var atTwo = Fly(incendiary, 0f, 2f);
+            var atThree = Fly(incendiary, 0f, 3f);
+            ctx.Check(Mathf.Abs(atOne.Speed - 150f) < 0.5f && Mathf.Abs(atTwo.Speed - 300f) < 0.5f,
+                $"a motor round off a standing launcher climbs at its authored rate 1s={atOne.Speed:0.#} 2s={atTwo.Speed:0.#} expected=150/300");
+            ctx.Check(Mathf.Abs(atThree.Speed - cruise) < 0.5f,
+                $"and reaches VELOCITY exactly as the motor's own arithmetic predicts speed={atThree.Speed:0.#} expected={cruise:0.#}");
+            // Its RANGE expires at 900 m, which it passes at ~3.46 s, so this is the last sample
+            // that is about the cap rather than about the round's death.
+            var held = Fly(incendiary, 0f, 3.3f);
+            ctx.Check(Mathf.Abs(held.Speed - cruise) < 0.5f,
+                $"the cap HOLDS it rather than the motor running on speed={held.Speed:0.#} expected={cruise:0.#}");
+
+            // wep_26's own cap sits 100 m/s higher than wep_04's off the same launcher, but it flies
+            // its 900 m out at 2.86 s and the cap is 3 s away, so the flight itself only shows the
+            // offset climb; Ballistics.LaunchSpeed carries the cap arithmetic under unit test.
+            var launched = Fly(fake, 100f, 1f);
+            var launchedLater = Fly(fake, 100f, 2f);
+            ctx.Check(Mathf.Abs(launched.Speed - 250f) < 0.5f && Mathf.Abs(launchedLater.Speed - 400f) < 0.5f,
+                $"a motor round off a 100 m/s launcher leaves at it and climbs from there 1s={launched.Speed:0.#} 2s={launchedLater.Speed:0.#} expected=250/400");
+            var (fakeSpeed, fakeCap) = Ballistics.LaunchSpeed(fake.Velocity ?? 0f, fake.Acceleration ?? 0f, 100f);
+            ctx.Check(Mathf.Abs(fakeCap - ((fake.Velocity ?? 0f) + 100f)) < 0.01f && Mathf.Abs(fakeSpeed - 100f) < 0.01f,
+                $"and its cap is VELOCITY above the launcher's speed cap={fakeCap:0.#} launch={fakeSpeed:0.#}");
+
+            var coasting = Fly(choker, 120f, 1f);
+            var fired = Fly(gun, 120f, 0.8f);
+            ctx.Check(atThree.WorstDrop >= -0.001f && held.WorstDrop >= -0.001f
+                      && coasting.WorstDrop >= -0.001f && fired.WorstDrop >= -0.001f,
+                $"no flight step reduced a round's speed, the original carrying no drag (worst step: motor={atThree.WorstDrop:0.###} capped={held.WorstDrop:0.###} rocket={coasting.WorstDrop:0.###} gun={fired.WorstDrop:0.###})");
         }
         finally
         {

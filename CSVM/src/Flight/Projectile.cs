@@ -49,8 +49,10 @@ public sealed partial class ProjectilePool : Node3D
     /// <see cref="GunEffectTtl"/>, rockets/ordnance take the default.</summary>
     public System.Action<string, Vector3, float>? EffectSink;
 
-    internal const float WorldGravity = PhysicsConstants.NomGravity; // only the 5 GRAVITY rockets use it
-                                                                     // (shared: FlightController's reticle integration reads it too)
+    internal const float WorldGravity = PhysicsConstants.NomGravity; // the sprite debris (casings,
+                                                                     // sparks) falls at it; a round
+                                                                     // does not — a weapon's own
+                                                                     // GRAVITY is already m/s²
     internal const float RocketSpeedScale = 1f; // rocket launch speed/accel scale (weapons.rocketSpeedScale);
                                                 // 1 = neutral. Scales both together, pending playtest A/B.
                                                 // ⚠ The four tracer constants below are measured off the original's `rabbit_blur` geometry, not
@@ -631,6 +633,11 @@ public sealed partial class ProjectilePool : Node3D
             speed *= scale;
             accel *= scale;
         }
+        // A motor round leaves at the LAUNCHER's speed and climbs to VELOCITY above it; one without
+        // ACCELERATION is seeded at its cap and stays there (Ballistics.LaunchSpeed). The launcher
+        // term is the raw vector, not InheritedAtLaunch: the original reads it before the LOCK_ON gate.
+        float cap;
+        (speed, cap) = Ballistics.LaunchSpeed(speed, accel, inheritVel.Length());
         var tint = weapon.IsRocket ? RocketTint : SlugTint;
         // TracerTextures/TipTextures index, reusing MuzzleAmmoIndex; unused on a rocket, since
         // RenderTracers draws no streak for ordnance.
@@ -659,7 +666,13 @@ public sealed partial class ProjectilePool : Node3D
             var vel = forward * speed;
             var model = weapon.IsRocket ? BuildFlyoutModel(weapon) : null;
             if (model != null)
-                model.GlobalTransform = FlyoutPose(muzzle.Origin, vel + inherited);
+            {
+                // A motor round's first-frame speed is ~zero, so pose the body down the launch
+                // direction rather than a velocity too short to normalise.
+                var poseVel = vel + inherited;
+                model.GlobalTransform = FlyoutPose(muzzle.Origin,
+                    poseVel.LengthSquared() > 1e-6f ? poseVel : forward);
+            }
             float rollRate = 0f;
             var trails = weapon.IsRocket ? AcquireTrails(weapon, muzzle.Origin, muzzle.Basis, out rollRate) : null;
             // Team is stamped once here, never re-derived from shooterId on a later scan, so a
@@ -672,7 +685,8 @@ public sealed partial class ProjectilePool : Node3D
                 Vel = vel,
                 DistLeft = weapon.Range ?? 1000f,
                 Accel = accel,
-                Grav = (weapon.Gravity ?? 0f) * WorldGravity,
+                Cap = cap,
+                Grav = weapon.Gravity ?? 0f,
                 Weapon = weapon,
                 Tint = tracerTint,
                 TracerIdx = tracerIdx,
@@ -811,7 +825,7 @@ public sealed partial class ProjectilePool : Node3D
                 }
                 p.Inherited = Vector3.Zero;
             }
-            Ballistics.Step(ref next, ref p.Vel, p.Accel, p.Grav, dt);
+            Ballistics.Step(ref next, ref p.Vel, p.Accel, p.Grav, p.Cap, dt);
             next += p.Inherited * (carried * dt);
             var vel = p.Vel + p.Inherited * carried;
             float stepLen = (next - prev).Length();
@@ -2210,7 +2224,10 @@ public sealed partial class ProjectilePool : Node3D
                                  // slot takes an aircraft, an emplacement or a beeper tag alike.
         public float DistLeft;   // m until it expires at RANGE
         public float Accel;      // ACCELERATION along the velocity direction, m/s²
-        public float Grav;       // GRAVITY scale × world gravity, m/s² (0 throughout this install)
+        public float Cap;        // the own speed ACCELERATION climbs to and stops at, m/s — seeded
+                                 // with Vel at spawn (Ballistics.LaunchSpeed)
+        public float Grav;       // GRAVITY, m/s² of vertical acceleration on the round's own
+                                 // velocity (0 throughout this install, so inert as shipped)
         public WeaponDef Weapon;
         public Color Tint;       // tracer brightness multiplier (uniform, TracerTint)
         public int TracerIdx;    // which TracerTextures entry/MultiMesh this round's streak draws into

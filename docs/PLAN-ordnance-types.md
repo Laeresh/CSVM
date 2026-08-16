@@ -151,7 +151,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Adopt the engine's squared-radius convention in `WeaponDef`
 2. ☑ Launch-velocity inheritance and its decay over `LOCK_ON`
-3. ☐ `ACCELERATION` toward the speed cap, and no drag
+3. ☑ `ACCELERATION` toward the speed cap, and no drag
 4. ☐ The three end conditions: range, timed fuse, target proximity
 5. ☐ Launch the player's ordnance along the aircraft axis, not the pylon's
 
@@ -285,7 +285,22 @@ visibly slow over about 2.5 s and then hold. Then the same at low speed, where i
 **⚠ Traps.** `CAP-28` was owed for this question and is **no longer needed to answer it**; its
 playtest row is retired with `BL-290`. Do not measure the decay off video to contest the constant.
 
-## A3 ☐ `ACCELERATION` toward the speed cap, and no drag
+## A3 ☑ `ACCELERATION` toward the speed cap, and no drag
+
+**Verdict.** Landed, and the cap turned out to be the item's real content. `FUN_005aef40` seeds the
+cap from `VELOCITY` and then, **only** for a weapon authoring `ACCELERATION`, adds the launcher's own
+speed to both the cap and the round's starting speed (which is otherwise 1e-4): a motor round leaves
+at the speed of the aircraft that fired it and climbs to `VELOCITY` **above** that, while a weapon
+without a motor is seeded at its cap and so is never accelerated at all. The addresses are on the
+decode page. `Ballistics.LaunchSpeed` is that pair, seeded beside `Proj.Vel`/`Proj.Cap` at spawn and
+by `Ballistics.March`, and `ApplyForces` reproduces the original's gate, which can only raise a
+speed: a round already past its cap is left alone rather than clamped down. No drag term existed in
+our integrator, so none was removed; what landed instead is an assertion that none appears. `GRAVITY`
+is implemented as the round's own m/s² rather than a scale on world gravity, correcting the
+`formats/weapons.md` gloss and the `× WorldGravity` the pool applied; it is inert at 0.0 throughout
+this install either way. The behavioural consequence owed at the controls is the flak: `wep_27` off a
+standing emplacement now needs 5.7 s to reach its authored 850 m/s and expires at 900 m before it
+gets there.
 
 **Goal.** Rounds that author `ACCELERATION` speed up to their cap; nothing else changes a round's
 speed except a turn.

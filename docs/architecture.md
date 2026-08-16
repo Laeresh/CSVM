@@ -1070,6 +1070,17 @@ rule asks for). Extracted so the two callers cannot
 silently diverge; each still owns its own step size. The weapon census behind why a fixed `dt` is
 safe for `March`: [formats/weapons.md](formats/weapons.md).
 
+**The motor and its cap** (`FUN_005afd50`, org/ordnanceTypes.md): `ACCELERATION × dt` raises the
+round's own speed only while it is **below** `speedCap`, and clamps there. `LaunchSpeed` is the pair
+the pool and the march both seed from, and it is where the counter-intuitive half lives: a weapon
+with no motor is seeded AT its cap (nothing accelerates it), while a motor round leaves at its
+**launcher's** speed and climbs to `VELOCITY` above that. ⚠ **Nothing here may ever reduce a speed.**
+The original has no drag term — a round already faster than its cap is left alone rather than clamped
+down — and that absence is why its rounds carry so far; `NoStepEverSlowsARound` pins it. `grav` is
+the weapon's `GRAVITY` in m/s² directly, not a scale on world gravity, and every shipped entry
+authors 0.0. Both vectors are the round's OWN velocity: a launcher's share is the caller's to carry,
+so `March` advances position by `vel + inheritVel` while accelerating `vel` alone.
+
 ## src/Flight/DisablingIntensity.cs
 The shared `SONIC`/`FLASH` intensity (`FUN_0042e840`, decoded in
 [org/ordnanceTypes.md](org/ordnanceTypes.md)): a static, Godot-`Node`-free `TryResolve` returning the
@@ -1168,6 +1179,16 @@ them would strip every bullet of its launcher's velocity, and both the gun aim a
 reticle (`Ballistics.March`) are built on the inheriting round. `CollectLiveRounds` is the seam a
 scripted run samples a round's speed through, and a breadcrumb reports the first four rounds that
 finish shedding.
+
+`Proj.Cap` is the own speed `ACCELERATION` climbs to, seeded beside `Vel` at spawn from
+`Ballistics.LaunchSpeed` (**after** the `weapons.rocketSpeedScale` dev factor, so scaling a rocket
+scales its cap with it) off the raw `inheritVel`, which the original reads before the `LOCK_ON` gate.
+The four motor weapons therefore leave at their launcher's speed rather than at `VELOCITY`: a flak
+emplacement's `wep_27` starts at nothing and is still short of its authored 850 m/s when its 900 m
+`RANGE` runs out. A motor round's first-frame speed is ~0, so `Spawn` poses the `FLYOUT` body down
+the launch direction instead of a velocity too short to normalise. `Proj.Grav` is the weapon's
+`GRAVITY` verbatim in m/s²; `WorldGravity` is now the sprite debris' fall rate alone. The
+`motor-acceleration` suite flies all of this on a live pool.
 
 `ProjectilePool` — the shared-world weapon-fire subsystem: a fixed pool of projectiles integrated
 with `Ballistics` (VELOCITY/ACCELERATION/GRAVITY, expiring at RANGE), plus tracer streaks,
