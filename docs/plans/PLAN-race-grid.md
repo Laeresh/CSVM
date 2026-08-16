@@ -57,7 +57,7 @@ The table is the authority where the prose below contradicts itself.
 |---|---|---|
 | 1 | Abreast grid, or rank on per-player-normalised time? | **Abreast grid** — the stunt objective is order-free (`StuntMission.cs:59`), so there is no route to normalise against; splitscreen stunt is our invention with no original reference, so a grid costs no fidelity |
 | 2 | What does the (deferred) countdown hold? | **Rolling start** — physics-alive presentation, same fairness as a full freeze, no dead-still aircraft |
-| 3 | How does the countdown flight work? | **On rails** — kinematic level walk handing off at `_model.Reset(...)`, so GO *is* today's spawn; no sink, no divergence between planes, decoupled from `BL-074` |
+| 3 | How does the countdown flight work? | **On rails** — kinematic level walk handing off at `_model.Reset(...)`, so GO *is* today's spawn; no sink, no divergence between planes, independent of whatever spawn speed the mission authors |
 | 4 | Keeping the fan out of terrain | **Centre the fan, lift the whole field uniformly** — per-plane lift rejected: different altitudes are the same unfairness in a new coordinate |
 | 5 | Scope | **Races only** (`Race != null`) — Dogfight wants its scattered spawns; that is `BL-301`'s call from `PT-43` |
 | 6 | Scripted runs | **`--det` bypasses the whole path** via implementation selection, not a flag — accepted cost: the grid is hand-flown verification only |
@@ -77,12 +77,11 @@ The table is the authority where the prose below contradicts itself.
 | 2 | "The spawns have a slight downward angle, so a plane will fly into the ground." | `SpawnPoint` is `(Vector3 Position, float HeadingDeg)` — **yaw only** (`SpawnPoints.cs:9`). `LogSpawn` builds the attitude as `Basis(Vector3.Up, heading) * Vector3.Forward`, which is horizontal, and even the story-mission path discards authored pitch and roll (`SpawnPoints.cs:19`). Every spawn we emit is dead level. The observed sink is the flight model: the spawn speed (then a fixed placeholder, now the mission's own `PLAYER_INIT` value via `SpawnPicker.StartState`) sits below the speed that sustains level flight at the spawn throttle, so the plane descends while it accelerates toward cruise. |
 | 3 | "Reuse `SpawnAbreast`; the fan already exists." | The 60 m fan at `SpawnPicker.cs:54` is inside the `_spec.SpawnAt` branch — reachable **only** from the `--spawn-at`/`--pos` debug override, never from a normal `--stunt` launch. The code shape is proven; the behaviour is not wired. It is also `BL-126`'s value, and `PLAN-vs-mode.md:500` records that BL-084 and BL-126 stay separate. |
 
-Consequence of #2 worth carrying: any setback or clearance figure derived from today's fixed
-53.6 m/s goes stale when **`BL-074`** lands, because the decoded spawn speed is the mission's own
-`PLAYER_INIT[4] × 0.1` (18 m/s in nearly every mission) rather than 53.6. A speed-derived offset
-would therefore move by a factor of three under the plane, and would move again on any mission
-authoring one of the other values. This plan avoids the exposure entirely by not simulating
-anything at spawn; the deferred countdown item must not reintroduce it.
+Consequence of #2 worth carrying: **no setback or clearance figure may be derived from the spawn
+speed**, because that speed is authored per mission (`PLAYER_INIT[4] × 0.1`, 18 m/s in nearly every
+mission, [../formats/spawns.md](../formats/spawns.md)) rather than a constant. A speed-derived
+offset would move on any mission authoring one of the other values. This plan avoids the exposure
+entirely by not simulating anything at spawn; the deferred countdown item must not reintroduce it.
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
 worktree session here; use a local commit or a file copy.

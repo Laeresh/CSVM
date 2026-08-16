@@ -165,15 +165,13 @@ no mission to read (AI aircraft, the labs, the unit tests) keep an older fixed s
 original gives an AI aircraft `min(plane_speed_max, fd_speed)`, so borrowing the player's number
 there would be a third invented answer rather than that rule.
 
-⚠ **The decoded start lands in the speed band the flight model is least trusted in.** 18 m/s is
-below the Bloodhawk's computed stall speed of about 25 m/s
-([../org/flightModel.md](../org/flightModel.md)), so the original drops the player in below the
-wing's own stall. In this engine the aircraft accelerates straight through it rather than
-dropping: 18 to 61 m/s in the first second, essentially level, which is roughly 4.4 G along the
-flight path. That may be the original's behaviour too, but it is the same sub-cruise band where
-the force scale is a recorded decode-versus-footage conflict, so the spawn now depends on an open
-question. Judge the climb-out at the controls, and do not tune the spawn speed to compensate for
-a force-scale problem.
+⚠ **The start is below the wing's own stall speed, and that is correct.** 18 m/s sits under the
+Bloodhawk's computed stall of about 25 m/s ([../org/flightModel.md](../org/flightModel.md)), so the
+player is dropped in slow and accelerates out: 18 to 61 m/s in the first second, essentially level,
+which is roughly 4.4 G along the flight path. The climb-out reads right at the controls. It is the
+same sub-cruise band where that page records the force scale as a decode-versus-footage conflict,
+so a future change to the force path will move this start's feel; the spawn speed is authored data
+and is not the knob to compensate with.
 
 ## Campaign mission map
 
