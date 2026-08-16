@@ -2108,7 +2108,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   before. `ObjectCycleTexture` needs neither; it needs a mission that
   actually builds a `taildamage` node, which none of the ones this project defaults to do.
 
-- `BL-135` `[Bug]` **The one-frame `CallSequence` dispatch lag.**
+- `BL-135` `[Bug]` `[Fixed — pending closure]` **The one-frame `CallSequence` dispatch lag.**
+  ✅ **Resolved.** `AnimInstance` holds a slot per `Def.Sequences` entry and walks them ascending,
+  so a call runs in the same tick exactly when the callee's index is higher, as the original does.
+  Seven goldens re-pinned, all phase and no content. Run `/close-backlog-item` to retire this;
+  everything below is the evidence trail and goes with it.
+
   **Found 2026-07-22 while fixing C1's police siren** (that fix landed; see `docs/HISTORY.md`). This
   is the *other* defect that investigation turned up — real, engine-wide, and deliberately left
   unfixed because it was not what silenced anything.

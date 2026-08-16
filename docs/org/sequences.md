@@ -407,6 +407,13 @@ backward minority are `police_car`'s `start_walkin` → `siren_police`, which th
 start a tick late, and the return hop of C2/M02's `marypickford` ring, which is what stops that ring
 resolving inside one tick.
 
+⚠ **A sequence's own timers do not advance on its first pass.** The stepper adds the tick delta to
+`seq+0x24`/`seq+0x28` only when the state is 1 or the cursor has moved past the sequence start, so a
+sequence the walk reaches in the tick it was called is stepped without being charged that tick. It
+matters to any re-implementation that restates an ANIMATION-origin gate in the sequence's own clock:
+charge the called sequence a delta the instance clock already spent and the two clocks drift apart
+by one tick, which gates every later ANIMATION offset in it a tick early.
+
 **No sequence is stepped twice in one pass, so the same-tick chain needs no cap.** A chain of
 forward calls is bounded by the array count, and a ring cannot spin at all: whichever way round it
 goes, one of its hops necessarily targets an index the cursor has passed. The engine gets this for
@@ -644,7 +651,7 @@ Everything here is a known, deliberate divergence — not a gap waiting to be cl
 | **The `STOP_SEQUENCE` DISABLE is not persisted** | A halt is not remembered, so a later `CALL_SEQUENCE` on the same name starts the sequence again, where the original's DONE state refuses it until the definition resets. **123 definitions name one sequence in both a call and a stop** (mostly `flame_light_seq`), but whether any reaches the stop BEFORE the call at run time is a control-flow question a static census cannot answer — persisting the flag would move all 123 on a divergence none of them is known to observe |
 | **The branch-taken stack** stands in for the original's arrival distinction | See the residual above: it needs a nesting shape no shipped definition has |
 | **A 256-dispatch-per-tick guard** | Bounds a zero-length sequence within one tick; the remainder defers to the next. The original has no such cap |
-| **Live runners in an append-ordered list, walked descending**, where the original holds a fixed slot per sequence and walks it ascending | Our `AnimInstance.Runners` has no index to compare, so a `CALL_SEQUENCE` always lands past the cursor and every called sequence starts one tick late, where the original starts it in the same tick whenever the callee is declared after the caller. `BL-135` holds the measurement of what closing this costs |
+| **A reader `DAMAGE_SEQUENCE` occupies a slot**, where the original keeps it out of the array | `AnimDefs.cs` appends it to `Def.Sequences` so `ApplyDamageStages` can find it by name, which gives it an index the original's standalone `anim+0xd4` record never has. Nothing calls it, and an insertion cannot invert the order of the sequences around it, so the same-tick rule is unaffected |
 | **The u16 pass-counter wrap** at 65,536, not reproduced | Unreachable within a session, and `-1` already spells "infinite" |
 | **The 86,400 s instance-clock clamp** (`FUN_004ebfd0`), not reproduced | A session never reaches a day |
 | **`LIGHT_ANIMATION` ramps asynchronously** rather than one delta-tick per dispatch | Same picture only because the sequence is also held for the run time; the tick-by-tick advance is not reproduced |

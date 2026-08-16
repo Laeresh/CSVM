@@ -468,8 +468,10 @@ public class SequenceRunnerTests
 
         var t = RunSteps(inst, host, 0.25f, 5);
 
-        Assert.Equal(new[] { "on", "trail" }, t[0]);      // 0.25s: start + the call
-        Assert.Equal(new[] { "emit" }, t[1]);             // 0.50s: the called trail runs
+        // `trail` is declared AFTER `activate`, so the call is forward and its event lands in the
+        // same pass — see CallForwardOfTheCallerRunsInTheSameTick.
+        Assert.Equal(new[] { "on", "trail", "emit" }, t[0]);
+        Assert.Empty(t[1]);
         Assert.Equal(new[] { "stopper" }, t[2]);          // 0.75s: the stop resolves, halts nothing
         Assert.DoesNotContain("off1", host.Fired);        //        and starts nothing
         Assert.DoesNotContain("off2", host.Fired);
@@ -555,6 +557,42 @@ public class SequenceRunnerTests
 
         // Its own runner ran it once; the calls added nothing.
         Assert.Single(host.Fired.Where(f => f == "glow"));
+    }
+
+    // ---- 17b. CALL_SEQUENCE dispatches in the same tick only when the callee is declared later --
+
+    [Fact]
+    public void CallForwardOfTheCallerRunsInTheSameTick()
+    {
+        // The original walks the definition's sequence array ascending, one step per slot, and a
+        // call writes the callee's own slot: ahead of the cursor it runs now, behind it waits.
+        // 99.5% of the install's calls point forward. Decode: docs/org/sequences.md.
+        var host = new RecordingHost();
+        var caller = Seq("caller", CallSeq("callee"));
+        var callee = Seq("callee", Swap("late"));
+        var inst = Instance(new[] { caller, callee }, caller);   // callee at the HIGHER index
+        host.Instance = inst;
+
+        var t = RunSteps(inst, host, 0.25f, 2);
+
+        Assert.Equal(new[] { "callee", "late" }, t[0]);
+    }
+
+    [Fact]
+    public void CallBackwardOfTheCallerWaitsForTheNextTick()
+    {
+        var host = new RecordingHost();
+        var callee = Seq("callee", Swap("late"));
+        var caller = Seq("caller", CallSeq("callee"));
+        var inst = Instance(new[] { callee, caller }, caller);   // callee at the LOWER index
+        host.Instance = inst;
+
+        var t = RunSteps(inst, host, 0.25f, 2);
+
+        // The cursor is already past slot 0 when the call lands, so the callee's first event
+        // waits a tick — the police siren (`start_walkin` -> `siren_police`) is this shape.
+        Assert.Equal(new[] { "callee" }, t[0]);
+        Assert.Equal(new[] { "late" }, t[1]);
     }
 
     // ---- 18. an "Animation" offset reads the INSTANCE's clock, not the called sequence's ----

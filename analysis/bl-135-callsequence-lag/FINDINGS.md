@@ -1,4 +1,8 @@
-# The one-frame `CALL_SEQUENCE` dispatch lag: implemented, measured, re-deferred
+# The one-frame `CALL_SEQUENCE` dispatch lag: measured, decoded, resolved
+
+⚠ **Read section 6 first.** The engine now reproduces the original's ascending slot walk, so the
+lag is gone and the drain measured in sections 2-5 was never the right mechanism. Those sections
+are kept as the record of what the drain cost, not as a description of the engine.
 
 Measured 2026-08-04 for `BL-135` / `PLAN-m3-polish-6.md` item B12. **Verdict: the bounded
 same-pass drain works and is bounded by a number the data itself sizes — but it is no longer
@@ -223,3 +227,31 @@ Two of the 116 backward edges settle arguments this file already had:
   `siren_police` (idx 1), so the original defers it too, and our behaviour there already matches.
   The drain would have made that call same-tick, which is *further* from the original, not closer.
   The item was born from this call; it turns out to be one of the 0.52 %.
+
+### What matching it actually cost
+
+`AnimInstance` holds a slot per `Def.Sequences` entry and walks them ascending, with the death slot
+and the damage-stage host unslotted and stepped after. The bound, the drain and the
+same-pass-append list are all gone; no cap is possible to need, since no slot is stepped twice in a
+pass. One latent bug surfaced: `SequenceRunner.Advance` added `dt` unconditionally, which for a
+runner born inside the pass desynced its clock from the instance's and fired `SetDue`'s ANIMATION
+restatement a tick early. It now withholds that first `dt`, which is also the original's rule.
+
+Seven of the 15 goldens moved, all of them phase and none of them content, measured against a
+baseline build of the same tree:
+
+| Shot | Pixels changed | Max channel delta | Rows |
+|---|---:|---:|---|
+| `c1-debris-rest` | 26,973 (2.927 %) | 189 | 149-360 |
+| `c1-crash` | 13,721 (1.489 %) | 198 | 241-450 |
+| `c1-targeting-hud` | 592 (0.064 %) | 26 | 314-467 |
+| `c1-destroy-effects` | 289 (0.031 %) | 14 | 462-523 |
+| `c5-city-night` | 61 (0.007 %) | 33 | 252-286 |
+| `c3-island` | 53 (0.006 %) | 21 | 149-218 |
+| `c2-city` | 25 (0.003 %) | 93 | 342-488 |
+
+`c1-flight`, the manifest's strongest tripwire, is unchanged. Overlaying the changed pixels on each
+shot puts every one of them inside a smoke plume or a muzzle puff: terrain, structures, debris,
+aircraft, HUD text and gauges are untouched. Note `c1-crash` at **1.5 %** against the drain's
+**79.7 %** on the same shot, which is the difference between "every call same-tick" and "same-tick
+only when the callee is declared later".
