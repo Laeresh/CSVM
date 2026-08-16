@@ -781,8 +781,14 @@ observe the difference; the constraint and its one residual live in `Scan`'s own
 function map, the three START_TIME origins, the LOOP's pass counter and 60 Hz frame denomination,
 and the clock-carry a timed loop needs; the authored side stays in
 [formats/anim-definitions.md](formats/anim-definitions.md).
-`AnimInstance` holds a definition's concurrent runners and removes them as they finish, and carries
-the CALL_SEQUENCE/STOP_SEQUENCE semantics (decode in `docs/org/sequences.md`;
+`AnimInstance` holds **one slot per `Def.Sequences` entry and walks them ASCENDING**, mirroring the
+original's per-definition sequence array, plus an unslotted list for runners the definition does not
+list (the death slot, the damage-stage host), which the original likewise keeps off the array and
+steps outside the walk. The walk order is behaviour, not housekeeping: `CALL_SEQUENCE` writes the
+callee's own slot, so a call runs in the same tick exactly when the callee is declared AFTER the
+caller and waits a tick when it is declared before — 99.5 % of the install's calls point forward.
+One slot stepped at most once per pass is also why no same-tick recursion cap is needed.
+It carries the CALL_SEQUENCE/STOP_SEQUENCE semantics (decode in `docs/org/sequences.md`;
 `AnimRuntime`'s dispatch cases are thin shims over these). **One runner per sequence, keyed on the
 `AnimSequence` OBJECT and never on its name** — the original holds a sequence's state inside the
 definition's own sequence array (`004eb570`), so `CallSequence` starts a sequence only when nothing

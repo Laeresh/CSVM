@@ -36,8 +36,8 @@ probes through `RunProbe.ps1`, and write to `.scratch/bl-135/`.
 `AnimInstance.CallSequence` appends to `Runners` (`SequenceRunner.cs:84`) while
 `AnimInstance.Advance` walks that list **descending** (`SequenceRunner.cs:67`). An appended runner
 lands at an index the walk has already passed, so every called sequence's first event fires on the
-next tick. (`BL-135` cites `AnimRuntime.cs:998`/`:1485`; the code has since moved into
-`SequenceRunner.cs` — the mechanism is unchanged.)
+next tick. (The mechanism was first traced at `AnimRuntime.cs:998`/`:1485`, before the interpreter
+moved into `SequenceRunner.cs`; it was unchanged by the move.)
 
 The descending walk is deliberate (`AnimRuntime.cs:250`) and was not touched.
 
@@ -117,9 +117,9 @@ missed, because the events happen inside the bootstrap window instead of one tic
 | C4 | 9 → 15 puffer emitters; 1,061 → 1,067 state ops | 15 → 15 active |
 | C5 | 9 → 37 puffer emitters; 1,483 → 1,511 state ops | 36 → 36 active |
 
-This is `docs/verification.md` LOG-2 exactly — the trap `BL-135`'s own notes name ("C1
-legitimately reports 38 while 39 emitters exist"). The censuses become **more honest**, but they
-were never the behaviour.
+This is `docs/verification.md` LOG-2 exactly: the bootstrap census is printed inside `Bootstrap`
+and so cannot see anything created after it, which is why C1 legitimately reports 38 while 39
+emitters exist. The censuses become **more honest**, but they were never the behaviour.
 
 The behaviour is the frame-120 capture, and 7 of the 8 chapters are **pixel-identical**
 (`--det`, 120 frames): C1, C1B, C1C, C2, C2B, C4, C5. C1's identity is the important one — its 18
