@@ -11,6 +11,11 @@ backlog.md / playtest.md after BL-253 and BL-262 were each minted twice by concu
 The JSON stores the LAST ISSUED number per kind. If the file is ever lost (fresh clone), re-seed
 it from the highest ID ever used — scan every *.md,since retired IDs are never reused.
 
+Run this for EVERY id, every time. It is not a once-per-session lookup: an id you derive yourself
+by adding 1 to the last one, or reuse from an earlier call, was never recorded in the counter, so
+the next call hands the same number out again and the duplicate-id pre-commit hook fails a later
+commit (often someone else's). Use -Count to reserve a block when you need several at once.
+
 .EXAMPLE
 ./New-ItemId.ps1 -Kind BL           # -> BL-283
 ./New-ItemId.ps1 -Kind CAP -Count 3 # -> CAP-28  CAP-29  CAP-30 (reserve a block up front)

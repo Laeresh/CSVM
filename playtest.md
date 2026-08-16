@@ -11,7 +11,10 @@ Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs a
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
 Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — run
 **`./New-ItemId.ps1 -Kind CAP`** (or `-Kind PT`), which increments a shared locked counter in
-`.git/item-id-counters.json` and is safe under concurrent sessions. Retired IDs' verdicts are in
+`.git/item-id-counters.json` and is safe under concurrent sessions. ⚠ **Run it for EVERY id, every
+time**: it is not a once-per-session lookup, and deriving the next id by adding 1 leaves the counter
+behind the file, so the number you invented gets handed out again later. `-Count n` reserves a block
+in one call when you need several. Retired IDs' verdicts are in
 the retiring commit's message (`git log --grep=<ID>`); pre-2026-08-06 retirements are in
 `docs/HISTORY.md` (frozen).
 

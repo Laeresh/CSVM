@@ -16,6 +16,12 @@ fails loudly instead of silently pointing at the wrong item. **Mint a new ID by 
 counter lives in `.git/item-id-counters.json` (shared by every worktree, outside version
 control) and the script increments it under an exclusive file lock, so two concurrent sessions
 cannot be handed the same number.
+⚠ **Run it for EVERY id, every time — it is not a once-per-session lookup.** Minting one id and
+then deriving the next by adding 1, or reusing a number the script handed you earlier in the
+session, desynchronises the counter from the file: the id you invented is not recorded, so the
+next call hands it out again and the duplicate-id hook fails a later commit. Need several at
+once? `-Count n` reserves a block in one call. The failure is silent at the time and surfaces
+in someone else's commit, which is why the rule is absolute rather than a default.
 
 **Structure.** Items are grouped into twelve theme sections, in this fixed order: Damage &
 destruction · Weapons & combat · Flight model & collision physics · Environment & world · Effects
