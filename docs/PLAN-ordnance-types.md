@@ -175,7 +175,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 15. ☐ The player's screen wash: colour, weight, duration, blending
 16. ☑ The AI stun
 17. ◐ `TANGLER`: the engine-dead timer
-18. ☐ `SMOKE_SCREEN`: the stun trap
+18. ◐ `SMOKE_SCREEN`: the stun trap
 
 ### Wave E — Flyout and gates
 
@@ -700,7 +700,21 @@ and is recorded as disproven on the decode page. Do not add an airspeed clamp to
 AI code reads the disabled-systems mask, so a choked AI is not told it has been choked and gets no
 evasive reaction; that is correct.
 
-## D18 ☐ `SMOKE_SCREEN`: the stun trap
+## D18 ◐ `SMOKE_SCREEN`: the stun trap
+
+**Verdict.** The mechanism landed as `Flight/SmokeScreens.cs`: `SmokeScreens.Lay(layer, TIME)` is
+the fire path's entry, the session steps the registry after every aircraft, and each running screen
+walks the roster about the layer's LIVE backward axis (`-NoseDirection`), washing a human on its own
+pane through `ScreenFlash.PlayBlend` and refreshing `TryStunPilot(smokescreen_stun_interval)` on
+an AI every step. Nothing lays a screen yet: the launch-side hook (the pylon fire path spawning no
+round for a `SMOKE_SCREEN` weapon and calling `Lay`) is the spawn lane's, and until it lands
+`--rocket=wep_13` still fires the ordinary round. Three things this item's own text left open,
+settled from `FUN_004b8fd0` and recorded on the decode page: the pose is read live each frame, not
+captured at the lay; a layer that dies ends its screen on the spot; and the "2 s per-victim
+cooldown" is a 2 s timer that re-arms below 0.5 s, so a victim inside is re-washed every 1.5 s at
+0.9, and 0.97 only when the timer had fully run down. The stun interval's loader default is 3 s.
+Pinned by `SmokeScreenTests` and the `smoke-screen` suite; owed at the controls once the hook
+lands: the 1v1 and the coop pair below.
 
 **Goal.** A smoke screen laid by an aircraft stuns AI and blinds humans behind it, and spawns no
 projectile.

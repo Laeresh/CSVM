@@ -645,10 +645,30 @@ targeting. Nothing queries it when picking or tracking a target. What it does, e
 
 Anything passing both gets hit, and again the victim's kind decides how. **The player** gets a
 `FUN_0042e9d0` wash in a grey-green `(0.2, 0.29, 0.145)` at weight 0.9, or 0.97 on the first hit,
-lasting 2 s and re-arming on a 2 s per-victim cooldown, so it keeps re-applying while you stay in it.
-**An AI** gets the same `FUN_004200d0` stun as a sonic round, for `smokescreen_stun_interval`
-seconds; since the stun leaves the AI in state 4 and `FUN_004200d0` accepts state 4, it is refreshed
-every frame the AI remains in the cloud.
+lasting 2 s, with no start delay. **An AI** gets the same `FUN_004200d0` stun as a sonic round, for
+`smokescreen_stun_interval` seconds, with no cooldown of any kind; since the stun leaves the AI in
+state 4 and `FUN_004200d0` accepts state 4, it is refreshed every frame the AI remains in the cloud.
+The AI branch skips a victim whose `+0xf8` byte is set, the same guard the sonic hit path applies.
+
+**The wash's re-arm timer** (object `+0x14`, one slot per screen, which is one per player in a
+single-player engine): the routine runs it down by the frame dt once per frame while it is above
+zero, clamping at zero, and then washes the player only while the timer reads **below 0.5 s**,
+restarting it at 2.0 s. So a player who stays inside is re-washed every **1.5 s**, not every 2, and
+the 0.97 weight is used only when the timer had reached zero, which is the first hit or a return
+after more than 2 s outside; every re-wash while inside is 0.9. Our side keeps the timer per victim
+per screen (`SmokeScreenRule.StepWash`), Decision 2's per-viewer divergence.
+
+**The pose is live, and the layer's death ends the screen.** Every frame the routine fetches the
+layer's position through its own vtable and reads the axis off the layer's current matrix at
+`+0x198`; nothing about the pose is captured at the lay, so a turning layer swings the whole 600 m
+cone with it. The distance is a plain length: `FUN_00422690` normalises the layer-to-victim delta in
+place and returns its length, compared raw and strictly against the range, and the dot is taken
+against the unit vector it left behind. The screen's timer (object `+0x10`) runs down by the frame
+dt at the top of every call; a layer whose `+0x91d` dead byte is set has its emitter stopped and its
+timer forced to the `-1.0` sentinel on the spot, so the walk never runs for a dead layer. The walk
+itself is also gated on the screen's emitter handle (`+8`, created at the lay through the effect
+system) being live, which in the shipped game it always is; our side runs the walk unconditionally,
+since the visual is the fire path's business.
 
 The three tunables are **not per-weapon**. `FUN_004735b0`, the `ai_skill_parameters` loader, writes
 them from `player.zrd.json`, where their authored names state the mechanism outright:
@@ -656,13 +676,17 @@ them from `player.zrd.json`, where their authored names state the mechanism outr
 | Key | Authored | Default if absent | Stored as |
 |---|---|---|---|
 | `smokescreen_stun_range` | 600 m | 200 m | raw |
-| `smokescreen_stun_angle` | 170° | ≈73.7° | `cos(angle × π/180 × 0.5)`, a **half**-angle cosine |
-| `smokescreen_stun_interval` | 5 s | — | raw, the AI stun duration |
+| `smokescreen_stun_angle` | 170° | ≈73.7° (a stored cosine of 0.8) | `cos(angle × π/180 × 0.5)`, a **half**-angle cosine |
+| `smokescreen_stun_interval` | 5 s | 3 s | raw, the AI stun duration |
 
 600 m across a 170° cone is close to "everything behind the layer", which makes the smoker one of the
 most powerful weapons in the table rather than a defensive screen. The layer axis is the third row of
-the aircraft's world matrix (`+0x198`–`+0x1a0`); its sign was not traced, though the weapon is
-`REAR`-firing.
+the aircraft's world matrix (`+0x198`–`+0x1a0`), the **backward** axis: the launch-side dispatch
+above negates that same row to spawn an ordinary weapon forward and takes it as-is for the `REAR`
+smoker, so the cone opens behind the layer, where the smoke is laid. Our side reads it as the
+negated `FlightController.NoseDirection`. On our side the mechanism is `Flight/SmokeScreens.cs`
+(`SmokeScreens.Lay` for the fire path, `SimStep` from the session, `SmokeScreenRule` for the
+aircraft-free tests, `SmokeScreenTunables.Load` for the three keys).
 
 ## The choker, settled
 

@@ -113,6 +113,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
 - `src/Flight/DisablingIntensity.cs` — the decoded `SONIC`/`FLASH` intensity plateau and `FLASH`'s facing test, on squared distances; feeds the player's wash weight and the AI stun's duration.
 - `src/Flight/TanglerChoke.cs` — the choker's engine-dead duration and the `ENGINE_DEAD` globals it reads; the original's squared-distance-over-raw-radius mismatch, reproduced.
+- `src/Flight/SmokeScreens.cs` — the smoke screen's stun trap: the world's active screens, walked over the roster every sim step to stun AI and wash humans behind the layer; the cone rule, the wash cadence and the three `player.json` tunables beside it.
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
 - `src/Flight/CameraController.cs` — the flown plane's camera: roll-following chase, numpad fixed views, paused orbit. Steers a `Camera3D` it does not own.
 - `src/Flight/ImpactOutcome.cs` — what a weapon×surface hit should do (effect, sound, stand-in, damage) as a value; `Resolve` is pure and engine-free.
@@ -1104,6 +1105,30 @@ unit mismatch that puts the full-strength zone of a 35 m weapon at about 4.6 m; 
 everything past it, so the curve alone never returns less than the minimum and the fuse decides
 whether a hit happens at all. The seconds go to `FlightController.TryChokeEngine`; this module knows
 nothing about aircraft.
+
+## src/Flight/SmokeScreens.cs
+The `SMOKE_SCREEN` mechanism (`FUN_004b8fd0`, decoded in
+[org/ordnanceTypes.md](org/ordnanceTypes.md) "SMOKE_SCREEN is a stun trap"), three types in one
+file. `SmokeScreenRule` is static and Godot-`Node`-free: `Catches` (strictly inside the raw range
+AND the unit layer-to-victim line's dot with the layer's BACKWARD axis strictly above the stored
+half-angle cosine) and `StepWash` (the human wash's cadence over one re-arm timer: 0.97 on a first
+hit, 0.9 every 1.5 s while inside, 2 s duration, the grey-green `(0.2, 0.29, 0.145)`).
+`SmokeScreenTunables` reads `smokescreen_stun_range` / `_angle` / `_interval` off `player.json`
+with the loader's own image defaults (200 m, cos 0.8, 3 s) for an absent key; the angle is stored
+as `cos(angle/2)`, so the shipped 170° reaches 85° off axis. `SmokeScreens` is the world registry:
+`Lay(layer, timeSeconds)` is the fire path's entry (a `SMOKE_SCREEN` weapon spawns no round; it lays
+a screen for its `TIME`), `SimStep(dt)` runs the timer down, ends a screen whose layer is out of
+play on the spot, and walks the roster delegate for every running screen, hitting every in-play
+aircraft other than the layer inside the cone about the layer's LIVE pose: a human gets the wash
+through the `SmokeWashSink` (`ScreenFlash.PlayBlend` in the session) addressed to its own
+`PlayerIndex`, an AI gets `FlightController.TryStunPilot(interval)` refreshed every step it stays
+inside, so it goes limp for the whole screen and the interval beyond it. The wash re-arm timer is
+kept per victim per screen (the original's one slot is single-player), Decision 2. It is NOT an
+occluder: no collision, no visibility, no targeting role, and no visual (the weapon's effects are
+the fire path's). Pinned by `SmokeScreenTests` (rules, tunables) and the `smoke-screen` suite (a
+live five-aircraft roster: the AI astern stunned throughout and recovering after expiry, the AI
+beyond 85° untouched, the human astern washed on its own pane while the layer's and a third human's
+stay clear, a downed layer's screen ending at once). Not a `Node`; the session owns and steps it.
 
 ## src/Flight/CamParams.cs
 One aircraft's camera tuning out of `camparam.json` ([formats/camparam.md](formats/camparam.md)):
@@ -2778,7 +2803,13 @@ as `--crash`'s `_crashFired`): P1 downs P2 through the real `DebugForceCrash(kil
 scripting an actual shot. `BuildFlightRigs` also constructs `AiAircraftSpawner` over the same rig
 `Inputs`; `SpawnAiAircraft` (public — the M4 A2 actor seam, called by `--ai=` at build and by
 later waves mid-session) adds each AI plane to `_aiPlanes`, stepped in `DriveSimSteps` after the
-rigs (a realtime clock lets them tick themselves, like the rigs). `_instantAction`
+rigs (a realtime clock lets them tick themselves, like the rigs). `AllAircraft()` is the one
+roster read (the rigs' controllers, then `_aiPlanes`, in a reused list rebuilt per call) behind
+both the targeting overlay and `_smokeScreens` (`SmokeScreens`, built beside `_screenFlash` with
+`SmokeScreenTunables.Load` off `player.json`, image defaults with a warning if that fails, washing
+through `_screenFlash.PlayBlend`); the screens step after every aircraft in `DriveSimSteps` and at
+the end of `_PhysicsProcess` on a realtime clock. Nothing lays a screen yet: the `SMOKE_SCREEN`
+fire path's call to `SmokeScreens.Lay` is the spawn lane's. `_instantAction`
 (`InstantActionRuntime?`) builds at the very top of `StartSession` —
 before any archive, since loading its source is a bare value read — from whichever of two
 producers the spec carries: `SessionSpec.IaDef` (the Instant Action wizard's own already-built def,

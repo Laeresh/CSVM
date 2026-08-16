@@ -140,6 +140,14 @@ public static class Suites
             "the decay obeys the steering step's gate, so a round holding no target keeps its " +
             "launcher's speed; and neither a gun nor a rocket without LOCK_ON changes",
             LaunchVelocityDecay));
+        into.Add(new TestHarness.Suite("smoke-screen",
+            "a smoke screen laid through SmokeScreens.Lay on a live roster (D18): the AI directly " +
+            "behind the layer inside 600 m is stunned for the whole 8 s TIME with its stun refreshed " +
+            "every step and recovers after the screen expires, an AI off to the side beyond 85° is " +
+            "never touched, the human behind gets the grey-green wash on its own pane at 0.97 then " +
+            "0.9 every 1.5 s while a second human elsewhere and the layer's own pane stay clear, " +
+            "and a layer going down ends its screen on the spot",
+            SmokeScreenSuite));
         into.Add(new TestHarness.Suite("motor-acceleration",
             "a round authoring ACCELERATION climbs to its speed cap and stops there (A3): wep_04 " +
             "off a standing launcher reads 150/300/450 m/s at 1/2/3 s and holds 450 from then on, " +
@@ -3873,6 +3881,176 @@ public static class Suites
             human?.Free();
             wingman?.Free();
             enemy?.Free();
+            textures.Dispose();
+        }
+    }
+
+    // D18's mechanism over a live roster, with the launch hook stood in for by a direct Lay: the
+    // layer is a human rig flying -Z, so its backward axis is +Z and everything at +Z of it is
+    // "behind". Two AI and two more humans sit where the cone must catch or miss them, the pool
+    // and the flight models run for real, and the wash goes through a real two-pane ScreenFlash
+    // wrapped by a recording sink so the third human (no pane) is still observable.
+    private static void SmokeScreenSuite(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        if (!weapons.TryGet("wep_13", out var smoker) || smoker.SmokeScreenTime is not { } screenTime)
+        {
+            ctx.Check(false, $"wep_13 resolves and carries a SMOKE_SCREEN TIME");
+            return;
+        }
+        ctx.Check(Mathf.IsEqualApprox(screenTime, 8f), $"wep_13 authors SMOKE_SCREEN TIME {screenTime:0.#}, the decode's 8 s");
+        var tunables = SmokeScreenTunables.Load(ctx.ZrdrPath);
+        ctx.Check(Mathf.IsEqualApprox(tunables.RangeM, 600f) && Mathf.IsEqualApprox(tunables.StunIntervalS, 5f)
+                  && Mathf.Abs(tunables.HalfAngleCos - Mathf.Cos(Mathf.DegToRad(85f))) < 1e-5f,
+            $"player.json reads 600 m, 5 s and 170° stored as cos 85° ({tunables.RangeM:0}/{tunables.StunIntervalS:0}/{tunables.HalfAngleCos:0.####})");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        var rigs = new List<FlightController>();
+        ScreenFlash? flash = null;
+        Node[] panes = System.Array.Empty<Node>();
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            FlightController BuildRig(int playerIndex, bool human, Vector3 pos)
+            {
+                var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+                var rig = new FlightController
+                {
+                    PlaneModel = model,
+                    Collider = PlaneCollider.Build(model),
+                    Damage = new PlaneDamage(stats.DestroyableParts),
+                    PlayerIndex = playerIndex,
+                    IsHumanPiloted = human,
+                    Pilot = human ? null : AiPilot.HoldingCourse(pos, pos + Vector3.Forward),
+                    Projectiles = live,
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                };
+                rig.AddChild(model);
+                rig.Setup(new FlightModel(stats), human ? ctx.Camera : null, new CamParams(), pos, pos + Vector3.Forward);
+                rig.Name = (human ? "p" : "ai") + playerIndex;
+                ctx.Host.AddChild(rig);
+                live.RegisterAircraft(rig.Body!);
+                // Held at the spawn pose (the weapon lab's pin, not the clock halt: the rigs still
+                // step): five airframes in two lanes would otherwise overtake and ram each other
+                // inside the 8 s, and the geometry the cone is asserted against must stand still.
+                rig.Held = true;
+                rigs.Add(rig);
+                return rig;
+            }
+
+            var layerPos = new Vector3(0f, 500f, 0f);
+            var layer = BuildRig(0, human: true, layerPos);
+            var humanBehind = BuildRig(1, human: true, layerPos + new Vector3(0f, 0f, 200f));
+            var humanAhead = BuildRig(2, human: true, layerPos + new Vector3(0f, 0f, -400f));
+            var aiBehind = BuildRig(AiAircraftSpawner.ShooterIdBase, human: false, layerPos + new Vector3(0f, 0f, 300f));
+            // 97° off the backward axis at 400 m: inside the range, outside the 85° edge.
+            var aiSide = BuildRig(AiAircraftSpawner.ShooterIdBase + 1, human: false, layerPos + new Vector3(397f, 0f, -49f));
+
+            (flash, panes) = PaneFlash(ctx, null);
+            var washes = new List<(int Player, float Weight, float Time)>();
+            float clock = 0f;
+            var flashSink = flash;
+            var screens = new SmokeScreens(tunables, () => rigs, (player, colour, weight, duration) =>
+            {
+                washes.Add((player, weight, clock));
+                flashSink.PlayBlend(player, colour, weight, duration);
+            });
+
+            const float dt = 1f / 60f;
+            void Step()
+            {
+                foreach (var rig in rigs)
+                    rig.SimStep(dt);
+                screens.SimStep(dt);
+                flash.Advance(dt);
+                clock += dt;
+            }
+
+            for (int i = 0; i < 30; i++)
+                Step();
+            ctx.Check(!aiBehind.Pilot!.IsStunned && washes.Count == 0 && screens.ActiveCount == 0,
+                $"nothing happens to anyone before a screen is laid stunned={aiBehind.Pilot.IsStunned} washes={washes.Count}");
+
+            screens.Lay(layer, screenTime);
+            ctx.Check(screens.ActiveCount == 1 && screens.IsLaying(layer), $"Lay registers one running screen on the layer");
+            Step();
+            ctx.Check(aiBehind.Pilot.IsStunned && Mathf.Abs(aiBehind.Pilot.StunRemainingS - tunables.StunIntervalS) < 0.05f,
+                $"the AI 300 m dead astern is stunned on the first step for smokescreen_stun_interval remaining={aiBehind.Pilot.StunRemainingS:0.00}");
+            ctx.Check(!aiSide.Pilot!.IsStunned,
+                $"the AI 400 m out at 97° off the backward axis is not touched");
+            ctx.Check(washes.Count == 1 && washes[0].Player == 1 && Mathf.IsEqualApprox(washes[0].Weight, 0.97f),
+                $"the human 200 m behind gets the first-hit wash at 0.97 on its own player index washes={washes.Count} first={(washes.Count > 0 ? $"P{washes[0].Player + 1}@{washes[0].Weight:0.00}" : "-")}");
+
+            // The rest of the 8 s: the AI's stun is refreshed every step it stays inside, so it
+            // never runs down while the screen runs; the human is re-washed every 1.5 s at 0.9.
+            float lowestStun = float.MaxValue;
+            while (clock < 0.5f + screenTime - dt)
+            {
+                Step();
+                if (screens.ActiveCount > 0)
+                    lowestStun = Mathf.Min(lowestStun, aiBehind.Pilot.StunRemainingS);
+            }
+            ctx.Check(lowestStun > tunables.StunIntervalS - 0.1f,
+                $"the per-step refresh holds the AI's remaining stun at the interval for the whole screen lowest={lowestStun:0.00}");
+            ctx.Check(!aiSide.Pilot.IsStunned, $"the AI beyond 85° stays untouched for the whole screen");
+            int rewashes = washes.Count(w => w.Player == 1) - 1;
+            ctx.Check(rewashes >= 4 && washes.Where(w => w.Player == 1).Skip(1).All(w => Mathf.IsEqualApprox(w.Weight, 0.9f)),
+                $"the human behind is re-washed at 0.9 while it stays inside rewashes={rewashes} (1.5 s apart over 8 s)");
+            var gaps = washes.Where(w => w.Player == 1).Select(w => w.Time).ToList();
+            bool spaced = true;
+            for (int i = 1; i < gaps.Count; i++)
+                spaced &= Mathf.Abs(gaps[i] - gaps[i - 1] - 1.5f) < 0.05f;
+            ctx.Check(spaced, $"and each re-wash comes 1.5 s after the last, the re-arm firing under 0.5 s of the 2 s timer");
+            ctx.Check(washes.All(w => w.Player == 1),
+                $"neither the layer (P1) nor the human 400 m ahead (P3) is ever washed players={string.Join(",", washes.Select(w => w.Player).Distinct())}");
+            var pane2 = flash.CurrentFor(1);
+            ctx.Check(pane2.A > 0.5f && pane2.G > pane2.R && pane2.R > pane2.B,
+                $"the human behind's pane carries the grey-green wash ({pane2})");
+            ctx.Check(flash.CurrentFor(0).IsEqualApprox(new Color(0f, 0f, 0f, 0f)),
+                $"the layer's own pane stays clear ({flash.CurrentFor(0)})");
+
+            // Expiry: the screen is gone at TIME, and the AI's last refresh runs down and frees it.
+            for (int i = 0; i < 6; i++)
+                Step();
+            ctx.Check(screens.ActiveCount == 0, $"the screen has expired at its TIME active={screens.ActiveCount}");
+            float atExpiry = aiBehind.Pilot.StunRemainingS;
+            // Released so its pilot flies (and counts its stun down) again; a held airframe reads
+            // no pilot input at all.
+            aiBehind.Held = false;
+            for (int i = 0; i < Mathf.RoundToInt((tunables.StunIntervalS + 0.5f) * 60f); i++)
+                Step();
+            ctx.Check(atExpiry > 0f && !aiBehind.Pilot.IsStunned,
+                $"the AI recovers once its last stun runs out after the screen expires atExpiry={atExpiry:0.00} stunned={aiBehind.Pilot.IsStunned}");
+
+            // A layer going down ends its screen on the spot: nothing walks for a dead layer.
+            int washesBefore = washes.Count;
+            screens.Lay(layer, screenTime);
+            layer.DebugForceCrash();
+            Step();
+            ctx.Check(screens.ActiveCount == 0 && washes.Count == washesBefore,
+                $"a screen whose layer is no longer in play ends immediately and hits nobody active={screens.ActiveCount}");
+        }
+        finally
+        {
+            flash?.Free();
+            foreach (var pane in panes)
+                pane.Free();
+            foreach (var rig in rigs)
+                rig.Free();
+            pool?.Free();
             textures.Dispose();
         }
     }

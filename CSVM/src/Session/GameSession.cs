@@ -77,6 +77,8 @@ public partial class GameSession : Node3D
     // Every AI aircraft spawned into this session — stepped in DriveSimSteps after the
     // player rigs, freed with the world subtree.
     private readonly List<FlightController> _aiPlanes = new();
+    // scratch: the rigs' controllers plus _aiPlanes, rebuilt on every AllAircraft() call
+    private readonly List<FlightController> _aircraftScan = new();
     // scratch: rig camera positions for the edge extender
     private readonly List<Vector3> _focusPoints = new();
     // Pickable subtrees that live beside the world content rather than under it — the anim lab's
@@ -164,6 +166,9 @@ public partial class GameSession : Node3D
     // The FBFX_COLOR_FROM_TO wash — one ramp per rendered view, painted into the pane(s) the burst
     // was near.
     private UI.ScreenFlash? _screenFlash;
+    // The active smoke screens (D18): laid by the SMOKE_SCREEN fire path, walked over every rig
+    // and AI plane each sim step, washing humans through _screenFlash and stunning AI pilots.
+    private SmokeScreens? _smokeScreens;
     private Node3D? _plane;
     // The session's simulation clock (see GameClock). Also published as GameClock.Current, which
     // is how the sim consumers scattered through the tree reach it; dropped by ReturnToMenu.
@@ -464,6 +469,22 @@ public partial class GameSession : Node3D
         _screenFlash = UI.ScreenFlash.Build(_rigs.Select(r => r.HudParent), _viewers);
         _worldRoot!.AddChild(_screenFlash);
         _worldEffectsFactory.ScreenFlash = _screenFlash.Play;
+        // The smoke screens ride the same wash and read the roster through a closure, since the
+        // rigs and the AI planes are both built later than this. player.json missing falls back
+        // to the static image's tunables with a warning rather than aborting the launch.
+        SmokeScreenTunables smokeTunables;
+        try
+        {
+            smokeTunables = SmokeScreenTunables.Load(_zrdrPath);
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"smoke screen: player.json unavailable ({e.Message}) — flying on the image defaults");
+            smokeTunables = SmokeScreenTunables.Image;
+        }
+        var screenFlashSink = _screenFlash;
+        _smokeScreens = new SmokeScreens(smokeTunables, AllAircraft,
+            (playerIndex, colour, weight, duration) => screenFlashSink.PlayBlend(playerIndex, colour, weight, duration));
 
         // The chapter-dependent paths are recomputed here so a new launchscreen chapter selection
         // takes effect on rebuild, and ride BuildState so no phase method re-derives them.
@@ -712,6 +733,9 @@ public partial class GameSession : Node3D
             return;
         _versus?.Advance(dt);
         StepInstantAction(dt);
+        // On a realtime clock the walk reads whatever pose each aircraft holds at this node's
+        // tick; a step's stale pose is at most one 60 Hz frame of a 600 m cone.
+        _smokeScreens?.SimStep(dt);
     }
 
     private static void CopyInstanceShaderParams(Node source, Node copy)
@@ -726,6 +750,23 @@ public partial class GameSession : Node3D
         int n = Math.Min(source.GetChildCount(), copy.GetChildCount());
         for (int i = 0; i < n; i++)
             CopyInstanceShaderParams(source.GetChild(i), copy.GetChild(i));
+    }
+
+    /// <summary>Every aircraft in the session, the rigs' controllers first and then the AI
+    /// planes, in one reused list read fresh on each call: waves activate and generators spawn
+    /// long after the consumers holding this delegate are built. Not to be held across a step.</summary>
+    private IReadOnlyList<FlightController> AllAircraft()
+    {
+        _aircraftScan.Clear();
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller is { } c)
+            {
+                _aircraftScan.Add(c);
+            }
+        }
+        _aircraftScan.AddRange(_aiPlanes);
+        return _aircraftScan;
     }
 
     // Loads the session's core archives (gamez, textures, sounds, sound defs/groups) and routes the
@@ -2621,23 +2662,10 @@ public partial class GameSession : Node3D
 
         // F15 / --debug-targets: who is aiming at whom. Reads the live gunners through closures
         // rather than a snapshot — waves activate, AI planes spawn and emplacements die long
-        // after this line runs. The shooter list is reused, not rebuilt per frame.
-        var targetScan = new List<FlightController>();
+        // after this line runs. The roster list is reused, not rebuilt per frame.
         _worldRoot!.AddChild(new UI.TargetingOverlay(
             () => _turretEmplacements?.Emplacements ?? Array.Empty<TurretController>(),
-            () =>
-            {
-                targetScan.Clear();
-                foreach (var rig in _rigs)
-                {
-                    if (rig.Controller is { } c)
-                    {
-                        targetScan.Add(c);
-                    }
-                }
-                targetScan.AddRange(_aiPlanes);
-                return targetScan;
-            })
+            AllAircraft)
         {
             DebugShow = _spec.DebugTargets,
         });
@@ -3343,6 +3371,9 @@ public partial class GameSession : Node3D
             // planes above have taken this step's crashes — the alive count
             // InstantActionWaves.Step reads must reflect them.
             StepInstantAction(dt);
+            // The smoke screens after every aircraft has moved this step: the walk reads the
+            // layer's and the victims' poses as they stand now, as the original's does.
+            _smokeScreens?.SimStep(dt);
             // The voice dispatch's mission clock: the 2 s mute window and every 15 s
             // slot cooldown run on sim time, so a halted clock halts the chatter too.
             _aiVoice?.Step(dt);
