@@ -39,18 +39,12 @@ public sealed class PlaneBuilder
     private string? _skinPrefix;
     private StandardMaterial3D? _flareMaterial;
 
-    /// <param name="spinningProps">Free-flight build: hide the static propeller disc and
-    /// keep the spinning blur layers (a PropAnimator drives them). Default (exterior view)
-    /// keeps the static disc and hides the blur layers. Implies damage panels.</param>
-    /// <param name="damagePanels">Build the exterior pdpN torn-skin panels (hidden) even
-    /// with static props — the viewer's --damage lab flips them without flying.</param>
-    /// <param name="scheme">Paint this aircraft in the given livery — its skins recoloured
-    /// and its three decal placeholders swapped (see <see cref="PlanePainter"/>). Null builds
-    /// the shipped unpainted skins, which is what every static view did before paint existed.
-    /// Painting is per builder, so two players in the same aircraft can wear different
-    /// liveries without disturbing the shared texture cache.</param>
-    /// <param name="patterns">The original's per-pattern region masks from the UI resource
-    /// archive (see <see cref="PatternLibrary"/>). An empty library paints nothing.</param>
+    /// <param name="spinningProps">Spins the blur layers instead of the static disc; implies
+    /// damage panels.</param>
+    /// <param name="damagePanels">Builds exterior pdpN panels hidden, for the --damage lab.</param>
+    /// <param name="scheme">Paint livery (<see cref="PlanePainter"/>); null keeps shipped skins,
+    /// per builder so two players can differ.</param>
+    /// <param name="patterns"><see cref="PatternLibrary"/>'s region masks; empty paints nothing.</param>
     public PlaneBuilder(GameZ gamez, TextureArchive textures, bool spinningProps = false,
         bool damagePanels = false, PaintScheme? scheme = null, PatternLibrary? patterns = null)
     {
@@ -58,11 +52,7 @@ public sealed class PlaneBuilder
         _textures = textures;
         _scheme = scheme;
         _patterns = patterns ?? PatternLibrary.Empty;
-        // The propeller/rotor blur discs (rotorblur/zeprotorblur) are soft sprites — their
-        // alpha peaks at ~26%, so the default 1-bit AlphaScissor cutout erases them entirely.
-        // Alpha-BLEND them instead (as with the clouds) so the translucent disc shows.
-        // cullBackfaces: aircraft interior structure (the gyro's frame lattice) faces
-        // inward and must be culled from outside, as the original engine does.
+        // blendTexture/cullBackfaces prohibitions: this module's docs/architecture.md entry.
         _scene = new SceneBuilder(gamez, textures, blendTexture: IsPropBlurTexture, cullBackfaces: true,
             textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex);
         _spinningProps = spinningProps;
@@ -156,13 +146,7 @@ public sealed class PlaneBuilder
     private static bool IsPropBlurTexture(string tex) =>
         tex.Contains("blur", StringComparison.OrdinalIgnoreCase);
 
-    // Damage-state panels pdp1..8 (exterior) / pcdpN (cockpit) start INACTIVE in the
-    // original: its player_destruct_reset "plane_reset" anim deactivates them and
-    // re-activates the healthy pdpN_h panels, which are real airframe sections (the
-    // Bloodhawk's wingtips, the Kestrel's outer wing thirds) — pdpN_h must render or
-    // the plane is missing those parts. Suffixed names (pdp2_h, pdp2i) don't match.
-    // In flight builds the exterior pdpN panels are BUILT hidden instead of skipped,
-    // so DamageVisuals can flip them at the injure_anims HP thresholds.
+    // pdp/pcdp naming and the pdpN_h render-always rule: this module's docs/architecture.md entry.
     private static bool IsDamagePanel(string name, out bool cockpit)
     {
         cockpit = name.StartsWith("pcdp", StringComparison.OrdinalIgnoreCase);
@@ -201,13 +185,8 @@ public sealed class PlaneBuilder
                 : ""));
     }
 
-    // Finds the wingtip flare nodes in the built tree, hides them (reset state:
-    // the original starts them off and flashes them via wing_light.json's blink anim), and
-    // re-skins each glow quad with an additive amber tint, keeping its authored one-sided
-    // orientation (no billboard — the source quad only shows from the angle it was
-    // authored at, which is roughly where a chase camera sits). See WingLights.
-    // The same walk collects the flight build's damage panels: torn-skin pdpN hidden
-    // (reset state), healthy pdpN_h twins as built.
+    // Hides and re-skins the wingtip flares (WingLights.cs), and in the same walk collects
+    // the flight build's damage panels: torn pdpN hidden, healthy pdpN_h as built.
     private void CollectWingFlares(Node node)
     {
         if (node is Node3D n3d)
@@ -234,13 +213,8 @@ public sealed class PlaneBuilder
             CollectWingFlares(child);
     }
 
-    // Additive glow shared by every flare quad: unshaded, no depth write, tinted the
-    // original's warm amber (wing_light.json LIGHT_STATE COLOR). No billboard and default
-    // (one-sided) culling — the quad keeps its authored mesh orientation, since forcing it
-    // to always face the camera turned the original's compact star burst into a large flat
-    // blob. The soft oil_liteflare sprite (white core → transparent black) blends
-    // additively so its edges add nothing and the core glows — same treatment as the
-    // point-sprite lights.
+    // Shared additive glow material for every flare quad (colour/texture: WingLights.cs).
+    // ⚠ No billboard: forcing the quad to face the camera flattened the star burst into a blob.
     private StandardMaterial3D FlareMaterial() => _flareMaterial ??= new StandardMaterial3D
     {
         ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
@@ -270,20 +244,12 @@ public sealed class PlaneBuilder
         if (node.Name.EndsWith("_hook", StringComparison.OrdinalIgnoreCase))
             return true;
         var kind = PropParts.Classify(node.Name);
-        // The exterior viewer shows ONLY the static disc. The nitro boost disc is hidden either
-        // way (no nitro system yet). Hiding it in flight matters: nitropropN is a NON-spinning
-        // blur disc, so leaving it in overlaid a fixed disc on the spinning ones, and its edge
-        // painted the shimmering seam.
+        // Exterior shows only the static disc; nitropropN prohibition: docs/architecture.md.
         if (!_spinningProps)
             return PropParts.IsDynamic(kind);
         if (kind == PropParts.Kind.Nitro)
             return true;
-        // Flight now builds the static PROPELLER disc too (not skipped), alongside the spinning
-        // blur discs it always built — the startprops/stopprops choreography cross-fades between
-        // them at spawn/engine-stop (see FlightController.Respawn/Crash), so both need to exist
-        // for the fade to have two things to fade between. That choreography names only
-        // staticpropN, never staticrotorN: the autogyro's static rotor disc has no such fade and
-        // stays skipped, exactly as before, so it does not double-expose against its own blur.
+        // staticprop-vs-staticrotor build rule: this module's docs/architecture.md entry.
         return kind == PropParts.Kind.Static
             && !node.Name.StartsWith("staticprop", StringComparison.OrdinalIgnoreCase);
     }

@@ -6,17 +6,10 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The original's weathervane: <c>return_rate</c> as a restoring torque that swings the nose onto
-/// the velocity vector — not extra per-axis damping folded into the damping coefficient.
-///
-/// <para>Everything here reads <see cref="FlightModel.WeathervaneTorque"/> directly, or the body
-/// rates after ONE step from rest where the model's arithmetic is a closed form
-/// (<c>BodyRates = cmd · dt</c>) — so a sign flip, a missing halving or a leak into roll fails
-/// exactly, rather than being absorbed by the integrator a hundred frames later.</para>
-///
-/// <para>The two properties that carry it: it must VANISH when the nose is on the flight
-/// path (that is what leaves level cruise untouched by construction rather than by scale), and its
-/// SIGN must close the misalignment rather than open it — a weathervane with the sign reversed is
-/// divergent and would still look plausible in a single frame.</para>
+/// the velocity vector, not extra per-axis damping. Decode: docs/org/flightModel.md, "Weathervane
+/// centring — resolved". Reads <see cref="FlightModel.WeathervaneTorque"/> directly, or the body
+/// rates after one step from rest where the arithmetic is closed-form, so a sign flip or a missing
+/// halving fails exactly rather than being absorbed by the integrator.
 /// </summary>
 public class WeathervaneTests
 {
@@ -72,10 +65,8 @@ public class WeathervaneTests
     [Fact]
     public void IsReturnRateTimesHalfTheMisalignmentAngle()
     {
-        // The magnitude is the binary's: return_rate × HALF the angle. The original builds the
-        // shortest-arc quaternion and converts it through a quaternion-log helper that returns
-        // atan2(|q.v|, q.w) — the half angle — and never doubles it back. Reading it as the full
-        // misalignment doubles the spring rate, which is exactly the mistake this pins.
+        // return_rate × HALF the misalignment angle (docs/org/flightModel.md); reading the full
+        // angle doubles the spring rate.
         var m = Model();
         m.Reset(Vector3.Zero, Pitched(20f), 120f, 1f);
         m.VelocityDir = Vector3.Forward;
@@ -105,11 +96,8 @@ public class WeathervaneTests
     [Fact]
     public void EntersTheSameAccumulatorAsTheStickAndCarriesRecInertia()
     {
-        // One step from rest with the stick centred: BodyRates = cmd·dt·exp(-dt·damp) — the torque
-        // scaled by that axis' RecInertia (the only scaling the original applies downstream), THEN
-        // this tick's own exponential decay — the original damps the accumulated total, not just
-        // whatever rate was already there, and on the first tick from rest that total IS this
-        // tick's torque.
+        // One step from rest: BodyRates = cmd·dt·exp(-dt·damp), torque scaled by RecInertia then
+        // this tick's own decay, since the original damps the accumulated total.
         var stats = Stats();
         var m = Model();
         m.Reset(Vector3.Zero, Pitched(20f), 120f, 1f);
@@ -136,10 +124,8 @@ public class WeathervaneTests
         m.BodyRates = new Vector3(0f, 0f, 1f);
         m.Step(default, Dt);
 
-        // Roll is the axis the weathervane provably cannot reach, so the decay there is the damping
-        // term alone and the check is not contaminated by the torque under test. The decay is
-        // EXPONENTIAL — the linear (1 - damp·dt) form gives a visibly different number at this
-        // damp·dt, printed alongside for contrast.
+        // Roll is the axis the weathervane provably cannot reach, so this isolates the damping
+        // term; the decay is exponential, not the linear (1 - damp·dt) form.
         float expected = Mathf.Exp(-stats.AngMomentumDamp * Dt);
         Assert.True(Mathf.IsEqualApprox(m.BodyRates.Z, expected, 1e-6f),
             $"roll decayed to {m.BodyRates.Z:0.000000}, expected exp(-ang_momentum_damp·dt) "

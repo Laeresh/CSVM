@@ -56,38 +56,21 @@ public readonly struct TargetScore
     public float Rank { get; }
 }
 
-/// <summary>The decoded target-ranking formula, recovered from the engine's own debug
-/// readout (docs/formats/ai-rosters.md "AI modes, engine-side"):
-/// <c>rank = weight × 1200 + distance + objectiveBias</c>, MINIMISED, where the weight starts at
-/// 1.0 for any target except the player, which starts at 0.7, then takes ±0.2 terms for bearing,
-/// altitude sign and target facing. A target beyond the activation radius scores the engine's
-/// own 1e21 and is never picked.
-///
-/// <para><b>Decoded:</b> the formula shape, the 1200 scale, the 0.7/1.0 base weights, the ±0.2
-/// term magnitudes, and the 1e21 activation cutoff. ⚠ Under minimisation the player's 0.7 base
-/// ranks the player AHEAD of an equal-distance AI target by 360 m of distance equivalence —
-/// that is the literal decoded arithmetic, implemented exactly (the plan's "rank the player
-/// last" gloss does not follow from it and is recorded as such in the landing notes).</para>
-///
-/// <para><b>Assumed, named as such:</b> each ±0.2 term's sign convention follows the design's
-/// target-ranking section (front 120° arc, targets below, targets facing away are the
-/// favourable, −0.2 arms); <see cref="BiasScale"/> maps an authored bias of −1.0 onto one full
-/// weight unit (raw metres would leave every shipped value inert); a bias list's FIRST matching
-/// entry wins (authored order). The readout's +0.4 dynamics-class and −0.5 structure terms are
-/// not modelled — no non-aircraft candidate reaches this path yet.</para>
-///
-/// <para><b>Deconfliction (invented minimum):</b> the design says a target already held by a
-/// peer is dropped from the pool and selection re-runs, falling back to the full pool when it
-/// empties. <see cref="SelectBest"/> implements exactly that: the best-ranked candidate with
-/// zero <see cref="RankedTargetCandidate.AlliedAttackers"/> wins; when every ranked candidate
-/// is held, the overall best is taken. What counts as an "allied attacker" is the caller's
-/// (invented: a same-team gunner whose standing target is the candidate).</para></summary>
+/// <summary>The decoded target-ranking formula (docs/architecture.md, docs/formats/ai-rosters.md):
+/// <c>rank = weight × 1200 + distance + objectiveBias</c>, MINIMISED, player base weight 0.7,
+/// others 1.0, ±0.2 terms for bearing/altitude sign/facing, <c>1e21</c> beyond the activation
+/// radius. <see cref="SelectBest"/> prefers a candidate no ally already holds
+/// (<see cref="RankedTargetCandidate.AlliedAttackers"/>), falling back to the overall best when
+/// the pool is exhausted — the design's deconfliction, a minimum reading.</summary>
 public static class AiTargetRanking
 {
     /// <summary>The decoded weight scale: one weight unit is worth 1200 m of distance.</summary>
     public const float WeightScale = 1200f;
 
-    /// <summary>The player's base weight — the decoded hard constant.</summary>
+    /// <summary>The player's base weight — the decoded hard constant.
+    /// ⚠ Under minimisation this ranks the player AHEAD of an equal-distance AI target, by about
+    /// 360 m of distance equivalence. That is the decoded arithmetic; do not "fix" it to rank the
+    /// player last.</summary>
     public const float PlayerWeight = 0.7f;
 
     /// <summary>Every other target's base weight.</summary>

@@ -3,25 +3,12 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>
-/// The original's Stunt Flying objective marker, rebuilt as a HUD Control
-/// over the flight view. It guides the player to the active Danger Zone:
-///  • on screen → the zone's text block floats at its projected position (name + live distance),
-///    a small reticle marking the point;
-///  • off screen / behind → the block clamps to the screen edge with an arrow pointing the
-///    shortest way toward it, plus the "N o'clock" relative bearing — matching
-///    OriginalScreenshots/C1 IA1 Cloudcoverage 1.png ("Danger Zone [Fly Through] - Train Tunnel
-///    Mid / 7 o'clock").
-/// Plus the run-status line (elapsed m:ss.t + zones done), the one-shot intro banner, an
-/// all-complete banner, and a brief zone-cleared flash. The displayed target follows
-/// StuntMission's auto-advance and the pilot's manual cycling (Tab / gamepad, in FlightController).
-///
-/// Follows the CompassTape/GaugeCluster pattern: a viewport-filling Control fed the plane pose
-/// each frame, projecting through the live camera at _Draw time (no cached projection, so the
-/// marker never lags the chase camera). Screen metrics scale by viewport height off the 1440p
-/// reference; colours + sizes are TUNE. The circular live-camera objective inset next to the
-/// original's marker is out of scope (backlog) — this draws the arrow + text only.
-/// </summary>
+/// <summary>The original's Stunt Flying objective marker, rebuilt as a HUD Control
+/// (docs/architecture.md): on screen, the zone's text block floats at its projected position with
+/// a reticle; off screen, it clamps to the edge with an arrow and clock-hour bearing. Plus the
+/// run-status line, intro banner, all-complete banner and zone-cleared flash. A viewport-filling
+/// Control fed the plane pose each frame, projecting through the live camera at <c>_Draw</c> time
+/// so the marker never lags the chase camera.</summary>
 public sealed partial class MarkerHud : Control
 {
     /// <summary>The splitscreen race this pilot is flying in, or null in a solo run.
@@ -91,11 +78,8 @@ public sealed partial class MarkerHud : Control
 
     public override void _Draw()
     {
-        // A draw can land before _Process has sized us to the viewport (and, in splitscreen,
-        // before a pane has been laid out): every derived metric would be 0 and Godot's font
-        // cache errors out on a zero size. Nothing to draw at zero height anyway.
-        // The marker scales like the rest of the HUD: window height against the 1440p reference,
-        // damped by this pane's share of it so a 4P quarter-pane marker stays readable (HudMetrics).
+        // A draw can land before _Process has sized us; Godot's font cache errors on zero size
+        // (docs/architecture.md).
         float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
         if (s <= 0f)
             return;

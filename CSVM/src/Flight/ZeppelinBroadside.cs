@@ -27,27 +27,12 @@ public enum ZeppelinCannonState
     Retracting,
 }
 
-/// <summary>
-/// The zeppelin broadside law (M4 F19), pure and engine-free: the decoded 90° firing arc
-/// (<c>dot(toTarget, sideNormal) &gt; 0.707</c> against the MOVING hull's lateral axis), the
-/// per-cannon stowed → deploy → ready → fire machine with its own re-fire timer
-/// (<c>cannon_fire_delay</c>), and the zeppelin-vs-zeppelin gasbag pick (the target's in-arc
-/// live gasbags, one chosen by the seeded rng). Hit resolution is BALLISTIC: the caller runs
-/// <see cref="TryAim"/> (a lead/intercept solve) and spawns a real <c>wep_28</c> round scattered
-/// by <c>cannon_inaccuracy</c>; a target with no solution is SKIPPED, never rolled against —
-/// the design document's 20 %→100 % hit curve is design-era and is not in the shipped engine
-/// (docs/formats/mission-entities.md "Broadside firing").
-///
-/// <para>Side alternation is geometric, not scheduled: the two 45°-half-angle cones sit on
-/// opposite normals, so at most one side ever bears and the volley swaps sides only when the
-/// target crosses the hull axis. No alternation cadence is invented.</para>
-///
-/// <para>What the decode does not state, named invented here: the stow trigger
-/// (<see cref="StowAfterIdleSeconds"/> without a bearing target) and the two fallback timings
-/// (<see cref="FallbackDeploySeconds"/>, <see cref="FallbackFireDelaySeconds"/>), neither of
-/// which a shipped record reaches — deploy/retract durations come from the authored anim defs
-/// and every cannon-bearing record authors <c>cannon_fire_delay</c>.</para>
-/// </summary>
+/// <summary>The zeppelin broadside law (M4 F19), pure and engine-free (docs/architecture.md): the
+/// decoded 90° firing arc, the per-cannon stowed → deploy → ready → fire machine with its own
+/// re-fire timer, and the zeppelin-vs-zeppelin gasbag pick. Hit resolution is BALLISTIC: <see
+/// cref="TryAim"/> is a lead/intercept solve, and a target with no solution is SKIPPED, never
+/// rolled against. <see cref="StowAfterIdleSeconds"/> and the two fallback timings are invented,
+/// named as such; no shipped record reaches them.</summary>
 public sealed class ZeppelinBroadside
 {
     /// <summary>The decoded arc gate: <c>dot(toTarget, sideNormal) &gt; 0.707</c> — a 45°
@@ -161,12 +146,10 @@ public sealed class ZeppelinBroadside
         inArcCount <= 0 ? -1 : rng.Next(inArcCount);
 
     /// <summary>One step of every cannon's machine. <paramref name="targetSide"/> is where the
-    /// current target bears (<see cref="BroadsideSide.None"/> for no target, out of range, or
-    /// out of both arcs); <paramref name="cannonAlive"/> is F18's zone view — a destroyed
-    /// cannon drops out of the volley entirely. The caller plays the anims for
-    /// <paramref name="deploying"/>/<paramref name="retracting"/> and fires (or skips) each
-    /// <paramref name="readyToFire"/> cannon, calling <see cref="Fired"/> on an actual
-    /// launch — a skipped no-solution target does NOT arm the re-fire timer.</summary>
+    /// current target bears; <paramref name="cannonAlive"/> is F18's zone view, dropping a
+    /// destroyed cannon from the volley. The caller plays the anims for <paramref
+    /// name="deploying"/>/<paramref name="retracting"/> and fires each <paramref
+    /// name="readyToFire"/> cannon, calling <see cref="Fired"/> on an actual launch.</summary>
     public void Step(float dt, BroadsideSide targetSide, Func<string, bool> cannonAlive,
         List<Cannon>? deploying = null, List<Cannon>? retracting = null,
         List<Cannon>? readyToFire = null)

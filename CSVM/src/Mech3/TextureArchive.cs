@@ -9,28 +9,12 @@ using Godot;
 
 namespace CSVM.Mech3;
 
-/// <summary>
-/// The texture drop-in instruments, hooked into <see cref="TextureArchive.Find"/> because that is
-/// the one place every consumer — world, clutter, aircraft, puffers, clouds, gauges — resolves a
-/// name, so none of them needs to know the mode exists.
-///
-/// <para><b><c>--tex-override=name[=color]</c></b> answers "is this thing drawing at all?": the
-/// named texture comes back a flat loud colour wherever it is used. <b><c>--tex-census</c></b>
-/// gives <i>every</i> texture its own flat colour, derived from the name alone, turning a frame
-/// into a machine-readable map of which texture painted which pixel.</para>
-///
-/// <para><b>What is deliberately NOT touched.</b> Only the RGB bytes change: size, pixel format,
-/// alpha channel and mip chain are the original's, so a hard-alpha cutout keeps its exact
-/// silhouette, a soft-alpha sprite keeps blending, and the material variant the builder picks is
-/// the one it would have picked anyway. No shader, material or geometry differs from a normal
-/// run — a diagnostic that moved what it measures would answer its own question.</para>
-///
-/// <para><b>Reading a census frame back.</b> Shading multiplies the flat and fog mixes it toward
-/// grey, so pixels are classified by <i>chromaticity</i> — the linear-space colour normalised to
-/// its brightest channel, which a scalar shade leaves untouched — with a tolerance, a runner-up
-/// margin and a darkness floor. Every colour is generated at full brightness (one channel pinned
-/// to 255) to keep that ratio as far above 8-bit quantisation as it can be.</para>
-/// </summary>
+/// <summary>The texture drop-in instruments (<c>--tex-override</c>/<c>--tex-census</c>,
+/// docs/cli.md), hooked into <see cref="TextureArchive.Find"/> because that is the one place
+/// every consumer resolves a name. ⚠ Only RGB bytes change — size, pixel format, alpha channel
+/// and mip chain stay the original's, so a diagnostic never alters what it measures. Census
+/// colours are a pure hash of the name, read back by chromaticity (docs/cli.md); plumbing: this
+/// module's entry in docs/architecture.md.</summary>
 public static class TextureDropIn
 {
     /// <summary>How far a pixel's chromaticity may sit from a census colour's and still be counted
@@ -220,21 +204,15 @@ public static class TextureDropIn
         }
     }
 
-    /// <summary>The census colour of any name at all, archive membership irrelevant: a pure hash,
-    /// so one texture wears one colour in every chapter and every run. Full brightness (one channel
-    /// pinned to 255) and never a grey, because the readback identifies a pixel by its channel
-    /// ratios and a grey has none.
-    ///
-    /// <para>The two free channels are drawn uniformly in <b>linear</b> ratio and converted to
-    /// sRGB for storage, so the spread is even in the space the classifier measures — drawing them
-    /// uniformly in sRGB bytes instead bunches them into the corners once gamma is undone.</para></summary>
+    /// <summary>The census colour of any name, a pure hash — one texture wears one colour in every
+    /// chapter and run. Full brightness, never grey: the readback classifies by channel ratios.
+    /// ⚠ Draw the two free channels in LINEAR ratio, not sRGB bytes: sRGB draws bunch into the
+    /// corners once gamma is undone.</summary>
     public static Color ColorForName(string name)
     {
         ulong h = Mix(Fnv1a(name.ToLowerInvariant()));
-        // Two free ratios over 0..0.9 against the pinned channel: a continuous space of billions,
-        // so an outright colour collision is vanishing and no two textures silently share an
-        // identity. Crowding is the real hazard and is reported instead — the map's nearest-
-        // neighbour column, and the contested counts in a shot report.
+        // Continuous space of billions: an outright collision is vanishing. Crowding is the real
+        // hazard, reported via the map's nearest-neighbour column and a shot's contested counts.
         float a = ((h >> 8) & 0xFFFF) / 65535f * 0.9f;
         float b = ((h >> 32) & 0xFFFF) / 65535f * 0.9f;
         var linear = (int)(h % 3) switch
@@ -654,20 +632,11 @@ public static class TextureDropIn
     }
 }
 
-/// <summary>
-/// Texture lookup over a mech3ax texture extraction — a ZIP (texture.zbd → PNGs) or a
-/// directory of those same PNGs (e.g. from ExtractAssets.ps1 -Unzip).
-/// Material texture names come from fixed-width 20-char fields in planes.zbd, so
-/// "blo_fusalagebottom.t" must still find "blo_fusalagebottom.png" — hence the
-/// prefix fallback.
-///
-/// <para><b>Mip levels.</b> 52–91 base textures per chapter ship hand-authored half- and
-/// quarter-resolution siblings (<c>cblock1</c>, <c>cblock1_1</c>, <c>cblock1_2</c>) that no gamez
-/// material references — they are a mip chain the artists drew, not textures in their own right.
-/// They are not downsamples: the artists dropped the overall level and kept the street lights
-/// punchy, so a box filter averages away every bright pixel the authored level keeps. See
-/// <see cref="Mips"/> for the two policies and docs/formats/gamez.md for the measurement.</para>
-/// </summary>
+/// <summary>Texture lookup over a mech3ax texture extraction — a ZIP (<c>texture.zbd</c> →
+/// PNGs) or a directory of the same PNGs. Absorbs the stored-name quirks (20-char truncation,
+/// legacy renames — docs/formats/gamez.md) so a truncated material name still resolves.
+/// Mip levels: <see cref="Mips"/>, docs/formats/gamez.md. Plumbing: this module's entry in
+/// docs/architecture.md.</summary>
 public sealed class TextureArchive : IDisposable
 {
     // Texture names referenced by gamez meshes that ship in NO archive of a retail
@@ -770,14 +739,10 @@ public sealed class TextureArchive : IDisposable
     /// <summary>True if the last texture returned by Find had an alpha channel.</summary>
     public bool LastHadAlpha { get; private set; }
 
-    /// <summary>
-    /// True if the last texture's alpha is "soft": its ink is mostly partial alpha, which a
-    /// 1-bit scissor cutout at 0.5 misrepresents — erasing what sits below the threshold and
-    /// solidifying what sits above it. True for the original's translucent art — baked shadow
-    /// decals, cloud/prop-blur/fire sprites, waterfalls, glow flares, neon, semi-transparent
-    /// lattices — which the original engine alpha-blends; false for genuine cutouts (fences,
-    /// trees, railings), whose ink is opaque fill plus AA edges and scissors correctly.
-    /// </summary>
+    /// <summary>True when the last texture's alpha is "soft" — mostly partial alpha, which a
+    /// 1-bit scissor at 0.5 misrepresents (this module's entry in docs/architecture.md has the
+    /// threshold and the census). True for translucent art (shadows, fire, glow, neon); false for
+    /// genuine cutouts (fences, trees), which scissor correctly.</summary>
     public bool LastAlphaIsSoft { get; private set; }
 
     /// <summary>True if the name is a texture the retail game data itself lacks (see
@@ -866,16 +831,8 @@ public sealed class TextureArchive : IDisposable
             ? archiveBaseName[^1] - '0'
             : 0;
 
-    // Classifies the alpha channel (see LastAlphaIsSoft). A 1-bit scissor at 0.5
-    // misrepresents a texture in both directions — it erases ink below the threshold AND
-    // solidifies partial alpha above it (a 60%-alpha waterfall sheet scissors to a solid
-    // wall, not to nothing) — so the question is not "would anything survive" but "is the
-    // ink essentially binary". Classify by the fraction of ink texels (a >= 32) that are
-    // truly opaque (a >= 200): genuine cutouts (fences, trees, railings) are AA edges on
-    // opaque fill and sit near 1; authored translucents (clouds, fire, flares, shadows,
-    // lattices, neon, decals) are mostly partial and sit near 0. The 0.45 threshold is
-    // measured install-wide (analysis/alpha-classification/): it flips nothing that
-    // blends today back to scissor, and the tightest genuine cutout (bush2) sits at 0.49.
+    // Fraction of ink texels (a >= 32) that are truly opaque (a >= 200); below the threshold is
+    // soft (this module's entry in docs/architecture.md has the value and the census).
     private static bool AlphaIsSoft(Image img)
     {
         var rgba = img;
@@ -903,14 +860,10 @@ public sealed class TextureArchive : IDisposable
     private static bool ImageHasAlpha(Image img) =>
         img.GetFormat() is Image.Format.Rgba8 or Image.Format.La8 or Image.Format.Rgba4444 && img.DetectAlpha() != Image.AlphaMode.None;
 
-    // Alpha-coverage-preserving mips for scissor cutouts: rescales each generated level's alpha
-    // so the share of texels passing the 0.5 scissor matches the BASE level's share, instead of
-    // letting the box filter's averaging erode it (the fix for lattices/foliage thinning and
-    // vanishing at distance). Per level: find the alpha value v where this level's own
-    // count(a > v) reaches the base's coverage, then scale all alphas by 127.5/v so exactly that
-    // population crosses the threshold. Boost-only — a level whose coverage already holds (v ≥ 128)
-    // stays byte-identical — and the scale is capped so near-invisible dust is never blown solid.
-    // Blend-class textures never come here: with no scissor there is no threshold to preserve.
+    // Rescales each generated mip level's alpha so its scissor coverage (a > 127) matches the
+    // base level's, instead of letting the box filter erode it — the fix for lattices/foliage
+    // thinning at distance (this module's entry in docs/architecture.md). Boost-only; a level
+    // already at coverage is untouched. Blend-class textures (no scissor) never reach this.
     private static void ScissorMipsKeepCoverage(Image img)
     {
         int mips = img.GetMipmapCount();
@@ -1011,10 +964,8 @@ public sealed class TextureArchive : IDisposable
         // Box-filter the whole chain first either way: it allocates the levels and fixes their
         // offsets, and levels 3-and-below have no authored sibling to take their place.
         img.GenerateMipmaps();
-        // Scissor cutouts only: the box filter averages a sparse cutout's alpha toward its
-        // coverage, which sinks below the 0.5 scissor threshold a level or two down and the
-        // object thins, then vanishes, at distance (eiffel1: 27 % coverage ⇒ mip alpha ~0.27).
-        // Runs BEFORE the authored siblings install so the artists' levels keep shipped alpha.
+        // Scissor cutouts only: box-filtered alpha sinks below the 0.5 threshold at distance and
+        // the object thins away (docs/architecture.md). Must run BEFORE the authored install.
         if (LastHadAlpha && !LastAlphaIsSoft)
         {
             ScissorMipsKeepCoverage(img);
@@ -1121,11 +1072,7 @@ public sealed class TextureArchive : IDisposable
         var m = System.Text.RegularExpressions.Regex.Match(baseName, @"^(.*)\.-\d+$");
         if (m.Success && _byBaseName.TryGetValue(m.Groups[1].Value, out var renamed))
             return renamed;
-        // Names stored as "prefix\0suffix\0" decode with a period restored at the first
-        // zero, so a name whose suffix is empty comes back doubled: "bldhwk_cowling..tif"
-        // → base "bldhwk_cowling." → the PNG is "bldhwk_cowling". Only the fork's tree
-        // exposes these (v0.6.1 hid them behind the ".-N" renames above); it is the one
-        // resolution case the shape change would otherwise have broken.
+        // Trailing doubled periods: fork-only, decode in docs/formats/gamez.md.
         var trimmed = baseName.TrimEnd('.');
         if (trimmed.Length != baseName.Length && _byBaseName.TryGetValue(trimmed, out var undoubled))
             return undoubled;

@@ -50,10 +50,8 @@ public class CameraWeatherStateTests
         Assert.Equal(1500f, weather.CloudBandCentre, 3);
         Assert.Equal(1000f, weather.CloudBottom, 3);
         Assert.Equal(CoreBottom, weather.CloudCoreBottom, 3);
-        // 1499 is BELOW the band centre (1500) but ABOVE the core bottom (1400): a bug that used
-        // CloudBandCentre for the threshold would answer 1 here; the correct answer, from
-        // CloudCoreBottom, is 2. 1001 is the mirror case against the visual floor (1000): a bug
-        // that used CloudBottom would answer 2; the correct answer is 1.
+        // 1499/1001 straddle CloudBandCentre/CloudBottom but not CloudCoreBottom, so a threshold
+        // using the wrong field would answer differently here.
         Assert.Equal(2, weather.CameraWeatherState(At(1499f), fogZoneArmed: false, NoVolumes));
         Assert.Equal(1, weather.CameraWeatherState(At(1001f), fogZoneArmed: false, NoVolumes));
     }

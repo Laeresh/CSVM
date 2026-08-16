@@ -5,21 +5,13 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// The cross-node draw-order tie-break, as a DENSE rank over the world's conflict graph.
-///
-/// <para>Two world surfaces that are exactly coplanar, carry the same polygon priority and the
-/// same <c>no_clutter</c> flag have nothing but the tie-break to separate them; the original draws the
-/// later node on top (nodes.json is a depth-first serialization = its draw order). Ranking by
-/// the node's flat index directly — <see cref="SceneBuilder.NodeOrderBias"/> — spends the whole
-/// index range on that, which measures 1.22–2.86 priority levels per chapter, so a within-mesh
-/// surface rank could out-bid it: 888 of 2,597 visible conflicting pairs resolved the wrong way
-/// round (<c>analysis/bl-053-dense-rank/</c>).</para>
-///
-/// <para>This ranks only what actually conflicts. Every edge runs low node index → high node
-/// index, so the longest-path layering below is a topological order of the conflict DAG and
-/// <b>cannot invert authored layering by construction</b>; and it costs one slot per conflicting
-/// layer rather than one per node, which is 8 slots at worst across all eight chapters instead
-/// of ~9,400.</para>
+/// The cross-node draw-order tie-break: a dense rank over the world's conflict graph, ranking
+/// only nodes with a genuine coplanar, same-priority, same-<c>no_clutter</c> conflict.
+/// ⚠ Ranking by flat node index instead (<see cref="SceneBuilder.NodeOrderBias"/>) spends the
+/// whole index range and lets a within-mesh surface rank out-bid it — see analysis/bl-053-dense-rank.
+/// Every edge runs low node index → high node index, so the longest-path layering is a
+/// topological order of the original's own draw order and cannot invert authored layering.
+/// Mechanism and the bias-value derivation: this module's docs/architecture.md entry.
 /// </summary>
 internal static class ConflictRank
 {
@@ -78,12 +70,9 @@ internal static class ConflictRank
         var merged = new List<Tri>();
         foreach (var (key, bucket) in buckets)
         {
-            // Vertices are floats and the two sides of a conflict reach their shared plane through
-            // different transforms, so a pair that is coplanar in the data can still land either
-            // side of a quantisation boundary. Each bucket is therefore paired against the next
-            // plane offset up as well; the reverse direction is covered when that bucket's own
-            // turn comes. Without this the engine found 294 of C5's pairs where the
-            // double-precision instrument found 337.
+            // A pair can be coplanar in the data yet land on either side of a quantisation
+            // boundary, since the two sides reach the shared plane through different transforms.
+            // Pairing each bucket with the next plane offset up recovers those (docs/architecture.md).
             var neighbour = (key.Item1, key.Item2, key.Item3, key.Item4 + 1);
             if (!buckets.TryGetValue(neighbour, out var above))
             {

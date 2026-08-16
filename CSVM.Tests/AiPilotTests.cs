@@ -8,15 +8,11 @@ namespace CSVM.Tests;
 /// <summary>
 /// The AI actor seam's input driver, engine-free: <see cref="AiPilot"/> over a real
 /// <see cref="FlightModel"/> on the shipped Bloodhawk stats, on the fixed sim dt. Pins that the
-/// control law holds a level course, converges onto an ordered heading, and — the seam's design
-/// requirement — that its orders are mutable mid-flight: a retarget and a new altitude issued
-/// between steps are flown to without any respawn or rebuild.
-///
-/// <para>Unchanged across E41, and deliberately not re-pinned: every bound here passed as written
-/// when the placeholder law was replaced by the original's (<see cref="AiControlLaw"/>), which is
-/// the useful result — the two laws agree on course-holding, capture and retargeting, and they
-/// differ in the maneuvering this file never measured. The law's own arithmetic is pinned by
-/// <see cref="AiControlLawTests"/> against the decode, not against these tolerances.</para>
+/// control law holds a level course, converges onto an ordered heading, and that its orders are
+/// mutable mid-flight: a retarget and a new altitude issued between steps are flown to with no
+/// respawn or rebuild. Deliberately not re-pinned when the placeholder law was replaced by the
+/// original's (<see cref="AiControlLaw"/>); its own arithmetic is pinned by
+/// <see cref="AiControlLawTests"/> against the decode instead.
 /// </summary>
 public class AiPilotTests
 {

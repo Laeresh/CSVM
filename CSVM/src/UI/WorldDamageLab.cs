@@ -12,29 +12,15 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The world damage lab (F5) in <c>--freecam</c>/<c>--anim-lab</c>: when
-/// <see cref="SelectionService"/> lands on a destructible, this panel shows that object's live HP
-/// pools with a slider, a Kill and a Reset — the interactive twin of <c>--damage-test</c>, on any
-/// object, in the running world. Elsewhere F5 means the aircraft's
-/// <see cref="Flight.DamageLab"/>; the two never exist in the same session.
-///
-/// <para><b>The unit of control is a pool, not an object.</b> A node can carry several
-/// <c>(def, anchor)</c> pools — the compiler's per-instance definition and a reader wildcard's both
-/// bind the C1 water tower — and each holds its own HP. Only the pool
-/// <see cref="DestructibleRegistry.Resolve"/> names is reachable by weapon fire, so only that one
-/// gets controls; the rest are listed with their live HP and the reason they are inert. Driving a
-/// twin directly would damage a pool nothing can ever hit and read as a working feature.</para>
-///
-/// <para><b>The slider is absolute HP.</b> Lowering it spends the difference through
-/// <see cref="AnimRuntime.DamageAt"/> — the same call a rocket makes, so stages, death, swap,
-/// debris and audio are the real ones. Raising it runs
-/// <see cref="AnimRuntime.ResetDestructible"/> and re-damages down to the new value, because the
-/// data has no healing: <c>DamageStage</c> only ever climbs, and a reset is the object's own
-/// authored way back to healthy.</para>
-///
-/// <para><b>A source this mode does not build says so.</b> Colliders exist only where collision was
-/// built, so a kill's collider census prints the not-built notice rather than a silent zero, and
-/// when it is built the two directions are counted <b>separately</b> — a death switches the healthy
-/// collider off and wreck colliders on, and the net hides the removal.</para>
+/// <see cref="SelectionService"/> lands on a destructible, this panel shows its live HP pools
+/// with a slider, a Kill and a Reset, the interactive twin of <c>--damage-test</c>. Elsewhere F5
+/// means the aircraft's <see cref="Flight.DamageLab"/>; the two never coexist. Only the pool
+/// <see cref="DestructibleRegistry.Resolve"/> names gets controls, since a node can carry several
+/// pools and driving one nothing can ever hit would read as a working feature. Lowering the
+/// slider spends the difference through <see cref="AnimRuntime.DamageAt"/>, the same call a
+/// rocket makes; raising it runs <see cref="AnimRuntime.ResetDestructible"/> and re-damages down,
+/// since the data has no healing. Full decode, including the collider-census and freecam-runtime
+/// traps: docs/architecture.md.
 /// </summary>
 public sealed partial class WorldDamageLab : Node
 {
@@ -237,12 +223,8 @@ public sealed partial class WorldDamageLab : Node
         var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
         root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
 
-        // Down the RIGHT edge: the node lab owns the left, and the two are meant to be readable
-        // together (pick a node there, damage it here). Anchored top-right (not RightWide) so the
-        // panel's own height is under our control below rather than stretched to fill the screen —
-        // ResizeToContent sets OffsetBottom to hug whatever the rows need, capped at BottomMargin
-        // above the bottom edge, so a short pool list is a compact block instead of a tall panel
-        // with dead translucent space over the debris line.
+        // Down the right edge; the node lab owns the left. Top-right, not RightWide, so
+        // ResizeToContent can hug the panel's own height instead of stretching it full-screen.
         var panel = new PanelContainer { SelfModulate = new Color(1, 1, 1, 0.88f) };
         panel.AnchorLeft = 1;
         panel.AnchorRight = 1;

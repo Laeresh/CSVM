@@ -3,26 +3,11 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>
-/// The game's own HUD text font, rebuilt from the two atlases in <c>extracted/rimage/</c>:
-/// <c>5pointhud.png</c> (the normal green glyphs) and <c>5pointhudbrite.png</c> (the brighter
-/// highlight variant). Both are the same 463×6 bitmap — a proportional 1-bit font whose glyphs
-/// occupy rows 0..4 (five pixels tall — hence "5point"; row 5 is blank spacing) and cover the
-/// printable ASCII range <c>0x20</c>..<c>0x7e</c>. Space (<c>0x20</c>) is a blank leading cell, so
-/// the atlas holds 94 ink glyphs, one per code <c>0x21</c>..<c>0x7e</c> in order; letters are drawn
-/// uppercase-only (the a–z cells reuse the A–Z shapes). Layout + metrics verified against the PNG,
-/// see <c>docs/formats/hud.md</c>.
-///
-/// <para>The two atlases are geometrically identical and differ only in green level (normal core
-/// 0,150,0 · highlight core 0,255,0), so glyph metrics are read once and either texture is sampled
-/// per draw. The black background is keyed to transparent at load; every non-black texel (the green
-/// core plus its dim-green outline) is kept as-is, so drawing with a white modulate reproduces the
-/// original's colours exactly.</para>
-///
-/// <para>Pure font resource, not a Node: <see cref="Draw"/> renders onto any caller's
-/// <see cref="CanvasItem"/>, sized in screen pixels — route the scale through
-/// <see cref="HudMetrics"/> exactly as CompassTape / GaugeCluster do. The drawing control must use
-/// a <b>Nearest</b> texture filter (this is a pixel font).</para>
+/// <summary>The game's own HUD bitmap font, rebuilt from <c>extracted/rimage/5pointhud.png</c> (+
+/// the brighter <c>5pointhudbrite.png</c> highlight variant): a proportional 5-px font covering
+/// printable ASCII <c>0x20</c>–<c>0x7e</c> (layout/colours: docs/formats/hud.md). Pure font
+/// resource, not a Node: <see cref="Draw"/> renders onto any caller's <see cref="CanvasItem"/>,
+/// sized via <see cref="HudMetrics"/>. The drawing control MUST set a Nearest texture filter.
 /// </summary>
 public sealed class HudFont
 {

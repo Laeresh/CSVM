@@ -45,11 +45,9 @@ public sealed class SessionArchives
 
     /// <summary>Opens gamez, textures, sounds, sound defs and sound groups for one chapter build,
     /// timing each into <see cref="StartupProfile"/> exactly as <c>WorldSession.Build</c>'s own
-    /// phases do — <c>Record</c> is a no-op with no session under measurement (the test harness),
-    /// so the calls are unconditional here too.
-    /// <para>⚠ The sound archive is scoped to the build and the texture archive is not — that
-    /// asymmetry is deliberate (see <see cref="ArchiveIntent"/>'s members) and is reproduced per
-    /// intent, never normalised.</para></summary>
+    /// phases do, unconditionally even under the test harness's no-op <c>Record</c>.
+    /// ⚠ The sound archive is scoped to the build and the texture archive is not; deliberate,
+    /// see <see cref="ArchiveIntent"/>. Never normalise the two to match.</summary>
     public static SessionArchives OpenFor(ArchiveIntent intent, string gamezPath, string texturesPath,
         string soundsPath, string zrdrPath, bool mute)
     {

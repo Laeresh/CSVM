@@ -3,21 +3,13 @@ using Godot;
 
 namespace CSVM.Effects;
 
-/// <summary>
-/// The GPU half of a <see cref="Puffer"/>: live particles in, draw calls out. The seam exists so
-/// the emitter's three modes — burst, distance trail and sustain — are reachable by a test, which
-/// through a real <see cref="MultiMesh"/> they are not.
-///
-/// <para>The atlas is built <b>above</b> this seam (`Puffer.Create` calls `BuildAtlas` and hands the
-/// result to the renderer's constructor), which is what makes a <c>Puffer</c> constructible with no
-/// <c>TextureArchive</c> anywhere in the path. A renderer below the atlas would have delivered
-/// nothing testable.</para>
-///
-/// <para>The contract per frame is: <see cref="Write"/> for indices <c>0 … liveCount-1</c>, packed
-/// and ascending, then one <see cref="Show"/> publishing how many of them are live. Slots past
-/// <c>liveCount</c> keep whatever they last held and are simply not drawn, exactly as the
-/// <c>MultiMesh</c> does.</para>
-/// </summary>
+/// <summary>The GPU half of a <see cref="Puffer"/>: live particles in, draw calls out. The seam
+/// exists so the emitter's three modes are reachable by a test, which a real <see cref="MultiMesh"/>
+/// is not. The atlas is built above this seam, in <c>Puffer.Create</c>, and passed to the renderer's
+/// constructor, so a <c>Puffer</c> needs no <c>TextureArchive</c> below it.
+/// Per frame: <see cref="Write"/> for indices <c>0 … liveCount-1</c>, packed and ascending, then one
+/// <see cref="Show"/>. Slots past <c>liveCount</c> keep their last value and simply aren't
+/// drawn.</summary>
 public interface IEmitterRenderer
 {
     /// <summary>Sizes the draw pool at <paramref name="capacity"/> particles and attaches whatever
@@ -39,11 +31,9 @@ public interface IEmitterRenderer
 /// The real renderer: ONE <see cref="MultiMesh"/> of billboarded quads (one draw call), whose
 /// shared shader billboards each instance toward the camera, picks its flipbook column from
 /// per-instance custom data, and composites additively or mixed.
-///
-/// <para>⚠ The blend is already resolved by the time it gets here — `Puffer.Create` derives it from
+/// ⚠ The blend is already resolved by the time it gets here — <c>Puffer.Create</c> derives it from
 /// the COLORS ramp and the dying sprite's luminance (effects.md). This type takes the verdict, not
-/// the question: there is no <c>Auto</c> to re-derive, because it holds no state to derive it
-/// from.</para>
+/// the question: there is no <c>Auto</c> to re-derive, because it holds no state to derive it from.
 /// </summary>
 public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 {
@@ -81,13 +71,9 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             // faint additive rectangles over dark ground on large grown quads
             vec2 rim = smoothstep(vec2(0.0), vec2(0.12), UV)
                      * smoothstep(vec2(0.0), vec2(0.12), vec2(1.0) - UV);
-            // soft particles: a billboard tilted by a high chase camera dips into the
-            // terrain and the depth test cuts it with a hard straight line — fade
-            // alpha out over the last ~1.5 m before the scene depth instead. Disabled
-            // (SOFT_EXPR → 1.0) for the crash smokeball: it sits just above the ground,
-            // so the fade zeroes the alpha of every fresh puff against the terrain right
-            // behind it — a bright additive fire still leaks through, but MIX black smoke
-            // faded to zero is simply invisible until it grows tall.
+            // Soft particles: fade alpha over the last ~1.5 m before the scene depth, so a tilted
+            // billboard doesn't hard-cut into the terrain. Disabled for the smokeball, which sits on
+            // the ground and would otherwise fade every fresh puff to invisible.
             float scene_raw = texture(depth_texture, SCREEN_UV).r;
             vec4 unproj = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, scene_raw, 1.0);
             float scene_z = unproj.z / unproj.w;
@@ -119,10 +105,9 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 
     public void Attach(Node3D owner, int capacity, float cullMargin)
     {
-        // The ShaderMaterial/Shader built here is the runtime one — a new
-        // Puffer's first draw, never a load-time material. Usually reached from
-        // EmitterDirector's EffectPoolMiss scope, which suppresses this one (flat leaves); it
-        // fires on its own only when a Puffer is built with nothing else already open.
+        // Runtime shader/material build, not load-time — a new Puffer's first draw. Usually
+        // absorbed into EmitterDirector's EffectPoolMiss scope; fires alone only when nothing else
+        // is already open.
         using var _ = PerfSample.Scope(PerfSite.MaterialCreate);
         var code = ShaderCode
             .Replace("BLEND_MODE", _blendMix ? "blend_mix" : "blend_add")

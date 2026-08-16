@@ -29,39 +29,13 @@ public readonly record struct FrameSample(
 /// The always-on frame-hitch detector: every rendered frame is compared against the cost of its
 /// recent neighbours, and a frame that costs far more than they did has a record assembled for it
 /// describing what the frame was doing. Nothing is logged from here; the record is held for
-/// whoever asks (the sidecar writer, the on-screen readout), so a clean run is silent.
-///
-/// <para><b>The trigger</b> is <c>frame_ms &gt; max(medianMultiple x rolling_median, floorMs)</c>:
-/// a relative term so the instrument adapts to whatever the machine is doing, and an absolute
-/// floor so a fast machine's small absolute jitter cannot trip it. Under vsync the rolling median
-/// sits pinned at the refresh interval (every frame is padded up to it), so the relative term
-/// degenerates into a FIXED threshold of <c>medianMultiple x refresh_interval</c> — which of the
-/// two terms then actually decides depends on the refresh rate, not on the defaults alone. At the
-/// 60 Hz cap this plan's defaults elsewhere assume, that fixed threshold is 4 x 16.67 ms = 66.7 ms,
-/// ABOVE the 40 ms floor, so the RELATIVE term is what fires there, not the floor — only a refresh
-/// at or above 100 Hz brings <c>medianMultiple x refresh_interval</c> under the floor and hands it
-/// the job (the <c>--hitch-inject=</c> verification ran on a 120 Hz box, where
-/// the floor did decide). Either way this is expected, not a fault: the whole sub-cap range is
-/// invisible under vsync, which is what <c>display.vsync</c>/<c>--no-vsync</c> exist for.</para>
-///
-/// <para><b>The baseline is a true median</b>, kept as a sorted mirror of the rolling window so
-/// each frame costs one binary search and one shift rather than a sort. A mean would be dragged up
-/// by the hitch it just saw and would then hide the next one.</para>
-///
-/// <para><b>Nothing here allocates after construction</b>, on any frame including a hitching one:
-/// the window, its sorted mirror, the ring buffer and the single record (with its own ring copy)
-/// are all preallocated. <see cref="Last"/> is that one record, overwritten by the next trigger, so
-/// a consumer that needs to keep one copies it.</para>
-///
-/// <para><b>The frame a record describes is the one that just ended.</b> Godot's <c>delta</c> is
-/// the time since the previous frame and its <c>Performance</c> monitors report the last measured
-/// frame, so the two line up with each other rather than with the frame being built.</para>
-///
-/// <para>Godot-free by construction: the caller samples the engine's counters and hands them in, so
-/// the trigger math, the wraparound and the grace window are unit-testable off-engine. The single
-/// exception is <see cref="PerfSample"/>, read ambiently when a record is filled — a scope
-/// several call layers away cannot be handed an accumulator by whoever ticks the monitor, which is
-/// the whole reason that class is a set of statics. It is engine-free too, so nothing above changes.</para>
+/// whoever asks (the sidecar writer, the on-screen readout), so a clean run is silent. Trigger
+/// formula and TUNE constants: docs/architecture.md; vsync interaction: docs/verification.md
+/// PERF-12/PERF-13.
+/// ⚠ Feed this a raw wall-clock timestamp, never Godot's <c>delta</c>, which is post-processed
+/// and does not describe the same frame as the counters read here.
+/// ⚠ Nothing allocates after construction, including on a hitching frame. <see cref="Last"/> is
+/// overwritten by the next trigger, so a consumer that needs to keep one copies it.
 /// </summary>
 public sealed class HitchMonitor
 {
@@ -171,13 +145,10 @@ public sealed class HitchMonitor
     /// The frame-time strip sizes its own buffer off this once, at build.</summary>
     public int RingFrames => _ringFrames;
 
-    /// <summary>Copies the LIVE ring buffer into <paramref name="destination"/>, oldest first —
-    /// unlike <see cref="Last"/>'s <c>Ring</c>, which only advances on a trigger, this reflects every
-    /// <see cref="Tick"/> regardless of whether anything has ever tripped (the
-    /// frame-time strip reads this directly rather than keeping its own history, so the display and a
-    /// hitch record can never disagree about the same frame). A <paramref name="destination"/> shorter
-    /// than what has been collected gets the MOST RECENT that many entries, not the oldest. Returns
-    /// how many entries were written.</summary>
+    /// <summary>Copies the live ring buffer into <paramref name="destination"/>, oldest first —
+    /// unlike <see cref="Last"/>'s <c>Ring</c>, which only advances on a trigger, this reflects
+    /// every <see cref="Tick"/>. A shorter <paramref name="destination"/> gets the most recent
+    /// that many entries, not the oldest. Returns how many entries were written.</summary>
     public int CopyRing(Span<FrameSample> destination)
     {
         int count = Math.Min(_ringCount, destination.Length);
@@ -284,10 +255,8 @@ public sealed class HitchMonitor
         _last.Gc2Delta = _hasPrevious ? gc2 - _prevGc2 : 0;
         _last.AllocatedBytesDelta = _hasPrevious ? allocated - _prevAllocated : 0;
 
-        // The one thing this class does not have handed to it: the frame's
-        // named work comes from an ambient static, because a scope in some far-off call path has no
-        // way to be handed an accumulator by whoever ticks the monitor. Taken here rather than by
-        // the caller so a record can never carry a stale frame's attribution.
+        // Read ambiently, taken here rather than by the caller so a record can never carry a
+        // stale frame's attribution.
         PerfSample.SnapshotInto(_last.Samples, frameMs);
 
         // Oldest first, ending with the hitching frame itself, so a consumer reads the run-up left
@@ -358,10 +327,9 @@ public sealed class HitchMonitor
 
 /// <summary>What a hitching frame was doing: its unaveraged cost split, how far past the trigger it
 /// was, what the counts and the GC did relative to the frame before it, and the frames leading up
-/// to it.
-/// <para>Mutable fields over an immutable value because there is exactly one of these per monitor
-/// and it is refilled in place. A record allocated on a hitching frame would be an allocation at
-/// the worst possible moment.</para></summary>
+/// to it. Mutable fields over an immutable value because there is exactly one of these per monitor
+/// and it is refilled in place; allocating on a hitching frame would be an allocation at the worst
+/// possible moment.</summary>
 public sealed class HitchRecord
 {
     /// <param name="ringFrames">Ring depth, preallocated once.</param>

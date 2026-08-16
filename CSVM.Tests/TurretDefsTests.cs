@@ -229,11 +229,7 @@ public class TurretDefsGoldenTests
     [ExtractedDataFact]
     public void TheStandaloneFamilyShipsFourAwakeAndFourAllied()
     {
-        // C9b's activation and team census: the four awake world emplacements are C5's thug
-        // boats plus the piratezep's belly/left/right rings, and the four authored TEAM 1
-        // (= ally) entries are the piratezep set — the player's own zeppelin's defences. Every
-        // other standalone entry is dormant (WAKEUP_TURRETS territory) and, with no TEAM key,
-        // lands on the loader's enemy default.
+        // The four TEAM 1 entries are the piratezep set; see docs/formats/turrets.md "Teams".
         var defs = TurretDefs.Load(ZrdrPath);
         var standalone = defs.All.Where(d => !d.Carried).ToList();
         Assert.Equal(4, standalone.Count(d => d.Activated));

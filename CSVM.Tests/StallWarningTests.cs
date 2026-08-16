@@ -6,20 +6,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The stall cues are TWO thresholds on one margin, and the STALL lamp's blink is a rate
-/// ramp. Asserts the split (the lamp leads the nose-drop over a real fd band), the blink law
-/// against both anchors measured from original-game footage, and the integrator that carries it —
-/// including the case a fixed-period blink cannot express, a dwell that changes length while the
-/// lamp is already lit. <see cref="GaugeCluster.StallLamp"/> is a plain struct —
-/// no live Control needs constructing. <see cref="Log.Debug"/> still runs through
-/// <see cref="Log.ConsoleSink"/>; with no sink installed that falls through to the real
-/// <c>GD.Print</c>, which crashes the whole test host outside the engine (the
-/// <c>StuntRaceTests</c> precedent) — which the process-wide no-op sink in
-/// <c>TestHostLogSink</c> covers, so no per-test ceremony is needed here.
-///
-/// <para>Everything here is in SIM seconds. The capture's wall figures are 1/1.390 of these, so a
-/// wrong-clock implementation lands ~39% short of every dwell asserted below — which is what
-/// makes the two anchor checks able to fail rather than decorative.</para>
+/// The stall cues are two thresholds on one margin, and the STALL lamp's blink is a rate ramp.
+/// Decode and measurements: docs/org/flightModel.md's "The two stall cues" section.
+/// <see cref="GaugeCluster.StallLamp"/> is a plain struct; <see cref="Log.Debug"/> falls through
+/// the process-wide no-op <c>TestHostLogSink</c>, avoiding the <c>StuntRaceTests</c> crash.
+/// ⚠ Everything here is in sim seconds; the capture's wall figures are 1/1.390 of these.
 /// </summary>
 public class StallWarningTests
 {
@@ -31,20 +22,9 @@ public class StallWarningTests
     [Fact]
     public void TheLampLeadsTheNoseDropOverARealFdBand()
     {
-        // The split: one margin (StallFraction), two DIFFERENT thresholds on it. The lamp still
-        // fires at a fixed 0.30 fd — measured inside a single original-game clip, 2.64 sim s /
-        // 14.9 mph ahead of the Bloodhawk's own nose-break. The nose-drop
-        // itself is the Bloodhawk's own computed StallSpeed (clMax·q·RefArea = VehWeight), not a
-        // fixed fraction, so this test flies the Bloodhawk's real dynamics (1900 kg / 330 ref_area)
-        // rather than the placeholder PlaneStats() defaults — those defaults are the executable's
-        // compiled fallback aircraft, not any real airframe, and their own computed stall speed sits
-        // almost exactly AT the 0.30 fd warn threshold (see FlightModel.StallSpeed's doc), which
-        // would invert the split rather than exercise it.
-        // ⚠ The computed Bloodhawk stall (56.5 mph) does not reproduce the clip's measured ~76 mph
-        // nose-drop — that gap is a recorded decode-vs-footage conflict (FlightModel.StallSpeed),
-        // not something this test papers over — so only the ORDERING (warn leads stall) and the
-        // MECHANISM (two independent thresholds on one margin) are asserted here, not the original
-        // clip's absolute 2.64 s / 14.9 mph lead.
+        // Flies the Bloodhawk's real dynamics, not the fallback PlaneStats() defaults, whose own
+        // stall speed sits almost at the warn threshold and would invert the split.
+        // Only ordering and mechanism are asserted; see docs/org/flightModel.md's stall-cues section.
         var model = new FlightModel(new PlaneStats { VehWeight = 1900f, RefArea = 330f, FdSpeed = 135f });
         float fd = model.Stats.FdSpeed;
         float stallFrac = model.StallSpeed / fd;

@@ -3,24 +3,14 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// Keeps every world collider's <c>Disabled</c> flag DERIVED from its owner's state rather than
-/// written independently: a collider is enabled exactly while its owner node is visible in the
-/// scene tree and no ancestor is faded out. Callers that hide something therefore write
-/// <c>Visible</c> (or <see cref="SetFaded"/>) and nothing else — there is no second flag to keep
-/// in step, and no hide path can forget one.
-///
-/// <para><b>Why it cannot be a recursive collider walk.</b> Godot's visibility is INHERITED
-/// (<c>IsVisibleInTree</c>) while <c>CollisionShape3D.Disabled</c> is absolute, so the two
-/// disagree the moment a write lands inside a subtree an ancestor already hid: C1/IA1's mission
-/// script hides <c>hk_zep</c>, then the anchored <c>RESET_STATE</c> pass activates the 31
-/// <c>healthy</c> destructible groups INSIDE it, which re-enabled their shapes and left an
-/// invisible zeppelin the player crashed into. The mirror case is a walk that re-enables a whole
-/// subtree and switches on descendants that are themselves deactivated (the hidden
-/// <c>destroyed</c> wrecks). Deriving the flag has neither failure mode.</para>
-///
-/// <para>Only colliders <see cref="SceneBuilder"/> builds are tracked, so deliberately
-/// invisible-but-solid bodies elsewhere (the weapon lab's target, the plane hitboxes, the empty
-/// stage's ground) keep working.</para>
+/// Keeps every world collider's <c>Disabled</c> flag DERIVED from its owner's state: enabled
+/// exactly while the owner is visible in the scene tree and no ancestor is faded out. Callers
+/// that hide something write <c>Visible</c> (or <see cref="SetFaded"/>) and nothing else.
+/// ⚠ Do not write <c>Disabled</c> independently, and do not replace this with a recursive
+/// collider walk; see the architecture.md entry for the asymmetry between Godot's inherited
+/// visibility and the absolute <c>Disabled</c> flag that makes both wrong.
+/// Only colliders <see cref="SceneBuilder"/> builds are tracked; other solid bodies (plane
+/// hitboxes, the empty stage's ground) are untracked and keep working.
 /// </summary>
 internal static class WorldCollision
 {

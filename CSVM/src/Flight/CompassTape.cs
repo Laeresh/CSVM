@@ -3,26 +3,11 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>
-/// The original's heading tape at the top of the screen, rebuilt from its own two
-/// HUD textures (every chapter's texture archive ships them): "compassticks2" —
-/// one 15° tick segment (a tall tick straddling the tile seam + four 3° minors,
-/// their cores full-white on opaque black), and "compasstxt" — the label atlas
-/// holding the pre-kerned pairs NE/SE/SW/NW (singles are cut out of the pairs;
-/// the 5 px gradient block at its right edge is unused here — it doesn't appear
-/// in the reference HUD).
-///
-/// The tape is a cylindrical drum seen edge-on with exactly 180° visible: a mark
-/// Δ° from the current heading sits at center − R·sin(Δ), so tick spacing
-/// compresses toward the rims, and brightness falls off as cos(Δ) (no extra gain
-/// — the tick cores are already 255 in the texture; the original's 245 peaks are
-/// its own filtering). Headings increase to the LEFT (W left of SW when flying
-/// SW) — a real whiskey-compass card. All of this and the pixel metrics below
-/// (2556×1440 reference) were measured in OriginalScreenshots/HUD.png.
-///
-/// Ticks render point-sampled (the original's comb has hard 1–2 px edges — its
-/// crispness IS the minification aliasing) while the labels are smooth, so the
-/// labels live on a bilinear child layer drawn on top.
+/// <summary>The original's heading tape at the top of the screen, rebuilt from its own
+/// compassticks2/compasstxt HUD textures (docs/formats/hud.md). A cylindrical drum seen edge-on:
+/// a mark Δ° from the current heading sits at <c>center − R·sin(Δ)</c>, brightness falls off as
+/// <c>cos(Δ)</c>, and headings increase to the LEFT, a real whiskey-compass card. Ticks render
+/// point-sampled while labels are smooth, so labels live on a bilinear child layer on top.
 /// </summary>
 public sealed partial class CompassTape : Control
 {
@@ -110,11 +95,8 @@ public sealed partial class CompassTape : Control
 
         DrawRect(new Rect2(0, 0, w, h), Colors.Black);
 
-        // Tick tiles at every 15° edge, each quad linearly stretched between its two
-        // drum positions (the within-tile nonlinearity is sub-pixel except near the
-        // rims, where the fade hides it). Tiles straddling ±90° are skipped outright —
-        // past the rim sin folds back and the drum's far side would draw reversed; the
-        // original's own rim ticks fade out ~20 px before the bar edge too.
+        // Tick tiles at every 15° edge. Tiles straddling ±90° are skipped: past the rim sin folds
+        // back and the drum's far side would draw reversed.
         float tileH = h * TileOverscan, tileY = h - tileH; // bottom-aligned, top clipped
         float first = Mathf.Ceil((HeadingDeg - 90f) / TileDegrees) * TileDegrees;
         for (float a = first; a + TileDegrees <= HeadingDeg + 90f; a += TileDegrees)

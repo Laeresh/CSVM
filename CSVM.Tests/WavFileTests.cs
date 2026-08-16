@@ -45,15 +45,9 @@ public class WavFileTests
     [Fact]
     public void MsAdpcmDecodesTheBlockHeaderAndItsNibbles()
     {
-        // One mono block, coefficient set {256, 0} so the predictor collapses to
-        // s1 + nibble*delta and every step is checkable by hand. Header: predictor 0,
-        // delta 16, s1 100, s2 50. Data byte 0x1F, then 0x80.
-        //   frame 0 = s2                                    =  50   (block header, older sample)
-        //   frame 1 = s1                                    = 100   (block header)
-        //   nibble 1  -> 100 + ( 1 * 16)                    = 116   delta -> max(230*16>>8, 16) = 16
-        //   nibble 15 -> 116 + (-1 * 16)                    = 100   delta -> 16
-        //   nibble 8  -> 100 + (-8 * 16)                    = -28   delta -> max(768*16>>8, 16) = 48
-        //   nibble 0  -> -28 + ( 0 * 48)                    = -28
+        // Coefficient set {256, 0} collapses the predictor to s1 + nibble*delta, so every step
+        // (header predictor 0, delta 16, s1 100, s2 50, data 0x1F 0x80) is checkable by hand
+        // against MS ADPCM's standard nibble/delta update.
         var wav = WavFile.Parse(AdpcmMono(new byte[] { 0x1F, 0x80 }, factSamples: 0));
 
         Assert.Equal(new short[] { 50, 100, 116, 100, -28, -28 }, wav.Samples);
@@ -73,11 +67,7 @@ public class WavFileTests
     [Fact]
     public void StereoNibblesAlternateBetweenChannels()
     {
-        // Same coefficients; left starts at s2=50/s1=100, right at s2=150/s1=200.
-        //   nibble 1  -> left  100 + ( 1*16) =  116
-        //   nibble 15 -> right 200 + (-1*16) =  184
-        //   nibble 8  -> left  116 + (-8*16) =  -12
-        //   nibble 0  -> right 184 + ( 0*16) =  184
+        // Same coefficients as the mono case; left starts at s2=50/s1=100, right at s2=150/s1=200.
         var wav = WavFile.Parse(AdpcmStereo(new byte[] { 0x1F, 0x80 }));
 
         Assert.Equal(2, wav.Channels);

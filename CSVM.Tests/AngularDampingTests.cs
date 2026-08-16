@@ -5,24 +5,12 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The original's angular damping: an EXPONENTIAL decay of <c>dt · ang_momentum_damp</c>, applied
-/// to the WHOLE body rate AFTER this tick's torque is accumulated onto it. The stick, the bank
-/// coupling and the weathervane all land in the same accumulator before the decay runs, so the decay
-/// carries every one of them, not just whatever rate was carried over from the previous frame.
-///
-/// <para>That ordering is the point. The alternative this discriminates against — an explicit-Euler
-/// linear subtraction, <c>(cmd − BodyRates·damp)·dt</c> — only ever damps the OLD rate, so each
-/// tick's own torque contribution goes out undamped until the FOLLOWING tick. <see
-/// cref="ThisTicksOwnTorqueIsDampedTooNotJustTheCarriedOverRate"/> is the test a decay-then-add
-/// implementation (decay the old state, then add this tick's undamped torque — a different, wrong
-/// reading of the same two lines) fails.</para>
-///
-/// <para>The two forms agree to first order in dt (<c>exp(-x) = 1 - x + O(x^2)</c>), so a small
-/// timestep cannot tell them apart — <see
-/// cref="ADeliberatelyLargeTimestepStaysBoundedWhereExplicitEulerWouldFlipSignAndGrow"/> is the
-/// case that can: past <c>dt·damp = 2</c> the linear factor <c>(1 − dt·damp)</c> goes below −1 and
-/// BodyRates flips sign and grows every tick, where <c>exp(−dt·damp)</c> stays in (0, 1) for any
-/// dt ≥ 0 and only ever decays.</para>
+/// The original's angular damping: an exponential decay of <c>dt · ang_momentum_damp</c>, applied
+/// to the whole body rate after this tick's torque is accumulated onto it, so the decay carries
+/// this tick's own torque and not just the carried-over rate. Decode: docs/org/flightModel.md.
+/// The two forms (exponential vs. linear) agree to first order in dt, so a small timestep cannot
+/// discriminate them; <see cref="ADeliberatelyLargeTimestepStaysBoundedWhereExplicitEulerWouldFlipSignAndGrow"/>
+/// is the case that can.
 /// </summary>
 public class AngularDampingTests
 {
@@ -31,10 +19,8 @@ public class AngularDampingTests
     [Fact]
     public void DecaysAPreExistingRateByExpOfDtTimesDamp()
     {
-        // Roll, stick centred, wings level, velocity down the nose: cmd is identically zero on every
-        // axis (no stick, no bank coupling, no weathervane misalignment — see BankCouplingTests and
-        // WeathervaneTests for each vanishing on its own), so this is a pure decay of whatever rate
-        // was already there.
+        // Stick centred, wings level, velocity down the nose: cmd is identically zero on every
+        // axis, so this is a pure decay of whatever rate was already there.
         var stats = Stats();
         var m = new FlightModel(stats);
         m.Reset(Vector3.Zero, Basis.Identity, 120f, 1f);
@@ -50,13 +36,9 @@ public class AngularDampingTests
     [Fact]
     public void ThisTicksOwnTorqueIsDampedTooNotJustTheCarriedOverRate()
     {
-        // Full roll stick from rest. The linear form this discriminates against gives
-        // BodyRates = cmd·dt EXACTLY on this first tick (BodyRates starts at 0, so the subtracted
-        // damping term is zero) — this tick's own torque goes out completely undamped. The original
-        // damps the accumulated total, torque included, so the right answer is cmd·dt·exp(-dt·damp),
-        // strictly smaller in magnitude. A build that decays only the carried-over rate before adding
-        // this tick's torque (rather than adding then decaying the sum) matches the linear form's
-        // reading below and fails this one — that is the ordering mistake the class doc warns about.
+        // Full roll stick from rest. The linear form gives BodyRates = cmd·dt exactly here, this
+        // tick's torque completely undamped; the original damps the accumulated total, so the
+        // right answer is cmd·dt·exp(-dt·damp), strictly smaller.
         var stats = Stats();
         var m = new FlightModel(stats);
         m.Reset(Vector3.Zero, Basis.Identity, 120f, 1f);

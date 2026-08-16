@@ -7,22 +7,6 @@ using Godot;
 
 namespace CSVM.Mech3;
 
-/// <summary>
-/// Reader for the mech3ax fork's compiled-anim extraction (<c>unzbd cs anim</c> on a
-/// <c>cam_anim.zbd</c>/<c>mis_anim.zbd</c> → a zip of per-def JSON + per-script
-/// <c>*.zan.json</c> + <c>metadata.json</c>). Accepts a zip or an unpacked directory, like
-/// every other loader in this project.
-///
-/// The fork's output is a *decoded AST*, not a key/value soup: each def carries typed
-/// fields and typed events whose node references are already resolved back to names. So
-/// this reader deliberately keeps event payloads as a generic property bag
-/// (<see cref="AnimData"/>) instead of 35 hand-written DTOs — a new event type costs the
-/// reader nothing, and <see cref="AnimRuntime"/> asks each payload only for the fields its
-/// handler needs. See docs/formats/anim-definitions.md.
-///
-/// Scripts are loaded lazily: a chapter archive holds ~50 and a mission's defs reference a
-/// handful, so parsing all of them (megabytes of frame JSON) at world build would be waste.
-/// </summary>
 /// <summary>A per-axis cubic <c>value + c1·t + c2·t² + c3·t³</c>, stored in the archive as a
 /// 16-byte little-endian float block (base64 in the JSON layer).</summary>
 public readonly struct SiCubic
@@ -56,6 +40,12 @@ public readonly struct SiCubic
     }
 }
 
+/// <summary>Reader for the mech3ax fork's compiled-anim extraction (<c>unzbd cs anim</c> on
+/// <c>cam_anim.zbd</c>/<c>mis_anim.zbd</c> → per-def JSON + per-script <c>*.zan.json</c> +
+/// <c>metadata.json</c>). Accepts a zip or an unpacked directory. Keeps event payloads as a
+/// generic property bag (<see cref="AnimData"/>) rather than one DTO per event kind, so a new
+/// event type costs nothing here. Scripts load lazily: a chapter archive holds ~50 and a
+/// mission uses a handful. See docs/formats/anim-definitions.md.</summary>
 public sealed class AnimArchive
 {
     /// <summary>Every definition in the archive, in the container's own def order.</summary>
@@ -179,18 +169,11 @@ public sealed class AnimDefinition
 {
     public readonly List<AnimSequence> Sequences = new();
 
-    /// <summary>
-    /// This definition's symbol table: the node name each of its events refers to → that
-    /// node's flat gamez list index. Built from the def's own <c>objects</c>/<c>nodes</c>
-    /// support arrays, whose <c>ptr</c> field IS the gamez node index (verified exactly on
-    /// 136,048 references across all 8 chapters — the only apparent exceptions are the
-    /// fork's own reversible <c>~N</c> duplicate-name suffixes, which the event names carry
-    /// too, so lookups still hit).
-    ///
-    /// This is what makes compiled definitions bind unambiguously: C1 has both a `caboose`
-    /// and a `caboose.flt` in different parts of the world, and name matching drives both.
-    /// Reader-sourced defs have no symbol table and keep the wildcard name matching.
-    /// </summary>
+    /// <summary>This definition's symbol table: the node name each event refers to → that node's
+    /// flat gamez list index, built from the def's <c>objects</c>/<c>nodes</c> support arrays
+    /// (decode and census: docs/formats/anim-definitions.md). This is what lets a compiled
+    /// definition bind unambiguously where a reader-sourced def's wildcard name matching
+    /// cannot.</summary>
     public readonly Dictionary<string, int> NodeRefs = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The <c>nodes</c> support array's names in container order. Separate from
@@ -233,16 +216,11 @@ public sealed class AnimDefinition
     public int[] SiScriptIds = Array.Empty<int>();
     public AnimSequence? ResetState;
 
-    /// <summary>The compiled destruction slot — mech3ax's <c>unknown_seq</c>, a third
-    /// <c>Initial</c> block the listed <c>sequences</c> never contain. Censused over all 12,693
-    /// compiled defs: every one of the 1,430 non-empty blocks sits on a
-    /// HEALTH &gt; 0 destructible, and 1,429 of them dispatch calls no listed sequence reaches —
-    /// the death's <c>large_30sec_fire</c>/flying-parts/part-hide choreography. Deliberately kept
-    /// OFF <see cref="Sequences"/> so bootstrap, RESET application and every derivation that walks
-    /// the listed sequences (<c>ChainedSwapTarget</c>, <c>AuthorsVisibleDeath</c>, the stage-root
-    /// closure) are untouched; <c>AnimRuntime.RunDeathSequence</c> is the one dispatcher. Null on
-    /// reader-sourced defs — the reader text authors its destruction as ordinary listed
-    /// sequences.</summary>
+    /// <summary>The compiled destruction slot — mech3ax's <c>unknown_seq</c> (decode and census:
+    /// docs/formats/destructibles.md). ⚠ Deliberately kept OFF <see cref="Sequences"/> so
+    /// bootstrap and every sequence-walking derivation stay untouched;
+    /// <c>AnimRuntime.RunDeathSequence</c> is the one dispatcher. Null on reader-sourced
+    /// defs.</summary>
     public AnimSequence? DeathSlot;
 
     public string SourceFile = "";
@@ -284,13 +262,8 @@ public sealed class AnimDefinition
                 arr[i] = (int)(AnimData.AsNum(ids[i]) ?? 0f);
             def.SiScriptIds = arr;
         }
-        // The support arrays are the def's symbol table (see NodeRefs). ONLY `nodes` and
-        // `objects` carry node indices: measured over C1/C2/C4/C5, their in-range `ptr`s
-        // resolve to a matching node name 46,481/46,481 and 31,323/31,323 of the time, while
-        // `lights`/`puffers`/`dynamic_sounds` are out of node range in **every** one of their
-        // 2,616 entries — those are runtime pointers to engine objects, not node indices.
-        // Admitting them here would silently bind (say) a PUFFER_STATE's own name to a bogus
-        // index and resolve it to nothing instead of falling through to name matching.
+        // ⚠ Only `nodes`/`objects` carry node indices (docs/formats/anim-definitions.md);
+        // `lights`/`puffers`/`dynamic_sounds` are runtime pointers, never admit them here.
         foreach (var key in new[] { "nodes", "objects" })
             foreach (var r in d.Objects(key))
                 if (r.Str("name") is { } refName && r.Num("ptr") is { } ptr
@@ -355,15 +328,10 @@ public sealed class AnimEvent
     public string? StartOffset;
     public float StartTime;
     /// <summary>WAIT_FOR_COMPLETION: this CALL_ANIMATION is synchronous — the caller's sequence
-    /// holds its NEXT event until the callee's instance finishes (docs/formats/anim-definitions.md).
-    /// <para>⚠ The authored state is presence, not value. Compiled e24 stores flag 0x10 plus a
-    /// zero-based index into the caller's own <c>anim_refs</c>, and the index always names the
-    /// call's own callee (3,731/3,731) — so <c>0</c> and <c>null</c> are DIFFERENT states (3,639
-    /// vs 53,019), and reading the number as a boolean would drop every zero. Hence
-    /// <see cref="AnimData.Has"/>, which is exactly "present and not null".</para>
-    /// <para>⚠ The adjacent <c>wait_for_raw</c> slot is deliberately NEVER read: Crimson Skies
-    /// leaves unflagged stale small integers there (525 events), and treating one as a wait would
-    /// invent a hold the author never wrote.</para></summary>
+    /// holds its NEXT event until the callee's instance finishes (decode and census:
+    /// docs/formats/anim-definitions.md). ⚠ Presence, not value: use <see cref="AnimData.Has"/>,
+    /// never a bool read, and never read the adjacent <c>wait_for_raw</c> slot as a
+    /// wait.</summary>
     public bool WaitsForCompletion;
     public AnimData Data = AnimData.Empty;
 

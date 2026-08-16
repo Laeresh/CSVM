@@ -6,20 +6,10 @@ namespace CSVM.Flight;
 /// The plane-wobble oscillators (<c>shakes.json</c> via <see cref="ShakeDefs"/>): gunfire buzz,
 /// overspeed rattle, and being-hit rocks, summed into <see cref="Roll"/> — radians the flight
 /// rig applies to a pivot node between the <see cref="FlightController"/> and its plane model.
-/// Everything visual — mesh, muzzle transforms, puffer anchors, mounted ordnance — rides that
-/// pivot; physics, aim and the chase camera read the controller's own transform and never see
-/// it (in the original the plane visibly rocks against the world in external views — the
-/// camera does not follow the wobble). Engine-free on purpose: the pivot write is the
-/// controller's one line, the law lives here where the unit tests reach.
-///
-/// <para>Amplitudes are radians of roll: measured for <c>fire_bullet</c>
-/// (<c>analysis/gun-wobble-shake/</c> — magnitude_factor × caliber, dead-astern roll
-/// decomposition). Each impulse source keeps one envelope that an event re-kicks to its
-/// magnitude and <c>damp</c> decays exponentially; <c>high_speed</c> is driven continuously,
-/// its envelope chasing the target at the same <c>damp</c> rate so the <c>min_speed</c> gate
-/// never pops. The <c>nitro</c> source and the ON_CALL <c>damage_shakes</c> defs stay unwired
-/// (no nitro system; unknown caller — docs/formats/shakes.md).</para>
-/// </summary>
+/// Decode: docs/formats/shakes.md. Engine-free on purpose: the pivot write is the controller's
+/// one line, the law lives here where the unit tests reach.
+/// ⚠ Everything visual rides the pivot; physics, aim and the chase camera read the controller's
+/// own transform and must never read the pivot's.</summary>
 public sealed class PlaneShake
 {
     // What each impact source's magnitude_factor multiplies is authored for fire_bullet only

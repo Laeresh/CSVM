@@ -7,23 +7,12 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The attitude-dependent thrust scale, and the sustained climb that settled it.
-///
-/// <para><b>The sign is the whole risk here.</b> The original reads the world-up component of the
-/// body Z axis, and the nose points along −Z, so the quantity is NEGATIVE in a climb. Flip it and
-/// the model still flies — it merely swaps climb for dive, which no casual look at a flight would
-/// catch. <see cref="TheScaleIsReadOffTheNoseAndNotItsMirror"/> is the able-to-fail form: it reads
-/// the thrust term out of the integrator by differencing full throttle against zero at an otherwise
-/// identical state, so it fails under the flip rather than trusting the formula's argument name.
-/// </para>
-///
-/// <para><b>Why there is no climb-gravity constant.</b> A fitted <c>ClimbGravityScale = 0.6</c>
-/// would spare a climbing aircraft, on the reasoning that the original holds speed better in a climb
-/// than plain energy exchange predicts. The decoded terms do the opposite. Measured against the
-/// original's own sustained full-throttle climb, all four combinations rank unambiguously (plateau
-/// speed against a measured 163.05 mph): constant alone 276.7, neither 257.7, both mechanisms 232.2,
-/// attitude terms alone <b>204.0</b>. On the current force shapes the constant makes the climb
-/// WORSE. See <c>docs/org/flightModel.md</c>.</para>
+/// The attitude-dependent thrust scale, and the sustained climb that settled it. Decode, the
+/// four-arrangement climb comparison and why there is no climb-gravity constant:
+/// docs/org/flightModel.md, "The sustained climb".
+/// ⚠ The sign is the whole risk: the quantity is negative in a climb, and a flipped sign still
+/// flies, merely swapping climb for dive. <see cref="TheScaleIsReadOffTheNoseAndNotItsMirror"/> is
+/// the able-to-fail form.
 /// </summary>
 public class AttitudeThrustTests
 {
@@ -49,14 +38,10 @@ public class AttitudeThrustTests
         Assert.Equal(1.12f, FlightModel.AttitudeThrustScale(0.5f), 4);
     }
 
-    /// <summary>The sign, read out of the integrator rather than off the formula. Thrust is the ONLY
-    /// force term the throttle touches, so differencing one step at full throttle against one step
-    /// at zero — same attitude, same speed, same flight path — isolates it exactly: drag, gravity
-    /// and lift cancel to the last bit.
-    ///
-    /// <para>⚠ This is the test that fails under a dropped sign. Flipping the argument's sense swaps
-    /// the two ratios below (climb 1.24, dive 0.661), and every assertion here breaks — where the
-    /// flown behaviour would look entirely plausible.</para></summary>
+    /// <summary>The sign, read out of the integrator rather than off the formula. Thrust is the
+    /// only force term the throttle touches, so differencing full throttle against zero at an
+    /// otherwise identical state isolates it exactly.
+    /// ⚠ Fails under a dropped sign, where the flown behaviour would still look plausible.</summary>
     [Fact]
     public void TheScaleIsReadOffTheNoseAndNotItsMirror()
     {
@@ -84,17 +69,11 @@ public class AttitudeThrustTests
         Assert.Equal(1f, FlightModel.AttitudeThrustScale(m.Attitude.Z.Y), 6);
     }
 
-    /// <summary>The sustained full-throttle climb the original was filmed holding for forty seconds,
-    /// against the model. The bound is deliberately placed where it separates the four candidate
-    /// arrangements rather than merely passing the one in place: on the same build the arrangement
-    /// with the climb-gravity constant and no attitude terms settles at 276.7 mph, neither mechanism
-    /// at 257.7, both mechanisms together at 232.2, and only the landed arrangement — attitude terms,
-    /// no constant — reaches 204.0 against a measured 163.05.
-    ///
-    /// <para>The residual is real and is recorded, not tuned away: see
-    /// <c>docs/org/flightModel.md</c>, "The sustained climb". The clamp check is not decoration —
-    /// a run that reaches the altitude clamp reports the clamp's speed, not the climb's.</para>
-    /// </summary>
+    /// <summary>The sustained full-throttle climb the original was filmed holding, against the
+    /// model. The bound separates the four candidate arrangements (docs/org/flightModel.md, "The
+    /// sustained climb"); the residual against the measured 163.05 mph is real and recorded, not
+    /// tuned away. The clamp check matters: a run that reaches the altitude clamp reports the
+    /// clamp's speed, not the climb's.</summary>
     [ExtractedDataFact]
     public void TheSustainedClimbSettlesFarBelowEitherFittedArrangement()
     {

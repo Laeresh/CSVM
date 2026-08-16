@@ -7,23 +7,14 @@ using Godot;
 namespace CSVM.Utils;
 
 /// <summary>The parsed <c>CSVM/data/effect_pools.json</c> — how many copies of each world-effects
-/// template the stage builds, per effect template ROOT, scaled by the session's player count
-/// (the numbers are TUNE values). Hand-authored engine config, not
-/// extracted data: the original instances a fresh copy per CALL_ANIMATION, so every value here is a
-/// finite approximation of "unbounded" and belongs in a file the user can edit rather than in a
-/// <c>const</c>.
-///
-/// <para>Pure data — it answers "how many copies of this root" and nothing else.
-/// <c>Session.WorldEffectsFactory</c> builds the slots and <c>Mech3.AnimRuntime</c> hands one out
-/// per call; <c>Mech3.WorldSession</c> uses the SAME file's <see cref="LocalCallPoolSize"/> for its
-/// own, unrelated library-root call-template pool — the reason this class lives in
-/// <c>CSVM.Utils</c> rather than <c>CSVM.Session</c>: both a Session-layer and a Mech3-layer
-/// consumer need it, and Session already depends on Mech3, never the reverse.</para>
-///
-/// <para>A missing or unreadable file is a warning, not a session failure: the built-in
-/// <see cref="Fallback"/> (the same values the shipped file carries) applies, exactly as
-/// <c>Config</c>'s <c>const</c> defaults do. A root named here that is not a stage root is reported
-/// — a typo would otherwise silently size nothing.</para></summary>
+/// template the stage builds, per effect template root, scaled by the session's player count.
+/// Hand-authored engine config, not extracted data: the original instances a fresh copy per
+/// CALL_ANIMATION, so every value here is a finite approximation the user can edit without a
+/// rebuild. Three sections, the crash-rig sizing, and why this lives in <c>CSVM.Utils</c> rather
+/// than <c>CSVM.Session</c>: this module's entry in docs/architecture.md.
+/// ⚠ A missing or unreadable file warns and falls back to <see cref="Fallback"/>, the same policy
+/// <c>Config</c>'s defaults use. Keep the fallback values in step with the shipped file.
+/// </summary>
 public sealed class EffectPools
 {
     /// <summary>The built-in defaults, applied when the file is absent or unreadable — the shipped
@@ -172,14 +163,11 @@ public sealed class EffectPools
         return Math.Clamp(e.Base + (e.PerExtraPlayer * extra), 1, MaxSlots);
     }
 
-    /// <summary>How many copies of a death-triggered library-root call template
-    /// (<c>AnimRuntime.ResolveLibraryRoot</c>) to keep — the SAME clamp as
-    /// <see cref="SlotsFor"/> but against <c>localCallRoots</c>/<c>localCallDefault</c>, never
-    /// <c>roots</c>/<c>default</c> (those are validated against
-    /// <c>WorldEffectsFactory.EffectStageRoots</c>, which these names are never a member of). A
-    /// name with no entry stays single-copy — today's behaviour, and correct for a template like
-    /// <c>genx12</c> that must not be widened here (its own <c>Targets</c> rescue depends on
-    /// staying unbuilt, and it never overlaps itself in the shipped data regardless).</summary>
+    /// <summary>How many copies of a death-triggered library-root call template to keep — the
+    /// same clamp as <see cref="SlotsFor"/> but against <c>localCallRoots</c>/<c>localCallDefault</c>,
+    /// never <c>roots</c>/<c>default</c>.
+    /// ⚠ Do not widen <c>genx12</c> here even though it has no entry: its own <c>Targets</c>
+    /// rescue depends on staying unbuilt.</summary>
     public int LocalCallPoolSize(string rootName)
     {
         var e = _localCallRoots.TryGetValue(rootName, out var hit) ? hit : _localCallDefault;

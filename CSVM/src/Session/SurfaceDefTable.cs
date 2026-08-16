@@ -9,32 +9,11 @@ namespace CSVM.Session;
 /// <c>"touchdown_" + name</c> over every <see cref="SurfaceRegistry.Names"/> slot — plus the
 /// cascade that indexes it with a struck material's numeric surface id
 /// (<see cref="SceneBuilder.SurfaceIdMeta"/>, ultimately <see cref="GameZMaterial.SoilId"/>).
-///
-/// <para>The original builds each vector by string concatenation over the registry
-/// (<c>FUN_00476250</c> for the crash family, <c>FUN_004735b0</c> for touchdown) and selects with
-/// <c>FUN_0048b920</c> <c>0x0048bac5</c>–<c>0x0048bb00</c>: a null struck material, a negative id,
-/// an id at or beyond the vector's length, or a slot that names nothing playable all resolve
-/// <b>slot 0</b>; a vector that is empty or whose slot 0 is itself empty resolves the bare anim
-/// name instead; anything else resolves <c>vector[id]</c>.</para>
-///
-/// <para><b>The two families differ in their last arm, and only there.</b> The touchdown handler
-/// <c>FUN_0048d2c0</c> repeats the whole test at <c>0x0048d425</c>–<c>0x0048d460</c> against the
-/// global vector <c>DAT_0071c2e8</c>/<c>DAT_0071c2ec</c>, with the same registry, the same index
-/// space, the same signed lower and unsigned upper bound, and the same empty-slot arm. Where the
-/// crash family resolves a bare anim handle, though, the touchdown fallback jumps <b>past</b> its
-/// play call (<c>FUN_004edc10</c>) to <c>LAB_0048d4c1</c> and plays nothing at all. So
-/// <paramref name="lastResort"/> is null for touchdown, and <see cref="DefForSurfaceId"/> answers
-/// null for "the original plays no def here". Decoded 2026-08-12, read-only.</para>
-///
-/// <para><b>The empty-slot arm is the whole mechanism, not a special case.</b> This install ships
-/// three defs per family (<c>default</c>/<c>dirt</c>/<c>water</c>), so the other eleven slots name
-/// a def that does not exist and fall back to slot 0 — which is why the ordinary ground crash is
-/// <c>player_crash_default</c> and <c>_dirt</c> plays only on <c>dirt</c>(13)-tagged material.
-/// Which ids fall back is therefore never listed here: it is whatever the bound program happens to
-/// define, asked once at construction.</para>
-///
-/// <para>Engine-free and pure, so the cascade is testable without a scene: the caller supplies
-/// both the "does this def exist" test and the id.</para>
+/// Faithful to <c>FUN_0048b920</c>: this module's docs/architecture.md entry has the addresses
+/// and the two families' one difference (touchdown's empty last-resort arm plays nothing).
+/// ⚠ The empty-slot arm is the mechanism, not a special case. Never hardcode which ids fall
+/// back to slot 0; ask the bound program.
+/// Engine-free and pure, so the cascade is testable without a scene.
 /// </summary>
 public sealed class SurfaceDefTable
 {

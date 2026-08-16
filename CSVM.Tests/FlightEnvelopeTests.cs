@@ -6,19 +6,11 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The Bloodhawk's flown envelope against the original's, measured off cockpit-gauge video
-/// (engine-free: <c>Probes.FlightEnvelope</c> touches
-/// no live Node). These are golden numbers in the same sense as the destructible census — the
-/// original is a fixed artifact, so "150 → 290 mph in 3.76 s" is an invariant of it.
-///
-/// <para>The probe's informational rows are deliberately NOT asserted; they record open questions
-/// and must not fail a build. Three of them are recorded CONFLICTS rather than open questions —
-/// accel-150-290 (footage vs the byte-verified force path), sustained-turn-speed (rides the
-/// unattributed turn-rate gap that the bank coupling was expected to close and demonstrably does
-/// not), and sustained-turn-sink (the third leg of that same turn, re-asserting with the rate row)
-/// — each with the attribution in its own comment in <c>Probes.FlightEnvelope</c> and the record in
-/// <c>docs/org/flightModel.md</c>. <c>terminal-dive</c> is asserted, not informational, now that
-/// the attitude-thrust terms carry it: a demotion is never the quiet way to make a run
-/// green.</para>
+/// (engine-free: <c>Probes.FlightEnvelope</c> touches no live Node). These are golden numbers:
+/// the original is a fixed artifact, so each measured figure is an invariant of it.
+/// The probe's informational rows are deliberately not asserted; the three recorded as conflicts
+/// rather than open questions, and why, are in docs/org/flightModel.md's C23 landing note.
+/// A demotion to informational is never the quiet way to make a run green.
 /// </summary>
 public class FlightEnvelopeTests
 {

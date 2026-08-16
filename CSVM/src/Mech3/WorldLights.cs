@@ -5,24 +5,13 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// The animated world's point lights (<c>LIGHT_STATE</c>), delivered to the fullbright world
-/// shader as a small data texture.
-///
-/// Why a texture and not real <see cref="OmniLight3D"/> nodes: the world renders
-/// <c>unshaded</c> (its lighting is the baked per-corner vertex colour — see the vertex_colors
-/// entry in the format gotchas), so a Godot dynamic light contributes exactly nothing
-/// to it. The original's DX7 point lights modulated the same vertex lighting, i.e. what a
-/// LIGHT_STATE actually does is *spill onto nearby geometry* — and the flare sprite a player
-/// sees at the light's position is already drawn by SceneBuilder from the gamez Facade mesh
-/// (<c>docklight_flare</c> → <c>dock_liteflare.tif</c>, <c>flame01</c> → <c>fire101.tif</c>).
-/// So the spill is the whole of the missing behaviour; adding a glow sprite here would
-/// double-draw a flare that already renders.
-///
-/// Godot global shader uniforms cannot be arrays, so the active set is packed into a 2×N
-/// RGBAF texture (row = light; texel 0 = world position + range max, texel 1 = linear colour +
-/// range min) exposed as the global <c>csky_light_data</c>, with <c>csky_light_count</c>
-/// bounding the shader's loop. Count 0 makes the shader's spill term exactly vec3(0.0), which
-/// is what keeps a light-free world bit-identical to the pre-change renderer.
+/// Packs the animated world's <c>LIGHT_STATE</c> point lights into a data texture the fullbright
+/// world shader reads as spill onto nearby geometry — the flare itself is separate gamez geometry
+/// <see cref="SceneBuilder"/> already draws.
+/// ⚠ Not real <see cref="OmniLight3D"/> nodes: the world renders unshaded, so a dynamic light
+/// contributes nothing to it (docs/formats/gotchas.md's fullbright entry).
+/// Packing layout, the multi-viewer fade rule and <c>BL-366</c>: this module's docs/architecture.md
+/// entry.
 /// </summary>
 public sealed class WorldLights : IDisposable
 {
@@ -101,11 +90,8 @@ public sealed class WorldLights : IDisposable
     public void Commit(IReadOnlyList<Vector3> viewerPositions)
     {
         LiveCount = _pending.Count;
-        // Distance fade, then nearest-first, then the budget. Order matters: fading before the
-        // sort is what lets the budget cut only lights that are already contributing nothing.
-        // "Distance" is to the NEAREST viewer, not a single camera — a light beside player 4 must
-        // not fade out because player 1 is far away (BL-366); one viewer (single player)
-        // reduces to the original rule exactly, so the goldens don't move.
+        // Fade before sort, so the budget only ever drops lights already contributing nothing.
+        // Distance is to the nearest viewer (BL-366), never a single camera.
         for (int i = _pending.Count - 1; i >= 0; i--)
         {
             float fade = 1f - Mathf.SmoothStep(FadeStart, FadeEnd, NearestDistance(_pending[i].Pos, viewerPositions));
@@ -119,10 +105,8 @@ public sealed class WorldLights : IDisposable
             PeakCount = n;
         if (n > MaxActive)
         {
-            // Rank by how much of the screen a light can actually affect — its pool's angular
-            // size, range/distance — not by distance alone. The ranges here span 2 m to 22 m, so
-            // a nearby pinpoint and a big refinery flare at the same distance are not equally
-            // worth a slot, and plain nearest-N would drop the one you can see.
+            // Rank by angular size (range/distance), not raw distance — plain nearest-N would
+            // drop a big flare in favor of an equally-far pinpoint.
             _pending.Sort((a, b) => Significance(b, viewerPositions).CompareTo(Significance(a, viewerPositions)));
             n = MaxActive;
         }

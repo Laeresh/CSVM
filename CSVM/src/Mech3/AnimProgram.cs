@@ -6,32 +6,14 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// Every animation definition visible to one mission, merged from the two sources that
-/// carry them, plus the startanims list that says which run at mission start.
-///
-/// Why two sources (see docs/formats/anim-definitions.md): the
-/// compiled <c>cam_anim.zbd</c>/<c>mis_anim.zbd</c> archives are the better data — typed
-/// events, node references resolved to names, and the SI motion scripts, which exist
-/// nowhere else — but they are not complete. <c>startanims</c> is reader-only and never
-/// appears compiled. Hence: load both, prefer compiled on collision, keep the remainder.
-///
-/// **The mission zrdr scope is a library, not a manifest** (confirmed against user
-/// observation of the original). A mission folder ships reader files it never uses:
-/// C1/IA1 carries a <c>zepstate.zrd.json</c> hiding <c>dliner1</c> and <c>cargotrain</c>,
-/// but its <c>mis_anim</c> compiles neither — and in the original both ARE present in
-/// Instant Action (the passenger-hangar zeppelin and the parked train in the cut). The
-/// missions that genuinely hide them, C1/M04, compile both; C1/M02 compiles
-/// <c>hk_zep</c>+<c>tethertower</c>, which is the one mission where the original drops the
-/// tether tower. Verified over every zepstate in the install:
-///
-///   C1/IA1, C1B/IA1, C1C/IA1, C2/IA1, C2B/IA1, C4/IA1 → all zepstate defs UNUSED
-///   C1/M02 (hk_zep, lkshadow, tethershadow, tethertower), C1/M04 (dliner1, cargotrain),
-///   C3/IA1, C3/M02, C3/M03, C4/M03 (cargozep1)          → COMPILED
-///
-/// C3/IA1 compiling <c>cargozep1</c> is why the rule is "check the compiled set", not
-/// "Instant Action ignores zepstate". So a mission-scope reader def applies only when the
-/// mission's compiled archive contains it. The shared and chapter scopes stay unconditional
-/// — they are the world's own furniture, not a per-mission roster.
+/// Every animation definition visible to one mission, merged from the compiled
+/// <c>cam_anim</c>/<c>mis_anim</c> archives and the zrdr readers, plus the startanims list that
+/// says which run at mission start. Compiled data wins on collision (typed events, resolved node
+/// names, the SI motion scripts); readers fill in what was never compiled. Full decode, including
+/// why the mission zrdr scope is a library rather than a manifest: docs/formats/anim-definitions.md.
+/// ⚠ A mission-scope reader def applies only when the mission's compiled archive contains it. The
+/// shared and chapter scopes stay unconditional; they are the world's own furniture, not a
+/// per-mission roster.
 /// </summary>
 public sealed class AnimProgram
 {
@@ -44,12 +26,9 @@ public sealed class AnimProgram
     public readonly List<string> StartAnims = new();
 
     /// <summary>Reader defs a loaded compiled manifest supersedes, so were not instantiated
-    /// (diagnostics): mission-scope defs the manifest does not list (the C1/IA1 zeppelin +
-    /// parked train), and the shared/chapter NAME1 multi-target defs — the compiler expands
-    /// those per pair per instance into exactly the missions that show the zeppelin, so with a
-    /// manifest present the reader form is either redundant (its compiled twins loaded) or
-    /// content this mission does not author. They load, anchor and register only on a
-    /// reader-only extraction (no <c>mis_anim</c>), where no compiled form exists.</summary>
+    /// (diagnostics): mission-scope defs the manifest does not list, and the shared/chapter
+    /// NAME1 multi-target defs the compiler expands per instance instead. They load, anchor and
+    /// register only on a reader-only extraction, where no compiled form exists.</summary>
     public readonly List<string> MissionLibrarySkipped = new();
 
     private readonly Dictionary<string, List<AnimDefinition>> _byAnimName =
@@ -61,13 +40,10 @@ public sealed class AnimProgram
     public int ReaderCount { get; private set; }
     public int ScriptPoolCount { get; private set; }
 
-    /// <summary>
-    /// Loads the animation program for one mission. The zrdr paths are the three scopes a
-    /// mission sees (shared / chapter / mission); the anim paths are the chapter's
-    /// <c>cam_anim</c> and the mission's <c>mis_anim</c> extractions. Any of them may be
-    /// missing — a user who has not re-run ExtractAssets.ps1 simply gets the reader-only
-    /// behaviour this project had before compiled animations landed.
-    /// </summary>
+    /// <summary>Loads the animation program for one mission, from the three zrdr scopes (shared
+    /// / chapter / mission) plus the chapter's <c>cam_anim</c> and the mission's <c>mis_anim</c>
+    /// extractions. Any of them may be missing: a user who has not re-run ExtractAssets.ps1 gets
+    /// the reader-only behaviour this project had before compiled animations landed.</summary>
     public static AnimProgram Load(string sharedZrdr, string chapterZrdr, string missionZrdr,
         string chapterAnimPath, string missionAnimPath)
     {
@@ -92,12 +68,9 @@ public sealed class AnimProgram
             }
         }
 
-        // Then the readers, which fill in what was never compiled. Shared and chapter scopes
-        // are unconditional; the MISSION scope is gated by that mission's compiled manifest
-        // (see the class remarks — an uncompiled mission-scope def is library content this
-        // mission does not instantiate). Gated only when the manifest actually loaded, so an
-        // extraction without mis_anim degrades to the previous behaviour rather than to an
-        // empty program.
+        // The readers fill in what was never compiled. Shared/chapter are unconditional; the
+        // mission scope is gated by the compiled manifest when one loaded (docs/formats/
+        // anim-definitions.md), else this degrades to reader-only behaviour.
         foreach (var zrdr in new[] { sharedZrdr, chapterZrdr })
         {
             foreach (var def in AnimDefs.LoadArchive(zrdr))
@@ -149,14 +122,11 @@ public sealed class AnimProgram
         _byAnimName.TryGetValue(animName, out var list) ? list : Array.Empty<AnimDefinition>();
 
     /// <summary>A minimal program holding only the definitions reachable from
-    /// <paramref name="rootAnimName"/> through CALL_ANIMATION — the transitive call closure —
-    /// reusing the same <see cref="AnimDefinition"/> objects (so SI-script resolution through
-    /// <c>def.Archive</c> still works). The per-player crash runtime binds THIS, not the whole
-    /// world program: bound to a scoped plane subtree, the full program's ~150 generic-named world
-    /// defs (<c>healthy</c>/<c>destroyed</c>/light names/…) mis-anchor onto plane parts and run
-    /// their reset states on the aircraft. The closure is just the crash def plus the effects it
-    /// fires, so nothing irrelevant anchors. StartAnims are left empty (the crash runtime never
-    /// auto-starts).</summary>
+    /// <paramref name="rootAnimName"/> through CALL_ANIMATION, reusing the same
+    /// <see cref="AnimDefinition"/> objects so SI-script resolution still works.
+    /// ⚠ The per-player crash runtime binds this, not the whole world program: the full
+    /// program's generic-named world defs would mis-anchor onto plane parts. StartAnims are left
+    /// empty; the crash runtime never auto-starts.</summary>
     public AnimProgram Subset(string rootAnimName) => Subset(new[] { rootAnimName });
 
     /// <summary>The closure over several roots at once — the world-effects runtime binds the
@@ -194,26 +164,18 @@ public sealed class AnimProgram
         return sub;
     }
 
-    /// <summary>
-    /// Every sound-definition name any <c>SOUND_NODE</c> event in this program can ask for,
-    /// deduplicated — including the ones only reachable at runtime. Feeds
-    /// <see cref="WorldSounds.Prewarm"/> so those streams are decoded while the sound archive is
-    /// still open; see that method for why the emitter-created cache alone is not sufficient.
-    ///
-    /// <para>Walks <see cref="AnimSequence.OnCallOnly"/> sequences and <c>ResetState</c> too:
-    /// reachability is the question here, not what runs at bootstrap, and a name missed costs a
-    /// permanently silent emitter while a name over-decoded costs one WAV. The whole install
-    /// uses 10 distinct SOUND_NODE names, so the upper bound is trivial either way.</para>
-    /// </summary>
+    /// <summary>Every sound-definition name any <c>SOUND_NODE</c> event in this program can ask
+    /// for, deduplicated, including names only reachable at runtime. Feeds
+    /// <see cref="WorldSounds.Prewarm"/> so those streams decode while the sound archive is
+    /// still open.
+    /// ⚠ Walk <see cref="AnimSequence.OnCallOnly"/> and <c>ResetState</c> too: reachability is
+    /// the question, not what runs at bootstrap.</summary>
     public IEnumerable<string> SoundNodeNames() => SoundNamesOfKind("SoundNode");
 
-    /// <summary>
-    /// Every sound name a one-shot <c>SOUND</c> event in this program can ask for — a sounds.json
-    /// definition OR a <c>SOUND_GROUPS</c> name — deduplicated, including the runtime-only
-    /// (death/damage sequence) sites. Feeds <see cref="WorldSounds.Prewarm"/>, which expands a
-    /// group name to its members before decoding. Same reachability rule as
-    /// <see cref="SoundNodeNames"/>: what the program can reach, not what runs at bootstrap.
-    /// </summary>
+    /// <summary>Every sound name a one-shot <c>SOUND</c> event in this program can ask for, a
+    /// sounds.json definition or a <c>SOUND_GROUPS</c> name, deduplicated, including
+    /// runtime-only sites. Feeds <see cref="WorldSounds.Prewarm"/>. Same reachability rule as
+    /// <see cref="SoundNodeNames"/>.</summary>
     public IEnumerable<string> OneShotSoundNames() => SoundNamesOfKind("Sound");
 
     /// <summary>The SI script a def's OBJECT_MOTION_SI_SCRIPT slot refers to. The event

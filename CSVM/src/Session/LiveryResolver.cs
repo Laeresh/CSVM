@@ -63,13 +63,11 @@ public sealed class LiveryResolver
         return prefix != null ? Patterns.PatternsFor(prefix) : new List<string>();
     }
 
-    /// <summary>The livery player <paramref name="index"/> flies, or null to build the
-    /// shipped unpainted skins. With no --paint= this is <see cref="DefaultPattern"/>
-    /// everywhere — flight, AI spawns and static views alike; --paint=none is how a caller
-    /// asks for the bare shipped skins. <paramref name="useDefaultPattern"/> false drops that
-    /// implicit default for an aircraft that must NOT wear the player militia's colours: an
-    /// Instant Action wave enemy flies for another militia whose pattern ia.json never carries,
-    /// so it keeps the shipped skins unless --paint= names one.</summary>
+    /// <summary>The livery player <paramref name="index"/> flies, or null to build the shipped
+    /// unpainted skins. With no --paint= this is <see cref="DefaultPattern"/> everywhere;
+    /// --paint=none asks for the bare shipped skins. <paramref name="useDefaultPattern"/> false
+    /// drops that default for an enemy that must not wear the player militia's colours
+    /// (this module's docs/architecture.md entry).</summary>
     public PaintScheme? SchemeFor(int index, string zrdrPath, RandomNumberGenerator rng,
         IReadOnlyList<string>? available = null, bool useDefaultPattern = true)
     {

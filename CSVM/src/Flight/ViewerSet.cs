@@ -3,24 +3,14 @@ namespace CSVM.Flight;
 using System.Collections.Generic;
 using Godot;
 
-/// <summary>Every pane's camera, session-owned and bound once — the pattern
-/// <see cref="ScreenSize.NearestFloor"/>/`ProjectilePool.Viewers` proved 2026-08-10
-/// (docs/org/tracers.md), promoted so every draw rule that needs "what do the cameras see" shares
-/// one registration instead of re-deriving it from `_rigs`. <c>GameSession</c> binds it once, right
-/// after the rigs are built (single player: one entry wrapping the main camera, same as every other
-/// rig loop); nothing here re-queries `_rigs` itself.
-///
-/// <para>Two read shapes, one per named consumer, and no more: <see cref="Positions"/> (B13's
-/// world-light budgeting — position only) and <see cref="Poses"/> (B11's puffer fade — needs each
-/// camera's forward too, for a view-space depth comparison a Euclidean distance can't make). Both
-/// skip a freed camera rather than throw. What "nearest" MEANS — screen-space pixel floor, view-space
-/// depth, or plain Euclidean range — stays the consumer's own arithmetic (`ScreenSize`'s entry in
-/// docs/architecture.md); this class only carries cameras, not that math.</para>
-///
-/// <para>⚠ Not `PlayerPositions` (`GameSession`'s gameplay seam, fed to `WorldSession.Options`):
-/// that one answers "where are the humans" off each rig's `Controller`/camera fallback for
-/// proximity gameplay rules; this one answers "what do the cameras see" for draw rules. Keep them
-/// separate.</para></summary>
+/// <summary>Every pane's camera, session-owned and bound once, so every draw rule that needs
+/// "what do the cameras see" shares one registration. Decode/history: docs/architecture.md's
+/// entry on this file, docs/org/tracers.md.
+/// <see cref="Positions"/> and <see cref="Poses"/> are the two read shapes; both skip a freed
+/// camera rather than throw. What "nearest" means stays the consumer's own arithmetic
+/// (<see cref="ScreenSize"/>); this class only carries cameras.
+/// ⚠ Not <c>GameSession.PlayerPositions</c>, the "where are the humans" gameplay seam. This one
+/// answers "what do the cameras see" for draw rules. Keep them separate.</summary>
 public sealed class ViewerSet
 {
     private readonly List<Camera3D> _cameras = new();

@@ -4,28 +4,13 @@ namespace CSVM.Utils;
 
 /// <summary>
 /// The session's simulation clock — one object owning "how much sim time does this rendered
-/// frame advance". Every sim consumer (the animation runtime, texture cycles, puffers, the
-/// projectile pool, the flight controller and its animators) takes its dt from here instead of
-/// its own <c>_Process</c>/<c>_PhysicsProcess</c> delta, so pausing, single-stepping and
-/// fixed-dt replay all work from one place and mean the same thing everywhere.
-///
-/// <para>Three run modes, plus an orthogonal <see cref="Halted"/>:
-/// <list type="bullet">
-/// <item><b>Realtime</b> (every shipped mode): one step per rendered frame at the wall delta —
-/// arithmetically the value each consumer used before this class existed, so the default path is
-/// unchanged.</item>
-/// <item><b>FixedAccum</b> (the interactive animation lab): an accumulator that emits whole
-/// 1/60 s steps, clamped so a hitch cannot unwind as a burst of catch-up.</item>
-/// <item><b>FixedStep</b> (a scripted lab run, and <c>--det</c>): exactly one 1/60 s step per
-/// rendered frame, wall time ignored — frame N is always sim state N.</item>
-/// </list></para>
-///
-/// <para>Consumers come in two shapes. A once-per-frame consumer reads <see cref="FrameDt"/>;
-/// one that must see each sub-step (the animation runtime, whose event scheduler resolves per
-/// step) loops <see cref="Steps"/> times on <see cref="Dt"/>. A <c>_PhysicsProcess</c> consumer
-/// calls <see cref="PhysicsDt"/>, and a zero return means "do nothing — the session drives you
-/// explicitly this frame", because Godot's physics tick has its own cadence that no sim clock
-/// can own.</para>
+/// frame advance". Every sim consumer takes its dt from here instead of its own
+/// <c>_Process</c>/<c>_PhysicsProcess</c> delta, so pausing, single-stepping and fixed-dt replay
+/// all work from one place and mean the same thing everywhere. Modes, published-instance shape
+/// and the shader-time tie-in: this module's entry in docs/architecture.md.
+/// ⚠ A once-per-frame consumer reads <see cref="FrameDt"/>; one that must see each sub-step loops
+/// <see cref="Steps"/> times on <see cref="Dt"/>. A <c>_PhysicsProcess</c> consumer calls
+/// <see cref="PhysicsDt"/>, where a zero return means the session drives it explicitly this frame.
 /// </summary>
 public sealed class GameClock
 {

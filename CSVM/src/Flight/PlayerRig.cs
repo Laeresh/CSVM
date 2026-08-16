@@ -49,15 +49,11 @@ public sealed class PlayerRig
     /// the anchor moves, the zone gate picks which child draws.</summary>
     public Node3D? Horizon;
 
-    /// <summary>The zone domes under <see cref="Horizon"/>, one per horizon zone the world built
-    /// (<c>WorldBuilder.DomeZonesToBuild</c>), each with
-    /// the gamez <c>zone_id</c> its zone node authors. <c>Session.WeatherRig.Tick</c> shows exactly
-    /// the one matching this rig's own camera weather state — below the cloud deck a deck chapter
-    /// draws <c>horizon/zone1</c> (its ceiling), above it <c>horizon/zone2</c>.
-    ///
-    /// <para>A single entry is left visible at every state: a chapter whose data supports no swap
-    /// must not render a frame with no sky in it.</para>
-    /// </summary>
+    /// <summary>The zone domes under <see cref="Horizon"/>, one per horizon zone the world built.
+    /// <c>Session.WeatherRig.Tick</c> shows exactly the one matching this rig's own camera
+    /// weather state; decode: docs/org/weather.md.
+    /// ⚠ A single entry stays visible at every state: a chapter whose data supports no swap must
+    /// not render a frame with no sky in it.</summary>
     public List<HorizonDome> HorizonDomes = new();
 
     /// <summary>This player's cloudlayer deck copy, re-anchored under the camera each frame.</summary>

@@ -24,20 +24,8 @@ public enum SuiteStatus
 
 /// <summary>
 /// The in-engine test harness behind <c>--run-tests[=filter]</c>: a registry of assertion suites,
-/// a PASS/FAIL/SKIP table, a <c>.scratch/test-report.json</c>, and a nonzero exit code when
-/// anything failed.
-///
-/// <para><b>Why in-engine at all.</b> The suites here are the checks that need a live Godot: a
-/// built plane whose markers resolve by global transform, a chapter world whose death sequences
-/// are ticked, a projectile pool that spawns. Anything that runs without the engine belongs in
-/// <c>CSVM.Tests</c> (<c>dotnet test</c>) instead — this harness is deliberately the smaller half.</para>
-///
-/// <para><b>Error policy.</b> A suite's verdict is its own structured checks. Native engine errors
-/// (<c>ERROR: …</c> from C++ <c>ERR_FAIL_COND</c>) cannot be intercepted from C# at all, so they
-/// are screened out-of-band: pass Godot's <c>--log-file &lt;path&gt;</c> and the run reads that
-/// file back at the end and classifies every error line against
-/// <see cref="ErrorAllowlist"/>. Without <c>--log-file</c> the screen reports SKIP, never
-/// PASS.</para>
+/// a PASS/FAIL/SKIP table, a <c>.scratch/test-report.json</c>, and a nonzero exit code on failure.
+/// Scope, error policy and the windowed-run rule: this module's entry in docs/architecture.md.
 /// </summary>
 public static class TestHarness
 {
@@ -46,10 +34,9 @@ public static class TestHarness
     /// the cap does the rest.</summary>
     public static readonly IReadOnlyList<ErrorAllowance> ErrorAllowlist = new[]
     {
-        // Godot's own Basis::invert guard, reached while a destructible's death sequence is ticked
-        // forward. It is a print-and-return macro in C++, not a managed throw: the run completes and
-        // every later row still reports. Measured on --damage-hd: C1 0, C2 4, C3 3 — the cap is set
-        // just above the worst single chapter so a new source of the same message still trips it.
+        // Godot's own Basis::invert guard in the destructible death path: a print-and-return C++
+        // macro, not a managed throw, so the run completes and every later row still reports.
+        // Cap set just above the worst measured chapter (C2 4) so a new source still trips it.
         new ErrorAllowance(@"Condition ""det == 0"" is true\.", 8,
             "pre-existing singular-basis guard in the destructible death path (backlog: det == 0 invert error)"),
         // A one-shot SOUND event whose anchor is read for its world position during the animation
@@ -201,15 +188,11 @@ public static class TestHarness
         };
     }
 
-    // The engine log Godot's `--log-file &lt;path&gt;` is writing, or null when the
-    // run was launched without it. Error lines are flushed as they are printed, so reading it
-    // while the process still holds it open is sound.
-    //
-    // Read from the process command line, not `OS.GetCmdlineArgs()`: Godot hands that
-    // method only the arguments its own parser did not recognise, and `--log-file` is
-    // one it consumes. Without the flag this falls back to the project's own rotating log, which
-    // desktop builds enable by default — so the screen runs without anyone remembering a
-    // flag.
+    // The engine log Godot's `--log-file` is writing, or null when launched without it. Error
+    // lines are flushed as printed, so reading it while the process holds it open is sound.
+    // ⚠ Read the command line directly, not `OS.GetCmdlineArgs()`: Godot hands that back only
+    // args its own parser did not recognise, and `--log-file` is one it consumes. Falls back to
+    // the project's own rotating log (desktop default) if the flag is absent.
     private static string? EngineLogPath()
     {
         var args = System.Environment.GetCommandLineArgs();
@@ -538,12 +521,10 @@ public sealed class TestContext
     }
 
     /// <summary>Builds (or reuses) a chapter world and runs <paramref name="body"/> against it. The
-    /// run's own chapter is cached because several suites want it; any other chapter is freed as
-    /// soon as the body returns, so a per-chapter census does not hold eight worlds at once.
-    ///
-    /// <para>The world subtree is in the scene tree with <see cref="AnimRuntime.ManualAdvance"/>
-    /// set, which is the pair a suite ticking the clock needs: an out-of-tree global-transform read
-    /// returns identity, and <c>_Process</c> must not also drive the runtime.</para></summary>
+    /// run's own chapter is cached; any other chapter is freed once the body returns, so a
+    /// per-chapter census does not hold eight worlds at once. The subtree is in the scene tree with
+    /// <see cref="AnimRuntime.ManualAdvance"/> set, so an out-of-tree transform read returns identity
+    /// and <c>_Process</c> does not also drive the runtime.</summary>
     public void WithWorld(string chapter, bool collision, Action<TestWorld> body) =>
         WithWorld(chapter, collision, mission: null, body);
 

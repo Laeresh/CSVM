@@ -10,29 +10,16 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The weapon lab's panel (<c>--weapon-lab</c>, key <b>B</b>): the configurator for the held
-/// aircraft's <b>live</b> loadout. It owns no weapon of its own and fires nothing — every stepper
-/// writes into the <see cref="Flight.FlightController"/>'s bound <see cref="Loadout"/>, and the
-/// aircraft's own trigger then fires exactly what free flight fires (decision 3).
-///
-/// <para>Weapons are split into two banks matching the game: <b>guns</b> arm the plane's named
-/// <b>gun groups</b>, <b>hardpoint</b> weapons (rockets / ordnance) arm its <b>pylons</b>. Picking a
-/// gun assigns it to the selected group and refills that group's ammo; picking a hardpoint weapon
-/// re-arms every pylon and <b>rebuilds the mounted ordnance models</b>, so the wings show the new
-/// type. The mount stepper drives the controller's own gun/pylon selectors
-/// (<see cref="Flight.FlightController.SelectGunGroup"/> / <see cref="Flight.FlightController.SelectPylon"/>),
-/// so the trigger fires from the mount the panel names. "reset to stock" puts the fit the session
-/// launched with back.</para>
-///
-/// <para>In a lab session the bound loadout is <see cref="Loadout.ForRig"/>'s — every firepoint and
-/// every pylon on the airframe — so any of the 48 weapons reaches any mount without editing
-/// <c>stock_loadouts.json</c>. "copy CLI args" writes the arguments that reproduce the current
-/// selection, as <see cref="LiveryLab"/> does.</para>
-///
-/// <para>Without a controller (no host) there is no live loadout to drive and the panel's edits are
-/// inert — nothing in the shipping paths builds it that way, since the <c>--weapon-test</c>
-/// 48-weapon pass check lives in <see cref="Flight.WeaponBench"/>. This node
-/// takes no <see cref="ProjectilePool"/> at all.</para>
+/// The weapon lab's panel (<c>--weapon-lab</c>, key B): a configurator for the held aircraft's
+/// live loadout. It owns no weapon and fires nothing; every stepper writes into the
+/// <see cref="Flight.FlightController"/>'s bound <see cref="Loadout"/>, and the aircraft's own
+/// trigger fires it. Guns arm the plane's gun groups, hardpoint weapons arm its pylons; picking a
+/// hardpoint weapon re-arms every pylon and rebuilds the mounted ordnance models. The mount
+/// stepper drives <see cref="Flight.FlightController.SelectGunGroup"/> and
+/// <see cref="Flight.FlightController.SelectPylon"/>, and "reset to stock" restores the launch
+/// fit. In a lab session the bound loadout is <see cref="Loadout.ForRig"/>'s, so any weapon
+/// reaches any mount without editing <c>stock_loadouts.json</c>. Full decode, including click-to-
+/// place: docs/architecture.md.
 /// </summary>
 public sealed partial class WeaponLab : Node3D
 {
@@ -471,13 +458,9 @@ public sealed partial class WeaponLab : Node3D
         return best is { } found ? (found.Point, Mathf.Sqrt(found.Dist)) : null;
     }
 
-    // Hands the rig's camera to a free Flight.SpectatorCamera and back
-    // (V). Out: the controller stops writing the camera entirely
-    // (CameraOwned) and the free camera takes over from
-    // exactly where the orbit had the eye, so there is no jump. Back: the free camera is dropped
-    // and the controller re-seeds its orbit from wherever the eye now is, so there is no jump that
-    // way either. The aircraft keeps flying/holding, firing and drawing its HUD throughout — only
-    // the view changes hands.
+    // Hands the rig's camera to a free Flight.SpectatorCamera and back (V), each direction
+    // taking over from exactly where the other left the eye so there is no jump. The aircraft
+    // keeps flying, firing and drawing its HUD throughout; only the view changes hands.
     private void SetFreeCamera(bool on)
     {
         if (_camera == null || _host == null || on == _freeCamera)
@@ -511,16 +494,11 @@ public sealed partial class WeaponLab : Node3D
         SyncState();
     }
 
-    // Fires the lab's own physics ray through `screen`, reports what it
-    // struck — its `cs_name`, its surface id and its distance — and re-parks the
-    // held aircraft on that same camera ray at the stand-off distance, nose on the struck point.
-    // `aimOnly` (shift-click) turns the aircraft toward it without moving it.
-    //
-    // The id comes from ProjectilePool.SurfaceIdOf — the one read the impact
-    // path itself makes, so the panel cannot disagree with what the round does — applied
-    // to the body the ray returned and nothing else: one mesh yields a separate body per
-    // texture-derived surface class present, and those siblings can carry different ids, so a
-    // coastal tile's `col` and `col_water` bodies report separately.
+    // Fires the lab's own ray through `screen`, reports what it struck and re-parks the held
+    // aircraft on that same ray at the stand-off distance, nose on the point. `aimOnly`
+    // (shift-click) turns the aircraft without moving it. The id comes from
+    // ProjectilePool.SurfaceIdOf on the struck body alone, so the panel cannot disagree with
+    // what the round does; a coastal tile's `col` and `col_water` bodies report separately.
     private void PickAt(Vector2 screen, bool aimOnly)
     {
         if (_camera == null || _host == null || !IsInsideTree())
@@ -591,20 +569,10 @@ public sealed partial class WeaponLab : Node3D
         PlaceOn(point, dir, body, body != null ? NameOfStruck(body) : "(world point)", aimOnly: false);
     }
 
-    // `--weapon-surface=&lt;registry name&gt;`: park facing the NEAREST piece of that
-    // surface id to the aircraft's spawn. The search walks the built world once for
-    // StaticBody3Ds, reads each one's id through the same
-    // ProjectilePool.SurfaceIdOf the impact path uses, and measures to the
-    // nearest vertex of its collision geometry — not to the body's origin, which for a
-    // chapter's water is the world origin on every tile and would send the aircraft kilometres off
-    // to aim at (0,0,0). Ties fall to the earlier node in tree order (strictly-less), so a
-    // `--det` capture is reproducible. A chapter with no collider carrying that id warns and
-    // leaves the aircraft at spawn; it is not a failed launch.
-    //
-    // Any of the registry's fourteen names is namable since B12, not just the three texture
-    // classes this took before — `dirt` now means id 13 (real dirt-tagged ground), NOT "every
-    // untagged surface", which is `default`. Six ids no shipped material carries at all, so
-    // those legitimately report "this chapter has none" everywhere.
+    // `--weapon-surface=<registry name>`: park facing the nearest collider carrying that
+    // surface id, measured to the nearest vertex of its collision geometry, never the body's
+    // origin (a chapter's water shares one origin at (0,0,0)). Ties fall to the earlier node
+    // in tree order, so a `--det` capture is reproducible. Full behaviour: docs/cli.md.
     private void PlaceOnNearestSurface(string want)
     {
         if (SurfaceRegistry.IdForName(want) is not { } target)

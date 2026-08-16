@@ -32,23 +32,13 @@ public enum InstantActionObjective
     ZeppelinDisabled,
 }
 
-/// <summary>Owns one Instant Action mission's actor set, as it grows across the plan's later
-/// waves (E11 the wave sequencer, F12 the zeppelin arm). C8 wired
-/// <c>dogfight_ace</c>'s authored ace; D9 added the wingmen; E11 adds the two per-wave-member
-/// draws (<see cref="RandomPilotStats"/>, <see cref="ResolveWaveAccentId"/>) that the actual
-/// selection/trigger/geometry logic (<see cref="InstantActionWaves"/>, a separate engine-free
-/// class) does not own; F12 adds the objective-zeppelin selection
-/// (<see cref="IsZeppelinRun"/>, <see cref="SelectedZeppelinNode"/>); G13 adds the mission's end
-/// — its <see cref="Objective"/>, its per-pilot lives ledger and its <see cref="Outcome"/>.
-/// <c>GameSession.BuildFlightRigs</c> reads <see cref="Def"/> directly to
-/// steer the player's own aircraft and spawn scenario, and calls the helpers below to place the
-/// ace, the wingmen and (with <see cref="InstantActionWaves"/>) each wave. Environment→chapter
-/// resolution is the launch MENU's job, not this class's — a <c>--ia=&lt;path&gt;</c> CLI
-/// launch already names its chapter via <c>--chapter=</c>.
-///
-/// <para>The end half holds no engine type and calls no <c>GD.*</c>, the same construction rule
-/// <see cref="Flight.VersusMatch"/> follows: the session pushes facts in (a signal, a death, a sim
-/// dt) and reads the verdict back, and every log line about it is the session's.</para></summary>
+/// <summary>Owns one Instant Action mission's actor set: the loaded <see cref="Def"/>, the ace's
+/// spawn draw, the wingmen's fan placement, each wave's per-member draws
+/// (<see cref="RandomPilotStats"/>, <see cref="ResolveWaveAccentId"/>), the objective-zeppelin
+/// selection, and the mission's end (<see cref="Objective"/>, the lives ledger,
+/// <see cref="Outcome"/>). Detail: this module's docs/architecture.md entry.
+/// The end half holds no engine type and calls no <c>GD.*</c>, the same construction rule
+/// <see cref="Flight.VersusMatch"/> follows.</summary>
 public sealed class InstantActionRuntime
 {
     /// <summary>Every Instant Action enemy's team ("the
@@ -68,13 +58,9 @@ public sealed class InstantActionRuntime
     /// never returns.</summary>
     public const float ActorVolumeRadiusM = 10000f;
 
-    // The five hand-authored pilot personalities a wave member's nine-stat vector is
-    // rolled from, `row = draw % 5` per aircraft (docs/formats/instant-action.md "A wave
-    // enemy's nine pilot stats are drawn at random from a table of five, not from its skill" —
-    // `FUN_0045a280`, `0x00607a3c`). Same field order/scale as
-    // InstantActionDef.AceStats: `dare_devil, natural_touch, sixth_sense,
-    // dead_eye, quick_draw, steady_hand, stun_recovery, talker, constitution`. Row 4 is a
-    // flat 4 across every stat; the other four are hand-authored personalities.
+    // The five hand-authored pilot personalities a wave member's nine-stat vector is rolled
+    // from, `row = draw % 5` per aircraft (docs/formats/instant-action.md "A wave enemy's nine
+    // pilot stats are drawn at random from a table of five, not from its skill").
     private static readonly int[][] PilotPersonalities =
     {
         new[] { 5, 7, 5, 3, 2, 1, 4, 4, 4 },
@@ -140,20 +126,12 @@ public sealed class InstantActionRuntime
     public bool IsZeppelinRun =>
         string.Equals(Def.MissionType, ZeppelinRunMissionType, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>The mission type's own win condition: the ace
-    /// down, every configured wave cleared, every player's zone set flown, or the zeppelin
-    /// disabled. Null for a type with no end condition here — see <see cref="Objective"/>.
-    ///
-    /// <para>⚠ The zeppelin run's is the ENGINES, not the hull. <c>FUN_0045b9d0</c>'s
-    /// mission-type-2 arm (<c>0x0045be0a</c>) wins the moment the objective zeppelin's engine
-    /// vector is empty, and that vector is the LIVE one: <c>FUN_004bf150</c> erases each nacelle
-    /// from it as the node goes inactive, keeping the authored count separately as the sqrt
-    /// curve's denominator. The hull's own death byte is tested immediately after, so the gasbag
-    /// threshold (F18) still wins the mode too, but it is the second path and not the one the
-    /// shipped text describes: <c>MSG_BRF_IAZ_OBJ2</c> is "Destroy the zeppelin's engines to
-    /// win!" and every chapter's <c>IA1/targets.zrd</c> labels the target
-    /// <c>MSG_OBJ_DISABLEENG</c> ("Disable Engines"). Until 2026-08-15 this mapped to the hull
-    /// kill alone, which no stock Instant Action loadout could reach.</para></summary>
+    /// <summary>The mission type's own win condition: the ace down, every configured wave
+    /// cleared, every player's zone set flown, or the zeppelin disabled. Null for a type with no
+    /// end condition here — see <see cref="Objective"/>.
+    /// ⚠ The zeppelin run wins on the engines first, the hull second — see "The zeppelin run is
+    /// won on the ENGINES" in docs/formats/instant-action.md. Do not map it to the hull alone.
+    /// </summary>
     public static InstantActionObjective? ObjectiveFor(string missionType) =>
         string.Equals(missionType, "dogfight_ace", StringComparison.OrdinalIgnoreCase)
             ? InstantActionObjective.AceDown
@@ -209,13 +187,9 @@ public sealed class InstantActionRuntime
     }
 
     /// <summary>Collapses an <see cref="AiSkillVector"/> into the one flat 1–9 rating CSVM's own
-    /// AI tuning takes (<c>AiSkills.At(key, rating)</c>, the same scale <c>--ai-attack=</c>
-    /// drives) — the average of whichever slots are set, rounded and clamped. Every shipped
-    /// chapter's <c>ace_stats</c> is a uniform 9 (docs/formats/spawns.md "ace_stats": the data
-    /// cannot even distinguish the nine slots' order), so this reduces to exactly 9 in every real
-    /// case; a hand-authored <c>--ia=</c> file with mixed values still gets a sensible single
-    /// number rather than nine independently-wired curves nothing in the shipped data can verify.
-    /// 5 (the same default <c>--ai-attack=</c> takes) when every slot is unset.</summary>
+    /// AI tuning takes: the average of whichever slots are set, rounded and clamped. Every
+    /// shipped chapter's <c>ace_stats</c> is a uniform 9, so this reduces to exactly 9 in every
+    /// real case (docs/formats/spawns.md). 5 when every slot is unset.</summary>
     public static int RepresentativeRating(AiSkillVector v)
     {
         int sum = 0, n = 0;
@@ -235,12 +209,9 @@ public sealed class InstantActionRuntime
     }
 
     /// <summary>Puts <see cref="ActorVolumeRadiusM"/> on all three of a spawned Instant Action
-    /// pilot's range gates. Call AFTER the spawn: <c>AiAircraftSpawner.Spawn</c> seeds attack and
-    /// return from the airframe def (2000/1200 m), which is the fallback for a roster that leaves
-    /// its volume slots at 0.0 (docs/formats/ai-rosters.md "The three unnamed slots") — an Instant
-    /// Action block authors them, so the fallback must not survive. Setting activation alone leaves
-    /// the airframe's 2000 m attack radius as the real engagement gate, since the mode machine
-    /// enters pursue on the MINIMUM of the two.</summary>
+    /// pilot's range gates. ⚠ Call after the spawn, and set all three: the spawner's own
+    /// airframe-def fallback (docs/formats/ai-rosters.md "The three unnamed slots") must not
+    /// survive an Instant Action block, which authors them.</summary>
     public static void ApplyActorVolumes(AiModeMachine? machine)
     {
         if (machine == null)
@@ -305,13 +276,9 @@ public sealed class InstantActionRuntime
     public static int ResolveWaveAccentId(int accentId, uint draw) =>
         accentId == 12 ? 12 + (int)(draw % 5) : accentId;
 
-    /// <summary>Decision 10's "every player has completed their zone set", with lives folded in:
-    /// a pilot out of lives can never clear another gate, so the zone sets are flown once every
-    /// pilot who can STILL FLY has finished. Counting a downed-out pilot would deadlock a
-    /// splitscreen stunt mission the survivors have actually finished — <c>StuntRace</c>'s own
-    /// all-finished rule (which still raises the results board) has no notion of a pilot who
-    /// cannot come back. False when nobody is left flying: that case is a LOSS, decided by the
-    /// lives ledger, and never a win.</summary>
+    /// <summary>"Every player has completed their zone set", with lives folded in: a pilot out
+    /// of lives can never clear another gate, so this is true once every pilot who can still fly
+    /// has finished. False when nobody is left flying — that case is a loss, never a win.</summary>
     public static bool ZoneSetsFlown(IReadOnlyList<(bool OutOfLives, bool Finished)> pilots)
     {
         bool anyFlying = false;
@@ -380,14 +347,10 @@ public sealed class InstantActionRuntime
     public void RegisterPilot(int playerIndex) => _lives[playerIndex] = Def.Lives;
 
     /// <summary>One human death: spends a life and answers whether that pilot flies again. False
-    /// means it is out, and the session hands its pane to the spectator camera; the mission is LOST
-    /// once every registered pilot is out, which is what keeps a splitscreen mission running while
-    /// any one human is still alive (decision 14).
-    ///
-    /// <para><c>lives 0</c> is unlimited and always answers true — a deliberately disabled end
-    /// condition in the shape <see cref="Flight.VersusMatch"/>'s 0 kill target already has, not an
-    /// oversight. An unregistered pilot also answers true, so nothing outside a mission is
-    /// changed.</para></summary>
+    /// means it is out, and the mission is lost once every registered pilot is out.
+    /// <c>lives 0</c> is unlimited and always answers true, the same disabled-end-condition shape
+    /// <see cref="Flight.VersusMatch"/>'s 0 kill target has. An unregistered pilot also answers
+    /// true.</summary>
     public bool NotifyPilotDown(int playerIndex)
     {
         if (Def.Lives == 0 || !_lives.TryGetValue(playerIndex, out int left))

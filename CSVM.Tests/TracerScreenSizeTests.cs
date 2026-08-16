@@ -6,19 +6,10 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The tracer pixel floor's screen-space math (<see cref="ScreenSize.MinWorldSizeForPixels"/>) and
-/// the splitscreen rule built on it.
-///
-/// <para>Every expectation is computed by hand from the projection
-/// (<c>screenPx = worldSize * viewportHeight / (2 * distance * tan(fov/2))</c>), never captured from
-/// the implementation. The round-trip cases assert the inverse actually inverts: feed the returned
-/// world size back through the forward form and the pixel target must come out.</para>
-///
-/// <para>These exist because of a live splitscreen bug: the pool floored every round against
-/// PLAYER 1's camera distance and P1's pane height, then drew that one shared world-space mesh in
-/// every pane — so a round far from P1 but close to P2 was inflated by the ratio of the two
-/// distances, and P2's tracers read hugely too big while P1's looked right. The fix is to take the
-/// NEAREST viewer, which is what <see cref="NearerViewerAlwaysWinsSoNoPaneIsEverInflated"/> pins.
-/// See docs/org/tracers.md.</para>
+/// the splitscreen rule built on it: flooring against the nearest viewer, not player 1's pane, per
+/// docs/org/tracers.md's splitscreen-bug section. Every expectation is computed by hand from the
+/// projection, never captured from the implementation. The round-trip cases assert the inverse
+/// actually inverts.
 /// </summary>
 public class TracerScreenSizeTests
 {

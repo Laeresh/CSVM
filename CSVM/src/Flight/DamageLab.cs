@@ -126,35 +126,12 @@ public sealed class FlightDamageTarget : IDamageLabTarget
     }
 }
 
-/// <summary>
-/// The damage lab: one armor slider (parts the data gives an armor pool) plus one health slider
-/// per destroyable part (vehicle.json destroyable_parts), driving the <see cref="DamageVisuals"/>
-/// pipeline through an <see cref="IDamageLabTarget"/> off their combined fraction. Dragging a
-/// part below an injure_anims threshold plays the visual — the pdpanelN torn-skin flip with its
-/// authored panel burn — and ≤ 10 % combined on any part starts the heavy player_damage_trail
-/// stage (short_firetrail at prop1 + the fire_lt nose light; the parked viewer burns stand-ins).
-/// Raising a slider back above a threshold restores the healthy skin: the visuals are rebuilt
-/// from scratch whenever the set of crossed thresholds changes (rebuilding only on set changes
-/// keeps a slider drag from restarting the fires at every pixel of travel).
-///
-/// Two hosts, one panel. In --viewer the sliders ARE the damage state on a parked plane
-/// (ViewerDamageTarget). In --fly/--stunt they write P1's real PlaneDamage
-/// (FlightDamageTarget) while the sim keeps running, so a dialled-in state can be flown, and
-/// they mirror it back — a graze moves the sliders, and a respawn returns them to 100 %. Armor
-/// can be driven to 0 with health untouched (a partial hit the real armor-first model never
-/// fully exhausts), but not the reverse: <see cref="ReadSliders"/> floors a part's armor at 0
-/// whenever its health reads below full, since the real damage path never leaves health
-/// short of max while armor still stands — dragging the health slider takes armor down with it.
-///
-/// F5 toggles the lab — panel AND gauges together, so it is genuinely present or absent
-/// (clean F12 shots). Every viewer and flight session builds one: with --damage it opens
-/// straight away, otherwise it waits hidden behind F5, which is what makes F5 mean something in
-/// a plain launch (a lab that exists only under --damage would leave the key
-/// silently doing nothing — user-reported). --damage=part:frac,… presets both sliders to the same
-/// raw fraction and lands through the same write path as a hand drag, so a fraction below 1
-/// still floors armor at 0; --screenshot runs capture damage states deterministically in either
-/// mode.
-/// </summary>
+/// <summary>The damage lab (F5 toggles): one armor slider plus one health slider per destroyable
+/// part, driving <see cref="DamageVisuals"/> through an <see cref="IDamageLabTarget"/> off their
+/// combined fraction (docs/architecture.md). Two hosts, one panel: <c>--viewer</c>'s sliders ARE
+/// the state on a parked plane, <c>--fly</c>/<c>--stunt</c> write P1's real <c>PlaneDamage</c>
+/// while the sim runs and mirror it back. <see cref="ReadSliders"/> floors a part's armor at 0
+/// whenever its health reads below full, mirroring the real armor-first damage path.</summary>
 public sealed partial class DamageLab : Node
 {
     private readonly PlaneStats _stats;
@@ -417,10 +394,8 @@ public sealed partial class DamageLab : Node
         foreach (var part in _stats.DestroyableParts)
         {
             float healthFrac = (float)(_healthSliders[part.Name].Value / 100.0);
-            // Mirrors PlaneDamage.Apply: armor absorbs a round in full before any of it reaches
-            // health, so no state the real damage path can reach has health short of max while
-            // armor still stands. Armor alone can still be driven to 0 with health untouched — a
-            // hit that never fully exhausts it — but not the reverse.
+            // Mirrors PlaneDamage.Apply's armor-first path: health never reads below full while
+            // armor still stands.
             float armorFrac = 1f;
             if (_armorSliders.TryGetValue(part.Name, out var a))
                 armorFrac = healthFrac < 1f ? 0f : (float)(a.Value / 100.0);

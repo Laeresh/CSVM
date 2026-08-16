@@ -5,40 +5,12 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>
-/// Per-pane Dogfight HUD: one compact status line — remaining time
-/// (omitted once <see cref="VersusMatch.TimeLimit"/> is disabled), this player's own
-/// kills/deaths, and the current leader's tag — a transient "P2 DOWNED P3" banner on every
-/// Downed report anywhere in the match (a plain "P3 DOWN" when the crash carried no killer), and
-/// an edge-arrow + clock-bearing marker per living opponent (hidden while
-/// <see cref="FlightController.Crashed"/>), in that opponent's own identity colour — the
-/// splitscreen answer to the original's radar (no reference to copy; extends MarkerHud's
-/// stunt-marker visual language, its own entry in architecture.md). The status line sits in the
-/// same screen slot MarkerHud's run-status line uses — Stunt and Versus are mutually exclusive
-/// modes, so the two never compete for it.
-///
-/// <para>The status line pulls <see cref="VersusMatch"/> live each frame: its own bookkeeping is
-/// already current by the time the HUD draws. The banner is pushed once per fact via
-/// <see cref="OnKill"/> — GameSession's own Downed subscription, a second one never piggybacked
-/// on the scoring handler, broadcast to every pane so the whole field sees who went down.
-/// Opponent positions are read straight off <see cref="Rigs"/> each frame — never
-/// <c>AnimRuntime.PlayerPosition</c>, a P1-only singleton — and projected through THIS pane's own
-/// camera, exactly like MarkerHud projects a danger zone.</para>
-///
-/// <para>H22: the same marker also tracks this pane's current AI hostile in EVERY flight
-/// session, not only <c>--vs</c>. <see cref="BuildHostileTracker"/> builds the HUD with no match
-/// (no status line, no banner, no opponent list); <see cref="HostilePool"/> is scanned each
-/// frame through the pool's one live aircraft roster (<c>CollectAircraft</c>, the same list the
-/// AI gunners read) and the NEAREST live AI aircraft becomes the tracked hostile. Humans carry
-/// no gunner, so there is no D12 "the target" to mirror; nearest-hostile is the shipped rule,
-/// re-evaluated per frame, which is VS mode's own no-lock behaviour. The hostile draws through
-/// <see cref="DrawOpponent"/> unchanged, in the HUD's hostile red.</para>
-///
-/// <para><c>--debug-markers</c> (<see cref="MarkAll"/>) widens that one marker to EVERY live
-/// aircraft the pool lists, red for a hostile team and blue for this pane's own side, each
-/// tagged with its slant range. It is a watching aid for AI work, not a gameplay feature: the
-/// shipped HUD marks exactly one hostile and the flag is off unless asked for.</para>
-/// </summary>
+/// <summary>Per-pane Dogfight HUD (docs/architecture.md): a status line (time, this pane's own K/D,
+/// the leader), a transient kill banner, and an edge-arrow + clock-bearing marker per living
+/// opponent — the splitscreen answer to the original's radar, extending MarkerHud's visual
+/// language. H22 extends the same one marker to the current AI hostile in every flight session, not
+/// only <c>--vs</c>; <c>--debug-markers</c> (<see cref="MarkAll"/>) widens it to every live
+/// aircraft, a watching aid rather than a gameplay feature.</summary>
 public sealed partial class VersusHud : Control
 {
     /// <summary>Which pane this draws in (0-based) — this pane's own K/D, and the identity every

@@ -4,19 +4,13 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// One launchscreen player's input source: the keyboard (player 1 only) and/or that
-/// player's gamepads, polled every frame with edge detection + auto-repeat. Splitting this out
-/// of <see cref="LaunchMenu"/> is what makes the join flow possible at all — before the split,
-/// every menu read was an any-pad OR across the whole roster (correct for one player, useless
-/// once two people need separate cursors).
-///
-/// <para>Polling rather than Godot's input map / focus system is deliberate and carried over from
-/// the original launchscreen: it needs no project-settings wiring, works identically for keyboard and pad, and — the
-/// reason it matters here — reads a <b>named device</b>, which the action system cannot do.</para>
-///
-/// <para><see cref="Prime"/> seeds the edge flags from the current raw state, so a button still
-/// held from whatever brought us here (the Start press that joined this player, the Esc that left
-/// a flight) is not read as a fresh press on the next frame.</para>
+/// One launchscreen player's input source: the keyboard (player 1 only) and that player's own
+/// gamepads, polled every frame with edge detection and auto-repeat. Per-player rather than an
+/// any-pad OR across the roster, which is what makes the join flow possible at all.
+/// ⚠ Poll raw device state; do not move this to Godot's input map or focus system. Only raw
+/// polling can read a NAMED device, and the join flow needs to know which pad pressed.
+/// <see cref="Prime"/> seeds the edge flags from the current raw state, so a button still held
+/// from whatever brought us here is not read as a fresh press on the next frame.
 /// </summary>
 public sealed class MenuInput
 {

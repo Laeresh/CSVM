@@ -4,22 +4,10 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// Live, mutable per-instance state for the world's destructible objects — the single owner of
-/// "how much health is this particular tower down to right now".
-///
-/// A destructible is not a file type: it is an <see cref="AnimDefinition"/> carrying
-/// <c>HEALTH &gt; 0</c> (the whole test — see <c>docs/formats/destructibles.md</c>). One
-/// definition binds to many world nodes — its <c>NAME</c> is a wildcard, so the reader's
-/// <c>ap_h2otwr*</c> covers four towers, and even the compiler's expanded per-instance defs can
-/// resolve to more than one node — and each of those node groups is an <b>independent</b>
-/// instance with its own hit points. Keying on <c>(def, anchor)</c> is what keeps one tower's
-/// damage from breaking its siblings.
-///
-/// The registry holds current/max HP and coarse lifecycle state, and makes <c>ANIM_HEALTH</c>
-/// condition evaluation read the live value instead of the static authored one. It applies no
-/// damage itself — the <c>WeaponHit</c> path is what decrements HP — so a freshly built world
-/// has every instance at full health. Damage-stage evaluation and the death sequence hang off
-/// the same instances.
+/// Live, mutable per-instance state for the world's destructible objects: current/max HP and
+/// coarse lifecycle state, keyed by <c>(def, anchor)</c> since one wildcard <c>NAME</c> or a
+/// compiler expansion can bind several independent instances to one def. Applies no damage
+/// itself; the <c>WeaponHit</c> path decrements HP. Decode: <c>docs/formats/destructibles.md</c>.
 /// </summary>
 public sealed class DestructibleRegistry
 {
@@ -111,15 +99,10 @@ public sealed class DestructibleRegistry
         return found;
     }
 
-    /// <summary>The destructible instance a struck world node belongs to. The struck node is a
-    /// raycast-hit collider deep under the anchor's subtree, so this climbs the parent chain to
-    /// find a registered anchor. It walks the WHOLE chain rather than stopping at the first hit,
-    /// because a compiled def and a reader wildcard can anchor to DIFFERENT nodes of one object —
-    /// the water tower's compiled def roots on <c>ap_h2otwr1</c> while its reader def's <c>*</c>
-    /// also grabs the inner <c>ap_h2otwr.flt</c>, which is nearer the collider — and the compiled
-    /// def is the authoritative one (its DAMAGE_SEQUENCE and death sequence are the real ones). So
-    /// the nearest COMPILED anchor wins; failing any compiled, the nearest reader. Null when
-    /// nothing up the chain is a destructible (terrain, water, clutter, the sky).</summary>
+    /// <summary>The destructible instance a struck world node belongs to: climbs the parent chain
+    /// from the raycast-hit collider to a registered anchor, nearest compiled anchor first, then
+    /// nearest reader (docs/formats/destructibles.md). Null off the destructible chain
+    /// entirely.</summary>
     public Instance? Resolve(Node? struck)
     {
         Instance? nearestReader = null;
@@ -175,15 +158,10 @@ public sealed class DestructibleRegistry
         /// restore the pose of whatever it moved.</summary>
         public AnimDefinition? ChainedDeathDef { get; set; }
 
-        /// <summary>Every <c>CALL_ANIMATION</c> target this death dispatched directly onto its OWN
-        /// anchor (C2's facade panels calling the shared <c>facade_parts</c> template; also covers
-        /// <see cref="ChainedDeathDef"/>'s target, redundantly but harmlessly) — populated at
-        /// dispatch time, not by re-deriving it from the data, so it only ever names what actually
-        /// ran. Carries the anchor <c>Start</c> actually used, not necessarily THIS instance's own
-        /// (a pooled library-root call anchors on its own copy, not the call
-        /// site), since that is what <c>Stop</c>/<c>RestoreRestPoses</c> need to find it again. A
-        /// reset stops and restores each of these too, or a called def's own motions (a
-        /// flying debris piece still mid-flight) can outlive the reset.</summary>
+        /// <summary>Every <c>CALL_ANIMATION</c> target this death dispatched onto its own anchor
+        /// (docs/formats/destructibles.md), populated at dispatch time so it names only what
+        /// actually ran. A reset stops and restores each of these too, or a called def's own
+        /// motions can outlive the reset.</summary>
         public HashSet<(AnimDefinition Def, Node3D Anchor)> LocalCallTargets { get; } = new();
 
         /// <summary>Re-seeds this pool from a mission record — the zeppelin case (M4 F18):

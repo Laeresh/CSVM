@@ -18,13 +18,11 @@ namespace CSVM.Mech3;
 /// </summary>
 public sealed class PaintScheme
 {
-    /// <summary>Named pattern — and this selects real data, not just a label:
-    /// it names a folder of per-skin region masks in the UI resource archive (see
-    /// <see cref="PatternLibrary"/> and <c>docs/formats/rof.md</c>), which is what decides
-    /// WHERE the three colours go. Patterns are per aircraft: <c>FORTUNE</c> covers all
-    /// eleven, the rest one to three, so a scheme is only meaningful together with a plane.
-    /// vehicle.json spells the names lower-case (<c>hughes</c>, <c>player_fortune</c>) and the
-    /// archive upper-case (<c>HUGHES</c>, <c>FORTUNE</c>); <see cref="FolderName"/> bridges them.</summary>
+    /// <summary>Named pattern: names a folder of per-skin region masks in the UI resource
+    /// archive (see <see cref="PatternLibrary"/> and <c>docs/formats/paint.md</c>), which decides
+    /// where the three colours go. Patterns are per aircraft, so a scheme is only meaningful
+    /// together with a plane; <see cref="FolderName"/> bridges vehicle.json's lower-case
+    /// spelling to the archive's upper-case one.</summary>
     public string Pattern = "";
 
     /// <summary>Paint slot 1–3, applied to the skin's first/second/third keyed region
@@ -111,17 +109,12 @@ public sealed class PaintScheme
     public static Color FromBytes(int r, int g, int b) =>
         new(Mathf.Clamp(r, 0, 255) / 255f, Mathf.Clamp(g, 0, 255) / 255f, Mathf.Clamp(b, 0, 255) / 255f);
 
-    /// <summary>A random livery: a named pattern from the catalog with randomized colours
-    /// and decals. Deliberately NOT three independent random RGBs — that produces clown
-    /// planes. The shipped twelve all follow one shape (see paint.md's table): slot 1 is the
-    /// squadron's identity colour, slot 2 a dark trim and slot 3 a light one, so a random
-    /// scheme is drawn the same way, with the catalog's own colours in the pool. Nose decals
-    /// come from the 21–49 nose-art range and tail/wing from the 00–20 squadron logos,
-    /// matching how every shipped def uses the three slots.</summary>
+    /// <summary>A random livery: a named pattern from the catalog with randomized colours and
+    /// decals, drawn to match the shipped shape (identity/dark-trim/light-trim, nose/tail/wing
+    /// decal ranges) rather than as independent random RGBs. See <c>docs/formats/paint.md</c>.</summary>
     /// <param name="patterns">The pattern names this aircraft actually has masks for
-    /// (<see cref="PatternLibrary.PatternsFor"/>) — a pattern is per-plane, so drawing one the
-    /// aircraft does not carry would paint nothing. Null/empty falls back to the catalog's
-    /// names, which is only right when no library is loaded.</param>
+    /// (<see cref="PatternLibrary.PatternsFor"/>); drawing one it does not carry would paint
+    /// nothing. Null/empty falls back to the catalog's names.</param>
     public static PaintScheme Random(RandomNumberGenerator rng, IReadOnlyList<PaintScheme>? catalog,
         IReadOnlyList<string>? patterns = null)
     {

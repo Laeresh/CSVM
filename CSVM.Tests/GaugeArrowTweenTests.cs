@@ -28,13 +28,9 @@ public class GaugeArrowTweenTests
         Assert.Equal(-90f, GaugeCluster.TweenArrow(float.NaN, -90f, 0.5f));
     }
 
-    /// <summary>A 90° step at 168.7 °/sim-s is 533 ms of pure interior-rate sim time; one 16.6 ms
-    /// sim-step (1/60 s) advances it by exactly the rate — neither clamped early nor overshooting.
-    /// The original's end-to-end footage reads ~633 ms for the same step because it also carries a
-    /// ~97 ms ease unimplemented here — this is a constant-rate tween with no easing, and
-    /// the ease's own shape is only known as "not a smoothstep", not measured well enough to build
-    /// (a lead, not a finding); the gap is real and owed a follow-up if an A/B against footage
-    /// reads as visibly wrong at the ends.</summary>
+    /// <summary>One sim-step at the constant rate advances the arrow by exactly rate × dt, neither
+    /// clamped early nor overshooting. This is a constant-rate tween with no easing; see
+    /// <c>docs/formats/hud.md</c> for the ~97 ms ease this omits.</summary>
     [Fact]
     public void OneSimStepAdvancesByRateTimesDt()
     {

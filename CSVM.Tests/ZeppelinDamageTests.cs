@@ -7,17 +7,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The F18 zeppelin kill arithmetic, engine-free. The one that matters most is the POLARITY
-/// pin: <c>num_healthy_required</c> counts SURVIVORS (dead when survivors &lt; required, the
-/// decoded rule) — the design document's destroy-count reading is the inverse, and implementing
-/// it yields an immortal zeppelin that reads as a damage bug. The discriminating state is
-/// asserted explicitly: 6 zones, required 4, exactly 3 destroyed — dead under the decoded rule,
-/// still alive under the inverse. Also pinned: literal per-entry counting over a duplicated
-/// healthy entry (C5/M01's shipped <c>gasbag5</c> twice), the engine recount that feeds
-/// <c>ZeppelinMotion.AliveEngines</c>, the DAMAGES_ZEPPELIN gasbag gate, and the record-stage
-/// crossing helper. The reader's default-1 and clamp rules are pinned in
-/// <see cref="ZeppelinsTests.TheDecodedThresholdRulesApply"/>; here the aggregator is shown to
-/// consume the reader's value unmodified.
+/// The F18 zeppelin kill arithmetic, engine-free. Pins the polarity: <c>num_healthy_required</c>
+/// counts survivors, not destroyed count (see <c>docs/formats/mission-entities.md</c> "The kill
+/// threshold counts survivors"). Also pins literal per-entry counting over a duplicated healthy
+/// entry, the engine recount feeding <c>ZeppelinMotion.AliveEngines</c>, the DAMAGES_ZEPPELIN
+/// gasbag gate, and the record-stage crossing helper.
 /// </summary>
 public class ZeppelinDamageTests
 {

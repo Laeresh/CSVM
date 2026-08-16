@@ -9,30 +9,13 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The shared world selection in <c>--freecam</c> and <c>--anim-lab</c>: click any object to pick
-/// the mesh under the cursor, then <b>PgUp/PgDn walk the ancestor ladder</b> from that leaf up to
-/// the placed world object it belongs to. A breadcrumb HUD line names every rung and a wireframe
-/// box outlines the current one. Every other inspect tool reads this state rather than picking for
-/// itself.
-///
-/// <para><b>How the pick works, and why it is not a physics raycast.</b> Neither mode builds
-/// collision (<c>WorldSession.Options.Collision</c> is flight-only), so there are no bodies to cast
-/// against. The pick is a manual ray-vs-AABB scan over the built <see cref="MeshInstance3D"/>s
-/// under the world root: the camera's <c>ProjectRayOrigin</c>/<c>ProjectRayNormal</c> give the ray,
-/// each visible mesh's own AABB is tested in its local frame (the affine inverse keeps the ray
-/// parameter equal to the world distance, so it compares across nodes), and the nearest hit wins.
-/// One walk per click. It is <b>AABB-accurate, not triangle-accurate</b> — a click just off a thin
-/// object can still take it.</para>
-///
-/// <para>Meshes whose world-space AABB diagonal exceeds <see cref="MaxPickDiag"/> are skipped, which
-/// is what keeps a click from landing on the map-spanning terrain tile in front of everything else.
-/// A click that hits nothing else therefore selects nothing, and says so rather than going
-/// quiet.</para>
-///
-/// <para><b>The ladder is `cs_name` ancestry.</b> The struck node is normally SceneBuilder's
-/// unnamed <c>mesh</c> child, so the rungs are the ancestors carrying the <c>cs_name</c> meta —
-/// Godot-only wrappers (the mesh/lights/collider children, our own overlays) are skipped, and the
-/// walk stops below the world content root. No auto-resolve heuristics: every named gamez ancestor
-/// is a rung, and the user picks the one they meant.</para>
+/// the mesh under the cursor, then PgUp/PgDn walk the <c>cs_name</c> ancestor ladder from that
+/// leaf up to the placed world object it belongs to. A breadcrumb HUD line names every rung and a
+/// wireframe box outlines the current one. Every other inspect tool reads this state rather than
+/// picking for itself. Ladder construction and the splitscreen constraint: this module's entry in
+/// docs/architecture.md.
+/// ⚠ The pick is a manual ray-vs-AABB scan, not a physics raycast: neither mode builds collision.
+/// It is AABB-accurate, not triangle-accurate — a click just off a thin object can still take it.
 /// </summary>
 public sealed partial class SelectionService : Node
 {

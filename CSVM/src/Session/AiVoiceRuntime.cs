@@ -11,27 +11,9 @@ namespace CSVM.Session;
 /// and plays every decision through B8's seam only — <c>CombatVoice.PlayableFor</c> resolving the
 /// name, <c>WorldSounds.HasStream</c> answering availability, and the source-following
 /// <c>WorldSounds.PlayOneShot(name, Node3D, rng)</c> playing it from the speaker's own aircraft.
-///
-/// <para>The wired sites (the full wired/unwired table is
-/// <c>docs/formats/combat-voice.md</c> "The remake's dispatch sites"): the DI distress tiers off
-/// <see cref="FlightController.DamageApplied"/> (the projectile hit path's whole-vehicle summary,
-/// 70/50/30 % most-severe-first); the death cry off <see cref="FlightController.Downed"/> — id 20
-/// <c>DA</c> when the dying aircraft's <see cref="FlightController.Team"/> is
-/// <see cref="AimAssist.PlayerTeam"/>, id 21 <c>DE</c> otherwise (every
-/// free-flight/<c>--vs</c> AI still lands on its own default team, so <c>DA</c> stays dormant
-/// there; a mission wingman on the player's team makes it reachable) — dispatched with force;
-/// <c>WA-Attack</c> + the computed <c>WA-Enemy</c> bearing broadcast on the mode machine's
-/// patrol→pursue transition against a human target (our chosen stand-in for the original's
-/// undecoded "enemy spotted" event, marked as such); <c>TA-FailTail</c> spoken by the evading AI
-/// target when its pursuer's sixth-sense stun lands; <c>TA-SucShk</c> when an AI's own
-/// evade/evasive-maneuver reaction completes ("fires as the reaction flag clears"). The player's
-/// aircraft registers only as a damage source: its health crossing 30 % broadcasts
-/// <c>WA-HighDmg</c> to its own <see cref="FlightController.Team"/>.</para>
-///
-/// <para>Speakers register on their real <see cref="FlightController.Team"/> (B7 removed the
-/// TEAMLESS stand-in this used before a team model existed): a broadcast now actually elects
-/// among a caller's own side, live the moment a mission puts two AI on one team; free
-/// flight/<c>--vs</c>, where every pilot still gets its own default team, is unaffected.</para></summary>
+/// The wired/unwired dispatch-site table is docs/formats/combat-voice.md "The remake's dispatch
+/// sites". Speakers register on their real <see cref="FlightController.Team"/>; a broadcast
+/// elects among a caller's own side.</summary>
 public sealed partial class AiVoiceRuntime : Node
 {
     /// <summary>The player's WA-HighDmg broadcast threshold — decoded (id 13 fires when the
@@ -95,10 +77,8 @@ public sealed partial class AiVoiceRuntime : Node
         var speaker = _dispatcher.Register(ai.PlayerIndex, vo, ai.Team,
             isPlayer: false, talkerChance, constitutionChance);
         _bySpeaker[ai.PlayerIndex] = ai;
-        // An INERT aircraft is not in the session yet, so it neither speaks nor is elected
-        // for a broadcast: the dispatcher's own aliveness gate carries it, mirrored here because
-        // nothing in the dispatcher can see a FlightController. Registration order is unchanged —
-        // the speaker is listed from the start, just not eligible until its wave launches.
+        // An inert aircraft neither speaks nor is elected for a broadcast, mirrored here because
+        // the dispatcher cannot see a FlightController's own aliveness.
         speaker.Alive = ai.InPlay;
         ai.InertChanged += plane => speaker.Alive = plane.InPlay;
         GD.Print($"ai voice: {ai.Name}: accent {accentId} -> VO id {vo} " +

@@ -318,15 +318,10 @@ public static class Probes
 
     // ---- mip chains ----------------------------------------------------------------------------
 
-    /// <summary>What a chapter's texture archive actually installed as levels 1 and 2, beside the
-    /// authored <c>_1</c>/<c>_2</c> siblings the chapter ships — one row per level, with the
-    /// deciding measurement: mean luminance, and the share of pixels above 128 (the
-    /// street lights the artists kept and a box filter averages away).
-    ///
-    /// <para>The chain is built through <see cref="TextureArchive.BuildMipped"/>, i.e. the code a
-    /// material's lookup runs, under whatever <c>--mips=</c> policy this run set — so the
-    /// <c>installed == authored</c> column is an able-to-fail check on the policy actually taking
-    /// effect, not on the levels merely existing on disk.</para></summary>
+    /// <summary>What a chapter's texture archive installed as levels 1 and 2, beside the authored
+    /// siblings — mean luminance and the share of pixels above 128 per level. Built through
+    /// <see cref="TextureArchive.BuildMipped"/> under whatever <c>--mips=</c> policy is set, so
+    /// <c>installed == authored</c> checks the policy took effect, not that files merely exist.</summary>
     public static MipResult MipChains(string texturesPath, string chapter, string filter)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
@@ -407,19 +402,10 @@ public static class Probes
 
     // ---- AI data -------------------------------------------------------------------------------
 
-    /// <summary>--dump-ai[=chapter]: a pure-data report over the five AI data families the plan
-    /// ("What the data actually ships") measured and none of the engine reads
-    /// yet — patrol nets (the one family <see cref="AiNets"/> already reads), <c>aiv</c> rosters,
-    /// <c>ai.zrd</c> turrets, zeppelins, generators. Reads every mission dir under the data root
-    /// (no optional value) or one chapter's dirs (with one), so the unfiltered totals are the
-    /// install-wide golden counts the plan cites: 222 nets, 414 aiv blocks across 53 files, 42
-    /// turret entries, 58 zeppelin records, 23 generators.
-    ///
-    /// <para>Loose parsing only, matching the traps the plan names: <c>aiv</c> blocks are read by
-    /// their actual length (never assumed 81-wide), <c>neindex</c>'s leading number is skipped
-    /// (not read as a count — <see cref="AiNets.LoadIndex"/> already does this), and net trailers
-    /// are read via <see cref="AiNets"/>'s own <c>[-1]</c> / <c>[-1,"name"]</c> / <c>[3]</c> /
-    /// <c>[nodeIndex,"name"]</c> handling rather than a second copy of it here.</para></summary>
+    /// <summary>--dump-ai[=chapter] (docs/cli.md): a pure-data report over the five AI families —
+    /// patrol nets, <c>aiv</c> rosters, <c>ai.zrd</c> turrets, zeppelins, generators. No world, no
+    /// scene: every family is read straight off the extraction, loosely, tolerating the same traps
+    /// <see cref="AiNets"/> does (real block width, <c>neindex</c>'s leading number skipped).</summary>
     public static AiDumpResult Ai(string dataRoot, string sharedZrdrPath, string chapterFilter)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
@@ -583,15 +569,11 @@ public static class Probes
 
     // ---- destructible damage -----------------------------------------------------------------
 
-    /// <summary>Every enabled collision shape under a subtree. SceneBuilder attaches a
-    /// <c>StaticBody3D</c> named <c>col</c> with one <c>CollisionShape3D</c> per collidable mesh, and
-    /// <c>SetSubtreeActive</c> toggles that shape's <c>Disabled</c> as it swaps healthy→destroyed.
-    /// The swap targets nodes through the compiled symbol table, which can resolve to geometry
-    /// OUTSIDE the small anim anchor, so a census under the anchor misses it — pass
-    /// <see cref="WorldRootOf"/> and compare the two sets around one kill.
-    /// <para><b>Report the two directions separately, never the signed sum</b>
-    /// (<c>docs/verification.md</c>): a death both switches the healthy collider off and brings wreck colliders on, and the
-    /// net can be positive while the real removal happened.</para></summary>
+    /// <summary>Every enabled collision shape under a subtree. <c>SetSubtreeActive</c> toggles each
+    /// shape's <c>Disabled</c> as it swaps healthy→destroyed, and the swap can resolve to geometry
+    /// outside the small anim anchor — pass <see cref="WorldRootOf"/> and compare the two sets
+    /// around one kill. ⚠ Report OFF and ON separately, never their signed sum: see INSTR-15 in
+    /// docs/verification.md.</summary>
     public static HashSet<CollisionShape3D> EnabledColliders(Node root)
     {
         var set = new HashSet<CollisionShape3D>();
@@ -611,12 +593,10 @@ public static class Probes
     }
 
     /// <summary>Every collider under a subtree that is enabled while nothing is drawn there — the
-    /// invisible-wall census. Reports the offending shape's owning node chain, leaf-first.
-    ///
-    /// <para>This is the generic tripwire for the whole class the C1/IA1 zeppelin belonged to
+    /// invisible-wall census. Reports the offending shape's owning node chain, leaf-first. The
+    /// generic tripwire for the class the C1/IA1 zeppelin belonged to
     /// (<see cref="Mech3.WorldCollision"/>): visibility is inherited and <c>Disabled</c> is not, so
-    /// any code that writes the two separately eventually disagrees with itself. Run over a built
-    /// world it needs no knowledge of which entity a mission hides.</para></summary>
+    /// writing the two separately eventually disagrees with itself.</summary>
     public static List<string> InvisibleEnabledColliders(Node root)
     {
         var found = new List<string>();
@@ -702,16 +682,12 @@ public static class Probes
         destroyedAll = dAll;
     }
 
-    /// <summary>Sweeps one live destructible instance per distinct def (optionally filtered) and
-    /// records what its damage/death did. Two modes: <paramref name="damageHd"/> &gt; 0 spends that
-    /// much HEALTH_DAMAGE per discrete weapon hit (death swap, colliders, debris, sound, the
-    /// collide gate and the reset/rekill idempotency check); otherwise the HP is swept continuously
-    /// from full to zero to find which stage effect fires at which health.
-    ///
-    /// <para>Requires the world subtree to be in the scene tree with
-    /// <see cref="AnimRuntime.ManualAdvance"/> set: it ticks the clock past the death schedule to
-    /// see the debris launch, and a global-transform read on an out-of-tree node returns
-    /// identity.</para></summary>
+    /// <summary>Sweeps one live destructible instance per distinct def and records what its
+    /// damage/death did. <paramref name="damageHd"/> &gt; 0 spends that HEALTH_DAMAGE per discrete
+    /// weapon hit (swap, colliders, debris, sound, collide gate, reset/rekill); 0 sweeps HP
+    /// continuously to find which stage effect fires at which health. Requires the world subtree in
+    /// the scene tree with <see cref="AnimRuntime.ManualAdvance"/> set, so an out-of-tree transform
+    /// read does not return identity mid-schedule.</summary>
     public static DamageResult Damage(AnimRuntime runtime, string chapter, string filter, float damageHd)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
@@ -762,10 +738,8 @@ public static class Probes
             + $"{chosen.Count} {kind} of {result.TotalInstances} destructible instance(s)");
         foreach (var inst in chosen)
         {
-            // Discrete-hit mode: spend a fixed HEALTH_DAMAGE per hit through DamageAt and count
-            // hits to destruction. DamageAt resolves a struck node to its AUTHORITATIVE instance, so
-            // drive the resolved one (the compiled def wins a shared node) — driving the picked
-            // reader twin would damage the compiled instance and never see HP fall.
+            // DamageAt resolves a struck node to its authoritative instance; drive that one — the
+            // picked reader twin would damage the compiled instance instead and never see HP fall.
             var target = damageHd > 0f ? (runtime.Destructibles.Resolve(inst.Anchor) ?? inst) : inst;
             var row = new DamageRow
             {
@@ -839,35 +813,27 @@ public static class Probes
                 {
                     swap = $"swap[healthy {hVis}/{hAll} shown, destroyed {dVis}/{dAll} shown]; ";
                 }
-                // Collider census, split by direction: how many colliders this kill switched OFF (the
-                // healthy door/building collision that stops blocking flight) vs ON (the wreck/debris
-                // the death — and any chained animation — brings solid). A net count hides the door
-                // removal when the death also spawns a solid wreck.
+                // Colliders switched OFF (healthy collision that blocked flight) vs ON (wreck/debris
+                // brought solid). ⚠ Report both, per INSTR-15; a net count hides the door removal.
                 var colAfter = EnabledColliders(WorldRootOf(target.Anchor));
                 row.CollidersOff = colBefore.Count(cs => !colAfter.Contains(cs));
                 row.CollidersOn = colAfter.Count(cs => !colBefore.Contains(cs));
                 swap += $"col[off {row.CollidersOff}, on {row.CollidersOn}]; ";
-                // Debris tumble: the death's ballistic OBJECT_MOTION bodies — the wreck pieces that
-                // arc out under gravity and tumble. They are SCHEDULED (the water tower's at t=2.2 s),
-                // so advance the death forward past the schedule to let them launch — done AFTER
-                // swap/col so those stay the immediate post-death state (pre-tick).
+                // Debris is SCHEDULED (the water tower's at t=2.2 s), so advance past it to let it
+                // launch — done AFTER swap/col so those stay the immediate post-death, pre-tick state.
                 for (int i = 0; i < 7; i++)
                 {
                     runtime.Advance(0.5f);   // 3.5 s — past the ~2.2 s schedule, into the tumble
                 }
                 row.Debris = runtime.BallisticMotionsLaunched - debrisBefore;
                 swap += $"debris[{row.Debris} launched]; ";
-                // One-shot SOUND: the death/damage sequence's explosion audio. Audio cannot be
-                // screenshot-verified, so a nonzero count across the kill+advance is the headless
-                // proof the destruction sounded. Zero when run muted or on a def whose death
-                // authors no Sound event.
+                // Audio cannot be screenshot-verified, so a nonzero count here is the headless proof
+                // the destruction sounded; zero when muted or the death authors no Sound event.
                 row.Sounds = runtime.OneShotSoundsPlayed - soundsBefore;
                 swap += $"snd[{row.Sounds} played]; ";
             }
-            // Stop the effects this run started, AFTER the debris tick so the pieces actually launch
-            // first: reader-wildcard and compiled per-instance defs bind the SAME tower nodes, so a
-            // leftover live effect would make the twin's identical CALL_ANIMATION a no-op and read as
-            // "no stage effect fired".
+            // Stop AFTER the debris tick so pieces launch first. Reader and compiled defs share
+            // tower nodes, so a leftover live effect makes the twin's CALL_ANIMATION a no-op.
             foreach (var (anim, anchor) in started)
             {
                 runtime.Stop(anim, anchor);
@@ -974,17 +940,11 @@ public static class Probes
     // ---- flight envelope ---------------------------------------------------------------------
 
     /// <summary>Steps a throwaway <see cref="FlightModel"/> through the manoeuvres the original was
-    /// measured flying, and reports both numbers side by side.
-    ///
-    /// <para>This is the only instrument that can answer "did a flight-constant change break the
-    /// calibration?" — the constants interact (thrust sets speed, speed sets the yaw <c>eff</c>, so
-    /// a thrust change moves yaw authority), and a screenshot cannot see any of it. No world, no
-    /// scene, no game assets beyond the zrdr readers: it constructs the model directly and
-    /// integrates it at the fixed <c>--det</c> step.</para>
-    ///
-    /// <para>⚠ Every target here is the <b>Bloodhawk's</b>. It is the only airframe the original was
-    /// recorded flying, so another plane's run reports its numbers with nothing to assert against —
-    /// which is honest, not a gap to fill by scaling the Bloodhawk's.</para></summary>
+    /// measured flying, and reports both numbers side by side — see docs/cli.md's <c>--dump-flight</c>
+    /// entry and docs/org/flightModel.md. No world, no scene: it constructs the model directly and
+    /// integrates it at the fixed <c>--det</c> step.
+    /// ⚠ Every target is the Bloodhawk's, the only airframe recorded flying. Another plane's run
+    /// reports its numbers with nothing to assert against; that is honest, not a gap to fill.</summary>
     public static FlightEnvelopeResult FlightEnvelope(string zrdrPath, string planeNodeName)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
@@ -1032,28 +992,18 @@ public static class Probes
         Row("level-top-speed", "level full throttle held to equilibrium", "mph",
             m.Speed / Mph, 300.4, 4.0, $"fd_speed = {fd / Mph:0.0} mph, α {m.Alpha:0.0}°");
 
-        // --- acceleration.
-        // ⚠ INFORMATIONAL — an OPEN CONFLICT with the footage, not a tolerance slip. The force path
-        // is verified byte-complete against the original's executable (docs/org/flightModel.md,
-        // "The force scale — settled"): thrust, drag and the ×9.82/weight conversion are the
-        // original's own arithmetic with nothing fitted, yet this run comes out ~14.5% fast. No
-        // decoded term is left to attribute the residual to; the candidate confounds are the
-        // original's 0.5/s throttle slew (decoded, unimplemented — the clip's lever history is
-        // unknown) and the clip recipe itself. Do NOT close it by scaling thrust or drag: the same
-        // footage's decel-290-150 pulls the opposite way, and no constant scale satisfies both (a
-        // ×0.5 force scale that fixes the decel blows this row out to ~6.4 s).
+        // --- acceleration. ⚠ INFORMATIONAL, an open conflict with the footage: the force path is
+        // byte-verified against the binary with nothing fitted, yet this runs ~14.5% fast. Do NOT
+        // close it by scaling thrust/drag — decel-290-150 pulls the opposite way. docs/org/flightModel.md.
         m = Fresh(stats, Level(), 150f * Mph, 1f);
         double tAccel = RunUntil(m, 1f, 30f, () => m.Speed >= 290f * Mph);
         Row("accel-150-290", "level full throttle, 150 -> 290 mph", "s", tAccel, 3.76, 0.40,
             $"α {m.Alpha:0.0}° at finish — OPEN conflict, force path verified against the binary",
             info: true);
 
-        // --- terminal dive. Nose (and path) 70.7° down, full throttle, held to terminal — the angle
-        // the original's "vertical" dive clip actually came out at, so this compares like with like.
-        // Asserted again since the attitude-thrust terms landed: the dive is the side of that scale
-        // where it ADDS thrust (×1.226 at this angle), and it is what carries the row from −5.3% to
-        // +0.2% with nothing fitted. The dive is also the one attitude the retired climb-gravity
-        // constant never touched, so this row is a clean read of the attitude terms alone.
+        // --- terminal dive, at 70.7° — the angle the original's "vertical" clip actually came out
+        // at. The attitude-thrust scale ADDS thrust here (×1.226), carrying the row from −5.3% to
+        // +0.2% with nothing fitted. docs/org/flightModel.md.
         m = Fresh(stats, Pitched(-70.7f), 0.9f * fd, 1f);
         Run(m, 1f, 120f, pitch: 0f);
         double pathDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
@@ -1069,13 +1019,9 @@ public static class Probes
         Row("roll-360", "full aileron from level cruise, 360°", "s", tRoll, 2.05, 0.25,
             $"α {m.Alpha:0.0}° at finish");
 
-        // --- pitch. Steady rate after the 1/damp spin-up, at three speeds: ours is
-        // speed-independent by construction, and the video says the original's is too, so the point
-        // of the three is to catch anything else (stall, lift, eff) leaking into pitch at the ends.
-        // Also the cleanest read of the alignment lag: wings-level, full elevator, no bank, so the
-        // settled α is where the nose-chase (the authored lift_accel_rate, plus the lift demand's
-        // own swing once the airflow blend engages past liftAOAs[0]) balances the commanded body
-        // rate. Both terms scale with the SAME authored rate, so this row moves with it.
+        // --- pitch, at three speeds: speed-independent by construction, so the three catch
+        // anything else (stall, lift, eff) leaking in at the ends. Also the cleanest read of the
+        // alignment lag. docs/org/flightModel.md.
         var pitchRates = new List<double>();
         var pitchAlphas = new List<double>();
         foreach (float mph in new[] { 120f, 200f, 280f })
@@ -1101,11 +1047,9 @@ public static class Probes
             (samples > 0 ? $"mean speed {sumSpeed / samples / Mph:0.0} mph, " : "")
             + $"α {m.Alpha:0.0}° at finish");
 
-        // --- altitude cap. A fixed 22° nose-up hold from level cruise (pitch input
-        // stays at 0 throughout — the attitude is set once via Pitched, matching the original clip's
-        // fixed pull rather than a continuous full-elevator input, which would loop instead of climb).
-        // Without the clamp this settles into the model's accepted "steep-climb equilibrium" artifact
-        // and never stops climbing; with it, altitude must stop at the resting cap.
+        // --- altitude cap: fixed 22° nose-up hold (attitude set once, not continuous elevator,
+        // which would loop instead of climb). Without the clamp this never stops climbing (the
+        // model's accepted "steep-climb equilibrium" artifact); with it, altitude settles at the cap.
         m = Fresh(stats, Pitched(22f), fd, 1f);
         Run(m, 1f, 240f, pitch: 0f);
         Row("altitude-cap", "22° nose-up hold at full throttle, altitude settled against the clamp", "ft",
@@ -1121,24 +1065,9 @@ public static class Probes
         Row("level-speed-near-cap", "level full throttle at 1988 m, held to equilibrium", "mph",
             m.Speed / Mph, 300.4, 4.0, $"altitude clamp must not leak below the cap, α {m.Alpha:0.0}°");
 
-        // --- sustained turn. The recipe: full throttle, stick full back throughout, entered from
-        // the 298.96 mph cruise at 100° of bank, held to a true equilibrium — the original's own
-        // window is 15.9 sim s and 449.8° of heading. Sampling early measures the bleed-in instead,
-        // which is a different number (0.369 A against the plateau's 0.380) that happens to look
-        // plausible, so this settles for 10 s first and then averages over that same 15.9 s window.
-        //
-        // ⚠ The bank is set at entry and then LEFT FREE — no roll input, which is what the
-        // original's pilot was doing to the stick and is NOT what "hold 100°" would mean here.
-        // Forcing it is worse than useless: a roll controller keyed on atan2(-X.Y, Y.Y) stops
-        // measuring bank the moment the nose leaves the horizontal, and drives entry banks of 60°,
-        // 75° and 100° all into the same nose-down spiral at terminal speed — an instrument
-        // artifact, not a model reading. Free-roll settles honestly, at its own bank rather than the
-        // original's; the row reports both, and asserts neither.
-        // ⚠ INFORMATIONAL and unattributed. The original's bank coupling (the 0.205/0.165 terms) is
-        // implemented and narrows this row without explaining it. The remaining gap rides with the
-        // rate row below, which that same coupling moves the WRONG WAY, so whatever slows the
-        // original's banked pull sets this equilibrium too and neither row can be closed alone.
-        // See docs/org/flightModel.md.
+        // --- sustained turn: full throttle, stick full back from a 100° banked entry, settled 10 s
+        // then averaged over the original's own 15.9 s window. ⚠ Bank is left FREE, never forced —
+        // forcing it via atan2 breaks the moment the nose leaves horizontal. docs/org/flightModel.md.
         var turn = SustainedTurn(stats, 100f, 298.96f * Mph, settle: 10f, window: 15.9f);
         Row("sustained-turn-speed", "full back stick from a banked entry, settled speed", "mph",
             turn.SpeedMph, 222.94, 5.0,
@@ -1147,64 +1076,18 @@ public static class Probes
             + "rides the rate row below",
             info: true);
 
-        // An UPPER BOUND, not a band. The defect this guards is the aircraft falling out of the
-        // manoeuvre — 83% of gravity across the flight path at a steep bank — so "sinks no harder
-        // than the original" is the claim the measurement supports. The other side is a different
-        // question: the turn coming out CLIMBING is its own divergence, so both signs stay visible
-        // in the number.
-        // ⚠ INFORMATIONAL, and the reason is the row above rather than this one. This is the third
-        // leg of a manoeuvre whose OTHER two legs are informational and UNOWNED: we sweep heading
-        // 76% faster than the original at a bank it never flew, and a sink read off that flight path
-        // has no reason to land on the original's. Asserting one leg of a manoeuvre the model gets
-        // demonstrably wrong is asserting a compensating coincidence. It re-asserts with the rate
-        // row, not before it.
-        // ⚠ The figure moves a long way with the pitch terms and that is attributed rather than
-        // tuned: a nose-down sag term applied through the WHOLE pull, at up to 11.5 °/s, changes the
-        // settled bank by more than 10° and with it the sink. On the other ten airframes the same
-        // change moves this row the OTHER way (negative = climbing), which is the clearest sign the
-        // number rides the turn-rate gap rather than reading a mechanism of its own.
-        // See docs/org/flightModel.md.
+        // ⚠ An UPPER BOUND, not a band: guards against falling out of the turn, not against
+        // climbing. INFORMATIONAL — rides the turn-rate gap below, not a mechanism of its own.
+        // docs/org/flightModel.md.
         Row("sustained-turn-sink", "sustained max-pull turn, sink rate", "ft/s",
             turn.SinkFtS, 1.85, 0.0,
             $"upper bound — the failure this guards is falling out of the turn (before the B12 lift "
             + $"re-key this read 18.29). Negative = climbing. Rides the rate row below.",
             info: true, upperBound: true);
 
-        // ⚠ INFORMATIONAL and must stay so until the rate gap closes. We sweep heading far faster
-        // than the original, which is recorded, not fixed; inventing a rate limiter to close it is
-        // the wrong-mechanism fix — a limiter fitted to this row explains nothing and hides the
-        // real term.
-        // ⚠ What the gap IS has narrowed: the original pulls 1.6x slower BANKED than wings-level
-        // (18.95 °/sim-s here against 30.16 round the `pitch` clip's 360° loop, same stick, same
-        // throttle), while we pull the same rate in both — so this is a bank/load-factor effect,
-        // not a pitch-authority error, and `zoom-climb` above is the row that shows our pitch is
-        // nearly right.
-        // ⚠ NO AUTHORED FIELD IS A CANDIDATE, and all three that were are eliminated by measurement
-        // rather than by argument. highGs: the G limiter is inert on all eleven airframes (peak
-        // demand 2.13-5.01 G against a threshold of 9) and a limiter that never fires cannot slow a
-        // turn. turn_fade_in/turn_fade_out: decoded as a base ramp on AIRSPEED ALONE — 0 at 10 mph
-        // rising to 1 at 50 and flat above — so it is identically 1 across the 222-260 mph this row
-        // settles at, carries no bank or load-factor term, and cannot be a bank effect at all (it is
-        // a real LOW-speed behaviour, landed by C24, and it cannot move this row). The capture
-        // that was meant to discriminate has
-        // been flown — CAP-33, 2026-08-15, the turn held at ~60-70° — and it answered the ADI
-        // question rather than this one: the original was being mis-read off its ADI, and its turn
-        // is coordinated after all (see the bank note below). So this row stays open with no
-        // authored candidate and no outstanding capture.
-        // ⚠ It is NOT the bank coupling, and that is now settled rather than suspected. The
-        // original's own 0.205/0.165 terms are implemented, and they move this row AWAY from the
-        // target (32.35 -> 34.71 here, up on ten of eleven airframes) because both add heading rate
-        // in the direction of bank by construction. No sign or scale of them subtracts turn rate,
-        // so do not re-open them looking for one.
-        // ⚠ Do not promote this row by matching the ADI's +100°: that reading is not a bank, and
-        // this comment used to say the original's turn was "not internally consistent with a
-        // coordinated level turn" on the strength of it. SETTLED by CAP-33 (2026-08-15), flown with
-        // the pilot holding a known 60-70°: across that turn the ADI sky-region centroid read a
-        // mean 105.1° while V·ω/nom_gravity read 62.2°, and the ADI's 46° swing tracked the pitch
-        // cycle (r = +0.886 against climb rate) rather than the heading rate (r = -0.091). The ADI
-        // shows airframe attitude, which in a high-alpha pull sits tens of degrees off the bank of
-        // the turn. So CAP-01's 18.95 °/sim-s at 222.94 mph — V·ω = 32.96 m/s², atan(32.96/20) =
-        // 58.7° — IS its bank, the original IS coordinated, and ours is consistent with it too.
+        // ⚠ OPEN, INFORMATIONAL: no authored field explains this gap (G limiter inert, turn_fade
+        // keys on airspeed alone). Do not chase the ADI's +100° — CAP-33 confirmed it reads
+        // attitude, not bank. docs/org/flightModel.md.
         Row("sustained-turn-rate", "sustained max-pull turn, heading rate", "°/s",
             turn.RateDegS, 18.95, 3.0,
             $"{turn.RateDegS / 18.95:0.00}x the original — OPEN. The original pulls 1.6x slower "
@@ -1214,13 +1097,9 @@ public static class Probes
             + "the ADI's +100° is airframe attitude, not bank",
             info: true);
 
-        // --- part throttle. These two are the ONLY place the drag shape is observable: the
-        // full-throttle equilibrium is fd_speed by construction for any curve, so it can never
-        // detect a wrong shape. The 1/8-throttle row passes unaided (the linear lever's
-        // discriminating test); the decel row is the recorded footage-vs-binary conflict — the
-        // polar, read out of the executable, is ~2× stronger below cruise than the zero-thrust clip
-        // measures (docs/org/flightModel.md). Both stay informational; the decel row is also still
-        // owed a human playtest.
+        // --- part throttle: the only place the drag shape is observable (full throttle is
+        // fd_speed by construction for any curve). 1/8-throttle passes unaided; decel is the
+        // footage-vs-binary conflict, both informational. docs/org/flightModel.md.
         m = Fresh(stats, Level(), 0.9f * fd, 0.125f);
         Run(m, 0.125f, 300f, pitch: 0f);
         double idlePath = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
@@ -1230,33 +1109,18 @@ public static class Probes
             + $"α {m.Alpha:0.0}°",
             info: true);
 
-        // ⚠ This is a ZERO-throttle run, not 1/8. The footage it is measured against holds 8/8,
-        // cuts to 0/8, and touches nothing else in level flight — so this is a pure drag probe, not
-        // a thrust-vs-drag scenario. Run it at 1/8 instead and the model reads 12.1 s against the
-        // same 7.04 target, which is an artifact of the wrong throttle setting and not a finding:
-        // 150 mph sits only 8% above the 1/8-throttle equilibrium, so the approach is asymptotic and
-        // the time runs away. With no thrust there is no equilibrium to crowd.
+        // ⚠ ZERO throttle, not 1/8 — the footage cuts 8/8 to 0/8, so this is a pure drag probe.
+        // Run at 1/8 instead and the model reads 12.1 s (an artifact of the wrong throttle, not a
+        // finding): 150 mph sits only 8% above that equilibrium, so the approach is asymptotic.
         m = Fresh(stats, Level(), 290f * Mph, 0f);
         double tDecel = RunUntil(m, 0f, 60f, () => m.Speed <= 150f * Mph);
         Row("decel-290-150", "throttle cut to ZERO, 290 -> 150 mph, level", "s", tDecel, 7.04, 1.0,
             $"pure drag — no thrust term to assume, α {m.Alpha:0.0}° at finish — OPEN conflict, "
             + "the polar is the binary's and the footage disagrees", info: true);
 
-        // --- zoom climb. INFORMATIONAL. The recipe: full throttle, full back stick held from a
-        // 299.4 mph level cruise — the SAME take that pinned the 33 °/s pitch rate, so its stick
-        // history is known rather than inferred. ⚠ A held FULL pull is what makes these targets the
-        // right ones; a slower or released pull is a different flight with a different apex, and the
-        // two must not be averaged. The original bleeds to 127.9 mph 4.4 sim s into the pull and
-        // tops out 936 ft up at 6.5 s, still climbing past its own slowest point (the speed minimum
-        // leads the apex by 2.2 s and 63 mph, because speed bottoms where thrust − drag = g·sinγ,
-        // not where the climb stops).
-        //
-        // The induced-drag term closes most of the speed gap and overshoots the altitude in the
-        // other direction (1282 ft against 936), so the energy is wrong the other way round and this
-        // stays the row to watch. Also a second,
-        // longer-duration read of the alignment lag alongside pitch-rate above — a held pull
-        // becomes a sustained loop, so α should sit near the same equilibrium at the point of
-        // minimum speed.
+        // --- zoom climb, INFORMATIONAL: full throttle, full back stick from the same take that
+        // pinned pitch-rate, so the stick history is known. ⚠ Must be a held FULL pull — a
+        // slower/released pull is a different flight and must not be averaged with it. docs/org/flightModel.md.
         m = Fresh(stats, Level(), 300f * Mph, 1f);
         float apex = 0f, minSpeed = float.MaxValue, alphaAtMinSpeed = 0f;
         double tApex = RunUntil(m, 1f, 30f,
@@ -1277,10 +1141,8 @@ public static class Probes
             info: true);
 
         // ⚠ INFORMATIONAL, same loop as the row above — a direction check, not an assertion. The
-        // induced-drag term closes most of this gap but the energy split still reads wrong: the row
-        // above OVERSHOOTS altitude (1282 ft against 936) while this UNDERSHOOTS speed, so C_i
-        // (fitted to the sustained-turn plateau only) does not yet reproduce this manoeuvre's energy
-        // balance. Asserting it would fail on that known-open gap, not a new one.
+        // row above OVERSHOOTS altitude while this UNDERSHOOTS speed: the energy split still reads
+        // wrong. docs/org/flightModel.md.
         Row("zoom-climb-min-speed", "same loop, speed at its own minimum", "mph",
             minSpeed / Mph, 127.9, 6.0,
             $"α {alphaAtMinSpeed:0.0}° here (the wings-level pull settles lower — this loop has "
@@ -1330,27 +1192,12 @@ public static class Probes
 
     // ---- knife-edge ----------------------------------------------------------------------------
 
-    /// <summary>The knife-edge hold, filmed twice at very different speeds: bank set at ENTRY and
-    /// then left free, stick neutral, held 36 sim s. Reports the nose elevation, the flight path,
-    /// the gap between them, the sink, the heading rate and α at the original's own sample times.
-    ///
-    /// <para><b>The recipe, which is the point of this probe existing</b> — a knife-edge figure
-    /// stated as prose has no instrument behind it and cannot be reproduced. It lives here instead:
-    /// entry bank 90° about the nose (<see cref="Banked"/>), nose on the horizon, flight path along
-    /// the nose (<see cref="FlightModel.Reset"/>'s convention), the two filmed entry speeds of 143
-    /// and 300 mph, and the throttle TRIMMED for level flight at that entry speed
-    /// (<see cref="TrimThrottle"/>), not held full. Full throttle is wrong for the 143 mph take by
-    /// a factor of two in speed: the aircraft would simply accelerate to its own level top speed
-    /// inside three seconds and the run would stop being a 143 mph take at all. Nothing is held on
-    /// the stick — in particular NO roll input, because holding the bank is what the original's
-    /// pilot was not doing, and a roll controller keyed on the horizon stops measuring bank the
-    /// moment the nose leaves it.</para>
-    ///
-    /// <para>⚠ The discriminating signature is the SHAPE, not any one number: the original drifts for
-    /// the whole 36 s and never finds an equilibrium, where a bounded sag settles inside a second.
-    /// <see cref="KnifeEdgeRun.DriftDegS"/> is the least-squares slope of the nose over 3–36 s and
-    /// <see cref="KnifeEdgeRun.SettledFrac"/> is how much of the total sag arrived in the last third
-    /// of the hold — a bounded sag reports ≈0 there and a linear drift ≈1/3.</para></summary>
+    /// <summary>The knife-edge hold, filmed twice at very different speeds: 90° bank set at entry
+    /// then left free, stick neutral, throttle TRIMMED to level (not full) at the entry speed, held
+    /// 36 sim s. Reports the nose elevation, flight path, sink, heading rate and α at the original's
+    /// own sample times. ⚠ The discriminating signature is the SHAPE, not one number: the original
+    /// drifts the whole 36 s with no equilibrium, where a bounded sag settles inside a second — see
+    /// <see cref="KnifeEdgeRun.DriftDegS"/>/<see cref="KnifeEdgeRun.SettledFrac"/>, docs/org/flightModel.md.</summary>
     public static KnifeEdgeResult KnifeEdge(string zrdrPath, string planeNodeName)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
@@ -1404,25 +1251,11 @@ public static class Probes
     // ---- sustained climb -----------------------------------------------------------------------
 
     /// <summary>The sustained full-throttle climb, speed against time — the manoeuvre the original
-    /// was filmed holding for forty seconds ("Climp 90° 100% Thrust"), and the one instrument that
-    /// separates a climb-retention term from an attitude-thrust one, because the two predict
-    /// opposite signs here.
-    ///
-    /// <para><b>The recipe.</b> Entry at the footage's own 300 mph and full throttle, attitude set
-    /// once to the path angle the original settled at (<see cref="Banked"/>'s pitched twin), stick
-    /// neutral thereafter — the same fixed-attitude shape <c>altitude-cap</c> uses, not a continuous
-    /// full-elevator pull, which loops instead of climbing. Held 18 sim s, which is long enough for
-    /// the plateau and short enough that the altitude clamp cannot bind from a sea-level entry —
-    /// <see cref="ClimbResult.ClampedAt"/> says so rather than leaving it to be assumed.</para>
-    ///
-    /// <para><b>What the original did</b> (Bloodhawk, decoded from the clip's speedometer and
-    /// altimeter): entry 298.9 mph, pulled into a climb whose flight path settles at
-    /// <b>56.3 ± 3.2°</b>, speed falls to a minimum of <b>152.4 mph at +6.5 s</b> and then RECOVERS
-    /// — <b>163.05 mph</b> across this probe's own 12–18 s window, still creeping onto a flat
-    /// <b>167.0 ± 0.5 mph</b> by +36 s, climbing ≈12,000 fpm from 900 to 6,300 ft. It leaves that
-    /// state only at ≈6,600 ft, which is the altitude ceiling and not the climb. ⚠ The UNDERSHOOT is
-    /// half the measurement: the original dips 9% below its own plateau and climbs back out of it,
-    /// which no monotone decay reproduces.</para></summary>
+    /// was filmed holding for forty seconds, and the one instrument that separates a
+    /// climb-retention term from an attitude-thrust one, since the two predict opposite signs here.
+    /// Entry at the footage's own 300 mph, attitude set once (<see cref="Banked"/>'s pitched twin,
+    /// not a continuous pull), held 18 sim s — long enough for the plateau, short enough the
+    /// altitude clamp cannot bind. Targets and the UNDERSHOOT shape: docs/org/flightModel.md.</summary>
     public static ClimbResult SustainedClimb(string zrdrPath, string planeNodeName)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
@@ -1448,10 +1281,8 @@ public static class Probes
         double Nose() => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp((-m.Attitude.Z).Y, -1f, 1f)));
         double Path() => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
 
-        // ⚠ 18 s, not longer, and read from a sea-level entry: the fastest climbers in the set reach
-        // the altitude clamp at ≈21 s from here, and a sample taken against the clamp reports the
-        // clamp's speed rather than the climb's. The footage is inside 2% of its own plateau by
-        // +12 s, so the window loses nothing.
+        // ⚠ 18 s, not longer: the fastest climbers reach the altitude clamp at ≈21 s, and sampling
+        // against the clamp reports its speed, not the climb's. The footage plateaus by +12 s.
         var want = new[] { 0f, 1f, 2f, 3f, 4f, 6f, 8f, 12f, 15f, 18f };
         int next = 0;
         float elapsed = 0f;
@@ -1543,25 +1374,11 @@ public static class Probes
 
     // ---- effects -------------------------------------------------------------------------------
 
-    /// <summary>Play every impact/destruction effect through the world-effects runtime at
-    /// <paramref name="playPoint"/> and report, per effect, whether it RESOLVES (its def is bound)
-    /// and whether it BUILDS a puffer — a started def whose factory/textures are missing renders
-    /// nothing. Each effect is stopped before the next so effects sharing a template root
-    /// (the gun family shares <c>gunhit</c>) get an independent count.
-    ///
-    /// <para>With <paramref name="stage"/> (the world-effects template stage) it also reports the
-    /// MESH half: how many of the stage's mesh instances become visible while the effect
-    /// plays, on which template root, and how far from the play point. A puffer count cannot see
-    /// this — the two halves fail independently, and an effect whose meshes never show, or show at
-    /// the STAGE origin, reads as a full pass on puffers alone. The whole stage is counted because
-    /// exactly one effect plays at a time (each is <c>StopAll</c>ed before the next), so every
-    /// visible mesh in the window belongs to it.</para>
-    ///
-    /// <para>⚠ Sampled EVERY tick and reported as the peak, never as one final reading: the data
-    /// turns its own meshes off inside the window (<c>large_fireball</c> deactivates
-    /// <c>flame_ball_01</c> 0.3 s in, well before the 0.5 s the puffer count needs), so a
-    /// single sample at the end reports a working effect as a blank one. The residual rows after
-    /// each stop are the opposite question — what is still lit once the effect is over.</para></summary>
+    /// <summary>Play every impact/destruction effect at <paramref name="playPoint"/> and report,
+    /// per effect, whether it RESOLVES and whether it BUILDS a puffer. With <paramref name="stage"/>
+    /// also reports the MESH half: visible instances, template root, distance from the play point.
+    /// See INSTR-11 in docs/verification.md for why both halves are counted independently, sampled
+    /// every tick as the peak, and never read as one final sample.</summary>
     public static EffectsResult Effects(AnimRuntime effects, IReadOnlyList<string> effectAnimNames,
         Vector3 playPoint, Node3D? stage, string chapter)
     {
@@ -1572,10 +1389,9 @@ public static class Probes
                       + $"point ({p.X:0},{p.Y:0},{p.Z:0})");
         if (stage != null)
         {
-            // The stage's BASE state, read off each mesh's own visibility flag rather than
-            // visible-in-tree (every root is hidden here by construction, so in-tree would read
-            // zero for all of them and say nothing). This is what a revealed root would show if its
-            // def touched nothing: the gamez base state the original's template copy carries.
+            // Read off each mesh's own visibility flag, not visible-in-tree: every root is hidden
+            // here by construction, so in-tree would read zero for all of them. This is what a
+            // revealed root shows if its def touches nothing.
             r.BaseState = MeshCensus.BaseStateOfStage(stage);
             sb.AppendLine($"  {"(stage at rest)",-22} {r.BaseState}");
         }

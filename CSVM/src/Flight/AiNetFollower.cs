@@ -5,49 +5,18 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>Walks an <see cref="AiNet"/> patrol graph as a stream of waypoints: positions in,
-/// the current target node out. Deliberately aircraft-agnostic: nothing here knows
-/// about flight models, controllers or speeds, so the zeppelin motion item (F17) reuses this
-/// class unchanged and only the thing consuming <see cref="CurrentTarget"/> differs
-/// (<see cref="AiPilot.Patrol"/> is the aircraft consumer).
-///
-/// <para><b>Traversal is over EDGES, treated as undirected, avoiding an immediate backtrack.</b>
-/// The shipped traversal direction is undecoded; this reading is ours, chosen because the worked
-/// C1 loop (`M4ReinfAce`, edges `[0,1]…[8,9]` closed by `[0,9]`) dead-ends at node 9 under a
-/// directed reading. A branch (a node with several onward neighbours) is resolved by the
-/// follower's own seeded <see cref="Random"/> (per plane through the repo's <c>Rng</c> streams
-/// at spawn, never Godot's global rng), so a fixed-seed run repeats its route. A dead end (the
-/// only neighbour is the node just left) turns back; an isolated node is held forever.</para>
-///
-/// <para><b>Arrival is a capture radius, and it is invented.</b>
-/// <see cref="DefaultArrivalRadius"/> is not an original value: the node counts as reached when
-/// the follower is horizontally (XZ) within the radius. Horizontal, because neither the deleted
-/// placeholder law nor the ported <see cref="AiControlLaw"/> converges on altitude quickly
-/// through a level patrol turn. E42 re-measured the radius against the ported law rather than
-/// assume it would shrink: it does not — on C1's M4ReinfAce the real law's own turning circle
-/// misses a stationary aim point on roughly this same scale, and halving the radius to 100 m
-/// roughly quadruples the mean time between node captures (measured over a 600 s run: 17 s/leg at
-/// 200 m vs 65 s/leg at 100 m). The value stands, re-justified rather than retired.</para>
-///
-/// <para><b>An anchored net RIDES its target (`BL-377`).</b> A trailer such as
-/// <c>[10, "player"]</c> makes the whole graph a PATTERN carried by a moving object rather than a
-/// fixed route: every node position comes back as <c>(node − anchor) + target</c> in X/Z with the
-/// node's <b>authored Y</b> (docs/org/aiPilot.md, "The trailer"). 76 of the 222 nets are anchored,
-/// 11 of them to the player, and six of the eight chapters' first nets. The offset runs through
-/// <see cref="NodePosition"/>, so the nearest-node scan and every consumer move with it, as the
-/// original's single <c>FUN_00432010</c> does. Whether a net actually rides is the CALLER's
-/// choice: without a <c>trailerTarget</c> supplier the authored coordinates are flown, which is
-/// also the engine's own unresolved-target branch.</para>
-///
-/// <para>Per-node tags are preserved raw on <see cref="AiNetNode.Tags"/>; both decoded readings
-/// (stop-point id vs segment id) are still open (F17), so this class acts on neither.</para></summary>
+/// <summary>Walks an <see cref="AiNet"/> patrol graph as a stream of waypoints: positions in, the
+/// current target node out. Aircraft-agnostic on purpose, so <c>ZeppelinMotion</c> (F17) reuses it
+/// unchanged; <see cref="AiPilot.Patrol"/> is the aircraft consumer. Traversal, the arrival radius
+/// and the anchored-trailer ride are all decoded in docs/architecture.md; per-node tags
+/// (<see cref="AiNetNode.Tags"/>) are preserved raw and unacted on (docs/formats/ai-nets.md).
+/// </summary>
 public sealed class AiNetFollower
 {
-    /// <summary>The capture radius, metres: an invented value, not original behaviour. First
-    /// sized to the (now deleted) placeholder law's tracking error; E42 re-measured it against
-    /// the ported <see cref="AiControlLaw"/> on the same C1 M4ReinfAce loop and found no smaller
-    /// value to prefer — shrinking it makes the patrol slower to advance, not more precise, so it
-    /// stands unchanged (see the class remarks for the measurement).</summary>
+    /// <summary>The capture radius, metres: an invented value, not original behaviour. Re-measured
+    /// against the ported <see cref="AiControlLaw"/> on the same C1 M4ReinfAce loop.
+    /// ⚠ Do not shrink it. No smaller value measured better; a tighter radius makes the patrol
+    /// slower to advance, not more precise.</summary>
     public const float DefaultArrivalRadius = 200f;
 
     private readonly Random _rng;
@@ -197,14 +166,9 @@ public sealed class AiNetFollower
     private Vector3 LiveOffset() =>
         _anchorIndex < 0 ? Vector3.Zero : TrailerOffset(Net, _trailerTarget!());
 
-    // The seat scan, in authored space: a uniform offset moves every node equally, so the target
-    // moves back instead of all N nodes forward.
-    //
-    // ⚠ Edgeless nodes are SKIPPED, which is the engine's own rule (FUN_00431900 tests the degree
-    // at node +0x18). It matters most on an anchored net, where the anchor is parked off the ring
-    // in every shipped case: seated there, the walk has no neighbour to advance to and the plane
-    // holds that node forever. A net whose nodes are ALL edgeless still gets a seat rather than
-    // nothing.
+    // The seat scan runs in authored space: a uniform offset moves every node equally.
+    // ⚠ Edgeless nodes are skipped, the engine's own rule (docs/architecture.md); a net whose nodes
+    // are all edgeless still gets a seat rather than nothing.
     private int NearestNode(Vector3 position)
     {
         var local = position - LiveOffset();

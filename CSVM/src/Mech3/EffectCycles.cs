@@ -6,26 +6,13 @@ using CSVM.Utils;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// The <c>EFFECTS</c> block of the shared <c>effects.zrd</c> — the original's second source of
-/// texture flipbooks, and the one that lights the fires. Two entries exist install-wide,
-/// <c>fire1.flt</c> (12 maps @ 10 fps) and <c>fire2.flt</c> (6 @ 5 fps).
-///
-/// <para>An entry names a NODE, but what it animates is that node's MATERIAL. The engine's reader
-/// (<c>zeff_ini.c</c>, <c>FUN_00523ac0</c>) resolves the node, walks down to the first mesh under
-/// it, takes surface 0's material, and installs the frame list on the material record
-/// (<c>gmod_matl.c</c>'s <c>SetCycleTextureCount/Map/Loop/Speed</c>). The draw loop then tests the
-/// material's own cycled bit per polygon and samples whichever frame the cycle is on. Materials
-/// are one record per texture — C1's 570-entry table has exactly one duplicate pair — so the
-/// flipbook reaches every polygon that references that material, not just the node that named it.
-/// <c>fire1.flt</c> is a parentless proxy the world never draws, exactly like the interp scripts'
-/// <c>watersetup</c>/<c>surfsetup</c> nodes; the visible burning is C1's refinery vent
-/// <c>flame01</c> and the muzzle bursts, which share material 88 with it.</para>
-///
-/// <para>So this pass patches the <see cref="GameZMaterial"/> the entry points at, before the
-/// world is built. <c>SceneBuilder.RegisterCycle</c> then picks it up unchanged, for every
-/// ShaderMaterial that source material produces, which is what makes the vent animate without any
-/// of the fire machinery knowing it exists. Running before the build is also the engine's own
-/// ordering: <c>zeff_ini</c> patches the material at load and the draw loop reads it later.</para>
+/// The <c>EFFECTS</c> block of the shared <c>effects.zrd</c>: the original's second source of
+/// texture flipbooks, and the one that lights C1's refinery vent. An entry names a node, but what
+/// it animates is that node's material — this pass resolves node → first mesh → surface 0's
+/// material and writes the frame list there before the world builds, so
+/// <see cref="TextureCycler"/> picks it up unchanged like any other cycling material.
+/// Mechanism, addresses and the two entries (<c>fire1.flt</c>, <c>fire2.flt</c>): see this
+/// module's docs/architecture.md entry and docs/formats/anim-definitions.md.
 /// </summary>
 public static class EffectCycles
 {

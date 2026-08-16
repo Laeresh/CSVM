@@ -309,10 +309,8 @@ public class PerfSampleTests
         double ns = (Stopwatch.GetTimestamp() - start) * 1e9 / Stopwatch.Frequency / Iterations;
         _out.WriteLine($"PerfSample.Scope: {ns:0.0} ns per open+close");
 
-        // A ceiling two orders of magnitude above the measured cost, not a benchmark: this fails
-        // when somebody puts a lock, an allocation or a dictionary lookup on the scope path, and
-        // stays quiet on a loaded machine. The measured figure is the printed line above, and is
-        // what the architecture entry quotes.
+        // A ceiling well above measured cost, not a benchmark: catches a lock, allocation or
+        // dictionary lookup landing on the scope path.
         Assert.True(ns < 2000, $"a scope cost {ns:0.0} ns — something expensive is on the path");
         PerfSample.Reset();
     }

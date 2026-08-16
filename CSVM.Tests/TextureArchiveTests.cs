@@ -93,11 +93,7 @@ public class TextureArchiveTests
     [Fact]
     public void CollisionsAreRareEnoughToBeReportableRatherThanRoutine()
     {
-        // Eight bits per channel leave ~200k reachable colours and the ratios are drawn uniformly
-        // in linear space, which uses the bright end of each byte sparsely — so a thousand names
-        // collide a handful of times (8 measured, and 4 across all 882 C1 textures). The engine
-        // warns per collision and the map counts them; this locks the rate, which a palette shrink
-        // would blow straight through.
+        // Locks the low measured collision rate; a palette shrink would blow straight through it.
         var seen = new System.Collections.Generic.HashSet<string>();
         for (int i = 0; i < 1000; i++)
         {

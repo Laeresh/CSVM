@@ -31,10 +31,8 @@ public class SequenceRunnerTests
     [Fact]
     public void StartTimeGatesTheCarryingEventNotItsSuccessor()
     {
-        // The bowl sign: strict des_on/des_off SWAP pairs, only the FIRST of each pair stamped. A
-        // runner that applies the stamp to the NEXT event splits every pair — both variants lit at
-        // t=0, then nothing for the gap (38% blank frames). Correct: each pair fires together after
-        // its own pause; the unstamped partner fires immediately after its stamped predecessor.
+        // The bowl sign: strict SWAP pairs, only the first stamped. Each pair must fire together
+        // after its own pause; see docs/org/sequences.md's bowl-sign case.
         var host = new RecordingHost();
         var inst = Instance(Seq(
             Swap("on1", "Event", 0.5f), Swap("off1"),
@@ -54,9 +52,8 @@ public class SequenceRunnerTests
     [Fact]
     public void AuthoredLoopCountZeroMeansInfinite()
     {
-        // Every one of the install's 26 Count-0 loops is a ground-vehicle route the original drives
-        // continuously; reading 0 as "stop" made each car drive once and freeze. Count 0 must run
-        // forever — the sequence never finishes and keeps re-firing its body.
+        // The install's 26 Count-0 loops are ground-vehicle routes; Count 0 must run forever, not
+        // stop after one pass. See docs/org/sequences.md.
         var host = new RecordingHost();
         var inst = Instance(Seq(Swap("car", "Event", 0.5f), Loop(0)));
 
@@ -71,11 +68,8 @@ public class SequenceRunnerTests
     [Fact]
     public void InstantIterationLoopFiresExactlyOncePerAnimFrame()
     {
-        // The waterfall/poll idiom [instant body, Loop{-1}] keeps an animation alive. Its body takes
-        // no time, so the loop is paced to one pass per SequenceRunner.AnimFrame. Driven AT that
-        // rate this is the original double-poll guard unchanged: the measured bug tested "clock == 0"
-        // instead of "did this iteration schedule time?", so the reset-to-0 clock let the body run a
-        // SECOND time before yielding, and every poll loop in the chapter cost double.
+        // The instant-body poll idiom is paced to one pass per SequenceRunner.AnimFrame; a
+        // reset-to-0 clock double-polls it. See docs/org/sequences.md's "double-poll guard".
         var host = new RecordingHost();
         var inst = Instance(Seq(Swap("mist"), Loop(-1)));
 
@@ -93,10 +87,8 @@ public class SequenceRunnerTests
     [InlineData(1f / 240f)]
     public void InstantIterationLoopRateIsIndependentOfTheStep(float dt)
     {
-        // A LOOP count is a count of authored animation frames, so its RATE must be 60 Hz of sim
-        // time whatever the client renders at. Before this was rate-locked the loop ran one pass per
-        // rendered frame: 240 Hz ran every authored timer 4x fast, 144 Hz quantised to 48 Hz (3
-        // steps per pass), 30 Hz ran at half speed.
+        // A LOOP count is authored animation frames, so its rate must be 60 Hz of sim time
+        // whatever the client renders at, not one pass per rendered frame.
         var host = new RecordingHost();
         var inst = Instance(Seq(Swap("mist"), Loop(-1)));
 
@@ -127,17 +119,9 @@ public class SequenceRunnerTests
             elapsed += dt;
         }
 
-        // 200 frames of sim time, give or take the step the last pass quantises onto — the
-        // residual is bounded by the step size, never by the count, which is the whole property.
-        // `want` is exact, not approximate: at dt == AnimFrame (the calibration step) this
-        // fixture measures 3.3333309s, matching 200 x AnimFrame to float32 noise. Traced against
-        // the exe's own stepper: a rewind always returns (state 4), so the next pass can only start
-        // on the FOLLOWING tick — pass 1 costs a tick exactly like every other pass, there is no
-        // free first pass, and 200 passes cost 200 ticks. The alternative this discriminates
-        // against, a down-counter spending authored + 1 passes, measures 3.3499975s at this same dt
-        // — a full AnimFrame LONG. 4 steps of headroom, not 3, because at the finest tested step
-        // (1/240, four sub-steps per AnimFrame) the last pass's step-quantisation residual can fall
-        // either side of the boundary; that headroom does not move `want` itself.
+        // 200 frames of sim time, residual bounded by the step size, never by the count. `want` is
+        // exact, traced against the exe's own stepper (docs/org/sequences.md); a down-counter
+        // spending authored + 1 passes would measure a full AnimFrame long instead.
         float want = 200f * SequenceRunner.AnimFrame;
         Assert.True(inst.Finished, "a counted loop must terminate");
         Assert.InRange(elapsed, want - 4f * dt, want + 4f * dt);
@@ -146,12 +130,8 @@ public class SequenceRunnerTests
     [Fact]
     public void AuthoredPeriodShorterThanAnAnimFrameIsNotStretchedToOne()
     {
-        // C3/M05's `ww_balmoral1/2/3` are LOOP 1000 with the period on the Loop event itself — an
-        // authored 0.01 s, BELOW SequenceRunner.AnimFrame (0.0167). A loop that carries its own
-        // period is timed data, not a tick counter, so the animation-frame pacing must not touch
-        // it: floored to a frame these three would run 16.7 s instead of their authored 10 s.
-        // The mechanism that keeps them out of it is _iterScheduledTime — SetDue() sets it when
-        // the Loop's own offset gates arrival at the Loop, so the iteration reads as timed.
+        // `ww_balmoral1/2/3`'s authored 0.01 s period is timed data, below AnimFrame; the
+        // animation-frame pacing must not stretch it. See docs/org/sequences.md.
         var host = new RecordingHost();
         var inst = Instance(Seq(Swap("wing"), Loop(1000, "Sequence", 0.01f)));
 
@@ -181,12 +161,8 @@ public class SequenceRunnerTests
     [InlineData(1f / 600f)]
     public void AuthoredPeriodIsHonouredAtStepsCoarserThanItself(float dt)
     {
-        // A timed rollover that resets the clock to zero rounds any period that does not land on
-        // a whole step UP to the next one — every iteration, forever: `ww_balmoral1/2/3`
-        // (LOOP 1000 @ 0.01 s, authored 10 s) then measures 16.7 s at 60 Hz, 12.5 s at 240 Hz and
-        // only reaches 10.0 s at 600 Hz — frame-rate dependence the count path must never have.
-        // Carrying `_clock - _due` is what makes an authored
-        // period mean seconds at any step; the residual is bounded by one step, never by the count.
+        // A reset-to-zero rollover rounds a period UP every iteration, forever, giving
+        // frame-rate-dependent totals; carrying `_clock - _due` is what fixes it (docs/org/sequences.md).
         var host = new RecordingHost();
         var inst = Instance(Seq(Swap("wing"), Loop(1000, "Sequence", 0.01f)));
 
@@ -210,11 +186,8 @@ public class SequenceRunnerTests
     [InlineData(2.5f)]         // 150 steps; shipsink's period
     public void AnInfiniteTimedLoopHoldsItsPeriodOverManyIterations(float period)
     {
-        // The long-horizon pin, and the one that covers the 26 ground-vehicle route animations:
-        // the carry must not merely fix the first iteration, it must not COMPOUND over hundreds of
-        // them. Two failure directions are both caught here — the pre-carry drop lost up to a step
-        // per iteration (a 1.0 s route loop cost 61 steps, so a car ran 1.7% slow indefinitely),
-        // and a carry applied twice would run fast without bound.
+        // The long-horizon pin: the carry must not merely fix the first iteration but must not
+        // compound over hundreds of them, in either direction. See docs/org/sequences.md.
         var host = new RecordingHost();
         var inst = Instance(Seq(Swap("route"), Loop(-1, "Sequence", period)));
 
@@ -233,11 +206,8 @@ public class SequenceRunnerTests
     [Fact]
     public void TimedBodyLoopRestartsIterationImmediately()
     {
-        // The counterpart to test 3: a loop whose body scheduled time is already waiting on _due, so
-        // it must NOT yield — the next iteration starts in the same frame the loop rolls over. With a
-        // 1.0 s motion driven at 0.5 s/step, the loop rolls over on the step the clock reaches 1.0 s
-        // and the motion re-fires within that same step (2 fires in 3 steps); a spurious yield would
-        // defer the re-fire to step 4 (only 1 fire in 3 steps).
+        // A loop whose body scheduled time must not yield: the next iteration starts in the same
+        // frame the loop rolls over, not deferred a step (docs/org/sequences.md).
         var host = new RecordingHost { Durations = { ["ObjectMotion"] = 1.0f } };
         var inst = Instance(Seq(Timed("swing"), Loop(-1)));
 
@@ -254,11 +224,8 @@ public class SequenceRunnerTests
     [Fact]
     public void TrailingLoopStartOffsetIsHonouredBetweenCycles()
     {
-        // The bowl sign's trailing `Loop {Event 1.2}` is its pause between cycles. Control flow does
-        // not fire an event but IS gated, so the Loop's own offset delays the next iteration. A
-        // runner that discards it — the Loop branch hard-resetting the gate to zero — cycles the
-        // sign with no pause. Here a 1.0 s trailing offset must space the body's fires one full second
-        // (two 0.5 s steps) apart.
+        // The bowl sign's trailing Loop offset is its inter-cycle pause; discarding it cycles the
+        // sign with no pause. See docs/org/sequences.md.
         var host = new RecordingHost();
         var inst = Instance(Seq(Swap("blink", "Event", 0f), Loop(0, "Event", 1.0f)));
 
@@ -276,14 +243,8 @@ public class SequenceRunnerTests
     [Fact]
     public void BranchesFallThroughToEndifAndFailedConditionsAdvanceWithoutCountingDepth()
     {
-        // A nested IF inside the outer branch. The fall-through off a taken branch skips to the
-        // next ENDIF and the ENDIF is what pops the frame, so the taken path is unremarkable.
-        // The FAILED path is the interesting one: the scan has no depth counter, so a false outer
-        // condition lands on the INNER chain's Endif at index 3 — not on the outer Elseif at 5 —
-        // and the outer branch's own tail at index 4 runs anyway.
-        //
-        //  0 If(outer) 1 If(inner) 2 SWAP inner_a 3 Endif 4 SWAP outer_a
-        //  5 Elseif(elseif) 6 SWAP branch2 7 Else 8 SWAP else_body 9 Endif 10 SWAP after
+        // The false path: no depth counter, so a false outer condition lands on the inner chain's
+        // Endif, not the outer Elseif (docs/org/sequences.md).
         var body = new[]
         {
             Branch("If", "outer"), Branch("If", "inner"), Swap("inner_a"), Ctrl("Endif"),
@@ -297,14 +258,9 @@ public class SequenceRunnerTests
         RunSteps(Instance(Seq(body)), taken, 1f, 1);
         Assert.Equal(new[] { "inner_a", "outer_a", "after" }, taken.Fired);
 
-        // Outer false: the scan stops at the inner Endif (3), which pops the ONE open frame, so
-        // the outer tail (4) fires and the chain behind it reads as an unopened one — the elseif
-        // is re-tested and its ELSE body runs too. The original would fire only outer_a and after:
-        // its ELSEIF/ELSE handler always skips to the ENDIF, so nothing downstream of the landing
-        // can run twice. That residual is the _branchTaken stack, and it needs a chain whose inner
-        // IF closes BEFORE the outer chain's next branch marker — a shape no shipped def has (all
-        // 48 nesting sequences close inner-first, where the two readings agree; see the gunhit
-        // test below). Asserted as-is so the residual is visible rather than buried.
+        // Outer false: the scan stops at the inner Endif, pops one frame, and re-tests the elseif
+        // too, unlike the original's ELSEIF/ELSE handler. No shipped def has this shape (all 48
+        // nesting sequences close inner-first); asserted as-is so the residual stays visible.
         var elseif = new RecordingHost { Conditions = { ["outer"] = false, ["elseif"] = true } };
         RunSteps(Instance(Seq(body)), elseif, 1f, 1);
         Assert.Equal(new[] { "outer_a", "branch2", "else_body", "after" }, elseif.Fired);
@@ -315,19 +271,9 @@ public class SequenceRunnerTests
     [Fact]
     public void GunhitNestedChainFiresInTheOriginalsOrder()
     {
-        // C1's gunhit-3040slug_gunhit, sequence 5 — the shape ALL 48 shipped nesting sequences
-        // have (every chapter's gunhit-*slug_gunhit / mag_gunhit-*, played on every gun impact):
-        //
-        //  0 If(AnimationLod 2) 1 If(PlayerRange 1000000) 2 If(RandomWeight 0.2)
-        //  3 LightState gunhit_lt range 21.25   4 ObjectActiveState gunhit_lt off (Event+0.0001)
-        //  5 Elseif(RandomWeight 0.2)
-        //  6 LightState gunhit_lt range 12.25   7 ObjectActiveState gunhit_lt off (Event+0.0001)
-        //  8 Else 9 Endif   10 Else 11 Endif   12 Endif
-        //
-        // Both empty ELSE bodies are what make the depth counter's absence observable: a false LOD
-        // or range gate lands on the ELSEIF at 5 and RE-TESTS it, so the dim light still fires on
-        // its 20% roll with either outer gate failed. A depth-aware scan skipped to 12 and fired
-        // nothing. This is the original's behaviour, quirk and all.
+        // C1's gunhit-3040slug_gunhit shape, shared by all 48 shipped nesting sequences. The empty
+        // ELSE bodies make the depth counter's absence observable: a false outer gate re-tests the
+        // inner ELSEIF instead of skipping past it. See docs/org/sequences.md.
         AnimEvent[] Body() => new[]
         {
             Branch("If", "lod"), Branch("If", "range"), Branch("If", "weight1"),
@@ -399,10 +345,8 @@ public class SequenceRunnerTests
     [Fact]
     public void AnimationOffsetsAreAbsoluteAndEventOffsetsAreRelative()
     {
-        // A 1.0 s motion pushes _base to 1.5 s by the time the second event is gated. An "Animation"
-        // offset of 2.0 s is ABSOLUTE — it fires at t=2.0 s regardless of _base; a relative reading
-        // would fire it at _base+2.0 = 3.5 s. The third event's "Event" offset is relative: 0.5 s
-        // after the absolute event fired (t=2.5 s).
+        // An "Animation" offset is absolute against t=0, not _base; a relative reading would fire
+        // 1.5 s late here. The third event's "Event" offset is relative to it.
         var host = new RecordingHost { Durations = { ["ObjectMotion"] = 1.0f } };
         var inst = Instance(Seq(
             Timed("motion", "Event", 0f),
@@ -444,10 +388,8 @@ public class SequenceRunnerTests
     [Fact]
     public void InstanceRunsSequencesConcurrentlyAndRemovesFinishedRunners()
     {
-        // The C1 train drives its cars from sibling sequences on one instance, each on its own clock.
-        // Two sequences with different offsets fire independently; each runner is removed the frame
-        // it finishes (the reverse-iteration removal in AnimInstance.Advance), and the instance is
-        // Finished only once both are gone.
+        // The C1 train drives its cars from sibling sequences; each runner is removed the frame
+        // it finishes, and the instance is Finished only once both are gone.
         var host = new RecordingHost();
         var inst = Instance(
             Seq(Swap("carA", "Event", 0.5f)),
@@ -495,10 +437,8 @@ public class SequenceRunnerTests
     [Fact]
     public void StopSequenceOnItsOwnSequenceBreaksOutSameFrame()
     {
-        // The break idiom (test_player ×33, setprop ×8): a sequence stops ITSELF once its taken
-        // branch ran, so the remaining events must not fire — and the exit happens inside the
-        // same Advance (the while loop re-tests Done after every dispatch), not via the
-        // 256-fire guard.
+        // The break idiom: a sequence stops itself once its taken branch ran, and the exit
+        // happens inside the same Advance, not via the 256-fire guard.
         var host = new RecordingHost();
         var main = Seq("main", Swap("before"), StopSeq("main"), Swap("after"));
         var inst = Instance(new[] { main }, main);
@@ -516,10 +456,8 @@ public class SequenceRunnerTests
     [Fact]
     public void StopSequenceWithNoRunningTargetStartsNothingAndLeavesItUncallable()
     {
-        // Shaped like the rocket fireball: activate starts a trail and, a beat later, names an
-        // ON_CALL stopper nothing else calls. The original writes the target DONE and stops, so
-        // the stopper's teardown never dispatches — and because a call only starts from PARKED,
-        // a later CALL_SEQUENCE on that name cannot revive it either.
+        // Shaped like the rocket fireball: the target's teardown never dispatches, and because a
+        // call only starts from PARKED, a later CALL_SEQUENCE cannot revive it either.
         var host = new RecordingHost();
         var activate = Seq("activate",
             Swap("on"), CallSeq("trail"), StopSeq("stopper", "Event", 0.5f));
@@ -585,10 +523,8 @@ public class SequenceRunnerTests
     [Fact]
     public void CallingASequenceThatIsAlreadyRunningStartsNoSecondCopy()
     {
-        // The original keeps a sequence's state inside the definition, so a call is
-        // `if (parked) start` and nothing else. 77 shipped definitions call one sequence from
-        // more than one site (sonic_ground_effect calls sonic_light_seq twice); each such pair
-        // must produce ONE run of the body, not two overlapping ones.
+        // A call is `if (parked) start` and nothing else; 77 shipped definitions call one
+        // sequence from more than one site, and each pair must produce one run, not two.
         var host = new RecordingHost();
         var main = Seq("main", CallSeq("light"), CallSeq("light"));
         var light = Seq("light", Swap("pulse", "Event", 0.5f));
@@ -606,10 +542,8 @@ public class SequenceRunnerTests
     [Fact]
     public void CallingANonOnCallSequenceIsANoOpThatStillResolvesTheName()
     {
-        // Only an ON_CALL sequence is ever parked, so a call naming one that runs with the
-        // animation cannot start it (reflight1..6 → refinery_light_seq, 6 shipped definitions).
-        // The return still says FOUND: callers read it as "did the name resolve", and a false
-        // would send a CALL_ANIMATION fallback after a name that was there.
+        // Only an ON_CALL sequence is ever parked. The return still says FOUND: a false would
+        // send a CALL_ANIMATION fallback after a name that was there.
         var host = new RecordingHost();
         var main = Seq("main", CallSeq("ambient"));
         var ambient = Seq("ambient", Swap("glow", "Event", 0.5f));
@@ -628,12 +562,8 @@ public class SequenceRunnerTests
     [Fact]
     public void AnimationOffsetInACalledSequenceGatesOnTheInstanceClock()
     {
-        // The shape 191 shipped events carry: an ON_CALL sequence a CALL_SEQUENCE starts partway
-        // through the animation, holding an event stamped "Animation t" — every rocket/torpedo
-        // trail's 10 s puffer shut-off, `ap_light_seq`'s LightAnimation chain, `chuteman_drop`.
-        // The instance clock is already at 1.0 s when the call lands, so an "Animation 1.5" gate is
-        // 0.5 s away; reading it against the CALLED sequence's own clock (which starts at zero)
-        // would defer it to 2.5 s, a full second late.
+        // The instance clock is at 1.0 s when the call lands, so an "Animation 1.5" gate is 0.5 s
+        // away; reading it against the called sequence's own clock would defer it a full second.
         var host = new RecordingHost();
         var main = Seq("main", CallSeq("trail", "Event", 1.0f));
         var trail = Seq("trail", Swap("shutoff", "Animation", 1.5f));
@@ -703,11 +633,9 @@ public class SequenceRunnerTests
     [Fact]
     public void AFlaggedCallAsTheLastEventDoesNotHoldItsRunnerOpen()
     {
-        // THE scope rule, and it is the data's: 2,770 of the 2,999 flagged calls the runtime can
-        // reach are the last event of their block, and every one of those names a callee that
-        // NEVER terminates (the sputter_* / gen_drop_ladder LOOP{-1} idiom). Read as a lifetime
-        // hold, all 2,770 would wedge their sequence open for the session; read as a gate on the
-        // next event, there is nothing behind the call to gate and the runner retires as before.
+        // The scope rule: most flagged calls the runtime can reach name a callee that never
+        // terminates. Read as a lifetime hold they'd wedge open forever; as a gate on the next
+        // event, there is nothing behind the call and the runner retires as before.
         var host = new RecordingHost();
         host.Running["sputter_fire"] = true;              // and it never stops
         var inst = Instance(Seq(Swap("burn"), Call("sputter_fire", wait: true)));
@@ -721,10 +649,8 @@ public class SequenceRunnerTests
     [Fact]
     public void TheEventAfterAWaitIsScheduledFromTheCalleesEndNotFromTheCall()
     {
-        // The wait REPLACES the call's duration, so a trailing "Event + t" offset is measured from
-        // completion. Computed from the call instead, the offset is already behind the clock by
-        // release time and collapses to zero — the held event would fire in the same pass the
-        // callee ended, losing its authored pause.
+        // The wait replaces the call's duration, so a trailing "Event + t" offset is measured
+        // from completion, not from the call, or the held event loses its authored pause.
         var host = new RecordingHost();
         host.Running["callee"] = true;
         var inst = Instance(Seq(Call("callee", wait: true), Swap("after", "Event", 0.5f)));
@@ -733,10 +659,7 @@ public class SequenceRunnerTests
         host.Running["callee"] = false;
         var t = RunSteps(inst, host, 0.25f, 4);
 
-        // t[0] is the pass that OBSERVES the callee gone and re-bases; the offset runs from there.
-        // (In the game that pass is the same tick the callee ended: AnimRuntime.Advance walks its
-        // instances backwards, and a callee started by this caller sits later in the list, so it
-        // is retired before the caller polls.)
+        // t[0] is the pass that observes the callee gone and re-bases; the offset runs from there.
         Assert.Empty(t[0]);
         Assert.Empty(t[1]);                       // release + 0.25 s: still inside the 0.5 s offset
         Assert.Equal(new[] { "after" }, t[2]);    // release + 0.50 s: the authored pause, honoured

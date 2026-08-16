@@ -9,30 +9,15 @@ using Godot;
 
 namespace CSVM.Session;
 
-/// <summary>Draws the sun's lens flare: a screen-space rig of four sprites strung along
-/// the sun→screen-centre vector, plus a full-screen white wash whose opacity rises as the sun
-/// nears the centre. Constructed once per session beside <see cref="WeatherRig"/> and ticked from
-/// the same per-rig block of <c>GameSession._Process</c>, because everything here is anchored to
-/// <i>a</i> camera and splitscreen needs one instance per pane.
-///
-/// <para><b>The whole spec is measured off footage, not invented and not decoded</b> — the element
-/// inventory, their positions along the vector, their diameters, the wash falloff and the fade. See
-/// <c>docs/org/weather.md</c>.</para>
-///
-/// <para><b>Two gates, read from two different files, that must agree.</b> The flare needs (1) a
-/// gamez node named <c>sun</c> in the chapter's <c>horizon</c> subtree and (2)
-/// <c>LensFlareTexture</c> slot registrations in <c>support\&lt;chapter&gt;\init.gw</c>. Across the
-/// whole install both are true of <b>C2 and C3 and no other chapter</b> — the sun texture ships in
-/// those two chapters only as well. Nothing is hardcoded to a chapter name: if the two gates ever
-/// disagree that is a real signal about the data, so it is logged rather than smoothed over.</para>
-///
-/// <para>⚠ <b>C2's flare is predicted, not verified.</b> The data says C2 should have one; we have
-/// no footage of it. Only C3 was captured. Do not treat a C2 flare as matched to anything.</para>
-///
-/// <para>Unlike the cloud whiteout, the per-pane state is held here rather than on
-/// <see cref="PlayerRig"/>: a flare instance is several nodes plus fade state, and putting a
-/// Session-namespace type on the Flight-namespace rig would couple them for no gain. The whiteout
-/// is a bare <c>ColorRect</c>, which is why it could live there.</para></summary>
+/// <summary>Draws the sun's lens flare: a screen-space rig of four sprites strung along the
+/// sun→screen-centre vector, plus a full-screen white wash whose opacity rises as the sun nears
+/// centre. One instance per pane, ticked from the same per-rig block as <see cref="WeatherRig"/>.
+/// The whole spec is measured off footage, not decoded: <c>docs/org/weather.md</c>.
+/// ⚠ Two gates must agree — a gamez <c>sun</c> node and <c>LensFlareTexture</c> slots — true only
+/// of C2 and C3; a disagreement is a real signal about the data and is logged, not smoothed over.
+/// ⚠ C2's flare is predicted, not verified; only C3 was captured. Do not treat C2 as matched.
+/// Per-pane state lives here rather than on <see cref="PlayerRig"/>, unlike the simpler cloud
+/// whiteout, because a flare instance is several nodes plus fade state.</summary>
 public sealed class LensFlareRig
 {
     // ── Measured off the footage, at 1280×720 ──────────────────────────────────────────────────
@@ -43,15 +28,9 @@ public sealed class LensFlareRig
     // the comments so a decoded FOV would make this a one-line conversion.
     private const float RefHeight = 720f;
 
-    // The wash ("sun blindness"). A plain white alpha composite — settled by arithmetic, not
-    // judgement: the dark fuselage (38,2,9) at α 0.66 predicts 181 and measures 179; the compass
-    // strip (20,20,18) predicts 175 and measures 178. Two surfaces two orders of magnitude apart
-    // in brightness, both within ~2/255.
-    //
-    // Opacity is ~linear in the sun's screen distance from centre. Fitting the measured table
-    // (30 px→0.66, 78→0.63, ~180→0.40, 207→0.34, 320→0.16, 351→0.13) as a line through its two
-    // ends reproduces the middle to within 0.05 and reaches zero at ~430 px, matching the recorded
-    // "~0 somewhere past ~400 px".
+    // The wash ("sun blindness"): a plain white alpha composite, opacity ~linear in the sun's
+    // screen distance from centre. Values fit a line through the measured table's two ends;
+    // the fit and its evidence are in docs/org/weather.md.
     private const float WashMax = 0.66f;         // measured 0.65–0.68 at the sun near centre
     private const float WashFullPx = 30f;        // inside this the wash is at WashMax
     private const float WashSlopePerPx = 0.001651f;
@@ -60,23 +39,9 @@ public sealed class LensFlareRig
     // as it leaves. So: instant attack, timed release.
     private const float FadeOutSeconds = 0.125f;
 
-    // ── Calibration of the ring intensities ────────────────────────────────────────────────────
-    // ⚠ Measured against the footage's own targets, and two things have to match or the comparison
-    // is worthless:
-    //
-    // (1) THE POSE. The footage's ring Δlum were read off frames that already carried the wash, and
-    //     the wash composites toward white — a true difference d reads as d·(1−α). Solved back from
-    //     `measure.py`'s probe coordinates, its two ring poses sit 311 px and 340 px from centre.
-    //     Ours is measured at 328 px, inside that band, rather than corrected by a fudge factor.
-    // (2) THE STATISTIC. `measure.py`'s `sample()` reports the BRIGHTEST pixel in a window on the
-    //     ring, not a median around the annulus. A median is the more robust locator but reads
-    //     systematically lower, so calibrating a median up to a brightest-pixel target overshoots.
-    //     The numbers below are brightest-pixel, matching.
-    //
-    // At 328 px, --no-fog, 1280×720: ring 0.50 → 11.0 (target 10–12), ring 0.90 → 17.3 (14–21),
-    // ring 2.00 → 5.0 (3–9). Only Ring A needed moving (0.30 → 0.38); the other two landed
-    // mid-band untouched and were deliberately NOT nudged, since the bands are the spread across
-    // two poses, not error bars, and fitting to the middle would be fitting to my estimator.
+    // Ring intensities, calibrated against the footage's own measured Δlum targets.
+    // ⚠ Only Ring A's intensity was nudged; Ring B and C landed mid-band and were deliberately
+    // left alone. The pose/statistic matching and the measured values: docs/org/weather.md.
     private static readonly Element[] Elements =
     {
         // Core — at the sun, "saturated-white disc, blue-cyan skirt", ~63 px half-max, blooming to
@@ -103,12 +68,10 @@ public sealed class LensFlareRig
     public int InstanceCount => _instances.Count;
 
     /// <summary>Reads the chapter's <c>LensFlareTexture</c> slot registrations out of the interp
-    /// extraction (<c>extracted/interp.json</c>), returning the texture name per slot in slot
-    /// order. Empty when the chapter registers none — which is the gate, not an error.
-    ///
-    /// <para>Mirrors <see cref="Clutter.TemplateNames"/>, which reads <c>adjust.gw</c> from the
-    /// same file the same way; the only difference is the verb and that these lines carry an
-    /// explicit slot index.</para></summary>
+    /// extraction, returning the texture name per slot in slot order. Empty when the chapter
+    /// registers none — which is the gate, not an error. Mirrors
+    /// <see cref="Clutter.TemplateNames"/>, which reads <c>adjust.gw</c> from the same file the
+    /// same way.</summary>
     public static List<string> FlareTextureNames(string interpPath, string chapter)
     {
         var bySlot = new SortedDictionary<int, string>();
@@ -192,18 +155,9 @@ public sealed class LensFlareRig
                     Texture = tex,
                     MouseFilter = Control.MouseFilterEnum.Ignore,
                     StretchMode = TextureRect.StretchModeEnum.Scale,
-                    // Additive: the core is measured as *saturating* and blooming ~63→86 px as it
-                    // nears centre, which is what an additive blend does and what an alpha blend
-                    // toward a fixed colour does not; and Ring C vanishing over the bright gray
-                    // deck murk is a faint additive ring over an already-bright background.
-                    // ⚠ The one measurement this overrules: the ring annulus reads (194,226,254)
-                    // against a 200 sky, i.e. R *below* the background, which additive cannot do.
-                    // That dip is 6/255 on a compressed frame next to a saturated highlight — the
-                    // regime where chroma subsampling and ringing live — so it is treated as
-                    // capture noise. If calibration cannot hit the measured Δlum without blowing
-                    // out the core, this is the assumption to revisit first (alpha-blend toward
-                    // the texture colour is the alternative; only the blend mode and the
-                    // intensities change).
+                    // Additive: matches the core's measured saturating bloom and Ring C fading
+                    // over bright background. ⚠ Overrules one measurement (treated as capture
+                    // noise); see docs/org/weather.md if intensities won't hit target without blowing out the core.
                     Material = new CanvasItemMaterial
                     {
                         BlendMode = CanvasItemMaterial.BlendModeEnum.Add,
@@ -247,25 +201,17 @@ public sealed class LensFlareRig
             if (size.Y <= 0f)
                 continue;
 
-            // The dome is camera-anchored, so read the sun as a LOCAL offset from the dome root
-            // rather than subtracting global positions: if the dome's re-anchoring ever runs after
-            // this tick, a global read would lag by one frame of camera motion while the offset
-            // stays exact.
+            // The dome is camera-anchored; the sun's own GlobalPosition already reflects that, so
+            // it stays exact even if the dome's re-anchoring runs after this tick.
             var sunGlobal = inst.Sun.GlobalPosition;
 
             bool behind = cam.IsPositionBehind(sunGlobal);
             var screen = cam.UnprojectPosition(sunGlobal);
             bool onScreen = !behind && viewport.GetVisibleRect().HasPoint(screen);
 
-            // Line of sight, for the SPRITES only. One ray to the sun's centre against the
-            // colliders the world already has. Everything the footage records falls out of that:
-            // terrain and the own plane carry colliders and therefore block; billboard sprites and
-            // particles carry none, so the volcano's eruption puffs drifting across the sun cannot
-            // occlude — which the footage says they must not. Partial cover with the centre still
-            // clear passes, rings and all; full cover blocks it.
-            // ⚠ Testing the CENTRE is the simpler of two readings the footage cannot distinguish
-            // (a multi-sample disc test fits it equally well). It is chosen because it needs no
-            // invented coverage threshold, not because it is decoded.
+            // Line of sight for the sprites only: one ray to the sun's centre against the world's
+            // own colliders.
+            // ⚠ Testing the centre needs no invented coverage threshold; see docs/org/weather.md.
             bool losClear = true;
             if (onScreen)
             {
@@ -322,13 +268,10 @@ public sealed class LensFlareRig
     private static Node3D? FindSun(Node3D? horizon)
         => horizon?.FindChild("sun", recursive: true, owned: false) as Node3D;
 
-    // One flare element: where it sits along the sun→screen-centre vector, how wide it is
-    // at RefHeight, and how hard it is drawn. `Frac` 0 is the sun itself, 1 the
-    // screen centre — Ring C at 2.0 is therefore as far past the centre as the sun is short of
-    // it. Slot order is `init.gw`'s: slots 0–3 happen to ascend along the vector here,
-    // corroborated by the textures' own appearance (lflare1 is a filled core glow, lflare3 the
-    // crisp bright ring that Ring B is measured to be). That is a fact about this four-element
-    // rig, NOT a decoded rule about the format.
+    // One flare element: where it sits along the sun→screen-centre vector, how wide it is at
+    // RefHeight, and how hard it is drawn. `Frac` 0 is the sun, 1 the screen centre.
+    // ⚠ Slot order ascending the vector is a fact about this four-element rig, not a decoded
+    // rule about the format — see docs/org/weather.md.
     private readonly record struct Element(float Frac, float DiaPx, float Intensity);
 
     private sealed class Instance

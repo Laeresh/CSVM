@@ -6,29 +6,13 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The cloud deck's two altitude regimes (<see cref="WeatherRig.DeckRegime"/>).
-///
-/// <para>The deck is a world-fixed sheet at the tiles' OWN AUTHORED altitude at every camera
-/// altitude — the alternative this discriminates against pins it to the <c>CLOUD_COVER</c> band
-/// centre, which for C1 is 1047 against its authored 960. Below the band's centre the sheet wears
-/// the overcast's dimmed underside, at or above it its undimmed top. Two things have to hold for
-/// that flip to be invisible rather than a hard pop, and both are asserted here: it is PER CAMERA
-/// (splitscreen panes on opposite sides of the band must disagree), and it happens inside the
-/// fully-opaque whiteout core, which is <see cref="WeatherState.WhiteoutAmount"/>'s business, not
-/// this rule's.</para>
-///
-/// <para>⚠ There is no second, below-band member carrying a ceiling at
-/// <c>camera.y + DeckCeilingHeight</c>: the tiles are <c>zone_id 2</c> world meshes the original
-/// culls below the deck, and the ceiling the player sees there is <c>horizon/zone1</c>'s own
-/// camera-anchored, UV-scrolled dome (<c>HorizonDomeTests</c>). There is no
-/// <c>DeckCeilingHeight</c> TUNE either — both of its fits (400 m and 135 m) measured a surface the
-/// original does not fog.</para>
-///
-/// <para>⚠ Whether the two ambient cloud populations RENDER is not this rule's business: it is the
-/// original's own <c>zone_id</c> gate, which owns it per camera and reads the zone per chapter from
-/// the data, rather than an altitude-keyed special case. Those assertions live in
-/// <c>ZoneGateTests</c>, which is also where the case that rules out an altitude rule lives (C2B's
-/// <c>zone_id −1</c> fog volumes, which must keep rendering below its deck).</para>
+/// The cloud deck's two altitude regimes (<see cref="WeatherRig.DeckRegime"/>): a world-fixed
+/// sheet at the tiles' own authored altitude, dimmed below the <c>CLOUD_COVER</c> band centre and
+/// undimmed at or above it. Decode: docs/org/weather.md, docs/formats/weather.md.
+/// ⚠ There is no below-band ceiling member and no <c>DeckCeilingHeight</c> TUNE; see
+/// docs/formats/weather.md's retired-mechanism entry.
+/// ⚠ Whether the ambient cloud populations render is the original's <c>zone_id</c> gate, not this
+/// rule; see <c>ZoneGateTests</c>.
 /// </summary>
 public class DeckRegimeTests
 {
@@ -46,12 +30,7 @@ public class DeckRegimeTests
     [Fact]
     public void BelowTheBandTheDeckNoLongerMovesWithTheCamera()
     {
-        // The alternative this discriminates against hangs the sheet below the band at
-        // `camera.y + DeckCeilingHeight`, as the overcast CEILING — the wrong object. The tiles
-        // carry `zone_id 2` and the original culls them outright down here; the ceiling is
-        // `horizon/zone1`'s own camera-anchored dome (HorizonDomeTests). So the deck does not move:
-        // two cameras 600 m apart below the band get the SAME deck Y, which a camera-relative
-        // ceiling makes impossible.
+        // Two cameras below the band get the same deck Y; a camera-relative ceiling could not.
         (float low, bool lowDimmed) = WeatherRig.DeckRegime(300f, C1Centre, C1AuthoredDeckY);
         (float high, bool highDimmed) = WeatherRig.DeckRegime(900f, C1Centre, C1AuthoredDeckY);
         Assert.Equal(C1AuthoredDeckY, low, 3);
@@ -89,11 +68,8 @@ public class DeckRegimeTests
     [Fact]
     public void TheDeckKeepsSunlightBelowTheBandAndDropsItAbove()
     {
-        // The band crossing flips the deck's own SUNLIGHT dimming off, because the two regimes
-        // show two different faces of the overcast. Measured both ways — the original's underside
-        // is 167.7 (ours 168.9, dimmed),
-        // and no pixel in any original ABOVE-band frame falls below FOG_COLOR 175, which a
-        // dimmed 168.9 sheet cannot satisfy at any fog setting.
+        // The band crossing flips SUNLIGHT dimming: the two regimes show different faces of the
+        // overcast, measured against docs/org/weather.md's fog-colour bound.
         Assert.True(WeatherRig.DeckRegime(C1Centre - 0.5f, C1Centre, C1AuthoredDeckY).DeckDimmed);
         Assert.False(WeatherRig.DeckRegime(C1Centre + 0.5f, C1Centre, C1AuthoredDeckY).DeckDimmed);
         // It is the ONLY thing the crossing decides — the sheet stays world-fixed at its
@@ -132,13 +108,8 @@ public class DeckRegimeTests
     public void TheDeckMeshStaysAboutTenMetresBelowTheFvolSlabFloor(
         string chapter, float expectedDeckAltitude, float expectedSlabFloor)
     {
-        // The trap: the fvol sprite field is independent of the mesh's WORLD placement above the
-        // band (DeckRegime's authoredY branch). The AUTHORED relationship between the two — see
-        // docs/formats/fogvol.md: "the deck mesh is the slab's floor... every deck chapter puts its
-        // CloudDeck tiles ~10 m BELOW its fvol1-fvol9 slab floor" — is a fact about the extraction,
-        // untouched by where WeatherRig.Tick renders the mesh. Read straight off the data here
-        // rather than re-typing the table's numbers as a constant, so a change to either reader
-        // fails this.
+        // The authored deck-to-slab relationship (docs/formats/fogvol.md), read off the data
+        // rather than re-typed as a constant, so a change to either reader fails this.
         var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
 
         float? deckAltitude = WorldBuilder.CloudDeckAltitudeOf(gamez);
@@ -165,10 +136,8 @@ public class DeckRegimeTests
     [ExtractedDataFact]
     public void TheRegimeFlipHappensInsideTheFullyOpaqueWhiteoutCore()
     {
-        // ⚠ This is what makes the deck's altitude JUMP unobservable, and it is asserted against
-        // the AUTHORED band rather than a hand-typed one: if C1's CLOUD_COVER or the core's
-        // thickness ever reads differently, the flip stops being masked. Should that happen it
-        // is a finding about the whiteout band, not a licence to move the flip.
+        // ⚠ Asserted against the authored band, not a hand-typed one: a mismatch is a finding
+        // about the whiteout band, never a licence to move the flip.
         var weather = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "IA1"));
         Assert.NotNull(weather);
         Assert.Equal(C1Bottom, weather!.CloudBottom, 3);

@@ -5,32 +5,12 @@ using CSVM.Mech3;
 
 namespace CSVM.Flight;
 
-/// <summary>
-/// The original's camera tuning for one aircraft, from the zrdr extraction's
+/// <summary>The original's camera tuning for one aircraft, from the zrdr extraction's
 /// <c>camparam.json</c>: a <c>default</c> block every plane starts from, with seven of the eleven
-/// airframes overriding their own chase distance on top. See
-/// <see href="../../../docs/formats/camparam.md">camparam.md</see>.
-///
-/// <para><b><see cref="Dist"/> and <see cref="DistFactor"/> drive the chase radius</b>
-/// (<see cref="CameraController"/>: <c>d = Dist + DistFactor·V</c>, V in m per sim-second —
-/// decoded from the original's footage). Everything else is decoded and carried here so the next reader does
-/// not have to re-derive it, but is deliberately dormant — the mechanisms behind those keys are
-/// not settled:</para>
-///
-/// <para>⚠ <b><see cref="DistMin"/>/<see cref="DistMax"/> is NOT a clamp, and their mechanism is
-/// still undecoded.</b> In the <c>default</c> block <see cref="Dist"/> is 13.0 while
-/// <see cref="DistMin"/> is 15.7 — the minimum is LARGER than the base — and the footage's realised
-/// distances never reach <see cref="DistMax"/>. For all seven per-plane overrides min equals the
-/// base instead. Do not wire a clamp. <see cref="DistVary"/> has no identified input either
-/// (the capture footage never exercises it).</para>
-///
-/// <para>⚠ <b>The catch-up triplet's units are undecoded.</b>
-/// <see cref="PosCatchUp"/>/<see cref="LookCatchUp"/>/<see cref="DistCatchUp"/> read plausibly as
-/// the 1/s exponential rates <see cref="CameraController"/> already uses, but could as easily be
-/// frame counts or seconds-to-settle. The footage's one measured rate — the throttle transient's
-/// 0.65 /sim-s — matches none of them (DistCatchUp 1.0 is the nearest, 1.54× it), so the
-/// transient is wired as that measured figure, not through this triplet. Confirm any further
-/// reading against a capture first.</para>
+/// airframes overriding their own chase distance on top (docs/formats/camparam.md). Only
+/// <see cref="Dist"/>/<see cref="DistFactor"/> drive the chase radius
+/// (<c>d = Dist + DistFactor·V</c>); every other field is decoded and carried here but is
+/// deliberately dormant, its mechanism unsettled — see the docs page before wiring one in.
 /// </summary>
 public sealed class CamParams
 {
@@ -98,14 +78,9 @@ public sealed class CamParams
     public bool FromData;
 
     /// <summary>Resolves one airframe's camera block: <c>default</c> first, then the plane's own
-    /// keys layered over it.
-    ///
-    /// <para>⚠ <b>The file is keyed by DISPLAY name</b> ("Bloodhawk", "Firebrand"), not by the
-    /// model node or the vehicle def, so the lookup goes through
-    /// <see cref="MarkerRig.PlayerAirframes"/>. Do not substitute
-    /// <c>PlaneRoster.PlaneDisplayName</c>: it strips a leading <c>p</c> and title-cases, which
-    /// yields "Fbrand" for <c>player_fbrand</c> and would silently drop the Firebrand's
-    /// override.</para></summary>
+    /// keys layered over it. ⚠ Keyed by DISPLAY name ("Bloodhawk"), not the model node or the
+    /// vehicle def, so the lookup goes through <see cref="MarkerRig.PlayerAirframes"/>
+    /// (docs/formats/camparam.md).</summary>
     public static CamParams Load(string zrdrPath, string planeNodeName)
     {
         var result = new CamParams();

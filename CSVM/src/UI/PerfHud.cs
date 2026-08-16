@@ -7,34 +7,16 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The always-available frame-cost readout (key <b>F14</b>): frames per second, the current
-/// frame's wall cost, and the worst frame in the last few seconds — a peak that spikes and
-/// decays, so a hitch you felt leaves readable evidence on screen a moment later rather than
-/// only an instantaneous number nobody was watching at the right instant.
-/// The Full tier adds the per-frame cost split, count and memory
-/// terms, GC counts by generation, the last few named breadcrumbs, and a rolling bar graph of
-/// recent frame times.
-///
-/// <para>Built once by <see cref="CSVM.Session.Launcher"/> — never per <c>GameSession</c> and
-/// never per splitscreen pane, since fps/frame cost/GC are process-wide facts, not a per-pane
-/// one — which is what makes it work at the launchscreen, in <c>--viewer</c>/<c>--freecam</c>
-/// and in flight for free. Off by default and builds nothing until switched on, so the 11
+/// The always-available frame-cost readout (key F14): fps, the current frame's wall cost, and
+/// the worst frame in the last few seconds, cycling Off, Compact, Full. The Full tier adds the
+/// per-frame cost split, GC counts by generation, breadcrumbs, and a rolling frame-time graph.
+/// Built once by <see cref="CSVM.Session.Launcher"/>, never per <c>GameSession</c> or
+/// splitscreen pane, since fps/frame cost/GC are process-wide facts. Off by default so the 11
 /// golden screenshots stay byte-identical; <c>--debug-fps[=compact|full]</c> is the scripted
-/// twin.</para>
-///
-/// <para>Fed the same raw <c>Stopwatch</c>-based frame cost <see cref="Utils.HitchMonitor"/>
-/// ticks on, every frame, via <see cref="Tick"/> — never Godot's <c>delta</c>, for the reason
-/// documented on that class. The current-cost term is fully unaveraged, matching the
-/// instrument's own ethos: it is exactly this frame's cost, not a windowed mean that would bury
-/// the hitch this readout exists to show.</para>
-///
-/// <para><b>Cycle: Off → Compact → Full → Off.</b> D10 landed Compact's content — the
-/// fps/frame-cost/worst-frame trio above, still the whole of Compact and the first line of
-/// Full. D11's Full-only lines and the <see cref="PerfHudStrip"/> read from <see cref="Monitor"/>
-/// directly (the split/count/memory terms off the same <see cref="FrameCounters"/> Tick is fed,
-/// GC generation counts off <c>GC.CollectionCount</c>, breadcrumbs off <see cref="PerfSample"/>,
-/// the strip off <see cref="Utils.HitchMonitor.CopyRing"/>) — no history of its own, so nothing
-/// here can ever disagree with what a hitch record says about the same frame.</para>
+/// twin. Fed the same raw <c>Stopwatch</c>-based cost <see cref="Utils.HitchMonitor"/> ticks on,
+/// never Godot's <c>delta</c>; the current-cost term is unaveraged, matching this frame exactly.
+/// Full decode: docs/architecture.md. What a frame-cost number can and cannot prove: PERF-1 and
+/// PERF-13/14 in docs/verification.md.
 /// </summary>
 public sealed partial class PerfHud : Node
 {

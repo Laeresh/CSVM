@@ -6,20 +6,12 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// The vehicle damage ledger for a flying aircraft: the per-part pools from the def's
-/// 'destroyable_parts' (see <see cref="DestroyablePart"/>) plus an independent whole-vehicle
-/// (armor, health) pair, ported instruction-for-instruction from the decoded take-hit wrapper
-/// (docs/org/vehicleDamage.md: FUN_004b9b30 the loop, FUN_004b7f80 the spend, FUN_004b3950 the
-/// zone resolver, FUN_004b3bf0 the part spend + recompute). One hit is a damage pair spent on
-/// the struck zone armor-first; a dead or unknown zone REDIRECTS to a random surviving zone
-/// (the resolver only returns parts with health left); after a part spend the whole pair is
-/// recomputed as the parts' fraction of their summed maxima times the whole maxima; the
-/// unabsorbed leftover then re-enters zone-less and spends against the whole pair directly,
-/// with no recompute. Death is whole-vehicle health at or below zero — never a part flag.
-/// The whole maxima are the def's authored armor/health pair where one exists (AI defs);
-/// player defs author none, so the pair seeds as the sum over parts (FUN_0047bd90's
-/// re-derivation is the decoded precedent for sum-over-parts as the whole pair).
-/// FlightController applies severity-scaled damage on survivable collisions and crashes
-/// outright on hard ones. Respawn calls <see cref="Reset"/>.
+/// <c>destroyable_parts</c> (see <see cref="DestroyablePart"/>) plus an independent whole-vehicle
+/// (armor, health) pair, ported instruction-for-instruction from the decoded take-hit wrapper.
+/// Decode: docs/org/vehicleDamage.md. <see cref="Apply"/> spends one hit through that flow;
+/// <see cref="IsDestroyed"/> is the decoded death test. FlightController applies severity-scaled
+/// damage on survivable collisions and crashes outright on hard ones. Respawn calls
+/// <see cref="Reset"/>.
 /// </summary>
 public sealed class PlaneDamage
 {
@@ -107,14 +99,10 @@ public sealed class PlaneDamage
         _rng = RngSeed; // a respawned plane redirects identically — suite determinism
     }
 
-    /// <summary>Spends one hit's two damage magnitudes (the weapon data's HEALTH_DAMAGE /
-    /// ARMOR_DAMAGE) through the decoded take-hit flow. The named zone takes the spend
-    /// armor-first while it lives; a dead or unknown zone redirects to a random surviving zone
-    /// (the resolver rule — a dead zone never absorbs, and never soaks a hit either); the part
-    /// spend recomputes the whole pair from the parts; the leftover the part could not absorb
-    /// then drains the whole pair directly. With no surviving zone the hit is spent on the
-    /// whole pair alone. Returns the zone actually struck (null when the hit went zone-less) —
-    /// callers must test <see cref="IsDestroyed"/> regardless of the return.</summary>
+    /// <summary>Spends one hit's <c>HEALTH_DAMAGE</c>/<c>ARMOR_DAMAGE</c> through the decoded
+    /// take-hit flow: the named zone armor-first, a dead or unknown zone redirected to a random
+    /// surviving one, the leftover draining the whole pair directly. Returns the zone actually
+    /// struck (null when zone-less) — test <see cref="IsDestroyed"/> regardless.</summary>
     public PartState? Apply(string partName, float healthDamage, float armorDamage)
     {
         if (healthDamage <= 0f && armorDamage <= 0f)

@@ -4,20 +4,10 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// The <c>--stage=empty</c> test stage: a flat, collidable ground plane under a grid drawn in
-/// code, standing in for a chapter world. No gamez is loaded, no mission setup runs, no animation
-/// program is bound — so a flight-model or ballistics run boots in a fraction of a chapter's time
-/// and its frame contains nothing but the subject.
-///
-/// <para><b>The grid texture is generated here, pixel by pixel.</b> Nothing is committed and
-/// nothing is read out of the player's install — the repo ships no assets, and a test stage is
-/// exactly the place that rule is easiest to break by accident.</para>
-///
-/// <para>The ground is one <see cref="PlaneMesh"/> quad with a tiled grid albedo plus one
-/// <see cref="StaticBody3D"/> box whose top face is <c>y = 0</c>. A box rather than a
-/// <see cref="WorldBoundaryShape3D"/>, because the weapon and airframe raycasts want a surface
-/// with a definite thickness under it, and rather than a trimesh because a 20 km quad's trimesh
-/// has the same two triangles and none of the BVH.</para>
+/// The <c>--stage=empty</c> test stage: a flat collidable ground plane under a grid drawn in
+/// code, standing in for a chapter world so a flight or ballistics run boots quickly with
+/// nothing else in the frame. See <c>docs/architecture.md</c> for the collider and texture
+/// prohibitions.
 /// </summary>
 public sealed class EmptyStage
 {
@@ -110,8 +100,8 @@ public sealed class EmptyStage
         };
     }
 
-    // One grid square: a dark field, a light square edge, and a quarter-cell minor rule. Drawn
-    // rather than loaded — see the class remark on the asset rule.
+    // One grid square: a dark field, a light square edge, and a quarter-cell minor rule.
+    // ⚠ Draw it, never load it. This stage must boot with no chapter assets present.
     private static ImageTexture GridTexture()
     {
         var field = new Color(0.16f, 0.17f, 0.19f);

@@ -6,17 +6,11 @@ using Godot;
 namespace CSVM.Testing;
 
 /// <summary>
-/// The engine half of the golden-image tripwire: it reduces a captured frame to one md5 and names
-/// the hardware that drew it.
-///
-/// <para><b>The hash is over the RAW pixel buffer</b> (<see cref="Image.GetData"/>), never over the
-/// saved PNG. Encoded bytes differ between two byte-identical images — all 881 of this install's C1
-/// texture PNGs do — so a PNG hash reports encoder state, not pixels.</para>
-///
-/// <para><b>Why the adapter travels with the hash.</b> A driver or GPU change legitimately moves
-/// every hash at once. Recording the adapter with the numbers turns that from an unexplained mass
-/// failure into a one-line explanation, which is the difference between "regenerate" and
-/// "stop the line".</para>
+/// The engine half of the golden-image tripwire: reduces a captured frame to one md5 and names the
+/// hardware that drew it.
+/// ⚠ Hash the raw pixel buffer (<see cref="Image.GetData"/>), never the saved PNG — see GOLD-10 in
+/// docs/verification.md. The adapter travels with the hash so a driver/GPU change reads as a
+/// one-line explanation rather than an unexplained mass failure.
 /// </summary>
 public static class GoldenShot
 {

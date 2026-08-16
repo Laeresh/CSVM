@@ -7,29 +7,15 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The animation debugger's timeline: a custom-drawn strip showing,
-/// for the played definition, one lane per Initial sequence with its events at their
-/// <b>authored</b> start times (an upper band of blocks, computed statically here), a moving
-/// playhead, and a bright tick stamped in the lower band at each event's <b>actual</b> dispatch
-/// time (fed from <see cref="AnimRuntime.OnEventDispatched"/>).
-///
-/// <para>The point is that the two bands come from two <b>independent</b> sources — the static
-/// schedule below, and the live <c>SequenceRunner</c> in the runtime — so a scheduling bug shows
-/// up as a horizontal gap between an event's authored block and its fired tick (drawn as a
-/// slanted connector on the first firing of each event). This is the instrument that would have
-/// caught the <c>NextDue</c> off-by-one, which fired each timestamped event one slot
-/// early and its unstamped partner one slot late. If the authored pass reused the runner's code
-/// the divergence would be invisible, so it deliberately re-derives the <i>documented</i>
-/// scheduling rule instead of calling into the runner.</para>
-///
-/// <para>A <c>CALL_ANIMATION</c> child definition (the crash effect templates, the door poll
-/// idiom) becomes an appended, indented lane group offset at the playhead time its instance
-/// started — its own authored blocks laid out from that offset, its fired ticks at their real
-/// dispatch times. Loops re-fire the same event indices, so ticks accumulate across passes (the
-/// loop period reads straight off the spacing); a Restart clears everything.</para>
-///
-/// <para>Display only: <see cref="Control.MouseFilterEnum.Ignore"/> so orbit-dragging over the
-/// strip still reaches the camera, and no state that survives a session teardown.</para>
+/// The animation debugger's timeline: a custom-drawn strip showing, per Initial sequence, its
+/// events at their authored start times (upper band, computed statically) and a bright tick at
+/// each event's actual dispatch time (lower band, fed from
+/// <see cref="AnimRuntime.OnEventDispatched"/>). ⚠ The authored band deliberately re-derives the
+/// documented scheduling rule rather than calling the runtime's <c>SequenceRunner</c>, so a
+/// scheduling bug shows as a gap between an event's block and its tick; do not "simplify" that
+/// independence away. A <c>CALL_ANIMATION</c> child becomes an appended, indented lane group
+/// offset at its instance's start time; loops accumulate ticks across passes, Restart clears.
+/// Display only: <see cref="Control.MouseFilterEnum.Ignore"/>. Full decode: docs/architecture.md.
 /// </summary>
 public sealed partial class AnimTimeline : Control
 {
@@ -297,18 +283,10 @@ public sealed partial class AnimTimeline : Control
         return null;
     }
 
-    // Lays a sequence's events out at their authored fire times, following the documented
-    // scheduling rule (docs/formats/anim-definitions.md) in one linear pass — deliberately NOT
-    // the runtime's `SequenceRunner`, so a runner bug diverges from this rather than
-    // matching it. An event's own `start` gates it: "Animation"/"Sequence" is absolute
-    // against the sequence start; anything else ("Event"/absent) is measured from the previous
-    // event's completion (its fire time plus its run time). "Animation" is drawn against the
-    // sequence start rather than the instance clock the runner gates it on, because a lane is an
-    // AUTHORED layout and when a CALL_SEQUENCE will start an ON_CALL lane is not authored — the
-    // fired ticks are what show where it actually landed. Control-flow events (LOOP/IF/…) are
-    // placed at their gated time but take no time and do not advance the base, exactly as the
-    // runner treats them. Loops are not unrolled — the fired ticks accumulate across passes and
-    // show the period against this single authored layout.
+    // Lays a sequence's events out at their authored fire times in one linear pass,
+    // deliberately not via the runtime's `SequenceRunner`, following the scheduling rule at
+    // docs/formats/anim-definitions.md. Loops are not unrolled; fired ticks accumulate across
+    // passes and show the period against this single authored layout.
     private Lane BuildLane(AnimDefinition def, AnimSequence seq)
     {
         var lane = new Lane { Name = seq.Name, OnCallOnly = seq.OnCallOnly };
@@ -395,11 +373,8 @@ public sealed partial class AnimTimeline : Control
             }
         }
 
-        // Fired ticks in the lower band. The FIRST firing of each event index also gets a
-        // connector to its authored block — a vertical connector means "fired on schedule", a
-        // slanted one is the authored-vs-actual divergence this whole strip exists to surface.
-        // Only the first is connected: a loop re-fires the same index at later times, and those
-        // all slant to the same iteration-0 block, which would be noise.
+        // Only the first firing of each event index gets a connector to its authored block;
+        // a slant is the authored-vs-actual divergence this strip exists to surface.
         var connected = new HashSet<int>();
         foreach (var (idx, time) in lane.Fired)
         {

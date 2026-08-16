@@ -37,22 +37,16 @@ public sealed class Racer
 }
 
 /// <summary>
-/// The splitscreen stunt race: every player flies the same mission's Danger Zones
-/// concurrently in one shared world, each with their own progress, marker HUD and clock. This
-/// object is only the race bookkeeping on top of the per-player <see cref="StuntMission"/>s —
-/// who has finished, in what order, and whether the race is over.
-///
-/// <para>A player's clock stops at their own <see cref="StuntMission.AllComplete"/> (their
-/// FlightController freezes them at the finish and the marker HUD shows their placing) while the
-/// others fly on; when the last one is in, <see cref="RaceCompleted"/> raises the shared
-/// <see cref="StuntRaceBoard"/>.</para>
-///
-/// <para>Best-time persistence stays single-player-only by decision (<see cref="ScoreStore"/> is
-/// not consulted here) — off because it was chosen to be, not because nothing implements it. A race
-/// field starts on an abreast grid, and a grid slot is a synthetic point by construction: it is the
-/// anchor spawn offset across the heading and the whole field raised to clear the ground, so no
-/// pilot sits on an authored spawn. A race total therefore measures a run from a place no solo run
-/// ever starts at, and filing it against a solo best would compare two different courses.</para>
+/// The splitscreen stunt race: every player flies the same mission's Danger Zones concurrently
+/// in one shared world, each with their own progress, marker HUD and clock. Bookkeeping only, on
+/// top of the per-player <see cref="StuntMission"/>s: who has finished, in what order, and
+/// whether the race is over.
+/// A player's clock stops at their own <see cref="StuntMission.AllComplete"/> while the others
+/// fly on; when the last one is in, <see cref="RaceCompleted"/> raises the shared
+/// <see cref="StuntRaceBoard"/>.
+/// ⚠ Do not wire <see cref="ScoreStore"/> best-time persistence in here. A race field starts on a
+/// synthetic abreast-grid point no solo run starts at, so a race total is not comparable to a
+/// solo best.
 /// </summary>
 public sealed class StuntRace
 {

@@ -10,17 +10,9 @@ namespace CSVM.Session;
 /// <summary>
 /// The broadside half of <see cref="ZeppelinRuntime"/> (M4 F19): wires each cannon-bearing
 /// record into a <see cref="ZeppelinBroadside"/> machine and, per sim step, resolves the
-/// record's authored <c>targets</c> (the player's aircraft, or another zeppelin), gates on
-/// <c>cannon_fire_range</c> and the decoded 90° side arc, plays the authored deploy/retract
-/// anims (scoped to the hull, durations read from the anim defs themselves), and fires REAL
-/// <c>wep_28</c> rounds — the ammunition is hardcoded in the original's fire routine, resolved
-/// from <see cref="WeaponDefs"/> at wire-up — through the shared pool, lead-solved by
-/// <see cref="ZeppelinBroadside.TryAim"/> and scattered by <c>cannon_inaccuracy</c>. A target
-/// with no intercept solution is skipped (decoded), arming no timer. Rounds are unowned
-/// (<see cref="ProjectilePool.NoShooter"/>), C9b's convention for a fire source that is not a
-/// pilot. Destroyed cannon zones (F18's pools) drop out of the volley; a dead or
-/// <c>deactivated</c> zeppelin fires nothing (<c>SimStep</c> never reaches this half).
-/// Observability is the <c>zep:</c> deploy/fire/skip lines.
+/// record's authored <c>targets</c>, gates on <c>cannon_fire_range</c> and the decoded arc,
+/// plays the deploy/retract anims, and fires real <c>wep_28</c> rounds through the shared pool.
+/// Detail: this module's docs/architecture.md entry.
 /// </summary>
 public sealed partial class ZeppelinRuntime
 {

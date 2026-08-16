@@ -50,14 +50,10 @@ public sealed class InstantActionWaves
     /// <see cref="Start"/> and once <see cref="Finished"/>.</summary>
     public int CurrentWaveSize => CurrentWave is >= 1 and <= 4 ? _waveSizes[CurrentWave - 1] : 0;
 
-    /// <summary>The teleport arm's own two-step draw: every entry of
-    /// <paramref name="spawns"/> at or beyond <see cref="MinSpawnDistanceSquared"/> from the
-    /// NEAREST of <paramref name="humanPositions"/> (Decision 8's splitscreen reading of "the
-    /// player") is collected, then one of THOSE is taken as <c>draw % n</c> — not a rejection
-    /// loop. ⚠ Falls back to the LITERAL first entry, index 0, not a random one, when the
-    /// collection is empty. <paramref name="spawns"/> must be non-empty; <paramref name="draw"/>
-    /// is the caller's own <c>rand()</c> pull, so this stays pure and <c>--det</c> reproduces it
-    /// off whichever named stream the caller drew from.</summary>
+    /// <summary>The teleport arm's own two-step draw (detail: this module's docs/architecture.md
+    /// entry): collect every entry at or beyond <see cref="MinSpawnDistanceSquared"/> from the
+    /// nearest human, then take <c>draw % n</c> over that collection.
+    /// ⚠ Falls back to the literal first entry, index 0, when the collection is empty.</summary>
     public static (int Index, SpawnPoint Point) ChooseWaveSpawn(
         IReadOnlyList<SpawnPoint> spawns, IReadOnlyList<Vector3> humanPositions, uint draw)
     {

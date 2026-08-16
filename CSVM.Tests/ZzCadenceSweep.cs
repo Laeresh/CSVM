@@ -11,30 +11,14 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The square-wave pitch-cadence sweep, run against our own flight model.
-/// The original was flown at six alternating pitch-up/pitch-down
-/// cadences and its altitude ripple measured at each; this drives the same square wave into a
-/// throwaway <see cref="FlightModel"/> and measures the ripple the same way, so the comparison is
-/// amplitude-for-amplitude with no transfer function assumed on either side.
-///
-/// <para>The statistic that decides it is the <b>roll-off</b> — how far the ripple falls
-/// between the slowest and fastest cadence. Double integration (body rate → attitude → altitude)
-/// accounts for a factor of (f_hi/f_lo)², and a single first-order lag can add at most another
-/// (f_hi/f_lo) on top of that, in the τ → ∞ limit. Anything steeper than that product cannot be
-/// produced by one lag at any τ, which is what makes this able to fail.</para>
-///
-/// <para>⚠ Two traps. (a) <b>Never detrend and then fit</b>: a
-/// sliding high-pass has real gain at f₀ and moved the original's 930 ms amplitude by 45 % as its
-/// span changed. The polynomial and the sinusoid are fitted <b>simultaneously</b> here, inside a
-/// window of at least eight periods, where a cubic can absorb almost none of the fundamental.
-/// (b) The cadences are quoted in the original's <b>wall</b> milliseconds; sim time runs at
-/// k = 1.390 (<c>docs/verification.md</c>), so both readings are swept and reported rather
-/// than one being picked. The roll-off ratio is invariant to the choice; only where the sweep sits
-/// on the curve is not.</para>
-///
-/// <para>⚠ This does not fit a τ and must not be quoted as one — the cadences are not at a common
-/// operating point (the slow ones are a large-amplitude manoeuvre, the fast ones a perturbation),
-/// which is exactly why the mean airspeed is reported beside every row.</para>
+/// The square-wave pitch-cadence sweep, run against our own flight model, drives the same input
+/// the original was filmed at into a throwaway <see cref="FlightModel"/> and measures the ripple
+/// the same way. Decode and the BL-147 result: docs/org/flightModel.md.
+/// ⚠ Fit the trend and the sinusoid simultaneously; see docs/verification.md METHOD-24.
+/// ⚠ Cadences are quoted in the original's wall milliseconds; both the sim and wall readings are
+/// reported (docs/verification.md), since the roll-off ratio is invariant to the choice.
+/// ⚠ This does not fit a τ: the cadences are not at a common operating point, which is why mean
+/// airspeed is reported beside every row.
 /// </summary>
 public class ZzCadenceSweep
 {
@@ -100,10 +84,8 @@ public class ZzCadenceSweep
                               + (atFloor ? $"<= {originalFt:0.000}" : $"{originalFt,8:0.000}"));
             }
 
-            // The discriminating ratio: the span 1300 -> 570 ms, over which the original
-            // fell 42x against a frequency ratio of 2.28. Double integration explains (ratio)^2 and
-            // one first-order lag at most another (ratio), so 12x is the steepest a single lag can
-            // ever be — the excess over that is the part no single lag can produce.
+            // The discriminating span, 1300 -> 570 ms; see docs/org/flightModel.md's C23 landing
+            // note for the single-lag ceiling this compares against and its own correction.
             double fRatio = 1300.0 / 570.0;
             double model = amps[0] / amps[3];
             double lagCeiling = fRatio * fRatio * fRatio;

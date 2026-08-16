@@ -10,23 +10,12 @@ namespace CSVM.Utils;
 
 /// <summary>
 /// The project's diagnostic log: one call shape, a fixed category vocabulary, four levels, and
-/// two sinks with different jobs.
-///
-/// <para><b>Console</b> is the human's view and stays quiet by default: errors and warnings
-/// always, info as well (that is what an unconverted <c>GD.Print</c> did, so converting a site
-/// changes nothing you see), and debug only for the categories <c>--log=</c> names.</para>
-///
-/// <para><b>The file sink</b> is the machine's view and always takes <i>everything</i>, at every
-/// level, in every category, to <c>.scratch/logs/&lt;mode&gt;-&lt;timestamp&gt;.log</c>. That is
-/// the whole point: a post-hoc grep can never miss a category nobody thought to enable before the
-/// run. It is line-flushed, so a run that crashes still leaves every line it had written.</para>
-///
-/// <para><b>Grammar.</b> Every line ends in <c>[cat] message key=value …</c> — the file prefixes
-/// a fixed-width level token, the console prefixes one only for warnings and errors. There is no
-/// timestamp column on purpose: a deterministic run must produce a byte-identical log, so a line
-/// that needs time carries it as an explicit <c>key=value</c>. Messages are interpolated strings
-/// rendered with <see cref="CultureInfo.InvariantCulture"/>, so a float reads <c>16.667</c> on
-/// every machine — a German locale would otherwise turn an XYZ triple into six ambiguous numbers.</para>
+/// two sinks with different jobs. Console is the human's view and stays quiet by default; the
+/// file sink is the machine's view and always takes everything, at every level, in every
+/// category, line-flushed so a crash still leaves what was written. Grammar and the category
+/// list: this module's entry in docs/architecture.md.
+/// ⚠ Messages are interpolated strings rendered with <see cref="CultureInfo.InvariantCulture"/>,
+/// so a float reads <c>16.667</c> on every machine, never the current-culture form.
 /// </summary>
 public static class Log
 {
@@ -83,13 +72,10 @@ public static class Log
 
     /// <summary>Routes this execution flow's console lines to <paramref name="sink"/> until the
     /// returned handle is disposed, then restores whatever this flow had before. Scopes nest, and
-    /// disposing twice does nothing.
-    ///
-    /// <para>Per-flow, not global: a concurrent flow — an xunit test class running in parallel —
-    /// has its own, so it can neither steal these lines nor add its own to them. The
-    /// converse is the one sharp edge: a thread this flow spawns does NOT inherit the scope
-    /// unless it captures the execution context, so its lines go to <see cref="ConsoleSink"/>
-    /// instead.</para></summary>
+    /// disposing twice does nothing. Per-flow, not global, so a concurrent flow cannot steal or
+    /// add to these lines.
+    /// ⚠ A thread this flow spawns does not inherit the scope unless it captures the execution
+    /// context; its lines go to <see cref="ConsoleSink"/> instead.</summary>
     public static IDisposable PushConsoleSink(Action<string> sink)
     {
         ArgumentNullException.ThrowIfNull(sink);
@@ -233,10 +219,9 @@ public static class Log
         $"{Tag(level)} [{cat}] {message}";
 
     /// <summary>Renders an interpolated message exactly as every logging call does: invariant
-    /// culture, so a float reads <c>16.667</c> and never <c>16,667</c>. Pure — no Godot API.
-    /// <b>A message must be ONE interpolated string.</b> Concatenating two (<c>$"a{x}" + $"b{y}"</c>)
-    /// produces a <c>string</c>, which will not compile against these overloads — deliberately, since
-    /// the concatenation would have already formatted its floats in the current culture.</summary>
+    /// culture, so a float reads <c>16.667</c> and never <c>16,667</c>. Pure, no Godot API.
+    /// ⚠ Pass one interpolated string, never a concatenation of two (<c>$"a{x}" + $"b{y}"</c>):
+    /// that produces a plain <c>string</c>, which will not compile against these overloads.</summary>
     public static string Format(FormattableString message) => message.ToString(CultureInfo.InvariantCulture);
 
     private static void Emit(Level level, string cat, string message, string? detail)

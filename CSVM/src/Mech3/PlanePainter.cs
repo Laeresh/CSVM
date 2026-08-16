@@ -6,29 +6,11 @@ namespace CSVM.Mech3;
 
 /// <summary>
 /// Applies a <see cref="PaintScheme"/> to one aircraft: paints its skins from the original's
-/// own per-pattern region masks and swaps the three decal placeholders. Built per plane
-/// instance (two players in the same aircraft wear different liveries), and it never mutates
-/// the shared <see cref="TextureArchive"/> cache.
-///
-/// HOW THE ORIGINAL PAINTS, and what this does (see <c>docs/formats/rof.md</c>).
-/// Each pattern ships a `.BM` per aircraft skin holding a
-/// near-greyscale shading map plus three per-pixel weight masks, one per paint colour slot,
-/// summing to 255. The composite is
-///
-///     shaded_paint = shading * (w1*colour1 + w2*colour2 + w3*colour3) / 255
-///
-/// with the pattern's overlay layer composited over the result. The shading map used is the
-/// `.BM`'s own base plane, NOT the ZBD skin of the same name — they are different images (the
-/// ZBD one is the blue-gray key texture; the `.BM` one is neutral).
-///
-/// Because the masks say outright which texel is which slot, a region needs no hue of its own
-/// to be painted: the Bloodhawk's black outer wing panels and the Fury (whose ZBD skin is
-/// featureless near-black) paint from full masks like any other. Slot order comes from the
-/// data, and region borders arrive already antialiased.
-///
-/// A pattern only covers the aircraft it ships skins for; <see cref="PatternLibrary.PatternsFor"/>
-/// is the per-plane list the original's paint UI offers. Parts a pattern does not carry are
-/// left as the shipped ZBD texture.
+/// per-pattern region masks and swaps the three decal placeholders. Built per plane instance,
+/// since two players in the same aircraft can wear different liveries, and it never mutates the
+/// shared <see cref="TextureArchive"/> cache.
+/// Composite formula, mask/decal layout and <see cref="PatternLibrary.PatternsFor"/>'s per-plane
+/// pattern list: <c>docs/formats/paint.md</c> and <c>docs/formats/rof.md</c>.
 /// </summary>
 public sealed class PlanePainter
 {
@@ -66,10 +48,8 @@ public sealed class PlanePainter
     /// rather than a node-name table, so it survives node renames. Null if nothing matches.</summary>
     public static string? PrefixFor(GameZ gamez, GameZNode root)
     {
-        // The decal placeholders are the reliable marker: an aircraft's skins are the only
-        // textures named <prefix>_noselogo / _taillogo / _winglogo. ⚠ Match ANY of the three,
-        // never the nose alone: the Firebrand ships no fir_noselogo, so a nose-only test
-        // leaves it unpainted.
+        // ⚠ Match any of the three decal placeholders, never the nose alone. The Firebrand
+        // ships no fir_noselogo, so a nose-only test leaves it unpainted (docs/formats/paint.md).
         string? found = null;
         void Walk(GameZNode n)
         {
@@ -174,10 +154,8 @@ public sealed class PlanePainter
         float r2 = c2.R * 255f, g2 = c2.G * 255f, b2 = c2.B * 255f;
         float r3 = c3.R * 255f, g3 = c3.G * 255f, b3 = c3.B * 255f;
 
-        // ⚠ ROW ORDER: `.BM` planes are stored BOTTOM-UP, the ZBD textures and Godot's Image are
-        // top-down, so every source row is read from h-1-y. Without this the livery is mirrored
-        // along the texture's V axis — stripes end up on the wrong sides of the wings and tail.
-        // See docs/formats/rof.md.
+        // ⚠ `.BM` rows are bottom-up, Godot's Image is top-down; read every source row from
+        // h-1-y or the livery mirrors along V (docs/formats/rof.md).
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
             {
@@ -213,10 +191,8 @@ public sealed class PlanePainter
                 data[d + 3] = 255;
             }
 
-        // The ZBD skin's alpha, where it has one and the grids agree: SceneBuilder already
-        // chose blend-vs-scissor from that texture's alpha class, so the substitute has to
-        // keep it. Three of 173 skins differ in size between .BM and ZBD (rof.md); those
-        // simply come back opaque rather than mis-sampled.
+        // Carries the ZBD skin's alpha so SceneBuilder's blend-vs-scissor choice stays valid.
+        // A size mismatch (rof.md) comes back opaque rather than mis-sampled.
         CopyAlphaFrom(original, data, w, h);
 
         var img = Image.CreateFromData(w, h, false, Image.Format.Rgba8, data);

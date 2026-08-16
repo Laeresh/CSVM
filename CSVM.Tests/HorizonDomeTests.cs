@@ -7,19 +7,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The skydome the camera's own weather state draws.
-///
-/// <para>The original draws the dome of the zone it is IN: below the cloud deck a deck chapter's
-/// camera is in state 1, its <c>zone_id 2</c> dome is culled and <c>horizon/zone1</c>'s own
-/// geometry is both the sky and the ceiling. Two halves are pinned here — the rule that decides
-/// how many domes a world builds (<see cref="WorldBuilder.DomeZonesToBuild"/>), and what each
-/// chapter's zone-1 dome actually IS, read off the extraction.</para>
-///
-/// <para>⚠ The second half exists to kill a plausible wrong number. The alternative this
-/// discriminates against puts C1's below-deck ceiling at <b>+396.4 m</b> — the <c>bbox_mid.y</c> of
-/// <c>h_zone1scroll</c>'s model, read as a "cap centre". It is the midpoint of a bbox spanning
-/// −2000…+2792.8 and there is no geometry within 2 km of it: the mesh's actual flat ceiling cap is
-/// the 12-gon at <b>+2792.8</b>. These cases assert the caps so +396.4 cannot come back.</para>
+/// The skydome the camera's own weather state draws: below the cloud deck, <c>horizon/zone1</c>'s
+/// own geometry is both the sky and the ceiling. Pins <see cref="WorldBuilder.DomeZonesToBuild"/>
+/// and each chapter's zone-1 dome, read off the extraction. Decode: docs/formats/weather.md.
+/// ⚠ C1's below-deck ceiling is +2792.8 m, its mesh's flat cap. Do not re-cite 396.4, a retired
+/// bounding-box-midpoint misreading; see docs/formats/weather.md's "+396.4 m" section.
 /// </summary>
 public class HorizonDomeTests
 {
@@ -163,10 +155,8 @@ public class HorizonDomeTests
     [ExtractedDataFact]
     public void OnlyC1sZoneOneDomeScrollsAndItScrollsAtTheAuthoredRate()
     {
-        // `tex_fx.gw`'s `FindNode h_zone1scroll` + `Object3DSetScroll on 0.07 0.0` is already baked
-        // into the shipped model's own texture_scroll field (MissionSetup.ScrollByModel's note), so
-        // building the node is the whole implementation — there is no second scroll path to add.
-        // The other three deck chapters author no scroll on their zone-1 geometry at all.
+        // Baked into the shipped model's own texture_scroll field; building the node is the
+        // whole implementation. See docs/formats/weather.md.
         foreach (var (chapter, zone, expected) in new[]
                  {
                      ("C1", "zone1", 0.07f), ("C1C", "zone1", 0f), ("C2B", "zone1", 0f), ("C4", "zone1", 0f),
@@ -191,14 +181,8 @@ public class HorizonDomeTests
     [ExtractedDataFact]
     public void OnlyC1sZoneOneCeilingHasARimAnythingCanSee()
     {
-        // Pinned from the extraction. The domes are camera-centred, unfogged
-        // and uniformly scaled, so the ONLY thing a frame can show is the elevation a feature
-        // subtends — and a feature needs two materials to be a feature at all. C1's zone-1 dome
-        // is the one that has them: a `sky2.tif` vault under a flat FOG_COLOR cap, so its cap RIM
-        // is a visible boundary (measured at 48–52° against the authored 46.95°). Every
-        // other zone-1/zone-3 dome is a SINGLE Colored material with `lighting: false`, i.e. one
-        // flat authored colour in every direction: no rim, no observable, and therefore no scale
-        // — uniform or split — that a render of those chapters could tell apart.
+        // A feature needs two materials to exist at all; C1's zone-1 dome is the one that has
+        // them. Every other zone-1/zone-3 dome is a single flat Colored material with no rim.
         foreach (var (chapter, zone, materials, flat) in new[]
                  {
                      ("C1", "zone1", 2, 176f), ("C1C", "zone1", 1, 176f), ("C2B", "zone1", 1, 176f),

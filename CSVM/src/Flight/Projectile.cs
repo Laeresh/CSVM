@@ -9,24 +9,15 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// The weapon-fire subsystem for a shared world: a pool of projectiles integrated with the data's
-/// own ballistics (<c>VELOCITY</c>/<c>ACCELERATION</c>/<c>GRAVITY</c>, expiring at <c>RANGE</c>),
-/// plus their visuals and impacts — tracer streaks, muzzle flashes, the per-surface <c>IMPACT</c>
-/// sound, and the named IMPACT effect: its <c>ANIMATION</c> model is instanced at the hit point when
-/// it is a chapter-gamez prototype (the water splash), else a stand-in spark sprite shows. Guns and
-/// hardpoints feed it through <see cref="Spawn"/>; it runs itself
-/// each physics frame. One pool serves every player (projectiles live in the shared world, so every
-/// splitscreen pane sees them).
-///
-/// <para>Hit detection is a per-step raycast over world + aircraft: a round can strike an
-/// opponent's <see cref="AircraftBody"/> (the <c>player</c>(6) IMPACT row), with the shooter's own
-/// body excluded per shot by identity — a pilot's rounds never hit their own launcher. World
-/// surfaces select their IMPACT row by the struck collider's numeric surface id
-/// (<see cref="SceneBuilder.SurfaceIdMeta"/>, <see cref="SurfaceIdOf"/>), the registry index the
-/// original indexes that table by; an aircraft hit routes its damage to the struck
-/// plane's own part model, never the destructible pipeline. A round that misses may still fuse:
-/// the <c>DETONATION_DISTANCE</c> proximity fuse arms against aircraft (only — never world
-/// geometry), and a detonation's blast reaches planes through a dedicated falloff pass beside
-/// the destructible sink (<see cref="BlastAircraftPass"/>), with the kill attributed.</para>
+/// own ballistics, plus their visuals and impacts — tracer streaks, muzzle flashes, per-surface
+/// impact sound, and the named IMPACT effect. Guns and hardpoints feed it through
+/// <see cref="Spawn"/>; it runs itself each physics frame, and one pool serves every player.
+/// Hit detection is a per-step raycast over world and aircraft, with the shooter's own body
+/// excluded per shot so a pilot's rounds never hit their own launcher. World surfaces select their
+/// IMPACT row by the struck collider's surface id (<see cref="SurfaceIdOf"/>); an aircraft hit
+/// routes its damage to the struck plane's own part model, never the destructible pipeline. A
+/// round that misses may still fuse — see <see cref="ProximityFuseTriggered"/> and
+/// <see cref="BlastAircraftPass"/>.
 /// </summary>
 public sealed partial class ProjectilePool : Node3D
 {
@@ -60,18 +51,10 @@ public sealed partial class ProjectilePool : Node3D
 
     internal const float WorldGravity = PhysicsConstants.NomGravity; // only the 5 GRAVITY rockets use it
                                                                      // (shared: FlightController's reticle integration reads it too)
-    internal const float RocketSpeedScale = 1f; // dev scale for rocket flyout speed (weapons.rocketSpeedScale);
-                                                // 1.0 = neutral. Rocket feel is a pending playtest A/B — scales
-                                                // both launch velocity and acceleration together so the whole
-                                                // profile stays proportional and the round still expires at RANGE.
-                                                // Magnitudes below route through Config
-                                                // (weapons.tracerLength/tracerWidth/tracerBrightness) so the user can retune the
-                                                // look without a rebuild; these consts are only the defaults (Config.GetFloat falls through
-                                                // to them verbatim with no config.json, so the defaults stay byte-identical for goldens).
-                                                // ⚠ The four tracer constants below are MEASURED off the original's own `rabbit_blur` geometry,
-                                                // not tuned by eye — see docs/org/tracers.md. They are the numbers the authored shape (a crossed
-                                                // quad pair plus a tip disc) carries, so they only make sense together with it. Retune only
-                                                // with the decode open.
+    internal const float RocketSpeedScale = 1f; // rocket launch speed/accel scale (weapons.rocketSpeedScale);
+                                                // 1 = neutral. Scales both together, pending playtest A/B.
+                                                // ⚠ The four tracer constants below are measured off the original's `rabbit_blur` geometry, not
+                                                // tuned by eye (docs/org/tracers.md). Retune only with that decode open.
     internal const float TracerLength = 4.5f;   // streak length, m — the authored quad spans z -4.5..0
     internal const float TracerWidth = 0.2f;    // m — both crossed quads are 0.2 m wide
     // The streak's geometry runs FORWARD from the round's simulated position: the position is the
@@ -92,13 +75,9 @@ public sealed partial class ProjectilePool : Node3D
     // cockpit A/B via weapons.tracerMinPixels.
     internal const float TracerMinPixels = 2.0f;
 
-    // How long a gun hit's `<caliber><ammo>_gunhit` instance may run. The family's own
-    // authored emission windows are the bound: ap/dum stop their `whitehotpuffer` at +0.1 s and mag
-    // stops `firepuffer`+`whitehotpuffer` at +0.3 s, while the four **slug** defs — the stock ammo
-    // on every gun — ship no ACTIVE_STATE 0 at all for their `blacksmokepuffer`. The longest
-    // authored stop in the family is therefore what bounds the ones with none. What this cuts short
-    // is the def's flung debris (`bit1`/`bit2`/`bit3` carry no geometry in this install, `chunk` is
-    // one 4-vertex quad) — invisible next to a smoke emitter that would otherwise never stop.
+    // How long a gun hit's `<caliber><ammo>_gunhit` instance may run: the family's longest authored
+    // stop (mag's +0.3 s), bounding the slug defs that ship no stop at all. See
+    // docs/formats/weapon-effects.md for the per-ammo emission windows.
     internal const float GunEffectTtl = 0.3f;
 
     // Minimum sim seconds between two plays of one gun's impact effect. The effect templates are
@@ -127,13 +106,9 @@ public sealed partial class ProjectilePool : Node3D
     // shows the smoke trail alone rather than a stand-in streak.
     private const float MuzzleSize = 0.5f;    // m
     private const float MuzzleLife = 0.05f;   // s
-    // The flash triad: three quads 120 degrees apart sharing one continuous per-shot roll, matched
-    // to the reference stills' 3-lobed burst (MuzzleFlash1-3.png). The def authors ONE
-    // `mb_spinflame` node with a 3-way RANDOM_WEIGHT roll (30/80/140 degrees,
-    // muzzle_burst.zrd.json); what the original ENGINE renders from that — one picked branch, or
-    // all three at once — is not recoverable from the data, and the stills are the ground truth.
-    // The pick-one reading (one rolled quad + the `_muzzle1`->`_muzzle2` frame flip) was
-    // implemented and REJECTED at the controls: it does not reproduce the stills' burst.
+    // The flash triad: three quads 120 degrees apart on one continuous per-shot roll. The
+    // pick-one reading was implemented and rejected at the controls; see
+    // docs/formats/weapon-effects.md "Engine wiring" for the evidence.
     private const int MuzzleFlashCount = 3;
     private const float ImpactSize = 3.0f;    // m
     private const float ImpactLife = 0.14f;   // s
@@ -180,49 +155,24 @@ public sealed partial class ProjectilePool : Node3D
     private const float RicochetSparkSpeed = 22f;   // m/s launch speed
     private const float RicochetSpreadDeg = 90f;    // cone half-angle around the surface normal
 
-    // The authored water-splash playback (splash1.zrd.json / bsplsh.zrd.json — identical shapes):
-    // the instanced model's `*_base` disc scales xz 1→2 over 0.2 s then eases back to 1.8 over
-    // [1.0,2.0] s, while the `*_splash` column pops to its authored scale (1,100,1) and collapses
-    // to zero over the 2 s run (OBJECT_MOTION SCALE initial+delta·u — MotionRuntime's decode).
-    // Values verbatim from the defs, including the
-    // 0.05 s opacity fade-in / 1 s fade-out (OBJECT_OPACITY_FROM_TO targets the WHOLE
-    // `splash1.flt`/`bsplsh.flt` root, i.e. base disc AND column together, not the column
-    // alone) and the column's `splash01→03` flipbook.
+    // The authored water-splash playback, verbatim from splash1.flt/bsplsh.flt (identical shapes).
+    // See docs/formats/weapon-effects/ordnance.md "Water splash playback" for the source events.
     private const float SplashRunTime = 2.0f;      // s, the def's sequence length
     private const float SplashBaseGrowTime = 0.2f; // s, base 1→2
     private const float SplashBaseEaseStart = 1.0f; // s (0.2 + EVENT_OFFSET 0.8), 2→1.8 over 1 s
     private const float SplashBaseMax = 2.0f, SplashBaseEnd = 1.8f;
     private const float SplashColumnScale = 100f;  // the column's authored initial Y scale
-    // OBJECT_OPACITY_FROM_TO on splash1.flt/bsplsh.flt (verbatim, both defs identical): 0→1 over
-    // 0.05 s, hold, then 1→0 over 1.0 s starting at 0.05 + EVENT_OFFSET 0.95 = 1.0 s — so the
-    // fade-out's start coincides numerically with the base disc's own ease-start
-    // (SplashBaseEaseStart) but the two are independent authored events, not one shared value.
     private const float SplashFadeInTime = 0.05f;   // s
     private const float SplashFadeOutStart = 1.0f;  // s (0.05 + EVENT_OFFSET 0.95)
     private const float SplashFadeOutTime = 1.0f;   // s
-    // The column's authored splash01→03 flipbook rate (OBJECT_CYCLE_TEXTURE reset in both defs),
-    // 3 frames @4 fps verbatim (C1B's own materials.json: material 135's `cycle` block). See
-    // SplashFlipbookTextures below for why this needs its own registration path.
+    // The column's authored flipbook rate; docs/formats/weapon-effects/ordnance.md as above.
     private const float SplashFlipbookFps = 4f;
-    // TUNE, source-visible for the A/B (same pattern as MuzzleFlashCount): the authored
-    // splash1_splash quad is literally 5 cm wide — sub-pixel past ~30 m — while the reference
-    // ticks in `Water Splash.png` measure ~0.35 m, which 8× matches. Judged at the controls
-    // with the fades in: 1× still reads as a thin stripe, so 8× is the shipped
-    // width. Set to 1 to reach the authored literal width. Not a `const`: both
-    // paths stay reachable without deleting either.
+    // TUNE, source-visible for the A/B: 8x the authored literal width, judged at the controls.
+    // docs/formats/weapon-effects/ordnance.md as above. Not a `const` so a run can set it to 1.
     private static readonly float SplashColumnWidthScale = 8f;
-    // The column's authored flipbook frame textures. Reuses TextureCycler's frame-swap machinery
-    // (its architecture entry: "Runs the gamez material cycle flipbooks... by swapping
-    // albedo_tex; frames resolve at build time while the TextureArchive is open") rather than a
-    // bespoke per-sprite flip, since this IS that same mechanism's data — just not reached by
-    // SceneBuilder's automatic per-polygon registration: splash1_splash's own polygon binds to a
-    // SIBLING material (136) that carries the identical splash01.tif texture but no cycle block
-    // (bsplsh_splash's polygon, unlike the gun's, does bind directly to the cycling material).
-    // Registered lazily on the actual built material the first time each is seen
-    // (EnsureSplashFlipbook), so it self-heals either way. Once registered it runs like every
-    // other world flipbook: globally and continuously, not reset per hit — concurrent splashes
-    // share one synced frame, the same simplification the water/wake/surf cycles already ship
-    // with (effects.md).
+    // The column's authored flipbook frames, reusing TextureCycler's frame-swap machinery: not
+    // reached by SceneBuilder's automatic registration, since splash1_splash's polygon binds a
+    // sibling material with no cycle block, so EnsureSplashFlipbook registers it lazily instead.
     private static readonly string[] SplashFlipbookTextures = { "splash01", "splash02", "splash03" };
 
     private static readonly Color RicochetTint = new(1f, 0.95f, 0.6f); // white-hot spark yellow
@@ -249,13 +199,9 @@ public sealed partial class ProjectilePool : Node3D
     private static readonly string[] TracerTextures =
         { "tracer_slug", "tracer_dumdum", "tracer_armorpierce", "tracer_magnesium" };
 
-    // The tip disc's own texture axis, index-parallel to TracerTextures: the authored streak's
-    // bright head is a SEPARATE mesh on its own texture (`slugtip`/`dumdumtip`/`armourpiercetip`/
-    // `magnesiumtip`), an octagonal disc perpendicular to the flight axis sitting TracerTipOffset
-    // ahead of the round. Perpendicular means it shows its full face only to a round coming at or
-    // going away from the viewer and is edge-on from the side — that self-hiding is authored, not a
-    // bug to compensate for. ⚠ Note the spelling: the AP entry is `armourpiercetip` (British) while
-    // its streak is `tracer_armorpierce` (American); both are as shipped.
+    // The tip disc's texture axis, index-parallel to TracerTextures (docs/org/tracers.md).
+    // ⚠ Keep the spelling as shipped: the AP entry is `armourpiercetip` (British) while its
+    // streak is `tracer_armorpierce` (American).
     private static readonly string[] TipTextures =
         { "slugtip", "dumdumtip", "armourpiercetip", "magnesiumtip" };
 
@@ -307,15 +253,12 @@ public sealed partial class ProjectilePool : Node3D
     // Pooled muzzle-light flashes: real OmniLight3Ds, reused round-robin.
     private readonly List<LightFlash> _lights = new();
 
-    // The named IMPACT effect models: a per-surface IMPACT `ANIMATION` whose name is a chapter
-    // gamez node (the water splash prototypes) is instanced at the hit point via the same flyout
-    // GameZ/SceneBuilder above. Names that resolve to a reader/control def or nothing (the gun
-    // `3040slug_gunhit` smoke, `he_ground_effect`, `bld_damage.flt`) stay on the stand-in spark —
-    // their runtime PUFFER_STATE half plays through EffectSink (the puffer factory is torn down
-    // after the world build).
     // The session's wind, read by the rocket-trail puffers this pool builds. Rocket trails
     // carry FRICTION and no WIND_FACTOR, so they take the engine default of 1 — fully carried.
     private readonly Effects.EffectAmbience _ambience = Effects.EffectAmbience.Still;
+    // A per-surface IMPACT `ANIMATION` naming a chapter gamez node (the water splash prototypes)
+    // is instanced at the hit point via the flyout GameZ/SceneBuilder. Everything else — a
+    // reader/control def or an unresolved name — stays on the stand-in spark instead.
     private readonly Dictionary<string, GameZNode?> _impactNodes = new(); // impact anim name → prototype (cached)
     private readonly HashSet<string> _impactFxLogged = new();
     private readonly List<ImpactFx> _impactFx = new();
@@ -402,18 +345,12 @@ public sealed partial class ProjectilePool : Node3D
         Name = "projectiles";
     }
 
-    /// <summary>Every camera that can see this pool's tracers — one per player pane in splitscreen,
-    /// GameSession's own <see cref="ViewerSet"/> by default so binding it once, right after the
-    /// rigs are built, is the whole wiring. Used only by the <see cref="TracerMinPixels"/> distance
-    /// floor, which is a SCREEN-space rule applied to ONE shared world-space mesh, so it can only
-    /// ever be satisfied exactly for one viewer. ⚠ Bind them ALL. Binding player 1's alone (as this
-    /// did until the splitscreen fix) floors every round against P1's distance and P1's pane height
-    /// and then draws that same inflated geometry in every other pane, where a round 1000 m from P1
-    /// but 100 m from P2 is blown up roughly 10x in P2's view. The floor now takes the NEAREST
-    /// viewer, so a round is never inflated for anyone — at worst it is under-floored for a distant
-    /// pane, which is just the un-floored look. A fresh, unbound set (every non-session caller: the
-    /// weapon bench, the `Suites.cs` labs) means no viewers and so no floor — see
-    /// <see cref="TracerFloor"/>.</summary>
+    /// <summary>Every camera that can see this pool's tracers, feeding the
+    /// <see cref="TracerMinPixels"/> distance floor — a screen-space rule applied to one shared
+    /// world-space mesh, so it takes the NEAREST bound viewer. Unbound (weapon bench, `Suites.cs`
+    /// labs) means no floor.
+    /// ⚠ Bind every pane, never player 1 alone: that floored every round against P1's distance and
+    /// inflated it in every other pane too. See <see cref="TracerFloor"/>.</summary>
     public ViewerSet Viewers { get; set; } = new();
 
     /// <summary>Splitscreen's overall gain for this pool's one-shots, the same equal-power figure
@@ -435,12 +372,10 @@ public sealed partial class ProjectilePool : Node3D
     public List<NearMissTarget> NearMissTargets { get; } = new();
 
     /// <summary>Instant Action's wrap-up "Shot %" (docs/formats/instant-action.md "What the four
-    /// numbers count"): the decode counts a cannon
-    /// round fired/hit only when the shooter is <c>the local player</c>; a shooter id in this set
-    /// is that filter generalised to every human pilot for splitscreen (empty — nothing scored —
-    /// outside Instant Action). <see cref="CannonRoundsFired"/>/<see cref="CannonHits"/> below are
-    /// the two counters, both filtered on <see cref="WeaponDef.IsCannon"/> exactly as the decode's
-    /// <c>0x40</c> bit test is.</summary>
+    /// numbers count") counts a cannon round fired/hit only for <c>the local player</c>; a shooter
+    /// id here is that filter generalised to every human pilot for splitscreen, empty outside
+    /// Instant Action. <see cref="CannonRoundsFired"/>/<see cref="CannonHits"/> are the two
+    /// counters, both filtered on <see cref="WeaponDef.IsCannon"/>.</summary>
     public HashSet<int> ScoredShooters { get; } = new();
 
     /// <summary>Cannon rounds a scored shooter fired that actually created a round (the pool was not
@@ -472,17 +407,11 @@ public sealed partial class ProjectilePool : Node3D
             return true;
         return velocity.Normalized().Dot(towardTarget.Normalized()) >= minimumDot.Value;
     }
-    /// <summary>The struck collider's numeric surface id — the index the weapon's <c>IMPACT</c>
+    /// <summary>The struck collider's numeric surface id, the index the weapon's <c>IMPACT</c>
     /// table is read at (<see cref="ImpactOutcome.Resolve"/>), off the same
-    /// <see cref="SceneBuilder.SurfaceIdMeta"/> tag the crash and graze cascades read
-    /// (<c>FlightController.SurfaceIdOf</c>). A collider carrying no tag answers
-    /// <c>default</c>(0), which is <c>FUN_005acf60</c>'s null-material arm
-    /// (<c>surfaceId = hit-&gt;material ? *(int *)(material + 0x20) : 0</c>).
-    /// <para>A struck aircraft answers <c>player</c>(6): our aircraft come from mechlib models
-    /// rather than a chapter's gamez, so they carry no material soil id to read, and 44 of the 48
-    /// weapons author a <c>player</c> row (<c>flak_effectplayer</c> and friends) that nothing else
-    /// could select. Which id the original's own plane materials carry is not decoded; this arm
-    /// keeps the pre-B11 behaviour rather than inventing a new one.</para></summary>
+    /// <see cref="SceneBuilder.SurfaceIdMeta"/> tag the crash and graze cascades read. An
+    /// untagged collider answers <c>default</c>(0); a struck aircraft answers <c>player</c>(6).
+    /// See docs/org/weaponImpact.md for the decode behind both arms.</summary>
     public static int SurfaceIdOf(Node? collider)
     {
         if (collider is AircraftBody)
@@ -499,18 +428,12 @@ public sealed partial class ProjectilePool : Node3D
     /// bound to this, so a landing piece, a round and a wingtip cannot disagree about the sea.</summary>
     public static bool SurfaceIsWater(Node? collider) => SurfaceIdOf(collider) == SurfaceRegistry.Water;
 
-    /// <summary>D31's distance term (`BL-370`): linear falloff between a one-shot's own RANGE — 1
-    /// at or inside the full-volume distance (<paramref name="rangeMin"/>), 0 at or past the
-    /// audible distance (<paramref name="rangeMax"/>), the same [full-volume, audible] reading
-    /// <see cref="WorldSounds"/> gives the RANGE pair for its positional emitters.
-    /// <paramref name="distance"/> is measured to the NEAREST human, not the nearest pane camera —
-    /// the gameplay seam, per this plan's seam-choice decision — so a shooter's own muzzle/impact
-    /// reads full volume while a firefight at the other end of a splitscreen map fades for everyone
-    /// else. 1 (no attenuation) at <see cref="float.MaxValue"/> — no listener seam wired, nothing
-    /// to measure against. TUNE: linear, not Godot's own inverse-distance curve — these one-shots
-    /// stay plain <c>AudioStreamPlayer</c>s, not <c>AudioStreamPlayer3D</c>, so there is no engine
-    /// curve to match. `public static` (not the class's usual instance-private shape) so D32's
-    /// <c>FlightAudio</c> one-shots reuse this exact term rather than a second implementation.</summary>
+    /// <summary>A one-shot's distance term: linear falloff from 1 at <paramref name="rangeMin"/>
+    /// to 0 at <paramref name="rangeMax"/>, the same [full-volume, audible] pair
+    /// <see cref="WorldSounds"/> reads for its positional emitters. <paramref name="distance"/> is
+    /// measured to the NEAREST human, not the nearest pane camera. TUNE: linear rather than
+    /// Godot's inverse-distance curve, since these stay plain <c>AudioStreamPlayer</c>s. Static so
+    /// <c>FlightAudio</c>'s one-shots reuse this term too.</summary>
     public static float DistanceGain(float distance, float rangeMin, float rangeMax)
     {
         if (distance >= float.MaxValue)
@@ -525,14 +448,11 @@ public sealed partial class ProjectilePool : Node3D
     /// <see cref="AircraftBody.PlayerIndex"/> is matched against each round's shooter id).</summary>
     public void RegisterAircraft(AircraftBody body) => _aircraft.Add(body);
 
-    /// <summary>Appends this pool's live proximity-fused rounds to the gun assist's candidate set
-    /// (`BL-342` B4) — the original's fourth candidate list, which is a FILTER over the rounds in
-    /// flight rather than a structure of its own: the engine registers a tracking record after every
-    /// spawn whose def carries a fuse longer than <see cref="AimAssist.MinFuseDistance"/>. Reads the
-    /// round's own <c>Team</c>, stamped once at <see cref="Spawn"/> from the shooter's
-    /// <c>FlightController.Team</c> rather than re-derived from the shooter id here; a round
-    /// nobody owns lands on <see cref="AimAssist.NeutralTeam"/> and is therefore rejected by the
-    /// scorer's team gate, same as the engine's own "either side is 0" rule.</summary>
+    /// <summary>Appends this pool's live proximity-fused rounds to the gun assist's candidate set:
+    /// a filter over rounds in flight whose def carries a fuse longer than
+    /// <see cref="AimAssist.MinFuseDistance"/>. Reads the round's own <c>Team</c>, stamped once at
+    /// <see cref="Spawn"/>; a round nobody owns lands on <see cref="AimAssist.NeutralTeam"/> and
+    /// is rejected by the scorer's team gate.</summary>
     public void CollectFusedOrdnance(AimCandidateSet into)
     {
         for (int i = 0; i < _proj.Length; i++)
@@ -546,15 +466,11 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>Appends every registered aircraft to the assist's candidate set (`BL-342` B5) — the
-    /// original's `VehicleList` pass, which is aircraft plus the AI ground/sea vehicles M4 will add.
-    /// The registered bodies are the one live roster of flying planes this pool already keeps (for
-    /// the hit ray and the fuse), so the assist reads the same list rather than a second one that
-    /// could drift. Reads each rig's own <see cref="FlightController.Team"/>, never re-derives
-    /// one from its <c>PlayerIndex</c>. A pilot that is not in play — crashed, or INERT
-    /// (<see cref="FlightController.InPlay"/>) — is present but not live, which is the engine's
-    /// own dead-candidate rejection; the shooter excludes itself through
-    /// <see cref="AimScan.Self"/>.</summary>
+    /// <summary>Appends every registered aircraft to the assist's candidate set, reading the one
+    /// live roster this pool already keeps for the hit ray and the fuse rather than a second list
+    /// that could drift. Reads each rig's own <see cref="FlightController.Team"/>. A crashed or
+    /// INERT pilot (<see cref="FlightController.InPlay"/>) is present but not live; the shooter
+    /// excludes itself through <see cref="AimScan.Self"/>.</summary>
     public void CollectAircraft(AimCandidateSet into)
     {
         foreach (var body in _aircraft)
@@ -564,13 +480,10 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>Appends every registered aircraft's carried turrets and every world
-    /// emplacement to the assist's candidate set — the original's `TurretList` pass. A
-    /// carried turret rides its host, so it moves with the host's velocity and sits on the
-    /// host's <see cref="FlightController.Team"/>; the host's own scan rejects it through that
-    /// same team gate, never through Self (the turret is its own Source). An emplacement carries its
-    /// own team and platform velocity, and stays listed while dormant — a sleeping AA gun is still a
-    /// lockable object; only its death delists it as live.</summary>
+    /// <summary>Appends every registered aircraft's carried turrets and every world emplacement to
+    /// the assist's candidate set. A carried turret rides its host's velocity and team; the host's
+    /// own scan rejects it through that team gate, never through Self. An emplacement stays listed
+    /// while dormant — a sleeping AA gun is still lockable; only its death delists it.</summary>
     public void CollectTurrets(AimCandidateSet into)
     {
         foreach (var body in _aircraft)
@@ -601,15 +514,9 @@ public sealed partial class ProjectilePool : Node3D
 
     public override void _Ready()
     {
-        // Tracers are velocity-aligned streaks (NOT billboarded — billboard would collapse the
-        // long streak into a screen-vertical bar); muzzle/impact bursts are oriented quads too, each
-        // carrying its own basis (Sprite.Orient) — the muzzle flash rolls in the firing plane's
-        // basis, the impact spark faces the struck surface normal; neither is a fixed world plane.
-        // One MultiMesh per tracer texture (TracerTextures) — its material is shared across every
-        // instance it draws, same reason the muzzle flash is split per ammo texture.
-        // The streak mesh is the authored CROSSED PAIR, not a single quad: two perpendicular quads
-        // in one mesh, so a round still costs one instance and the streak reads solid from every
-        // angle without consulting the camera at all (docs/org/tracers.md).
+        // Tracers are velocity-aligned streaks, not billboarded, or a long streak would collapse
+        // into a screen-vertical bar. One MultiMesh per texture; the streak mesh is the authored
+        // crossed pair (docs/org/tracers.md), so it reads solid without consulting the camera.
         for (int i = 0; i < TracerTextures.Length; i++)
             _tracerMm[i] = AddMultiMesh(TracerTextures[i], MaxProjectiles, additive: true, billboard: false, out _, CrossedStreakMesh());
         // The tip discs. Carried on a plain quad rather than the authored octagon: the texture is a
@@ -637,31 +544,12 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>Fires one round of <paramref name="weapon"/> from the world muzzle transform,
-    /// inheriting the launch platform's velocity, along <paramref name="aimDir"/> — or exactly
-    /// along the muzzle axis when none is given. The original applies no dispersion here;
-    /// <c>CANNON_SPREAD</c> is the aim assist's acceptance cone, not a scatter (`BL-342`/A1). Also
-    /// flashes the muzzle. Silently drops the round if the pool is momentarily full (a soft cap,
-    /// never a crash).
-    ///
-    /// <para><paramref name="shooterId"/> is who fired — a <c>FlightController.PlayerIndex</c>, or
-    /// <see cref="NoShooter"/> for a round nobody owns (the weapon lab). It exists for the
-    /// near-miss cue's self-exclusion, so a pilot flying through their own line of fire never
-    /// warns themselves; identity, not weapon, is what excludes.</para>
-    ///
-    /// <para><paramref name="aimDir"/> is a world direction the CALLER computed (the gun path's
-    /// aim-assist vector, `BL-342`/B5). ⚠ Keep it that way: an assisted direction is a value
-    /// produced at the fire call, never re-derived inside this method, so a networking milestone
-    /// can feed a received vector here and get the shooter's own answer rather than a locally
-    /// re-run scan that would diverge (`BL-342`/B6).</para>
-    ///
-    /// <para><paramref name="team"/> is the round's team for <see cref="CollectFusedOrdnance"/>'s
-    /// candidate stamp — stamped ONCE at spawn, not re-derived from
-    /// <paramref name="shooterId"/> on every scan, so a caller with a real
-    /// <c>FlightController.Team</c> (a mission override, not the pilot-index default) is
-    /// answered faithfully for the round's whole flight. Omitted, it falls back to
-    /// <see cref="AimAssist.TeamOfPilot"/>(<paramref name="shooterId"/>), the same default every
-    /// unowned/bench/turret caller already got.</para></summary>
+    /// <summary>Fires one round of <paramref name="weapon"/> from the muzzle transform, inheriting
+    /// platform velocity, along <paramref name="aimDir"/> or the muzzle axis when none is given.
+    /// <c>CANNON_SPREAD</c> is the aim assist's acceptance cone, not a scatter — no dispersion here.
+    /// Silently drops the round if the pool is momentarily full. <paramref name="shooterId"/> is who
+    /// fired, used for the near-miss cue's self-exclusion; <paramref name="team"/> stamps the
+    /// round's team once, read by <see cref="CollectFusedOrdnance"/>.</summary>
     public void Spawn(WeaponDef weapon, Transform3D muzzle, Vector3 inheritVel, int shooterId = NoShooter,
         Node3D? muzzleAnchor = null, Vector3? aimDir = null, int? team = null)
     {
@@ -670,6 +558,9 @@ public sealed partial class ProjectilePool : Node3D
         // one-shot with no double-up risk.
         if (weapon.Fire?.Sound is { } fireSnd)
             PlaySound(fireSnd, muzzle.Origin);
+        // ⚠ aimDir is a value the CALLER computed (the gun path's aim-assist vector). Never
+        // re-derive it here, so a networking milestone can feed a received vector and get the
+        // shooter's own answer rather than a locally re-run scan that would diverge.
         var forward = aimDir is { } aim && aim.LengthSquared() > 1e-12f
             ? aim.Normalized()
             : -muzzle.Basis.Z.Normalized();
@@ -685,10 +576,8 @@ public sealed partial class ProjectilePool : Node3D
             accel *= scale;
         }
         var tint = weapon.IsRocket ? RocketTint : SlugTint;
-        // The tracer's own ammo-type axis (TracerTextures/TipTextures, index-parallel) — reuses
-        // MuzzleAmmoIndex, the same FIRE-binding resolution as the muzzle flash. Ordnance draws no
-        // streak at all (RenderTracers skips it), so the old generic-tracer1 fallback is gone and
-        // this index is simply unused on a rocket.
+        // TracerTextures/TipTextures index, reusing MuzzleAmmoIndex; unused on a rocket, since
+        // RenderTracers draws no streak for ordnance.
         int tracerIdx = MuzzleAmmoIndex(weapon);
         // Brightness is baked into the tint at spawn (weapons.tracerBrightness) rather than read
         // per frame — a round's tint stands for its whole life, same as everything else in Proj.
@@ -716,6 +605,9 @@ public sealed partial class ProjectilePool : Node3D
                 model.GlobalTransform = FlyoutPose(muzzle.Origin, vel);
             float rollRate = 0f;
             var trails = weapon.IsRocket ? AcquireTrails(weapon, muzzle.Origin, muzzle.Basis, out rollRate) : null;
+            // Team is stamped once here, never re-derived from shooterId on a later scan, so a
+            // caller with a real FlightController.Team is answered faithfully for the round's
+            // whole flight.
             _proj[slot] = new Proj
             {
                 Alive = true,
@@ -741,13 +633,9 @@ public sealed partial class ProjectilePool : Node3D
         var muzzleSprites = _muzzle[ammoIdx];
         if (muzzleSprites.Count + MuzzleFlashCount <= MaxFlashes)
         {
-            // The triad rolls with the firing aircraft: its base orientation IS the muzzle's world
-            // basis, which inherits the plane's roll/pitch/yaw — not a fixed world plane. Each of
-            // the three quads is that basis rolled about its own facing normal (Z, unaffected by
-            // the roll) by a shared per-shot random angle plus its 120-degree slot. When the
-            // shooter passes its live muzzle node, the flash sprites store their pose LOCAL to it
-            // and ride the plane — the def plays muzzle_burst AT that node, and a world-fixed
-            // flash is flown through at speed (user-reported at the controls).
+            // The triad's base orientation is the muzzle's world basis, so it rolls with the
+            // aircraft rather than a fixed world plane (a world-fixed flash was flown through at
+            // speed, user-reported at the controls).
             var planeBasis = muzzle.Basis.Orthonormalized();
             bool anchored = muzzleAnchor != null;
             var invBasis = anchored ? planeBasis.Inverse() : Basis.Identity;
@@ -767,11 +655,8 @@ public sealed partial class ProjectilePool : Node3D
                     AnchorLeft = true,
                 });
             }
-            // Verification breadcrumbs (two, low-volume): the first flash reads a stored sprite's
-            // facing normal back and confirms it IS the aircraft basis's at spawn (match≈1.000 — a
-            // regression that stopped feeding Orient would read 0, and the roll leaves Z untouched);
-            // a second sample once the plane has had a second to maneuver shows that basis rolled
-            // with it, not locked to a world plane.
+            // Two low-volume breadcrumbs confirming the stored sprite basis matches the aircraft's,
+            // at spawn and again once the plane has had a second to maneuver.
             double t = GameClock.Current?.Time ?? 0.0;
             if (_muzzleBasisLogs < 2 && (_muzzleBasisLogs == 0 || t >= 1.0))
             {
@@ -796,14 +681,12 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>Instances a weapon's <c>FLYOUT</c> <c>MODEL</c> body — its <c>.flt</c> prototype root
-    /// in the chapter gamez (<c>he_rocket</c>, <c>ap_rocket</c>, <c>sonic</c>, …) — as a fresh,
-    /// collision-exempt <see cref="Node3D"/>, returned <b>un-parented</b> for the caller to place. The
-    /// resolved prototype node is cached per model name; the geometry is authored nose-along-(-Z).
-    /// Shared by the in-flight rocket body and the mounted pylon ordnance
-    /// (<see cref="PylonOrdnance"/>): the round hanging on the wing and the round that flies off it are the same asset. Null
-    /// when no world scene is bound (viewer / headless dump), the weapon carries no <c>FLYOUT</c>
-    /// <c>MODEL</c>, or the chapter gamez lacks the prototype root.</summary>
+    /// <summary>Instances a weapon's <c>FLYOUT</c> <c>MODEL</c> body, its <c>.flt</c> prototype root
+    /// in the chapter gamez, as a fresh collision-exempt <see cref="Node3D"/>, returned unparented
+    /// for the caller to place. Shared by the in-flight rocket body and
+    /// <see cref="PylonOrdnance"/>'s mounted round, the same asset either way. Null when no world
+    /// scene is bound, the weapon carries no <c>FLYOUT</c> <c>MODEL</c>, or the gamez lacks the
+    /// prototype root.</summary>
     public Node3D? BuildFlyoutBody(WeaponDef weapon)
     {
         if (_flyoutScene == null || _flyoutGamez == null || weapon.Flyout?.Model is not { } modelName)
@@ -876,12 +759,9 @@ public sealed partial class ProjectilePool : Node3D
                     ReleaseTrails(ref p);
                     continue;
                 }
-                // No direct hit this step — the proximity fuse may still pop the round near a
-                // plane. Checked AFTER the ray so a round that would strike its target keeps the
-                // full direct hit. The fused-on body rides into Impact for per-surface
-                // effect/sound selection (the weapon's `player` IMPACT entry); its damage arrives
-                // through the blast's aircraft pass with falloff, never the direct-hit branch
-                // (shapeIdx -1 keeps it out).
+                // Checked AFTER the ray, so a round that would strike its target keeps the direct
+                // hit. Damage arrives through the blast's aircraft pass, not this branch (shapeIdx
+                // -1 keeps it out of the direct-hit path).
                 if (ProximityFuseTriggered(p.Weapon, p.Shooter, prev, next, p.Vel,
                         out var fusePoint, out var fused, out var towardHull))
                 {
@@ -1022,12 +902,8 @@ public sealed partial class ProjectilePool : Node3D
                 f.SplashRest.Basis.Orthonormalized().Scaled(
                     new Vector3(SplashColumnWidthScale, y, SplashColumnWidthScale)), f.SplashRest.Origin);
         }
-        // OBJECT_OPACITY_FROM_TO: 0->1 over 0.05 s, hold, 1->0 over the last second —
-        // applied to base AND column together (the def's target is the model root), each through
-        // its own per-instance csky_opacity so concurrent splashes fade independently even though
-        // they may share one twinned material (EnsureSplashFade). This is what prevents pop-in:
-        // t=0 is posed before the first tick (see SpawnImpactModel), so a fresh splash starts
-        // invisible rather than snapping to full scale.
+        // Applied to base and column through separate per-instance shader params, so concurrent
+        // splashes fade independently even when sharing one twinned material (EnsureSplashFade).
         float alpha = SplashOpacity(t);
         f.BaseMesh?.SetInstanceShaderParameter(SceneBuilder.OpacityParam, alpha);
         f.SplashMesh?.SetInstanceShaderParameter(SceneBuilder.OpacityParam, alpha);
@@ -1165,10 +1041,8 @@ public sealed partial class ProjectilePool : Node3D
             var origin = s.Pos;
             if (s.Anchor is { } anchor)
             {
-                // Anchored sprites store Pos/Orient LOCAL to the anchor node: the muzzle flash
-                // rides the plane (the def plays muzzle_burst AT the muzzle node — a world-fixed
-                // flash is flown through at speed). An anchor freed or unparented mid-flash (the
-                // plane died) skips the draw for the sprite's last few milliseconds.
+                // Pos/Orient are LOCAL to the anchor node, so the flash rides the plane. An anchor
+                // freed or unparented mid-flash skips the draw for the sprite's last few ms.
                 if (!GodotObject.IsInstanceValid(anchor) || !anchor.IsInsideTree())
                     continue;
                 var xf = anchor.GlobalTransform;
@@ -1206,16 +1080,8 @@ public sealed partial class ProjectilePool : Node3D
             BillboardMode = billboard ? BaseMaterial3D.BillboardModeEnum.Enabled : BaseMaterial3D.BillboardModeEnum.Disabled,
             BillboardKeepScale = true,
             VertexColorUseAsAlbedo = true,
-            // None of these quads tile — every one draws exactly one whole texture. Left at the
-            // engine default (true), bilinear filtering at the UV=0/1 edge blends in the OPPOSITE
-            // edge (wrap), which is the tail artifact on a tracer streak (bright front bleeding into
-            // the dark tail). (⚠ Do not add a `Uv1Scale.x=-1` mirror here: with `TextureRepeat`
-            // off and no matching `Uv1Offset`, it clamps every
-            // sample to the texture's single U=0 column instead of mirroring it, so every sprite
-            // drawn by this pool — tracer, muzzle flash, impact, smoke — renders as a flat colour
-            // stripe instead of its texture. A texture that needs flipping gets
-            // that from its own geometry — e.g. RenderTracers rotates the streak quad 180° about its
-            // own facing normal — never from a `Uv1Scale` mirror on this shared material.)
+            // ⚠ Do not add a `Uv1Scale.x=-1` mirror here. Without a matching `Uv1Offset` it clamps
+            // every sample to one texture column, flattening every sprite this pool draws.
             TextureRepeat = false,
         };
         Mesh drawn;
@@ -1407,22 +1273,15 @@ public sealed partial class ProjectilePool : Node3D
         return null;
     }
 
-    /// <summary>Instances a named IMPACT effect's gamez MODEL prototype at the hit point, when the
-    /// name resolves to a chapter-gamez node carrying geometry (the water splash <c>splash1.flt</c> /
-    /// <c>bsplsh.flt</c>). Reuses the flyout <see cref="GameZ"/>/<see cref="SceneBuilder"/>, is
-    /// collision-exempt, and sits upright at the point; the instance is tracked for a short life and
-    /// freed. Returns false — leaving the stand-in spark to show — when there is no world scene, the
-    /// name is a reader/control def or an unresolved binding (no such node), or the node built no
-    /// mesh (an empty puffer-host root such as <c>gunhit</c>).</summary>
-    // Installs THIS instance's own translucent twin as a surface override, so its
-    // own SetInstanceShaderParameter(OpacityParam, ...) drives the fade without editing the
-    // shared cached material every other splash's mesh also points at (the same never-edit-in-
-    // place rule AnimRuntime's fade-twin cache follows, reusing its derivation —
-    // SceneBuilder.FadeShaderFor — rather than re-deriving one). The twin is cached per SOURCE
-    // material and shared across every instance that needs it; only the per-instance uniform
-    // differs. A source shader with no alpha path is counted, not swallowed — the splash still
-    // plays its scale curves, just without a fade (should not happen for a BiasMaterial-built
-    // world mesh; every variant unconditionally emits the `vec4 col = ` line FadeShaderFor needs).
+    /// <summary>Instances a named IMPACT effect's gamez MODEL prototype at the hit point (the water
+    /// splash <c>splash1.flt</c>/<c>bsplsh.flt</c>), collision-exempt, tracked for a short life and
+    /// freed. Returns false, leaving the stand-in spark to show, when there is no world scene, the
+    /// name resolves to nothing, or the node built no mesh.</summary>
+    // Installs this instance's own translucent twin as a surface override, so its own
+    // per-instance uniform drives the fade without editing the shared cached material every other
+    // splash's mesh also points at. Cached per source material (SceneBuilder.FadeShaderFor).
+    // A source with no alpha path is counted, not swallowed: the splash plays its scale curves
+    // without a fade rather than throwing.
     private void EnsureSplashFade(MeshInstance3D mi)
     {
         if (mi.Mesh is not { } mesh || mesh.GetSurfaceCount() == 0)
@@ -1443,14 +1302,10 @@ public sealed partial class ProjectilePool : Node3D
             mi.SetSurfaceOverrideMaterial(0, twin);
     }
 
-    // Registers the column's built material with the shared TextureCycler the first
-    // time it is seen — see the SplashFlipbookTextures field comment for why this cannot rely on
-    // SceneBuilder's automatic per-polygon registration for the gun splash (splash1_splash's own
-    // polygon binds to a sibling non-cycling material, confirmed against C1B's materials.json).
-    // The material registered must be the RENDERED one — the fade twin installed as the surface
-    // override (EnsureSplashFade runs first), not the mesh's source material: the cycler swaps
-    // albedo_tex on exactly the material it is handed, and a twin's duplicated parameters never
-    // follow the source, so a cycle on the source advances invisibly behind the override.
+    // Registers the column's built material with the shared TextureCycler the first time it is
+    // seen (see SplashFlipbookTextures above).
+    // ⚠ Register the RENDERED material, the fade twin from EnsureSplashFade, not the mesh's source:
+    // the cycler swaps albedo_tex on exactly the material it is handed.
     private void EnsureSplashFlipbook(MeshInstance3D mi)
     {
         if (_flyoutScene?.Cycler is not { } cycler)
@@ -1502,11 +1357,8 @@ public sealed partial class ProjectilePool : Node3D
         var baseNode = FindChildByMetaSuffix(inst, "_base");
         var splashNode = FindChildByMetaSuffix(inst, "_splash");
         bool animated = baseNode != null || splashNode != null;
-        // The splash models are authored `lighting: false` + `fog: false` (self-lit effect
-        // geometry — the reference captures show white splashes at night). SceneBuilder honours
-        // both flags on every model, so no hand-rolled unshaded override is needed here: the
-        // instance takes the shared world materials and comes out self-lit, unfogged
-        // and billboarded per its own `Facade` mode, from the data rather than from a guess.
+        // Authored `lighting: false`/`fog: false`; SceneBuilder honours both, so no hand-rolled
+        // unshaded override is needed here.
         var baseMesh = baseNode?.GetNodeOrNull<MeshInstance3D>("mesh");
         var splashMesh = splashNode?.GetNodeOrNull<MeshInstance3D>("mesh");
         // The fade targets base AND column; the flipbook only the column, per the defs.
@@ -1541,10 +1393,8 @@ public sealed partial class ProjectilePool : Node3D
     private void Impact(WeaponDef weapon, Vector3 point, Node? collider, Vector3 normal, int shapeIdx = -1,
         int shooter = NoShooter)
     {
-        // G14's hit-side counter. A cannon round only ever reaches Impact through the direct-hit
-        // ray (SimStep's first call site) — the fuse/range-expiry call sites below are gated to
-        // rockets — so this one guard covers the decode's three hit sites without distinguishing
-        // them, exactly as the decode's own filter (shooter + the CANNON bit) does.
+        // A cannon round only ever reaches Impact through the direct-hit ray, so this one guard
+        // covers the decode's three hit sites without distinguishing them.
         if (weapon.IsCannon && ScoredShooters.Contains(shooter))
             CannonHits++;
         int surface = SurfaceIdOf(collider);
@@ -1553,19 +1403,13 @@ public sealed partial class ProjectilePool : Node3D
         // attempt, so the first resolve is only for the effect NAME to attempt; the second carries
         // the answer. Everything after this line obeys `outcome` — Impact itself decides nothing.
         var outcome = ImpactOutcome.Resolve(weapon, surface, modelResolved: false, hasEffectsRuntime);
-        // The named IMPACT effect: when its `ANIMATION`/`SURFACE_ANIMATION` names a chapter
-        // gamez node (the water splash prototypes), instance it at the hit point and skip the spark
-        // — the authored model IS the effect. The gun/rocket smoke+fireball names resolve to reader
-        // defs or nothing, so nothing instances and the spark stands in (their PUFFER_STATE half
-        // plays through EffectSink).
+        // A chapter gamez node name instances at the hit point and skips the spark; a reader-def
+        // or unresolved name leaves the spark to stand in.
         if (outcome.EffectName is { } fxName && SpawnImpactModel(fxName, point))
             outcome = ImpactOutcome.Resolve(weapon, surface, modelResolved: true, hasEffectsRuntime);
 
-        // Verification breadcrumb: the first few impacts confirm hit detection, surface
-        // classification and which per-surface IMPACT entry the classification selected,
-        // without needing a lucky screenshot; then it goes quiet. It prints the resolved outcome, so
-        // the probe line and the unit assertion say the same thing — `fx=`/`snd=`/`standin=` are
-        // what make a "these two surfaces look the same" report answerable.
+        // Verification breadcrumb: the first few impacts confirm hit detection and surface
+        // classification without needing a lucky screenshot; then it goes quiet.
         if (_impactsLogged < 8)
         {
             _impactsLogged++;
@@ -1587,11 +1431,8 @@ public sealed partial class ProjectilePool : Node3D
         // The impact sprites face the struck surface (SurfaceBasis(normal)) rather than a fixed world
         // plane — a supplier distinct from the muzzle flash's plane basis (both feed Sprite.Orient).
         var orient = SurfaceBasis(normal);
-        // The puffer half: when the effect is not a gamez model — i.e. a stand-in is owed —
-        // hand its name to the world-effects runtime, which builds the smoke/fireball at the hit. The
-        // runtime no-ops on a name it does not carry (the inert `bld_damage.flt`/`f18sparks2`/…), so
-        // the stand-in below still draws for those. A gun hit is throttled and time-bounded —
-        // see GunEffectInterval / GunEffectTtl; a rocket fires at most ~1/s and takes the defaults.
+        // The puffer half, when a stand-in is owed: hand the name to the world-effects runtime,
+        // which no-ops on a name it does not carry. Gun hits are throttled (GunEffectInterval/Ttl).
         if (outcome.StandIn != ImpactStandIn.None && outcome.EffectName is { } fxName
             && (!weapon.IsGun || GunEffectDue(fxName)))
             EffectSink?.Invoke(fxName, point, weapon.IsGun ? GunEffectTtl : 0f);
@@ -1613,29 +1454,20 @@ public sealed partial class ProjectilePool : Node3D
         // Per-surface IMPACT sound (landed): the struck surface's SOUND, else the default's.
         if (outcome.Sound is { } snd)
             PlaySound(snd, point);
-        // A ray-struck aircraft takes the weapon's health/armor damage through its own per-part
-        // model — never the destructible pipeline. Only a ray hit carries a struck shape; a fuse
-        // detonation (shapeIdx -1) leaves its plane to the blast's aircraft pass, where falloff
-        // applies. Everything else goes to the destructible sink as before — a plane never does.
+        // A ray-struck aircraft takes damage through its own part model, never the destructible
+        // pipeline. A fuse detonation (shapeIdx -1) leaves its plane to the blast's aircraft pass.
         if (collider is AircraftBody plane && shapeIdx >= 0)
             plane.TakeProjectileHit(weapon, point, shapeIdx, shooter);
         else
             ApplyDamage(weapon, outcome, point, collider is AircraftBody ? null : collider, shooter);
     }
 
-    // The DETONATION_DISTANCE proximity fuse: armed against AIRCRAFT only — the
-    // original fuses on enemies, never terrain (do not re-add a world fuse: it detonates every
-    // rocket 15-50 m short of the surface it was aimed at and, handing Impact a null collider,
-    // locks every hardpoint weapon out of its per-surface IMPACT entry). The round detonates at its
-    // CLOSEST APPROACH to a candidate's collision boxes within the swept step, not at first
-    // entry into fuse range: most rockets author DETONATION_DISTANCE equal to IMPACT_PROXIMITY,
-    // so a first-entry fuse would always detonate exactly where the linear blast falls to zero
-    // and no rocket could ever hurt a plane. While the round is still closing at the step's end
-    // the fuse holds (StillClosingFraction). The shooter's own plane is never a
-    // candidate — a rocket leaves the muzzle INSIDE its own boxes — and neither is one out of
-    // play: a wreck, or an INERT airframe. ⚠ This walk is the pool's OWN roster, not a
-    // physics query, so the collision layer that hides an inert plane from the hit ray never
-    // reaches it — FlightController.InPlay does.
+    // ⚠ Do not re-add a world fuse. It detonates every rocket short of its target and locks every
+    // hardpoint weapon out of its per-surface IMPACT entry. Armed against aircraft only.
+    // Detonates at CLOSEST APPROACH within the swept step, not first entry, or most rockets would
+    // detonate where the linear blast falls to zero and never hurt a plane. The shooter's own
+    // plane and a wreck/INERT airframe are never candidates. ⚠ This walk is the pool's own roster,
+    // not a physics query, so it needs FlightController.InPlay itself.
     private bool ProximityFuseTriggered(WeaponDef weapon, int shooter, Vector3 from, Vector3 to,
         Vector3 velocity, out Vector3 detonationPoint, out AircraftBody? fused, out Vector3 towardHull)
     {
@@ -1685,15 +1517,10 @@ public sealed partial class ProjectilePool : Node3D
         return body.GlobalPosition;
     }
 
-    // A neighbour's splash falloff distance must be measured to the nearest point on ITS
-    // OWN collision shape, not to the shape owner's transform origin — a large body (a zeppelin
-    // gasbag, a long building mesh) otherwise soaks less splash than a small one, or none at all
-    // when its origin happens to fall outside the sweep sphere entirely even though its skin does
-    // not. `GetRestInfo` against the same blast sphere, with every OTHER body the sweep found
-    // excluded, returns the contact point where the sphere first touches THIS body's surface —
-    // exactly the nearest point the Approach calls for. Falls back to the origin only if that
-    // query somehow finds nothing (the body was already known to overlap the sphere via
-    // `IntersectShape`, so this is a defensive fallback, not the expected path).
+    // ⚠ Measure splash falloff to the nearest point on the neighbour's OWN collision shape, never
+    // its transform origin. A large body (a zeppelin gasbag, a long building mesh) otherwise soaks
+    // less splash than a small one, or none at all if its origin sits outside the sweep sphere.
+    // Falls back to the origin only as a defensive case; IntersectShape already found an overlap.
     private Vector3 NearestBlastPoint(PhysicsDirectSpaceState3D space, Vector3 center, float radius,
         Node3D body, Rid bodyRid, Godot.Collections.Array<Godot.Collections.Dictionary> hits, int shapeIndex)
     {
@@ -1765,16 +1592,11 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    // The blast's aircraft pass: every registered flying plane inside the weapon's
-    // IMPACT_PROXIMITY radius — never the shooter's own (the guns invariant applied
-    // consistently, not a balance opinion) and never one out of play, a wreck or an INERT
-    // airframe (FlightController.InPlay, E10 — the same roster-walk caveat as the
-    // fuse above: no physics query is involved, so the collision layer alone would not shield
-    // it) — takes the weapon's own
-    // ARMOR/HEALTH damage scaled by the same linear falloff the destructible sink applies,
-    // measured to the nearest point on the plane's OWN collision boxes (the
-    // blast-neighbor-shape rule) and struck at that box, so part mapping and kill attribution
-    // run the exact direct-hit path.
+    // Every registered flying plane inside the weapon's IMPACT_PROXIMITY radius, never the
+    // shooter's own and never one out of play (same roster-walk caveat as the fuse above), takes
+    // damage scaled by the same linear falloff as the destructible sink, measured to the nearest
+    // point on the plane's own collision boxes and struck there, so kill attribution runs the
+    // exact direct-hit path.
     private void BlastAircraftPass(WeaponDef weapon, Vector3 point, float radius, int shooter)
     {
         foreach (var plane in _aircraft)
@@ -1843,13 +1665,9 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    // Ejects one shell casing: a pooled instance of the chapter-gamez
-    // `gunshell` prototype (its `g1` child carries the shell mesh), launched with the
-    // gunshell def's own `OBJECT_MOTION` read verbatim from the anim program — the ranged
-    // ballistic drop and the forward-rotation tumble over its `RUN_TIME`, same semantics as
-    // `MotionRuntime`. Each casing rides its own transient node, so sustained fire ejects at
-    // gun rate — nothing shares the `gunshell` anchor. No-op without a world scene/anim
-    // program (the weapon lab, the empty stage).
+    // Ejects one shell casing: a pooled instance of the `gunshell` prototype, launched with its
+    // def's own OBJECT_MOTION (MotionRuntime semantics). Each casing rides its own transient node,
+    // so sustained fire ejects at gun rate. No-op without a world scene/anim program.
     private void SpawnCasing(Transform3D muzzle)
     {
         var spec = CasingSpecResolve();
@@ -1858,12 +1676,8 @@ public sealed partial class ProjectilePool : Node3D
         var slot = AcquireCasing();
         if (slot != null)
         {
-            // MotionRuntime's translation_range read, through its own expression so the two
-            // cannot drift: `xz`/`y` are an azimuth/elevation in degrees and `initial` the launch
-            // speed. The authored gunshell values are ±10° of bearing at −75…−85° of elevation and
-            // 1.5–1.8 m/s — a casing dropping out of the gun port, which is why the direction is
-            // taken in the MUZZLE's frame rather than the world's: a rolling plane throws its brass
-            // out sideways, not at the ground.
+            // Direction is drawn in the MUZZLE's frame, not the world's, so a rolling plane throws
+            // its brass out sideways rather than at the ground.
             slot.Basis = muzzle.Basis.Orthonormalized();
             slot.Start = muzzle.Origin;
             var dir = Mech3.Anim.MotionRuntime.RangeLaunchDirection(
@@ -2137,18 +1951,11 @@ public sealed partial class ProjectilePool : Node3D
 
     private float RandRange(float a, float b) => a + _rng.Randf() * (b - a);
 
-    // A weapon's SOUND binding (FIRE/IMPACT) may name a SOUND_GROUPS entry (e.g. the incendiary
-    // rocket's ground_mixed_exp_sg default impact) rather than a plain sounds.json SETS def —
-    // resolve it through the group first, same as WorldSounds.PlayOneShot, or the lookup below
-    // misses and the call silently no-ops.
-    //
-    // D31 (BL-370): these players are non-positional (an 8-voice round-robin pool, not
-    // AudioStreamPlayer3D, so A2's per-pane-listener engine rule never touches them), so the
-    // splitscreen answer has to be applied by hand — MixGain, the same equal-power factor
-    // FlightAudio's own-ship loops use, plus a distance term against the NEAREST human
-    // (PlayerPositions, C21's PLAYER_RANGE seam) so a firefight at P2's end of the map doesn't
-    // also blare at P1. worldPos is the FIRE muzzle or the IMPACT point — whichever this call is
-    // for. The 0.2f factor is the pre-existing tuned balance; carried, not re-tuned.
+    // A weapon's SOUND binding may name a SOUND_GROUPS entry rather than a plain sounds.json SETS
+    // def; resolve it through the group first, same as WorldSounds.PlayOneShot, or the lookup
+    // below misses. These players are non-positional, so splitscreen gain (MixGain, plus a
+    // distance term against the nearest human) is applied by hand. The 0.2f factor is the
+    // pre-existing tuned balance, carried rather than re-tuned.
     private void PlaySound(string sndName, Vector3 worldPos)
     {
         if (_sounds == null || _soundDefs == null)
@@ -2220,14 +2027,8 @@ public sealed partial class ProjectilePool : Node3D
 
     private void RenderTracers()
     {
-        // The authored tracer: two perpendicular quads (CrossedStreakMesh) whose shared local Y lies
-        // along the flight direction, running FORWARD from the round's position, capped by a
-        // perpendicular tip disc TracerTipOffset ahead. Not billboarded and — since the crossed pair
-        // reads solid from any angle — not camera-aligned either; the eye is only consulted for
-        // the TracerMinPixels floor. Full-size from the spawn frame, with no muzzle-growth ramp:
-        // the original never scales a gun round. See docs/org/tracers.md.
-        // Config-driven look: read once per frame, not per round — a session-wide setting,
-        // not a per-shot one. Falls through to the in-code defaults verbatim with no config.json.
+        // The authored tracer (docs/org/tracers.md): a crossed pair, not billboarded or
+        // camera-aligned. Config-driven look, read once per frame, a session-wide setting.
         float cfgLength = Config.GetFloat("weapons.tracerLength", TracerLength);
         float cfgWidth = Config.GetFloat("weapons.tracerWidth", TracerWidth);
         float minPixels = Config.GetFloat("weapons.tracerMinPixels", TracerMinPixels);
@@ -2267,20 +2068,13 @@ public sealed partial class ProjectilePool : Node3D
             // here and why nothing in this basis depends on the eye any more.
             var zAxis = yAxis.Cross(Mathf.Abs(yAxis.Dot(Vector3.Up)) > 0.99f ? Vector3.Right : Vector3.Up).Normalized();
             var xAxis = yAxis.Cross(zAxis).Normalized();
-            // The distance-visibility floor: the minimum world size that still covers minPixels on
-            // screen for the NEAREST bound viewer — 0 with none bound (the weapon lab). ⚠ This is
-            // the one place this pool knowingly contradicts the decode: the authored LOD stops
-            // drawing a round past 600 m outright, while this floor keeps inflating it. Kept
-            // deliberately (it came from the reference captures' distant fire) until a shot fired at
-            // a KNOWN range settles which reading is right — see docs/org/tracers.md's closing note.
-            // The tip disc below is deliberately NOT floored.
+            // ⚠ This is the one place this pool knowingly contradicts the decode: the authored LOD
+            // stops drawing past 600 m, while this floor keeps inflating it. See docs/org/tracers.md.
             float floorSize = TracerFloor(p.Pos, minPixels);
             float width = Mathf.Max(cfgWidth, floorSize);
             float len = Mathf.Max(cfgLength, floorSize);
-            // Both width axes scale by the width, the length axis by the length: the mesh's local +Y
-            // is its front, so the streak runs FORWARD from the round. The round's position is the
-            // streak's TAIL — hence the +half-length origin offset rather than the -half this used
-            // to apply, and no 180° flip: the mesh's own UVs already put the head at the front.
+            // The mesh's local +Y is its front; the round's position is the streak's TAIL, hence
+            // the +half-length origin offset below.
             var basis = new Basis(xAxis * width, yAxis * len, zAxis * width);
             var mm = _tracerMm[p.TracerIdx];
             int n = _tracerCounts[p.TracerIdx]++;

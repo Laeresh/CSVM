@@ -5,18 +5,11 @@ namespace CSVM.UI;
 /// <summary>
 /// The static inspection view's orbit-camera controller: LMB-drag orbit, mouse-wheel zoom, and
 /// AABB-based framing of a subject. Shared by <see cref="CSVM.Session.GameSession"/> and the
-/// <c>--anim-lab</c> mode, which drive the same orbit camera without duplicating it.
-///
-/// <para>Owns the orbit state (center / distance / yaw / pitch / drag) and steers a
-/// <see cref="Camera3D"/> it does not own. The host keeps ownership of the placement flags
-/// (resolved into <see cref="Frame"/>'s arguments) and F11/F12 (which read <see cref="OrbitCenter"/>
-/// back out).</para>
-///
-/// <para><b>The pivot is a POINT, not a direction.</b> <see cref="Frame"/>'s <c>lookAt</c> sets
-/// both the point the view orbits and, with the eye, the orbit radius, so a direction-only
-/// placement (<c>--direction</c>) cannot be handed straight in — the host synthesizes a pivot on
-/// the aim ray first. Collapsing that back to a direction would leave the wheel and the drag
-/// spinning about the eye.</para>
+/// <c>--anim-lab</c> mode. Owns the orbit state and steers a <see cref="Camera3D"/> it does not
+/// own; the host keeps ownership of the placement flags and F11/F12. FOV and direction-handling
+/// details: this module's entry in docs/architecture.md.
+/// ⚠ <see cref="Frame"/>'s <c>lookAt</c> is a pivot point, not a direction: with the eye it also
+/// sets the orbit radius, so a direction-only placement must be synthesized into a pivot first.
 /// </summary>
 public sealed class OrbitCamera
 {
@@ -43,13 +36,10 @@ public sealed class OrbitCamera
     public float Yaw { get => _yaw; set => _yaw = value; }
     public float Pitch { get => _pitch; set => _pitch = value; }
 
-    /// <summary>Merges every mesh AABB under <paramref name="root"/> into one world-space box —
-    /// the subject box <see cref="Frame"/> takes. A subtree with no meshes returns a zero-size
-    /// box at the origin, which callers must special-case (the anim lab substitutes a nominal
-    /// box around the node's own position). Moved verbatim from GameSession's ComputeAabb
-    /// so the lab frames arbitrary world subtrees through the same
-    /// code; the nodes must be in the scene tree (GlobalTransform on a detached node is
-    /// identity, and Godot logs an error per call).</summary>
+    /// <summary>Merges every mesh AABB under <paramref name="root"/> into one world-space box,
+    /// the subject box <see cref="Frame"/> takes.
+    /// ⚠ A meshless subtree returns a zero-size box at the origin; callers must special-case it.
+    /// The nodes must be in the scene tree, or <c>GlobalTransform</c> reads identity.</summary>
     public static Aabb MergedAabb(Node3D root)
     {
         Aabb merged = default;

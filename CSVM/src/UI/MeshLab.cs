@@ -9,41 +9,14 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The mesh lab (key M): geometry and shading diagnostics for one subtree — normal vectors,
-/// wireframe with smoothing seams, the collision zone boxes, steerable lighting, and live
-/// overrides of the two render decisions that shading artifacts usually trace back to.
-///
-/// It exists because "this patch looks wrong" is not diagnosable from a screenshot: the
-/// candidate causes (a normal pointing the wrong way, a polygon single-sided that should be
-/// double-sided, a polygon falling back to a flat face normal because the file carries none
-/// for it, or simply a texture that was never painted) all look alike on a dark model. The
-/// lab separates them by letting you change exactly one of those at a time and watch.
-///
-/// <para><b>Two targets, one lab.</b> In <c>--viewer</c> it owns the parked aircraft for the
-/// whole session. In <c>--freecam</c>/<c>--anim-lab</c> it is <i>scoped</i>: M attaches it to
-/// whatever <see cref="SelectionService"/> currently has selected, and M again (or a selection
-/// change, or deselection) restores that subtree exactly — every surface's original material and
-/// mesh are held per surface for precisely that.</para>
-///
-/// <para><b>Override fidelity.</b> The <see cref="CullOverride"/> / <see cref="NormalSource"/>
-/// modes rebuild the surface's OWN shader with two edits — the cull token in its
-/// <c>render_mode</c> and a normal rewrite at the top of <c>fragment()</c> — so an override
-/// differs from the shipped render in the culling or the normal and in nothing else. That
-/// matters most on world geometry, whose shaders are the fullbright variants (unshaded, sRGB
-/// vertex modulate, LIGHT_STATE spill, distance fog, UV scroll): a hand-written stand-in shader
-/// would silently re-light and unfog the very surface under test. Materials the lab cannot read
-/// a shader off fall back to a replica of SceneBuilder's shaded vertex stage.</para>
-///
-/// <para><b>Provenance is inferred, not plumbed.</b> SceneBuilder does not record which
-/// normals came from the file and which came from its flat fallback, and threading that
-/// through the shared world/aircraft builder for a debug view is not worth it. Instead a
-/// triangle is called FLAT when its three corner normals are equal to each other and to the
-/// winding normal — which is exactly what the fallback produces. A genuinely flat-shaded
-/// polygon whose file normals happen to equal its face normal reads as FLAT too; that is a
-/// tolerable false positive for a diagnostic and it is called out in the panel.</para>
-///
-/// Starts hidden like the other two labs, so an unadorned <c>--viewer</c> screenshot stays
-/// byte-identical. M toggles it; DamageLab owns H and LiveryLab owns L, so all three can be
-/// open at once.
+/// wireframe with smoothing seams, collision zone boxes, steerable lighting, and live overrides
+/// of the two render decisions shading artifacts usually trace back to, so each candidate cause
+/// can be toggled and watched alone. In <c>--viewer</c> it owns the parked aircraft; in
+/// <c>--freecam</c>/<c>--anim-lab</c> it is scoped to whatever <see cref="SelectionService"/> has
+/// selected, and restores that subtree's original material and mesh on change or deselection.
+/// Starts hidden so an unadorned <c>--viewer</c> screenshot stays byte-identical; M toggles it,
+/// DamageLab owns H and LiveryLab owns L, so all three can be open at once. Module map, override
+/// fidelity and the FLAT-normal heuristic: docs/architecture.md.
 /// </summary>
 public sealed partial class MeshLab : Node
 {
@@ -559,19 +532,11 @@ public sealed partial class MeshLab : Node
     // ---- smooth-normal rebuild -------------------------------------------------------------
 
     // Sets (or clears) this surface's override material.
-    //
-    // Godot bounds-checks the instance's `surface_override_materials` array,
-    // which is NOT the same number as the mesh's surface count: MeshInstance3D sizes that array
-    // when the mesh is assigned, so a mesh whose surfaces were committed afterwards —
-    // which is exactly what SceneBuilder does, committing into an already-assigned ArrayMesh —
-    // can leave it short. ⚠ Checking the mesh's surface count instead errors per call
-    // (`p_surface = 0 is out of bounds (size() = 0)`). Re-assigning the mesh forces the
-    // resize.
-    //
-    // It recovers rather than skips because this is a diagnostic lab: a silently
-    // un-overridden surface means half an A/B, and a conclusion drawn from it would be
-    // wrong. Clearing (mat null) on a missing slot is genuinely a no-op, so that returns
-    // early and startup — where every surface is cleared — touches nothing.
+    // ⚠ Do not check the mesh's own surface count here; it errors per call. Godot sizes
+    // `surface_override_materials` off the mesh at assignment time, so a mesh whose surfaces were
+    // committed afterward (SceneBuilder's pattern) can leave that array short — re-assign the
+    // mesh to force a resize. Clearing on a missing slot is a genuine no-op and returns early,
+    // since a silently un-overridden surface would wrongly pass this diagnostic's A/B.
     private static void SetOverride(Surf s, Material? mat)
     {
         var mesh = s.Instance.Mesh;
@@ -928,10 +893,8 @@ public sealed partial class MeshLab : Node
                 break;
             }
             drawn += s.Tris.Length / 3;
-            // Edge → the (position-keyed) triangles touching it. Keyed by quantised position
-            // rather than vertex index because SurfaceTool splits a vertex wherever the
-            // normal differs — which is precisely the seam we are trying to find, so index
-            // identity would make every seam invisible.
+            // Keyed by quantised position, not vertex index: SurfaceTool splits a vertex
+            // wherever the normal differs, which is the seam this is trying to find.
             var edges = new Dictionary<(long, long), List<(int Tri, int A, int B)>>();
             for (int t = 0; t + 2 < s.Tris.Length; t += 3)
                 for (int k = 0; k < 3; k++)
@@ -1116,10 +1079,8 @@ public sealed partial class MeshLab : Node
 shader_type spatial;
 render_mode skip_vertex_transform, {mode};
 uniform float depth_bias = 0.0;
-// The shared ordered instance-uniform block — this shader reads only node_bias, but it must
-// declare the canonical order like every other (see csky_instance_uniforms.gdshaderinc). A
-// diagnostic that disagrees with the shipped renderer is worse than useless: MeshLab's whole
-// contract is that its vertex stage is SceneBuilder's verbatim.
+// Reads only node_bias, but declares the canonical order like every other shader: this
+// diagnostic's contract is that its vertex stage matches SceneBuilder's verbatim.
 #include ""res://shaders/csky_instance_uniforms.gdshaderinc""
 uniform int normal_mode = 0;
 {(textured
@@ -1127,10 +1088,8 @@ uniform int normal_mode = 0;
     : "uniform vec4 albedo_color : source_color = vec4(1.0);")}
 
 void vertex() {{
-    // Leading minus mirrors SceneBuilder's shaded path: it cancels the engine's back-face
-    // normal flip, which cull_front makes universal on aircraft. AsData therefore matches
-    // the shipped renderer, and Negated flips relative to that (an inside-out look), which is
-    // what makes it useful as a sanity mode.
+    // Leading minus cancels the engine's back-face normal flip (cull_front on aircraft), so
+    // AsData matches the shipped renderer and Negated gives the inside-out sanity view.
     VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     NORMAL = -normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
     VERTEX *= 1.0 - (depth_bias + node_bias);
@@ -1194,10 +1153,8 @@ void fragment() {{
             smooth = st.Commit();
             _smoothed[s] = smooth;
         }
-        // Only meaningful when the instance holds exactly this one surface; multi-surface
-        // instances keep their original mesh (the shader-side modes still apply to them).
-        // A triangle-less surface commits to a 0-surface mesh — swapping that in would leave
-        // the instance with nothing to render or override.
+        // Multi-surface instances keep their original mesh; a triangle-less surface commits
+        // to a 0-surface mesh, which would leave nothing to render or override.
         if (s.OriginalMesh is ArrayMesh am && am.GetSurfaceCount() == 1
             && smooth.GetSurfaceCount() == 1)
             s.Instance.Mesh = smooth;
@@ -1341,11 +1298,9 @@ void fragment() {{
                     }; break;
                 case "ambient": _ambientOn = value != "off"; break;
                 case "cycle":
-                    // cycle=N — step the normal-source cycler N times at launch, the headless
-                    // equivalent of clicking it (same convention as --debug-livery=N). Exists
-                    // because the reported out-of-bounds crash only showed up on the BUTTON
-                    // path, which a one-shot spec never exercised: it takes a second
-                    // ApplyOverrides, after a mesh swap, to reach it.
+                    // cycle=N — step the normal-source cycler N times at launch (the headless
+                    // equivalent of clicking it), reaching a second ApplyOverrides after a mesh
+                    // swap that a one-shot spec would otherwise never exercise.
                     if (int.TryParse(value, out int n))
                         _debugCycles = n;
                     break;

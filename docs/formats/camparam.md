@@ -29,7 +29,9 @@ the keys it overrides** — three keys for most, five for the Balmoral. Resoluti
 
 ⚠ **The blocks are keyed by the aircraft's DISPLAY name** — `"Bloodhawk"`, `"Firebrand"` — not by
 the model node (`player_bhawk`) and not by the vehicle def (`pbloodhawk`). The node→display map is
-in [markers.md](markers.md); in the engine it is `MarkerRig.PlayerAirframes`.
+in [markers.md](markers.md); in the engine it is `MarkerRig.PlayerAirframes`. Do not substitute
+`PlaneRoster.PlaneDisplayName`: it strips a leading `p` and title-cases, which yields `"Fbrand"` for
+`player_fbrand` and silently drops the Firebrand's override.
 
 ## Per-plane overrides
 

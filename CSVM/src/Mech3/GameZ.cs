@@ -7,34 +7,8 @@ using Godot;
 
 namespace CSVM.Mech3;
 
-/// <summary>
-/// In-memory model of a mech3ax GameZ extraction (planes.zbd / gamez.zbd → ZIP of
-/// nodes.json / models.json / materials.json / textures.json). Only the fields the
-/// renderer needs.
-///
-/// <para><b>Two extraction shapes are accepted.</b>
-/// The pinned mech3ax v0.6.1 binary emits the "legacy" shape; the fork (which restored
-/// CS gamez support on top of upstream's unified API) emits a "unified" one. They carry
-/// semantically identical data — verified field-for-field on C1 + planes: same node
-/// count and order, same model_index values, same transforms, same partitions — but
-/// spell it differently:</para>
-/// <list type="bullet">
-/// <item>nodes.json: <c>{"Object3d": {…}}</c> → a flat node with the variant under
-/// <c>data</c>; <c>mesh_index</c> → <c>model_index</c>, <c>children</c> →
-/// <c>child_indices</c>, <c>transformation</c> → <c>transform</c> (an "Initial" string
-/// where the legacy shape wrote null, else a <c>RotateTranslateScale</c> whose
-/// <c>original</c> is the legacy <c>matrix</c>).</item>
-/// <item>meshes.json → models.json; polygon <c>unk04</c> → <c>priority</c>,
-/// <c>triangle_strip</c> → <c>tri_strip</c>; mesh light <c>extra</c> →
-/// <c>vertices</c>.</item>
-/// <item>materials.json: <c>texture</c> (a name) → <c>texture_index</c> into
-/// textures.json, whose entries went from <c>{original, renamed}</c> to
-/// <c>{name}</c>.</item>
-/// </list>
-/// <para>Reading both keeps `tools/` rollback-able to v0.6.1 without a code revert —
-/// the conservatism the revival plan asks for at this step — and let the port be proven
-/// by rendering the same scene from both trees.</para>
-/// </summary>
+/// <summary>One point-sprite light baked into a mesh (stars, nav beacons); see
+/// <see cref="GameZMesh.Lights"/>.</summary>
 public struct GameZLight
 {
     public Vector3 Position;
@@ -44,6 +18,16 @@ public struct GameZLight
     public float Range;      // source unk68 (else unk52): visibility range in metres, 0 = unset
 }
 
+/// <summary>
+/// In-memory model of a mech3ax GameZ extraction: nodes/models/materials/textures JSON into
+/// plain C# objects. Reads both the v0.6.1 "legacy" and the fork "unified" shapes.
+/// Field mapping and reader rules: docs/formats/gamez.md. Plumbing: this module's entry in
+/// docs/architecture.md.
+/// ⚠ <see cref="GameZNode.Index"/> is the flat list position, never the unified JSON's own
+/// 1-based, duplicated <c>index</c>; child_indices are flat positions too.
+/// ⚠ The unified transform's <c>scale</c> is deliberately ignored; it is unit on every node
+/// measured.
+/// </summary>
 public sealed class GameZ
 {
     // The original's surface-type registry, restricted to the labels mech3ax's extraction has
@@ -138,15 +122,10 @@ public sealed class GameZ
         return _markerGizmo[meshIndex] = true;
     }
 
-    /// <summary>An untextured (<c>Colored</c>) polygon whose every vertex colour restates the
-    /// material's OWN colour: one authored value written into two slots, not two terms meant to
-    /// modulate each other. Multiplying them squares the colour — 176 draws as 120, 200 as 156,
-    /// (16,24,48) as (0,0,3). Every chapter's skydome skirt (the below-horizon cone under the
-    /// textured dome wall) is authored this way in its zone's own <c>FOG_COLOR</c>, so squaring it
-    /// is what turns the join with the terrain's fog wall into a hard band. Install-wide: 87
-    /// polygons, 85 of them those skirts. A polygon carrying a real vertex gradient, or one whose
-    /// material colour is white, is never one of these — those two are the cases where the product
-    /// IS the authored intent, and they stay a product.</summary>
+    /// <summary>An untextured polygon whose vertex colours all restate its own material colour:
+    /// one authored value in two slots, not two terms to multiply. Multiplying squares the colour
+    /// (176 → 120). 87 polygons install-wide, mostly skydome skirts. Decode: docs/formats/gamez.md
+    /// and this module's docs/architecture.md entry.</summary>
     public bool VertexColorsRestateMaterialColor(GameZPolygon poly, int materialIndex)
     {
         if (materialIndex < 0 || materialIndex >= Materials.Count)
@@ -175,20 +154,11 @@ public sealed class GameZ
         return null;
     }
 
-    /// <summary>Is <paramref name="node"/> staged template-library content — built with the game
-    /// but never PLACED anywhere in it, left inert until an animation calls it by name? (docs/
-    /// formats/gamez.md). The census: 166 C2 nodes carry an empty <c>parent_indices</c> and are
-    /// not referenced by the World node's spatial-partition grid either — every world-placed node
-    /// instead has one or the other. Beyond the handful of engine roots (<c>world1</c>,
-    /// <c>display</c>, <c>camera1</c>, …, none of them <c>Object3d</c>), that set IS the library:
-    /// every effect template, weapon/projectile model, zeppelin wreck template, clutter template,
-    /// cutscene prop — and both death-call template roots (<c>facdsticks</c>,
-    /// <c>genx12</c>). <c>zone_id == -1</c> and Object3d's own <c>signs == 128</c> are the
-    /// corroborating bits (world-placed nodes carry a real zone and <c>signs == 4108</c>); this
-    /// method tests only placement, the load-bearing signal, and <c>Kind == "Object3d"</c> (every
-    /// engine root is a different <c>Kind</c>). The two <c>active: false</c> library members
-    /// (<c>letterbox</c>, <c>sunlight</c>) are excluded too — their own data says never to summon
-    /// them.</summary>
+    /// <summary>Is <paramref name="node"/> staged template-library content: built with the game
+    /// but never placed, left inert until an animation calls it by name? Decode: docs/formats/
+    /// gamez.md.
+    /// ⚠ Tests placement (the load-bearing signal) plus <c>Kind == "Object3d"</c> and
+    /// <c>Active</c>. <c>zone_id</c>/<c>signs</c> only corroborate; do not test them alone.</summary>
     public bool IsLibraryRoot(GameZNode node)
     {
         EnsurePlaced();
@@ -308,10 +278,8 @@ public sealed class GameZ
         int index = 0;
         foreach (var wrapper in doc.RootElement.EnumerateArray())
         {
-            // Legacy: the node IS an enum wrapper, {"Object3d": {...}} / {"Lod": {...}},
-            // with name/mesh_index/children inside the variant body.
-            // Unified: a flat node carrying name/model_index/child_indices itself, with
-            // only the variant-specific fields under "data".
+            // Legacy wraps the variant as {"Object3d": {...}}; unified is a flat node with
+            // name/model_index/child_indices, and the variant-only fields under "data".
             bool unified = wrapper.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object;
             var prop = FirstProperty(unified ? data : wrapper);
             var body = prop.Value;      // the variant-specific fields (area, range, transform…)
@@ -335,16 +303,11 @@ public sealed class GameZ
                 if (fl.TryGetProperty("active", out var ac))
                     node.Active = ac.ValueKind == JsonValueKind.True;
             }
-            // The original's per-node visibility zone (see ZoneGate): a node draws iff its
-            // zone_id is -1 ("always"), or is in the camera's armed zone set {0, camera state}.
-            // Absent (a legacy extraction that does not carry the field) -> -1, i.e. ungated,
-            // which is what every reader of this field must treat as "no opinion".
+            // zone_id: -1 (absent too) means always draw. See ZoneGate and docs/formats/gamez.md.
             if (header.TryGetProperty("zone_id", out var zn) && zn.ValueKind == JsonValueKind.Number)
                 node.ZoneId = zn.GetInt32();
-            // Both spellings are flat list positions, NOT the node's own "index" field
-            // (which the unified shape also exposes, 1-based and with duplicates — the
-            // legacy "node_index" by another name). Verified on C1: reading them as flat
-            // positions is parent/child-consistent 6553 times, as index values 59.
+            // ⚠ Flat list positions, never the node's own "index" field (1-based, duplicated).
+            // See docs/formats/gamez.md and GameZNode.Index's warning.
             if ((header.TryGetProperty("child_indices", out var kids)
                  || header.TryGetProperty("children", out kids)) && kids.ValueKind == JsonValueKind.Array)
                 foreach (var c in kids.EnumerateArray())
@@ -441,21 +404,15 @@ public sealed class GameZ
                 // identified it as SHOW_BACKFACE — accept both spellings.
                 poly.ShowBackface = (pf.TryGetProperty("unk2", out var bf) || pf.TryGetProperty("show_backface", out bf))
                     && bf.ValueKind == JsonValueKind.True;
-                // no_clutter ("unk3", raw bit 0x0800): set from a NODE-NAME SUBSTRING the artists
-                // author (gg_load.c's strstr(name, "no_clutter")), not an OpenFlight structural
-                // attribute, and ⚠ not the OpenFlight "SUBFACE" bit it resembles — see
-                // docs/formats/gamez.md rule 23.
-                // Serialized with skip_serializing_if bool_false by both mech3ax trees, so
-                // it is ABSENT when false — TryGetProperty with a false default is required.
+                // unk3 = no_clutter (docs/formats/gamez.md). Absent means false
+                // (skip_serializing_if), so TryGetProperty's false default is required.
                 poly.NoClutter = pf.TryGetProperty("unk3", out var sf) && sf.ValueKind == JsonValueKind.True;
                 // Draw-priority layer. mech3ax v0.6.1 emits it as "unk04"; upstream has
                 // since identified and renamed it to "priority" — accept both spellings.
                 if (p.TryGetProperty("unk04", out var pr) || p.TryGetProperty("priority", out pr))
                     poly.Priority = pr.GetInt32();
-                // Per-polygon weather-zone membership list (unified-shape only; absent on a
-                // legacy tree, where ZoneSet stays null). Every polygon in this install carries
-                // at most one value — see the docs/formats/world-structure.md census — so only
-                // the first element is kept; an empty array also leaves ZoneSet null.
+                // Unified-only; null on legacy. At most one value per polygon (docs/formats/
+                // world-structure.md census), so only the first element is kept.
                 if (p.TryGetProperty("zone_set", out var zsArr) && zsArr.ValueKind == JsonValueKind.Array
                     && zsArr.GetArrayLength() > 0)
                     poly.ZoneSet = zsArr[0].GetInt32();
@@ -470,11 +427,8 @@ public sealed class GameZ
                             vc.GetProperty("g").GetSingle() / 255f,
                             vc.GetProperty("b").GetSingle() / 255f));
                 }
-                // `materials` is a LIST: element 0 is the polygon's base skin, and every element
-                // after it is an overlay pass drawn on the same triangles with its OWN UVs (the
-                // original's multi-texture decals — terrain transition blends, fog gradients, lit
-                // building windows, signage, zeppelin logos). 619 polygons install-wide carry a
-                // second entry and 7 a third; every one of them ships uv_coords of its own.
+                // `materials` is a list: element 0 is the base skin, later entries are overlay
+                // passes with their own UVs (docs/formats/gamez.md). 619 polygons carry a second.
                 if (p.TryGetProperty("materials", out var pms))
                 {
                     for (int pass = 0; pass < pms.GetArrayLength(); pass++)
@@ -513,10 +467,7 @@ public sealed class GameZ
                         || extra.ValueKind != JsonValueKind.Array || extra.GetArrayLength() == 0)
                         continue;
                     var c = l.GetProperty("color");
-                    // Per-light params (field meanings inferred from the C1 value
-                    // survey): unk08 = size scale (0 default / 1 / 2 / 5 — the
-                    // lighthouse), unk64 = max sprite size in px (30 everywhere it's set),
-                    // unk52/unk68 = visibility range in m (1500 / 2500 / 4000).
+                    // Field meanings per the C1 value survey; see GameZLight's field comments.
                     float F(string name) =>
                         l.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number
                             ? v.GetSingle() : 0f;
@@ -536,13 +487,8 @@ public sealed class GameZ
                     });
                 }
             }
-            // "model_type"/"facade_mode"/"texture_scroll" are unified-shape-only (absent on
-            // a legacy v0.6.1 tree, where the fields stay at their all-static defaults —
-            // SceneBuilder falls back to its texture-name billboard heuristic in that case).
-            // ModelType=="Facade" is the real discriminator, NOT facade_mode alone: a
-            // Default-typed model can still carry a stale facade_mode value (verified: C1's
-            // multi-poly `flare_green` "strings" are ModelType=Default, FacadeMode=
-            // CylindricalY, and must NOT billboard — they'd swing around a shared centroid).
+            // ⚠ ModelType, not FacadeMode alone, decides Facade vs Default (docs/formats/
+            // gamez.md); a Default model can carry a stale FacadeMode and must not billboard.
             if (m.TryGetProperty("model_type", out var mt) && mt.ValueKind == JsonValueKind.String)
                 mesh.ModelType = mt.GetString();
             if (m.TryGetProperty("facade_mode", out var fm) && fm.ValueKind == JsonValueKind.String)
@@ -604,11 +550,8 @@ public sealed class GameZ
                     int i = ti.GetInt32();
                     mat.TextureName = i >= 0 && i < _textureNames.Count ? _textureNames[i] : null;
                 }
-                // A material can carry its own texture flipbook: the original's animated water,
-                // surf, boat wakes, turbulence, splashes and the walking/running crowd sprites
-                // are all one material cycling a frame list at a fixed rate. Only 1-5 materials
-                // per chapter have one, but C1B's sea is 695 polygons of `wtr00000` and 375 of
-                // `srf0001`, so ignoring it leaves a large surface visibly frozen.
+                // A material's own texture flipbook (docs/formats/effects.md); rare per chapter
+                // but covers large surfaces like C1B's animated sea.
                 if (body.TryGetProperty("cycle", out var cyc) && cyc.ValueKind == JsonValueKind.Object)
                 {
                     if (cyc.TryGetProperty("texture_indices", out var idx))
@@ -722,15 +665,9 @@ public sealed class GameZPolygon
     // (terrain-transition patches, road/shadow decals, plane logos, cockpit gauge
     // needles up to 49), <0 drawn behind (skydome walls -49, zeppelin gasbags -10).
     public int Priority;
-    // no_clutter ("unk3"): a node-name-authored marker (NOT the OpenFlight SUBFACE
-    // attribute this was once read as — docs/formats/gamez.md rule 23) that gates
-    // ClutterBuilder's scatter. Where two coplanar layers are painted over each other
-    // the flagged one is the layer that must draw on top — SceneBuilder's
-    // NoClutterLayerBias applies one whole priority level to it globally
-    // (`GameGenSetSubfacePriorityOffset 1` in support\init.gw) on that empirical basis,
-    // not because the flag means "subface". Carried by terrain patches (terpat*),
-    // cliff/river transitions, piers and C5's cblock street layer — 658 polygons in C5,
-    // none at all in C1B.
+    // no_clutter ("unk3"): node-name-authored marker gating ClutterBuilder's scatter, not the
+    // OpenFlight SUBFACE bit it resembles. Decode: docs/formats/gamez.md.
+    // ⚠ It selects which of two coplanar layers draws on top; it does not mean bare ground.
     public bool NoClutter;
     // Per-polygon weather-zone membership (unified-shape "zone_set").
     // Null when the field is absent (legacy tree) or the array is empty; every

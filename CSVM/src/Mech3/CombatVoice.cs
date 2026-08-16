@@ -5,30 +5,20 @@ using System.IO;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// The combat-voice resolver: the <c>aiv</c> roster's <c>accentID</c> (slot 65) → a row in
-/// <c>zrdr/voice.zrd</c> (the ACCENT table, 35 rows, not the trigger table) → a pool of pilot VO
-/// ids → that pilot's clip entries in sounds.json. The clips ship as ordinary <c>SETS</c> entries
-/// (<c>snd_id&lt;N&gt;_&lt;TYPE&gt;</c> → <c>VO_id&lt;N&gt;_&lt;TYPE&gt;.wav</c>, one set per pilot
-/// id), and the data also ships per-family variant groups
-/// (<c>snd_&lt;FAMILY&gt;-A_id&lt;N&gt;_random</c>, <c>DYNAMIC_WEIGHTS 0.5</c>) that pick one of
-/// the <c>-A/-B/-C</c> takes, so a resolved name feeds <see cref="WorldSounds.PlayOneShot"/>
-/// directly, group or plain def alike. See <c>docs/formats/combat-voice.md</c>.
-///
-/// <para>This is the chain only: trigger dispatch (cooldowns, the talker roll, speaker election)
-/// is E16's and sits above this seam. ⚠ A def here is not proof of a playable clip: five pilot ids
-/// (13, 15, 17, 35, 36) ship full def sets with no WAVs at all, and id 44 carries the 12 bearing
-/// defs without their WAVs. Availability is answered by the prewarm
-/// (<see cref="WorldSounds.HasStream"/>), never by def presence.</para>
+/// The combat-voice resolver: <c>aiv</c> roster <c>accentID</c> → a pool of pilot VO ids →
+/// that pilot's clip entries in sounds.json, resolving to a name <see cref="WorldSounds.PlayOneShot"/>
+/// can play directly. Full decode: <c>docs/formats/combat-voice.md</c>.
+/// This is the chain only; trigger dispatch (cooldowns, the talker roll, speaker election) sits
+/// above this seam. ⚠ A def is not proof of a playable clip; check availability with
+/// <see cref="WorldSounds.HasStream"/>, never by def presence.
 /// </summary>
 public sealed class CombatVoice
 {
     /// <summary>
     /// The engine's 29-trigger table (ids 0–28), as family roots for <see cref="ClipsFor"/> /
-    /// <see cref="PlayableFor"/>. Ids 1–12 are the computed bearing call-outs
-    /// (<c>id = 1 + 3·bearing + altitudeBand</c>, low/level/high within each of 12/3/6/9 o'clock)
-    /// and are exact clip tokens with no variant letter. Ids 20/21 resolve to the <c>DA</c>/<c>DE</c>
-    /// family root; the <c>Bail</c>/<c>NoBail</c> split below it is the dispatcher's
-    /// (constitution) call, so query <c>"DA-Bail"</c> or <c>"DA-NoBail"</c> for a playable name.
+    /// <see cref="PlayableFor"/>. Ids 1–12 are the computed bearing call-outs; see
+    /// <c>docs/formats/combat-voice.md</c> for the index formula and the <c>Bail</c>/<c>NoBail</c>
+    /// split queried as <c>"DA-Bail"</c> / <c>"DA-NoBail"</c>.
     /// </summary>
     public static readonly IReadOnlyList<string> TriggerFamilies = new[]
     {
@@ -219,10 +209,8 @@ public sealed class CombatVoice
 
     /// <summary>
     /// The one name to hand <see cref="WorldSounds.PlayOneShot"/> for a pilot and a family root:
-    /// the shipped <c>snd_&lt;family&gt;-A_id&lt;N&gt;_random</c> variant group when the data
-    /// authors one (466 do; recency-weighted <c>-A/-B/-C</c> pick), else the plain def for a
-    /// variantless token (the 12 bearing call-outs), else null. Both <c>PR-DngrZn</c> spellings
-    /// are accepted for either family.
+    /// the shipped variant group when the data authors one, else the plain def for a variantless
+    /// token, else null. Both <c>PR-DngrZn</c> spellings are accepted for either family.
     /// </summary>
     public string? PlayableFor(int voId, string family)
     {

@@ -157,11 +157,8 @@ public class EnemyGeneratorsTests
     [ExtractedDataFact]
     public void TheParamsLabelsResolveInTheAivHeaderExceptTheOneShippedTypo()
     {
-        // The vehicle.params linkage: each label names a designer label in the aiv header's
-        // (slotId, label) pair list (docs/formats/ai-rosters.md), never a vehicle block name.
-        // 14 of the 15 authored labels resolve; C1/M04's 'Eairg32_params' does not, because the
-        // header spells it 'Earig32_params' (an authored transposition in the shipped data; see
-        // docs/formats/mission-entities.md).
+        // C1/M04's one shipped typo is the expected miss; see
+        // docs/formats/mission-entities/enemy-generators.md "shipped typo".
         var misses = new List<string>();
         foreach (var (chapter, mission) in Missions())
         {

@@ -65,13 +65,11 @@ public sealed class ProbeRunner
         }
     }
 
-    /// <summary>--destroy=&lt;name&gt; (F42): kill every destructible whose def name, animation name or
-    /// anchor <c>cs_name</c> contains <paramref name="name"/> (case-insensitive), so a --screenshot
-    /// captures the destruction with nobody at the controls. Reuses the weapon-hit path exactly
-    /// (<see cref="Mech3.AnimRuntime.DamageAt"/> — the healthy→destroyed swap, debris and effects the
-    /// same as a rocket kill); it just spends more than the object's HP. Resolves each match to its
-    /// authoritative instance and dedupes by anchor, so a wildcard def that binds one physical object
-    /// through several pools is killed once. Returns how many distinct objects were destroyed.</summary>
+    /// <summary>--destroy=&lt;name&gt; (F42, docs/cli.md): kill every destructible whose def name, anim
+    /// name or anchor <c>cs_name</c> matches (case-insensitive), through the real weapon-hit path
+    /// (<see cref="Mech3.AnimRuntime.DamageAt"/>). Resolves each match to its authoritative instance
+    /// and dedupes by anchor, so one physical object bound through several pools dies once. Returns
+    /// how many distinct objects were destroyed.</summary>
     public static int TriggerDestroy(Mech3.AnimRuntime runtime, string name, out Aabb bounds)
     {
         bounds = default;
@@ -156,13 +154,9 @@ public sealed class ProbeRunner
         return killed;
     }
 
-    /// <summary>--dump-markers[=plane]: print each player airframe's firepoint / pylon / target
-    /// rig — name, plane-frame position, gun-pair grouping and shared mounts — to stdout and
-    /// <c>./.scratch/markers_dump.txt</c>, then quit (see <see cref="Mech3.MarkerRig"/>). This is
-    /// the committed instrument the <c>docs/formats/markers.md</c> tables regenerate from, so the
-    /// user can see and name every mount when handing back the airframe gun-group table.
-    /// An optional value filters to one plane by model node (<c>player_bhawk</c>) or display name
-    /// (<c>Bloodhawk</c>), matched case-insensitively as a substring.</summary>
+    /// <summary>--dump-markers[=plane] (docs/cli.md): the airframe marker-rig report — stdout and
+    /// <c>./.scratch/markers_dump.txt</c> — that <c>docs/formats/markers.md</c> regenerates from.
+    /// See <see cref="Mech3.MarkerRig"/>.</summary>
     /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
     public bool DumpMarkers(SessionSpec spec)
     {
@@ -235,12 +229,9 @@ public sealed class ProbeRunner
         return code;
     }
 
-    /// <summary>--dump-weapons[=id|name]: load the typed <see cref="Flight.WeaponDefs"/> reader
-    /// over <c>weapons.json</c>, print one line per def (id, name, key ballistics, flags,
-    /// bindings) to stdout and <c>./.scratch/weapons_dump.txt</c>, and report any unmapped keys,
-    /// then quit. The committed verification instrument the weapons.md table is checked against —
-    /// a clean run (no UNHANDLED lines) is the pass. An optional value filters by id
-    /// (<c>wep_06</c>) or <c>NAME</c> substring, matched case-insensitively.</summary>
+    /// <summary>--dump-weapons[=id|name] (docs/cli.md): the <see cref="Flight.WeaponDefs"/> report —
+    /// stdout and <c>./.scratch/weapons_dump.txt</c> — checked against weapons.md; a clean run (no
+    /// UNHANDLED lines) is the pass.</summary>
     /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
     public bool DumpWeapons(SessionSpec spec)
     {
@@ -257,12 +248,9 @@ public sealed class ProbeRunner
         return true;
     }
 
-    /// <summary>--dump-flight[=plane]: step a throwaway <see cref="FlightModel"/> through the
-    /// manoeuvres the original was recorded flying and print its numbers beside the video-decoded
-    /// ones (<c>analysis/video-flight-calibration/</c>), to stdout and
-    /// <c>./.scratch/flight_dump.txt</c>, then quit. The instrument behind the
-    /// <c>flight-envelope</c> suite, and the only way to see what a flight-constant change did to
-    /// the whole envelope rather than to the one number that was edited.</summary>
+    /// <summary>--dump-flight[=plane] (docs/cli.md): the <see cref="FlightModel"/> envelope report
+    /// against the video-decoded targets, to stdout and <c>./.scratch/flight_dump.txt</c>. The only
+    /// instrument that shows what a flight-constant change did to the whole envelope.</summary>
     /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
     public bool DumpFlight(SessionSpec spec)
     {
@@ -280,16 +268,10 @@ public sealed class ProbeRunner
         return true;
     }
 
-    /// <summary>--dump-loadout[=plane]: for each plane in <c>stock_loadouts.json</c>, build its
-    /// model and bind the stock loadout (<see cref="Flight.Loadout"/>), reporting the resolved
-    /// gun groups (mount, weapon, per-group ammo, muzzle nodes) and hardpoints — or the loud error
-    /// if a marker doesn't resolve. Writes to stdout and <c>./.scratch/loadout_dump.txt</c>, then
-    /// quits. <c>--loadout=&lt;def&gt;</c> binds that def's loadout instead of each plane's own (a
-    /// cross-binding test — e.g. binding a def that wants <c>firepoint8</c> to the Kestrel proves
-    /// the missing-marker error fires). An optional value filters by def / model / display.
-    /// Combined with <c>--weapon-lab</c>, binds each plane's <see cref="Flight.Loadout.ForRig"/>
-    /// full-rig loadout instead of the stock one, so the report lists mounts the stock file never
-    /// names.</summary>
+    /// <summary>--dump-loadout[=plane] (docs/cli.md): builds each plane and binds its stock loadout
+    /// (<see cref="Flight.Loadout"/>), reporting gun groups and hardpoints, or the loud error if a
+    /// marker doesn't resolve. <c>--weapon-lab</c> binds <see cref="Flight.Loadout.ForRig"/> instead.
+    /// Writes to stdout and <c>./.scratch/loadout_dump.txt</c>.</summary>
     /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
     public bool DumpLoadout(SessionSpec spec)
     {
@@ -307,12 +289,9 @@ public sealed class ProbeRunner
         return true;
     }
 
-    /// <summary>--dump-mips[=name]: for every base texture in the chapter's archive that ships an
-    /// authored <c>_1</c>/<c>_2</c> level, report the mip chain the texture archive built — level
-    /// size, mean luminance and the share of pixels above 128 — beside the authored artwork, and
-    /// say whether the installed level IS that artwork. Writes to stdout and
-    /// <c>./.scratch/mips_dump.txt</c>, then quits. Run it once per <c>--mips=</c> policy: the
-    /// generated chain averages the bright pixels away, the authored one keeps them.</summary>
+    /// <summary>--dump-mips[=name] (docs/cli.md): the chapter's mip-chain report against the
+    /// authored artwork, to stdout and <c>./.scratch/mips_dump.txt</c>. Run once per <c>--mips=</c>
+    /// policy: the generated chain averages the bright pixels away, the authored one keeps them.</summary>
     /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
     public bool DumpMips(SessionSpec spec)
     {
@@ -330,12 +309,9 @@ public sealed class ProbeRunner
         return r.Ok;
     }
 
-    /// <summary>--dump-ai[=chapter]: a pure-data report over the five AI data families — patrol
-    /// nets, <c>aiv</c> rosters, <c>ai.zrd</c> turrets, zeppelins, generators (see
-    /// <see cref="Probes.Ai"/>) — to stdout and <c>./.scratch/ai_dump.txt</c>, then quit. No
-    /// world, no scene: every family is read straight off the extraction. An optional value
-    /// restricts the per-chapter/mission half (nets/aiv/zeppelins/egen) to one chapter; turrets
-    /// are one shared file and are always reported in full.</summary>
+    /// <summary>--dump-ai[=chapter] (docs/cli.md): a pure-data report over the five AI families —
+    /// see <see cref="Probes.Ai"/> — to stdout and <c>./.scratch/ai_dump.txt</c>. No world, no
+    /// scene: every family is read straight off the extraction.</summary>
     /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
     public bool DumpAi(SessionSpec spec)
     {
@@ -352,13 +328,9 @@ public sealed class ProbeRunner
         return r.Ok;
     }
 
-    /// <summary>--effects-test: the world-effects headless verify — see <see cref="Probes.Effects"/>, whose
-    /// census the <c>effect-template-mesh</c> suite counts through.
-    /// Plays every effect at the camera point so range-gated ones (gunhit's PLAYER_RANGE) pass;
-    /// <paramref name="effectAnimNames"/> is the caller's static name table
-    /// (<c>EffectCatalogue.WorldEffectAnimNames</c>: the fixed table plus the playable
-    /// <c>touchdown_*</c> vector slots), <paramref name="stage"/> its template stage
-    /// for the MESH half. Reports to stdout and <c>./.scratch/effects_test.txt</c>.</summary>
+    /// <summary>--effects-test (docs/cli.md): the world-effects headless verify — see
+    /// <see cref="Probes.Effects"/>. Plays every effect at the camera point so range-gated ones
+    /// (gunhit's PLAYER_RANGE) pass. Reports to stdout and <c>./.scratch/effects_test.txt</c>.</summary>
     public void RunEffectsTest(SessionSpec spec, Camera3D camera, Mech3.AnimRuntime effects,
         IReadOnlyList<string> effectAnimNames, Node3D? stage = null)
     {

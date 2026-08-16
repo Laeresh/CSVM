@@ -84,12 +84,8 @@ public sealed class CaptureDirector
         {
             return;
         }
-        // Delay elapsed: grab one frame per _Process call for spec.ScreenshotShots frames,
-        // then quit. A single shot keeps the original path verbatim; a burst (for z-fight
-        // debugging, where flicker only shows across frames) writes indexed files. The
-        // captured image is the PREVIOUS frame's render, so file _00 is the un-jittered
-        // baseline and _01.. carry the dither applied below — all distinct, which is all
-        // the flip-through needs.
+        // A burst (z-fight debugging) writes indexed files; a single shot keeps the plain path.
+        // The image is the PREVIOUS frame's render, so _00 is un-jittered and _01+ carries the dither.
         var img = viewport.GetTexture().GetImage();
         if (img == null)
         {

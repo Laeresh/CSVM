@@ -7,21 +7,14 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The throttle-slam exhaust smoke (observed in the original's footage): a large, sudden throttle INCREASE streams
-/// dark trail smoke from the engine's exhaust nodes for a few seconds; a single small step, a
-/// sustained high setting, and any throttle decrease all show nothing. The shape is
-/// <c>plane_props.json</c>'s <c>nitro_boost</c> puffers (<c>nitropuff1..4</c>, AT_NODE
-/// <c>exhaust1..4</c>) reused WITHOUT the rest of that def — no <c>nitropropN</c> discs, no
-/// <c>snd_nitrostart</c>, no nitro spin — since the capture shows the same trail-smoke shape on a
-/// plain throttle jump with no boost involved.
-///
-/// <para>The gate is edge-triggered on a continuous rise: <see cref="Update"/> tracks the throttle
-/// value at the start of the current unbroken climb and fires once per climb, the instant the
-/// cumulative rise crosses <see cref="SlamThreshold"/> — never again for the same climb (however
-/// far it continues), and never on a flat or falling throttle. A climb resets the moment the
-/// throttle stops rising, so tapping up one notch at a time (each tap separated by a flat/falling
-/// frame) is evaluated fresh every time and never accumulates across taps.</para>
-/// </summary>
+/// The throttle-slam exhaust smoke (observed in the original's footage, <c>CAP-21</c>): a large,
+/// sudden throttle increase streams the <c>nitro_boost</c> def's own puffers from the exhaust
+/// nodes, reused without the rest of that def. Decode + evidence: this module's entry in
+/// docs/architecture.md.
+/// <see cref="Update"/> is an edge-triggered gate: it tracks the throttle at the start of the
+/// current unbroken climb and fires once per climb, the instant the cumulative rise crosses
+/// <see cref="SlamThreshold"/>, never again for that climb and never on a flat or falling
+/// throttle.</summary>
 public sealed class ThrottleSlamSmoke
 {
     // TUNE: the capture only bounds this between the two jump sizes it filmed — idle→5/8 (0.625)

@@ -4,24 +4,11 @@ namespace CSVM.UI;
 /// The <see cref="Godot.CanvasLayer"/> ordering for everything drawn over the 3D view, in one
 /// place. Godot sorts canvas layers by this number, and keeping them here rather than as bare
 /// literals across nine files is what makes "does the collider overlay draw above the cloud
-/// whiteout?" answerable by reading one file.
-///
-/// <para><b>The order below is measured, not chosen.</b> The original's stacking reads off the
-/// footage as <c>world &lt; flare sprites &lt; HUD/cockpit &lt; sun wash</c>: the compass clips the
-/// flare's core glow, while at maximum wash the compass strip itself goes (20,20,18) →
-/// (178,180,177) — the same α as world pixels. That is why <see cref="SunWash"/> sits *above*
-/// <see cref="Hud"/> and <see cref="FlareSprites"/> sits below it.</para>
-///
-/// <para><b>Why the debug bands sit above the wash.</b> The wash is a full-screen white composite
-/// reaching α ≈ 0.66, and it survives terrain occlusion — so anything it covers becomes hard to
-/// read whenever the sun is near screen centre. The original had no debug overlays and no
-/// scoreboard, so nothing about fidelity says they should wash out; they are the instruments the
-/// picture is *judged* with, and washing them out would make the effect an obstacle to verifying
-/// itself. <see cref="Debug"/> and <see cref="Lab"/> therefore sit above <see cref="SunWash"/>.
-/// Layer 3 is deliberately left free as headroom between the wash and the debug band.</para>
-///
-/// <para>The <c>--viewer</c> lab *panels* (MeshLab, LiveryLab, WeaponLab, DamageLab) stay on
-/// <see cref="Hud"/>: they run in modes that have no flight HUD to contend with.</para>
+/// whiteout?" answerable by reading one file. Order is measured off the original's footage, not
+/// chosen: decode in docs/org/weather.md, wash-over-HUD evidence in docs/verification.md SHOT-22.
+/// ⚠ <see cref="Debug"/> and <see cref="Lab"/> sit above <see cref="SunWash"/> on purpose: they
+/// are the instruments the picture is judged with, and the original never had them, so nothing
+/// about fidelity says they should wash out with the rest of the HUD.
 /// </summary>
 internal static class HudLayers
 {

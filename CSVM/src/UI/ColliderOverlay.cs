@@ -9,40 +9,16 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The collision wireframe overlay (key C): every built collider in the session drawn as coloured
-/// lines, so "is this thing solid?" and "did that death take its collider away?" are questions you
-/// can answer by looking instead of by reading a census.
-///
-/// <para><b>Its first job is to say when there is nothing to draw.</b> Collision is a flight-build
-/// option — <c>--freecam</c>, <c>--anim-lab</c> and <c>--viewer</c> build no bodies at all — so an
-/// empty overlay in those modes would read as "nothing here is collidable", which is the exact
-/// false conclusion a collider census once nearly reached. Pressing C without <c>--collision</c>
-/// therefore prints the reason and draws nothing.</para>
-///
-/// <para><b>Two kinds of collider, one overlay.</b> World and aircraft geometry hangs its shapes on
-/// <see cref="CollisionShape3D"/> nodes; the solid clutter attaches its shared shapes straight to a
-/// region body's RID with no node of their own, so those are read back through the physics server.
-/// ⚠ Only the server-side <c>BodyGetShape*</c> getters are used on those bodies — any
-/// <c>ShapeOwner*</c> call on one would make Godot rebuild it from the nodes it does not have and
-/// silently empty it.</para>
-///
-/// <para><b>A stale overlay is a lie.</b> Killing a destructible switches its healthy collider off
-/// and its wreck's on, so the drawing follows each shape's <c>Disabled</c> flag rather than being
-/// baked once, and the on/off tallies are reported as two numbers — never as a net, which for the
-/// C2 propane gate reads +8 and looks like death ADDING collision.</para>
-///
-/// <para><b>The colour is the RESOLVED surface id, not the stamp.</b> Each collider body carries
-/// the original's numeric surface id (<see cref="SceneBuilder.SurfaceIdMeta"/>), which is what the
-/// crash and <c>touchdown_*</c> cascades index, and this overlay draws the id a touch will
-/// actually select: an id whose def this install does not ship draws as <c>0/default</c>, because
-/// that is the def it plays (<see cref="ResolvedSurfaceIds"/>). Showing the raw stamp instead would
-/// hide the empty-slot arm, which is the mechanism, not a detail. ⚠ Two limits on reading it as
-/// source data: the id is stamped per collider BODY, not per polygon, so a mesh whose polygons
-/// disagree reports one id for all of them (up to 16.4 % of C1's dirt-tagged ground —
-/// <c>analysis/surface-classification/FINDINGS.md</c>), and the body NAME still comes from the
-/// texture-derived class, which disagrees with the id on real bodies — two of C1's
-/// <c>col_water</c> bodies draw <c>0/default</c>, and one C3 body that is not named
-/// <c>col_water</c> draws <c>1/water</c>. Both are what the engine will select.</para>
+/// The collision wireframe overlay (key C): every built collider in the session drawn as
+/// coloured lines, so "is this solid?" is answerable by looking rather than by reading a census.
+/// Collision is a flight-build option; pressing C without <c>--collision</c> prints why and draws
+/// nothing rather than an empty overlay that reads as "nothing here is collidable". World and
+/// aircraft geometry hangs shapes on <see cref="CollisionShape3D"/> nodes; solid clutter attaches
+/// shared shapes straight to a region body's RID, read back through the physics server. ⚠ Only
+/// the server-side <c>BodyGetShape*</c> getters are used on those; a <c>ShapeOwner*</c> call
+/// would rebuild the body from nodes it lacks and silently empty it. The drawing follows each
+/// shape's <c>Disabled</c> flag, so a kill's collider swap shows live. Colour is the resolved
+/// surface id a touch will actually select, not the raw stamp. Full decode: docs/architecture.md.
 /// </summary>
 public sealed partial class ColliderOverlay : Node
 {
@@ -433,11 +409,8 @@ public sealed partial class ColliderOverlay : Node
         {
             return ResolveId(sb.GetMeta(SceneBuilder.SurfaceIdMeta).AsInt32());
         }
-        // SceneBuilder stamps the id on every collider body it builds, so this is only the safety
-        // net for its naming ("col" untagged, "col_water"/"col_buildings" tagged — CollidersForMesh
-        // names them apart so Godot cannot silently rename a sibling). An unstamped body answers
-        // default(0), which is what ProjectilePool.SurfaceIdOf answers an untagged collider
-        // (FUN_005acf60's null-material arm).
+        // Safety net for an unstamped body; SceneBuilder stamps the id on every collider it
+        // builds. Matches ProjectilePool.SurfaceIdOf's answer for an untagged collider.
         return name.StartsWith("col", StringComparison.Ordinal) ? SurfaceRegistry.Default : OtherKey;
     }
 
@@ -510,10 +483,8 @@ public sealed partial class ColliderOverlay : Node
                 lines += 12;
             }
             mesh.SurfaceEnd();
-            // The airframe boxes are cast per frame by the flight code rather than being switched
-            // on and off, so they follow the overlay itself. Drawn under the FlightController
-            // (frame), which is the plane model's parent and the frame Collider.Parts.Local is
-            // already expressed in — parenting to the model itself would double its own transform.
+            // Drawn under FlightController (frame), the space Collider.Parts.Local is already
+            // in; parenting to the model itself would double its own transform.
             _unswitched.Add(MakeDraw(mesh, frame, "col_wire_plane"));
             perKey[PlaneKey] = perKey.GetValueOrDefault(PlaneKey) + collider.Parts.Count;
         }

@@ -43,45 +43,17 @@ public enum AiMode
 }
 
 /// <summary>The nine-mode AI state machine, owned by an <see cref="AiPilot"/> and stepped
-/// once per sim tick from <see cref="AiPilot.Next"/>. The mode list is decoded (the engine's debug
-/// readout dispatches on exactly these states); the transitions below are decoded where the plan
-/// says so and NAMED AS INVENTED where they are not:
-///
-/// <para><b>Decoded:</b> pursue is entered when a target sits inside the activation/attack radius
-/// (player.json's <c>min_ai_active_dist</c> and vehicle.json's <c>attack</c>, both 2000 m shipped —
-/// the roster's own volume slots are 0.0 install-wide). A hit rolls the steady-hand test
-/// (<c>steady_hand_chance</c>) and a FAILED test evades — the engine's own vocabulary ("Absorbed
-/// %f damage; steady hand test failed. Evading."), never restated. A target's evasive maneuver
-/// rolls the sixth-sense test (<c>sixth_sense_chance</c>) and a FAILED test stuns for
-/// <c>stun_recovery_interval</c>. An evasive maneuver is an eligible library entry
-/// (<see cref="Maneuver.EligibleFor"/>) played to <see cref="ManeuverExecutor.Done"/>, then back
-/// to the prior mode. Lay off is the design's rubber-band assist, deliberate design: a pursued
-/// pilot eases off to let the player catch up, and the shipped <c>sixth_sense_factor</c> pair
-/// (0.994 → 1.07, interpolated <c>rating/9</c> per E42's correction) is its decoded ease-off
-/// constant.</para>
-///
-/// <para><b>Invented, named as such:</b> the evade behaviour beyond breaking off (timed run,
-/// seeded heading scrambles away from the threat — the decode is thin past "Evading."); the
-/// steady-hand roll is the flat shipped chance, the design's "damage weighted by accumulated
-/// damage" arithmetic being undecoded; <c>return_range</c> read as a chase leash from the point
-/// where pursuit began (which anchor the original uses is undecoded); the avoid-crash probe's
-/// cadence, second ray and minimum length (its LOOKAHEAD is decoded, see
-/// <see cref="ProbeLookaheadS"/>) and the <see cref="ClimbOutM"/> release altitude; the ×3
-/// signature-maneuver selection weight; lay off's
-/// entry/exit geometry (the pursued test's cones, the fallen-behind / caught-up distances and
-/// the anti-chatter hold — only the mode, the ease-off constant and the intent are decoded;
-/// no condition on the player's health exists anywhere in the decode, so none is modelled).</para>
-///
-/// <para><b>Enum-only:</b> the two danger-zone modes are never entered. Their entry conditions
-/// are undecoded — the danger-zone gate data is the 4-extra net-tag system the F17 decode left
-/// open, and <c>daredevil_chance</c> (the attempt roll) stays unwired until it exists. Do not
-/// invent an entry condition.</para>
-///
-/// <para>Config fields are plain and mutable BY DESIGN (the mission-script rule:
-/// <c>SET_AI_ATTACK_RADIUS</c> and friends rewrite them at runtime). All randomness is this
-/// machine's own seeded stream, so a fixed-seed run transitions identically. Engine-free: the
-/// obstacle probe is an injected delegate and target state arrives as a snapshot, so the
-/// transition table unit-tests without a scene tree (<c>AiModeMachineTests</c>).</para></summary>
+/// once per sim tick from <see cref="AiPilot.Next"/>. The mode list and its vocabulary are
+/// decoded (docs/formats/ai-rosters.md "AI modes, engine-side"); which transitions are decoded
+/// and which are invented is recorded in docs/architecture.md's entry for this file, and each
+/// invented constant below says so at its own declaration.
+/// Config fields are plain and mutable BY DESIGN — mission scripts rewrite them at runtime
+/// (<c>SET_AI_ATTACK_RADIUS</c> and friends). All randomness is this machine's own seeded
+/// stream, so a fixed-seed run transitions identically. The obstacle probe is an injected
+/// delegate and target state arrives as a snapshot, so the transition table unit-tests without
+/// a scene tree (<c>AiModeMachineTests</c>).
+/// ⚠ The two danger-zone modes are enum-only and never entered. Do not invent an entry
+/// condition for them.</summary>
 public sealed class AiModeMachine
 {
     /// <summary>Invented: how long a plain (maneuver-less) evade runs before returning.</summary>
@@ -198,12 +170,11 @@ public sealed class AiModeMachine
     public IReadOnlyCollection<string>? SignatureManeuvers;
 
     /// <summary>Line-of-sight probe for the avoid-crash test: static world plus other aircraft,
-    /// never the caster's own body — the original's ray has no vehicle filter and excludes only
-    /// itself (docs/org/aiPilot.md, "What the ray can hit"). Returns the struck body's name, or
-    /// null for a clear line: the NAME is what makes the transition log say whether the override
-    /// fired on terrain or on another aeroplane, which is not answerable from a bool. The host
-    /// wires <c>FlightController.AvoidCrashBlocksLine</c>; tests inject a fake. A null delegate
-    /// means no world data and the mode is never entered.</summary>
+    /// never the caster's own body (docs/org/aiPilot.md "What the ray can hit"). Returns the
+    /// struck body's name, or null for a clear line — the name lets the transition log say
+    /// whether the override fired on terrain or another aircraft. The host wires
+    /// <c>FlightController.AvoidCrashBlocksLine</c>; a null delegate means no world data and the
+    /// mode is never entered.</summary>
     public Func<Vector3, Vector3, string?>? ProbeBlocked;
 
     private readonly Random _rng;
@@ -282,14 +253,11 @@ public sealed class AiModeMachine
     }
 
     /// <summary>One sim tick's transitions. <paramref name="targetPos"/> is the standing target's
-    /// position or null (no live target); <paramref name="targetMode"/> its own machine's mode
-    /// when the target is an AI aircraft — the sixth-sense trigger watches it enter an evasive
-    /// state. A human target reports null: detecting a human player's maneuver is undecoded, so
-    /// the sixth-sense roll fires only against AI targets today.
+    /// position or null; <paramref name="targetMode"/> is its own machine's mode when the target
+    /// is an AI aircraft, for the sixth-sense trigger. A human target reports null: the
+    /// sixth-sense roll fires only against AI targets today (undecoded for a human).
     /// <paramref name="targetVelocity"/>/<paramref name="targetIsHuman"/> feed the lay-off
-    /// pursued test: the assist is only ever extended to a human-piloted pursuer — in
-    /// splitscreen that is whichever human the AI is currently engaging, an extension decision
-    /// (the original is single-player and its "the player" needs no choosing).</summary>
+    /// pursued test, extended only to a human-piloted pursuer.</summary>
     public AiMode Update(Vector3 pos, Vector3 velocity, Vector3? targetPos, AiMode? targetMode,
         float dt, Vector3? targetVelocity = null, bool targetIsHuman = false, Vector3? nose = null)
     {
@@ -456,13 +424,10 @@ public sealed class AiModeMachine
         Transition(back, "reaction complete");
     }
 
-    // The rubber-band assist's transitions. Decoded: the mode, its "let the
-    // player catch up" intent (the design's Sixth Sense pursued-side role) and the
-    // `sixth_sense_factor` ease-off constant. Invented, named on the constants above: the
-    // pursued-test cones, the fallen-behind / caught-up distances and the anti-chatter hold.
+    // The rubber-band assist's transitions (decoded: the mode, its "let the player catch up"
+    // intent, and sixth_sense_factor; the geometry is invented, named on the constants above).
     // Pursue eases into lay off when a chasing human target has fallen behind; lay off returns
-    // to pursue when the pursuer catches up or stops chasing. AssistEnabled
-    // false never enters and immediately releases.
+    // when the pursuer catches up or stops chasing. AssistEnabled false never enters.
     private void UpdateLayOff(Vector3 pos, Vector3 velocity, Vector3 targetPos,
         Vector3? targetVelocity, bool targetIsHuman, float dt)
     {
@@ -494,13 +459,10 @@ public sealed class AiModeMachine
         }
     }
 
-    // The pursued test (invented geometry): the target sits behind the AI — within
-    // LayOffRearConeDeg of the tail axis — and its velocity points at the AI
-    // within LayOffPursuerConeDeg, i.e. it is actually giving chase. The tail
-    // axis is the NOSE attitude when the caller supplies one, the velocity only as a fallback:
-    // mid-maneuver the two diverge, and the velocity reading let the test pass for a frame with
-    // the enemy positionally behind the player (user-reported). An unknown target velocity can
-    // never read as pursuit.
+    // The pursued test (invented geometry): the target sits within LayOffRearConeDeg of the tail
+    // axis and its velocity points within LayOffPursuerConeDeg of the AI, i.e. it is chasing.
+    // The tail axis is the NOSE when supplied, velocity only as fallback — mid-maneuver the two
+    // diverge and velocity alone let the test pass for a frame with the enemy behind the player.
     private bool IsPursuedBy(Vector3 pos, Vector3 velocity, Vector3 targetPos,
         Vector3? targetVelocity)
     {

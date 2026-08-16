@@ -162,7 +162,7 @@ public sealed class PufferState
         float Range(string key, string end, float fallback) =>
             d.Obj(key)?.Num(end) ?? fallback;
 
-        // The one interval number is seconds (Time) or meters (Distance) — see the remark above.
+        // The one interval number is seconds when Time, metres when Distance.
         var ig = d.Obj("interval_garbage");
         bool byDistance = string.Equals(ig?.Str("interval_type"), "Distance",
             StringComparison.OrdinalIgnoreCase);

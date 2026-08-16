@@ -20,11 +20,8 @@ public class BandFlickerTests
     [Fact]
     public void TheFirstCallForAFreshInstanceIsAnIdentityWhateverTheOpacity()
     {
-        // The trap: FlatColorTests/DeckRegimeTests read a static
-        // pose's WhiteoutAmount directly, and any golden shot's frame 0 must match. Neither curve
-        // equals the identity function at an interior opacity (AtanCurve(0.5) = 0.267), so this
-        // has to hold by construction (the amplitude ramp), not by t happening to start at a fixed
-        // point.
+        // A golden shot's frame 0 must match a static pose's WhiteoutAmount; this must hold by
+        // construction, since neither curve equals identity at an interior opacity.
         foreach (float op in new[] { 0.01f, 0.25f, 0.5f, 0.75f, 0.99f })
         {
             var flicker = new WeatherRig.BandFlicker(new Random(1));

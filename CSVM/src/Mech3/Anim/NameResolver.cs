@@ -5,59 +5,24 @@ using System.Text.RegularExpressions;
 
 namespace CSVM.Mech3.Anim;
 
-/// <summary>Name → node resolution: the index, the wildcard matcher, the memoized <see
-/// cref="FindAll"/>, the scoped tier chain (<see cref="Resolve"/>/<see cref="ResolveScoped"/>),
-/// the symbol-table authority (<see cref="SymbolClaims"/>, the by-index map <see cref="Add"/>
-/// builds), the anchoring rules (<see cref="Anchors"/>: NAME match, symbol narrowing, the
-/// ANIMATION_ROOT_NAME lift) and the bind-time resolution census (<see cref="ResolutionLines"/>)
-/// — generic over the node type so the whole rule set is testable without an engine (a plain
-/// token type in <c>CSVM.Tests</c>) and shared, unchanged, by the one engine instantiation
-/// (<c>AnimRuntime</c>'s <c>NameResolver&lt;Node3D&gt;</c>).
-///
-/// <para>⚠ The three-tier scope order — call anchor's subtree, then the definition's OWN template
-/// roots (the constructor's <c>ownRootsOf</c> hook), then global unless <c>LOCAL_NODES_ONLY</c> —
-/// is structural here: <see cref="ResolvePath"/> is private, so no consumer can compose the
-/// primitives in a different order. It once diverged caller-side (the motion targets and the
-/// puffer host took different routes to the same name and landed on different copies, so an
-/// authored stop never reached its emitter); every consumer resolves through
-/// <see cref="Resolve"/>/<see cref="ResolveScoped"/> by construction.</para>
-///
-/// <para>Rows enter through <see cref="Add"/> and are never removed — most build during one
-/// bootstrap walk and every later query reads that as a fixed snapshot, including ancestry: <see
-/// cref="Add"/>'s <c>parent</c> argument is recorded once, so a scoped <see cref="FindAll"/> never
-/// re-touches the live tree to ask "is this node inside that one" — it walks the recorded parent
-/// chain instead. ⚠ No node this resolver has already indexed may be reparented afterwards (into
-/// or out of any indexed subtree) — the ancestry snapshot goes stale and <see cref="FindAll"/>'s
-/// scope filter silently misreads it. A subtree staged after the bootstrap (an effect template, a
-/// pooled copy) may still <see cref="Add"/> more rows, but the caller must also call <see
-/// cref="ClearFindCache"/>, or a pattern <see cref="FindAll"/> already cached as "resolves to
-/// nothing" stays stale even though the new rows would now answer it.</para>
-///
-/// <para>⚠ <see cref="Anchors"/> records the anchoring census ONCE per definition and is the only
-/// census-recording entry point; everything else here (<see cref="FindAll"/>,
-/// <see cref="ResolvePath"/>, the private census-free anchor computation it wraps) records
-/// nothing, so a per-event caller — the runtime's own-template-root resolution runs per event on
-/// poll loops — can resolve freely without re-entering the census. Keep it that way: a second
-/// recording path double-counts definitions the bootstrap visits on more than one pass.</para>
-///
-/// <para>⚠ Node identity is caller-supplied, not inherited: the constructor takes an <see
-/// cref="IEqualityComparer{T}"/> that answers identity, not value equality. The engine
-/// instantiation keys by instance id — Godot object equality is unreliable inside a dictionary/
-/// tuple key across proxy instances of the same native node — rather than trusting
-/// <typeparamref name="TNode"/>'s inherited <c>Equals</c>.</para></summary>
+/// <summary>Name → node resolution: the index, the wildcard matcher, memoized <see cref="FindAll"/>,
+/// the scoped tier chain (<see cref="Resolve"/>/<see cref="ResolveScoped"/>), the symbol authority
+/// (<see cref="SymbolClaims"/>), the anchoring rules (<see cref="Anchors"/>) and the bind-time
+/// census (<see cref="ResolutionLines"/>) — generic over the node type, so the whole rule set is
+/// testable without an engine and shared, unchanged, by <c>AnimRuntime</c>'s one instantiation.
+/// Decode: docs/architecture.md, this file's entry.</summary>
 public sealed class NameResolver<TNode>
     where TNode : class
 {
     // ---- policy inputs. The owning runtime sets these before its bootstrap calls Add/Anchors;
     // they are construction-time facts about the runtime, not per-query switches. ----
 
-    /// <summary>Resolve every node reference by NAME, ignoring the compiled gamez index:
-    /// <see cref="Add"/> leaves the by-index map empty, so every <see cref="SymbolClaims"/> lookup
-    /// reports "index not built" and symbol narrowing never decides. Set by a runtime whose
-    /// subtree either carries non-portable node ptrs or MIXES two gamez index spaces that collide
-    /// (the per-player crash rig — see <c>AnimRuntime.NameResolveFallback</c> for the measured
-    /// cases); such a subtree has one node per name, so name resolution is the only correct
-    /// choice.</summary>
+    /// <summary>Resolve every node reference by NAME, ignoring the compiled gamez index: <see
+    /// cref="Add"/> leaves the by-index map empty, so <see cref="SymbolClaims"/> always reports
+    /// "index not built" and symbol narrowing never decides. Set by a runtime whose subtree carries
+    /// non-portable node ptrs or mixes two colliding gamez index spaces (the per-player crash rig —
+    /// see <c>AnimRuntime.NameResolveFallback</c>), where one node per name makes name resolution
+    /// the only correct choice.</summary>
     public bool NameResolveFallback;
 
     /// <summary>Refuse the <c>ANIMATION_ROOT_NAME</c> anchor lift, however few matches it finds.
@@ -91,6 +56,8 @@ public sealed class NameResolver<TNode>
 
     private readonly Dictionary<(string Pattern, TNode? Scope), List<TNode>> _findCache;
 
+    // Caller-supplied identity, not TNode's inherited Equals — Godot object equality is unreliable
+    // across proxy instances of the same native node. The engine keys by instance id.
     private readonly IEqualityComparer<TNode> _identity;
 
     // The middle tier: the definition's own template roots, resolved by the OWNER (the pool and
@@ -119,16 +86,12 @@ public sealed class NameResolver<TNode>
 
     private int _censusAnchored, _censusNarrowed, _censusLifted, _censusSuppressed, _censusUnanchored, _censusMissing;
 
-    /// <summary>
-    /// <paramref name="ownRootsOf"/> supplies the tier chain's middle tier: the copies of a
-    /// definition's own template root(s) that belong with the given anchor's pool slot. It runs
-    /// per event on poll loops, so it must resolve through <see cref="FindAll"/> — never <see
-    /// cref="Anchors"/>, whose once-per-definition census it would re-enter — and must not
-    /// allocate beyond what a <see cref="FindAll"/> call already does. Null means "no own roots"
-    /// (the tier always misses). <paramref name="isLive"/> answers whether an anchor node is
-    /// still valid; a dead anchor drops the scoped tiers entirely (see
-    /// <see cref="ResolveScoped"/>).
-    /// </summary>
+    /// <summary><paramref name="ownRootsOf"/> supplies the middle tier: a definition's own template
+    /// root copies for the given anchor's pool slot. Runs per event, so it must resolve through
+    /// <see cref="FindAll"/> only — never <see cref="Anchors"/>, whose census it would re-enter.
+    /// Null means "no own roots" (the tier always misses). <paramref name="isLive"/> answers
+    /// whether an anchor is still valid; a dead one drops the scoped tiers
+    /// (<see cref="ResolveScoped"/>).</summary>
     public NameResolver(
         IEqualityComparer<TNode>? identity = null,
         Func<AnimDefinition, TNode?, IReadOnlyList<TNode>>? ownRootsOf = null,
@@ -155,18 +118,12 @@ public sealed class NameResolver<TNode>
         }
     }
 
-    /// <summary>Adds one row to the index: a node's source (gamez) name, its parent — the ancestry
-    /// snapshot <see cref="FindAll"/>'s scope filter reads instead of touching the live tree — and
-    /// its compiled gamez-index slot when it has one.
-    ///
-    /// <para>⚠ The by-index map <see cref="SymbolClaims"/> reads is populated here, under two
-    /// deliberate refusals ported from the measured bugs behind them: never when <see
-    /// cref="NameResolveFallback"/> is set (that runtime's index spaces collide — every lookup must
-    /// miss and fall through to the unique name), and never for a row added with
-    /// <paramref name="indexByPointer"/> false — a POOLED copy of a staged template carries the
-    /// SAME compiled indices as every other copy, so a shared index-keyed map can hold only the
-    /// first copy that claims each slot and a second copy's events would silently resolve onto the
-    /// first's nodes. Such rows still resolve by name, scoped to their own subtree.</para></summary>
+    /// <summary>Adds one row: a node's source name, its parent (the ancestry snapshot
+    /// <see cref="FindAll"/> reads instead of the live tree), and its gamez-index slot if any.
+    /// The by-index map <see cref="SymbolClaims"/> reads stays empty under
+    /// <see cref="NameResolveFallback"/>, and skips a row added with
+    /// <paramref name="indexByPointer"/> false: a pooled copy shares its source's indices, so a
+    /// shared map would steal the first copy's events; such rows still resolve by name.</summary>
     public void Add(TNode node, string srcName, TNode? parent, int? gamezIndex = null, bool indexByPointer = true)
     {
         _index.Add(new IndexRow(node, srcName, gamezIndex));
@@ -183,15 +140,11 @@ public sealed class NameResolver<TNode>
     public void ClearFindCache() => _findCache.Clear();
 
     /// <summary>Every indexed node matching a NAME pattern, optionally restricted to one node's
-    /// subtree (inclusive of that node itself). Wildcards: <c>*</c> matches any run of characters,
-    /// <c>#</c> a run of digits including zero (<c>air_gen#</c> covers bare <c>air_gen</c>); a
-    /// plain name compares case-insensitively. A name carrying a <c>.flt</c> model-file suffix also
-    /// matches the pattern against its own name with the suffix stripped, so a definition that
-    /// names a node without it still resolves.
-    ///
-    /// <para>Memoized on <c>(pattern, scope)</c>: the index never changes after <see cref="Add"/>
-    /// stops being called, so the answer cannot change either. Callers must treat the returned list
-    /// as read-only — the same instance is handed back on every repeat query.</para></summary>
+    /// subtree. Wildcards: <c>*</c> any run, <c>#</c> a digit run including zero; a plain name
+    /// compares case-insensitively, also against a <c>.flt</c>-stripped copy. Memoized on
+    /// <c>(pattern, scope)</c> — the returned list is read-only, the same instance on every repeat
+    /// query. ⚠ The scope filter reads each node's <see cref="Add"/>-time parent snapshot; a node
+    /// reparented afterwards silently misreads it.</summary>
     public List<TNode> FindAll(string pattern, TNode? scope)
     {
         var key = (pattern, scope);
@@ -230,22 +183,12 @@ public sealed class NameResolver<TNode>
         return found.Count > 0 ? found[0] : null;
     }
 
-    /// <summary>Resolves a NAME path for one definition, narrowest scope first: the call anchor's
-    /// subtree, then the DEFINITION'S OWN template root(s) (the constructor's <c>ownRootsOf</c>
-    /// hook), then — unless the definition carries <c>LOCAL_NODES_ONLY</c> — the whole index. A
-    /// null or dead anchor (the <c>isLive</c> predicate) skips the scoped tiers and resolves
-    /// against the whole index directly, regardless of <c>LOCAL_NODES_ONLY</c>.
-    ///
-    /// <para>The middle tier exists because the anchor is not always where the def's own nodes
-    /// live: an effect callee is re-anchored onto the CALL SITE (<c>call_hetrails_up</c> onto
-    /// <c>he_ring</c>) while its nodes ride its own template root, which the owner relocated to
-    /// that site. Effect templates staged side by side reuse node names — <c>fly_trail1</c>-<c>5</c>
-    /// belongs to <c>he_trails</c>, <c>ap_trails</c> AND <c>carnage_trails</c> — so falling
-    /// straight to the global index animated every copy, two of them still parked at the stage
-    /// origin, i.e. the world origin.</para>
-    ///
-    /// <para>Callers must treat the returned list as read-only — a single-element path hands back
-    /// the memoized <see cref="FindAll"/> list itself.</para></summary>
+    /// <summary>Resolves a NAME path, narrowest scope first: the call anchor's subtree, then the
+    /// definition's OWN template roots (<c>ownRootsOf</c>), then — unless <c>LOCAL_NODES_ONLY</c> —
+    /// the whole index. A null or dead anchor skips the scoped tiers. ⚠ This order is structural:
+    /// <see cref="ResolvePath"/> is private, so no caller can compose it differently — it once
+    /// diverged and an authored stop never reached its emitter. Callers must treat the result as
+    /// read-only.</summary>
     public List<TNode> ResolveScoped(IReadOnlyList<string> path, AnimDefinition def, TNode? anchor)
     {
         if (anchor == null || !_isLive(anchor))
@@ -264,25 +207,17 @@ public sealed class NameResolver<TNode>
         return found;
     }
 
-    /// <summary>The world nodes a definition anchors to: NAME matches (wildcards = one per
-    /// building/vehicle instance), narrowed to the instance holding the def's symbol-table ROOT
-    /// node when the NAME is shared by twins; else ANIMATION_ROOT_NAME matches lifted to their
-    /// parent (the instance root, so sibling healthy/destroyed both resolve locally — needed where
-    /// instance roots have free names: <c>m_build**</c> instances are <c>apbuild01.flt</c>…),
-    /// refused above <see cref="MaxRootLift"/> matches and under <see cref="SuppressRootLift"/>.
-    /// Returns a fresh list each call.
-    ///
-    /// <para>⚠ This is the ONE census-recording resolution call (once per definition identity, see
-    /// the class remarks) — every other query stays census-free by construction.</para></summary>
+    /// <summary>The world nodes a definition anchors to: NAME matches, narrowed to the twin holding
+    /// the def's symbol-table ROOT node when NAME is shared; else ANIMATION_ROOT_NAME matches
+    /// lifted to their parent instance root, refused above <see cref="MaxRootLift"/> or under
+    /// <see cref="SuppressRootLift"/>. Returns a fresh list each call.
+    /// ⚠ The ONE census-recording resolution call, once per definition identity — every other
+    /// query stays census-free.</summary>
     public List<TNode?> Anchors(AnimDefinition def)
     {
-        // Multi-target NAME1 definitions (zeppelin nacelles/turrets/gasbag wiring) parse with
-        // an empty NAME but carry their own explicit (pattern, anchor path) pairs. They anchor
-        // through THOSE paths — never the ANIMATION_ROOT_NAME lift, whose generic root names
-        // ('healthy') would anchor them onto every building in the world; that refusal was the
-        // pre-F18 rule and it still holds for an empty-NAME def with no recorded targets
-        // (compiled camera/eject defs). Deliberately scoped to the parsed NAME1 paths and
-        // nothing wider (M4 F18: each zeppelin sub-part becomes its own scalar destructible).
+        // Multi-target NAME1 defs (zeppelin nacelles/turrets) parse with an empty NAME but anchor
+        // through their own (pattern, path) pairs, never the ANIMATION_ROOT_NAME lift — which would
+        // anchor them onto every building (docs/architecture.md, this file's entry, F18).
         if (string.IsNullOrEmpty(def.Name))
         {
             if (def.MultiTargets.Count == 0)
@@ -299,13 +234,11 @@ public sealed class NameResolver<TNode>
     }
 
     /// <summary>The symbol-table authority: true when the definition's symbol table CLAIMS
-    /// <paramref name="name"/> — the caller must then not fall back to global name matching, which
-    /// resolves C1's <c>caboose</c> to the real consist AND an unrelated <c>caboose.flt</c>.
-    /// <paramref name="node"/> is the world node the compiled gamez index binds the name to, or
-    /// null when that node was never built (LOD levels the builder drops, skipped subtrees — and
-    /// every lookup on a <see cref="NameResolveFallback"/> runtime, whose by-index map is left
-    /// empty on purpose). False means the name is not the symbol table's to answer (a reader def,
-    /// an unlisted name) and name resolution proceeds as usual.</summary>
+    /// <paramref name="name"/> — the caller must not fall back to global name matching, which
+    /// resolves C1's <c>caboose</c> to both the real consist and an unrelated <c>caboose.flt</c>.
+    /// <paramref name="node"/> is the bound world node, or null when never built (a dropped LOD, a
+    /// skipped subtree, or any lookup on a <see cref="NameResolveFallback"/> runtime). False means
+    /// the symbol table has no opinion and name resolution proceeds as usual.</summary>
     public bool SymbolClaims(AnimDefinition def, string name, out TNode? node)
     {
         node = null;
@@ -346,22 +279,12 @@ public sealed class NameResolver<TNode>
         }
     }
 
-    /// <summary>
-    /// The bind-time resolution census, ready to log — empty unless <see cref="ReportResolution"/>
-    /// was set. It exists because <b>two different failures look identical from outside</b> a
-    /// partial world: a definition that never instantiated (its NAME/ANIMATION_ROOT_NAME matches
-    /// nothing here, so <i>no handler ever fires</i>) and a definition that IS running but whose
-    /// event names a node <i>this subtree does not contain</i>. Both leave the object still. The
-    /// lines name which happened, per definition.
-    ///
-    /// <para>The line nobody expects is <c>root_lift_suppressed</c>: an <c>ANIMATION_ROOT_NAME</c>
-    /// lift is capped at <see cref="MaxRootLift"/> matches precisely so a generic root like
-    /// <c>healthy</c> (217× in C1) cannot anchor a definition onto every building — and a
-    /// single-subtree stage drops under that cap, so defs that never anchor in the full world would
-    /// anchor here, onto whatever generic child the subtree happens to own.
-    /// <see cref="SuppressRootLift"/> refuses them and this reports the refusal, because a
-    /// silently-different anchor set is the trap.</para>
-    /// </summary>
+    /// <summary>The bind-time resolution census, ready to log — empty unless
+    /// <see cref="ReportResolution"/> was set. Two failures look identical from outside a partial
+    /// world: a definition that never instantiated (no handler ever fires) versus one running whose
+    /// event names a node this subtree lacks. The lines name which happened, per definition.
+    /// <c>root_lift_suppressed</c> is the line nobody expects: a lift the full world would refuse
+    /// (docs/architecture.md, this file's entry) but a partial subtree would silently allow.</summary>
     public IReadOnlyList<string> ResolutionLines()
     {
         var lines = new List<string>();
@@ -406,8 +329,8 @@ public sealed class NameResolver<TNode>
 
     // A parent->child NAME path: the first element within scope (falling back to the whole index
     // when that misses and localOnly is false), then each further element inside the previous
-    // matches. Private on purpose — the tier order above is the ONLY route to it (⚠ class
-    // remarks); every tier call passes localOnly: true, the global step being a tier of its own.
+    // matches. ⚠ Private on purpose: this is ResolveScoped's only route, keeping call-site variants
+    // impossible. Every tier call passes localOnly: true; the global step is a tier of its own.
     private List<TNode> ResolvePath(IReadOnlyList<string> path, TNode? scope, bool localOnly)
     {
         var candidates = FindAll(path[0], scope);
@@ -435,7 +358,7 @@ public sealed class NameResolver<TNode>
 
     // The middle tier: the path resolved inside the definition's own template root(s) — the same
     // copies the owner places at a call site — de-duplicated in first-seen order. Census-free by
-    // construction: the hook and this method go through FindAll only (⚠ class remarks).
+    // construction: the hook and this method go through FindAll only (see Anchors' own remark).
     private List<TNode> ResolveInOwnRoot(IReadOnlyList<string> path, AnimDefinition def, TNode? anchor)
     {
         var found = new List<TNode>();
@@ -488,8 +411,8 @@ public sealed class NameResolver<TNode>
     }
 
     // The census-free anchor computation Anchors wraps — the internal path for anything that must
-    // not re-enter the census (⚠ class remarks); the tier chain stays census-free the same way,
-    // through FindAll/ResolvePath only.
+    // not re-enter the census (see Anchors' own remark); the tier chain stays census-free the same
+    // way, through FindAll/ResolvePath only.
     private (List<TNode?> Anchors, AnchorKind How) ComputeAnchors(AnimDefinition def)
     {
         var anchors = FindAll(def.Name, null).Cast<TNode?>().ToList();
@@ -529,22 +452,12 @@ public sealed class NameResolver<TNode>
         return (anchors, how);
     }
 
-    // Picks the one instance a compiled definition actually belongs to, when its NAME
-    // matches several. The compiler expands a multi-instance object into one def per instance but
-    // leaves them all sharing a NAME — C1's two airfield hangars are both `air_gen`, telling
-    // them apart only by their symbol tables (`air_gen` names the nodes under
-    // `eairg32`, `air_gen#1` those under `eairg31`). Name matching hands BOTH defs
-    // BOTH anchors, so the pair cross-binds: shooting one hangar resolved to the other def, whose
-    // events then target its own hangar by exact index — destroy `eairg31` and
-    // `eairg32` explodes.
-    //
-    // So resolve the def's ANIMATION_ROOT_NAME through the symbol table — the same
-    // authority SymbolClaims gives every event — and keep only the anchors
-    // containing that exact node. Returns null when it cannot decide: a reader def (no symbol
-    // table), an index the builder never built, or a root outside every candidate — all of which
-    // leave the name match standing. A NameResolveFallback runtime gets null for
-    // free, since its by-index map is empty. ⚠ Null (undecidable) and an empty narrowing are
-    // different outcomes — an empty result never leaves this method.
+    // Picks the one instance a compiled def belongs to when its NAME matches several — C1's two
+    // airfield hangars are both `air_gen`, told apart only by their symbol tables
+    // (docs/formats/destructibles.md). Resolves ANIMATION_ROOT_NAME through the symbol table and
+    // keeps only anchors containing that exact node. Null means undecidable (a reader def, an
+    // unbuilt index, a root outside every candidate) and leaves the name match standing; ⚠ that is
+    // not the same as an empty narrowing, which never leaves this method.
     private List<TNode?>? NarrowToSymbolRoot(AnimDefinition def, List<TNode?> anchors)
     {
         if (anchors.Count < 2
@@ -607,7 +520,7 @@ public sealed class NameResolver<TNode>
     }
 
     // node is within scope's subtree, inclusive of scope itself — walks the recorded parent chain
-    // rather than the live tree (see the class remarks).
+    // rather than the live tree (see FindAll's own remark on reparenting).
     private bool IsWithin(TNode node, TNode scope)
     {
         for (TNode? p = node; p is not null; _parentOf.TryGetValue(p, out p))

@@ -36,29 +36,12 @@ public readonly record struct ImpactOutcome
     /// caller owes the surrounding-bodies query rather than just damaging what it struck.</summary>
     public bool HasBlastDamage => Damage > 0f && BlastRadius > 0f;
 
-    /// <summary>Decide the impact. Pure: it reads the weapon's <c>IMPACT</c> table at the struck
-    /// material's numeric surface id (<see cref="SceneBuilder.SurfaceIdMeta"/>, the registry index
-    /// <c>FUN_005acf60</c> hands <c>FUN_005ad100</c>) and picks, touching no scene, no sink and no
-    /// sound archive. The caller supplies the id, including the original's null-material-to-0 arm.
-    ///
-    /// <para><paramref name="modelResolved"/> is an input rather than something this discovers,
-    /// because whether <see cref="EffectName"/> names a real gamez node is a question only a caller
-    /// holding the chapter's scene can answer — and when it does, the authored model IS the effect
-    /// and no stand-in applies. <paramref name="hasEffectsRuntime"/> is the same kind of fact about
-    /// the caller: a scene-less pool (the weapon lab) has nowhere to build a hardpoint weapon's real
-    /// fireball, so the explosion stand-in carries the blast there and only there.</para>
-    ///
-    /// <para><b>Whether an unauthored id falls back to <c>default</c> is settled in
-    /// <c>WeaponDefs.InheritDefaultRow</c>, not here</b> — it does, and the table arrives already
-    /// filled, so this is an index and nothing more. Do not re-add a fallback arm at the lookup:
-    /// two of them would resurrect <c>default</c>'s effect on the ids a weapon names and
-    /// deliberately binds nothing on (the slug's <c>player</c>(6)).</para>
-    ///
-    /// <para><c>player</c>(6) is a struck <c>AircraftBody</c>; <c>enemy</c>(7) stays unreachable
-    /// until something non-player flies. Neither gets a case of its own here: both read out of the
-    /// table like any other id and fall to <see cref="ImpactStandIn.Spark"/>, which is the
-    /// existing else-branch and not a behaviour invented for them — the struck plane's damage is
-    /// the caller's business, not this record's.</para></summary>
+    /// <summary>Decides the impact from the weapon's <c>IMPACT</c> table at the struck surface id;
+    /// touches no scene, sink or sound archive (docs/org/weaponImpact.md). <c>default</c> already
+    /// backfills ids the weapon names no block for (<see cref="WeaponDefs.InheritDefaultRow"/>), so
+    /// do not re-add a fallback here — it would also fire on ids a weapon names and leaves empty,
+    /// like <c>player</c>(6). <paramref name="modelResolved"/> and <paramref
+    /// name="hasEffectsRuntime"/> are caller facts this cannot discover on its own.</summary>
     public static ImpactOutcome Resolve(WeaponDef weapon, int surfaceId, bool modelResolved,
         bool hasEffectsRuntime)
     {
@@ -76,22 +59,10 @@ public readonly record struct ImpactOutcome
         };
     }
 
-    // The stand-in ladder, in its order: an instanced model beats everything; a hardpoint
-    // weapon with nowhere to build its fireball gets the explosion; a gun off a building gets
-    // ricochet sparks; everything else, ground included, gets the single spark.
-    //
-    // The ladder is ours, not the original's — it stands in for authored assets that do not
-    // render here.
-    //
-    // Ground has no arm of its own (BL-313, 2026-08-15). It used to take a tumbling
-    // chip burst on the `bit01`–`bit04` textures, inferred from the gunhit def's
-    // zero-vertex `bit1`–`bit3` nodes. The original draws no such chips: those nodes each
-    // carry one light record and render a single 1-pixel near-black point (`FUN_005524d0` /
-    // `FUN_00554550` gate the light block on the light count alone), invisible against ground
-    // at gameplay zoom. Ground must still return a non-`None` stand-in, because
-    // `ProjectilePool` gates the world-effects `EffectSink` call on
-    // `StandIn != None` — a `None` here would take the `blacksmokepuffer` with
-    // it.
+    // The stand-in ladder, ordered: model beats all; a hardpoint weapon with no scene gets the
+    // explosion; a gun on `buildings` gets ricochet sparks; everything else gets the single spark.
+    // Ground has no arm of its own (backlog.md `BL-289`/`BL-313`) but must still return non-`None`
+    // — `ProjectilePool` gates the `EffectSink` call on that, and the `blacksmokepuffer` rides it.
     private static ImpactStandIn StandInFor(WeaponDef weapon, int surfaceId, bool modelResolved,
         bool hasEffectsRuntime)
     {

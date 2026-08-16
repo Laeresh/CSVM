@@ -296,6 +296,22 @@ over ~0.125 s as it leaves: instant attack, timed release.
 frame next to a saturated highlight, and is treated as capture noise — but it is the first
 assumption to revisit if the intensities cannot be hit without blowing out the core.
 
+Line of sight for the sprites (not the wash) is one ray to the sun's centre against the world's own
+colliders: terrain and the flown plane block, billboard sprites and particles don't, so drifting
+smoke or eruption puffs cannot occlude the flare — matching the footage. Testing the centre rather
+than a multi-sample disc is chosen because it needs no invented coverage threshold, not because
+either reading is decoded; the footage cannot distinguish them.
+
+Ring-intensity calibration must match two things: the footage's ring Δlum was read off frames that
+already carried the wash (a true difference `d` reads as `d·(1−α)`), and `measure.py`'s `sample()`
+reports the brightest pixel in a window, not a median around the annulus — a median reads
+systematically lower, so the calibration values below are brightest-pixel to match. Measured at a
+328 px sun-to-centre distance (inside the footage's 311–340 px pose band), `--no-fog`, 1280×720:
+Ring A 0.38 → 11.0 (target 10–12, nudged up from an initial 0.30), Ring B 0.45 → 17.3 (target
+14–21, unchanged), Ring C 0.18 → 5.0 (target 3–9, unchanged). Only Ring A needed moving; B and C
+landed mid-band and were deliberately left alone, since the bands are the spread across two poses,
+not error bars, and fitting to the middle would be fitting to the estimator.
+
 ## The horizon dome, drawn camera-centred
 
 The dome is a **pure zero-parallax backdrop**: it is re-centred on the camera in *all* axes every

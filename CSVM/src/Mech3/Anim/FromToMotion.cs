@@ -4,56 +4,15 @@ using Godot;
 namespace CSVM.Mech3.Anim;
 
 /// <summary>
-/// An OBJECT_MOTION_FROM_TO tween: linear over the authored run time, in the node's own
-/// parent frame.
-///
-/// The <c>translate</c>/<c>rotate</c>/<c>scale</c> channels are ABSOLUTE poses in that
-/// frame, not offsets from the rest pose — verified across all 8 chapters: C1's
-/// <c>mafia</c> car moves from (-6796, 128, -5958), which is its authored node translate
-/// to within a metre, and C5's <c>m_gerter</c> crane hook moves between (21.3, 19.9,
-/// -20.2) and (21.3, 7.9, -20.2) in its parent crane's frame. Adding these to the rest
-/// pose doubles every world-space position (the C1 traffic ended up 7 km off the map).
-/// Nodes whose animation is what places them — C2's <c>sailboat2</c> rests at its parent's
-/// origin — simply don't match their rest pose, which is why "does it match the rest pose"
-/// is a bad test and absolute-in-parent-frame is the rule.
-///
-/// <para>An ABSENT channel means "HOLD the last value written to this node", NOT "return to
-/// the authored rest pose" — the same rule <c>ScriptPlayback</c> above documents, and for
-/// the same reason. The pose is therefore held as three separate components seeded from the
-/// node's LIVE transform at the moment the event fires, not from <c>RestOf</c>. Reading the
-/// rest pose instead is what made C1's traffic drive mis-headed: <c>police_chase</c> sets
-/// <c>suspect</c>/<c>police_car</c> to 45° with an OBJECT_ROTATE_STATE and then plays a
-/// translate-only 2 s leg, which snapped both cars back to 0° for the diagonal; the same
-/// def parks <c>suspect</c> for 27 s on a translate-only event that must hold -110°.
-/// Surveyed install-wide: 883 of 1,802 OBJECT_MOTION_FROM_TO events carry no rotate
-/// channel, and on 89 of them (26 nodes — the C1 traffic and firetrucks, C2's ten
-/// studebakers, its sailboats and yachts) the value to hold differs from the authored rest,
-/// up to <c>sailboat1</c>'s 300 s leg held 180° out. The components are kept SEPARATE
-/// rather than as one transform for `ScriptPlayback`'s reason: it keeps <c>Seek(t)</c> a
-/// pure function of <c>t</c>, and a rotate channel cannot silently discard the
-/// node's scale. They are seeded ONCE per event rather than re-read per frame, so a tween
-/// cannot compound into itself.</para>
-///
-/// The compiled <c>*_delta</c> channels are deliberately not read, because they carry
-/// nothing this class does not already have: each is the sibling absolute channel's
-/// per-second RATE, <c>(to - from) / run_time</c>. Verified over every one of the 51 in
-/// the install (15 translate, 17 rotate, 19 scale) — zero mismatches, worst relative
-/// residual 4e-6, i.e. float32 rounding — and each of the 51 ships the sibling channel it
-/// is the rate of. Composing them as an extra offset on top of the tween would run every
-/// one of those motions at double speed. The reader sources spell no <c>*_DELTA</c> token
-/// at all (0 of 1,355 files), so <c>AnimDefs</c> has nothing to emit either.
-///
-/// Rotations arrive here as RADIANS from both front-ends. The COMPILED data is radians
-/// natively (its extremes settle it: maximum 15.708 = 5π, 99.93% of values ≤ 2π, 228 on
-/// exact π/2 multiples — DegToRad-ing those made every rotation ~57× too small). The READER
-/// sources are degrees (1,388 of 1,428 nonzero values exceed 2π, max 900) and
-/// <c>AnimDefs</c> converts them at parse — the same reader↔compiled unit divergence as
-/// XYZ_ROTATION. Unconverted they spun C2's roadblock cars ~9 turns through a 35° swerve.
-///
-/// A missing FROM means "from where the node already is" — the held component, which is
-/// what <c>AnimDefs.AddFromTo</c> has always documented as the intent. Every channel in the
-/// compiled data ships both ends (919/919 rotate, 401/401 translate, 663/663 scale), so this
-/// only bites the reader path.
+/// An OBJECT_MOTION_FROM_TO tween: linear over the authored run time, in the node's own parent
+/// frame. Decode: docs/formats/anim-definitions.md.
+/// ⚠ Channels are absolute poses in that frame, never offsets from the rest pose. Adding to rest
+/// doubles every world position.
+/// ⚠ An absent channel means hold the last live value, not the rest pose. Read as rest, C1's
+/// traffic drives mis-headed.
+/// ⚠ Do not read the compiled <c>*_delta</c> channels. Each is the sibling channel's rate, not
+/// an extra offset, and composing it doubles the motion's speed.
+/// Rotations arrive here as radians; <see cref="AnimDefs"/> converts reader degrees at parse.
 /// </summary>
 internal sealed class FromToMotion : IAnimMotion
 {

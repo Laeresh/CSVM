@@ -11,16 +11,9 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The abreast starting grid (<see cref="RaceGrid"/>): where each pilot's slot lands, which way it
-/// faces, and how far the field is raised to clear the ground.
-///
-/// <para>These tests are the primary instrument for the lift rule, deliberately. A grid that raises
-/// each plane by its own ground instead of the whole field by the worst slot still starts the race,
-/// still lines up correctly in every screenshot, and is quietly unfair — there is no capture and no
-/// log line that would show it. <see cref="TheFieldIsLiftedByTheWorstSlotNeverPerPlane"/> is the
-/// only thing that can, so it uses a heightfield on which the two rules give different answers.</para>
-///
-/// <para>Terrain is a synthetic function of the slot position rather than a physics space: the
-/// injected sampler is what makes the geometry testable at all off-engine.</para>
+/// faces, and how far the field is raised to clear the ground. See <c>docs/architecture.md</c>
+/// for why lift-by-worst-slot has no visible symptom otherwise. Terrain is a synthetic function
+/// of slot position, which is what makes the geometry testable off-engine.
 /// </summary>
 public class RaceGridTests
 {
@@ -114,11 +107,8 @@ public class RaceGridTests
     // ---- The lift ------------------------------------------------------------------------------
 
     /// <summary>
-    /// ⚠ The assertion this file exists for. Three slots over three different ground heights, each
-    /// picked so the two candidate rules disagree: raising the field by the single worst slot puts
-    /// all three planes at 550 m, while raising each plane by its own ground would put them at
-    /// 500 / 550 / 500 — a race that looks identical in every screenshot and starts one pilot 50 m
-    /// above the others.
+    /// Three slots over three ground heights picked so the two candidate rules disagree: lift by
+    /// worst slot puts all three at 550 m; lift per plane would put them at 500 / 550 / 500.
     /// </summary>
     [Fact]
     public void TheFieldIsLiftedByTheWorstSlotNeverPerPlane()

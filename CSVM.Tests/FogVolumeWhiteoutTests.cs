@@ -8,19 +8,12 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The in-volume whiteout (<see cref="FogVolumeWhiteout"/>): the decompiled approach/interior
-/// ramps, their union, the authored colour — and the exterior-distance helper they rest on
-/// (<see cref="FogVolumeBox.ExteriorDistance"/>), pinned against closed-form distances so "the
-/// projection converged" is a measurement rather than a hope.
-///
-/// <para>⚠ The interior ramp DECAYS inward: full AT the wall, 0 at
-/// <c>interior_fog_fade_dist</c> deep. That is the decompiled shape and it
-/// reads backwards on its own — the volume is a transition curtain, and <c>ZONE3</c>'s own fog is
-/// what carries the interior look. A future session "fixing" it by inverting the
-/// ramp fails these tests, which is the point of pinning both halves.</para>
-///
-/// <para>Fixture shapes follow <c>FogVolumeTests</c>'s precedent: hand-built
-/// <see cref="FogVolumeBox"/>es with explicit outward planes for the rule, and the real extraction
-/// for the per-chapter facts (which chapter arms it, and what the golden pose measures).</para>
+/// ramps, their union, and the exterior-distance helper they rest on
+/// (<see cref="FogVolumeBox.ExteriorDistance"/>). Decode: docs/formats/fogvol.md.
+/// ⚠ The interior ramp decays inward, full at the wall and 0 at <c>interior_fog_fade_dist</c>
+/// deep; a future "fix" that inverts it fails these tests.
+/// Fixture shapes follow <c>FogVolumeTests</c>'s precedent: hand-built for the rule, extraction
+/// for the per-chapter facts.
 /// </summary>
 public class FogVolumeWhiteoutTests
 {
@@ -85,10 +78,8 @@ public class FogVolumeWhiteoutTests
     [Fact]
     public void TwoVolumesUnionAsTheBinaryDoesRatherThanTakingTheNearer()
     {
-        // Two cubes 100 m apart in X, the point midway between their facing walls — 8 m from each
-        // wall at a 16 m fade, so each contributes exactly 0.5. a + b - a·b = 0.75; picking the
-        // nearer volume would give 0.5 and adding them would give 1.0, so the case separates all
-        // three readings at once.
+        // Midway between the cubes' facing walls each contributes 0.5; a + b - a·b = 0.75
+        // separates union from both "nearer volume" (0.5) and plain addition (1.0).
         var west = BoxVolume("west", new Vector3(-108f, -50f, -50f), new Vector3(-8f, 50f, 50f));
         var east = BoxVolume("east", new Vector3(8f, -50f, -50f), new Vector3(108f, 50f, 50f));
         var whiteout = Armed(new[] { west, east });
@@ -259,11 +250,8 @@ public class FogVolumeWhiteoutTests
 
         Assert.True(whiteout.Armed);
         Assert.Equal(0f, whiteout.Density(pose));
-        // Stated with the measurement, not just the verdict: the margin is what says the prediction
-        // is robust rather than a knife-edge (the ramp is 16 m).
-        // Measured 1797.7 m — 112x the 16 m ramp, so the prediction is not a knife-edge. The bound
-        // is written well under that so an authored change to the data fails LOUDLY here rather
-        // than by moving a golden nobody re-attributes.
+        // Measured 1797.7 m, well over the 16 m ramp; the bound is written under that so an
+        // authored data change fails loudly here, not by moving an unattributed golden.
         Assert.True(nearest > 500f, $"nearest C5 volume is {nearest:0.0} m from the golden pose");
     }
 

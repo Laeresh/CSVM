@@ -336,28 +336,10 @@ public sealed class StuntMission
             ? $"STUNT {CompletedCount}/{TotalCount} — COMPLETE"
             : $"STUNT {CompletedCount}/{TotalCount} — {ActiveZone?.MarkerText() ?? ""}";
 
-    // The anchor point for a dzone whose ia.json record names a piece of world
-    // geometry instead of a `dzN` point marker, or null when the node draws nothing
-    // (every ordinary marker — the caller then keeps using the node's own world origin).
-    //
-    // A `dzN` marker is a childless `model_index -1` node whose
-    // `RotateTranslateScale.translate` IS the zone point, so it has no geometry and takes the
-    // null path. C2's first zone is instead `sghangar`, the Seaplane Hangar building itself,
-    // whose `transform` is the JSON string `"Initial"` → GameZNode.Local
-    // null → GameZ.WorldTransformOf resolves to (0,0,0), ~8 km from the hangar
-    // (the label was right and the point was wrong). Gamez origins are routinely nowhere near the
-    // geometry they draw — `NodeLabels` anchors on the mesh AABB centre for the same reason.
-    //
-    // Which point on the structure. These zones are all `MSG_OBJ_FLYTHROUGH`, so the
-    // zone means the structure's aperture, not its middle. Where the structure carries a
-    // matched pair of door leaves the gap between them is that aperture, so those are anchored on
-    // alone: the hangar's `sgh_door1`/`sgh_door2` are retracted to either side of the
-    // front wall leaving a 20 m slit centred on their union centre (−5770.4, 23.5, −5623.9), and
-    // DzRadius = 15 m about that point covers the whole slit.
-    // Independently corroborated by `dzpath1`, whose (otherwise unread)
-    // second polygon is the front aperture outline, centred 1.9 m away at (−5770.4, 23.5, −5622.0).
-    // The whole-structure centre would instead sit 129 m deep inside the hangar, reachable from the
-    // open rear but missable off-centre. Structures with no door pair fall back to that centre.
+    // The anchor point for a dzone whose ia.json record names world geometry rather than a `dzN`
+    // point marker, or null for an ordinary marker (docs/formats/missions.md, the `sghangar` case).
+    // Anchors on the union centre of a matched `door`-named leaf pair when one exists, since these
+    // zones are all `MSG_OBJ_FLYTHROUGH` and mean the aperture, not the structure's middle.
     private static Vector3? GeometryAnchor(GameZ gz, GameZNode node)
     {
         var worldXf = gz.WorldTransformOf(node);

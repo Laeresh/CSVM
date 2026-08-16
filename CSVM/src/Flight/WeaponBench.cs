@@ -8,17 +8,12 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// The cheap, world-less "do all 48 weapons mount and fire without throwing" pass check behind
-/// <c>--weapon-test</c> and the <c>weapons-fire</c> in-engine suite. It is deliberately NOT part of
-/// the weapon lab: the lab is a flight-mode panel that fires nothing of its own, while this
-/// is a one-shot harness over a <b>parked</b> plane that spawns straight into a caller-supplied
-/// <see cref="ProjectilePool"/> and needs no world, no colliders and no frame — <c>Spawn</c> does the
-/// muzzle math and the pool insert synchronously.
-///
-/// <para>Each weapon fires from every mount of its own class — a gun from the loadout's firable gun
-/// groups, a hardpoint weapon from its pylons. Hand it <see cref="Loadout.ForRig"/>'s loadout and
-/// that is the airframe's <b>whole</b> rig (4 gun groups + every pylon), so a weapon that only ever
-/// mounts on a slot <c>stock_loadouts.json</c> omits is still covered.</para>
-/// </summary>
+/// <c>--weapon-test</c> and the <c>weapons-fire</c> in-engine suite: a one-shot harness over a
+/// parked plane that spawns straight into a caller-supplied <see cref="ProjectilePool"/> and
+/// needs no world, no colliders and no frame.
+/// ⚠ Deliberately not part of the weapon lab, which fires nothing of its own; do not fold this
+/// back in. Hand it <see cref="Loadout.ForRig"/>'s loadout so every mount class is covered.
+/// Decode + measured counts: this module's entry in docs/architecture.md.</summary>
 public static class WeaponBench
 {
     /// <summary>Mounts and fires every weapon in the catalogue once per mount of its class,

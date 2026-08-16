@@ -8,24 +8,15 @@ using Godot;
 namespace CSVM.Utils;
 
 /// <summary>
-/// the always-on detector's write path. Every tripped <see cref="HitchMonitor"/>
-/// record gets ONE human-readable line in the <c>perf</c> log category and ONE JSON line in a
-/// sidecar sharing the main log's <c>&lt;mode&gt;-&lt;stamp&gt;</c> stem — but never inline on the
-/// hitching frame itself: both a string interpolation and a file write are avoidable allocation-heavy
-/// work, and doing either right after a hitch is the worst possible moment. A tripped record is
-/// instead copied (no allocation — every queue slot's own <see cref="HitchRecord"/> and its
-/// <c>Ring</c> array are preallocated once, at construction) into a small ring, and the whole ring is
-/// drained a few seconds later, once the frames that followed the hitch have had time to settle.
-///
-/// <para><b>Crash durability.</b> The sidecar's file is opened once, for the process's whole life,
-/// with <see cref="Log"/>'s own recipe: UTF-8 WITH a BOM (PowerShell 5.1 reads a BOM-less file as
-/// ANSI) and <c>AutoFlush</c>, so a line reaches disk the instant it is written. A record therefore
-/// survives a crash from the moment it is FLUSHED, not from the moment it TRIPPED: the flush interval
-/// is the loss bound on an abnormal exit (a <c>Stop-Process -Force</c> mid-flight loses at most its
-/// queued-but-unflushed tail), and nothing more elaborate — a signal handler racing the crash it is
-/// meant to survive — is worth building for that bound. <c>Launcher</c> flushes before
-/// <c>HitchMonitor.Rearm</c> on both a session build and a teardown, so an ordinary relaunch never
-/// waits out the interval.</para>
+/// <see cref="HitchMonitor"/>'s write path: every tripped record gets one human-readable line in
+/// the <c>perf</c> log category and one JSON line in a sidecar sharing the main log's stem — never
+/// inline on the hitching frame, since a string interpolation and a file write are avoidable
+/// allocation-heavy work at the worst possible moment. A record is copied (no allocation; every
+/// queue slot is preallocated at construction) into a small ring, drained a few seconds later.
+/// Line grammar and the JSON shape: this module's entry in docs/architecture.md.
+/// ⚠ Crash durability is bounded by the flush interval, not by the trip. A record survives a
+/// crash only once flushed; <c>Launcher</c> flushes before every <see cref="HitchMonitor.Rearm"/>
+/// so an ordinary relaunch never waits out the interval.
 /// </summary>
 public sealed class HitchSidecar
 {
@@ -49,14 +40,11 @@ public sealed class HitchSidecar
     private double _sinceFlushMs;
     private int _droppedCount;
 
-    /// <summary>Builds a sidecar over the <c>hitchSidecar.*</c> config keys, each falling back to
-    /// its <c>Default</c> const. Constructing it is what registers those keys, so this has to
-    /// happen before <c>--dump-config</c> writes its template — and after <see cref="Log.Open"/>,
-    /// since the sidecar's path is derived from <see cref="Log.SinkPath"/>.</summary>
-    /// <param name="logPath">The open log file's path (<see cref="Log.SinkPath"/>); the sidecar
-    /// replaces its <c>.log</c> suffix with <c>.hitches.jsonl</c>.</param>
-    /// <param name="ringFrames">Ring depth per queued record — matched to the <see cref="HitchMonitor"/>
-    /// this sidecar drains, so a queue slot's <c>Ring</c> array and a record's are the same length.</param>
+    /// <summary>Builds a sidecar over the <c>hitchSidecar.*</c> config keys. Must construct after
+    /// <see cref="Log.Open"/>, since the sidecar's path derives from <see cref="Log.SinkPath"/>.</summary>
+    /// <param name="logPath">The open log file's path; the sidecar replaces its <c>.log</c> suffix
+    /// with <c>.hitches.jsonl</c>.</param>
+    /// <param name="ringFrames">Ring depth per queued record, matched to <see cref="HitchMonitor"/>.</param>
     public HitchSidecar(string logPath, int ringFrames)
         : this(
             logPath,

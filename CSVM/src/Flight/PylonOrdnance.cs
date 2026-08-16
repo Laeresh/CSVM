@@ -4,18 +4,13 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The ordnance hanging under a plane's wings: one <c>FLYOUT</c> <c>MODEL</c> body instanced at
-/// each loaded pylon and hidden the moment that pylon runs dry. The mounted body is the SAME gamez
-/// prototype the round flies (<c>he_rocket</c>, <c>ap_rocket</c>, <c>sonic</c>, …), instanced through
-/// <see cref="ProjectilePool.BuildFlyoutBody"/> and parented to the pylon marker with an identity
-/// local transform — so it rides the airframe nose-forward, exactly where and how the round launches.
-///
-/// <para><b>One model per pylon</b>, regardless of the <c>CLUSTER_SIZE</c> rounds that pylon carries:
-/// the original shows a single rocket per hardpoint, not a stack. <see cref="Update"/> tracks the
-/// live <see cref="Hardpoint.Ammo"/> counter that <c>FlightController.UpdateRockets</c> depletes —
-/// the model shows while the pylon holds ordnance and hides at zero, a respawn refill bringing it
-/// back. Built once at session setup and rides the plane; freed with it.</para>
-/// </summary>
+/// The ordnance hanging under a plane's wings: one <c>FLYOUT MODEL</c> body instanced at each
+/// loaded pylon and hidden the moment that pylon runs dry. The mounted body is the same gamez
+/// prototype the round flies, instanced through <see cref="ProjectilePool.BuildFlyoutBody"/> and
+/// parented to the pylon marker at an identity local transform. Built once at session setup and
+/// rides the plane; freed with it.
+/// ⚠ One model per pylon, never one per <c>CLUSTER_SIZE</c> round — the original shows a single
+/// rocket per hardpoint. Decode: this module's entry in docs/architecture.md.</summary>
 public sealed class PylonOrdnance
 {
     private readonly List<Mount> _mounts;

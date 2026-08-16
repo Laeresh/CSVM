@@ -5,20 +5,12 @@ using Godot;
 namespace CSVM.Utils;
 
 /// <summary>
-/// The session's randomness policy: one master seed, and a separate named generator per subsystem
-/// derived from it. A subsystem's seed is <c>mix(master ^ hash(name))</c>, so the streams are
-/// <b>independent of each other and of call order between them</b> — adding a draw to the weapons
-/// code cannot shift what the liveries roll. Within one subsystem the sequence still depends on its
-/// own call order, which the fixed <see cref="GameClock"/> makes reproducible.
-///
-/// <para>The master is pinned (1 by default) for a deterministic run and time-seeded otherwise, so
-/// the shipped game keeps its variety: a bare <c>--fly</c> still gets a random spawn, random
-/// liveries and a random gun-spread pattern. The resolved value is logged, so any interesting
-/// unpinned run can be replayed with <c>--seed=</c>.</para>
-///
-/// <para>⚠ The hash is written here on purpose: <c>string.GetHashCode()</c> is randomized per
-/// process in .NET, so deriving seeds from it would produce a different set of streams on every
-/// launch — exactly the property this class exists to remove.</para>
+/// The session's randomness policy: one master seed, and a named generator per subsystem derived
+/// from it via <c>splitmix64(master ^ fnv1a(name))</c> — independent across subsystems, so a draw
+/// added to one cannot shift another's. Pinned for a deterministic run, time-seeded otherwise; the
+/// resolved value logs for replay via <c>--seed=</c>. Full list: docs/architecture.md.
+/// ⚠ Never derive a subsystem seed via <see cref="string.GetHashCode"/>. .NET randomizes it per
+/// process, so the stream would differ every launch and silently break <c>--det</c>.
 /// </summary>
 public static class Rng
 {
@@ -107,17 +99,12 @@ public static class Rng
     /// shape the effects code already uses.</summary>
     public static Random NewSystemRandom(string subsystem) => new(NewIntSeed(subsystem));
 
-    /// <summary>A per-CELL <see cref="System.Random"/>, keyed by coordinate rather than draw
-    /// order: the seed is a pure function of the subsystem name, the master seed and the two
-    /// coordinates alone, so it does not depend on how many cells exist, what order they are
-    /// built in, or on any other subsystem's draws. Use this instead of
-    /// <see cref="NewSystemRandom(string)"/> when the set of things being drawn is itself a
-    /// runtime computation over a coordinate space rather than a fixed walk over authored data —
-    /// <c>FogVolumeClutter</c>'s map-edge continuation is the first caller: the extension ring's
-    /// cell count depends
-    /// on each kind's authored <c>far_fade</c>, so a shared sequential stream would silently
-    /// reroll every surviving cell's placement if that bound, or the enumeration order, ever
-    /// changed.</summary>
+    /// <summary>A per-cell <see cref="System.Random"/> keyed by coordinate, not draw order: the
+    /// seed is a pure function of the subsystem, the master and the coordinates alone. Use this
+    /// instead of <see cref="NewSystemRandom(string)"/> when the set being drawn is itself a
+    /// runtime computation over coordinates. Decode: docs/architecture.md.
+    /// ⚠ A shared sequential stream would reroll every surviving cell if the cell count or
+    /// enumeration order changed, which is why this stays keyed.</summary>
     public static Random NewSystemRandom(string subsystem, int cellX, int cellZ)
     {
         ulong h = Mix(SeedFor(subsystem) ^ Fnv1a($"{cellX},{cellZ}"));

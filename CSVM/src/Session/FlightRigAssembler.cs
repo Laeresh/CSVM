@@ -56,10 +56,8 @@ public sealed class FlightRigAssembler
     {
         bool verbose = pi == 0; // the per-plane detail lines are identical for every player
         string tag = _in.RigCount > 1 ? $"P{pi + 1} " : "";
-        // Each player flies their own pick (the launchscreen's join flow / a --plane= list);
-        // with one name given, that is the same plane for everyone as before. An active Instant
-        // Action mission overrides this for every human alike — the
-        // def carries one player_plane, not a per-player list.
+        // Each player flies their own pick; an active Instant Action mission overrides this for
+        // every human alike, since the def carries one player_plane, not a per-player list.
         string planeName = _in.InstantActionPlayerPlaneNode ?? PlaneRoster.PlaneFor(_spec, pi);
         var stats = _in.StatsFor(planeName);
 
@@ -99,27 +97,22 @@ public sealed class FlightRigAssembler
             GrazeEffectSink = _in.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
             // The level's one touchdown vector (the original's global), not one per plane.
             TouchdownDefs = _in.TouchdownDefs,
-            // splitscreen: this player's own device(s), own pane for the HUD.
-            // Start/P reads on every rig, splitscreen included (`BL-373`) — GameSession wires
-            // every rig's PauseState to the same shared instance, so any human can pause the
-            // world but only the pauser can resume it.
+            // splitscreen: this player's own device(s), own pane for the HUD. Start/P reads on
+            // every rig (BL-373); GameSession wires every PauseState to one shared instance.
             PadDevices = _in.PadAssignment?[pi],
             UseKeyboard = pi == 0,
             PinnedView = _spec.View,
             HudParent = rig.Viewport,
             AllowPause = true,
         };
-        // Every human joins team 1 in an Instant Action mission, splitscreen included — humans 2-4
-        // would otherwise default to their own team (Team's fallback is
-        // AimAssist.TeamOfPilot(PlayerIndex), one team per pilot index) and collide with an
-        // enemy's. --coop asks for the same thing in plain flight; --vs never reaches here with
-        // Coop set (SessionSpec.Resolve drops it), so its FFA stays untouched.
+        // Every human joins team 1 in an Instant Action mission, splitscreen included — the
+        // per-pilot team fallback would otherwise collide with an enemy's. --coop asks the same
+        // in plain flight; SessionSpec.Resolve already drops Coop when --vs is set.
         if (_in.InstantActionActive || _in.Coop)
             controller.Team = AimAssist.PlayerTeam;
-        // The wobble pivot: the plane model and everything resolved inside it — muzzle nodes,
-        // puffer anchors, mounted ordnance — rides the shake, while the controller's own
-        // transform (physics, aim, chase camera) never sees it. In the original the plane
-        // visibly rocks against the world in external views (docs/formats/shakes.md).
+        // The wobble pivot: the plane model and everything resolved inside it rides the shake,
+        // while the controller's own transform (physics, aim, chase camera) never sees it
+        // (docs/formats/shakes.md).
         controller.Shake = new PlaneShake(_in.Shakes);
         var shakePivot = new Node3D { Name = "ShakePivot" };
         controller.ShakePivot = shakePivot;
@@ -149,10 +142,9 @@ public sealed class FlightRigAssembler
                 controller.AutoFire = _spec.AutoFire;
                 controller.AutoFireRockets = _spec.AutoFireRockets;
                 controller.InitialGunSelect = _spec.GunSelect;
-                // --rocket=<wep_id>: swap every hardpoint's ordnance before the model is
-                // mounted and the ordnance-type list is built (controller._Ready). A
-                // testing hook — all 11 stock loadouts carry HE (wep_06), so this is the
-                // only way to prove the mounted model varies by rocket type.
+                // --rocket=<wep_id>: swap every hardpoint's ordnance before the model is mounted.
+                // A testing hook — all 11 stock loadouts carry HE, so this is the only way to
+                // prove the mounted model varies by rocket type.
                 if (_spec.RocketOverride != null)
                 {
                     Testing.ProbeRunner.ApplyRocketOverride(controller.Loadout, _in.WeaponDefs, _spec.RocketOverride, verbose);
@@ -276,12 +268,9 @@ public sealed class FlightRigAssembler
                 GD.Print("gun reticle: ballistic impact point via impact_point.png");
         }
 
-        // Visible damage: torn-skin panel flips + the authored damage-stage anims
-        // (player-1.zrd.json's pdpanelN / player_fuelleak / player_damage_trail menu), played
-        // through the rig runtime once it exists (the sink wiring below, after the runtime builds).
-        // The healthy↔torn candidate sets come from the same defs (plane_reset's re-ACTIVE list +
-        // the pdpanelN targets); a missing program leaves DamageVisuals' geometric
-        // fallback to engage, loudly.
+        // Visible damage: torn-skin panel flips + the authored damage-stage anims, played through
+        // the rig runtime once it exists (wired below, after the runtime builds). A missing
+        // program leaves DamageVisuals' geometric fallback to engage, loudly.
         if (controller.Damage != null)
         {
             PanelPairing? pairing = null;
@@ -353,10 +342,8 @@ public sealed class FlightRigAssembler
             }
         }
 
-        // Dogfight (--vs): the per-pane match timer/K-D/leader line + kill banner. Bound to
-        // the match GameSession built before this loop ran (mirrors Race above); the kill facts
-        // themselves arrive later, once every rig exists, through GameSession's own Downed
-        // subscription.
+        // Dogfight (--vs): the per-pane match timer/K-D/leader line + kill banner, bound to the
+        // match GameSession built before this loop ran; kill facts arrive later via Downed.
         if (_in.VersusMatch is { } versus)
         {
             // Rigs is the SAME list GameSession keeps live for the whole session — every seat
@@ -372,10 +359,8 @@ public sealed class FlightRigAssembler
         }
         else
         {
-            // No match: the same HUD tracks this pane's nearest AI hostile, so an
-            // --ai / --generators enemy stays findable in ANY flight session. Built
-            // unconditionally because generators spawn hostiles mid-session; with none in the
-            // pool it draws nothing.
+            // No match: the same HUD tracks this pane's nearest AI hostile, so an --ai/
+            // --generators enemy stays findable in any flight session; empty pool draws nothing.
             controller.VersusHud = VersusHud.BuildHostileTracker(pi, rig.Camera, _in.Projectiles);
             if (verbose)
                 GD.Print("targeting HUD: nearest-AI-hostile marker (edge arrow + clock bearing)");
@@ -391,11 +376,9 @@ public sealed class FlightRigAssembler
                 GD.Print("--debug-markers: marking EVERY live aircraft (red hostile / blue own side)");
         }
 
-        // Every player's start comes from ONE call, because a grid start is not decomposable: the
-        // fan is centred on the player count and the whole field is lifted by its worst slot, so no
-        // single pilot's answer exists until all of them do. Resolved lazily here rather than in the
-        // constructor so it happens at the same point in the build it always did — the first rig —
-        // and so the caller keeps constructing the assembler before the rigs are known.
+        // Every player's start comes from ONE call: a grid start is not decomposable, since no
+        // single pilot's answer exists until every slot is known. Resolved lazily on the first
+        // rig, so the caller can keep constructing the assembler before the rigs are known.
         var (spawnPos, spawnLookAt) = (_starts ??= _spawns.ChooseStarts(
             _in.SpawnList, _in.MissionZrdrPath, _in.SpawnBase, _in.RigCount))[pi];
         // The plant's force path is chosen once, here, off who is flying — a person, so the
@@ -403,10 +386,8 @@ public sealed class FlightRigAssembler
         // rather than the original's own pointer-compare-against-the-player test.
         controller.Setup(new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
             rig.Camera, _in.CamParamsFor(planeName), spawnPos, spawnLookAt);
-        // --weapon-lab: the lab is a flight session whose aircraft is pinned at the spawn pose
-        // — everything else (world, pool, effects, the trigger itself) runs exactly as in free
-        // flight. Set AFTER Setup, which places the plane: the pin is captured at the first held
-        // sim step, so it takes the spawn pose Setup just wrote.
+        // --weapon-lab: a flight session whose aircraft is pinned at the spawn pose. Set after
+        // Setup, so the pin, captured at the first held sim step, takes the pose Setup just wrote.
         if (_spec.WeaponLab)
         {
             controller.Held = true;
@@ -436,11 +417,9 @@ public sealed class FlightRigAssembler
         rig.Controller = controller;
         _worldRoot.AddChild(controller);
 
-        // Data-driven crash (Layer 2): a per-player crash AnimRuntime that PLAYS
-        // player_crash_dirt on a crash — the wreck breaking apart, the pieceN ballistics
-        // and every authored effect, from the compiled def. Built here, once the
-        // controller (and its plane model) are in the tree, so the crash def's reset
-        // states resolve valid global transforms. The standard (and only) crash path.
+        // Data-driven crash: a per-player crash AnimRuntime playing the compiled def. Built here,
+        // once the controller (and its plane model) are in the tree, so the crash def's reset
+        // states resolve valid global transforms.
         if (_in.CrashProgram != null && _in.WorldScene != null)
         {
             _worldEffects.BuildFlightCrashRuntime(controller, planeBuilder, planeName, _in.Gamez,
@@ -448,24 +427,18 @@ public sealed class FlightRigAssembler
             // The start choreography for the very first spawn: Respawn() plays this same def on
             // every later respawn, but Setup() above called Respawn() before this runtime existed.
             controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
-            // That runtime also carries the authored damage-stage menu and the
-            // <part>_damage_effects shims, so a part crossing an injure_anims threshold plays
-            // its authored def — panel burn, fuel leak, heavy prop1 trail, spark burst. Wired here
-            // because the runtime is built after the controller joins the tree, later than
-            // DamageVisuals itself.
+            // That runtime also carries the damage-stage menu, so a part crossing an
+            // injure_anims threshold plays its authored def. Wired here because the runtime is
+            // built after the controller joins the tree, later than DamageVisuals itself.
             if (controller.Visuals != null && controller.CrashRuntime is { } rigRuntime)
             {
                 controller.Visuals.DamageEffectSink = anim =>
                 {
-                    // applyReset:false for the same reason the crash trigger passes it — a reset
-                    // here would re-pose nodes the damage state owns, not just the effect's. The
-                    // plane model is the fallback anchor: the menu defs' NAME (player_pfighter)
-                    // resolves on no other airframe, exactly the startprops shape.
+                    // applyReset:false as the crash trigger does — a reset would re-pose nodes
+                    // the damage state owns, not just the effect's.
                     int started = rigRuntime.Play(anim, planeModel, applyReset: false).Count;
-                    // ⚠ started is instances, NOT emitters — the def's PufferState events dispatch on
-                    // the runtime's NEXT tick, so a puffer-count delta taken here reads 0 no matter
-                    // what renders — the count has to be sampled later, which is what the rig's
-                    // cumulative total below does.
+                    // ⚠ started is instances, not emitters — PufferState events dispatch on the
+                    // runtime's next tick, so sample the puffer count later, not off this delta.
                     Log.Info("anim", $"damage stage anim={anim} started={started} rig_puffers_total={rigRuntime.PuffersBuilt}");
                     // player_fuelleak's ELSE branch deactivates wing_flare2 for the rest of
                     // the leak (the def never re-activates it) — hand that lamp to the leak so
@@ -473,10 +446,9 @@ public sealed class FlightRigAssembler
                     if (anim.Equals("player_fuelleak", StringComparison.OrdinalIgnoreCase))
                         controller.WingLights?.Suspend("wing_flare2");
                 };
-                // The stop must cover the CLOSURE, not the played roots alone: Stop("pdpanel1")
-                // cannot reach the short_firetrail instance it CALLed onto the panel, and
-                // player_damage_trail's trail sits on prop1, which stays visible — its authored
-                // NODE_ACTIVE exit never fires. Derived from the program so no hand list can rot.
+                // ⚠ The stop must cover the CALL closure, not the played roots alone, or a
+                // called-onto instance never gets its NODE_ACTIVE exit. Derived from the program
+                // so no hand list can rot.
                 var stageClosure = new List<string>();
                 foreach (var d in _in.CrashProgram.Subset(EffectCatalogue.PlayerDamageStageAnims).Defs)
                 {

@@ -5,41 +5,14 @@ using Godot;
 
 namespace CSVM.Effects;
 
-/// <summary>
-/// Rain and snow, driven by the mission weather.json's precipitation block (see
-/// <see cref="WeatherState.PrecipData"/>): C4 Rocky-Mountains SNOW, C1C/C2B RAIN. The data
-/// gives the type, tint (COLOR), fall rate (GRAVITY), drift (WIND_DIR/WIND_VEL), density
-/// (PARTICLES, rain only), and peak opacity (ALPHA_GRADIENT); every mapping from those data
-/// units to a metres/second look is a marked <c>TUNE</c> constant, validated by the user's
-/// A/B against the original.
-///
-/// <para><b>Model — a camera-following field the plane flies through.</b> One
-/// <see cref="MultiMeshInstance3D"/> (one draw call) of N small quads. Each instance carries a
-/// fixed random seed; a spatial shader turns that seed into a world position that (a) falls +
-/// drifts over the <c>csky_time</c> global (see <see cref="CSVM.Utils.ShaderTime"/>) and (b)
-/// wraps into a box <b>centred on the camera</b> — so the field is world-anchored (the plane's
-/// own motion carries the particles past, correct parallax) yet infinite and cheap. The whole
-/// animation runs from that uniform and the <c>CAMERA_POSITION_WORLD</c> built-in, so there is
-/// <b>zero per-frame CPU</b>: build it once and it plays itself — and because the uniform is the
-/// only handle, halting or fixed-stepping the sim clock is what stops or pins the fall. A
-/// generous custom AABB keeps it from being frustum-culled when the camera is far from this
-/// node's origin (the shader positions everything around the camera, so the computed instance
-/// transforms stay near the origin).</para>
-///
-/// <para><b>SNOW</b> = small camera-facing flakes with a gentle per-instance horizontal
-/// flutter (so they don't fall in lockstep). <b>RAIN</b> = thin streak quads billboarded
-/// <i>along the fall direction</i> (the data's GRAVITY+WIND velocity), length scaled by fall
-/// speed. (Streaking along the plane-relative velocity — rain coming at the camera when you
-/// fly fast — is a nicer look but not what the data specifies; it's a documented TUNE
-/// follow-up pending the user's in-game A/B.) The sprites are <b>procedural</b> (a soft dot /
-/// a soft streak, generated here): the original rendered untextured coloured line/point
-/// primitives, which no texture archive carries, so a tiny generated sprite is the faithful,
-/// asset-free stand-in.</para>
-///
-/// <para>No distance fog: unlike the cloud sprites (which reach kilometres out to the fog
-/// wall), the precipitation box is a tight ~40 m shell around the camera, entirely inside the
-/// fog's clear near-range (FOG_RANGES.x / 2 ≈ 250–500 m), so a fog term would be a provable
-/// no-op here.</para>
+/// <summary>Rain and snow, driven by the mission's <c>weather.json</c> precipitation block (see
+/// <see cref="WeatherState.PrecipData"/>). Schema and the data→look TUNE mapping:
+/// docs/formats/weather/atmosphere.md's Precipitation section; model and rendering:
+/// docs/architecture.md's entry for this file.
+/// ⚠ The sprites are procedural (<see cref="MakeFlakeTexture"/>/<see cref="MakeStreakTexture"/>):
+/// the original drew untextured coloured primitives, which no texture archive carries.
+/// ⚠ RAIN streaks along the data's GRAVITY+WIND fall direction, not the plane-relative velocity.
+/// The plane-relative look is nicer but unauthored; it is a TUNE follow-up pending an A/B.
 /// </summary>
 public sealed partial class Precipitation : Node3D
 {
@@ -62,13 +35,10 @@ public sealed partial class Precipitation : Node3D
     private const float SnowSwayFreq = 1.3f; // … and frequency (rad/s)
 
     // Self-animating: fall/wind drift over csky_time, wrapped into a box centred on the camera.
-    // The final world position ignores the instance transform entirely (POSITION is set
-    // directly), so the instances can stay at the node origin — only the custom AABB below keeps
-    // them visible. INSTANCE_CUSTOM.xyz = the fixed base fraction [0,1)³; .w = a flutter phase.
-    //
-    // ⚠ csky_time (the sim clock's shader-side twin), never Godot's TIME: this module has no
-    // per-frame C# hook at all, so the uniform is the ONLY handle on the animation — with TIME
-    // the rain kept falling through a halted clock and through a fixed-step capture.
+    // POSITION is set directly, so instances stay at the node origin; only the AABB below keeps
+    // them visible. INSTANCE_CUSTOM.xyz is the fixed base fraction, .w a flutter phase.
+    // ⚠ Never use Godot's TIME here. This module has no per-frame C# hook, so csky_time is the
+    // only handle on the animation — TIME kept the rain falling through a halted clock.
     private const string ShaderCode = """
         shader_type spatial;
         render_mode blend_mix, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;

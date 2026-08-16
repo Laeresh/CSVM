@@ -11,22 +11,12 @@ namespace CSVM.UI;
 /// <summary>
 /// The node lab (N) in <c>--freecam</c>/<c>--anim-lab</c>: a dockable panel holding the world's
 /// node tree by <c>cs_name</c>, a search box, per-node actions (frame the camera, hide/show the
-/// subtree) and a dependency readout for whatever <see cref="SelectionService"/> currently has.
-/// A second view lists the chapter's destructibles with coverage columns.
-///
-/// <para><b>The tree is lazy.</b> A chapter world is thousands of nodes, so a branch is populated
-/// only when it is expanded — each expandable row carries one placeholder child that is reused as
-/// its first real child on expand. Nothing is rebuilt per frame; the only per-frame work while the
-/// panel is open is one status line at 4 Hz.</para>
-///
-/// <para><b>The tree reaches what a click cannot.</b> <see cref="SelectionService"/> skips
-/// map-scale meshes, so terrain is unpickable; selecting a row here goes through
-/// <see cref="SelectionService.Select"/>, which has no such limit.</para>
-///
-/// <para><b>A dependency source that this mode does not build says so.</b> Colliders exist only in
-/// the flight build, so an empty collider list here would be the instrument missing rather than the
-/// colliders — the readout prints the fact instead of the empty list. The same applies to a
-/// <c>--node=</c> slice, whose anim bind is deliberately partial.</para>
+/// subtree) and a dependency readout for whatever <see cref="SelectionService"/> currently has. A
+/// second view lists the chapter's destructibles with coverage columns. The tree is lazy: a
+/// branch populates only when expanded. Full behaviour: this module's entry in
+/// docs/architecture.md.
+/// ⚠ A dependency source this mode does not build must say so, never show an empty list: an empty
+/// collider list here is the instrument missing, not missing colliders.
 /// </summary>
 public sealed partial class NodeLab : Node
 {

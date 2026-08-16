@@ -4,22 +4,12 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// Wingtip navigation lights. Every player plane carries two sprite quads
-/// <c>wing_flare1</c>/<c>wing_flare2</c> at the wingtips, skinned with the soft glow
-/// <c>oil_liteflare.tif</c> (a white core fading to transparent black). The original
-/// hides them at spawn and flashes them on a 1.5 s cycle: <c>wing_light.json</c>'s
-/// <c>wing_lights_blink</c> anim (wired into most plane defs via <c>start_anims</c>) has
-/// a RESET_STATE that deactivates both flares, and a looping <c>blink_lights</c> sequence
-/// that activates them (plus two warm point lights, COLOR 0.88/0.78/0.36, RANGE 0.5–1.25 m)
-/// for a single frame every SEQUENCE_OFFSET 1.5 s — a brief blink, gated off entirely below
-/// ANIMATION_LOD HIGH.
-///
-/// PlaneBuilder hides the flares at build time (both viewers) and re-skins each with an
-/// additive amber tint, keeping the source quad's one-sided orientation (no billboard —
-/// forcing it to always face the camera turned the compact authored star burst into a
-/// large flat blob; the original only shows it from the angle it was authored at, which
-/// is where a chase camera sits). In flight a <see cref="Flight.WingLightBlinker"/> flashes
-/// the flares and toggles a matching OmniLight3D per side on the same cycle.
+/// Wingtip navigation lights: the flare-node predicate (<c>wing_flare1</c>/<c>wing_flare2</c>),
+/// glow texture, blink colour and period, and point-light range. See
+/// <c>docs/architecture.md</c> for the full decode.
+/// PlaneBuilder hides and re-skins the flares (additive tint, one-sided as authored, no
+/// billboard); <see cref="Flight.WingLightBlinker"/> flashes them and emits a matching
+/// OmniLight3D per side.
 /// </summary>
 public static class WingLights
 {

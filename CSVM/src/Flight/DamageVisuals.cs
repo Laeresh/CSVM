@@ -6,45 +6,14 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// Visible damage on the aircraft, driven by the data's thresholds against two separate pools,
-/// as the original does: a part's own HEALTH fraction crosses an entry of its 'injure_anims'
-/// (see <see cref="DestroyablePart"/>, <see cref="OnPartDamage"/>), and the whole vehicle's
-/// health fraction crosses an entry of the def-level list (<see cref="OnHullDamage"/>). Armour
-/// is in neither quotient. The
-/// pdpanelN entries flip the torn-skin panel (pdpN shown, the healthy skin covering
-/// the same spot hidden) and, in flight, play the authored pdpanelN def through the
-/// player's own rig runtime (<see cref="DamageEffectSink"/>) — gimmeflakes debris
-/// plus the staged short_firetrail / loop_short_firetrail burn-down at the panel,
-/// exactly as player-1.zrd.json choreographs it. The def-level entries play the same
-/// way: player_fuelleak (0.85 — the fuel-vapor stream from a random pdp1–3) and, for
-/// the 0.10 player_smoketrail entry, player_damage_trail — short_firetrail at prop1
-/// plus the flickering fire_lt nose light (see <see cref="RigAnimFor"/> for why that
-/// one name is mapped).
-///
-/// The healthy twin is found BY POSITION, not by name: on player_bhawk,
-/// player_fbrand and player_brigand the _h numbering is crossed in the model
-/// files (e.g. the firebrand's pdp3_h is the RIGHT wingtip skin while pdp3 is a
-/// LEFT-wing torn panel — its true healthy twin is named pdp2_h), so name
-/// pairing amputates the opposite wing. Each _h node instead pairs with the
-/// nearest torn panel's mesh footprint (real twins sit ≤ 0.72 m apart, crossed
-/// or unrelated skins ≥ 1.36 m — see MaxPairDistance), rejecting mirrored
-/// left/right positions (the autogyro's pdp2/pdp2_h sit ±0.28 m across the
-/// centerline). Unpaired _h skins (the brigand's tip strips, the balmoral's fin
-/// panel) are never hidden. The original's pdpanelN anims only ACTIVE pdpN; its
-/// player_destruct_reset anim re-ACTIVEs the _h nodes, so the original engine
-/// does hide them at damage time by some rule of its own — if that rule is the
-/// name convention, the original shows the same wrong-wing glitch on these
-/// three planes (unverified). The *_damage_green/yellow/red entries are the
-/// cockpit indicator's texture cycle and stay unwired until a cockpit exists.
-///
-/// Two hosts. In flight the sinks reach the rig runtime and the effects are the
-/// authored defs; a world-less flight (--stage=empty) has no rig runtime, so only
-/// the panel flips render there, logged once. The parked viewer's damage lab has no
-/// runtime either — and a parked plane travels no distance, so the authored
-/// distance-interval trails would emit nothing anyway; it keeps stand-in Puffer
-/// trails burning in place (<see cref="UpdateStatic"/>) at the panels and at the
-/// authored prop1 anchor. FlightController notifies <see cref="OnPartDamage"/> and
-/// <see cref="OnHullDamage"/> after each hit and calls <see cref="Reset"/> on respawn.
+/// Visible damage on the aircraft, driven purely by the data's injure_anims thresholds: a
+/// part's own health fraction (<see cref="OnPartDamage"/>) and the whole vehicle's health
+/// fraction (<see cref="OnHullDamage"/>) each drive their own list — see
+/// <c>docs/org/vehicleDamage.md</c>'s "Damage staging" for the two pools and why armour is in
+/// neither. See <c>docs/architecture.md</c>'s "src/Flight/DamageVisuals.cs" entry for what each
+/// authored stage plays and the panel-pairing/gimmeflakes traps.
+/// FlightController calls <see cref="OnPartDamage"/>/<see cref="OnHullDamage"/> after each hit
+/// and <see cref="Reset"/> on respawn.
 /// </summary>
 public sealed class DamageVisuals
 {
@@ -85,17 +54,12 @@ public sealed class DamageVisuals
     private bool _smoking;
     private bool _noRuntimeLogged;
 
-    /// <param name="panels">PlaneBuilder.DamagePanels — pdpN (hidden) + pdpN_h nodes.</param>
-    /// <param name="planeRoot">the built model's root — pairing measures panel mesh
-    /// positions in this frame (the _h nodes bake their placement into mesh space).</param>
-    /// <param name="standInTrail">parked-viewer stand-in for the heavy trail's smoke half,
-    /// burned in place at prop1; flight passes none and plays the authored defs instead.</param>
+    /// <param name="panels">PlaneBuilder.DamagePanels — pdpN + pdpN_h nodes.</param>
+    /// <param name="planeRoot">pairing measures panel mesh centers in this frame.</param>
+    /// <param name="standInTrail">parked-viewer stand-in smoke half, burned at prop1; null in flight.</param>
     /// <param name="standInFire">its fire half.</param>
-    /// <param name="panelTrails">parked-viewer stand-in pool, one firepuffer per flipped
-    /// panel — standing in for the authored short_firetrail the flight path plays.</param>
-    /// <param name="pairing">the def-derived panel candidate sets (<see cref="PanelPairingSets"/>)
-    /// — which skins damage may hide and which torn panels participate. Null engages the
-    /// unscoped geometric fallback, loudly.</param>
+    /// <param name="panelTrails">parked-viewer stand-in pool, one firepuffer per flipped panel.</param>
+    /// <param name="pairing">def-derived candidate sets; null falls back to unscoped pairing, loudly.</param>
     public DamageVisuals(IEnumerable<Node3D> panels, Node3D planeRoot, PlaneStats stats,
         Puffer? standInTrail = null, Puffer? standInFire = null, List<Puffer>? panelTrails = null,
         PanelPairing? defPairing = null)
@@ -166,12 +130,9 @@ public sealed class DamageVisuals
             : null;
     }
 
-    /// <summary>Applies every per-part visual whose threshold the struck part's new HEALTH
-    /// fraction has crossed (fraction ≤ entry). Idempotent per anim name.
-    /// <paramref name="healthFraction"/> is health current over health max for that part alone
-    /// (FUN_004b3d70's [part+0x30] / [part+0x2c]), not the combined armour+HP progression: armour
-    /// never enters the quotient, and FUN_004b7f80 blocks health damage outright while the part's
-    /// armour covers the hit, so an armoured part crosses nothing. The whole-plane stages are
+    /// <summary>Applies every per-part visual whose threshold the part's health fraction has
+    /// crossed (health-only, not combined armour+HP — see <c>docs/org/vehicleDamage.md</c>'s
+    /// "Damage staging"). Idempotent per anim name. The whole-vehicle stages are
     /// <see cref="OnHullDamage"/>, off a different pool.</summary>
     public void OnPartDamage(string partName, float healthFraction)
     {
@@ -201,11 +162,8 @@ public sealed class DamageVisuals
                 }
                 else if (anim.EndsWith("_damage_effects", StringComparison.OrdinalIgnoreCase))
                 {
-                    // The per-impact spark burst. The authored chain discards the part: all four
-                    // <part>_damage_effects defs are the same one-event shim calling
-                    // random_gun_impact, which picks pdp1 (40%) or pdp2 (40%) and ALWAYS also
-                    // sparks pdp4 — so a hit can light one panel or two, never none. Health-gated
-                    // like every other entry: an armoured part never reaches this 0.99 threshold.
+                    // The per-impact spark burst; see docs/formats/vehicle.md for
+                    // random_gun_impact's panel pick. Health-gated like every other entry.
                     PlayStage(anim, partName, healthFraction);
                 }
                 // else: *_damage_green/yellow/red cockpit indicator and got_hit_anim's nosedamage
@@ -352,14 +310,11 @@ public sealed class DamageVisuals
         }
     }
 
-    // Pairs every healthy pdpN_h skin with the torn panel occupying the same
-    // spot on the airframe (nearest mesh-AABB center within MaxPairDistance,
-    // same side of the centerline). The CANDIDATE sets come from the authored defs when
-    // given: only skins `plane_reset` re-ACTIVEs are hideable, only `pdpanelN` targets are
-    // torn panels — an `_h` node outside the authored list is never hidden, by construction.
-    // The assignment inside those sets stays positional: the defs never say which torn panel
-    // hides which skin, and name-based pairing is wrong on three planes — see the class
-    // comment.
+    // Pairs each healthy pdpN_h skin with the nearest torn panel (mesh-AABB centers,
+    // same side of the centerline). CANDIDATE sets are def-derived when given — see
+    // architecture.md's DamageVisuals entry. The ASSIGNMENT inside those sets is
+    // always positional: no def says which panel hides which skin, and name-based
+    // pairing is wrong on three planes.
     private void PairHealthySkins(Node3D planeRoot, PanelPairing? defPairing)
     {
         if (defPairing == null)

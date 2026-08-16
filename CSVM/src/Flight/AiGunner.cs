@@ -2,26 +2,16 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>The AI's forward-gun gunnery: the lead-sphere accuracy model and the
-/// shot-angle cones, decoded in docs/formats/ai-rosters.md ("ai_skill_parameters") and
-/// docs/formats/vehicle.md (gun_pitch/gun_yaw). Per sim tick the host
+/// <summary>The AI's forward-gun gunnery: the lead-sphere accuracy model and the shot-angle
+/// cones, decoded in docs/formats/ai-rosters.md (<c>ai_skill_parameters</c>) and
+/// docs/formats/vehicle.md (<c>gun_pitch</c>/<c>gun_yaw</c>). Per sim tick the host
 /// <see cref="FlightController"/> hands it the fire geometry (<see cref="Solve"/>); the gunner
-/// answers with the trigger (<see cref="WantsFire"/>) and the lead direction, and every round
-/// that goes out perturbs that lead inside the dead-eye cone (<see cref="ShotDirection"/>, one
-/// draw per shot). The lead solve is <see cref="AimAssist.TryIntercept"/> — the same
-/// constant-velocity solver the player assist and the turret gunners consume, never re-derived.
-///
-/// <para>The fire gates, in order: an intercept the round can reach inside the weapon's RANGE;
-/// the lead direction inside the airframe's forward gun cone (<c>gun_pitch</c>/<c>gun_yaw</c>,
-/// ±11° on every shipped AI aircraft — a hard gate, the AI does not fire off-boresight); and
-/// the quick-draw cone — the shot is taken only within <see cref="QuickDrawAngleDeg"/> of the
-/// TARGET's nose or tail axis (head-on and rear shots are the safe ones; beam shots need a
-/// confident pilot: 50° → 89° over the shipped <c>quick_draw_angle</c> pair).</para>
-///
-/// <para><see cref="Target"/> is a plain mutable field BY DESIGN — the original's mission
-/// script retargets an AI at runtime (<c>ADD_OTHER_TARGET</c>…), so orders are never read-once.
-/// The dead-eye rng is the gunner's own seeded stream, so a fixed-seed run scatters
-/// identically.</para></summary>
+/// answers with the trigger (<see cref="WantsFire"/>) and the lead direction, perturbed inside
+/// the dead-eye cone (<see cref="ShotDirection"/>, one draw per shot). The lead solve is
+/// <see cref="AimAssist.TryIntercept"/>, the same constant-velocity solver the player assist and
+/// the turret gunners consume.
+/// ⚠ <see cref="Target"/> is a plain mutable field by design: the original's mission script
+/// retargets an AI at runtime, so orders are never read-once.</summary>
 public sealed class AiGunner
 {
     /// <summary>The shipped forward-gun cone half-angle: <c>gun_pitch</c>/<c>gun_yaw</c> are

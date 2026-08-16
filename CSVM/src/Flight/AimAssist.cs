@@ -195,17 +195,12 @@ public static class AimAssist
     // every frame.
     private const float ParallelDot = 0.999f;
 
-    /// <summary>The per-frame forget + catch-up pass, run once per active slot. Forget: past
-    /// <paramref name="forgetInterval"/> seconds since the slot was last touched, the target
-    /// unwinds to local forward. Catch-up: <see cref="GunAimSlot.Smoothed"/> slerps toward
-    /// <see cref="GunAimSlot.Target"/> at <paramref name="catchupRate"/> per second, snapping
-    /// outright once that covers the whole turn in one frame — any frame at or past
-    /// <c>1 / catchupRate</c> seconds fully snaps the gun line, a real hitch-behaviour difference
-    /// and not a rounding detail to smooth away.
-    ///
-    /// <para>Call this immediately BEFORE performing this tick's fire outcome — the original
-    /// restamps <c>lastUpdate</c> on every round that goes out, so the pass must see the
-    /// pre-shot state.</para></summary>
+    /// <summary>The per-frame forget + catch-up pass, run once per active slot (docs/org/aim-assist.md
+    /// "The per-frame slot update"). Forget: past <paramref name="forgetInterval"/> seconds since
+    /// last touched, the target unwinds to local forward. Catch-up: <see cref="GunAimSlot.Smoothed"/>
+    /// slerps toward <see cref="GunAimSlot.Target"/> at <paramref name="catchupRate"/> per second.
+    /// ⚠ Call this BEFORE this tick's fire outcome; the original restamps <c>lastUpdate</c> on every
+    /// round fired, so the pass must see the pre-shot state.</summary>
     public static void Tick(GunAimSlot[] slots, double now, float dt, float forgetInterval, float catchupRate)
     {
         for (int i = 0; i < slots.Length; i++)
@@ -235,21 +230,12 @@ public static class AimAssist
         }
     }
 
-    /// <summary>The constant-velocity intercept solver (<c>FUN_00460e30</c>): given a muzzle
-    /// position, the round's speed, a target position and the target's velocity RELATIVE to the
-    /// shooter (target velocity minus the shooter's — the caller subtracts before calling), finds
-    /// the direction to fire and the time of flight so a straight-line round launched now reaches
-    /// where the target will be. Frame-agnostic — every input in the same space, world or
-    /// plane-local, and the answer comes out in that space.
-    ///
-    /// <para>The round meets the target when <c>speed·t = |displacement + relVel·t|</c>, a
-    /// quadratic in <c>t</c> whose leading coefficient is <c>|relVel|² − speed²</c> — which sits
-    /// near zero whenever the target's closing speed is close to the round's, the common case.
-    /// Substituting <c>u = 1/t</c> flips the roles of leading and constant coefficient, so the
-    /// leading coefficient becomes <c>|displacement|²</c> instead, essentially never near zero for
-    /// a real separation. That substitution, not the quadratic formula's own cancellation
-    /// avoidance, is what "numerically stable" refers to here — read that before "fixing"
-    /// it.</para></summary>
+    /// <summary>The constant-velocity intercept solver (<c>FUN_00460e30</c>, docs/org/aim-assist.md
+    /// "The lead solver"): given the muzzle, the round's speed, the target position and its velocity
+    /// RELATIVE to the shooter, finds the fire direction and time of flight. Frame-agnostic — every
+    /// input in the same space, and the answer comes out in that space.
+    /// ⚠ Solves via <c>u = 1/t</c>, not the textbook quadratic in <c>t</c>; the docs page has the
+    /// derivation. Do not swap it back in.</summary>
     public static bool TryIntercept(Vector3 muzzlePos, float speed, Vector3 targetPos, Vector3 relVel,
         out Vector3 aimDir, out float t)
     {
@@ -314,25 +300,19 @@ public static class AimAssist
     public static float ConeCosFor(in AimCandidate candidate, float weaponConeCos) =>
         candidate.ConeOverride >= 0f ? Mathf.Cos(candidate.ConeOverride) : weaponConeCos;
 
-    /// <summary>The DEFAULT team for a pilot index with no mission-assigned team: pilot N is team
-    /// N+1, which makes every pane hostile to every other pane — what <c>--vs</c> and free flight
-    /// run on. <see cref="FlightController.Team"/> falls back to this when
-    /// nothing has set it explicitly; a mission overrides it per aircraft (Instant Action's
-    /// wingmen and enemies both land on a fixed team, never one derived from pilot index — see
-    /// <see cref="PlayerTeam"/>). A round nobody owns (<see cref="ProjectilePool.NoShooter"/>, and
-    /// any other negative id) is <see cref="NeutralTeam"/>, so the engine's own "either side is 0
-    /// rejects the pair" rule leaves it untargetable.</summary>
+    /// <summary>The default team for a pilot index with no mission-assigned team: pilot N is team
+    /// N+1, so every pane is hostile to every other — what <c>--vs</c> and free flight run on.
+    /// <see cref="FlightController.Team"/> falls back to this until a mission sets one explicitly
+    /// (docs/architecture.md's <c>FlightController.cs</c> entry). A round nobody owns
+    /// (<see cref="ProjectilePool.NoShooter"/>) is <see cref="NeutralTeam"/>, so it is
+    /// untargetable.</summary>
     public static int TeamOfPilot(int shooterId) => shooterId >= 0 ? shooterId + 1 : NeutralTeam;
 
-    /// <summary>The launch scatter (<c>FUN_00460940</c> → <c>FUN_004608a0</c>), the ONLY scatter the
-    /// original applies to a player's round: build any perpendicular to the aim direction, roll it
-    /// about the aim axis by a uniform angle, then rotate the aim direction about that perpendicular
-    /// by <paramref name="inaccuracy"/> × a uniform [0,1).
-    ///
-    /// <para>⚠ The polar angle is uniform in <c>[0, inaccuracy]</c>, NOT uniform over the cone's
-    /// solid angle — sampling the cap (the reflex when porting, and what
-    /// <c>ProjectilePool.ApplySpread</c> does with its <c>sqrt(rand)</c>) puts noticeably more shots
-    /// near the rim. Do not merge the two.</para></summary>
+    /// <summary>The launch scatter (<c>FUN_00460940</c> → <c>FUN_004608a0</c>, docs/org/aim-assist.md
+    /// "The scatter cone"), the only scatter the original applies to a player's round: rotate the aim
+    /// direction about a perpendicular by <paramref name="inaccuracy"/> × a uniform [0,1).
+    /// ⚠ The polar angle is uniform in <c>[0, inaccuracy]</c>, not over the cone's solid angle. Do
+    /// not merge this with <c>ProjectilePool.ApplySpread</c>'s <c>sqrt(rand)</c> cap sampling.</summary>
     public static Vector3 Scatter(Vector3 aimDir, float inaccuracy, RandomNumberGenerator rng)
     {
         if (inaccuracy <= 0f || aimDir.LengthSquared() < 1e-12f)
@@ -348,21 +328,12 @@ public static class AimAssist
         return axis.Rotated(perp, rng.Randf() * inaccuracy).Normalized();
     }
 
-    /// <summary>One round's launch direction, in world space — <c>FUN_004b6530</c>'s whole step
-    /// order, which is asymmetric on purpose:
-    /// <list type="number">
-    /// <item>seed the slot's target with the plane's own forward axis (the "no target found"
-    /// answer) and run the scan, whose winner replaces it;</item>
-    /// <item>rotate that world direction into the slot's plane-local <see cref="GunAimSlot.Target"/>
-    /// and restamp <see cref="GunAimSlot.LastUpdate"/> — which is why the forget timer measures time
-    /// since this barrel last FIRED;</item>
-    /// <item>rotate the slot's plane-local <see cref="GunAimSlot.Smoothed"/> back out to world as
-    /// the direction actually fired — <b>this frame's scan result is not what goes out</b>, the
-    /// smoothed value from previous frames is;</item>
-    /// <item>scatter it by <paramref name="inaccuracy"/>.</item>
-    /// </list>
-    /// Firing this frame's scan result instead would remove the lag entirely and read as an
-    /// aimbot; the lag is the feel.</summary>
+    /// <summary>One round's launch direction, in world space (<c>FUN_004b6530</c>'s whole step
+    /// order): scan for a target and store the winner as the slot's new plane-local
+    /// <see cref="GunAimSlot.Target"/>, then fire along the slot's plane-local
+    /// <see cref="GunAimSlot.Smoothed"/> rotated back to world, scattered.
+    /// ⚠ This frame's scan result is not what goes out; the smoothed value from previous frames is.
+    /// Firing the scan result directly would remove the lag and read as an aimbot.</summary>
     public static Vector3 FireDirection(ref GunAimSlot slot, in AimScan scan,
         AimCandidateSet candidates, Basis planeBasis, double now, float inaccuracy,
         RandomNumberGenerator rng, out AimScanResult found)
@@ -375,18 +346,11 @@ public static class AimAssist
         return Scatter(fired, inaccuracy, rng);
     }
 
-    /// <summary>The candidate scan (<c>FUN_004b6530</c>'s scan half): one scorer over all four of
-    /// the original's candidate lists, in its own order, returning the highest-scoring survivor or
-    /// false. Every gate is the engine's, in the engine's order — self, not live, same team (or
-    /// either side unaffiliated), no intercept, the intercept point out of the weapon's authored
-    /// range, outside the acceptance cone — and survivors rank by
-    /// <c>alignment − distance × dist_factor</c>, where alignment is the dot of the intercept
-    /// direction with the plane's forward axis. The first survivor always beats the seed, exactly
-    /// as the engine's <c>−FLT_MAX</c> best-score cell does.
-    ///
-    /// <para>Works in world space throughout, so <paramref name="scan"/>'s muzzle, velocities and
-    /// forward axis are all world; B5 rotates the winning direction world→local into the slot's
-    /// target field, which is where the plane-local half of the assist starts.</para></summary>
+    /// <summary>The candidate scan (<c>FUN_004b6530</c>'s scan half, docs/org/aim-assist.md "The four
+    /// lists"): one scorer over all four candidate lists, in the original's order, returning the
+    /// highest-scoring survivor or false. Survivors rank by
+    /// <c>alignment − distance × dist_factor</c>. Works in world space throughout; the caller rotates
+    /// the winning direction into the slot's plane-local target.</summary>
     public static bool Scan(in AimScan scan, AimCandidateSet candidates, out AimScanResult best)
     {
         best = default;

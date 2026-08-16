@@ -6,21 +6,12 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The original's low-speed control-authority ramp (closing BL-330): roll and
-/// pitch authority is 0 at <c>turn_fade_in</c> (10 mph), rises linearly to 1 at
-/// <c>turn_fade_out</c> (authored 50 mph) and holds there. Yaw keeps its own, different curve.
-///
-/// <para><b>Why these assertions and not a "the aircraft feels mushy" probe.</b> The ramp is
-/// saturated at 1 across the whole speed band the flight-envelope suite measures, so every pinned
-/// number in that suite is blind to it (<c>verification.md</c> METHOD-10: a green suite here says
-/// nothing). What follows is the able-to-fail part — the curve's shape read off the model, and the
-/// rotation it produces at a speed where it actually bites.</para>
-///
-/// <para>The reverse-authority factor rides along because it comes out of the same function
-/// (<c>FUN_0048bdd0</c>'s fifth output). It is asserted as a CURVE only: its one consumer in the
-/// original is the visible rudder angle, so a test that looked for it in the force path would be
-/// testing the misattribution rather than the mechanism — see
-/// <see cref="FlightModel.ReverseAuthorityAt"/>.</para>
+/// The original's low-speed control-authority ramp (closed BL-330). Decode:
+/// docs/org/flightModel.md, "The low-speed ramp". Saturated at 1 across the whole speed band the
+/// flight-envelope suite measures, so a green suite there says nothing here (verification.md
+/// METHOD-10); this asserts the curve's shape and the rotation it produces where it bites.
+/// The reverse-authority factor is asserted as a curve only, per
+/// <see cref="FlightModel.ReverseAuthorityAt"/>'s own note.
 /// </summary>
 public class ControlAuthorityRampTests
 {

@@ -19,22 +19,11 @@ namespace CSVM.Mech3;
 public readonly record struct InstantActionWave(
     int NumEnemies, string EnemyName, string EnemyPlane, string EnemySkill, int EnemyAccentId);
 
-/// <summary>
-/// Builds an <see cref="InstantActionDef"/> the three ways decision 2
-/// names: the shipped <c>ia.zrd.json</c> (<see cref="Load"/>), a hand-authored <c>--ia=&lt;path&gt;</c>
-/// file using the same field names as an ordinary JSON object rather than the zrdr archive's
-/// flat-alternating shape (<see cref="LoadFromJson"/>), and the launchscreen's Instant Action
-/// wizard (<see cref="BuildFromWizard"/>), which starts from a chosen environment's own
-/// <see cref="Load"/> result and overlays only what the wizard actually lets a pilot configure.
-/// The first two share one field-population path (<c>BuildDef</c>, over <see cref="ZrdrDict"/>) —
-/// <see cref="LoadFromJson"/>'s only job is the small mapping from a plain JSON object onto the
-/// same key/[values…] shape <see cref="ZrdrDict"/> already wraps ("a small hand-written mapping and
-/// not a second schema"), so a JSON object's nested
-/// <c>group1</c>…<c>group4</c> records parse through exactly the same <c>ZrdrDict.Dict</c> call
-/// a real reader's does. The wizard converges on the same record type rather than this same
-/// parse — <c>GameSession</c> builds one <c>InstantActionRuntime</c> from an
-/// <see cref="InstantActionDef"/> regardless of which of the three produced it.
-/// </summary>
+/// <summary>Builds an <see cref="InstantActionDef"/> the three ways decision 2 names: the
+/// shipped <c>ia.zrd.json</c> (<see cref="Load"/>), a hand-authored <c>--ia=&lt;path&gt;</c>
+/// file (<see cref="LoadFromJson"/>), and the launchscreen's Instant Action wizard
+/// (<see cref="BuildFromWizard"/>). All three converge on one record and one build path
+/// (<c>BuildDef</c>); plumbing: this module's entry in docs/architecture.md.</summary>
 public static class InstantAction
 {
     // "The built-in defaults" (docs/formats/instant-action.md), decoded from FUN_00458ff0's
@@ -119,18 +108,11 @@ public static class InstantAction
     /// kept for the same reason <c>--ia=</c>'s own load catches and warns rather than crashing.</summary>
     public static InstantActionDef Defaults() => BuildDef(ZrdrDict.FromAlternating(new List<object?>()));
 
-    /// <summary>Builds an <see cref="InstantActionDef"/> from the launchscreen's Instant Action
-    /// wizard — the third of the three producers decision 2 names,
-    /// converging on the same record the shipped-file reader and <c>--ia=</c> build. The wizard
-    /// owns <paramref name="missionType"/>, <paramref name="playerPlane"/>, the wingmen and
-    /// <paramref name="waves"/>, and <paramref name="lives"/> — everything else (the ace, the
-    /// zeppelin node names, <c>disallow_missions</c>) is the chosen environment's own, carried over
-    /// from <paramref name="baseDef"/> unedited, since the wizard has no control for any of them
-    /// (they are chapter-level facts, not mission-type-level ones). <c>dogfight_ace</c> forces the
-    /// wingman count and every wave's enemy count to 0 — the same rule <see cref="BuildDef"/>
-    /// applies when reading the file: the ace duel is solo whichever producer built the
-    /// def, so a wizard pilot who configured wingmen and then switched to Dogfighting an Ace does
-    /// not get a solo-breaking def out of stale wizard state.</summary>
+    /// <summary>Builds an <see cref="InstantActionDef"/> from the launchscreen's wizard: the third
+    /// of the three producers, converging on the same record. Overlays only what the wizard lets a
+    /// pilot configure; everything else carries over from <paramref name="baseDef"/> unedited.
+    /// ⚠ Forces wingmen and every wave's enemy count to 0 when <paramref name="missionType"/> is
+    /// <c>dogfight_ace</c>, matching <see cref="BuildDef"/>'s parse-time rule.</summary>
     public static InstantActionDef BuildFromWizard(InstantActionDef baseDef, string missionType,
         string playerPlane, int numWingmen, string wingmanPlane,
         IReadOnlyList<InstantActionWave> waves, int lives)
@@ -336,26 +318,13 @@ public static class InstantAction
     };
 }
 
-/// <summary>
-/// One Instant Action mission, fully resolved: everything a chapter's <c>ia.zrd.json</c>
-/// configures, with every optional key filled from the original's own reset defaults
-/// (docs/formats/instant-action.md "The built-in defaults") rather than left blank — the same
-/// reset-then-overlay the game's own parser performs (<c>FUN_00458ff0</c> then
-/// <c>FUN_00459390</c>), which is what lets a hand-authored <c>--ia=&lt;path&gt;</c> file omit
-/// anything the tester does not care about and still get the original's own fallback.
-///
-/// <para><see cref="Flight.SpawnPoints.LoadIa"/> and <see cref="Flight.StuntMission"/> already
-/// read this same file's <c>spawn_points</c> and <c>dzones</c> keys directly — this record does
-/// not repeat either, by design ("keep both where they are and have
-/// the def carry the rest").</para>
-///
-/// <para><c>ground_target_name</c>/<c>ground_target_node</c> belong to the <c>ground_target</c>
-/// mission type, which every chapter's own <c>disallow_missions</c> bars and this milestone does
-/// not implement, so they are left out entirely rather than modelled for a mode nothing can
-/// reach. The wave-only <c>enemy_accentID</c> IS modelled, on
-/// <see cref="InstantActionWave"/> itself rather than here — it varies per wave, unlike every
-/// other field on this record.</para>
-/// </summary>
+/// <summary>One Instant Action mission, fully resolved: every optional <c>ia.zrd.json</c> key
+/// filled from the original's own reset-then-overlay defaults (docs/formats/instant-action.md
+/// "The built-in defaults"), so a hand-authored <c>--ia=&lt;path&gt;</c> file can omit anything
+/// and still get the original's fallback. Plumbing and per-field rules: this module's entry in
+/// docs/architecture.md.
+/// ⚠ Leaves out <c>ground_target_name</c>/<c>ground_target_node</c>: every chapter's own
+/// <c>disallow_missions</c> bars that mission type and this milestone does not implement it.</summary>
 public sealed class InstantActionDef
 {
     public required string MissionType { get; init; }

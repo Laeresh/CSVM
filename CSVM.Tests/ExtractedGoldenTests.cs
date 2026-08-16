@@ -10,15 +10,10 @@ namespace CSVM.Tests;
 /// <summary>
 /// Golden invariants over the player's own extraction. The retail install is a fixed input, so
 /// these counts and structural facts are stable, and a change to either the data or a reader
-/// moves them — that is the point. Only <b>numbers</b> and shapes are recorded here, never
-/// extracted content.
-///
-/// <para>Editing a number is a deliberate act: a moved count means either a reader changed
-/// behaviour or the extraction was rebuilt, and which of the two must be established first.</para>
-///
-/// <para>Every test here is an <see cref="ExtractedDataFactAttribute"/> or an
-/// <see cref="ExtractedDataTheoryAttribute"/>, so a checkout without <c>extracted/</c> reports
-/// them as skipped rather than green.</para>
+/// moves them; only numbers and shapes are recorded here, never extracted content.
+/// Editing a number is deliberate: establish first whether a reader changed behaviour or the
+/// extraction was rebuilt. Every test is <see cref="ExtractedDataFactAttribute"/> or
+/// <see cref="ExtractedDataTheoryAttribute"/>, so a checkout without <c>extracted/</c> skips.
 /// </summary>
 public class ExtractedGoldenTests
 {

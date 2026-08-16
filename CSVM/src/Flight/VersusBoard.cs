@@ -156,10 +156,8 @@ public sealed partial class VersusBoard : Control
         body.AddThemeConstantOverride("separation", Mathf.RoundToInt(7f * s));
         _panel.AddChild(body);
 
-        // Standings() is captured ONCE here (Populate runs only from OnMatchCompleted) — a later
-        // Restart() zeroes the live match, but that never rebuilds these already-drawn labels, so
-        // the board keeps showing the match it was actually populated for (StuntRaceBoard's same
-        // discipline).
+        // Captured once here so a later Restart() zeroing the live match never rebuilds these
+        // already-drawn labels.
         var standings = _match.Standings().ToList();
         var winners = standings.Where(st => st.Rank == 1).ToList();
         string title = winners.Count == 1 ? $"{SplitScreen.PlayerTag(winners[0].PlayerIndex)} WINS" : "DRAW";

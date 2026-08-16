@@ -6,27 +6,14 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// Floating node-name labels over the built scene (key <b>T</b>) — available in
-/// the static viewer <i>and</i> in flight, which is the point: the fastest way to identify an
-/// object sitting at a wrong position is to read its name off it while you fly past.
-///
-/// <para>Names come from the <c>cs_name</c> meta SceneBuilder stamps on every node, not from
-/// <c>Node.Name</c>: Godot sanitises (<c>.</c>→<c>_</c>) and auto-renames duplicate siblings,
-/// so the Godot name is frequently not the name in the game files, and a name you cannot
-/// grep for in the extraction is useless for this job. Nodes without that meta (our own
-/// overlays, effect roots) are not labelled at all.</para>
-///
-/// <para><b>Why it is bounded.</b> A chapter world is thousands of nodes; labelling all of
-/// them at once is unreadable and slow. So labels are limited to <see cref="MaxLabels"/>
-/// nearest the camera within <see cref="Radius"/>, and the selection is recomputed on a timer
-/// rather than per frame (positions are static in world space and the labels billboard
-/// themselves, so a slower cadence is invisible). The candidate walk is redone on the same
-/// timer because the tree genuinely changes in flight — MapEdgeExtender adds and drops
-/// border tiles as you cross cells.</para>
-///
-/// <para>Off by default and it builds nothing until switched on, so screenshots are
-/// unaffected. Modes cycle Off → Meshes (only nodes that actually draw something) → All
-/// (every gamez node, including the empty group/pivot nodes that structure the tree).</para>
+/// Floating node-name labels over the built scene (key T), available in the static viewer and in
+/// flight: the fastest way to identify an object at a wrong position is to read its name off it.
+/// Names come from the <c>cs_name</c> meta SceneBuilder stamps on every node, not
+/// <c>Node.Name</c>, which Godot sanitises and auto-renames on duplicate siblings. Labels are
+/// limited to <see cref="MaxLabels"/> nearest the camera within <see cref="Radius"/>, recomputed
+/// on a timer since the tree changes in flight as MapEdgeExtender adds and drops border tiles.
+/// Off by default; modes cycle Off, Meshes (nodes that draw something), All (every gamez node).
+/// Full decode, including the splitscreen selection trap: docs/architecture.md.
 /// </summary>
 public sealed partial class NodeLabels : Node
 {
@@ -129,17 +116,8 @@ public sealed partial class NodeLabels : Node
         return false;
     }
 
-    // Where on the node to hang its label, in node-local space: the centre of its
-    // mesh geometry rather than the node origin.
-    //
-    // This matters twice over. A gamez node's origin is frequently nowhere near the
-    // thing it draws, so an origin-anchored name floats off in space — useless when the whole
-    // job is reading the name of an object you are looking at. And a great many world nodes
-    // share an origin (group/pivot nodes sitting at the world origin), so origin anchoring
-    // collapsed them all into one screen cell and the de-clutter threw nearly all of them
-    // away: C1 in flight showed 6 labels out of 183 candidates.
-    //
-    // Computed once per scan in LOCAL space and transformed per refresh, so it follows
+    // ⚠ Anchor at the mesh-AABB centre in node-local space, never the node origin — see
+    // docs/architecture.md. Computed once per scan and transformed per refresh, so it follows
     // a node that moves (aircraft parts) without being recomputed.
     private static Vector3 LocalAnchor(Node3D n)
     {
@@ -256,10 +234,8 @@ public sealed partial class NodeLabels : Node
         }
         _picked.Sort(static (a, b) => a.Rank.CompareTo(b.Rank));
 
-        // Screen-space de-cluttering, nearest-first: without it the labels stack into an
-        // unreadable pile (an aircraft alone puts ~24 names inside a few hundred pixels, and a
-        // world is far worse), which defeats the whole point of being able to read a name off
-        // an object. A node loses its label only to something closer to the camera.
+        // Screen-space de-cluttering, nearest-first, or the labels stack into an unreadable
+        // pile. A node loses its label only to something closer to the camera.
         _occupied.Clear();
         int shown = 0, hidden = 0;
         var view = _camera.GetViewport().GetVisibleRect().Grow(GapX);

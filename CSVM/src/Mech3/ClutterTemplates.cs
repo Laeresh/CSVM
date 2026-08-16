@@ -4,47 +4,26 @@ using Godot;
 
 namespace CSVM.Mech3;
 
-/// <summary>One weighted alternative of a kind's <c>substitute</c> list — the model this stamp may
-/// become instead of the decoration the template authored.
-///
-/// <para><b>The file's weights are relative, not percentages</b>, and the engine normalises them
-/// itself: it sums the list, then stores each entry as <c>w / total</c>.
-/// <see cref="Weight"/> is the number as authored and <see cref="Fraction"/> is the engine's
-/// normalised share, so a reader of either cannot mistake C1's <c>9.0</c>/<c>1.0</c> for anything
-/// but 90 %/10 % — and C5's <c>hotelsign0</c>, which weights ITSELF 0.1 against two alternatives at
-/// 5.0 each, for the 1 %/49.5 %/49.5 % it is.</para></summary>
-/// <param name="Weight">The relative weight exactly as the file authors it.</param>
-/// <param name="Fraction">That weight divided by the list's total — the engine's own stored value,
-/// and the probability this alternative is drawn.</param>
-/// <param name="Model">The decoration model to place instead, e.g. <c>firtree2.flt</c>. A list
-/// always names the source model itself as one of its alternatives in the shipped data, which is
-/// how "stays itself 90 % of the time" is expressed.</param>
+/// <summary>One weighted alternative in a kind's <c>substitute</c> list. Weights are relative; the
+/// engine normalises by dividing by the list total. Decode: docs/formats/templates.md.</summary>
+/// <param name="Weight">The relative weight, exactly as authored.</param>
+/// <param name="Fraction">Weight divided by the list total: the draw probability.</param>
+/// <param name="Model">The decoration model to place instead.</param>
 public readonly record struct ClutterSubstitute(float Weight, float Fraction, string Model);
 
-/// <summary>One <c>OnWeaponHit</c> / <c>OnCrater</c> / <c>OnCollide</c> block: what a decoration
-/// does when it is shot, cratered or flown into. <b>No chapter in the install authors any of the
-/// three</b> — decoded and documented so the absence is a measurement rather than a gap. See
-/// docs/formats/templates.md.</summary>
-/// <param name="Health">The <c>health</c> key. Its presence is what arms the block at all, which
-/// is why the type is non-nullable here and the whole block is null when unarmed.</param>
-/// <param name="Anim">The <c>anim</c> key — an animation-definition name, resolved by the engine at
-/// parse time. Null when the key is absent.</param>
-/// <param name="Model">The <c>model</c> key — a debris/wreck model name, resolved by the engine's
-/// model lookup at parse time. Null when the key is absent.</param>
+/// <summary>One <c>OnWeaponHit</c>/<c>OnCrater</c>/<c>OnCollide</c> block. No chapter authors any
+/// of the three. Decode: docs/formats/templates.md.</summary>
+/// <param name="Health">Arms the block; null Health means unarmed.</param>
+/// <param name="Anim">Resolved animation-definition name, or null.</param>
+/// <param name="Model">Resolved debris/wreck model name, or null.</param>
 public readonly record struct ClutterDamageResponse(float Health, string? Anim, string? Model);
 
 /// <summary>
-/// One <c>templates.zrd</c> block: the authored properties of ONE decoration model, keyed by the
-/// model's own node name (<c>firtree1.flt</c>, <c>cb00a.flt</c>) — never by the template that
-/// scatters it. Every property here is consumed by the clutter stamper; the schema, the
-/// per-chapter census and which keys the retail data leaves at their defaults are in
-/// docs/formats/templates.md.
-///
-/// <para><b>Every default here is the engine's own</b>, read off its block initialiser
-/// rather than chosen — which matters because a decoration whose name appears in NO block is
-/// legitimate (the stamper simply skips every kind-driven step for it), and because five of the
-/// eleven keys are authored by no chapter at all, so their defaults are what the whole install
-/// runs on.</para>
+/// One <c>templates.zrd</c> block: the authored properties of one decoration model, keyed by its
+/// own node name, never the template that scatters it. Schema and per-chapter census: docs/
+/// formats/templates.md.
+/// Every default here is the engine's own. A decoration matching no block is normal; the stamper
+/// skips every kind-driven step for it.
 /// </summary>
 public sealed class ClutterKindProps
 {
@@ -66,21 +45,9 @@ public sealed class ClutterKindProps
     public Vector2 FarFadeMin { get; init; }
 
     /// <summary><c>far_fade_range</c> upper bounds — <c>(nearMax, farMax)</c>, in metres, from the
-    /// file's SECOND pair.
-    ///
-    /// <para>⚠ <b>The two file pairs are the MIN and MAX of the two distances, not the two
-    /// distances themselves.</b> The stamper lerps the near distance between
-    /// <c>kind+0x2c</c> and <c>+0x30</c> — the two pairs' FIRST components — and the far distance
-    /// between <c>+0x34</c> and <c>+0x38</c>, their second components. So C1's <c>firtree2</c>,
-    /// authored <c>[[300,600],[1000,2000]]</c>, fades from somewhere in 300–1000 m to somewhere in
-    /// 600–2000 m; reading the pairs as two bands would give 300–600 and 1000–2000, which is a
-    /// different rule that happens to agree on the many kinds whose numbers are chained
-    /// (<c>[[200,300],[300,350]]</c>). <b>And both distances come from ONE <c>rand()</c> draw</b> —
-    /// near and far are perfectly correlated per instance, not rolled independently.</para>
-    ///
-    /// <para>A zero <c>farMax</c> is the engine's "never fades" sentinel (the initialiser's own
-    /// value, so it is also what a decoration with no block gets). Not rendered by the remake:
-    /// applying it REMOVES distant clutter, so it is deferred deliberately.</para></summary>
+    /// file's second pair. Decode: docs/formats/templates.md.
+    /// ⚠ The two file pairs are the min and max of the two distances, not the two distances
+    /// themselves; both come from one <c>rand()</c> draw. Zero <c>farMax</c> means never fades.</summary>
     public Vector2 FarFadeMax { get; init; }
 
     /// <summary><c>translate_uv_range</c> lower bounds — <c>(uMin, vMin)</c>, in UV units, from the
@@ -109,15 +76,10 @@ public sealed class ClutterKindProps
     /// i.e. no cull. See <see cref="NormalYMax"/> for the inversion.</summary>
     public float NormalYMin { get; init; } = -1f;
 
-    /// <summary>The UPPER bound on the ground triangle's normal Y, from <c>min_slope</c>
-    /// (<c>kind+0x5c</c>). Default +1.
-    ///
-    /// <para>⚠ <b>The bounds are named for the field they gate, not for the key they come from,
-    /// because the mapping INVERTS</b>: cosine decreases with angle, so the *minimum* slope angle
-    /// becomes the *maximum* admissible normal Y. The stamper's step 3 rejects the triangle
-    /// when its clamped normal Y falls outside <c>[NormalYMin, NormalYMax]</c>. <b>No chapter
-    /// authors either key</b>, so the cull is off everywhere — which is why `ClutterBuilder` has
-    /// no hard-coded slope threshold of its own.</para></summary>
+    /// <summary>Upper bound on the ground triangle's normal Y, from <c>min_slope</c>. Decode:
+    /// docs/formats/templates.md.
+    /// ⚠ Named for the field it gates, not the key it comes from: the mapping inverts, since
+    /// cosine decreases with angle.</summary>
     public float NormalYMax { get; init; } = 1f;
 
     /// <summary><c>align_normal</c> — a BARE FLAG (no value list): present means align the placed
@@ -167,27 +129,14 @@ public sealed class ClutterKindProps
 }
 
 /// <summary>
-/// One chapter's <c>zrdr/templates.zrd</c>: the per-decoration properties the clutter stamper reads
-/// — substitution tables, scale ranges, fade distances, and the slope/jitter/rotation limits the
-/// retail data leaves at their defaults. Full schema, per-chapter census and the decoded/unapplied
-/// split: docs/formats/templates.md.
-///
-/// <para><b>This file is keyed by DECORATION MODEL, and the chapter's registered templates are a
-/// separate list.</b> The two are easy to confuse and the shipped data punishes it: C3 registers
-/// exactly one template, <c>cliff1_sandtrans</c>, while its <c>templates.zrd</c> describes palms —
-/// because that cliff template's ground quad scatters six <c>palmtree1.flt</c> decorations, and the
-/// palms are what the file is about. The registration list is <c>interp.json</c>'s
-/// <c>AddClutterTemplates</c> (docs/formats/clutter.md); nothing here reads it.</para>
-///
-/// <para><b>A decoration with no block is normal and means "all defaults"</b> — the stamper guards
-/// every kind-driven step on a null kind pointer. In the shipped install the reverse is what
-/// happens: every placed decoration has a block, and the extra blocks (43 of C5's 78, C3's
-/// <c>palmtree2/3</c>, C4's <c>firtree2</c>) exist to give SUBSTITUTION TARGETS their own
-/// properties, since the engine resolves a substituted stamp's properties from the target model.
-/// Two C5 targets have no block even so, which is what the defaults are for.</para>
-///
-/// <para>Static over a reader list, so the whole thing is testable off-engine —
-/// <c>CSVM.Tests/ClutterTemplatesTests.cs</c> pins all eight chapters.</para>
+/// One chapter's <c>zrdr/templates.zrd</c>: per-decoration properties the clutter stamper reads.
+/// Schema, census and the decoded/unapplied split: docs/formats/templates.md.
+/// ⚠ Keyed by decoration model, not by the chapter's registered templates, a separate list
+/// (<c>interp.json</c>'s <c>AddClutterTemplates</c>, docs/formats/clutter.md); nothing here reads
+/// it.
+/// A decoration with no block is normal and means all defaults; the stamper guards every
+/// kind-driven step on a null kind pointer.
+/// Static over a reader list, so <c>CSVM.Tests/ClutterTemplatesTests.cs</c> pins it off-engine.
 /// </summary>
 public sealed class ClutterTemplateSpec
 {
@@ -278,14 +227,10 @@ public sealed class ClutterTemplateSpec
     public ClutterKindProps? Find(string node) =>
         _byNode.TryGetValue(node, out var props) ? props : null;
 
-    /// <summary>A one-line census of what this chapter authors: block and distinct-kind counts,
-    /// then how many blocks author each key the parser accepts — every key listed, so an unauthored
-    /// one reads as a measured zero rather than as an omission.
-    ///
-    /// <para>Counted by key PRESENCE over every block, which is what makes the numbers comparable
-    /// with a per-chapter survey of the files themselves: most of C5's 78 blocks author
-    /// <c>scale_range</c> as 1.0/1.0, and counting parsed values instead would score those as
-    /// unauthored.</para></summary>
+    /// <summary>A one-line census: block and distinct-kind counts, then how many blocks author each
+    /// accepted key — every key listed, so unauthored reads as a measured zero.
+    /// Counted by key presence, not by parsed value, since most of C5's blocks author
+    /// <c>scale_range</c> as the default 1.0/1.0.</summary>
     public string Census()
     {
         int scale = 0, fade = 0, translate = 0, rotation = 0, minSlope = 0, maxSlope = 0;

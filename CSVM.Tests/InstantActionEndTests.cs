@@ -55,9 +55,7 @@ public class InstantActionEndTests
     [Fact]
     public void ClearingAStuntMissionsWavesIsNotItsWinEither()
     {
-        // Stunt flying carries enemies in the original — the setup screen hides the enemy
-        // controls on dogfight_ace ALONE, and all four shipped stunt chapters author four full
-        // waves (C4/C5 at 6/5/4/3). Shooting them all down is not what completes the run: the
+        // Stunt flying carries enemies, but clearing them is not what completes the run: the
         // zones are, exactly as the zeppelin is on a zeppelin run.
         var stunt = new InstantActionRuntime(Def("stunt_flying"));
 

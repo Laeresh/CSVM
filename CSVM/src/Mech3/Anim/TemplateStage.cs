@@ -7,46 +7,21 @@ namespace CSVM.Mech3.Anim;
 
 /// <summary>
 /// The effect-template stage as one module: pool-slot arithmetic, template placement, the
-/// "which copy is mine" identity rule and the reveal/retire/sweep ritual that <c>PlayEffectAt</c>
-/// and the <c>CALL_ANIMATION</c> arm both perform. Generic over
-/// the node type like <see cref="NameResolver{TNode}"/>: the engine hands adapter hooks over at
-/// construction, together with the three policy flags that say what kind of stage this is
-/// (<see cref="Pooled"/>, <see cref="Shown"/>, <see cref="Places"/>), and the runtime-dependent
-/// hooks at the handover (<see cref="Wire"/> — they
-/// cannot be construction arguments, because the factory that builds the stage exists before any
-/// resolver or runtime does), so slot wrap, modulo fallback, recycle counting and caller-slot
-/// stickiness are assertable off-engine against a token node type (<c>CSVM.Tests</c>).
-///
-/// <para>The three flags are sealed at construction and have
-/// no setter anywhere: the stage is built by whoever knows what role its runtime plays
-/// (<c>WorldEffectsFactory</c> for the world-effects and crash rigs, <c>WorldSession</c> for the
-/// world runtime) and handed to <c>AnimRuntime</c> as a constructor argument, so there is no
-/// post-seal write to get wrong.</para>
-///
-/// <para>⚠ Do not move slot arithmetic into <see cref="EmitterDirector"/>: the director is handed
-/// already-resolved host and anchor nodes, and the pool must never become a third emitter-keying
-/// scheme. That property holds by construction: the stage resolves roots and hands them out;
-/// nothing here keys an emitter.</para>
-///
-/// <para>⚠ Root resolution goes through the <c>findAll</c> hook, never <c>Anchors</c> — with one
-/// deliberate asymmetry. Per-EVENT paths (<see cref="RootsFor"/>, <see cref="IsAt"/>, and the
-/// resolver's own-root tier this class feeds) run on poll loops every frame, and
-/// <c>NameResolver.Anchors</c> is the one census-recording resolution call, which must not be
-/// re-entered there. Per-CALL paths (<see cref="TakeNextSlot"/>, <see cref="RootsOf"/>) may use
-/// the <c>anchors</c> hook: they run once per <c>PlayEffectAt</c>/hide decision and the census
-/// records once per def identity.</para>
+/// "which copy is mine" identity rule and the reveal/retire/sweep ritual. Generic over the node
+/// type like <see cref="NameResolver{TNode}"/>. Plumbing, the three policy flags and the pin
+/// history: this module's entry in docs/architecture.md.
+/// ⚠ Do not move slot arithmetic into <see cref="EmitterDirector"/>; the pool must never become
+/// a third emitter-keying scheme.
+/// ⚠ Root resolution goes through <c>findAll</c>, never <c>Anchors</c>, on per-event paths
+/// (<see cref="RootsFor"/>, <see cref="IsAt"/>) — see docs/architecture.md for the asymmetry.
 /// </summary>
 public sealed class TemplateStage<TNode>
     where TNode : class
 {
-    /// <summary>The squared-metres tolerance below which a
-    /// placed template already sits "at" a call site — 0.5 m. Separates "the data is re-issuing
-    /// the same call from a poll loop" (leave the live instance alone) from "a second explosion
-    /// needs this template somewhere else" (relocate and restart). Metre-scale on purpose:
-    /// distinct impacts are metres apart, and an exact compare on kilometre-scale world
-    /// coordinates would call a float round-trip a move. One named constant so the two distance
-    /// tests that share it (<c>TemplateIsAt</c> and the <c>CallAnimation</c>
-    /// arm's <c>libraryCopy</c> test) cannot drift apart.</summary>
+    /// <summary>Squared-metres tolerance below which a placed template already sits "at" a call
+    /// site (0.5 m). Separates a poll-loop re-issue (leave it) from a genuinely new site
+    /// (relocate). One named constant so <c>IsAt</c> and the CallAnimation arm's move test
+    /// cannot drift.</summary>
     public const float MoveToleranceSq = 0.25f;
 
     private readonly IEqualityComparer<TNode> _identity;
@@ -87,21 +62,13 @@ public sealed class TemplateStage<TNode>
     private readonly HashSet<string> _recyclesLogged = new(StringComparer.OrdinalIgnoreCase);
 
     // Template-root NAMEs a placing stage must never relocate: an authored NAME that is a live
-    // scene node rather than a staged template copy. The crash defs' player damage/reset family is
-    // all authored NAME=player_pfighter — on ten airframes that resolves to nothing, but on the
-    // Devastator it IS the aircraft's model root, and placing it TopLevel-pins the whole plane at
-    // the call site while the FlightController flies on with only the crash rig's debris in tow.
-    // Sealed at construction with the flags: which names are airframe-scoped is catalogue
-    // knowledge the stage's builder has and the runtime must not rediscover per call.
+    // scene node rather than a staged template copy (the Devastator's crash defs resolve to the
+    // aircraft's own model root). Sealed at construction with the flags; docs/architecture.md.
     private readonly HashSet<string> _placeExempt;
 
-    // A relocating CALL_ANIMATION on a pooled runtime whose anchor sits in no slot
-    // container — the crash rig's pdpN panels, its wreck pieces, prop1: plane nodes, never pool
-    // copies — claims a slot per (template root, anchor) here on its first call and keeps it, so
-    // each panel's tear owns its own template copy while every other panel's burst flies on.
-    // Keyed per root with its own cursor, because one root's callers are a SUBSET of all damage
-    // anchors: a single shared numbering would fold two of its callers onto one copy while other
-    // copies idle.
+    // A relocating CALL_ANIMATION whose anchor sits in no slot container claims a slot per
+    // (template root, anchor) here on its first call and keeps it. Keyed per root, since one
+    // root's callers are a subset of all anchors (docs/architecture.md).
     private readonly Dictionary<string, Dictionary<TNode, int>> _callerSlots =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -164,34 +131,17 @@ public sealed class TemplateStage<TNode>
         _slotOfNode = new Dictionary<TNode, int>(identity);
     }
 
-    /// <summary>Whether the staged effect templates exist in more than one copy, one per pool slot
-    /// (<c>AnimRuntime.PoolSlotMeta</c>), so each call takes the next copy instead of relocating the
-    /// one shared original. Set on the WORLD-EFFECTS runtime and the per-player crash rig:
-    /// two rockets landing a second apart then keep their own trails at their own sites,
-    /// where a single copy made the first blast's trails jump to the second's. Everything
-    /// template-shaped becomes slot-scoped under it — which copy a call places
-    /// (<see cref="PlaceAt"/>), reveals (<see cref="Reveal"/>), tests for a move
-    /// (<see cref="IsAt"/>) and resolves its own node names in (the resolver's own-root tier, fed by
-    /// <see cref="RootsFor"/>) — all keyed off the slot the call's anchor lives in, so a nested
-    /// CALL_ANIMATION stays inside its caller's slot.
-    ///
-    /// <para>⚠ Off on the WORLD runtime, deliberately, and this is not a keying scheme layered on
-    /// the puffer key: emitters there stay keyed by the collapsed <c>(name, host)</c> (see
-    /// <c>AnimRuntime.DefScopedPufferKeys</c> and <see cref="EmitterDirector"/>'s keying remark) —
-    /// the world's templates are the world's own nodes, not staged copies, and there is nothing to
-    /// pool. A pooled call gets distinct emitters for free, because each slot's host node is a
-    /// different node.</para></summary>
+    /// <summary>Whether staged effect templates exist in more than one copy, one per pool slot, so
+    /// each call takes the next copy instead of relocating the shared original. Plumbing and the
+    /// slot-scoping rules: this module's entry in docs/architecture.md.
+    /// ⚠ Off on the world runtime, deliberately: the world's templates are its own nodes, not
+    /// staged copies, and there is nothing to pool.</summary>
     public bool Pooled { get; }
 
     /// <summary>Whether this runtime's templates are staged hidden, so the stage reveals a root
-    /// while an effect plays on it and hides it again when that effect is over. Set on the
-    /// world-effects runtime, whose templates are staged hidden so nothing renders ambiently at the
-    /// stage origin: without it the templates' own MESHES — the rocket's per-type explosion rings,
-    /// the fireball facades, the splash models — never draw, only their puffers do. Only the
-    /// root's own visibility is touched; what shows inside it stays the data's decision (the rings
-    /// are reset INACTIVE or opacity-OFF and their defs turn them on). Off everywhere else — the
-    /// crash rig included, whose templates hide by their own reset states — where the stage is
-    /// visible anyway.</summary>
+    /// while an effect plays and hides it again after. Only the root's own visibility is touched;
+    /// what shows inside stays the data's decision. Set on the world-effects runtime; docs/
+    /// architecture.md.</summary>
     public bool Shown { get; }
 
     /// <summary>Whether a CALL_ANIMATION relocates its callee's effect-template root onto the call
@@ -249,15 +199,9 @@ public sealed class TemplateStage<TNode>
     }
 
     /// <summary>Claims a pool slot for a relocating CALL_ANIMATION whose anchor sits in no slot
-    /// container — the crash rig's damage-stage calls, anchored on the plane's own nodes
-    /// (every `pdpanelN` tear CALLs `gimmeflakes` onto its own `pdpN`; a single
-    /// shared `planeflakes` root would teleport to each new tear, restarting the previous panel's
-    /// burst mid-flight). Sticky per (template root, anchor), so a re-call from the same anchor
-    /// restarts ITS OWN copy and never a sibling's. More anchors than staged copies wrap through
-    /// <see cref="RootsFor"/>'s modulo — the effects pool's own exhaustion behaviour — counted in
-    /// <see cref="Recycles"/> and named once. No-op off the pool, for a template staged
-    /// single-copy (those never ask for a slot), and for anchors already inside a slot (the
-    /// world-effects runtime's calls, whose anchors are the pooled copies themselves).</summary>
+    /// container, so a re-call from the same anchor restarts its own copy, never a sibling's.
+    /// Sticky per (template root, anchor); wraps and counts through <see cref="Recycles"/>.
+    /// No-op off the pool or for an already-slotted anchor. Plumbing: docs/architecture.md.</summary>
     public void AssignCallerSlot(AnimDefinition callee, TNode anchor)
     {
         if (!Pooled || string.IsNullOrEmpty(callee.Name) || SlotOf(anchor) >= 0
@@ -292,20 +236,11 @@ public sealed class TemplateStage<TNode>
     }
 
     /// <summary>The copies of a definition's own template root(s) that belong with
-    /// <paramref name="inSlotOf"/> — the one pool slot that call is running in. Off the pool (or
-    /// for a def whose root is staged in a single copy, like the shared gun family's, which is
-    /// relocated on purpose) this is every match. Also the resolver's
-    /// <c>ownRootsOf</c> hook (its middle tier — wired at the handover), which is the one route
-    /// the pool takes into the resolver: it sees the resolved root list, never the slot
-    /// arithmetic. Resolved through the <c>findAll</c> hook rather than <c>Anchors</c>: the
-    /// callers run per event, and Anchors records a per-definition anchoring census that must not
-    /// be re-entered.
-    ///
-    /// <para>Pool sizes are per ROOT (<c>data/effect_pools.json</c>), so a callee can be staged
-    /// shallower than its caller's slot — a slot-5 blast calling a template with only 4 copies.
-    /// That picks one copy by modulo rather than falling back to "all of them": every branch here
-    /// must return ONE call's copies, or a nested call would drive every slot's nodes at once,
-    /// which is the collapse the pool exists to end.</para></summary>
+    /// <paramref name="inSlotOf"/>'s pool slot. Off the pool, or for a single-copy root, this is
+    /// every match. The resolver's <c>ownRootsOf</c> hook. Resolved through <c>findAll</c>, never
+    /// <c>Anchors</c> (docs/architecture.md).
+    /// ⚠ Must return exactly one call's copies, picked by modulo when the callee is staged
+    /// shallower than the caller's slot; falling back to "all of them" collapses the pool.</summary>
     public List<TNode> RootsFor(AnimDefinition callee, TNode? inSlotOf)
     {
         var roots = _findAll(callee.Name, null);
@@ -324,15 +259,11 @@ public sealed class TemplateStage<TNode>
         return mine.Count > 0 ? mine : roots;
     }
 
-    /// <summary>Takes the next pool slot for one <c>PlayEffectAt</c> call and returns that
-    /// slot's copy of the definition's template root(s) — the anchor the new instance runs on, so
-    /// two overlapping calls to one effect animate two different copies at two different sites.
-    /// Empty (and unpooled) runtimes return every anchor unchanged.
-    ///
-    /// <para>The cursor wraps: a burst deeper than the pool recycles its oldest slot, relocating
-    /// and restarting a copy that may still be live — the shared-template collapse, bounded to
-    /// the wrap instead of every call. That is the exhaustion signal, so it is counted and named
-    /// once (<see cref="Recycles"/>).</para></summary>
+    /// <summary>Takes the next pool slot for one <c>PlayEffectAt</c> call and returns that slot's
+    /// copy of the definition's roots, so overlapping calls animate different copies at different
+    /// sites. Unpooled runtimes return every anchor unchanged.
+    /// ⚠ The cursor wraps: a burst deeper than the pool recycles its oldest slot, counted once
+    /// through <see cref="Recycles"/> (docs/architecture.md).</summary>
     public List<TNode?> TakeNextSlot(AnimDefinition def)
     {
         var anchors = _anchors(def).Where(a => a != null && _isValid(a)).ToList();
@@ -362,15 +293,9 @@ public sealed class TemplateStage<TNode>
         return mine.Cast<TNode?>().ToList();
     }
 
-    /// <summary>Moves an effect template's own root(s) to a call site so its puffers — which
-    /// ride that root (<c>yellow_spark_01</c>, <c>fly_trailN</c>, …), NOT the caller's anchor —
-    /// emit there instead of at the template's gamez origin. This is the template-instancing the
-    /// original does by copying the template mesh per call; on a pooled runtime
-    /// (<see cref="Pooled"/>) it moves only the copy in the CALL'S OWN slot, so a second
-    /// call elsewhere leaves the first blast's copy where it is. Unpooled, the one shared template
-    /// is relocated and overlapping calls collapse onto the last site. Only the world position is
-    /// set — the puffers key off the host origin — and the offset is applied in the site's own
-    /// frame.</summary>
+    /// <summary>Moves an effect template's own root(s) to a call site so its puffers emit there
+    /// instead of at the template's gamez origin — the remake's stand-in for the original's
+    /// per-call template copy. Pooled, only the call's own slot moves. Docs: architecture.md.</summary>
     public void PlaceAt(AnimDefinition callee, TNode site, Vector3 offset)
     {
         // An airframe-scoped NAME is a live scene node, never a staged template — placing it
@@ -396,26 +321,18 @@ public sealed class TemplateStage<TNode>
                 continue;
             var xf = _transformOf(root);
             xf.Origin = origin;
-            // A named crash-def template (the water splash's flat rings/spray column, the
-            // dirt burst's dust plane) inherits crashRoot's rotation otherwise — the plane's
-            // attitude at impact, not the struck surface. Basis only; the origin above still places
-            // at the call site. Named, not blanket (see LevelPlacedTemplateNames's own ⚠): a crash
-            // debris template's scatter is authored in ITS OWN frame and must keep co-rotating with
-            // the impact attitude.
+            // ⚠ Named crash-def templates only (docs/architecture.md); leveling every template
+            // would fight debris scatter authored in its own co-rotating frame.
             if (level)
                 xf.Basis = Basis.Identity;
             _placeAt(root, xf);
         }
     }
 
-    /// <summary>Whether a placed template already sits where a call wants it — within
-    /// <see cref="MoveToleranceSq"/>. Separates "the data is re-issuing the same call from a poll
-    /// loop" (leave the live instance alone) from "a second explosion needs this template
-    /// somewhere else" (relocate and restart). Resolves the roots the way the resolver's own-root
-    /// tier does — this runs per event, and <c>Anchors</c> would re-enter its per-definition
-    /// anchoring census on every frame of a poll loop. Pooled, the question is asked of the copy
-    /// in the CALL's slot: another slot's copy sitting at another blast site is not this call
-    /// being re-issued from somewhere new.</summary>
+    /// <summary>Whether a placed template already sits where a call wants it, within
+    /// <see cref="MoveToleranceSq"/>. Resolved the same way the resolver's own-root tier is, never
+    /// through <c>Anchors</c> (this runs per event). Pooled, only the call's own slot is asked.
+    /// Docs: architecture.md.</summary>
     public bool IsAt(AnimDefinition callee, TNode site, Vector3 offset)
     {
         // A place-exempt callee is never moved (PlaceAt), so it is never "moved away" either —
@@ -460,16 +377,10 @@ public sealed class TemplateStage<TNode>
     }
 
     /// <summary>Shows or hides the effect-template root(s) a definition anchors on, when this
-    /// runtime stages its templates hidden (<see cref="Shown"/>). Paired with the effect's life,
-    /// not its instance: hiding on instance-finish would cut the ring off mid-flight, because the
-    /// authored scale/opacity motions outlive the sequence that launched them.
-    /// <paramref name="anchor"/> is the instance's own anchor, so on a pooled runtime only THAT
-    /// call's copy is revealed or hidden — hiding the whole set would blank a sibling blast that
-    /// is still burning.
-    ///
-    /// <para>The one place the ritual lives: <c>PlayEffectAt</c> and the <c>CALL_ANIMATION</c> arm
-    /// both reveal through here after their Start, and the retire walk and instance teardown both
-    /// hide through here — one shared spelling, so the entry points cannot drift apart.</para></summary>
+    /// runtime stages templates hidden (<see cref="Shown"/>). Paired with the effect's life, not
+    /// its instance: hiding on instance-finish would cut a motion that outlives its sequence.
+    /// Pooled, only the call's own copy is touched. The one shared entry point both
+    /// <c>PlayEffectAt</c> and the CALL_ANIMATION arm reveal through (docs/architecture.md).</summary>
     public void Reveal(AnimDefinition def, TNode? anchor, bool visible)
     {
         if (!Shown)
@@ -477,38 +388,22 @@ public sealed class TemplateStage<TNode>
         // Either direction settles a deferred hide: a replay re-reveals this copy (its old hide is
         // about an effect that is over), and an explicit hide has already done the job.
         _hidesPending.RemoveAll(p => p.Def == def && NodesEqual(p.Anchor, anchor));
-        // On a pooled stage only STAGED COPIES (nodes in a pool slot) take the visibility write.
-        // Instance retirement runs this for every ended def, template or not — and a crash-rig
-        // def whose "root" is the aircraft's own model (the place-exempt family), the `player`
-        // crash scaffold or the wreck must never be blanked by the ritual that darkens an ended
-        // effect's copy.
+        // ⚠ Only staged copies (nodes in a pool slot) take the visibility write; a crash-rig
+        // "root" that is the aircraft's own model must never be blanked here.
         foreach (var root in RootsOf(def, anchor))
             if (root != null && _isValid(root) && (!Pooled || SlotOf(root) >= 0))
                 _setVisible(root, visible);
-        // A def whose t=0 events complete it never reaches the retire walk — Start removes such an
-        // instance itself — so a reveal for one would stand for the rest of the session.
-        // `biggun_flying_parts` is exactly that shape: one CALL_ANIMATION, finished inside Start.
-        // Scheduling the hide from here covers both entry points in one place, and the holds below
-        // still apply, so a copy something is still animating stays lit.
+        // ⚠ A def whose t=0 events finish it never reaches the retire walk (Start removes it
+        // itself), so schedule its hide here too or a reveal stands for the rest of the session.
         if (visible && !_isLive(def, anchor))
             RetireWhenIdle(def, anchor);
     }
 
-    /// <summary>Hides an ended effect's template root — the other half of the reveal
-    /// (<see cref="Reveal"/>), and the reason a staged template does not stay lit at the last hit
-    /// site for the rest of the session. An explicit stop already hides what it tears down, but an
-    /// instance that ends by reaching the end of its OWN sequences is removed without one: the
-    /// ap/dum/mag gun hit authors an <c>ACTIVE_STATE 0</c> stop, finishes 0.3 s in and would leave
-    /// its <c>dum_gunhit</c> chunk mesh visible at the impact point permanently (measured by
-    /// <c>--effects-test</c>'s residual line), while the slug hit — which ships no stop and so runs
-    /// to its TTL — is hidden by the Stop the sweep does.
-    ///
-    /// <para>Deferred while the instance's motions still run, because the reveal is paired with the
-    /// EFFECT's life and not its instance's: the ring defs' scale/opacity motions outlive the
-    /// sequence that launched them, and hiding on instance-finish cuts the explosion ring off
-    /// mid-expansion. The <c>stillAnimated</c> hook carries which motions count, and
-    /// <see cref="SharedWithLiveInstance"/> the other hold; <see cref="Sweep"/> drains the
-    /// deferrals.</para></summary>
+    /// <summary>Hides an ended effect's template root, the other half of <see cref="Reveal"/> —
+    /// why a staged template does not stay lit at the last hit site for the rest of the session.
+    /// Deferred while the instance's motions still run, since the reveal is paired with the
+    /// effect's life, not its instance's. <see cref="Sweep"/> drains the deferrals. Docs:
+    /// architecture.md.</summary>
     public void RetireWhenIdle(AnimDefinition def, TNode? anchor)
     {
         if (!Shown)

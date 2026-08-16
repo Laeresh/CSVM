@@ -6,39 +6,15 @@ using Godot;
 namespace CSVM.Effects;
 
 /// <summary>The mission's global wind: a static base velocity plus a horizontal random-walk gust,
-/// re-derived once per frame. Decoded verbatim from the original's one puffer tick, which derives
-/// the wind at its head before touching a single emitter or particle,
-/// and authored per mission in <c>weather.zrd</c>'s <c>WIND</c> block — see
-/// <c>docs/formats/weather.md</c> and <c>docs/org/weather.md</c>.
-///
-/// <para>The four authored keys, each written by its own one-line setter in the original:</para>
-/// <list type="table">
-/// <item><term><c>STATIC_VELOCITY</c></term><description>the base vector, added to the gust every
-/// frame.</description></item>
-/// <item><term><c>RANDOM_MAX_SPEED</c></term><description>the gust MAGNITUDE ceiling
-/// (m/s).</description></item>
-/// <item><term><c>RANDOM_ACCEL</c></term><description>the magnitude's step size.</description></item>
-/// <item><term><c>RANDOM_ANG_VEL</c></term><description>multiplied by <c>0.017453292</c> on the way
-/// in — the key is in DEGREES per second and the global is radians per second.</description></item>
-/// </list>
-///
-/// <para>Both call sites of those four setters agree on the mapping: the weather reader reads the
-/// <c>WIND</c> block key by key, and the debug console exposes the same four
-/// as <c>GlobalWindStaticVelocity</c> / <c>GlobalWindRandomMaxSpeed</c> /
-/// <c>GlobalWindRandomAccel</c> / <c>GlobalWindRandomAngVel</c>, the second of which is the
-/// original's own name for this mechanism.</para>
-///
-/// <para>⚠ Not to be confused with <c>PARTICLES</c>' <c>WIND_DIR</c>/<c>WIND_VEL</c> in the same
-/// weather file. Those drive precipitation drift (<see cref="Precipitation"/>) and are a different
-/// mechanism entirely; wiring them here would be wrong.</para>
-///
-/// <para>⚠ <b>The magnitude step carries no <c>dt</c>, and that is traced, not an oversight.</b>
-/// The heading step is <c>±angVel·dt</c> (the frame delta is multiplied in), while the magnitude
-/// step multiplies by <c>RANDOM_ACCEL</c> and nothing else — one jump per FRAME. With the
-/// shipped data (accel 5, ceiling 10) that makes the gust magnitude effectively re-drawn every
-/// frame and frame-rate dependent, which is faithfully reproduced here rather than smoothed:
-/// this project matches the original's arithmetic, and a <c>dt</c> nobody wrote would be an
-/// invented breeze. Our sim is fixed-step under <c>--det</c>, so it is reproducible.</para></summary>
+/// re-derived once per frame. Decoded verbatim from the original's one puffer tick
+/// (<c>FUN_0054ee10</c>), authored per mission in <c>weather.zrd</c>'s <c>WIND</c> block. Keys,
+/// setters and the engine's own naming: docs/formats/weather/atmosphere.md's Wind section and
+/// docs/org/weather.md.
+/// ⚠ Not <c>PARTICLES</c>' <c>WIND_DIR</c>/<c>WIND_VEL</c> in the same file. Those drive
+/// precipitation drift (<see cref="Precipitation"/>) and are a different mechanism.
+/// ⚠ The magnitude step carries no <c>dt</c>; only the heading step does. Reproduced as traced,
+/// not smoothed — an invented <c>dt</c> would be a breeze the original never had.
+/// </summary>
 public sealed class WorldWind
 {
     /// <summary><c>RANDOM_ANG_VEL</c>'s degrees→radians factor, as the weather reader spells
@@ -57,12 +33,11 @@ public sealed class WorldWind
     private float _magnitude;
 
     /// <param name="staticVelocity">The <c>STATIC_VELOCITY</c> vector (m/s), world axes.</param>
-    /// <param name="randomMaxSpeed"><c>RANDOM_MAX_SPEED</c> — the gust magnitude ceiling.</param>
-    /// <param name="randomAccel"><c>RANDOM_ACCEL</c> — the per-frame magnitude step.</param>
-    /// <param name="randomAngVelDegrees"><c>RANDOM_ANG_VEL</c> in DEGREES per second, exactly as
-    /// the reader spells it; the conversion happens here, where the binary does it.</param>
-    /// <param name="rng">The draw stream. One per session, off <see cref="CSVM.Utils.Rng.Wind"/>,
-    /// so a <c>--det</c> run re-derives the same gust and no other subsystem's scatter moves.</param>
+    /// <param name="randomMaxSpeed"><c>RANDOM_MAX_SPEED</c>, the gust magnitude ceiling.</param>
+    /// <param name="randomAccel"><c>RANDOM_ACCEL</c>, the per-frame magnitude step.</param>
+    /// <param name="randomAngVelDegrees"><c>RANDOM_ANG_VEL</c> in degrees/s; converted here.</param>
+    /// <param name="rng">The draw stream, one per session off <see cref="CSVM.Utils.Rng.Wind"/>,
+    /// so <c>--det</c> reproduces the same gust.</param>
     public WorldWind(Vector3 staticVelocity, float randomMaxSpeed, float randomAccel,
         float randomAngVelDegrees, Random rng)
     {
@@ -139,19 +114,14 @@ public sealed class WorldWind
     private float Symmetric() => (_rng.Next(32768) / 16384f) - 1f;
 }
 
-/// <summary>The per-frame world state a <see cref="Puffer"/>'s simulation READS but does not own,
+/// <summary>The per-frame world state a <see cref="Puffer"/>'s simulation reads but does not own,
 /// handed in at construction rather than reached for. One instance per session, written by
 /// <c>WeatherRig.Tick</c> and read by every emitter it was passed to.
-///
-/// <para>This is deliberately a small mutable holder rather than a value passed down each
-/// <c>_Process</c>: a <see cref="Puffer"/> is a <c>Node3D</c> that ticks itself off the scene
-/// tree, so there is no per-frame call from above to thread a parameter through. The wind and
-/// every pane's camera pose both live here for that reason, on the same once-per-frame write.</para>
-///
-/// <para><see cref="Still"/> is the null object: the wind a puffer feels when nobody wired one in
-/// (unit tests, the viewer, a mission with no weather.json). It refuses to be written, so a
-/// missing wire fails loudly at the writer rather than silently blowing on every emitter in the
-/// process.</para></summary>
+/// A small mutable holder rather than a value threaded through <c>_Process</c>: a
+/// <see cref="Puffer"/> ticks itself off the scene tree, so nothing calls down into it per frame.
+/// <see cref="Still"/> is the null object: the wind a puffer feels when nobody wired one in. It
+/// refuses to be written, so a missing wire fails loudly at the writer rather than silently
+/// blowing on every emitter in the process.</summary>
 public sealed class EffectAmbience
 {
     // Every pane's camera pose this frame, refilled in place from the session's ViewerSet. A list
@@ -173,11 +143,11 @@ public sealed class EffectAmbience
     /// <see cref="Vector3.Zero"/> until someone steps a wind into it.</summary>
     public Vector3 Wind { get; private set; }
 
-    /// <summary>Whether any camera pose has been published. <b>False means "no camera known",
-    /// and the camera-distance fade is skipped entirely</b> rather than measured against the origin —
-    /// which is the right answer for every caller that has no camera to give (the unit suites, the
-    /// plane viewer, the damage lab) and would otherwise near-cull half their particles, the
-    /// unauthored <c>NEAR_FADE</c> default being a hard cull at depth 0.</summary>
+    /// <summary>Whether any camera pose has been published. False means "no camera known", and the
+    /// camera-distance fade is skipped entirely rather than measured against the origin — the right
+    /// answer for every caller that has no camera to give (the unit suites, the plane viewer, the
+    /// damage lab), which would otherwise near-cull half their particles under the unauthored
+    /// <c>NEAR_FADE</c> default's hard cull at depth 0.</summary>
     public bool HasCamera => _viewers.Count > 0;
 
     /// <summary>This frame's camera poses, one per rendered pane (one in single player, freecam and
@@ -206,20 +176,12 @@ public sealed class EffectAmbience
         _viewers.Add(new ViewerSet.ViewerPose(position, forward));
     }
 
-    /// <summary>Publishes this frame's pose for EVERY pane, from the session's viewer set.
-    /// Throws on <see cref="Still"/>, for the same reason <see cref="SetWind"/> does.
-    ///
-    /// <para>Unlike the wind — one for the world, stepped once — the fade is a DRAW rule, and the
-    /// original evaluates it per particle per draw, so each pane owes its own answer. Ours is still
-    /// one <c>MultiMesh</c> per emitter shared by every pane with one alpha written per frame, so
-    /// what a particle gets is the most favourable of the panes' answers rather than each pane's
-    /// own: drawn if any pane should see it, at that pane's alpha (see
-    /// <see cref="Puffer.DistanceAlpha"/>). Per-pane alpha would take one <c>MultiMesh</c> per pane;
-    /// the nearest rule is the tracer-floor precedent and is what this project takes until it
-    /// visibly fails.</para>
-    ///
-    /// <para>An unbound set publishes nothing and leaves <see cref="HasCamera"/> false, which is the
-    /// no-camera-no-fade path rather than a fade against the origin.</para></summary>
+    /// <summary>Publishes this frame's pose for every pane, from the session's viewer set. Throws
+    /// on <see cref="Still"/>, for the same reason <see cref="SetWind"/> does.
+    /// Unlike the wind, the fade is a draw rule evaluated per pane: a particle draws if any pane
+    /// would see it, at the most favourable of the panes' answers (see
+    /// <see cref="Puffer.DistanceAlpha"/>), since one shared <c>MultiMesh</c> writes one alpha.
+    /// An unbound set leaves <see cref="HasCamera"/> false, the no-camera-no-fade path.</summary>
     public void SetViewers(ViewerSet viewers)
     {
         Writable();

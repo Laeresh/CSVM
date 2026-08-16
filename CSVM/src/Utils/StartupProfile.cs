@@ -8,39 +8,12 @@ namespace CSVM.Utils;
 
 /// <summary>
 /// The always-on startup timing report: one <c>[perf] startup …</c> line per session build,
-/// split into the phases the build spends its time in. It only <i>reports</i> — no thresholds,
-/// no verdicts, no comparisons; a comparison needs a warm-up protocol this class deliberately
-/// does not own.
-///
-/// <para><b>The identity the line asserts</b> is
-/// <c>total = boot + Σ(phases) + rest + first_frame</c>, so the numbers can be checked against
-/// each other and against the process's own wall time:</para>
-/// <list type="bullet">
-/// <item><c>boot</c> — engine start → the session build starting: Godot's own init, arg parsing,
-/// shader-global registration, lighting, the pad roster. On a session built from the
-/// launchscreen it also contains however long the menu was up, which is why it is printed
-/// separately rather than folded into <c>total</c>'s meaning.</item>
-/// <item>the phases — see the vocabulary below; each is a leaf, never nested inside another, so
-/// they sum without double counting.</item>
-/// <item><c>rest</c> — the session build minus its phases: everything not carved out into a
-/// phase. Not an error term; it is real work with no stopwatch on it.</item>
-/// <item><c>first_frame</c> — the build ending → the first frame being on screen (measured at
-/// the top of the second <c>_Process</c>, so the first draw, and the shader compilation in it,
-/// falls inside). A run that quits during the build never renders and prints
-/// <c>first_frame=none</c>; its build is closed at teardown instead, so its <c>rest</c> also
-/// carries whatever the probe did after the world was up.</item>
-/// </list>
-///
-/// <para><b>Phase vocabulary</b> (the keys a parser may rely on; a phase absent from a mode is
-/// simply absent from the line): <c>gamez</c> · <c>textures</c> · <c>sounds</c> · <c>zrdr</c>
-/// (every reader/interp JSON load) · <c>world</c> (WorldBuilder) · <c>clutter</c> ·
-/// <c>anim</c> (AnimProgram load) · <c>bind</c> (AnimRuntime bind + bootstrap) ·
-/// <c>prewarm</c> (sound decode) · <c>plane</c> (aircraft build + paint) · <c>weather</c>
-/// (skydome + fog + cloud visuals) · <c>edge</c> (map-edge extender).</para>
-///
-/// <para>Measurement is <see cref="Stopwatch.GetTimestamp"/> pairs — two QPC reads per phase, a
-/// couple of dozen per session — which is why this runs unconditionally rather than behind a
-/// flag.</para>
+/// split into the phases the build spends its time in. It only reports — no thresholds, no
+/// verdicts, no comparisons; a comparison needs a warm-up protocol this class deliberately does
+/// not own. Line grammar, the phase vocabulary and <c>boot</c>/<c>rest</c>/<c>first_frame</c>'s
+/// meaning: this module's entry in docs/architecture.md.
+/// ⚠ The line asserts <c>total = boot + Σ(phases) + rest + first_frame</c>. Keep every phase a
+/// leaf, never nested inside another, or the sum silently double-counts.
 /// </summary>
 public sealed class StartupProfile
 {
