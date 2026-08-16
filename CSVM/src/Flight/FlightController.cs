@@ -1861,7 +1861,7 @@ public partial class FlightController : Node3D
             if (!_gunLoggedFirst[gi])
             {
                 _gunLoggedFirst[gi] = true;   // verification breadcrumb: which groups actually fire
-                Log.Info("weapons", $"gun group {gi + 1} ({g.Mount}, {g.Weapon.Caliber ?? 0}-cal {g.Weapon.Id}) firing");
+                Log.Info("weapons", $"gun group {gi + 1} ({g.Mount}, {g.Weapon.Caliber ?? 0}-cal {g.Weapon.Id}) firing on {Name}");
             }
         }
         if (outcome.RocketPylon >= 0)
@@ -1878,7 +1878,7 @@ public partial class FlightController : Node3D
             if (_rocketsLaunched < 12)
             {
                 _rocketsLaunched++;
-                Log.Info("weapons", $"rocket: {hp.Weapon.Id} ({hp.Weapon.Name}) from pylon{hp.Index}, {(InfiniteAmmo ? "∞" : hp.Ammo.ToString(CultureInfo.InvariantCulture))} left on that pylon");
+                Log.Info("weapons", $"rocket: {Name} launched {hp.Weapon.Id} ({hp.Weapon.Name}) from pylon{hp.Index}, {(InfiniteAmmo ? "∞" : hp.Ammo.ToString(CultureInfo.InvariantCulture))} left on that pylon");
             }
         }
         if (outcome.GunLoopWanted)
@@ -1898,7 +1898,7 @@ public partial class FlightController : Node3D
         if (outcome.RocketDryCue)
         {
             Audio?.PlayEmptyClip();
-            Log.Info("weapons", $"rocket: dry pull, all pylons empty — empty-clip cue");
+            Log.Info("weapons", $"rocket: {Name} dry pull, all pylons empty — empty-clip cue");
         }
     }
 
@@ -2406,9 +2406,12 @@ public partial class FlightController : Node3D
         if (rocketeer.WantsFire && !_rocketeerLoggedFire)
         {
             _rocketeerLoggedFire = true; // verification breadcrumb: the ordnance gates first opened
-            var weapon = Loadout.Hardpoints[rocketeer.SelectedPylon].Weapon;
+            // pylon{Index}, never the list position the selection runs on: the launch line the
+            // fire step logs names the hardpoint's OWN number, and two numbers for one pylon in
+            // adjacent lines is how a reader concludes the wrong pylon fired.
+            var hp = Loadout.Hardpoints[rocketeer.SelectedPylon];
             Log.Info("flight",
-                $"ai rocketeer: shooter {PlayerIndex} launches at P{target.PlayerIndex + 1} at {WorldPosition.DistanceTo(target.WorldPosition):0} m ({weapon.Id}, pylon {rocketeer.SelectedPylon})");
+                $"ai rocketeer: shooter {PlayerIndex} launches at P{target.PlayerIndex + 1} at {WorldPosition.DistanceTo(target.WorldPosition):0} m ({hp.Weapon.Id}, pylon{hp.Index})");
         }
     }
 
