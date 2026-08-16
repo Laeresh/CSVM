@@ -3138,14 +3138,25 @@ per frame is the shipped rule, which also picks up generator spawns and drops a 
 breadcrumb each. Pinned by the `hostile-marker-hud` suite + `HostileTagTests`; a hud built without
 a pool never tracks.
 `--debug-markers` (`MarkAll`, set by the rig assembler alongside `Own`) widens that to EVERY live
-aircraft in the same scan: `CollectMarks` is the pure selection (live, a `FlightController`, not
-`Own`), each drawn through the same `DrawOpponent` in HUD blue on the pane's own team and HUD red
-otherwise, tagged with its slant range and its current AI mode (`ModeSuffix`, the mode machine's
-own `NameOf` vocabulary; empty for a pilot without a machine), and off-screen tags stepped along
+aircraft in the same scan: `CollectMarks` (C23) wraps each candidate as a `TargetRef` — the same
+aircraft construction `TargetPool`'s Vehicle branch uses, reading `FlightController.Damage`/
+`Stats` — paired with whether it is on the pane's own team, each drawn through the same
+`DrawOpponent` in HUD blue on the pane's own team and HUD red otherwise, tagged with
+`DebugTag`'s FULL identity string: `AI1 Fury 640 m H78 A91 pursue` — the hostile tag kept whole
+(the one marker that does NOT collapse to the shipped marker's plane-type-alone label), the
+airframe type, slant range, health then armor as whole percentages with NO percent sign (decision
+12: two figures, health first, never a blended one), and the AI mode (`ModeSuffix`, the mode
+machine's own `NameOf` vocabulary; empty for a pilot without a machine). Off-screen tags step along
 the screen edge (`RefStaggerStep`) so a flight sharing one bearing does not stack into one string.
 It REPLACES the hostile-tracker draw rather than adding to it, so the tracked plane is never drawn
 twice in two colours — but NOT the selected target's marker, which keeps drawing under the flag
 (different shape, and C24's golden wants brackets, label and debug string in one frame).
+⚠ **Health and armor are omitted, not defaulted, when the `TargetRef` carries no figure**
+  (`Health`/`Armor` null — a bare rig with no `Damage` ledger bound): `H100 A100` for a source with
+  no health model would be a number the game does not have. Wrapping the aircraft as a `TargetRef`
+  here (rather than reading `FlightController.Damage` directly in the draw loop) is what makes that
+  the correct default the moment this scan widens past aircraft to a turret or sub-part, whose
+  `TargetRef.Health` is already the right shape.
 ⚠ A neutral-team aircraft marks HOSTILE here, unlike `NearestHostile`'s engine gate which rejects
   the pair. A debugging overlay that silently omitted a plane would be worse than one that
   mis-colours it.
@@ -3167,7 +3178,9 @@ bearing, which `VersusHud`'s opponent loop never does.
 Pinned by the `hostile-marker-hud` suite, which carries C22's three pure rules as well: the colour
 table (three colours, the Destroy override, the neutral-own-side case), the gun-reach gate (inside
 `RANGE` brackets, past it does not, an outrunning target never does, and the hysteresis holds the
-boundary case) and the label lines. The drawn geometry itself is C24's golden.
+boundary case) and the label lines. C23's `DebugTag` is pinned there too — the full format string,
+health/armor omitted with no source, and `CollectMarks`' `TargetRef` wrapping reading a live
+`Damage` ledger. The drawn geometry itself is C24's golden.
 
 ## src/Flight/VersusBoard.cs
 The dogfight's shared results overlay (`PLAN-vs-mode.md` C25) — `StuntRaceBoard`'s construction

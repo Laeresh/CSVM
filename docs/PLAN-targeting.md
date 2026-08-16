@@ -240,7 +240,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ Split the targeting marker out of `VersusHud` into `TargetHud`
 22. ☑ Draw the original's marker: name label, range-gated brackets, two-line edge tag
-23. ☐ `--debug-markers`: keep full identity, add `H78 A91`
+23. ☑ `--debug-markers`: keep full identity, add `H78 A91`
 24. ☐ One golden screenshot for the geometry
 
 ### Wave D — Close out
@@ -1017,7 +1017,7 @@ what C24 needs.
 - **Not run, deliberately:** the 8-chapter `--freecam` sweep. This item touches HUD drawing only, no
   world-load path, and the 14 goldens (which cover all eight chapters) are byte-identical.
 
-## C23 ☐ `--debug-markers`: keep full identity, add `H78 A91`
+## C23 ☑ `--debug-markers`: keep full identity, add `H78 A91`
 
 **Goal.** The debug overlay reads `AI1 Fury 640 m H78 A91 pursue` — identity, plane type, range,
 health, armor, AI mode.
@@ -1043,6 +1043,50 @@ instrument.>
 
 **⚠ Traps.** This is the one place the full identity string survives; do not "simplify" it to match
 the shipped marker. Its own doc already says it is never a gameplay feature.
+
+**Landed 2026-08-16.** `TargetHud.DebugTag` (`TargetHud.cs`) builds the string; `CollectMarks` now
+wraps each scanned aircraft as a `TargetRef` (the same construction `TargetPool`'s Vehicle branch
+uses, reading `FlightController.Damage`/`Stats`) instead of handing back a bare `FlightController`,
+which is what lets the string read health/armor as `TargetRef`'s optional fields rather than a
+plane-specific read of its own — the moment `--debug-markers`' scan widens past aircraft, a turret
+or sub-part's `TargetRef.Health` is already the right shape (null, correctly). Plane type
+(`DisplayName`, C22's own accessor) was added alongside the figures: the item's Goal string named
+it explicitly even though the checklist title did not, and the pre-existing string had never
+carried it.
+
+**Two things the Approach could not have known.** The identity + type ordering reads `AI1 Fury`,
+not `Fury AI1` — `DebugTag` puts `HostileTag` first because it is the FULL-identity marker (the
+trap this item's own text calls out), so the plane-type-alone label the shipped marker centres on
+(decision 10) rides second, not first. And the omission is per-figure, not per-plane: a source that
+has health but no armor model (none shipped, but `TargetRef`'s contract allows it) would print `H`
+alone — the two `is { } x` checks are independent, matching decision 12's "two figures" framing
+rather than an all-or-nothing gate.
+
+**Verified (2026-08-16):**
+
+- **Pinned by tests.** The `hostile-marker-hud` suite gained `DebugTag`'s pure format (identity +
+  type + range + both figures + mode; the no-health-source omission dropping both) over synthetic
+  `TargetRef`s, plus `CollectMarks`' live wrapping: a bare rig's `TargetRef` carries the airframe's
+  `DisplayName` with `Health`/`Armor` both null (no `Damage` ledger bound), and — once
+  `PlaneDamage` is bound and a hit applied through `Apply` — the ref's fractions match the ledger's
+  own `WholeHealth`/`WholeArmor` getters exactly, checked dynamically rather than hand-derived
+  (`PlaneDamage`'s armor-first spend arithmetic is its own module's concern, not this item's).
+  **Able to fail:** defaulting the no-`Damage` health read to `1f` instead of `null` (the exact
+  "print `H100` for a source with no health model" mistake the goal forbids) turns the suite FAIL
+  and exit 1 on the omission check; reverted, it passes.
+- **Live capture.** `--fly --chapter=C1 --plane=player_fury --ai=player_kestrel --debug-markers
+  --det --mute --frames=90 --screenshot=`: the tag reads `AI1 Kestrel 270 m H100 A100  patrol`
+  (full health/armor on an undamaged AI, its live AI mode), drawn on the same frame as the shipped
+  selection marker (`Kestrel`'s brackets + label) — the C24 golden's target composition. **Not
+  captured live:** a plane at reduced health reading a `H` figure below 100 — no CLI flag pre-damages
+  a spawned AI for a scripted screenshot (the plan's own open TODO), and combat damage is not
+  frame-deterministic enough to land a chosen HP value inside a fixed `--frames` budget. Resolved
+  by the pinned suite instead, which drives `PlaneDamage.Apply` directly and reads the resulting
+  fraction back off `TargetRef` and `DebugTag` together — the same plumbing a live hit would
+  exercise, without depending on combat RNG to produce a specific number on screen.
+- **Regression:** 1378/1378 units, 69/69 in-engine suites, engine errors clean, `dotnet format
+  --verify-no-changes` clean. No 8-chapter `--freecam` sweep is owed — this item touches HUD string
+  formatting and one collection helper only, no world-load path.
 
 ## C24 ☐ One golden screenshot for the geometry
 

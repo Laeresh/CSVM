@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Text;
+using CSVM.Session;
 using CSVM.UI;
 using Godot;
 
@@ -27,9 +29,11 @@ namespace CSVM.Flight;
 ///
 /// <para><c>--debug-markers</c> (<see cref="MarkAll"/>) widens the one marker to EVERY live
 /// aircraft the pool lists, red for a hostile team and blue for this pane's own side
-/// (<see cref="Own"/>), each tagged with its slant range. It is a watching aid for AI work, not a
-/// gameplay feature: the shipped HUD marks exactly one hostile and the flag is off unless asked
-/// for.</para>
+/// (<see cref="Own"/>), each tagged with the FULL identity string (<see cref="DebugTag"/>, C23):
+/// the hostile tag, the airframe type, slant range, health/armor as whole percentages with no
+/// percent sign (omitted, not defaulted, where the source carries no figure), and the AI mode. It
+/// is a watching aid for AI work, not a gameplay feature: the shipped HUD marks exactly one
+/// hostile and the flag is off unless asked for.</para>
 ///
 /// <para>The edge-arrow + clock-bearing drawing (<see cref="DrawOpponent"/>,
 /// <see cref="EdgePoint"/>, <see cref="ClockHour"/>, <see cref="DrawArrow"/>, <see cref="DrawTag"/>)
@@ -115,7 +119,7 @@ public sealed partial class TargetHud : Control
     private readonly List<string> _labelLines = new();  // rebuilt per draw
 
     private readonly AimCandidateSet _hostileScan = new(); // rebuilt per frame, aircraft list only
-    private readonly List<(FlightController Plane, bool Friendly)> _marks = new(); // --debug-markers
+    private readonly List<(TargetRef Target, bool Friendly)> _marks = new(); // --debug-markers
 
     private Camera3D _camera = null!;
     private FlightController? _hostile;
@@ -198,13 +202,19 @@ public sealed partial class TargetHud : Control
         return best;
     }
 
-    /// <summary>Every live aircraft in <paramref name="scan"/> paired with whether it is on
-    /// <paramref name="ownTeam"/> (<c>--debug-markers</c>), skipping <paramref name="own"/>. The
-    /// team test is the plain identity one, not the assist's: a neutral aircraft is nobody's
-    /// friend, so it marks hostile rather than vanishing, which is what a debugging overlay
-    /// wants. Pure over the snapshot, same contract as <see cref="NearestHostile"/>.</summary>
+    /// <summary>Every live aircraft in <paramref name="scan"/>, wrapped as a <see cref="TargetRef"/>
+    /// (C23) and paired with whether it is on <paramref name="ownTeam"/> (<c>--debug-markers</c>),
+    /// skipping <paramref name="own"/>. The team test is the plain identity one, not the assist's: a
+    /// neutral aircraft is nobody's friend, so it marks hostile rather than vanishing, which is what
+    /// a debugging overlay wants.
+    ///
+    /// <para>Wrapping as a <see cref="TargetRef"/> — the same aircraft construction
+    /// <see cref="TargetPool"/>'s Vehicle branch uses — is what lets <see cref="DebugTag"/> read
+    /// health/armor as optional fields rather than a plane-specific read of its own: the moment this
+    /// scan widens past aircraft, a turret or sub-part's <see cref="TargetRef.Health"/> is already
+    /// the right shape (null, correctly).</para></summary>
     public static void CollectMarks(int ownTeam, object? own, AimCandidateSet scan,
-        List<(FlightController Plane, bool Friendly)> into)
+        List<(TargetRef Target, bool Friendly)> into)
     {
         foreach (var c in scan.Vehicles)
         {
@@ -212,7 +222,14 @@ public sealed partial class TargetHud : Control
                 continue;
             if (c.Source is not FlightController fc)
                 continue;
-            into.Add((fc, c.Team == ownTeam && c.Team != AimAssist.NeutralTeam));
+            var dmg = fc.Damage;
+            var cls = TargetRef.Classify(AimTargetKind.Vehicle, live: true, c.Team, ownTeam)
+                ?? TargetClass.Enemy;
+            var target = TargetRef.ForAircraft(c, cls, fc.Name,
+                fc.Stats is { } stats ? PlaneRoster.PlaneDisplayName(stats) : null,
+                dmg == null ? null : TargetRef.Fraction(dmg.WholeHealth, dmg.WholeHealthMax),
+                dmg == null ? null : TargetRef.Fraction(dmg.WholeArmor, dmg.WholeArmorMax));
+            into.Add((target, c.Team == ownTeam && c.Team != AimAssist.NeutralTeam));
         }
     }
 
@@ -231,6 +248,40 @@ public sealed partial class TargetHud : Control
         int cut = name.IndexOf('_');
         string head = cut > 0 ? name.Substring(0, cut) : name;
         return head.Length > 0 ? head.ToUpperInvariant() : "AI";
+    }
+
+    /// <summary><c>--debug-markers</c>' own tag (C23): <c>AI1 Fury 640 m H78 A91 pursue</c>. This is
+    /// the one marker that keeps the FULL identity string — <paramref name="identity"/>
+    /// (<see cref="HostileTag"/>), never collapsed to <paramref name="target"/>'s plane-type-alone
+    /// label the way the shipped marker is (decision 10) — plus the plane type, the slant range,
+    /// health then armor as whole percentages with NO percent sign (decision 12: two figures, health
+    /// first, never a blended one), and finally <paramref name="modeSuffix"/>.
+    ///
+    /// <para>Health and armor are each omitted, not defaulted, when <paramref name="target"/> carries
+    /// no figure for it (<see cref="TargetRef.Health"/>/<see cref="TargetRef.Armor"/> null) — a
+    /// turret emplacement or a bare rig with no damage ledger has no such number to print, and
+    /// <c>H100 A100</c> would be a number the game does not have.</para></summary>
+    public static string DebugTag(string identity, in TargetRef target, float rangeM, string modeSuffix)
+    {
+        var tag = new StringBuilder(identity);
+        if (target.DisplayName is { Length: > 0 } name)
+        {
+            tag.Append(' ').Append(name);
+        }
+
+        tag.Append(' ').Append(Mathf.RoundToInt(rangeM)).Append(" m");
+        if (target.Health is { } health)
+        {
+            tag.Append(" H").Append(Mathf.RoundToInt(health * 100f));
+        }
+
+        if (target.Armor is { } armor)
+        {
+            tag.Append(" A").Append(Mathf.RoundToInt(armor * 100f));
+        }
+
+        tag.Append(modeSuffix);
+        return tag.ToString();
     }
 
     /// <summary>The marker's colour, <c>Target::GetColor</c> (<c>FUN_004a5f40</c>) verbatim: an
@@ -404,13 +455,15 @@ public sealed partial class TargetHud : Control
             _marks.Clear();
             CollectMarks(OwnTeam, Own, _hostileScan, _marks);
             int stagger = 0;
-            foreach (var (plane, friendly) in _marks)
+            foreach (var (mark, friendly) in _marks)
             {
-                if (!GodotObject.IsInstanceValid(plane) || !plane.IsInsideTree())
+                if (mark.Source is not FlightController plane
+                    || !GodotObject.IsInstanceValid(plane) || !plane.IsInsideTree())
                     continue;
                 var at = plane.GlobalPosition;
                 DrawOpponent(font, at, friendly ? HudBlue : HudRed,
-                    $"{HostileTag(plane.Name)} {PlanePos.DistanceTo(at):0} m{ModeSuffix(plane)}",
+                    DebugTag(HostileTag(mark.Name), mark, PlanePos.DistanceTo(at),
+                        ModeSuffix(plane)),
                     s, markerFont, stagger++);
             }
 

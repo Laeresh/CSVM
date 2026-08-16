@@ -6453,6 +6453,20 @@ public static class Suites
                   && lines[1] == "Promised Land",
             $"a named objective composes both lines, C1 M04 Zeppelin.png's case, with no wrap width to port ({string.Join(" / ", lines)})");
 
+        // --- C23's debug-marker string: identity kept whole, health/armor gated on the source ------
+        var healthyRef = TargetRef.ForAircraft(
+            new AimCandidate { Team = hostileTeam, Live = true, Source = new object() },
+            TargetClass.Enemy, "ai1_player_fury", "Fury",
+            TargetRef.Fraction(78f, 100f), TargetRef.Fraction(91f, 100f));
+        string healthyTag = TargetHud.DebugTag("AI1", healthyRef, 640f, "");
+        ctx.Check(healthyTag == "AI1 Fury 640 m H78 A91",
+            $"the debug tag keeps the FULL identity (unlike the shipped marker's plane-type-alone label), adds the plane type, then health and armor as whole percentages with no percent sign, health first: '{healthyTag}'");
+        ctx.Check(TargetHud.DebugTag("AI1", healthyRef, 640f, "  pursue") == "AI1 Fury 640 m H78 A91  pursue",
+            $"the AI mode trails the figures, carrying ModeSuffix's own leading spaces: '{TargetHud.DebugTag("AI1", healthyRef, 640f, "  pursue")}'");
+        string noHealthTag = TargetHud.DebugTag("AI2", enemyRef, 250f, "");
+        ctx.Check(noHealthTag == "AI2 Fury 250 m",
+            $"a source with no health model (enemyRef carries none) omits BOTH figures rather than printing H100 A100: '{noHealthTag}'");
+
         // --- the live tracker, against real AI planes registered in a real pool ---
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
@@ -6528,12 +6542,16 @@ public static class Suites
             ai2.Team = AimAssist.PlayerTeam;
             var scan = new AimCandidateSet();
             live.CollectAircraft(scan);
-            var marks = new List<(FlightController Plane, bool Friendly)>();
+            var marks = new List<(TargetRef Target, bool Friendly)>();
             TargetHud.CollectMarks(AimAssist.PlayerTeam, null, scan, marks);
-            ctx.Check(marks.Count == 1 && ReferenceEquals(marks[0].Plane, ai1),
+            ctx.Check(marks.Count == 1 && ReferenceEquals(marks[0].Target.Source, ai1),
                 $"a crashed plane is never marked marks={marks.Count}");
             ctx.Check(!marks[0].Friendly,
                 $"ai1 is on the enemy team, so it marks hostile friendly={marks[0].Friendly}");
+            string airframeName = PlaneRoster.PlaneDisplayName(stats);
+            ctx.Check(marks[0].Target.DisplayName == airframeName
+                      && marks[0].Target.Health == null && marks[0].Target.Armor == null,
+                $"CollectMarks wraps a TargetRef carrying the airframe's display name (C23), and a bare rig with no Damage ledger bound omits both figures: name={marks[0].Target.DisplayName} h={marks[0].Target.Health} a={marks[0].Target.Armor}");
             ai1.Team = AimAssist.PlayerTeam;
             marks.Clear();
             scan.Clear();
@@ -6544,6 +6562,27 @@ public static class Suites
             marks.Clear();
             TargetHud.CollectMarks(AimAssist.PlayerTeam, ai1, scan, marks);
             ctx.Check(marks.Count == 0, $"the pane's own aircraft is excluded marks={marks.Count}");
+
+            // C23: once the plane carries a damage ledger, CollectMarks' TargetRef reads it straight
+            // off — the same optional-field contract a sub-part or emplacement would use once the
+            // scan widens past aircraft, not a plane-specific field read of its own.
+            ai1.Damage = new PlaneDamage(stats.DestroyableParts);
+            var firstPart = stats.DestroyableParts.First();
+            ai1.Damage.Apply(firstPart.Name, healthDamage: 5f, armorDamage: 5f);
+            marks.Clear();
+            scan.Clear();
+            live.CollectAircraft(scan);
+            TargetHud.CollectMarks(AimAssist.PlayerTeam, null, scan, marks);
+            float expectHealth = TargetRef.Fraction(ai1.Damage.WholeHealth, ai1.Damage.WholeHealthMax)!.Value;
+            float expectArmor = TargetRef.Fraction(ai1.Damage.WholeArmor, ai1.Damage.WholeArmorMax)!.Value;
+            ctx.Check(marks.Count == 1 && marks[0].Target.Health == expectHealth
+                      && marks[0].Target.Armor == expectArmor,
+                $"a damaged plane's health/armor fractions come straight off its own Damage ledger h={marks[0].Target.Health} a={marks[0].Target.Armor} (expected h={expectHealth} a={expectArmor})");
+            string damagedTag = TargetHud.DebugTag(TargetHud.HostileTag(marks[0].Target.Name),
+                marks[0].Target, 640f, "");
+            ctx.Check(damagedTag
+                      == $"AI1 {airframeName} 640 m H{Mathf.RoundToInt(expectHealth * 100f)} A{Mathf.RoundToInt(expectArmor * 100f)}",
+                $"the full string a live damaged plane produces: '{damagedTag}'");
 
             // The mode suffix the marker tag carries, in the engine's own vocabulary. A pilot
             // with no mode machine (this suite's own bare-orders spawn) adds nothing rather than
