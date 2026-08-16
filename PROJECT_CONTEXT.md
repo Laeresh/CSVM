@@ -71,7 +71,7 @@ previews, debug dumps, golden-test captures, etc. — always write them into
   | `///` on a type | 12 lines |
   | `///` on a member | 6 lines |
   | `//` above a declaration | 6 lines |
-  | `//` above a statement | 2 lines |
+  | `//` above a statement | 3 lines |
 
   Sentences are ≤ 25 words; a block is ≤ 6 sentences and covers one topic. A warning states the
   prohibition first and the reason second: `⚠ Do not remove the seen dedup; C1 and C4 still need it.`
