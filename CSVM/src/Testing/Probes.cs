@@ -1078,7 +1078,7 @@ public static class Probes
             info: true);
 
         // ⚠ An UPPER BOUND, not a band: guards against falling out of the turn, not against
-        // climbing. INFORMATIONAL — rides the turn-rate gap below, not a mechanism of its own.
+        // climbing. INFORMATIONAL — rides the turn-rate row below, not a mechanism of its own.
         // docs/org/flightModel.md.
         Row("sustained-turn-sink", "sustained max-pull turn, sink rate", "ft/s",
             turn.SinkFtS, 1.85, 0.0,
@@ -1086,14 +1086,14 @@ public static class Probes
             + $"re-key this read 18.29). Negative = climbing. Rides the rate row below.",
             info: true, upperBound: true);
 
-        // ⚠ OPEN, INFORMATIONAL: no authored field explains this gap (G limiter inert, turn_fade
-        // keys on airspeed alone). Do not chase the ADI's +100° — it reads attitude, not
-        // bank. docs/org/flightModel.md.
+        // ⚠ INFORMATIONAL, and not a target: the rotation path is decoded, while 18.95 is
+        // frame-measured, so this records a difference against video, not a defect. Do not chase
+        // the ADI's +100° — it reads attitude, not bank. docs/org/flightModel.md.
         Row("sustained-turn-rate", "sustained max-pull turn, heading rate", "°/s",
             turn.RateDegS, 18.95, 3.0,
-            $"{turn.RateDegS / 18.95:0.00}x the original — OPEN. The original pulls 1.6x slower "
-            + "BANKED than wings-level (18.95 vs 30.16 °/sim-s round its own loop) and we pull the "
-            + "same rate in both, so the gap is bank/load-factor, not pitch authority. Its 18.95 "
+            $"{turn.RateDegS / 18.95:0.00}x the footage. The footage pulls 1.6x slower BANKED than "
+            + "wings-level (18.95 vs 30.16 °/sim-s round its own loop) and we pull the same rate in "
+            + "both, so the difference is bank/load-factor, not pitch authority. Its 18.95 "
             + "°/sim-s at 222.94 mph implies a 58.7° bank, and CAP-33 confirmed that IS its bank — "
             + "the ADI's +100° is airframe attitude, not bank",
             info: true);

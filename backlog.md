@@ -1074,32 +1074,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *How you'd know it worked:* a fighter dropped from a zeppelin over terrain is not shoved off its
   drop for its first 2.5 s.
 
-- `BL-383` `[Research]` `[Owed-capture]` **The original's banked rotation is ≈1.6× slower than ours
-  and no authored constant is left to explain it.** Split out of `BL-095` when that umbrella retired
-  2026-08-15: every candidate that entry tracked has now died, so what remains is a measurement gap
-  with no data-side suspect. The whole banked rotation runs ≈1.6× fast — `sustained-turn-rate` 32.80
-  against `CAP-01`'s 18.95 °/s, knife-edge drift 1.09 °/s against 0.69–0.89, heading 1.68 against
-  0.68–1.13, the same ratio in all three.
-  ⚠ **All three authored candidates are dead, and re-opening one is the trap.** The hardcoded bank
-  coupling moves the banked rate the WRONG way by construction (`C22`); `highGs`/`lowGs` is a limiter
-  that never fires on any of the eleven airframes (`D33`, pinned by `ControlLimiterTests`); and
-  `turn_fade_in`/`turn_fade_out` is an airspeed ramp, implemented 2026-08-15 (`C24`) and saturated at
-  1 everywhere this gap appears.
-  ⚠ **`CAP-33` settled the other half and did not close this one.** The ~100° an ADI shows in the
-  footage is airframe ATTITUDE, not the bank of the turn (flown at a known 60–70°, the ADI sky
-  centroid read 105.1° while `V·ω / nom_gravity` read 62.2°, and the ADI's swing tracked the pitch
-  cycle at `r = +0.886` against the heading rate's `r = −0.091`). So `CAP-01`'s turn was banked 58.7°
-  at ~2 g, the original IS flying coordinated, and the rate gap is untouched by that finding.
-  ⚠ **Do not fill the hole by inventing a rate limiter from field names**, and do not hide it in a
-  chase constant: retuning `KnifeAlignFloor` would bury a rotation error in a camera-adjacent knob,
-  and a naive speed/bank coupling that quietly costs pitch authority is the wrong-mechanism fix
-  `BL-124`'s history warns about.
-  *Where it is recorded:* [`docs/org/flightModel.md`](docs/org/flightModel.md) (the "authored
-  candidates exhausted" note), `FlightEnvelopeTests`' informational rows, and
-  [`POST-B14.md`](analysis/flight-model-baseline/POST-B14.md).
-  *How you'd know it worked:* `sustained-turn-rate` lands near 18.95 °/s at `CAP-01`'s speed through
-  a decoded mechanism, not a fitted one.
-
 - `BL-393` `[Tuning]` **The control surfaces' deflection angles, mix and slew are decoded and the
   TUNEs are still in place.** `ControlSurfaceAnimator` deflects ±20° per kind and slews linearly at
   3 units/s, both chosen by eye. `PLAN-ai-flight` `C24` decoded what the original does while tracing
@@ -1179,309 +1153,53 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `docs/plans/PLAN-ai-flight.md` F52 (player arm), `BL-330` (the authority ramp this pairs
   with).
 
-- `BL-096` `[Feature]` **Angle of attack is now fittable and is not modelled.** The ADI shows hysteresis against
-  vertical speed round the loop — expected, since the ball shows attitude while `dh/dt` follows the
-  flight path, and AoA is exactly what separates them. That hysteresis *is* the AoA signal, and it
-  became fittable when the clock factor was pinned. Pairs with the `maxAOA`/`liftAOAs` data above.
-
-- `BL-097` `[Research]` **The roll's spin-up shape is untested.** Mid-roll steady rate reads 240 °/wall-s while the whole
-  360° averages 246, so the original's roll was **still accelerating when it finished**. Our
-  `1/damp` spin-up reproduces the total time (1.98 s vs 2.05) — whether it reproduces the curve is
-  unknown, and only a per-frame bank trace would say.
-  ⚠ **Re-read this as a held-key step question** (2026-08-03, out of `BL-147`/`CAP-04`): the
-  original's controls are digital, so there is no partial aileron deflection to spin up and a
-  "moderate roll input" clip cannot be flown. The only measurable transient is the leading edge of a
-  *held* key from steady flight — and at 30 fps that edge is unresolvable, exactly as it was for
-  pitch. Any roll-transient capture needs ≥60 fps constant frame rate.
-
-- `BL-115` `[Tuning]` `[Owed-playtest]` **Flight model** — `StallNoseRate`, `KnifeAlignFloor`
-  (`LowSpeedDragBlend` closed 2026-08-07 by `PLAN-flight-drag-lift` A1; `ClimbGravityScale`
-  **retired** 2026-08-09 by `PLAN-flight-model-rewrite` D32 — see its bullet below, which stays
-  because the climb residual it uncovered is still open).
-  **`PitchTune` / `YawTune` / `RollTune` / `ThrustConst` are not on this list**: all four are
-  measured against the original frame by frame and asserted by the `flight-envelope` suite, so they
-  are not TUNE knobs and a feel A/B cannot overrule them.
-  ✅ **Flown 2026-08-09, straight off the completed `PLAN-flight-model-rewrite` (`3c8f5ae`): "feels
-  a lot better overall, every manoeuvre."** The whole rewrite — the lift demand and its clamp, the
-  Mach polar, the thrust curve, per-airframe stall, the authored yaw table, bank coupling, the
-  weathervane, exponential damping, the retired knife-edge sag and the attitude-thrust climb — reads
-  as an improvement at the controls, not only on the instruments. A **pass on the direction**, and
-  the reason the two constants still listed above are not being tuned toward anything: nothing in the
-  flown report points at them. It is **not** a pass on the three recorded conflicts (the zero-thrust
-  drag deficit, the banked-turn rate, the climb plateau), none of which a feel report can settle. The
-  same sortie produced the observation behind `BL-330`.
-  **`CAP-05` decoded 2026-08-04** (four clips, all gating rigid) — three of the four are answered and
-  one is not:
-  - **`StallNoseRate` 1.0 rad/s is ~17× too fast.** In `CAP-05 Stall 0% Thrust no input` the nose
-    holds **+4.2 ± 0.1°** through the whole deceleration, starts falling only at **76 mph = 0.25 fd**
-    (minimum speed reached 69.8 mph = **0.232 fd**), then drops at **3.38 °/sim-s = 0.059 rad/sim-s**
-    from +4.1° to −21.2°, and **stops at ≈−22°** once speed rebuilds past 0.40 fd. It does not chase
-    world-down, so "rad/s toward world-down at full stall depth" is the wrong target as well as the
-    wrong rate. The break is wings-level and clean: the compass turns **0.0°** across the whole
-    24.8 sim s, no wing drop. ⚠ Note `StallSpeedFrac` **0.30** is implicated too — the original breaks
-    at 0.25 fd, not 0.30 — but that constant is outside this entry; it was `BL-148`'s.
-    **Closed 2026-08-04 by `CAP-06` and landed the same day (`BL-148`, polish-7 A2): the constant is
-    `split`, not moved.** The original's *warning* lights at 0.299 fd (four clips) — 0.30 is correct
-    there — while the *nose-drop* is at 0.25 fd, measured in the same frames of the same clip.
-    `StallSpeedFrac` is now the nose-drop at **0.25** and `StallWarnFrac` the lamp at 0.30, so the
-    rate/target question in this bullet is the only part of the stall model still open.
-  - **`LowSpeedDragBlend` 0.35 gave 4–6× too much drag below cruise — closed 2026-08-07.** The same
-    clip is a thrust-free drag probe: measured `D` is **0.36 / 1.11 / 2.82 / 3.74 m/s²** at
-    x = 0.25 / 0.35 / 0.46 / 0.50 against the blend's **7.69 / 12.13 / 17.91 / 20.25**. The model-free
-    form: engine off at 152.6 mph in a +5° climb the original decelerates at **6.24 m/s²** where ours
-    took 21.6. `PLAN-flight-drag-lift` A1 replaced the blend with a piecewise power law
-    (`DragExpLow` **3.278** / `DragExpHigh` **2.663**) fitted numerically against the real integrator
-    and all four independent measurements at once (this clip, `accel-150-290`, `terminal-dive`, the
-    1/8-throttle equilibrium) — within 4% of every point above. ⚠ The `x^2.67` figure once quoted
-    here as an independent confirmation was **wrong**: it is an artifact of assuming thrust is linear
-    in throttle (`0.459^2.67 = 0.125` exactly — the exponent that makes 1/8 throttle give 1/8 thrust
-    by construction, not a drag measurement). Solving each of the four points above for its own
-    exponent gives 3.69–4.00, which is what the fitted 3.278/2.663 piecewise curve actually
-    reproduces.
-    **`CAP-31` decoded 2026-08-07 — the 1/8 case, and it clears the curve rather than condemning
-    it.** This is the capture that was owed against this bullet, and it is the discriminator
-    `PLAN-flight-drag-lift` A1 asked for: at 1/8 throttle there is an equilibrium, so the 290 → 150
-    time tests the drag curve's *shape* between x = 0.5 and 0.96 and not its scale. Gate `OK` (dial
-    dx corr +1.00, freshly run), level throughout (+0.96 ft/sim-s over 38 sim s), entry plateau
-    299.29 ± 0.13 mph. Measured **290 → 150 mph in 13.94 ± 0.29 sim s** against the model's published
-    **12.10**, i.e. the original **coasts longer than we do**. ⚠ Both alternatives `playtest.md`
-    offered were "12.1, or markedly faster"; neither happened, and the *faster* branch was the one
-    that would have made the user's unmodelled-airbrake hypothesis live. It is **not supported** —
-    the "feels like coasting" report is faithful reproduction. ⚠ **The chop is not instantaneous:**
-    deceleration builds for 3.5 sim s after the speed leaves the plateau (peaking at 244 mph, which
-    constant thrust and a monotone drag cannot produce), and the panel carries no throttle indicator,
-    so pilot key cadence and engine spool-down are indistinguishable here. That makes 13.94 an upper
-    bound on the instant chop the probe runs — estimated **12.8–13.3 sim s** two ways — while
-    **240 → 150 mph = 11.33 ± 0.24 sim s** is transient-free and needs no extrapolation. ⚠ Separately,
-    **`Probes.cs`'s `eighth-throttle-speed` target of 137.9 mph is ~2% high.** `CAP-31` is at
-    134.84 mph and still falling at its last frame, and the `accel` clip's 1/8 entry leg — re-decoded
-    the same day — is not a plateau either but a rise from 134.25 to 135.56 mph. The two bracket
-    **≈135 mph (0.449 fd) ± 1**, and our 137.87 "match" was against a number no clip supports.
-    Retargeting that row and running the model over the two new times is model work and is not done
-    here (`FINDINGS.md`, `CAP-31`).
-    ⚠ `CAP-31` says **nothing** about the three constants still open below — it is a level
-    deceleration, so it carries no stall, no climb and no knife-edge.
-  - **`KnifeAlignFloor` 0.35 — the last of the three, and the other two are gone.**
-    ✅ **`KnifeNoseSag` / `KnifeNoseRate` retired 2026-08-09** (`PLAN-flight-model-rewrite` D31): the
-    decoded bank→yaw coupling and the weathervane produce the sag, and produce its onset BETTER than
-    the fitted step did — nose at +3 s **−4.94°** against the measured −4.9°, where the bounded step
-    on top read −7.28°, and sink 12.7 → **5.7** ft/s against a measured 0.5. Playtest note (2) below
-    is confirmed and fixed: the term keyed on `1 − |bodyUp·up|`, so it fought every wings-level pull
-    at up to 11.5 °/s — `zoom-climb` moved toward its measured 936 ft on all eleven airframes and the
-    Balmoral can now reach the altitude cap (4471 → 6572 ft). `KnifeEdgeTests` pins both the shape
-    and the absence of the zero-bank leak; `Probes.KnifeEdge` is the re-runnable instrument.
-    **`KnifeAlignFloor` stays at 0.35, on evidence rather than for want of a measurement** (D31): it
-    is the ONE surviving use of `wingVert`, and the decode is silent about it (the nose-chase is the
-    remake's own arcade term). Retiring it — chase floor 1.0, the bank-independent reading — collapses
-    the nose–path gap 2.9° → 1.9° at +3 s against a measured 4.8° that GROWS, and raises the 36 s
-    altitude loss 1087 → 1334 m against a measured 540. Lowering it to 0.10 moves every row toward
-    the footage and still cannot reach it, while walking the knife-edge α to 5.36°, past
-    `liftAOAs[0] = 5°`. ⚠ **What is left is not this constant**: the whole banked rotation runs
-    ≈1.6× fast (knife-edge drift 1.09 °/s against 0.69–0.89, heading 1.68 against 0.68–1.13, the same
-    ratio as `sustained-turn-rate`'s 32.80 against 18.95), and no authored field is left that is
-    shaped like it: `turn_fade_in`/`turn_fade_out` was implemented 2026-08-15 (`C24`) and is
-    saturated at 1 across the whole band, `highGs` was measured inert on all eleven airframes
-    (`D33`), and the bank coupling moves the rate the wrong way (`C22`). That gap is `BL-383`.
-    Retuning `KnifeAlignFloor` would hide a rotation error inside a chase constant.
-    The original's knife-edge trajectory (`CAP-05`, both takes, 143/300 mph,
-    agreeing to ~13%, so driven by time-since-roll-in, not airspeed):
-
-    | time since roll-in | nose | path | sink |
-    |---|---|---|---|
-    | 0–3 s | −4° step, then drifting | ≈0° | **0.5 ft/sim-s — genuinely holds altitude** |
-    | +12 s | −12.0° | −6.0° | 24 ft/sim-s |
-    | +24 s | −20.0° | −12.8° | 60 ft/sim-s |
-    | +36 s | −27.0° | −18.7° | 93 ft/sim-s, still steepening |
-
-    The sag reads as an immediate ≈4° step followed by an **unbounded drift of 0.69–0.89 °/sim-s
-    that a bounded sag cannot produce** — which is why the bounded pair is now retired rather than
-    retuned. ⚠ For `KnifeAlignFloor` the observable is the path lagging the nose by 4.8° at +3 s /
-    7.2° at +24 s / 8.3° at +36 s, and `CAP-05` cannot separate that from gravity pulling the path
-    down over the same interval — **do not back an absolute align rate out of it.** The D31 argument
-    above uses only the *direction* the number moves under an A/B on the same build, which the
-    confound cannot reverse (gravity pulling the path down can only shrink the gap, so the inferred
-    chase is an upper bound either way).
-    *Playtest after fix:* (1) does the knife-edge sink feel like the original's; (2) does the
-    stall-into-knife-edge recovery behave now that the sag term no longer compounds with the stall
-    nose-drop (the two used to be gated apart from each other by an explicit `!stalled` check that
-    no longer exists, because there is nothing left to gate).
-  - **`ClimbGravityScale` is RETIRED — closed 2026-08-09 by `PLAN-flight-model-rewrite` D32, and it
-    leaves this entry's TUNE list.** The degenerate `CAP-05` fit that this bullet warned about
-    (`C` = 1.18 / 0.59 / 0.00 at `g` = 17 / 20 / 25, rms flat across the valley, so `C` ≈ 0.6 was a
-    consistency and never a measurement) turned out to be flattering a constant that is not merely
-    unmeasured but **wrong in sign**. Measured against the original's own sustained full-throttle
-    climb (`Climp 90° 100% Thrust.mp4`, now clip key `climb90`; plateau 163.05 mph at a 56.3° path),
-    the constant alone gives 276.66 mph and **removing it alone** gives 257.74 — it makes the climb
-    faster than the original's, not slower. The original's climb penalty lives in THRUST, scaled by
-    nose attitude, decoded and landed in the same item. ⚠ **The GDD §4.1.1 reading recorded here was
-    design intent, not behaviour:** the shipped executable's gravity block
-    (`0x48ff85`–`0x48ff9d`) reads no attitude at all, and the term that IS attitude-scaled runs the
-    other way. Do not reintroduce a pitch-scaled gravity on the strength of the design document.
-    *Still open, and it is the climb's magnitude rather than its mechanism:* the model settles 25%
-    fast (204.04 against 163.05) and does not reproduce the footage's undershoot-and-recover. The
-    leading candidate is the α the original held there — its clip is a 90° pull, and at a 90° nose
-    with the measured 56° path the same decoded force path balances to −3.3%. `CAP-20` (a shallow,
-    held climb with a **readable** ADI, which this bullet already asked for) is what would settle it;
-    the 90° clip's ADI saturates above ≈+30° and cannot.
+- `BL-410` `[Tuning]` `[Owed-playtest]` **The flight model's three remaining loose ends: the stall
+  nose-drop's rate and target, the sustained climb's magnitude, and `KnifeAlignFloor`'s feel.**
+  Carries forward what `BL-115` still had open when the rest of it closed; `git log --grep=BL-115`
+  for everything that entry settled. ⚠ **`PitchTune`/`YawTune`/`RollTune`/`ThrustConst` are not on
+  this list** — all four are measured against the original frame by frame and asserted by the
+  `flight-envelope` suite, so they are not TUNE knobs and a feel report cannot overrule them.
+  - **`StallNoseRate` 1.0 rad/s is ~17× too fast, and chases the wrong target.** In `CAP-05 Stall 0%
+    Thrust no input` the original's nose holds **+4.2 ± 0.1°** through the whole deceleration, starts
+    falling only at 0.25 fd, drops at **3.38 °/sim-s = 0.059 rad/sim-s** from +4.1° to −21.2°, and
+    **stops at ≈−22°** once speed rebuilds past 0.40 fd — it does not chase world-down at all, so
+    "rad/s toward world-down at full stall depth" is the wrong shape as well as the wrong rate. The
+    break is wings-level and clean: the compass turns **0.0°** across the whole 24.8 sim s, no wing
+    drop. ⚠ **Nothing in the executable has been traced to this constant** (`docs/org/flightModel.md`,
+    "The nose-drop's own rate is a remake TUNE"), so unlike the rest of the stall model there is no
+    decode to defer to — it is chosen so the deep-stall rate beats full-elevator authority
+    (~0.58 rad/s) and the drop stays decisive. Whatever replaces it must keep that property and must
+    still refuse to raise the nose over the horizon while stalled.
+    ⚠ The two stall thresholds around it are settled and are not in scope: `StallSpeedFrac` is the
+    nose-drop at **0.25 fd** and `StallWarnFrac` the lamp at **0.30 fd**, two unrelated thresholds on
+    one margin (`StallWarningTests`).
+  - **The sustained climb settles 25% fast, and the missing input is α, not a mechanism.** Against
+    the original's full-throttle 90° climb (`climb90`; plateau **163.05 mph** at a 56.3° path) the
+    model settles at **204.04**, and it does not reproduce the footage's undershoot-and-recover. The
+    climb penalty itself is decoded and landed (thrust scaled by nose attitude), and at a 90° nose
+    with the measured 56° path the same decoded force path balances to **−3.3%** — so the residual
+    is most likely the α the original held, which no capture yet resolves: every climb clip taken so
+    far saturates its ADI above ≈+30°. `CAP-20` (a shallow held climb with a readable ADI) is what
+    would settle it. ⚠ **Do not reintroduce a pitch-scaled gravity** on the strength of GDD §4.1.1:
+    the shipped gravity block (`0x48ff85`–`0x48ff9d`) reads no attitude at all, and the term that is
+    attitude-scaled runs the other way.
+  - **`KnifeAlignFloor` 0.35 is the remake's own arcade term and owes a feel A/B, not a fit.** It is
+    the one surviving use of `wingVert` and the decode is silent about it, so it is held at 0.35 on
+    an A/B rather than for want of a measurement: retiring it (chase floor 1.0) or lowering it to
+    0.10 moves the knife-edge rows the wrong way or fails to reach the footage while walking α past
+    `liftAOAs[0] = 5°`. The evidence and the trap that goes with it (`CAP-05` cannot separate the
+    nose–path lag from gravity pulling the path down, so no absolute align rate comes out of it) are
+    in [`docs/org/flightModel.md`](docs/org/flightModel.md)'s knife-edge section.
+  - **`Probes.cs`'s `eighth-throttle-speed` target of 137.9 mph is against a number no clip
+    supports.** `CAP-31` reads 134.84 mph still falling at its last frame and the `accel` clip's 1/8
+    entry leg rises 134.25 → 135.56, bracketing **≈135 mph (0.449 fd) ± 1**. Retarget the row, and
+    run the model over `CAP-31`'s two coast times while there (290 → 150 in **13.94 ± 0.29 sim s**,
+    an upper bound because the chop is not instantaneous, and the transient-free 240 → 150 in
+    **11.33 ± 0.24**).
+  *Playtest after fix:* (1) does the knife-edge sink feel like the original's; (2) does the
+  stall-into-knife-edge recovery behave now that no sag term compounds with the stall nose-drop.
 
 - `BL-120` `[Tuning]` `[Owed-playtest]` **Collision feel** — behaviour against building corners.
-
-- `BL-147` `[Research]` **Pitch's transient shape. NARROWED to a ≈1.8× residual, and the named
-  mechanism is now landed and measured rather than pending. Measured 2026-08-03 from `CAP-04`; the
-  capture is discharged and retired. The A/B against our own build is DONE (`C23`): the original's
-  1300 → 570 ms cadence roll-off is 42× against our 23.3× (was 19.6× before the weathervane), and
-  the "3.5× steeper than one first-order lag permits" framing this entry was written on is
-  superseded — see the landed-mechanism paragraph.**
-  The item was written asking for a *moderate-deflection* pitch trace, on the assumption that a
-  sub-full-deflection input exists to spin up. **It does not — the user flies the original's pitch on
-  the keyboard, so every pitch command is full deflection gated on/off by the key** (confirmed by the
-  user, 2026-08-03; note the numpad in the original is the *camera*, `CAP-07`/`CAP-08`, not the stick).
-  A "~45° pull" is therefore a **tap cadence**, not a deflection, and there is no partial-deflection
-  spin-up curve to fit.
-  **What `CAP-04` actually measured** (both takes, `checkclip` `OK`, heading flat to 0.2° so the
-  manoeuvre is genuinely wings-level pitch; decode noise 1.3–1.8 ft second-difference; altimeter band
-  resolved 11.2× / 8.2×). Entry 299.4 / 300.4 mph level, then a tapped pull. Smoothed peak
-  flight-path pitch rate **8.5 / 9.8 / 9.4 / 12.7 °/sim-s** over the four pull events = 26–30% of the
-  33 °/sim-s full-deflection rate, i.e. the tap duty cycle; the instantaneous rate climbs to
-  **20–24 °/sim-s** as the smoothing window shrinks, which is the individual taps showing through.
-  Flight path peaked at **+33.5°** (take 1) and **+28.0°** (take 2) — the clip is *not* a 45° pull, and
-  the pitch *attitude* is unreadable because the ADI ball saturates (sky fraction pinned at its 0.730
-  ceiling) once the flight path passes ~+10°.
-  **The step response was already in the 2026-07 loop clip**, which was flown by *holding* the key:
-  from 4 s of dead-level 299.4 mph, key down at t = 4.10 s wall, the rate rises to an asymptote
-  **R = 26–31 °/sim-s** (consistent with the published sustained 33) with a model-free 10–90% rise of
-  **0.66 s sim**. The exponential **τ is not resolvable** — fitted τ tracks the smoothing window
-  (0.73 → 0.19 s sim as the window tightens), so all the footage supports is an **upper bound
-  τ ≲ 0.2 s sim**. Our model's held-stick spin-up is `1/ang_momentum_damp` = 1/5.0 = **0.2 s**
-  (`FlightModel.cs`, `return_rate` adds only on release), which sits exactly at that bound.
-  ⚠ **That "no mismatch is demonstrable" reading is SUPERSEDED by the cadence sweep below.** The
-  bound above is only meaningful *if* the response is a single first-order lag, and the sweep shows it
-  is not — so a τ derived from it describes a model the original does not obey. What survives from the
-  loop clip is the asymptote R = 26–31 °/sim-s and the 0.66 s sim rise, both model-free.
-  `PitchTune` 0.75 is still not implicated: it sets the steady rate, which continues to match.
-  **The sluggishness is most likely the tap cadence, not the airframe.** At matched smoothing the held
-  key reaches its rate in 0.66 s sim while `CAP-04`'s tapped pulls take 0.99 / 1.25 / 1.50 / 5.28 s —
-  1.5× to 8× slower, and *not reproducible between takes*, which is the signature of a human hand
-  rather than a flight model. Before touching any constant, check whether our key-to-input path
-  ramps/filters where the original's is a bare on/off.
-  **What remains open:** τ itself — but there is now a **named candidate mechanism**, which there was
-  not before.
-
-  **The weathervane mechanism is LANDED and it does not close this item — the gap is narrowed to
-  ≈1.8×, and the entry's own arithmetic is corrected (`C23`, 2026-08-09).** The original applies
-  `return_rate` as a **weathervane torque** along `cross(nose, velocity)` (the `−nose` this entry
-  used to carry was a transcription error — the code's `−m[2]` *is* the nose) at **half** the
-  misalignment angle, continuously, into the same accumulator as the stick. That is a spring-damper
-  where the remake folded `return_rate` into the damping coefficient, and it is now implemented
-  (`FlightModel.WeathervaneTorque`, decode in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md) "Weathervane centring — resolved").
-  **The sweep now exists for our build too** — `CSVM.Tests/ZzCadenceSweep.cs` drives the identical
-  square wave into the model and fits the ripple with the identical simultaneous cubic+sin+cos
-  estimator, at both the sim and wall readings of the cadences (DET-11). Amplitude-for-amplitude, so
-  the operating-point objection below does not apply and no transfer function is assumed on either
-  side. **1300 → 570 ms roll-off: 19.6× before the change, 23.3× after, against the original's 42×**
-  (wall reading: 20.7× → 22.4×). Right direction, about a sixth of the gap closed. Full table and
-  per-cadence amplitudes: `analysis/flight-model-baseline/POST-B14.md`, "C23".
-  ⚠ **The "3.5× steeper than any single first-order lag permits" figure above does NOT describe our
-  build's deficit, and must stop being quoted as if it does.** That ceiling assumes the chain is
-  double integration + one lag. Ours is not and never was: the flight path chases the nose through a
-  **second** first-order lag (`lift_accel_rate`, τ = 1.33 s), so the pre-C23 build already rolled off
-  19.6× — 1.65× past that ceiling — while `return_rate` was still pure damping. The amplitude
-  comparison above is the statement of record.
-  **What remains open:** the residual ≈1.8× of roll-off, with no named mechanism. Candidates not yet
-  examined: the original's 0.5/s throttle slew (decoded, unimplemented — it contaminates the first
-  seconds of any manoeuvre), the `liftAOAs` airflow blend's behaviour under a rapidly reversing
-  demand, and the possibility that the original's 570 ms point (a 4.9× drop from 700 ms over a 1.23
-  frequency ratio) is a resonance rather than a point on a smooth roll-off, which no monotone
-  transfer function can produce and which the corpus cannot presently distinguish from noise at
-  0.63 ± 0.13 ft.
-  ⚠ `PitchTune` **did** move here, 0.75 → 0.89, and so did `YawTune`, 1.33 → 1.57 — *not* to chase
-  this transient. A sustained full-stick manoeuvre holds a real misalignment (α ≈ 18° pulling), so
-  the weathervane opposes the stick and dropped the **steady** rate to 28.35 °/s; the refit re-pins
-  it to the same measured 33. Re-pinning a steady rate a new mechanism moved is what `*Tune` is for;
-  chasing the roll-off through it remains forbidden and is still not the knob.
-  **How the original's own footage was got — a fixed-cadence key macro. 30 fps is a floor, not a target; record at whatever
-  rate the recorder gives and keep the bitrate high.** A single step
-  edge is ~4 frames and unresolvable, but a *periodic* input is not: drive the pitch keys as a square
-  wave and τ shows up as the **ripple amplitude** at a known frequency, which averages down over
-  hundreds of cycles instead of living or dying on one edge. Alternate pitch-**up** and pitch-**down**
-  (not a single key) so the mean rate is zero — the aircraft porpoises about level, speed and the aero
-  gain stay put, altitude stays in one band and the ADI never saturates.
-  Modelled ripple at τ = 0.2 s sim, V = 440 ft/s, against the 1.75 ft second-difference noise
-  (conservative: that statistic implies only ~0.7 ft of independent per-frame noise):
-
-  | period (wall) | frames/cycle | alt ripple | ripple at τ = 0.1 / 0.2 / 0.3 |
-  |---|---|---|---|
-  | 0.25 s | 7.5 | 0.57 ft | 1.06 / 0.57 / 0.39 |
-  | 0.40 s | 12 | 2.25 ft | 3.75 / 2.25 / 1.56 |
-  | 0.60 s | 18 | 6.99 ft | 10.22 / 6.99 / 5.06 |
-  | 1.00 s | 30 | 26.3 ft | 32.5 / 26.3 / 20.9 |
-
-  **FLOWN 2026-08-03 — seven clips, and the result is a refutation, not a τ.** Six alternating cadences
-  (1300 / 930 / 700 / 570 / 370 / 230 ms) plus a 230 ms duty control. All gate `checkclip` **OK** and
-  are the cleanest footage in the corpus (dial translation literally 0 px on the six; second-difference
-  noise 0.59–2.64 ft). Cadence logs measured **1300.0 / 930.0 / 700.0 / 570.0 / 370.0 / 230.0 ms** with
-  jitter sd 0.002–0.535 ms, so the input is known, not assumed.
-
-  | period | f₀ | ripple amplitude | operating point |
-  |---|---|---|---|
-  | 1300 ms | 0.769 Hz | **26.31 ± 2.37 ft** | 246 mph mean |
-  | 930 ms | 1.075 Hz | **7.07 ± 0.21 ft** | 206 mph |
-  | 700 ms | 1.429 Hz | **3.09 ± 0.09 ft** | 259 mph |
-  | 570 ms | 1.754 Hz | **0.63 ± 0.13 ft** | 213 mph |
-  | 370 ms | 2.703 Hz | 0.065 — at the floor | 221 mph |
-  | 230 ms | 4.348 Hz | 0.037 — at the floor | 227 mph |
-
-  **The headline: from 1300 → 570 ms the response falls 42×, over a frequency ratio of only 2.28.**
-  Double integration (rate → attitude → altitude) accounts for 5.2× of that. A single first-order lag
-  can add at most another 2.28× — that is the τ → ∞ limit, not a fit. So the steepest possible
-  one-lag model gives 12×, and the original delivers **42×: 3.5× more roll-off than any single
-  first-order lag permits.** That margin is far outside the ±20% amplitude systematics and the ±12%
-  spread in mean airspeed. **Our rotation model is exactly one first-order lag**
-  (`BodyRates += (cmd - BodyRates*damp)*dt`), so on this axis the original is not that shape.
-  **The duty control settles the alternative explanation.** 50% duty on the pull key alone (measured
-  duty fraction 0.507 from the log, mean press 116.6 ms against a nominal 115) produced a large
-  sustained pull — the aircraft climbed 1775 → 4892 ft and went over the top, speed bleeding to
-  109 mph. So **115 ms presses unquestionably reach the game**, and the 370/230 ms nulls are the
-  aircraft's own roll-off, not dropped input. The sliding-window amplitude plot shows this directly:
-  the four detections hold a flat amplitude across the whole clip while 370/230 sit in the noise
-  throughout — the cadence ran in every clip.
-  ⚠ **This is still not a fitted τ, and must not be quoted as one.** The clips are not at a common
-  operating point: mean airspeed runs 206–259 mph and the ripple itself spans 0.6–26 ft, so the low
-  frequencies are a large-amplitude manoeuvre and the high ones a small perturbation. A transfer
-  function fitted across that mixes regimes.
-  ⚠ **Trap, and it cost a wrong figure before it was caught.** High-passing altitude with a sliding
-  quadratic *before* fitting the sinusoid has real gain at f₀ — the 930 ms amplitude moved 4.87 → 6.85
-  → 7.07 ft as the span changed. The correct estimator fits **polynomial + sin + cos simultaneously**
-  inside a window of ≥8 periods, where a cubic can absorb almost none of the fundamental; that is
-  stable to 3% on the strong clips. Never detrend and then fit.
-  **DONE (C23, 2026-08-09) — the identical cadences now run through our build**, as
-  `CSVM.Tests/ZzCadenceSweep.cs` driving the model directly rather than `--hold` driving a session
-  (engine-free, so it is deterministic by construction and needs no clip decode). Same input, same
-  estimator, same operating points, no transfer function assumed — results in the landed-mechanism
-  paragraph above. Plot of the original's side: `playtest/CAP-04/cadence_response.png`.
-
-  The driver is `analysis/video-flight-calibration/pitch_cadence.ahk` (AutoHotkey v2) — its header
-  carries the rig rationale, the re-flight rules (non-integer periods, the busy-spin timing) and
-  the verified timing figures; the edge log it writes (`cadence-logs/*.csv`) is the deliverable as
-  much as the video is. ⚠ For a re-flight: `extract.py`'s `LAYOUTS` knows only 2560×720 and
-  2560×1440 and raises on anything else — declare a new geometry *before* recording. The rig's
-  beeps are in none of the clips (Game Bar records game audio only); find the cadence window by
-  matched filter on altitude, which is what the analysis does.
-  ⚠ **Traps.** (a) `PitchTune` **is a pinned measurement** (0.89 since `C23`; see the
-  flight-constants standing note at the top of this file) — and the cadence sweep leaves it
-  untouched: it sets the **steady** rate, which still matches, while what the sweep is about is the
-  *transient shape*. It cannot move to fix a feel report — and it is emphatically not the knob for
-  the roll-off mismatch. (Its `C23` move was in the other direction entirely: a decoded torque
-  changed the steady rate, and the constant re-pinned it to the same measurement.) (b) **Do not quote a τ from `CAP-04`, from the
-  loop clip, or from the cadence sweep.** The loop clip's fitted τ is smoothing-limited and falls
-  monotonically as the window tightens (`FINDINGS.md`'s "a peak found by differentiating a smoothed
-  signal is a smoothing artifact", in its exact form); the sweep's points are not at one operating
-  point. The sweep refutes a *shape*; it does not fit a constant. (c) Don't fold this into `BL-097` — same shape of gap,
-  different axis, and pitch's own coupling to speed (induced drag, modelled in `PLAN-flight-drag-lift`
-  C21) makes conflating the two easy to get wrong. (d) The digital-input finding is not pitch-specific — it means **`BL-097`'s
-  roll question has the same defect**: there is no partial aileron deflection either, so a "moderate
-  roll input" clip cannot be flown, and `BL-097` should be re-read as a held-key step question too.
 
 - `BL-381` `[Feature]` `[Owed-playtest]` **What `BL-172` left behind: the crash block's two damage
   ranges, and an unexplained vertical-speed kill on contact.** `PLAN-ai-flight` `C25` landed that
@@ -1545,8 +1263,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   no roll→pitch coupling. Before inventing a constant, measure it: the decoded 360° aileron-roll
   capture (manoeuvre #4, `analysis/video-flight-calibration/`) should show the nose-over as an
   altitude/ADI dip across the roll — if it cannot be read there, it is too small to model and this
-  closes as won't-do. ⚠ Distinct from `BL-097` (the roll's spin-up *rate* shape); this is the
-  cross-axis coupling.
+  closes as won't-do. ⚠ This is the cross-axis coupling, not the roll's own spin-up rate, which is
+  decoded (`roll_torque` through the reciprocal inertia, damped exponentially).
 
 - `BL-311` `[Feature]` **Ambient turbulence is designed and absent.** GDD §4.1.10: subtle, random jostling
   of the player's plane to sell moving through air — explicitly zero effect on speed, heading or
@@ -3061,13 +2779,13 @@ usual.
 
   **⚠ Traps — read before touching this.**
 
-  1. **Do not derive the pre-GO setback from a speed.** `SpawnSpeed = 53.6f` is flagged
-     **PLACEHOLDER** (`FlightController.cs:371`) and `BL-074` will make spawn speed
-     per-mission (decoded: `PLAYER_INIT[4] × 0.1`, 18 m/s in nearly every mission, against
-     today's 53.6). Any "start N seconds back at the spawn speed" arithmetic therefore bakes in a
-     number that is about to change by a factor of three, and would land each aircraft of a grid
-     somewhere different again the moment it does. The on-rails walk above avoids this by
-     construction: it simulates nothing and it ends on the spawn pose whatever the speed is.
+  1. **Do not derive the pre-GO setback from a speed.** Spawn speed is the mission's own
+     (`PLAYER_INIT[4] × 0.1`, 18 m/s in nearly every mission), resolved per session by
+     `SpawnPicker.StartState` and carried on `FlightStart` — `BL-074`. It is data, so it differs
+     between missions and can differ again whenever a mission is re-read; any "start N seconds back
+     at the spawn speed" arithmetic therefore hard-codes one map's number into a rule meant to hold
+     on all of them. The on-rails walk above avoids this by construction: it simulates nothing and
+     it ends on the spawn pose whatever the speed is.
   2. **This changes `StuntMission.Elapsed`'s documented rule.** "The clock never stops" is stated
      twice and on purpose (`StuntMission.cs:109-113` on the property, `:247-249` on `Tick`) — it is
      why a mid-run crash freeze still costs you time. A countdown means the clock must not *start*
@@ -3075,7 +2793,7 @@ usual.
      both comments rather than deleting the rule, or the next reader reads the crash freeze as
      negotiable too.
   3. **Do not simulate the count and do not freeze the sim.** A physics-alive count that is actually
-     flown re-opens the sink (`FlightController.cs:300-302`) and diverges per plane; a hard freeze
+     flown re-opens the sink (`FlightController.Respawn`'s start state) and diverges per plane; a hard freeze
      was rejected as the presentation this mode wants. Both are the alternatives already considered.
   4. **The instrument is a hand-flown sitting, not a screenshot.** A race grid is not photographable
      (chase-cam panes; a 60 m neighbour is out of frustum), and `--det` cannot reach this path at
