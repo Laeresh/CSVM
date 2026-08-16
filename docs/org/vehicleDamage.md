@@ -300,6 +300,25 @@ it. What the caller chooses is the context node, not the anim: for `injure_anims
 passes the vehicle's own scene node (`inst+0xc`) when the entry's `+0x0c` is zero, and a named
 sub-node via `FUN_004d8cf0` otherwise.
 
+The whole player damage-stage family is authored this way, not just the smoke trail. Twenty defs
+per chapter carry the NAME `player_pfighter` (`pdpanel1`-`8`, `plane_reset`, `player_fuelleak`,
+`player_smoketrail`, `player_damage_trail`, `player_firetrail`, `random_remote_damage`,
+`reset_bulletholes`, `bullet1`-`5`), and that name is the Devastator's own player-model root: a
+node under the `player` wrapper in `extracted/planes/nodes.json`, holding the same
+`geometry`/`cockpit1` children the other ten `player_*` roots hold. Every one of them spells
+`anim_root_name` equal to its own `name`, and the extraction shows `anim_ptr == anim_root_ptr` on
+each, which is the `def+0x6c == def+0x48` identity the branch tests. **So none of them is
+Devastator-specific in effect**: played on any airframe, both fields are rewritten to that
+airframe's node. Our rig runtime arrives at the same place from the other side, since a def whose
+NAME resolves no anchor falls back to the caller's staging anchor, which is the plane model.
+
+⚠ **`EffectCatalogue.AirframeScopedAnchors`' note is half right and should not be read as a claim
+about the definitions.** No chapter gamez ships a `player_pfighter` node (zero occurrences across
+all eight), so the constant's own job stands: the name stages no effect template, and it is
+place-exempt because on the Devastator it resolves to the aircraft itself. But "inert on the other
+ten airframes" is true only of the anchor, never of the def, and the `pdpanel*` / `player_fuelleak`
+/ `player_damage_trail` stages already play on all eleven airframes for exactly that reason.
+
 ### Where a stage's effects land
 
 Node names in a started anim are bound in `FUN_00521180`, which walks the anim's node tables and
@@ -324,6 +343,57 @@ with a zero pointer leaves `EAX` zero at `0x004e8277` and `FUN_00550370` writes 
 puffer's parent slot `+0x74`. Combined with the global by-name fallback above, an anchor absent from
 the airframe that is playing the anim binds to any node of that name anywhere in the loaded scene
 before it reaches the NULL case. Decoded 2026-08-16 (`BL-385`).
+
+### The AI stage anchors exist on ten of the eleven airframes
+
+The two anims an AI `injure_anims` ladder names are authored against the Devastator, and they name
+five node anchors between them: `piratefighter-pfsmoketrail` puts its `smokepuffer`/`firepuffer`
+pair at `prop1`, and `player_pfighter-random_remote_damage` calls `small_fireball_follow`,
+`short_fireball_follow` and `short_fire_follow` onto `railer1`, `lailer1`, `lft_elev` and `rt_elev`.
+Because both defs take the total-retarget branch above, those five names are resolved against
+whichever airframe the stage is playing on, which makes their presence per airframe the question.
+
+Censused over `extracted/planes/nodes.json` by walking each airframe root's subtree, so the answer
+is by node identity rather than by eye. Each airframe ships two models: the `player_*` root the
+player flies (and the one CSVM builds for an AI plane too, since `PlaneStats.LoadForAi` keeps the
+built model on the player chain) and the bare AI root the original spawns from an `aiv` roster.
+
+| Airframe | `player_*` root | AI root | `prop1` | `railer1` | `lailer1` | `lft_elev` | `rt_elev` |
+|---|---|---|---|---|---|---|---|
+| Bloodhawk | `player_bhawk` | `bloodhawk` | yes | yes | yes | **no** | **no** |
+| Devastator | `player_pfighter` | `piratefighter` | yes | yes | yes | yes | yes |
+| Firebrand | `player_fbrand` | `firebrand` | yes | yes | yes | yes | yes |
+| Brigand | `player_brigand` | `brigand` | yes | yes | yes | yes | yes |
+| Fury | `player_fury` | `fury` | yes | yes | yes | yes | yes |
+| Autogyro | `player_autogyro` | `autogyro` | yes | yes | yes | yes | yes |
+| Avenger | `player_avenger` | `avenger` | yes | yes | yes | yes | yes |
+| Kestrel | `player_kestrel` | `kestrel` | yes | yes | yes | yes | yes |
+| Peacemaker | `player_peacemaker` | `peacemaker` | yes | yes | yes | yes | yes |
+| Balmoral | `player_balmoral` | `balmoral` | yes | yes | yes | yes | yes |
+| Warhawk | `player_warhawk` | `warhawk` | yes | yes | yes | yes | yes |
+
+Both model families give the same answer on every airframe, so the census does not depend on which
+model an AI plane is built from. **The Bloodhawk is the single exception, and only on the elevator
+pair**: it spells its elevators `l_elev` and `r_elev`, children of `nose` rather than of `tail`, so
+`lft_elev` and `rt_elev` resolve nothing on it. Two of `random_remote_damage`'s five cascade steps
+therefore have no anchor on a Bloodhawk. `prop1` is present on all twenty-two roots, so
+`pfsmoketrail` (the only stage a campaign wingman's one-entry ladder names) always resolves.
+
+⚠ **In the original, a Bloodhawk's two anchorless steps do not go nowhere.** The global by-name
+fallback above binds them to any node of that name in the loaded scene, and C3, C4 and C5 each ship
+scenery aircraft carrying exactly these names: C3's three `britbalmoral_*`, C4's `anim_warhawk`,
+`anim2_warhawk`, `anim2_brigand` and `anim2_autogyro`, and C5's `stihellhound_eg0`. A fireball
+called onto a wounded Bloodhawk's `lft_elev` can therefore appear on a parked aircraft elsewhere in
+the map. C1, C1B, C1C, C2 and C2B ship none of the five names in their gamez, so there the fallback
+can only reach another live aircraft. **This is why "smoke appeared" is not evidence that a stage
+anchored correctly.**
+
+Our runtime cannot reproduce that particular mistake. The damage stages play through the per-plane
+crash runtime, which is bound to the `FlightController`, so `NameResolver`'s widest tier is that one
+aircraft's subtree rather than the world. The cost lands differently instead: `CallTargetSite`
+falls back to the caller's anchor when a call's target node does not resolve, so on a Bloodhawk the
+two fireballs fire at the airframe root. That is counted (`_retargetUnresolved`) and logged only
+under `--debug-anim`. Censused for `BL-385`.
 
 ## Death
 

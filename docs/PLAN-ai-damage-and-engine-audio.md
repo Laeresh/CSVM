@@ -168,7 +168,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Evidence
 
-16. ☐ Anchor census: do the AI stage defs' nodes exist on every AI airframe?
+16. ☑ Anchor census: do the AI stage defs' nodes exist on every AI airframe?
 17. ☐ Tests, golden and audio debug line
 
 ## Dependency and parallelism notes
@@ -461,6 +461,15 @@ what the answer changes is B12's approach and whether a warning is needed when a
 absent.
 
 **Model recommendation.** medium, low effort — a mechanical census over the model data.
+
+**Result.** Censused by node identity over `extracted/planes/nodes.json`, written up in
+`docs/org/vehicleDamage.md`. `prop1` is present on all twenty-two airframe roots. The **Bloodhawk**
+is the only exception and only on the elevator pair: it spells its elevators `l_elev` / `r_elev`
+under `nose`, so two of `random_remote_damage`'s five cascade steps have no anchor there. B12's flat
+two-name list is unchanged by this; what it adds is a warn-once line naming (airframe, stage anim,
+unresolved node), which fires exactly twice in the whole install. `EffectCatalogue`'s
+"inert on the other ten airframes" note is wrong about the definitions (all twenty `player_pfighter`
+defs take the total-retarget branch) and right about the anchor (no gamez ships that node).
 
 **Verify.** N/A — this item's product is the census itself.
 
