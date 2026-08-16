@@ -1138,15 +1138,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (**D**) *The four no-damage types.* All four zero the damage pair first, and the player and an AI
   take **different** effects. `SONIC` and `FLASH` share one intensity model (full strength out to
   ≈77% of the radius, then a linear fade; `FLASH` additionally requires the victim to be facing it):
-  the player gets a screen flash, red for `SONIC` and white for `FLASH`, while an AI gets a **stun**
-  of up to 5 s that zeroes its control inputs. `BEEPER` does nothing to its victim beyond leaving the
-  tag. `TANGLER` cuts the engine and no AI code reads that, so a choked AI simply flies without
-  thrust.
+  the player gets a **purely visual** full-screen wash, red for `SONIC` and white for `FLASH`, lasting
+  five times the intensity and blending with any wash already running, with **no** control effect;
+  an AI instead gets a **stun** of the same duration that zeroes its control inputs. `BEEPER` does
+  nothing to its victim beyond leaving the tag. `TANGLER` cuts the engine and no AI code reads that,
+  so a choked AI simply flies without thrust.
   (**E**) *`SMOKE_SCREEN` and `REAR`.* Both belong to `wep_13`, the only entry carrying either: the
   smoker spawns **no projectile**, only a world object carrying `TIME [8]`, and `REAR` inverts the
-  aim test and the spawn axis and is gated on the being-hit latch. Neither deals damage. ⚠ The flare
-  `wep_15` is named `MSG_WEAP_REARARC_FLASH` but does **not** carry `REAR`; it is a `FLASH` round
-  that hangs where it is dropped (`VELOCITY [1.0]`) and goes off on `DETONATION_TIME [2.0]`.
+  aim test and the spawn axis and is gated on the being-hit latch. Neither deals damage. ⚠ **The
+  smoke is a stun trap, not concealment** — it is no occluder and nothing queries it for targeting.
+  While its `TIME` runs it walks the aircraft list and hits anything within `smokescreen_stun_range`
+  (**600 m**) and inside a `smokescreen_stun_angle` (**170°**, a half-angle cosine) cone about the
+  layer's axis: a grey-green 2 s screen wash for the player on a 2 s cooldown, and the same stun an
+  AI takes from a sonic round for `smokescreen_stun_interval` (**5 s**), refreshed every frame it
+  stays in the cloud. Those three are authored in `player.zrd.json` and loaded by the
+  `ai_skill_parameters` loader, so they are game-wide, not per-weapon. ⚠ The flare `wep_15` is named
+  `MSG_WEAP_REARARC_FLASH` but does **not** carry `REAR`; it is a `FLASH` round that hangs where it
+  is dropped (`VELOCITY [1.0]`) and goes off on `DETONATION_TIME [2.0]`.
   (**F**) *The flyout.* `TARGETABLE` admits the round to the target list; `FLYOUT_HEALTH` gives it a
   health pair spent armour-then-health; zero destroys it, playing `DESTROY_ANIMATION`.
   (**G**) *Gates.* `DAMAGES_ZEPPELIN` refuses its weapon against non-zeppelins as well as the

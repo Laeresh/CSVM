@@ -504,9 +504,10 @@ for `SONIC` (`wep_08`), the `BEEPER` (`wep_10`) and the choker (`wep_12`), which
 damage pair, **the data is misleading and the engine discards it**. Dealing no damage is not the same
 as doing nothing, though: three of the four disable the victim instead, which is the section below.
 
-## What the no-damage types do to an AI
+## What the no-damage types do, to the player and to an AI
 
 The player and an AI take **different** effects from the same weapon, decided at the point of impact.
+The short version: an AI loses its controls, the player loses their view.
 
 ### `SONIC` and `FLASH`: an intensity, then a stun
 
@@ -539,6 +540,19 @@ where that term multiplies was not traced.
 So a sonic or flash round against an AI takes its hands off the controls for up to five seconds. It
 is the strongest non-damaging effect in the weapon table and we model none of it.
 
+**The player's half is `FUN_0042e9d0`, and it is purely visual.** It is a full-screen colour wash:
+`SONIC` red `(1, 0, 0)`, `FLASH` white `(1, 1, 1)`, at a **weight** equal to the intensity and for a
+**duration equal to five times the intensity**, the same number the AI stun uses. Two derived timings
+at 0.35 and 0.15 of the duration split it into phases. Overlapping washes **blend** rather than
+replace: the running colour is mixed toward the new one by the incoming weight and the weights
+combine as `w + p − w·p`, so two flashes are worse than one but never saturate. An optional sound
+handle starts with it.
+
+⚠ **Nothing on the player's path touches the controls.** The player branch calls only the screen
+wash and returns; there is no input lockout, no state change, no stun. That asymmetry is the design:
+the same round blinds a human and disables an AI, because blinding an AI would mean nothing and
+locking a human's controls for five seconds would be intolerable.
+
 ### `TANGLER`: mechanical only
 
 The choker sets the engine-dead bit and its timer, and nothing in the AI decision layer reads that
@@ -550,6 +564,36 @@ state change and no evasive reaction.
 
 The tag is a world-list entry that seeker rounds query. The victim gets no effect, no state change
 and no notification.
+
+### `SMOKE_SCREEN` is a stun trap, not concealment
+
+The smoke object built at launch is **not an occluder** and has nothing to do with line of sight or
+targeting. Nothing queries it when picking or tracking a target. What it does, every frame while its
+`TIME` runs, is walk the **aircraft list** and test each aircraft that is alive and is not the layer:
+
+    within  smokescreen_stun_range          of the layer, and
+    dot( unit(other - layer), layerAxis )  >  cos( smokescreen_stun_angle / 2 )
+
+Anything passing both gets hit, and again the victim's kind decides how. **The player** gets a
+`FUN_0042e9d0` wash in a grey-green `(0.2, 0.29, 0.145)` at weight 0.9, or 0.97 on the first hit,
+lasting 2 s and re-arming on a 2 s per-victim cooldown, so it keeps re-applying while you stay in it.
+**An AI** gets the same `FUN_004200d0` stun as a sonic round, for `smokescreen_stun_interval`
+seconds; since the stun leaves the AI in state 4 and `FUN_004200d0` accepts state 4, it is refreshed
+every frame the AI remains in the cloud.
+
+The three tunables are **not per-weapon**. `FUN_004735b0`, the `ai_skill_parameters` loader, writes
+them from `player.zrd.json`, where their authored names state the mechanism outright:
+
+| Key | Authored | Default if absent | Stored as |
+|---|---|---|---|
+| `smokescreen_stun_range` | 600 m | 200 m | raw |
+| `smokescreen_stun_angle` | 170° | ≈73.7° | `cos(angle × π/180 × 0.5)`, a **half**-angle cosine |
+| `smokescreen_stun_interval` | 5 s | — | raw, the AI stun duration |
+
+600 m across a 170° cone is close to "everything behind the layer", which makes the smoker one of the
+most powerful weapons in the table rather than a defensive screen. The layer axis is the third row of
+the aircraft's world matrix (`+0x198`–`+0x1a0`); its sign was not traced, though the weapon is
+`REAR`-firing.
 
 ## The choker, settled
 
@@ -668,8 +712,11 @@ code, and were not opened.
 - `FUN_004b6820`, `FUN_004b5fb0`, `FUN_004b9770`, `FUN_005aef40`, `FUN_005af960`, `FUN_005af720`,
   `FUN_005abcf0`, `FUN_00441830`, `FUN_00441780`, `FUN_004b8b50`, `FUN_004b8ad0`, `FUN_004b89c0`,
   `FUN_004b7670`, `FUN_004b1690`, `FUN_005afd50`, `FUN_00480f50`, `FUN_005ac3a0`, `FUN_005ac7a0`,
-  `FUN_005ac690`, `FUN_005ac580`, `FUN_005aca30`, `FUN_005acac0`, `FUN_0042e840` and `FUN_004200d0`
-  were read in full.
+  `FUN_005ac690`, `FUN_005ac580`, `FUN_005aca30`, `FUN_005acac0`, `FUN_0042e840`, `FUN_004200d0`,
+  `FUN_0042e9d0`, `FUN_004b8d50` and `FUN_004b8fd0` were read in full.
+- The three `smokescreen_stun_*` values were traced from their authored names in `player.zrd.json`
+  through `FUN_004735b0`'s stores to their reads in `FUN_004b8fd0`, including the `× π/180 × 0.5`
+  conversion, so the half-angle reading is decoded rather than inferred.
 - The claim that no AI code reads the disabled-systems mask rests on an enumeration of every
   instruction referencing `+0x2dc`: twelve sites, all in the flight-model and damage ranges, none in
   the AI decision range. `FUN_0048fc40`, the flight model's reader, was not opened.
