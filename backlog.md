@@ -2718,8 +2718,44 @@ usual.
   (parked roster planes, not fresh spawns) is a separate fidelity gap from this bug; B6's fresh-spawn
   stand-in is documented in its landing commit.
 
-- `BL-074` `[Research]` **PLAYER_INIT fields [3]/[4] semantics + per-plane spawn speed** — story-mission spawns
-  currently assume the IA convention (0.5 throttle / 53.6 m/s).
+- `BL-074` `[Research]` **PLAYER_INIT fields [3]/[4] semantics + per-plane spawn speed.**
+  **Decoded and landed; what is left is one judgement at the controls.** Fields [3] and [4] *are* the
+  player's spawn throttle and spawn speed, one reader each: [3] goes to the throttle lever
+  (parsed `00467879` → `0071bb5c`, read `0047f450`, stored to aircraft `+0x124`), and [4] is
+  scaled by `0.1` on parse (`0046788b` → `0071bb60`, read `0047f4da`) to give the speed in m/s
+  along the nose. Authored values are throttle **0.8** in 49 of the 51 records and speed
+  **18 m/s** in 48 of them. **Spawn speed is not plane-dependent** in any path: the spawn routine
+  `FUN_0047f1f0` references neither `fd_speed` nor the aircraft def. The remake's 53.6 m/s is a
+  developer teleport constant (`0060803c`, cheat case `0x3b7`, 120.000 mph exactly), not a spawn
+  rule. Full decode with the branch table and the Instant Action case:
+  [`docs/formats/spawns.md`](docs/formats/spawns.md), "Story mission spawns"; the correction to the
+  flight-model page is item 13 of [`docs/org/flightModel.md`](docs/org/flightModel.md).
+  **What landed.** `SpawnPoints.LoadPlayerInit` returns the whole record as a `PlayerStart`,
+  `SpawnPicker.StartState` answers the throttle and speed for the whole field (Instant Action
+  substituting its 1.0), `FlightStart` carries them, and `FlightController.Setup` takes them
+  through to the single `_model.Reset(...)` call. Story and multiplayer missions therefore start
+  on the authored throttle, Instant Action on 1.0, and everything on the authored speed.
+  **What remains: the sitting.** Only a live judgement is left, and it is a real question rather
+  than a formality (see trap (a)).
+  ⚠ **Traps.** (a) **The decoded start puts every mission's first seconds in the speed band the
+  flight model is least trusted in.** Measured on the re-pinned goldens, the Bloodhawk goes 18 →
+  61 m/s in the first second, essentially level (`path=-1°`), which is about 4.4 G of longitudinal
+  acceleration; the aircraft accelerates straight through its own computed stall speed (~25 m/s)
+  rather than dropping. That may be the original's behaviour, but this is exactly where
+  [`docs/org/flightModel.md`](docs/org/flightModel.md) records an unresolved force-scale conflict
+  (the polar reads 2–3.6× too strong against `CAP-05`'s sub-cruise decelerations), so the spawn now
+  *depends* on an open question it did not depend on at 53.6 m/s. Judge the climb-out at the
+  controls before treating it as settled, and do not tune the spawn speed to fix a force-scale
+  problem. (b) The two claims this entry used to rest on are false at source, so do not restore
+  them from an older reading: "always throttle 0.5 regardless of mission" (no `0.5` is written to
+  the lever anywhere in the image) and "the start speed is plane-dependent". (c) The per-airframe
+  rule `min(plane_speed_max, fd_speed)` is real but belongs to **AI** aircraft in the vehicle
+  factory (`FUN_0047c210`); it is not the player's, it is not landed, and the AI rigs plus the labs
+  and unit tests deliberately keep the old 53.6/0.5 fallback rather than borrow the player's
+  numbers. (d) Five `--det` goldens moved and were re-pinned with the landing: `empty-stage`,
+  `c1-flight`, `c1-destroy-effects`, `c1-crash`, `c1-targeting-hud`. Exactly the shots that fly a
+  player aircraft moved and nothing else, which is the signature to expect from a spawn-state
+  change; a sixth would have meant something other than this was in the diff.
 
 - `BL-314` `[Feature]` `[Blocked: PT-45]` **Race countdown — a rolling start on rails before the run clock
   opens.** The abreast starting grid landed 2026-08-08 (`RaceGrid`), so every pilot in a splitscreen
@@ -2743,12 +2779,13 @@ usual.
 
   **⚠ Traps — read before touching this.**
 
-  1. **Do not derive the pre-GO setback from a speed.** `SpawnSpeed = 53.6f` is flagged
-     **PLACEHOLDER** (`FlightController.cs:300-302`) and `BL-074` will make spawn speed
-     plane-dependent. Any "start N seconds back at the spawn speed" arithmetic therefore lands each
-     aircraft of a mixed grid at a different point, which re-creates the unfairness the grid just
-     removed — in the one coordinate the grid does not control. The on-rails walk above avoids this
-     by construction: it simulates nothing and it ends on the spawn pose whatever the speed is.
+  1. **Do not derive the pre-GO setback from a speed.** Spawn speed is the mission's own
+     (`PLAYER_INIT[4] × 0.1`, 18 m/s in nearly every mission), resolved per session by
+     `SpawnPicker.StartState` and carried on `FlightStart` — `BL-074`. It is data, so it differs
+     between missions and can differ again whenever a mission is re-read; any "start N seconds back
+     at the spawn speed" arithmetic therefore hard-codes one map's number into a rule meant to hold
+     on all of them. The on-rails walk above avoids this by construction: it simulates nothing and
+     it ends on the spawn pose whatever the speed is.
   2. **This changes `StuntMission.Elapsed`'s documented rule.** "The clock never stops" is stated
      twice and on purpose (`StuntMission.cs:109-113` on the property, `:247-249` on `Tick`) — it is
      why a mid-run crash freeze still costs you time. A countdown means the clock must not *start*
@@ -2756,7 +2793,7 @@ usual.
      both comments rather than deleting the rule, or the next reader reads the crash freeze as
      negotiable too.
   3. **Do not simulate the count and do not freeze the sim.** A physics-alive count that is actually
-     flown re-opens the sink (`FlightController.cs:300-302`) and diverges per plane; a hard freeze
+     flown re-opens the sink (`FlightController.Respawn`'s start state) and diverges per plane; a hard freeze
      was rejected as the presentation this mode wants. Both are the alternatives already considered.
   4. **The instrument is a hand-flown sitting, not a screenshot.** A race grid is not photographable
      (chase-cam panes; a 60 m neighbour is out of frustum), and `--det` cannot reach this path at

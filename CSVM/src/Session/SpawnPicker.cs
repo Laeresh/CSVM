@@ -49,15 +49,41 @@ public sealed class SpawnPicker : IFlightStarts
     public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
         string missionZrdrPath, int spawnBase, int playerCount)
     {
+        var (throttle, speed) = StartState(spawns, missionZrdrPath);
         var starts = new FlightStart[playerCount];
         for (int pi = 0; pi < playerCount; pi++)
         {
             // The log tag names the pane in splitscreen and is empty when flying alone.
             string tag = playerCount > 1 ? $"P{pi + 1} " : "";
             var (pos, lookAt) = ChooseSpawn(spawns, missionZrdrPath, spawnBase, pi, tag);
-            starts[pi] = new FlightStart(pos, lookAt);
+            starts[pi] = new FlightStart(pos, lookAt, throttle, speed);
         }
         return starts;
+    }
+
+    /// <summary>The throttle and speed every pilot in this mission starts on, out of the mission's
+    /// own PLAYER_INIT (docs/formats/spawns.md). ⚠ Whole-field like <see cref="ChooseStarts"/>:
+    /// the record is one per mission, so never make this per-player — that invites a per-player
+    /// answer the original does not have. <see cref="RaceGrid"/> calls it rather than
+    /// restating it.</summary>
+    public (float ThrottleFrac, float SpeedMps) StartState(IReadOnlyList<SpawnPoint>? spawns,
+        string missionZrdrPath)
+    {
+        // A present ia.json spawn list is what makes this an instant-action launch, the same test
+        // ChooseSpawn already selects the position source on.
+        bool instantAction = spawns is { Count: > 0 };
+        if (SpawnPoints.LoadPlayerInit(missionZrdrPath) is not { } init)
+        {
+            // Silent with no mission to read (a lab, a headless test): that is not a data problem.
+            // A mission that HAS a zrdr and still has no record is, so that one says so.
+            if (!string.IsNullOrEmpty(missionZrdrPath))
+                Log.Warn("flight", $"no PLAYER_INIT for {_spec.Chapter}/{_spec.Mission} — starting on the shipped-majority throttle/speed");
+            return (instantAction ? SpawnPoints.InstantActionThrottleFrac : SpawnPoints.DefaultThrottleFrac,
+                SpawnPoints.DefaultSpeedMps);
+        }
+        float throttle = instantAction ? SpawnPoints.InstantActionThrottleFrac : init.ThrottleFrac;
+        Log.Info("flight", $"start [{_spec.Chapter}/{_spec.Mission}] throttle={throttle:0.00} speed={init.SpeedMps:0.#}m/s ({init.SpeedMps * 2.2369363f:0}mph)");
+        return (throttle, init.SpeedMps);
     }
 
     /// <summary>Picks one player's flight spawn: a world position + a look-at point one unit
@@ -89,9 +115,9 @@ public sealed class SpawnPicker : IFlightStarts
             return LogSpawn($"{tag}{ScenarioOverride ?? _spec.Scenario} #{i} of {spawns.Count}", spawns[i]);
         }
         // No instant-action spawns (only IA1 folders have ia.json) — use the story-mission
-        // spawn from objectives.json PLAYER_INIT (position + heading).
+        // spawn from objectives.json PLAYER_INIT (position + heading; StartState takes the rest).
         if (SpawnPoints.LoadPlayerInit(missionZrdrPath) is { } init)
-            return LogSpawn("PLAYER_INIT", init);
+            return LogSpawn("PLAYER_INIT", init.Spawn);
 
         GD.PushWarning($"no ia.json / PLAYER_INIT spawn for {_spec.Chapter}/{_spec.Mission} — using fallback spawn");
         return (new Vector3(-6200, 500, -3300), new Vector3(-5700, 350, -6300));

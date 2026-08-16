@@ -8,15 +8,36 @@ namespace CSVM.Flight;
 /// <summary>One instant-action spawn: a world position + a heading (yaw, degrees).</summary>
 public readonly record struct SpawnPoint(Vector3 Position, float HeadingDeg);
 
+/// <summary>A mission's whole <c>PLAYER_INIT</c> record: where the player starts, and the
+/// throttle and speed it starts on. ⚠ <paramref name="SpeedMps"/> is already the parsed
+/// field scaled by the original's own 0.1, so it is metres per second and needs no further
+/// conversion (docs/formats/spawns.md).</summary>
+public readonly record struct PlayerStart(SpawnPoint Spawn, float ThrottleFrac, float SpeedMps);
+
 /// <summary>
-/// Reads the player spawn from a mission's own zrdr. Two schemas, both yielding a
-/// <see cref="SpawnPoint"/>: <c>LoadIa</c> (instant-action <c>ia.json</c> <c>spawn_points</c>
-/// per scenario, one picked at random per launch) and <c>LoadPlayerInit</c> (story
-/// <c>objectives.json</c> <c>PLAYER_INIT</c>, position + yaw). Schema: docs/formats/spawns.md.
-/// ⚠ Throttle/speed from the data are deliberately ignored; the remake uses
-/// <see cref="FlightController"/>'s fixed start.</summary>
+/// Reads the player spawn from a mission's own zrdr. Two schemas: <c>LoadIa</c>
+/// (instant-action <c>ia.json</c> <c>spawn_points</c> per scenario, one picked at random per
+/// launch) yields <see cref="SpawnPoint"/>s, and <c>LoadPlayerInit</c> (story
+/// <c>objectives.json</c> <c>PLAYER_INIT</c>) yields a whole <see cref="PlayerStart"/>.
+/// Schema and the decode behind it: docs/formats/spawns.md.</summary>
 public static class SpawnPoints
 {
+    /// <summary>What the original multiplies PLAYER_INIT's speed field by on the way in
+    /// (the 0.1 at <c>0046788b</c>), which is what makes the result metres per second.</summary>
+    public const float SpeedScale = 0.1f;
+
+    /// <summary>The values a mission that authors no throttle/speed falls back to: what 49 of
+    /// the 51 shipped records say (0.8) and what 48 of them say (180 × 0.1 = 18 m/s).</summary>
+    public const float DefaultThrottleFrac = 0.8f;
+
+    /// <summary>See <see cref="DefaultThrottleFrac"/>.</summary>
+    public const float DefaultSpeedMps = 18f;
+
+    /// <summary>The throttle an Instant Action spawn takes instead of the authored one: the
+    /// original's mode-3 branch hard-sets 1.0 (<c>0047f3fb</c>) and reads PLAYER_INIT's throttle
+    /// not at all, while still taking its speed from the same record as every other mode.</summary>
+    public const float InstantActionThrottleFrac = 1f;
+
     /// <summary>Loads the spawn list for <paramref name="scenario"/> from the mission's
     /// ia.json (a zrdr zip or unpacked dir). Null if the file or scenario is absent.</summary>
     public static List<SpawnPoint>? LoadIa(string missionZrdrPath, string scenario)
@@ -43,12 +64,19 @@ public static class SpawnPoints
         return spawns.Count > 0 ? spawns : null;
     }
 
-    /// <summary>Loads the story-mission spawn from a mission's objectives.json
-    /// <c>PLAYER_INIT</c> block (<c>[1, [x,y,z], [pitch,yaw,roll]°, throttle, speed]</c>),
-    /// taking position + yaw. Null if the file or block is absent. The fallback for
-    /// missions that have no instant-action ia.json (only IA1 folders do).</summary>
-    public static SpawnPoint? LoadPlayerInit(string missionZrdrPath)
+    /// <summary>Loads a mission's objectives.json <c>PLAYER_INIT</c> block
+    /// (<c>[pending, [x,y,z], [pitch,yaw,roll]°, throttle, speed]</c>): position + yaw, the
+    /// throttle verbatim, and the speed scaled by the original's own 0.1 into m/s. Null if the
+    /// file or block is absent. ⚠ Pitch and roll are dropped because the original's own spawn
+    /// only ever authors yaw; do not "restore" them without re-reading the data.</summary>
+    public static PlayerStart? LoadPlayerInit(string missionZrdrPath)
     {
+        // A caller with no mission at all (a lab, a headless test) is asking the same question as
+        // a mission whose file is missing, and gets the same answer. Zrdr throws ArgumentException
+        // rather than IOException on an empty path, so the guard is here and not in the catch.
+        if (string.IsNullOrEmpty(missionZrdrPath))
+            return null;
+
         List<object?> root;
         try
         {
@@ -69,6 +97,10 @@ public static class SpawnPoints
             || pos[0] is not float x || pos[1] is not float y || pos[2] is not float z
             || rot[1] is not float yaw)
             return null;
-        return new SpawnPoint(new Vector3(x, y, z), yaw);
+        // Every shipped record carries all five, but the position half is the part that has been
+        // verified in-game, so a truncated record still yields a usable spawn on the defaults.
+        float throttle = pi.Count > 3 && pi[3] is float t ? t : DefaultThrottleFrac;
+        float speed = pi.Count > 4 && pi[4] is float s ? s * SpeedScale : DefaultSpeedMps;
+        return new PlayerStart(new SpawnPoint(new Vector3(x, y, z), yaw), throttle, speed);
     }
 }
