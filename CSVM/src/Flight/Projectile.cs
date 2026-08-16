@@ -1111,11 +1111,8 @@ public sealed partial class ProjectilePool : Node3D
             }
             else
             {
-                // Dirt debris carries velocity/spin; smoke puffs carry velocity without gravity;
-                // every other sprite has both zeroed and is unaffected — the position/orientation
-                // set at spawn stands for its whole life.
-                if (s.SpinRate != 0f)
-                    s.Orient = s.Orient.Rotated(s.SpinAxis, s.SpinRate * dt);
+                // Smoke puffs and ricochet sparks carry velocity; every other sprite has it zeroed
+                // and is unaffected — the position/orientation set at spawn stands for its whole life.
                 if (s.Vel != Vector3.Zero)
                 {
                     s.Pos += s.Vel * dt;
@@ -2331,10 +2328,8 @@ public sealed partial class ProjectilePool : Node3D
         public Basis Orient;   // unit quad orientation: X width, Y height, Z the facing normal.
                                // Muzzle flashes roll in the firing plane's basis; impact sprites
                                // face the struck surface normal — a fixed world plane for neither.
-        public Vector3 Vel;    // m/s, world; zero for every sprite but dirt debris and smoke
-        public Vector3 SpinAxis; // unit axis the debris tumbles about; unused when SpinRate is 0
-        public float SpinRate; // rad/s about SpinAxis; zero for every sprite but dirt debris
-        public bool NoGravity; // smoke puffs drift on their spawn velocity; debris arcs (false)
+        public Vector3 Vel;    // m/s, world; zero for every sprite but ricochet sparks and smoke
+        public bool NoGravity; // smoke puffs drift on their spawn velocity; sparks arc (false)
         public bool AnchorLeft; // Pos is the texture's left edge (UV x=0), not the quad centre —
                                 // the muzzle flash triad; the centre is derived in RenderSprites
                                 // from the *current* (shrinking) size so the anchor doesn't drift.
