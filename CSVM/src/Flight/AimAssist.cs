@@ -427,8 +427,9 @@ public sealed class AimCandidateSet
     /// <see cref="FlightController"/>s.</summary>
     public List<AimCandidate> Vehicles { get; } = new();
 
-    /// <summary>Turrets. **Empty in every build today** — turrets are M4, and this list exists so
-    /// that arrives as a wiring change rather than a scan change.</summary>
+    /// <summary>Turrets, fed since M4 C9a/C9b by <see cref="ProjectilePool.CollectTurrets"/>: every
+    /// registered aircraft's carried gunners (on their host's team) and every world emplacement (on
+    /// its own). A dormant emplacement stays listed; only its death delists it as live.</summary>
     public List<AimCandidate> Turrets { get; } = new();
 
     /// <summary>The mission structures. CSVM's analogue is

@@ -109,6 +109,47 @@ public sealed partial class ZeppelinRuntime : Node
     public int SurvivorsOf(string node) =>
         Find(node) is { Damage: { } damage } zep ? damage.Survivors(zep.ZoneAlive) : -1;
 
+    /// <summary>Appends every live zeppelin's damage zones (gasbags, engines, cannons) to
+    /// <paramref name="into"/>, one candidate per part, for the player-target pool.
+    /// Each part rides its hull, so it carries the zeppelin's own
+    /// velocity (<c>Forward * Speed</c>) rather than zero; a destroyed zone is offered but not live,
+    /// and a part whose anchor has left the tree is skipped rather than read (its global transform
+    /// is meaningless there, the same rule <see cref="AimCandidateSet.AddStructures"/> follows).
+    ///
+    /// <para>A plain list, deliberately NOT an <see cref="AimCandidateSet"/>'s <c>Structures</c>:
+    /// <see cref="TargetPool"/> never reads that list, so the world's destructible registry cannot
+    /// reach the player's cycles even if a future caller feeds a shared scan. This is the only
+    /// channel by which a structure becomes selectable.</para>
+    ///
+    /// <para>⚠ <b>This is a deliberate divergence from the original, not a port of it.</b> The
+    /// decode found NO sub-part enumeration anywhere in the targeting path
+    /// (<c>docs/org/targeting.md</c> "The class model"): a gasbag is selectable there only because
+    /// the mission authored it as its own <c>MStruct</c> carrying <c>otherTarget</c> /
+    /// <c>objectiveTarget</c>. CSVM has no mission flag data to read, so it enumerates the parts it
+    /// already models as damageable instead. Decision 8 asked for this; do not "correct" it back by
+    /// citing the decode.</para></summary>
+    public void CollectTargetParts(List<AimCandidate> into, int team = AimAssist.WorldTeam)
+    {
+        foreach (var zep in _live)
+        {
+            var vel = zep.Motion.Forward * zep.Motion.Speed;
+            foreach (var inst in zep.GasbagZones.Values)
+            {
+                AddPart(into, inst, team, vel);
+            }
+
+            foreach (var inst in zep.EngineZones.Values)
+            {
+                AddPart(into, inst, team, vel);
+            }
+
+            foreach (var cannon in zep.CannonZones)
+            {
+                AddPart(into, cannon.Instance, team, vel);
+            }
+        }
+    }
+
     /// <summary>Builds every zeppelin's damage zones over the world's destructible registry
     /// (the class summary's seeding rules) and starts the per-step damage poll. Idempotent.</summary>
     public void WireDamage(AnimRuntime runtime)
@@ -285,6 +326,25 @@ public sealed partial class ZeppelinRuntime : Node
 
     private static Node3D? ZoneNode(AnimRuntime runtime, Node3D host, string nodeName) =>
         runtime.FindNodes(nodeName, host) is { Count: > 0 } hits ? hits[0] : null;
+
+    private static void AddPart(List<AimCandidate> into, DestructibleRegistry.Instance? inst,
+        int team, Vector3 velocity)
+    {
+        if (inst == null || !GodotObject.IsInstanceValid(inst.Anchor) || !inst.Anchor.IsInsideTree())
+        {
+            return;
+        }
+
+        into.Add(new AimCandidate
+        {
+            Position = inst.Anchor.GlobalPosition,
+            Velocity = velocity,
+            Team = team,
+            Live = ZoneIsAlive(inst),
+            ConeOverride = AimAssist.NoConeOverride,
+            Source = inst,
+        });
+    }
 
     private static bool ZoneIsAlive(DestructibleRegistry.Instance? inst) =>
         inst == null || inst.Status != DestructibleRegistry.State.Destroyed;

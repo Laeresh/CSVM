@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Numerics;
 using CSVM.Utils;
 using Xunit;
 
@@ -14,6 +16,9 @@ namespace CSVM.Tests;
 /// (both go through native Godot objects — <c>GD.Seed</c>, <c>Godot.RandomNumberGenerator</c> —
 /// that only run inside the engine; this overload deliberately does not, which is why it can be
 /// pinned here at all).
+///
+/// <para>Plus <see cref="Rng.SortieSeed"/>, the per-flight master step, which is pure arithmetic
+/// for the same reason and so can be pinned here too.</para>
 /// </summary>
 public class RngTests
 {
@@ -49,5 +54,38 @@ public class RngTests
         var precip = Rng.NewSystemRandom(Rng.Precip, 7, -3);
 
         Assert.NotEqual(clouds.NextDouble(), precip.NextDouble());
+    }
+
+    [Fact]
+    public void ASortieSeedIsAPureFunctionOfTheProcessSeedAndTheSortie()
+    {
+        // The whole replay story rests on this: the logged process seed plus "the third flight"
+        // must reconstruct that mission, on any machine and at any point in the run.
+        Assert.Equal(Rng.SortieSeed(0xC0FFEE, 3), Rng.SortieSeed(0xC0FFEE, 3));
+        Assert.NotEqual(Rng.SortieSeed(0xC0FFEE, 3), Rng.SortieSeed(0xC0FFEF, 3));
+    }
+
+    [Fact]
+    public void SuccessiveSortiesGiveDistinctMasters()
+    {
+        var seen = new HashSet<ulong>();
+        for (int sortie = 1; sortie <= 64; sortie++)
+        {
+            Assert.True(seen.Add(Rng.SortieSeed(4242, sortie)), $"sortie {sortie} repeated a master");
+        }
+    }
+
+    [Fact]
+    public void ConsecutiveSortiesAreWellSeparated()
+    {
+        // The step is +1 through a mixer, not a bare +1: two masters a bit apart would hand every
+        // subsystem a pair of near-identical seeds, and back-to-back flights would look alike in
+        // exactly the way this change exists to prevent.
+        for (int sortie = 1; sortie <= 16; sortie++)
+        {
+            int differing = BitOperations.PopCount(
+                Rng.SortieSeed(4242, sortie) ^ Rng.SortieSeed(4242, sortie + 1));
+            Assert.InRange(differing, 16, 48);
+        }
     }
 }

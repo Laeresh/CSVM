@@ -448,6 +448,29 @@ public sealed partial class ProjectilePool : Node3D
     /// <see cref="AircraftBody.PlayerIndex"/> is matched against each round's shooter id).</summary>
     public void RegisterAircraft(AircraftBody body) => _aircraft.Add(body);
 
+    /// <summary>The registered aircraft that fired a round carrying <paramref name="shooterId"/>, or
+    /// null for an unowned round (<see cref="NoShooter"/>) or a plane no longer registered. Shooter
+    /// ids ARE unique across a session (a human's is its pane index, an AI's is
+    /// <c>AiAircraftSpawner.ShooterIdBase + n</c>), so this resolves one plane, not a class of
+    /// them.</summary>
+    public FlightController? RigOfShooter(int shooterId)
+    {
+        if (shooterId < 0)
+        {
+            return null;
+        }
+
+        foreach (var body in _aircraft)
+        {
+            if (body.Rig.PlayerIndex == shooterId)
+            {
+                return body.Rig;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Appends this pool's live proximity-fused rounds to the gun assist's candidate set:
     /// a filter over rounds in flight whose def carries a fuse longer than
     /// <see cref="AimAssist.MinFuseDistance"/>. Reads the round's own <c>Team</c>, stamped once at
@@ -987,11 +1010,8 @@ public sealed partial class ProjectilePool : Node3D
             }
             else
             {
-                // Dirt debris carries velocity/spin; smoke puffs carry velocity without gravity;
-                // every other sprite has both zeroed and is unaffected — the position/orientation
-                // set at spawn stands for its whole life.
-                if (s.SpinRate != 0f)
-                    s.Orient = s.Orient.Rotated(s.SpinAxis, s.SpinRate * dt);
+                // Smoke puffs and ricochet sparks carry velocity; every other sprite has it zeroed
+                // and is unaffected — the position/orientation set at spawn stands for its whole life.
                 if (s.Vel != Vector3.Zero)
                 {
                     s.Pos += s.Vel * dt;
@@ -2125,10 +2145,8 @@ public sealed partial class ProjectilePool : Node3D
         public Basis Orient;   // unit quad orientation: X width, Y height, Z the facing normal.
                                // Muzzle flashes roll in the firing plane's basis; impact sprites
                                // face the struck surface normal — a fixed world plane for neither.
-        public Vector3 Vel;    // m/s, world; zero for every sprite but dirt debris and smoke
-        public Vector3 SpinAxis; // unit axis the debris tumbles about; unused when SpinRate is 0
-        public float SpinRate; // rad/s about SpinAxis; zero for every sprite but dirt debris
-        public bool NoGravity; // smoke puffs drift on their spawn velocity; debris arcs (false)
+        public Vector3 Vel;    // m/s, world; zero for every sprite but ricochet sparks and smoke
+        public bool NoGravity; // smoke puffs drift on their spawn velocity; sparks arc (false)
         public bool AnchorLeft; // Pos is the texture's left edge (UV x=0), not the quad centre —
                                 // the muzzle flash triad; the centre is derived in RenderSprites
                                 // from the *current* (shrinking) size so the anchor doesn't drift.

@@ -6,7 +6,7 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// Floating node-name labels over the built scene (key T), available in the static viewer and in
+/// Floating node-name labels over the built scene (key F16), available in the static viewer and in
 /// flight: the fastest way to identify an object at a wrong position is to read its name off it.
 /// Names come from the <c>cs_name</c> meta SceneBuilder stamps on every node, not
 /// <c>Node.Name</c>, which Godot sanitises and auto-renames on duplicate siblings. Labels are
@@ -90,7 +90,7 @@ public sealed partial class NodeLabels : Node
 
     public override void _UnhandledKeyInput(InputEvent @event)
     {
-        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.T })
+        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F16 })
             SetMode(_mode switch
             {
                 Mode.Off => Mode.Meshes,
@@ -266,7 +266,7 @@ public sealed partial class NodeLabels : Node
             _pool[i].Visible = false;
 
         if (_hud != null)
-            _hud.Text = $"node labels [T]: {_mode} — {shown} shown"
+            _hud.Text = $"node labels [F16]: {_mode} — {shown} shown"
                         + (hidden > 0 ? $", {hidden} hidden (overlap / cap {MaxLabels})" : "")
                         + $" within {Radius:0} m";
     }

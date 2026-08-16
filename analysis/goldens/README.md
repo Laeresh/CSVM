@@ -1,6 +1,6 @@
 # The golden-image tripwire
 
-Thirteen pinned `--det` captures, each reduced to one md5. `RunTests.ps1` re-renders them and compares;
+Fifteen pinned `--det` captures, each reduced to one md5. `RunTests.ps1` re-renders them and compares;
 a mismatch names the shot and leaves the actual PNG in `.scratch/goldens/` next to that run's engine
 log. Nothing here is a picture — `manifest.json` holds command lines and hashes only, which is what
 keeps it inside the repo's no-game-assets rule.
@@ -64,9 +64,10 @@ you know which instrument to reach for.
 Each entry's `exercises` field says what that shot covers and carries its measured
 frame-sensitivity — frame N against N+1, which is
 the check that a pose has any animated surface in it at all (SHOT-12: a pose that renders identically
-twice proves nothing, because most poses show nothing that moves). Six shots move on a one-frame
-perturbation (`c1-flight` 34.52 %, `empty-stage` 12.21 %, `c4-snow` 3.74 %, `c2b-rain` 3.47 %,
-`c1c-rain` 2.50 %, `c1-waterfall` 1.28 %); the rest are geometry-and-shading shots and say so.
+twice proves nothing, because most poses show nothing that moves). Seven shots move on a one-frame
+perturbation (`c1-targeting-hud` 48.18 %, `c1-flight` 34.52 %, `empty-stage` 12.21 %, `c4-snow`
+3.74 %, `c2b-rain` 3.47 %, `c1c-rain` 2.50 %, `c1-waterfall` 1.28 %); the rest are geometry-and-shading
+shots and say so.
 
 **The 2-second window is itself a gap.** Every shot is captured at frame 120 = **2.00 s** of sim
 (`viewer-bhawk` 30, `c1-crash` 20), so anything whose period is seconds long is barely sampled: the

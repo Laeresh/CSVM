@@ -407,8 +407,10 @@ public partial class GameSession : Node3D
         _worldEffectsFactory = new WorldEffectsFactory(_spec, _worldRoot,
             () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam ? cam.GlobalPosition : Vector3.Zero,
             _ambience, PlayerPositionsSnapshot);
-        // Re-derive every subsystem RNG from the master before anything in the session draws, so a
-        // rebuild (Esc to the launchscreen and back) repeats the run rather than continuing it.
+        // Re-derive every subsystem RNG from the master before anything in the session draws, so
+        // this session's content is a function of its master alone rather than of how long the
+        // previous one ran. The launcher decides what that master is: held for a pinned run (the
+        // rebuild replays), stepped per sortie otherwise (the rebuild is a new mission).
         Rng.Reset(_masterSeed, _spec.SeedPinned);
         // One simulation clock per session. --det pins a fixed step, the animation lab is fixed-dt
         // by nature, everything else runs at the wall delta.
@@ -2269,6 +2271,17 @@ public partial class GameSession : Node3D
             if (_projectiles != null)
             {
                 _zeppelins.WireCannons(_projectiles, weaponDefs);
+            }
+            // B14: the zeppelin sub-parts are the one thing that makes a structure selectable, and
+            // the zeppelins are built AFTER the rigs — so the feed is bound here rather than in the
+            // assembler. Every pane shares the one runtime; each fills its own list from it.
+            var zepTargets = _zeppelins;
+            foreach (var zepRig in _rigs)
+            {
+                if (zepRig.Controller is { } zepPlane)
+                {
+                    zepPlane.TargetSubParts = into => zepTargets.CollectTargetParts(into);
+                }
             }
             GD.Print($"zep: {_zeppelins.LiveCount} of {zepDefs.Count} zeppelin(s) placed for " +
                      $"{_spec.Chapter}/{_spec.Mission}");

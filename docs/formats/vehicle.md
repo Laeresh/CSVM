@@ -290,14 +290,23 @@ far. Player defs carry `weapons` (as a catalogue), `cannon_jam`, `turrets` and
 `bullethole_anims`; the `armor`/`health` pair and the AI-tuning keys live only on the AI
 variant defs.
 
-**`weapons`** — a list of 5-tuples `[weapon_id, count, ?, ?, range]`, ids into
+**`weapons`** is a list of 5-tuples
+`[weapon_id, rounds_carried, refire_interval_s, min_range_m, max_range_m]`, ids into
 [weapons.md](weapons.md). On `player_airplane` it is a **capability catalogue, not a
 loadout**: all 39 buyable ids at once (`wep_00`–`15`, `25`/`27`/`28`, and the full
 `wep_30`–`73` player matrix), each with position-5 range `10000` — a UI sentinel, since the
 real per-plane loadout is executable-resident. On an AI def it is the actual armament:
-`bloodhawk` = `[["wep_04",4,…,800],["wep_07",2,…,800],["wep_00",9000,…,900]]` — a carried
-count, two undecoded factors, then an **engagement range** in metres (800–900 for AI
-fighters, 500 for the boat/truck). Positions 3–4 are inferred, not confirmed.
+`bloodhawk` = `[["wep_04",4,200,30,800],["wep_07",2,200,30,800],["wep_00",9000,0.05,1,900]]`, so
+one gun at 8000–9000 rounds over 1–900 m, plus one or two ordnance entries of 2–8 rounds over a
+200–800 m **band** (the boat and truck carry a gun alone, 1–500 m). **All five fields are
+decoded** from the builder `FUN_004b59b0`, which squares the last two into the vehicle's weapon
+slot ([org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md)); the per-def census is
+`analysis/ai-ordnance-census/`.
+
+⚠ **Five base defs author positions 3 and 4 transposed** against all 25 militia variants:
+`firebrand`, `bloodhawk`, `brigand`, `fury` and `autogyro` say `200, 30` where the variants say
+`30, 200`, so the engine gives them a 200-second ordnance refire at a 30 m floor. Shipped data,
+not a reader bug.
 
 **`cannon_jam`** (`player_airplane`) — `heat_safe_limit 1000`, `heat_dissipation_rate 50`,
 `jam_chance 0.1`; reads as a gun-overheating model paired with `FIRING_HEAT` in

@@ -90,6 +90,11 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/WeaponBench.cs` — the world-less 48-weapon mount-and-fire pass check behind `--weapon-test` and `weapons-fire`; fires the whole `ForRig` rig, no lab node involved.
 - `src/Flight/FireControl.cs` — the engine-free fire-control state machine (BL-295): trigger edges, fire clocks, ammo draw-down, both selectors, dry cues; `FlightController` performs its `FireOutcome`.
 - `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the forget + catch-up pass, the intercept solver, the four-list candidate scan, and the fire call's step order + 1° launch scatter.
+- `src/Flight/TargetRef.cs` — the player-targeting abstraction: one value over every selectable thing (aircraft, mission structure, turret), wrapping an `AimCandidate` for the pose/team/liveness/source half and adding class, label, optional health/armor, plus `Classify` (the decoded class model) and source-identity matching.
+- `src/Flight/TargetPool.cs` — the player's classed candidate pool: the three cycles (Enemy/Objective, Ally, Non-Aircraft) of `TargetRef`, rebuilt from scratch off the aim assist's `Vehicles`/`Turrets` lists plus an explicit sub-part list; the one place a concrete source type is read.
+- `src/Utils/TapHoldButton.cs` — one button carrying two actions, split by hold duration: edge-detects a level read, times it over `HoldToRepeat`, and answers tap / hold / nothing. The tap resolves on RELEASE; a press whose hold fired is spent. Pure, so the decoding unit-tests even though a gamepad does not.
+- `src/Flight/TargetSelection.cs` — the sticky player selection: owns a `TargetPool`, sorts it into the decoded cycle order, re-finds the selection by entity each frame, and carries every action (next/previous/nearest per class, nearest-crosshairs, target-nothing) plus the attacker queue and the lifecycle. `ApplyInitial` is `--target=`'s seam.
+- `src/Flight/TargetHud.cs` — the per-pane targeting HUD, built in every flight session: the selected-target bracket marker and label, the nearest-AI-hostile fallback, and `--debug-markers`' every-aircraft overlay.
 - `src/Flight/TurretDefs.cs` — typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
 - `src/Flight/TurretController.cs` — one carried turret gunner: acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
 - `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver: mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; each mode picks the aim point and table `AiControlLaw` steers on. `SteeringPatrol` reports whether the last step actually flew the net (F13's leashes read it).
@@ -178,7 +183,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/TileGridOverlay.cs` — the map-edge tile-grid overlay (`--debug-tilegrid`): every ground tile tinted by repetition band, so one colour band is one block.
 - `src/UI/WeaponLab.cs` — the weapon lab panel (B): steppers that arm the held plane's live loadout, click-to-place on a real world surface. Fires nothing itself.
 - `src/UI/PanelFocus.cs` — the one-line rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
-- `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
+- `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (F16): Off/Meshes/All, anchored on mesh centres, de-cluttered.
 - `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels.
 - `src/UI/PerfHud.cs` — the frame-cost readout (F14, `--debug-fps=`): fps/current-frame-cost/worst-recent-frame, once for the window, drawn above the launchscreen too.
 - `src/UI/TargetingOverlay.cs` — the targeting overlay (F15, `--debug-targets`): a line from every gunner to its acquired target, coloured by the gate holding the trigger.
@@ -953,6 +958,44 @@ seed the slot's target with the plane's forward axis, run `Scan`, rotate the win
 actually fired, and scatter it. `AimAssist.Scatter` (`FUN_004608a0`) is that scatter: a uniform roll
 about the aim axis, then a polar angle **uniform in `[0, inaccuracy]`**.
 
+## src/Flight/TargetRef.cs
+The one abstraction over everything the player can select: an enemy Fury, a zeppelin engine and a
+turret emplacement are three unrelated C# types, and every consumer downstream (the classed pool,
+the cycles, the label formatter, the marker) reads this and never the underlying type. It WRAPS an
+`AimCandidate` rather than restating it, adding what the aim assist has no use for: `Kind`, `Class` +
+`Objective`, `Name`/`DisplayName`/`TypeLabel`/`Category`, and optional `Health`/`Armor`. `Classify`
+is the decoded class model (`FUN_004b5cd0`); `CategoryLine` composes the marker's line 1. Pure data,
+no Godot node. Decode: [org/targeting.md](org/targeting.md). Pinned by the `target-ref` suite.
+
+## src/Flight/TargetPool.cs
+The player's classed candidate pool: three lists of `TargetRef` (`Enemy`, `Ally`, `NonAircraft`,
+reachable through `Of(TargetClass)`), rebuilt from scratch on every `Rebuild` call, which is the
+original's own contract and why a runtime spawn appears and a death disappears with no extra
+plumbing. It walks two of the aim assist's four lists (`Vehicles`, `Turrets`); selectable structures
+arrive through `Rebuild`'s separate `subParts` argument, filled only by
+`ZeppelinRuntime.CollectTargetParts`. `Describe` is the only place in the targeting path that reads
+a concrete source type. `TargetSelection` owns the instance; `FlightRigAssembler` wires one per human
+pane and `FlightController.StepTargeting` feeds it every frame. Decode:
+[org/targeting.md](org/targeting.md) "The candidate list". Pinned by the `target-pool` suite, with
+the carried-gunner exclusion on `turret-gunner`.
+
+## src/Flight/TargetSelection.cs
+One pilot's target selection: the sticky choice, the eleven actions and the lifecycle. One instance
+per pane; it OWNS its `TargetPool`. The split between the action handlers (which only mutate the
+class and the selection identity, stepping the list that already exists) and `Resolve` (the per-frame
+pass that re-sorts and re-finds the selection by entity, falling back to the list head) is the
+original's, and that one fallback is the entire lifecycle: auto-acquire, switch-on-death and
+drop-on-class-change are all the same failed re-find. `SectorKey` is the cycle comparator
+(ahead, behind, left, right, nearest-first inside each); `Select`/`ApplyInitial` are `--target=`'s
+seam, the only things here with no counterpart in the original. No Godot node dependency. Decode:
+[org/targeting.md](org/targeting.md). Pinned by the `target-selection` and `target-flag` suites.
+
+## src/Utils/TapHoldButton.cs
+One button carrying two actions, split by how long it is held. Feed it the button's LEVEL each
+frame; it edge-detects, times over `HoldToRepeat`, and answers `TapHold.Tap` / `Hold` / `None`.
+Engine-free: the input read stays with the caller, which is what makes the decoding unit-testable
+when the device is not. Pinned by the `target-input` suite.
+
 ## src/Flight/TurretDefs.cs
 Typed reader over the shared `ai.zrd`'s `TURRET` section — 42 `TurretDef`s (docs/formats/turrets.md):
 the carried/standalone split (`CREATE_STANDALONE` present-and-zero = carried, looked up by `TITLE`
@@ -1478,9 +1521,9 @@ score and re-arms completion. Off-engine coverage: `CSVM.Tests/VersusMatchTests.
 time-out win, draw, post-completion no-op, rematch re-arm, each limit disabled on its own).
 
 ## src/Flight/VersusHud.cs
-Per-pane Dogfight HUD: a compact status line — remaining time
-(omitted once `VersusMatch.TimeLimit` is disabled), this pane's own K/D, and the current leader's
-tag — drawn in MarkerHud's run-status slot (`RefStatusY` — Stunt and Versus are mutually
+Per-pane Dogfight HUD, `--vs` only: a compact status line — remaining
+time (omitted once `VersusMatch.TimeLimit` is disabled), this pane's own K/D, and the current
+leader's tag — drawn in MarkerHud's run-status slot (`RefStatusY` — Stunt and Versus are mutually
 exclusive, so the two never compete for it); a transient "P2 DOWNED P3" kill banner ("P3 DOWN"
 with no killer); and one opponent marker per living rig (`Rigs`, excluding `PlayerIndex` and any
 `Controller.Crashed` seat) — an on-screen tag at the projected point, or MarkerHud's edge-arrow +
@@ -1494,27 +1537,21 @@ The status line pulls the match live every `_Draw` (no pose to project for it) a
 pushed once per `Downed` report by GameSession's own broadcast — a second subscription, never
 piggybacked on the scoring one, so every pane hears every kill/death, not just the two it
 happened to.
-H22 extends the same marker to AI hostiles in EVERY flight session: `BuildHostileTracker(pi,
-camera, pool)` is the matchless build (no status line, no banner, no `Rigs`) the rig assembler
-hangs on every human pane outside `--vs`, and in `--vs` the normal build additionally gets
-`HostilePool`. `UpdateHostile` (every `_Process`) rescans the pool's one live aircraft roster
-(`ProjectilePool.CollectAircraft`, the same list the AI gunners read) and `NearestHostile` picks
-the nearest LIVE AI-piloted `FlightController` past the engine's team gate; the winner draws
-through `DrawOpponent` unchanged, in the HUD red, tagged `HostileTag(name)` ("ai1_player_fury"
-reads "AI1"). Humans carry no `AiGunner`, so there is no D12 "the target" to mirror;
-nearest-hostile re-selected per frame is the shipped rule, which also picks up generator spawns
-and drops a crashed hostile (listed but not live) with no extra plumbing. Acquire/lose
-transitions log one `targeting hud:` breadcrumb each. Pinned by the `hostile-marker-hud` suite +
-`HostileTagTests`; a hud built without a pool never tracks, which keeps the golden VS path
-byte-identical.
-`--debug-markers` (`MarkAll`, set by the rig assembler alongside `Own`) widens that to EVERY live
-aircraft in the same scan: `CollectMarks` is the pure selection (live, a `FlightController`, not
-`Own`), each drawn through the same `DrawOpponent` in HUD blue on the pane's own team and HUD red
-otherwise, tagged with its slant range and its current AI mode (`ModeSuffix`, the mode machine's
-own `NameOf` vocabulary; empty for a pilot without a machine), and off-screen tags stepped along
-the screen edge (`RefStaggerStep`) so a flight sharing one bearing does not stack into one string. It REPLACES the
-single-hostile draw rather than adding to it, so the tracked plane is never drawn twice in two
-colours.
+The single-target marker whose shape this reuses is `TargetHud`'s; the original has no per-opponent
+marker at all, so drawing one per human opponent is CSVM's own splitscreen answer to its radar.
+The shape's provenance is decoded in [`org/targeting.md`](org/targeting.md).
+
+## src/Flight/TargetHud.cs
+The per-pane targeting HUD, built on EVERY human pane in every flight session (`--vs` panes get one
+alongside `VersusHud`): the pilot's own selected target from `TargetSelection`, a nearest-AI-hostile
+fallback where no selection exists, and `--debug-markers`' every-live-aircraft overlay. Draws the
+original's bracket box, label block and off-screen edge arrow + clock bearing, and owns the colour
+table (`MarkerColor`), the label layout (`LabelLines`), the selected gun's reach gate (`GunReaches`,
+fed by `FlightController.GunReachesTarget`) and the debug identity string (`DebugTag`). The marker's
+decode is [`org/targeting.md`](org/targeting.md); the shape is copied from `VersusHud`'s own copy of
+`MarkerHud`'s. Pinned by the `hostile-marker-hud` suite, `HostileTagTests` and the
+`c1-targeting-hud` golden.
+
 
 ## src/Flight/VersusBoard.cs
 The dogfight's shared results overlay — `StuntRaceBoard`'s construction
@@ -1946,9 +1983,9 @@ as state, by the private `ApplyPresence()` — the model's `Visible` and `Body.S
 runs from `Respawn` AND `_Ready`, because `Setup` calls `Respawn` before `_Ready` has built the
 body. Everything else consults the flag: `TakeProjectileHit`/`DebugForceCrash` refuse,
 `DriveAiGunner` drops a standing target that leaves play, and outside this class
-`ProjectilePool.CollectAircraft` (which carries the aim assist, `SelectRankedTarget` and the H22
-tracker with it), the pool's fuse/blast passes, `TurretController.Alive`, `AiPilot.Next`'s quarry
-test and `VersusHud`'s hostile draw all read `InPlay`. `InertChanged` is the event a session-level
+`ProjectilePool.CollectAircraft` (which carries the aim assist, `SelectRankedTarget` and the
+hostile tracker with it), the pool's fuse/blast passes, `TurretController.Alive`, `AiPilot.Next`'s quarry
+test and `TargetHud`'s hostile draw all read `InPlay`. `InertChanged` is the event a session-level
 roster mirrors it into (`AiVoiceRuntime` → `Speaker.Alive`). `Activate(pos, lookAt)` is the
 inverse — re-home, clear the flag, `Respawn` — the original's teleport-then-reactivate in one call.
 `Spectating` is the third lifecycle flag and the narrowest: a pilot out
@@ -1968,6 +2005,17 @@ the chase — `halted || Held`, since both mean "the plane is standing still and
 around it" — and `CameraOwned` makes this node write nothing to the camera at all while the lab
 hands the same `Camera3D` to a `SpectatorCamera`; clearing it re-seeds the orbit from wherever the
 free camera left the eye.
+`SelectedGun`/`MuzzleMidpoint` are the shared "which gun is selected, and where does its fire leave
+from" answer, read by the pipper and by `GunReachesTarget`, the targeting marker's bracket gate
+(see `TargetHud.cs`). `Stats` exposes the flight model's own `PlaneStats`, needed for the airframe's
+display name; it is null on a rig `Setup` has not run on.
+`StepTargeting` is the player-targeting frame, run for every human pane whose `Targeting` is set:
+rebuild the pool and re-resolve, prune the attacker queue, then dispatch input. `TargetSubParts` is
+the delegate that adds the zeppelin sub-parts, bound by `GameSession` rather than the assembler.
+D-pad Up runs through `TapHoldButton`; `T`/`Y`/`U`/`I`/`O` are the curated keyboard set.
+`ApplyInitialTarget` spends `--target=`'s one application (`cli.md`), and `TakeProjectileHit` feeds
+the attacker queue `Next Enemy/Objective` walks backwards. Decode:
+[`org/targeting.md`](org/targeting.md).
 
 `ApplyFireOutcome` is where the gun aim assist meets the world (`BL-342`/B5): it rebuilds
 `AimAssist`'s candidate set ONCE per tick (aircraft + fused ordnance off the pool, the world's
@@ -2178,7 +2226,7 @@ The `--viewer` livery editor (key L): squadron stepper (loads the squadron's who
 `LoadSquadronLivery`), per-slot RGB sliders, decal steppers, random livery, copy-CLI-args.
 
 ## src/UI/NodeLabels.cs
-Floating node-name labels (key T) in both the static viewer and flight, cycling Off → Meshes → All;
+Floating node-name labels (key F16) in both the static viewer and flight, cycling Off → Meshes → All;
 `--debug-names[=meshes|all]` presets the mode at launch. In splitscreen the nearest/de-clutter pick
 is P1's viewpoint alone (rig 0's camera); every pane still renders the resulting labels, since they
 are ordinary world-space children of the root.
@@ -3076,6 +3124,9 @@ authored deploy/retract anims scoped to the hull, and spawns unowned rounds
 (`ProjectilePool.NoShooter`, C9b's convention) scattered by `cannon_inaccuracy`. Pinned by
 `zeppelin-motion` + `zeppelin-damage` + `zeppelin-broadside` suites. Zeppelins ride an anchored net
 too (`BL-377`, via `NetTrailerTargets`); `formats/ai-nets.md` has the two-of-222 census.
+`CollectTargetParts(List<AimCandidate>)` offers those same F18 zones — gasbags, engines, cannons —
+to the player's `TargetPool`, one candidate per part, each carrying the hull's own velocity so the
+bracket gate has something to lead. It is the only channel by which a structure becomes selectable.
 `Hold(node)` (F12) is the runtime counterpart of that flag for a zeppelin Instant Action's own
 builder switched off: placed, but no longer stepped, so it neither flies its net nor fires an
 invisible broadside. It stands in for `FUN_0045a390`'s `FUN_0045a2a0`, which deletes the vehicle/AI
@@ -3124,17 +3175,16 @@ on it — loadout/ordnance (and, with them, the aim assist's structure candidate
 readout/reticle, damage visuals,
 audio, the throttle-slam exhaust smoke and chapter-authored `SpeedCue` (private visual layer per
 rig), this player's stunt run + marker/scoreboard/race entry
-(or, in `--vs`, its `VersusHud` bound to `Inputs.VersusMatch` + `Inputs.Rigs` for the opponent
-markers — C23/C24; outside `--vs` the matchless `VersusHud.BuildHostileTracker` over
-`Inputs.Projectiles` instead, so every human pane tracks its nearest AI hostile in any flight
-session, H22; and the `--vs` build gets `HostilePool` too), the spawn placement, and the crash
-runtime built after the controller joins the tree. An active Instant Action mission overrides two
-things here: `Inputs.InstantActionPlayerPlaneNode`, when set, replaces `PlaneRoster.PlaneFor` for
-every human alike (the def carries one `player_plane`, not a per-player list), and
-`Inputs.InstantActionActive` puts every human on `AimAssist.PlayerTeam` (Decision 8) regardless of
-pilot index. Plain flight's `--coop` gives every human the same team the same way — the two flags
-are independent inputs to one `if`, since Instant Action always implies its own co-op regardless of
-`--coop`. Constructed once per session build from
+(in `--vs`, its `VersusHud` bound to `Inputs.VersusMatch` + `Inputs.Rigs` for the opponent markers;
+and, unconditionally in EVERY flight session, its `TargetHud` over `Inputs.Projectiles`, so every
+human pane tracks its nearest AI hostile whether or not the session has a match), the spawn
+placement, and the crash runtime built after the controller joins the tree. An active Instant
+Action mission overrides two things here: `Inputs.InstantActionPlayerPlaneNode`, when set, replaces
+`PlaneRoster.PlaneFor` for every human alike (the def carries one `player_plane`, not a per-player
+list), and `Inputs.InstantActionActive` puts every human on `AimAssist.PlayerTeam` (Decision 8)
+regardless of pilot index. Plain flight's `--coop` gives every human the same team the same way —
+the two flags are independent inputs to one `if`, since Instant Action always implies its own
+co-op regardless of `--coop`. Constructed once per session build from
 `(SessionSpec, LiveryResolver, SpawnPicker, WorldEffectsFactory, worldRoot, Inputs)`, then
 `Assemble(pi, rig)` once per rig; `MeshInstances`/`WhatSuffix` accumulate across the rigs for the
 caller's build summary. `--weapon-lab` sets `FlightController.Held` on every rig right after `Setup`
