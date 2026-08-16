@@ -153,8 +153,8 @@ public sealed class AiGunner
     /// <see cref="QuickDrawAngleDeg"/> about the target's nose axis or its tail axis. A
     /// degenerate zero separation passes (the geometry is meaningless there and the range gate
     /// owns that case). ⚠ The original applies this only aircraft-against-aircraft, a condition
-    /// <see cref="Target"/>'s type satisfies rather than tests; it needs a real test once a
-    /// gasbag or a ground target can be aimed at (<c>BL-395</c>).</summary>
+    /// <see cref="Target"/>'s type satisfies rather than tests, where
+    /// <see cref="AiRocketeer.Solve"/> takes the target's class as an argument instead.</summary>
     public bool QuickDrawAccepts(Vector3 ownPos, Vector3 targetPos, Vector3 targetForward) =>
         QuickDrawAccepts(ownPos, targetPos, targetForward, QuickDrawAngleDeg);
 

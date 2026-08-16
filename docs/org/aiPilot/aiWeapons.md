@@ -1,9 +1,9 @@
 # AI weapon employment: when an AI pulls the trigger, decoded from `crimson.exe`
 
 Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
-`crimson.exe`, `language x86:LE:32:default`), 2026-08-16, for `BL-395` (our AI never fires
-ordnance) and to settle the gun gates `AiGunner` had inferred from authored data. Every claim names
-the function or address it came from; the data census names the file it counted.
+`crimson.exe`, `language x86:LE:32:default`), 2026-08-16, to settle the gun gates `AiGunner` had
+inferred from authored data and to give the AI an ordnance trigger of its own (`AiRocketeer`).
+Every claim names the function or address it came from; the data census names the file it counted.
 
 This is the firing half of [`../aiPilot.md`](../aiPilot.md), which decodes what an AI *flies*:
 target acquisition, steering, escort, crash avoidance. Nothing here is about steering. The authored

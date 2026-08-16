@@ -719,7 +719,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `sec*` = Studio Security, `sti*`/`german*` = the two Hellhound militias. Two table entries have
   no def (Sacred Trust's Warhawk, Broadway Bomber's Peacemaker) — expected, since that table comes
   from `.BM` paint coverage, not from `vehicle.json`.
-  *The 5-tuple is decoded, so that risk is gone (2026-08-16, `BL-395`):*
+  *The 5-tuple is decoded, so that risk is gone:*
   `[weapon_id, rounds_carried, refire_interval_s, min_range_m, max_range_m]`, read out of the
   builder `FUN_004b59b0` ([`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md),
   census in `analysis/ai-ordnance-census/`).
@@ -735,8 +735,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-386` (the damage half — landed and closed 2026-08-16,
   `git log --grep=BL-386`; this builds on the `PlaneStats.AiDefName` seam it left),
   `docs/formats/vehicle.md` (the def-family census), `docs/formats/instant-action.md` (the militia
-  table's provenance), `BL-395` (the AI rocket trigger, which lands on the player loadout and wants
-  this item's armament afterwards).
+  table's provenance).
+  *The AI ordnance trigger is already built and waiting on this item.* `AiRocketeer` fires under
+  the decoded gates but on the *player's* pylons, so its shipped defaults (200–800 m band, 30 s
+  refire) stand in for the per-vehicle `weapons` tuple this item parses; they are fields, ready to
+  be fed. Two things only become reachable once it lands, and neither is a defect until then:
+  launch rates are worth tuning at all, and the `DAMAGES_ZEPPELIN` rule (a Black Hat Warhawk's
+  eight torpedoes must never be launched at an aircraft) becomes exercisable in the cockpit
+  rather than only in `AiRocketeerTests`. Fly a Black Hat flight when it lands and confirm the
+  torpedoes stay on the rail against aircraft.
 
 ## Weapons & combat
 
@@ -1083,59 +1090,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   = bracketed, inside = not), reusing the same hysteresis machinery already built.
   *Cross-refs:* `TargetHud.GunReaches`.
 
-- `BL-395` `[Bug]` **Enemy AI never fires ordnance: the rocket trigger is human-input only.**
-  `AiGunner` is forward-gun only, and `FlightController.cs:1177` derives `RocketHeld` from
-  `RocketFirePressed()` (keyboard/pad), so a non-human pilot cannot pull the rocket trigger at
-  all. AI planes nonetheless carry live pylons: `Session/AiAircraftSpawner.cs:120-126` binds the
-  stock loadout and builds `PylonOrdnance`, so enemy rockets are modelled, visible on the rail, and
-  never leave it.
-  *The original's employment model is decoded* (2026-08-16,
-  [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md)): the fire decision
-  `FUN_0041f420` walks one weapon list holding guns and ordnance together, and an ordnance entry
-  passes when its slot cooldown has expired, the target's gasbag class matches the weapon's
-  `DAMAGES_ZEPPELIN` bit, and the squared separation sits inside the authored `[min, max]` band.
-  The shot itself (`FUN_004b6820`) then needs the mount's aim inside **5°** (the gun's gate is
-  10°), a vehicle-wide ordnance lockout to have expired, and a **`quick_draw_chance` roll** to
-  pass (0.05 at pilot rating 1, 0.44 at 9), and that roll is the parameter's only consumer. The
-  roll is `rand()/32767` against the chance, inclusive; its one override (`FUN_00440ad0` at
-  `0x004b6b84`) reads the `Network` config flag, which is zero in single player, so **the roll is
-  an unconditional gate here** and a failed one advances to the next weapon slot.
-  *Fix shape:* a new `AiRocketeer` beside `AiGunner` holding those gates, whose `WantsFire`
-  replaces `RocketFirePressed()` for a non-human pilot, exactly as `AiGunner.WantsFire` already
-  replaces `FirePressed()` one line above. Feed the existing `FireControl` rocket input, never a
-  direct projectile spawn, so ammo, pylon selection, the dry cue, `PylonOrdnance` visibility and
-  the self-blast exemption stay in the one place that implements them.
-  ⚠ *Traps.* (a) **Scope is damaging ordnance.** Five militias fly the `wep_12` choker, two the
-  `wep_15` flare, one the rear-firing `wep_13` smoke (fired only while being pursued, aimed
-  backwards). Those need their own triggers and are a separate item, not a widening of this one.
-  (b) **A `DAMAGES_ZEPPELIN` weapon is fired ONLY at gasbags**, so the Black Hat Warhawk's eight
-  torpedoes must never be launched at an aircraft. (c) The engagement window is a **band**, 200 m
-  to 800 m on the shipped defs; a max-range-only gate is wrong. (d) **Do not tune launch rates
-  yet.** An AI still flies the *player's* loadout (`BL-394`), so counts and refire are wrong at
-  the source; wire the trigger, land it, tune after `BL-394`.
-  *Built, playtest owed.* `AiRocketeer` runs the gates and `FlightController.DriveAiRocketeer`
-  feeds `FireControl`'s rocket input; `AiRocketeerTests` covers each gate engine-free. Four calls
-  are recorded here because the entry does not imply them and a later reader would otherwise
-  re-open them. (i) **No selection arbitration with the gun.** The original couples the two
-  because they share one mount and one aim vector; ours share neither, so there is nothing to
-  arbitrate. (ii) **An AI's round leaves along the clamped mount aim**, passed as
-  `ProjectilePool.Spawn`'s `aimDir`; the player's path is untouched (`BL-403`) and the mounted
-  body does not rotate to match (`BL-404`). (iii) **The rocketeer holds no target**, reading
-  `AiGunner.Target`, so the two weapon classes cannot chase different aircraft. (iv) **The
-  lockout is stamped before the roll**, which is what makes launches rare: about one per ten
-  minutes at pilot rating 1, one per 68 s at rating 9.
-  *How you'd know it worked:* the engine-free assertions above. The launches-per-engagement and
-  hit-fraction metric this entry originally asked for is **not** built and should not be: at one
-  attempt per 30 s times a 0.05 roll, a run long enough to make the count significant takes hours,
-  and a regression halving the rate would not surface in it. The rate itself is asserted instead,
-  as attempts per interval, which is deterministic even though the roll is not.
-  *Playtest after fix:* fly against a Black Hat flight and confirm rockets are aimed at you and
-  read as a threat rather than noise.
-  *Cross-refs:* `BL-394` (what an AI carries; this item is only the trigger), `BL-227` (blast
-  falloff), `analysis/ai-ordnance-census/`. The gun half of the same decode is settled: `AiGunner`
-  runs the squared engagement window and the clamp-then-residual aim gate, so an `AiRocketeer`
-  copies that shape with the ordnance thresholds (5°, the vehicle-wide lockout, the roll).
-
 - `BL-403` `[Research]` **Does the player's rocket get an aim component in the original, the way
   the player's guns get the assist?** *Evidence:* our rocket launch spawns from the pylon marker's
   transform with no aim direction at all (`FlightController.cs:1860-1865`), on the stated ground
@@ -1154,10 +1108,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ *Trap:* a "no aim on rockets" answer is what the shipped code already assumes, so a decode
   that merely fails to find an assist has not confirmed it. The confirmation is the spawn call's
   direction argument, named by address.
-  *Why it matters now:* `BL-395` gives the AI's rocket a clamped launch direction, so until this
-  is settled an AI rocket and a player rocket leave along different vectors by decision rather
-  than by evidence.
-  *Cross-refs:* `BL-395` (the AI ordnance trigger),
+  *Why it matters now:* an AI's rocket already leaves along the clamped mount aim
+  (`AiRocketeer.LaunchDirWorld`) while the player's leaves along the pylon axis, so the two differ
+  by decision rather than by evidence until this is settled.
+  *Cross-refs:* `AiRocketeer` (the AI ordnance trigger),
   [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md) ("The fire routine, and the aim
   gate", and its "Open" note on the muzzle-position branch),
   [`docs/org/aim-assist.md`](docs/org/aim-assist.md).
@@ -1170,9 +1124,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   mount carrying an animated node (`+0x34`/`+0x38`) slews toward that direction through
   `FUN_00460840` instead of snapping to it. Our pylons do not move: `PylonOrdnance` parents the
   body to the pylon marker at identity and never touches it again (`PylonOrdnance.cs:46-49`).
-  `BL-395` gives an AI round a launch direction up to the traverse limit off the pylon axis, so
-  the mounted body and the round it becomes now point different ways at the launch instant, which
-  the mounting comment's "seamless" claim no longer covers.
+  An AI round leaves along a launch direction up to the traverse limit off the pylon axis
+  (`AiRocketeer.LaunchDirWorld`), so the mounted body and the round it becomes point different
+  ways at the launch instant, which the mounting comment's "seamless" claim no longer covers.
   ⚠ *Settle the data question first.* The slewing mechanism is decoded; whether any shipped
   aircraft authors an animated node on the mount its ordnance hangs from is **not**. A fixed
   forward gun has no node and reaches the clamped direction the same frame, and if the ordnance
@@ -1182,8 +1136,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   decision already computes, with the mounted body riding it as it does today. Ours would snap
   where the original slews unless `FUN_00460840`'s rate is read too.
   *Size:* localized, and probably closed as no-change.
-  *Cross-refs:* `BL-395` (which creates the mismatch), `BL-403` (whether the player's rocket gets
-  a direction at all), `docs/formats/vehicle.md` (`gun_pitch`/`gun_yaw`).
+  *Cross-refs:* `AiRocketeer` (whose launch direction creates the mismatch), `BL-403` (whether the
+  player's rocket gets a direction at all), `docs/formats/vehicle.md` (`gun_pitch`/`gun_yaw`).
 
 - `BL-401` `[Bug]` **The node names we spawn do not match the names the rosters author, so
   `rating_biases` matches nothing.** *Evidence:* `ObjectiveBiasFor(fc.Name, gunner.RatingBiases)`
