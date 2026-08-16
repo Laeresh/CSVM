@@ -84,7 +84,7 @@ There is **no world-space grid and no global clutter origin** in the original at
 fixed X/Z grid was a fiction with no counterpart, and it cost C1 roughly 4× its trees — its terrain
 is painted with `terpat02` at half the template quad's scale, so one repeat spans ~260 m where the
 grid stepped 512. The measurements are in
-`analysis/bl-305-clutter-uv/FINDINGS-A1.md` / `-A2.md` and `docs/PLAN-clutter-uv-placement.md`.
+`analysis/bl-305-clutter-uv/FINDINGS-A1.md` / `-A2.md`.
 
 **Which polygons get dressed is a per-polygon decision**, made by the `no_clutter` flag (raw
 polygon bit `0x800`, `FUN_004de2c0`). It does not mean "leave this ground bare": where two coplanar
@@ -167,7 +167,7 @@ Hughes' flying boat and the C2/M01 mission object, whose folder siblings are
 
 **There is no spruce-*tree* animation, and no tree-destruction animation of any kind,
 anywhere in the install.** The remake therefore gives clutter **sprites** no collider at
-all  — consistent with every other billboard, which is a flat
+all — consistent with every other billboard, which is a flat
 card whose collider would be a phantom wall wherever the card happens to be facing.
 
 **The 3D decorations are the opposite case and DO collide** :

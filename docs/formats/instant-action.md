@@ -555,7 +555,7 @@ record authors a threshold: the count is "all of them", because the test is on a
 load, and nothing distinguishes that from having emptied it. Unobservable in the shipped data (all
 58 records author 12 or 14 engines) but it is the behaviour, not an accident.
 
-⚠ **This was decoded , after G13 had already shipped the hull kill as the only path.**
+⚠ **This was decoded, after G13 had already shipped the hull kill as the only path.**
 The tell was in play: every engine on the objective zeppelin destroyed and the mission ran on.
 The reason the error survived review is that the gasbags are behind the `DAMAGES_ZEPPELIN` gate
 ([weapons.md](weapons.md)) while engines are ordinary destructibles, so the hull-only reading made

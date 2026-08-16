@@ -131,7 +131,7 @@ one of the 414 blocks — the volumes are never authored, so every AI falls back
 `activation` / `attack` / `return_range` in `vehicle.json` and to `player.json`'s
 `min_ai_active_dist` (2000 m). Do not spend time on it; do not invent values for it.
 
-**Closed  — treat them as inherited padding.** The likeliest explanation is that they are
+**Closed — treat them as inherited padding.** The likeliest explanation is that they are
 a remnant: this engine is a descendant of Zipper's `mech3` lineage (the same lineage the
 extraction toolchain targets — [extraction.md](extraction.md)), and a record layout that outlived
 the fields it was written for is exactly what a carried-over roster format looks like. That is a
@@ -201,7 +201,7 @@ pair per stat**, the endpoints the rating interpolates between.
 
 Notes that matter to anyone implementing this:
 
-- ~~**Only the two endpoints are decoded.**~~ **Traced  (`D31`), and the working assumption
+- ~~**Only the two endpoints are decoded.**~~ **Traced (`D31`), and the working assumption
   was the right shape with the wrong origin.** The engine computes
   `value = lo + (hi − lo) · rating · 1/9` (`FUN_0047c210` at `0x47d0c1`–`0x47d101`, the constant at
   `0x608028` being exactly `0.11111112`). The endpoints therefore sit at rating **0 and 9**, not 1

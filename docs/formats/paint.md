@@ -11,7 +11,7 @@ flies a **red** one: the remake draws the unpainted key texture.
 
 Extracted data and the user's reference screenshots show
 (`OriginalScreenshots/CustomPlane Paint1 Bloodhawk.png` = the in-game paint UI,
-`OriginalScreenshots/Kestrel.png` = a painted plane in flight). **Implemented ** —
+`OriginalScreenshots/Kestrel.png` = a painted plane in flight). **Implemented** —
 see "Implementing this in the remake" at the bottom for what the remake actually does and
 where it knowingly diverges.
 
@@ -92,12 +92,12 @@ time; the shipped 16×16 image is a placeholder, not artwork to render. Placehol
 are both `alpha=Full`, so the swap does not disturb a renderer's alpha classification.
 
 **Not every aircraft has all three.** The Firebrand ships no `fir_noselogo` (only
-`fir_taillogo` / `fir_winglogo`) — , after keying the remake's aircraft
+`fir_taillogo` / `fir_winglogo`) —, after keying the remake's aircraft
 detection on the nose slot alone left the Firebrand unpainted. Detect on any of the three.
 
 Index → texture is unambiguous: in both C1 and C5 exactly 50 textures match "two digits
 followed by a non-digit, not an `_1` LOD twin", one per index 00–49, with no collisions
-anywhere else in the archive (verified ).
+anywhere else in the archive (verified).
 
 ## Base skins are unpainted key textures
 
@@ -134,13 +134,13 @@ on palette index:
 So the engine cannot be doing an index-range palette swap. Whatever table it uses to decide
 "this texel is paint slot 2" is keyed on something else and is not in the ZBD data.
 
-> **Found,  — it is in `crimson.rof`.** The region table exists after all, in the UI
+> **Found, — it is in `crimson.rof`.** The region table exists after all, in the UI
 > resource archive rather than the ZBD set: each `ASSETS/GRAPHICS/<PATTERN>/<SKIN>.BM` carries
 > a greyscale shading map plus **three 8-bit per-pixel weight masks, one per paint colour slot,
 > summing to 255**. That is a direct answer to "how the engine identifies a region", and it is
 > per *pattern* — which also answers "what a pattern actually varies" below. Full decode in
 > [rof.md](rof.md); `ExtractRof.ps1` writes each mask out as `<SKIN>_mask.png` (R/G/B = slots
-> 1/2/3). **The remake was reworked onto these masks on ** — the hue-window sections
+> 1/2/3). **The remake was reworked onto these masks on** — the hue-window sections
 > below describe the source-skin analysis; the runtime uses the mask-based mapping described in this page.
 
 ### What the regions actually look like
@@ -185,7 +185,7 @@ record is only needed to *import* a player's saved planes, which nothing depends
 
 ## Implementing this in the remake
 
-**Reworked onto the original's own masks **, replacing the hue-window workaround
+**Reworked onto the original's own masks**, replacing the hue-window workaround
 below. `src/Mech3/PatternLibrary.cs` reads the `.BM` region masks out of the extracted UI
 archive, `src/Mech3/PlanePainter.cs` composites them, `src/Mech3/PaintScheme.cs` holds the
 record, and the result reaches the renderer through a `SceneBuilder` texture-substitution hook
@@ -267,7 +267,7 @@ colour, and all of them are gone:
 
 ## Known limits
 
-- ~~**The "Shade" column.**~~ *Answered  (user): Shade is simply the **brightness** of
+- ~~**The "Shade" column.**~~ *Answered (user): Shade is simply the **brightness** of
   the chosen colour.* The UI's Colour dropdown picks the hue family and Shade picks how light
   or dark it is; their product is the single RGB that ends up in `paint_colorN`. There is no
   fourth stored field and nothing extra to model — a scheme really is three colours, and the

@@ -1,8 +1,7 @@
 # The `OBJECT_MOTION` rigid body, decoded from `crimson.exe`
 
 Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
-`crimson.exe`, `language x86:LE:32:default`), 2026-08-10/13, over the course of
-[`PLAN-object-motion-decode.md`](../PLAN-object-motion-decode.md). Every claim below names the
+`crimson.exe`, `language x86:LE:32:default`), 2026-08-10/13. Every claim below names the
 function it came from, and every install-wide count was re-derived from `extracted/` rather than
 carried forward.
 

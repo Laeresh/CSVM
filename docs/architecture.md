@@ -164,7 +164,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/ColliderOverlay.cs` — the collider wireframes (C): every built collision shape drawn, coloured by the surface id it resolves to; needs `--collision` outside flight.
 - `src/UI/ClassOverlay.cs` — the colour-by-class overlay (X): every drawn mesh tinted destructible/facade/clutter/scenery, a findable-targets view.
 - `src/UI/AiNetsOverlay.cs` — the AI patrol-net overlay (F13, `--debug-ainets`): the chapter's nets as coloured graphs with labels + census log.
-- `src/UI/TileGridOverlay.cs` — the map-edge tile-grid overlay, **flag-only** (`--debug-tilegrid`; no key is bound — `F14`/`F15`/`F16` were freed by `PLAN-perf-hitches` A1): every ground tile tinted 20 % by repetition band, so one colour band is one block; `--map-edge-block=`/`--map-edge-mode=` set the depth/fold once at launch. The instrument that settled the map-edge fold.
+- `src/UI/TileGridOverlay.cs` — the map-edge tile-grid overlay, **flag-only** (`--debug-tilegrid`; no key is bound): every ground tile tinted 20 % by repetition band, so one colour band is one block; `--map-edge-block=`/`--map-edge-mode=` set the depth/fold once at launch. The instrument that settled the map-edge fold.
 - `src/UI/WeaponLab.cs` — the weapon lab panel (B): steppers that arm the held plane's live loadout, click-to-place on a real world surface. Fires nothing itself.
 - `src/UI/PanelFocus.cs` — the one-line rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
@@ -203,7 +203,7 @@ instead.
 - `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
 - `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/RecordingEmitterRenderer.cs` — the no-GPU `IEmitterRenderer` fake that keeps a `Puffer`'s particles instead of drawing them, so its three modes are assertable.
-- `src/Testing/Suites.cs` — the 26 registered suites and their golden counts (48 weapon defs, destructibles, glTF round trip). Six no-blocker suites (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` — 11 airframes, blast/fuse rules — moved to `CSVM.Tests` (`FlightEnvelopeTests`, `GaugeColoursTests`, `GaugeArrowTweenTests`, `WeaponsDefsTests`, `WeaponBlastTests`, `MarkersRigTests`) since their bodies called only `Probes.*`/plain statics with no live Node — `PLAN-engine-free-suites.md` A3. `GaugeCluster`'s colour/sweep statics (`GunIndicatorColor`, `HardpointIndicatorColor`, `SlotIndicatorColor`, `DamageZoneColor`, `TargetArrowAngle`, `TweenArrow`, `IndicatorLowFrac`, `ArrowSweepDegPerSimS`) went `internal` → `public` for the move; `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the stall-specific consts stay `internal` (`stall-warning` is Wave B, scoped to `GaugeCluster` only).
+- `src/Testing/Suites.cs` — the 26 registered suites and their golden counts (48 weapon defs, destructibles, glTF round trip). Six no-blocker suites (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` — 11 airframes, blast/fuse rules — moved to `CSVM.Tests` (`FlightEnvelopeTests`, `GaugeColoursTests`, `GaugeArrowTweenTests`, `WeaponsDefsTests`, `WeaponBlastTests`, `MarkersRigTests`) since their bodies called only `Probes.*`/plain statics with no live Node. `GaugeCluster`'s colour/sweep statics (`GunIndicatorColor`, `HardpointIndicatorColor`, `SlotIndicatorColor`, `DamageZoneColor`, `TargetArrowAngle`, `TweenArrow`, `IndicatorLowFrac`, `ArrowSweepDegPerSimS`) went `internal` → `public` for the move; `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the stall-specific consts stay `internal` (`stall-warning` is Wave B, scoped to `GaugeCluster` only).
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
 - `src/Testing/CaptureDirector.cs` — the `--screenshot=`/`--shots=`/`--frames=` capture state machine + F11/F12, ticked from `_Process`.
@@ -227,8 +227,8 @@ clusters they delegate to.
 - `src/Session/EffectPools.cs` — the `data/effect_pools.json` reader: how many copies of each effect template the stage builds, per ROOT, scaled by player count.
 - `src/Session/FlightRigAssembler.cs` — assembles one player's flight rig: painted plane, `FlightController`, loadout/ordnance, HUD instruments, damage visuals, audio, stunt run, spawn, crash runtime.
 - `src/Session/AiAircraftSpawner.cs` — spawns an AI-piloted aircraft into a running session (M4 A2): the flight-essential subset of a rig, an `AiPilot` at the controls, shooter ids from 100.
-- `src/Session/InstantActionRuntime.cs` — owns one Instant Action mission's actor set (PLAN-instant-action.md C8/D9/E11/F12): the loaded `InstantActionDef`, the ace's own spawn draw and team/rating, the wingmen's fan placement/escort chain/flight-size clamp, E11's two per-wave-member draws (the five-row pilot-personality table, the accent-12 re-roll), and F12's objective-zeppelin selection.
-- `src/Session/InstantActionWaves.cs` — the decoded wave sequencer's own selection/trigger/geometry (PLAN-instant-action.md E11), pure and engine-free: the wave counter (advance-on-last-kill, 0-enemy fall-through, no advance past wave 4), the 500-m-from-nearest-human spawn draw with its literal-index-0 fallback, and the 100 m/45° fan.
+- `src/Session/InstantActionRuntime.cs` — owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's own spawn draw and team/rating, the wingmen's fan placement/escort chain/flight-size clamp, E11's two per-wave-member draws (the five-row pilot-personality table, the accent-12 re-roll), and F12's objective-zeppelin selection.
+- `src/Session/InstantActionWaves.cs` — the decoded wave sequencer's own selection/trigger/geometry, pure and engine-free: the wave counter (advance-on-last-kill, 0-enemy fall-through, no advance past wave 4), the 500-m-from-nearest-human spawn draw with its literal-index-0 fallback, and the 100 m/45° fan.
 - `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in and F12's wave-credit budget that switches it back off.
 - `src/Session/NetTrailerTargets.cs` — resolves a patrol net's trailer name (`player`, a zeppelin, a train) to a live position, so an anchored net rides its target (`BL-377`).
 - `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (M4 B6, `--generators`): load-time drop rules, per-cycle stepping, spawns through `GameSession.SpawnAiAircraft` — or, on an Instant Action zeppelin run (F12), releases an already-built wave member instead.
@@ -242,7 +242,7 @@ clusters they delegate to.
 - `src/SessionPaths.cs` — resolves extracted-data paths (per-chapter gamez/texture/zrdr; `PreferUnzipped`); extracted from `GameSession`.
 - `src/SessionSpec.cs` — the launch args as one immutable, engine-free value: `Parse` parses **and** resolves (closed `SessionMode`, `--det` bundle, placement, `BuildsCollision`), plus the pure arg parsers.
 
-- `CSVM.Tests/` — the xUnit project (`dotnet test`): engine-free reader units on hand-authored fixtures + `extracted/` golden counts, skipped when absent; plus, since `PLAN-engine-free-suites.md` (A3/A4/B11), eight former in-engine suites moved here as `Probes.*`/plain-static/`StuntMission`/`GaugeCluster` facts.
+- `CSVM.Tests/` — the xUnit project (`dotnet test`): engine-free reader units on hand-authored fixtures + `extracted/` golden counts, skipped when absent; plus eight former in-engine suites moved here as `Probes.*`/plain-static/`StuntMission`/`GaugeCluster` facts.
 
 ## Cross-module conventions
 
@@ -352,64 +352,61 @@ collider-bearing node is registered with
 still built with its transform — animations attach puffers and sounds to those nodes by name.
 A surface's colour is `vertex colour × material` (the original's baked-lighting modulate) — except
 where the two are the same authored value, which `GameZ.VertexColorsRestateMaterialColor` detects
-and `EmitPolygon` answers by writing white corners, so the value lands once. `PLAN-overcast-match`
-`B18`: every skydome's below-horizon skirt is an untextured polygon authored in its zone's own
-`FOG_COLOR`, and squaring that is what made the horizon join a hard band in seven of eight chapters.
-`DebugClutterFlag` (`--debug-clutterflag`, set by the caller before building) is the one thing that
-overrides that colour: `EmitTriangle` writes the polygon's decoded `no_clutter` bit as the vertex
-colour (red flagged / green clear) and the fullbright shader's last ALBEDO write becomes
-`ClutterFlagTintLine` instead of `TintLine`, since C5's night art would swallow a tint. Per polygon
-because the flag varies WITHIN a mesh, which no per-instance tint can express; the tint mix survives
-in that line so `WorldSession` can still force the clutter populations blue per instance. Off — every
-other builder, and the shaded aircraft path always — emits `TintLine` itself, so the default shader
-text is byte-for-byte unchanged. `FlaggedPolygonCount`/`ClearPolygonCount` count per BUILT MODEL, not
-per placement.
-⚠ Instance-uniform block is an ORDERING CONTRACT — every shader on one instance declares the same
-  block (csky_instance_uniforms); a shader with NO instance uniform must not take the preamble
-  (16-vec4 per-instance buffer cost). The model's `lighting`/`fog` flags therefore select shader
-  VARIANTS (and join the material cache keys) rather than adding a uniform: a lit, fogged surface
-  keeps byte-identical shader text, so honouring the flags cannot perturb the rest of the world.
-  `BuildSubtree`/`GetMesh`/`BuildMesh` all carry a `forceLit` override beside `forceDoubleSided`
-  (`PLAN-overcast-match` C22, `WorldBuilder.Add`'s deck path): `bool lit = mesh.Lighting ||
+and `EmitPolygon` answers by writing white corners, so the value lands once. Every skydome's
+below-horizon skirt is an untextured polygon authored in its zone's own `FOG_COLOR`, and squaring
+that is what made the horizon join a hard band in seven of eight chapters. `DebugClutterFlag`
+(`--debug-clutterflag`, set by the caller before building) is the one thing that overrides that
+colour: `EmitTriangle` writes the polygon's decoded `no_clutter` bit as the vertex colour (red
+flagged / green clear) and the fullbright shader's last ALBEDO write becomes `ClutterFlagTintLine`
+instead of `TintLine`, since C5's night art would swallow a tint. Per polygon because the flag
+varies WITHIN a mesh, which no per-instance tint can express; the tint mix survives in that line so
+`WorldSession` can still force the clutter populations blue per instance. Off — every other builder,
+and the shaded aircraft path always — emits `TintLine` itself, so the default shader text is
+byte-for-byte unchanged. `FlaggedPolygonCount`/`ClearPolygonCount` count per BUILT MODEL, not per
+placement. ⚠ Instance-uniform block is an ORDERING CONTRACT — every shader on one instance declares
+  the same block (csky_instance_uniforms); a shader with NO instance uniform must not take the
+  preamble (16-vec4 per-instance buffer cost). The model's `lighting`/`fog` flags therefore select
+  shader VARIANTS (and join the material cache keys) rather than adding a uniform: a lit, fogged
+  surface keeps byte-identical shader text, so honouring the flags cannot perturb the rest of the
+  world. `BuildSubtree`/`GetMesh`/`BuildMesh` all carry a `forceLit` override beside
+  `forceDoubleSided` (`WorldBuilder.Add`'s deck path): `bool lit = mesh.Lighting ||
   forceLit` still only PICKS an existing lit/fogged variant, so this composes with the ordering
   contract rather than working around it. Both overrides join the mesh cache key
   (`(Model, Force, ForceLit)`) because sidedness and the lit choice are baked into the built
   surfaces, not read per frame. That baking is why a RUNTIME lit-ness change has to be a mesh
   swap: `SharedMesh(meshIndex, forceDoubleSided, forceLit)` takes the same two flags and hits the
   same cache, so a caller can hold both variants of one model and assign either onto a live
-  `MeshInstance3D` — the deck's regime-conditional dimming (`PLAN-overcast-match` C23,
-  `Session/WeatherRig`) is exactly that and needs no second build of the deck.
-⚠ UV scroll reads the `csky_time` global, never Godot's `TIME` — it must keep TIME's 3600 s wrap
-  because every install rate (0.07/0.4/0.5/0.7/1.0) × 3600 is a whole number of texture repeats.
-⚠ `BuildSubtree` sets the built root's transform from the node's OWN `Local` — a caller slicing a
-  nested node must overwrite it with `GameZ.WorldTransformOf` or it lands at its parent's origin.
-⚠ A polygon's overlay passes become their own surfaces, appended after every base group, ordered by
-  `OverlayPassBias` and NOT by surface rank — 97 of the 307 overlay-bearing models are already at
-  the rank cap, where an appended group would share its base's rank and z-fight it. Declined on
-  sprite/facade meshes (no biasable material); `OverlayPassDeclinedCount` is the tripwire and is 0
-  across the install.
-⚠ `BuildFlatQuadMesh` (`PLAN-overcast-match` C26, `WorldBuilder.AddDeckAnnulus`) is the one caller
+  `MeshInstance3D` — the deck's regime-conditional dimming (`Session/WeatherRig`) is exactly that
+and needs no second build of the deck. ⚠ UV scroll reads the `csky_time` global, never Godot's
+  `TIME` — it must keep TIME's 3600 s wrap because every install rate (0.07/0.4/0.5/0.7/1.0) × 3600
+is a whole number of texture repeats. ⚠ `BuildSubtree` sets the built root's transform from the
+  node's OWN `Local` — a caller slicing a nested node must overwrite it with
+`GameZ.WorldTransformOf` or it lands at its parent's origin. ⚠ A polygon's overlay passes become
+  their own surfaces, appended after every base group, ordered by `OverlayPassBias` and NOT by
+  surface rank — 97 of the 307 overlay-bearing models are already at the rank cap, where an appended
+  group would share its base's rank and z-fight it. Declined on sprite/facade meshes (no biasable
+  material); `OverlayPassDeclinedCount` is the tripwire and is 0 across the install.
+⚠ `BuildFlatQuadMesh` (`WorldBuilder.AddDeckAnnulus`) is the one caller
   that builds geometry with NO gamez node behind it at all — raw world-space quad corners into a
   `SurfaceTool`, given the SAME `GetMaterial(-1, …)` no-texture branch a `Colored` polygon with an
   out-of-range material index gets, so it shares the ordinary bias-shader fog/lighting pipeline
   (`fogged: true`, `lit: false`) rather than a hand-rolled second one. `materialIndex = -1` is a
   deliberate reuse of an existing fallback path, not a new one.
-⚠ **Splitscreen-correct by construction** (residual sweep, `PLAN-splitscreen-polish` B14): the LOD
+⚠ **Splitscreen-correct by construction** (residual sweep): the LOD
   pick is a one-time BUILD-time choice (keep the highest-detail level, `LodRangeMin == 0`), never a
   per-frame distance check against any camera — so there is no "whose camera" question to ask.
 
 ## src/Mech3/ZoneGate.cs
-The original's per-node visibility gate (`FUN_0056c430`, `PLAN-weather-decompile-match` B12,
-2026-08-09). `FUN_004d62d0` arms the camera each frame with the zone set `{0, camera weather
-state}`; the walk draws a node iff its gamez `zone_id` is `-1`, or is in that set. Four members:
-`Draws(zoneId, state)` (the rule), `LayerFor(zoneId)` (the visual layer a gated zone's meshes are
-MOVED onto — 0 for `-1`/`0`, i.e. leave on the default layer), `CullMask(mask, state)` (narrows the
-band to one zone, every other bit untouched) and `OpenCullMask(mask)` (the whole band back —
-`--no-zone-cull` and the launcher camera's per-session reset).
-⚠ **Per NODE, never inherited down a subtree.** The data puts parents and children on different
-  zones — C1's `flaglite1`/`flaglite2` are `zone_id -1` under a zone-1 parent — and the binary
-  calls the gate per node during the walk. `SceneBuilder.BuildSubtree(…, zoneGate: true)` stamps
-  each node's own mesh instances accordingly, which is also why the gate can never be node
+The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame
+with the zone set `{0, camera weather state}`; the walk draws a node iff its gamez `zone_id` is
+`-1`, or is in that set. Four members: `Draws(zoneId, state)` (the rule), `LayerFor(zoneId)` (the
+visual layer a gated zone's meshes are MOVED onto — 0 for `-1`/`0`, i.e. leave on the default
+layer), `CullMask(mask, state)` (narrows the band to one zone, every other bit untouched) and
+`OpenCullMask(mask)` (the whole band back — `--no-zone-cull` and the launcher camera's per-session
+reset). ⚠ **Per NODE, never inherited down a subtree.** The data puts parents and children on
+  different zones — C1's `flaglite1`/`flaglite2` are `zone_id -1` under a zone-1 parent — and the
+  binary calls the gate per node during the walk. `SceneBuilder.BuildSubtree(…, zoneGate: true)`
+  stamps each node's own mesh instances accordingly, which is also why the gate can never be node
   visibility: a hidden parent takes its children with it in Godot, and a cull mask does not.
 ⚠ **A cull mask, not `Node3D.Visible`, for shared world content.** Splitscreen panes sit in
   different states at the same instant, and `AnimRuntime`'s `NodeActive` condition + uncovered-
@@ -528,7 +525,7 @@ as authored, no billboard); WingLightBlinker flashes them and emits a matching O
 ## src/Mech3/WorldBuilder.cs
 Builds a chapter world (fullbright): World children + partition-referenced subtrees; skips `horizon`
 (`BuildHorizon` makes the camera-anchored skydome; every horizon model in every chapter is authored
-`fog: false` and, since `PLAN-overcast-match` `B16` (2026-08-08), that flag is honoured like
+`fog: false` and that flag is honoured like
 everywhere else — dome materials build unfogged; its `lighting: false` is honoured too, as before),
 `fvol*` (`IsFogVolumeNode`, shared with `FogVolumeSpec.VolumesOf` so the skipped set and the
 cloud-scatter set are one list), `dzpaths`.
@@ -551,7 +548,7 @@ because the zone the dome and the fog share is picked from it
 (`Flight.WeatherState.PreferPopulatedHorizonZone`; three chapters ship a `zone2` that is a bare
 marker). Static over a `GameZ` so it needs no built scene and is testable off-engine.
 
-**Zone groups (`PLAN-weather-decompile-match` B12).** Every world node the walk builds is stamped
+**Zone groups.** Every world node the walk builds is stamped
 with its own `zone_id` visual layer by `SceneBuilder` (`zoneGate: true` — see `Mech3/ZoneGate.cs`),
 so the camera's weather state culls it as `FUN_0056c430` does. Two populations are excluded from
 that stamp because they are per-rig camera-anchored COPIES, whose per-player visual layer a zone
@@ -567,7 +564,7 @@ zoned content".
   the caller's, and an explicit `--sky-zone=` is meant to be able to show a bare marker's nothing.
   Its own name-absent fallback (first zone child) stays a no-op in the normal path.
 ⚠ **`DomeZonesToBuild(zones, activeZone)` decides how MANY domes a world builds**
-  (`PLAN-weather-decompile-match` B14, 2026-08-09). The original draws the dome of the zone its
+  (2026-08-09). The original draws the dome of the zone its
   camera is IN, so a deck chapter needs both present: below the deck its `zone_id 2` dome is culled
   and `horizon/zone1`'s own geometry is the sky *and* the ceiling. The rule is the gate's own
   arithmetic, never a chapter list — a second zone is added only if it builds geometry, its
@@ -581,14 +578,14 @@ white line strip (never a filled or closed polygon).
 Splits the overcast deck into
 `CloudDeck` (GameSession moves it with the player); hides origin-parked unplaced vehicles.
 `Add` builds every deck tile with `forceLit: isDeck` beside its existing `forceDoubleSided:
-isDeck` (`PLAN-overcast-match` C22): the deck tiles author `lighting: false` like the dome and
+isDeck`: the deck tiles author `lighting: false` like the dome and
 the `cloudsprite` field, but the deck alone was actually SUNLIGHT-dimmed in the original —
 `SunIncidence` was calibrated on this exact texture (`Flight/Weather.cs`) — so `forceLit`
 applies `csky_world_light` to the deck regardless of its own authored flag, deck-local, never a
 change to the `lighting` gate or to `csky_world_light` itself. C4's deck is unaffected by
 construction (its `WorldLight` clamps to 1.0), which is the control that proves the fix is
 deck-local rather than a hidden global change.
-⚠ That dimming is the BELOW-BAND regime only (`PLAN-overcast-match` C23, user's fork verdict
+⚠ That dimming is the BELOW-BAND regime only (user's fork verdict
 2026-08-09): the ceiling a camera under the band sees is the overcast's dimmed UNDERSIDE, the
 floor a camera above it sees is the undimmed top, and the original's above-band frames contain no
 pixel below `FOG_COLOR` at all. `RecordDeckUndimmedMesh` therefore asks `SceneBuilder.SharedMesh`
@@ -597,7 +594,7 @@ the very resource the built instance carries — and `CloudDeckUndimmedMeshes` p
 keyed by the dimmed mesh's `Rid`. `Session/WeatherRig.Tick` assigns one variant per rig at the
 band crossing; nothing here decides which. Keyed by RID because a splitscreen session's extra deck
 copies (`GameSession.AssignCloudDecks`) are `Duplicate`s sharing these resources.
-`AddDeckAnnulus` (`PLAN-overcast-match` C26, 2026-08-09) adds ONE more child under the same `deck`
+`AddDeckAnnulus` (2026-08-09) adds ONE more child under the same `deck`
 node once the 144 tiles are built: a flat, untextured four-quad picture frame around
 `MergedLocalAabb(deck)` (the tiles' own measured AABB — never a hardcoded origin, so the annulus
 stays exactly centred on the tile grid and the eventual `GameSession.AssignCloudDeckIfBuilt`
@@ -625,7 +622,7 @@ touch the dome) or its outer edge would sit past the dome wall it renders in fro
   coordinates as the 144 tiles (`MergedLocalAabb(deck)`'s own `Y`), so it moves only because its
   parent's `Position` does — the same mechanism that already kept it centred through
   `AssignCloudDeckIfBuilt`'s re-measurement.
-`CloudDeckAltitude` (`PLAN-weather-decompile-match` B13, 2026-08-09) exposes `_deckAltitude` — the
+`CloudDeckAltitude` (2026-08-09) exposes `_deckAltitude` — the
 same coverage-winning altitude bucket `FindCloudDeck` classifies the 144 tiles by (C1/C1C/C2B 960,
 C4 1050) — as the tiles' AUTHORED Y, read off the built data rather than hardcoded.
 `Session/WeatherRig.SetDeckAltitude` takes it (`GameSession`, beside `SetDeckZoneId`) so the
@@ -821,9 +818,8 @@ changing a placement rule; the authored side stays in [formats/clutter.md](forma
   `ClutterBuilder.BuriedClutterDistricts` no longer exists — B13/B15 landed the gate coupled with
   retiring that exemption, which is what actually resolves `BL-305`'s CAP-22 pose (the visible
   ground there is the flagged overlay; the exempted base layer had to come back for the gate to
-  leave anything behind). See `docs/plans/PLAN-clutter-uv-placement.md` items B13/B14/B15 for the
-  full account; this paragraph needs rewriting to match, not just re-pointing — flagged rather than
-  silently corrected here.
+  leave anything behind). This paragraph needs rewriting to match, not just re-pointing — flagged
+  rather than silently corrected here.
   The `SceneBuilder.NoClutterLayerBias` depth-bias fix (renamed 2026-08-10 from `SubfaceBias`) is a
   separate mechanism: it only resolves which ground TEXTURE wins the z-fight, and has no effect on
   this file, which walks the same gamez tree independently.
@@ -944,7 +940,7 @@ in `CSVM.Tests/ZeppelinsTests.cs`.
   present-but-empty; `team` accepts three names case-insensitively AND a bare integer id.
 
 ## src/Mech3/InstantAction.cs
-`InstantActionDef` (docs/formats/instant-action.md, PLAN-instant-action.md B6) plus the three
+`InstantActionDef` (docs/formats/instant-action.md) plus the three
 producers decision 2 names, converging on one record: `Load` for a chapter's shipped
 `ia.zrd.json`, `LoadFromJson` for a hand-authored `--ia=<path>` file — a plain JSON object using
 the same field names, not the zrdr archive's flat-alternating shape — and `BuildFromWizard` for
@@ -965,7 +961,7 @@ slot at 0 enemies, regardless of what the militia/aircraft/skill cursors are sit
 `Defaults()` is `BuildDef` over an empty `ZrdrDict` — the wizard's fallback if an environment's own
 file somehow fails to load. `spawn_points` and `dzones` stay where they already were
 (`Flight/SpawnPoints.LoadIa`, `Flight/StuntMission`) — this def does not repeat either.
-`PlaneNodeFor` (PLAN-instant-action.md C8) is the eleven-entry display-name → gamez-node table
+`PlaneNodeFor` is the eleven-entry display-name → gamez-node table
 (`"Bloodhawk"` → `"player_bhawk"`), a deliberate duplicate of `UI.LaunchMenu.Planes` rather than a
 shared one — the plan's file-contention notes reserved `LaunchMenu.cs` for H15/H16 alone. Fixture
 units + install goldens in `CSVM.Tests/InstantActionTests.cs`; the wizard's own build path is
@@ -1038,26 +1034,25 @@ off-engine (`CSVM.Tests/FogVolumeTests.cs` pins all eight chapters).
   fogvol.md. `BL-277`'s geometry rule stands. It is a BOOL: `FogZoneArmed` (`FogZone != 0`,
   `FUN_0044e010`) drives `WeatherState.CameraWeatherState`'s state-3 gate (A2) and
   `FogVolumeWhiteout` (C21), and is true only for C5.
-⚠ **`FogVolumeWhiteout` is the in-volume whiteout RULE** (`PLAN-weather-decompile-match` C21,
-  `FUN_0044e6f0`): the chapter's `fog_fade_dist`/`interior_fog_fade_dist`/`fog_color` plus its
-  volumes, answering one 0..1 density for a camera position. Pure, off-engine, unit-tested
-  (`CSVM.Tests/FogVolumeWhiteoutTests.cs`); `Session/WeatherRig.Tick` is the only consumer.
-  Approach ramp OUTSIDE (0 at `fog_fade_dist` → 1 at the wall), decay INSIDE (1 at the wall → 0 at
-  `interior_fog_fade_dist` deep), union `a + b − a·b`. ⚠ The interior half reads backwards alone —
-  the volume is a transition curtain and `ZONE3`'s fog (`C22`) carries the interior look; do not
-  invert it. `Disarmed` is the seven other chapters, and it short-circuits before touching geometry.
-⚠ **Two distances, and they are not interchangeable.** `FogVolumeBox.SignedDistance` is the max
-  over the face planes — EXACT inside (for a convex polytope the nearest wall is the least-negative
-  plane, so `−SignedDistance` is the penetration depth) but only a LOWER BOUND outside.
-  `FogVolumeBox.ExteriorDistance` is the true Euclidean distance to the hull, by **Dykstra's
-  alternating projection** over the face half-spaces — cyclic projection *with* the per-set
-  correction term, which converges to the projection onto the intersection where plain POCS reaches
-  only some point of it. Exactness is iterative (a whole cycle moving under 1e-4 m, capped at 64
-  cycles; an axis-aligned box is exact in one), and the tests pin it against closed-form distances
-  where the face planes alone are 29 % low on a box edge and 42 % low at a corner. Allocation-free:
-  the corrections are a `stackalloc` of 32 entries, far above the widest shipped volume's 5 planes.
-  `Tick` only pays for it when the cheap bound already lands inside the ramp — at C5's 16 m, almost
-  never.
+⚠ **`FogVolumeWhiteout` is the in-volume whiteout RULE** (`FUN_0044e6f0`): the chapter's
+  `fog_fade_dist`/`interior_fog_fade_dist`/`fog_color` plus its volumes, answering one 0..1 density
+  for a camera position. Pure, off-engine, unit-tested (`CSVM.Tests/FogVolumeWhiteoutTests.cs`);
+  `Session/WeatherRig.Tick` is the only consumer. Approach ramp OUTSIDE (0 at `fog_fade_dist` → 1 at
+  the wall), decay INSIDE (1 at the wall → 0 at `interior_fog_fade_dist` deep), union `a + b − a·b`.
+  ⚠ The interior half reads backwards alone — the volume is a transition curtain and `ZONE3`'s fog
+  (`C22`) carries the interior look; do not invert it. `Disarmed` is the seven other chapters, and
+it short-circuits before touching geometry. ⚠ **Two distances, and they are not interchangeable.**
+  `FogVolumeBox.SignedDistance` is the max over the face planes — EXACT inside (for a convex
+  polytope the nearest wall is the least-negative plane, so `−SignedDistance` is the penetration
+  depth) but only a LOWER BOUND outside. `FogVolumeBox.ExteriorDistance` is the true Euclidean
+  distance to the hull, by **Dykstra's alternating projection** over the face half-spaces — cyclic
+  projection *with* the per-set correction term, which converges to the projection onto the
+  intersection where plain POCS reaches only some point of it. Exactness is iterative (a whole cycle
+  moving under 1e-4 m, capped at 64 cycles; an axis-aligned box is exact in one), and the tests pin
+  it against closed-form distances where the face planes alone are 29 % low on a box edge and 42 %
+  low at a corner. Allocation-free: the corrections are a `stackalloc` of 32 entries, far above the
+  widest shipped volume's 5 planes. `Tick` only pays for it when the cheap bound already lands
+  inside the ramp — at C5's 16 m, almost never.
 ⚠ A volume is NOT the `CLOUD_COVER` band: only C1's floor coincides, and C1C/C4/C5 all disagree.
 ⚠ `FindMapSpanningSlab` (A5) is the data-driven test for "does this chapter have a map-spanning
   slab to continue past the map edge" — never a chapter name or a hardcoded `fvol1..9`. A volume
@@ -1246,7 +1241,7 @@ satisfies its `ISequenceHost` seam by explicit interface implementation (`Dispat
   collision is DERIVED from both. Never write `CollisionShape3D.Disabled` from here again: a
   recursive walk re-solidifies activations landing inside an already-hidden subtree.
 ⚠ **`PlayerPos()`'s `GetViewport().GetCamera3D()` branch is a fallback, not a live splitscreen
-  site** (residual sweep, `PLAN-splitscreen-polish` B14): `GameSession` always wires `PlayerPosition`
+  site** (residual sweep): `GameSession` always wires `PlayerPosition`
   (`GameSession.cs:875`), so the branch only ever runs for an `AnimRuntime` built standalone (a lab
   or a unit test with no session behind it) — never in a real `--fly` session, splitscreen or not.
   A `PLAYER_RANGE` condition (`EvaluateCondition`'s `"PlayerRange"` arm) no longer reads this
@@ -1268,7 +1263,7 @@ staged templates reuse node names, `fly_trail1`-`5` is `he_trails` AND `ap_trail
 through its `Resolve`/`ResolveScoped`/`Anchors` forwards, hands its
 `NameResolveFallback`/`SuppressRootLift`/`ReportResolution` flags over at `Bind`, and wires the
 pool's per-slot root list as the resolver's `ownRootsOf` hook (`TemplateStage.RootsFor` — the
-slot arithmetic lives on the stage, PLAN-template-stage A2, and the resolver still sees only a
+slot arithmetic lives on the stage, and the resolver still sees only a
 resolved root list).
 Puffer emitters live in `Anim/EmitterDirector.cs` (`Emitters`) — read its entry before touching
 anything emitter-shaped. This class keeps only the dispatch case, the `at_node` sentinel resolution
@@ -1283,7 +1278,7 @@ one does not. Effect templates are **pooled** on the effects runtime (`TemplateS
 per template ROOT name, not per anim name — two defs on one root must not both be handed slot 0).
 The slot arithmetic, placement, copy-identity questions and the three template policy flags live in
 `Anim/TemplateStage.cs`
-(PLAN-template-stage A2–A4 — read its entry, which carries the Decision-16 reinterpretation): this
+(read its entry, which carries the Decision-16 reinterpretation): this
 class supplies the engine and runtime hooks and calls through; it reads exactly one of the flags
 itself (`Places`, in the `CALL_ANIMATION` arm's relocation test) and owns none of them. Everything
 template-shaped is slot-scoped through `TemplateStage.RootsFor(def, node)`: which copy is placed
@@ -1361,7 +1356,7 @@ fire, C1's refuel tanks). It cannot reach the ambient emitters: theirs are the 6
 `LOOP {-1}` means the instance never finishes. **Instance-scoped, never sequence-scoped** — a lone
 `PufferState` in a one-tick sequence (`part1_trail`) is the debris-trail idiom.
 The staged-hidden reveal/retire/sweep ritual is `TemplateStage.Shown`'s
-(`Reveal`/`RetireWhenIdle`/`Sweep`, PLAN-template-stage A3 — read its
+(`Reveal`/`RetireWhenIdle`/`Sweep` — read its
 entry for the holds and what each measured): both entry points drive it through the one module,
 `PlayEffectAt` and the relocating **CALL_ANIMATION** arm alike (`BL-061`,
 `analysis/bl-061-template-mesh/`), and `Advance`'s retire walk hands finished instances to
@@ -1553,14 +1548,13 @@ forever), and the re-asserting instance takes ownership. `EndOn` is NOT expressi
 their world-space particles show.
 
 ## src/Mech3/Anim/NameResolver.cs
-Name→node resolution as one public module, generic over the node type (`NameResolver<TNode>`,
-PLAN-name-resolver): the index (`Add(node, srcName, parent, gamezIndex?, indexByPointer)`),
-the wildcard `Matcher` (`*` any run, `#` a digit run including zero, case-insensitive, the `.flt`
-suffix double match), the memoized `FindAll`, the **scoped tier chain**
-(`Resolve`/`ResolveScoped`), the **symbol authority** (`SymbolClaims` over the by-index map `Add`
-builds; `NarrowToSymbolRoot` — the `air_gen`/`eairg31` cross-bind fix, tri-state: null means
-undecidable and leaves the name match standing, never conflate it with an empty narrowing),
-**`Anchors`** (NAME match → symbol narrowing → root lift, with
+Name→node resolution as one public module, generic over the node type (`NameResolver<TNode>`): the
+index (`Add(node, srcName, parent, gamezIndex?, indexByPointer)`), the wildcard `Matcher` (`*` any
+run, `#` a digit run including zero, case-insensitive, the `.flt` suffix double match), the memoized
+`FindAll`, the **scoped tier chain** (`Resolve`/`ResolveScoped`), the **symbol authority**
+(`SymbolClaims` over the by-index map `Add` builds; `NarrowToSymbolRoot` — the `air_gen`/`eairg31`
+cross-bind fix, tri-state: null means undecidable and leaves the name match standing, never conflate
+it with an empty narrowing), **`Anchors`** (NAME match → symbol narrowing → root lift, with
 `NameResolveFallback`/`SuppressRootLift`/`MaxRootLift` as its documented policy inputs — the
 runtime copies its flags over at `Bind`; an empty-NAME def carrying parsed `NAME1`
 `MultiTargets` anchors through those authored paths instead — the deliberate F18 change, scoped
@@ -1602,7 +1596,7 @@ entry) refused per-mode *observation* interfaces; this plan extracted one concep
 share, unchanged — one resolver for all of them. No re-open.
 
 ## src/Mech3/Anim/TemplateStage.cs
-The effect-template stage as one module (`TemplateStage<TNode>`, PLAN-template-stage A2–A4): pool-slot
+The effect-template stage as one module (`TemplateStage<TNode>`): pool-slot
 arithmetic (`SlotOf` memoized over a raw-walk hook, `TakeNextSlot`'s per-root cursor, `RootsFor`'s
 slot scoping with the modulo fallback for callees staged shallower than their caller's slot), the
 BL-288 caller-slot claim (`AssignCallerSlot` — sticky per (root, anchor), wraps through the same
@@ -1971,21 +1965,20 @@ registered aircraft's carried gunners, on their host's team), `Structures`
 strings and nothing damageable) and `Ordnance` (`ProjectilePool.CollectFusedOrdnance` — a FILTER
 over the rounds in flight, `DetonationDistance > AimAssist.MinFuseDistance`, not a structure of its
 own).
-⚠ **The team model is `FlightController.Team`** (PLAN-instant-action B7), not a per-call derivation:
+⚠ **The team model is `FlightController.Team`**, not a per-call derivation:
   every consumer here reads that field, which falls back to `AimAssist.TeamOfPilot` = `PlayerIndex +
   1` (every pane hostile to every other, what `--vs`/free flight run on by default) only when
   nothing overrode it. `NeutralTeam` 0 is for a round nobody owns, `WorldTeam` for the destructibles.
-  Team 0 on EITHER side rejects the pair — it is "never a target", not a wildcard. `--coop`
-  (PLAN-splitscreen-polish A1) is the plain-flight opt-in to `AimAssist.PlayerTeam` for every human,
-  the same override `FlightRigAssembler` gives Instant Action; `--vs` drops `--coop` at parse time
-  (`SessionSpec.Resolve`), so Dogfight's FFA is never at risk of the override racing it.
-⚠ `dist_factor` **ships at 0.0**, which deletes the distance term outright: selection is purely
+  Team 0 on EITHER side rejects the pair — it is "never a target", not a wildcard. `--coop` is the
+  plain-flight opt-in to `AimAssist.PlayerTeam` for every human, the same override
+  `FlightRigAssembler` gives Instant Action; `--vs` drops `--coop` at parse time
+(`SessionSpec.Resolve`), so Dogfight's FFA is never at risk of the override racing it. ⚠
+  `dist_factor` **ships at 0.0**, which deletes the distance term outright: selection is purely
   most-aligned, and a distant on-axis target beats a near off-axis one at any range inside `RANGE`.
   The executable's compiled default is `2.5e-4`; "restoring" it during tuning re-enables something
-  the shipped data turns off. The suite pins both, and shows the winner flipping between them.
-⚠ Scoping the candidate set to aircraft is a silent behaviour change, not a simplification: guns
-  snap onto a live proximity-fused round by design (the engine's own priority query ranks that list
-  above the other three), which is why the ordnance filter is here and not deferred.
+the shipped data turns off. The suite pins both, and shows the winner flipping between them. ⚠
+  Scoping the candidate set to aircraft is a silent behaviour change, not a simplification: guns
+  snap onto a live proximity-fused round by design (the engine's own priority query ranks that list above the other three), which is why the ordnance filter is here and not deferred.
 
 `AimAssist.FireDirection` (B5) is the whole fire call in one place (`FUN_004b6530`'s step order):
 seed the slot's target with the plane's forward axis, run `Scan`, rotate the winner world→local into
@@ -2308,7 +2301,7 @@ each step measures the round's ACTUAL travelled segment — hit/fuse point inclu
 registered aircraft but its shooter's, and reports the pass distance (`WarningShotCue`).
 `RegisterAircraft` is the hittability half: the hit ray runs world+aircraft with each round
 excluding its own shooter's registered `AircraftBody` by RID.
-`ScoredShooters`/`CannonRoundsFired`/`CannonHits` (PLAN-instant-action.md G14) are the wrap-up
+`ScoredShooters`/`CannonRoundsFired`/`CannonHits` are the wrap-up
 board's "Shot %" counters: `Spawn` increments the fired side once per round actually created (the
 pool was not full) and `Impact` increments the hit side, both gated on `weapon.IsCannon` and the
 shooter's id being in `ScoredShooters` — `GameSession` populates that set with every human seat's
@@ -2364,8 +2357,7 @@ assertion say the same thing, which is what makes a "these two surfaces look the
 answerable without a lucky screenshot (`BL-019`); rockets fly
 their FLYOUT model body via `BuildFlyoutBody` (shared with `PylonOrdnance`) and trail their FLYOUT
 `MODEL_ANIMATION` smoke (C21): the def's DISTANCE_INTERVAL puffers resolved from the world
-`AnimProgram` (ctor `flyoutAnims`), one pooled/reused `Puffer.Emit`/`Stop` set per live round
-(PLAN-puffer-interface A3),
+`AnimProgram` (ctor `flyoutAnims`), one pooled/reused `Puffer.Emit`/`Stop` set per live round,
 plus the sonic's authored 8.73 rad/s body roll (weapon-effects.md). Gun shots add the
 `muzzle_burst` secondaries (C22): a pooled per-shot `gunshell` casing instance flying the def's
 OBJECT_MOTION verbatim (per-shot nodes on purpose — a shared anchor under `CallAnimation`'s
@@ -2829,7 +2821,7 @@ finishing stamps the next placing, `RaceCompleted` fires when the last pilot is 
 orders finishers by placing then in-flight players by progress; `Restart()` (rematch) resets
 every mission and clears placings — the planes are respawned by GameSession, which owns them.
 Its console lines, and `StuntScoreboard`/`StuntRaceBoard`'s, route through `Log.Info("flight", …)`
-(M3 `PLAN-deepening.md` C6/C7) instead of a bare `GD.Print`. Off-engine coverage:
+instead of a bare `GD.Print`. Off-engine coverage:
 `CSVM.Tests/StuntRaceTests.cs` (finish ordering, rematch reset, standings ties).
 ⚠ `FinishTime` is snapshotted separately from `Mission.Elapsed` so the board still reads
   correctly after a rematch has reset the missions.
@@ -2852,7 +2844,7 @@ once `AllFinished` clears; the footer's exit hint follows how the session was la
   overlay for no reason.
 
 ## src/Flight/VersusMatch.cs
-Dogfight deathmatch bookkeeping (M4-A1 front-load `PLAN-vs-mode.md` B12): `RegisterKill(shooter,
+Dogfight deathmatch bookkeeping: `RegisterKill(shooter,
 victim)` scores the shooter and tallies the victim's death, `RegisterDeath(victim)` tallies a death
 alone (terrain/mid-air — no killer, no score change); `Advance(dt)` is the host-fed match clock;
 `MatchCompleted` fires once on kill threshold or time-out (leader wins, equal top kills draw);
@@ -2869,7 +2861,7 @@ time-out win, draw, post-completion no-op, rematch re-arm, each limit disabled o
   `Advance` timekeeping.
 
 ## src/Flight/VersusHud.cs
-Per-pane Dogfight HUD (`PLAN-vs-mode.md` C23/C24): a compact status line — remaining time
+Per-pane Dogfight HUD: a compact status line — remaining time
 (omitted once `VersusMatch.TimeLimit` is disabled), this pane's own K/D, and the current leader's
 tag — drawn in MarkerHud's run-status slot (`RefStatusY` — Stunt and Versus are mutually
 exclusive, so the two never compete for it); a transient "P2 DOWNED P3" kill banner ("P3 DOWN"
@@ -2916,7 +2908,7 @@ colours.
   mis-colours it.
 
 ## src/Flight/VersusBoard.cs
-The dogfight's shared results overlay (`PLAN-vs-mode.md` C25) — `StuntRaceBoard`'s construction
+The dogfight's shared results overlay — `StuntRaceBoard`'s construction
 almost verbatim: winner (their own `SplitScreen.PlayerColor`, or "DRAW" on a tie) on top, then one
 ranked row per player (tag, kills, deaths) from `VersusMatch.Standings()`, covering the WHOLE
 window on its own CanvasLayer (Layer 10, above SplitScreen's 0) — the match ends for everybody at
@@ -2958,7 +2950,7 @@ has no such external-reset case, so the event is sufficient).
 ⚠ Scales on raw window height / 720, NOT HudMetrics — same reason `StuntRaceBoard`/`VersusBoard` do.
 
 ## src/Flight/IaWrapupBoard.cs
-Instant Action's wrap-up board (`PLAN-instant-action.md` G14) — `VersusBoard`'s WHOLE-window
+Instant Action's wrap-up board — `VersusBoard`'s WHOLE-window
 construction, since the mission ends for every human at once (decisions 10/14), not
 `StuntScoreboard`'s per-pane shape. Four label/value rows (Time to Complete Mission, Enemies Shot
 Down, Danger Zones Completed, Shot %) — the langui titles at ids 1134-1137, kept as literal
@@ -3014,18 +3006,17 @@ sky and fog are always the same zone. Census + per-chapter table: weather.md; th
   fog. A request the horizon does not name at all is left to `ResolveZone`'s weather-file fallback,
   which is what already lands C5 on `zone1`.
 ⚠ It fires on a UNIQUE populated sibling only. Two buildable zones (C1, C1C, C2B, C4) means the
-  geometry cannot decide — resolved by render evidence instead (`PLAN-overcast-match` `B12`, all
+  geometry cannot decide — resolved by render evidence instead (all
   four = `zone2`), which is what the default already ships; not a gap here.
 
-`CameraWeatherState(cameraPosition, fogZoneArmed, volumes)` (`PLAN-weather-decompile-match` A2,
-`FUN_0042ee40`) is the binary's per-frame camera zone 1/2/3, published by `WeatherRig.Tick` onto
-each `PlayerRig.CameraWeatherState`: 1 default; 2 when
-`HasCloudBand` and the camera's altitude is at/above `CloudCoreBottom` — a THIRD spelling
-alongside `CloudBandCentre` (the deck-regime flip) and `CloudBottom` (the visual floor), all
-within ~80 m of each other in C1 but never unified (Decision 1); 3 when `fogZoneArmed`
-(`FogVolumeSpec.FogZoneArmed`) and the camera is inside any `FogVolumeBox` — the exact
-half-space `Contains` test, not the AABB — and state 3 wins over state 2 on overlap (never
-actually exercised in shipped data: only C5 arms `fogZoneArmed`, and its band sits far above
+`CameraWeatherState(cameraPosition, fogZoneArmed, volumes)` (`FUN_0042ee40`) is the binary's
+per-frame camera zone 1/2/3, published by `WeatherRig.Tick` onto each
+`PlayerRig.CameraWeatherState`: 1 default; 2 when `HasCloudBand` and the camera's altitude is
+at/above `CloudCoreBottom` — a THIRD spelling alongside `CloudBandCentre` (the deck-regime flip) and
+`CloudBottom` (the visual floor), all within ~80 m of each other in C1 but never unified (Decision
+1); 3 when `fogZoneArmed` (`FogVolumeSpec.FogZoneArmed`) and the camera is inside any `FogVolumeBox`
+— the exact half-space `Contains` test, not the AABB — and state 3 wins over state 2 on overlap
+(never actually exercised in shipped data: only C5 arms `fogZoneArmed`, and its band sits far above
 every C5 volume).
 `ZoneForState(state)` is B11's consumer-side half: state *n* asks for `zone<n>` and goes through
 `ResolveZone`'s file fallback, so a mission with no `ZONE<n>` keeps its first zone rather than
@@ -3086,14 +3077,13 @@ The original engine's billboard-particle emitter, data-driven from `PUFFER_STATE
 (schema: docs/formats/effects.md). `PufferState.Load` finds the fully-defined state in an
 effects reader; `Puffer.Create` builds the atlas and hands it to an `IEmitterRenderer`
 (`EmitterRenderer.cs`) — the class itself owns only the CPU integration, so `CreateWith` builds any
-mode with no atlas, no `TextureArchive` and no GPU. The continuous surface is ONE pair
-(PLAN-puffer-interface A2): `Emit(worldPos, worldBasis, dt, staticBurnMps = 0f)` / `Stop()`,
-plus the one-shot `Burst` and the hard-kill `Clear` — the authored state picks the mode, callers
-never do. `Emit` dispatches: DISTANCE_INTERVAL trails per interval of the authored AT_NODE
-point's actual motion, including its host-frame offset (the speed cue's point is 60 m ahead;
-CAP-15's density, `BL-259`); TrailPool-sized even on the sustained path, since the time-cadence
-pool floor silently dropped ~85% of a flight-speed trail; a still host keeps the time cadence
-(the static
+mode with no atlas, no `TextureArchive` and no GPU. The continuous surface is ONE pair:
+`Emit(worldPos, worldBasis, dt, staticBurnMps = 0f)` / `Stop()`, plus the one-shot `Burst` and the
+hard-kill `Clear` — the authored state picks the mode, callers never do. `Emit` dispatches:
+DISTANCE_INTERVAL trails per interval of the authored AT_NODE point's actual motion, including its
+host-frame offset (the speed cue's point is 60 m ahead; CAP-15's density, `BL-259`); TrailPool-sized
+even on the sustained path, since the time-cadence pool floor silently dropped ~85% of a
+flight-speed trail; a still host keeps the time cadence (the static
 building sputters, whose distance can never elapse — every distance state carries the parsers'
 synthetic 0.1 s TIME_INTERVAL, so that cadence always exists); a host that CANNOT move declares
 `staticBurnMps` and spends virtual metres at the held pose instead (the damage lab's parked
@@ -3102,23 +3092,22 @@ revived emitter re-homes rather than drawing a puff line from its pooled slot's 
 site (the rocket ghost trails). **All five external callers (`PufferEmitter`, `ProjectilePool`,
 `DamageVisuals`, `ThrottleSlamSmoke`, `SpeedCue`) drive the emitter through `Emit`/`Stop`
 only** — the six
-mode verbs (`TrailAdvance`/`TrailEnd`/`TrailBurnAt`/`SustainAt`/`SustainEnd`) are `private`
-(PLAN-puffer-interface A3); `DriveAt` was deleted (it had been a straight `Emit` alias with no
-remaining caller once `PufferEmitter` moved to calling `Emit` directly).
-⚠ `Emit`'s very first call on a DISTANCE_INTERVAL state that hasn't moved yet (a trail's homing
-frame) also fires one `SustainAt` batch — a single 1-puff burst at the muzzle/exhaust, since a
-distance state's synthetic TIME_INTERVAL cadence is always live underneath the distance dispatch.
-`EmitterDirector`'s own callers always had this; migrating `ProjectilePool`'s rocket trails and
-`ThrottleSlamSmoke`'s exhaust trail onto `Emit` gave them the same one-puff homing sputter they
-didn't carry under raw `TrailAdvance` — judged negligible-to-desirable and confirmed at the
-controls (rocket-volley capture: a continuous, non-ghosted trail; the `c1-flight` golden's
-one-golden move is exactly this, its `--hold` throttle jump crossing `ThrottleSlamSmoke`'s slam
-threshold on the capture's first frame).
+mode verbs (`TrailAdvance`/`TrailEnd`/`TrailBurnAt`/`SustainAt`/`SustainEnd`) are `private`;
+`DriveAt` was deleted (it had been a straight `Emit` alias with no remaining caller once
+`PufferEmitter` moved to calling `Emit` directly). ⚠ `Emit`'s very first call on a DISTANCE_INTERVAL
+state that hasn't moved yet (a trail's homing frame) also fires one `SustainAt` batch — a single
+1-puff burst at the muzzle/exhaust, since a distance state's synthetic TIME_INTERVAL cadence is
+always live underneath the distance dispatch. `EmitterDirector`'s own callers always had this;
+migrating `ProjectilePool`'s rocket trails and `ThrottleSlamSmoke`'s exhaust trail onto `Emit` gave
+them the same one-puff homing sputter they didn't carry under raw `TrailAdvance` — judged
+negligible-to-desirable and confirmed at the controls (rocket-volley capture: a continuous,
+non-ghosted trail; the `c1-flight` golden's one-golden move is exactly this, its `--hold` throttle
+jump crossing `ThrottleSlamSmoke`'s slam threshold on the capture's first frame).
 `PufferState.FromAnimEvent` parses the compiled anim payloads.
 Three config knobs scale `BaseSize` per spawn path — `puffer.burstSizeScale` /
 `puffer.trailSizeScale` / `puffer.sustainSizeScale` (`SizeScaleDefault` **2**, decoded from
 `FUN_0057c5c0`/`FUN_0054e6e0`: `SIZE_RANGE` is a screen-space HALF-extent, so the world quad's
-side is `2 × SIZE_RANGE` — not a judgement call, `PLAN-puffer-engine-deltas` A1. The knobs remain
+side is `2 × SIZE_RANGE` — not a judgement call. The knobs remain
 for deliberate per-path tuning — the cull margin scales with the largest). Two more scale the
 `fire_n_smoke` family ONLY — `puffer.fireRiseScale` / `puffer.fireLifetimeScale` (defaults 2.5/1.5,
 invented against original footage rather than decoded, signed off at the controls 2026-08-06):
@@ -3135,14 +3124,14 @@ total, the other 6 carry no live emitter.
 ⚠ `SpawnSustained`'s draw order (pos → vel → size → life) is shared determinism: reordering the
   `Rand` calls re-scatters EVERY sustained emitter — measured as five goldens moving with the
   fire tune inert in all of them.
-`START_AGE_RANGE` (`PufferState.StartAgeMin`/`StartAgeMax`, `PLAN-puffer-engine-deltas` B4): a
+`START_AGE_RANGE` (`PufferState.StartAgeMin`/`StartAgeMax`): a
 particle is born at `Rand(StartAgeMin, StartAgeMax)` instead of age 0, gated on
 `HasStartAgeRange` so the extra `Rand()` draw is skipped entirely for the ~2,900 puffers that
 don't author the key (only 4 in the install do).
 A negative age (`fire_at_zepskin3`'s min is −1.0) is drawn on the frame it's born, pinned to
 stop 0 of every ramp/envelope (`p.Age > 0f ? p.Age / p.Life : 0f` in `_Process`), and outlives its
 authored `LIFETIME_RANGE` by `|age0|` since reap is `age >= life` with no sign test.
-**Sub-frame emission** (`PLAN-puffer-engine-deltas` B5): `SustainAt` keeps the previous frame's
+**Sub-frame emission**: `SustainAt` keeps the previous frame's
 emitter origin and spreads a frame's batches along the motion segment instead of stacking them on
 today's pose — batch `b` of `batches` spawns at `prevOrigin.Lerp(origin, frac)` with
 `frac = (b+1)·interval / accumulator`, and carries the engine's matching `(1 - frac)·dt` added to
@@ -3160,7 +3149,7 @@ leftover accumulator drains at a normal `dt`. Do not "fix" this by clamping the 
 that clamp was tried, it keeps dead batches alive, and it is an invented divergence the skip exists
 to make unnecessary. Every draw is made before the skip decides, so a skipped particle consumes the
 same `_rng` stream a created one would.
-**Wind-coupled friction and the traced integration order** (`PLAN-puffer-engine-deltas` B6).
+**Wind-coupled friction and the traced integration order**.
 `_Process` now integrates exactly as `FUN_0054ee10` does, and the ORDER is the change:
 `pos += v·dt` on the velocity the particle had at the top of the frame, **then** `v += a·dt`,
 **then** — only when `FRICTION != 0` (`0054f016`'s own gate) —
@@ -3185,7 +3174,7 @@ identity at `FRICTION 0`; with a wind inside the block it is not, and a friction
 feel no wind at all.
 The wind itself is `Effects/WorldWind.cs` — see its own entry.
 
-**The camera-distance fade** (`PLAN-puffer-engine-deltas` C7, `DistanceAlpha`). `FADE_RANGE`/
+**The camera-distance fade** (`DistanceAlpha`). `FADE_RANGE`/
 `NEAR_FADE` become a per-particle alpha and two hard culls at DRAW time — the mechanism, the field
 order, the cross-wire and the three `puffer.*` switches are all written up in
 [formats/effects.md](formats/effects.md); read that before touching this. What matters here is the
@@ -3208,7 +3197,7 @@ count, at most `_liveCount`.
   and `c1-destroy-effects` moves either way, so its delta is the authored far ramp (400→600 m on
   `ap_radiotwr`'s `puffer1`) and is sub-perceptual side by side. A third control shows the
   unauthored depth-0 rule (behind-camera particles) moves nothing anywhere in the set.
-⚠ `DEVIATION_DISTANCE` scatters **±0.5·d**, not ±d (`PLAN-puffer-engine-deltas` A2):
+⚠ `DEVIATION_DISTANCE` scatters **±0.5·d**, not ±d:
   `FUN_0054f8b0` spawns at `prev + delta*frac + (rand01 - 0.5) * d` per axis, so the offset is a
   HALF-width around the origin — `Rand(-d, d)` was drawing twice the authored width per axis
   (eight times the authored volume). All three spawn paths (`SpawnSustained`, `SpawnTrailPuff`,
@@ -3224,7 +3213,7 @@ count, at most `_liveCount`.
   capture path, re-pins all seven puffer-bearing goldens (the `SizeScaleDefault` list above — an
   earlier "four", then "five", here was a stale count); `CreateWith` is a test entry point only.
 
-**The emission accumulator: a teleport guard, and no batch cap** (`PLAN-puffer-engine-deltas` C9).
+**The emission accumulator: a teleport guard, and no batch cap**.
 `FUN_0054f8b0` accumulates into the emitter's interval counter under a branch, and the two arms are
 NOT alternatives — the plan's own framing ("the 200 m guard *vs.* our cap") was wrong. In DISTANCE
 mode (`+0x3c` set) it adds the frame's motion length **only `if (len < 200.0)`**; in TIME mode it
@@ -3255,7 +3244,7 @@ carried, and **neither arm has a per-frame batch cap**.
   `SustainAt`'s `Max(interval, 1e-3)` divide guard. A census that counts them as emitters will
   conclude the sub-millisecond path is 13× busier than it is.
 
-**`PRIORITY` inflates the sprite** (`PLAN-puffer-engine-deltas` C8). `FUN_0054e6e0` scales the
+**`PRIORITY` inflates the sprite**. `FUN_0054e6e0` scales the
 drawn screen radius by `1 + K·PRIORITY`; `PufferState.Priority` (both parsers, default 0 — the
 puffer object's own ctor default) is folded into `BaseSize` at spawn instead, via
 `Puffer.PriorityScaleDefault` (`_priorityFactor`, read once at `Init`) rather than a config knob —
@@ -3269,14 +3258,13 @@ C1's `spew_puffer` (the waterfall splash) is one of them, which is why `c1-water
 golden C8 moved — every other puffer-bearing golden's emitters author no `PRIORITY` and are
 byte-identical across the change.
 
-**The whole original runtime is written up in [org/puffer.md](org/puffer.md)** (`PLAN-puffer-engine-deltas`
-D10) — the function map, the emitter/particle layouts, the ctor's defaults (which settle every
-"what does an unauthored key do?" question), the tick order, the accumulator, the render equation,
-and one table of every place this implementation deliberately differs. Read it before adding a
-mechanism here; the authored-key side stays in [formats/effects.md](formats/effects.md).
-⚠ It is in `docs/org/`, NOT `docs/formats/`: the formats tree is the CC-BY public deliverable and
-  states "no exe decompilation", so executable decodes live outside it (the decision is
-  `PLAN-flight-model-rewrite`'s item 6, and `docs/org/flightModel.md` is the precedent).
+**The whole original runtime is written up in [org/puffer.md](org/puffer.md)** — the function map,
+the emitter/particle layouts, the ctor's defaults (which settle every "what does an unauthored key
+do?" question), the tick order, the accumulator, the render equation, and one table of every place
+this implementation deliberately differs. Read it before adding a mechanism here; the authored-key
+side stays in [formats/effects.md](formats/effects.md). ⚠ It is in `docs/org/`, NOT `docs/formats/`:
+  the formats tree is the CC-BY public deliverable and states "no exe decompilation", so executable
+  decodes live outside it (the decision is `PLAN-flight-model-rewrite`'s item 6, and `docs/org/flightModel.md` is the precedent).
 
 **The fire pair is DELETED** (D10, 2026-08-10). `puffer.fireRiseScale` 2.5 / `fireLifetimeScale` 1.5
 — the last invented multiplier in this file — are gone, along with their config keys and the
@@ -3353,7 +3341,7 @@ otherwise be near-culled wholesale by the unauthored `NEAR_FADE (0,0)` cutting a
 remaining divergence is the ALPHA, not the answer: one `MultiMesh` per emitter is shared by every
 pane, so a particle is drawn if ANY pane should see it, at the most favourable pane's alpha
 (`Puffer.NearestViewerAlpha`) rather than each pane's own. Per-pane alpha would take N MultiMeshes
-(the plan's nearest/union boundary rule — `PLAN-splitscreen-polish.md`'s Milestone goal). With one viewer that is that viewer's own answer unchanged,
+(the nearest/union boundary rule). With one viewer that is that viewer's own answer unchanged,
 which is why no capture moved. There is also a one-frame lag at session start: an emitter that draws
 on the very first frame can beat the first `Tick` and draw unfaded once.
 `EffectAmbience.Still` is the null object every unwired puffer reads (unit suites, the plane
@@ -3368,7 +3356,7 @@ of camera-billboarded quads, owning the shader — quad-rim fade, flipbook colum
 custom data, and the soft-particle depth fade. Reached in a suite by `RecordingEmitterRenderer`.
 ⚠ The atlas is built ABOVE this seam, in `Puffer.Create`, and passed to the renderer's constructor.
   That is the whole point of the cut: below it, a `Puffer` would still need a `TextureArchive` and
-  the three modes would stay unreachable (`PLAN-deepening` Decision 9, `E15b`).
+  the three modes would stay unreachable (`E15b`).
 ⚠ The blend arrives resolved. `Create` derives additive-vs-mix from the COLORS ramp and the dying
   sprite's luminance; this type holds no state to re-derive it from, so there is no `Auto` here.
 
@@ -3483,20 +3471,19 @@ The `--freecam`/`--anim-lab` observation camera: WASD move, RMB-held mouse look 
 while held), wheel speed, pads via `Pads.For(_padDevices)`; lab additions `Frame(Aabb)`, the
 `FollowNode` orbit-lock (released by any translation input; `ExitFollow` keeps orientation) and
 a public `Camera` accessor — all inert in plain `--freecam`. Rates TUNE.
-It is also the pane an Instant Action pilot out of lives watches from (PLAN-instant-action G13,
-`GameSession.BeginInstantActionSpectate`): the lab's own `FollowNode` orbit is what "follow a live
+It is also the pane an Instant Action pilot out of lives watches from
+(`GameSession.BeginInstantActionSpectate`): the lab's own `FollowNode` orbit is what "follow a live
 aircraft" needed, so nothing was added for it. Constructor params `padDevices`/`useKeyboard` (E44,
 `BL-375`) default to null/true — every connected pad plus the keyboard, unchanged for `--freecam`,
 the anim lab and the weapon lab — but `BeginInstantActionSpectate` passes its rig's own
 `FlightController.PadDevices`/`UseKeyboard`, the same filter the flying panes use, so two
 splitscreen pilots watching at once move independently instead of lockstep. Mouse look has no such
-split (one physical mouse) and stays shared.
-⚠ Default start is the mission spawn — RANDOM per launch; pass `--pos`/`--direction` for comparisons.
-⚠ `KeyboardCaptured` zeroes keyboard axes while a text field owns focus — raw key polls bypass GUI focus.
-⚠ Vertical is Q/E plus the **Z/U** alternate — not C/Space: C toggles the collider overlay and
-  Space fires guns, and because this camera POLLS raw key state, sharing either key moved the
-  camera as a side effect of the other action (`BL-279` moved Space off; Z stays clear of C for
-  the same reason).
+split (one physical mouse) and stays shared. ⚠ Default start is the mission spawn — RANDOM per
+launch; pass `--pos`/`--direction` for comparisons. ⚠ `KeyboardCaptured` zeroes keyboard axes while
+a text field owns focus — raw key polls bypass GUI focus. ⚠ Vertical is Q/E plus the **Z/U**
+  alternate — not C/Space: C toggles the collider overlay and Space fires guns, and because this
+  camera POLLS raw key state, sharing either key moved the camera as a side effect of the other
+  action (`BL-279` moved Space off; Z stays clear of C for the same reason).
 
 ## src/Flight/FlightModel.cs
 The aircraft's plant: the arcade velocity-vector flight model, decoded from the original and
@@ -3556,7 +3543,7 @@ boost. `Update(dt, throttle)` runs an edge-triggered gate: it tracks the throttl
 current unbroken climb and fires once per climb the instant the cumulative rise crosses
 `SlamThreshold`, never again for that climb and never on a flat or falling throttle — so tapping one
 notch at a time (each tap separated by a flat/falling frame) evaluates fresh every time. Drives the
-puffers via `Puffer.Emit`/`Stop` (PLAN-puffer-interface A3; DISTANCE_INTERVAL, the same mechanism
+puffers via `Puffer.Emit`/`Stop` (DISTANCE_INTERVAL, the same mechanism
 `DamageVisuals` uses for the nose smoke trail) — the authored def is a distance-triggered trail,
 not a time-interval burst. `Reset(throttle)` (crash/respawn) hard-stops any plume and re-anchors the
 climb tracker so the throttle jump those moments make is never itself read as a slam.
@@ -3713,7 +3700,7 @@ before the crash anim starts. Nothing in this build's M3 slice shoots a plane do
 arm has no trigger today — `Crash` fires once, at first (and only) contact, and always takes the
 cascade above. `player_crash_default` is the cascade's **fallback arm**, reached by a null material,
 an out-of-range id or an empty slot — it is NOT the original's air/no-impact variant, a reading
-`PLAN-crash-surface-id` (`BL-059`) disproved; the mid-air destruct is a separate, unwired anim with
+`BL-059` disproved; the mid-air destruct is a separate, unwired anim with
 no `player_crash_*` def of its own. Modelling the two-stage split — wiring a trigger for the negative
 arm — is future work for when the player becomes killable; `this+0x19f ∈ {0,4}` inside
 `FUN_004b82d0` is undecoded and stays unmodelled.
@@ -3771,14 +3758,13 @@ controls); false stages on the aircraft, which is what the def's `MAIN_ROOT_NODE
 `AttachWarningShotCue` registers the aircraft on the pool as a near-miss target and `OnNearMiss`
 rates the passes through `WarningShotCue` into `FlightAudio.OnWarningShot`; `PlayerIndex` is both
 the pane seat and the identity every round this pilot fires carries, so it must be set before the
-registration (the assembler sets it at construction, not in the stunt block). `Team`
-(PLAN-instant-action B7) is this aircraft's side for every hostility test — the aim-assist
-candidate scan, `SelectRankedTarget`, carried `TurretController`s and `AiVoiceDispatcher`
-registration all read it, none re-derives one from `PlayerIndex` — and defaults to
-`AimAssist.TeamOfPilot(PlayerIndex)` until a mission sets it explicitly, so free flight and `--vs`
-are unchanged; plain flight's `--coop` (PLAN-splitscreen-polish A1) is the one other explicit
-setter, `FlightRigAssembler` giving it `AimAssist.PlayerTeam` the same way Instant Action does.
-`Inert` (PLAN-instant-action E10) is this aircraft's other lifecycle state: BUILT but held
+registration (the assembler sets it at construction, not in the stunt block). `Team` is this
+aircraft's side for every hostility test — the aim-assist candidate scan, `SelectRankedTarget`,
+carried `TurretController`s and `AiVoiceDispatcher` registration all read it, none re-derives one
+from `PlayerIndex` — and defaults to `AimAssist.TeamOfPilot(PlayerIndex)` until a mission sets it
+explicitly, so free flight and `--vs` are unchanged; plain flight's `--coop` is the one other
+explicit setter, `FlightRigAssembler` giving it `AimAssist.PlayerTeam` the same way Instant Action
+does. `Inert` is this aircraft's other lifecycle state: BUILT but held
 completely out of the session — not stepped (`SimStep` and `_Process` return at once), not drawn,
 not on the aircraft collision layer, not hittable, not a targeting candidate, and not counted as
 living. `InPlay` (`!Crashed && !Inert`) is the one "is it there" question every roster asks; a
@@ -3795,7 +3781,7 @@ inverse — re-home, clear the flag, `Respawn` — the original's teleport-then-
 ⚠ Inert is NOT "parked far away", a shape considered and rejected: a parked plane still ticks,
 still collides and still costs a frame. Where an inert aircraft sits is nobody's business (the
 original's own world-origin parking is incidental).
-`Spectating` (PLAN-instant-action G13) is the third lifecycle flag and the narrowest: a pilot out
+`Spectating` is the third lifecycle flag and the narrowest: a pilot out
 of lives stays crashed for the rest of the mission. Checked at the TOP of the crash branch, ahead
 of both respawn triggers, so neither R nor the armed `AutoRespawnAfter` timer can fly it again —
 clearing the timer instead would leave R working. The session sets it from its own lives ledger and
@@ -3966,47 +3952,45 @@ The original's cockpit dials as a screen-space HUD: altimeter, speedometer, dama
 the gun + missile weapon gauges (E35), all geometry extracted from the plane's own gauges subtree
 (structure/scales/quirks: docs/formats/hud.md); polys draw by data priority, rest rotations
 ignored; PartFraction binds flight or the lab; dial centres are bottom-anchored (FromBottom) so
-panes keep them on screen. `DamageZoneColor(frac, yellowAt, orangeAt, redAt)` (`BL-085`/`BL-173`,
-`PLAN-armour-layer` C21) is the damage-dial band function — `frac` is `PartFraction`'s COMBINED
-armor+health value (both bound sources, flight and the lab, feed that scale; nothing here computes
-it), `yellowAt`/`orangeAt`/`redAt` are mined per-part from the data's own
-`*_damage_green/yellow/red` injure_anims. Both `Border` and `Fill` always take the same colour
-index — `BL-173`'s refuted fix shape was a synthetic per-pool ring split; there is only ever one
-colour per zone. `GunIndicatorColor`/`HardpointIndicatorColor`/`SlotIndicatorColor`/
+panes keep them on screen. `DamageZoneColor(frac, yellowAt, orangeAt, redAt)` (`BL-085`/`BL-173`) is
+the damage-dial band function — `frac` is `PartFraction`'s COMBINED armor+health value (both bound
+sources, flight and the lab, feed that scale; nothing here computes it),
+`yellowAt`/`orangeAt`/`redAt` are mined per-part from the data's own `*_damage_green/yellow/red`
+injure_anims. Both `Border` and `Fill` always take the same colour index — `BL-173`'s refuted fix
+shape was a synthetic per-pool ring split; there is only ever one colour per zone.
+`GunIndicatorColor`/`HardpointIndicatorColor`/`SlotIndicatorColor`/
 `DamageZoneColor`/`TargetArrowAngle`/`TweenArrow`/`IndicatorLowFrac`/`ArrowSweepDegPerSimS`/
 `StallBlinkHalfPeriodS` are `public` (not `internal`) so `CSVM.Tests` (`GaugeColoursTests`,
 `GaugeArrowTweenTests`, `StallWarningTests`) can call them from outside the assembly — moved from
-the in-engine `gauge-colours`/`gauge-arrow-tween`/`stall-warning` suites (`PLAN-engine-free-suites.md`
-A3, B11). The two animated cues are plain nested structs, `GaugeCluster.ArrowSweep`
-(`Angle`/`Advance`/`Reset`) and `GaugeCluster.StallLamp` (`Lit`/`Advance`/`Set`) — B11 retired the
-`internal` testability-escape hatches (`StallLampLit`, `AdvanceStallLamp`, the private
+the in-engine `gauge-colours`/`gauge-arrow-tween`/`stall-warning` suites (B11). The two animated
+cues are plain nested structs, `GaugeCluster.ArrowSweep` (`Angle`/`Advance`/`Reset`) and
+`GaugeCluster.StallLamp` (`Lit`/`Advance`/`Set`) — B11 retired the `internal` testability-escape
+hatches (`StallLampLit`, `AdvanceStallLamp`, the private
 `_gunArrowAngle`/`_missileArrowAngle`/`_stallBlinkPhase`/`_stallDwellS`/`_stallLampOn`/
 `_stallWarnPrev` fields) that existed only so the in-engine suite could reach a live `GaugeCluster`;
 the structs need no `Control` to construct, so `CSVM.Tests` drives them directly. Scoped to
-`GaugeCluster` only (Decision 5) — `FlightController`'s stall/arrow feed predicates are untouched.
-⚠ The gauge textures lie — compare pixel values, never appearances: the faces hold dark UNLIT
+  `GaugeCluster` only (Decision 5) — `FlightController`'s stall/arrow feed predicates are untouched.
+  ⚠ The gauge textures lie — compare pixel values, never appearances: the faces hold dark UNLIT
   copies of the STALL / LOW ALT windows (~58,0,0 unlit vs 180+,0,0 lit); bitten twice. The needle
-  draws its shipped RGBA art untouched (the pointer silhouette is the rtexture-tier alpha, BL-048)
-  — never re-add keying or load-time shaping.
-⚠ The weapon-gauge 4-digit readout is per-GROUP for guns, per-PYLON for rockets — NOT a total; the
-  belt-indicator yellow tier is likewise GUN-ONLY (hardpoint/pylon indicators go green→red, never
-  yellow — confirmed against the original).
-⚠ Both animated cues advance in `_Process` on **sim** dt (`GameClock.Current.FrameDt`), never the
-  raw frame delta or `_time` — their rates are video-decoded in sim seconds and the wall figures
-  would run them 39% fast. (1) The gun/missile arrow SWEEPS at a shared constant 168.7 °/sim-s
+draws its shipped RGBA art untouched (the pointer silhouette is the rtexture-tier alpha, BL-048) —
+  never re-add keying or load-time shaping. ⚠ The weapon-gauge 4-digit readout is per-GROUP for
+  guns, per-PYLON for rockets — NOT a total; the belt-indicator yellow tier is likewise GUN-ONLY
+(hardpoint/pylon indicators go green→red, never yellow — confirmed against the original). ⚠ Both
+  animated cues advance in `_Process` on **sim** dt (`GameClock.Current.FrameDt`), never the raw
+  frame delta or `_time` — their rates are video-decoded in sim seconds and the wall figures would
+  run them 39% fast. (1) The gun/missile arrow SWEEPS at a shared constant 168.7 °/sim-s
   (`ArrowSweepDegPerSimS`, `BL-184`/`CAP-18`, `TweenArrow`, shortest-way wrap), not drawn from
   `Selected` — `_Draw` reads the already-advanced `_gunArrow.Angle`/`_missileArrow.Angle`
   (`GaugeCluster.ArrowSweep`), and the readout digits/type name still snap on the sweep's first
   frame; do not tween those too. (2) The STALL lamp's blink is a RATE ramp
-  (`GaugeCluster.StallLamp.Advance`, `BL-148`/`CAP-06`): binary brightness, duty 0.50, half-period
-  ∝ the fd fraction the controller feeds as `StallFrac`. It is INTEGRATED, not read off a clock —
-  a period that changes mid-dwell must shorten the remainder, not jump the lamp. `Reset()` calls
-  each struct's own `Reset`/`Set` to clear the arrows to NaN and re-arm the lamp lit, so a respawn
-  snaps. The LOW ALT cue is legitimately a plain fixed blink (`WarnBlinkPeriod`) — do not
-  generalise the ramp onto it.
-⚠ The gungauge/missilegauge face is on a generic child (`g815`/`g819`) on ALL planes (no Bloodhawk
-  special case, unlike the damage dial) — "any unrecognised child = face" is the extraction rule.
-⚠ The hardpoint gauge's `WeaponGauge.Slots`/`Selected` index by PYLON NUMBER
+  (`GaugeCluster.StallLamp.Advance`, `BL-148`/`CAP-06`): binary brightness, duty 0.50, half-period ∝
+  the fd fraction the controller feeds as `StallFrac`. It is INTEGRATED, not read off a clock — a
+  period that changes mid-dwell must shorten the remainder, not jump the lamp. `Reset()` calls each
+  struct's own `Reset`/`Set` to clear the arrows to NaN and re-arm the lamp lit, so a respawn snaps.
+  The LOW ALT cue is legitimately a plain fixed blink (`WarnBlinkPeriod`) — do not generalise the
+ramp onto it. ⚠ The gungauge/missilegauge face is on a generic child (`g815`/`g819`) on ALL planes
+  (no Bloodhawk special case, unlike the damage dial) — "any unrecognised child = face" is the
+extraction rule. ⚠ The hardpoint gauge's `WeaponGauge.Slots`/`Selected` index by PYLON NUMBER
   (`Hardpoint.Index − 1`), never by position in `Loadout.Hardpoints` (`BL-294`) — that list is bound
   via `PylonFillOrder`, not `1..N`, so a plane with fewer than 8 pylons must show gaps at the
   ring's unfitted physical positions rather than piling its lit slots at the start.
@@ -4017,7 +4001,7 @@ the structs need no `Control` to construct, so `CSVM.Tests` drives them directly
   the physical slot.
 
 ## src/UI/LaunchMenu.cs
-The in-game launchscreen CanvasLayer: Mode branches two ways (PLAN-instant-action.md H15/H16). Free
+The in-game launchscreen CanvasLayer: Mode branches two ways. Free
 Flight/Dogfight go Mode → Chapter → Plane, unchanged. Instant Action (the Mode row that used to
 read Stunt Flying — decision 17) instead opens its own five-step wizard: Mode → Environment →
 MissionType → Waves → Wingmen → Plane, shared with the other two modes as the final step.
@@ -4069,7 +4053,7 @@ caught only by an actual screenshot at the pilot-configures-5-wingmen-solo edge,
 ## src/UI/MenuInput.cs
 One launchscreen player's input source — keyboard flag (player 1 only), `Pads` device array, edge/
 auto-repeat state; `Poll(dt)` fills Move/MoveX/Accept/Back/Start (polled: actions can't read a
-named device). `MoveX` (Left/Right, PLAN-instant-action.md H15) is `Move`'s horizontal twin, added
+named device). `MoveX` (Left/Right) is `Move`'s horizontal twin, added
 so an Instant Action wizard screen can carry a vertical list cursor and a horizontal stepper at
 once without either read starving the other: MissionType's lives (H15), WaveEdit's four fields and
 Wingmen's count/aircraft (H16) all read it — every other screen ignores it.
@@ -4159,13 +4143,13 @@ those re-anchor to the view's camera every frame, so N players need N of each.
   every loop over the rigs degenerates to the old single-camera code.
 ⚠ In splitscreen the camera's parent is a `SubViewport`, not a Node3D — local `Position` IS the
   world transform, so per-frame anchoring reads `Camera.Position` directly (correct in both modes).
-`CameraWeatherState` (1/2/3, `PLAN-weather-decompile-match` A2) is the same shape as the deck
+`CameraWeatherState` (1/2/3) is the same shape as the deck
 regime: a per-rig field, not shared, because splitscreen panes can sit in different states at the
 same instant. Written each frame by `Session/WeatherRig.Tick`; rig 0's value drives the per-state
 fog switch there (B11) — the fog globals are session-wide, so only rig 0's is read for them.
 
 ## src/Flight/ViewerSet.cs
-`ViewerSet` (`PLAN-splitscreen-polish.md` A3) — the "what do the cameras see" seam promoted out of
+`ViewerSet` — the "what do the cameras see" seam promoted out of
 `ProjectilePool.Viewers`/`ScreenSize.NearestFloor`, the pattern the tracer floor proved 2026-08-10
 ([`org/tracers.md`](org/tracers.md)). `GameSession` owns one instance (`_viewers`) and `Bind`s it
 once, right after `BuildRigs` returns (`StartSession`) — the same rig-camera list every rig loop
@@ -4227,7 +4211,7 @@ magenta, pylons cyan, target green); `--markers` opens it at launch. Reuses `Mar
   new evidence that `--viewer` gained a splitscreen path.
 
 ## src/UI/PerfHud.cs
-The frame-cost readout (PLAN-perf-hitches D10, key **F14**): fps, current frame cost and the
+The frame-cost readout (key **F14**): fps, current frame cost and the
 worst recent frame, cycling Off → Compact → Full → Off; `--debug-fps[=compact|full]` presets the
 mode at launch. Built once by `Launcher` (never per `GameSession`, never per splitscreen pane) —
 fps/frame-cost/GC are process-wide facts, so one readout for the whole window is correct and a
@@ -4241,7 +4225,7 @@ On `HudLayers.PerfReadout` (11), **above `HudLayers.Board`**: the launchscreen's
 full-screen opaque `ColorRect` on `Board`, and this readout has to read there too. Sized off
 `HudMetrics.ReferenceHeight` through the plain window-height ratio, not `HudMetrics.Scale` —
 that method's `PaneFactor` damping is exactly wrong for a control that isn't per-pane.
-**Full (PLAN-perf-hitches D11)** adds four lines under Compact's fps/frame/worst headline — the
+**Full** adds four lines under Compact's fps/frame/worst headline — the
 current frame's `FrameCounters` split (script/render-cpu/gpu/physics ms), its draws/prims/nodes/
 mem terms, `GC.CollectionCount` per generation (raw counts, not deltas — a live readout reads
 better as "gc2 has fired 3 times" than as an almost-always-zero per-refresh delta), and C8's
@@ -4348,7 +4332,7 @@ than under it (the anim lab's `--plane=` prop), each also capping its own ancest
 ⚠ Rungs are the `cs_name` meta, never `Node.Name` (WORLD-8) — C1's second `box_car.flt` is `godot=@Node3D@5`.
 ⚠ The box is measured from the selected subtree's OWN meshes, never an `OrbitCamera.MergedAabb`
   live-tree merge (WORLD-14 — an overlay parked elsewhere would enter the merge).
-⚠ **Unreachable in splitscreen, by construction** (residual sweep, `PLAN-splitscreen-polish` B14):
+⚠ **Unreachable in splitscreen, by construction** (residual sweep):
   `--freecam`/`--anim-lab` are not `Fly`, and `SessionSpec.Resolve` clamps `Players` back to 1
   whenever `Players > 1 && !Fly` — so this single-camera pick never has a second pane to be wrong
   about. Documented here rather than fixed; no code follows.
@@ -4629,7 +4613,7 @@ scripting an actual shot. `BuildFlightRigs` also constructs `AiAircraftSpawner` 
 `Inputs`; `SpawnAiAircraft` (public — the M4 A2 actor seam, called by `--ai=` at build and by
 later waves mid-session) adds each AI plane to `_aiPlanes`, stepped in `DriveSimSteps` after the
 rigs (a realtime clock lets them tick themselves, like the rigs). `_instantAction`
-(`InstantActionRuntime?`, PLAN-instant-action.md C8) builds at the very top of `StartSession` —
+(`InstantActionRuntime?`) builds at the very top of `StartSession` —
 before any archive, since loading its source is a bare value read — from whichever of two
 producers the spec carries: `SessionSpec.IaDef` (the Instant Action wizard's own already-built def,
 H16) first, else `--ia=<path>` loaded through `InstantAction.LoadFromJson`; stays null on a load
@@ -4809,8 +4793,7 @@ item does not add one, since G13's own verification drove that mode through real
     because the clamped chapter (C1B) authors no deck.
   - **What could contradict it, and what the record says.** (a) *The climb ordering.* A
     camera-anchored ceiling can never be reached by climbing, and that is exactly the original's
-    behaviour on record: the user at the controls of the original (`PLAN-overcast-match` A7,
-    2026-08-08) reported that "climbing below the deck, the texture's look is *exactly the same* at
+    behaviour on record: the user at the controls of the original (2026-08-08) reported that "climbing below the deck, the texture's look is *exactly the same* at
     every altitude — a world-fixed sheet would grow and parallax", and `CAP-12`'s six deck crossings
     record the whiteout taking over instead (first wisps ~982 m, full obscuration 1003–1085 m,
     clear above ~1128 m) with **no ceiling reached at any altitude**. Nothing in the footage record
@@ -4895,7 +4878,7 @@ rest=… first_frame=…` line per session build. `Mark()`/`Record(phase, mark)`
   long the menu was up.
 
 ## src/Utils/HitchMonitor.cs
-The always-on frame-hitch detector (PLAN-perf-hitches B4), ticked from `Launcher._Process` in every
+The always-on frame-hitch detector, ticked from `Launcher._Process` in every
 mode: a frame trips when `frame_ms > max(medianMultiple × rolling_median, floorMs)`, and a
 `HitchRecord` is assembled describing it: unaveraged script/render-CPU/GPU/physics, draws/prims/
 nodes/mem as absolutes AND as deltas against the frame before, `GC.CollectionCount` per generation
@@ -4908,16 +4891,15 @@ them in), so the trigger, both wraparounds and the grace window are unit-tested 
 in, and it is engine-free too. Five `hitchMonitor.*` config keys over `const` defaults, read in
 the constructor (which is what registers them for `--dump-config`). `FrameCount` exposes the same
 counter `HitchRecord.Frame` reports, one call early, so `--hitch-inject=` (B5) can fire on a stated
-ordinal in this monitor's own frame space rather than the sim frame. `RingFrames`/`CopyRing`
-(PLAN-perf-hitches D11) expose the ring buffer itself, live — every `Tick`, not just on a trigger
-like `Last.Ring` — for `PerfHud`'s Full-tier frame-time strip; `CopyRing` returns the MOST RECENT
-entries when handed a shorter destination than the ring holds, oldest of those first.
-⚠ **Every default here is TUNE**, named in conversation on 2026-08-14 and evidenced by nothing:
-  `medianMultiple` 4, `floorMs` 40, `baselineFrames`/`ringFrames` 120, `graceMs` 2000. Do not cite
-  one as a measured value. Fed a raw `Stopwatch.GetTimestamp` pair, **never Godot's `delta`**:
-  `delta` is post-processed (`OS.delta_smoothing`) and measures as a quantised constant here,
-  8.333 ms on every frame of a `--no-vsync --det` empty-stage run while the real cost varied
-  8.25–8.42 ms.
+ordinal in this monitor's own frame space rather than the sim frame. `RingFrames`/`CopyRing` expose
+the ring buffer itself, live — every `Tick`, not just on a trigger like `Last.Ring` — for
+`PerfHud`'s Full-tier frame-time strip; `CopyRing` returns the MOST RECENT entries when handed a
+shorter destination than the ring holds, oldest of those first. ⚠ **Every default here is TUNE**,
+  named in conversation on 2026-08-14 and evidenced by nothing: `medianMultiple` 4, `floorMs` 40,
+  `baselineFrames`/`ringFrames` 120, `graceMs` 2000. Do not cite one as a measured value. Fed a raw
+  `Stopwatch.GetTimestamp` pair, **never Godot's `delta`**: `delta` is post-processed
+  (`OS.delta_smoothing`) and measures as a quantised constant here, 8.333 ms on every frame of a
+  `--no-vsync --det` empty-stage run while the real cost varied 8.25–8.42 ms.
 ⚠ The baseline is a **true median**, not a mean, and the hitching frame is judged against the
   window BEFORE it joins. A mean would be dragged up by the hitch it just saw and would hide the
   next. Under vsync the median pins at the refresh interval, degenerating the relative term into a
@@ -4928,14 +4910,14 @@ entries when handed a shorter destination than the ring holds, oldest of those f
 ⚠ **Nothing applied during `Launcher.LaunchSession`'s build can ever trip this monitor, at any
   magnitude**, because `Rearm()` fires the instant `StartSession()` returns (`Launcher.cs:743-744`,
   by design), so anything earlier in the same build is always finished before grace starts counting.
-  Measured (PLAN-perf-hitches E13, disproven): a maximal four-part debris burst (`max_ms` 150.00 vs
+  Measured (disproven): a maximal four-part debris burst (`max_ms` 150.00 vs
   an 8.33 ms baseline) produced zero `[perf] hitch` lines over 600 frames — the spike lands ~700 ms
   after `Rearm()`, a third of the 2000 ms grace, and never recurs; a scenario wanting this monitor to
   see an event needs that event live, mid-run, after the build, not a CLI preset applied at
   construction time.
 
 ## src/Utils/HitchSidecar.cs
-`HitchMonitor`'s write path (PLAN-perf-hitches B6): a tripped `HitchRecord` is copied — never
+`HitchMonitor`'s write path: a tripped `HitchRecord` is copied — never
 referenced, since `Last` is overwritten on the next trip — into a small preallocated queue, then
 drained a few seconds later to one `[perf] hitch …` line (`ReportPerf`'s own flat key=value grammar,
 ms terms as-is, byte counts as MB) plus one JSON line in `.scratch/logs/<mode>-<stamp>.hitches.jsonl`,
@@ -4956,7 +4938,7 @@ own recipe (UTF-8 WITH a BOM, `AutoFlush`) — a line reaches disk the instant i
   something to buffer around silently.
 
 ## src/Utils/PerfSample.cs
-Ambient timed leaf scopes (PLAN-perf-hitches C8): `using (PerfSample.Scope(PerfSite.DebrisSpawn))`
+Ambient timed leaf scopes: `using (PerfSample.Scope(PerfSite.DebrisSpawn))`
 adds its wall time to that site's total for the frame in progress, and any code path can do it
 without knowing the monitor, the readout, or whether anything is listening — statics over a
 preallocated per-site array, the same ambient shape `StartupProfile` uses and for the same reason
@@ -4968,7 +4950,7 @@ never carry a stale frame's attribution. `Reset()` on a build or teardown, besid
 a closed enum (`debris_spawn` · `part_detach` · `ai_spawn` · `effect_checkout` · `effect_pool_miss` ·
 `material_create` · `resource_load` · `audio_load`); a site nothing called is ABSENT from the record
 rather than reported as zero.
-All eight sites are seeded (PLAN-perf-hitches C9): `AnimRuntime.RunDeathSequence` (debris_spawn),
+All eight sites are seeded: `AnimRuntime.RunDeathSequence` (debris_spawn),
 `FlightController.Crash` (part_detach), `AiAircraftSpawner.Spawn` (ai_spawn),
 `AnimRuntime.PlayEffectAt` (effect_checkout), `EmitterDirector.Assert`'s miss branch
 (effect_pool_miss), `EmitterRenderer.Attach` (material_create), `TextureArchive.FindImage`
@@ -5104,14 +5086,14 @@ ray that hits it at spawn returns nothing at the flown-to position), the AI gunn
 acquisition as mutable state, the quick-draw and ±11° cone gates, dead-eye skill 1 vs 9 hit
 rates on a fixed seed, the kill under the AI's shooter id, and the IsHumanPiloted assist
 exclusion A/B'd on one rig),
-the inert aircraft state (`inert-aircraft`, PLAN-instant-action E10: four REAL instruments — a
+the inert aircraft state (`inert-aircraft`: four REAL instruments — a
 physics raycast, `CollectAircraft` into an `AimAssist.Scan`, a round fired through the pool, and
 `SimStep` — run over a live control, an aircraft built inert, and that same aircraft after
 `Activate`, so every observation is watched flipping in both directions rather than only being
 absent; plus the roster check that an inert plane is listed as a not-live candidate. ⚠ It
 activates its subject AT ITS BUILD POSE for exactly the `ai-actor` reason above, and re-measured
 that constraint on its own live control before working around it),
-the Instant Action zeppelin run (`instant-action-zeppelin`, PLAN-instant-action F12: the
+the Instant Action zeppelin run (`instant-action-zeppelin`: the
 `zeppelin_type` selection with its cargo fallback, a real generator on the wave-credit budget
 launching nothing uncredited and exactly one wave's members once credited — from the same bay drop
 point the plane arm uses, never a fresh spawn — the parked-counts-as-present trigger, and
@@ -5122,7 +5104,7 @@ synchronous suite does not re-enter the physics space either, the same one-frame
 and the round path is `zeppelin-damage`'s. ⚠ It is read-only against the SHARED cached world —
 registering a pool or leaving the node switched on there is handed to every later C1 suite, which
 showed up as an inflated `destructible-census` while this was being written),
-the Instant Action mission end (`instant-action-end`, PLAN-instant-action G13: one mission type at
+the Instant Action mission end (`instant-action-end`: one mission type at
 a time, each driven to its end through the SAME signal `GameSession` subscribes to — a spawned
 ace's own `Downed`, `InstantActionWaves` stepped over real aircraft, `StuntRace`'s all-finished
 path over C1/IA1's authored zones, and C1/M04's piratezep really destroyed through the F18 damage
@@ -5142,7 +5124,7 @@ flattening, and glTF/collision/node visibility. `emitter-lifetime` is registered
 the only suite installing a fake `IEmitterFactory`, and `WithWorld` caches one world per chapter, so
 running first means it builds the shared C1 world while the fake is in effect; `damage-hd`'s
 `collision:true` immediately after forces a real rebuild for everyone downstream.
-⚠ **Eight suites moved out** (`PLAN-engine-free-suites.md` A3+A4+B11, 2026-08-06): `flight-envelope`,
+⚠ **Eight suites moved out** (2026-08-06): `flight-envelope`,
   `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` (A3),
   `stunt-gates` (A4, once `StuntMission` itself went engine-free in A2) and `stall-warning` (B11,
   once its `StallLamp`/`ArrowSweep` cues became plain `GaugeCluster` structs) are now `CSVM.Tests`
@@ -5199,7 +5181,7 @@ the sink: every step reports the burst's own point and the def's authored `10000
 real two-pane `ScreenFlash` over two `Camera3D` nodes 120 m apart paints one pane, the other pane, or
 both, purely by where the burst is. The able-to-fail control is the same overlay with no `ViewerSet`
 bound, which paints both — the pre-B12 behaviour; disabling the routing fails three of the checks.
-`ordnance-burst-timeline` is `PLAN-anim-original-match` D31's proof: it plays `he_ground_effect`,
+`ordnance-burst-timeline` proves the ordnance burst timeline: it plays `he_ground_effect`,
 `flash_effect` and `sonic_ground_effect` on its own miniature world-effects stage and matches the
 WHOLE recorded `OnEventDispatched` log of each — every sequence, every event, in its sequence's
 order, at its authored instant — against a table read off the def JSON by hand. Order is asserted
@@ -5299,16 +5281,16 @@ exe's own directory; `CSVM_DATA_ROOT`/`--data-root=` override either.
 `LaunchSession()` instantiates a `GameSession` per
 launch; `ReturnToMenu` `QueueFree`s it; a menu launch derives its spec via
 `SessionSpec.FromMenu(_cli, …)`, never from the outgoing spec.
-`ReportPerf`'s window line carries `max_ms`/`p95_ms` beside its means (PLAN-perf-hitches A2):
+`ReportPerf`'s window line carries `max_ms`/`p95_ms` beside its means:
 a preallocated `_perfFrameMs` ring holds each frame's unaveraged wall cost, sorted into scratch
 at window close. No `p99_ms` — at `PerfWindowFrames` = 60 it would equal `max_ms` by construction.
 One `ReadFrameCounters()` per frame samples the eight engine counters once and feeds both
-instruments (PLAN-perf-hitches B4): `HitchMonitor.Tick` wants them unaveraged, `ReportPerf` sums
+instruments: `HitchMonitor.Tick` wants them unaveraged, `ReportPerf` sums
 them, and the two `TIME_*` monitors are converted from seconds to ms at that single read. The
 monitor is constructed alongside the other process-scoped services (ahead of every probe's early
 quit and of `--dump-config`, which is what registers its five keys) and `Rearm`ed by
 `LaunchSession`/`ReturnToMenu`, since a build or a teardown legitimately stalls the loop.
-`--hitch-inject=` (PLAN-perf-hitches B5) fires right before the QPC stamp, on the `_Process` call
+`--hitch-inject=` fires right before the QPC stamp, on the `_Process` call
 where `HitchMonitor.FrameCount + 1` matches the flag's frame — so the injected stall counts as that
 call's own frame cost instead of the next one's.
 `PerfSample.EndFrame()` (C8) is called on the same line as that stamp, so a frame's scopes and its
@@ -5324,7 +5306,7 @@ Measured render time is enabled once in `_Ready` (`ViewportSetMeasureRenderTime`
 frame from `ReportPerf`, because the hitch record needs the CPU/GPU split on every run, not only a
 `--perf` one.
 Vsync resolves at the same `_Ready` site as the shader clock / `--perf` tick: `display.vsync`
-config key (default true) or `--no-vsync`, the flag always beating the key (PLAN-perf-hitches A3).
+config key (default true) or `--no-vsync`, the flag always beating the key.
 The config read is unconditional even when the flag already decided, so the key still registers
 into `--dump-config` on a `--no-vsync` run — the same reason `ApplyMasterVolume` reads
 `audio.volume` unconditionally. The resolved state logs either way (`vsync on` / `vsync off
@@ -5379,7 +5361,7 @@ type stays the single owner of spawn resolution.
 ⚠ **The `_spec.SpawnAt` override branch is tested BEFORE the list branch** — that ordering is the
   whole reason `--pos` beats the mission spawn list, and `RaceGrid` inherits the override for free
   by delegating rather than reimplementing. Do not move it.
-⚠ **`ScenarioOverride` (PLAN-instant-action.md C8) is display-only** — `BuildFlightRigs` already
+⚠ **`ScenarioOverride` is display-only** — `BuildFlightRigs` already
   reads the mission's own `mission_type` for the spawn LIST (`SpawnPoints.LoadIa`'s own argument);
   this only keeps `LogSpawn`'s printed tag naming the right one instead of the stale
   `_spec.Scenario`. Set once in `BuildFlightRigs`, read by `LogSpawn` alone.
@@ -5452,7 +5434,7 @@ the vehicle's own name (`FUN_00479240` at `0x0047b11b`), so `AiCrashDefTable` pa
   plays nothing, where the crash family resolves a bare anim handle. So `lastResort` is null for
   touchdown and `DefForSurfaceId` can answer null. Unreachable in this install, because all eight
   chapters ship `touchdown_default`, so slot 0 always resolves (decoded 2026-08-12, read-only).
-⚠ The weapon `IMPACT` table now indexes the SAME registry id space (`PLAN-surface-id-weapons` B11),
+⚠ The weapon `IMPACT` table now indexes the SAME registry id space,
   so a round and a wingtip agree about what they struck — but it does NOT share this cascade's
   fallback: an id whose IMPACT row is empty plays nothing, where an empty slot here resolves slot 0.
   Copying this class's arm into `ImpactOutcome` is the specific mistake to avoid.
@@ -5514,13 +5496,13 @@ before the node joins the tree — so an aircraft built inert never has one live
 log says `INERT`, and the caller puts it in play with `FlightController.Activate`. Everything else
 is built exactly as a live plane's: pilot, gunner and mode machine are all wired, they simply
 never step.
-⚠ `Spawn`'s `scheme`/`team` (PLAN-instant-action.md C8) are worn/set exactly as given, never
+⚠ `Spawn`'s `scheme`/`team` are worn/set exactly as given, never
   re-derived — `scheme ?? _liveries.SchemeFor(…)` short-circuits the resolver call entirely on a
   non-null scheme, so an authored livery (the Instant Action ace) consumes NO RNG draw and cannot
   reshuffle another spawn's pinned paint under `--det`.
 
 ## src/Session/InstantActionRuntime.cs
-Owns one Instant Action mission's actor set (PLAN-instant-action.md), as it grows across the
+Owns one Instant Action mission's actor set, as it grows across the
 plan's later waves — C8 wired `dogfight_ace`'s ace, D9 added the wingmen, E11 adds the two draws
 a wave member needs that the sequencer itself (`InstantActionWaves`, below) does not own. Holds
 the loaded
@@ -5614,22 +5596,21 @@ negative number there (docs/formats/instant-action.md), which is not behaviour w
 division C8's `Objective`/`Outcome` half already draws against `GameSession`.
 
 ## src/Session/InstantActionWaves.cs
-The decoded wave sequencer's own selection, trigger and geometry logic (PLAN-instant-action.md
-E11, `FUN_0045b9d0`, traced whole by A4 over M4 B7's main-path read): pure state over `Start`/
-`Step` calls (no `GD.*`, no `Godot.` node, no clock), in the shape of `GeneratorCycle` —
-`CSVM.Tests\InstantActionWavesTests.cs` pins it off-engine. `CurrentWave` is 0 before `Start`,
-1–4 while running, 5 once `Finished` (no advance past wave 4, ever). `Start`/`Step` both cascade
-past any wave whose configured enemy count is 0 without ever activating it — the original's own
-"no member of this group to wait on" shape — and `Step(aliveInCurrentWave)` advances exactly when
-that reaches 0, so `GameSession` feeds it its own `InPlay` count of the current wave's roster each
-sim step rather than this class tracking any aircraft itself. The two static geometry helpers are
-the teleport arm's own two-step draw, `ChooseWaveSpawn` (collect every spawn point at or beyond
-`MinSpawnDistanceSquared` — 500 m squared — from the NEAREST human, Decision 8's splitscreen
-reading of "the player", then `draw % n` over that collection; ⚠ falls back to the LITERAL first
-entry, index 0, not a random one, when the collection is empty), and `FanOffset(memberIndex)` —
-member 0 sits exactly on the point, member `k` after it (`k` = index − 1) sits
-`100 · ((k >> 1) + 1)` m out at ±45°, sign `+` when `k & 3` is 1 or 2, the same pattern
-`InstantActionRuntime.WingmanSlotFor` uses.
+The decoded wave sequencer's own selection, trigger and geometry logic (`FUN_0045b9d0`, traced whole
+by A4 over M4 B7's main-path read): pure state over `Start`/ `Step` calls (no `GD.*`, no `Godot.`
+node, no clock), in the shape of `GeneratorCycle` — `CSVM.Tests\InstantActionWavesTests.cs` pins it
+off-engine. `CurrentWave` is 0 before `Start`, 1–4 while running, 5 once `Finished` (no advance past
+wave 4, ever). `Start`/`Step` both cascade past any wave whose configured enemy count is 0 without
+ever activating it — the original's own "no member of this group to wait on" shape — and
+`Step(aliveInCurrentWave)` advances exactly when that reaches 0, so `GameSession` feeds it its own
+`InPlay` count of the current wave's roster each sim step rather than this class tracking any
+aircraft itself. The two static geometry helpers are the teleport arm's own two-step draw,
+`ChooseWaveSpawn` (collect every spawn point at or beyond `MinSpawnDistanceSquared` — 500 m squared
+— from the NEAREST human, Decision 8's splitscreen reading of "the player", then `draw % n` over
+that collection; ⚠ falls back to the LITERAL first entry, index 0, not a random one, when the
+collection is empty), and `FanOffset(memberIndex)` — member 0 sits exactly on the point, member `k`
+after it (`k` = index − 1) sits `100 · ((k >> 1) + 1)` m out at ±45°, sign `+` when `k & 3` is 1 or
+2, the same pattern `InstantActionRuntime.WingmanSlotFor` uses.
 ⚠ **Its two GEOMETRY helpers do not run on `zeppelin_run`** — A4 traced the type-2 branch as an
   EXCLUSIVE alternative to the teleport (a `JMP` past the whole block), not a caller of it; that
   mode's wave arrival is F12's generator arm. The COUNTER is mode-independent and this class runs
@@ -5718,7 +5699,7 @@ the decoded shape, since `FUN_00452450` finds the parked airframes whose group m
 them from the bay. A released member takes no net pick (it carries its own `primary_target`), and a
 hook returning null (the wave has nothing parked left) is accounted exactly like a failed spawn.
 ⚠ The drop point is the SAME one the plane arm uses, `DropClearanceM` and all — F12 must not
-  re-derive it (PLAN-instant-action.md F12 trap b).
+  re-derive it.
 
 ## src/Session/ZeppelinRuntime.cs
 Runs a mission's zeppelins (M4 F17 motion + F18 damage + F19 broadside, behind
@@ -5829,15 +5810,13 @@ rig), this player's stunt run + marker/scoreboard/race entry
 markers — C23/C24; outside `--vs` the matchless `VersusHud.BuildHostileTracker` over
 `Inputs.Projectiles` instead, so every human pane tracks its nearest AI hostile in any flight
 session, H22; and the `--vs` build gets `HostilePool` too), the spawn placement, and the crash
-runtime built after the controller joins the tree. An active Instant Action mission
-(PLAN-instant-action.md C8) overrides two things here: `Inputs.InstantActionPlayerPlaneNode`, when
-set, replaces `PlaneRoster.PlaneFor` for every human alike (the def carries one `player_plane`,
-not a per-player list), and `Inputs.InstantActionActive` puts every human on
-`AimAssist.PlayerTeam` (Decision 8) regardless of pilot index. Plain flight's `--coop`
-(PLAN-splitscreen-polish A1) gives every human the same team the same way — the two flags are
-independent inputs to one `if`, since Instant Action always implies its own co-op regardless of
-`--coop`. Constructed
-once per session build from
+runtime built after the controller joins the tree. An active Instant Action mission overrides two
+things here: `Inputs.InstantActionPlayerPlaneNode`, when set, replaces `PlaneRoster.PlaneFor` for
+every human alike (the def carries one `player_plane`, not a per-player list), and
+`Inputs.InstantActionActive` puts every human on `AimAssist.PlayerTeam` (Decision 8) regardless of
+pilot index. Plain flight's `--coop` gives every human the same team the same way — the two flags
+are independent inputs to one `if`, since Instant Action always implies its own co-op regardless of
+`--coop`. Constructed once per session build from
 `(SessionSpec, LiveryResolver, SpawnPicker, WorldEffectsFactory, worldRoot, Inputs)`, then
 `Assemble(pi, rig)` once per rig; `MeshInstances`/`WhatSuffix` accumulate across the rigs for the
 caller's build summary. `--weapon-lab` sets `FlightController.Held` on every rig right after `Setup`
@@ -5924,7 +5903,7 @@ its whole producible range resolves inside `EffectAnimNames`/`PlaneDamageEffectA
   (`CallSuppliedAnchors`: `zep_can_dstry1.flt`, absent from C2's gamez entirely; `warhawk`,
   `startprops`/`stopprops`' own NAME — a shared authoring label no real airframe carries) and one
   authored against the Devastator's own model root (`AirframeScopedAnchors`: `player_pfighter`).
-  Extend those lists, never the walk (`PLAN-effect-catalogue` B2's Outcome).
+  Extend those lists, never the walk.
 
 ## src/Session/WorldEffectsFactory.cs
 Builds the impact/destruction effect stages and the per-plane crash runtime: the world-effects runtime (D32) and
@@ -5982,7 +5961,7 @@ soft edge for additive fire. Templates build with collision suppressed and the s
 each ROOT hidden (`TemplateStage.Shown` reveals one while an effect plays on it), so a
 template's meshes render — the rocket's per-type explosion rings, the fireball facades (D31). The
 runtime's stage is built here and handed into `ForEffects` **sealed** — `Pooled`+`Shown`+`Places`
-as constructor state (PLAN-template-stage A4). Until A4 the last two were written onto the returned
+as constructor state. Until A4 the last two were written onto the returned
 runtime instead, which was the accepted sealing leak; do not re-introduce a post-`ForEffects` write.
 The world-effects stage is built in **pool slots** (`BL-225`): each root is staged in as many copies as
 `EffectPools` sizes it for this session, one copy per `pool<N>` container stamped with
@@ -5996,7 +5975,7 @@ root someone just re-sized actually got its copies.
 `EffectStage` exposes that stage node read-only, for `--effects-test`'s mesh census (`BL-061`) —
 a puffer count cannot see whether a template's geometry drew, and the two halves fail independently
 (`docs/verification.md` INSTR-11).
-⚠ **This module owns no root list any more** (`PLAN-effect-catalogue` B3, 2026-08-05).
+⚠ **This module owns no root list any more** (2026-08-05).
   `EffectStageRoots`/`EffectTemplateRoots` are deleted; both binds stage what
   `EffectCatalogue.WorldStageRoots`/`CrashStageRoots` derive from the very names they are about to
   bind — `EffectStageRootNames(program, gamez)` and `CrashStageRootNames(program, gamez, rigScope)`
@@ -6016,13 +5995,13 @@ a puffer count cannot see whether a template's geometry drew, and the two halves
   rebuilt fresh next `StartSession`, same as `LiveryResolver`/`SpawnPicker`. Do not add a
   `GameSession`-side cache of the runtime "for symmetry" — it would be a second place to keep in sync
   with the factory's. `BuildWorldEffectsRuntime` is `private` **for exactly this reason**
-  (`PLAN-deepening` F17, closing `BL-232`): it used to be public and `GameSession` called it directly
+  (closing `BL-232`): it used to be public and `GameSession` called it directly
   from two sites that never populated `_worldEffects`, so a later `EnsureWorldEffects` demand in the
   same session found the cache empty and built a second runtime. `EnsureWorldEffects` is now the only
   way in, and it also wires `ProjectilePool.EffectSink` when a pool is passed (gated on "unset", same
   as `ExternalEffect`) — the wiring `GameSession`'s raw call used to do inline.
   ⚠ **`EnsureWorldEffects` keeps its 6-param signature — folding it was examined and declined**
-  (`PLAN-template-stage` B11, no-go 2026-08-07). Its four world params look call-order-dependent and
+  (no-go 2026-08-07). Its four world params look call-order-dependent and
   are not: `GameSession.cs:665–667` assigns `state.CrashProgram`/`WorldScene`/`WorldRuntime` from
   `session.Program`/`Builder.Scene`/`Runtime`, so all four call sites pass one and the same five
   objects — whichever caller populates the cache first, it does so with identical arguments. Moving
@@ -6066,7 +6045,7 @@ the retired `DeckCeilingHeight` fits, which must not be re-derived.
 resolves the rendered zone from BOTH the mission's zone names and the horizon's geometry
 (`BL-277` — see `Flight/Weather.cs`). `_activeZone` is the single answer both the fog and the dome
 are built from, and it is logged with the meshed counts it was decided on.
-⚠ `SetFogVolumes(volumes, spec)` (`PLAN-weather-decompile-match` A2/C21) is called separately
+⚠ `SetFogVolumes(volumes, spec)` is called separately
   from `Build`, same reason as `SetDeckCenter`: the fog-volume census is chapter/world data
   (`GameSession`'s own `FogVolumeSpec.VolumesOf`/`Load`), not mission weather. `Tick` feeds both
   it and the resolved `WeatherState` into `WeatherState.CameraWeatherState` once per rig, per
@@ -6101,15 +6080,14 @@ are built from, and it is logged with the meshed counts it was decided on.
     session (C5 only), and `Tick` logs the density at debug on each 0 ↔ non-0 crossing and each
     0.05 move — the evidence a probe reads, since a curtain that never fires and one that fires at
     0.02 are the same picture in a night frame.
-⚠ **The FOG follows that state; the DOME does not** (`PLAN-weather-decompile-match` B11,
-  2026-08-09, `FUN_00472ea0`). After the per-rig loop, `Tick` hands rig 0's state to
-  `FogStateTrigger.Next`, which resolves `WeatherState.ZoneForState(state)` (state *n* →
-  `zone<n>` through the file fallback) and answers non-null only when the state CHANGED; on an
-  answer that also changes the live zone, `ApplyFogGlobals` rewrites `csky_fog_color`/`_range`/
-  `_alt`/`csky_world_light` for the new zone. `_activeZone` — the dome's zone, resolved once at
-  `Build` from the mission's names plus the horizon census — is deliberately left alone; below the
-  deck a deck chapter therefore flies ZONE1's fog under ZONE2's sky, which is what the original
-  does and what `B14` will reconcile geometrically.
+⚠ **The FOG follows that state; the DOME does not** (2026-08-09, `FUN_00472ea0`). After the per-rig
+  loop, `Tick` hands rig 0's state to `FogStateTrigger.Next`, which resolves
+  `WeatherState.ZoneForState(state)` (state *n* → `zone<n>` through the file fallback) and answers
+  non-null only when the state CHANGED; on an answer that also changes the live zone,
+  `ApplyFogGlobals` rewrites `csky_fog_color`/`_range`/ `_alt`/`csky_world_light` for the new zone.
+  `_activeZone` — the dome's zone, resolved once at `Build` from the mission's names plus the
+  horizon census — is deliberately left alone; below the deck a deck chapter therefore flies ZONE1's
+  fog under ZONE2's sky, which is what the original does and what `B14` will reconcile geometrically.
   - **Edge-triggered, not per-frame**, and that is a requirement: the C26 rim annulus reads these
     same globals, so a per-frame rewrite would shimmer at the boundary. `FogStateTrigger`
     (nested, pure, unit-tested — `CSVM.Tests/FogZoneStateTests.cs`) counts its `Applications` so a
@@ -6177,9 +6155,9 @@ are built from, and it is logged with the meshed counts it was decided on.
     with it: `A7`'s 400 m (wrong texture period) and `C21`/`C25`'s 135 m, which fitted the
     **authored fog ramp** to a surface the original does not fog at all — every horizon model in
     every chapter is authored `fog: false`. That same fact is the standing explanation for
-    `PLAN-overcast-match` `B15`'s "the original's ceiling texture survives to ~12.6 km" anomaly.
+    the "the original's ceiling texture survives to ~12.6 km" anomaly.
   - ⚠ **The above-band floor sits at the tiles' OWN AUTHORED altitude, not the band centre**
-    (`PLAN-weather-decompile-match` B13, 2026-08-09 — supersedes `A7`'s band-centre pin here,
+    (2026-08-09 — supersedes `A7`'s band-centre pin here,
     which the disproof-4 decompile finding showed was C4's own coincidence: C4's authored altitude
     equals its own centre, 1050, so the pin only ever looked right there). `authoredY` is
     `_deckAltitude`, set by `WeatherRig.SetDeckAltitude` from `WorldBuilder.CloudDeckAltitude` —
@@ -6202,29 +6180,28 @@ are built from, and it is logged with the meshed counts it was decided on.
   `CLOUD_COVER`'s `THICKNESS`, makes it visible;
   if a pop ever shows, that is a finding about the whiteout band, not a licence to move the flip.
   `DeckRegimeTests` asserts the masking against the AUTHORED band, so the data moving fails a test.
-⚠ **`DeckDimmed`: `C22`'s SUNLIGHT dimming is the BELOW-band regime only** (`PLAN-overcast-match`
-  C23, user's fork verdict 2026-08-09). The two regimes are two different objects — an underside
-  and a top — and the evidence splits the same way: the original's underside reads 167.7 (ours
-  168.9, dimmed) while **no pixel in any original above-band frame falls below `FOG_COLOR` 175**,
-  which a 168.9 surface cannot satisfy at any fog setting (fog only pulls TOWARD the fog colour).
-  `Tick` applies it as a per-INSTANCE mesh swap on that rig's own deck copy, between the two
-  variants `WorldBuilder.CloudDeckUndimmedMeshes` built (lit-ness is baked into the material — a
-  shader variant, see `Mech3/SceneBuilder`), resolved once per deck node and written only on a
-  change. Per instance and never per material for the same reason the gate is a per-camera cull
-  mask: two panes on opposite sides of the band must be able to disagree. Inert where
-  `WorldLight` is 1.0 (C4) by construction. `deck lighting: N of M deck tile(s)…` is printed once
-  per session — `0 of 144` is what a broken RID lookup would look like.
-~~⚠ **`DeckCeilingHeight` (135 m) is a TUNE matched to one original still, and it is the only free
-  parameter in the model**~~ **RETIRED 2026-08-09 (`B14`) — the constant is deleted, and BOTH of
-  its fits measured the wrong surface** (see the deck entry above: the below-deck ceiling is the
-  unfogged `horizon/zone1` dome, not the deck sheet, so a fit against the deck's authored fog ramp
-  has nothing to fit). Kept below as the record of how it was derived, because the next reader
-  must not re-derive it. (`C21`/`C25`, 2026-08-08). Supersedes `A7`'s 400 m, which fit apparent
-  mottling scale against the WRONG texture period — the deck's authored UVs make
-  `cloudlayer.tif` repeat every 2048 m, not the 1024 m tile `A7` assumed — and against a render
-  that is heavily mip-blurred at grazing angles where the original is not, both of which biased
-  that estimator's K upward. `C21` re-derived it by fitting the SAME still's ceiling to the
-  zone's own **authored fog ramp** instead of to texture appearance (the deck tiles author
+⚠ **`DeckDimmed`: `C22`'s SUNLIGHT dimming is the BELOW-band regime only** (user's fork verdict
+  2026-08-09). The two regimes are two different objects — an underside and a top — and the evidence
+  splits the same way: the original's underside reads 167.7 (ours 168.9, dimmed) while **no pixel in
+  any original above-band frame falls below `FOG_COLOR` 175**, which a 168.9 surface cannot satisfy
+  at any fog setting (fog only pulls TOWARD the fog colour). `Tick` applies it as a per-INSTANCE
+  mesh swap on that rig's own deck copy, between the two variants
+  `WorldBuilder.CloudDeckUndimmedMeshes` built (lit-ness is baked into the material — a shader
+  variant, see `Mech3/SceneBuilder`), resolved once per deck node and written only on a change. Per
+  instance and never per material for the same reason the gate is a per-camera cull mask: two panes
+  on opposite sides of the band must be able to disagree. Inert where `WorldLight` is 1.0 (C4) by
+  construction. `deck lighting: N of M deck tile(s)…` is printed once per session — `0 of 144` is
+what a broken RID lookup would look like. ~~⚠ **`DeckCeilingHeight` (135 m) is a TUNE matched to one
+  original still, and it is the only free parameter in the model**~~ **RETIRED 2026-08-09 (`B14`) —
+  the constant is deleted, and BOTH of its fits measured the wrong surface** (see the deck entry
+  above: the below-deck ceiling is the unfogged `horizon/zone1` dome, not the deck sheet, so a fit
+  against the deck's authored fog ramp has nothing to fit). Kept below as the record of how it was
+  derived, because the next reader must not re-derive it. (`C21`/`C25`, 2026-08-08). Supersedes
+  `A7`'s 400 m, which fit apparent mottling scale against the WRONG texture period — the deck's
+  authored UVs make `cloudlayer.tif` repeat every 2048 m, not the 1024 m tile `A7` assumed — and
+  against a render that is heavily mip-blurred at grazing angles where the original is not, both of
+  which biased that estimator's K upward. `C21` re-derived it by fitting the SAME still's ceiling to
+  the zone's own **authored fog ramp** instead of to texture appearance (the deck tiles author
   `fog: true`, so this is the ceiling's actual fade mechanism, not a proxy for one): bracket
   110–155 m. That fit also explains B16's "sky stripe below the deck" as a pure `K` artifact —
   the sheet's rim sits at `f·K/6144`, and at 400 m it landed exactly where the original still
@@ -6258,7 +6235,7 @@ are built from, and it is logged with the meshed counts it was decided on.
   there by the zone-1 dome instead: the `C26` climb ladder now reads dip **0.15** / step **0.14** at
   every rung, against `C26`'s own post-fix 2.07 / +1.11.
 ⚠ **`Tick` is the ONE owner of render visibility, and the rule is the original's `zone_id` gate**
-  (`PLAN-weather-decompile-match` B12, 2026-08-09, `FUN_0056c430` — see `Mech3/ZoneGate.cs`). Per
+  (2026-08-09, `FUN_0056c430` — see `Mech3/ZoneGate.cs`). Per
   rig, per frame, it narrows that camera's cull mask to the single zone layer its own weather state
   arms, and sets `Node3D.Visible` on the rig's private deck and dome copies by the same rule
   (`ZoneGate.Draws`). A cull mask, not visibility, for the shared world: splitscreen panes sit in
@@ -6301,7 +6278,7 @@ are built from, and it is logged with the meshed counts it was decided on.
   mesh-10 m-under-the-slab invariant, pinned per chapter in `DeckRegimeTests`) — a fact about the
   DATA, unaffected by which regime is currently rendering the mesh.
 ⚠ **The band whiteout flickers inside the interior — `BandFlicker` (nested class), the decompiled
-  `FUN_0042ee40` remap** (`PLAN-weather-decompile-match` D32, 2026-08-09). Only the `CLOUD_COVER`
+  `FUN_0042ee40` remap** (2026-08-09). Only the `CLOUD_COVER`
   band's own opacity (`WeatherState.WhiteoutAmount`) is remapped, and only while it sits strictly
   inside `(0,1)` — the binary's exact `*pfVar5 != 0.0 && *pfVar5 != 1.0` guard, applied in `Tick`
   right after `band` is read and before the volume-curtain union, so both paths (C21's union and

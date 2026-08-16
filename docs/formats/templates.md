@@ -204,7 +204,7 @@ chapter authors — the negative is only a measurement if the reader would have 
 
 `ClutterBuilder` consumes `substitute` and `scale_range` (C22): a stamp rolls its model against
 the kind's table and takes a uniform scale from its range. `far_fade_range` is read and **not
-applied** — deferred to `BL-337` (C23, ). It is a rendering-side feature, not a
+applied** — deferred to `BL-337` (C23). It is a rendering-side feature, not a
 placement one: the runtime's `CameraSetClutterFadeScaleSq` (`0x0063f5bc`) writes one global that
 scales *every* type-5 scene node's LOD/distance fade, defaulted by the graphics detail level
 (×1/×2/×3, `FUN_00440750`) and overridable per mission — so the authored metres in this file are a

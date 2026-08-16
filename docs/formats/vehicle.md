@@ -98,12 +98,11 @@ A list of part entries:
   `destroyable_parts` (11 player `p*` + 11 AI `r*`), measured; values 15/20/25/30/35/40. Equal
   because armor is **purchasable** and these are the *stock* allocations, not because the number is
   duplicated. `PlaneStats` reads both values (`DestroyablePart.MaxHp`/`MaxArmor`); the two-pool
-  `PlaneDamage.Apply(part, healthDamage, armorDamage)` — armour first, 1:1 overflow — landed
-   (`PLAN-armour-layer`).
+  `PlaneDamage.Apply(part, healthDamage, armorDamage)` — armour first, 1:1 overflow — landed.
   this install has an unequal pair.)*
 - Flags: `critical` — the plane is destroyed when this part reaches 0 HP (all four player
   parts carry it); `engine` — engine damage/power loss on that part.
-  ⚠ **The `critical` reading is from the flag's name and the  executable decode does not
+  ⚠ **The `critical` reading is from the flag's name and the executable decode does not
   support it** ([`org/vehicleDamage.md`](../org/vehicleDamage.md)): the death path tests only
   whole-vehicle health, no code on it reads a part flag, and one zone at zero leaves the
   whole-vehicle summary at 75 %. Either the flag is consumed somewhere not yet found, or the
@@ -145,7 +144,7 @@ A list of part entries:
     At 0.99 it fires on the *first scratch*, which is authored, not a threshold to retune.
 
     ⚠ **`random_gun_impact`'s real home is `weapons.json`, not here — read this entry as a probable
-    authoring leftover (hypothesis, ).** It is the `player` **IMPACT surface animation**
+    authoring leftover (hypothesis).** It is the `player` **IMPACT surface animation**
     for `wep_03` (60slug) — "what a bullet does when it hits the player's aircraft"
     ([weapons.md](weapons.md)), the counterpart of the `enemy` and `default`/`buildings` classes.
     That is a general mechanism gated on being shot at, which nothing can do in M3. One plane of
@@ -174,20 +173,19 @@ position, not by name (measurements in `gamez.md`, "Player-plane damage states")
 ### Armor and hit points
 
 **The two numbers on a `destroyable_parts` entry are that zone's hit points `[1]` and its armor
-pool `[2]`, armor spent first.** Settled .
+pool `[2]`, armor spent first.** Settled.
 
 **How it was settled.** Every pair in this install is *equal*, so no measurement over the shipped
 data can separate (armor, hp) from (hp, hp) or (max, current) — the reading stood as a hypothesis
 for that reason. The original's **armory breaks the tie, because it varies armor independently of
 health**: its per-zone allocation is in units that are armor points 1:1, and a **stock** airframe
 reads the same per-zone numbers the zrdr def carries (a stock Bloodhawk shows ~20 units on each of
-its four zones; `pbloodhawk`'s parts are 20/20/20/20). Observed at the controls, .
+its four zones; `pbloodhawk`'s parts are 20/20/20/20). Observed at the controls,.
 
-**Confirmed end-to-end by `CAP-19`** (observed at the controls, ). Three results:
+**Confirmed end-to-end by `CAP-19`** (observed at the controls). Three results:
 
-1. **Armor depletes before health.** The ordering retail string 3372 states and
-   [`PLAN-M3-weapons.md`](../plans/PLAN-M3-weapons.md) C23 derives from a dominance argument is now
-   *directly observed*, not inferred.
+1. **Armor depletes before health.** The ordering retail string 3372 states, and that a dominance
+   argument derives, is now *directly observed*, not inferred.
 2. **The armory's per-zone cap is 60 units**, uniform across a plane's four zones. (Whether the cap
    varies by airframe is untested — one airframe was read.)
 3. **A stripped zone falls far faster** than an armored one — green→red in visibly less time, more
@@ -227,8 +225,8 @@ Corroborating evidence, all data-confirmed:
    unarmored surfaces, inflicting very little damage"), id 3371 (dum-dum: "very useful for
    finishing off aircraft that have already been damaged"), id 3410 (AP rocket: "remove most, if
    not all, of the armor from an aircraft but has no noticeable effect on unarmored surfaces").
-   A gate, not a damage reducer. [`PLAN-M3-weapons.md`](../plans/PLAN-M3-weapons.md) C23 derives
-   the same ordering from a dominance argument; this is the direct statement.
+   A gate, not a damage reducer. A dominance argument derives the same ordering; this is the
+   direct statement.
 
 **Still open: what `ARMOR: Standard (N/T/W)` is — and it is now known *not* to be the cap.** Five of
 the eleven airframe blurbs carry a per-zone armor triple (`ui_strings.json` ids 40115 Balmoral
@@ -304,7 +302,7 @@ fighters, 500 for the boat/truck). Positions 3–4 are inferred, not confirmed.
 **`cannon_jam`** (`player_airplane`) — `heat_safe_limit 1000`, `heat_dissipation_rate 50`,
 `jam_chance 0.1`; reads as a gun-overheating model paired with `FIRING_HEAT` in
 [weapons.md](weapons.md). ⚠ **Dead data: the original executable has no reader for it**
-(decoded ). None of `cannon_jam`, `heat_safe_limit`, `heat_dissipation_rate` or
+(decoded). None of `cannon_jam`, `heat_safe_limit`, `heat_dissipation_rate` or
 `jam_chance` exists as a string in `crimson.exe`, and the zrdr readers look keys up by string
 (`FUN_0057a090(dict, "KEY")`), so no lookup is possible. Sibling keys `bullethole_anims`
 (`0x00627ec4`) and `destroyable_parts` (`0x00627d7c`) are present, which is the calibration
@@ -329,7 +327,7 @@ AI aircraft is **zone-less**, carrying its authored pair alone. Census and conse
 [`org/vehicleDamage.md`](../org/vehicleDamage.md).
 
 **A vehicle spends both, in a fixed relationship: the per-part pools are the ledger and the
-whole-vehicle pair is a running summary of them.** Decoded from the executable , full
+whole-vehicle pair is a running summary of them.** Decoded from the executable, full
 write-up in [`org/vehicleDamage.md`](../org/vehicleDamage.md). A weapon hit carries two damage
 numbers (armour and health, not one figure) and, sometimes, a zone id. When it names a zone, the
 damage is spent against that zone's pools, armour first with 1:1 overflow into health, and the
@@ -357,7 +355,7 @@ the same type are never quite identical. Ships and ground vehicles are excluded 
 a patrol boat is exactly its authored 40 times the difficulty factor: 35, 40 or 50.
 
 **The patrol boat has two sets of hit points because it is authored as two things, and both are
-live** (settled ; the decode is [`org/vehicleDamage.md`](../org/vehicleDamage.md)). A boat
+live** (settled; the decode is [`org/vehicleDamage.md`](../org/vehicleDamage.md)). A boat
 spawned from an `aiv` roster is a **vehicle** and reads the 40 on this page, with the 0.60/0.30
 `injure_anims` above it; a boat *placed* in the world is a **destructible** and reads the `HEALTH 20`
 of the anim def whose wildcard `NAME` catches it, with that def's own `ANIM_HEALTH` stages. C1 ships

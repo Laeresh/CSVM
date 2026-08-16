@@ -151,7 +151,7 @@ Stages, in order, each reported `PASS` / `FAIL` / `SKIP` / `TODO`:
 | `units` | `dotnet test CSVM/CSVM.sln` (the `CSVM.Tests` xUnit project), `--no-build` since the build stage just produced the binaries. Counts are read from a TRX log in `.scratch/testresults/`, never scraped from the localized console summary |
 | `engine` | Godot with `--run-tests` — windowed (never `--headless`: no shaders compile there, so a clean error screen would prove nothing — LOG-8) and with `--log-file .scratch/run-tests-engine.log`, which is what lets the harness screen native engine `ERROR:` lines. `--run-tests` implies `--det` by itself. Verdict from the process exit code; counts and the failing suite names from `.scratch/test-report.json`, which is deleted before the run so a dead run cannot be scored from the last one's numbers |
 | `goldens` | The golden-image tripwire: one Godot per shot in `analysis/goldens/manifest.json`, each a pinned `--det` capture with `--screenshot=` and `--log-file=` appended, compared as **md5 of the raw pixel buffer** the engine prints on its `[core] shot pixmd5=… size=… gpu=…` line (never the PNG's encoded bytes — SHOT-6). ~53 s for 11 shots |
-| `hitch` | Two scripted Godot launches proving `HitchMonitor`/`HitchSidecar` (PLAN-perf-hitches B4/B6) still work: a clean `--frames=180` run that must stay silent, and a `--hitch-inject=50@300 --frames=310` run that must trip exactly once, on frame 300, with a full 120-entry ring and a sidecar record matching the printed line |
+| `hitch` | Two scripted Godot launches proving `HitchMonitor`/`HitchSidecar` still work: a clean `--frames=180` run that must stay silent, and a `--hitch-inject=50@300 --frames=310` run that must trip exactly once, on frame 300, with a full 120-entry ring and a sidecar record matching the printed line |
 | `perf` | `-Perf` only: every scenario in `analysis/perf/scenarios.json` under `--det --perf --no-vsync --mute`, medians appended to the git-ignored `perf-history.jsonl`. ~88 s for 5 scenarios. It measures and records; it never judges (below) |
 
 Switches: **`-Filter <substring>`** (engine suite names only — `-Filter weapons` runs `weapons-defs`
@@ -174,16 +174,15 @@ covering up a defect, and `analysis/goldens/README.md` for the shot set.
 **The hitch stage is a scripted pass for the same structural reason the golden stage is one**:
 `HitchMonitor` only trips on a real rendered frame measured over wall time (ticked from
 `Launcher._Process`), and `--run-tests` runs every suite to completion inside one `_Ready` call
-without ever yielding a frame — this is PLAN-perf-hitches B7 settling its own open question, not a
-new exception. Each launch's sidecar path is recovered from the `"[core] log file=…"` line every
-session prints once at `Log.Open` (`Log.SinkPath`, the PROJECT's own log — a different file from
-Godot's own `--log-file` this stage also passes), then read back as `<that path minus .log>.hitches.jsonl`.
-A `FAIL` here means the detector stopped detecting (or started firing on nothing) with nobody
-watching, which is exactly the failure mode an always-on, silent-when-clean instrument invites.
-The injected record's C8 attribution is checked as an identity — `attributed_ms + unattributed_ms`
-must close over `frame_ms`, with no scope violations — rather than as "no samples": the injected
-stall is deliberately unscoped (B5), and C9 seeding a site that fires during this launch must not
-turn the check red.
+without ever yielding a frame, which is not a new exception. Each launch's sidecar path is recovered
+from the `"[core] log file=…"` line every session prints once at `Log.Open` (`Log.SinkPath`, the
+PROJECT's own log — a different file from Godot's own `--log-file` this stage also passes), then
+read back as `<that path minus .log>.hitches.jsonl`. A `FAIL` here means the detector stopped
+detecting (or started firing on nothing) with nobody watching, which is exactly the failure mode an
+always-on, silent-when-clean instrument invites. The injected record's C8 attribution is checked as
+an identity — `attributed_ms + unattributed_ms` must close over `frame_ms`, with no scope violations
+— rather than as "no samples": the injected stall is deliberately unscoped (B5), and C9 seeding a
+site that fires during this launch must not turn the check red.
 
 ### The perf stage (`-Perf`)
 
@@ -218,16 +217,14 @@ Nothing in this stage can fail a build, and **a history trend is awareness, not 
 with its reason: `fps` and `frame_ms` (paced — floors, PERF-2), `script_ms` (`TIME_PROCESS`,
 ~2.2× real per PERF-1, and it collapses onto the frame cap when the loop is paced), `physics_ms`
 (`--det` makes the clock parent-driven, so `_PhysicsProcess` consumers no-op and the term is empty),
-`mem_mb` (managed-heap high-water, monotonic inside a run), `max_ms`/`p95_ms` (PLAN-perf-hitches A2:
-the worst frame and the 95th percentile within each 60-frame window, then MEDIANED across windows —
-a population too small to hold a ratio, and the median actively hides a single bad window: a real
-50 ms injected stall moved one window's own `max_ms` from 8.33 to 48.96 while the scenario's reported
-`max_ms` stayed 8.33, three clean windows outvoting the hit one), `hitch_count` (PLAN-perf-hitches
-E12, below). A row is marked `*` only when it clears **both** a relative band and an absolute floor,
-both measured as this machine's same-build noise — see `docs/verification.md` PERF-9…PERF-11 and the
-manifest's `notes`.
+`mem_mb` (managed-heap high-water, monotonic inside a run), `max_ms`/`p95_ms` (the worst frame and
+the 95th percentile within each 60-frame window, then MEDIANED across windows — a population too
+small to hold a ratio, and the median actively hides a single bad window: a real 50 ms injected
+stall moved one window's own `max_ms` from 8.33 to 48.96 while the scenario's reported `max_ms`
+stayed 8.33, three clean windows outvoting the hit one), `hitch_count` (below). A row is marked `*`
+only when it clears **both** a relative band and an absolute floor, both measured as this machine's same-build noise — see `docs/verification.md` PERF-9…PERF-11 and the manifest's `notes`.
 
-**`hitch_count`** (PLAN-perf-hitches E12) is `HitchMonitor`'s own trip count for the launch — the
+**`hitch_count`** is `HitchMonitor`'s own trip count for the launch — the
 `[perf] hitch …` lines B6 writes — median over the same kept-launch population as every other metric
 here, riding inside the record's `metrics` object rather than a section of its own so it flows
 through the existing ratio machinery for free. It is what actually survives a single hitching frame:

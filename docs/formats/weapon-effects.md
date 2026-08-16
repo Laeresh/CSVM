@@ -49,7 +49,7 @@ already-live gate would drop every ejection but one per 2 s window):
 The **white puff cluster** the retail captures show riding each ejected casing matches **no
 shipped effect def** (only `muzzle_burst` references `gunshell`, and the `gunshell` def carries
 no puffer) — the "cluster" in the captures is the muzzlepuffer's own smoke misread as a casing
-effect  .
+effect.
 (`BL-261`, A2): the casing now flies bare and the muzzlepuffer plays at its authored 6-puffs/0.3 s
 window instead.
 
@@ -70,7 +70,7 @@ bound name (`3040slug_gunhit`, …) and whose body is distance-gated:
   and each renders as **one 1-pixel, near-black point**. That matches the original :
   `OriginalScreenshots/Videos/70 DD Dirt.mp4` shows a 70-slug dirt hit producing only the `chunk`
   and one faint black `blacksmokepuffer` puff.
-  ⚠ **They draw a point, not nothing** (decoded , `BL-313`). Models 24–26 carry
+  ⚠ **They draw a point, not nothing** (decoded, `BL-313`). Models 24–26 carry
   `lights: 1` with a non-null light array, and both draw functions gate the light block on the light
   **count** alone, not on vertices or polygons — software `FUN_005524d0` at `00552be2`, D3D
   `FUN_00554550` at `005445f1`, the latter ending in `DrawPrimitive(D3DPT_POINTLIST, …)` via
@@ -78,7 +78,7 @@ bound name (`3040slug_gunhit`, …) and whose body is distance-gated:
   constants set in `FUN_0054d9c0`), colour word `0x020B` unpacked by `FUN_0059e0e0` to R=0 G=16 B=11
   of 255, and one position at the node origin. There is no sprite, billboard or texture-quad
   substitution anywhere in either draw function.
-  ⚠ **RETRACTED  (`BL-313`):** this line used to read *"the debris art is the `bit01`–
+  ⚠ **RETRACTED (`BL-313`):** this line used to read *"the debris art is the `bit01`–
   `bit04` textures every chapter archive ships"* — i.e. the zero-vertex nodes were taken as
   pointers to those textures. The binary refutes it outright: no string `bit01`–`bit04` or
   `bit1`–`bit3` exists in `crimson.exe`, neither draw function resolves anything by name, and no
@@ -123,7 +123,7 @@ effect **animation**, splits by what the bound name resolves to:
   runtime already proves (`BuildFlightCrashRuntime`) and that **destruction effects (D32)** share,
   so the impact-puffer wiring folds into D32. The per-class stand-ins these names fall to (A2):
   dirt → the single spark, i.e. no arm of its own (the tumbling chips on the `bit01–04` textures
-  were **deleted , `BL-313`**, see the `PLAYER_RANGE 200` note above; ground still
+  were **deleted, `BL-313`**, see the `PLAYER_RANGE 200` note above; ground still
   resolves to a non-`None` stand-in because the world-effects sink is gated on it); a gun round on a
   buildings-classed surface → a ricochet spark burst + flash (judged by eye — `bld_damage.flt`
   and the `rcochet1` `EFFECT` are both install-missing, see the unresolved-names table).
@@ -310,7 +310,7 @@ the plane as the def's `AT_NODE` placement implies (a world-fixed flash is flown
 speed). The def authors ONE `mb_spinflame` node with a 3-way `RANDOM_WEIGHT` roll (30°/80°/140°);
 what the original engine renders from that — one picked branch or all three at once — is not
 recoverable from the data. The pick-one reading (one rolled quad playing the
-`_muzzle1`→`_muzzle2` flipbook) was implemented and **rejected at the controls (,
+`_muzzle1`→`_muzzle2` flipbook) was implemented and **rejected at the controls (
 `BL-263`)**: it does not reproduce the stills, and the deviation is recorded here as deliberate.
 The `_muzzle2` frame is not played by the flash; the impact stand-in spark keeps reusing it
 through its own separate pool.

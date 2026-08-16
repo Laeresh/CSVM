@@ -93,7 +93,7 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   red bezel slashes** (`redhilite.tif` quads at the dial edge, left+right of the
   window's side). The whole node toggles/blinks.
 - **The STALL lamp's blink is a RATE ramp on its own threshold** (`BL-148`, `CAP-06`
-  + the two `CAP-05` stall clips, ). Three separate facts, each
+  + the two `CAP-05` stall clips). Three separate facts, each
   measured across four clips:
   - **Brightness is binary** — the lit plate reads 211.0 ± 0.2 red and the unlit one
     41.7 ± 0.2 at *every* speed, and the duty cycle is 0.50 throughout. There is no
@@ -259,7 +259,7 @@ consumed, `%%` → literal `%`) is handled by `Messages.Fill`.
 
 ## Bitmap font
 
-Decoded  by pixel-probing the atlas; remake reader `src/Flight/HudFont.cs`.
+Decoded by pixel-probing the atlas; remake reader `src/Flight/HudFont.cs`.
 
 Two textures in **`extracted/rimage/`** (the menu/UI image set — *not* the chapter texture
 archives that carry the compass/gauge art):

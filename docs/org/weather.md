@@ -1,9 +1,7 @@
 # The weather, sky, fog and lighting runtime, decoded from `crimson.exe`
 
 Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
-`crimson.exe`, `language x86:LE:32:default`), 2026-08-07…08-10, over the course of
-[`PLAN-weather-decompile-match.md`](../plans/PLAN-weather-decompile-match.md) and
-[`PLAN-overcast-match.md`](../plans/PLAN-overcast-match.md). Every claim below names the function
+`crimson.exe`, `language x86:LE:32:default`), 2026-08-07…08-10. Every claim below names the function
 it came from, and every claim that came from a *measurement* instead — a matched-pose A/B against
 original footage or a screenshot — says so on the line.
 
@@ -116,7 +114,7 @@ the decompiler:
   view distance, not a euclidean sphere radius (user-diagnosed).
 - The altitude fade is by **fragment** altitude — full fog below `FOG_ALTITUDE[0]`, none above
   `FOG_ALTITUDE[1]`, so the deck and sky overhead stay clear. Settled in C2, the only chapter whose
-  flown band (256–1024 m) sits inside the flight envelope (`PLAN-overcast-match` B13).
+  flown band (256–1024 m) sits inside the flight envelope.
 - The near→far ramp is **linear**, per the gamez world node's own `fog_state == 1` (B15).
 
 ⚠ **`ZONE3`'s `CLIP_RANGES` far of 300 is NOT applied.** The original hard-clips; the remake fogs
@@ -327,8 +325,8 @@ different model index). C4's sole zone-1 node is **confusingly named `h_zone2scr
 name, not a scroll: its model's `texture_scroll` is 0.
 
 ⚠ **Every horizon model in every chapter is authored `fog: false`.** The below-deck ceiling is
-therefore *unfogged* geometry — which is also the standing explanation for `PLAN-overcast-match`
-B15's "ceiling texture survives to ~12.6 km" anomaly. Any measurement that fits a distance from the
+therefore *unfogged* geometry — which is also the standing explanation for the "ceiling texture
+survives to ~12.6 km" anomaly. Any measurement that fits a distance from the
 fog ramp on that surface is measuring nothing.
 
 ⚠ **C1's below-deck ceiling is at +2792.8, not +396.4.** The 396.4 figure was `h_zone1scroll`'s
@@ -436,7 +434,7 @@ altitude. It was the `zone_id 2` special case of `FUN_0056c430`. The case that k
 `zone_id −1` fog volumes, which must keep rendering *below* its deck where the altitude rule hid
 them. Do not re-add it: two owners of one visibility question was the failure.
 
-### ⚠ The `fogRangeFactor = 2.0` halving — RETIRED (`PLAN-overcast-match` B15, 2026-08-08)
+### ⚠ The `fogRangeFactor = 2.0` halving — RETIRED (2026-08-08)
 
 "This does not seem to be radius but diameter." The authored ranges **are** the ranges. The data
 never supported the factor: `VIEWING_RANGE` ships `FOG_SCALE 1.0` at HIGH detail in all eight

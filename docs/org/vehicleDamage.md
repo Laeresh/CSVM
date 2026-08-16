@@ -66,9 +66,9 @@ A vehicle instance carries a whole-vehicle pair and, optionally, a list of per-p
 | `+0x6d0` | the destroy anim reference, copied from def`+0x158` |
 
 The naming is not inferred: `FUN_0041c470` prints these four as
-`Armor: %.1f/%.1f  Health: %.1f/%.1f` (`0061fdfc`), and each part as
-`DP: %s Armor: %.1f/%.1f  Health: %.1f/%.1f` (`00620400`) from the part fields below. An object with
-no vehicle behind it gets a third format, `Armor: N/A  Health: %.1f/%.1f` (`0061fe44`), read through
+`Armor: %.1f/%.1f Health: %.1f/%.1f` (`0061fdfc`), and each part as
+`DP: %s Armor: %.1f/%.1f Health: %.1f/%.1f` (`00620400`) from the part fields below. An object with
+no vehicle behind it gets a third format, `Armor: N/A Health: %.1f/%.1f` (`0061fe44`), read through
 two virtuals rather than these offsets: that is the static-destructible case.
 
 A part record (`0x58` bytes, `FUN_00476250` fills it, `FUN_0041c470` prints it):
@@ -123,7 +123,7 @@ patrol boat, truck or shipped wingman is ever jittered and no player plane is ei
 eleven-slot list, the gates and the class table are decoded in
 [`flightModel.md`](flightModel.md)'s "The per-spawn jitter"; the whole-vehicle pair here is slots 1
 and 2 of it, and **the per-part pools are not touched**. Implemented as
-`PlaneStats.WithAiSpawnJitter`, applied at `AiAircraftSpawner.Spawn` (PLAN-ai-flight C26).
+`PlaneStats.WithAiSpawnJitter`, applied at `AiAircraftSpawner.Spawn`.
 
 ## Taking a hit
 
@@ -162,8 +162,7 @@ from either end.
 
 **A round from one aircraft damages another whatever the two teams are.** The team ids gate the
 target scan and the radio lines; nothing on the damage path gates the spend. Read 2026-08-14 to
-settle `PLAN-instant-action` A2, which asked whether the original refuses friendly damage or only
-friendly targeting. It refuses only the targeting.
+settle whether the original refuses friendly damage or only friendly targeting: it refuses only the targeting.
 
 The path from a struck polygon to a drained pool has no team test in it. The node that owns the
 struck geometry carries a handler table at `node + 0xbc`, a list of `{context, callback}` pairs;
@@ -445,7 +444,7 @@ design's unified damage-zone model (every object divides into critical/non-criti
 when a threshold count of critical zones dies) is design-era. The shipped engine has **two kill
 rules and no shared zone vocabulary**: vehicles die by sum-exhaustion of their zones, zeppelins by
 the survivor count, and the design's own aircraft example (1 of {tail, nose, wings} critical) is
-refuted by the decoded death path. `plans/PLAN-M4-ai.md`'s "Damage zones" section and its
+refuted by the decoded death path. The earlier "Damage zones" reading and its
 architecture-constraints bullet proposing `(def, anchor, zone)` plus a threshold counter inside
 the registry are superseded by this note.
 

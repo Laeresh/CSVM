@@ -13,13 +13,13 @@ The whiteout band (a vertical altitude band the plane vanishes inside), bare-sca
 | `TOP_COLOR` / `BOTTOM_COLOR` | *(optional)* the **band's** colours (integer RGB) — what the in-cloud whiteout paints. Absent in C1/IA1. Decoded into `CloudTopColor`/`CloudBottomColor` and consumed by `WeatherState.WhiteoutColor` |
 
 ⚠ **`TOP_COLOR`/`BOTTOM_COLOR` are not the deck mesh's face tints**, whatever the names
-suggest (this page said so until ). Three of the four chapters that author them —
+suggest (this page said so until). Three of the four chapters that author them —
 C1B, C3, C5 — ship **no `CloudDeck` mesh at all** (`WorldBuilder`'s coverage table), so there
 is nothing there to tint. They track the cloud band, and the render confirms it: C4 authors
-`[192]³` and the original's in-cloud veil measures a flat 192 (`CAP-12`'s C4 take, ).
+`[192]³` and the original's in-cloud veil measures a flat 192 (`CAP-12`'s C4 take).
 
 **The band's MIDPOINT is load-bearing twice over** (`WeatherState.CloudBandCentre`, one spelling
-for both; `A7`, ). It centres the opaque core above, and it is also the altitude at
+for both; `A7`). It centres the opaque core above, and it is also the altitude at
 which the cloud **deck** changes regime — below it the deck is a ceiling carried with the camera,
 at/above it a world-fixed floor sitting exactly on the centre, and both ambient cloud populations
 are hidden below / shown above, per camera. That is a rendering rule, not a datum: nothing in
@@ -29,12 +29,11 @@ fully opaque core, so **moving the band or thinning `THICKNESS` exposes a hard p
 flip at 1047, core 1032–1062. See `WeatherRig.DeckRegime` and `docs/architecture.md`'s
 `WeatherRig.cs` entry for the mechanism and the ceiling distance's derivation.
 
-**Correction (, decompile): the behaviour was measured right, but "one mesh relocated
+**Correction (decompile): the behaviour was measured right, but "one mesh relocated
 by the engine" is not the mechanism — it is two different objects, swapped by the `zone_id`
-gate** ([decoded above](../weather.md#zone-selection-at-runtime),
-`PLAN-weather-decompile-match` A7/B13/B14). Above the deck, what renders is the **authored
-world-fixed tiles at their own authored altitude** — C1/C1C/C2B 960 m, C4 1050 m — not a
-mesh re-pinned to the band centre; A7's "exactly on the centre" reading was **C4's own
+gate** ([decoded above](../weather.md#zone-selection-at-runtime)). Above the deck, what renders is
+the **authored world-fixed tiles at their own authored altitude** — C1/C1C/C2B 960 m, C4 1050 m —
+not a mesh re-pinned to the band centre; A7's "exactly on the centre" reading was **C4's own
 coincidence**, because C4 happens to author `CLOUD_COVER` centre = 1050 = its tile altitude. C1's
 centre is 1047, its tiles 960 — an 87 m gap the centre-pin model was silently absorbing. Below
 the deck, the ceiling the player sees is **not the deck mesh at all** — it is
@@ -57,7 +56,7 @@ below](../weather.md#deck-census) — found C1's `h_zone1scroll`
 shared constant — `B14` measured all five (the four deck chapters plus C5's `zone3`) into
 [the zone-1 ceiling table](../weather.md#the-3964-m-cap-centre-is-a-bounding-box-midpoint).
 
-> **Landed  (`PLAN-weather-decompile-match` B14).** The remake builds a dome per gateable
+> **Landed.** The remake builds a dome per gateable
 > horizon zone (`WorldBuilder.DomeZonesToBuild`) and shows the one matching each camera's own
 > weather state, so below the deck a deck chapter now renders `horizon/zone1` and above it
 > `horizon/zone2`. The scroll needed no code: `h_zone1scroll`'s model carries `texture_scroll`
@@ -76,7 +75,7 @@ flown-zone fact: `zone1` is flown below the deck in every deck chapter, so its `
 pair is live data during below-deck flight, not an artifact of an unflown zone. See the ⚠
 un-retirement at that paragraph.
 
-**Decoded  (was inferred): the whiteout lerps `BOTTOM_COLOR` → `TOP_COLOR` across the
+**Decoded (was inferred): the whiteout lerps `BOTTOM_COLOR` → `TOP_COLOR` across the
 band by camera altitude — that is exactly what the binary computes.** `FUN_0042ee40` (the
 per-frame atmosphere update, see the zone-state section above): for camera altitude between
 `BOTTOM` and `TOP`, colour = `TOP_COLOR·f + BOTTOM_COLOR·(1−f)` with `f = (alt − BOTTOM) /
@@ -143,7 +142,7 @@ toward `wind × WIND_FACTOR` rather than toward rest, and only when the puffer a
 `FRICTION`. `WIND_FACTOR` defaults to **1**, not 0 (the puffer object's ctor `FUN_00550100` writes
 `1.0` to `+0x6c`), so 2,802 of the install's 2,863 friction-bearing compiled `PufferState` events
 are fully wind-carried; only 12 events across the six-strong `subdoors_puffer` family author an
-explicit `0.0` to opt out. See `PLAN-puffer-engine-deltas.md` B6.
+explicit `0.0` to opt out.
 
 It still does **not** move the cloud clutter. It used to drive the drift of the hand-tuned
 `CloudPuffs` field, which the authored `fogvol.zrd` clutter does not use (`BL-273`,

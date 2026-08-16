@@ -168,13 +168,13 @@ live pose walked every repeat explosion's debris further from the blast than the
 - `TRANSLATION.initial` is the launch **velocity** (a crash piece leaves at y=10 m/s); `rnd_xz` a
   per-axis random spread added to it (through the runtime's **seedable** `_rng`, so a lab replay
   is deterministic); `delta` a constant **acceleration** along the launch, in m/s² — **not** a ramp
-  divided by `RUN_TIME`, which is how it was read until  (non-zero on 92 of the 757
+  divided by `RUN_TIME`, which is how it was once read (non-zero on 92 of the 757
   vector-form events).
 - `TRANSLATION_RANGE` is a ballistic launch in **polar form** — **`xz` is an AZIMUTH and `y` an
   ELEVATION, both in DEGREES, and `initial` is the launch SPEED in m/s** (`delta` the same constant
   acceleration, non-zero on 233 of 1,226). This is an acceleration, not a distance reading:
   threw debris hundreds of metres; census + evidence in `analysis/object-motion-range/`.
-  ⚠ **The elevation is LINEAR, not spherical**, and that was on : the direction
+  ⚠ **The elevation is LINEAR, not spherical**, and that was corrected: the direction
   is `dirY = elevation/90` with the horizontal taking the remainder `1 − |elevation|/90`, so it is
   deliberately **not unit length** (0.707 at 45°) and only the azimuth goes through trigonometry. Do
   not normalise it — the unit-sphere reading launches 60–70° debris 20–25 % too fast. The mechanism
@@ -195,13 +195,13 @@ live pose walked every repeat explosion's debris further from the blast than the
   vertical column under the body to a full geometry sweep, which is what lands a piece on a rooftop
   or stops it against a wall. `NO_ALTITUDE` is the opt-out and `gunshell` alone authors it. This was
   read the other way round — the test gated on `DO_INTERSECTIONS`, `NO_ALTITUDE` as something about
-  spawn altitude — until ; the mechanism is in
+  spawn altitude; the mechanism is in
   [`../org/objectMotion.md`](../org/objectMotion.md). Every gravity-bearing body therefore lands,
   including the free-falling shapes (zeppelin gasbags, lifeboats, `chuteman` descents) that had been
   deferred as `BL-245` on the older reading.
   A third launch shape is worth knowing: **neither `RUN_TIME` nor `BOUNCE_SEQUENCE`**, where the
   event's duration is what the sequence's NEXT (null-start) event waits on — in 159 of 167 cases
-  install-wide, the flying piece's own `ACTIVE_STATE 0`. Censused  (`BL-257`,
+  install-wide, the flying piece's own `ACTIVE_STATE 0`. Censused (`BL-257`,
   `analysis/bl-257-nulled-launch/`): a body with no `RUN_TIME` reports the parabola's return to
   launch height as its duration, so these are hidden when they land rather than on the launch tick.
   `dblcannon_flying_parts` is the reachable case — eight parts at elevation 10–70°, 17–25 m/s, each
@@ -221,7 +221,7 @@ live pose walked every repeat explosion's debris further from the blast than the
   [`../org/objectMotion.md`](../org/objectMotion.md).
 - `SCALE.initial`/`delta` a linear scale ramp that is an **OFFSET from unit scale, not an absolute
   size**: `scale = 1 + initial + delta·u`. Unlike `OBJECT_SCALE_STATE`/`OBJECT_SCALE_FROM_TO`, which
-  are absolute. **Settled ** by the install's commonest value — a bare `(-0.1, -0.1, -0.1)`
+  are absolute. **Settled** by the install's commonest value — a bare `(-0.1, -0.1, -0.1)`
   with zero delta on **30 of the 45 distinct SCALE events** (every `h2twr`/`radiotwr`/`transmitter`
   collapse, every `gullfly`): as an absolute that is a *negative* scale, i.e. the piece inside-out at
   a tenth of its size and effectively invisible; as an offset it is a clean 10 % shrink. Confirmed
@@ -231,12 +231,12 @@ live pose walked every repeat explosion's debris further from the blast than the
   the node's own authored scale is **undecided**: every node carrying this channel is authored at
   exactly unit scale in this install, so the two readings coincide and nothing can separate them.
 
-Verified  in `--anim-lab --play-anim=player_crash_dirt` (seeded, fixed-dt): the five
+Verified in `--anim-lab --play-anim=player_crash_dirt` (seeded, fixed-dt): the five
 `fly_trail*` debris anchors integrate outward and the two carrying `FORWARD_ROTATION` tumble while
 the others do not (those two are `TRANSLATION_RANGE` launches; the crash's own `pieceN`, which fly
-the vector form, stopped tumbling on ), `dust` runs a scale ramp and an `OpacityFade` at once, `flydirt` sinks on its
-`TRANSLATION`. An 8-chapter ambient regression is byte-identical bar C3's one reachable opacity
-fade — because nothing ambient fires the ballistic half (see the reachability boundary above).
+the vector form, stopped tumbling), `dust` runs a scale ramp and an `OpacityFade` at once, `flydirt`
+sinks on its `TRANSLATION`. An 8-chapter ambient regression is byte-identical bar C3's one reachable
+opacity fade — because nothing ambient fires the ballistic half (see the reachability boundary above).
 
 What the reachable spins are: 576 of 590 are zeppelin nacelle propellers — `spin` at −40°/s and
 `counterspin` at +30°/s about local Z, counter-rotating — plus rotating signage (`ammosign`,
@@ -271,7 +271,7 @@ ambiguous angle unit got in `interp.md`.
 from its authored rest pose.** Nothing in this data is relative: the `*_delta` channels that
 look like they would be are the same tween's rate — see the `*_delta` section just below.
 
-Evidence, surveyed over all 8 chapters ():
+Evidence, surveyed over all 8 chapters :
 
 - C1's `mafia` car moves `from (-6796, 128, -5958) to (-6521, 128, -5958)`; its gamez node's
   authored translate is `(-6795.828, 128.0, -5956.72)` and its parent is the `world1` root.
@@ -287,7 +287,7 @@ Evidence, surveyed over all 8 chapters ():
   places them (C2's `sailboat2`, C1's `car_go_home`) rest at their parent's origin and
   legitimately don't match. Absolute-in-parent-frame is the rule that covers both families.
 
-Rotation units differ between the two spellings (, the C2 roadblock spin):
+Rotation units differ between the two spellings (the C2 roadblock spin):
 
 - **Compiled** archives are **radians**: the maximum magnitude in that data is `15.708 = 5π`,
   99.93% of values are ≤ 2π, and 228 sit on exact π/2 multiples. Converting them with
@@ -311,7 +311,7 @@ route exactly sideways.
 
 ### `*_delta` is the same channel's RATE, not a second motion
 
-Decoded  from an install-wide census of all 16,114 compiled anim files
+Decoded from an install-wide census of all 16,114 compiled anim files
 (`analysis/bl-050-fromto-delta/`). The compiled `*_delta` channels arrive as a bare `{x,y,z}`
 vector, **not** a `{from,to}` pair, on **51** events (15 `translate_delta`, 17 `rotate_delta`,
 19 `scale_delta`; 29 in `cam_anim`, 22 in `mis_anim`; 33 distinct authored signatures). The
@@ -330,18 +330,18 @@ of `(0.5485, −3.9395, 0)`; C5's `litemast_dest`/`wire2` scales `(1,1,1) → (0
 ⚠ **So a consumer must NOT read it.** It carries no information the tween does not already
 have, and composing it as an extra offset — the reading a bare vector invites, "the `to` with
 an implied zero `from`" — runs every one of these 51 motions at double speed. CSVM reads the
-three absolute channels only (`FromToMotion`); the delta plumbing was removed  so a
+three absolute channels only (`FromToMotion`); the delta plumbing was removed so a
 later reader who notices a `{from,to}` parser returning `(null, null)` on a bare vector does
 not "fix" it back.
 
 ### `IF`/`ELSEIF` conditions are all evaluable
 
 Ten condition kinds appear across the install. None of them is opaque gameplay state that a
-branch. **All ten are evaluated as of ** (`AnimRuntime.EvaluateCondition`).
+branch. **All ten are evaluated** (`AnimRuntime.EvaluateCondition`).
 
 ⚠ **The engine has fourteen, and the missing four are unused data, not unimplemented code.**
 `PLAYER_UNDERCOVER`, `PLAYER_BELOW_ALT`, `PLAYER_LINED_UP` and `PLAYER_SPEED` have parser branches
-and evaluator branches in `crimson.exe` and are authored nowhere in the install (swept ,
+and evaluator branches in `crimson.exe` and are authored nowhere in the install (swept:
 0 occurrences against 1,097 for `PLAYER_RANGE`). The full bit-to-token table is in
 [`org/sequences.md`](../org/sequences.md); this table is the census of what ships, and the two do
 not disagree.
@@ -424,21 +424,21 @@ Playback ops seen and deferred: `OBJECT_DELETE_CHILD`,
 `CALLBACK`, `DETONATE_WEAPON`.
 (`FBFX_COLOR_FROM_TO` landed — see [`org/sequences.md`](../org/sequences.md)'s
 "FBFX_COLOR_FROM_TO is a full-screen wash";
-`LIGHT_STATE`/`LIGHT_ANIMATION` landed  — see below;
-`SOUND_NODE` + the sound half of `OBJECT_ADD_CHILD` landed  — see "SOUND_NODE is a
-three-event triple"; `OBJECT_MOTION`'s rotation half landed  and its
-ballistic/scale/tumble half  — see "OBJECT_MOTION is two ops in one";
-`OBJECT_OPACITY_STATE` landed  and `OBJECT_OPACITY_FROM_TO`  — see
+`LIGHT_STATE`/`LIGHT_ANIMATION` landed — see below;
+`SOUND_NODE` + the sound half of `OBJECT_ADD_CHILD` landed — see "SOUND_NODE is a
+three-event triple"; `OBJECT_MOTION`'s rotation half landed and its
+ballistic/scale/tumble half — see "OBJECT_MOTION is two ops in one";
+`OBJECT_OPACITY_STATE` landed and `OBJECT_OPACITY_FROM_TO` — see
 "OBJECT_OPACITY_STATE is translucency".)
 
-`CALL_ANIMATION` dispatched from the start but **ignored its target node** until  —
+`CALL_ANIMATION` dispatched from the start but **ignored its target node** until —
 see "CALL_ANIMATION carries a target node" below; that is the data's template-instancing
 mechanism and `OBJECT_ADD_CHILD` is **not** (surveyed: the fire templates are never its
 children, and 75% of its 1,152 uses attach sound *definitions* rather than nodes).
 
 ## Animation calls
 
-Surveyed and implemented . A call may name **another node to run the callee on**,
+Surveyed and implemented. A call may name **another node to run the callee on**,
 and that is how one authored definition serves many sites. Three spellings, two shapes:
 
 | Reader | Compiled | Uses |
@@ -522,7 +522,7 @@ All flagged compiled owners are `OnCall` (2,844) or `WeaponHit` (8 in these bloc
 `OnStartup`, so no ambient world boot arms one — measured: an 8-chapter `--freecam` regression arms
 zero holds and leaves every bootstrap count identical. The clearest timing case is
 `player_crash_water`, where flagged `plane_big_splash` precedes `large_steam_spray`. **That case is
-reachable as of ** (surface-aware crash selection), and a captured sea dive showed the
+reachable as of** (surface-aware crash selection), and a captured sea dive showed the
 divergence directly: the two retargeted on the *same tick*, so the steam spray started with the
 splash instead of after it. The splash's own choreography runs 3.0 s (`plane_sp_polys`' scale +
 `plane_sp_polyfade`' opacity ramp); the landed hold measures **3.050 s** on real gamez data
@@ -532,7 +532,7 @@ chapters' `player_crash_default`/`player_crash_dirt` are all `null`.
 One spelling is counted and deliberately NOT honoured: 33 reader `CALL_SEQUENCE` bodies carry the
 bare token, which the compiled form never does (56,750/56,750 of the field's occurrences are on
 `CallAnimation`) and so has no decoded semantics. The 879 flagged calls in the `unknown_seq`
-destruction slot dispatch since `BL-276` () — the slot is loaded as
+destruction slot dispatch since `BL-276` — the slot is loaded as
 `AnimDefinition.DeathSlot` and runs at death (see [destructibles.md](destructibles.md)), so its
 flags behave like any dispatched call's (a routed effect call's hold is counted, not honoured).
 
@@ -600,7 +600,7 @@ third — the "stopper" — turns out to author a teardown that never runs:
   would re-light it one frame later.
 - **Stopper** (`flame_ball.zrd`'s `stop_p1trail`): the target is `ACTIVATION ON_CALL`, not
   running at fire time, and its body is pure teardown (`PUFFER_STATE … INACTIVE`,
-  `OBJECT_ACTIVE_STATE … INACTIVE`). The  survey read this as a fall-through to a call,
+  `OBJECT_ACTIVE_STATE … INACTIVE`). The survey read this as a fall-through to a call,
   on the strength of the same file reaching the same sequence by a literal
   `CALL_SEQUENCE [stop_p1trail]` elsewhere (`moving_fire_ball_01`'s `fly_flare`). The exe says
   otherwise: the stop marks it done and the teardown never dispatches. The two events are *not*
@@ -620,7 +620,7 @@ the call at run time is a control-flow question the static census cannot answer.
 
 ## Fire animations
 
-Decoded  while chasing the user's "there is a fire flipbook at the refinery" report;
+Decoded while chasing the user's "there is a fire flipbook at the refinery" report;
 was wrong** (see "What changed" below). Three separate layers, none of which is
 `OBJECT_ADD_CHILD`:
 
@@ -682,7 +682,7 @@ the only caller, de-sharing the gauge materials so each instrument indexes its o
 
 ### Effect-cycle mechanism
 
-The  reading said "EFFECTS binds to the NODE, not the texture or material", concluded
+The reading said "EFFECTS binds to the NODE, not the texture or material", concluded
 that `flame01` is a static base flame, and that the animated fire the user saw was a placed
 `fire2` instance. The draw loop settles it the other way: **`flame01` plays `fire101` to `fire112`
 at 10 fps from load, with no trigger and no placement**, and `mb1`/`mb_spinflame` play the same
@@ -734,7 +734,7 @@ then `{min −50, max −160}` over 0.05 s, and a negative range is not a value 
 The reader's `RANGE` carries four numbers (`[min, max, altMin, altMax]`) where the compiled
 form splits the trailing pair into `range_alt` (null throughout this install).
 
-**The ramp is the event's DURATION — it holds its sequence** (decoded , D31). The
+**The ramp is the event's DURATION — it holds its sequence** (decoded, D31). The
 handler is dispatch slot 5, `004e82b0`. On its first dispatch (`seq+0x20 == 0`, i.e. state
 *starting*) it copies the authored per-second deltas into the event's working slots
 (`+0x30/0x34 → +0x40/0x44` for the range pair, `+0x48/0x4c/0x50 → +0x60/0x64/0x68` for the
@@ -783,7 +783,7 @@ the name changes.
 
 ## Ambient audio
 
-Implemented  (`src/Mech3/WorldSounds.cs`). This is the waterfall roar, the train, the
+Implemented (`src/Mech3/WorldSounds.cs`). This is the waterfall roar, the train, the
 firetruck and police sirens, the zeppelin nacelle engines, the fire crackle and the cockpit
 warning beeper.
 
@@ -1137,7 +1137,7 @@ are not visible from the byte format alone, each measured against this install.
   quantise to 48 Hz (3 render frames per 1/60 s pass). CSVM pins the pass rate to
   `SequenceRunner.AnimFrame`.
   ⚠ **A loop that carries its own period is NOT automatically safe** — this doc said so until
-  `BL-237` () measured otherwise. A period is only honoured if the rollover carries its
+  `BL-237` measured otherwise. A period is only honoured if the rollover carries its
   overshoot instead of resetting the clock, and if "did this iteration schedule time?" is asked of
   the DATA rather than of `_due > _clock`, which becomes a question about the step as soon as the
   step is coarser than the period. Missing either, a 0.02 s period costs 2 steps at 60 Hz instead of
@@ -1152,7 +1152,7 @@ are not visible from the byte format alone, each measured against this install.
   every base quaternion is unit-norm and the yaw tracks the frame-to-frame chord heading to ~1°
   (frame 1 quat-yaw −33.11° against a chord of −43.12°, spanned by the frame's own −0.0505 rad/s
   rate); read literally the values are not even normalised. Undo the shift at the parse boundary.
-- **Compiled `PUFFER_STATE` payloads** (consumed ): the event carries the emitter's
+- **Compiled `PUFFER_STATE` payloads** (consumed): the event carries the emitter's
   full parameter set inline, so no reader lookup is needed — cross-checked field-for-field
   against `train.json`'s own `steampuffer` (interval 0.03, LOCAL_VELOCITY 0/15/0, SIZE_RANGE
   0.8–1.5, LIFETIME_RANGE 0.5–4.5, friction 3, the five texture names, the three-stop colour
@@ -1173,7 +1173,7 @@ are not visible from the byte format alone, each measured against this install.
   NOT the event's `name` (that is the puffer's own name, a separate namespace). `ACTIVE_STATE`
   1 starts a continuous emitter and 0 stops it; definitions re-assert their puffers on every
   loop iteration, so a consumer must treat re-assertion as idempotent.
-- **`unk_range` is `NEAR_FADE`** — identified  (`PLAN-puffer-engine-deltas.md` item C7).
+- **`unk_range` is `NEAR_FADE`.**
   The compiled `PufferState` payload carries the near camera-distance band under that placeholder
   name, immediately before `fade_range` (which is the reader's `FADE_RANGE`/`FAR_FADE`). Proven by
   matching both surfaces on one effect: C1's `black_smoke_ball_01-large_black_smokeball.json` has
@@ -1181,10 +1181,10 @@ are not visible from the byte format alone, each measured against this install.
   `max` labels are the mech3ax field names, not a range: `min` is the hard discard cutoff and `max`
   the distance alpha would reach 1, so almost every event in the install has `max < min`. The
   semantics live in [effects.md](effects.md).
-- **`growth_factors[i]` is `(age_i, scale_i)`, not `(min, max)`**
-  (`PLAN-puffer-engine-deltas.md` item B3, which closed as a disproof). This bullet read the entry as a size *range* and cited a "matches 172 of 177 puffers" survey; **both
-  statements are withdrawn** — the reading was wrong and the survey does not reproduce (see the
-  wildcard bullet below for what it was actually seeing).
+- **`growth_factors[i]` is `(age_i, scale_i)`, not `(min, max)`.**
+  This bullet read the entry as a size *range* and cited a "matches 172 of 177 puffers" survey;
+  **both statements are withdrawn** — the reading was wrong and the survey does not reproduce (see
+  the wildcard bullet below for what it was actually seeing).
   **The data alone proves the reading**, independent of the disassembly: **216 compiled events
   author a second entry whose "max" is *less* than its "min"** — `(1, 0.25)` ×71, `(1, −0.2)`
   ×39, `(1, 0.5)` ×26, `(1, 0.45)`/`(1, 0.2)`/`(1, 0.15)`/`(1, 0.0)` ×16 each, `(1, 0.1)`/
@@ -1208,7 +1208,7 @@ are not visible from the byte format alone, each measured against this install.
   Read the array as stops anyway — a single-entry synthesis of the form `[(0, G)]` encodes the
   *wrong* reading even where it happens to yield the right number.
 - **A reader `PUFFER_STATE` `NAME` may itself carry a `*` wildcard, and it expands at compile
-  time** (found ). The [name-wildcard convention](README.md#shared-conventions-zrdr-readers)
+  time** (found). The [name-wildcard convention](README.md#shared-conventions-zrdr-readers)
   is documented for scene-*node* references; the puffer name is a separate namespace (it is not
   `AT_NODE`), and it takes wildcards too. Three definitions in this install use one:
   `rc_smokn_stacks*` (`C1/M05/zrdr/redcross_ship.zrd.json`), `stack_puffer*`

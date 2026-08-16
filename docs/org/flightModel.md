@@ -621,11 +621,10 @@ Three properties of the port, all read off `FUN_0048bdd0` and `FUN_0048c470` rat
   to the roll output; the pitch output is then multiplied by `high_speed_pitch_fade`
   (`0x48be22`–`0x48be68`), which this install authors at [1000, 1001] mph and is unreachable.
 
-Where 50 mph falls decides how visible this is, and it differs by airframe (stall speeds from
-`PLAN-flight-model-rewrite` B15): nine of the eleven stall at 52–57 mph, i.e. *above* the ramp's
-top, so for them the fade bites only once already stalling; the Balmoral (45.5) reaches its stall at
-≈89 % authority, and the autogyro (18.5) flies a long way inside the ramp and stalls at roughly
-**21 %** of roll and pitch authority.
+Where 50 mph falls decides how visible this is, and it differs by airframe: nine of the eleven stall
+at 52–57 mph, i.e. *above* the ramp's top, so for them the fade bites only once already stalling;
+the Balmoral (45.5) reaches its stall at ≈89 % authority, and the autogyro (18.5) flies a long way
+inside the ramp and stalls at roughly **21 %** of roll and pitch authority.
 
 ⚠ **"Roll never fades" above means never with HIGH speed.** Read as "roll authority is
 speed-independent" it becomes the misreading that had `turn_fade_in`/`turn_fade_out` filed as a
@@ -1698,7 +1697,7 @@ take on either: it ported the impulse and not the resolver around it.
 
 ## Collision response and `bounce_factor` (`FUN_0048d7f0`)
 
-Decoded 2026-08-14, **impulse implemented 2026-08-15** (`PLAN-ai-flight` `C25`, retiring `BL-172`):
+Decoded 2026-08-14, **impulse implemented 2026-08-15** (retiring `BL-172`):
 `FlightModel.BounceNormalSpeed` is the law and `FlightController.SurviveHit` the site, gated on
 `IsHumanPiloted` and not-already-crashed. The sweep, the placement and the two timers below are
 NOT ported — this engine has its own collision sweep, and what C25 bound is the impulse alone.
@@ -1920,8 +1919,8 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
     against drag. See `ThrustFactor` above.
 11. **Drag is a polar in Mach with no induced term.** Any model that makes drag rise with the pull
     is adding a mechanism the original does not have. See Drag above. The remake briefly did:
-    `PLAN-flight-drag-lift` C21 fitted a `sin²α` term (`InducedDragCoef` 10.75) on 2026-08-07, two
-    days before this decode, and `PLAN-flight-model-rewrite` B12 removed it with no successor when
+    a `sin²α` term (`InducedDragCoef` 10.75) was fitted on 2026-08-07, two
+    days before this decode, and removed with no successor when
     the decoded Mach polar replaced the fitted drag law. `FlightModel.cs` now carries the same
     no-induced-drag statement in its own comments.
 12. **The throttle lever slews at 0.5/s with no idle floor** (2 s full-to-idle); the remake applies

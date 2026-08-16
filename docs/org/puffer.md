@@ -1,8 +1,7 @@
 # The puffer particle system, decoded from `crimson.exe`
 
 Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
-`crimson.exe`, `language x86:LE:32:default`), 2026-08-09/10, over the course of
-[`PLAN-puffer-engine-deltas.md`](../plans/PLAN-puffer-engine-deltas.md). Every claim below names
+`crimson.exe`, `language x86:LE:32:default`), 2026-08-09/10. Every claim below names
 the function it came from.
 
 Everything here is a description of *behaviour and constants*. No decompiler output is reproduced;
@@ -15,8 +14,7 @@ and [`formats/anim-definitions.md`](../formats/anim-definitions.md). Our impleme
 plumbing and the traps. This page is the original's runtime: what the engine does with those keys.
 
 ⚠ **This page is a decode, not a proposal.** Where it disagrees with a footage measurement, the
-decode wins and the disagreement is a note (`PLAN-puffer-engine-deltas`'s standing rule on video
-evidence). Where CSVM deliberately differs, that is listed at the bottom rather than hidden.
+decode wins and the disagreement is a note. Where CSVM deliberately differs, that is listed at the bottom rather than hidden.
 
 ## Function map
 

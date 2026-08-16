@@ -47,7 +47,7 @@ A state is a **fully-defined emitter iff it has `NUMBER` (burst) or `DISTANCE_IN
 | Key | Value | Meaning |
 |---|---|---|
 | `NAME` | string | referenced by anims' `PUFFER_STATE` calls |
-| `AT_NODE` | `[nodeName, dx?, dy?, dz?]` | attach point; the optional trailing offset is in the host node's own frame, same convention as `LOCAL_VELOCITY` — what spreads C1's three waterfall splash puffers ±11 m either side of the shared anchor `waterfall01` instead of stacking them on one point ( fix: the offset was parsed nowhere and silently dropped, in both the compiled-event and reader-event front-ends — 862 of 4387 PUFFER_STATE events in this install carry a non-zero one) |
+| `AT_NODE` | `[nodeName, dx?, dy?, dz?]` | attach point; the optional trailing offset is in the host node's own frame, same convention as `LOCAL_VELOCITY` — what spreads C1's three waterfall splash puffers ±11 m either side of the shared anchor `waterfall01` instead of stacking them on one point (fix: the offset was parsed nowhere and silently dropped, in both the compiled-event and reader-event front-ends — 862 of 4387 PUFFER_STATE events in this install carry a non-zero one) |
 | `NUMBER` | int | burst mode: sprites spawned per `TIME_INTERVAL` |
 | `TIME_INTERVAL` | s | burst/sustained spawn period. ⚠ The **engine's** unauthored default is **1.0** (the puffer ctor `FUN_00550100` writes `0x3f800000` to `+0x40` and to its reciprocal at `+0x44`); ours is an invented 0.1 — `BL-336`. The smallest authored value in the install is 0.001 s (`torpufferblast`, the torpedo trail) |
 | `DISTANCE_INTERVAL` | m | trail mode: one sprite per N meters of the followed node's motion (`dense_firetrail`: smoke 1.0 m / fire 0.25 m). ⚠ Only accumulated when the frame's motion is **under 200 m** — the teleport guard, see the emission-accumulator section below |
@@ -64,9 +64,9 @@ A state is a **fully-defined emitter iff it has `NUMBER` (burst) or `DISTANCE_IN
 | `COLORS` | [[lifeFrac, r, g, b, a]…] | colour-over-age ramp; rgb dual-encoded (the [weather.md](weather.md) rule: any component > 1 ⇒ ÷255), alpha 0–1. `dense_firetrail`'s smoke is born orange (255,164,90) → near-black |
 | `FADE_RANGE` (= `FAR_FADE`) | [rampStart, cutoff] m | camera-distance fade: full alpha up to `[0]`, linear to zero at `[1]`, discarded beyond (`fire_n_smoke`: 1500–1700). Two spellings of one block — 574 readers say `FADE_RANGE`, exactly one (C3's `volcanosmoke`) says `FAR_FADE`. **Implemented** (`PufferState.FarFadeStart`/`FarFadeEnd`, C7); the install's widest authored key at 2,508 compiled events over 238 puffers |
 | `NEAR_FADE` | [cutoff, fullAlpha] m | near-camera band, compiled name `unk_range`. `[0]` is the **hard discard cutoff** and `[1]` the distance alpha would reach 1 — ⚠ **do not read that order off the values**, five of the six authored pairs are descending (`70,20` almost everywhere). **Implemented** (`PufferState.NearFadeStart`/`NearFadeEnd`, C7). With the shipped data it is a **cull, never a partial alpha** — see the distance-fade section below |
-| `START_AGE_RANGE` | [min, max] s | random birth age — a particle is born at `Rand(min, max)` instead of age 0, negative values included (`fire_at_zepskin3`: −1.0 to 0.1). **Implemented** (`PufferState.StartAgeMin`/`StartAgeMax`); authored by only 4 puffers in the install, 80 compiled events total (`PLAN-puffer-engine-deltas` B4). ⚠ The key is not the whole birth age: the engine's `age0` is this draw **plus** `(1 - frac)·dt`, the sub-frame term of the time-cadence spawn (B5), and it discards the particle outright when `age0 >= life` — so that skip fires on a long frame for **any** puffer, authored key or not |
+| `START_AGE_RANGE` | [min, max] s | random birth age — a particle is born at `Rand(min, max)` instead of age 0, negative values included (`fire_at_zepskin3`: −1.0 to 0.1). **Implemented** (`PufferState.StartAgeMin`/`StartAgeMax`); authored by only 4 puffers in the install, 80 compiled events total. ⚠ The key is not the whole birth age: the engine's `age0` is this draw **plus** `(1 - frac)·dt`, the sub-frame term of the time-cadence spawn (B5), and it discards the particle outright when `age0 >= life` — so that skip fires on a long frame for **any** puffer, authored key or not |
 | `WIND_FACTOR` | float | how strongly the world's wind carries this puffer's particles; **defaults to 1, not 0**, and is inert unless `FRICTION` is non-zero. **Implemented** (B6) — see [architecture.md](../architecture.md)'s `Effects/WorldWind.cs` entry |
-| `PRIORITY` | float | a per-puffer sprite-size nudge, `1 + K·PRIORITY` with `K = 0.02` (the hardware-path constant — this project has no software path), folded into `BaseSize` at spawn. **Implemented** (`PufferState.Priority`, `Puffer.PriorityScaleDefault`, `PLAN-puffer-engine-deltas` C8) — 192 compiled events over 47 puffers; default 0, so an unauthored puffer's factor is exactly 1. Almost certainly a depth-priority constant reused for size — this trace found only the size use |
+| `PRIORITY` | float | a per-puffer sprite-size nudge, `1 + K·PRIORITY` with `K = 0.02` (the hardware-path constant — this project has no software path), folded into `BaseSize` at spawn. **Implemented** (`PufferState.Priority`, `Puffer.PriorityScaleDefault`) — 192 compiled events over 47 puffers; default 0, so an unauthored puffer's factor is exactly 1. Almost certainly a depth-priority constant reused for size — this trace found only the size use |
 
 ## Emission accumulator
 
@@ -208,12 +208,12 @@ because they share the same frame sets (`fire101-112` etc.), so:
 1. **Puffer flipbooks** - `PUFFER_STATE`'s `TEXTURES`/`TEXTURE_SEQUENCE`, played per *particle*.
    Implemented (`src/Effects/Puffer.cs`); this is what animates crash fireballs and damage trails.
 2. **Material cycles** - a gamez material's own `cycle` block: `texture_indices` (the frame
-   list), `speed` (fps), `looping`. Played on the *surface*.`r`n   (`src/Mech3/TextureCycler.cs`). Only 1-7 materials per chapter carry one, but they cover the
-   animated sea: C1B has `wtr00000` x16 @10 fps over 695 polygons and `srf0001` x16 @9 over 375,
-   plus `wakefront1` x5 @12 (boat wakes) and `turb01` x6 @12 (turbulence); C1 has `splash01` x3
-   @4 and the `bmanwalk`/`bmanrun` x6 @9 crowd sprites. `ObjectCycleTexture{name, reset}` (144
-   events, carrying no frame list of its own) is the anim-side trigger for these - still
-   unimplemented, so cycles currently run free rather than being started/reset by animation.
+   list), `speed` (fps), `looping`. Played on the *surface*.`r`n (`src/Mech3/TextureCycler.cs`).
+   Only 1-7 materials per chapter carry one, but they cover the animated sea: C1B has `wtr00000` x16
+   @10 fps over 695 polygons and `srf0001` x16 @9 over 375, plus `wakefront1` x5 @12 (boat wakes)
+   and `turb01` x6 @12 (turbulence); C1 has `splash01` x3 @4 and the `bmanwalk`/`bmanrun` x6 @9
+   crowd sprites. `ObjectCycleTexture{name, reset}` (144 events, carrying no frame list of its own)
+   is the anim-side trigger for these - still unimplemented, so cycles currently run free rather than being started/reset by animation.
 3. **The `EFFECTS` reader** - `extracted/zrdr/effects.zrd.json`, the same idea reached through a
    proxy NODE:
 
