@@ -694,6 +694,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   encode a falloff curve or impulse. D10 uses linear falloff to zero at the edge and
   `BlastImpulsePerDamage = 1 N·s` on a directly struck rigid body. Judge clustered-object damage
   and physical push against the original before changing either.
+  ✅ **The falloff half is decoded, and D10's invented curve is right.** `FUN_005acac0` applies
+  `damage × (1 − distance / weapon[+0x40])` to **both** pools, so the original's splash is exactly
+  linear to zero at the radius, which is what D10 assumed
+  ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md), "Half two, the splash"). Do not retune
+  the shape. Three details we do not model: the gather radius (`+0x3c`) is a **different field** from
+  the falloff denominator (`+0x40`); a per-round factor at round `+0x678` scales the radius and both
+  damage figures together; and a weapon with `+0x74` bit `0x4000` skips the falloff entirely and
+  deals full damage everywhere inside the radius.
   ⚠ **The impulse half is no longer a TUNE.** `FUN_004b9bc0` applies a per-hit impulse
   (`FUN_0048f5e0`) whose two magnitudes are `damage × vehicle_def[+0xa0]` scaled by **0.005** and
   **0.0333**, gated on the larger damage figure exceeding **5.0**
@@ -1194,7 +1202,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   sweep); and an unguided or far-from-target round **wanders** on a bounded random walk rather than
   flying a straight line. *This item is answered.* What is left unread bears on no shipped ordnance
   type: `FUN_005ac3a0` (detonation, whose effect side is `weaponImpact.md`), `FUN_005b03f0` (the
-  swept-step collision query), and the key behind `+0x74` bit `0x8000000`.
+  swept-step collision query), and the key behind `+0x74` bit `0x8000000`. Eighth pass corrects that
+  last sentence, which was wrong: the detonation was **not** covered by `weaponImpact.md`, which
+  documents the per-surface `IMPACT` table and nothing about what a burst does. `FUN_005ac3a0` is now
+  decoded through both halves, the direct impact (`FUN_005ac7a0`, including the per-weapon impact
+  hook at weapon `+0x20c` that `TANGLER` installs) and the splash (`FUN_005aca30` gathers,
+  `FUN_005acac0` applies). The splash falloff is exactly linear to zero at `weapon[+0x40]`, which
+  confirms `BL-227`'s invented curve, and `BL-227`/`BL-293` are amended with what it settles.
 
 ## Flight model & collision physics
 
@@ -2267,8 +2281,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   behaviour — ours is CORRECT as-is and this is not a bug. The proposal on the table for the
   feel side: upper ring facing the plane / against the rocket's flight direction. The ring anims
   carry no rotation data (scale/opacity only — `docs/formats/weapon-effects.md`), so any change
-  is engine-side and a deliberate deviation. Cross-link: `BL-292` (crash-splash orientation,
-  different spawn path; scheduled in `docs/plans/PLAN-m3-polish-10.md` A3).
+  is engine-side and a deliberate deviation.
+  ✅ **The actionable half is now decoded, not just proposed.** `FUN_005ac7a0` spawns the `IMPACT`
+  row's `SURFACE_ANIMATION` (row `+0x1c`) with an orientation it builds **from the struck surface's
+  normal**, where the row's plain `ANIMATION` gets no such orientation
+  ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md), "Half one, the direct impact"). So
+  normal-orientation is the original's rule for one specific slot rather than for ground rings in
+  general, and which of our rings are `SURFACE_ANIMATION` decides which should follow it. That also
+  leaves the parked half undisturbed: the fixed-axis upper ring is a plain `ANIMATION`.
+  Cross-link: `BL-292` (crash-splash orientation, different spawn path; scheduled in
+  `docs/plans/PLAN-m3-polish-10.md` A3).
 
 - `BL-334` `[Research]` **A stopped sequence stays callable in CSVM; in the original it is disabled
   until the definition resets.** `STOP_SEQUENCE` (`004eb610`) writes the sequence *done*, and

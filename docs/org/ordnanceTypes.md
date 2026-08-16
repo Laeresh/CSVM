@@ -106,7 +106,9 @@ Armour-piercing versus high-explosive is the `ARMOR_DAMAGE`/`HEALTH_DAMAGE` pair
 guidance is `TURN_RATE` with no flag at all.
 
 Parsing `TANGLER` has a side effect the other flags do not: `FUN_004ba6f0` registers a handler on the
-weapon record (`FUN_005aec90`, target `0x004ba660`, which Ghidra has not resolved as a function).
+weapon record through `FUN_005aec90` (target `0x004ba660`, which Ghidra has not resolved as a
+function). That handler lands at weapon `+0x20c` and is the per-weapon impact hook the detonation
+path calls first; see [the detonation section](#detonation-the-impact-then-the-splash).
 
 ## The launch-side dispatch
 
@@ -382,6 +384,53 @@ and on zero destroys the round: it plays the weapon's `DESTROY_ANIMATION` (weapo
 authored, or calls `FUN_005ac3a0` if not, and clears the alive flag. This is why the not-shootable
 sentinel is **-1.0** rather than 0: a round without `FLYOUT_HEALTH` must never satisfy that equality.
 
+## Detonation: the impact, then the splash
+
+[`weaponImpact.md`](weaponImpact.md) covers the per-surface `IMPACT` **table**, meaning which effect
+and sound a row binds and how rows are filled. It does not cover what a detonation *does*. That is
+`FUN_005ac3a0`, and it has two halves.
+
+### Half one, the direct impact (`FUN_005ac7a0`)
+
+- **A per-weapon impact hook.** If the weapon has a callback at `+0x20c`, it runs first and returns a
+  suppression mask: bit 1 silences the row's sound, bit 2 suppresses damage and effects, bit 4
+  suppresses the impact animation. This is the slot `FUN_005aec90` writes, and the `TANGLER` parse is
+  the one caller that installs one (target `0x004ba660`), which closes the loose end noted at the top
+  of this page.
+- **Direct damage** is the authored pair scaled by a per-round factor at round `+0x678`, applied
+  through `FUN_005abcf0` to the struck object alone.
+- **The explosion effect** then spawns: `FUN_005ac690` for a `ROCKET`, `FUN_005ac580` for a
+  `TANGLER`. Both are effect spawners rather than damage, both gate on the struck node carrying
+  `0x10000`, and both randomise a count and two scales from weapon fields `+0x198`/`+0x1c0`,
+  `+0x1a4`/`+0x1cc` and `+0x1a8`/`+0x1d0`.
+- **The row's own bindings** follow: the sound through `FUN_005ad100`, the `ANIMATION`, and the
+  `SURFACE_ANIMATION` **oriented by the struck surface's normal**, which the routine builds from the
+  hit record before spawning it.
+
+### Half two, the splash (`FUN_005aca30` then `FUN_005acac0`)
+
+Gated on `weapon +0x3c > 0`. `FUN_005aca30` runs a sphere query (`FUN_004cb420`) of radius
+`round[+0x678] * weapon[+0x3c]` and fills a hit buffer: a count, then entries of 0x2c bytes each
+carrying the struck object and its **distance** from the burst. `FUN_005acac0` then walks that buffer
+and, per entry:
+
+    t      = 1 - distance / weapon[+0x40]
+    armour = t * ARMOR_DAMAGE  * round[+0x678]
+    health = t * HEALTH_DAMAGE * round[+0x678]
+
+**The falloff is exactly linear, reaching zero at the radius, and it scales both pools by the same
+factor.** A weapon carrying `+0x74` bit `0x4000` skips the falloff entirely and applies full damage
+to everything inside the radius.
+
+Two things worth keeping straight. The **gather radius (`+0x3c`) and the falloff denominator
+(`+0x40`) are different fields**, so the sphere searched and the distance the falloff normalises by
+need not be the same number. And `round[+0x678]` is a per-round yield multiplier that scales the
+radius and both damage figures together, so it is one knob over the whole burst.
+
+⚠ Which authored key writes `+0x3c` and which writes `+0x40` was **not** traced to the parse site.
+`+0x40` is the same field the `SHAKES_CAMERA` shake falls off over, which is consistent with it being
+`IMPACT_PROXIMITY`, but that is an inference from two uses, not a decode.
+
 ## The hit-side dispatch
 
 `FUN_004b9bc0` is the routine that applies one weapon hit to one aircraft. It receives the victim,
@@ -503,10 +552,13 @@ the inherited component over 2.5 s down to a 60 m/s cruise. An aircraft at 120 m
 
 ## Still open
 
-Nothing that bears on what a shipped ordnance type does. The remaining unread pieces are
-`FUN_005ac3a0` (the detonation itself, whose effect side is [`weaponImpact.md`](weaponImpact.md)),
-`FUN_005b03f0` (the swept-step collision query) and the identity of `+0x74` bit `0x8000000`, which
-gates the wander and which no key was traced to.
+- Which authored keys write weapon `+0x3c` (the splash gather radius) and `+0x40` (the falloff
+  denominator). Both are named by use here, not traced to their parse sites.
+- `FUN_004cb420`, the sphere query the splash gathers with: what it admits, and whether it can return
+  world geometry as well as vehicles.
+- `FUN_005b03f0`, the swept-step collision query that decides what a round hits in the first place.
+- The keys behind `+0x74` bits `0x8000000` (gates the wander) and `0x4000` (halves the range
+  accumulator, skips the splash falloff, and reroutes the tick).
 - `FUN_004881e0` is the player's fire-input tick. It routes by `CANNON` (`0x40`) and `ROCKET`
   (`0x10`) only, feeding `CALIBER` to `FUN_004810d0` for guns and the whole weapon to `FUN_00480f50`
   for ordnance.
@@ -519,7 +571,8 @@ gates the wander and which no key was traced to.
   stated for aircraft targets.
 - `FUN_004b6820`, `FUN_004b5fb0`, `FUN_004b9770`, `FUN_005aef40`, `FUN_005af960`, `FUN_005af720`,
   `FUN_005abcf0`, `FUN_00441830`, `FUN_00441780`, `FUN_004b8b50`, `FUN_004b8ad0`, `FUN_004b89c0`,
-  `FUN_004b7670`, `FUN_004b1690`, `FUN_005afd50` and `FUN_00480f50` were read in full.
+  `FUN_004b7670`, `FUN_004b1690`, `FUN_005afd50`, `FUN_00480f50`, `FUN_005ac3a0`, `FUN_005ac7a0`,
+  `FUN_005ac690`, `FUN_005ac580`, `FUN_005aca30` and `FUN_005acac0` were read in full.
   `FUN_004b8b50`'s selection rule was taken from its disassembly rather than its decompilation,
   because the decompiler's rendering of the branch order there is misleading.
 - Weapon-record offsets named by their use in `FUN_005afd50`: `+0x1c` `RANGE`, `+0x38`
