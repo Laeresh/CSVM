@@ -54,6 +54,17 @@ always states it explicitly. The two values:
 > `DAMAGE_SEQUENCE` stages. **Every destructible takes severity-scaled collision damage; the enum
 > gates the *plane's* fate (solid vs fly-through), not the object's.** The crash explosion has no
 > blast radius (crashing beside a destructible damages nothing), so the damage is contact-borne.
+>
+> **Now decoded, and it agrees.** `activation` is the animation record's `+0xa1` byte. The
+> animation-definition loader `FUN_005230d0` registers a damage handler per record keyed on it (0
+> registers slot 0 only, 1 slot 1 only, 2 both), and the slot-0 handler `0x004e7220` re-checks the
+> byte itself, accepting `+0xa1 ∈ {0, 2}` and refusing everything else (`0x004e7234`). A collision
+> is delivered through slot 0 as an ordinary `wep_24` weapon hit, so `WeaponHit` (0) and
+> `WeaponOrCollideHit` (2) both take it. The handler subtracts the object's own damage reduction
+> (`+0xbc`) from the incoming health damage, applies the remainder to the pool at `+0xb8`, and
+> re-runs the `DAMAGE_SEQUENCE` evaluation, which is the severity scaling the graze test showed.
+> See [`../org/flightModel.md`](../org/flightModel.md)'s "Collision damage" for the severity law
+> and the handler's arithmetic.
 
 `proximity_damage` is a **separate** header flag and is `false` on every case examined here,
 including both collide members and plain `WeaponHit` destructibles — it does *not* encode the

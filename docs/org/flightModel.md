@@ -1710,7 +1710,17 @@ standing. Fallback **0.8**, this install authors **0.6**.
 `FUN_0048d7f0` sweeps the aircraft's contact spheres (`obj[0x1a9]..obj[0x1aa]`, stride `0x24`)
 through the world and resolves the **single deepest** contact. On a contact frame it **replaces** the
 frame's translation with a placement at the contact point plus a fixed **0.03** along the normal,
-rather than moving by `v·dt`. One resolution per aircraft per tick, no sub-stepping.
+rather than moving by `v·dt`. One resolution per aircraft per sweep, no sub-stepping.
+
+⚠ **An object sweeps only every OTHER frame, on a random per-object phase.** The sentence above
+said "per tick", which is wrong. `FUN_0048d7f0` returns immediately unless
+`((obj[0x1af] ^ DAT_009be6f8) & 1) == 1`, that is unless the object's own phase byte at `obj+0x6BC`
+matches the parity of the global frame counter. The phase is seeded from `rand()` in the entity
+constructor `FUN_004aff80`, so it differs per object and per run. On a skipped frame the sweep does
+not simply do nothing: it accumulates that frame's translation into `obj+0x6B0`…`obj+0x6B8` and
+returns severity `0.0`, and the next sweep that does run applies the accumulated motion. This halves
+the collision rate and is why two aircraft in the same contact do not necessarily resolve on the
+same frame.
 
 ⚠ **Only the player bounces.** The impulse branch is entered only when `obj == DAT_0071c298` and the
 player is not already crashed. AI aircraft get position correction and an impact cosine, and no
@@ -1792,13 +1802,135 @@ in a single inter-frame interval at 30 fps, and it does not accumulate.
   inside it (`0x0048d7fd`), so the object has **no collision at all**, and the AI's ground blow is
   skipped too. Set to clock + **1.5** at spawn (**5.0** on the alternate placement path,
   `0x0045243c`), and to clock + **1.0** on **both** parties after an entity-versus-entity impact
-  (`0x0048d383`, `0x0048d395`), the same branch that cuts that impact's damage terms to 20 %.
+  (`0x0048d383`, `0x0048d395`), the same branch that cuts that impact's damage terms to 20 %
+  ("Collision damage" below).
 - **`obj+0xB4`, a post-drop settling window.** Clock + **2.5**, written on the spawn paths only.
   `FUN_00452450` gives the context: the entity is repositioned, yawed to −π/2, and given the launch
   velocity minus 22.352 m/s vertically, which is a drop from a carrier at 50 mph. Inside it, an AI's
   ground blow runs at 15 %.
 
 Neither is a damage-invulnerability timer; `obj+0xAC` disables collision itself.
+
+## Collision damage (`FUN_0048d2c0`)
+
+The section above is the response; this is the damage. `FUN_0048d7f0` returns an impact severity and
+`FUN_0048d2c0` turns it into a damage pair. Not ported: `FlightController.CollideDamagePerVn` is a
+hand-picked scalar on a different variable, and no part of the law below is implemented
+(`BL-302`, `BL-402`).
+
+**The severity is a cosine.** `FUN_0048d7f0` normalises the velocity through `FUN_00422690` (at
+`0x0048df8b` on the player path, `0x0048dba0` / `0x0048dbba` otherwise) **before** dotting it with
+the contact normal, and returns `s = -(v̂ · n̂)`, dimensionless and in `(0, 1]`. Nothing registers
+unless `s > 0` (`0x006032c8`).
+
+```
+armorDmg = healthDmg = max(300 · s³, 50)          cube at 0x0048d4c1
+                                                   scale  0x0071c34c / 0x0071c354
+                                                   floor  0x0071c350 / 0x0071c358
+if the striker is not the player and it hit an aeroplane:  both × 0.2
+```
+
+⚠ **There is no airspeed term anywhere in it.** A 400 mph belly-flop and a 90 mph belly-flop at the
+same attitude deal identical damage. The whole law is a function of the angle of incidence, which is
+why a remake that scales collision damage by closing speed cannot be made to match by retuning a
+constant. The floor dominates below `s ≈ 0.550`, so any contact shallower than about 33° off the
+surface deals a flat 50.
+
+The four numbers are **data, not constants**: they are `player.json`'s `crash` block, the same block
+`bounce_factor` comes from, parsed by `FUN_004735b0` under keys `armor_damage_range` (`0x006275a0`)
+and `health_damage_range` (`0x006275b4`), with element 0 landing in the floor slot and element 1 in
+the scale slot. Compiled fallbacks are `[15, 200]` (`0x00473b8d`, `0x00473b97`, `0x00473ba1`,
+`0x00473bab`); this install authors `[50, 300]` for both, so the fallbacks never stand. This is the
+same authored-vs-fallback split the "Authored values vs the executable's fallbacks" section covers.
+
+**A collision is delivered as a weapon hit.** `FUN_0048d2c0` looks up the weapon record named
+`wep_24` (string `0x00628a14`, by-name scan `FUN_005abfd0`, stride `0x214`) and hands the pair to
+the ordinary applier `FUN_005abcf0` at `0x0048d55b`, the same one a rocket uses. The call is gated
+only on the sweep having resolved a node (`contact+0x24 != 0`): there is **no** test on object
+class, on a destructible's `ACTIVATION`, or on whether the striker survives. Two consequences
+follow, and both are structural rather than incidental. A rammed object dies through its ordinary
+`DAMAGE_SEQUENCE` thresholds, so collision damage is severity-scaled rather than an instant kill.
+And any gate that sits downstream of the applier catches collisions for free, which is exactly how
+the gasbag exemption works: the gasbag damage handler `FUN_004c0640` tests `DAMAGES_ZEPPELIN`
+(`weaponRecord+0x210`, flags `& 0x1000`, `TEST AH,0x10` at `0x004c0665`) before subtracting
+anything, `wep_24` does not carry the flag, and so ramming a gasbag deals it nothing while still
+killing the plane. The zeppelin cannon and turret handler `FUN_004c0880` has no such test and
+subtracts at `0x004c090b`, so every zeppelin part except the gasbags is rammable.
+
+**Both parties are damaged, by the same law.** The struck party takes the pair on the `wep_24` path
+above; for an aircraft target that runs `FUN_004b9750` → `FUN_004b9770` → `FUN_004b9b30` →
+`FUN_004b9bc0` and lands on the identical primitives the striker applies to itself. The striker then
+takes the same pair: per-part first where the airframe has a part list (`FUN_004b3950` picks the
+struck node's own part, else the part nearest the contact; `FUN_004b3bf0` at `0x0048d724`), then the
+remainder in aggregate (`FUN_004b8070` at `0x0048d783`). The armour-to-health split is
+`FUN_004b7f80`: with `f = min(1, armor / armorDmg)`, armour drops by `armorDmg` floored at zero and
+health drops by `(1 - f) · healthDmg`, so a **fully-armoured contact costs no health at all**.
+Survival is then `health > 0` (`obj+0x2d0`, tested `0x0048d78b`).
+
+⚠ **An invulnerable striker still destroys what it hits.** The `obj+0x920` early-out at `0x0048d563`
+sits *after* the struck object has been damaged, so invulnerability protects the rammer only.
+
+⚠ **The player is deliberately asymmetric, in three ways that travel together.** A player-owned
+striker jumps past the entity-detection block at `0x0048d2ed` entirely. So the player never takes the
+0.2 cut that scales an AI's ram to a fifth (`0x0048d51a`, `0x0048d526`); the player writes no
+`obj+0xAC` grace clock, so the contact can re-resolve on following frames while the two aircraft are
+still overlapped; and the player is never subject to `local_11`, the flag that forces destruction
+regardless of remaining health (`0x0048d79e`). `local_11` is set for a non-player striker that did
+*not* resolve an aeroplane, so an AI that rams terrain or a building always dies, while an AI that
+rams another aircraft survives if health remains. Entity detection requires node flag `0x40000000`
+and a dispatch class at `+0x67c` of 0 or 4, the two aeroplane classes (`0x0048d360`). This is the
+same single-global-player-pointer guard the bounce impulse uses, and widening it to every
+human-piloted aircraft is the same decision `C21` recorded for the force path.
+
+**What a rammed destructible actually takes.** The handler is `0x004e7220`, registered per
+animation record by `FUN_005230d0`, the animation-definition loader (`D:\zipper\gamez\zEffect\zeff_ani…`,
+`0x0062ee28`), which is the right place because a destructible IS an animation definition
+([`../formats/destructibles.md`](../formats/destructibles.md)). Records live in the array at
+`DAT_009fd14c`, count `DAT_009fd14a`, stride `0x110`, and the registration is keyed on the record's
+`+0xa1` byte: 0 registers slot 0 only, 1 registers slot 1 only (`FUN_004e7150`), 2 registers both.
+`FUN_005abcf0` dispatches through **slot 0**, and `0x004e7220` re-checks the byte itself, accepting
+`+0xa1 ∈ {0, 2}` and refusing everything else (`0x004e7234`). That byte is the `ACTIVATION` enum,
+with `WeaponHit` 0 and `WeaponOrCollideHit` 2, so a ram damages **both** kinds and the enum decides
+only the plane's fate. That is `BL-302`'s playtest reading, decoded.
+
+With `+0xb4` the max health, `+0xb8` the current pool and `+0xbc` a per-object damage reduction:
+
+```
+net = healthDmg - animRecord[+0xbc]      subtracted, and written BACK into the pair (0x004e7259)
+if net > 0:  animRecord[+0xb8] -= net
+             re-evaluate DAMAGE_SEQUENCE (FUN_004e71e0)
+             dead at +0xb8 <= 0 -> death sequence FUN_004ed730
+```
+
+⚠ **A destructible consumes the health term only.** `armorDmg` is never read on this path, and
+`healthDmg` is reduced by the object's own `+0xbc` before anything is subtracted. Every non-aircraft
+handler behaves this way (the two zeppelin handlers above, and clutter's `0x004df420` from
+`FUN_004deab0`, `D:\zipper\gamez\zclass\cls_clutter.cpp`); only the aircraft handler `0x004b9750`
+consumes both through the armour split.
+
+⚠ **The `+0x400` gate refuses damage when the bit is SET, not when it is clear.** `0x004e7227` tests
+`weaponRecord+0x74 & 0x400` and jumps *into* the damage body when it is zero (`JZ` at `0x004e722a`
+over the `XOR EAX,EAX; RET` at `0x004e722c`). Bit `0x400` is the `FREEZE` impact type, set only by
+that keyword in the weapon parser `FUN_005ad630`, paired with `0x40` `HEAT` and `0x1000` `DESIGNATE`.
+No shipped weapon carries `FREEZE`, and `wep_24` in particular does not, so collisions do reach
+destructibles. Read the other way round this would say collisions damage nothing, so the direction
+matters.
+
+⚠ **A ram borrows the HE rocket's record, so it borrows its impact effects.** `wep_24` is
+`MSG_WEAP_HEXPLOSIVE_ROCKET`, `NAME "BOOM"`. Its authored `ARMOR_DAMAGE 100` / `HEALTH_DAMAGE 100`
+are NOT used (`FUN_005abcf0` forwards the caller's pair, which `FUN_0048d2c0` filled with the
+severity law above), but its `IMPACT` block still fires: ramming a building plays `large_fireball`,
+ramming water plays `bsplsh.flt`. A remake that models the damage without the effect will look
+wrong on contact.
+
+**Open:** whether zeppelin sub-part geometry is in the sweep's candidate set at all. The sweep
+removes the object's own node and then queries the world through `FUN_004ca320` (or `FUN_004c8f70`
+for a single probe), which enumerates scene nodes carrying bit `0x4` of `node+0x24`
+(`gwNodeSetActive`, `FUN_004cca30`). Whether the zeppelin construction path sets that bit on gasbag
+and turret nodes is unread, so the decoded fact that `FUN_004c0880` would accept a ram is not yet
+known to be reachable. Also unread: what writes dispatch class 1 to `entity+0x67c`. Class 1 runs
+`FUN_0048ffe0`, which sweeps at `0x00490441` but never calls `FUN_0048d2c0`, so class-1 objects take
+position correction and no collision damage at all; every write to that field found so far stores 0.
 
 ## The three `*Tune` rates — what they are pinned to
 

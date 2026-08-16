@@ -490,9 +490,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   **The damage is dealt by re-entering the ordinary weapon pipeline as `wep_24`** (string
   `0x00628a14`, looked up by name at `0x0048d53e`, applied through the same applier a rocket uses,
   `FUN_005abcf0`, at `0x0048d55b`), so a rammed object dies exactly as a weapon kill does, through
-  its normal thresholds. That is test 2's severity scaling, decoded. Non-aircraft targets consume
-  the health term only and ignore the armour term (gasbag handler `0x004c06c8`, zeppelin turret
-  `0x004c090b`, and the two other registered handlers `0x004df420` / `0x004e7220`).
+  its normal thresholds. That is test 2's severity scaling, decoded.
+  ✅ **The receiving handler is `0x004e7220`, and `ACTIVATION` is its gate, decoded.** The
+  animation-definition loader `FUN_005230d0` registers a damage handler per animation record keyed on
+  the record's `+0xa1` byte, which IS the `ACTIVATION` enum (0 registers slot 0 only, 1 slot 1 only,
+  2 both). A collision arrives through slot 0, and `0x004e7220` re-checks the byte itself, accepting
+  `+0xa1 ∈ {0, 2}` at `0x004e7234`. So `WeaponHit` AND `WeaponOrCollideHit` both take collision
+  damage, from the binary, independently of the three tests. The handler subtracts the object's own
+  damage reduction at `+0xbc` from `healthDmg`, applies the remainder to the pool at `+0xb8`, re-runs
+  the `DAMAGE_SEQUENCE` evaluation (`FUN_004e71e0`) and fires the death sequence at zero. The armour
+  term is never read on this path: a destructible consumes `healthDmg` only, as do the zeppelin
+  handlers and clutter's `0x004df420` (`FUN_004deab0`, `cls_clutter.cpp`). Only the aircraft handler
+  `0x004b9750` consumes both.
+  ⚠ **`0x004e7220`'s weapon gate refuses when the bit is SET, and reading it backwards would say
+  collisions damage nothing.** `0x004e7227` tests `weaponRecord+0x74 & 0x400` and the `JZ` at
+  `0x004e722a` jumps INTO the damage body when it is zero. Bit `0x400` is the `FREEZE` impact type
+  (`FUN_005ad630`, alongside `0x40` `HEAT` and `0x1000` `DESIGNATE`); no shipped weapon carries
+  `FREEZE` and `wep_24` does not, so the gate is open and this item stands.
+  ⚠ **A ram borrows the HE rocket's IMPACT effects along with its record.** `wep_24` is
+  `MSG_WEAP_HEXPLOSIVE_ROCKET` / `"BOOM"`. Its authored `ARMOR_DAMAGE 100` and `HEALTH_DAMAGE 100`
+  are NOT used (the caller's pair is forwarded), but its `IMPACT` block still fires: ramming a
+  building plays `large_fireball`, ramming water plays `bsplsh.flt`. Landing the damage without the
+  effect will look wrong at the controls.
   *Fix shape:* apply collision damage to ANY struck destructible (`FlightController.cs:882-894`
   currently consults `CollideDamageSink` and `AnimRuntime.CollideDamageAt:1257-1269` rejects
   non-`WeaponOrCollideHit` defs — lift that gate for the damage half), keeping the fly-through-on-break
@@ -557,6 +576,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   NOT resolve an aeroplane, so an AI that rams terrain or a building always dies while an AI that
   rams another aircraft survives if health remains. Entity detection requires node flag `0x40000000`
   and a dispatch class at `+0x67c` of 0 or 4, the two aeroplane classes (`0x0048d360`).
+  ⚠ **There is no pairwise broadphase: each aircraft sweeps itself, so a player ram is applied
+  TWICE.** `FUN_0048d7f0` reads only `this`'s probe list, and the two callers of `FUN_0048d2c0` are
+  both per-object update paths. When the player rams an AI, the AI's own sweep finds the same contact
+  from its own probes and applies its own reciprocal `wep_24` hit, with its own normal and therefore
+  its own severity, and nothing suppresses it because the player path armed no grace clock on either
+  party. Timing is non-deterministic rather than the occurrence: an object sweeps only every OTHER
+  frame on a `rand()`-seeded phase (`obj+0x6BC`, seeded in `FUN_004aff80`; gate at the head of
+  `FUN_0048d7f0`), so the reciprocal hit lands on the same frame or the next. A remake that resolves
+  one contact once, symmetrically, will under-damage a player ram relative to the original.
   ⚠ **Gasbags are exempt and the rest of the zeppelin is not.** The zeppelin parser `FUN_004bd8d0`
   registers a different damage handler per part list. The gasbag handler `FUN_004c0640` tests
   `DAMAGES_ZEPPELIN` (`weaponRecord+0x210` → flags `& 0x1000`, `TEST AH,0x10` at `0x004c0665`)
@@ -566,11 +594,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   take collision damage, un-cut by the 0.2 factor (a zeppelin part is not class 0 or 4), and a
   non-player rammer is destroyed outright by the `local_11` rule. This confirms the reading that
   every zeppelin part except the gasbags is rammable.
-  ⚠ **The gate lives in the handler, not in the weapon pipeline.** `0x1000` is read in exactly two
-  places in the image: `0x0042008c` (`FUN_00420070`) and `0x004c0665`. `FUN_00420070` only decides
-  what ordnance an AI is OFFERED; the enforcement that actually refuses damage is
-  `FUN_004c0640`. `docs/org/targeting.md` and `BL-291`/`BL-239` attribute enforcement to
-  `FUN_00420070`, which is why collision damage looks like it should be gated upstream and is not.
+  ⚠ **Reachability of the zeppelin half is NOT settled, and it is the one thing to check first.**
+  The damage path is class-agnostic once the sweep resolves a node, but the sweep's candidate set is
+  the scene nodes carrying bit `0x4` of `node+0x24` (`gwNodeSetActive`, `FUN_004cca30`), queried
+  through `FUN_004ca320` (or `FUN_004c8f70` for a single probe). Whether the zeppelin construction
+  path sets that bit on gasbag and turret nodes is unread, so `FUN_004c0880` accepting a ram may be
+  unreachable in the shipped game. Settle that before building the zeppelin leg; the aircraft leg
+  does not depend on it.
+  ⚠ **Our gasbag gate is on the PROJECTILE path only, and a collision will walk straight past it.**
+  This is the one place our architecture and the original's diverge in a way that bites here.
+  `0x1000` is read in exactly two places in the image: `0x0042008c` (`FUN_00420070`, the AI ordnance
+  check that decides what an AI is OFFERED, `docs/org/aiPilot.md`) and `0x004c0665`, inside the
+  gasbag DAMAGE handler. Because the original delivers a ram as an ordinary `wep_24` weapon hit, that
+  downstream handler catches the collision for free. Ours cannot: `ProjectilePool.WorldDamageGate` →
+  `ZeppelinRuntime.GateWeaponDamage` (`ZeppelinRuntime.cs:158`) is consulted by `Projectile.cs:1576`
+  and nowhere else, while the collision path runs `FlightController.CollideDamageSink` →
+  `AnimRuntime.CollideDamageAt`, which never asks it. So the gasbag exemption that F18 already
+  implements correctly for weapons will NOT hold for a ram unless the collision path is routed
+  through the same gate. Route it rather than re-testing the flag at the collision site, or the rule
+  ends up stated in two places that can drift.
   *Fix shape:* land with `BL-302`, since both hang off the one contact resolution in
   `FlightController.cs:1129-1143`. Give the sink a second leg for a struck AIRCRAFT and for a
   zeppelin sub-part, deal the decoded pair to the striker through an armour-then-health split
