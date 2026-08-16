@@ -241,7 +241,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ Split the targeting marker out of `VersusHud` into `TargetHud`
 22. ☑ Draw the original's marker: name label, range-gated brackets, two-line edge tag
 23. ☑ `--debug-markers`: keep full identity, add `H78 A91`
-24. ☐ One golden screenshot for the geometry
+24. ☑ One golden screenshot for the geometry
 
 ### Wave D — Close out
 
@@ -1088,7 +1088,7 @@ rather than an all-or-nothing gate.
   --verify-no-changes` clean. No 8-chapter `--freecam` sweep is owed — this item touches HUD string
   formatting and one collection helper only, no world-load path.
 
-## C24 ☐ One golden screenshot for the geometry
+## C24 ☑ One golden screenshot for the geometry
 
 **Goal.** A pinned golden shot covering the parts no unit test can reach: bracket geometry, the range
 threshold, label placement, and the debug string.
@@ -1110,6 +1110,41 @@ string.
 
 **⚠ Traps.** <TODO: pick the world, chapter and pose, and confirm the AI spawn is deterministic
 enough for a stable golden — a re-pinned golden that drifts every run is worse than none.>
+
+**Landed 2026-08-16.** `analysis/goldens/manifest.json`'s `c1-targeting-hud`: `--chapter=C1
+--plane=player_fury --ai=player_kestrel --target=ai1_player_kestrel --debug-markers
+--hold=0,0,0,0.5 --det --mute`, frame 90. `--ai=` places the Kestrel 250 m ahead of P1 on the same
+course, so a level hold (no turn, half throttle) keeps it on screen and inside the gun's authored
+`RANGE` without hunting for a pose — the TODO's "pick the world, chapter and pose" resolved to
+reusing `c1-flight`'s own chapter and airframe rather than inventing a new one. `--target=` (B15)
+pins the subject explicitly rather than relying on the auto-acquire picking the sole enemy, so the
+shot stays correct if a second candidate is ever added to this scene.
+
+**The TODO's determinism half resolved clean.** An AI spawn's only randomness is jitter (fd/thrust)
+and livery paint, both pinned by `--det`'s master seed; the target's own position is `--ai=`'s fixed
+250 m-ahead placement, not a random one. Two independent `RunTests.ps1` passes (a `-RegenGoldens`
+render and a plain verify run afterward) hashed identically with no retry, so the AI's small
+in-frame jitter never moved a pixel by frame 90.
+
+**Verified (2026-08-16):**
+
+- The shot visibly shows all three pieces the Goal asked for: the fixed-size brackets around the
+  Kestrel (inside the fury's gun range at 270 m), `Kestrel` in the label block below it, and the
+  `--debug-markers` string `AI1 Kestrel 270 m H100 A100  patrol` drawn above — the same frame
+  composition C22 and C23 built toward.
+- **Two runs, identical.** `RunTests.ps1 -RegenGoldens` (the render that minted the hash) and a
+  plain `RunTests.ps1` verify pass immediately after both hashed `23f8af3edd99e9afedd69352fac3aa8f`
+  — the Verify step's own bar.
+- **The other 14 shots are untouched**: the regen run reported `1 hash(es) changed` — only the new
+  entry — so this item moved no existing pixel.
+- Measured frame-sensitivity (frame 90 vs 91, raw pixel diff): **48.18 %**, the most sensitive shot
+  in the set (surpassing `c1-flight`'s 34.52 %) — a flying plane's chase camera plus a moving AI
+  target compounds `c1-flight`'s own motion. Recorded in the manifest's `exercises` field and in
+  `analysis/goldens/README.md`'s frame-sensitivity roster (now seven shots, not six).
+- **Regression:** 1378/1378 units, 69/69 in-engine suites, engine errors clean, 15/15 goldens
+  hash-identical (the pre-existing 14 plus the new one), `dotnet format --verify-no-changes` clean.
+  No code changed in this item — only the golden manifest and its README — so no build/test
+  regression was possible in the first place; the runs above are the golden stage's own proof.
 
 # Wave D — Close out
 

@@ -3150,7 +3150,8 @@ machine's own `NameOf` vocabulary; empty for a pilot without a machine). Off-scr
 the screen edge (`RefStaggerStep`) so a flight sharing one bearing does not stack into one string.
 It REPLACES the hostile-tracker draw rather than adding to it, so the tracked plane is never drawn
 twice in two colours — but NOT the selected target's marker, which keeps drawing under the flag
-(different shape, and C24's golden wants brackets, label and debug string in one frame).
+(different shape, and C24's golden shot pins brackets, label and debug string together in one
+frame — `analysis/goldens/manifest.json`'s `c1-targeting-hud`).
 ⚠ **Health and armor are omitted, not defaulted, when the `TargetRef` carries no figure**
   (`Health`/`Armor` null — a bare rig with no `Damage` ledger bound): `H100 A100` for a source with
   no health model would be a number the game does not have. Wrapping the aircraft as a `TargetRef`
@@ -3180,7 +3181,7 @@ table (three colours, the Destroy override, the neutral-own-side case), the gun-
 `RANGE` brackets, past it does not, an outrunning target never does, and the hysteresis holds the
 boundary case) and the label lines. C23's `DebugTag` is pinned there too — the full format string,
 health/armor omitted with no source, and `CollectMarks`' `TargetRef` wrapping reading a live
-`Damage` ledger. The drawn geometry itself is C24's golden.
+`Damage` ledger. The drawn geometry itself is C24's golden (`c1-targeting-hud`).
 
 ## src/Flight/VersusBoard.cs
 The dogfight's shared results overlay (`PLAN-vs-mode.md` C25) — `StuntRaceBoard`'s construction
