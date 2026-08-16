@@ -31,8 +31,9 @@ announcer id without defs) are [combat-voice.md](combat-voice.md); the reader is
 
 Each plane def names its own engine loop via `engine_sound` / `cockpit_engine_sound`
 (see [vehicle.md](vehicle.md)) — e.g. `engine_sound snd_bloodhawkengine` → bloodhawk.wav.
-`damaged_engine_sound` is a second, vehicle.json-only loop (`snd_damagedengine`) blended in as
-damage accumulates — its own two-float shape, not a `player.json` curve block; see vehicle.md.
+`damaged_engine_sound` is an array of swap candidates for that same slot (`snd_damagedengine`
+install-wide), not a second loop blended over it; the entry's two floats are a pitch-multiplier
+range drawn once per swap. See vehicle.md.
 
 ## Sound groups
 
@@ -78,14 +79,16 @@ All are clamped two-point ramps `(inStart→inEnd maps outStart→outEnd)`:
 | Block | Meaning |
 |---|---|
 | `engine_sound` | pitch 0.6→1.0 over throttle 0.1→1.0; volume flat 1.0 |
-| `prop_sound` | the **overspeed dive whine**: volume 0→0.5 over speed 1.0→1.1× `fd_speed`, pitch 0.65→1.25 over 1.0→1.2×. The WAV is not named anywhere in the readers (the remake uses `snd_enginewhine`, the only pitch-shiftable candidate — identified by an all-archive comb sweep against a reference recording) |
+| `prop_sound` | the **overspeed dive whine**: volume 0→0.5 over speed 1.0→1.1× `fd_speed`, pitch 0.65→1.25 over 1.0→1.2×. Drives the engine audio's second slot, whose definition is the vehicle def's own `prop_sound` key |
 | `rattle` | `snd_planeshake`: volume 0→1 over speed 1.0→1.2× `fd_speed` |
 
-**Caveat — the curve volume is not a linear mix amplitude.** Spectral analysis of a
-reference dive recording shows the original plays the whine 12–18 dB below
-what `prop_sound`'s 0.5 volume cap would give as a linear gain against the engine loop —
-the engine applies scaling of its own between the curve value and the mixer. Treat these
-volume numbers as relative shapes, not absolute amplitudes.
+⚠ **The whine never sounds in the retail install, and `snd_enginewhine` is not its WAV.** The
+second slot's definition comes from the vehicle def's `prop_sound` string key; no shipped def
+authors it, the field has no compiled default, and `snd_enginewhine` appears as a literal nowhere
+in `crimson.exe`. The curves above are still read, and would drive the slot if a def ever named
+one. A spectral comb in a reference dive recording was previously read as the whine mixed 12–18 dB
+under the engine; that reading is refuted, and the engine slot's own speed-driven pitch term is the
+better candidate for what produced it.
 
 ## WAV format
 

@@ -39,6 +39,11 @@ public partial class FlightController : Node3D
     /// <summary>Own-plane sound, if the sound archive was found (add as a child too).</summary>
     public FlightAudio? Audio;
 
+    /// <summary>The positional twin of <see cref="Audio"/>, carried by an AI-flown aircraft instead
+    /// of it: engine loops on 3D emitters, culled by distance. Never both — own-ship audio is
+    /// non-positional by design, and a rig with a person in it takes <see cref="Audio"/>.</summary>
+    public AiEngineAudio? EngineAudio;
+
     /// <summary>The visible aircraft model (a child of this node); hidden while crashed.</summary>
     public Node3D? PlaneModel;
 
@@ -1485,8 +1490,10 @@ public partial class FlightController : Node3D
         }
         if (!halted && !_crashed)
         {
-            Audio?.Update(simDt, _model.Throttle, _model.Speed / _model.Stats.FdSpeed,
-                1f - (Damage?.WorstFraction ?? 1f));
+            float speedFrac = _model.Speed / _model.Stats.FdSpeed;
+            float damageFrac = 1f - (Damage?.WorstFraction ?? 1f);
+            Audio?.Update(simDt, _model.Throttle, speedFrac, damageFrac);
+            EngineAudio?.Update(simDt, _model.Throttle, speedFrac, damageFrac);
             // The throttle-slam gate needs the live value every frame, not just while its plume
             // is active, so it can tell a fresh climb from one already in progress.
             ThrottleSmoke?.Update(simDt, _model.Throttle);
@@ -2093,6 +2100,9 @@ public partial class FlightController : Node3D
         string? crashDef = CrashDefs?.DefForSurfaceId(surfaceId);
         LastCrashDef = crashDef;
         Audio?.OnCrash();
+        // An AI aircraft's loops end here and stay ended: the crash animation's own authored sound
+        // events are what is audible from now on, and no wreck respawns to restart them.
+        EngineAudio?.Stop();
         PlayCrashBoom(crashDef);
         // The engine wind-down cue layers over the explosion, replacing the loops' abrupt cut with
         // snd_propstop.

@@ -137,6 +137,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/PhysicsConstants.cs` — `NomGravity`, the single `nom_gravity` value the flight model and its tests share.
 - `src/Flight/Weather.cs` — weather.json reader → `WeatherState`: per-zone fog, sunlight, cloud whiteout, wind, precipitation.
 - `src/Flight/FlightAudio.cs` — own-plane loops (engine, overspeed whine, rattle) + crash/prop one-shots, per-player `MixGain`.
+- `src/Flight/AiEngineAudio.cs` — an AI aircraft's positional engine loops and the 2000-unit cull.
+- `src/Flight/EngineAudioCurves.cs` — the engine-slot definition choice and curve maths both audio paths share.
 - `src/Flight/SpectatorCamera.cs` — the `--freecam`/`--anim-lab` observation camera: RMB-look + WASD/QE, no roll; `Frame`/`FollowNode` track an object.
 - `src/Flight/FlightModel.cs` — the arcade velocity-vector flight physics: thrust/drag/gravity/lift, stall, calibrated control rates.
 - `src/Flight/PropAnimator.cs` — spins the collected prop/rotor discs about their local axes, throttle-scaled (idle floor 0.4); `--fly` only.
@@ -1649,9 +1651,7 @@ falling to `NoFog` (no fog, fullbright). Deliberately NOT routed through the hor
 underneath it every time the camera crosses the cloud core.
 
 ## src/Flight/FlightAudio.cs
-Own-plane non-positional loops (engine with throttle-driven pitch, overspeed whine, rattle,
-damaged-engine blend keyed to `Update`'s `damageFrac` via `PlaneStats.DamagedEngineGain`) +
-one-shots: `StartEngine`/`EngineStartRamp` prop-start fade (re-fired via the loop-restart hook
+Own-plane non-positional loops (engine, overspeed whine, rattle) + one-shots: `StartEngine`/`EngineStartRamp` prop-start fade (re-fired via the loop-restart hook
 in `Update`; `EngineStartRamp` 2.0 s is sourced from startprops' authored prop cross-fade duration,
 not a bare literal), `OnCrash` → `snd_exp_plane1..4` (the `plane_destroy_sg` group every crash def
 that names it wants), `OnGroundExplosion`/`OnWaterExplosion` layering the boom the *chosen crash
@@ -1665,10 +1665,25 @@ fallback `player_crash_default` Sounds only `plane_destroy_sg`, so it layers nei
 CHOSEN `touchdown_*` def, since the sound is authored inside that def). `OnWarningShot` draws one
 `bullet_warning_sg` variant per near miss (player.json `warning_shot_sound` is a SOUND_GROUPS name, so
 `Setup` takes the group table too; rate-limited by `FlightController`'s `WarningShotCue`, same split).
-The engine loop (`BL-078`) is two voices of the same clip, pitch-split ±half of `EngineDetuneRatio`
-(0.05 TUNE, `flightAudio.engineDetuneRatio`) around `EnginePitch.Eval`; each voice is held at the
-fixed equal-power `EngineVoiceGain` (1/√2, not a TUNE) so the pair sums to the old single loop's
-loudness.
+The engine is ONE voice on one slot; its pitch, gain and definition all come from
+`EngineAudioCurves`, shared with `AiEngineAudio` (see that entry). `SetEngineDamaged` swaps the
+slot's stream for `damaged_engine_sound` and back, both resolved at `Setup`. `MixGain` is the only
+own-ship scale left and stays here — splitscreen, not a fidelity knob.
+
+## src/Flight/EngineAudioCurves.cs
+The engine-audio slot maths both audio paths read: `EngineDefFor` (which definition the engine slot
+holds and the damaged swap's one-off pitch draw), `Engine` and `Whine` (each slot's pitch and gain
+off the `PlaneStats` curves), and `CullDistanceSq`. It exists because the original runs one
+per-frame routine for the player and every AI vehicle; the decode is in
+[formats/vehicle.md](formats/vehicle.md), "The engine audio's slots".
+
+## src/Flight/AiEngineAudio.cs
+The positional twin of `FlightAudio` that an AI-flown aircraft carries instead of it: the same two
+engine slots on `AudioStreamPlayer3D`s, plus the cull that stops them past `CullDistanceSq` from
+the nearest listener and starts them again inside it. `Attach` is the whole spawner-side surface.
+Deliberately carries no own-ship concept — no `MixGain`, no start ramp, no prop-start cue, no crash
+one-shots: an AI kill is audible from its crash animation's own authored `Sound` events. Every cull
+transition and slot swap writes one `sound` log line, since audio cannot be screenshot-verified.
 
 ## src/Effects/Puffer.cs
 The original engine's billboard-particle emitter, data-driven from `PUFFER_STATE` blocks

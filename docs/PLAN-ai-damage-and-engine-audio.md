@@ -33,7 +33,9 @@ item, though this plan records the mechanism the decode found for it.
 - A shot-down AI aircraft disappears into its crash effects instead of leaving a visible pristine
   hull, matching the original's `ai_crash_*` choreography.
 - An AI kill is audible, positionally, from the crash animation's own authored sound events.
-- AI aircraft carry engine and whine loops, positional, culled at the decoded distance.
+- AI aircraft carry the engine loop, positional, culled at the decoded distance. The whine slot the
+  plan expected to fill turned out to be unassigned in the retail install (B14), so there is no
+  second loop to carry.
 - The player's engine audio matches the decoded model rather than four readings the decode refuted.
 
 **No behaviour in this plan is invented from feel or footage.** Every threshold, distance, curve and
@@ -49,7 +51,7 @@ decode left a question open it stays open and marked, not filled with a plausibl
 | 3 | What is an AI's `DamageVisuals` built with? | **No panels, no pairing** — and the need for pairing is **derived from the data** (does either ladder name a `pdpanel*` stage?), not from a constructor flag. A player def does, an AI def doesn't. |
 | 4 | How does an AI kill get its sound? | **Give the AI crash runtime its `Sounds` reference** and let the authored `Sound` events play positionally. Not a `FlightAudio` per AI plane, which is own-ship and non-positional by design. |
 | 5 | Where do AI engine loops live? | **A separate positional component**, with the pitch/gain curve maths extracted into a helper shared with `FlightAudio`. Not a dual-mode `FlightAudio`. |
-| 6 | Which loops does an AI plane get? | **Decode first, then match it.** Decode ran: engine + `prop_sound` whine, damaged-engine as a def swap on the engine slot, no rattle. |
+| 6 | Which loops does an AI plane get? | **Decode first, then match it.** Decode ran: engine, damaged-engine as a def swap on the engine slot, no rattle. The `prop_sound` whine slot exists in the reader but **no shipped vehicle def authors it**, so the original assigns it on no aircraft (B14's re-decode; see row 3). |
 | 7 | How is the `_applied` latch fixed? | **Per-entry slots, and the retraction too** — this plan absorbs `BL-384` item (3) rather than touching the same structure twice. |
 | 8 | Where does the shared wiring live? | **Two-phase extraction** — a shared construction helper called unconditionally by both spawners, and the sink/stop wiring folded into `BuildFlightCrashRuntime`. Folding construction in too would silently delete the damage lab's visuals. |
 | 9 | How much of the decoded audio machinery do we build? | **The 2000-unit cull, yes; the 15-voice budget, no.** The cull is what the player hears; the voice cap is a DirectSound buffer-pool artifact. |
@@ -65,7 +67,7 @@ Five readings this session refuted. None of them was obviously wrong; four of th
 |---|---|---|
 | 1 | `pfsmoketrail`'s `anim_root_name` (`piratefighter`) may need an explicit OPERAND_NODE retarget onto other airframes (`BL-385` trap (b), filed as "unverified"). | Decode: `anim_root_name` is an offset within the caller's context node, not a target selector. A def whose root name equals its own name has both fields overwritten with the context node's name at play time (`FUN_00520910` / `FUN_00521180`). No retarget exists or is needed. |
 | 2 | An AI wreck persisting is a bug of ours; the original presumably removes it after some time. | Decode: nothing on the death path frees a vehicle. No timeout, no distance cull, no count cap, no recycling. The free is a handshake between `LAB_00480710` and `FUN_0047bab0`, and no roster aircraft reaches a caller of the latter. The wreck stops being *visible* because the crash anim deactivates all four of its nodes. |
-| 3 | `PlaneStats.WhineSound = "snd_enginewhine"` — "not named in the readers; the only pitch-shiftable candidate" (`PlaneStats.cs:209`). | Decode: it is named in the readers. Slot 1's def is `prop_sound`, VDEF+0x74, parsed by `FUN_00479240` at `0x0047a2aa`. |
+| 3 | `PlaneStats.WhineSound = "snd_enginewhine"` — "not named in the readers; the only pitch-shiftable candidate" (`PlaneStats.cs:209`). | Decode: the KEY is named in the readers. Slot 1's def is `prop_sound`, VDEF+0x74, parsed by `FUN_00479240` at `0x0047a2aa` and assigned at `0x004771b3`. B14 then found the rest: **no shipped vehicle def authors the key**, `FUN_00478a00` leaves the field at 0, and `snd_enginewhine` is a literal nowhere in `crimson.exe`. So slot 1 is never assigned and the original plays **no whine at all**. |
 | 4 | The damaged-engine sound is a second loop blended in over the engine by a gain curve (`PlaneStats.cs:219-222`, itself flagged "a TUNE candidate, not a confirmed original mechanic"). | Decode: it is a **definition swap** on slot 0, drawn at random from an array at VDEF+0x7c, with the pitch multiplier `veh+0x68` randomised into `[entry+0x14, entry+0x18]` when the entry's flag byte `+0x10` is set. No crossfade, no second voice, and an array we collapse to one entry. |
 | 5 | The original plays its engine as a detuned dual stack, ~5% apart — from spectral combs in a reference dive recording (`FlightAudio.cs:35-48`). | Decode: one handle per slot. The combs are better explained by engine + `prop_sound`, two loops with different curves. Per this repo's own rule, a video measurement does not contest a decode. |
 
@@ -112,9 +114,9 @@ per non-player vehicle then once for the player by `FUN_004897c0`):
 | Slot | Def | Started for AI? |
 |---|---|---|
 | 0 | `engine_sound`, VDEF+0x6c | Yes, gain 1.0 |
-| 1 | `prop_sound` (the whine), VDEF+0x74 | Yes, gain 1.0 |
-| 0 (swapped) | `damaged_engine_sound[]`, VDEF+0x7c | Yes, random entry, `veh+0x68` randomised into `[entry+0x14, entry+0x18]` when the entry's flag `+0x10` is set |
-| — | `cockpit_engine_sound`, VDEF+0x70 | Never — player, views 6/7 only |
+| 1 | `prop_sound` (the whine), VDEF+0x74 | Gain 1.0 — but ⚠ **never in practice: no shipped def authors the key**, so the slot has no definition for anybody (B14) |
+| 0 (swapped) | `damaged_engine_sound[]`, VDEF+0x7c | Yes, random entry, `veh+0x68` randomised into `[entry+0x14, entry+0x18]` when the entry's flag `+0x10` is set. The shipped entry sets the flag with the range **0.0 to 1.0**, so a damaged engine's pitch is drawn anywhere from the frequency floor to normal, once per swap, and holds (B14) |
+| — | `cockpit_engine_sound`, VDEF+0x70 | Never — player, camera MODES 6/7, which are cockpit modes CSVM has no counterpart for (B14) |
 | — | rattle (`player.zrd` globals, `DAT_0071c334`) | Never — plays through camera shake, gated on being the camera's subject vehicle |
 | 2, 3 | collision / landing one-shots | Never — player-gated at all three call sites |
 
@@ -163,8 +165,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☐ Extract the two-phase `DamageVisuals` wiring and give the AI spawner both phases
 12. ☑ Add `AiDamageStageAnims` and open `RigAnimFor` to it
 13. ☐ Give the AI crash runtime its `Sounds` reference
-14. ☐ Correct the player's engine-audio model to the decode
-15. ☐ Positional AI engine audio with the 2000-unit cull
+14. ☑ Correct the player's engine-audio model to the decode
+15. ☑ Positional AI engine audio with the 2000-unit cull (component built; the spawner's attach line
+    is owed by B11's file, tracked below)
 
 ### Wave C — Evidence
 
@@ -415,19 +418,38 @@ decode did *not* refute untouched.
 **Model recommendation.** high — it changes how the player's aircraft sounds, and the constants
 around it carry spectral-analysis provenance that must not be disturbed by accident.
 
-**Verify.** <TODO: name the A/B — a before/after recording at fixed throttle and in a dive, plus the
-view 6/7 switch. Audio cannot be screenshot-verified; state the instrument.> Confirm which view
-indices are 6 and 7 in our camera set before wiring the branch.
+**Verify.** Two instruments, because audio cannot be screenshot-verified.
+(1) *Headless, machine-readable, and the half a listener could not separate by ear anyway:* the
+`sound` log category. The rig-build line names every resolved slot definition
+(`audio: engine=snd_bloodhawkengine damaged=snd_damagedengine whine=none (no def names prop_sound)
+rattle=snd_planeshake`), and the swap line records the definition the engine slot took and the pitch
+it drew (`engine sound: slot 0 -> snd_damagedengine pitchMul=0.634`). Reproduce with
+`RunProbe.ps1 --fly --plane=player_bhawk --stage=empty --damage=nose:0.4 --volume=1.0 --frames=90
+--screenshot=… --log=sound:debug`. `--dump-config` is the companion check: the `flightAudio` block
+must be gone, since all three of its keys scaled refuted mechanisms.
+(2) *At the controls, which only the user can do* (`docs/verification.md`, "What this project cannot
+verify itself"): same plane, same chapter, `--volume=1.0 --no-det`, HEAD against this build. At a
+fixed throttle in level flight the chorus/beating of the dual voice is gone; in a full dive past
+`fd_speed` no whine layer rises in over the engine, because the original has none; after taking hits
+the engine loop is replaced outright by `snd_damagedengine` at a random pitch rather than joined by
+a second loop.
+The view 6/7 half of this A/B is void — there is nothing to switch, see the traps below.
 
 **⚠ Traps.** Removing the second voice will be noticed at the controls; it is deliberate and
 decode-backed, and the reason belongs in the landing commit message so nobody restores it from the
 old comment. `MixGain` is an own-ship splitscreen concept and stays on `FlightAudio` alone.
-<TODO: confirm our view indices against the original's 6/7.>
+⚠ **Our view indices are NOT the original's 6/7 and the branch must not be wired to them.** The
+original's 6 and 7 are camera MODES, and its cockpit modes at that; our `--view=`/numpad set is
+external throughout (`CameraController.Views`: 6 is a level flank, 7 an above-flank), CSVM ships no
+cockpit view at all (`BL-080` is unstarted, and `PlaneStats.TurretMount` already says so), and
+`BL-150`'s `CAP-07` measurement puts the original's own 6 and 7 at a port flank and an
+astern-starboard low view. So `cockpit_engine_sound` is read into `PlaneStats` and nothing selects
+it; binding it to numpad 6/7 would be inventing behaviour.
 
 ## B15 ☐ Positional AI engine audio with the 2000-unit cull
 
-**Goal.** AI aircraft are audible as they pass, engine and whine, attenuating with distance and
-silent past 2000 units.
+**Goal.** AI aircraft are audible as they pass, engine (and the whine slot, which no shipped def
+fills — see the model table), attenuating with distance and silent past 2000 units.
 
 **Evidence (confidence: direction-sound).** The loop assignment, the fork, the cull constant
 (`4000000.0` at `0x0060350c`, squared, i.e. 2000 units), the curve inputs and the clamps are all

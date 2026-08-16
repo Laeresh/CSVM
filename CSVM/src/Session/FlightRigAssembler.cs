@@ -298,9 +298,10 @@ public sealed class FlightRigAssembler
             controller.Audio = audio;
             controller.AddChild(audio);
             if (verbose)
-                GD.Print($"audio: engine={stats.EngineSound} (dual voice, " +
-                         $"{Config.GetFloat("flightAudio.engineDetuneRatio", FlightAudio.EngineDetuneRatio) * 100f:0.#}% detune) " +
-                         $"whine={stats.WhineSound} rattle={stats.RattleSound}" +
+                GD.Print($"audio: engine={stats.EngineSound} " +
+                         $"damaged={stats.DamagedEngineSound ?? "none"} " +
+                         $"whine={stats.WhineSound ?? "none (no def names prop_sound)"} " +
+                         $"rattle={stats.RattleSound}" +
                          (_in.MixGain < 1f ? $" (per-player mix gain {_in.MixGain:0.00})" : ""));
         }
         // This player's stunt run: player 1 flies the loaded instance, everyone else an
