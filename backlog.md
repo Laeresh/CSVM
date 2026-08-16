@@ -1036,44 +1036,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   fraction, so a regression shows up as a count.
   *Playtest after fix:* fly against a Black Hat flight and confirm rockets are aimed at you and
   read as a threat rather than noise.
-  *Cross-refs:* `BL-394` (what an AI carries; this item is only the trigger), `BL-396` (the gun
-  gates the same decode calls into question), `BL-227` (blast falloff),
-  `analysis/ai-ordnance-census/`.
-
-- `BL-396` `[Bug]` **All three AI gun gates are wrong against the decoded fire path.** `AiGunner`'s
-  gates were assembled from authored data, not read out of the executable, and the decode
-  ([`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md), "Our gun gates against this
-  path") finds one right in form only and two wrong in mechanism.
-  (a) **Range.** `AiGunner.Solve` tests whether the round reaches the intercept inside the weapon's
-  `RANGE`, a closing-speed-dependent quantity the original never computes. `FUN_0041f420` tests
-  squared separation against the slot's authored `[+0x18, +0x1c]` window (1–900 m on every AI gun),
-  and we have no minimum-range floor at all.
-  (b) **The ±11° cone.** `gun_pitch`/`gun_yaw` clamp the mount's aim, they do not veto the shot.
-  `FUN_00479240` parses them to radians onto vehicle def `+0x20`–`+0x2c`, `FUN_00476250` copies them
-  onto mount `+0x94`–`+0xa0`, and `FUN_004b7670` clamps the lead into that band and writes
-  `+0xa4 = dot(clamped mount aim, desired lead)`. The gate in `FUN_004b6820` is that residual
-  against `0.9848`, so the employable cone is roughly the authored limit plus 10°, about twice ours.
-  (c) **Quick draw.** The test and the `cos(quick_draw_angle)` comparison match, but the original
-  applies it only when the shooter's mode is jet or wingman *and* the target is a vehicle of those
-  same classes; we apply it to every target, every tick.
-  *Fix shape:* three separate changes in `AiGunner.Solve`, smallest first: the squared `[min, max]`
-  window (with its floor), the shooter/target class condition on quick draw, then the clamp-then-
-  residual aim gate, which is the one that changes how often an AI fires.
-  ⚠ *Traps.* (a) `AiGunner` is landed, unit-tested (`AiGunnerTests`) and covered by the
-  `ai-gunnery` suite, and a gate change is a regression risk with its own verification burden, which
-  is why this is separate from `BL-395`. (b) The dead-eye scatter is a different mechanism from the
-  aim gate; do not conflate the cone the AI *shoots inside* with the quality threshold it *waits
-  for*. (c) The min-range floor of 1 m is authored, not a sentinel. It is the same field that
-  carries 200 m on ordnance. (d) The aim gate is skipped for the player and for a vehicle carrying
-  the `+0xf8` byte, and a `REAR` weapon negates the aim value and needs the `+0xba` pursued byte;
-  none of that is `AiGunner`'s today and (d) is out of scope until an `AiRocketeer` exists
-  (`BL-395`). (e) Widening the cone makes AI gunfire more frequent, so the dead-eye scatter and the
-  `ai-gunnery` hit fraction are what to watch, not the trigger rate alone.
-  *How you'd know it worked:* engine-free assertions on each decoded gate in `AiGunnerTests`, plus
-  the `ai-gunnery` suite's hit fraction holding while the firing envelope widens.
-  *Cross-refs:* `BL-395`, [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md),
-  `docs/formats/ai-rosters.md` ("ai_skill_parameters"),
-  `docs/architecture.md` `src/Flight/AiGunner.cs`.
+  *Cross-refs:* `BL-394` (what an AI carries; this item is only the trigger), `BL-227` (blast
+  falloff), `analysis/ai-ordnance-census/`. The gun half of the same decode is settled: `AiGunner`
+  runs the squared engagement window and the clamp-then-residual aim gate, so an `AiRocketeer`
+  copies that shape with the ordnance thresholds (5°, the vehicle-wide lockout, the roll).
 
 - `BL-401` `[Bug]` **The node names we spawn do not match the names the rosters author, so
   `rating_biases` matches nothing.** *Evidence:* `ObjectiveBiasFor(fc.Name, gunner.RatingBiases)`

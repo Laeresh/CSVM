@@ -100,7 +100,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver: mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; each mode picks the aim point and table `AiControlLaw` steers on. `SteeringPatrol` reports whether the last step actually flew the net (F13's leashes read it).
 - `src/Flight/AiControlLaw.cs` — the original's own AI steering law (decoded in `docs/org/aiControlLaw.md`): aim point + that point's velocity + one of four decoded parameter tables → stick and throttle lever. Engine-free and pure.
 - `src/Flight/AiModeMachine.cs` — the nine-mode AI state machine, the engine's decoded mode vocabulary: patrol/pursue/lay off/evade/evasive maneuver/stunned/avoid crash + two enum-only danger-zone modes; steady-hand and sixth-sense reaction rolls on the shipped chances.
-- `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery: intercept lead via `AimAssist.TryIntercept`, the ±11° gun cone and the quick-draw cone as fire gates, per-shot dead-eye scatter; mutable target, primary-target name and rating biases (the D12 script seams).
+- `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery: intercept lead via `AimAssist.TryIntercept`, the quick-draw cone and the engagement window as fire gates, the ±11° traverse clamp with its 10° residual gate, per-shot dead-eye scatter; mutable target, primary-target name and rating biases (the D12 script seams).
 - `src/Flight/AiVoiceDispatcher.cs` — the combat-voice trigger dispatch, engine-free: the talker roll, the 15 s per-slot cooldown armed on failure too, the bearing halving, the broadcast election, the DI tiers, the death cries with force, the computed bearing index.
 - `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula: rank = weight × 1200 + distance + objectiveBias, minimised; player base weight 0.7, ±0.2 bearing/altitude/facing terms, 1e21 beyond activation; rating-bias matching and the allied-attacker deconfliction pick.
 - `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints: nearest node first, then edge-list neighbours, seeded branch draws, and an anchored net offset onto its live trailer target (`BL-377`); aircraft-agnostic, shared by `AiPilot` and `ZeppelinMotion`.
@@ -1369,9 +1369,11 @@ The AI's forward-gun gunnery: per sim tick the host `FlightController` hands it 
 fire geometry (`Solve`), it answers with the trigger (`WantsFire`) and the intercept, and each
 round leaves along `ShotDirection(muzzlePos)` — the line from THAT barrel to the intercept point
 (wing guns converge; parallel lines straddle a fuselage) perturbed inside the dead-eye cone, one
-seeded draw per shot. Gates in order: an intercept reachable inside the weapon's RANGE
-(`AimAssist.TryIntercept`, consumed never re-derived), the airframe's ±11° `gun_pitch`/`gun_yaw`
-forward cone as a hard fire gate, and the quick-draw cone off the TARGET's nose/tail axis.
+seeded draw per shot. Gates in the engine's order: the quick-draw cone off the TARGET's nose/tail
+axis, the separation inside the slot's authored engagement window (1–900 m on every AI gun), then
+the airframe's ±11° `gun_pitch`/`gun_yaw` clamp on the lead (`AimAssist.TryIntercept`, consumed
+never re-derived) with the residual the clamp leaves gated at 10°, so the employable cone is the
+traverse limit plus the gate (`docs/org/aiPilot/aiWeapons.md`).
 Engine-free (`AiGunnerTests`); the live half is the `ai-gunnery` suite.
 
 ## src/Flight/AiVoiceDispatcher.cs

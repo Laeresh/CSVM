@@ -2,9 +2,10 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>The AI's forward-gun gunnery: the lead-sphere accuracy model and the shot-angle
-/// cones, decoded in docs/formats/ai-rosters.md (<c>ai_skill_parameters</c>) and
-/// docs/formats/vehicle.md (<c>gun_pitch</c>/<c>gun_yaw</c>). Per sim tick the host
+/// <summary>The AI's forward-gun gunnery: the lead-sphere accuracy model and the fire gates,
+/// decoded in docs/org/aiPilot/aiWeapons.md, with their authored values in
+/// docs/formats/ai-rosters.md (<c>ai_skill_parameters</c>) and docs/formats/vehicle.md
+/// (<c>gun_pitch</c>/<c>gun_yaw</c>). Per sim tick the host
 /// <see cref="FlightController"/> hands it the fire geometry (<see cref="Solve"/>); the gunner
 /// answers with the trigger (<see cref="WantsFire"/>) and the lead direction, perturbed inside
 /// the dead-eye cone (<see cref="ShotDirection"/>, one draw per shot). The lead solve is
@@ -57,9 +58,8 @@ public sealed class AiGunner
     /// <summary>Quick-draw shot-acceptance cone half-angle off the target's nose/tail axis,
     /// degrees — <c>quick_draw_angle</c> at the pilot's rating (50° at 1, 89° at 9). The
     /// same-named <c>quick_draw_chance</c> is not a gun term at all: it is the per-launch
-    /// ordnance roll (docs/org/aiPilot/aiWeapons.md), so nothing here consumes it. The
-    /// original applies this cone only jet-or-wingman against jet-or-wingman (<c>BL-396</c>).
-    /// </summary>
+    /// ordnance roll (docs/org/aiPilot/aiWeapons.md), so nothing here consumes it. The cone's
+    /// aircraft-against-aircraft scope is on <see cref="QuickDrawAccepts"/>.</summary>
     public float QuickDrawAngleDeg = 50f;
 
     /// <summary>Traverse yaw half-limit, degrees (<c>gun_yaw</c>).</summary>
@@ -138,8 +138,8 @@ public sealed class AiGunner
     /// <see cref="QuickDrawAngleDeg"/> about the target's nose axis or its tail axis. A
     /// degenerate zero separation passes (the geometry is meaningless there and the range gate
     /// owns that case). ⚠ The original applies this only aircraft-against-aircraft, a condition
-    /// <see cref="Target"/>'s type satisfies for us; re-check it when a gasbag or a ground
-    /// target becomes targetable (<c>BL-395</c>).</summary>
+    /// <see cref="Target"/>'s type satisfies rather than tests; it needs a real test once a
+    /// gasbag or a ground target can be aimed at (<c>BL-395</c>).</summary>
     public bool QuickDrawAccepts(Vector3 ownPos, Vector3 targetPos, Vector3 targetForward)
     {
         var away = ownPos - targetPos;

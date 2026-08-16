@@ -2,8 +2,8 @@
 
 Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
 `crimson.exe`, `language x86:LE:32:default`), 2026-08-16, for `BL-395` (our AI never fires
-ordnance) and `BL-396` (our gun gates were inferred, not read). Every claim names the function or
-address it came from; the data census names the file it counted.
+ordnance) and to settle the gun gates `AiGunner` had inferred from authored data. Every claim names
+the function or address it came from; the data census names the file it counted.
 
 This is the firing half of [`../aiPilot.md`](../aiPilot.md), which decodes what an AI *flies*:
 target acquisition, steering, escort, crash avoidance. Nothing here is about steering. The authored
@@ -27,7 +27,7 @@ layout, not from reading the turret update end to end.
 - [The fire routine, and the aim gate](#the-fire-routine-and-the-aim-gate)
 - [`gun_pitch`/`gun_yaw` clamp the mount, they do not gate the shot](#gun_pitchgun_yaw-clamp-the-mount-they-do-not-gate-the-shot)
 - [The specials](#the-specials)
-- [Our gun gates against this path](#our-gun-gates-against-this-path)
+- [What `AiGunner` runs](#what-aigunner-runs)
 - [What the shipped data amounts to](#what-the-shipped-data-amounts-to)
 - [Function map](#function-map)
 - [Open](#open)
@@ -198,20 +198,19 @@ the same two routines:
   is fired **only** at a gasbag, never at an aircraft, despite the Black Hat Warhawk carrying eight
   of them with the shortest refire in the game.
 
-## Our gun gates against this path
+## What `AiGunner` runs
 
-`AiGunner.Solve` applies three gates. Read against `FUN_0041f420` and `FUN_004b6820` they stand as
-follows; `BL-396` carries the fixes.
+`AiGunner.Solve` holds the gun path in this order: the quick-draw cosine, the squared engagement
+window against the separation itself, then the traverse clamp and the residual it leaves against
+`0.9848`. `MinRangeM`/`MaxRangeM` carry the shipped 1 to 900 m until the vehicle def's `weapons`
+tuple is parsed per vehicle (`BL-394`), and the clamp runs through `TurretController.LocalDir`, the
+same clamp-then-cone the turret gunners use.
 
-| Our gate | The original | Verdict |
-|---|---|---|
-| the round must reach the intercept inside the weapon's `RANGE` | squared separation inside the slot's `[+0x18, +0x1c]` window, 1 to 900 m on every AI gun | wrong quantity, and we have no minimum-range floor |
-| `[-11, 11]` degrees of yaw/pitch off the airframe's nose, a hard fire gate | the same numbers clamp the mount's aim; the gate is the 10-degree residual that survives the clamp | wrong mechanism, and our cone is about half the employable one |
-| the quick-draw cone, applied every tick against any target | the same test and the same `cos(quick_draw_angle)`, but only when the shooter's mode is jet or wingman **and** the target is a vehicle of those same classes | formula right, scope wrong |
-
-Two conditions on the aim gate have no counterpart in `AiGunner` at all: it is skipped for the
-player and for any vehicle carrying the `+0xf8` byte, and a `REAR` weapon negates the mount's aim
-value and additionally requires the being-pursued byte `+0xba`.
+Three things here have no counterpart on our side yet. The quick draw's aircraft-against-aircraft
+condition is satisfied by our target type rather than tested, and needs a real test once a gasbag or
+a ground target can be aimed at. The aim gate's two skips (the player, and any vehicle carrying the
+`+0xf8` byte) are not modelled. The `REAR` handling and the ordnance thresholds arrive with the
+ordnance trigger (`BL-395`).
 
 ## What the shipped data amounts to
 
