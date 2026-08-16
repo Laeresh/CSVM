@@ -1013,6 +1013,31 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   gate", and its "Open" note on the muzzle-position branch),
   [`docs/org/aim-assist.md`](docs/org/aim-assist.md).
 
+- `BL-408` `[Bug]` **A player's ordnance leaves along the pylon marker's axis; the original launches
+  it along the aircraft's axis.** *Evidence:* decoded, `FUN_004b6820`'s player ordnance branch builds
+  the direction it hands the spawn `FUN_005aef40` from the **aircraft's own basis axis**, negated
+  (taken as-is for a `REAR` weapon), and reads the mount for the spawn **position** only
+  ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md), "Who aims ordnance, and who does not").
+  We instead spawn from the pylon marker's full transform, direction included
+  (`FlightController.cs:1860-1865`, `PylonOrdnance`). The two agree only for a marker whose forward
+  axis is parallel to the airframe's, so any canted or toed-in pylon sends our round off the
+  original's line, and a salvo from pylons canted in opposite directions fans where the original's
+  flies parallel.
+  *Fix shape:* take the position from the pylon marker and the direction from the aircraft basis.
+  Small and local: one call site, no new data.
+  *⚠ Traps:* (a) **This is not the aim-assist question.** `BL-404` settled that no ordnance round is
+  aim-assisted, for the player or the AI; this item is only about which axis the unassisted round
+  leaves along, so do not reach for `FUN_004b6530`. (b) The AI is **not** wrong and must not be
+  changed to match: its branch passes mount `+0x3c`, the clamped mount aim in world space, and that
+  is what the original does for an AI. The player and the AI genuinely differ here. (c) `REAR` takes
+  the axis unnegated, so whatever sign convention the fix lands on has to survive both cases, though
+  no player-fittable stock loadout carries the one `REAR` weapon (`wep_13`).
+  *How you'd know it worked:* fire a full pylon salvo straight and level and watch whether the rounds
+  fly parallel to the nose. On an airframe whose pylon markers are canted, today they will not.
+  *Cross-refs:* `BL-404` (the decode this came out of, and the aiming question it settles),
+  `BL-405` (whether the mounted body should track the aim before launch, which is the visual half of
+  the same mount question), `BL-406` (the decode item), `PylonOrdnance`, `Projectile.cs`.
+
 - `BL-405` `[Fidelity]` **Mounted ordnance should track the aim before it launches, not hang fixed
   along the pylon.** *Evidence:* the mount model is decoded
   ([`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md), "`gun_pitch`/`gun_yaw` clamp
@@ -1141,8 +1166,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `wep_10` paints and `wep_11` homes and neither is useful alone. `TARGETABLE` is what wraps a round
   into the `TargetProjectile` list and sets the `+0x6c` admission byte `aiPilot.md` names, while
   `FLYOUT_HEALTH` is what lets it absorb damage; the two flags are different halves of "shootable".
-  Same pass answers `BL-404` in full. Still open: `TORPEDO` (no located reader, and it may carry
-  nothing), what spends the flyout's health, and the exact preference order inside the beeper query.
+  Same pass answers `BL-404` in full and mints `BL-408` off its residual. Fifth pass settles
+  `TORPEDO`: three sweeps (`TEST <mem>, 0x8` over the whole weapon-bearing span, `AND <mem>, 0x8`
+  program-wide, `AND <reg>, 0x8` in range) find **no reader at all**, so the flag joins `FIRING_HEAT`
+  and `cannon_jam` as parsed-and-never-acted-on, and every part of the torpedo's flight is accounted
+  for by keys that do have readers. Still open: what spends the flyout's health at round `+0x19d`,
+  and the exact preference order inside the beeper query `FUN_004b8b50`.
 
 ## Flight model & collision physics
 

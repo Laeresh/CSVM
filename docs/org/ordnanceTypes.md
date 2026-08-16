@@ -79,7 +79,7 @@ Every bit `FUN_004ba6f0` sets, in the order the function tests for them:
 
 | Bit | Key |
 |---|---|
-| `0x08` | `TORPEDO` |
+| `0x08` | `TORPEDO` (no reader, see below) |
 | `0x10` | `ROCKET` |
 | `0x20` | `TARGETABLE` |
 | `0x40` | `CANNON` |
@@ -374,12 +374,45 @@ routine computes the bearing to the hit source as an `atan2` converted to degree
 `FUN_00481330` for a `CANNON` hit or `FUN_004813c0` for anything else, passing the damage magnitude
 alongside.
 
+## `TORPEDO` is parsed and never read
+
+`FUN_004ba6f0` sets extension-struct bit `0x08` from the `TORPEDO` key, and **nothing in the
+executable tests it**. Three sweeps back that:
+
+- `TEST <memory>, 0x8` across the whole `0x400000`–`0x535c43` span, which contains every weapon,
+  projectile and vehicle routine: every hit dereferences a **scene-node** flag word (`node+0x38`,
+  `+0x0c`, `+0x24`), and none dereferences the weapon-extension pointer.
+- `AND <memory>, 0x8` across the entire program: **zero** matches.
+- `AND <register>, 0x8` in the weapon range: only `FUN_00442200`, which writes 0-or-8 masks into a
+  viewport block from a global mode and never touches a weapon.
+
+So the aerial torpedo's behaviour comes entirely from its other keys, and `TORPEDO` itself is inert.
+It joins `FIRING_HEAT` and `cannon_jam` as a key the original parses and never acts on.
+⚠ A `CMP`-based or shift-and-test idiom would evade all three sweeps, and the first sweep was
+truncated above `0x535c43`, which is past all weapon code but not past the whole image.
+
+### What the torpedo actually does, then
+
+Every part of `wep_14`'s flight is now accounted for by keys that **do** have readers:
+
+| Key | Value | Effect, from the decode above |
+|---|---|---|
+| `TURN_RATE` | 0.001 | the dumbfire sentinel: guidance runs but turns it essentially not at all |
+| `VELOCITY` | 60 m/s | its own cruise speed, and a slow one |
+| `ACCELERATION` | 0 | no motor ramp |
+| `LOCK_ON` | 2.5 s | inherits the launcher's velocity, decaying linearly to zero over 2.5 s |
+| `RANGE_MINIMUM` | 300 m | the one entry carrying it |
+| `DETONATION_DISTANCE` | 1 m | fuse trigger distance, and its ticket into the fuse list |
+| `IMPACT_PROXIMITY` | 30 m | blast radius |
+| `TARGETABLE` + `FLYOUT_HEALTH 10` | | wrapped into the target list, with 10 HP to absorb |
+| `DAMAGES_ZEPPELIN` | | restricted to zeppelins at launch, and the gasbag routing gate on impact |
+
+So it leaves the rail at launcher speed plus 60 m/s, flies straight with no gravity drop, and sheds
+the inherited component over 2.5 s down to a 60 m/s cruise. An aircraft at 120 m/s launches one that
+**halves its speed** across those 2.5 s, which is the slowdown `BL-290` recorded from the controls.
+
 ## Still open
 
-- **`TORPEDO`** (extension struct `0x08`). No reader located, and the searches behind that were
-  truncated by the tool's result cap, so this is not yet a finding. It is a live possibility that the
-  flag carries nothing: the torpedo's shootability comes from `FLYOUT_HEALTH` and `TARGETABLE`, and
-  its zeppelin restriction from `DAMAGES_ZEPPELIN`, leaving `TORPEDO` with no work to do.
 - **What spends the flyout's health** at round `+0x19d` when the projectile is shot.
 - The exact preference order inside the beeper query `FUN_004b8b50`.
 - `FUN_00480f50` tests `REAR` on the player's fire-feedback path and was not opened.
