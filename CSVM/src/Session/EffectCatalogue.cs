@@ -98,6 +98,13 @@ public static class EffectCatalogue
     // this splash off with the sliding wreck.
     public static readonly string[] GroundSplashAnimNames = { "flydirt_plane" };
 
+    // The bailed pilot under his canopy. He leaves a wreck that is itself carrying the aircraft's
+    // momentum, and the data cannot tell his launch from a thrown wreck piece, so without this he
+    // is catapulted along the flight path instead of drifting down (judged at the controls).
+    // ⚠ Wired into `InheritedVelocityExempt` beside the ground splash, for the same reason: he is
+    // not a piece of the wreck, he is a man stepping out of it.
+    public static readonly string[] BailoutAnimNames = { "chuteman" };
+
     // The crash def's sub-effects meant to lie flat on the struck surface rather than co-rotate
     // with the plane's impact attitude — the only crash-rig templates
     // `AnimRuntime.LevelPlacedTemplateNames` levels to world axes.

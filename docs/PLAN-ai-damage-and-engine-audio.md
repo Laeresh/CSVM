@@ -182,7 +182,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 20. ☑ The parachute: `chuteman` at 3.0 s, and the wreck's own landing sequences (the planes gamez is
     now a second stage source for the crash rig; ⚠ the Balmoral's three chutes still collapse to
     one, see D21)
-21. ☐ Evidence for the fall, against the two reference recordings
+21. ☐ Evidence for the fall
+22. ☑ The bailed pilot must not inherit the wreck's velocity
+23. ☐ Decode `start: null` after a timed event, and convert the anim family off `GD.Print`, against the two reference recordings
 
 ## ⚠ Wave D — what Waves A to C got wrong
 

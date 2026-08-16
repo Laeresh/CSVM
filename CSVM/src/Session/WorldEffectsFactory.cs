@@ -349,6 +349,7 @@ public sealed class WorldEffectsFactory
         // per-crash), because which defs are exempt never changes across a session.
         crashRuntime.InheritedVelocityExempt =
             new HashSet<string>(EffectCatalogue.GroundSplashAnimNames, StringComparer.OrdinalIgnoreCase);
+        crashRuntime.InheritedVelocityExempt.UnionWith(EffectCatalogue.BailoutAnimNames);
         // Surface-hugging sub-effects (water-splash rings/spray, dirt-burst dust) level to world
         // axes instead of inheriting impact attitude. Set once; these defs only ever play from a
         // crash sequence, so no per-crash toggle is needed.
