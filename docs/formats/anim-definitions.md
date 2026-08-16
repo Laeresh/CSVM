@@ -719,14 +719,20 @@ three-polygon sprite that is already spinning and flashing, and the twelve `fire
 variations of one shape rather than a sequence with obvious motion. **The clean A/B is the
 refinery vent**, which is a still object where the frames should visibly roll.
 
-### The behaviours are still triggerless
+### The behaviours are dead data, and CSVM does not run them
 
 All four `fire.zrd.json` names appear in exactly one file, their own. No compiled archive, no
 other reader, and there is no index-based call form. `CATCHES_FIRE` is a real ZWEP weapon key
 (`zwep_ini.c` `FUN_005ad630`, flag bit 13) but **no weapon in this install sets it**, so it is not
-the missing trigger either. The original invokes them engine-side, so reproducing a *damaged
-object catching fire* still requires choosing our own trigger. The always-on refinery flame does
-not: it is the material cycle above, and CSVM installs it in `EffectCycles`.
+the missing trigger either. Nothing in the shipped data ever reaches these four definitions, and
+they read as leftovers from the engine's earlier game rather than content this one uses.
+
+**CSVM therefore has no damaged-object catch-fire path, by decision.** Any condition we wired
+would be our invention, not a port, and an invented trigger is the kind of fidelity guess this
+project does not make. The always-on refinery flame is unaffected: it is the material cycle above,
+installed by `EffectCycles`, and needs no behaviour, no burn site and no trigger. What a damaged
+object does show is the `sputter_fire`/`sputter_black_smoke`/`sputter_fire_smoke` callees its
+`HEALTH`/`DAMAGE_SEQUENCE` script actually names.
 
 ## Point lights
 

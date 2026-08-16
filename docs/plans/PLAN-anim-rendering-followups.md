@@ -322,9 +322,9 @@ anchor. Fixed in `AnimRuntime.CallTargetAnchor` + an `AnimDefs` normalizer case 
 `docs/HISTORY.md` and the `anim-definitions.md` "CALL_ANIMATION carries a target node" section.
 
 **Postponed 2026-07-21 (user decision): the remaining fire work is a minor detail and its
-trigger is unrecoverable** — the user searched the disassembly and found no xref either. Moved
-to `backlog.md` under "Blocked / deferred" with the full decode, so nothing needs re-deriving
-if it is ever picked up. What was left, in dependency order:
+trigger is unrecoverable** — the user searched the disassembly and found no xref either. The
+decode lives in `docs/formats/anim-definitions.md`'s "Fire animations" section. What was left, in
+dependency order:
 
 1. **Build the effect-template pool.** `fire1`/`fire2` (and `large_firetrail`, `short_firetrail`,
    `lg_fireball`, … — the parentless roots at gamez indices ~74–150) are real geometry that
@@ -340,8 +340,9 @@ if it is ever picked up. What was left, in dependency order:
    `persistent_big_fire`, `persistent_small_fire`, `timed_small_fire`) appear in **exactly one
    file — their own**. Nothing in any compiled archive or reader calls them, and
    `CALL_ANIMATION` references animations by name string only (no index form exists anywhere).
-   So the original invokes them engine-side. Reproducing a persistent fire means choosing our
-   own trigger; **user is checking the disassembly** for xrefs to those strings.
+   Nothing reaches them, and CSVM does not reproduce a damaged-object fire: an invented trigger
+   would be a fidelity guess, so the four definitions stay dead. Item 2 landed anyway, since the
+   refinery flame is a material cycle that needs neither a template pool nor a trigger.
 
 ## 3. Mission-spawned entity rosters (`hk_zep`, CTF props)
 
