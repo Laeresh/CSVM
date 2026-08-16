@@ -14,7 +14,8 @@ by `CSVM/src/Flight/SpawnPoints.cs`.
 `[x, y, z, heading°]`. The original picks one entry at **random** per launch (e.g.
 C1/IA1 `zeppelin_run` = 4 spawns, which are the first 4 of `dogfight_ace`). Scenario
 names seen: `dogfight_ace`, `dogfight_squadron`, `stunt_flying`, `zeppelin_run`. No
-throttle/speed fields — the game uses a fixed start (below).
+throttle/speed fields here: an Instant Action spawn takes throttle 1.0 from the engine and
+its speed from the same `PLAYER_INIT[4]` the story missions use (see "Story mission spawns").
 
 Scenario names appear **only** in `ia.json` (spawn lists + `disallow_missions`); no
 reader carries scenario-conditional world state — the world build is per-mission,
@@ -79,18 +80,92 @@ block every actor is spawned from, and which of these keys the engine never read
 PLAYER_INIT  [1, [x, y, z], [pitch, yaw, roll]°, throttle, speed]
 ```
 
-Five elements; field[0] is `1` across all 50 missions; only the yaw of the rotation
-varies; `throttle` ∈ {0.5, 0.8, 1.0}; `speed` ∈ {150, 180, 580}.
+Five elements. Only the yaw of the rotation varies between missions. Position + yaw
+([1]/[2]) are confirmed correct: C3/M01's spawn matched the original side-by-side.
 
-**Fields [3]/[4] are NOT the player's spawn throttle/speed.** Confirmed in-game
-the original always spawns at **throttle 0.5** regardless of mission
-(while PLAYER_INIT[3] varies), and the start *speed* is **plane-dependent** (while
-PLAYER_INIT[4] varies per mission). Their real meaning is unidentified. Position + yaw
-([1]/[2]) are confirmed correct — C3/M01's spawn matched the original side-by-side.
+**Fields [3] and [4] are the player's spawn throttle and spawn speed**, each with exactly
+one reader. The parse site is `FUN_00466b70` (the `objectives.zrd` loader; the string
+`PLAYER_INIT` at `0062609c` has a single xref, from `0046777d`), which stores the five
+elements into the mission singleton at `0071b480`:
 
-The remake spawns at throttle 0.5 (correct) and a fixed 53.6 m/s ≈ 120 mph placeholder;
-the plane-dependent start speed is an open question (candidate: a fixed fraction of
-`fd_speed` — 53.6/135 ≈ 0.4 for the Bloodhawk — needs multi-plane measurements).
+| element | stored at | transform on the way in |
+|---|---|---|
+| [0] | `0071bb40` (`00467801`) | none |
+| [1] x, y, z | `0071bb44/48/4c` | none |
+| [2] pitch, yaw, roll | `0071bb50/54/58` | `× 0.017453292519943295` (double at `006040e8`), degrees to radians |
+| [3] throttle | `0071bb5c` (`00467879`) | none, verbatim float |
+| [4] speed | `0071bb60` (`0046788b`) | **`× 0.1`** (float at `006034a8`) |
+
+**Field [3] is the throttle lever setting**, read at `0047f450` and copied to the player
+aircraft's `+0x124` at `0047f45c`. That offset is the lever without ambiguity: the AI
+throttle servo (`FUN_004209b0`) walks it at `dt × 0.35`, and the human throttle input path
+(`FUN_0041b560`) adds into the same field.
+
+**Field [4] × 0.1 is the spawn speed in metres per second**, read at `0047f4da`. The value
+is negated and used as the scale on the nose axis (`FUN_0053fb40` rotates the unit vector at
+`006379d0` by the spawn orientation), giving velocity at player `+0x924/928/92c`, speed² at
+`+0x930` and its root at `+0x934`. The rotated vector is unit length, so the resulting speed
+is exactly `field[4] × 0.1`. The unit is confirmed independently: the AI cruise setpoint
+compared against `+0x934` is `80.4672` (`006036b8`), which is 180 mph × 0.44704 exactly.
+
+**Field [0] is a pending flag, not the constant `1`.** `FUN_00443de0` tests it at `004440ab`
+and only then calls the spawn routine, which clears it at `0047f3e2`. It means "PLAYER_INIT
+not yet applied", consumed once per mission load.
+
+### The authored values
+
+Across the 51 `PLAYER_INIT` records in this install (every chapter's `M0x`, `MP0x` and `IA1`):
+
+| field | value | records |
+|---|---|---|
+| [3] throttle | **0.8** | 49 |
+| | 0.5 | C1/M02 |
+| | 1.0 | C3/M01 |
+| [4] × 0.1 speed | **18 m/s** (40 mph) | 48 |
+| | 58 m/s (130 mph) | C1C/M01, C2B/M04 |
+| | 15 m/s (34 mph) | C1/M02 |
+
+### Which spawn path reads what
+
+The player spawn/reset routine is `FUN_0047f1f0(apply)`. All of its "place the player"
+branches share the one velocity computation above, so **the speed always comes from field [4]**;
+the branches differ only in position, rotation and throttle.
+
+| condition | position / rotation | throttle | speed |
+|---|---|---|---|
+| `apply != 0`, no override, mode ≠ 3 (story, multiplayer) | `PLAYER_INIT` [1]/[2] | `PLAYER_INIT` [3] | field [4] |
+| `apply != 0`, no override, **mode 3 (Instant Action)** | random point via `FUN_0045a390` | **1.0** (`0047f3fb`) | field [4] |
+| override spawn (byte at `0071daca` set) | `0071dad0`…`0071dae4` | 0 (`0047f3d2`) | field [4] |
+| `apply == 0`, grounded | unchanged | 0 (`0047f313`) | 0 |
+| `apply == 0`, airborne reset | altitude `+= 100.0` (`006032e4`) | 0.4 (`0047f28b`) | 20 m/s (`00608040`) |
+
+The mode test is `FUN_004639b0`, a one-line comparison of the mission object's `+0x700`
+against 3, called at `0047f3e8`. Instant Action therefore ignores the authored throttle
+(every `IA1` folder still carries one, at 0.8) but takes its speed from the same field as
+everything else. `apply != 0` is reached only from `004440bf`; the two reset call sites
+(`0047e15f`, `004804d9`) pass 0 and never read `PLAYER_INIT`.
+
+⚠ **Spawn speed is NOT plane-dependent, and an earlier reading here said it was.** A sweep of
+all 349 instructions of `FUN_0047f1f0` finds no reference to `fd_speed` (object `+0x668`) or to
+the aircraft def pointer: the routine never touches per-aircraft data. The per-airframe rule that
+does exist belongs to AI aircraft in the vehicle factory (`FUN_0047c210`), which spawns a
+pathless aircraft at `min(plane_speed_max, fd_speed)`, and is documented in
+[../org/flightModel.md](../org/flightModel.md).
+
+⚠ **The remake's 53.6 m/s is a developer teleport constant, not a spawn rule.** `−53.6448` at
+`0060803c` is read at three sites, all inside case `0x3b7` of the cheat-command dispatcher
+`FUN_0047e080`, which teleports the player to the camera. 53.6448 / 0.44704 is 120.000 mph
+exactly. The retired "candidate: 0.4 × `fd_speed` for the Bloodhawk" was a coincidence of that
+number against one airframe, not a mechanism.
+
+**The remake does not yet match either field**: `FlightController` starts every airframe at
+53.6 m/s on throttle 0.5, against the original's 18 m/s on throttle 0.8 in all but three
+missions, and `SpawnPoints.LoadPlayerInit` reads position and yaw only. ⚠ Landing the decoded
+values needs a sitting first: 18 m/s is below the Bloodhawk's computed stall speed (about
+25 m/s, [../org/flightModel.md](../org/flightModel.md)), so the original drops the player in
+below the wing's own stall and the aircraft accelerates out of it. That is what the data and the
+code say together, and it is a large change to the first seconds of every mission, so it is
+flown before it is believed.
 
 ## Campaign mission map
 

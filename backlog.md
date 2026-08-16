@@ -3000,8 +3000,30 @@ usual.
   (parked roster planes, not fresh spawns) is a separate fidelity gap from this bug; B6's fresh-spawn
   stand-in is documented in its landing commit.
 
-- `BL-074` `[Research]` **PLAYER_INIT fields [3]/[4] semantics + per-plane spawn speed** — story-mission spawns
-  currently assume the IA convention (0.5 throttle / 53.6 m/s).
+- `BL-074` `[Research]` **PLAYER_INIT fields [3]/[4] semantics + per-plane spawn speed.**
+  **The research half is answered; what is left is landing it.** Fields [3] and [4] *are* the
+  player's spawn throttle and spawn speed, one reader each: [3] goes to the throttle lever
+  (parsed `00467879` → `0071bb5c`, read `0047f450`, stored to aircraft `+0x124`), and [4] is
+  scaled by `0.1` on parse (`0046788b` → `0071bb60`, read `0047f4da`) to give the speed in m/s
+  along the nose. Authored values are throttle **0.8** in 49 of the 51 records and speed
+  **18 m/s** in 48 of them. **Spawn speed is not plane-dependent** in any path: the spawn routine
+  `FUN_0047f1f0` references neither `fd_speed` nor the aircraft def. The remake's 53.6 m/s is a
+  developer teleport constant (`0060803c`, cheat case `0x3b7`, 120.000 mph exactly), not a spawn
+  rule. Full decode with the branch table and the Instant Action case:
+  [`docs/formats/spawns.md`](docs/formats/spawns.md), "Story mission spawns"; the correction to the
+  flight-model page is item 13 of [`docs/org/flightModel.md`](docs/org/flightModel.md).
+  **What remains:** `FlightController.SpawnSpeed`/`SpawnThrottle` become reads off the mission's
+  `PLAYER_INIT` (`SpawnPoints.LoadPlayerInit` already parses the record and discards both fields),
+  consumed at the single `_model.Reset(...)` call site.
+  ⚠ **Traps.** (a) Do not land it unflown. 18 m/s is below the Bloodhawk's computed stall speed
+  (~25 m/s), so the decoded spawn drops the player in below the wing's own stall to accelerate out
+  of it; that is what the code and the data say together, and it is the first second of every
+  mission. (b) The two claims this entry used to rest on are false at source, so do not restore
+  them from an older reading: "always throttle 0.5 regardless of mission" (no `0.5` is written to
+  the lever anywhere in the image) and "the start speed is plane-dependent". (c) The per-airframe
+  rule `min(plane_speed_max, fd_speed)` is real but belongs to **AI** aircraft in the vehicle
+  factory (`FUN_0047c210`); it is not the player's. (d) Every `--det` golden moves, since spawn
+  speed is the initial condition of every scripted run: the re-pin is part of the landing.
 
 - `BL-314` `[Feature]` `[Blocked: PT-45]` **Race countdown — a rolling start on rails before the run clock
   opens.** The abreast starting grid landed 2026-08-08 (`RaceGrid`), so every pilot in a splitscreen
@@ -3026,11 +3048,12 @@ usual.
   **⚠ Traps — read before touching this.**
 
   1. **Do not derive the pre-GO setback from a speed.** `SpawnSpeed = 53.6f` is flagged
-     **PLACEHOLDER** (`FlightController.cs:300-302`) and `BL-074` will make spawn speed
-     plane-dependent. Any "start N seconds back at the spawn speed" arithmetic therefore lands each
-     aircraft of a mixed grid at a different point, which re-creates the unfairness the grid just
-     removed — in the one coordinate the grid does not control. The on-rails walk above avoids this
-     by construction: it simulates nothing and it ends on the spawn pose whatever the speed is.
+     **PLACEHOLDER** (`FlightController.cs:371`) and `BL-074` will make spawn speed
+     per-mission (decoded: `PLAYER_INIT[4] × 0.1`, 18 m/s in nearly every mission, against
+     today's 53.6). Any "start N seconds back at the spawn speed" arithmetic therefore bakes in a
+     number that is about to change by a factor of three, and would land each aircraft of a grid
+     somewhere different again the moment it does. The on-rails walk above avoids this by
+     construction: it simulates nothing and it ends on the spawn pose whatever the speed is.
   2. **This changes `StuntMission.Elapsed`'s documented rule.** "The clock never stops" is stated
      twice and on purpose (`StuntMission.cs:109-113` on the property, `:247-249` on `Tick`) — it is
      why a mid-run crash freeze still costs you time. A countdown means the clock must not *start*

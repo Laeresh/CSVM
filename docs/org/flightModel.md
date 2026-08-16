@@ -1201,9 +1201,11 @@ calls the field **`FakeDynSpeed`** and *measures* `TopSpeed` separately (if `fd_
 speed there would be nothing to measure), and at runtime `fd_speed` is used as a **normalising
 reference speed** — `speed/fd_speed` for gauge and effect fractions (`0x4b1e54`), a far-field
 cruise speed `fd_speed · throttle` (`0x48c593`, A2 below; this used to read "an AI target speed",
-which it is not), and a speed clamp (`0x46aaf4`) — never as a solved
-equilibrium. **Do not treat `fd_speed` as the original's top speed in B12/B13 without settling
-this.**
+which it is not), and an **initial** velocity for a spawning AI aircraft (`0x46aaf4`, the
+mission-event "move object to node" action; ⚠ this used to read "a speed clamp", which it is not,
+and it is the same `min(plane_speed_max, fd_speed)` rule the vehicle factory applies, item 13
+above) — never as a solved equilibrium. **Do not treat `fd_speed` as the original's top speed in
+B12/B13 without settling this.**
 
 **Bonus, and load-bearing for B13:** `[obj+0x124]` and `[obj+0x128]` are the **commanded** and
 **current throttle** — `FUN_0048e585` rate-limits the current toward the commanded and burns fuel
@@ -2077,9 +2079,22 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
 12. **The throttle lever slews at 0.5/s with no idle floor** (2 s full-to-idle); the remake applies
     it instantly. Decoded, unimplemented — a feel/transient gap, not a steady-state one, and the
     one mechanism that could contaminate the first seconds of any throttle-step footage.
-13. **Spawn speed is a fixed 53.6 m/s (≈120 mph) for every airframe.** The original's is
-    plane-dependent; this is a remake placeholder (`FlightController.SpawnSpeed`), kept fixed for
-    now per user decision, not a decode.
+13. **Spawn speed is a fixed 53.6 m/s (≈120 mph) for every airframe, and the original's is not
+    plane-dependent either.** ⚠ This item previously read "the original's is plane-dependent";
+    that is false at source. The player spawn routine `FUN_0047f1f0` takes its speed from the
+    mission's own `PLAYER_INIT[4] × 0.1` (18 m/s in 48 of 51 records) and touches no per-aircraft
+    data at all: no reference to `fd_speed` (object `+0x668`) or to the def pointer appears in any
+    of its 349 instructions. The remake's 53.6 m/s traces to `−53.6448` at `0060803c`, read only
+    by the cheat dispatcher `FUN_0047e080`'s case `0x3b7` (teleport player to camera), which is
+    120.000 mph exactly. Spawn throttle is `PLAYER_INIT[3]` (0.8 in 49 of 51 records), against the
+    remake's 0.5. Full decode, including the mode-3 Instant Action branch and the reset paths:
+    [../formats/spawns.md](../formats/spawns.md), "Story mission spawns".
+    The per-airframe spawn rule that does exist belongs to **AI** aircraft: the vehicle factory
+    `FUN_0047c210` gives a pathless aircraft `min(plane_speed_max, fd_speed)` along its nose
+    (comparison at `0047d84f`) and gives one with an authored waypoint path zero velocity and
+    throttle 1.0 (`0047d82d`). `plane_speed` is a two-value authored tag at def `+0x1e4`/`+0x1e8`,
+    each scaled by `0.44704` on parse (`00607b2c`), which the AI speed controller then uses as the
+    lower and upper clamps.
 
 ## Confidence
 

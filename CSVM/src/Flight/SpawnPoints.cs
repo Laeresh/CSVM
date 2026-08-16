@@ -13,8 +13,8 @@ public readonly record struct SpawnPoint(Vector3 Position, float HeadingDeg);
 /// <see cref="SpawnPoint"/>: <c>LoadIa</c> (instant-action <c>ia.json</c> <c>spawn_points</c>
 /// per scenario, one picked at random per launch) and <c>LoadPlayerInit</c> (story
 /// <c>objectives.json</c> <c>PLAYER_INIT</c>, position + yaw). Schema: docs/formats/spawns.md.
-/// ⚠ Throttle/speed from the data are deliberately ignored; the remake uses
-/// <see cref="FlightController"/>'s fixed start.</summary>
+/// ⚠ Throttle/speed from the data are decoded (they ARE the spawn throttle and speed) but
+/// still dropped here; the remake uses <see cref="FlightController"/>'s fixed start. BL-074.</summary>
 public static class SpawnPoints
 {
     /// <summary>Loads the spawn list for <paramref name="scenario"/> from the mission's
