@@ -151,6 +151,26 @@ with kind **0** and `CALIBER` times a global at `DAT_0064ef78 + 0x3c`. That is t
 the hit handler uses with kinds 1, 2 and 3, which confirms from the other direction that
 `SHAKES_CAMERA` is not the fire-path mechanism.
 
+## Who aims ordnance, and who does not
+
+The gun aim assist `FUN_004b6530` is reached from the **`CANNON` branch only**. Both ordnance
+branches, the player's and the AI's, bypass it, so no ordnance round of any shooter is aim-assisted.
+What separates the two is the direction each hands the spawn `FUN_005aef40`:
+
+- **The AI's ordnance leaves along the mount's clamped aim, in world space.** The direction argument
+  is the mount record's `+0x3c`, which `FUN_004b7670` writes at the end of every mount update as the
+  clamped aim `+0x48`–`+0x50` rotated through the aircraft's orientation matrix. That aim tracks the
+  lead solve within the authored `gun_pitch`/`gun_yaw` band
+  ([`aiPilot/aiWeapons.md`](aiPilot/aiWeapons.md)), so an AI's rocket really does leave along a
+  direction that follows the target.
+- **The player's ordnance leaves along the aircraft's own basis axis**, negated, or taken as-is for a
+  `REAR` weapon. The mount contributes the spawn **position** only; its aim is not read.
+
+So the original gives the player no aim component on ordnance, and gives the AI one. ⚠ Note the
+remaining difference on our side: we launch along the **pylon marker's** transform, where the
+original uses the **aircraft's** axis. Those coincide only for a pylon whose marker is aligned with
+the airframe.
+
 ## Guidance
 
 `FUN_005af960`, reached from `FUN_005af720`, is the per-round steering step. It runs for **every**
@@ -218,6 +238,52 @@ it, the candidate is skipped and the round flies on. The cone is measured agains
 facing, not the round's. `FUN_004b9770`, the terminal-impact path, repeats the same test against the
 victim's basis before it will resolve a hit.
 
+## The beeper and the seeker, which are one weapon in two halves
+
+`FUN_00441830` runs immediately after every spawn and is where a round acquires its per-type
+behaviour. Three things happen there, each on its own flag:
+
+- **`BEEPER_SEEKER`** (extension struct `0x8000`) installs `FUN_00441780` as the round's **per-frame
+  retarget callback** at round `+0x688`.
+- **`TARGETABLE`** (extension struct `0x20`) wraps the round in a 0x70-byte `TargetProjectile`
+  (vtable `PTR_LAB_006063c4`), naming it from string id `0x2f6a`, and pushes it onto `DAT_0064f78c`.
+- A weapon whose fuse distance (`+0x44`) exceeds 0.01 gets the same wrapper if it does not have one
+  already, with the weapon stored at wrapper `+0x68`.
+
+The wrapper's `+0x6c` byte is set to **1 only on the `TARGETABLE` path** and left 0 for a fuse-only
+wrapper, which is exactly the admission byte [`aiPilot.md`](aiPilot.md) names for `TargetProjectile`.
+So `TARGETABLE` is what makes a round appear in the target list, while `FLYOUT_HEALTH` is what lets
+it absorb damage; the two flags do different halves of "shootable" and the torpedo carries both.
+
+⚠ This also corrects the fuse section above: `DAT_0064f78c` is **not** every round in flight. Only
+rounds that are `TARGETABLE` or carry a fuse distance are ever wrapped into it, so the fuse loop
+walks exactly the set that could fuse, and a plain round is invisible to it.
+
+### The full beeper loop
+
+1. A `BEEPER` round reaches an aircraft. `FUN_004b9bc0` zeroes its damage and calls `FUN_004b88a0`,
+   which builds a tag object carrying the weapon's shared `TIME` and pushes it onto the tag list
+   `DAT_0071dbac` (count `DAT_0071dbb0`).
+2. `FUN_004b8ad0` counts every tag down by the frame delta through `FUN_004b89c0`. If the tagged
+   aircraft dies or is removed (`+0x91d`/`+0x91f`), the countdown is slammed to **-1.0**. Crossing
+   zero calls `FUN_004b8970`, which is where the tag stops being usable; the entry is only deleted
+   once it passes **-5.0**, so there is a five-second tail after expiry.
+3. A `BEEPER_SEEKER` round's callback `FUN_00441780` queries the tag list every frame through
+   `FUN_004b8b50`, passing the round's **position** (`+0x48`) and **heading** (`+0x3c`). Tags with a
+   countdown at or below zero are skipped.
+4. The query scores each remaining tag on the dot of the bearing against the round's heading and on
+   range relative to the current best, with thresholds 0.7, a 0.1 alignment margin, and distance
+   ratios of 1.0 and 1.2. The exact preference order was not disentangled from the control flow; what
+   is certain is that both alignment and relative range participate.
+5. The winner is written into the round's target fields `+0x70` and `+0x74`, which are the same
+   fields the guidance step reads. From there the round steers toward it at `TURN_RATE` like any
+   other guided round.
+
+So the two weapons are one system: `wep_10` paints a target for its `TIME`, and `wep_11`, the sole
+`BEEPER_SEEKER` and the sole weapon with a real `TURN_RATE` (1.25), homes on whatever is painted.
+Neither half is useful alone, which is also why the Seeker is the only entry that needs guidance at
+all.
+
 ## The shootable flyout
 
 `FLYOUT_HEALTH`, not `TARGETABLE`, is what makes a round shootable. At the end of the spawn
@@ -230,10 +296,8 @@ victim's basis before it will resolve a hit.
   `0x8000000` flag set, a `1` at node `+0xbc`, and a **back-pointer to the round at node `+0x40`**,
   which is what lets a collision against the node find the round it belongs to.
 
-The AI's side of this is decoded separately: [`aiPilot.md`](aiPilot.md) has `TargetProjectile`
-(list `DAT_0064f78c`, constructor `FUN_004a63b0`) as the consumer of `TARGETABLE`, admitted on the
-round's `+0x6c` byte. What writes `+0x6c` from the flag was not traced, so the join between the
-`TARGETABLE` admission and the `FLYOUT_HEALTH` health pair is the one link still missing.
+`TARGETABLE`'s half of the job, admitting the round to the target list, is `FUN_00441830` above.
+What spends `+0x19d` when the flyout is shot was not traced.
 
 ## The hit-side dispatch
 
@@ -312,16 +376,12 @@ alongside.
 
 ## Still open
 
-- **`BEEPER_SEEKER`** (extension struct `0x8000`). No reader located. The `BEEPER` half is decoded on
-  both the launch and hit sides, but what consumes the tag it leaves is not. The Seeker steers
-  through the ordinary guidance step like every other round, so whatever `BEEPER_SEEKER` adds is
-  target **selection**, not steering.
-- **`TORPEDO`** (extension struct `0x08`). No reader located. The torpedo's shootability comes from
-  `FLYOUT_HEALTH` and its zeppelin restriction from `DAMAGES_ZEPPELIN`, so this flag may carry
-  nothing.
-- **What writes the round's `+0x6c`**, the `TARGETABLE` admission byte that `aiPilot.md` names.
-- Absence of a located reader is not proof of absence. The bit searches behind the two flags above
-  were truncated by the tool's result cap and are not exhaustive.
+- **`TORPEDO`** (extension struct `0x08`). No reader located, and the searches behind that were
+  truncated by the tool's result cap, so this is not yet a finding. It is a live possibility that the
+  flag carries nothing: the torpedo's shootability comes from `FLYOUT_HEALTH` and `TARGETABLE`, and
+  its zeppelin restriction from `DAMAGES_ZEPPELIN`, leaving `TORPEDO` with no work to do.
+- **What spends the flyout's health** at round `+0x19d` when the projectile is shot.
+- The exact preference order inside the beeper query `FUN_004b8b50`.
 - `FUN_00480f50` tests `REAR` on the player's fire-feedback path and was not opened.
 - `FUN_004881e0` is the player's fire-input tick. It routes by `CANNON` (`0x40`) and `ROCKET`
   (`0x10`) only, feeding `CALIBER` to `FUN_004810d0` for guns and the whole weapon to `FUN_00480f50`
@@ -333,7 +393,8 @@ alongside.
 - `FUN_004b9bc0` was read in full. It handles hits **on an aircraft**; whether ground objects and
   zeppelins route through the same function is unread, so the "four types deal no damage" finding is
   stated for aircraft targets.
-- `FUN_004b6820`, `FUN_004b5fb0`, `FUN_004b9770`, `FUN_005aef40`, `FUN_005af960` and `FUN_004b1690`
+- `FUN_004b6820`, `FUN_004b5fb0`, `FUN_004b9770`, `FUN_005aef40`, `FUN_005af960`, `FUN_00441830`,
+  `FUN_00441780`, `FUN_004b8b50`, `FUN_004b8ad0`, `FUN_004b89c0`, `FUN_004b7670` and `FUN_004b1690`
   were read in full.
 - The `+0x74` bit assignments and the guidance scalar offsets were read from `FUN_005ad630`'s parse
   sites one key at a time, each confirmed against the key string it is stored beside. `+0x84` is

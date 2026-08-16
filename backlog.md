@@ -991,20 +991,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `FUN_00440ad0` muzzle-position branch the decode leaves unread; (c) whether the player's own
   ordnance skips the aim gate entirely the way it skips the `quick_draw_chance` roll
   (`0x004b6b41`).
-  ✅ **(c) is settled: the player skips the aim gate outright.** `FUN_004b6820` jumps over the whole
-  gate when the shooter is the player, so neither the player's guns nor the player's ordnance are
-  tested against it. When it does run, the threshold differs by class: **cos 5° for ordnance against
-  cos 10° for guns** ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md)).
-  📎 **(a), read but not yet confirmed to the trap's standard.** In the player's ordnance branch the
-  spawn `FUN_005aef40` is handed a direction built from the **vehicle's** basis axis
-  (`param_1[0x66]`–`[0x68]`), negated, or taken as-is for a `REAR` weapon; the mount contributes the
-  position only. The AI's ordnance branch instead takes the direction from the mount record at
-  `+0x3c`, which is neither the `+0x48` actual aim nor the `+0x78` desired direction that
-  `aiWeapons.md` names, so which mount field that is remains open. The argument roles above are
-  inferred from position in the call, not from reading `FUN_005aef40`.
-  ⚠ *Trap:* a "no aim on rockets" answer is what the shipped code already assumes, so a decode
-  that merely fails to find an assist has not confirmed it. The confirmation is the spawn call's
-  direction argument, named by address.
+  ✅ **ANSWERED, all three parts** ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md), "Who
+  aims ordnance, and who does not"). **(a)** The player's ordnance branch hands `FUN_005aef40` a
+  direction built from the **aircraft's own basis axis**, negated (taken as-is for a `REAR` weapon);
+  the mount contributes the spawn position only, and its aim is never read. The AI's branch instead
+  passes mount `+0x3c`, which `FUN_004b7670` writes at the end of every mount update as the clamped
+  aim `+0x48`–`+0x50` rotated into world space, so an AI's round does leave along a target-tracking
+  direction. **(b)** No. The assist `FUN_004b6530` is reached from the `CANNON` branch only; both
+  ordnance branches bypass it, for the player and the AI alike. **(c)** The player skips the aim gate
+  outright, `FUN_004b6820` jumping the whole block when the shooter is the player; when it does run
+  the threshold is cos 5° for ordnance against cos 10° for guns.
+  ⚠ **The residual is not the one this item expected.** "No aim on rockets" is confirmed for the
+  player, so the shipped assumption holds in kind, but our direction is the **pylon marker's**
+  transform where the original uses the **aircraft's axis**. Those agree only for a marker aligned
+  with the airframe, so a canted pylon is a real deviation. That, not the assist, is what to fix.
   *Why it matters now:* an AI's rocket already leaves along the clamped mount aim
   (`AiRocketeer.LaunchDirWorld`) while the player's leaves along the pylon axis, so the two differ
   by decision rather than by evidence until this is settled.
@@ -1135,8 +1135,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `FLYOUT_HEALTH`, not `TARGETABLE`, is what makes a round shootable. Four parsed keys
   (`PITCH_RATE`, `TURN_SUSPEND_TIME`, `TETHER_GUIDED`, `REMOTE_DETONATE`) are authored by no shipped
   weapon and so are absent from `weapons.md`'s census, but their defaults shape behaviour.
-  Still open: `BEEPER_SEEKER`, `TORPEDO` (which may carry nothing), and what writes a round's
-  `+0x6c` `TARGETABLE` admission byte.
+  Fourth pass closes the beeper pair and the targeting join via `FUN_00441830`, the post-spawn
+  registration: `BEEPER_SEEKER` installs a per-frame retarget callback that queries the beeper-tag
+  list and rewrites the round's target fields, which the guidance step then steers toward, so
+  `wep_10` paints and `wep_11` homes and neither is useful alone. `TARGETABLE` is what wraps a round
+  into the `TargetProjectile` list and sets the `+0x6c` admission byte `aiPilot.md` names, while
+  `FLYOUT_HEALTH` is what lets it absorb damage; the two flags are different halves of "shootable".
+  Same pass answers `BL-404` in full. Still open: `TORPEDO` (no located reader, and it may carry
+  nothing), what spends the flyout's health, and the exact preference order inside the beeper query.
 
 ## Flight model & collision physics
 
