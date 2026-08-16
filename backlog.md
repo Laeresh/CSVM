@@ -1031,6 +1031,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
+- `BL-414` `[Research]` **Untune the flight model: decode what is currently fitted.** `FlightModel.cs`
+  carries **18 `TUNE` markers** and **11 `flightModel.*` config overrides**, and
+  [`docs/org/flightModel.md`](docs/org/flightModel.md) already separates what was read out of
+  `crimson.exe` from what was fitted to match the original at the controls. This item is to shrink
+  the second set as far as the binary allows, constant by constant, rather than to re-fit any of
+  them. Priority targets are the ones a fitted value silently distorts: the lift clamp
+  (`LiftGMin` -5 / `LiftGMax` 9, a load factor), the aerodynamic ceiling `ClMaxStatic` /
+  `ClMaxMach`, `LiftAccelRate`, and the force/acceleration scale the lift and gravity terms share,
+  which that page records as a real unresolved conflict rather than a settled reading.
+  **Trigger:** a decoded death path (`BL-385`'s Wave D) put a dead hull under the model with no
+  thrust, and it *glided* where the original's drops, which is the kind of gap a fitted lift term
+  hides while a living aircraft still feels right.
+  ⚠ **Traps.** (a) These constants have measured provenance and A/B history at the controls; a
+  decode that replaces one must beat it on evidence, and "the number changed" is not the same as
+  "the aircraft is right" — this is the file where the user's eyes have overruled the instruments
+  before. (b) The two-integrator correction on that page is the worked example of how this goes
+  wrong: the provenance table named the wrong integrator for months. Confirm which function you are
+  reading before trusting an offset. (c) A change here moves every aircraft in the game; the goldens
+  and engine suites are the net, and a moved golden hash is a finding to explain, never to re-pin.
+  (d) Do not fold this into a feature item — the product here is the decode and its evidence, and a
+  correct disproof that leaves a constant fitted is a success.
+
 - `BL-089` `[Feature]` **Nitro booster — scoped, low priority (the user's standing call).** Recorded because the data is
   complete and waiting, not as a discovery. Shipped: `MSG_CMD_NITROUS` ("Use Nitro-Booster") is a
   bindable command and `MSG_HUD_NITRO` ("Nitrous: boost: %1 charge: %2") its two-value readout;
