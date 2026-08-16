@@ -102,6 +102,73 @@ public class AiPilotTests
         Assert.False(pilot.SteeringPatrol);
     }
 
+    /// <summary>The stun mask (<c>FUN_004200d0</c>): a stunned pilot hands back neutral stick and
+    /// rudder with the throttle lever left where it was, for exactly the seconds asked, and then
+    /// steers again; a second stun while stunned overwrites the clock. With a mode machine the
+    /// stun lives in its Stunned mode; without one the pilot keeps its own countdown, and the
+    /// mask is the same either way. Both are checked here.</summary>
+    [ExtractedDataFact]
+    public void AStunnedPilotHandsBackNeutralSticksForTheDurationAndThenResumes()
+    {
+        var stats = PlaneStats.Load(ZrdrPath, "player_bhawk");
+
+        foreach (bool withMachine in new[] { false, true })
+        {
+            var model = new FlightModel(stats);
+            model.Reset(new Vector3(0f, 400f, 0f), Basis.Identity, 80f, 0.85f);
+            // Ordered 90° off the nose, so an unmasked step always deflects a control.
+            var pilot = new AiPilot { TargetHeadingDeg = 90f, TargetAltitude = 400f };
+            if (withMachine)
+                pilot.Machine = new AiModeMachine(new System.Random(3));
+
+            var steering = pilot.Next(model, Dt);
+            Assert.True(Mathf.Abs(steering.Roll) + Mathf.Abs(steering.Pitch) + Mathf.Abs(steering.Yaw) > 0.01f,
+                $"the unstunned pilot ({(withMachine ? "machine" : "bare")}) did not deflect a control");
+            float lever = pilot.Throttle;
+
+            Assert.False(pilot.IsStunned);
+            pilot.Stun(1f);
+            Assert.True(pilot.IsStunned);
+            Assert.Equal(1f, pilot.StunRemainingS, 3);
+
+            // A whole second of neutral sticks, the lever untouched, the model still flying.
+            for (int i = 0; i < 59; i++)
+            {
+                var input = pilot.Next(model, Dt);
+                Assert.Equal(0f, input.Roll);
+                Assert.Equal(0f, input.Pitch);
+                Assert.Equal(0f, input.Yaw);
+                Assert.Equal(lever, input.Throttle, 5);
+                Assert.True(pilot.IsStunned, $"stun ended early at step {i}");
+                model.Step(input, Dt);
+            }
+
+            // Re-stunned mid-way: the clock is overwritten, not accumulated.
+            pilot.Stun(0.5f);
+            Assert.Equal(0.5f, pilot.StunRemainingS, 3);
+            for (int i = 0; i < 31; i++)
+                model.Step(pilot.Next(model, Dt), Dt);
+            Assert.False(pilot.IsStunned, $"the {(withMachine ? "machine" : "bare")} pilot stayed stunned past the overwritten clock");
+            Assert.Equal(0f, pilot.StunRemainingS);
+
+            // And it steers again on its own.
+            var resumed = pilot.Next(model, Dt);
+            Assert.True(Mathf.Abs(resumed.Roll) + Mathf.Abs(resumed.Pitch) + Mathf.Abs(resumed.Yaw) > 0.01f,
+                "the recovered pilot did not take the controls back");
+
+            // The respawn reset clears a running stun outright.
+            pilot.Stun(5f);
+            Assert.True(pilot.IsStunned);
+            pilot.ClearStun();
+            Assert.False(pilot.IsStunned);
+            Assert.Equal(0f, pilot.StunRemainingS);
+
+            // Zero seconds is not a stun.
+            pilot.Stun(0f);
+            Assert.False(pilot.IsStunned);
+        }
+    }
+
     /// <summary>The climb-out breaks to the right of the aeroplane's own GROUND TRACK, which is
     /// what makes two aircraft that both detect each other diverge instead of both pulling
     /// straight up along converging paths. Taken off the track and not the airframe, so roll and

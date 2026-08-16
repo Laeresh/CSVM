@@ -173,7 +173,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 13. ☑ `ScreenFlash`: the victim-routed blend channel
 14. ☑ `SONIC`/`FLASH`: the shared intensity model
 15. ☐ The player's screen wash: colour, weight, duration, blending
-16. ☐ The AI stun
+16. ☑ The AI stun
 17. ☐ `TANGLER`: the engine-dead timer
 18. ☐ `SMOKE_SCREEN`: the stun trap
 
@@ -597,15 +597,29 @@ wash.
 **⚠ Traps.** No input lockout for the player, ever. The asymmetry with `D16` is the design: the same
 round blinds a human and disables an AI.
 
-## D16 ☐ The AI stun
+## D16 ☑ The AI stun
+
+**Verdict.** Landed as `AiPilot.Stun(seconds)` behind `FlightController.TryStunPilot(seconds)`, the
+entry the hit path and the smoke screen call on a struck aircraft; the guards (human, dead or inert,
+no AI pilot) live in that method. The mask is neutral stick and rudder with the throttle lever left
+alone, so the aircraft stays on the flight model. Two corrections to this item's text: "state 0 or
+4" is the **vehicle dispatch class** at `+0x67c` (`jet`/`wingman`), not the AI mode, so the routine
+accepts a pilot in any mode including its own stun; and `+0x978` is the pilot's
+`stun_recovery_interval`, **display-only** in this routine (the debug line prints it whatever
+seconds were passed; only the sixth-sense caller passes it as the duration). The expiry is
+overwritten, not maxed. Decision 6 was applied against a machine that already carried the original's
+state 4 as `AiMode.Stunned` (the sixth-sense fail, D11), so no mode was added: `AiModeMachine.Stun`
+is the one entry both stuns share, and a machine-less pilot keeps its own countdown. Owed at the
+controls: an AI going limp for about five seconds under `--rocket=wep_08` and resuming, once the
+hit-side wiring lands.
 
 **Goal.** An AI hit by a sonic or flash round stops flying for up to five seconds.
 
-**Evidence (confidence: traced).** `FUN_004200d0` sets its own AI state 4, zeroes four control inputs
-and two further fields, and writes an expiry from the intensity × 5. It refuses a dead victim, the
-player, a victim with `+0xf8` set, and any AI not in state 0 or 4. Its debug line reports a value at
-`+0x978`, so a per-pilot term is involved. <TODO: trace where `+0x978` multiplies, or confirm it is
-display-only.>
+**Evidence (confidence: traced).** `FUN_004200d0` sets AI mode 4, zeroes the three stick channels raw
+and copied, and writes an expiry of clock + seconds, the caller's seconds being intensity × 5. It
+refuses a dead victim, the player, a victim with `+0xf8` set, and any vehicle whose class is not
+`jet` or `wingman`. `+0x978` in its debug line is `stun_recovery_interval`, traced to the skill
+loader and the roster spawn; it multiplies nothing here ([`org/ordnanceTypes.md`](org/ordnanceTypes.md)).
 
 **Approach.** Per Decision 6: mask `AiControlLaw`'s output while stunned and expose an `IsStunned`
 flag for `AiModeMachine` to read. Do **not** add a mode. The aircraft stays on the flight model, so a

@@ -560,14 +560,30 @@ The routine returns the intensity and **five times** the intensity. The player's
 the first; `FUN_004200d0` takes the second as a **stun duration in seconds**, so a dead-centre hit
 stuns for the full 5 s.
 
-`FUN_004200d0` refuses a dead victim, the player, a victim with `+0xf8` set, and any AI not in state
-0 or 4. Otherwise it sets AI state **4**, **zeroes four control inputs** (`+0x100`, `+0x108`,
-`+0x10c`, `+0x114`) and two more at `+0x11c`/`+0x120`, and writes the expiry to `+0xc0`. Its debug
-line reads "Stunned for %f seconds based on s…" off `+0x978`, so a per-pilot term is involved;
-where that term multiplies was not traced.
+`FUN_004200d0` refuses a dead victim (`+0x91d`), the player, a victim with `+0xf8` set, and any
+vehicle whose **dispatch class** `+0x67c` is not 0 or 4, that is, anything but a `jet` or a
+`wingman` ([`aiPilot.md`](aiPilot.md); the AI *mode* at `+0x358` is not consulted, so a stunned
+pilot is accepted). Otherwise it sets AI mode **4**, **zeroes the three stick channels raw and
+copied** (`+0x100`/`+0x108`/`+0x10c` and `+0x114`/`+0x11c`/`+0x120`,
+[`aiControlLaw.md`](aiControlLaw.md) "The channels"; the throttle lever at `+0x124` is left alone),
+and writes the expiry to `+0xc0` as **clock + seconds, overwriting** whatever was there. There is
+no max against the running expiry, so a stun landing on a stunned pilot replaces the clock in both
+directions.
+
+**`+0x978` is `stun_recovery_interval` and it is display-only here.** The field is the per-pilot
+interpolation of the `stun_recovery_interval` pair (`DAT_0071c4c8`/`DAT_0071c4cc`, written by the
+`ai_skill_parameters` loader `FUN_004735b0`, defaults 6.0/0.6, authored 4.8/0.6), stored at spawn by
+`FUN_0047c210` (`0x0047d16a`) and defaulted to a flat 3.0 in `FUN_004aff80` (`0x004b0404`). Its
+only other reader is `FUN_0041d9f0`'s failed sixth-sense test, which is `FUN_004200d0`'s third
+caller and passes `+0x978` **as the seconds argument** (`0x0041df89`, "AI has been evaded. Sixth
+sense test failed"). The debug `sprintf` inside `FUN_004200d0` prints `+0x978` regardless of what
+was passed, so it is truthful for that caller and misleading for the other two: a sonic or flash
+hit is stunned for five times the intensity and the smoke screen for `smokescreen_stun_interval`,
+and the pilot's recovery interval multiplies neither.
 
 So a sonic or flash round against an AI takes its hands off the controls for up to five seconds. It
-is the strongest non-damaging effect in the weapon table and we model none of it.
+is the strongest non-damaging effect in the weapon table. Our side: `AiPilot.Stun` through
+`FlightController.TryStunPilot`, which holds the victim guards.
 
 **The player's half is `FUN_0042e9d0`, and it is purely visual.** It is a full-screen colour wash:
 `SONIC` red `(1, 0, 0)`, `FLASH` white `(1, 1, 1)`, at a **weight** equal to the intensity and for a

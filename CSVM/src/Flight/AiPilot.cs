@@ -1,3 +1,4 @@
+using System;
 using Godot;
 
 namespace CSVM.Flight;
@@ -93,12 +94,27 @@ public sealed class AiPilot
     private const float MergeVerticalBiasM = 0.3f;
     private const float MergeVerticalBiasPerMps = 0.033554047f;
 
+    // The stun countdown of a pilot WITHOUT a mode machine, seconds; a pilot with one keeps its
+    // stun in the machine's Stunned mode instead (one timer per pilot, never two).
+    private float _bareStunRemainingS;
+
     /// <summary>Whether the LAST <see cref="Next"/> actually steered to <see cref="Patrol"/>'s
     /// node, as opposed to pursuing, evading or holding the bare orders. Reported rather than
     /// re-derived from the mode: the dispatch in <see cref="Next"/> is the only thing that
     /// decides it, so an observer (the debug overlay's leashes) that asked the mode machine
     /// instead could drift from it.</summary>
     public bool SteeringPatrol { get; private set; }
+
+    /// <summary>Whether the controls are masked to neutral this step: the original's AI state 4.
+    /// True while <see cref="Machine"/> sits in <see cref="AiMode.Stunned"/>, or, for a pilot
+    /// without a machine, while its own countdown runs. Read by the host for the gates the
+    /// original keys on state 4 (the ground-blow probe) and by the debug HUD.</summary>
+    public bool IsStunned =>
+        Machine is { } machine ? machine.Mode == AiMode.Stunned : _bareStunRemainingS > 0f;
+
+    /// <summary>Seconds of stun left, zero when not stunned.</summary>
+    public float StunRemainingS =>
+        Machine is { } machine ? machine.StunRemainingS : Mathf.Max(0f, _bareStunRemainingS);
 
     /// <summary>Aims the standing orders at holding the given spawn pose: heading from the
     /// pos→look-at pair, altitude from the position — what a freshly spawned patrol-less AI
@@ -175,6 +191,31 @@ public sealed class AiPilot
         _ => (ownSpeed - MergeSpeedMps) * MergeVerticalBiasPerMps,
     };
 
+    /// <summary>The stun handler's entry (decoded: <c>FUN_004200d0</c>): hands off the stick for
+    /// <paramref name="seconds"/>, then back to what it was doing, the aircraft staying on the
+    /// flight model with the lever where it was. Re-entrant: a second call OVERWRITES the remaining
+    /// time (clock + seconds, never a max), which the smoke screen relies on every frame. The victim
+    /// guards (dead, human, <c>+0xf8</c>) are the caller's: go through
+    /// <c>FlightController.TryStunPilot</c>.</summary>
+    public void Stun(float seconds)
+    {
+        if (seconds <= 0f)
+            return;
+        if (Machine is { } machine)
+            machine.Stun(seconds, FormattableString.Invariant($"stunned for {seconds:0.0} s"));
+        else
+            _bareStunRemainingS = seconds;
+    }
+
+    /// <summary>Clears a running stun outright: the respawn reset, so a pilot never wakes up
+    /// stunned in a fresh airframe.</summary>
+    public void ClearStun()
+    {
+        _bareStunRemainingS = 0f;
+        if (Machine is { Mode: AiMode.Stunned } machine)
+            machine.Enter(AiMode.Patrol, "respawned");
+    }
+
     /// <summary>One sim step's stick and throttle for the current orders. Pure over the model's
     /// state and this instance's fields (no clocks, no node reads, and the only randomness is
     /// <see cref="Patrol"/>'s own seeded branch draw), so a fixed-dt run is deterministic.</summary>
@@ -194,9 +235,7 @@ public sealed class AiPilot
             switch (mode)
             {
                 case AiMode.Stunned:
-                    // Controls neutral for the stun (the throttle lever is not a control
-                    // surface and stays where it was).
-                    return new FlightInput { Throttle = Mathf.Clamp(Throttle, 0f, 1f) };
+                    return StunnedInput();
 
                 case AiMode.EvasiveManeuver when machine.Executor is { } executor:
                     return executor.Next(model, dt);
@@ -226,8 +265,22 @@ public sealed class AiPilot
             }
         }
 
+        // A pilot with no machine keeps its own countdown; the mask is the same either way.
+        if (_bareStunRemainingS > 0f)
+        {
+            _bareStunRemainingS -= dt;
+            return StunnedInput();
+        }
+
         return quarry != null ? FlyPursuit(model, dt, quarry) : FlyPatrol(model, dt);
     }
+
+    // The stun mask: stick and rudder neutral, the throttle lever left where it was. The
+    // original zeroes exactly the three channels raw and copied (+0x100/+0x108/+0x10c and
+    // +0x114/+0x11c/+0x120, docs/org/aiControlLaw.md "The channels") and never the lever at
+    // +0x124, so a stunned aircraft coasts under power rather than falling out of the sky.
+    private FlightInput StunnedInput() =>
+        new() { Throttle = Mathf.Clamp(Throttle, 0f, 1f) };
 
     // Runs the original's law for this step's aim point and keeps the lever it walked.
     // The skill factor is the machine's `sixth_sense_factor`, which the decode shows

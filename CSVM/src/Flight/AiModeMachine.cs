@@ -28,7 +28,10 @@ public enum AiMode
     /// <summary>Playing one maneuver-library program through <see cref="ManeuverExecutor"/>.</summary>
     EvasiveManeuver,
 
-    /// <summary>Controls neutral for <c>stun_recovery_interval</c> after a failed sixth-sense test.</summary>
+    /// <summary>Controls neutral until the stun expires: the original's state 4, entered by a
+    /// failed sixth-sense test (<c>stun_recovery_interval</c>), a <c>SONIC</c>/<c>FLASH</c> hit
+    /// (five times the intensity) and every frame inside a smoke screen
+    /// (<c>smokescreen_stun_interval</c>), all through <see cref="AiModeMachine.Stun"/>.</summary>
     Stunned,
 
     /// <summary>Obstacle-closure override (terrain or another aircraft dead ahead): climb out,
@@ -227,6 +230,10 @@ public sealed class AiModeMachine
     /// <see cref="Mode"/> is <see cref="AiMode.EvasiveManeuver"/>.</summary>
     public ManeuverExecutor? Executor { get; private set; }
 
+    /// <summary>Seconds of stun left, zero outside <see cref="AiMode.Stunned"/>: the original's
+    /// expiry at <c>+0xc0</c> minus the clock.</summary>
+    public float StunRemainingS => Mode == AiMode.Stunned ? Mathf.Max(0f, _stunRemaining) : 0f;
+
     /// <summary>Evade's current heading order, degrees (mission-data convention).</summary>
     public float EvadeHeadingDeg { get; private set; }
 
@@ -403,9 +410,23 @@ public sealed class AiModeMachine
             (passed ? "passed." : "failed; AI now stunned."));
         if (passed)
             return;
-        _returnMode = Mode;
-        _stunRemaining = StunRecoveryIntervalS;
-        Transition(AiMode.Stunned, FormattableString.Invariant($"for {StunRecoveryIntervalS:0.0} s"));
+        Stun(StunRecoveryIntervalS, FormattableString.Invariant($"for {StunRecoveryIntervalS:0.0} s"));
+    }
+
+    /// <summary>The stun handler (decoded: <c>FUN_004200d0</c>, shared by the failed sixth-sense
+    /// test, a <c>SONIC</c>/<c>FLASH</c> hit and the smoke screen): controls neutral for
+    /// <paramref name="seconds"/>, then back to the interrupted mode. Pre-empts every mode (the
+    /// original writes state 4 without reading it), and a stun on a stunned pilot OVERWRITES the
+    /// expiry (clock + seconds, no max) BY DESIGN: the smoke screen refreshes it every frame. The
+    /// victim guards are the caller's (<c>FlightController.TryStunPilot</c>).</summary>
+    public void Stun(float seconds, string reason = "stunned")
+    {
+        if (seconds <= 0f)
+            return;
+        if (Mode is AiMode.Pursue or AiMode.LayOff or AiMode.Patrol)
+            _returnMode = Mode;
+        _stunRemaining = seconds;
+        Transition(AiMode.Stunned, reason);
     }
 
     // Evade needs an initial course even when entered externally: away from the
@@ -584,6 +605,8 @@ public sealed class AiModeMachine
         Mode = to;
         if (to != AiMode.EvasiveManeuver)
             Executor = null;
+        if (from == AiMode.Stunned)
+            _stunRemaining = 0f; // an override out of the stun leaves no stale expiry behind
         if (to == AiMode.Stunned && _stunRemaining <= 0f)
             _stunRemaining = StunRecoveryIntervalS;
         if (to == AiMode.Evade && _evadeRemaining <= 0f)

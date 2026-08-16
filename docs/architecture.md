@@ -1361,7 +1361,12 @@ an evasive maneuver plays its `ManeuverExecutor`, stunned returns neutral sticks
 one `FlightInput` per sim step out, read by a `FlightController` whose `Pilot` is set. Pure over
 the model state and its own fields, seeded randomness only, so a fixed-dt run is deterministic
 (`AiPilotTests`). The original's own steering law is `AiControlLaw`; this class is only its driver
-(docs/org/aiPilot.md).
+(docs/org/aiPilot.md). `Stun(seconds)` is the AI stun's entry (`FUN_004200d0`, reached by a
+`SONIC`/`FLASH` burst and the smoke screen through `FlightController.TryStunPilot`, which holds the
+victim guards): the mask is neutral stick and rudder with the throttle lever left where it was, the
+three channels the original zeroes and the one it does not, so the aircraft stays on the flight
+model and coasts under power. With a `Machine` the stun is its `Stunned` mode; without one the pilot
+keeps its own countdown; `IsStunned` reads either and `ClearStun` is the respawn reset.
 
 ## src/Flight/AiControlLaw.cs
 The original's own AI steering law, decoded as plan D31 in `docs/org/aiControlLaw.md` — read
@@ -1380,7 +1385,12 @@ into pursue inside `min_ai_active_dist`/vehicle `attack` (both 2000 shipped, `Ai
 `PlaneStats`); a hit rolls steady-hand (`NotifyDamage`, called from
 `FlightController.TakeProjectileHit` for AI planes) and a FAILED test breaks off; a pursued AI
 target entering an evasive state rolls sixth-sense and a FAILED test stuns for
-`stun_recovery_interval`; an evasive maneuver is an `EligibleFor`-culled, signature-weighted,
+`stun_recovery_interval`; `Stun(seconds)` is the one stun entry (the original's `FUN_004200d0`,
+shared by that roll, a `SONIC`/`FLASH` hit and the smoke screen): it enters `Stunned` from ANY
+mode, dropping a running maneuver or climb-out, and a stun landing on a stunned pilot OVERWRITES
+the remaining time (clock + seconds, no max), which is what lets the smoke screen refresh it every
+frame; the mode clears on its own clock and returns to the mode it interrupted, and an external
+`Enter` releases it with no stale expiry; an evasive maneuver is an `EligibleFor`-culled, signature-weighted,
 seeded library draw played to `ManeuverExecutor.Done`, then back; `lay off` is D15's rubber-band
 assist (decoded: the mode and `sixth_sense_factor` 0.994→1.07, "the ease-off while pursued") —
 pursue eases into it when a chasing HUMAN target has fallen behind, and it releases when the

@@ -811,6 +811,7 @@ public partial class FlightController : Node3D
         _crashed = false;
         _holdElapsed = 0f; // scripted hold sequences restart from the spawn
         _lastInput = default;
+        Pilot?.ClearStun();  // a fresh airframe never wakes up with its pilot's hands still off
         WingLights?.Reset(); // flares off; the cycle restarts from this spawn
         Surfaces?.Reset();   // control surfaces back to neutral
         Damage?.Reset();     // every part back to full HP
@@ -1021,6 +1022,20 @@ public partial class FlightController : Node3D
             ? $"⚠ HIT {struckPart.ToUpperInvariant()} {state.Fraction * 100f:0}%"
             : $"⚠ HIT HULL {Damage.SummaryHealthFraction * 100f:0}%";
         _damageFlash = DamageFlashTime;
+    }
+
+    /// <summary>The AI stun's entry for a struck aircraft (decoded: <c>FUN_004200d0</c>; a
+    /// <c>SONIC</c>/<c>FLASH</c> burst passes <see cref="DisablingIntensity"/>'s stun seconds, the
+    /// smoke screen <c>smokescreen_stun_interval</c>). The original's victim guards live here: never
+    /// a human (their half is the screen wash, no control is touched), never a dead or inert
+    /// airframe, never an aircraft with no AI pilot; the <c>+0xf8</c> byte is not modelled on our
+    /// side. Returns whether the pilot was stunned. Re-entrant: see <see cref="AiPilot.Stun"/>.</summary>
+    public bool TryStunPilot(float seconds)
+    {
+        if (IsHumanPiloted || !InPlay || Pilot is not { } pilot || seconds <= 0f)
+            return false;
+        pilot.Stun(seconds);
+        return true;
     }
 
     /// <summary>The receiving half of a plane-versus-plane ram: the striker's decoded
@@ -2004,13 +2019,13 @@ public partial class FlightController : Node3D
     // Ground blow's probe (docs/org/flightModel.md "Ground blow"): a ray along the nose
     // whose nearest hit FlightModel turns into a control-response bias.
     // ⚠ The mask is CollisionLayers.World, the decoded emitter rule — do not add an
-    // aircraft mask. ⚠ Skipped in AiMode.Stunned; do not lift either gate.
+    // aircraft mask. ⚠ Skipped while the AI pilot is stunned; do not lift either gate.
     private void ProbeGroundBlow(ref FlightInput input)
     {
         float elev = _model.Stats.GroundBlowElev;
         if (elev <= 0f)
             return;
-        if (!IsHumanPiloted && (!_model.UsesAiForcePath || Pilot?.Machine?.Mode == AiMode.Stunned))
+        if (!IsHumanPiloted && (!_model.UsesAiForcePath || Pilot?.IsStunned == true))
             return;
         var space = GetWorld3D()?.DirectSpaceState;
         if (space == null)

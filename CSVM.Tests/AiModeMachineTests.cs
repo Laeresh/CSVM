@@ -172,6 +172,129 @@ public class AiModeMachineTests
         Assert.Contains("Sixth sense test passed.", logged2);
     }
 
+    /// <summary>The ordnance stun (a SONIC/FLASH burst, the smoke screen) enters the same
+    /// state 4 the sixth-sense fail does, from ANY mode: the original writes the state without
+    /// reading it, so a running maneuver or climb-out is dropped. It clears on its own and
+    /// returns to the mode it interrupted.</summary>
+    [Fact]
+    public void AStunPreemptsAnyModeAndReturnsToTheInterruptedOne()
+    {
+        // From pursue: neutral for the given seconds, then pursue again.
+        var m = Machine();
+        var target = Home + new Vector3(500f, 0f, 0f);
+        PursueFrom(m, target);
+        string? reason = null;
+        m.ModeChanged += (_, to, why) => { if (to == AiMode.Stunned) reason = why; };
+        m.Stun(2f, "sonic burst");
+        Assert.Equal(AiMode.Stunned, m.Mode);
+        Assert.Equal("sonic burst", reason);
+        Assert.Equal(2f, m.StunRemainingS, 3);
+        for (int i = 0; i < 119; i++)
+            Assert.Equal(AiMode.Stunned, m.Update(Home, Level, target, null, 1f / 60f));
+        m.Update(Home, Level, target, null, 1f / 60f);
+        m.Update(Home, Level, target, null, 1f / 60f);
+        Assert.Equal(AiMode.Pursue, m.Mode);
+        Assert.Equal(0f, m.StunRemainingS);
+
+        // From an evasive maneuver: the executor is dropped, and the stun still returns to the
+        // mode the maneuver itself would have returned to.
+        var m2 = Machine();
+        m2.NaturalTouch = 2;
+        m2.Library = new[] { QuickManeuver("bank_turn", 2, duration: 5f) };
+        PursueFrom(m2, target);
+        m2.SteadyHandChance = 1f;
+        m2.NotifyDamage(8f, new Vector3(1f, 0f, 0f));
+        Assert.Equal(AiMode.EvasiveManeuver, m2.Mode);
+        m2.Stun(0.5f);
+        Assert.Equal(AiMode.Stunned, m2.Mode);
+        Assert.Null(m2.Executor);
+        for (int i = 0; i < 40; i++)
+            m2.Update(Home, Level, target, null, 1f / 60f);
+        Assert.Equal(AiMode.Pursue, m2.Mode);
+
+        // From avoid crash: the climb-out is overwritten too; with the line clear afterwards the
+        // pilot is back on patrol, not stuck in either state.
+        var m3 = Machine();
+        bool blocked = true;
+        m3.ProbeBlocked = (_, _) => blocked ? "test/obstacle" : null;
+        Assert.Equal(AiMode.AvoidCrash, m3.Update(Home, Level, null, null, Due));
+        m3.Stun(0.5f);
+        Assert.Equal(AiMode.Stunned, m3.Mode);
+        blocked = false;
+        for (int i = 0; i < 40; i++)
+            m3.Update(Home, Level, null, null, 1f / 60f);
+        Assert.Equal(AiMode.Patrol, m3.Mode);
+
+        // Zero or negative seconds is not a stun at all.
+        var m4 = Machine();
+        PursueFrom(m4, target);
+        m4.Stun(0f);
+        Assert.Equal(AiMode.Pursue, m4.Mode);
+    }
+
+    /// <summary>Re-entrancy is the design, not an accident: the original accepts its own stun
+    /// state as an input state and OVERWRITES the expiry (clock + seconds, no max). The smoke
+    /// screen holds a pilot by re-stunning every frame; a weaker hit shortens a longer stun.</summary>
+    [Fact]
+    public void AStunLandingOnAStunnedPilotOverwritesTheExpiry()
+    {
+        var m = Machine();
+        var target = Home + new Vector3(500f, 0f, 0f);
+        PursueFrom(m, target);
+        m.Stun(5f);
+        for (int i = 0; i < 60; i++)
+            m.Update(Home, Level, target, null, 1f / 60f);
+        Assert.Equal(4f, m.StunRemainingS, 2);
+
+        // Refreshed every frame for a second: still the full interval left at the end of it.
+        for (int i = 0; i < 60; i++)
+        {
+            m.Stun(5f);
+            m.Update(Home, Level, target, null, 1f / 60f);
+        }
+        Assert.Equal(AiMode.Stunned, m.Mode);
+        Assert.InRange(m.StunRemainingS, 4.9f, 5f);
+
+        // A shorter stun on top does not extend; it replaces, and the pilot recovers on the
+        // shorter clock.
+        m.Stun(0.5f);
+        Assert.Equal(0.5f, m.StunRemainingS, 3);
+        for (int i = 0; i < 40; i++)
+            m.Update(Home, Level, target, null, 1f / 60f);
+        Assert.Equal(AiMode.Pursue, m.Mode);
+
+        // The sixth-sense stun goes through the same entry, so it is refreshable too.
+        var m2 = Machine();
+        PursueFrom(m2, target);
+        m2.SixthSenseChance = 0f;
+        m2.StunRecoveryIntervalS = 1f;
+        m2.NotifyTargetEvaded();
+        Assert.Equal(AiMode.Stunned, m2.Mode);
+        m2.Stun(3f);
+        Assert.Equal(3f, m2.StunRemainingS, 3);
+    }
+
+    /// <summary>The stun cannot strand a pilot: an external mode override during it releases the
+    /// controls, and a stunned pilot takes no reaction rolls that could pile a second timer on.</summary>
+    [Fact]
+    public void AStunnedPilotIsReleasedByAnOverrideAndTakesNoRolls()
+    {
+        var m = Machine();
+        var target = Home + new Vector3(500f, 0f, 0f);
+        PursueFrom(m, target);
+        m.Stun(5f);
+        m.SteadyHandChance = 1f;
+        m.NotifyDamage(10f, new Vector3(1f, 0f, 0f));
+        Assert.Equal(AiMode.Stunned, m.Mode); // no controls to break off with
+        m.SixthSenseChance = 0f;
+        m.NotifyTargetEvaded();
+        Assert.Equal(AiMode.Stunned, m.Mode);
+
+        m.Enter(AiMode.Patrol, "scripted");
+        Assert.Equal(AiMode.Patrol, m.Mode);
+        Assert.Equal(0f, m.StunRemainingS);
+    }
+
     [Fact]
     public void EvasiveManeuverPlaysAnEligibleEntryToDoneAndReturns()
     {
