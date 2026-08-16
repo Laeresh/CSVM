@@ -196,8 +196,8 @@ public partial class FlightController : Node3D
 
     /// <summary>Whether <see cref="DestroyDef"/> takes the hull over itself (an <c>ObjectMotion</c>
     /// on <c>MAIN_ROOT_NODE</c>, with its own bounce landing) — true on all eleven airframe defs,
-    /// false on <c>player</c>, whose hull instead keeps falling under the flight model until it
-    /// strikes the world. Derived from the data by <c>EffectCatalogue.FliesOwnHull</c>.</summary>
+    /// false on <c>player</c>. It says who LANDS the wreck, not who flies it: every dead hull flies
+    /// itself until the def's <c>Callback 15</c>. Derived by <c>EffectCatalogue.FliesOwnHull</c>.</summary>
     public bool DestroyDefFliesWreck;
 
     /// <summary>The def the last <see cref="Crash"/> selected off <see cref="CrashDefs"/> —
@@ -587,9 +587,9 @@ public partial class FlightController : Node3D
     /// covers a live aircraft flown into terrain as well; this is the shot-down half alone.</summary>
     public bool Destroyed => _destroyed;
 
-    /// <summary>Whether the wreck is still falling under the flight model, on its way to the
-    /// ground-impact def. False once it lands, and never true for an airframe whose destroy def
-    /// flies the hull itself (<see cref="DestroyDefFliesWreck"/>).</summary>
+    /// <summary>Whether the wreck is still falling under the flight model. True from the kill until
+    /// the destroy def's <c>Callback 15</c> hands the hull to the anim, or until it lands and runs
+    /// its ground-impact def, whichever the airframe authors.</summary>
     public bool WreckFalling => _wreckFalling;
 
     /// <summary>An aircraft that has been BUILT but held completely out of the session — not
@@ -948,16 +948,6 @@ public partial class FlightController : Node3D
         float range = sel.Weapon.Range ?? 0f;
         return TargetHud.GunReaches(MuzzleMidpoint(sel), _model.VelocityDir * _model.Speed, speed,
             range + margin, targetPos, targetVel);
-    }
-
-    /// <summary>The Callback-16 seam: the dying vehicle's world momentum, handed to the anim
-    /// instance so an <c>impact_force</c> launch inherits it. Called as the destroy def starts;
-    /// <c>AnimRuntime</c>'s handler for the authored code 16 calls the same method, and writing the
-    /// same value twice is why it may.</summary>
-    public void PushWreckVelocityIntoAnim()
-    {
-        if (CrashRuntime != null)
-            CrashRuntime.InheritedWorldVelocity = _model.VelocityDir * _model.Speed * WreckMomentum;
     }
 
     /// <summary>--crash[=frame]: forces this player's crash outside any live collision. No struck
@@ -2141,12 +2131,17 @@ public partial class FlightController : Node3D
         string? destroyDef = CrashRuntime != null ? DestroyDef : null;
         if (destroyDef != null)
         {
-            PushWreckVelocityIntoAnim();
+            // The dead hull flies itself from here; the def's own Callback 15 stops it, at 3.0 s on
+            // the ten AI airframes and at once on `player`. ⚠ Wire both seams before Play, or the
+            // untimed player def raises them into nothing (docs/org/vehicleDamage.md).
+            _wreckFalling = true;
+            CrashRuntime!.WreckVelocity = () => _model.VelocityDir * _model.Speed;
+            CrashRuntime.StopWreckFlying = () => _wreckFalling = false;
             // The airburst, the pilot's chute and (on the eleven airframe defs) the wreck's own
             // launch: this plane's parts detaching, not a world destructible's.
             using (PerfSample.Scope(PerfSite.PartDetach))
             {
-                CrashRuntime!.Play(destroyDef, CrashAnchor, applyReset: false);
+                CrashRuntime.Play(destroyDef, CrashAnchor, applyReset: false);
                 CrashRuntime.Play("stopprops", PlaneModel, applyReset: false);
             }
         }
@@ -2156,12 +2151,9 @@ public partial class FlightController : Node3D
             // rather than leave a pristine hull hanging in the air.
             PlaneModel.Visible = false;
         }
-        // Which system carries the wreck down. A def that takes MAIN_ROOT_NODE over also authors
-        // its own bounce landing, so the flight model must not fly the same hull underneath it.
-        _wreckFalling = destroyDef != null && !DestroyDefFliesWreck;
         CutToCrashView(at);
         Log.Info("flight",
-            $"DESTROYED by {hitName} ({part}) def={destroyDef ?? "-"} wreck={(_wreckFalling ? "falling (flight model)" : DestroyDefFliesWreck ? "falling (anim)" : "none")} pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) spd={_model.Speed:0} m/s");
+            $"DESTROYED by {hitName} ({part}) def={destroyDef ?? "-"} wreck={(_wreckFalling ? "falling (flight model)" : "handed over on the kill frame")} lands={(DestroyDefFliesWreck ? "anim (bounce sequence)" : "ground-impact def")} pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) spd={_model.Speed:0} m/s");
         Downed?.Invoke(PlayerIndex, killer);
     }
 
@@ -2198,8 +2190,9 @@ public partial class FlightController : Node3D
             _hudCanvas.Visible = false;
     }
 
-    // The dead hull still flying itself down, for an airframe whose destroy def does not take it
-    // over: no thrust, no controls, and the world sweep that ends it in its ground-impact def.
+    // The dead hull flying itself down: no thrust, no controls, and the world sweep that ends it in
+    // its ground-impact def. Runs until the destroy def's Callback 15 takes the hull over, so a
+    // wreck that reaches the ground before that still gets its crash def, as the original's does.
     private void StepWreckFall(float dt)
     {
         if (!_wreckFalling)

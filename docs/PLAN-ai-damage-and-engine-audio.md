@@ -184,7 +184,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
     one, see D21)
 21. ☐ Evidence for the fall
 22. ☑ The bailed pilot must not inherit the wreck's velocity
-23. ☐ Decode `start: null` after a timed event, and convert the anim family off `GD.Print`, against the two reference recordings
+23. ☑ Decode `start: null` after a timed event (❌ disproven as the cause; the real mechanism is the
+    dead vehicle flying itself until `Callback 15`), and convert the anim family off `GD.Print`
+24. ☐ A dead hull glides instead of dropping: no lift and high drag once the engine is out
+25. ☐ `player-player` authors `Callback 15` untimed, so a dead player's hull freezes on the kill
+    frame and never reaches its ground-impact def — judge at the controls, against the two reference recordings
 
 ## ⚠ Wave D — what Waves A to C got wrong
 
@@ -790,13 +794,30 @@ is owed if the bound def set changes. D19 bound the destroy defs, which is exact
 logs `effect_pool_miss:5x37.86` against a 40 ms threshold, so the closure is calling more at once
 than the crash section sizes.
 
-**(c) The fall may not start for three seconds.** In `fury-fury`'s `destroy_craft` the events after
-the 3.0 s `chuteman` call (`Callback 16`, `Callback 15`, `CallSequence randomdestseq`) carry
-`start: null` and dispatch after it, so `randomdestseq`'s `ObjectMotion` (the fall itself) does not
-begin until 3 s after the kill, with the wreck holding the death position meanwhile. The reference
-recording shows the wreck falling well before the parachute appears, so either our reading of
-`start: null` after a timed event is wrong or the ordering is. **Settle this against the recording
-before adjusting anything** — it is the one beat of the choreography that currently disagrees.
+**(c) ❌ DISPROVEN — the fall's three-second delay was not an event-timing bug.** The hypothesis was
+that `start: null` after a timed event was misread, so `randomdestseq`'s `ObjectMotion` queued behind
+the 3.0 s `chuteman` call. **Our reading of `start: null` is correct** and was confirmed at the
+instruction level: `FUN_004ecbb0` reads the offset kind from the event's `+1` byte (1 Animation
+against `anim+0xb0`, 2 Sequence against `seq+0x24`, 3 Event against `seq+0x28`), evaluates the gate
+only once the previous event has completed, and stalls the sequence when it fails; an absent `start`
+encodes as `Animation 0.0`, which always passes. So `Callback 16`, `Callback 15` and
+`CallSequence randomdestseq` really are authored to fire at 3.0 s.
+
+What was missing is that **a dead aircraft keeps flying itself for those three seconds**.
+`FUN_004b82d0` sets `+0x91d = 1` and `+0x91f = 1` for mode class 0 (jet) and 4 (wingman), and
+`FUN_004897c0` keeps updating a vehicle while `+0x91f != 0`, so the integrator still runs while the
+AI think and the weapon loop are skipped. `LAB_00480710`'s code-15 arm clears `+0x91f` at
+`0x00480774`, and from the next frame the vehicle stops moving itself. The three events are therefore
+a **handover protocol**: 16 samples the velocity the wreck has reached after three seconds of falling
+under its own model, 15 releases the vehicle, and the `ObjectMotion` (whose `translation.initial` is
+all zero, so it has no velocity of its own) flies it from there. Sampling at the handover rather than
+at the kill is only meaningful if the vehicle moved in between, which is the internal evidence.
+
+The recordings confirm the gate rather than contradicting it: airburst to parachute is 2.75 s to
+6.0 s on one kill and 14.75 s to 17.75 s on the other, both 3.0 s within a frame. Beat (4), the
+"second explosion after the parachute", is authored *simultaneous* with it and reads as sequential
+only because by then the wreck is about 175 m downrange. Our wreck never moved, so the two landed on
+top of each other, which is exactly the symptom reported at the controls.
 
 **Playtest (owed, Wave D).** Shoot down an enemy and watch the whole sequence against
 `Enemy AI Shotdown.mp4`: airburst, burning wreck falling on its old heading, parachute, second

@@ -437,13 +437,15 @@ what decides what a callback means, never the def it sits in.
 family.** `randomdestseq`'s `ObjectMotion` names `MAIN_ROOT_NODE` with `impact_force`, gravity
 -9.8, `do_intersections`, `run_time 20` and `bounce_sequence { default: bounce_effects, water:
 destroyed_water }`, so on all eleven airframe defs the destroy anim takes the hull over and owns
-both the fall and the ground explosion; the vehicle no longer moves itself, so `FUN_0048b920` never
-sees a contact and the `ai_crash_*` table is left to what it is for, a LIVE aircraft flown into
+the last of the fall and the ground explosion; from the handover on the vehicle no longer moves
+itself, so `FUN_0048b920` sees no contact and the `ai_crash_*` table is left to what it is for
+(that, and a wreck that reaches the ground inside the first three seconds), a LIVE aircraft flown into
 terrain. `player-player` authors no hull `ObjectMotion` at all — only `piece1seq`..`piece4seq`,
-each with its own `pNgrndhit` bounce — so the player's hull keeps falling as a vehicle and its
-ground contact does run the table. That is why `player-player_crash_dirt` leaves `destroyed` active
-and plays `large_10sec_fire` on it: the node is only active because `destroy_craft` switched it on.
-Wiring both families to the kill would play the ground explosion twice.
+each with its own `pNgrndhit` bounce — but it authors its `Callback 15` UNTIMED, so by the rule in
+the next section a dead player's hull stops on the kill frame and its ground contact does not reach
+the table either; what falls is the four pieces. `player-player_crash_dirt` leaving `destroyed`
+active with `large_10sec_fire` on it is for the other case that def family serves, a live player
+flown into terrain. Wiring both families to the kill would play the ground explosion twice.
 
 **Nothing removes a destroyed vehicle.** There is no timeout, no distance cull, no count cap and no
 recycling on the death path. The wreck stops being visible when the GROUND-IMPACT anim switches its
@@ -459,6 +461,25 @@ the crash point, owned by the anim system and expiring on their own sequences. �
 authored differently: `player-player_crash_dirt` leaves `destroyed` active and plays
 `large_10sec_fire` on it, so a player dirt crash does leave a burning hulk. The difference is
 entirely in the data; both take the same code path.
+
+### A dead aircraft keeps flying itself until `Callback 15`
+
+⚠ **`+0x91f` is what keeps a shot-down aircraft moving, and code 15 is what stops it.** The
+per-vehicle update `FUN_004897c0` runs a vehicle when `+0x91d == 0 || +0x91f != 0`, so setting both
+on death (`FUN_004b82d0`, for mode class 0 jet / 4 wingman) keeps the dead aircraft ACTIVE: the
+movement dispatcher `FUN_00489ea0` carries the same test and still calls the aircraft integrator
+`FUN_0048e580`, while the AI think (`FUN_0041f810`/`FUN_0041c270`) and the weapon loop are skipped
+because each is gated on `+0x91f == 0`. `LAB_00480710`'s code-15 arm clears `+0x91f` at `0x00480774`,
+and from the next frame the vehicle falls out of the update and stops moving itself.
+
+That is why `Callback 16`, `Callback 15` and `CallSequence randomdestseq` sit in that order behind
+the 3.0 s chute gate on all ten AI airframes: **16 samples the velocity the wreck has reached after
+three seconds of falling on its own, 15 hands the hull over, and the `ObjectMotion` flies it from
+there.** `player-player` authors the same three untimed, so a dead player's hull stops on the kill
+frame instead. ⚠ Nothing about this is `start: null` semantics — an absent `start` is `Animation 0.0`
+and always passes, so the events behind a timed one fire at that timed event's time
+(`FUN_004ecbb0`, and [anim-definitions.md](../formats/anim-definitions.md)'s "Event scheduling").
+The fall before the parachute is the VEHICLE's, not the anim's.
 
 `LAB_00480710`, the callback, handles three event codes. **16** pushes the vehicle's velocity into
 the anim instance through `FUN_004ee0e0`, which is how a wreck inherits the aircraft's motion.
