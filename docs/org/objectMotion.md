@@ -322,9 +322,30 @@ is by zero. That is **495 of the install's 1,399** authored tumbles, including a
 i.e. a turn per metre travelled. **All 1,399 tumbles in the install author `Time` and none authors
 `Distance`**, so the branch is documented and unbuilt.
 
+## The spin (`XYZ_ROTATION`)
+
+Same parameterisation as the tumble: `initial` is a rate and `delta` is that rate's acceleration.
+The first-tick init seeds a live rate at `+0xa0..0xa8` from the authored triple at `+0x88..0x90`,
+and the update integrates it by `+0xa0 += dt × delta` off `+0x94..0x9c` each frame. The parser reads
+the delta triple only when the token block carries all seven elements, and scales all six values by
+`0.017453292`, so both triples are authored in degrees and compiled to radians.
+
+**The spin has no rest pose.** Per frame the update hands `(dt × rateX, dt × rateY, dt × rateZ)` to
+`FUN_004d25c0` (class 1) or `FUN_004d1ba0` (class 5), and both do nothing but **add** that triple
+onto the node's own stored euler angles. No base orientation is read, written or held anywhere: the
+`0x14c`-byte event record is zero-filled at parse and carries no orientation field at all, and the
+first-tick init copies rates only.
+
+⚠ **A replacing `OBJECT_MOTION` changes the rate and never the pose.** A node whose sequence
+re-asserts the spin at several different rates (`zeppelin_rocksleft` fires five such events at
+`rock_zeppelin`) keeps accumulating from the angles it already holds, so its attitude walks across
+repeated loops instead of returning to the authored one. That walk is the engine's behaviour, not a
+fault to correct, and it is why CSVM's `SpinMotion` seeding its rest from the node's **live** pose
+is the faithful reading: seeding from the authored pose would snap the node back at every rate
+change, which the original never does.
+
 ## The other channels
 
-- `XYZ_ROTATION` (`0x20`) is a steady spin about the node's own axes, rad/s compiled.
 - `SCALE` (`0x100`) is a linear ramp, clamped at 0.001, and the authored numbers are **offsets from
   unit scale** rather than absolute sizes. CSVM ramps that offset from `Vector3.One`; whether it
   should instead be the node's own authored scale is undecided — every node carrying this channel
