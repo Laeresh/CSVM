@@ -132,8 +132,9 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/VersusHud.cs` — per-pane Dogfight status line: remaining time, this player's kills, the leader, and the hostile marker.
 - `src/Flight/VersusBoard.cs` — the Dogfight results overlay, one whole-window CanvasLayer above the splitscreen panes.
 - `src/Flight/IaWrapupBoard.cs` — Instant Action's wrap-up board: outcome headline and the per-counter score rows, summed across every seat.
-- `src/Flight/PauseState.cs` — splitscreen pause bookkeeping: who paused, engine-free, owning none of the halt itself.
-- `src/Flight/PauseBoard.cs` — the shared pause overlay, one whole-window CanvasLayer like the results boards.
+- `src/Flight/PauseState.cs` — who is holding the sim clock and why: the pause owner and the results-board halt, engine-free.
+- `src/Flight/HaltReason.cs` — why the clock is stopped; the clock advances only when no reason is set.
+- `src/Flight/PauseBoard.cs` — the shared pause board and its Resume · Restart · Exit menu, one whole-window CanvasLayer.
 - `src/Flight/PhysicsConstants.cs` — `NomGravity`, the single `nom_gravity` value the flight model and its tests share.
 - `src/Flight/Weather.cs` — weather.json reader → `WeatherState`: per-zone fog, sunlight, cloud whiteout, wind, precipitation.
 - `src/Flight/FlightAudio.cs` — own-plane loops (engine, overspeed whine, rattle) + crash/prop one-shots, per-player `MixGain`.
@@ -171,7 +172,11 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab has a scripted
 `--debug-*` twin so a finding can be reproduced headlessly — see `docs/cli.md`.
 
-- `src/UI/MenuInput.cs` — one launchscreen player's input source: keyboard flag + a `Pads` array, edge/auto-repeat `Poll(dt)`.
+- `src/UI/MenuInput.cs` — one player's menu input source: keyboard flag + a `Pads` binding, edge/auto-repeat `Poll(dt)`.
+- `src/UI/BoardMenu.cs` — a board's cursor and item list, engine-free, so the selection rules test off engine.
+- `src/UI/BoardMenuItem.cs` — the rows a board menu can offer: Resume, Restart, Exit.
+- `src/UI/BoardMenuView.cs` — draws a board menu's rows in the launchscreen's cursor idiom, inside the board style.
+- `src/UI/BoardMenuHost.cs` — menu, rows and reader kept together, so a board wires one in two lines.
 - `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2–4), shared `World3D`, per-player visual-layer band.
 - `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session.
 - `src/UI/ScreenFlash.cs` — the `FBFX_COLOR_FROM_TO` full-screen wash: a close burst ramping the frame, routed per pane.
@@ -1501,7 +1506,10 @@ block, the off-screen edge arrow (`EdgePoint`, `ClockHour` bearing), run status 
 End-of-run results overlay: plain Godot UI (dimming backdrop → CenterContainer →
 PanelContainer → VBox + 3-column split grid) filled from `StuntMission.InCompletionOrder()`;
 wakes on `RunCompleted` (records via `ScoreStore.RecordIfBest`, logs the split table to stdout
-for headless review), branching NEW BEST vs BEST on the stored record.
+for headless review), branching NEW BEST vs BEST on the stored record. Raises `HaltReason.Ended`
+and carries a Restart · Exit `BoardMenu`; `_Process` releases both once `AllComplete` clears, so
+R and pad Y reach the rerun without going through the menu. Not built while Instant Action is
+active — `IaWrapupBoard` carries the splits there instead (`BL-358`).
 
 ## src/Flight/ScoreStore.cs
 Stunt best-time persistence: one JSON object in `user://stunt_scores.json` keyed
@@ -1521,8 +1529,10 @@ instead of a bare `GD.Print`. Off-engine coverage:
 The race's shared ranked results overlay: same clean-Godot-UI construction as StuntScoreboard,
 but covering the WHOLE window — on its own CanvasLayer (Layer 10, above SplitScreen's 0) under
 the session root, one row per player from `StuntRace.Standings()` (placing, tag, plane, zones,
-total + gap to the winner; DNF when unfinished). Wakes on `RaceCompleted`, hides in `_Process`
-once `AllFinished` clears; the footer's exit hint follows how the session was launched.
+total + gap to the winner; DNF when unfinished). Wakes on `RaceCompleted` and raises
+`HaltReason.Ended`; `_Process` hides it and releases the clock once `AllFinished` clears, so R and
+pad Y reach the rematch without going through the menu. Carries a Restart · Exit `BoardMenu`
+driven by player 1, Exit's label following how the session was launched.
 
 ## src/Flight/VersusMatch.cs
 Dogfight deathmatch bookkeeping: `RegisterKill(shooter,
@@ -1575,33 +1585,46 @@ once, unlike a per-pane HUD element. Wakes on `MatchCompleted`, hides in `_Proce
 `Completed` clears (a rematch); `Populate` runs ONLY from `OnMatchCompleted`, so the drawn rows
 stay the ones the match actually ended with even after `Restart()` zeroes the live state —
 `StuntRaceBoard`'s `FinishTime`-snapshot discipline, achieved here for free since `VersusStanding`
-is a value-type snapshot already. Live flying continues underneath (nothing scores post-match); R
-routes through `GameSession.RestartMatch` (mirrors `RestartRace`: `VersusMatch.Restart()` then
-every rig respawns), owned only while the board is visible via `FlightController.Match is
-{ Completed: true }` — checked before the crash branch, same R-ownership shape `Race`/
-`RestartRace` already use.
+is a value-type snapshot already. Raises `HaltReason.Ended`, so the world stops rather than leaving
+the losers to fly under a board that has already counted them. Carries a Restart · Exit
+`BoardMenu` driven by player 1; Restart routes through `GameSession.RestartMatch` (mirrors
+`RestartRace`: `VersusMatch.Restart()` then every rig respawns), which clears `Completed` and lets
+`_Process` do the hide and the clock release. R and pad Y reach the same call directly, owned only
+while the board is up via `FlightController.Match is { Completed: true }` — polled in
+`PollResultsShortcuts` off the rendered frame, since the halt means no sim step runs to read it.
+
+## src/Flight/HaltReason.cs
+Why the sim clock is stopped, as a flags set: `Paused` (a player asked, and carries an owner) and
+`Ended` (a results board is up). The clock advances only when the set is empty, which is what lets
+two systems halt it at once without either resuming it out from under the other. `PauseState`
+arbitrates; nothing else writes a reason.
 
 ## src/Flight/PauseState.cs
-Splitscreen pause bookkeeping (`BL-373`) — `VersusMatch`'s engine-free shape: no `GD.*`, no
-`Godot.` type, no `Node`. One instance per session, built by `GameSession.BuildFlightRigs` right
-after the rig loop and assigned to every rig's `FlightController.PauseState` (the same broadcast
-`Match` uses). `TryToggle(playerIndex)` is the whole surface: not paused → pauses and claims
-`OwnerPlayerIndex`, always accepted; paused → resumes only if `playerIndex` matches the owner,
-otherwise a silent no-op (`Changed` does not fire on a rejected attempt, so `PauseBoard` never
-flickers on another player's futile press). Off-engine coverage: `CSVM.Tests/PauseStateTests.cs`
-(any player pauses, only the owner resumes, a rejected attempt changes nothing and fires nothing).
+Who is holding the sim clock and why (`BL-373`) — `VersusMatch`'s engine-free shape: no `GD.*`, no
+`Godot.` type, no `Node`. One instance per session, built by `GameSession.BuildFlightRigs` ahead of
+the rig loop (the assembler hands it to the per-pane stunt board) and assigned to every rig's
+`FlightController.PauseState`. `TryToggle(playerIndex)` owns the pause half: not paused → pauses
+and claims `OwnerPlayerIndex`; paused → resumes only if `playerIndex` matches the owner, otherwise
+a silent no-op (`Changed` does not fire on a rejected attempt, so `PauseBoard` never flickers on
+another player's futile press). Refused outright while `Ended` is set — the results board's own
+menu already offers the only two things left to do, so a pause menu would stack on nothing.
+`Raise`/`Clear` own the results-board half and REJECT `Paused`, which carries ownership and must
+go through `TryToggle`; `ForceResume` drops a pause whoever owns it, for a rerun or an exit chosen
+from the menu. Off-engine coverage: `CSVM.Tests/PauseStateTests.cs`.
 
 ## src/Flight/PauseBoard.cs
 The shared pause overlay (`BL-373`) — `VersusBoard`'s WHOLE-window construction (pausing
 stops the game for everybody at once, not one pane), built once by `GameSession` on its own
 CanvasLayer (`UI.HudLayers.Board`, same layer the race/dogfight/wrap-up boards share) and wired to
 `PauseState.Changed` instead of a match/race completion event. Shows "PAUSED", the pausing
-player's tag in their own `SplitScreen.PlayerColor`, and a footer naming that same player as the
-only one who can resume — everyone else is told to wait rather than shown a prompt they cannot
-act on. `Populate()` runs only on a fresh pause (mirrors `VersusBoard`'s snapshot discipline);
-`Visible` tracks `PauseState.Paused` directly on every `Changed` event, no polling in `_Process`
-(unlike the match/race boards, which poll `Completed` each frame to catch a rematch — `PauseState`
-has no such external-reset case, so the event is sufficient).
+player's tag in their own `SplitScreen.PlayerColor`, and a `BoardMenu` of Resume · Restart · Exit
+driven by that same player alone — `PauseState` lets only the owner resume, so binding the cursor
+to the owner keeps one rule rather than two, and stops a second pad steering a menu whose Restart
+and Exit decide the whole session. Exit's label follows how the session was launched. A fresh menu
+each pause, so the cursor starts on Resume and a stray confirm cannot destroy a run.
+`Populate()` runs only on a fresh pause (mirrors `VersusBoard`'s snapshot discipline); `Visible`
+tracks `PauseState.Paused` on every `Changed` event, and `_Process` polls the host only to move
+the cursor.
 
 ## src/Flight/IaWrapupBoard.cs
 Instant Action's wrap-up board — `VersusBoard`'s WHOLE-window
@@ -1610,11 +1633,17 @@ construction, since the mission ends for every human at once (decisions 10/14), 
 Down, Danger Zones Completed, Shot %) — the langui titles at ids 1134-1137, kept as literal
 strings rather than read off `ui_strings.json` at runtime, since that table is a build-time
 extraction artifact of the `.rof` archive and not one of the five archives `SessionArchives.OpenFor`
-loads. Unlike `VersusBoard`/`StuntRaceBoard` it takes no live match object at all: `Present(won,
-elapsedSeconds, enemiesShotDown, zonesCompleted, shotPercent)` is the caller's own snapshot, handed
-in once from `InstantActionRuntime.MissionEnded` — `GameSession` owns every source (the mission
-clock, the kill tally, `ProjectilePool`'s shot counters, the summed `StuntMission.CompletedCount`)
-and this class only draws what it is given.
+loads. Unlike `VersusBoard`/`StuntRaceBoard` it takes no live match object at all: `Present`'s
+arguments are the caller's own snapshot, handed in once from `InstantActionRuntime.MissionEnded` —
+`GameSession` owns every source (the mission clock, the kill tally, `ProjectilePool`'s shot
+counters, the summed `StuntMission.CompletedCount`) and this class only draws what it is given.
+On a `stunt_flying` mission `Present` also takes a `StuntSummary`, and the board grows the run's
+zone splits, total and best-time row in `StuntScoreboard`'s layout; the scoreboard is then not
+built at all, which is how `BL-358`'s two stacked boards became one. Safe because the scoreboard
+only ever existed single-pane: several pilots take the race branch, which builds none.
+Raises `HaltReason.Ended` on `Present` and carries a Restart · Exit `BoardMenu` driven by player 1.
+Nothing else retires this board — a mission that has ended stays ended — so unlike the race and
+dogfight boards the hide and the clock release happen on the menu's own Restart.
 
 ## src/Flight/Weather.cs
 `WeatherState`: per-mission atmosphere from the flown mission's own weather.json — per-zone
@@ -1894,16 +1923,25 @@ hull pair. Collaborators:
 FlightModel, CameraController + CamParams, SpeedCue, Loadout + ProjectilePool (guns/rockets),
 `CollideDamageSink` →
 `AnimRuntime.CollideDamageAt` (fly-through facades), CrashRuntime, every HUD widget and animator.
-Pause (`BL-373`): `AllowPause` gates whether THIS rig's P/gamepad-Start reads at all (true for
-every human rig, false for AI rigs and the suites' bare test rigs); the edge-detected press then
-goes through `PauseState` — every human rig in a session shares the SAME instance (`GameSession`
-assigns it, the way `Match` is), so any player can pause but `PauseState.TryToggle` only lets
-`OwnerPlayerIndex` resume it. `_Process` mirrors `PauseState.Paused` into the session's
-`GameClock.Halted` every frame (a no-op write once every rig agrees), which is the one field every
-other halt-aware consumer (animation, puffers, the projectile pool, `.`'s single-step) already
-reads — `PauseState` only decides who may flip it, not how a halt behaves once flipped. A rig built
-with no `PauseState` (the suites) falls back to the pre-E43 unconditional toggle, unreachable there
-since `AllowPause` is false on every such rig. `PauseBoard` is the shared "PAUSED" overlay.
+Pause (`BL-373`): `AllowPause` gates whether THIS rig's P / Esc / gamepad-Start reads at all (true
+for every human rig, false for AI rigs and the suites' bare test rigs); the edge-detected press
+then goes through `PauseState` — every human rig in a session shares the SAME instance
+(`GameSession` assigns it, the way `Match` is), so any player can pause but `PauseState.TryToggle`
+only lets `OwnerPlayerIndex` resume it. Esc joins the toggle rather than leaving the flight: a
+board menu's Exit item is what leaves, so a pad can reach it. `_Process` mirrors `PauseState.Halted`
+into the session's `GameClock.Halted` every frame (a no-op write once every rig agrees), which is
+the one field every other halt-aware consumer (animation, puffers, the projectile pool, `.`'s
+single-step) already reads. Reading the COMBINED value is what lets a results board halt the world
+without this mirror fighting it back to running on the next frame — `PauseState` decides who may
+flip it, not how a halt behaves once flipped. A rig built with no `PauseState` (the suites) falls
+back to the pre-E43 unconditional toggle, unreachable there since `AllowPause` is false on every
+such rig. `PauseBoard` is the shared pause board.
+
+`PollResultsShortcuts` reads R / pad Y while a results board is up, from `_Process` on wall time
+rather than from the sim step. The board halts the clock, so the sim step no longer runs to read
+them, and the hold harness's automatic rematch would have stopped with them. The sim step keeps
+only the structural halves of those branches: the early returns, and the `_simPrev = _simCurr`
+hold that leaves no stale pair to interpolate at the finish pose.
 `Crash` reads the struck body's numeric surface id (`SceneBuilder.SurfaceIdMeta`) and indexes
 `CrashDefs` (`SurfaceDefTable`) with it, the original's own cascade: `dirt`(13) plays
 `player_crash_dirt` + `snd_exp_ground_a`, `water`(1) `player_crash_water` + `snd_exp_water_a`, and
@@ -2159,10 +2197,45 @@ is why `Build` now also takes `dataRoot`. `DebugWaves(N)`/`DebugWingmen(N)` (--d
 --debug-wingmen=) are `DebugJoin`'s own screenshot-aid pattern, extended to the wizard's own
 screens.
 
+## src/UI/BoardMenu.cs
+A board's cursor and item list, engine-free so the selection rules test off engine the way
+`PauseState` does. Holds no input source: the board polls its menu owner through `MenuInput` and
+feeds one frame's result to `Handle(move, accept, back)`, which is what stops a pad steering a menu
+it does not own. Returns whether the highlight moved, so a board repaints only when it has to.
+Opens on the first item, and the boards order their rows so the first is the harmless one (Resume,
+else Restart) — a stray confirm on a menu that just appeared then cannot destroy a run. Confirm
+beats back in the same frame, the row having already been chosen. A results board's menu is not
+`Dismissable`: dismissing it would leave the player in a halted world with no way back, so it
+answers no back key and advertises none. Off-engine coverage: `CSVM.Tests/BoardMenuTests.cs`.
+
+## src/UI/BoardMenuItem.cs
+The rows a board menu can offer — Resume, Restart, Exit. The board owning the menu decides which it
+carries and what each does; Resume appears only on the pause board, and Exit's label follows
+whether the session can return to the launchscreen or only quit.
+
+## src/UI/BoardMenuView.cs
+Draws a `BoardMenu`'s rows in `LaunchMenu`'s cursor idiom (dim rows, the highlighted one gold
+behind a marker) inside the board style all five boards already share, so the cursor reads the same
+wherever it appears and a layout fix lands once. `Refresh()` recolours from the current highlight,
+touching only label overrides. The footer is the button legend, since nothing else on a board
+teaches the cursor; a results board's has no back key to name.
+
+## src/UI/BoardMenuHost.cs
+`BoardMenu` + `BoardMenuView` + the reader, kept together so a board wires a menu in two lines
+rather than restating the poll-handle-repaint order five times. `Build` primes the reader, so a
+button still held from whatever raised the board is not read as a fresh press. ⚠ `Poll` takes WALL
+time: the clock this menu is holding does not advance, so auto-repeat on sim dt would never fire.
+Reads `PadBack`, not `Back` — Esc and Start reach the pause toggle through `FlightController`, so
+the combined back would act twice on one press.
+
 ## src/UI/MenuInput.cs
-One launchscreen player's input source — keyboard flag (player 1 only), `Pads` device array, edge/
-auto-repeat state; `Poll(dt)` fills Move/MoveX/Accept/Back/Start (polled: actions can't read a
-named device). `MoveX` (Left/Right) is `Move`'s horizontal twin, added
+One player's menu input source — keyboard flag (player 1 only), `Pads` binding, edge/auto-repeat
+state; `Poll(dt)` fills Move/MoveX/Accept/Back/PadBack/Start (polled: actions can't read a
+named device). `Pads` is nullable, null meaning every connected pad, which is the same binding
+`FlightController.PadDevices` takes — a single-player session has no per-player assignment to hand
+over. `PadBack` is the pad's B alone, for a reader whose Escape is spoken for elsewhere; a board
+menu's is. Serves both the launchscreen and the in-flight board menus.
+`MoveX` (Left/Right) is `Move`'s horizontal twin, added
 so an Instant Action wizard screen can carry a vertical list cursor and a horizontal stepper at
 once without either read starving the other: MissionType's lives, WaveEdit's four fields and
 Wingmen's count/aircraft all read it — every other screen ignores it.
@@ -2541,10 +2614,15 @@ the ace (`dogfight_ace` only; F12 adds the zeppelin arm) right after the player 
 through that overload, with the authored `PaintScheme`/`InstantActionRuntime.EnemyTeam`/rating —
 the ace's own spawn-point draw is `InstantActionRuntime.ChooseAceSpawn` over
 `Rng.Stream(Rng.Spawn)`, one call after the player's own `ChooseSpawnBase` draw in the same
-stream, so a `--det` run reproduces it. Right after the rig loop, `BuildFlightRigs` also builds one
-`PauseState` (`BL-373`) and assigns it to every rig's `FlightController.PauseState`, then
-`PauseBoard.Build`s the shared "PAUSED" overlay on its own CanvasLayer — single player included, so
-there is one pause path rather than a solo one plus a splitscreen one. Right after the ace block, D9's wingman block spawns
+stream, so a `--det` run reproduces it. `BuildFlightRigs` builds one `PauseState` (`BL-373`) and one
+`MenuInput` per player AHEAD of the rig loop, since the assembler hands both to the per-pane stunt
+board, then assigns the state to every rig's `FlightController.PauseState` and `PauseBoard.Build`s
+the shared pause board — single player included, so there is one pause path rather than a solo one
+plus a splitscreen one. `MenuInputFor(playerIndex)` is the seam every board menu takes its owner's
+reader from. `Rerun()` is the Restart item's session-wide arm: the race and the match reset their
+own bookkeeping, anything else resets per plane. `RerunInstantAction` is the mission's own —
+runtime, Shot % counters, spectator panes and every plane. ⚠ It does NOT reset the enemy waves;
+see the backlog's rerun reset audit. Right after the ace block, D9's wingman block spawns
 `InstantActionRuntime.FlownWingmen(NumWingmen, _rigs.Count)` wingmen (`NumWingmen` is 0 on
 `dogfight_ace`, so the two blocks never both fire) on `AimAssist.PlayerTeam`, fanned off
 `_rigs[0]`'s pose by `WingmanSlotFor`, wearing the paint catalog's `player_fortune` entry (no
@@ -2906,7 +2984,11 @@ The default root is export-aware: editor (and editor-run builds) → the repo ch
 exe's own directory; `CSVM_DATA_ROOT`/`--data-root=` override either.
 `LaunchSession()` instantiates a `GameSession` per
 launch; `ReturnToMenu` `QueueFree`s it; a menu launch derives its spec via
-`SessionSpec.FromMenu(_cli, …)`, never from the outgoing spec.
+`SessionSpec.FromMenu(_cli, …)`, never from the outgoing spec. `ExitSession` is the boards' Exit
+item, handed down through `LauncherContext`: back to the launchscreen when the process launched
+into it, out of the game otherwise. The routing Esc used to do — Esc now opens the pause board
+instead, so leaving a flight is reachable from a pad, and this one rule lives here rather than
+being restated per board.
 `ReportPerf`'s window line carries `max_ms`/`p95_ms` beside its means:
 a preallocated `_perfFrameMs` ring holds each frame's unaveraged wall cost, sorted into scratch
 at window close. No `p99_ms` — at `PerfWindowFrames` = 60 it would equal `max_ms` by construction.

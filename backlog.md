@@ -2771,7 +2771,7 @@ viewer set behind `ProjectilePool.Viewers` / `ScreenSize.NearestFloor` for draw 
 (`Session/WeatherRig.Tick`, stepped once per frame outside the per-rig loop on purpose). Splitscreen-scoped items that live with
 their own system: `BL-231` (per-player pool term), `BL-296` (per-player ActionMap), `BL-299`
 (MP spawn maps), `BL-301` (Dogfight tuning), `BL-314` (race countdown), `BL-351` (per-pane target
-cycling), `BL-358` (board stacking).
+cycling).
 
 The theme's first batch (`BL-126`, `BL-365`–`BL-376`) landed via
 [`docs/plans/PLAN-splitscreen-polish.md`](docs/plans/PLAN-splitscreen-polish.md) (2026-08-15,
@@ -2899,19 +2899,24 @@ usual.
   does not, and the two should not be conflated. (b) `PURCHASE` implies an economy, which belongs to
   the campaign and not to Instant Action.
 
-- `BL-358` `[Polish]` **The Instant Action wrap-up board stacks on top of the stunt scoreboard on a
-  `stunt_flying` mission.** Landed alongside `PLAN-instant-action.md` G14 (2026-08-14), screenshot-
-  observed (`--ia=` a `stunt_flying` file, `--debug-scoreboard`): `FlightRigAssembler` already builds
-  a per-pane `Flight/StuntScoreboard` unconditionally for any completed stunt run, and G14's own
-  `Flight/IaWrapupBoard` wakes on the SAME event, so both render at once — the wrap-up board correctly
-  drawn on top (`CanvasLayer` 10 over the pane's own HUD canvas), but the stunt board's zone-split
-  table shows through behind it. Cosmetic only: every number both boards show is correct. Whether the
-  fix is hiding `StuntScoreboard` for the duration of an Instant Action mission, sequencing the two
-  (splits first, then the wrap-up), or leaving both (the original may have shown an analogous
-  sequence of screens) is a design call this item did not make, since G14's own scope was the four
-  rows, not the interaction between two already-separate boards — `docs/plans/PLAN-instant-action.md`'s own
-  trap (b) on this item says not to change either board's persistence rule while adding one that
-  shows both, which this leaves untouched.
+- `BL-410` `[Bug]` **A rerun does not reset the enemy waves, so the second run of an Instant Action
+  mission is not the first one again.** The wrap-up board's Restart item reruns the mission in place:
+  `InstantActionRuntime.Rerun` clears the clock, the outcome and the lives ledger,
+  `ProjectilePool.ResetShotCounters` zeroes Shot %, the spectator panes go back to their pilots and
+  every plane respawns. The wave runtimes are untouched, so a rerun flies against whatever the waves
+  were left as — cleared waves stay cleared on a `dogfight_squadron`, and a downed ace stays down.
+  ⚠ *Traps:* (a) The reset ledger is the whole item, not the wave list alone — audit every runtime a
+  mission touches (`InstantActionWaves`, the generator arms, the objective zeppelin's damage state,
+  `AiAircraftSpawner`'s spawned roster, `GameClock.Frame`/`Time`) and say for each whether it resets,
+  deliberately persists, or cannot. (b) `ObjectiveEnabled` must NOT reset: it records that this
+  mission's win signal can never arrive, a fact about the def rather than about the run
+  (`InstantActionEndTests.ARerunLeavesAnUnwinnableMissionUnwinnable` pins it). (c) A rerun must stay
+  a rerun — same seed, same world, no session teardown — so anything that can only be fixed by
+  rebuilding belongs in a separate relaunch item, not here.
+  *How you'd know it worked:* a `dogfight_squadron` rerun presents the same wave count it started
+  with, and a `dogfight_ace` rerun has an ace to shoot down.
+  *Cross-refs:* `GameSession.RerunInstantAction` (which carries the same warning),
+  `InstantActionRuntime.Rerun`, `docs/architecture.md`.
 
 - `BL-350` `[Bug]` `[Blocked: mission animations]` **Generator-spawned planes crash inside closed hangars
   (C1/M04 `--generators`, user-reported 2026-08-13).** The spawn position is decoded-correct: the
