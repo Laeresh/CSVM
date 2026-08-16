@@ -2124,15 +2124,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   - **The drain is the wrong mechanism.** It made every call same-tick, which the original does not
     do either. Matching means giving each sequence a fixed slot indexed by its position in
     `Def.Sequences` and walking ascending, which retires the descending walk, the bound and the
-    `_startedThisPass` list together. The death slot (`AnimRuntime.cs:2979`, `def.DeathSlot`) is the
-    one runner with no index and needs a slot appended past the end.
+    `_startedThisPass` list together. The death slot (`AnimRuntime.cs:2979`, `def.DeathSlot`) stays
+    OUTSIDE the indexed slots: it is the original's `anim+0xd4` standalone record, stepped by a
+    direct call rather than by the walk, which is what `RunDeathSlot` already does.
   - **A same-tick sequence gets the FULL frame delta**, not zero. `DAT_009fd1a8` is reloaded from
     `DAT_009ad744` at the top of every walk iteration. The drain advanced newly-appended runners
     with `0f`, on the reasoning that the sequence did not exist for that slice of time.
 
-  ⚠ **Unverified assumption before any code**: that our `Def.Sequences` order is the original's
-  array order. Every same-tick decision rests on it, and if it does not hold the result is worse
-  than today's uniform lag.
+  ✅ **The ordering the whole scheme rests on is verified.** The original's array is append-only,
+  one slot per `SEQUENCE_DEFINITION` in loader-encounter order (`FUN_0051c350`, called only from the
+  definition loader `FUN_0051dcf0`; it caps at 255 with `Sequence list overflow`). The compiled
+  archives store that same 64-byte `SeqDefInfoC` runtime record in array order, and
+  `CompiledAnim.Parse` appends `sequences` in file order, so `Def.Sequences[i]` is the original's
+  index `i` for every compiled def. ⚠ **The reader path diverges**: `AnimDefs.cs:174-180` puts a
+  reader `DAMAGE_SEQUENCE` INTO `def.Sequences`, where the original keeps it out of the array
+  entirely (standalone record at `anim+0xd4`). It must be excluded from the indexed slots, and
+  since it is appended where the keyword appears it can shift every later index in a reader-sourced
+  def. The census is unaffected, having read compiled archives only.
 
   **⚠ Re-measured and RE-DEFERRED 2026-08-04** (`PLAN-m3-polish-6` B12). The bounded drain was
   built, measured across the whole install and then taken back out. Read

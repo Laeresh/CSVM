@@ -202,6 +202,16 @@ the forward share is still **98.29 %** (6,663 of 6,779). By definition rather th
 the 403** definitions carrying a call have at least one forward edge, 15 have any backward edge, and
 exactly **one** is backward-only.
 
+**The index the census compares is the original's index.** The array is append-only, one slot per
+`SEQUENCE_DEFINITION` in loader-encounter order: `FUN_0051c350` reallocs to `(count+1) * 0x40`,
+returns the record at the old count and bumps the count byte, refusing past 255 with
+`Sequence list overflow`. Its only caller is the definition loader `FUN_0051dcf0`, which calls it
+from a linear scan of the body, so nothing sorts or reorders. The compiled archives hold that same
+64-byte `SeqDefInfoC` record in array order and `CompiledAnim.Parse` appends them in file order, so
+the JSON position this census reads is the slot index the walk uses. `RESET_STATE` and
+`DAMAGE_SEQUENCE` are standalone `calloc`ed records at `anim+0xd0` / `anim+0xd4`, outside the array
+and outside the walk, which is why they are excluded here.
+
 Two of the 116 backward edges settle arguments this file already had:
 
 * **`marypickford` behaves exactly as the walk predicts.** Its ring is `randomloop` (idx 2) →

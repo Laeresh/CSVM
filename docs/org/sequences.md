@@ -412,6 +412,24 @@ forward calls is bounded by the array count, and a ring cannot spin at all: whic
 goes, one of its hops necessarily targets an index the cursor has passed. The engine gets this for
 free from the walk's shape rather than from a guard.
 
+### The index is the authored ordinal, and two named sequences are outside the array
+
+The array is built by **appending one slot per `SEQUENCE_DEFINITION`, in the order the loader meets
+them**. `FUN_0051c350` is the whole allocator: it `realloc`s to `(count+1) * 0x40`, hands back the
+record at the old count, increments the count byte and zeroes the 0x40 bytes. It refuses at 255
+with `Sequence list overflow`, so a definition can hold at most 255 sequences. Its one caller is the
+definition loader `FUN_0051dcf0`, which calls it from a linear scan over the definition body, so an
+index is exactly the keyword's ordinal in the source. Nothing sorts or reorders.
+
+**`RESET_STATE` and `DAMAGE_SEQUENCE` never enter the array.** After that scan the loader
+`calloc`s a standalone 0x40 record for each and hangs it off its own pointer: the reset body at
+`anim+0xd0`, named `RESET_SEQUENCE`, and the damage body at `anim+0xd4`, named `DAMAGE_SEQUENCE`.
+Both are filled by the same event-list reader the array slots use, and both are stepped by direct
+single-sequence calls outside the tick walk (`FUN_004ed340` steps `+0xd0` on start;
+`FUN_004e71e0` zeroes the instance clock and steps `+0xd4`). Neither occupies an index, neither is
+reachable by `CALL_SEQUENCE`, and neither is advanced by the walk. mech3ax's `unknown_seq` is the
+`+0xd4` damage record.
+
 ⚠ The name resolution is **memoized into the event**, not recomputed. `CALL_SEQUENCE` scans the
 array comparing the record's name at `seq+0` and stores the resulting index in the event payload at
 `+0x2c` (`004eb5db`), reusing it on every later dispatch of that same event. `STOP_SEQUENCE`
