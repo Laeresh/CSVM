@@ -173,9 +173,16 @@ the airframe.
 
 ## Guidance
 
-`FUN_005af960`, reached from `FUN_005af720`, is the per-round steering step. It runs for **every**
-round, not only guided ones; what makes a rocket dumbfire is that its `TURN_RATE` sentinel of 0.001
-buys it almost no turn per frame.
+`FUN_005af960` is the per-round steering step, and `FUN_005af720`, the projectile tick, decides who
+gets it. The gate is **`LOCK_ON` present (`+0x74` bit `0x8000`) and the round holding a target at
+`+0x70`**. A round failing either condition never enters the steering step at all; it goes straight
+to the motion step, `FUN_005afd50` normally or a plain constant-velocity integration when `+0x74` bit
+`0x800` is set.
+
+So "guided" has two independent gates in the original, and neither is a `GUIDED` flag: a weapon must
+author `LOCK_ON` to be steered at all, and the round must have acquired something. `TURN_RATE` then
+decides how hard it may turn, with the 0.001 sentinel meaning a `LOCK_ON` weapon that is steered but
+turns almost imperceptibly.
 
 **The desired direction** starts as the bearing from the round's position to its target. If the
 weapon authored `LOCK_ON_LEAD` (`+0x74` bit `0x10000`) and the round is older than `+0x7c`, the
@@ -217,6 +224,11 @@ sets
 so the launcher's contribution is blended out **linearly to zero over `LOCK_ON` seconds**, leaving
 the round travelling at its own authored `VELOCITY`. A round launched from a fast aircraft therefore
 starts fast and visibly slows to its own cruise, and one launched from a slow aircraft does not.
+
+⚠ This decay lives **inside** the steering step, so it inherits that step's gate: a `LOCK_ON` round
+fired with **no target** is never stepped through `FUN_005af960` and so keeps its inherited launch
+velocity indefinitely. In practice the shot routine hands a `LOCK_ON` weapon a target when the player
+has none, so the usual case is the decaying one, but the two are not the same rule.
 
 `LOCK_ON` is doing three separate jobs, which is why the name misleads: it is the lead-guidance ramp
 denominator, the launch-velocity decay window, and the flag that decides whether launch velocity is
@@ -271,13 +283,29 @@ walks exactly the set that could fuse, and a plain round is invisible to it.
 3. A `BEEPER_SEEKER` round's callback `FUN_00441780` queries the tag list every frame through
    `FUN_004b8b50`, passing the round's **position** (`+0x48`) and **heading** (`+0x3c`). Tags with a
    countdown at or below zero are skipped.
-4. The query scores each remaining tag on the dot of the bearing against the round's heading and on
-   range relative to the current best, with thresholds 0.7, a 0.1 alignment margin, and distance
-   ratios of 1.0 and 1.2. The exact preference order was not disentangled from the control flow; what
-   is certain is that both alignment and relative range participate.
+4. The query keeps a running best and replaces it by the rule below.
 5. The winner is written into the round's target fields `+0x70` and `+0x74`, which are the same
    fields the guidance step reads. From there the round steers toward it at `TURN_RATE` like any
    other guided round.
+
+### The query's selection rule
+
+Read from the branch structure at `0x004b8c03`–`0x004b8c72`, with all four constants read out of the
+image. **The dot's sign is inverted from the intuitive one**: the vector is taken from the tag toward
+the round and dotted with the round's heading, so a tag **directly ahead scores near -1** and a lower
+dot is a better-aligned candidate. With that convention, and writing `ratio` for
+`candidateDistance / bestDistance`:
+
+- **No current best** → take the candidate.
+- **Candidate better aligned** (`candDot < bestDot`) → take it if `ratio < 1.2`. A better-aligned tag
+  is allowed to be up to 20% farther away.
+- **Candidate worse or equally aligned** (`candDot >= bestDot`) → take it only if it is strictly
+  nearer (`ratio < 1.0`) **and** its alignment is not much worse, meaning
+  `candDot <= 0.7` or `candDot < bestDot + 0.1`.
+
+The four constants are `1.2` (`0x006040ac`), `1.0` (`0x006032dc`), `0.7` (`0x006035b0`) and `0.1`
+(`0x006034a8`). Net effect: alignment leads, range breaks near-ties, and a nearer tag can only steal
+the pick if it gives up less than 0.1 of alignment.
 
 So the two weapons are one system: `wep_10` paints a target for its `TIME`, and `wep_11`, the sole
 `BEEPER_SEEKER` and the sole weapon with a real `TURN_RATE` (1.25), homes on whatever is painted.
@@ -297,7 +325,26 @@ all.
   which is what lets a collision against the node find the round it belongs to.
 
 `TARGETABLE`'s half of the job, admitting the round to the target list, is `FUN_00441830` above.
-What spends `+0x19d` when the flyout is shot was not traced.
+
+### How the flyout's health is spent, and what happens at zero
+
+`FUN_005abcf0`, the projectile-hit resolver, tests the struck node's `+0xbc` for the `1` the spawn
+wrote and follows the node's `+0x40` back-pointer to the round. It then spends the pair exactly the
+way an aircraft damage zone is spent, **armour first, then health**:
+
+    flyout[+0x670] = max(0, flyout[+0x670] - incomingArmourDamage)
+    if flyout[+0x670] == 0:
+        flyout[+0x674] = max(0, flyout[+0x674] - incomingHealthDamage)
+
+⚠ The armour pool starts at **zero**. The spawn seeds `+0x670` from weapon `+0x8c`, and `+0x8c` is
+only ever written as the literal 0 by the parser, with no key feeding it. So a flyout's armour pool
+is always empty and the first hit spends health directly. The two-pool structure is real but inert as
+shipped.
+
+The projectile tick `FUN_005af720` then checks `+0x674 == 0.0` **every frame, before anything else**,
+and on zero destroys the round: it plays the weapon's `DESTROY_ANIMATION` (weapon `+0x188`) if one is
+authored, or calls `FUN_005ac3a0` if not, and clears the alive flag. This is why the not-shootable
+sentinel is **-1.0** rather than 0: a round without `FLYOUT_HEALTH` must never satisfy that equality.
 
 ## The hit-side dispatch
 
@@ -413,9 +460,12 @@ the inherited component over 2.5 s down to a 60 m/s cruise. An aircraft at 120 m
 
 ## Still open
 
-- **What spends the flyout's health** at round `+0x19d` when the projectile is shot.
-- The exact preference order inside the beeper query `FUN_004b8b50`.
 - `FUN_00480f50` tests `REAR` on the player's fire-feedback path and was not opened.
+- `+0x74` bit `0x800`, parsed just before `LOCK_ON` from a key not identified here, selects a plain
+  constant-velocity integration in place of the normal motion step `FUN_005afd50`. Which key sets it
+  was not traced, and no shipped weapon's behaviour was attributed to it.
+- `FUN_005afd50`, the non-guided motion step, was not opened. Drag, gravity and the fuse's own
+  swept-step handling live there or below it.
 - `FUN_004881e0` is the player's fire-input tick. It routes by `CANNON` (`0x40`) and `ROCKET`
   (`0x10`) only, feeding `CALIBER` to `FUN_004810d0` for guns and the whole weapon to `FUN_00480f50`
   for ordnance.
@@ -426,9 +476,11 @@ the inherited component over 2.5 s down to a 60 m/s cruise. An aircraft at 120 m
 - `FUN_004b9bc0` was read in full. It handles hits **on an aircraft**; whether ground objects and
   zeppelins route through the same function is unread, so the "four types deal no damage" finding is
   stated for aircraft targets.
-- `FUN_004b6820`, `FUN_004b5fb0`, `FUN_004b9770`, `FUN_005aef40`, `FUN_005af960`, `FUN_00441830`,
-  `FUN_00441780`, `FUN_004b8b50`, `FUN_004b8ad0`, `FUN_004b89c0`, `FUN_004b7670` and `FUN_004b1690`
-  were read in full.
+- `FUN_004b6820`, `FUN_004b5fb0`, `FUN_004b9770`, `FUN_005aef40`, `FUN_005af960`, `FUN_005af720`,
+  `FUN_005abcf0`, `FUN_00441830`, `FUN_00441780`, `FUN_004b8b50`, `FUN_004b8ad0`, `FUN_004b89c0`,
+  `FUN_004b7670` and `FUN_004b1690` were read in full. `FUN_004b8b50`'s selection rule was taken from
+  its disassembly rather than its decompilation, because the decompiler's rendering of the branch
+  order there is misleading.
 - The `+0x74` bit assignments and the guidance scalar offsets were read from `FUN_005ad630`'s parse
   sites one key at a time, each confirmed against the key string it is stored beside. `+0x84` is
   computed from `LOCK_ON_LEAD`'s two elements by an expression that was not read.

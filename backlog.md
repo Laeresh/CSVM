@@ -787,6 +787,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   a steering round's speed is multiplied by `0.8 + 0.2 × cos(turnAngle)` each frame it turns, and
   guidance authority ramps as `(age − TURN_SUSPEND_TIME) / LOCK_ON` (with `TURN_SUSPEND_TIME`
   unauthored, hence 0, hence full authority from frame one).
+  ⚠ *One gate to carry with it:* the decay lives inside the steering step, which the projectile tick
+  `FUN_005af720` runs only for a `LOCK_ON` weapon whose round **holds a target**. A torpedo fired
+  with no target keeps its inherited launch velocity indefinitely. The usual case is the decaying one
+  (the shot routine hands a `LOCK_ON` weapon a target when the player has none), but implement the
+  gate, not just the curve.
   *Fix shape:* consume the inheritance and its decay in `Projectile`; the item is now
   implementation, not investigation. `wep_14` is mountable via `--rocket=wep_14` (no stock loadout
   carries it).
@@ -1170,8 +1175,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `TORPEDO`: three sweeps (`TEST <mem>, 0x8` over the whole weapon-bearing span, `AND <mem>, 0x8`
   program-wide, `AND <reg>, 0x8` in range) find **no reader at all**, so the flag joins `FIRING_HEAT`
   and `cannon_jam` as parsed-and-never-acted-on, and every part of the torpedo's flight is accounted
-  for by keys that do have readers. Still open: what spends the flyout's health at round `+0x19d`,
-  and the exact preference order inside the beeper query `FUN_004b8b50`.
+  for by keys that do have readers. Sixth pass closes the last two: `FUN_005abcf0` spends the
+  flyout's pair armour-then-health exactly as an aircraft zone is spent (with the armour pool always
+  0, so it is inert), and `FUN_005af720` destroys the round the frame its health reads 0, which is
+  why the not-shootable sentinel is −1.0; and the beeper query's selection rule is read off the
+  disassembly with all four constants (1.2, 1.0, 0.7, 0.1). Same pass **corrects the third-pass
+  claim that guidance runs for every round**: `FUN_005af720` gates the steering step on `LOCK_ON`
+  **and** the round holding a target.
+  *Remaining, all minor:* `FUN_00480f50`'s `REAR` branch, the unidentified key behind `+0x74` bit
+  `0x800`, and the non-guided motion step `FUN_005afd50` (where drag and gravity would live).
 
 ## Flight model & collision physics
 
