@@ -382,13 +382,13 @@ public static class Suites
         into.Add(new TestHarness.Suite("ai-crash-defs",
             "an AI plane's crash rig binds the ai_crash_* family and its crash indexes it by the struck surface id — dirt(13) plays ai_crash_dirt, no material plays ai_crash_default — while a human rig off the same factory keeps player_crash_* (G21)", AiCrashDefs));
         into.Add(new TestHarness.Suite("hostile-marker-hud",
-            "the H22 targeting HUD outside --vs: the matchless VersusHud tracks the pane's " +
-            "nearest LIVE AI hostile off the pool's own aircraft roster (a closer human, dead " +
-            "plane or neutral is never picked), switches to a closer hostile, drops a crashed " +
-            "one, and a hud built without a pool (the VS default) never tracks; plus " +
-            "--debug-markers' own selection, which takes EVERY live aircraft instead of the " +
-            "nearest, flags each by team against the pane's own, skips a crashed one and skips " +
-            "the pane's own aircraft", HostileMarkerHud));
+            "the H22 targeting HUD (TargetHud, every flight session): the tracker picks the " +
+            "pane's nearest LIVE AI hostile off the pool's own aircraft roster (a closer human, " +
+            "dead plane or neutral is never picked), switches to a closer hostile, drops a " +
+            "crashed one, and a hud built without a pool never tracks; plus --debug-markers' " +
+            "own selection, which takes EVERY live aircraft instead of the nearest, flags each " +
+            "by team against the pane's own, skips a crashed one and skips the pane's own " +
+            "aircraft", HostileMarkerHud));
         into.Add(new TestHarness.Suite("target-ref",
             "B11's one abstraction over every selectable thing, tree-free: a TargetRef built for "
             + "each of the three source kinds (aircraft, zeppelin sub-part, turret emplacement) "
@@ -6306,14 +6306,14 @@ public static class Suites
         }
     }
 
-    /// <summary>The H22 targeting HUD on AI hostiles. Two halves: the pure selection
-    /// (<see cref="VersusHud.NearestHostile"/> over a constructed candidate set, no scene) pins
-    /// the filters (live only, AI-piloted only, the engine's either-side-neutral rejection,
-    /// nearest wins) plus <see cref="VersusHud.HostileTag"/>; the in-engine half runs the
-    /// matchless tracker against real spawned AI planes registered in a live pool: acquisition,
-    /// the switch to a closer hostile, the crash drop (a crashed plane is listed but not live),
-    /// and the empty-pool null. A hud built WITHOUT a pool (the VS constructor's default) never
-    /// tracks, which is the seam keeping the golden VS output untouched.</summary>
+    /// <summary>The H22 targeting HUD (<see cref="TargetHud"/>, C21) on AI hostiles. Two halves:
+    /// the pure selection (<see cref="TargetHud.NearestHostile"/> over a constructed candidate
+    /// set, no scene) pins the filters (live only, AI-piloted only, the engine's
+    /// either-side-neutral rejection, nearest wins) plus <see cref="TargetHud.HostileTag"/>; the
+    /// in-engine half runs the tracker against real spawned AI planes registered in a live pool:
+    /// acquisition, the switch to a closer hostile, the crash drop (a crashed plane is listed but
+    /// not live), and the empty-pool null. A hud built with no pool bound never tracks, which is
+    /// the seam keeping a golden shot with no hostile in play untouched.</summary>
     private static void HostileMarkerHud(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -6340,21 +6340,21 @@ public static class Suites
                 AimAssist.TeamOfPilot(100), live: true, pureNear);
             set.AddVehicle(new Vector3(0f, 0f, -2000f), Vector3.Zero,
                 AimAssist.TeamOfPilot(102), live: true, pureFar);
-            ctx.Check(ReferenceEquals(VersusHud.NearestHostile(Vector3.Zero, ownTeam, set), pureNear),
+            ctx.Check(ReferenceEquals(TargetHud.NearestHostile(Vector3.Zero, ownTeam, set), pureNear),
                 $"the nearest LIVE AI hostile wins over a closer human, a closer dead plane and a closer neutral");
-            ctx.Check(VersusHud.NearestHostile(Vector3.Zero, AimAssist.NeutralTeam, set) == null,
+            ctx.Check(TargetHud.NearestHostile(Vector3.Zero, AimAssist.NeutralTeam, set) == null,
                 $"a neutral own side targets nothing (the engine's either-side-0 rule)");
-            ctx.Check(VersusHud.NearestHostile(Vector3.Zero, ownTeam, new AimCandidateSet()) == null,
+            ctx.Check(TargetHud.NearestHostile(Vector3.Zero, ownTeam, new AimCandidateSet()) == null,
                 $"an empty scan tracks nothing");
-            ctx.Check(VersusHud.HostileTag("ai1_player_fury") == "AI1"
-                && VersusHud.HostileTag("bandit") == "BANDIT" && VersusHud.HostileTag("") == "AI",
+            ctx.Check(TargetHud.HostileTag("ai1_player_fury") == "AI1"
+                && TargetHud.HostileTag("bandit") == "BANDIT" && TargetHud.HostileTag("") == "AI",
                 $"the marker tag is the name's first segment uppercased, 'AI' as the fallback");
 
             // B12 trap (a), the wingman-in-the-marker bug: OwnTeam must read the pane's own Team
             // FIELD. Deriving it from the pilot index is right for P1 by coincidence
             // (TeamOfPilot(0) == PlayerTeam) and wrong for P2-P4 the moment a mission sets teams,
             // which is every Instant Action and every --coop session.
-            var p2 = new VersusHud { PlayerIndex = 1 };
+            var p2 = new TargetHud { PlayerIndex = 1 };
             ctx.Check(p2.OwnTeam == AimAssist.TeamOfPilot(1),
                 $"with no aircraft bound the HUD still falls back to the pilot-index derivation own={p2.OwnTeam}");
             p2.Own = pureHuman;
@@ -6368,10 +6368,10 @@ public static class Suites
             wingScan.AddVehicle(new Vector3(0f, 0f, -900f), Vector3.Zero,
                 InstantActionRuntime.EnemyTeam, live: true, pureFar);   // the actual enemy
             ctx.Check(ReferenceEquals(
-                    VersusHud.NearestHostile(Vector3.Zero, p2.OwnTeam, wingScan), pureFar),
+                    TargetHud.NearestHostile(Vector3.Zero, p2.OwnTeam, wingScan), pureFar),
                 $"…so the far ENEMY is tracked and the near wingman is not");
             ctx.Check(ReferenceEquals(
-                    VersusHud.NearestHostile(Vector3.Zero, AimAssist.TeamOfPilot(1), wingScan),
+                    TargetHud.NearestHostile(Vector3.Zero, AimAssist.TeamOfPilot(1), wingScan),
                     pureNear),
                 $"CONTROL: the old derivation tracks the WINGMAN instead, and skips the enemy as own-team");
             p2.Free();
@@ -6390,7 +6390,7 @@ public static class Suites
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
         FlightController? ai1 = null, ai2 = null;
-        VersusHud? hud = null, vsHud = null;
+        TargetHud? hud = null, noPoolHud = null;
         try
         {
             var live = new ProjectilePool(textures, null, null);
@@ -6420,7 +6420,7 @@ public static class Suites
             }
 
             ai1 = SpawnAi(0, new Vector3(0f, 500f, -800f));
-            hud = VersusHud.BuildHostileTracker(0, ctx.Camera, live);
+            hud = TargetHud.Build(0, ctx.Camera, live);
             hud.PlanePos = new Vector3(0f, 500f, 0f);
             hud.UpdateHostile();
             ctx.Check(ReferenceEquals(hud.TrackedHostile, ai1),
@@ -6444,14 +6444,14 @@ public static class Suites
             ctx.Check(hud.TrackedHostile == null,
                 $"with every hostile down the pane tracks nothing");
 
-            // The VS constructor leaves HostilePool null (the rig assembler opts it in), so a
-            // bare VS hud never tracks whatever the pool holds, which is the golden shots' path.
+            // A hud with no pool bound (HostilePool left null) never tracks whatever the pool
+            // holds — the seam that keeps a golden shot with no hostile in play untouched.
             ai1.Respawn();
-            vsHud = VersusHud.Build(new VersusMatch(2, killTarget: 0, timeLimit: 0f), 0, ctx.Camera);
-            vsHud.PlanePos = hud.PlanePos;
-            vsHud.UpdateHostile();
-            ctx.Check(vsHud.TrackedHostile == null,
-                $"a hud built without a pool (the VS default) never tracks");
+            noPoolHud = new TargetHud();
+            noPoolHud.PlanePos = hud.PlanePos;
+            noPoolHud.UpdateHostile();
+            ctx.Check(noPoolHud.TrackedHostile == null,
+                $"a hud built without a pool never tracks");
 
             // --debug-markers' own selection: EVERY live aircraft, not the nearest one, each
             // flagged by team against the pane's own. ai1 is live again (respawned above); ai2 is
@@ -6460,7 +6460,7 @@ public static class Suites
             var scan = new AimCandidateSet();
             live.CollectAircraft(scan);
             var marks = new List<(FlightController Plane, bool Friendly)>();
-            VersusHud.CollectMarks(AimAssist.PlayerTeam, null, scan, marks);
+            TargetHud.CollectMarks(AimAssist.PlayerTeam, null, scan, marks);
             ctx.Check(marks.Count == 1 && ReferenceEquals(marks[0].Plane, ai1),
                 $"a crashed plane is never marked marks={marks.Count}");
             ctx.Check(!marks[0].Friendly,
@@ -6469,27 +6469,27 @@ public static class Suites
             marks.Clear();
             scan.Clear();
             live.CollectAircraft(scan);
-            VersusHud.CollectMarks(AimAssist.PlayerTeam, null, scan, marks);
+            TargetHud.CollectMarks(AimAssist.PlayerTeam, null, scan, marks);
             ctx.Check(marks.Count == 1 && marks[0].Friendly,
                 $"the same plane on the pane's own team marks friendly friendly={marks[0].Friendly}");
             marks.Clear();
-            VersusHud.CollectMarks(AimAssist.PlayerTeam, ai1, scan, marks);
+            TargetHud.CollectMarks(AimAssist.PlayerTeam, ai1, scan, marks);
             ctx.Check(marks.Count == 0, $"the pane's own aircraft is excluded marks={marks.Count}");
 
             // The mode suffix the marker tag carries, in the engine's own vocabulary. A pilot
             // with no mode machine (this suite's own bare-orders spawn) adds nothing rather than
             // inventing a state; armed, it names whatever mode the machine is in.
-            ctx.Check(VersusHud.ModeSuffix(ai1) == "",
-                $"a pilot with no mode machine adds nothing to the tag: '{VersusHud.ModeSuffix(ai1)}'");
+            ctx.Check(TargetHud.ModeSuffix(ai1) == "",
+                $"a pilot with no mode machine adds nothing to the tag: '{TargetHud.ModeSuffix(ai1)}'");
             ai1.Pilot!.Machine = new AiModeMachine(new System.Random(5));
             ai1.Pilot.Machine.Enter(AiMode.Pursue, "suite");
-            ctx.Check(VersusHud.ModeSuffix(ai1).Trim() == "pursue",
-                $"the marker tag carries the plane's mode: '{VersusHud.ModeSuffix(ai1).Trim()}'");
+            ctx.Check(TargetHud.ModeSuffix(ai1).Trim() == "pursue",
+                $"the marker tag carries the plane's mode: '{TargetHud.ModeSuffix(ai1).Trim()}'");
         }
         finally
         {
             hud?.Free();
-            vsHud?.Free();
+            noPoolHud?.Free();
             ai1?.Free();
             ai2?.Free();
             pool?.Free();

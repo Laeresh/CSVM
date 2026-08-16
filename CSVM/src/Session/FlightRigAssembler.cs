@@ -365,22 +365,18 @@ public sealed class FlightRigAssembler
             // player assembles, so by the time this pane draws, every opponent's is populated.
             controller.VersusHud = VersusHud.Build(versus, pi, rig.Camera);
             controller.VersusHud.Rigs = _in.Rigs;
-            // AI hostiles spawned into a dogfight get the same marker (H22); the scan is empty
-            // (and the draw unchanged) until one exists.
-            controller.VersusHud.HostilePool = _in.Projectiles;
             if (verbose)
                 GD.Print("dogfight HUD: match timer/K-D/leader line + kill banner + opponent markers");
         }
-        else
-        {
-            // No match: the same HUD tracks this pane's nearest AI hostile (H22), so an
-            // --ai / --generators enemy stays findable in ANY flight session. Built
-            // unconditionally because generators spawn hostiles mid-session; with none in the
-            // pool it draws nothing.
-            controller.VersusHud = VersusHud.BuildHostileTracker(pi, rig.Camera, _in.Projectiles);
-            if (verbose)
-                GD.Print("targeting HUD: nearest-AI-hostile marker (edge arrow + clock bearing)");
-        }
+
+        // The targeting HUD (PLAN-targeting.md C21): one per human pane, in EVERY flight session
+        // — not only --vs, which VersusHud is. Tracks this pane's nearest AI hostile (H22) off the
+        // pool's own roster; built unconditionally because generators spawn hostiles mid-session,
+        // and with none in the pool it draws nothing. A --vs pane gets one alongside VersusHud, so
+        // an AI hostile spawned into a dogfight is still marked.
+        controller.TargetHud = TargetHud.Build(pi, rig.Camera, _in.Projectiles);
+        if (verbose)
+            GD.Print("targeting HUD: nearest-AI-hostile marker (edge arrow + clock bearing)");
 
         // The player's target selection (PLAN-targeting.md B13/B14): one per human pane, each with
         // its own pool — the cycles are sorted against THIS plane's pose, so they cannot be shared.
@@ -389,16 +385,16 @@ public sealed class FlightRigAssembler
         controller.InitialTarget = _spec.TargetSelect;   // --target=, the scripted twin (B15)
 
         // Bound on EVERY pane, not just under --debug-markers: it is what the HUD's team tests read
-        // this pane's side off (VersusHud.OwnTeam). Deriving the side from the pilot index instead
+        // this pane's side off (TargetHud.OwnTeam). Deriving the side from the pilot index instead
         // is right for P1 by coincidence and wrong for P2-P4 in any session that sets teams
         // explicitly, which is what put a wingman in the marker.
-        controller.VersusHud.Own = controller;
+        controller.TargetHud.Own = controller;
 
         // --debug-markers: the same HUD marks every live aircraft instead of one hostile. Own also
         // keeps it from marking the aircraft the camera is sitting on.
         if (_spec.DebugMarkers)
         {
-            controller.VersusHud.MarkAll = true;
+            controller.TargetHud.MarkAll = true;
             if (verbose)
                 GD.Print("--debug-markers: marking EVERY live aircraft (red hostile / blue own side)");
         }

@@ -22,8 +22,8 @@ public enum TargetClass
 /// <summary>One thing the player can select, whatever it actually is: an enemy Fury, a zeppelin
 /// engine, a turret emplacement. Every consumer (the pool, the cycles, the label formatter, the
 /// marker) reads this and never the underlying C# type, which is the whole point. Without it the
-/// <c>c.Source is not FlightController fc</c> test in <see cref="VersusHud.NearestHostile"/> and
-/// <see cref="VersusHud.CollectMarks"/> multiplies across four modules.
+/// <c>c.Source is not FlightController fc</c> test in <see cref="TargetHud.NearestHostile"/> and
+/// <see cref="TargetHud.CollectMarks"/> multiplies across four modules.
 ///
 /// <para><b>It WRAPS an <see cref="AimCandidate"/> rather than restating it</b> (B11's open
 /// question). Position, velocity, team, liveness and the source object are the same five facts the
@@ -35,7 +35,7 @@ public enum TargetClass
 /// entity's data rather than a duplicated field.</para>
 ///
 /// <para>Pure data with no Godot node dependency, so the cycles and the label formatter unit-test
-/// with no tree, the way <see cref="VersusHud.NearestHostile"/> already does.</para></summary>
+/// with no tree, the way <see cref="TargetHud.NearestHostile"/> already does.</para></summary>
 public readonly struct TargetRef
 {
     private TargetRef(AimCandidate candidate, AimTargetKind kind, TargetClass cls, bool objective,

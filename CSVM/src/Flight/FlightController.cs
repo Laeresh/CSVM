@@ -239,12 +239,17 @@ public partial class FlightController : Node3D
     /// the run's RunCompleted. Null in free flight.</summary>
     public StuntScoreboard? Scoreboard;
 
-    /// <summary>The Dogfight per-pane HUD: the match timer/K-D/leader line and
-    /// the kill banner. Added to the HUD canvas; fed nothing per frame (it pulls VersusMatch's own
-    /// live state) beyond the kill facts GameSession pushes through its OnKill. Outside
-    /// <c>--vs</c> it is the matchless hostile tracker (H22): the same marker on this pane's
-    /// nearest AI hostile, built for every human pane by the rig assembler.</summary>
+    /// <summary>The Dogfight per-pane HUD, <c>--vs</c> only: the match timer/K-D/leader line, the
+    /// kill banner, and the opponent markers. Added to the HUD canvas; fed nothing per frame (it
+    /// pulls VersusMatch's own live state) beyond the kill facts GameSession pushes through its
+    /// OnKill.</summary>
     public VersusHud? VersusHud;
+
+    /// <summary>The targeting HUD (<c>PLAN-targeting.md</c> C21): the tracked-AI-hostile marker
+    /// (H22) and <c>--debug-markers</c>, built for every human pane by the rig assembler in EVERY
+    /// flight session, <c>--vs</c> included. Added to the HUD canvas; fed this pane's pose every
+    /// frame, same site as <see cref="Marker"/>'s.</summary>
+    public TargetHud? TargetHud;
 
     /// <summary>The splitscreen stunt race this plane is one seat of, or null when
     /// flying solo. Set, clearing every zone parks this player at the finish while the others fly
@@ -704,7 +709,9 @@ public partial class FlightController : Node3D
             if (Marker != null)
                 canvas.AddChild(Marker); // stunt objective marker, drawn on top of the dials
             if (VersusHud != null)
-                canvas.AddChild(VersusHud); // dogfight HUD, or the matchless hostile tracker (H22)
+                canvas.AddChild(VersusHud); // dogfight HUD: status line, kill banner, opponent markers
+            if (TargetHud != null)
+                canvas.AddChild(TargetHud); // targeting HUD: tracked AI hostile / --debug-markers (H22)
             if (Scoreboard != null)
                 canvas.AddChild(Scoreboard); // end-of-run results, drawn over everything
             if (FontTest != null)
@@ -1484,12 +1491,17 @@ public partial class FlightController : Node3D
             Marker.PlanePos = _model.Position;
             Marker.HeadingDeg = headingDeg;
         }
-        // Dogfight opponent / AI hostile markers: this pane's own pose, so the HUD can compute
-        // each target's clock bearing off it (the same feed Marker gets, for the same reason).
+        // Dogfight opponent / AI hostile markers: this pane's own pose, so each HUD can compute
+        // its own target's clock bearing off it (the same feed Marker gets, for the same reason).
         if (VersusHud != null)
         {
             VersusHud.PlanePos = _model.Position;
             VersusHud.HeadingDeg = headingDeg;
+        }
+        if (TargetHud != null)
+        {
+            TargetHud.PlanePos = _model.Position;
+            TargetHud.HeadingDeg = headingDeg;
         }
         if (Gauges != null)
         {
@@ -2303,7 +2315,7 @@ public partial class FlightController : Node3D
         }
         // The team is read off the FIELD. Deriving it from PlayerIndex is right for P1 by
         // coincidence and wrong for every other pane the moment a mission sets teams — the
-        // wingman-in-the-marker bug (see VersusHud.OwnTeam).
+        // wingman-in-the-marker bug (see TargetHud.OwnTeam).
         sel.Rebuild(_targetScan, _targetParts, Team, this, _model.Position, _model.Attitude);
 
         // The death prune (FUN_004a64e0). There is no session-wide Downed broadcast outside --vs,

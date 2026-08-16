@@ -238,7 +238,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — The HUD
 
-21. ☐ Split the targeting marker out of `VersusHud` into `TargetHud`
+21. ☑ Split the targeting marker out of `VersusHud` into `TargetHud`
 22. ☐ Draw the original's marker: name label, range-gated brackets, two-line edge tag
 23. ☐ `--debug-markers`: keep full identity, add `H78 A91`
 24. ☐ One golden screenshot for the geometry
@@ -854,7 +854,7 @@ so the flag stays reproducible; a disambiguating suffix is not invented until so
 
 # Wave C — The HUD
 
-## C21 ☐ Split the targeting marker out of `VersusHud` into `TargetHud`
+## C21 ☑ Split the targeting marker out of `VersusHud` into `TargetHud`
 
 **Goal.** `VersusHud` is the VS status line, the kill banner and the VS opponent markers — the things
 it is named for. The targeting marker, the hostile tracker and `--debug-markers` move to their own
@@ -881,6 +881,43 @@ draw what they drew before the split.
 **⚠ Traps.** The suites reach for `VersusHud.TrackedHostile`, `NearestHostile`, `CollectMarks`,
 `HostileTag` and `ModeSuffix` — they all move, and the test references move with them. Correct the
 "no reference to copy" claim (⚠ row 1) while rewriting the module doc.
+
+**Landed 2026-08-16.**
+
+**TODO resolved — duplicate, following the codebase's own precedent.** `VersusHud` already carries a
+private copy of `EdgePoint`/`ClockHour`/`DrawArrow` documented as "MarkerHud's … verbatim" rather
+than sharing a base class with `MarkerHud`; that is the established answer to this exact question,
+one HUD move earlier. `TargetHud` follows it: its own private copies of `DrawOpponent`/`EdgePoint`/
+`ClockHour`/`DrawArrow`/`DrawTag`, documented as copied verbatim from `VersusHud`'s copy (plus the
+`stagger` parameter `--debug-markers` needs, which `VersusHud`'s own opponent loop never uses and
+so lost from its copy). A shared base class for two `Control`s would be the first of its kind in this
+codebase and duplicates a decision already made the other way.
+
+`TargetHud` is built **unconditionally** now, one per human pane in every flight session including
+`--vs` — `VersusHud.BuildHostileTracker`'s old "matchless" framing is gone along with the branch that
+picked between it and `VersusHud.Build`; both HUDs are simply built when their session calls for them
+(`VersusHud` only under `--vs`, `TargetHud` always), which is simpler than the two-build split it
+replaces. `Own`/`OwnTeam`/`MarkAll`/`HostilePool` moved to `TargetHud` in full — `VersusHud`'s
+remaining `Rigs` opponent loop never read `OwnTeam` (it marks every living rig by `SplitScreen`
+identity colour, not by team), so nothing stayed behind needing them.
+
+**Verified (2026-08-16):**
+
+- **Pinned by tests** — `hostile-marker-hud` and `HostileTagTests` moved onto `TargetHud` with no
+  behaviour change (the "hud built without a pool never tracks" case now constructs a bare
+  `TargetHud` directly rather than through the old VS-constructor side effect, since `TargetHud.Build`
+  always takes a pool).
+- **Regression:** 1378/1378 units, 69/69 in-engine suites, engine errors clean, 14/14 goldens
+  hash-identical (byte-for-byte with the pre-split shots — the plain-`--fly` half of the Verify step),
+  the hitch detector still firing on an injected stall and silent without one, and `dotnet format
+  --verify-no-changes` clean.
+- **Targeted `--vs` capture** (the half no golden covers): `--chapter=C1
+  --plane=player_bhawk,player_fury --vs --ai=player_kestrel --hold=0.2,0.1,0,1 --det --mute
+  --frames=120 --screenshot=`, 2 human panes + 1 AI hostile. Log shows both HUDs building on both
+  panes (`dogfight HUD: …` + `targeting HUD: …`) and `TargetHud` acquiring the hostile on each
+  (`targeting hud: P1 tracking ai1_player_kestrel at 8932 m`, same for P2); the screenshot shows both
+  panes' status line/dials/reticle drawing normally with no missing chrome or exception. No golden is
+  minted for this — no `--vs` shot exists in the manifest yet (C24 is a Wave C item still open).
 
 ## C22 ☐ Draw the original's marker
 

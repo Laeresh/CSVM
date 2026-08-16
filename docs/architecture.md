@@ -2009,7 +2009,7 @@ The one abstraction over everything the player can select (`PLAN-targeting.md` B
 [org/targeting.md](org/targeting.md). An enemy Fury, a zeppelin engine and a turret emplacement are
 three unrelated C# types (`FlightController`, `DestructibleRegistry.Instance`, `TurretController`),
 and every consumer downstream of this (the classed pool B12, the cycles B13, the label formatter and
-the marker C22) reads `TargetRef` and never the underlying type. `VersusHud`'s
+the marker C22) reads `TargetRef` and never the underlying type. `TargetHud`'s
 `c.Source is not FlightController fc` test in both `NearestHostile` and `CollectMarks` is the shape
 that would otherwise have multiplied across four modules.
 **It WRAPS an `AimCandidate` rather than restating it** (B11's open question, settled here). Position,
@@ -2076,7 +2076,7 @@ source type — the kind picks the shape, the source supplies only the name and 
 ⚠ **Read `FlightController.Team`, never `AimAssist.TeamOfPilot(PlayerIndex)`.** Deriving the side
   from the pilot index is right for P1 by coincidence (`TeamOfPilot(0)` == `PlayerTeam`) and wrong
   for P2–P4 in any session that sets teams explicitly. That is the wingman-in-the-marker bug this
-  item diagnosed: see the `VersusHud.OwnTeam` entry. The suite carries the derivation as a named
+  item diagnosed: see the `TargetHud.OwnTeam` entry. The suite carries the derivation as a named
   able-to-fail CONTROL so the wrong read cannot quietly come back.
 ⚠ The aircraft display name is the plain **node** name here (`ai1_player_fury`). C22 replaces it with
   the airframe's common name (`Fury`), which needs an accessor `FlightController` does not have yet.
@@ -3047,9 +3047,9 @@ time-out win, draw, post-completion no-op, rematch re-arm, each limit disabled o
   `Advance` timekeeping.
 
 ## src/Flight/VersusHud.cs
-Per-pane Dogfight HUD (`PLAN-vs-mode.md` C23/C24): a compact status line — remaining time
-(omitted once `VersusMatch.TimeLimit` is disabled), this pane's own K/D, and the current leader's
-tag — drawn in MarkerHud's run-status slot (`RefStatusY` — Stunt and Versus are mutually
+Per-pane Dogfight HUD, `--vs` only (`PLAN-vs-mode.md` C23/C24): a compact status line — remaining
+time (omitted once `VersusMatch.TimeLimit` is disabled), this pane's own K/D, and the current
+leader's tag — drawn in MarkerHud's run-status slot (`RefStatusY` — Stunt and Versus are mutually
 exclusive, so the two never compete for it); a transient "P2 DOWNED P3" kill banner ("P3 DOWN"
 with no killer); and one opponent marker per living rig (`Rigs`, excluding `PlayerIndex` and any
 `Controller.Crashed` seat) — an on-screen tag at the projected point, or MarkerHud's edge-arrow +
@@ -3068,27 +3068,40 @@ happened to.
 ⚠ Opponent positions come off `PlayerRig.Controller.GlobalPosition` directly, never
   `AnimRuntime.PlayerPosition` (a P1-only singleton) — the same rule MarkerHud/FlightController
   already follow.
-H22 extends the same marker to AI hostiles in EVERY flight session: `BuildHostileTracker(pi,
-camera, pool)` is the matchless build (no status line, no banner, no `Rigs`) the rig assembler
-hangs on every human pane outside `--vs`, and in `--vs` the normal build additionally gets
-`HostilePool`. `UpdateHostile` (every `_Process`) rescans the pool's one live aircraft roster
+⚠ **The edge-arrow + two-line-off-screen-tag SHAPE this draws is not invented** — the module doc
+  used to claim "no reference to copy"; that claim is false and was corrected by `PLAN-targeting.md`
+  C21. `OriginalScreenshots/HUD.png` shows the original's own targeting marker doing exactly this,
+  decoded in [`org/targeting.md`](org/targeting.md). What IS this class's own invention is applying
+  that shape to draw one marker per *human opponent* — the original has no such per-opponent
+  marker at all; that use is CSVM's own splitscreen answer to its radar.
+The H22 nearest-AI-hostile tracker and `--debug-markers` used to live here too; C21 split both out
+to `TargetHud` (below), because that marker draws in EVERY flight session, not only `--vs`, which
+this class never did.
+
+## src/Flight/TargetHud.cs
+The per-pane targeting HUD (`PLAN-targeting.md` C21): the H22 nearest-AI-hostile tracker and
+`--debug-markers`, split out of `VersusHud` because both draw in EVERY flight session, not only
+`--vs` — a Versus-only class was the wrong home for a feature every pane gets. `Build(playerIndex,
+camera, pool)` is unconditional, one per human pane, built by `FlightRigAssembler` whether or not
+the session has a `VersusMatch`; a `--vs` pane gets BOTH this and a `VersusHud`, so an AI hostile
+spawned into a dogfight is still marked alongside the human opponents.
+`UpdateHostile` (every `_Process`) rescans `HostilePool`'s one live aircraft roster
 (`ProjectilePool.CollectAircraft`, the same list the AI gunners read) and `NearestHostile` picks
 the nearest LIVE AI-piloted `FlightController` past the engine's team gate; the winner draws
-through `DrawOpponent` unchanged, in the HUD red, tagged `HostileTag(name)` ("ai1_player_fury"
-reads "AI1"). Humans carry no `AiGunner`, so there is no D12 "the target" to mirror;
-nearest-hostile re-selected per frame is the shipped rule, which also picks up generator spawns
-and drops a crashed hostile (listed but not live) with no extra plumbing. Acquire/lose
-transitions log one `targeting hud:` breadcrumb each. Pinned by the `hostile-marker-hud` suite +
-`HostileTagTests`; a hud built without a pool never tracks, which keeps the golden VS path
-byte-identical.
+through `DrawOpponent`, in the HUD red, tagged `HostileTag(name)` ("ai1_player_fury" reads "AI1").
+Humans carry no `AiGunner`, so there is no D12 "the target" to mirror; nearest-hostile re-selected
+per frame is the shipped rule, which also picks up generator spawns and drops a crashed hostile
+(listed but not live) with no extra plumbing. Acquire/lose transitions log one `targeting hud:`
+breadcrumb each. Pinned by the `hostile-marker-hud` suite + `HostileTagTests`; a hud built without
+a pool never tracks.
 `--debug-markers` (`MarkAll`, set by the rig assembler alongside `Own`) widens that to EVERY live
 aircraft in the same scan: `CollectMarks` is the pure selection (live, a `FlightController`, not
 `Own`), each drawn through the same `DrawOpponent` in HUD blue on the pane's own team and HUD red
 otherwise, tagged with its slant range and its current AI mode (`ModeSuffix`, the mode machine's
 own `NameOf` vocabulary; empty for a pilot without a machine), and off-screen tags stepped along
-the screen edge (`RefStaggerStep`) so a flight sharing one bearing does not stack into one string. It REPLACES the
-single-hostile draw rather than adding to it, so the tracked plane is never drawn twice in two
-colours.
+the screen edge (`RefStaggerStep`) so a flight sharing one bearing does not stack into one string.
+It REPLACES the single-hostile draw rather than adding to it, so the tracked plane is never drawn
+twice in two colours.
 ⚠ A neutral-team aircraft marks HOSTILE here, unlike `NearestHostile`'s engine gate which rejects
   the pair. A debugging overlay that silently omitted a plane would be worse than one that
   mis-colours it.
@@ -3102,15 +3115,14 @@ colours.
   `--debug-markers`; with no aircraft bound (a spectator, a suite rig) `OwnTeam` still falls back to
   the derivation. The `hostile-marker-hud` suite carries both the fix and the old derivation as a
   named CONTROL. The gate itself was always right — it was being handed the wrong own-team.
-⚠ **The module doc's "no reference to copy" claim is false** and is corrected by `PLAN-targeting.md`
-  C21. The original has a full player-targeting system, decoded in
-  [`org/targeting.md`](org/targeting.md): a sticky player-chosen target in plane `+0x948` over three
-  classes, a per-frame rebuilt and angularly sorted candidate list, a fixed 20x16 px bracket box
-  gated on the selected gun's authored `RANGE` through a lead solve, and a three-line label
-  (`<name> [<category>] -` / proper name / `%d o'clock`) placed BELOW the box. Our edge-arrow +
-  clock-hour branch is already the original's behaviour; the auto-nearest re-pick, the tag above the
-  point, and `HostileTag`'s node-name parse are the parts that are ours. Read that page before
-  changing anything here.
+`DrawOpponent`/`EdgePoint`/`ClockHour`/`DrawArrow`/`DrawTag` are copied verbatim from `VersusHud`'s
+own copy of them — the same relationship `VersusHud` already has with `MarkerHud` (a private
+per-HUD copy documented as verbatim, not a shared base class for two `Control`s); `TargetHud`'s
+copy additionally carries the `stagger` step `--debug-markers` needs when several planes share one
+bearing, which `VersusHud`'s opponent loop never does.
+⚠ This class does not yet read the player's own STICKY selection (`TargetSelection`,
+  `Targeting.Current`) — only the H22 auto-nearest hostile. C22 draws that marker here, in the
+  original's own shape (fixed-size brackets, the label always below, a two-line edge tag).
 
 ## src/Flight/VersusBoard.cs
 The dogfight's shared results overlay (`PLAN-vs-mode.md` C25) — `StuntRaceBoard`'s construction
@@ -3986,7 +3998,7 @@ body. Everything else consults the flag: `TakeProjectileHit`/`DebugForceCrash` r
 `DriveAiGunner` drops a standing target that leaves play, and outside this class
 `ProjectilePool.CollectAircraft` (which carries the aim assist, `SelectRankedTarget` and the H22
 tracker with it), the pool's fuse/blast passes, `TurretController.Alive`, `AiPilot.Next`'s quarry
-test and `VersusHud`'s hostile draw all read `InPlay`. `InertChanged` is the event a session-level
+test and `TargetHud`'s hostile draw all read `InPlay`. `InertChanged` is the event a session-level
 roster mirrors it into (`AiVoiceRuntime` → `Speaker.Alive`). `Activate(pos, lookAt)` is the
 inverse — re-home, clear the flag, `Respawn` — the original's teleport-then-reactivate in one call.
 ⚠ Inert is NOT "parked far away", a shape considered and rejected: a parked plane still ticks,
@@ -4030,7 +4042,7 @@ zeppelin sub-parts (bound by `GameSession`, not the assembler — the zeppelins 
 rigs are). D-pad Up runs through `TapHoldButton` (tap = next enemy, hold = nearest-crosshair);
 `T`/`Y`/`U`/`I`/`O` are the curated keyboard set, each edge-detected in its own `_targetKeyPrev` slot.
 ⚠ **The team comes off the `Team` FIELD**, not `AimAssist.TeamOfPilot(PlayerIndex)`. That derivation
-  is the wingman-in-the-marker bug (see `VersusHud.OwnTeam`), and it is right for P1 by coincidence,
+  is the wingman-in-the-marker bug (see `TargetHud.OwnTeam`), and it is right for P1 by coincidence,
   which is exactly why it survived.
 ⚠ **Input is gated on `InPlay`, the rebuild is not.** A downed pilot watches from the freecam
   controls (E44), which bind WASD/QE including `U` — reading targeting keys from a spectator would
@@ -6045,11 +6057,11 @@ on it — loadout/ordnance (and, with them, the aim assist's structure candidate
 readout/reticle, damage visuals,
 audio, the throttle-slam exhaust smoke and chapter-authored `SpeedCue` (private visual layer per
 rig), this player's stunt run + marker/scoreboard/race entry
-(or, in `--vs`, its `VersusHud` bound to `Inputs.VersusMatch` + `Inputs.Rigs` for the opponent
-markers — C23/C24; outside `--vs` the matchless `VersusHud.BuildHostileTracker` over
-`Inputs.Projectiles` instead, so every human pane tracks its nearest AI hostile in any flight
-session, H22; and the `--vs` build gets `HostilePool` too), the spawn placement, and the crash
-runtime built after the controller joins the tree. An active Instant Action mission
+(in `--vs`, its `VersusHud` bound to `Inputs.VersusMatch` + `Inputs.Rigs` for the opponent markers
+— C23/C24; and, unconditionally in EVERY flight session, its `TargetHud` (`PLAN-targeting.md` C21)
+over `Inputs.Projectiles`, so every human pane tracks its nearest AI hostile whether or not the
+session has a match, H22), the spawn placement, and the crash runtime built after the controller
+joins the tree. An active Instant Action mission
 (PLAN-instant-action.md C8) overrides two things here: `Inputs.InstantActionPlayerPlaneNode`, when
 set, replaces `PlaneRoster.PlaneFor` for every human alike (the def carries one `player_plane`,
 not a per-player list), and `Inputs.InstantActionActive` puts every human on
