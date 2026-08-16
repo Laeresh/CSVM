@@ -1035,6 +1035,51 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   nothing), [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) (slot 33 and the
   `bias × −750` decode), `AiTargetRanking.ObjectiveBiasFor`, `AiSkills.RosterRatingBiases`.
 
+- `BL-406` `[Research]` **What each ordnance type actually does at runtime is undecoded: twelve
+  distinct rocket types ship, and every one of them flies as the same generic projectile.**
+  *Evidence:* the authored side is fully decoded and documented
+  ([`docs/formats/weapons.md`](docs/formats/weapons.md)). `wep_04`–`15` are twelve separate types
+  (incendiary, armor-piercing, high-explosive, `FLAK`, `SONIC`, `FLASH`, `BEEPER`, `SEEKER`,
+  `CHOKER`, `SMOKER`, aerial torpedo, rear-arc `FLARE`), plus the world weapons `wep_24`–`28`
+  (multiplayer HE, glidebomb, AA flak, zeppelin cannonball). The *behavioural* side is not
+  decoded: `WeaponDefs.cs` parses `SONIC`, `FLASH`, `BEEPER`/`TIME`, `BEEPER_SEEKER`, `TANGLER`,
+  `SMOKE_SCREEN`, `REAR`, `TORPEDO`, `TARGETABLE`/`FLYOUT_HEALTH`, `CRATER`, `TURN_RATE` and
+  `DETONATION_DOT_PRODUCT` into fields marked "unimplemented, parsed so no key is dropped"
+  (`WeaponDefs.cs:107`), and `Projectile` flies all of them identically: straight line at
+  `VELOCITY`, blast at `IMPACT_PROXIMITY`, damage from the armor/health pair. Nothing homes
+  (`IsGuided` "describes the data rather than driving flight", `WeaponDefs.cs:129-133`), nothing
+  is choked, no smoke is laid, no flare fires rearward, and no flyout can be shot down.
+  *Fix shape:* a Ghidra pass over the executable's ordnance dispatch, delivering one docs section
+  per type: what the flag selects, which routine consumes it, what the struct fields mean in
+  engine units, and what the player sees. `FUN_004ba6f0` is the entry point, being the weapon
+  flag parser with three bits already named (`CANNON` `0x40`, `DAMAGES_ZEPPELIN` `0x1000`,
+  `REAR` `0x20000`, [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md)), so the rest
+  of that dword is the map of which types the engine branches on at all. From there follow the
+  game-side weapon-extension struct (0x38 bytes, hung off the ZWEP record at `+0x210`) to its
+  consumers, the way [`docs/org/weaponImpact.md`](docs/org/weaponImpact.md) followed the `IMPACT`
+  table. The deliverable is a decode doc (`docs/org/ordnanceTypes.md`, or a section of
+  `weaponImpact.md`), not code; each type's implementation is then its own item, sized against
+  what the decode found.
+  *⚠ Traps:* (a) **Do not invent behaviour from the flag name.** `FIRING_HEAT` and `cannon_jam`
+  are parsed and never read by the original, and `SHAKES_CAMERA`'s sole carrier is a zero-damage
+  fake weapon, so "the key exists" is not evidence the engine acts on it. A type whose flag has
+  no reader is a finding, and one of the more valuable ones. (b) The type set is **not** the flag
+  set: `HIGH_EXPLOSIVE` vs armor-piercing is a damage-pair difference with no special routine,
+  while guidance is `TURN_RATE` with no flag at all, so enumerate by behaviour and say which
+  types collapse onto the generic model on purpose. (c) The choker's felt behaviour is user
+  recollection, not decode (`weapons.md`, `TANGLER`): the open question is whether the instant
+  stall is the `ENGINE_DEAD [5,13]` thrust cutout alone or a second airspeed clamp. Answer it
+  from the routine, and do not carry the recollection forward as settled. (d) `CLUSTER_SIZE`,
+  `AMMO_LIMIT` and `PRIORITY` are allotment and selection, already decoded; this item is about
+  flight and effect, do not re-litigate them.
+  *Cross-refs:* `BL-290` (torpedo flight dynamics, the one per-type behaviour already minted, and
+  the model case this decode should subsume or confirm), `BL-353` (the Weapon Loadout screen, the
+  only route by which a player ever fits a non-HE type, so this research is what makes that screen
+  worth having), `BL-227` (blast falloff, which excludes the `DAMAGE 0` specials whose real
+  effect this item defines), `BL-233` (the proximity fuse, and the six plain rockets'
+  `DETONATION_DISTANCE == IMPACT_PROXIMITY` quirk), `BL-404`/`BL-405` (where an ordnance round is
+  aimed, as opposed to what it does once launched), `WeaponDefs.cs`, `Projectile.cs`.
+
 ## Flight model & collision physics
 
 - `BL-089` `[Feature]` **Nitro booster — scoped, low priority (the user's standing call).** Recorded because the data is
