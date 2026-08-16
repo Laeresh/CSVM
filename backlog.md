@@ -640,9 +640,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `sec*` = Studio Security, `sti*`/`german*` = the two Hellhound militias. Two table entries have
   no def (Sacred Trust's Warhawk, Broadway Bomber's Peacemaker) — expected, since that table comes
   from `.BM` paint coverage, not from `vehicle.json`.
-  *⚠ Carries decode risk:* the `weapons` 5-tuple's last four fields are unread — count is
-  plausibly slot 2, but the 200/30/800 triple is not decoded. Do that before wiring, or AI planes
-  get wrong ammo counts and ranges.
+  *The 5-tuple is decoded, so that risk is gone (2026-08-16, `BL-395`):*
+  `[weapon_id, rounds_carried, refire_interval_s, min_range_m, max_range_m]`, read out of the
+  builder `FUN_004b59b0` ([`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md),
+  census in `analysis/ai-ordnance-census/`).
+  ⚠ Five base defs (`firebrand`, `bloodhawk`, `brigand`, `fury`,
+  `autogyro`) author fields 3 and 4 transposed against all 25 militia variants, `200, 30` against
+  `30, 200`, so they run a 200-second ordnance refire. That is shipped data; carry it, do not
+  "fix" it.
   *⚠ Trap:* `stock_loadouts.json` holds the eleven `p*` defs alone. Moving `DefName` to an AI def
   without giving `Loadout.Bind` an AI path disarms every AI plane **silently** —
   `AiAircraftSpawner` has no "unarmed" warning branch the way `FlightRigAssembler` does.
@@ -651,7 +656,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-386` (the damage half — landed and closed 2026-08-16,
   `git log --grep=BL-386`; this builds on the `PlaneStats.AiDefName` seam it left),
   `docs/formats/vehicle.md` (the def-family census), `docs/formats/instant-action.md` (the militia
-  table's provenance).
+  table's provenance), `BL-395` (the AI rocket trigger, which lands on the player loadout and wants
+  this item's armament afterwards).
 
 ## Weapons & combat
 
@@ -940,6 +946,64 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   [`docs/org/aiPilot.md`](docs/org/aiPilot.md) "The trailer" (the anchored-net ride that carries a
   net over any terrain and so made this visible; closed as `BL-377`,
   `git log --grep=BL-377`).
+
+- `BL-395` `[Bug]` **Enemy AI never fires ordnance: the rocket trigger is human-input only.**
+  `AiGunner` is forward-gun only, and `FlightController.cs:1229` derives `RocketHeld` from
+  `RocketFirePressed()` (keyboard/pad), so a non-human pilot cannot pull the rocket trigger at
+  all. AI planes nonetheless carry live pylons: `AiAircraftSpawner.cs:150-156` binds the stock
+  loadout and builds `PylonOrdnance`, so enemy rockets are modelled, visible on the rail, and
+  never leave it.
+  *The original's employment model is decoded* (2026-08-16,
+  [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md)): the fire decision
+  `FUN_0041f420` walks one weapon list holding guns and ordnance together, and an ordnance entry
+  passes when its slot cooldown has expired, the target's gasbag class matches the weapon's
+  `DAMAGES_ZEPPELIN` bit, and the squared separation sits inside the authored `[min, max]` band.
+  The shot itself (`FUN_004b6820`) then needs the mount's aim inside **5°** (the gun's gate is
+  10°), a vehicle-wide ordnance lockout to have expired, and a **`quick_draw_chance` roll** to
+  pass (0.05 at pilot rating 1, 0.44 at 9), and that roll is the parameter's only consumer.
+  *Fix shape:* a new `AiRocketeer` beside `AiGunner` holding those gates, whose `WantsFire`
+  replaces `RocketFirePressed()` for a non-human pilot, exactly as `AiGunner.WantsFire` already
+  replaces `FirePressed()` one line above. Feed the existing `FireControl` rocket input, never a
+  direct projectile spawn, so ammo, pylon selection, the dry cue, `PylonOrdnance` visibility and
+  the self-blast exemption stay in the one place that implements them.
+  ⚠ *Traps.* (a) **Scope is damaging ordnance.** Five militias fly the `wep_12` choker, two the
+  `wep_15` flare, one the rear-firing `wep_13` smoke (fired only while being pursued, aimed
+  backwards). Those need their own triggers and are a separate item, not a widening of this one.
+  (b) **A `DAMAGES_ZEPPELIN` weapon is fired ONLY at gasbags**, so the Black Hat Warhawk's eight
+  torpedoes must never be launched at an aircraft. (c) The engagement window is a **band**, 200 m
+  to 800 m on the shipped defs; a max-range-only gate is wrong. (d) **Do not tune launch rates
+  yet.** An AI still flies the *player's* loadout (`BL-394`), so counts and refire are wrong at
+  the source; wire the trigger, land it, tune after `BL-394`.
+  *How you'd know it worked:* engine-free assertions on the decoded gates mirroring
+  `AiGunnerTests`, plus a scripted `--ai` engagement reporting launches per engagement and hit
+  fraction, so a regression shows up as a count.
+  *Playtest after fix:* fly against a Black Hat flight and confirm rockets are aimed at you and
+  read as a threat rather than noise.
+  *Cross-refs:* `BL-394` (what an AI carries; this item is only the trigger), `BL-396` (the gun
+  gates the same decode calls into question), `BL-227` (blast falloff),
+  `analysis/ai-ordnance-census/`.
+
+- `BL-396` `[Research]` **Verify our AI gun gates against the decoded fire path.** `AiGunner`'s
+  three gates were assembled from authored data, not read out of the executable: the RANGE-reach
+  test, the ±11° `gun_pitch`/`gun_yaw` airframe cone as a hard fire gate, and the quick-draw cone
+  off the target's nose/tail axis. The `BL-395` decode reached the routine that actually fires
+  (`FUN_0041f420` + `FUN_004b6820`) and it does not obviously agree. It applies a **10° aim-quality
+  gate on the mount's lead solution**, a per-weapon **squared** `[min, max]` range window from the
+  def (1–900 m for every AI gun), and the quick-draw cosine as an early all-or-nothing return
+  rather than a per-shot filter. Whether `gun_pitch`/`gun_yaw` gate firing at all, or only the
+  mount's traverse, is the open question.
+  *Do:* read `FUN_0041f420`'s gun path and `FUN_004b6820`'s aim gate against
+  `AiGunner.Solve`/`ShotDirection` gate by gate, and record the verdict as a line in
+  [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md). Confirmation closes this item;
+  a contradiction re-tags it `[Bug]` and it carries its own fix.
+  ⚠ *Traps.* (a) `AiGunner` is landed, unit-tested (`AiGunnerTests`) and covered by the
+  `ai-gunnery` suite, and a gate change is a regression risk with its own verification burden, which
+  is why this is separate from `BL-395`. (b) The dead-eye scatter is a different mechanism from the
+  aim gate; do not conflate the cone the AI *shoots inside* with the quality threshold it *waits
+  for*. (c) The min-range floor of 1 m is authored, not a sentinel. It is the same field that
+  carries 200 m on ordnance.
+  *Cross-refs:* `BL-395`, `docs/formats/ai-rosters.md` ("ai_skill_parameters"),
+  `docs/architecture.md` `src/Flight/AiGunner.cs`.
 
 ## Flight model & collision physics
 

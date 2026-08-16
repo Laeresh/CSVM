@@ -13,8 +13,10 @@ are given so any claim can be re-checked at source.
 the authored airframe side is [`formats/vehicle.md`](../formats/vehicle.md) (`mode`, `attack`,
 `return_range`, `preferred_engagement_altitude`); the patrol graphs themselves are
 [`formats/ai-nets.md`](../formats/ai-nets.md). The flight physics an AI shares with the player is
-[`flightModel.md`](flightModel.md). CSVM's implementation seam is `src/Flight/AiPilot.cs`, the
-driver that picks each mode's aim point and parameter block; the steering law it hands them to is
+[`flightModel.md`](flightModel.md); the firing half (when an AI pulls the trigger, and the
+`weapons` 5-tuple that governs it) is [`aiPilot/aiWeapons.md`](aiPilot/aiWeapons.md). CSVM's
+implementation seam is `src/Flight/AiPilot.cs`, the driver that picks each mode's aim point and
+parameter block; the steering law it hands them to is
 `src/Flight/AiControlLaw.cs`, decoded in [`aiControlLaw.md`](aiControlLaw.md).
 
 ## The headline: there is no netless patrol
@@ -79,6 +81,10 @@ this order:
    value returns without steering.
 6. After the net follower, a live selected target promotes the task to pursue (`FUN_0041f040` sets
    `+0x2f0 = 1`).
+
+Firing is not one of those branches. All three behaviours call the fire decision `FUN_0041f420`
+themselves, each with both weapon classes enabled, and it is decoded in
+[`aiPilot/aiWeapons.md`](aiPilot/aiWeapons.md).
 
 The AI mode enum lives at `+0x358` and is a different thing from the task: 1 evasive maneuver,
 2 approaching danger zone, 3 avoid crash, 4 stunned, 5 navigating danger zone, 0 otherwise.
@@ -665,6 +671,7 @@ is where to start.
 | `FUN_00421950` | the scorer for every other `mode`, base weight and the two class terms only |
 | `FUN_0041ae40` | the `rating_biases` lookup, returning rank units |
 | `FUN_00420070` | the `DAMAGES_ZEPPELIN` ordnance check that admits gasbag candidates |
+| `FUN_0041f420` | the fire decision every behaviour calls, [`aiPilot/aiWeapons.md`](aiPilot/aiWeapons.md) |
 
 ## Open
 
