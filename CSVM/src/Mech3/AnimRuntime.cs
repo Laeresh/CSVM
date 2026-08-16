@@ -1016,7 +1016,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         var inst = new AnimInstance(def, anchor);
         foreach (var seq in def.Sequences.Where(s => !s.OnCallOnly))
             inst.AddRunner(seq);
-        if (inst.Runners.Count == 0)
+        if (inst.Finished)
             return;
         _instances.Add(inst);
         OnInstanceStarted?.Invoke(def, anchor);

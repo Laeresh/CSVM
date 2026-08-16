@@ -36,6 +36,7 @@ bottom rather than hidden.
 | `004ec5a0` | The **ELSE/ELSEIF fall-through** scan — the same walk with the narrower stop set: ENDIF only |
 | `004ec5d0` | `ENDIF` — a bare `MOV EAX,2 / RET`, i.e. a no-op |
 | `004eb570` / `004eb610` | `CALL_SEQUENCE` / `STOP_SEQUENCE` |
+| `004ecedc`–`004ecf53` | The per-instance **tick walk** — one ascending pass over the sequence array, stepping each slot at most once. The containing function is undefined in the database; the loop block is the citable unit |
 | `FUN_00516820` | The reader-side condition parser — one branch per keyword, writing the condition flag word |
 | `FUN_004ec6a0` | `FBFX_COLOR_FROM_TO`, dispatch slot 36 — the model for "a timed event reports STILL RUNNING until its run time is up" |
 | `004e82b0` | `LIGHT_ANIMATION`, dispatch slot 5 — advances one tick's worth of the authored delta per dispatch, clamps the last tick to the remainder, and returns still-running on the same test |
@@ -50,6 +51,8 @@ on every tick. These are the offsets the runtime reads:
 | Offset | Meaning |
 |---|---|
 | `anim+0xb0` | The **instance** clock — one clock per running definition, shared by every sequence of it |
+| `anim+0xcc` | Base of the definition's **sequence array** — `SeqDefInfoC` records, stride `0x40` |
+| `anim+0xd8` | Sequence **count**, one byte; the loop bound for every walk of the array |
 | `seq+0x20` | Current state |
 | `seq+0x21` | Reset state (`SeqDefState`: `Initial`=0, `OnCall`=3) |
 | `seq+0x24` | The sequence's own start instant (origin `Sequence`) |
@@ -376,6 +379,70 @@ into one and loses half the burst.
 ⚠ Halting a runner does not touch what it already launched. Motions and puffers have authored
 lifetimes and outlive the sequence that started them.
 
+## The tick walk is ascending, and that is what decides same-tick dispatch
+
+A running definition advances its sequences in **one forward pass over the array**, not over a list
+of live runners. The walk reads the base from `anim+0xcc` and the count from the byte at `anim+0xd8`,
+and steps by the `0x40` record stride (`004ecedc`–`004ecf53`, increment at `004ecf4d`). Each
+iteration re-reads that slot's state byte at `seq+0x20` and calls the stepper only when the state is
+**0 or 1**; parked (3) and done (2) are skipped. The global tick delta `DAT_009fd1a8` is reloaded
+from `DAT_009ad744` at the top of **every** iteration, so each slot the pass reaches is advanced by
+the full frame delta.
+
+Two properties follow from the pass being a forward index walk, and both matter more than they look.
+
+**A called sequence runs in the same tick if and only if its index is higher than the caller's.**
+`CALL_SEQUENCE` writes state 0 into the callee's own slot (`004eb5fa`–`004eb605`, addressing it as
+`base + index*0x40`), and the walk has either passed that index already or has not. A call
+*forward* in the array lands on a slot the cursor has yet to reach, so the callee's first event
+fires in the same tick as the call. A call *backward*, or a sequence calling itself, lands behind
+the cursor and waits for the next tick. The index is the sequence's position in the definition's own
+array, which is authored declaration order, so the authoring decides the timing.
+
+The data authors overwhelmingly call forward. Of the 22,173 compiled CALL edges the walk sees,
+**22,057 (99.48 %) target a higher index** and so dispatch in the same tick; 116 target a lower one
+and defer. 398 of the 403 definitions carrying a call have at least one forward edge, and exactly
+one is backward-only (census: `analysis/bl-135-callsequence-lag/call-index-order.ps1`). Among the
+backward minority are `police_car`'s `start_walkin` → `siren_police`, which the original really does
+start a tick late, and the return hop of C2/M02's `marypickford` ring, which is what stops that ring
+resolving inside one tick.
+
+⚠ **A sequence's own timers do not advance on its first pass.** The stepper adds the tick delta to
+`seq+0x24`/`seq+0x28` only when the state is 1 or the cursor has moved past the sequence start, so a
+sequence the walk reaches in the tick it was called is stepped without being charged that tick. It
+matters to any re-implementation that restates an ANIMATION-origin gate in the sequence's own clock:
+charge the called sequence a delta the instance clock already spent and the two clocks drift apart
+by one tick, which gates every later ANIMATION offset in it a tick early.
+
+**No sequence is stepped twice in one pass, so the same-tick chain needs no cap.** A chain of
+forward calls is bounded by the array count, and a ring cannot spin at all: whichever way round it
+goes, one of its hops necessarily targets an index the cursor has passed. The engine gets this for
+free from the walk's shape rather than from a guard.
+
+### The index is the authored ordinal, and two named sequences are outside the array
+
+The array is built by **appending one slot per `SEQUENCE_DEFINITION`, in the order the loader meets
+them**. `FUN_0051c350` is the whole allocator: it `realloc`s to `(count+1) * 0x40`, hands back the
+record at the old count, increments the count byte and zeroes the 0x40 bytes. It refuses at 255
+with `Sequence list overflow`, so a definition can hold at most 255 sequences. Its one caller is the
+definition loader `FUN_0051dcf0`, which calls it from a linear scan over the definition body, so an
+index is exactly the keyword's ordinal in the source. Nothing sorts or reorders.
+
+**`RESET_STATE` and `DAMAGE_SEQUENCE` never enter the array.** After that scan the loader
+`calloc`s a standalone 0x40 record for each and hangs it off its own pointer: the reset body at
+`anim+0xd0`, named `RESET_SEQUENCE`, and the damage body at `anim+0xd4`, named `DAMAGE_SEQUENCE`.
+Both are filled by the same event-list reader the array slots use, and both are stepped by direct
+single-sequence calls outside the tick walk (`FUN_004ed340` steps `+0xd0` on start;
+`FUN_004e71e0` zeroes the instance clock and steps `+0xd4`). Neither occupies an index, neither is
+reachable by `CALL_SEQUENCE`, and neither is advanced by the walk. mech3ax's `unknown_seq` is the
+`+0xd4` damage record.
+
+⚠ The name resolution is **memoized into the event**, not recomputed. `CALL_SEQUENCE` scans the
+array comparing the record's name at `seq+0` and stores the resulting index in the event payload at
+`+0x2c` (`004eb5db`), reusing it on every later dispatch of that same event. `STOP_SEQUENCE`
+(`004eb610`) resolves identically. The memo is per authored event, so it is stable for the life of
+the mission.
+
 ## WAIT_FOR_COMPLETION gates the NEXT event, not the runner's lifetime
 
 A `CALL_ANIMATION` carrying the flag holds its sequence while the callee it actually reached is
@@ -584,6 +651,7 @@ Everything here is a known, deliberate divergence — not a gap waiting to be cl
 | **The `STOP_SEQUENCE` DISABLE is not persisted** | A halt is not remembered, so a later `CALL_SEQUENCE` on the same name starts the sequence again, where the original's DONE state refuses it until the definition resets. **123 definitions name one sequence in both a call and a stop** (mostly `flame_light_seq`), but whether any reaches the stop BEFORE the call at run time is a control-flow question a static census cannot answer — persisting the flag would move all 123 on a divergence none of them is known to observe |
 | **The branch-taken stack** stands in for the original's arrival distinction | See the residual above: it needs a nesting shape no shipped definition has |
 | **A 256-dispatch-per-tick guard** | Bounds a zero-length sequence within one tick; the remainder defers to the next. The original has no such cap |
+| **A reader `DAMAGE_SEQUENCE` occupies a slot**, where the original keeps it out of the array | `AnimDefs.cs` appends it to `Def.Sequences` so `ApplyDamageStages` can find it by name, which gives it an index the original's standalone `anim+0xd4` record never has. Nothing calls it, and an insertion cannot invert the order of the sequences around it, so the same-tick rule is unaffected |
 | **The u16 pass-counter wrap** at 65,536, not reproduced | Unreachable within a session, and `-1` already spells "infinite" |
 | **The 86,400 s instance-clock clamp** (`FUN_004ebfd0`), not reproduced | A session never reaches a day |
 | **`LIGHT_ANIMATION` ramps asynchronously** rather than one delta-tick per dispatch | Same picture only because the sequence is also held for the run time; the tick-by-tick advance is not reproduced |
