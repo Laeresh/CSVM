@@ -3112,11 +3112,7 @@ Three config knobs scale `BaseSize` per spawn path — `puffer.burstSizeScale` /
 `puffer.trailSizeScale` / `puffer.sustainSizeScale` (`SizeScaleDefault` **2**, decoded from
 `FUN_0057c5c0`/`FUN_0054e6e0`: `SIZE_RANGE` is a screen-space HALF-extent, so the world quad's
 side is `2 × SIZE_RANGE` — not a judgement call. The knobs remain
-for deliberate per-path tuning — the cull margin scales with the largest). Two more scale the
-`fire_n_smoke` family ONLY — `puffer.fireRiseScale` / `puffer.fireLifetimeScale` (defaults 2.5/1.5,
-invented against original footage rather than decoded, signed off at the controls 2026-08-06):
-vertical spawn velocity + puff lifetime of the crash/destruction/tank fires, identity for every
-other emitter — left untouched by A1/A2; D10 re-judges them against the corrected sim. All read at
+for deliberate per-path tuning — the cull margin scales with the largest). Read at
 `Init`; registered in `Config.WarmTuningRegistry` for `--dump-config`. Moving
 `SizeScaleDefault` re-pins every puffer-bearing golden and only those. Measured on the 4->1 revert:
 `c1-waterfall`, `c3-island`, `c5-city-night`, `c1-destroy-effects`, `c1-crash`. Re-measured on the
