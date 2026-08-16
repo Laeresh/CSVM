@@ -1,8 +1,8 @@
-# Enemy generators — `egen.json`
+# Enemy generators â€” `egen.json`
 
 Part of [Mission entities](../mission-entities.md) in the [format documentation](../README.md).
 
-## `egen.json` — enemy generators
+## `egen.json` â€” enemy generators
 
 An **enemy generator** spawns AI aircraft into a live mission from a host entity. The host is
 either a zeppelin (fighters dropped out of its hangar) or a fixed installation â€” this install

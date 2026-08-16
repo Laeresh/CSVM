@@ -33,29 +33,29 @@ behind [effects.md](effects.md)'s sprites).
 
 ### Start here
 
-- [extraction.md](extraction.md) — extraction modes, output, and round-trip support.
-- [gotchas.md](gotchas.md) — cross-cutting reader and renderer rules.
-- [zrdr.md](zrdr.md) — reader archives and their family index.
+- [extraction.md](extraction.md) â€” extraction modes, output, and round-trip support.
+- [gotchas.md](gotchas.md) â€” cross-cutting reader and renderer rules.
+- [zrdr.md](zrdr.md) â€” reader archives and their family index.
 
 ### World and scene
 
 - [gamez.md](gamez.md), [world-structure.md](world-structure.md), [interp.md](interp.md), [clutter.md](clutter.md), [templates.md](templates.md), and [fogvol.md](fogvol.md).
 - [weather.md](weather.md), [anim-definitions.md](anim-definitions.md), [destructibles.md](destructibles.md), and [effects.md](effects.md).
-  - [Weather atmosphere controls](weather/atmosphere.md) — cloud cover, wind, and precipitation.
-  - [Compiled animation archives](anim-definitions/compiled-archives.md) — the compiled archive and SI-script reference.
+  - [Weather atmosphere controls](weather/atmosphere.md) â€” cloud cover, wind, and precipitation.
+  - [Compiled animation archives](anim-definitions/compiled-archives.md) â€” the compiled archive and SI-script reference.
 
 ### Aircraft and combat
 
 - [vehicle.md](vehicle.md), [markers.md](markers.md), [loadouts.md](loadouts.md), [paint.md](paint.md), and [camparam.md](camparam.md).
-  - [Player global blocks](vehicle/player-globals.md) — `player.json` globals.
+  - [Player global blocks](vehicle/player-globals.md) â€” `player.json` globals.
 - [weapons.md](weapons.md), [weapon-effects.md](weapon-effects.md), [turrets.md](turrets.md), [shakes.md](shakes.md), and [sounds.md](sounds.md).
   - [Ordnance effects and projectile prototypes](weapon-effects/ordnance.md).
 
 ### Missions and AI
 
 - [spawns.md](spawns.md), [missions.md](missions.md), [mission-entities.md](mission-entities.md), and [instant-action.md](instant-action.md).
-  - [Enemy generators](mission-entities/enemy-generators.md) — host, launch cycle, and capacity rules.
-  - [Instant Action wrap-up](instant-action/wrap-up.md) — scoring and friendly-fire rules.
+  - [Enemy generators](mission-entities/enemy-generators.md) â€” host, launch cycle, and capacity rules.
+  - [Instant Action wrap-up](instant-action/wrap-up.md) â€” scoring and friendly-fire rules.
 - [ai-nets.md](ai-nets.md), [ai-rosters.md](ai-rosters.md), and [combat-voice.md](combat-voice.md).
 
 ### Presentation and UI

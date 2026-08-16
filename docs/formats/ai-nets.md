@@ -2,9 +2,7 @@
 
 Part of the [format documentation](README.md). The chapter-scoped patrol graphs the
 original's AI flies: waypoint sets with an **explicit edge list**, referenced by every
-AI-consuming reader family. First surveyed in `docs/plans/PLAN-M4-ai.md` (); the
-numbers below were re-measured against the same install on  and are asserted by
-`CSVM.Tests/AiNetsTests.cs`. Engine reader: `CSVM/src/Mech3/AiNets.cs`; the
+AI-consuming reader family. Engine reader: `CSVM/src/Mech3/AiNets.cs`; the
 `--debug-ainets` overlay (F13) renders them, and `CSVM/src/Flight/AiNetFollower.cs` (M4 B5)
 flies them as a patrol behaviour (`--ai=<plane>:<net>`), traversal along the edge list, an anchored
 trailer ridden (`BL-377`), per-node tags preserved unacted-on.
@@ -32,7 +30,7 @@ pairs to the end of the list instead.
 
 The **name** is the join key everything else uses: `egen.json` `vehicle.nets`,
 `zeppelins.json` `net`, and `objectives.json` reference nets by name. `aiv.json` field 0
-references them by **id** ([PLAN-M4-ai.md](../plans/PLAN-M4-ai.md), decoded slots table).
+references them by **id**.
 
 ⚠ **An anchored trailer makes the whole net RIDE its target** (
 `BL-377`, [`org/aiPilot.md`](../org/aiPilot.md) "The trailer"). `[nodeIndex, "name"]` is not
@@ -212,7 +210,7 @@ lobe and about a kilometre away through the other.
 - **`<Cx>/<mission>/zrdr/net.zrd` is a different, unnamed, edgeless file** — node counts
   quantised by mission type (8/48/80), payloads shared across missions, coordinates
   sometimes outside the mission world. Shape says *spawn table*, not route. Undecoded —
-  do not build patrol behaviour on it ([PLAN-M4-ai.md](../plans/PLAN-M4-ai.md), wrong-claim #2).
+  do not build patrol behaviour on it.
 - The stunt/danger-zone route ribbons (`dzpathN` gamez meshes, [missions.md](missions.md))
   are guide *geometry*, not AI nets — a separate system with its own `--debug-dzpaths`
   overlay.

@@ -1,4 +1,4 @@
-# Mission entities — `zeppelins.json` and `egen.json`
+# Mission entities â€” `zeppelins.json` and `egen.json`
 
 Part of the [format documentation](README.md). `zeppelins.json`, in a mission's own zrdr archive
 (`<chapter>/<mission>/zrdr.zbd`), configures the zeppelins the player attacks or escorts.
@@ -6,7 +6,7 @@ Part of the [format documentation](README.md). `zeppelins.json`, in a mission's 
 The whole-install census contains 58 zeppelin instances across 50 `zeppelins.json` files. A separate
 [enemy-generator reference](mission-entities/enemy-generators.md) covers `egen.json` and the 23 generators in 53 files.
 
-`zeppelins.json` uses the standard flat alternating `KEY, [values…]` shape
+`zeppelins.json` uses the standard flat alternating `KEY, [valuesâ€¦]` shape
 ([shared conventions](README.md#shared-conventions-zrdr-readers)); all numbers arrive as floats.
 
 ## `zeppelins.json` â€” one entry per zeppelin instance
