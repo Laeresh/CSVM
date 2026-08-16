@@ -13,8 +13,10 @@ namespace CSVM.Utils;
 ///
 /// <para>The master is pinned (1 by default) for a deterministic run and time-seeded otherwise, so
 /// the shipped game keeps its variety: a bare <c>--fly</c> still gets a random spawn, random
-/// liveries and a random gun-spread pattern. The resolved value is logged, so any interesting
-/// unpinned run can be replayed with <c>--seed=</c>.</para>
+/// liveries and a random gun-spread pattern, and each flight from the launchscreen advances the
+/// master (see <see cref="SortieSeed"/>) so flying again is a new mission rather than a replay. The
+/// master in force is logged per session, so any interesting one can be replayed with
+/// <c>--seed=</c>.</para>
 ///
 /// <para>⚠ The hash is written here on purpose: <c>string.GetHashCode()</c> is randomized per
 /// process in .NET, so deriving seeds from it would produce a different set of streams on every
@@ -56,8 +58,10 @@ public static class Rng
     public static bool Pinned { get; private set; }
 
     /// <summary>Re-derives every subsystem stream from <paramref name="master"/>. Called once per
-    /// session build, before anything draws, so an in-process session restart (menu → fly → menu →
-    /// fly) repeats the previous run exactly rather than continuing its sequence.</summary>
+    /// session build, before anything draws, so a session's content is a function of its master
+    /// alone and never of how long the previous session ran. A pinned run reuses the same master on
+    /// an in-process restart (menu → fly → menu → fly) and so repeats exactly; an unpinned one is
+    /// handed the next <see cref="SortieSeed"/> and so gets a fresh mission.</summary>
     public static void Reset(ulong master, bool pinned)
     {
         Master = master;
@@ -66,6 +70,14 @@ public static class Rng
         // The net for any draw this class does not own: Godot's global RNG behind GD.Randf/Randi.
         GD.Seed(master);
     }
+
+    /// <summary>The master for the <paramref name="sortie"/>'th session of an unpinned run, so
+    /// flying again from the launchscreen gets a fresh spawn, fresh opposition and fresh liveries
+    /// instead of replaying the last one. Pure and clock-free: the process seed printed at launch
+    /// plus the sortie index reconstructs any mission, and each value is logged as it is used so
+    /// <c>--seed=</c> can pin it. Mixed rather than added: consecutive masters must not hand the
+    /// subsystems seeds that differ in one bit.</summary>
+    public static ulong SortieSeed(ulong processSeed, int sortie) => Mix(processSeed + (ulong)sortie);
 
     /// <summary>A master drawn from the clock — the unpinned default.</summary>
     public static ulong TimeSeed()

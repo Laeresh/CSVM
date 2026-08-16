@@ -94,6 +94,12 @@ public partial class Launcher : Node3D
     // spec's value; everything else draws from the clock, which is why it is resolved here and not
     // in the spec.
     private ulong _masterSeed;
+    // The once-per-process draw _masterSeed starts at, kept so an unpinned relaunch can step to the
+    // next sortie's master from it rather than from whatever the last session used.
+    private ulong _processSeed;
+    // How many times the launchscreen has started a flight this process — the step count applied to
+    // _processSeed for an unpinned run, and the label the seed is logged under.
+    private int _sortie;
 
     // The clock the --run-tests suites hand back (RunTestSuites' out param), ticked below so a
     // suite's teardown frame behaves as it always did. Every other clock is the session node's.
@@ -388,9 +394,10 @@ public partial class Launcher : Node3D
         // the shipped game keeps its variety. Applied here as well as per session so the dump tools
         // — which quit before any session is built — still draw from the resolved master rather
         // than a zero one.
-        _masterSeed = _spec.PinnedSeed ?? Rng.TimeSeed();
+        _processSeed = _spec.PinnedSeed ?? Rng.TimeSeed();
+        _masterSeed = _processSeed;
         Rng.Reset(_masterSeed, _spec.SeedPinned);
-        GD.Print($"rng: master seed {_masterSeed}" + (_spec.SeedPinned ? " (pinned)" : " (--seed=N to pin)"));
+        LogMasterSeed();
         // Announce the whole resolved bundle on one line, so any capture or log carries the exact
         // conditions it was taken under instead of relying on the reader remembering what --det
         // implies. Every constituent is named with its value, including the ones a flag overrode.
@@ -837,6 +844,16 @@ public partial class Launcher : Node3D
             planes.Add(p.PlaneNode);
         }
         _spec = SessionSpec.FromMenu(_cli, chapter, planes, mode, iaDef);
+        // Step the master so flying again is a new mission rather than a replay of the last one:
+        // without this every launchscreen relaunch re-derives the same spawn, opposition and
+        // liveries from the one process draw. A pinned run (--seed=, --det, --scripted-by, the anim
+        // lab) holds still, which is what keeps the goldens and the perf harnesses reproducible.
+        if (!_spec.SeedPinned)
+        {
+            _sortie++;
+            _masterSeed = Rng.SortieSeed(_processSeed, _sortie);
+        }
+        LogMasterSeed();
         // Honour the join flow's device binding rather than re-deriving it from the roster: the
         // pad that joined as P2 in the menu must be the pad that flies P2. Single player keeps the
         // any-pad policy (null), so every connected pad flies the one plane, as before.
@@ -855,6 +872,15 @@ public partial class Launcher : Node3D
             ReturnToMenu();
             _menu.ShowError($"Could not load {chapter} / {string.Join(", ", _spec.PlaneNames)} — see the log.");
         }
+    }
+
+    /// <summary>Prints the master the next session will draw from. Per session rather than per
+    /// process because an unpinned run advances it: the seed a mission actually flew on is the one
+    /// worth having in the log, so an interesting one can be pinned with <c>--seed=</c>.</summary>
+    private void LogMasterSeed()
+    {
+        string how = _spec.SeedPinned ? "pinned" : $"sortie {_sortie}, --seed=N to pin";
+        GD.Print($"rng: master seed {_masterSeed} ({how})");
     }
 
     /// <summary>Frees the current session node and shows the launchscreen again — the in-process
