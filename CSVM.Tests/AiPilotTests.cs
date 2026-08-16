@@ -106,6 +106,42 @@ public class AiPilotTests
         Assert.False(pilot.SteeringPatrol);
     }
 
+    /// <summary>The climb-out breaks to the right of the aeroplane's own GROUND TRACK, which is
+    /// what makes two aircraft that both detect each other diverge instead of both pulling
+    /// straight up along converging paths. Taken off the track and not the airframe, so roll and
+    /// pitch never flip which way a pilot breaks.</summary>
+    [Fact]
+    public void TheClimbOutBreaksRightOfItsOwnGroundTrack()
+    {
+        var pos = new Vector3(0f, 400f, 0f);
+
+        // Flying north (nose −Z): right is +X. Flying east (+X): right is +Z.
+        var north = AiPilot.ClimbOutAim(pos, new Vector3(0f, 0f, -100f));
+        Assert.True(north.X > 0f, $"a northbound break went to X={north.X:0}");
+        Assert.Equal(0f, north.Z, 3);
+        var east = AiPilot.ClimbOutAim(pos, new Vector3(100f, 0f, 0f));
+        Assert.True(east.Z > 0f, $"an eastbound break went to Z={east.Z:0}");
+
+        // It is still a climb, and the vertical part is the original's own 1000 m.
+        Assert.Equal(1400f, north.Y, 3);
+
+        // A steep climb or dive keeps its horizontal track, so the break does not flip.
+        var climbing = AiPilot.ClimbOutAim(pos, new Vector3(0f, 90f, -40f));
+        Assert.True(climbing.X > 0f, "a climbing aeroplane broke the wrong way");
+        var diving = AiPilot.ClimbOutAim(pos, new Vector3(0f, -90f, -40f));
+        Assert.True(diving.X > 0f, "a diving aeroplane broke the wrong way");
+
+        // Two aircraft meeting head-on break to OPPOSITE sides of the shared line, which is the
+        // whole point: the same rule applied by both parties separates them.
+        var a = AiPilot.ClimbOutAim(pos, new Vector3(0f, 0f, -100f));
+        var b = AiPilot.ClimbOutAim(pos, new Vector3(0f, 0f, 100f));
+        Assert.True(a.X > 0f && b.X < 0f, $"both broke to X={a.X:0} and X={b.X:0}");
+
+        // A hover with no horizontal track still yields a usable aim point rather than a NaN.
+        var still = AiPilot.ClimbOutAim(pos, Vector3.Zero);
+        Assert.True(still.IsFinite() && still.Y > pos.Y);
+    }
+
     /// <summary>The aspect test (<c>FUN_0041d9f0</c> at <c>0x0041dd49</c>) takes BOTH of the
     /// victim's cones: a victim coming at us and a victim we sit behind read alike, and only a
     /// beam aspect leaves the pursuer flying to the lead point. The cone is the pilot's own

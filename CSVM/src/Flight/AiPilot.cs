@@ -84,6 +84,10 @@ public sealed class AiPilot
     // The original's own avoid-crash aim point: straight up from the aircraft by this much.
     private const float ClimbOutAimM = 1000f;
 
+    // INVENTED: how far right of its own ground track the climb-out is displaced, making the
+    // 1000 m pull-up a 45° break to the right rather than a vertical one. See ClimbOutAim.
+    private const float ClimbOutBreakM = 1000f;
+
     // The merge rule's five decoded constants (FUN_0041d9f0 at 0x0041e130): the range it arms
     // inside, the fraction of each party's own speed its closure test wants along the line of
     // sight, the flat speed the aim velocity collapses to, and the vertical-bias endpoints.
@@ -136,6 +140,24 @@ public sealed class AiPilot
             return false;
         float cos = toQuarry.Normalized().Dot(quarryNose.Normalized());
         return Mathf.Abs(cos) > Mathf.Cos(Mathf.DegToRad(quickDrawAngleDeg));
+    }
+
+    /// <summary>Avoid crash's aim point. ⚠ INVENTED in one respect: the original climbs out at its
+    /// own position plus 1000 m of altitude and nothing else, which is why two aeroplanes that both
+    /// detect each other both pull straight up along converging tracks and merge anyway (measured,
+    /// docs/org/aiPilot.md). This adds a <see cref="ClimbOutBreakM"/> displacement to the RIGHT of
+    /// the aeroplane's own ground track, which is the aviation right-of-way convention and the
+    /// point of it: two aircraft meeting head-on that each break right diverge, where two picking a
+    /// side at random still merge half the time. The right is taken off the TRACK rather than the
+    /// airframe's right axis, so a rolled or inverted aeroplane breaks the same way as a level
+    /// one.</summary>
+    public static Vector3 ClimbOutAim(Vector3 pos, Vector3 velocity)
+    {
+        var track = new Vector3(velocity.X, 0f, velocity.Z);
+        var right = track.LengthSquared() > 1e-4f
+            ? new Vector3(-track.Z, 0f, track.X).Normalized()
+            : Vector3.Right;
+        return pos + (Vector3.Up * ClimbOutAimM) + (right * ClimbOutBreakM);
     }
 
     /// <summary>The decoded merge test (<c>FUN_0041d9f0</c> at <c>0x0041e130</c>): the victim is
@@ -203,12 +225,14 @@ public sealed class AiPilot
 
                 case AiMode.AvoidCrash:
                     // The original's own avoid-crash aim point is straight up from the aircraft,
-                    // flown on its own table with the emergency arm. The machine's climb-out
-                    // altitude stays the ORDER so its release test and callers still read it.
-                    TargetHeadingDeg = HeadingDegOf(-model.Attitude.Z);
+                    // flown on its own table with the emergency arm; ClimbOutAim adds the invented
+                    // break to the right. The machine's climb-out altitude stays the ORDER so its
+                    // release test and callers still read it.
+                    var climbOut = ClimbOutAim(model.Position, model.VelocityDir * model.Speed);
+                    TargetHeadingDeg = HeadingDegOf(climbOut - model.Position);
                     TargetAltitude = machine.ClimbOutAltitude;
-                    return Fly(model, dt, model.Position + (Vector3.Up * ClimbOutAimM),
-                        Vector3.Zero, AiLawParams.AvoidCrash, emergency: true);
+                    return Fly(model, dt, climbOut, Vector3.Zero, AiLawParams.AvoidCrash,
+                        emergency: true);
 
                 case AiMode.Pursue when quarry != null:
                     return FlyPursuit(model, dt, quarry);

@@ -427,6 +427,53 @@ with the caster's own body excluded, which is this rule. Its reach is `AiModeMac
 `ProbeLookaheadS`, set to the decoded 4.5 s; the cadence (0.25 s, flat) and the second, deck-slanted
 ray are inventions and remain marked as such.
 
+### Measured: the third bound is the binding one
+
+A spectated 5-versus-5 Bloodhawk dogfight in C1 (a hand-authored `--ia` file, `--debug-spectate
+--ai-attack=5 --det --frames=9000`, about 150 s of sim per run) was run to settle which of the
+three bounds above actually produces the mid-air collisions CSVM sees. ⚠ `--det` does not pin this
+scenario across processes, so each run is a sample; the figures below are per-run averages.
+
+| probe | runs | mid-airs / run | of which head-on | arms / run | arms on an aircraft / run |
+|---|---|---|---|---|---|
+| the decoded zero-width ray | 8 | 3.63 | ~5 in 6 | 31.0 | 13.8 |
+| a swept 10 m sphere | 6 | 3.50 | ~3 in 4 | 79.7 | 66.7 |
+
+Two results. **The ray does see aeroplanes in flight**: 13.8 arms per run on another Bloodhawk's
+airframe, against 17 on terrain. And **widening it changes nothing that matters**: the sweep
+detects an aeroplane 4.8× as often and the collision rate does not move (3.50 against 3.63, inside
+a run-to-run spread of 3 to 4). Detection is not the bottleneck, so the sweep was reverted.
+
+What remains is the third bound, which the decode already names: **both parties answer a detection
+with the same straight-ahead 1000 m climb**, so two aeroplanes that both see each other both pull
+up along converging tracks and merge anyway. The collisions are overwhelmingly head-on — measured
+at impact as the angle between the two velocity vectors, 175°–178° apart on most of them.
+
+### Measured: breaking the climb-out's symmetry is what helps
+
+Same rig, and this time the two arms differ in ONE constant, `AiPilot.ClimbOutBreakM`, so
+everything else about the build is identical:
+
+| climb-out | runs | mid-airs / run | of which head-on / run |
+|---|---|---|---|
+| straight up, the original's | 8 | 3.75 | 3.00 |
+| 1000 m up **and 1000 m right of own track** | 14 | **2.21** | 2.14 |
+
+A 41 % cut, Welch t = 2.8 on 13 degrees of freedom, p ≈ 0.014. Right rather than a coin flip is
+the point: two aeroplanes meeting head-on that each break right diverge every time, where a random
+side still puts them on the same one half the time. It is taken off the ground track and not the
+airframe's own right axis, so a rolled or inverted pilot breaks the same way as a level one.
+
+⚠ This is INVENTED and marked so in the code. The original displaces nothing; its climb-out aim
+point is the aeroplane's own position with Y + 1000 and no lateral term at all.
+
+⚠ And it is not a cure: 2.2 mid-airs per 150 s of a ten-plane furball is still a lot. It is the
+symmetry that was costing the most, not the detection.
+
+⚠ The whole scenario is one the original never produces. Ten netted aircraft all pursuing each
+other in one volume is Instant Action as CSVM builds it; the shipped game's actors fly the
+chapter's first net (above) and converge rarely.
+
 ## The merge rule: what pursue does when two aircraft close nose to nose
 
 Decoded 2026-08-16 to answer "is there a proximity check against other planes?". There is no

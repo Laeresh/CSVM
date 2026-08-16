@@ -1545,18 +1545,39 @@ public partial class FlightController : Node3D
             PhysicsRayQueryParameters3D.Create(from, to, CollisionLayers.World)).Count > 0;
     }
 
-    /// <summary>Whether anything the AI's avoid-crash ray can hit blocks the segment: the static
-    /// world or another aircraft, never this plane's own body. The original's ray has no vehicle
-    /// filter and excludes only the caster (its node is deactivated around the cast; see
-    /// docs/org/aiPilot.md, "What the ray can hit"), so this is not <see cref="WorldBlocksLine"/>.</summary>
-    internal bool AvoidCrashBlocksLine(Vector3 from, Vector3 to)
+    /// <summary>What blocks the AI's avoid-crash lookahead along the segment — the static world or
+    /// another aircraft, never this plane's own body — as the struck body's name, or null for a
+    /// clear path. The original's ray has no vehicle filter and excludes only the caster (its node
+    /// is deactivated around the cast; see docs/org/aiPilot.md, "What the ray can hit"), so this is
+    /// not <see cref="WorldBlocksLine"/>.
+    ///
+    /// <para>⚠ Widening this to a swept sphere was tried and REVERTED (2026-08-16). It works as a
+    /// detector — arms on another aeroplane went from 13.8 to 66.7 per run — and changes nothing
+    /// that matters: mid-airs held at 3.5 per run against the ray's 3.6, over six and eight runs
+    /// of the same 5-versus-5. Detection was never the bottleneck, so the decoded zero-width ray
+    /// stays and the two extra physics queries per probe do not.</para></summary>
+    internal string? AvoidCrashBlocksLine(Vector3 from, Vector3 to)
     {
         var space = GetWorld3D()?.DirectSpaceState;
         if (space == null)
-            return false;
-        return space.IntersectRay(PhysicsRayQueryParameters3D.Create(
-            from, to, CollisionLayers.WorldAndAircraft, Body?.ExcludeSelf)).Count > 0;
+            return null;
+        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+            from, to, CollisionLayers.WorldAndAircraft, Body?.ExcludeSelf));
+        if (hit.Count == 0)
+            return null;
+        // The name is the diagnostic: a block on "a5/col" is terrain, one on
+        // "ai6_player_bhawk/airframe" is the aircraft case the decode says this ray also covers.
+        return hit["collider"].Obj is Node body
+            ? $"{body.GetParent()?.Name}/{body.Name}"
+            : "unnamed";
     }
+
+    /// <summary>Degrees between two vectors, 180 when either is degenerate (an unmeasurable
+    /// aspect reads as the worst case rather than as zero).</summary>
+    private static float AngleBetweenDeg(Vector3 a, Vector3 b) =>
+        a.LengthSquared() < 1e-6f || b.LengthSquared() < 1e-6f
+            ? 180f
+            : Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(a.Normalized().Dot(b.Normalized()), -1f, 1f)));
 
     /// <summary>The rocket name the text readout shows: the resolved <c>MSG_WEAP_*</c> display name
     /// (e.g. "High-explosive rocket") when it resolved, else the short internal handle ("BOOM") — a
@@ -2180,6 +2201,18 @@ public partial class FlightController : Node3D
         string surface = surfaceId is { } sid
             ? $"{sid}/{SurfaceRegistry.NameForId(sid) ?? "?"}"
             : "none";
+        // A mid-air's ASPECT (diagnostic): which AI rule should have prevented it depends entirely
+        // on whether the two met head-on, overtaking or side-on, and no crash line carries that.
+        if (hitBody is AircraftBody struckAir)
+        {
+            var mine = _model.VelocityDir;
+            var theirs = struckAir.Rig.WorldVelocity;
+            var los = struckAir.Rig.WorldPosition - _model.Position;
+            GD.Print($"midair aspect: into {hitName} — tracks {AngleBetweenDeg(mine, theirs):0}° " +
+                     $"apart (0 = same heading, 180 = head-on), line of sight " +
+                     $"{AngleBetweenDeg(mine, los):0}° off own track, " +
+                     $"spd mine={_model.Speed:0} theirs={theirs.Length():0} m/s");
+        }
         GD.Print($"CRASH into {hitName} ({part}) surface={surface} def={crashDef ?? "-"} " +
                  $"impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) " +
                  $"pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) " +

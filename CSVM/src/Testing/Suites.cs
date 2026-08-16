@@ -6248,7 +6248,7 @@ public static class Suites
                 StunRecoveryIntervalS = skills.At("stun_recovery_interval", 5),
                 NaturalTouch = 1,
                 Library = library,
-                ProbeBlocked = (_, _) => terrainBlocked,
+                ProbeBlocked = (_, _) => terrainBlocked ? "suite/terrain" : null,
             };
             var transitions = new List<string>();
             machine.ModeChanged += (from, to, _) =>

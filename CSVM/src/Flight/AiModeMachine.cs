@@ -199,10 +199,12 @@ public sealed class AiModeMachine
 
     /// <summary>Line-of-sight probe for the avoid-crash test: static world plus other aircraft,
     /// never the caster's own body — the original's ray has no vehicle filter and excludes only
-    /// itself (docs/org/aiPilot.md, "What the ray can hit"). The host wires
-    /// <c>FlightController.AvoidCrashBlocksLine</c>; tests inject a fake. Null = no world data,
-    /// the mode is never entered.</summary>
-    public Func<Vector3, Vector3, bool>? ProbeBlocked;
+    /// itself (docs/org/aiPilot.md, "What the ray can hit"). Returns the struck body's name, or
+    /// null for a clear line: the NAME is what makes the transition log say whether the override
+    /// fired on terrain or on another aeroplane, which is not answerable from a bool. The host
+    /// wires <c>FlightController.AvoidCrashBlocksLine</c>; tests inject a fake. A null delegate
+    /// means no world data and the mode is never entered.</summary>
+    public Func<Vector3, Vector3, string?>? ProbeBlocked;
 
     private readonly Random _rng;
 
@@ -533,22 +535,22 @@ public sealed class AiModeMachine
         var dir = speed > 1e-3f ? velocity / speed : Vector3.Forward;
         float reach = Mathf.Max(speed * ProbeLookaheadS, ProbeMinLookaheadM);
         var ahead = pos + dir * reach;
-        bool blocked = probe(pos, ahead) || probe(pos, ahead + Vector3.Down * ProbeDeckM);
+        string? struck = probe(pos, ahead) ?? probe(pos, ahead + Vector3.Down * ProbeDeckM);
 
         if (Mode == AiMode.AvoidCrash)
         {
-            _clearProbes = blocked ? 0 : _clearProbes + 1;
+            _clearProbes = struck is null ? _clearProbes + 1 : 0;
             if (_clearProbes >= ClearProbesToExit)
                 Transition(_returnMode, "clear of obstacles");
         }
-        else if (blocked && Mode != AiMode.Stunned)
+        else if (struck is not null && Mode != AiMode.Stunned)
         {
             if (Mode is AiMode.Pursue or AiMode.LayOff or AiMode.Patrol)
                 _returnMode = Mode;
             Executor = null; // a running maneuver is abandoned to the override
             _clearProbes = 0;
             ClimbOutAltitude = pos.Y + ClimbOutM;
-            Transition(AiMode.AvoidCrash, $"obstacle inside {reach:0} m");
+            Transition(AiMode.AvoidCrash, $"obstacle inside {reach:0} m ({struck})");
         }
     }
 
