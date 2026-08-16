@@ -5023,12 +5023,24 @@ public static class Suites
         ctx.Check(turretDefs.All.Count(d => !d.Carried) == 26,
             $"the 26 standalone ai.zrd entries parse standalone={turretDefs.All.Count(d => !d.Carried)}");
 
-        // The mapping CSVM runs the decoded team space through: neutral stays untargetable,
-        // ally = player one's side, the enemy default lands clear of every pilot team.
-        ctx.Check(TurretController.EngineTeamFor(0) == AimAssist.NeutralTeam
-                  && TurretController.EngineTeamFor(1) == AimAssist.TeamOfPilot(0)
-                  && TurretController.EngineTeamFor(TurretDef.DefaultTeamId) > AimAssist.WorldTeam,
-            $"the team mapping: neutral 0, ally = P1's team, enemy default past every pilot team");
+        // BL-403: one team space, so an emplacement and an aircraft on the same authored side
+        // must compare equal. The enemy default is the id an Instant Action wave carries, and the
+        // gate they meet at is the same one AcquireTarget runs.
+        ctx.Check(!AimAssist.Hostile(TurretDef.DefaultTeamId, InstantActionRuntime.EnemyTeam)
+                  && AimAssist.Hostile(TurretDef.DefaultTeamId, AimAssist.PlayerTeam),
+            $"a no-TEAM emplacement ({TurretDef.DefaultTeamId}) spares the wave and engages the player");
+
+        // The versus band exists so a splitscreen human cannot inherit an emplacement's side.
+        ctx.Check(AimAssist.TeamOfPilot(0) == AimAssist.PlayerTeam
+                  && AimAssist.TeamOfPilot(1) > AimAssist.VersusTeamBand
+                  && AimAssist.Hostile(TurretDef.DefaultTeamId, AimAssist.TeamOfPilot(1)),
+            $"--vs pilot 1 (team {AimAssist.TeamOfPilot(1)}) is still engaged by a no-TEAM emplacement");
+
+        // Neutral is not a wildcard, and the predicate is symmetric on both sides of it.
+        ctx.Check(!AimAssist.Hostile(AimAssist.NeutralTeam, AimAssist.PlayerTeam)
+                  && !AimAssist.Hostile(AimAssist.PlayerTeam, AimAssist.NeutralTeam)
+                  && !AimAssist.Hostile(AimAssist.PlayerTeam, AimAssist.PlayerTeam),
+            $"team 0 never shoots and is never shot, and no side is hostile to itself");
 
         ctx.WithWorld("C1", collision: true, world =>
         {
@@ -5070,7 +5082,7 @@ public static class Suites
                 ctx.Same(15, runtime.AwakeCount,
                     $"shipped ACTIVATED: only the piratezep's own awake rings are up (ally, TEAM 1)");
                 ctx.Check(runtime.Emplacements.Where(t => t.Activated)
-                        .All(t => t.EngineTeam == AimAssist.TeamOfPilot(0)),
+                        .All(t => t.Team == AimAssist.PlayerTeam),
                     $"every emplacement awake by data is on the ally team — no hostile fires unwoken");
 
                 // A dormant hostile emplacement: aagun32, enemy by the loader's no-TEAM default.
@@ -5078,8 +5090,8 @@ public static class Suites
                 ctx.Check(aagun != null, $"aagun32 built a gunner");
                 if (aagun == null)
                     return;
-                ctx.Check(!aagun.Activated && aagun.EngineTeam > AimAssist.WorldTeam,
-                    $"aagun32 is dormant and hostile-by-default team={aagun.EngineTeam}");
+                ctx.Check(!aagun.Activated && AimAssist.Hostile(aagun.Team, AimAssist.PlayerTeam),
+                    $"aagun32 is dormant and hostile to the player by default team={aagun.Team}");
                 aagun.Def.InaccuracyDeg = 0f; // determinism: the scatter cone is the assist suite's
 
                 FlightController BuildRig(string plane, int playerIndex, Vector3 pos, Vector3 look)
@@ -5144,8 +5156,12 @@ public static class Suites
                         $"…every one of them dormant by data, which is why it flies unarmed");
                     ctx.Same(14, runtime.SetActivatedUnder(mp1[0], true),
                         $"the builder's zeppelin arm arms every ring on the objective hull");
-                    ctx.Check(mp1Rings.All(t => t.Activated && t.EngineTeam > AimAssist.WorldTeam),
-                        $"…all of them awake and hostile, the no-TEAM loader default");
+                    // BL-403: hostile to the PLAYER, and never to the wave this hull launches —
+                    // both halves, since the band made the second half impossible.
+                    ctx.Check(mp1Rings.All(t => t.Activated
+                            && AimAssist.Hostile(t.Team, AimAssist.PlayerTeam)
+                            && !AimAssist.Hostile(t.Team, InstantActionRuntime.EnemyTeam)),
+                        $"…all awake, hostile to the player, and allied with their own bay wave");
                     ctx.Check(!aagun.Activated && mp2Rings.All(t => !t.Activated),
                         $"…and nothing outside that subtree woke with it");
 
@@ -5219,7 +5235,7 @@ public static class Suites
                 // plane, and the same rings do engage a hostile pane, which is the able-to-fail control. Run over
                 // the whole allied population, since the per-ring arcs are the zeppelin's own frame.
                 var allied = runtime.Emplacements
-                    .Where(t => t.EngineTeam == AimAssist.TeamOfPilot(0)).ToList();
+                    .Where(t => t.Team == AimAssist.PlayerTeam).ToList();
                 ctx.Check(allied.Count > 0, $"the piratezep's allied rings exist count={allied.Count}");
                 if (allied.Count > 0)
                 {
@@ -6114,12 +6130,13 @@ public static class Suites
                     .Any(t => ReferenceEquals(t.Source, crateInst)),
                 $"…and specifically the crate never becomes selectable (decision 8: ours would walk every crate and fence, the original's walks a curated targets.zrd list)");
 
-            // The able-to-fail control for the team read: derive the side from the pilot index the
-            // way the HUD used to, and P2's own wingman turns hostile.
+            // The able-to-fail control: derive the side from the pilot index the way the HUD used
+            // to, and P2's own wingman turns hostile. ⚠ The real enemy now stays in Enemy, where it
+            // used to drop out — that derived side WAS EnemyTeam until the versus band (BL-403).
             pool.Rebuild(scan, null, AimAssist.TeamOfPilot(self.PlayerIndex), self);
             ctx.Check(pool.Enemy.Any(t => ReferenceEquals(t.Source, wingman))
-                      && !pool.Enemy.Any(t => ReferenceEquals(t.Source, enemy)),
-                $"CONTROL: deriving P2's side from its pilot index puts the wingman in Enemy and drops the real enemy — the bug this item diagnosed");
+                      && AimAssist.TeamOfPilot(self.PlayerIndex) != InstantActionRuntime.EnemyTeam,
+                $"CONTROL: deriving P2's side from its pilot index puts the wingman in Enemy — the bug this item diagnosed — and no longer collides with the enemy team itself");
 
             // Sub-parts: the only channel by which a structure becomes selectable.
             var gasbagInst = registry.Register(

@@ -648,13 +648,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the same 2 an Instant Action enemy fighter carries (`FUN_0045a390` → `0x004a259f`), which is
   exactly why the original's zeppelin turrets never engage their own wave. So store the authored
   `TEAM` integer raw, keep the absent-key default at enemy index 0 = 2, and drop
-  `EmplacementEnemyBand` entirely. `AimAssist.WorldTeam` (100) goes the same way: a world object is
-  built through the same constructor and takes its team from a **two-bit** ownership field on its
-  scene node (`FUN_004a32f0`), defaulting to **0**, and the predicate's neutral clause is what makes
-  an unauthored one untargetable. That two-bit width is the corroboration: the engine's whole team
-  space fits in `{0, 1, 2, 3}`.
-  ⚠ `Suites.cs:5028-5031` pins the current shape (`EngineTeamFor(DefaultTeamId) > WorldTeam`) and
-  has to be rewritten with the mapping, not worked around.
+  `EmplacementEnemyBand` entirely. `AimAssist.WorldTeam` (100) is the same finding but NOT the same
+  fix, and is split out as `BL-407`: a world object is neutral until its scene node authors
+  ownership, and zeroing the constant with no ownership reader would silence the gun assist over
+  every ground target.
+  ⚠ **The pilot ladder is what has to move instead.** `AimAssist.TeamOfPilot` derived a team from
+  the pilot index, so a splitscreen `--vs` player two took id 2 — the id the no-`TEAM` emplacements
+  default to — and those emplacements would have stopped engaging that player the moment the band
+  went. Pilot 0 keeps `PlayerTeam` (the four authored `TEAM 1` rings are the player's own
+  zeppelin's) and every further pilot lands in `AimAssist.VersusTeamBand`.
   ⚠ **Do not fix this by exempting the launching zeppelin's own turrets.** That hides the mismatch
   for one mission type and leaves it live everywhere else.
   *How you'd know it worked:* fly `--chapter=C2 --mission=IA1 --zeppelins`; the bay-launched wave
@@ -664,6 +666,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   entry is now built on), `docs/formats/turrets.md` ("Teams"), `InstantActionRuntime.cs` (`EnemyTeam`),
   `TurretController.cs` (`EngineTeamFor`, `EmplacementEnemyBand`), `BL-350` (the drop is not gated on
   the doors opening, open in the same mission).
+
+- `BL-407` `[Bug]` **World objects are hostile to everyone; the original leaves an unauthored one
+  neutral.** *Evidence:* the team-space decode ([`docs/org/targeting.md`](docs/org/targeting.md)
+  "The team space"), taken while fixing `BL-403`. CSVM stamps every destructible with
+  `AimAssist.WorldTeam` (100) through `AddStructures`'s default, which `FlightController.cs:1873`
+  takes on every frame of every session, so a crate is hostile to every pilot alike. The original
+  builds a world object through the same constructor as an aircraft (`FUN_004a3360` →
+  `FUN_004a2570`) and takes its team from a **two-bit ownership field** on the scene node, walking
+  the node then its ancestors (`FUN_004a32f0`, called at `0x004a3493`); when no ancestor carries
+  one it falls through to **neutral**, and the hostility predicate's neutral clause is what makes
+  it untargetable.
+  ⚠ **Do not just change the constant to 0.** CSVM reads no ownership field, so every world object
+  would go neutral at once and the gun assist would fall silent over every ground target and every
+  zeppelin gasbag. The work is to find whether any CSVM world node carries authored ownership
+  first, and only then to decide whether hostile-to-all stays as a remake-only rule.
+  *How you'd know it worked:* ground targets and gasbags still take assisted fire, and whatever the
+  ownership field turns out to select still does.
+  *Cross-refs:* `BL-400` (the other half: structures on the Non-Aircraft SELECTION cycle need a
+  curated `targets.zrd`-equivalent list — this item is the gun assist's team, they fail in
+  different subsystems), `AimAssist.WorldTeam`, `BL-403` (the decode's origin).
 
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
   (`messages.json` 126–129), implying world pickups that restore ammo. **Carries research

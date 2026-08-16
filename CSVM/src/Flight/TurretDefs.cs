@@ -94,8 +94,12 @@ public sealed class TurretDef
     /// <summary><c>SOUNDS.CANNON</c> (always <c>snd_chaingun</c> where authored).</summary>
     public string? CannonSound;
 
-    /// <summary>The team id the original's loader ends up with: the authored value, else the
-    /// enemy default.</summary>
+    /// <summary>The team this emplacement fights on: the authored value, else the enemy default.
+    /// There is no authored-to-runtime conversion, here or anywhere — the original stores one
+    /// integer per combat object and compares two of them raw
+    /// (docs/org/targeting.md "The team space"). An emplacement built by its constructor takes the
+    /// same id 2 an Instant Action enemy aircraft carries, which is why the original's zeppelin
+    /// turrets do not engage the wave that zeppelin launched.</summary>
     public int TeamId => Team ?? DefaultTeamId;
 
     /// <summary>Whether the yaw axis is actually limited: the engine clamps only when both

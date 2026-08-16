@@ -520,7 +520,7 @@ public sealed partial class ProjectilePool : Node3D
         foreach (var turret in _worldTurrets)
         {
             into.AddTurret(turret.WorldPosition, turret.PlatformVelocity,
-                turret.EngineTeam, turret.Alive, turret);
+                turret.Team, turret.Alive, turret);
         }
     }
 

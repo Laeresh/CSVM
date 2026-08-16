@@ -28,6 +28,26 @@ _Avoid_: fudge, hack, approximation, guess, magic number
 Behaviour with no counterpart in the original, kept deliberately and with a measured reason.
 _Avoid_: divergence, deviation, our own, deliberate departure
 
+## Teams
+
+**Team id**:
+The one integer space every combat actor shares: `0` neutral, `1` the player's side, `2` and up
+hostile sides. Two actors are hostile when their ids differ and neither is `0`. There is no second
+space and no per-kind mapping; an aircraft, an emplacement and a world object are compared as
+plain integers.
+_Avoid_: engine team, engine-space team, team index, side id, faction, alliance
+
+**Authored team**:
+The team id a data file carries. The same integer as the team id, with no conversion on load; an
+absent `TEAM` key means `2`.
+_Avoid_: original team id, raw team, data team, loader team
+
+**Versus band**:
+Where the extra humans of a splitscreen `--vs` session sit, kept clear of the ids world data
+authors so a player cannot inherit an emplacement's side. A remake-only rule: the original has no
+per-pilot team ladder.
+_Avoid_: team band, emplacement band, pilot team offset
+
 ## Clutter
 
 **Stamp**:
