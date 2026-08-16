@@ -244,8 +244,8 @@ reaching zero also plays that part's destroy anim (part`+0x1c`), which is separa
 def-level list carries `[0.85, player_fuelleak]` and `[0.10, player_smoketrail]`; both are
 whole-vehicle-health stages, so `player_smoketrail` means "the hull is at 10%", not "some zone is at
 10%". Driving the def-level list off a per-part fraction fires the whole-plane trail while the hull
-is still near full. Decoded 2026-08-15 (`BL-246`); our implementation's three deltas against this
-are `BL-384`.
+is still near full. The backlog item this settled is retired; its closing commit is
+`git log --grep=BL-246`. Our implementation's three deltas against this are `BL-384`.
 
 ### One start per downward crossing
 
