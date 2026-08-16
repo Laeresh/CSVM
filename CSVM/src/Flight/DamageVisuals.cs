@@ -135,21 +135,24 @@ public sealed class DamageVisuals
     }
 
     /// <summary>The rig anim an injure_anims entry plays, or null for the entries that are not
-    /// rig-runtime work (the cockpit gauge cycles, got_hit_anim). One deliberate mapping: the
-    /// data's 0.10 entry names <c>player_smoketrail</c>, whose def calls the dense_firetrail pair,
-    /// but the original's damage footage pins the heavy stage the player sees as <c>player_damage_trail</c> —
+    /// rig-runtime work (the cockpit gauge cycles, got_hit_anim). Membership in the curated menus
+    /// the rig binds, never a program-existence rule, which would play those gauge defs on the
+    /// airframe. One deliberate mapping: the data's 0.10 entry names <c>player_smoketrail</c>, but
+    /// the original's damage footage pins the heavy stage as <c>player_damage_trail</c> —
     /// short_firetrail at prop1 plus the fire_lt nose light — so that is what plays.</summary>
     public static string? RigAnimFor(string injureAnim)
     {
-        if (injureAnim.StartsWith("pdpanel", StringComparison.OrdinalIgnoreCase)
-            || injureAnim.EndsWith("_damage_effects", StringComparison.OrdinalIgnoreCase)
-            || injureAnim.Equals("player_fuelleak", StringComparison.OrdinalIgnoreCase))
-        {
-            return injureAnim;
-        }
-        return injureAnim.Equals("player_smoketrail", StringComparison.OrdinalIgnoreCase)
-            ? "player_damage_trail"
-            : null;
+        if (Same(injureAnim, "player_smoketrail"))
+            return "player_damage_trail";
+        // The catalogue's spelling is returned, not the ladder's: the rig binds and stops by that
+        // name, and the data's case is not guaranteed to match it.
+        foreach (var anim in Session.EffectCatalogue.DamageStageAnims)
+            if (Same(anim, injureAnim))
+                return anim;
+        foreach (var anim in Session.EffectCatalogue.PlaneDamageEffectAnims)
+            if (Same(anim, injureAnim))
+                return anim;
+        return null;
     }
 
     /// <summary>How many ladder entries hold this anim right now, vehicle-level and per part.

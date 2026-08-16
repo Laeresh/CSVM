@@ -67,8 +67,8 @@
       "why": "pdpanel4/6 WITH their pdpN, plus the crash defs' four WITH pieceN trails — which shared one copy across all four flung pieces before this pool existed."
     },
     "small_injure_fireball": {
-      "base": 3,
-      "why": "small_fireball_follow — pdpanel2/3/5."
+      "base": 7,
+      "why": "small_fireball_follow / short_fireball_follow / short_fire_follow — pdpanel2/3/5 WITH their pdpN, plus random_remote_damage's four cascade anchors railer1/lailer1/lft_elev/rt_elev."
     },
     "flame_ball_02": {
       "base": 2,

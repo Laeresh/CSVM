@@ -161,7 +161,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Wire the AI up
 
 11. ☐ Extract the two-phase `DamageVisuals` wiring and give the AI spawner both phases
-12. ☐ Add `AiDamageStageAnims` and open `RigAnimFor` to it
+12. ☑ Add `AiDamageStageAnims` and open `RigAnimFor` to it
 13. ☐ Give the AI crash runtime its `Sounds` reference
 14. ☐ Correct the player's engine-audio model to the decode
 15. ☐ Positional AI engine audio with the 2000-unit cull

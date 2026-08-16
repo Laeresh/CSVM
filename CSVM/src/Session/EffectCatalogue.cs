@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Mech3;
 
 namespace CSVM.Session;
@@ -126,6 +127,19 @@ public static class EffectCatalogue
         "pdpanel8", "player_fuelleak", "player_damage_trail",
     };
 
+    // The authored AI damage-stage menu, which the eleven AI airframes' injure_anims ladders name:
+    // the prop1 smoke/fire trail and the five-step random fireball cascade. One flat list, correct
+    // for every airframe, because both defs retarget onto whichever plane stages them.
+    // ⚠ Extend this list, never DamageVisuals.RigAnimFor's walk, and never merge it into the player
+    // menu: an AI ladder names different anims. A program-existence rule instead of a curated list
+    // would stage the cockpit gauge defs (nose_damage_green, *_got_hit) on the airframe.
+    public static readonly string[] AiDamageStageAnims = { "pfsmoketrail", "random_remote_damage" };
+
+    // Both damage-stage menus: what the crash rig binds, and what a whole-menu stop closure is
+    // derived over. DamageVisuals.RigAnimFor tests membership over this plus PlaneDamageEffectAnims.
+    public static readonly string[] DamageStageAnims =
+        PlayerDamageStageAnims.Concat(AiDamageStageAnims).ToArray();
+
     // Anchors the closure below reports that no bind stages, because the CALL reaching the
     // definition supplies its anchor instead of its own NAME: `zep_can_dstry1.flt` (absent from
     // C2's gamez entirely) and `warhawk` (startprops/stopprops' own NAME, a shared authoring
@@ -133,13 +147,16 @@ public static class EffectCatalogue
     // ⚠ Extend this list, never the mechanical closure walk itself.
     public static readonly string[] CallSuppliedAnchors = { "zep_can_dstry1.flt", "warhawk" };
 
-    // The crash defs' authored airframe anchors: `plane_reset`/`pdpanel5` are written against the
-    // Devastator's own model root and `ai_crash_*` against the Kestrel's, inert on every other
-    // airframe. No gamez ships a `player_pfighter` or `kestrel` node, and our model roots are
-    // `player_*`, so neither is a template to stage; the caller's context node carries the def.
+    // Airframe model-root names authored as anchors, none of which any chapter gamez ships:
+    // `player_pfighter` (plane_reset, pdpanelN, random_remote_damage), `piratefighter`
+    // (pfsmoketrail) and `kestrel` (ai_crash_*). The anchor is whichever airframe stages the def
+    // (org/vehicleDamage.md, "Which airframe a stage's anim binds to"), so none is a template.
     // ⚠ Also the crash stage's place-exempt set (WorldEffectsFactory.NewCrashTemplateStage): where
     // such a name does resolve it is the aircraft, and a relocating CALL would TopLevel-pin it.
-    public static readonly string[] AirframeScopedAnchors = { "player_pfighter", AiCrashAnimRoot };
+    public static readonly string[] AirframeScopedAnchors =
+    {
+        "player_pfighter", "piratefighter", AiCrashAnimRoot,
+    };
 
     // The crash rig's own anim-root scaffold name: `player`, the crash root every rig builds and
     // the `player_crash_*` family's authored NAME.
@@ -174,15 +191,16 @@ public static class EffectCatalogue
 
     /// <summary>Everything the per-player crash rig binds — every playable crash-vector slot (the
     /// struck surface is only known at impact, so the whole vector is bound), the four damage
-    /// shims, the prop choreography and the authored damage-stage menu, i.e. every def that plays
+    /// shims, the prop choreography and both authored damage-stage menus, i.e. every def that plays
     /// ON one aircraft — and therefore the name set whose anchor-root closure that rig's own
-    /// template stage must satisfy (<see cref="CrashStageRoots"/>).</summary>
+    /// template stage must satisfy (<see cref="CrashStageRoots"/>). Both menus regardless of who is
+    /// at the controls: the rig is built before its ladder is read.</summary>
     public static IReadOnlyList<string> CrashRigAnimNames(SurfaceDefTable crashDefs)
     {
         var names = new List<string>(crashDefs.PlayableDefs);
         names.AddRange(PlaneDamageEffectAnims);
         names.AddRange(PropChoreographyAnims);
-        names.AddRange(PlayerDamageStageAnims);
+        names.AddRange(DamageStageAnims);
         return names;
     }
 

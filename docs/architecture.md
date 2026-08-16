@@ -2075,7 +2075,11 @@ ENTRY and cleared on the upward crossing alone, so a repair un-stages and the en
 (`StagedEntryCount`). Panel pairing (def-derived candidate sets, positional assignment, the three
 crossed-naming outliers) is decoded on `PairHealthySkins` and runs only for an airframe whose own
 data names a `pdpanel*` stage (`PairsPanels`); the null-sink stand-in fallback is on
-`UpdateStatic`/`PlayStage`.
+`UpdateStatic`/`PlayStage`. An AI ladder's own two anims (`pfsmoketrail`,
+`random_remote_damage`) play through the same sink: `RigAnimFor` is a membership test over
+`EffectCatalogue.DamageStageAnims` + `PlaneDamageEffectAnims`, curated rather than
+program-existence, so the cockpit gauge defs (`*_damage_green/yellow/red`, `*_got_hit`) can never
+play on an airframe.
 
 ## src/Flight/DamageLab.cs
 The damage lab (F5 toggles): one armor slider (parts the data gives an armor pool) plus one health
@@ -3215,7 +3219,8 @@ is built below — so this method plays `startprops` once more right after
 The record of which authored anims are playable effects, and what their defs need staged: the name
 tables every effect producer must stay inside, static and engine-free. Owns `EffectAnimNames`, the
 crash-rig's own name sets (`CrashDefTable`/`AiCrashDefTable`/`TouchdownDefTable`,
-`PlaneDamageEffectAnims`, `PropChoreographyAnims`, `PlayerDamageStageAnims`), `ResolvedSurfaceIds`
+`PlaneDamageEffectAnims`, `PropChoreographyAnims`, and the two damage-stage menus
+`PlayerDamageStageAnims`/`AiDamageStageAnims` with their union `DamageStageAnims`), `ResolvedSurfaceIds`
 (the collider overlay's colour key, `BL-345`), and the anchor-root derivation
 (`StageRootsFor`/`WorldStageRoots`/`CrashStageRoots`) — this IS `WorldEffectsFactory`'s stage
 source; an unstageable anchor fails the build rather than leaving a def anchored on nothing. Every
