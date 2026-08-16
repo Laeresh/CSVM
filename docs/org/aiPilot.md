@@ -382,16 +382,27 @@ per-plane check that flips the AI substate at vehicle `+0x358`.
 
 | Y | What happens |
 |---|---|
-| below `DAT_0071c3f0` (**20.0**) | state `+0x358` = **3** outright |
-| `DAT_0071c3f0` … `DAT_0071c3f4` (**8000.0**) | cast a ray, hit sets state 3 |
-| above `DAT_0071c3f4` | no check, and a state of 3 is CLEARED to 0 |
+| below `DAT_0071c3f0` (**20.0**) | state `+0x358` = **3** outright, no ray and no throttle |
+| `DAT_0071c3f0` … `DAT_0071c3f4` (**8000.0**) | cast a ray, hit sets state 3, a clear ray clears it |
+| above `DAT_0071c3f4` | no check, and a state of 3 is CLEARED to 0 every frame |
+
+Both bounds are hard immediates written at level setup by `FUN_004735b0`: `0x45fa0000` = 8000.0 at
+`0x00474151` and `0x41a00000` = 20.0 at `0x0047415b`. They are not per-mission and not authored.
+The nose-speed floor 4.4700 (`DAT_0071c3f8`, `0x408f0d84`) is written in the same run.
 
 The ray is the vector the vehicle's virtual `+0x04` accessor returns, scaled by **4.5**, passed to
 `FUN_004c8f70`. ⚠ That accessor is velocity by shape and by use, which makes the ray about 4.5
 seconds of travel, but the identification is inferred rather than read off a name; the 4.5 itself
 is exact. The check is throttled per plane by `+0xf0` against the game clock `DAT_0071c470` to
 **clock + 0.5…1.0 s**, the fraction drawn as `rand() × 3.051851e-05` (that is `rand()/32767`), so
-it is not a per-frame cast.
+it is not a per-frame cast. The throttle gate returns before the cast and before the clear, so
+state 3 persists between due checks; the caller resets `+0xf0` to the current clock when a vehicle
+first becomes active, so a plane that pops in checks on its first tick rather than waiting out a
+fresh interval.
+
+⚠ **A clear ray releases the state in the same call.** There is no consecutive-clear counter and no
+hold: the ray misses, control falls through to `if (state == 3) state = 0`, and the plane is back on
+its route on the next tick. The climb-out is exactly as long as the obstacle keeps arming it.
 
 State 3 is consumed by the follower's own switch on `+0x358` (`FUN_0041d1f0` case 3, and the same
 case in the `+0x67c == 1` arm): the steering target becomes **the plane's own position with
@@ -401,9 +412,32 @@ hotter lever, and it ends when the check stops setting the state.
 
 Two neighbouring facts about the same floor. `FUN_0041b560`, the shared steering law, reads
 `DAT_0071c3f0` directly (`0x0041b5c5`, `0x0041b5d5`), so the floor is enforced inside the control
-law as well as by this check. And `FUN_004216e0` (the `+0x358 == 2` maneuver) SUSPENDS both bounds
-for its duration: it stashes `DAT_0071c3f0` and writes −FLT_MAX, with a paired per-vehicle ceiling
-at `+0x314` written +FLT_MAX, restoring both when it finishes.
+law as well as by this check. And `FUN_004216e0` (the maneuver, reached from the follower
+`FUN_0041d1f0` at `0x0041d4f2` and the merge rule `FUN_0041d9f0` at `0x0041da75`) bypasses both
+bounds: it stashes `DAT_0071c3f0` and writes −FLT_MAX (`0x004216f5`), with a paired per-vehicle
+ceiling at `+0x314` written +FLT_MAX, and restores both at `0x00421775`.
+
+⚠ **That bypass spans one steering solve, not the maneuver's duration.** The two writes bracket a
+single `FUN_0041b560` call and the restore is the next thing the function does, so the clamp is off
+for one aim-point evaluation. It therefore never reaches `FUN_0041f810`, which the frame loop calls
+from its own site and which always sees the restored 20.0. Nothing in the original suspends crash
+avoidance while a maneuver runs.
+
+### Which state wins
+
+The precedence is in the caller, `FUN_004897c0`, not in either function, and it runs in this order
+per vehicle per frame:
+
+```
+if (state < 4)                    FUN_0041f810(v);   // the crash check
+if (state == 4 && clock >= +0xc0) state = 0;         // stun expiry
+if (+0x9bc != 0 && state < 2)     state = 2;         // a queued maneuver starts
+```
+
+Three rules fall out. The crash check runs in states 0 to 3 only, so **stunned (4) and state 5
+suppress it entirely**. It writes 3 without consulting the prior state, so it **pre-empts a running
+maneuver**. And a maneuver only starts from state 0 or 1, so once crash avoidance holds state 3 the
+maneuver stays queued until the climb-out releases.
 
 ⚠ **The floor is a flat world-Y value, not a terrain follow.** 20 m saves a plane over water and
 flat ground and does nothing over a 600 m ridge; the raycast is the only terrain-aware part.
@@ -429,9 +463,12 @@ lookahead in roughly two seconds; and both parties answer with the same straight
 mutual detection can still merge. Head-ons in the original are rare, not impossible.
 
 CSVM's probe is `FlightController.AvoidCrashBlocksLine`, masking `CollisionLayers.WorldAndAircraft`
-with the caster's own body excluded, which is this rule. Its reach is `AiModeMachine`'s
-`ProbeLookaheadS`, set to the decoded 4.5 s; the cadence (0.25 s, flat) and the second, deck-slanted
-ray are inventions and remain marked as such.
+with the caster's own body excluded, which is this rule. `AiModeMachine` carries the rest of the
+band structure: `ProbeLookaheadS` 4.5 s, `ProbeIntervalMinS`/`ProbeIntervalMaxS` 0.5…1.0 s drawn
+per plane from its seeded rng, `AltitudeFloorM` 20, `ProbeCeilingM` 8000, `ClimbOutM` 1000, and
+release on the first clear ray. What remains invented there is the probe geometry inside the middle
+band (a second, deck-slanted ray, `ProbeDeckM`) and `ProbeMinLookaheadM`, both marked as such, plus
+`AiPilot.ClimbOutBreakM` below.
 
 ### Measured: the third bound is the binding one
 
@@ -479,6 +516,23 @@ symmetry that was costing the most, not the detection.
 ⚠ The whole scenario is one the original never produces. Ten netted aircraft all pursuing each
 other in one volume is Instant Action as CSVM builds it; the shipped game's actors fly the
 chapter's first net (above) and converge rarely.
+
+### Measured: the decoded cadence costs no collisions
+
+Adopting the original's band structure (the 20 m and 8000 m arms, the 0.5…1.0 s per-plane cadence
+in place of a flat invented 0.25 s, and release on the first clear ray in place of a four-round
+clear streak) probes far less often, so it was A/B'd on the same rig, the two arms differing only
+in that change:
+
+| probe rule | runs | mid-airs / run | arms / run | arms on an aircraft / run |
+|---|---|---|---|---|
+| the invented 0.25 s cadence, 4-round release | 8 | 2.13 | 28.3 | 11.0 |
+| the decoded bands, cadence and release | 8 | 1.75 | 24.0 | 4.4 |
+
+Mid-airs do not move: Welch t = 0.97, p ≈ 0.36, so nothing here separates the arms. Detections on
+another aeroplane fall by 60 % and the collision rate does not follow, which is the same result the
+swept-sphere arm gave from the other direction. Detection frequency is not what produces these
+collisions.
 
 ## The merge rule: what pursue does when two aircraft close nose to nose
 

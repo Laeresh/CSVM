@@ -202,8 +202,8 @@ public sealed class AiPilot
                     return Fly(model, dt, OrderAim(model), Vector3.Zero, AiLawParams.Cruise);
 
                 case AiMode.AvoidCrash:
-                    // The machine's climb-out altitude stays the order so its release test still
-                    // reads it; ClimbOutAim only adds the invented break to the right.
+                    // The reported order and the flown aim are the same 1000 m of climb; ClimbOutAim
+                    // only adds the invented break to the right, which is lateral.
                     var climbOut = ClimbOutAim(model.Position, model.VelocityDir * model.Speed);
                     TargetHeadingDeg = HeadingDegOf(climbOut - model.Position);
                     TargetAltitude = machine.ClimbOutAltitude;

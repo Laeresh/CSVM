@@ -6966,11 +6966,12 @@ public static class Suites
                 $"…and recovered to the prior mode after it mode={AiModeMachine.NameOf(machine.Mode)}");
 
             // --- avoid crash: a blocked probe overrides with a climb-out, a cleared one
-            // releases back.
+            // releases back. Stepped past ProbeIntervalMaxS, since the probe's cadence is the
+            // original's per-plane 0.5…1.0 s draw and this plane's is unknown to the test.
             machine.SixthSenseChance = 1f;
             float yBefore = ai.WorldPosition.Y;
             terrainBlocked = true;
-            Step(30);
+            Step((int)(AiModeMachine.ProbeIntervalMaxS * 60f) + 6);
             ctx.Check(machine.Mode == AiMode.AvoidCrash,
                 $"a blocked terrain probe takes the mode mode={AiModeMachine.NameOf(machine.Mode)}");
             ctx.Check(machine.ClimbOutAltitude > yBefore,
@@ -6987,6 +6988,10 @@ public static class Suites
             // the machine's own tick: a chasing human 600 m dead astern enters lay off with
             // the assist on, and never with --no-assist's switch off.
             machine.Enter(AiMode.Pursue, "test: rejoin for lay off");
+            // Pursue's own lever, to ease off FROM. ⚠ Not a fixed number: the law walks the lever
+            // toward its desired speed, so what pursue is commanding here depends on how fast the
+            // plane happens to be after the climb-out above.
+            float leverPursuing = pilot.Throttle;
             var aiPos2 = ai.WorldPosition;
             var ownVel = new Vector3(0f, 0f, -100f);               // flying -Z
             var pursuerPos = aiPos2 + new Vector3(0f, 0f, 600f);   // 600 m dead astern
@@ -7015,8 +7020,8 @@ public static class Suites
             Step(30);
             ctx.Check(machine.Mode == AiMode.LayOff,
                 $"the anti-chatter hold keeps the mode mode={AiModeMachine.NameOf(machine.Mode)}");
-            ctx.Check(pilot.Throttle < 1f,
-                $"the throttle is eased off flat-out throttle={pilot.Throttle:0.00}");
+            ctx.Check(pilot.Throttle < leverPursuing,
+                $"the throttle is eased off pursue's own lever throttle={pilot.Throttle:0.000} from {leverPursuing:0.000}");
             ctx.Check(!pilot.Gunner.WantsFire, $"fire is held while laying off");
 
             // Once the hold expires the machine releases back to pursue and the lever runs up to its ceiling.
