@@ -376,6 +376,12 @@ public sealed partial class LaunchMenu : CanvasLayer
             _modeIndex = (int)MenuMode.Stunt;
             _mode = MenuMode.Stunt;
         }
+        // Opening straight onto Waves skips the accept that normally parks the cursor, so put it
+        // where a player would find it — otherwise the aid screenshots a state nobody sees.
+        if (_screen == Screen.Waves)
+        {
+            _waveListIndex = _waves.Length;
+        }
         _error = "";
         Visible = true;
         if (_slots.Count == 0)
@@ -876,7 +882,10 @@ public sealed partial class LaunchMenu : CanvasLayer
                 else
                 {
                     _screen = Screen.Waves;
-                    _waveListIndex = 0;
+                    // Opens on the trailing Continue row, not wave 1: every slot starts empty
+                    // (decision 1), so configuring none is the common path and the harmless row is
+                    // the one under the cursor. Coming BACK from a wave keeps that wave's row.
+                    _waveListIndex = _waves.Length;
                 }
                 break;
             case Screen.Chapter:
@@ -1341,7 +1350,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Chapter => $"Region {CurrentChapters[focus].Code}",
         Screen.Environment => $"Region {Environments[focus].Code}",
         Screen.MissionType => LivesDetail(),
-        Screen.Waves => "Enter / A  edit a wave",
+        Screen.Waves => focus == _waves.Length ? "Enter / A  on to the wingmen" : "Enter / A  edit a wave",
         Screen.WaveEdit or Screen.Wingmen => "←→  change",
         _ => PlaneStat(Planes[focus].Node),
     };
