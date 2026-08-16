@@ -152,9 +152,9 @@ public sealed class MenuInput
         Accept = Back = Start = false;
     }
 
-    /// <summary>The first of this player's pads currently producing menu input (excluding Start).
-    /// Phantom devices never register — they read idle — so a pad found here is demonstrably a
-    /// real one somebody is holding.</summary>
+    // The first of this player's pads currently producing menu input (excluding Start).
+    // Phantom devices never register — they read idle — so a pad found here is demonstrably a
+    // real one somebody is holding.
     private int ScanActivePad()
     {
         foreach (int pad in CSVM.Pads.For(Pads))
@@ -171,11 +171,11 @@ public sealed class MenuInput
 
     private bool KeyDown(Key key) => Keyboard && Input.IsKeyPressed(key);
 
-    /// <summary>Button pressed on ANY of this player's pads (a set of one for a joined player,
-    /// every unclaimed device for player 1). Through <c>CSVM.Pads.For</c> rather than the
-    /// <see cref="Pads"/> field directly, so the read is gated on window focus and on
-    /// <c>--no-pads</c> — the field stays the player's <i>binding</i>, which
-    /// the join bookkeeping still needs while unfocused.</summary>
+    // Button pressed on ANY of this player's pads (a set of one for a joined player,
+    // every unclaimed device for player 1). Through `CSVM.Pads.For` rather than the
+    // Pads field directly, so the read is gated on window focus and on
+    // `--no-pads` — the field stays the player's binding, which
+    // the join bookkeeping still needs while unfocused.
     private bool PadButton(JoyButton button)
     {
         foreach (int pad in CSVM.Pads.For(Pads))
@@ -184,8 +184,8 @@ public sealed class MenuInput
         return false;
     }
 
-    /// <summary>The largest-magnitude value of the axis across this player's pads — idle phantom
-    /// devices read ~0 and never mask a real stick.</summary>
+    // The largest-magnitude value of the axis across this player's pads — idle phantom
+    // devices read ~0 and never mask a real stick.
     private float PadAxis(JoyAxis axis)
     {
         float v = 0f;
@@ -219,7 +219,7 @@ public sealed class MenuInput
 
     private bool RawBack() => KeyDown(Key.Escape) || PadButton(JoyButton.B);
 
-    /// <summary>Start is the join gesture, so it is pad-only: the keyboard is always player 1,
-    /// who is joined from the start and has nothing to join.</summary>
+    // Start is the join gesture, so it is pad-only: the keyboard is always player 1,
+    // who is joined from the start and has nothing to join.
     private bool RawStart() => PadButton(JoyButton.Start);
 }

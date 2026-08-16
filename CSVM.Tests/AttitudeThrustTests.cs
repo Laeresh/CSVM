@@ -112,8 +112,8 @@ public class AttitudeThrustTests
             + "residual has always been on the fast side, so this is a different defect");
     }
 
-    /// <summary>One step's thrust contribution along the nose, m/s², at a nose-up angle: the
-    /// difference between a full-throttle step and a zero-throttle step from the same state.</summary>
+    // One step's thrust contribution along the nose, m/s², at a nose-up angle: the
+    // difference between a full-throttle step and a zero-throttle step from the same state.
     private static float ThrustTermAt(float noseDeg)
     {
         var attitude = Basis.Identity.Rotated(Vector3.Right, Mathf.DegToRad(noseDeg));
@@ -129,8 +129,8 @@ public class AttitudeThrustTests
         return delta.Length() / Dt;
     }
 
-    /// <summary>The Bloodhawk's real dynamics — the placeholder <c>PlaneStats()</c> defaults are the
-    /// executable's fallback aircraft and carry a different weight and reference area.</summary>
+    // The Bloodhawk's real dynamics — the placeholder `PlaneStats()` defaults are the
+    // executable's fallback aircraft and carry a different weight and reference area.
     private static PlaneStats Bhawk() => new()
     {
         PitchTorque = 3.3f,

@@ -346,10 +346,10 @@ public sealed partial class NodeLab : Node
         return node.Visible ? name : name + "  (hidden)";
     }
 
-    /// <summary>The nearest <c>cs_name</c>-bearing descendants of a node — the exact inverse of
-    /// the selection ladder's ancestor walk, so the tree's parent/child relation and the
-    /// breadcrumb's rungs are the same relation. SceneBuilder's unnamed wrappers are stepped
-    /// through, never shown.</summary>
+    // The nearest `cs_name`-bearing descendants of a node — the exact inverse of
+    // the selection ladder's ancestor walk, so the tree's parent/child relation and the
+    // breadcrumb's rungs are the same relation. SceneBuilder's unnamed wrappers are stepped
+    // through, never shown.
     private static void CollectNamed(Node parent, List<Node3D> into)
     {
         foreach (var child in parent.GetChildren())
@@ -628,9 +628,9 @@ public sealed partial class NodeLab : Node
         RefreshTreeVisibility();
     }
 
-    /// <summary>Re-reads live <c>Visible</c> for every bound row on the panel's existing 4 Hz
-    /// status cadence, so a def re-showing a node updates its row without user input — the row
-    /// reflects the node, it never latches what a button last did.</summary>
+    // Re-reads live `Visible` for every bound row on the panel's existing 4 Hz
+    // status cadence, so a def re-showing a node updates its row without user input — the row
+    // reflects the node, it never latches what a button last did.
     private void RefreshTreeVisibility()
     {
         if (_tree == null || _destView)
@@ -1483,9 +1483,9 @@ public sealed partial class NodeLab : Node
         }
     }
 
-    /// <summary>One destructible definition's row: how many world node groups it actually bound,
-    /// whether its <c>ANIMATION_ROOT_NAME</c> resolves inside each of them, and whether its
-    /// sequences use only event kinds the runtime acts on.</summary>
+    // One destructible definition's row: how many world node groups it actually bound,
+    // whether its `ANIMATION_ROOT_NAME` resolves inside each of them, and whether its
+    // sequences use only event kinds the runtime acts on.
     private sealed class DestRow
     {
         public AnimDefinition Def = null!;

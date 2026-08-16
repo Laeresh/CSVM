@@ -248,9 +248,9 @@ public sealed class AiPilot
         return quarry != null ? FlyPursuit(model, dt, quarry) : FlyPatrol(model, dt);
     }
 
-    /// <summary>Runs the original's law for this step's aim point and keeps the lever it walked.
-    /// The skill factor is the machine's <c>sixth_sense_factor</c>, which the decode shows
-    /// multiplies all three channels every step; a pilot with no machine gets a neutral 1.</summary>
+    // Runs the original's law for this step's aim point and keeps the lever it walked.
+    // The skill factor is the machine's `sixth_sense_factor`, which the decode shows
+    // multiplies all three channels every step; a pilot with no machine gets a neutral 1.
     private FlightInput Fly(FlightModel model, float dt, Vector3 aimPoint, Vector3 aimVelocity,
         in AiLawParams p, bool emergency = false, bool engaged = false, bool gunLead = false)
     {
@@ -260,16 +260,16 @@ public sealed class AiPilot
         return input;
     }
 
-    /// <summary>Pursuit: the aim point is the decoded lead offset ahead of the victim along the
-    /// victim's own facing, flown on the engaged table with its authority bonus. Sitting on the
-    /// victim's own axis (<see cref="IsOnGunAxis"/>) aims at the victim itself instead and lets
-    /// the law solve the firing problem rather than a fly-to.
-    ///
-    /// <para>On top of that, a merge (<see cref="IsMerging"/>) replaces the aim VELOCITY the law
-    /// is handed: the victim's own velocity gives way to a flat <see cref="MergeSpeedMps"/>
-    /// (70 mph) along the line of sight, which collapses the law's speed demand into the pass —
-    /// the law then walks the lever down against its own ±26.82 m/s clamp. This is the original's
-    /// entire answer to two aircraft closing nose to nose; it does not break off.</para></summary>
+    // Pursuit: the aim point is the decoded lead offset ahead of the victim along the
+    // victim's own facing, flown on the engaged table with its authority bonus. Sitting on the
+    // victim's own axis (IsOnGunAxis) aims at the victim itself instead and lets
+    // the law solve the firing problem rather than a fly-to.
+    //
+    // On top of that, a merge (IsMerging) replaces the aim VELOCITY the law
+    // is handed: the victim's own velocity gives way to a flat MergeSpeedMps
+    // (70 mph) along the line of sight, which collapses the law's speed demand into the pass —
+    // the law then walks the lever down against its own ±26.82 m/s clamp. This is the original's
+    // entire answer to two aircraft closing nose to nose; it does not break off.
     private FlightInput FlyPursuit(FlightModel model, float dt, FlightController quarry)
     {
         var toQuarry = quarry.WorldPosition - model.Position;
@@ -293,14 +293,14 @@ public sealed class AiPilot
         return Fly(model, dt, aim, aimVelocity, AiLawParams.Engaged, engaged: true, gunLead: onAxis);
     }
 
-    /// <summary>Lay off (the rubber-band assist): let the pursuer catch up. Steers the course
-    /// captured at mode entry on the cruise table, staying ahead of the pursuer rather than
-    /// turning back into a head-on, and then OVERRIDES the law's lever with D15's own walk toward
-    /// <see cref="AiModeMachine.SixthSenseFactor"/> × the pursuer's speed.
-    /// ⚠ That override is this engine's assist, not the original's lay-off: the decode has the
-    /// break-off arm flying the same cruise table with a 0.8 lever floor and no speed match, and
-    /// reading the factor as a pursuer-speed match is D15's invention. It is kept because D15 is a
-    /// landed, playtested feature with its own suite; revisit it at F52, not here.</summary>
+    // Lay off (the rubber-band assist): let the pursuer catch up. Steers the course
+    // captured at mode entry on the cruise table, staying ahead of the pursuer rather than
+    // turning back into a head-on, and then OVERRIDES the law's lever with D15's own walk toward
+    // AiModeMachine.SixthSenseFactor × the pursuer's speed.
+    // ⚠ That override is this engine's assist, not the original's lay-off: the decode has the
+    // break-off arm flying the same cruise table with a 0.8 lever floor and no speed match, and
+    // reading the factor as a pursuer-speed match is D15's invention. It is kept because D15 is a
+    // landed, playtested feature with its own suite; revisit it at F52, not here.
     private FlightInput FlyLayOff(FlightModel model, float dt, AiModeMachine machine,
         FlightController pursuer)
     {
@@ -316,9 +316,9 @@ public sealed class AiPilot
         return input;
     }
 
-    /// <summary>Patrol: a net node is already the point-with-no-velocity shape the law wants, so it
-    /// is flown directly; without a net the standing heading/altitude orders are projected into
-    /// one. Both on the cruise table, which is what the original's patrol arm uses.</summary>
+    // Patrol: a net node is already the point-with-no-velocity shape the law wants, so it
+    // is flown directly; without a net the standing heading/altitude orders are projected into
+    // one. Both on the cruise table, which is what the original's patrol arm uses.
     private FlightInput FlyPatrol(FlightModel model, float dt)
     {
         if (Patrol is not { } patrol)
@@ -333,8 +333,8 @@ public sealed class AiPilot
         return Fly(model, dt, patrol.CurrentTarget, Vector3.Zero, AiLawParams.Cruise);
     }
 
-    /// <summary>The aim point a bare heading/altitude order becomes (see
-    /// <see cref="OrderAimRangeM"/> for why the distance is a port artifact).</summary>
+    // The aim point a bare heading/altitude order becomes (see
+    // OrderAimRangeM for why the distance is a port artifact).
     private Vector3 OrderAim(FlightModel model)
     {
         var dir = new Basis(Vector3.Up, Mathf.DegToRad(TargetHeadingDeg)) * Vector3.Forward;

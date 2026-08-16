@@ -76,22 +76,22 @@ public readonly record struct ImpactOutcome
         };
     }
 
-    /// <summary>The stand-in ladder, in its order: an instanced model beats everything; a hardpoint
-    /// weapon with nowhere to build its fireball gets the explosion; a gun off a building gets
-    /// ricochet sparks; everything else, ground included, gets the single spark.
-    ///
-    /// <para>The ladder is ours, not the original's — it stands in for authored assets that do not
-    /// render here.</para>
-    ///
-    /// <para><b>Ground has no arm of its own (BL-313, 2026-08-15).</b> It used to take a tumbling
-    /// chip burst on the <c>bit01</c>–<c>bit04</c> textures, inferred from the gunhit def's
-    /// zero-vertex <c>bit1</c>–<c>bit3</c> nodes. The original draws no such chips: those nodes each
-    /// carry one light record and render a single 1-pixel near-black point (<c>FUN_005524d0</c> /
-    /// <c>FUN_00554550</c> gate the light block on the light count alone), invisible against ground
-    /// at gameplay zoom. Ground must still return a non-<c>None</c> stand-in, because
-    /// <c>ProjectilePool</c> gates the world-effects <c>EffectSink</c> call on
-    /// <c>StandIn != None</c> — a <c>None</c> here would take the <c>blacksmokepuffer</c> with
-    /// it.</para></summary>
+    // The stand-in ladder, in its order: an instanced model beats everything; a hardpoint
+    // weapon with nowhere to build its fireball gets the explosion; a gun off a building gets
+    // ricochet sparks; everything else, ground included, gets the single spark.
+    //
+    // The ladder is ours, not the original's — it stands in for authored assets that do not
+    // render here.
+    //
+    // Ground has no arm of its own (BL-313, 2026-08-15). It used to take a tumbling
+    // chip burst on the `bit01`–`bit04` textures, inferred from the gunhit def's
+    // zero-vertex `bit1`–`bit3` nodes. The original draws no such chips: those nodes each
+    // carry one light record and render a single 1-pixel near-black point (`FUN_005524d0` /
+    // `FUN_00554550` gate the light block on the light count alone), invisible against ground
+    // at gameplay zoom. Ground must still return a non-`None` stand-in, because
+    // `ProjectilePool` gates the world-effects `EffectSink` call on
+    // `StandIn != None` — a `None` here would take the `blacksmokepuffer` with
+    // it.
     private static ImpactStandIn StandInFor(WeaponDef weapon, int surfaceId, bool modelResolved,
         bool hasEffectsRuntime)
     {

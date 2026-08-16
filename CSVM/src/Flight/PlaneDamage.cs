@@ -162,11 +162,11 @@ public sealed class PlaneDamage
         return hurt.Count == 0 ? whole : whole + " · " + string.Join(" · ", hurt.Select(PoolText));
     }
 
-    /// <summary>FUN_004b7f80 verbatim: armor spends first and its covered share shields health
-    /// 1:1; the leftovers are written back into the damage pair. Quirks kept on purpose: armor
-    /// standing against a hit with NO armor damage nulls the health damage outright, and the
-    /// health leftover is measured against the full magnitude, so the armor-shielded share
-    /// re-enters the wrapper loop rather than vanishing.</summary>
+    // FUN_004b7f80 verbatim: armor spends first and its covered share shields health
+    // 1:1; the leftovers are written back into the damage pair. Quirks kept on purpose: armor
+    // standing against a hit with NO armor damage nulls the health damage outright, and the
+    // health leftover is measured against the full magnitude, so the armor-shielded share
+    // re-enters the wrapper loop rather than vanishing.
     private static void Spend(ref float dmgA, ref float dmgH, ref float poolA, ref float poolH)
     {
         float covered = 0f;
@@ -212,9 +212,9 @@ public sealed class PlaneDamage
         return text;
     }
 
-    /// <summary>FUN_004b3950 + FUN_004b3b60: the named zone while its health lasts; otherwise a
-    /// uniform pick among the first up-to-3 surviving zones in def order; null only when none
-    /// survives (or the vehicle has no parts).</summary>
+    // FUN_004b3950 + FUN_004b3b60: the named zone while its health lasts; otherwise a
+    // uniform pick among the first up-to-3 surviving zones in def order; null only when none
+    // survives (or the vehicle has no parts).
     private PartState? ResolveStruckPart(string partName)
     {
         if (_parts.TryGetValue(partName, out var named) && named.Hp > 0f)
@@ -232,10 +232,10 @@ public sealed class PlaneDamage
         return live.Count == 0 ? null : live[(int)(NextRand() % (uint)live.Count)];
     }
 
-    /// <summary>FUN_004b3bf0's tail: after a part spend, whole current = parts' fraction of
-    /// their summed maxima × whole maxima, both pools. ⚠ The decoded quirk, reproduced on
-    /// purpose: this OVERWRITES any earlier zone-less overflow dent, partially healing the
-    /// whole pair back onto the parts' fraction. The engine's own arithmetic does this.</summary>
+    // FUN_004b3bf0's tail: after a part spend, whole current = parts' fraction of
+    // their summed maxima × whole maxima, both pools. ⚠ The decoded quirk, reproduced on
+    // purpose: this OVERWRITES any earlier zone-less overflow dent, partially healing the
+    // whole pair back onto the parts' fraction. The engine's own arithmetic does this.
     private void RecomputeWhole()
     {
         float hpCur = 0f, hpMax = 0f, armorCur = 0f, armorMax = 0f;

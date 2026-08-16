@@ -145,8 +145,8 @@ public sealed class LiveryResolver
         return false;
     }
 
-    /// <summary>An explicit --paint-color=/--paint-decal= list overrides whatever the scheme
-    /// brought, so a single colour can be dialled in against a chosen pattern.</summary>
+    // An explicit --paint-color=/--paint-decal= list overrides whatever the scheme
+    // brought, so a single colour can be dialled in against a chosen pattern.
     private PaintScheme WithOverrides(PaintScheme scheme)
     {
         if (_spec.PaintColorOverride == null && _spec.PaintDecalOverride == null)

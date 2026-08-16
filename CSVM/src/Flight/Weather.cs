@@ -386,11 +386,11 @@ public sealed class WeatherState
         return Mathf.Clamp(ambient + diffuse * SunIncidence, MinWorldLight, 1f);
     }
 
-    /// <summary>The zone's <c>SUNLIGHT_ORIENTATION</c> as Godot euler RADIANS, ready to assign
-    /// straight to a <see cref="DirectionalLight3D"/>'s <c>Rotation</c> — see
-    /// <see cref="ZoneWeather.SunOrientation"/> for why no axis conversion is needed. The data is
-    /// degrees; the binary multiplies by the same 0.017453292. Absent (or short) → the binary's
-    /// own default, pitch −π/2: straight down.</summary>
+    // The zone's `SUNLIGHT_ORIENTATION` as Godot euler RADIANS, ready to assign
+    // straight to a DirectionalLight3D's `Rotation` — see
+    // ZoneWeather.SunOrientation for why no axis conversion is needed. The data is
+    // degrees; the binary multiplies by the same 0.017453292. Absent (or short) → the binary's
+    // own default, pitch −π/2: straight down.
     private static Vector3 SunOrientationOf(ZrdrDict zone)
     {
         if (zone.List("SUNLIGHT_ORIENTATION") is not { Count: >= 2 } so

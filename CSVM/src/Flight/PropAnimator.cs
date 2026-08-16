@@ -51,10 +51,10 @@ public sealed class PropAnimator
             Collect(child, spinners);
     }
 
-    /// <summary>One spinning disc: its rest pose and rate (radians/second, local axes),
-    /// accumulated total time. Recomputes an absolute pose from rest every <see cref="Advance"/>
-    /// via <see cref="SpinMotion.ComposeSpin"/> rather than stepping <c>RotateObjectLocal</c>,
-    /// so a long session cannot drift — same reasoning as <c>SpinMotion</c> itself.</summary>
+    // One spinning disc: its rest pose and rate (radians/second, local axes),
+    // accumulated total time. Recomputes an absolute pose from rest every Advance
+    // via SpinMotion.ComposeSpin rather than stepping `RotateObjectLocal`,
+    // so a long session cannot drift — same reasoning as `SpinMotion` itself.
     private sealed class Spinner
     {
         private readonly Node3D _node;

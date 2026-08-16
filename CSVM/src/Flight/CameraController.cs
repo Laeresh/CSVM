@@ -76,13 +76,13 @@ public sealed class CameraController
     // ≈ 16.62 m. Only used to normalise that direction against the data's own distance.
     private static readonly float BaseDist = Mathf.Sqrt((BaseBack * BaseBack) + (BaseUp * BaseUp));
 
-    /// <summary>The numpad's fixed camera perspectives, keyed by its own spatial layout: 2 straight
-    /// under the plane, 1/3 45° up from there to the left/right, 4/6 the level flanks, 7/9 45° above
-    /// those flanks, 8 ahead of the nose looking back. 5 is deliberately unbound — the middle of the
-    /// pad is where the chase camera already is. <c>Dir</c> is the camera's offset direction and
-    /// <c>Up</c> the image up, both unit vectors in the PLANE's frame (+x right, +y up, −z nose), so
-    /// every pose banks and rolls with the aircraft. The belly view takes the nose as its up because
-    /// the plane's own up is the view axis there.</summary>
+    // The numpad's fixed camera perspectives, keyed by its own spatial layout: 2 straight
+    // under the plane, 1/3 45° up from there to the left/right, 4/6 the level flanks, 7/9 45° above
+    // those flanks, 8 ahead of the nose looking back. 5 is deliberately unbound — the middle of the
+    // pad is where the chase camera already is. `Dir` is the camera's offset direction and
+    // `Up` the image up, both unit vectors in the PLANE's frame (+x right, +y up, −z nose), so
+    // every pose banks and rolls with the aircraft. The belly view takes the nose as its up because
+    // the plane's own up is the view axis there.
     private static readonly (Key Key, int Digit, Vector3 Dir, Vector3 Up)[] Views =
     {
         (Key.Kp1, 1, new Vector3(-Diag, -Diag, 0f), Vector3.Up),

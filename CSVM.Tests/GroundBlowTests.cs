@@ -37,9 +37,9 @@ public class GroundBlowTests
     // no-hit BASELINE.
     private const float AngDamp = 5f;
 
-    /// <summary>A slope ahead and below, its normal facing up and back at the aircraft — the cliff
-    /// case, in BODY coordinates (nose −Z, up +Y, right +X). Its escape axis is body +X, i.e. the
-    /// bias is pitch-up.</summary>
+    // A slope ahead and below, its normal facing up and back at the aircraft — the cliff
+    // case, in BODY coordinates (nose −Z, up +Y, right +X). Its escape axis is body +X, i.e. the
+    // bias is pitch-up.
     private static readonly Vector3 SlopeNormalBody = new Vector3(0f, 1f, 1f).Normalized();
 
     [Fact]
@@ -261,15 +261,15 @@ public class GroundBlowTests
             + $"rad, got {pushingIn:0.000000}");
     }
 
-    /// <summary>The escape axis the law should build for <see cref="SlopeNormalBody"/>, in body
-    /// coordinates and already scaled by proximity — <c>normalize(n × b) · S</c>, which for this
-    /// slope is body +X (pitch up).</summary>
+    // The escape axis the law should build for SlopeNormalBody, in body
+    // coordinates and already scaled by proximity — `normalize(n × b) · S`, which for this
+    // slope is body +X (pitch up).
     private static Vector3 ExpectedAxis(float dist) => new(ExpectedProximity(dist), 0f, 0f);
 
-    /// <summary>The AI law's contribution to one step's <c>BodyRates</c>: <c>v · (ai_groundblow ·
-    /// groundblow_mag)</c> is a command-accumulator torque like the player law's, carrying no dt of
-    /// its own — the same single <c>dt</c> then <c>exp(−dt·damp)</c> the caller applies to the whole
-    /// accumulator applies here too.</summary>
+    // The AI law's contribution to one step's `BodyRates`: `v · (ai_groundblow ·
+    // groundblow_mag)` is a command-accumulator torque like the player law's, carrying no dt of
+    // its own — the same single `dt` then `exp(−dt·damp)` the caller applies to the whole
+    // accumulator applies here too.
     private static Vector3 ExpectedAiDelta(Vector3 v, float aiGroundBlow) =>
         v * (aiGroundBlow * Mag) * Dt * Mathf.Exp(-Dt * AngDamp);
 
@@ -282,9 +282,9 @@ public class GroundBlowTests
             $"at {dist:0} m the rates must be {expected} (baseline + V·dot(baseline, V)·{Mag}), got {actual}");
     }
 
-    /// <summary>The angle in radians between the flight path and the nose after one step, with the
-    /// path started 10° off the nose IN YAW so there is a gap for the steer to close on an axis the
-    /// pitch-axis bias does not move.</summary>
+    // The angle in radians between the flight path and the nose after one step, with the
+    // path started 10° off the nose IN YAW so there is a gap for the steer to close on an axis the
+    // pitch-axis bias does not move.
     private static float GapAfter(float pitch, Vector3 normal, bool ai = false)
     {
         var m = Fresh(ai: ai);
@@ -315,9 +315,9 @@ public class GroundBlowTests
         return m;
     }
 
-    /// <summary>The Bloodhawk's real dynamics, with this install's authored ground-blow values
-    /// rather than the executable's 100/1.5/0.9 fallbacks (PlaneStatsFlightGlobalsTests pins the
-    /// read itself). <c>AiGroundBlow</c> at the authored 0.5 for the AI-path tests.</summary>
+    // The Bloodhawk's real dynamics, with this install's authored ground-blow values
+    // rather than the executable's 100/1.5/0.9 fallbacks (PlaneStatsFlightGlobalsTests pins the
+    // read itself). `AiGroundBlow` at the authored 0.5 for the AI-path tests.
     private static PlaneStats Bhawk() => new()
     {
         PitchTorque = 3.3f,

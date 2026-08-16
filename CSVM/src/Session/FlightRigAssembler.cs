@@ -27,7 +27,7 @@ public sealed class FlightRigAssembler
     private readonly Node3D _worldRoot;
     private readonly Inputs _in;
 
-    /// <summary>Every player's start, resolved in one call (see <see cref="Assemble"/>).</summary>
+    // Every player's start, resolved in one call (see Assemble).
     private IReadOnlyList<FlightStart>? _starts;
 
     public FlightRigAssembler(SessionSpec spec, LiveryResolver liveries, IFlightStarts spawns,

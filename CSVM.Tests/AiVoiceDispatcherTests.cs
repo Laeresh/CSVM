@@ -247,13 +247,13 @@ public class AiVoiceDispatcherTests
         Assert.Contains(Run(), clip => clip != null); // the pin measures something
     }
 
-    /// <summary>A resolver where every family resolves for every pilot.</summary>
+    // A resolver where every family resolves for every pilot.
     private static Func<int, string, string?> ResolveAll() =>
         (voId, family) => $"snd_id{voId}_{family}-A";
 
-    /// <summary>A Random whose NextDouble()s replay a script (repeating the last entry) and whose
-    /// Next(max) draws pop <see cref="Ints"/> (falling back to 0) — the election/roll order is
-    /// the thing under test, so the draws must be exact.</summary>
+    // A Random whose NextDouble()s replay a script (repeating the last entry) and whose
+    // Next(max) draws pop Ints (falling back to 0) — the election/roll order is
+    // the thing under test, so the draws must be exact.
     private sealed class ScriptedRandom : Random
     {
         private readonly Queue<double> _doubles;

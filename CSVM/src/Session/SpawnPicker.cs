@@ -18,7 +18,7 @@ public sealed class SpawnPicker : IFlightStarts
     /// rather than the stale <c>_spec.Scenario</c>. Null outside one.</summary>
     public string? ScenarioOverride;
 
-    /// <summary>Splitscreen: fan the players out abreast so they don't spawn inside each other.</summary>
+    // Splitscreen: fan the players out abreast so they don't spawn inside each other.
     private const float SpawnAbreast = 60f;
 
     private readonly SessionSpec _spec;
@@ -95,8 +95,8 @@ public sealed class SpawnPicker : IFlightStarts
         return (new Vector3(-6200, 500, -3300), new Vector3(-5700, 350, -6300));
     }
 
-    /// <summary>Turns a spawn (position + heading) into a (position, look-at) pair — the nose
-    /// (-Z) rotated by the heading (yaw about up) — and logs it for cross-checking the data.</summary>
+    // Turns a spawn (position + heading) into a (position, look-at) pair — the nose
+    // (-Z) rotated by the heading (yaw about up) — and logs it for cross-checking the data.
     private (Vector3 pos, Vector3 lookAt) LogSpawn(string label, SpawnPoint s)
     {
         var forward = new Basis(Vector3.Up, Mathf.DegToRad(s.HeadingDeg)) * Vector3.Forward;

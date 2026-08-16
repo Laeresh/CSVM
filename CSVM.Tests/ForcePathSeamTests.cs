@@ -245,7 +245,7 @@ public class ForcePathSeamTests
         Assert.True(player.Speed > 4.4704f);
     }
 
-    /// <summary>The Bloodhawk's real dynamics, the same fixture <c>AttitudeThrustTests</c> flies.</summary>
+    // The Bloodhawk's real dynamics, the same fixture `AttitudeThrustTests` flies.
     private static PlaneStats Bhawk() => new()
     {
         PitchTorque = 3.3f,

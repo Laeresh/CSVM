@@ -135,16 +135,16 @@ public sealed partial class CompassTape : Control
         DrawTextureRectRegion(_ticks, new Rect2(w - 2f * s, tileY, 2f * s, tileH), rimSrc, rim);
     }
 
-    /// <summary>Screen x of a mark Δ° off the current heading — the drum projection;
-    /// increasing headings run leftward (whiskey card).</summary>
+    // Screen x of a mark Δ° off the current heading — the drum projection;
+    // increasing headings run leftward (whiskey card).
     private float DrumX(float deltaDeg) =>
         Size.X / 2f - RefDrumRadius * HudMetrics.Scale(this)
                     * Mathf.Sin(Mathf.DegToRad(deltaDeg));
 
-    /// <summary>Octant labels every 45°, centred on their drum position but NOT
-    /// drum-compressed (the original billboards them upright), fading with the same
-    /// cos as the ticks — the atlas' own cream colour shows through. A child layer
-    /// only so the letters filter bilinearly while the ticks stay point-sampled.</summary>
+    // Octant labels every 45°, centred on their drum position but NOT
+    // drum-compressed (the original billboards them upright), fading with the same
+    // cos as the ticks — the atlas' own cream colour shows through. A child layer
+    // only so the letters filter bilinearly while the ticks stay point-sampled.
     private sealed partial class LabelLayer : Control
     {
         public CompassTape Tape = null!;

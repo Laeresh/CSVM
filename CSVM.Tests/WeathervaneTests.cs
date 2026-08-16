@@ -147,8 +147,8 @@ public class WeathervaneTests
             + $"damp + return_rate folded in would give {1f - ((stats.AngMomentumDamp + stats.ReturnRate) * Dt):0.000000})");
     }
 
-    /// <summary>The Bloodhawk's real dynamics — the torque is scaled by <c>rec_moments_inertia</c>,
-    /// so the placeholder defaults would hide a wrong axis behind near-equal components.</summary>
+    // The Bloodhawk's real dynamics — the torque is scaled by `rec_moments_inertia`,
+    // so the placeholder defaults would hide a wrong axis behind near-equal components.
     private static PlaneStats Stats() => new()
     {
         PitchTorque = 3.3f,
@@ -165,11 +165,11 @@ public class WeathervaneTests
 
     private static FlightModel Model() => new(Stats());
 
-    /// <summary>Nose up by <paramref name="deg"/> — a rotation about the body starboard axis.</summary>
+    // Nose up by `deg` — a rotation about the body starboard axis.
     private static Basis Pitched(float deg) =>
         Basis.Identity.Rotated(Vector3.Right, Mathf.DegToRad(deg));
 
-    /// <summary>Nose left by <paramref name="deg"/>.</summary>
+    // Nose left by `deg`.
     private static Basis Yawed(float deg) =>
         Basis.Identity.Rotated(Vector3.Up, Mathf.DegToRad(deg));
 

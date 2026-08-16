@@ -72,10 +72,10 @@ public sealed class GltfExporter
         tree.Quit(err == Error.Ok ? 0 : 1);
     }
 
-    /// <summary>Bake the current damage/flare state and drop non-geometry: free every hidden
-    /// <c>Node3D</c> (torn/healthy panel twins and off wing-flares are toggled purely by
-    /// <c>Visible</c>) and every point-sprite <c>"lights"</c> instance, then convert each surviving
-    /// mesh's shader skins to a <c>StandardMaterial3D</c> glTF can serialize.</summary>
+    // Bake the current damage/flare state and drop non-geometry: free every hidden
+    // `Node3D` (torn/healthy panel twins and off wing-flares are toggled purely by
+    // `Visible`) and every point-sprite `"lights"` instance, then convert each surviving
+    // mesh's shader skins to a `StandardMaterial3D` glTF can serialize.
     private static void BakeAndConvert(Node copy)
     {
         var toFree = new List<Node>();
@@ -110,11 +110,11 @@ public sealed class GltfExporter
         }
     }
 
-    /// <summary>Replace each surface's custom <c>ShaderMaterial</c> skin with a
-    /// <c>StandardMaterial3D</c> that glTF understands: the painted <c>albedo_tex</c> as the albedo
-    /// map, the shader's <c>albedo_color</c> tint when present, and vertex color as albedo so the
-    /// baked per-vertex shading survives into glTF's <c>COLOR_0</c>. <c>StandardMaterial3D</c>
-    /// skins (flares, magenta-missing fallbacks) already serialize and pass through untouched.</summary>
+    // Replace each surface's custom `ShaderMaterial` skin with a
+    // `StandardMaterial3D` that glTF understands: the painted `albedo_tex` as the albedo
+    // map, the shader's `albedo_color` tint when present, and vertex color as albedo so the
+    // baked per-vertex shading survives into glTF's `COLOR_0`. `StandardMaterial3D`
+    // skins (flares, magenta-missing fallbacks) already serialize and pass through untouched.
     private static void ConvertMaterials(MeshInstance3D mesh)
     {
         int surfaces = mesh.GetSurfaceOverrideMaterialCount();
@@ -138,8 +138,8 @@ public sealed class GltfExporter
         }
     }
 
-    /// <summary>Force the path to a glTF extension the writer recognizes: keep an explicit
-    /// <c>.glb</c>/<c>.gltf</c>, otherwise write a self-contained <c>.glb</c>.</summary>
+    // Force the path to a glTF extension the writer recognizes: keep an explicit
+    // `.glb`/`.gltf`, otherwise write a self-contained `.glb`.
     private static string NormalizeExtension(string path)
     {
         var ext = Path.GetExtension(path).ToLowerInvariant();
@@ -150,9 +150,9 @@ public sealed class GltfExporter
         return path + ".glb";
     }
 
-    /// <summary>Give the glTF writer a path it can open: Godot's <c>res://</c>/<c>user://</c> schemes
-    /// pass through, everything else becomes an absolute OS path (a bare relative path fails to open
-    /// for write).</summary>
+    // Give the glTF writer a path it can open: Godot's `res://`/`user://` schemes
+    // pass through, everything else becomes an absolute OS path (a bare relative path fails to open
+    // for write).
     private static string ResolvePath(string path)
     {
         if (path.StartsWith("res://") || path.StartsWith("user://"))

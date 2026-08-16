@@ -145,8 +145,8 @@ public sealed partial class ScreenFlash : Node
         }
     }
 
-    /// <summary>The panes a burst at <paramref name="origin"/> washes, into <see cref="_selected"/>:
-    /// every pane whose own camera is within the def's authored gate of it.</summary>
+    // The panes a burst at `origin` washes, into _selected:
+    // every pane whose own camera is within the def's authored gate of it.
     private void SelectPanes(Vector3 origin, float radiusSquared)
     {
         _selected.Clear();
@@ -195,8 +195,8 @@ public sealed partial class ScreenFlash : Node
         _layers[pane].Visible = c.A > 0f;
     }
 
-    /// <summary>One pane's ramp. A class rather than a struct because these are held in a list and
-    /// advanced in place every frame.</summary>
+    // One pane's ramp. A class rather than a struct because these are held in a list and
+    // advanced in place every frame.
     private sealed class Ramp
     {
         public Color From;

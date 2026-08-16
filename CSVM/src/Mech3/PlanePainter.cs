@@ -32,7 +32,7 @@ namespace CSVM.Mech3;
 /// </summary>
 public sealed class PlanePainter
 {
-    /// <summary>The three decal slots' texture suffixes, in paint-UI order: nose, tail, wing.</summary>
+    // The three decal slots' texture suffixes, in paint-UI order: nose, tail, wing.
     private static readonly string[] DecalSuffixes = { "_noselogo", "_taillogo", "_winglogo" };
 
     private readonly TextureArchive _textures;

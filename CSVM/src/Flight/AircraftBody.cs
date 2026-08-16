@@ -146,8 +146,8 @@ public sealed partial class AircraftBody : AnimatableBody3D
         return bestD;
     }
 
-    /// <summary>Distance from a point to an origin-centred axis-aligned box, in the box's own
-    /// frame; 0 inside.</summary>
+    // Distance from a point to an origin-centred axis-aligned box, in the box's own
+    // frame; 0 inside.
     private static float BoxDistance(Vector3 p, Vector3 half)
     {
         var q = p.Abs() - half;

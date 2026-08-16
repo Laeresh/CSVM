@@ -38,21 +38,21 @@ namespace CSVM.Tests;
 /// </summary>
 public class ZzCadenceSweep
 {
-    /// <summary>Sim seconds per wall second.</summary>
+    // Sim seconds per wall second.
     private const double SimPerWall = 1.390;
 
     private const float Dt = 1f / 60f;
     private const float Mph = 0.44704f;
     private const float Ft = 0.3048f;
 
-    /// <summary>Periods of settling discarded before the fit window opens, then periods fitted.
-    /// Eight is the floor for the simultaneous fit; twelve leaves margin.</summary>
+    // Periods of settling discarded before the fit window opens, then periods fitted.
+    // Eight is the floor for the simultaneous fit; twelve leaves margin.
     private const int SettlePeriods = 3;
     private const int FitPeriods = 12;
 
-    /// <summary>The original's six cadences, in the wall milliseconds its input log recorded
-    /// (jitter sd 0.002–0.535 ms, so these are known rather than nominal), with the ripple each one
-    /// produced in feet. The last two sat at the decode floor and are quoted as upper bounds.</summary>
+    // The original's six cadences, in the wall milliseconds its input log recorded
+    // (jitter sd 0.002–0.535 ms, so these are known rather than nominal), with the ripple each one
+    // produced in feet. The last two sat at the decode floor and are quoted as upper bounds.
     private static readonly (int WallMs, double OriginalFt, bool AtFloor)[] Cadences =
     {
         (1300, 26.31, false),
@@ -117,8 +117,8 @@ public class ZzCadenceSweep
         Assert.True(File.Exists(outPath));
     }
 
-    /// <summary>Flies one cadence and returns (ripple amplitude in feet, mean airspeed in mph over
-    /// the fit window).</summary>
+    // Flies one cadence and returns (ripple amplitude in feet, mean airspeed in mph over
+    // the fit window).
     private static (double AmplitudeFt, double MeanMph) Ripple(PlaneStats stats, float period)
     {
         var m = new FlightModel(stats);
@@ -147,10 +147,10 @@ public class ZzCadenceSweep
         return (FitSinusoid(t, y, 1.0 / period), t.Count > 0 ? speedSum / t.Count : 0);
     }
 
-    /// <summary>Least-squares fit of cubic + A·sin(2πf·t) + B·cos(2πf·t) over the whole window, all
-    /// six coefficients solved together; returns sqrt(A² + B²). Fitting the trend and the sinusoid
-    /// simultaneously is the point — removing the trend first has real gain at f and biases the
-    /// amplitude, which is the error that produces a wrong figure.</summary>
+    // Least-squares fit of cubic + A·sin(2πf·t) + B·cos(2πf·t) over the whole window, all
+    // six coefficients solved together; returns sqrt(A² + B²). Fitting the trend and the sinusoid
+    // simultaneously is the point — removing the trend first has real gain at f and biases the
+    // amplitude, which is the error that produces a wrong figure.
     private static double FitSinusoid(IReadOnlyList<double> t, IReadOnlyList<double> y, double f)
     {
         const int N = 6;
@@ -184,7 +184,7 @@ public class ZzCadenceSweep
         return x == null ? 0 : Math.Sqrt((x[4] * x[4]) + (x[5] * x[5]));
     }
 
-    /// <summary>Gaussian elimination with partial pivoting; null if the system is singular.</summary>
+    // Gaussian elimination with partial pivoting; null if the system is singular.
     private static double[]? Solve(double[,] a, double[] b, int n)
     {
         for (int col = 0; col < n; col++)

@@ -24,13 +24,13 @@ namespace CSVM.Tests;
 /// </summary>
 public class RaceGridTests
 {
-    /// <summary>The grid's own spacing and clearance, restated so a change to either fails here
-    /// rather than passing silently. Both are config fallbacks now; these tests run with no
-    /// config.json, which is the state a scripted run and a fresh checkout are also in.</summary>
+    // The grid's own spacing and clearance, restated so a change to either fails here
+    // rather than passing silently. Both are config fallbacks now; these tests run with no
+    // config.json, which is the state a scripted run and a fresh checkout are also in.
     private const float Spacing = 60f;
     private const float Clearance = 100f;
 
-    /// <summary>An anchor high above everything, so the ground never asks for lift.</summary>
+    // An anchor high above everything, so the ground never asks for lift.
     private static readonly Vector3 HighAnchor = new(1000f, 5000f, -2000f);
 
     // ---- The fan -------------------------------------------------------------------------------
@@ -357,19 +357,19 @@ public class RaceGridTests
 
     // ---- Helpers -------------------------------------------------------------------------------
 
-    /// <summary>A grid over a picker with no <c>--pos</c> override, so the anchor comes from the
-    /// spawn list handed to <c>ChooseStarts</c>.</summary>
+    // A grid over a picker with no `--pos` override, so the anchor comes from the
+    // spawn list handed to `ChooseStarts`.
     private static RaceGrid Grid(Func<Vector3, float?> ground) =>
         new(new SpawnPicker(SessionSpec.Parse(new[] { "--stunt" })), ground);
 
     private static IReadOnlyList<SpawnPoint> Spawns(Vector3 pos, float headingDeg) =>
         new[] { new SpawnPoint(pos, headingDeg) };
 
-    /// <summary>Ground at one height everywhere.</summary>
+    // Ground at one height everywhere.
     private static Func<Vector3, float?> Flat(float y) => _ => y;
 
-    /// <summary>A synthetic heightfield keyed on the slot's X offset from the origin — the axis the
-    /// fan runs along at heading 0°. An unlisted column is at sea level.</summary>
+    // A synthetic heightfield keyed on the slot's X offset from the origin — the axis the
+    // fan runs along at heading 0°. An unlisted column is at sea level.
     private static Func<Vector3, float?> Heights(Dictionary<float, float> byX) => p =>
     {
         foreach (var (x, h) in byX)
@@ -382,8 +382,8 @@ public class RaceGridTests
         return 0f;
     };
 
-    /// <summary>The nose direction a spawn heading means, built the way <c>SpawnPicker</c> builds
-    /// it, so a change to that convention fails these tests rather than sliding past them.</summary>
+    // The nose direction a spawn heading means, built the way `SpawnPicker` builds
+    // it, so a change to that convention fails these tests rather than sliding past them.
     private static Vector3 Forward(float headingDeg) =>
         (new Basis(Vector3.Up, Mathf.DegToRad(headingDeg)) * Vector3.Forward).Normalized();
 }

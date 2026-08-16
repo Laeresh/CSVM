@@ -74,18 +74,18 @@ public enum MenuMode
 /// </summary>
 public sealed record SessionSpec
 {
-    /// <summary>The sim frame a bare <c>--crash</c> (no <c>=frame</c>) fires at — early enough that
-    /// the default <c>--frames=</c> screenshot lands mid-break-up rather than pre-impact.</summary>
+    // The sim frame a bare `--crash` (no `=frame`) fires at — early enough that
+    // the default `--frames=` screenshot lands mid-break-up rather than pre-impact.
     private const int DefaultCrashFrame = 5;
 
-    /// <summary>The frame a bare <c>--hitch-inject=</c> (no <c>@frame</c>) fires at, in
-    /// <see cref="Utils.HitchMonitor.FrameCount"/>'s own space. The grace window is wall-clock ms,
-    /// not a frame count, so how many frames it takes to clear depends on how fast this MACHINE
-    /// renders a frame — 120 frames is NOT "2 seconds" the way the 60 Hz-cap assumption elsewhere in
-    /// this plan implies: measured on the dev box, both vsync on (its actual refresh is 120 Hz, not
-    /// 60) and <c>--no-vsync</c> pace the empty stage at ~8.3 ms/frame, so the default 2000 ms grace
-    /// window does not clear until ~frame 240. 300 leaves a margin verified on that box; a slower
-    /// machine or a heavier stage still needs its own <c>@frame</c>, explicit.</summary>
+    // The frame a bare `--hitch-inject=` (no `@frame`) fires at, in
+    // FrameCount's own space. The grace window is wall-clock ms,
+    // not a frame count, so how many frames it takes to clear depends on how fast this MACHINE
+    // renders a frame — 120 frames is NOT "2 seconds" the way the 60 Hz-cap assumption elsewhere in
+    // this plan implies: measured on the dev box, both vsync on (its actual refresh is 120 Hz, not
+    // 60) and `--no-vsync` pace the empty stage at ~8.3 ms/frame, so the default 2000 ms grace
+    // window does not clear until ~frame 240. 300 leaves a margin verified on that box; a slower
+    // machine or a heavier stage still needs its own `@frame`, explicit.
     private const int DefaultHitchInjectFrame = 300;
 
     private List<Note> _notes = new();
@@ -1213,16 +1213,16 @@ public sealed record SessionSpec
 
     private static float Flt(string s) => float.Parse(s, CultureInfo.InvariantCulture);
 
-    /// <summary>Turns the parsed votes into the one answer each: the mode, its modifiers, the world
-    /// selection, the player count, the <c>--det</c> bundle's pinned values and the placement
-    /// routing. Runs once, from <see cref="Parse"/>, on a spec that has not escaped yet.
-    ///
-    /// <para>The step ORDER is the behaviour, and it is the order <c>_Ready</c> ran these in. Two
-    /// places depend on it in a way that is easy to undo by tidying: <c>--stunt</c> moves
-    /// <see cref="Scenario"/> BEFORE arbitration can clear <see cref="Stunt"/>, so
-    /// <c>--anim-lab --stunt</c> still ends up on the stunt spawn list; and the <c>--freecam</c>/
-    /// <c>--anim-lab</c>-only debug tools are dropped AFTER <c>--node=</c> has forced the viewer,
-    /// so <c>--node= --debug-select=</c> loses the tool.</para></summary>
+    // Turns the parsed votes into the one answer each: the mode, its modifiers, the world
+    // selection, the player count, the `--det` bundle's pinned values and the placement
+    // routing. Runs once, from Parse, on a spec that has not escaped yet.
+    //
+    // The step ORDER is the behaviour, and it is the order `_Ready` ran these in. Two
+    // places depend on it in a way that is easy to undo by tidying: `--stunt` moves
+    // Scenario BEFORE arbitration can clear Stunt, so
+    // `--anim-lab --stunt` still ends up on the stunt spawn list; and the `--freecam`/
+    // `--anim-lab`-only debug tools are dropped AFTER `--node=` has forced the viewer,
+    // so `--node= --debug-select=` loses the tool.
     private void Resolve()
     {
         // Every flag that votes for a mode, gathered before anything is arbitrated. The probes vote
@@ -1433,16 +1433,16 @@ public sealed record SessionSpec
         ResolvePlacement();
     }
 
-    /// <summary>Routes <c>--pos</c>/<c>--direction</c> — the one placement pair — onto the per-mode
-    /// plumbing that already carries placement: the plane's spawn override in flight, the camera's
-    /// placement everywhere else. Routing happens HERE, in one place, so no consumer downstream has
-    /// to ask what mode it is in or whether it holds a point or a vector.
-    ///
-    /// <para>The superseded spellings keep their old per-mode reach, so <c>--campos</c> still places
-    /// only a camera (never the plane) and <c>--spawn-at</c> still moves the anim lab's parked stage
-    /// prop. <c>--lookat</c> names a POINT and <c>--direction</c> a VECTOR; the conversion is
-    /// one-way and flight-only, because the orbit view PIVOTS on the point and no direction can
-    /// express that.</para></summary>
+    // Routes `--pos`/`--direction` — the one placement pair — onto the per-mode
+    // plumbing that already carries placement: the plane's spawn override in flight, the camera's
+    // placement everywhere else. Routing happens HERE, in one place, so no consumer downstream has
+    // to ask what mode it is in or whether it holds a point or a vector.
+    //
+    // The superseded spellings keep their old per-mode reach, so `--campos` still places
+    // only a camera (never the plane) and `--spawn-at` still moves the anim lab's parked stage
+    // prop. `--lookat` names a POINT and `--direction` a VECTOR; the conversion is
+    // one-way and flight-only, because the orbit view PIVOTS on the point and no direction can
+    // express that.
     private void ResolvePlacement()
     {
         if (Fly && Direction == null && LookAt is { } aimPoint && (Pos ?? SpawnAt) is { } eye)
@@ -1496,7 +1496,7 @@ public sealed record SessionSpec
         }
     }
 
-    /// <summary>Runs a lab's own token filter over a spec value without letting it log.</summary>
+    // Runs a lab's own token filter over a spec value without letting it log.
     private string? FilterSpec(string? spec, Func<string, List<string>?, string> filter,
         string what, string wanted)
     {
@@ -1513,9 +1513,9 @@ public sealed record SessionSpec
         return kept;
     }
 
-    /// <summary>Reads <c>--mips=</c>. An unreadable value keeps the current policy rather than
-    /// quietly falling back to one of them — a run whose mip source is not what was asked for is a
-    /// run whose pixel evidence means nothing.</summary>
+    // Reads `--mips=`. An unreadable value keeps the current policy rather than
+    // quietly falling back to one of them — a run whose mip source is not what was asked for is a
+    // run whose pixel evidence means nothing.
     private void SetMips(string value)
     {
         if (Enum.TryParse<TextureArchive.MipSource>(value, ignoreCase: true, out var source))
@@ -1531,7 +1531,7 @@ public sealed record SessionSpec
 
     private void Warn(string category, string message) => _notes.Add(new Note(category, message));
 
-    /// <summary>A complaint that is a bare console line today, with no log category.</summary>
+    // A complaint that is a bare console line today, with no log category.
     private void Print(string message) => _notes.Add(new Note("", message));
 
     /// <summary>A parse- or resolve-time complaint, held rather than logged so the spec stays

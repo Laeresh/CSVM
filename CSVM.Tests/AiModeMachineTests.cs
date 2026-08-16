@@ -400,8 +400,8 @@ public class AiModeMachineTests
 
     private static AiModeMachine Machine(int seed = 1) => new(new Random(seed));
 
-    /// <summary>Holds the pursued geometry through the sustain window plus one frame — the
-    /// entry now needs it CONTINUOUS, never one passing frame.</summary>
+    // Holds the pursued geometry through the sustain window plus one frame — the
+    // entry now needs it CONTINUOUS, never one passing frame.
     private static void SustainPursuit(AiModeMachine m, Vector3 target, Vector3 chase)
     {
         int frames = (int)(AiModeMachine.LayOffSustainS * 60f) + 2;
@@ -409,7 +409,7 @@ public class AiModeMachineTests
             m.Update(Home, Level, target, null, 1f / 60f, chase, targetIsHuman: true);
     }
 
-    /// <summary>A one-step maneuver the executor finishes in a fraction of a second.</summary>
+    // A one-step maneuver the executor finishes in a fraction of a second.
     private static Maneuver QuickManeuver(string name, int difficulty, float duration = 0.05f) =>
         new()
         {

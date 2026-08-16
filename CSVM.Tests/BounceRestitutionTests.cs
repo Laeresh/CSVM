@@ -159,15 +159,15 @@ public class BounceRestitutionTests
             m.BounceNormalSpeed(Vector3.Down * Sink, Vector3.Up, new Vector3(0f, 2f, 0f)), 3);
     }
 
-    /// <summary>Level, unrotating, at the sink speed — the state every case above varies from.</summary>
+    // Level, unrotating, at the sink speed — the state every case above varies from.
     private static void Rest(FlightModel m)
     {
         m.Reset(Vector3.Zero, Basis.Identity, Sink, 0f);
         m.BodyRates = Vector3.Zero;
     }
 
-    /// <summary>The Bloodhawk's reciprocal moments with an explicit <c>bounce_factor</c> — the
-    /// partition reads <c>I⁻¹</c>, so it is the one airframe number that matters here.</summary>
+    // The Bloodhawk's reciprocal moments with an explicit `bounce_factor` — the
+    // partition reads `I⁻¹`, so it is the one airframe number that matters here.
     private static FlightModel Plant(float bounceFactor) => new(new PlaneStats
     {
         RecInertia = new Vector3(1.18f, 1f, 1.1f),

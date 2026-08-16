@@ -238,9 +238,9 @@ public static class AnimDefs
                 yield return ev;
     }
 
-    /// <summary>One reader op → one normalized event. The kind is the mechanical
-    /// SNAKE_CASE→PascalCase conversion; the payload is normalized per kind for the fields
-    /// handlers read, and always keeps the raw body under "raw".</summary>
+    // One reader op → one normalized event. The kind is the mechanical
+    // SNAKE_CASE→PascalCase conversion; the payload is normalized per kind for the fields
+    // handlers read, and always keeps the raw body under "raw".
     private static AnimEvent? ToEvent(string key, List<object?>? body)
     {
         var kind = PascalCase(key);
@@ -412,16 +412,14 @@ public static class AnimDefs
         };
     }
 
-    /// <summary>
-    /// Normalizes a reader PUFFER_STATE body into the same field shape
-    /// <see cref="Effects.PufferState.FromAnimEvent"/> reads from the compiled archives —
-    /// the two forms agree field-for-field except ACTIVE_STATE's token spelling and
-    /// AT_NODE's optional trailing offset. Without this, a reader-only puffer event carried
-    /// none of its own fields (no case existed here at all): <c>active_state</c> came back
-    /// null, which <c>HandlePufferState</c>'s <c>?? 0f</c> default reads as "stop" — the C1
-    /// waterfall bug, where a reader-scope duplicate of the (correctly compiled) waterfall
-    /// def re-asserted its puffers as OFF every frame.
-    /// </summary>
+    // Normalizes a reader PUFFER_STATE body into the same field shape
+    // FromAnimEvent reads from the compiled archives —
+    // the two forms agree field-for-field except ACTIVE_STATE's token spelling and
+    // AT_NODE's optional trailing offset. Without this, a reader-only puffer event carried
+    // none of its own fields (no case existed here at all): `active_state` came back
+    // null, which `HandlePufferState`'s `?? 0f` default reads as "stop" — the C1
+    // waterfall bug, where a reader-scope duplicate of the (correctly compiled) waterfall
+    // def re-asserted its puffers as OFF every frame.
     private static void AddPufferState(Dictionary<string, object?> data, Dictionary<string, List<object?>?> fields)
     {
         data["active_state"] = string.Equals(First(fields, "ACTIVE_STATE") as string, "ACTIVE",
@@ -508,18 +506,16 @@ public static class AnimDefs
         }
     }
 
-    /// <summary>
-    /// Normalizes a reader LIGHT_STATE body into the compiled shape
-    /// <see cref="AnimRuntime"/>'s handler reads. 66 of this install's reader files carry
-    /// LIGHT_STATE, so skipping this front-end would repeat the PUFFER_STATE bug in a subtler
-    /// form: a reader-only fire would define a light with no range or colour.
-    ///
-    /// The one semantic that must survive the trip is **partiality** — a flicker event is
-    /// <c>["NAME", […], "RANGE", […]]</c> and nothing else, and it must not reset the light's
-    /// position, colour or active state. So each field is written only when the reader body
-    /// actually carries it, and ACTIVE_STATE's key is left absent rather than defaulted (the
-    /// handler tests <c>Has</c>, not the value).
-    /// </summary>
+    // Normalizes a reader LIGHT_STATE body into the compiled shape
+    // AnimRuntime's handler reads. 66 of this install's reader files carry
+    // LIGHT_STATE, so skipping this front-end would repeat the PUFFER_STATE bug in a subtler
+    // form: a reader-only fire would define a light with no range or colour.
+    //
+    // The one semantic that must survive the trip is **partiality** — a flicker event is
+    // `["NAME", […], "RANGE", […]]` and nothing else, and it must not reset the light's
+    // position, colour or active state. So each field is written only when the reader body
+    // actually carries it, and ACTIVE_STATE's key is left absent rather than defaulted (the
+    // handler tests `Has`, not the value).
     private static void AddLightState(Dictionary<string, object?> data, Dictionary<string, List<object?>?> fields)
     {
         if (First(fields, "ACTIVE_STATE") is string active)
@@ -554,17 +550,15 @@ public static class AnimDefs
         { ["r"] = r, ["g"] = g, ["b"] = b };
     }
 
-    /// <summary>
-    /// A reader IF/ELSEIF body → the compiled <c>condition</c> payload
-    /// <see cref="AnimRuntime"/> evaluates: a one-key union, e.g.
-    /// <c>{"RandomWeight": 0.15}</c>. The reader spells the same ten conditions with its own
-    /// vocabulary, and two of them change units on the way through the compiler — this is
-    /// where that is undone so the runtime has exactly one convention:
-    /// <c>PLAYER_RANGE</c> is metres in the reader and metres SQUARED compiled (reader 270 ↔
-    /// compiled 72900, measured across the install), and <c>ANIMATION_LOD</c> is the token
-    /// <c>HIGH</c> in the reader and the number 2 compiled. <c>NODE_NEAR_GROUND</c> is the
-    /// reader's name for the condition upstream calls <c>NodeUndercover</c>.
-    /// </summary>
+    // A reader IF/ELSEIF body → the compiled `condition` payload
+    // AnimRuntime evaluates: a one-key union, e.g.
+    // `{"RandomWeight": 0.15}`. The reader spells the same ten conditions with its own
+    // vocabulary, and two of them change units on the way through the compiler — this is
+    // where that is undone so the runtime has exactly one convention:
+    // `PLAYER_RANGE` is metres in the reader and metres SQUARED compiled (reader 270 ↔
+    // compiled 72900, measured across the install), and `ANIMATION_LOD` is the token
+    // `HIGH` in the reader and the number 2 compiled. `NODE_NEAR_GROUND` is the
+    // reader's name for the condition upstream calls `NodeUndercover`.
     private static Dictionary<string, object?>? ReaderCondition(Dictionary<string, List<object?>?> fields)
     {
         Dictionary<string, object?> Union(string tag, object? value) =>

@@ -46,20 +46,20 @@ namespace CSVM.UI;
 /// </summary>
 public sealed partial class ColliderOverlay : Node
 {
-    /// <summary>Trimeshes bigger than this draw as their bounding box instead of their triangles: a
-    /// terrain tile's collider is tens of thousands of lines and tells you nothing an outline does
-    /// not. The count of boxed shapes is reported, never hidden.</summary>
+    // Trimeshes bigger than this draw as their bounding box instead of their triangles: a
+    // terrain tile's collider is tens of thousands of lines and tells you nothing an outline does
+    // not. The count of boxed shapes is reported, never hidden.
     private const int MaxShapeTris = 2000;
 
-    /// <summary>And a total line budget across the whole overlay; past it every remaining shape is
-    /// boxed. A C5 city is ~8k clutter placements.</summary>
+    // And a total line budget across the whole overlay; past it every remaining shape is
+    // boxed. A C5 city is ~8k clutter placements.
     private const int MaxTotalLines = 400000;
 
-    /// <summary>Wireframes sit exactly on the surface they outline, which z-fights into dashes.
-    /// Scaling each shape a hair about its own geometric centre lifts the lines clear.
-    /// ⚠ Never about the local origin: chapter-world trimeshes carry vertices baked in world
-    /// coordinates under identity nodes, so an origin-relative scale shifts the whole wireframe
-    /// by 0.25% of the vertex magnitude — ~20 m at a map corner, invisible near the origin.</summary>
+    // Wireframes sit exactly on the surface they outline, which z-fights into dashes.
+    // Scaling each shape a hair about its own geometric centre lifts the lines clear.
+    // ⚠ Never about the local origin: chapter-world trimeshes carry vertices baked in world
+    // coordinates under identity nodes, so an origin-relative scale shifts the whole wireframe
+    // by 0.25% of the vertex magnitude — ~20 m at a map corner, invisible near the origin.
     private const float Inflate = 1.0025f;
 
     // How often the drawing re-reads the Disabled flags. Fast enough that a kill's swap is visibly
@@ -222,9 +222,9 @@ public sealed partial class ColliderOverlay : Node
         _ => key >= 0 && key < SurfaceColors.Length ? SurfaceColors[key] : OtherColor,
     };
 
-    /// <summary>What a key reads as: <c>13/dirt</c> for a surface id, the bare word for the three
-    /// owner keys. Id and name together because fourteen ids do not have fourteen readable
-    /// colours — the number is the part that identifies the slot.</summary>
+    // What a key reads as: `13/dirt` for a surface id, the bare word for the three
+    // owner keys. Id and name together because fourteen ids do not have fourteen readable
+    // colours — the number is the part that identifies the slot.
     private static string LabelFor(int key) => key switch
     {
         ClutterKey => "clutter",
@@ -235,10 +235,10 @@ public sealed partial class ColliderOverlay : Node
 
     // ---- shape emission ------------------------------------------------------------------------
 
-    /// <summary>Draws one shape into the mesh. Returns true when it was drawn as a bounding box
-    /// rather than in full — the caller counts those so the panel can say so.</summary>
-    /// <summary>Whether this shape has anything to draw. Checked before opening a surface: an
-    /// ImmediateMesh surface closed with no vertices in it is an engine error.</summary>
+    // Draws one shape into the mesh. Returns true when it was drawn as a bounding box
+    // rather than in full — the caller counts those so the panel can say so.
+    // Whether this shape has anything to draw. Checked before opening a surface: an
+    // ImmediateMesh surface closed with no vertices in it is an engine error.
     private static bool HasGeometry(Shape3D shape) =>
         shape is not ConcavePolygonShape3D concave || concave.GetFaces().Length >= 3;
 
@@ -384,9 +384,9 @@ public sealed partial class ColliderOverlay : Node
         };
     }
 
-    /// <summary>The game-file name of the object a collider belongs to: the nearest ancestor
-    /// carrying a <c>cs_name</c>, which is what a destructible is called in the data. A collider's
-    /// own node is SceneBuilder's unnamed <c>col</c> body, which names nothing.</summary>
+    // The game-file name of the object a collider belongs to: the nearest ancestor
+    // carrying a `cs_name`, which is what a destructible is called in the data. A collider's
+    // own node is SceneBuilder's unnamed `col` body, which names nothing.
     private static string OwnerName(Node3D shape)
     {
         for (Node? n = shape; n != null; n = n.GetParent())
@@ -414,10 +414,10 @@ public sealed partial class ColliderOverlay : Node
 
     // ---- building ------------------------------------------------------------------------------
 
-    /// <summary>The overlay's colour key for one shape: the surface id its body resolves to, or one
-    /// of the three owner keys above. The id decides what happens when you touch the geometry, so
-    /// it is what the wireframe is coloured by; the texture-derived class
-    /// (<see cref="SceneBuilder.SurfaceMeta"/>) decides nothing here and is not read.</summary>
+    // The overlay's colour key for one shape: the surface id its body resolves to, or one
+    // of the three owner keys above. The id decides what happens when you touch the geometry, so
+    // it is what the wireframe is coloured by; the texture-derived class
+    // (SceneBuilder.SurfaceMeta) decides nothing here and is not read.
     private int KeyOf(CollisionShape3D cs)
     {
         if (cs.GetParent() is not StaticBody3D sb)
@@ -441,10 +441,10 @@ public sealed partial class ColliderOverlay : Node
         return name.StartsWith("col", StringComparison.Ordinal) ? SurfaceRegistry.Default : OtherKey;
     }
 
-    /// <summary>The id a stamped body actually resolves to — its own when a touch cascade ships a
-    /// def for it, else slot 0, including for an id outside the registry (the cascade's own
-    /// out-of-range arm): the overlay shows what will be
-    /// selected, never the raw stamp, or it hides the empty-slot arm it exists to expose.</summary>
+    // The id a stamped body actually resolves to — its own when a touch cascade ships a
+    // def for it, else slot 0, including for an id outside the registry (the cascade's own
+    // out-of-range arm): the overlay shows what will be
+    // selected, never the raw stamp, or it hides the empty-slot arm it exists to expose.
     private int ResolveId(int id)
     {
         if (ResolvedSurfaceIds is not { } resolved)
@@ -545,9 +545,9 @@ public sealed partial class ColliderOverlay : Node
         Log.Info("world", $"collider overlay: colours are the surface id a touch RESOLVES to — an id whose def this install does not ship draws as 0/default — and the id is stamped per collider BODY, not per polygon. It shows what the engine will select, not the material data.");
     }
 
-    /// <summary>Releases this pass's drawings before the next show rebuilds from the live tree.
-    /// A source subtree may already have been freed by a destructible swap, so its drawing is
-    /// checked independently before it is queued.</summary>
+    // Releases this pass's drawings before the next show rebuilds from the live tree.
+    // A source subtree may already have been freed by a destructible swap, so its drawing is
+    // checked independently before it is queued.
     private void Clear()
     {
         foreach (var e in _entries)
@@ -587,9 +587,9 @@ public sealed partial class ColliderOverlay : Node
         return draw;
     }
 
-    /// <summary>Reads a body's shapes back off the physics server — the clutter case, whose shared
-    /// shapes have no scene node. ⚠ Server getters only: a <c>ShapeOwner*</c> call here would make
-    /// Godot rebuild the body from its (nonexistent) shape nodes and empty it.</summary>
+    // Reads a body's shapes back off the physics server — the clutter case, whose shared
+    // shapes have no scene node. ⚠ Server getters only: a `ShapeOwner*` call here would make
+    // Godot rebuild the body from its (nonexistent) shape nodes and empty it.
     private int EmitBodyShapes(StaticBody3D body, ref int lines, ref int boxed)
     {
         var rid = body.GetRid();
@@ -643,9 +643,9 @@ public sealed partial class ColliderOverlay : Node
 
     // ---- live state ----------------------------------------------------------------------------
 
-    /// <summary>Re-reads every tracked shape's <c>Disabled</c> flag and matches the drawing to it,
-    /// then reports the two tallies whenever they move — the destructible swap, seen from outside.
-    /// Reported as separate on and off counts: their signed difference hides the removal.</summary>
+    // Re-reads every tracked shape's `Disabled` flag and matches the drawing to it,
+    // then reports the two tallies whenever they move — the destructible swap, seen from outside.
+    // Reported as separate on and off counts: their signed difference hides the removal.
     private void SyncEnabled(bool report)
     {
         int on = 0, off = 0;
@@ -768,8 +768,8 @@ public sealed partial class ColliderOverlay : Node
         }
     }
 
-    /// <summary>One node-backed shape and the wireframe drawn for it. The wireframe's visibility
-    /// tracks the shape's own <c>Disabled</c> flag, which is what the destructible swap moves.</summary>
+    // One node-backed shape and the wireframe drawn for it. The wireframe's visibility
+    // tracks the shape's own `Disabled` flag, which is what the destructible swap moves.
     private sealed class Entry
     {
         public required CollisionShape3D Shape;

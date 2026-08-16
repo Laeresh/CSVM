@@ -226,8 +226,8 @@ public sealed class AnimProgram
         return def.Archive.Script(def.SiScriptIds[slot]);
     }
 
-    /// <summary>Definition identity: (anchor name, animation name) — exactly how the compiled
-    /// extraction names its files, so a reader def and its compiled twin share a key.</summary>
+    // Definition identity: (anchor name, animation name) — exactly how the compiled
+    // extraction names its files, so a reader def and its compiled twin share a key.
     private static string KeyOf(AnimDefinition def) => $"{def.Name}\0{def.AnimName}";
 
     private void Add(AnimDefinition def, bool compiled)

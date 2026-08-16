@@ -400,7 +400,7 @@ public partial class FlightAudio : Node
         return player;
     }
 
-    /// <summary>Loads a non-looped one-shot (crash/prop start/stop) from a sounds.json def.</summary>
+    // Loads a non-looped one-shot (crash/prop start/stop) from a sounds.json def.
     private AudioStreamPlayer? MakeOneShot(SoundArchive archive,
         IReadOnlyDictionary<string, SoundDef> defs, string sndName, out float baseVolume)
     {
@@ -419,8 +419,8 @@ public partial class FlightAudio : Node
         return player;
     }
 
-    /// <summary>Spin the engine loop up from silence behind snd_propstart. Used for the
-    /// initial spawn (here) and every respawn (via the loop-restart hook in Update).</summary>
+    // Spin the engine loop up from silence behind snd_propstart. Used for the
+    // initial spawn (here) and every respawn (via the loop-restart hook in Update).
     private void StartEngine()
     {
         _engineRamp = 0f;

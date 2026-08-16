@@ -341,11 +341,11 @@ public sealed partial class Puffer : Node3D
     /// unless authored.</summary>
     public const float PriorityScaleDefault = 0.02f;
 
-    /// <summary>Alpha-weighted mean luminance (0–1) below which the sprite a particle dies on
-    /// counts as smoke, so the emitter alpha-blends instead of adding. The measured population
-    /// separates cleanly either side of it: fire_f06 0.018 and thickblksmoke 0.004 below,
-    /// nothing above it under 0.12 (fire101 0.12, exp_yel01 0.17, smoke101 0.22, fire_f01 0.34)
-    /// — so white smoke stays additive and only genuinely black sprites flip.</summary>
+    // Alpha-weighted mean luminance (0–1) below which the sprite a particle dies on
+    // counts as smoke, so the emitter alpha-blends instead of adding. The measured population
+    // separates cleanly either side of it: fire_f06 0.018 and thickblksmoke 0.004 below,
+    // nothing above it under 0.12 (fire101 0.12, exp_yel01 0.17, smoke101 0.22, fire_f01 0.34)
+    // — so white smoke stays additive and only genuinely black sprites flip.
     private const float SmokeLuminance = 16f / 255f;
 
     // Life-fade envelope (a render nicety, not in the reader): ease the additive glow in
@@ -356,11 +356,11 @@ public sealed partial class Puffer : Node3D
     // A sustained emitter never stops, so its pool is sized to the steady-state population
     // (Number per interval, each living up to LifetimeMax) rather than to a burst duration.
     private const int SustainPoolMin = 16, SustainPoolMax = 2048;
-    /// <summary>The original's teleport guard on the DISTANCE path: it
-    /// accumulates the frame's motion length into the emitter's interval counter only
-    /// <c>if (len &lt; 200.0)</c> — a respawned or pooled emitter that jumps across the world
-    /// lays no line of puffs along the jump. The time path has no equivalent test: there the
-    /// engine accumulates <c>dt</c> unconditionally.</summary>
+    // The original's teleport guard on the DISTANCE path: it
+    // accumulates the frame's motion length into the emitter's interval counter only
+    // `if (len &lt; 200.0)` — a respawned or pooled emitter that jumps across the world
+    // lays no line of puffs along the jump. The time path has no equivalent test: there the
+    // engine accumulates `dt` unconditionally.
     private const float TeleportGuardMeters = 200f;
 
     // Particle spread/size/life/frame jitter. One stream per emitter, drawn off the master seed's
@@ -630,11 +630,11 @@ public sealed partial class Puffer : Node3D
         }
     }
 
-    /// <summary>A fade band's <c>1/width</c>, with the engine's own degenerate case: both of its
-    /// setters store the raw difference first and only invert it
-    /// when it is non-zero, so an equal-ended band keeps 0 rather than an infinity. The unauthored
-    /// far band (<c>FLT_MAX</c>, <c>FLT_MAX</c>) is exactly that case, and nothing ever reaches its
-    /// ramp anyway.</summary>
+    // A fade band's `1/width`, with the engine's own degenerate case: both of its
+    // setters store the raw difference first and only invert it
+    // when it is non-zero, so an equal-ended band keeps 0 rather than an infinity. The unauthored
+    // far band (`FLT_MAX`, `FLT_MAX`) is exactly that case, and nothing ever reaches its
+    // ramp anyway.
     private static float Reciprocal(float width) => width != 0f ? 1f / width : 0f;
 
     private static float FadeFor(float lifeFrac) =>
@@ -642,10 +642,10 @@ public sealed partial class Puffer : Node3D
         : lifeFrac > FadeOutStart ? Mathf.Max(0f, 1f - (lifeFrac - FadeOutStart) / (1f - FadeOutStart))
         : 1f;
 
-    /// <summary>Packs the frames side by side into one atlas, and measures whether a particle DIES
-    /// on a dark sprite — the flipbook's last frame, or a static pool's mean luminance. This is what
-    /// distinguishes "fire_n_smoke", whose flipbook ends near-black despite starting bright; see
-    /// <c>docs/org/puffer.md</c>. Null atlas when a frame is missing.</summary>
+    // Packs the frames side by side into one atlas, and measures whether a particle DIES
+    // on a dark sprite — the flipbook's last frame, or a static pool's mean luminance. This is what
+    // distinguishes "fire_n_smoke", whose flipbook ends near-black despite starting bright; see
+    // `docs/org/puffer.md`. Null atlas when a frame is missing.
     private static (ImageTexture? Atlas, bool DiesDark) BuildAtlas(IReadOnlyList<string> names,
         TextureArchive textures, bool sequenced)
     {
@@ -679,8 +679,8 @@ public sealed partial class Puffer : Node3D
             (sequenced ? lastLum : meanLum) < SmokeLuminance);
     }
 
-    /// <summary>A sprite's mean luminance weighted by its own alpha — what it actually
-    /// contributes when composited, rather than what its unmasked pixels contain.</summary>
+    // A sprite's mean luminance weighted by its own alpha — what it actually
+    // contributes when composited, rather than what its unmasked pixels contain.
     private static float MeanLuminance(Image img)
     {
         int w = img.GetWidth(), h = img.GetHeight();
@@ -696,11 +696,11 @@ public sealed partial class Puffer : Node3D
         return sum / (w * h);
     }
 
-    /// <summary>The distance alpha across every pane (<c>BL-339</c>): keeps the most favourable
-    /// answer of <see cref="DistanceAlpha"/> evaluated per viewer, drawing if any pane would draw it.
-    /// ⚠ Must be per-viewer, not nearest-by-range: the fade is view-space depth along each camera's
-    /// own forward axis, and a pane facing away can still be the range-nearest one. See
-    /// <c>docs/architecture.md</c>.</summary>
+    // The distance alpha across every pane (`BL-339`): keeps the most favourable
+    // answer of DistanceAlpha evaluated per viewer, drawing if any pane would draw it.
+    // ⚠ Must be per-viewer, not nearest-by-range: the fade is view-space depth along each camera's
+    // own forward axis, and a pane facing away can still be the range-nearest one. See
+    // `docs/architecture.md`.
     private bool NearestViewerAlpha(Vector3 worldPos,
         IReadOnlyList<ViewerSet.ViewerPose> viewers, out float alpha)
     {
@@ -720,12 +720,12 @@ public sealed partial class Puffer : Node3D
         return drawn;
     }
 
-    /// <summary>The camera-distance alpha for ONE viewer, decoded verbatim from the original's
-    /// per-particle draw; <c>false</c> means the particle is discarded this frame. The distance is
-    /// view-space DEPTH, not euclidean range. ⚠ The near ramp reads the FAR band's origin — not a
-    /// typo, verified in raw assembly, and must not be "repaired". <c>_distanceFade</c>/<c>_farCull</c>/
-    /// <c>_nearCull</c> are three separate mechanisms, not one switch. See
-    /// <c>docs/formats/effects.md</c> and <c>docs/org/puffer.md</c>.</summary>
+    // The camera-distance alpha for ONE viewer, decoded verbatim from the original's
+    // per-particle draw; `false` means the particle is discarded this frame. The distance is
+    // view-space DEPTH, not euclidean range. ⚠ The near ramp reads the FAR band's origin — not a
+    // typo, verified in raw assembly, and must not be "repaired". `_distanceFade`/`_farCull`/
+    // `_nearCull` are three separate mechanisms, not one switch. See
+    // `docs/formats/effects.md` and `docs/org/puffer.md`.
     private bool DistanceAlpha(Vector3 worldPos, in Vector3 camPos, in Vector3 camFwd,
         out float alpha)
     {
@@ -754,10 +754,10 @@ public sealed partial class Puffer : Node3D
         return alpha > 0f;
     }
 
-    /// <summary>Advances a DISTANCE_INTERVAL trail emitter to the followed node's new
-    /// world position, emitting one sprite per interval of motion (with carry across
-    /// frames) — the dense_firetrail smoke/fire trailing a damaged plane. The first
-    /// call starts the trail; call every frame while the effect is on.</summary>
+    // Advances a DISTANCE_INTERVAL trail emitter to the followed node's new
+    // world position, emitting one sprite per interval of motion (with carry across
+    // frames) — the dense_firetrail smoke/fire trailing a damaged plane. The first
+    // call starts the trail; call every frame while the effect is on.
     private void TrailAdvance(Vector3 worldPos)
     {
         if (_state.DistanceInterval <= 0f)
@@ -799,15 +799,15 @@ public sealed partial class Puffer : Node3D
         _trailCarry -= count * interval;
     }
 
-    /// <summary>Stops trail emission; live smoke decays naturally.</summary>
+    // Stops trail emission; live smoke decays naturally.
     private void TrailEnd() => _trailing = false;
 
-    /// <summary>Static-viewer variant of <see cref="TrailAdvance"/>: emits the trail's
-    /// per-meter puffs AT a fixed world point, spending <paramref name="speedMps"/>
-    /// meters of virtual motion per second — the damage lab's parked plane, whose
-    /// panels burn in place (the puffs' own random velocity and growth make the
-    /// stacked emissions read as a flickering fire). Same carry, pool and spawn
-    /// path as the moving trail.</summary>
+    // Static-viewer variant of TrailAdvance: emits the trail's
+    // per-meter puffs AT a fixed world point, spending `speedMps`
+    // meters of virtual motion per second — the damage lab's parked plane, whose
+    // panels burn in place (the puffs' own random velocity and growth make the
+    // stacked emissions read as a flickering fire). Same carry, pool and spawn
+    // path as the moving trail.
     private void TrailBurnAt(Vector3 worldPos, float dt, float speedMps)
     {
         if (_state.DistanceInterval <= 0f)
@@ -829,11 +829,11 @@ public sealed partial class Puffer : Node3D
         _trailCarry -= count * _state.DistanceInterval;
     }
 
-    /// <summary>Continuous emission at a moving world point, spread along the emitter's own motion
-    /// since the previous call rather than stacked on today's pose (batch <c>k</c> at
-    /// <c>frac = (k+1)·interval/accumulator</c> along <c>prevOrigin → origin</c>). Call every frame
-    /// while the puffer is on; <see cref="SustainEnd"/> stops emission and lets particles decay.
-    /// ⚠ No per-frame batch cap — see <c>docs/org/puffer.md</c> for why a cap is actively wrong.</summary>
+    // Continuous emission at a moving world point, spread along the emitter's own motion
+    // since the previous call rather than stacked on today's pose (batch `k` at
+    // `frac = (k+1)·interval/accumulator` along `prevOrigin → origin`). Call every frame
+    // while the puffer is on; SustainEnd stops emission and lets particles decay.
+    // ⚠ No per-frame batch cap — see `docs/org/puffer.md` for why a cap is actively wrong.
     private void SustainAt(Vector3 worldPos, Basis worldBasis, float dt)
     {
         var origin = worldPos + worldBasis * _state.AtNodeOffset;
@@ -868,7 +868,7 @@ public sealed partial class Puffer : Node3D
         _sustainPrevOrigin = origin;
     }
 
-    /// <summary>Stops sustained emission; live particles finish their lifetimes.</summary>
+    // Stops sustained emission; live particles finish their lifetimes.
     private void SustainEnd() => _sustaining = false;
 
     private void Init(PufferState state, IEmitterRenderer renderer, float activeDuration,
@@ -920,10 +920,10 @@ public sealed partial class Puffer : Node3D
         Visible = false;
     }
 
-    /// <summary><paramref name="origin"/> is the emitter's world point for this batch, already
-    /// AT_NODE-offset and motion-interpolated (<see cref="SustainAt"/> owns both).
-    /// <paramref name="ageOffset"/> is the sub-frame <c>(1 - frac)·dt</c> correction, added to the
-    /// start age even for a puffer with no <c>START_AGE_RANGE</c> authored.</summary>
+    // `origin` is the emitter's world point for this batch, already
+    // AT_NODE-offset and motion-interpolated (SustainAt owns both).
+    // `ageOffset` is the sub-frame `(1 - frac)·dt` correction, added to the
+    // start age even for a puffer with no `START_AGE_RANGE` authored.
     private void SpawnSustained(Vector3 origin, Basis worldBasis, float ageOffset)
     {
         var min = _state.MinRandomVelocity;
@@ -993,7 +993,7 @@ public sealed partial class Puffer : Node3D
         };
     }
 
-    /// <summary>Interpolates the COLORS (lifeFrac, color) ramp.</summary>
+    // Interpolates the COLORS (lifeFrac, color) ramp.
     private Color RampColor(float lifeFrac)
     {
         var ramp = _state.Colors;
@@ -1041,9 +1041,9 @@ public sealed partial class Puffer : Node3D
         _burstsSpawned++;
     }
 
-    /// <summary>Latest flipbook frame whose keyed time has been reached (times ascending). ⚠ The
-    /// key is a FRACTION of the particle's own lifetime, not seconds — reading it as seconds
-    /// collapsed <c>large_30sec_fire</c> into a static ball. See <c>docs/org/puffer.md</c>.</summary>
+    // Latest flipbook frame whose keyed time has been reached (times ascending). ⚠ The
+    // key is a FRACTION of the particle's own lifetime, not seconds — reading it as seconds
+    // collapsed `large_30sec_fire` into a static ball. See `docs/org/puffer.md`.
     private float FrameFor(float lifeFrac)
     {
         var seq = _state.TextureSequence;

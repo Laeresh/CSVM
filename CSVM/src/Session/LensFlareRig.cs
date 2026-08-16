@@ -311,24 +311,24 @@ public sealed class LensFlareRig
         }
     }
 
-    /// <summary>Instant attack, timed release — the measured shape: the rig "pops in complete" when
-    /// the sun core enters frame and fades over ~0.1–0.15 s as it leaves.</summary>
+    // Instant attack, timed release — the measured shape: the rig "pops in complete" when
+    // the sun core enters frame and fades over ~0.1–0.15 s as it leaves.
     private static float Step(float current, bool on, double delta)
         => on ? 1f : Mathf.Max(0f, current - ((float)delta / FadeOutSeconds));
 
-    /// <summary>The <c>sun</c> node inside one rig's dome copy, or null when this chapter's horizon
-    /// carries none. Scoped to the dome deliberately: the name is short enough that an unscoped
-    /// search could pick up something unrelated elsewhere in the world.</summary>
+    // The `sun` node inside one rig's dome copy, or null when this chapter's horizon
+    // carries none. Scoped to the dome deliberately: the name is short enough that an unscoped
+    // search could pick up something unrelated elsewhere in the world.
     private static Node3D? FindSun(Node3D? horizon)
         => horizon?.FindChild("sun", recursive: true, owned: false) as Node3D;
 
-    /// <summary>One flare element: where it sits along the sun→screen-centre vector, how wide it is
-    /// at <see cref="RefHeight"/>, and how hard it is drawn. <c>Frac</c> 0 is the sun itself, 1 the
-    /// screen centre — Ring C at 2.0 is therefore as far past the centre as the sun is short of
-    /// it. Slot order is <c>init.gw</c>'s: slots 0–3 happen to ascend along the vector here,
-    /// corroborated by the textures' own appearance (lflare1 is a filled core glow, lflare3 the
-    /// crisp bright ring that Ring B is measured to be). That is a fact about this four-element
-    /// rig, NOT a decoded rule about the format.</summary>
+    // One flare element: where it sits along the sun→screen-centre vector, how wide it is
+    // at RefHeight, and how hard it is drawn. `Frac` 0 is the sun itself, 1 the
+    // screen centre — Ring C at 2.0 is therefore as far past the centre as the sun is short of
+    // it. Slot order is `init.gw`'s: slots 0–3 happen to ascend along the vector here,
+    // corroborated by the textures' own appearance (lflare1 is a filled core glow, lflare3 the
+    // crisp bright ring that Ring B is measured to be). That is a fact about this four-element
+    // rig, NOT a decoded rule about the format.
     private readonly record struct Element(float Frac, float DiaPx, float Intensity);
 
     private sealed class Instance

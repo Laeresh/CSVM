@@ -187,12 +187,12 @@ public static class AimAssist
     /// <summary>Local forward — the "no target found" answer a slot's target unwinds to.</summary>
     public static readonly Vector3 LocalForward = new(0f, 0f, -1f);
 
-    /// <summary>Two directions this close to parallel (or its negation) make Godot's
-    /// <see cref="Vector3.Slerp"/> throw "Argument is not normalized": its rotation axis comes
-    /// from a cross product that degenerates at 0° and 180° separation. <see cref="FlightModel"/>
-    /// guards its own VelocityDir slerp the same way, for the same crash — a plane holding
-    /// straight and level, or a gun line that has already caught up to its target, hits this
-    /// every frame.</summary>
+    // Two directions this close to parallel (or its negation) make Godot's
+    // Vector3.Slerp throw "Argument is not normalized": its rotation axis comes
+    // from a cross product that degenerates at 0° and 180° separation. FlightModel
+    // guards its own VelocityDir slerp the same way, for the same crash — a plane holding
+    // straight and level, or a gun line that has already caught up to its target, hits this
+    // every frame.
     private const float ParallelDot = 0.999f;
 
     /// <summary>The per-frame forget + catch-up pass, run once per active slot. Forget: past

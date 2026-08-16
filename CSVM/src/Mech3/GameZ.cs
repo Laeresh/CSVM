@@ -214,8 +214,8 @@ public sealed class GameZ
         return xf;
     }
 
-    /// <summary>Opens the first of <paramref name="names"/> the archive actually has —
-    /// how the models.json / meshes.json rename is absorbed.</summary>
+    // Opens the first of `names` the archive actually has —
+    // how the models.json / meshes.json rename is absorbed.
     private static Stream OpenEntry(ZipArchive zip, params string[] names)
     {
         foreach (var name in names)
@@ -565,12 +565,12 @@ public sealed class GameZ
         }
     }
 
-    /// <summary>textures.json — the unified shape's material texture table. Entries are
-    /// <c>{name}</c>; v0.6.1 wrote <c>{original, renamed}</c>, where "renamed" carried a
-    /// <c>name.-N</c> disambiguation for duplicate table entries. The fork drops that
-    /// machinery entirely (materials reference textures by index, so duplicates need no
-    /// unique name), which is why <see cref="TextureArchive"/>'s <c>.-N</c> fallback is
-    /// legacy-only. Both spellings are read so either tree loads.</summary>
+    // textures.json — the unified shape's material texture table. Entries are
+    // `{name}`; v0.6.1 wrote `{original, renamed}`, where "renamed" carried a
+    // `name.-N` disambiguation for duplicate table entries. The fork drops that
+    // machinery entirely (materials reference textures by index, so duplicates need no
+    // unique name), which is why TextureArchive's `.-N` fallback is
+    // legacy-only. Both spellings are read so either tree loads.
     private void ParseTextures(Stream stream)
     {
         using var doc = JsonDocument.Parse(BufferAll(stream));

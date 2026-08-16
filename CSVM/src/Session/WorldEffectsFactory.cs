@@ -445,8 +445,8 @@ public sealed class WorldEffectsFactory
                      + $"+ {restPoses.Count} wreck node(s) — crash runtime bound (scoped, no auto-start)");
     }
 
-    /// <summary>Every name a bind's own scope answers — the Godot node name and the gamez
-    /// <see cref="AnimRuntime.NameMeta"/> both, since name resolution reads the meta.</summary>
+    // Every name a bind's own scope answers — the Godot node name and the gamez
+    // AnimRuntime.NameMeta both, since name resolution reads the meta.
     private static HashSet<string> NamesUnder(Node root)
     {
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -484,28 +484,28 @@ public sealed class WorldEffectsFactory
             }
     }
 
-    /// <summary>Builds the one world-effects runtime — the world-scoped generalization of the
-    /// per-player crash runtime. It stages the impact/destruction effect templates under a
-    /// dedicated subtree so their names resolve locally without colliding with the world or the crash
-    /// roots, keeps a live <c>IEmitterFactory</c> over the session textures, and binds the closure of
-    /// <see cref="EffectCatalogue.EffectAnimNames"/>. <see cref="AnimRuntime.PlayEffectAt"/> then stages any of those
-    /// effects at a hit or death point: <c>ProjectilePool.EffectSink</c> calls it on a weapon impact,
-    /// and the world runtime's <see cref="AnimRuntime.ExternalEffect"/> routes a death's
-    /// CALL_ANIMATION here. Puffers parent at world level (the crash lesson) so the stage does
-    /// not suppress them.
-    ///
-    /// <para>The stage itself is visible and each template ROOT starts hidden
-    /// (<see cref="Mech3.Anim.TemplateStage{TNode}.Shown"/> reveals one for as long as an effect
-    /// plays on it): a template's meshes are half the effect — the rocket's authored per-type rings, the
-    /// fireball facades, the splash models — and hiding the whole stage would render none of
-    /// them. Inside a revealed root the data still decides what shows: every ring is reset
-    /// INACTIVE or opacity-OFF at bootstrap and its own def turns it on.</para>
-    ///
-    /// <para>⚠ Private — <see cref="EnsureWorldEffects"/> is the only way in. A caller that builds its
-    /// own copy alongside the cached one recreates the two-runtimes bug: a <c>--fly --destroy=</c> session's
-    /// direct call here, followed by the damage lab's own <see cref="EnsureWorldEffects"/> lookup
-    /// finding the cache empty, built two runtimes, each carrying <c>EffectPoolSlots</c> × ~38
-    /// template subtrees.</para></summary>
+    // Builds the one world-effects runtime — the world-scoped generalization of the
+    // per-player crash runtime. It stages the impact/destruction effect templates under a
+    // dedicated subtree so their names resolve locally without colliding with the world or the crash
+    // roots, keeps a live `IEmitterFactory` over the session textures, and binds the closure of
+    // EffectCatalogue.EffectAnimNames. AnimRuntime.PlayEffectAt then stages any of those
+    // effects at a hit or death point: `ProjectilePool.EffectSink` calls it on a weapon impact,
+    // and the world runtime's AnimRuntime.ExternalEffect routes a death's
+    // CALL_ANIMATION here. Puffers parent at world level (the crash lesson) so the stage does
+    // not suppress them.
+    //
+    // The stage itself is visible and each template ROOT starts hidden
+    // (Shown reveals one for as long as an effect
+    // plays on it): a template's meshes are half the effect — the rocket's authored per-type rings, the
+    // fireball facades, the splash models — and hiding the whole stage would render none of
+    // them. Inside a revealed root the data still decides what shows: every ring is reset
+    // INACTIVE or opacity-OFF at bootstrap and its own def turns it on.
+    //
+    // ⚠ Private — EnsureWorldEffects is the only way in. A caller that builds its
+    // own copy alongside the cached one recreates the two-runtimes bug: a `--fly --destroy=` session's
+    // direct call here, followed by the damage lab's own EnsureWorldEffects lookup
+    // finding the cache empty, built two runtimes, each carrying `EffectPoolSlots` × ~38
+    // template subtrees.
     private AnimRuntime BuildWorldEffectsRuntime(GameZ gamez, SceneBuilder worldScene,
         TextureArchive textures, AnimProgram worldProgram)
     {

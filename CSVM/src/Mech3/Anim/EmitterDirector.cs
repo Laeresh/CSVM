@@ -25,27 +25,27 @@ namespace CSVM.Mech3.Anim;
 /// a different node.</para></summary>
 public sealed class EmitterDirector
 {
-    /// <summary>One emitter per (puffer name, emitter node[, owning def]). Definitions re-assert
-    /// their PUFFER_STATE every loop iteration — C1's waterfall is [PufferState ×3, Loop{-1}] — so
-    /// the start has to be idempotent: re-asserting an already-running emitter must be a no-op, not
-    /// a second emitter. Safe by the data: all 2,774 compiled PUFFER_STATE events reference only
-    /// puffers their own def declares (measured install-wide).
-    ///
-    /// <para>⚠ The def is in the key only where <c>defScopedKeys</c> says so, and both cases are
-    /// measured. REQUIRED on the world-effects runtime: two effect defs can declare same-named
-    /// puffers on one host — the two damage-stage sputters both call theirs `black_smoke`, and a
-    /// shared key let the stage-1 smoke emitter mask the stage-2 fire build. FORBIDDEN on the world
-    /// runtime: C5's six `m_crane_go(#N)` twins all name-resolve `man_spark` onto one node, and
-    /// def-scoped keys there stacked six spark emitters on it and moved the `c5-city-night`
-    /// golden — the collapsed key doubles as the de-dup for that name-resolution artifact.</para>
-    ///
-    /// <para>The value carries the owning (def, anchor) so a stop can reach exactly the emitters a
-    /// stopped instance created.</para></summary>
+    // One emitter per (puffer name, emitter node[, owning def]). Definitions re-assert
+    // their PUFFER_STATE every loop iteration — C1's waterfall is [PufferState ×3, Loop{-1}] — so
+    // the start has to be idempotent: re-asserting an already-running emitter must be a no-op, not
+    // a second emitter. Safe by the data: all 2,774 compiled PUFFER_STATE events reference only
+    // puffers their own def declares (measured install-wide).
+    //
+    // ⚠ The def is in the key only where `defScopedKeys` says so, and both cases are
+    // measured. REQUIRED on the world-effects runtime: two effect defs can declare same-named
+    // puffers on one host — the two damage-stage sputters both call theirs `black_smoke`, and a
+    // shared key let the stage-1 smoke emitter mask the stage-2 fire build. FORBIDDEN on the world
+    // runtime: C5's six `m_crane_go(#N)` twins all name-resolve `man_spark` onto one node, and
+    // def-scoped keys there stacked six spark emitters on it and moved the `c5-city-night`
+    // golden — the collapsed key doubles as the de-dup for that name-resolution artifact.
+    //
+    // The value carries the owning (def, anchor) so a stop can reach exactly the emitters a
+    // stopped instance created.
     private readonly Dictionary<(string Name, Node3D Node, AnimDefinition? Def), Entry> _emitters = new();
 
-    /// <summary>The emitting emitters, each stamped with the INSTANT it started — the runtime
-    /// batch (one <see cref="AnimRuntime.Advance"/> pass) that dispatched its <c>PUFFER_STATE 1</c>.
-    /// <see cref="EndOn"/> reads the stamp; nothing else does. See <see cref="_instant"/>.</summary>
+    // The emitting emitters, each stamped with the INSTANT it started — the runtime
+    // batch (one AnimRuntime.Advance pass) that dispatched its `PUFFER_STATE 1`.
+    // EndOn reads the stamp; nothing else does. See _instant.
     private readonly List<(IEmitter Emitter, Node3D Node, ulong Started)> _active = new();
 
     // Each host node's emission point in its own frame (see AnimRuntime.VisualOriginOf) — zero for
@@ -339,11 +339,11 @@ public sealed class EmitterDirector
 
     private bool Emitting(IEmitter emitter) => _active.Any(a => a.Emitter == emitter);
 
-    /// <summary>The host's emission point in its own frame, cached per node. Zero — and the emission
-    /// point exactly the node origin, byte-identical with the pre-cache behaviour — for every node
-    /// whose origin sits inside its mesh bounds; the offset to the bounds centre for
-    /// absolute-modelled world subtrees, whose origin is the map corner. Local-frame, so
-    /// a motion-driven host carries its emission point along.</summary>
+    // The host's emission point in its own frame, cached per node. Zero — and the emission
+    // point exactly the node origin, byte-identical with the pre-cache behaviour — for every node
+    // whose origin sits inside its mesh bounds; the offset to the bounds centre for
+    // absolute-modelled world subtrees, whose origin is the map corner. Local-frame, so
+    // a motion-driven host carries its emission point along.
     private Vector3 HostOffsetOf(Node3D host, in Transform3D xform)
     {
         if (_hostOffsets.TryGetValue(host, out var offset))

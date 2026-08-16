@@ -129,11 +129,11 @@ public static class Zrdr
         }
     }
 
-    /// <summary>The names a requested reader file may be stored under. mech3ax v0.6.1
-    /// replaced the source extension ("vehicle.zrd" → "vehicle.json"); the fork appends
-    /// instead ("vehicle.zrd.json"), keeping the original extension visible. Content is
-    /// identical — all 222 readers verified semantically equal across the two — so only
-    /// the lookup needs to accept both.</summary>
+    // The names a requested reader file may be stored under. mech3ax v0.6.1
+    // replaced the source extension ("vehicle.zrd" → "vehicle.json"); the fork appends
+    // instead ("vehicle.zrd.json"), keeping the original extension visible. Content is
+    // identical — all 222 readers verified semantically equal across the two — so only
+    // the lookup needs to accept both.
     private static byte[] ReadEntry(string zrdrPath, string fileName)
     {
         byte[]? bytes = null;

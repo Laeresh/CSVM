@@ -184,8 +184,8 @@ public class AiSpawnJitterTests
         InBand(stock.RollTorque, ai.RollTorque, "roll_torque");
     }
 
-    /// <summary>A stats object with nothing loaded: enough to watch the arithmetic on, and the two
-    /// destroyable parts give the hull pair a sum to be derived from.</summary>
+    // A stats object with nothing loaded: enough to watch the arithmetic on, and the two
+    // destroyable parts give the hull pair a sum to be derived from.
     private static PlaneStats Authored()
     {
         var stats = new PlaneStats

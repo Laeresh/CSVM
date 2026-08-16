@@ -24,13 +24,12 @@ namespace CSVM.Mech3;
 /// </summary>
 internal static class WorldCollision
 {
-    /// <summary>Marks a subtree root faded below the collision threshold. A meta rather than a
-    /// static registry so it dies with the node — sessions build and free whole worlds.</summary>
+    // Marks a subtree root faded below the collision threshold. A meta rather than a
+    // static registry so it dies with the node — sessions build and free whole worlds.
     private const string FadedMeta = "csky_col_faded";
 
-    /// <summary>Live faded roots, so the common case (none) skips the ancestor walk. Only a
-    /// perf hint: a world freed mid-fade leaves it high, which costs a walk and nothing else.
-    /// </summary>
+    // Live faded roots, so the common case (none) skips the ancestor walk. Only a
+    // perf hint: a world freed mid-fade leaves it high, which costs a walk and nothing else.
     private static int _fadedRoots;
 
     /// <summary>Binds <paramref name="owner"/>'s colliders to its own visibility. Called once per

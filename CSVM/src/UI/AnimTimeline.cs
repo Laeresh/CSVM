@@ -297,20 +297,18 @@ public sealed partial class AnimTimeline : Control
         return null;
     }
 
-    /// <summary>
-    /// Lays a sequence's events out at their authored fire times, following the <b>documented</b>
-    /// scheduling rule (docs/formats/anim-definitions.md) in one linear pass — deliberately NOT
-    /// the runtime's <c>SequenceRunner</c>, so a runner bug diverges from this rather than
-    /// matching it. An event's own <c>start</c> gates it: "Animation"/"Sequence" is absolute
-    /// against the sequence start; anything else ("Event"/absent) is measured from the previous
-    /// event's completion (its fire time plus its run time). "Animation" is drawn against the
-    /// sequence start rather than the instance clock the runner gates it on, because a lane is an
-    /// AUTHORED layout and when a CALL_SEQUENCE will start an ON_CALL lane is not authored — the
-    /// fired ticks are what show where it actually landed. Control-flow events (LOOP/IF/…) are
-    /// placed at their gated time but take no time and do not advance the base, exactly as the
-    /// runner treats them. Loops are not unrolled — the fired ticks accumulate across passes and
-    /// show the period against this single authored layout.
-    /// </summary>
+    // Lays a sequence's events out at their authored fire times, following the documented
+    // scheduling rule (docs/formats/anim-definitions.md) in one linear pass — deliberately NOT
+    // the runtime's `SequenceRunner`, so a runner bug diverges from this rather than
+    // matching it. An event's own `start` gates it: "Animation"/"Sequence" is absolute
+    // against the sequence start; anything else ("Event"/absent) is measured from the previous
+    // event's completion (its fire time plus its run time). "Animation" is drawn against the
+    // sequence start rather than the instance clock the runner gates it on, because a lane is an
+    // AUTHORED layout and when a CALL_SEQUENCE will start an ON_CALL lane is not authored — the
+    // fired ticks are what show where it actually landed. Control-flow events (LOOP/IF/…) are
+    // placed at their gated time but take no time and do not advance the base, exactly as the
+    // runner treats them. Loops are not unrolled — the fired ticks accumulate across passes and
+    // show the period against this single authored layout.
     private Lane BuildLane(AnimDefinition def, AnimSequence seq)
     {
         var lane = new Lane { Name = seq.Name, OnCallOnly = seq.OnCallOnly };

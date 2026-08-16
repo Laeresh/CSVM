@@ -29,13 +29,13 @@ namespace CSVM.UI;
 /// </summary>
 public sealed partial class ClassOverlay : Node
 {
-    /// <summary>How much of the class colour is mixed over the object's real appearance. At 0.5 a
-    /// target reads as its class AND stays recognisable as itself — which is the point of the
-    /// overlay: a report names "the C2 water tower", and a flat red silhouette hides the tower.
-    /// <para>The mix happens inside the world's own shaders, per instance
-    /// (<see cref="SceneBuilder.TintParam"/>) — never through a <c>MaterialOverride</c>. See
-    /// <see cref="SceneBuilder.TintLine"/> for the three ways an overlay material got this
-    /// wrong.</para></summary>
+    // How much of the class colour is mixed over the object's real appearance. At 0.5 a
+    // target reads as its class AND stays recognisable as itself — which is the point of the
+    // overlay: a report names "the C2 water tower", and a flat red silhouette hides the tower.
+    // The mix happens inside the world's own shaders, per instance
+    // (SceneBuilder.TintParam) — never through a `MaterialOverride`. See
+    // SceneBuilder.TintLine for the three ways an overlay material got this
+    // wrong.
     private const float TintStrength = 0.5f;
 
     private static readonly Color DestructibleColor = new(0.95f, 0.15f, 0.15f);
@@ -143,10 +143,10 @@ public sealed partial class ClassOverlay : Node
         return string.Join("   ", parts);
     }
 
-    /// <summary>Which class a built world node's own mesh belongs to. <paramref name="owner"/> is
-    /// the structural node SceneBuilder built for it (the "mesh" MeshInstance3D's parent) — the
-    /// same node <see cref="DestructibleRegistry.Resolve"/> and <see cref="AnimRuntime.IndexMeta"/>
-    /// are keyed on.</summary>
+    // Which class a built world node's own mesh belongs to. `owner` is
+    // the structural node SceneBuilder built for it (the "mesh" MeshInstance3D's parent) — the
+    // same node DestructibleRegistry.Resolve and AnimRuntime.IndexMeta
+    // are keyed on.
     private string ClassOf(Node3D owner)
     {
         if (_runtime != null && _runtime.Destructibles.Resolve(owner) != null)

@@ -100,7 +100,7 @@ public sealed partial class StuntScoreboard : Control
         return l;
     }
 
-    /// <summary>Wraps a label in a CenterContainer so it centres in the VBox's full width.</summary>
+    // Wraps a label in a CenterContainer so it centres in the VBox's full width.
     private static CenterContainer Centered(Control c)
     {
         var cc = new CenterContainer();

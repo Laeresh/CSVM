@@ -83,8 +83,8 @@ public static class EffectCycles
         return applied;
     }
 
-    /// <summary>The engine's own resolution: the named node, then the first mesh at or under it
-    /// (depth-first, <c>FUN_00525d40</c>), then that mesh's first polygon's material.</summary>
+    // The engine's own resolution: the named node, then the first mesh at or under it
+    // (depth-first, `FUN_00525d40`), then that mesh's first polygon's material.
     private static (int Index, GameZMaterial Material)? FindMaterial(GameZ gamez, string nodeName)
     {
         int nodeIndex = gamez.Nodes.FindIndex(n => n.Name.Equals(nodeName, StringComparison.OrdinalIgnoreCase));

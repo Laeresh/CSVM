@@ -274,9 +274,9 @@ public sealed class SequenceRunner
     /// it.</summary>
     public bool Waiting => _waitingOn != null;
 
-    /// <summary>Has some branch of the innermost open IF chain already run? A malformed
-    /// chain (an ELSE with no IF) reads as "not taken" and writes are dropped, so bad
-    /// data degrades to running the branch instead of faulting.</summary>
+    // Has some branch of the innermost open IF chain already run? A malformed
+    // chain (an ELSE with no IF) reads as "not taken" and writes are dropped, so bad
+    // data degrades to running the branch instead of faulting.
     private bool Taken
     {
         get => _branchTaken.Count > 0 && _branchTaken[^1];
@@ -503,29 +503,27 @@ public sealed class SequenceRunner
     private static string? EventDisplayName(AnimEvent ev) =>
         ev.Data.Str("name") ?? ev.Data.Str("node") ?? ev.Data.Str("child");
 
-    /// <summary>
-    /// Gate the event at <see cref="_pc"/> on ITS OWN schedule.
-    ///
-    /// An event's START_TIME says when *that* event fires — see
-    /// <see cref="AnimEvent.StartOffset"/>: "Event" = since the previous event fired,
-    /// null = immediately after it. Do NOT read the offset off the event just FIRED
-    /// and apply it to its successor — that shifts **every sequence in the install**
-    /// by one slot: a timestamped event fires one slot early and its unstamped
-    /// partner one slot late.
-    ///
-    /// C1's `bowl` sign is the clean demonstration. Its compiled
-    /// sequence is nine strict `des_on`/`des_off` SWAP pairs plus an infinite Loop,
-    /// and only the FIRST of each pair carries a timestamp — the one-slot shift splits
-    /// every pair, leaving both variants lit at t=0 and then **nothing at all** for
-    /// each gap. Measured face-on at the sign: 38.0% of frames completely blank under
-    /// the shifted reading, 0% under this one — in-game the sign disables and
-    /// re-enables itself instead of flashing as the original does.
-    ///
-    /// Control-flow events (LOOP/IF/ELSEIF/…) do not advance <see cref="_base"/> —
-    /// they take no time — but they ARE gated, which is what gives the sign's trailing
-    /// `Loop {Event 1.2}` its inter-cycle pause (a Loop branch that hard-reset the
-    /// gate to zero would discard that offset outright).
-    /// </summary>
+    // Gate the event at _pc on ITS OWN schedule.
+    //
+    // An event's START_TIME says when *that* event fires — see
+    // AnimEvent.StartOffset: "Event" = since the previous event fired,
+    // null = immediately after it. Do NOT read the offset off the event just FIRED
+    // and apply it to its successor — that shifts **every sequence in the install**
+    // by one slot: a timestamped event fires one slot early and its unstamped
+    // partner one slot late.
+    //
+    // C1's `bowl` sign is the clean demonstration. Its compiled
+    // sequence is nine strict `des_on`/`des_off` SWAP pairs plus an infinite Loop,
+    // and only the FIRST of each pair carries a timestamp — the one-slot shift splits
+    // every pair, leaving both variants lit at t=0 and then **nothing at all** for
+    // each gap. Measured face-on at the sign: 38.0% of frames completely blank under
+    // the shifted reading, 0% under this one — in-game the sign disables and
+    // re-enables itself instead of flashing as the original does.
+    //
+    // Control-flow events (LOOP/IF/ELSEIF/…) do not advance _base —
+    // they take no time — but they ARE gated, which is what gives the sign's trailing
+    // `Loop {Event 1.2}` its inter-cycle pause (a Loop branch that hard-reset the
+    // gate to zero would discard that offset outright).
     private void SetDue()
     {
         if (_pc >= _seq.Events.Count)
@@ -577,21 +575,19 @@ public sealed class SequenceRunner
     // continues. Lands ON the ENDIF so it pops the frame.
     private int SkipToEnd(int from) => Scan(from, stopAtElse: false);
 
-    /// <summary>
-    /// Walk forward to the event a branch jump lands on. ⚠ Deliberately NOT nesting-aware:
-    /// the original walks event by event and breaks on the FIRST byte in its stop set, with
-    /// no depth counter — a false IF stops at ELSE/ELSEIF/ENDIF alike, while the ELSE/ELSEIF
-    /// fall-through stops at ENDIF only. Those two stop sets are the
-    /// <paramref name="stopAtElse"/> flag and must stay separate.
-    ///
-    /// <para>This is observable, not academic. 48 shipped sequences nest — every chapter's
-    /// <c>gunhit-*slug_gunhit</c> / <c>mag_gunhit-*</c>, played on every gun impact — all in one
-    /// shape: <c>If lod / If range / If weight … Elseif weight … Else Endif / Else Endif /
-    /// Endif</c>. A false OUTER condition lands on the INNER chain's ELSEIF and re-tests it, so
-    /// the impact light still fires on its 20% roll with the LOD gate and the 1 km range gate
-    /// both failed. A depth counter skips the whole thing instead. That reads like a compiler
-    /// bug in the original and it is what the original does; do not "fix" it.</para>
-    /// </summary>
+    // Walk forward to the event a branch jump lands on. ⚠ Deliberately NOT nesting-aware:
+    // the original walks event by event and breaks on the FIRST byte in its stop set, with
+    // no depth counter — a false IF stops at ELSE/ELSEIF/ENDIF alike, while the ELSE/ELSEIF
+    // fall-through stops at ENDIF only. Those two stop sets are the
+    // `stopAtElse` flag and must stay separate.
+    //
+    // This is observable, not academic. 48 shipped sequences nest — every chapter's
+    // `gunhit-*slug_gunhit` / `mag_gunhit-*`, played on every gun impact — all in one
+    // shape: `If lod / If range / If weight … Elseif weight … Else Endif / Else Endif /
+    // Endif`. A false OUTER condition lands on the INNER chain's ELSEIF and re-tests it, so
+    // the impact light still fires on its 20% roll with the LOD gate and the 1 km range gate
+    // both failed. A depth counter skips the whole thing instead. That reads like a compiler
+    // bug in the original and it is what the original does; do not "fix" it.
     private int Scan(int from, bool stopAtElse)
     {
         for (int i = from + 1; i < _seq.Events.Count; i++)

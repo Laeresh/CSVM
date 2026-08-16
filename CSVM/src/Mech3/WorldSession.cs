@@ -411,12 +411,12 @@ public sealed class WorldSession
         return s;
     }
 
-    /// <summary>Stamps <see cref="SceneBuilder.ClutterColor"/> onto every clutter draw under
-    /// <paramref name="clutter"/> as a full-strength <see cref="SceneBuilder.TintParam"/>, and
-    /// returns how many it painted. Per instance rather than per material because both clutter
-    /// paths are MultiMeshes sharing the placed world's materials — the sprite cards' own shader
-    /// and, for the 3D decorations, literally the world's — so a material-level colour would
-    /// repaint the ground with them.</summary>
+    // Stamps SceneBuilder.ClutterColor onto every clutter draw under
+    // `clutter` as a full-strength SceneBuilder.TintParam, and
+    // returns how many it painted. Per instance rather than per material because both clutter
+    // paths are MultiMeshes sharing the placed world's materials — the sprite cards' own shader
+    // and, for the 3D decorations, literally the world's — so a material-level colour would
+    // repaint the ground with them.
     private static int TintClutterBlue(Node3D clutter)
     {
         int painted = 0;

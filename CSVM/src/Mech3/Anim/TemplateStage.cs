@@ -549,16 +549,16 @@ public sealed class TemplateStage<TNode>
         _applyResetStates(subtree);
     }
 
-    /// <summary>Whether an ended effect's template may go dark now: nothing is still animating the
-    /// copy, and no other live instance is playing on it.</summary>
+    // Whether an ended effect's template may go dark now: nothing is still animating the
+    // copy, and no other live instance is playing on it.
     private bool ReadyToHide(AnimDefinition def, TNode? anchor)
     {
         var roots = RootsOf(def, anchor);
         return !_stillAnimated(roots) && !SharedWithLiveInstance(def, anchor, roots);
     }
 
-    /// <summary>The slot <see cref="AssignCallerSlot"/> gave this (template root, anchor) pair,
-    /// or -1 when it never claimed one.</summary>
+    // The slot AssignCallerSlot gave this (template root, anchor) pair,
+    // or -1 when it never claimed one.
     private int AssignedCallerSlot(AnimDefinition callee, TNode? anchor)
     {
         if (anchor == null || !_isValid(anchor) || string.IsNullOrEmpty(callee.Name))

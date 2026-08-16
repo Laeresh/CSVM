@@ -132,8 +132,8 @@ public static class WeaponBench
         public required int PylonMounts { get; init; }
     }
 
-    /// <summary>One place on the airframe the bench fires from: a firable gun group's muzzles or a
-    /// single pylon.</summary>
+    // One place on the airframe the bench fires from: a firable gun group's muzzles or a
+    // single pylon.
     private sealed class Mount
     {
         public Mount(string label, IReadOnlyList<Node3D> nodes)

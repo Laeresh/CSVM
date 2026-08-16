@@ -426,8 +426,8 @@ public sealed class AiModeMachine
         Transition(AiMode.Stunned, FormattableString.Invariant($"for {StunRecoveryIntervalS:0.0} s"));
     }
 
-    /// <summary>Evade needs an initial course even when entered externally: away from the
-    /// threat, offset randomly (invented behaviour — the decode is thin past "Evading.").</summary>
+    // Evade needs an initial course even when entered externally: away from the
+    // threat, offset randomly (invented behaviour — the decode is thin past "Evading.").
     private void StartPlainEvade(Vector3 threatDir)
     {
         _evadeRemaining = EvadeDurationS;
@@ -443,8 +443,8 @@ public sealed class AiModeMachine
         Transition(AiMode.Evade, "breaking off");
     }
 
-    /// <summary>Where a finished reaction goes back to: the prior mode when its conditions still
-    /// hold, patrol otherwise.</summary>
+    // Where a finished reaction goes back to: the prior mode when its conditions still
+    // hold, patrol otherwise.
     private void ReturnFromReaction(Vector3 pos, Vector3? targetPos)
     {
         bool targetInRange = targetPos is { } t && pos.DistanceTo(t) <= ActivationRange;
@@ -456,13 +456,13 @@ public sealed class AiModeMachine
         Transition(back, "reaction complete");
     }
 
-    /// <summary>The rubber-band assist's transitions. Decoded: the mode, its "let the
-    /// player catch up" intent (the design's Sixth Sense pursued-side role) and the
-    /// <c>sixth_sense_factor</c> ease-off constant. Invented, named on the constants above: the
-    /// pursued-test cones, the fallen-behind / caught-up distances and the anti-chatter hold.
-    /// Pursue eases into lay off when a chasing human target has fallen behind; lay off returns
-    /// to pursue when the pursuer catches up or stops chasing. <see cref="AssistEnabled"/>
-    /// false never enters and immediately releases.</summary>
+    // The rubber-band assist's transitions. Decoded: the mode, its "let the
+    // player catch up" intent (the design's Sixth Sense pursued-side role) and the
+    // `sixth_sense_factor` ease-off constant. Invented, named on the constants above: the
+    // pursued-test cones, the fallen-behind / caught-up distances and the anti-chatter hold.
+    // Pursue eases into lay off when a chasing human target has fallen behind; lay off returns
+    // to pursue when the pursuer catches up or stops chasing. AssistEnabled
+    // false never enters and immediately releases.
     private void UpdateLayOff(Vector3 pos, Vector3 velocity, Vector3 targetPos,
         Vector3? targetVelocity, bool targetIsHuman, float dt)
     {
@@ -494,13 +494,13 @@ public sealed class AiModeMachine
         }
     }
 
-    /// <summary>The pursued test (invented geometry): the target sits behind the AI — within
-    /// <see cref="LayOffRearConeDeg"/> of the tail axis — and its velocity points at the AI
-    /// within <see cref="LayOffPursuerConeDeg"/>, i.e. it is actually giving chase. The tail
-    /// axis is the NOSE attitude when the caller supplies one, the velocity only as a fallback:
-    /// mid-maneuver the two diverge, and the velocity reading let the test pass for a frame with
-    /// the enemy positionally behind the player (user-reported). An unknown target velocity can
-    /// never read as pursuit.</summary>
+    // The pursued test (invented geometry): the target sits behind the AI — within
+    // LayOffRearConeDeg of the tail axis — and its velocity points at the AI
+    // within LayOffPursuerConeDeg, i.e. it is actually giving chase. The tail
+    // axis is the NOSE attitude when the caller supplies one, the velocity only as a fallback:
+    // mid-maneuver the two diverge, and the velocity reading let the test pass for a frame with
+    // the enemy positionally behind the player (user-reported). An unknown target velocity can
+    // never read as pursuit.
     private bool IsPursuedBy(Vector3 pos, Vector3 velocity, Vector3 targetPos,
         Vector3? targetVelocity)
     {
@@ -518,10 +518,10 @@ public sealed class AiModeMachine
         return chaseCos >= Mathf.Cos(Mathf.DegToRad(LayOffPursuerConeDeg));
     }
 
-    /// <summary>The obstacle-closure override (invented probe geometry, marked above): two rays
-    /// along the velocity lookahead, every <see cref="ProbeIntervalS"/>, seeing world and other
-    /// aircraft alike (decoded; the caster alone is excluded). Blocked → avoid crash (dropping a
-    /// running maneuver); clear for <see cref="ClearProbesToExit"/> rounds → back.</summary>
+    // The obstacle-closure override (invented probe geometry, marked above): two rays
+    // along the velocity lookahead, every ProbeIntervalS, seeing world and other
+    // aircraft alike (decoded; the caster alone is excluded). Blocked → avoid crash (dropping a
+    // running maneuver); clear for ClearProbesToExit rounds → back.
     private void UpdateAvoidCrash(Vector3 pos, Vector3 velocity, float dt)
     {
         if (ProbeBlocked is not { } probe)
@@ -554,8 +554,8 @@ public sealed class AiModeMachine
         }
     }
 
-    /// <summary>An eligible library maneuver, signature entries weighted up, one seeded draw;
-    /// null when no library is set or nothing passes the natural-touch cull.</summary>
+    // An eligible library maneuver, signature entries weighted up, one seeded draw;
+    // null when no library is set or nothing passes the natural-touch cull.
     private Maneuver? PickManeuver()
     {
         if (Library is not { Count: > 0 } library)

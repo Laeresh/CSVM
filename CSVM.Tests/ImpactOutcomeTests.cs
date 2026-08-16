@@ -20,14 +20,14 @@ namespace CSVM.Tests;
 /// </summary>
 public class ImpactOutcomeTests
 {
-    /// <summary>The surface ids a round can actually strike in M3, which is a measurement rather
-    /// than a choice: the seven ids some shipped material carries somewhere in the eight chapters
-    /// (<c>analysis/surface-classification/FINDINGS.md</c>, 2026-08-11 per-chapter area table:
-    /// <c>default</c>(0), <c>water</c>(1), <c>fire</c>(5), <c>airstrip</c>(8),
-    /// <c>buildings</c>(11), <c>dzone</c>(12), <c>dirt</c>(13)) plus <c>player</c>(6), which
-    /// <c>ProjectilePool.SurfaceIdOf</c> answers for a struck <c>AircraftBody</c>. The remaining
-    /// six ids are carried by no material and by no body, so a case for them would be invented
-    /// coverage — <c>quicksand</c>(3) included, even though three weapons author a row for it.</summary>
+    // The surface ids a round can actually strike in M3, which is a measurement rather
+    // than a choice: the seven ids some shipped material carries somewhere in the eight chapters
+    // (`analysis/surface-classification/FINDINGS.md`, 2026-08-11 per-chapter area table:
+    // `default`(0), `water`(1), `fire`(5), `airstrip`(8),
+    // `buildings`(11), `dzone`(12), `dirt`(13)) plus `player`(6), which
+    // `ProjectilePool.SurfaceIdOf` answers for a struck `AircraftBody`. The remaining
+    // six ids are carried by no material and by no body, so a case for them would be invented
+    // coverage — `quicksand`(3) included, even though three weapons author a row for it.
     private static readonly int[] ReachableSurfaceIds =
     {
         SurfaceRegistry.Default, SurfaceRegistry.Water, 5, 8, SurfaceRegistry.Player,

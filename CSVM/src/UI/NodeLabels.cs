@@ -129,18 +129,18 @@ public sealed partial class NodeLabels : Node
         return false;
     }
 
-    /// <summary>Where on the node to hang its label, in node-local space: the centre of its
-    /// mesh geometry rather than the node origin.
-    ///
-    /// <para>This matters twice over. A gamez node's origin is frequently nowhere near the
-    /// thing it draws, so an origin-anchored name floats off in space — useless when the whole
-    /// job is reading the name of an object you are looking at. And a great many world nodes
-    /// share an origin (group/pivot nodes sitting at the world origin), so origin anchoring
-    /// collapsed them all into one screen cell and the de-clutter threw nearly all of them
-    /// away: C1 in flight showed 6 labels out of 183 candidates.</para>
-    ///
-    /// <para>Computed once per scan in LOCAL space and transformed per refresh, so it follows
-    /// a node that moves (aircraft parts) without being recomputed.</para></summary>
+    // Where on the node to hang its label, in node-local space: the centre of its
+    // mesh geometry rather than the node origin.
+    //
+    // This matters twice over. A gamez node's origin is frequently nowhere near the
+    // thing it draws, so an origin-anchored name floats off in space — useless when the whole
+    // job is reading the name of an object you are looking at. And a great many world nodes
+    // share an origin (group/pivot nodes sitting at the world origin), so origin anchoring
+    // collapsed them all into one screen cell and the de-clutter threw nearly all of them
+    // away: C1 in flight showed 6 labels out of 183 candidates.
+    //
+    // Computed once per scan in LOCAL space and transformed per refresh, so it follows
+    // a node that moves (aircraft parts) without being recomputed.
     private static Vector3 LocalAnchor(Node3D n)
     {
         var sum = Vector3.Zero;
@@ -202,9 +202,9 @@ public sealed partial class NodeLabels : Node
         return h;
     }
 
-    /// <summary>Re-walks the tree for labellable nodes. Redone periodically because the flight
-    /// scene is not static — MapEdgeExtender adds and removes border tiles on cell crossings,
-    /// and a one-shot walk would label ghosts and miss new ground.</summary>
+    // Re-walks the tree for labellable nodes. Redone periodically because the flight
+    // scene is not static — MapEdgeExtender adds and removes border tiles on cell crossings,
+    // and a one-shot walk would label ghosts and miss new ground.
     private void Rescan()
     {
         _candidates.Clear();
@@ -292,9 +292,9 @@ public sealed partial class NodeLabels : Node
                         + $" within {Radius:0} m";
     }
 
-    /// <summary>Reserves this label's screen cell, or reports the spot as already taken.
-    /// Checking the 3×3 neighbourhood is what guarantees a real minimum gap; testing only the
-    /// own cell would happily place two labels a pixel apart across a cell boundary.</summary>
+    // Reserves this label's screen cell, or reports the spot as already taken.
+    // Checking the 3×3 neighbourhood is what guarantees a real minimum gap; testing only the
+    // own cell would happily place two labels a pixel apart across a cell boundary.
     private bool Claim(Vector2 screen)
     {
         int cx = Mathf.FloorToInt(screen.X / GapX), cy = Mathf.FloorToInt(screen.Y / GapY);

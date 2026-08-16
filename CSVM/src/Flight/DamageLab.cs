@@ -242,8 +242,8 @@ public sealed partial class DamageLab : Node
         }
     }
 
-    /// <summary>Threshold-line shorthand: pdpanel4 → p4 (the wired torn-skin flip),
-    /// leftwing_damage_yellow → yellow (the cockpit-indicator cycle).</summary>
+    // Threshold-line shorthand: pdpanel4 → p4 (the wired torn-skin flip),
+    // leftwing_damage_yellow → yellow (the cockpit-indicator cycle).
     private static string ShortAnim(string part, string anim)
     {
         if (anim.StartsWith("pdpanel", StringComparison.OrdinalIgnoreCase))
@@ -259,8 +259,8 @@ public sealed partial class DamageLab : Node
         return label;
     }
 
-    /// <summary>Moves one slider to match the model's own value, no-op (and reports no movement)
-    /// when it is already there — the tolerance keeps a settled read-back from chattering.</summary>
+    // Moves one slider to match the model's own value, no-op (and reports no movement)
+    // when it is already there — the tolerance keeps a settled read-back from chattering.
     private static bool SyncSlider(HSlider slider, float frac)
     {
         double want = Math.Round(frac * 100.0);
@@ -270,11 +270,10 @@ public sealed partial class DamageLab : Node
         return true;
     }
 
-    /// <summary>Pulls the target's own damage state back into the sliders — in flight that is
-    /// every hit taken while the panel is up, and the respawn that repairs them. Sliders under
-    /// the mouse are left alone: a drag that fights the read-back is unusable. The visuals are
-    /// NOT re-derived here; whoever moved the model (FlightController's hit path) already did.
-    /// </summary>
+    // Pulls the target's own damage state back into the sliders — in flight that is
+    // every hit taken while the panel is up, and the respawn that repairs them. Sliders under
+    // the mouse are left alone: a drag that fights the read-back is unusable. The visuals are
+    // NOT re-derived here; whoever moved the model (FlightController's hit path) already did.
     private void SyncFromTarget()
     {
         if (_dragging > 0)
@@ -297,10 +296,10 @@ public sealed partial class DamageLab : Node
         _applied = TargetAnims(fractions);
     }
 
-    /// <summary>Shows or hides the whole lab — slider panel and HUD gauges together. H is
-    /// "is the damage lab here", not "is one of its two layers here"; the panel's own
-    /// checkbox still controls the gauges independently while the lab is up, and its state
-    /// is remembered across a hide/show.</summary>
+    // Shows or hides the whole lab — slider panel and HUD gauges together. H is
+    // "is the damage lab here", not "is one of its two layers here"; the panel's own
+    // checkbox still controls the gauges independently while the lab is up, and its state
+    // is remembered across a hide/show.
     private void SetLabVisible(bool on)
     {
         _ui.Visible = on;
@@ -386,7 +385,7 @@ public sealed partial class DamageLab : Node
         UI.PanelFocus.Strip(_ui, "damage lab: panel built");
     }
 
-    /// <summary>One slider, the shape shared by a part's armor and health controls.</summary>
+    // One slider, the shape shared by a part's armor and health controls.
     private HSlider AddPartSlider(VBoxContainer box, string partName)
     {
         var slider = new HSlider
@@ -406,9 +405,9 @@ public sealed partial class DamageLab : Node
         return slider;
     }
 
-    /// <summary>The combined armor+HP fraction the gauge dial key off (used before the panel
-    /// exists, e.g. GaugeCluster's own PartFraction callback assigned in _Ready — safe because
-    /// it only ever runs once BuildUi has populated the sliders).</summary>
+    // The combined armor+HP fraction the gauge dial key off (used before the panel
+    // exists, e.g. GaugeCluster's own PartFraction callback assigned in _Ready — safe because
+    // it only ever runs once BuildUi has populated the sliders).
     private float CombinedFractionOf(string partName) =>
         _healthSliders.ContainsKey(partName) ? ReadSliders()[partName].Combined : 1f;
 
@@ -447,9 +446,9 @@ public sealed partial class DamageLab : Node
             }
     }
 
-    /// <summary>Writes the sliders through to the target. The visual rebuild (Reset +
-    /// re-crossing every threshold) only runs when the set of crossed anims actually
-    /// changed — mid-band drags just move a pool and update the readouts.</summary>
+    // Writes the sliders through to the target. The visual rebuild (Reset +
+    // re-crossing every threshold) only runs when the set of crossed anims actually
+    // changed — mid-band drags just move a pool and update the readouts.
     private void Reapply()
     {
         var fractions = ReadSliders();
@@ -478,9 +477,9 @@ public sealed partial class DamageLab : Node
         _target.Apply(fractions, rebuild);
     }
 
-    /// <summary>The anim set the current fractions demand — mirrors DamageVisuals'
-    /// crossing rule (an entry applies when the combined fraction ≤ its threshold; the
-    /// def-level anims read the worst part).</summary>
+    // The anim set the current fractions demand — mirrors DamageVisuals'
+    // crossing rule (an entry applies when the combined fraction ≤ its threshold; the
+    // def-level anims read the worst part).
     private HashSet<string> TargetAnims(Dictionary<string, PartFrac> fractions)
     {
         var target = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

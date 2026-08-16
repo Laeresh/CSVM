@@ -170,16 +170,16 @@ public sealed partial class MarkerHud : Control
         }
     }
 
-    /// <summary>"Danger Zone [Fly Through] -" — the category/action prefix (the description goes on
-    /// the next line), degrading gracefully if a part is absent.</summary>
+    // "Danger Zone [Fly Through] -" — the category/action prefix (the description goes on
+    // the next line), degrading gracefully if a part is absent.
     private static string MarkerHead(StuntZone z) =>
         z.Category.Length > 0 && z.Help.Length > 0 ? $"{z.Category} [{z.Help}] -"
         : z.Help.Length > 0 ? $"[{z.Help}] -"
         : z.Category.Length > 0 ? $"{z.Category} -"
         : "";
 
-    /// <summary>Distance in the HUD's imperial units (feet under a mile, miles above — matching the
-    /// altimeter/speedometer; TUNE — the original's marker-distance unit is unverified).</summary>
+    // Distance in the HUD's imperial units (feet under a mile, miles above — matching the
+    // altimeter/speedometer; TUNE — the original's marker-distance unit is unverified).
     private static string FormatDistance(float meters)
     {
         float ft = meters * 3.28084f;
@@ -192,10 +192,10 @@ public sealed partial class MarkerHud : Control
         _flashText = z.Description.Length > 0 ? $"{z.Description} — CLEARED" : "DANGER ZONE CLEARED";
     }
 
-    /// <summary>The banner shown in this player's pane once they have cleared every zone. Solo: the
-    /// run is simply over (the results board is coming up in the same pane). In a race:
-    /// their placing + finish time, held while the rest of the field still flies — the shared
-    /// ranked board only appears when the last pilot is in.</summary>
+    // The banner shown in this player's pane once they have cleared every zone. Solo: the
+    // run is simply over (the results board is coming up in the same pane). In a race:
+    // their placing + finish time, held while the rest of the field still flies — the shared
+    // ranked board only appears when the last pilot is in.
     private string[] CompleteBanner()
     {
         if (Race?.Of(PlayerIndex) is not { } me)
@@ -213,8 +213,8 @@ public sealed partial class MarkerHud : Control
         return lines.ToArray();
     }
 
-    /// <summary>Relative bearing of the zone from the plane's heading in clock hours (12 = ahead,
-    /// 3 = right, 6 = behind, 9 = left) — the original's "N o'clock" suffix.</summary>
+    // Relative bearing of the zone from the plane's heading in clock hours (12 = ahead,
+    // 3 = right, 6 = behind, 9 = left) — the original's "N o'clock" suffix.
     private int ClockHour(StuntZone z)
     {
         var d = z.Position - PlanePos;
@@ -224,7 +224,7 @@ public sealed partial class MarkerHud : Control
         return h == 0 ? 12 : h;
     }
 
-    /// <summary>Screen-edge point along <paramref name="dir"/> from centre, inset by the margin.</summary>
+    // Screen-edge point along `dir` from centre, inset by the margin.
     private Vector2 EdgePoint(Vector2 center, Vector2 dir, float margin)
     {
         float hx = Size.X / 2f - margin, hy = Size.Y / 2f - margin;
@@ -250,9 +250,9 @@ public sealed partial class MarkerHud : Control
         DrawArc(p, r, 0f, Mathf.Tau, 20, HudBlue, 1.5f);
     }
 
-    /// <summary>Draws centred lines (each horizontally centred at <paramref name="anchor"/>.X),
-    /// with a 1 px drop shadow. Vertically the block is centred on <paramref name="anchor"/>.Y
-    /// unless <paramref name="topAnchored"/>, in which case anchor.Y is its top.</summary>
+    // Draws centred lines (each horizontally centred at `anchor`.X),
+    // with a 1 px drop shadow. Vertically the block is centred on `anchor`.Y
+    // unless `topAnchored`, in which case anchor.Y is its top.
     private void DrawLines(Font font, Vector2 anchor, string[] lines, int fontSize, Color color,
         bool topAnchored = false)
     {
@@ -269,8 +269,8 @@ public sealed partial class MarkerHud : Control
         }
     }
 
-    /// <summary>Like <see cref="DrawLines"/> (vertically centred) but keeps the whole block within
-    /// the screen margins — the off-screen edge marker never spills off a corner.</summary>
+    // Like DrawLines (vertically centred) but keeps the whole block within
+    // the screen margins — the off-screen edge marker never spills off a corner.
     private void DrawLinesClamped(Font font, Vector2 center, string[] lines, int fontSize, Color color)
     {
         float lineH = font.GetHeight(fontSize);

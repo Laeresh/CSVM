@@ -250,9 +250,9 @@ public sealed class MarkerRig
             CultureInfo.InvariantCulture, out ordinal) && ordinal > 0;
     }
 
-    /// <summary>The mirror partner ordinal of a firepoint: gun pairs are consecutive
-    /// (fp1,fp2)(fp3,fp4)…, so odd n pairs with n+1 and even n with n−1. The Kestrel's fp7 is the
-    /// one centreline mount with no fp8 — its partner simply isn't in the rig.</summary>
+    // The mirror partner ordinal of a firepoint: gun pairs are consecutive
+    // (fp1,fp2)(fp3,fp4)…, so odd n pairs with n+1 and even n with n−1. The Kestrel's fp7 is the
+    // one centreline mount with no fp8 — its partner simply isn't in the rig.
     private static int MirrorPartner(int ordinal) => (ordinal % 2 == 1) ? ordinal + 1 : ordinal - 1;
 
     private static string Vec(Vector3 v) => string.Format(CultureInfo.InvariantCulture,

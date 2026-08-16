@@ -116,10 +116,10 @@ public sealed class HudFont
         }
     }
 
-    /// <summary>Loads one atlas: keys the black background to transparent, and (when
-    /// <paramref name="glyphs"/> is given) segments the ink into per-code source rects by walking
-    /// columns — each maximal run of inked columns is the next glyph, assigned to codes from
-    /// <see cref="FirstCode"/> upward. Returns null if the file is missing or unreadable.</summary>
+    // Loads one atlas: keys the black background to transparent, and (when
+    // `glyphs` is given) segments the ink into per-code source rects by walking
+    // columns — each maximal run of inked columns is the next glyph, assigned to codes from
+    // FirstCode upward. Returns null if the file is missing or unreadable.
     private static Texture2D? LoadAtlas(string path, (int X, int W)[]? glyphs,
         out int runCount, out int top, out int height)
     {

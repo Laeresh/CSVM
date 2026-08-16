@@ -265,8 +265,8 @@ public class AiTargetRankingTests
         Assert.Equal(0, thirds);
     }
 
-    /// <summary>A candidate ahead of the shooter with every ±0.2 term on the same arm as its
-    /// peers: in the front arc, above the shooter (level counts as above), nose pointing away.</summary>
+    // A candidate ahead of the shooter with every ±0.2 term on the same arm as its
+    // peers: in the front arc, above the shooter (level counts as above), nose pointing away.
     private static RankedTargetCandidate Ahead(float distance, bool isPlayer = false,
         float bias = 0f, int attackers = 0, float xOffset = 0f) => new()
         {

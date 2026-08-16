@@ -68,13 +68,13 @@ public sealed class InstantActionRuntime
     /// never returns.</summary>
     public const float ActorVolumeRadiusM = 10000f;
 
-    /// <summary>The five hand-authored pilot personalities a wave member's nine-stat vector is
-    /// rolled from, <c>row = draw % 5</c> per aircraft (docs/formats/instant-action.md "A wave
-    /// enemy's nine pilot stats are drawn at random from a table of five, not from its skill" —
-    /// <c>FUN_0045a280</c>, <c>0x00607a3c</c>). Same field order/scale as
-    /// <see cref="InstantActionDef.AceStats"/>: <c>dare_devil, natural_touch, sixth_sense,
-    /// dead_eye, quick_draw, steady_hand, stun_recovery, talker, constitution</c>. Row 4 is a
-    /// flat 4 across every stat; the other four are hand-authored personalities.</summary>
+    // The five hand-authored pilot personalities a wave member's nine-stat vector is
+    // rolled from, `row = draw % 5` per aircraft (docs/formats/instant-action.md "A wave
+    // enemy's nine pilot stats are drawn at random from a table of five, not from its skill" —
+    // `FUN_0045a280`, `0x00607a3c`). Same field order/scale as
+    // InstantActionDef.AceStats: `dare_devil, natural_touch, sixth_sense,
+    // dead_eye, quick_draw, steady_hand, stun_recovery, talker, constitution`. Row 4 is a
+    // flat 4 across every stat; the other four are hand-authored personalities.
     private static readonly int[][] PilotPersonalities =
     {
         new[] { 5, 7, 5, 3, 2, 1, 4, 4, 4 },

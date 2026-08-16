@@ -108,8 +108,8 @@ public sealed class ManeuverExecutor
         };
     }
 
-    /// <summary>The rotation from the current attitude to the target as a body-frame
-    /// axis·angle vector (radians), whose components line up with the stick axes.</summary>
+    // The rotation from the current attitude to the target as a body-frame
+    // axis·angle vector (radians), whose components line up with the stick axes.
     private static Vector3 BodyFrameError(Basis attitude, Basis target)
     {
         var q = (attitude.Orthonormalized().Inverse() * target).GetRotationQuaternion();
@@ -121,8 +121,8 @@ public sealed class ManeuverExecutor
         return len < 1e-6f ? Vector3.Zero : axis * (angle / len);
     }
 
-    /// <summary>The step's target attitude in the world frame: entry frame · yaw · pitch · roll
-    /// (degrees; body axes — pitch +up about X, yaw +left about Y, roll +left about Z).</summary>
+    // The step's target attitude in the world frame: entry frame · yaw · pitch · roll
+    // (degrees; body axes — pitch +up about X, yaw +left about Y, roll +left about Z).
     private Basis TargetBasis(ManeuverStep step) =>
         _reference
         * new Basis(Vector3.Up, Mathf.DegToRad(step.YawDeg))

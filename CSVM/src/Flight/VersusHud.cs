@@ -329,8 +329,8 @@ public sealed partial class VersusHud : Control
         return $"{total / 60}:{total % 60:00}";
     }
 
-    /// <summary>Screen-edge point along <paramref name="dir"/> from centre, inset by the margin —
-    /// MarkerHud's EdgePoint verbatim.</summary>
+    // Screen-edge point along `dir` from centre, inset by the margin —
+    // MarkerHud's EdgePoint verbatim.
     private static Vector2 EdgePoint(Vector2 center, Vector2 dir, float margin)
     {
         float hx = center.X - margin, hy = center.Y - margin;
@@ -346,17 +346,17 @@ public sealed partial class VersusHud : Control
         return $"{time}{kd}   {LeaderText(match)}";
     }
 
-    /// <summary>The sole rank-1 player's tag, or "—" while tied (including 0-0 before the first
-    /// kill — nobody leads yet).</summary>
+    // The sole rank-1 player's tag, or "—" while tied (including 0-0 before the first
+    // kill — nobody leads yet).
     private string LeaderText(VersusMatch match)
     {
         var leaders = match.Standings().Where(st => st.Rank == 1).ToList();
         return leaders.Count == 1 ? $"LEADER {SplitScreen.PlayerTag(leaders[0].PlayerIndex)}" : "LEADER —";
     }
 
-    /// <summary>One opponent's marker: on screen, their tag floats just above the projected
-    /// point; off screen (or behind), an edge arrow + "N o'clock" bearing — MarkerHud's on-screen/
-    /// edge-arrow branch, one instance per opponent instead of one stunt zone.</summary>
+    // One opponent's marker: on screen, their tag floats just above the projected
+    // point; off screen (or behind), an edge arrow + "N o'clock" bearing — MarkerHud's on-screen/
+    // edge-arrow branch, one instance per opponent instead of one stunt zone.
     private void DrawOpponent(Font font, Vector3 pos, Color color, string tag, float s, int fontSize,
         int stagger = 0)
     {
@@ -385,9 +385,9 @@ public sealed partial class VersusHud : Control
             $"{tag}  {ClockHour(pos)} o'clock", color, fontSize);
     }
 
-    /// <summary>Relative bearing of <paramref name="targetPos"/> from this pilot's own heading in
-    /// clock hours (12 = ahead, 3 = right, 6 = behind, 9 = left) — MarkerHud.ClockHour over an
-    /// opponent instead of a danger zone.</summary>
+    // Relative bearing of `targetPos` from this pilot's own heading in
+    // clock hours (12 = ahead, 3 = right, 6 = behind, 9 = left) — MarkerHud.ClockHour over an
+    // opponent instead of a danger zone.
     private int ClockHour(Vector3 targetPos)
     {
         var d = targetPos - PlanePos;
@@ -416,8 +416,8 @@ public sealed partial class VersusHud : Control
         DrawString(font, p, text, HorizontalAlignment.Left, -1f, fontSize, color);
     }
 
-    /// <summary>Draws one horizontally-centred line at <paramref name="anchor"/>.X, top-anchored
-    /// at .Y, with a 1 px drop shadow — MarkerHud's DrawLines, single-line.</summary>
+    // Draws one horizontally-centred line at `anchor`.X, top-anchored
+    // at .Y, with a 1 px drop shadow — MarkerHud's DrawLines, single-line.
     private void DrawCentered(Font font, Vector2 anchor, string text, int fontSize, Color color)
     {
         float ascent = font.GetAscent(fontSize);

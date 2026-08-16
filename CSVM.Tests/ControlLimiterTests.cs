@@ -36,7 +36,7 @@ public class ControlLimiterTests
 {
     private const float Dt = 1f / 60f;
 
-    /// <summary>The executable's compiled fallback <c>highGs</c> — NOT what this install authors.</summary>
+    // The executable's compiled fallback `highGs` — NOT what this install authors.
     private const float FallbackHighGStart = 5f;
 
     private static readonly string[] AllPlanes =
@@ -46,10 +46,10 @@ public class ControlLimiterTests
         "player_peacemaker",
     };
 
-    /// <summary>The manoeuvres that make G and α, at full throttle: the sustained max-performance
-    /// pull at cruise and again entered fast (G grows with speed), the same pull banked, a full
-    /// forward push (the <c>lowGs</c> side), and full rudder. Ten seconds each — more than a full
-    /// loop — so nothing transient is missed.</summary>
+    // The manoeuvres that make G and α, at full throttle: the sustained max-performance
+    // pull at cruise and again entered fast (G grows with speed), the same pull banked, a full
+    // forward push (the `lowGs` side), and full rudder. Ten seconds each — more than a full
+    // loop — so nothing transient is missed.
     private static readonly (string Name, float EntryFdFrac, FlightInput In)[] Manoeuvres =
     {
         ("pull @ fd", 1.0f, new FlightInput { Pitch = 1f, Throttle = 1f }),
@@ -178,7 +178,7 @@ public class ControlLimiterTests
         Assert.Equal(AllPlanes.Length, rows.Count);
     }
 
-    /// <summary>Peak demanded load factor and peak α over one manoeuvre.</summary>
+    // Peak demanded load factor and peak α over one manoeuvre.
     private static (float PeakG, float PeakAlpha) Fly(PlaneStats stats, float entrySpeed, FlightInput input)
     {
         var m = new FlightModel(stats);
@@ -193,7 +193,7 @@ public class ControlLimiterTests
         return (peakG, peakAlpha);
     }
 
-    /// <summary>Worst case over every manoeuvre, for one airframe.</summary>
+    // Worst case over every manoeuvre, for one airframe.
     private static (float PeakG, string GWhere, float PeakAlpha, string AlphaWhere) Worst(PlaneStats stats)
     {
         float peakG = 0f, peakAlpha = 0f;

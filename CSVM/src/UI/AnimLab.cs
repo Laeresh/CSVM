@@ -61,9 +61,9 @@ public sealed partial class AnimLab : Node
     // metres across; this frames it without clipping the near plane. TUNE.
     private const float StageAnchorDist = 55f;
 
-    /// <summary>The transport time scales, slowest to fastest (buttons + the current-speed
-    /// readout use these). 1× is the real-time default; below it is slow-mo, above it is
-    /// fast-forward for skimming a long loop.</summary>
+    // The transport time scales, slowest to fastest (buttons + the current-speed
+    // readout use these). 1× is the real-time default; below it is slow-mo, above it is
+    // fast-forward for skimming a long loop.
     private static readonly float[] Speeds = { 0.1f, 0.25f, 1f, 2f, 4f };
 
     private readonly AnimRuntime _runtime;
@@ -142,8 +142,8 @@ public sealed partial class AnimLab : Node
     /// still tracks what it picked.</summary>
     public SelectionService? Selection { get; init; }
 
-    /// <summary>The session clock the transport drives. The lab never owns it — the session picks
-    /// the mode (accumulator when interactive, one fixed step per frame when scripted).</summary>
+    // The session clock the transport drives. The lab never owns it — the session picks
+    // the mode (accumulator when interactive, one fixed step per frame when scripted).
     private static GameClock? Clock => GameClock.Current;
 
     private float PlayheadTime => _playhead;
@@ -266,9 +266,9 @@ public sealed partial class AnimLab : Node
 
     // ---- render-pose smoothing (see the _renderPoses field note) -----------------------------
 
-    /// <summary>Puts every smoothed target back on its exact sim pose, so the steps about to run
-    /// — and any event they fire that seeds a held pose from the live transform — never see an
-    /// interpolated render pose. Sim state stays a function of the step count alone.</summary>
+    // Puts every smoothed target back on its exact sim pose, so the steps about to run
+    // — and any event they fire that seeds a held pose from the live transform — never see an
+    // interpolated render pose. Sim state stays a function of the step count alone.
     private void RestoreSimPoses()
     {
         foreach (var (target, pair) in _renderPoses)
@@ -280,9 +280,9 @@ public sealed partial class AnimLab : Node
         }
     }
 
-    /// <summary>Rolls the pose pairs after this frame's steps: each live transform-motion
-    /// target's Curr becomes Prev and its fresh sim pose becomes Curr. A target whose motion
-    /// ended leaves the set at its final sim pose (just restored, never re-interpolated).</summary>
+    // Rolls the pose pairs after this frame's steps: each live transform-motion
+    // target's Curr becomes Prev and its fresh sim pose becomes Curr. A target whose motion
+    // ended leaves the set at its final sim pose (just restored, never re-interpolated).
     private void SnapshotSimPoses()
     {
         var live = new Dictionary<Node3D, (Transform3D, Transform3D)>();
@@ -302,10 +302,10 @@ public sealed partial class AnimLab : Node
         }
     }
 
-    /// <summary>Draws each smoothed target between its last two sim poses at the clock's
-    /// sub-step fraction. FixedStep pins the fraction to 1 — an identity rewrite — so scripted
-    /// captures stay byte-identical; while halted the fraction holds still, so a paused frame
-    /// cannot wobble between stale poses.</summary>
+    // Draws each smoothed target between its last two sim poses at the clock's
+    // sub-step fraction. FixedStep pins the fraction to 1 — an identity rewrite — so scripted
+    // captures stay byte-identical; while halted the fraction holds still, so a paused frame
+    // cannot wobble between stale poses.
     private void ApplyRenderPoses(float fraction)
     {
         foreach (var (target, pair) in _renderPoses)
@@ -443,10 +443,10 @@ public sealed partial class AnimLab : Node
         }
     }
 
-    /// <summary>Repositions the effect/crash stage a fixed offset in front of the camera on a
-    /// <paramref name="fresh"/> Play (so the effect sits where you are looking), and leaves it put on
-    /// Restart — so a seeded replay lands in exactly the same spot. Returns it as the fallback anchor
-    /// for a still-placeless def.</summary>
+    // Repositions the effect/crash stage a fixed offset in front of the camera on a
+    // `fresh` Play (so the effect sits where you are looking), and leaves it put on
+    // Restart — so a seeded replay lands in exactly the same spot. Returns it as the fallback anchor
+    // for a still-placeless def.
     private Node3D StageAnchor(bool fresh)
     {
         if (fresh)
@@ -458,9 +458,9 @@ public sealed partial class AnimLab : Node
         return _stageAnchor;
     }
 
-    /// <summary>Restart = <see cref="AnimRuntime.Stop"/> (tear down the def's live
-    /// motions/puffers/lights/sounds) → re-pin the RNG → re-apply RESET_STATE → Start, playhead
-    /// back at step 0 — the visually-identical replay the fixed clock + seed exist for.</summary>
+    // Restart = AnimRuntime.Stop (tear down the def's live
+    // motions/puffers/lights/sounds) → re-pin the RNG → re-apply RESET_STATE → Start, playhead
+    // back at step 0 — the visually-identical replay the fixed clock + seed exist for.
     private void Restart()
     {
         if (_defName == null)
@@ -586,9 +586,9 @@ public sealed partial class AnimLab : Node
         }
     }
 
-    /// <summary>Frames the camera on the played def and follows its anchor (or first resolved
-    /// target node — <see cref="AnimRuntime.FrameTarget"/>), so a moving def (the train) stays in
-    /// view until the user takes the camera somewhere with WASD/QE.</summary>
+    // Frames the camera on the played def and follows its anchor (or first resolved
+    // target node — AnimRuntime.FrameTarget), so a moving def (the train) stays in
+    // view until the user takes the camera somewhere with WASD/QE.
     private void FrameOn(List<(AnimDefinition Def, Node3D? Anchor)> started)
     {
         foreach (var (def, anchor) in started)

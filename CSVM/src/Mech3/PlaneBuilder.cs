@@ -176,7 +176,7 @@ public sealed class PlaneBuilder
         return true;
     }
 
-    /// <summary>pdpN_h — the healthy twin of an exterior damage panel.</summary>
+    // pdpN_h — the healthy twin of an exterior damage panel.
     private static bool IsHealthyPanel(string name) =>
         name.EndsWith("_h", StringComparison.OrdinalIgnoreCase)
         && IsDamagePanel(name[..^2], out bool cockpit) && !cockpit;
@@ -201,13 +201,13 @@ public sealed class PlaneBuilder
                 : ""));
     }
 
-    /// <summary>Finds the wingtip flare nodes in the built tree, hides them (reset state:
-    /// the original starts them off and flashes them via wing_light.json's blink anim), and
-    /// re-skins each glow quad with an additive amber tint, keeping its authored one-sided
-    /// orientation (no billboard — the source quad only shows from the angle it was
-    /// authored at, which is roughly where a chase camera sits). See <see cref="WingLights"/>.
-    /// The same walk collects the flight build's damage panels: torn-skin pdpN hidden
-    /// (reset state), healthy pdpN_h twins as built.</summary>
+    // Finds the wingtip flare nodes in the built tree, hides them (reset state:
+    // the original starts them off and flashes them via wing_light.json's blink anim), and
+    // re-skins each glow quad with an additive amber tint, keeping its authored one-sided
+    // orientation (no billboard — the source quad only shows from the angle it was
+    // authored at, which is roughly where a chase camera sits). See WingLights.
+    // The same walk collects the flight build's damage panels: torn-skin pdpN hidden
+    // (reset state), healthy pdpN_h twins as built.
     private void CollectWingFlares(Node node)
     {
         if (node is Node3D n3d)

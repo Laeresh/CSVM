@@ -224,8 +224,8 @@ public sealed partial class PerfHud : Node
         GD.Print($"[perf] fps readout: {_mode}");
     }
 
-    /// <summary>Built lazily on first switch-on: a session that never presses F14 (or passes
-    /// --debug-fps) adds no nodes at all, so nothing it renders can differ.</summary>
+    // Built lazily on first switch-on: a session that never presses F14 (or passes
+    // --debug-fps) adds no nodes at all, so nothing it renders can differ.
     private void EnsureBuilt()
     {
         if (_hudLayer != null)
@@ -243,10 +243,10 @@ public sealed partial class PerfHud : Node
         _root = root;
     }
 
-    /// <summary>Built lazily on first entry into Full — a session that only ever cycles to Compact
-    /// never pays for the strip's own buffer or control. Sizes the buffer off <c>perfHud.stripFrames</c>
-    /// (clamped to <see cref="Utils.HitchMonitor.RingFrames"/>, since asking for more than the ring
-    /// keeps is meaningless) once, rather than on every refresh.</summary>
+    // Built lazily on first entry into Full — a session that only ever cycles to Compact
+    // never pays for the strip's own buffer or control. Sizes the buffer off `perfHud.stripFrames`
+    // (clamped to RingFrames, since asking for more than the ring
+    // keeps is meaningless) once, rather than on every refresh.
     private void EnsureStrip()
     {
         if (_strip != null)

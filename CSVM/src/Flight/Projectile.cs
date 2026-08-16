@@ -1189,10 +1189,10 @@ public sealed partial class ProjectilePool : Node3D
         mm.VisibleInstanceCount = n;
     }
 
-    /// <summary>Builds one pooled sprite/streak pool: a MultiMesh of <paramref name="cap"/>
-    /// instances over a single shared material. <paramref name="crossed"/> supplies a mesh other
-    /// than the default unit quad — the tracer pools pass <see cref="CrossedStreakMesh"/>; everything
-    /// else takes the quad.</summary>
+    // Builds one pooled sprite/streak pool: a MultiMesh of `cap`
+    // instances over a single shared material. `crossed` supplies a mesh other
+    // than the default unit quad — the tracer pools pass CrossedStreakMesh; everything
+    // else takes the quad.
     private MultiMesh AddMultiMesh(string texture, int cap, bool additive, bool billboard, out MultiMeshInstance3D mmi, ArrayMesh? crossed = null)
     {
         var mat = new StandardMaterial3D
@@ -1245,12 +1245,12 @@ public sealed partial class ProjectilePool : Node3D
         return mm;
     }
 
-    /// <summary>The authored tracer streak's shape: two perpendicular quads sharing the length axis,
-    /// in one mesh (the original's `rabbit_blur` is one model with two polys, so one instance draws
-    /// both). Unit-sized — local +Y is the FRONT and spans [-0.5, +0.5]; X and Z are the two width
-    /// axes, so <see cref="RenderTracers"/> scaling X and Z by the width and Y by the length yields
-    /// two width x length quads. U runs along the length, 0 at the front to 1 at the tail: the
-    /// authored UV convention, measured off the model (u tracks length, v tracks width).</summary>
+    // The authored tracer streak's shape: two perpendicular quads sharing the length axis,
+    // in one mesh (the original's `rabbit_blur` is one model with two polys, so one instance draws
+    // both). Unit-sized — local +Y is the FRONT and spans [-0.5, +0.5]; X and Z are the two width
+    // axes, so RenderTracers scaling X and Z by the width and Y by the length yields
+    // two width x length quads. U runs along the length, 0 at the front to 1 at the tail: the
+    // authored UV convention, measured off the model (u tracks length, v tracks width).
     private ArrayMesh CrossedStreakMesh()
     {
         var verts = new Vector3[]
@@ -1297,9 +1297,9 @@ public sealed partial class ProjectilePool : Node3D
         return tilted.Normalized();
     }
 
-    /// <summary>The in-flight rocket body: a <see cref="BuildFlyoutBody"/> instance parented under the
-    /// pool's own container (the caller poses it down the round's velocity each frame). Null falls back
-    /// to the exhaust streak.</summary>
+    // The in-flight rocket body: a BuildFlyoutBody instance parented under the
+    // pool's own container (the caller poses it down the round's velocity each frame). Null falls back
+    // to the exhaust streak.
     private Node3D? BuildFlyoutModel(WeaponDef weapon)
     {
         var inst = BuildFlyoutBody(weapon);
@@ -1308,12 +1308,12 @@ public sealed partial class ProjectilePool : Node3D
         return inst;
     }
 
-    /// <summary>Starts the round's FLYOUT smoke trail: one <see cref="Puffer"/> per
-    /// DISTANCE_INTERVAL <c>PUFFER_STATE</c> in the weapon's <c>MODEL_ANIMATION</c> def, taken
-    /// from the free-list when an earlier round's emitter has fully decayed, else freshly built.
-    /// <paramref name="rollRate"/> is the def's spinner rate (rad/s about the nose axis; the
-    /// sonic), 0 for everything else. Null when there is no anim program (no world / the weapon
-    /// lab), the weapon names no <c>MODEL_ANIMATION</c>, or its textures are absent.</summary>
+    // Starts the round's FLYOUT smoke trail: one Puffer per
+    // DISTANCE_INTERVAL `PUFFER_STATE` in the weapon's `MODEL_ANIMATION` def, taken
+    // from the free-list when an earlier round's emitter has fully decayed, else freshly built.
+    // `rollRate` is the def's spinner rate (rad/s about the nose axis; the
+    // sonic), 0 for everything else. Null when there is no anim program (no world / the weapon
+    // lab), the weapon names no `MODEL_ANIMATION`, or its textures are absent.
     private TrailEmitter[]? AcquireTrails(WeaponDef weapon, Vector3 origin, Basis basis, out float rollRate)
     {
         rollRate = 0f;
@@ -1367,11 +1367,11 @@ public sealed partial class ProjectilePool : Node3D
         return spec;
     }
 
-    /// <summary>Reads a FLYOUT def's trail out of the anim program: every ACTIVE
-    /// DISTANCE_INTERVAL <c>PUFFER_STATE</c> (the authored per-type smoke — colour ramp, size,
-    /// lifetime, one puff per interval meters), plus the def's steady <c>ObjectMotion</c> spin
-    /// rate if it carries one. Time-interval puffers (the torpedo's blast cloud) are left to a
-    /// future pass — this path renders the trail the round leaves behind.</summary>
+    // Reads a FLYOUT def's trail out of the anim program: every ACTIVE
+    // DISTANCE_INTERVAL `PUFFER_STATE` (the authored per-type smoke — colour ramp, size,
+    // lifetime, one puff per interval meters), plus the def's steady `ObjectMotion` spin
+    // rate if it carries one. Time-interval puffers (the torpedo's blast cloud) are left to a
+    // future pass — this path renders the trail the round leaves behind.
     private TrailSpec? BuildTrailSpec(string animName, string weaponId)
     {
         foreach (var def in _flyoutAnims!.ByAnimName(animName))
@@ -1576,11 +1576,11 @@ public sealed partial class ProjectilePool : Node3D
         Apply(weapon, surface, outcome, point, collider, normal, shapeIdx, shooter);
     }
 
-    /// <summary>Perform a resolved impact: the effect, the stand-in burst, the sound and the damage.
-    /// Decides nothing — every branch here is keyed on <paramref name="outcome"/>. It still takes the
-    /// weapon for the gun-effect rate limit (a stateful throttle, not a decision) and the surface for
-    /// the spark's tint (a <c>Color</c>, which the engine-free <see cref="ImpactOutcome"/> cannot
-    /// carry).</summary>
+    // Perform a resolved impact: the effect, the stand-in burst, the sound and the damage.
+    // Decides nothing — every branch here is keyed on `outcome`. It still takes the
+    // weapon for the gun-effect rate limit (a stateful throttle, not a decision) and the surface for
+    // the spark's tint (a `Color`, which the engine-free ImpactOutcome cannot
+    // carry).
     private void Apply(WeaponDef weapon, int surface, in ImpactOutcome outcome, Vector3 point,
         Node? collider, Vector3 normal, int shapeIdx = -1, int shooter = NoShooter)
     {
@@ -1623,19 +1623,19 @@ public sealed partial class ProjectilePool : Node3D
             ApplyDamage(weapon, outcome, point, collider is AircraftBody ? null : collider, shooter);
     }
 
-    /// <summary>The DETONATION_DISTANCE proximity fuse: armed against AIRCRAFT only — the
-    /// original fuses on enemies, never terrain (do not re-add a world fuse: it detonates every
-    /// rocket 15-50 m short of the surface it was aimed at and, handing Impact a null collider,
-    /// locks every hardpoint weapon out of its per-surface IMPACT entry). The round detonates at its
-    /// CLOSEST APPROACH to a candidate's collision boxes within the swept step, not at first
-    /// entry into fuse range: most rockets author DETONATION_DISTANCE equal to IMPACT_PROXIMITY,
-    /// so a first-entry fuse would always detonate exactly where the linear blast falls to zero
-    /// and no rocket could ever hurt a plane. While the round is still closing at the step's end
-    /// the fuse holds (<see cref="StillClosingFraction"/>). The shooter's own plane is never a
-    /// candidate — a rocket leaves the muzzle INSIDE its own boxes — and neither is one out of
-    /// play: a wreck, or an INERT airframe. ⚠ This walk is the pool's OWN roster, not a
-    /// physics query, so the collision layer that hides an inert plane from the hit ray never
-    /// reaches it — <see cref="FlightController.InPlay"/> does.</summary>
+    // The DETONATION_DISTANCE proximity fuse: armed against AIRCRAFT only — the
+    // original fuses on enemies, never terrain (do not re-add a world fuse: it detonates every
+    // rocket 15-50 m short of the surface it was aimed at and, handing Impact a null collider,
+    // locks every hardpoint weapon out of its per-surface IMPACT entry). The round detonates at its
+    // CLOSEST APPROACH to a candidate's collision boxes within the swept step, not at first
+    // entry into fuse range: most rockets author DETONATION_DISTANCE equal to IMPACT_PROXIMITY,
+    // so a first-entry fuse would always detonate exactly where the linear blast falls to zero
+    // and no rocket could ever hurt a plane. While the round is still closing at the step's end
+    // the fuse holds (StillClosingFraction). The shooter's own plane is never a
+    // candidate — a rocket leaves the muzzle INSIDE its own boxes — and neither is one out of
+    // play: a wreck, or an INERT airframe. ⚠ This walk is the pool's OWN roster, not a
+    // physics query, so the collision layer that hides an inert plane from the hit ray never
+    // reaches it — FlightController.InPlay does.
     private bool ProximityFuseTriggered(WeaponDef weapon, int shooter, Vector3 from, Vector3 to,
         Vector3 velocity, out Vector3 detonationPoint, out AircraftBody? fused, out Vector3 towardHull)
     {
@@ -1765,16 +1765,16 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>The blast's aircraft pass: every registered flying plane inside the weapon's
-    /// IMPACT_PROXIMITY radius — never the shooter's own (the guns invariant applied
-    /// consistently, not a balance opinion) and never one out of play, a wreck or an INERT
-    /// airframe (<see cref="FlightController.InPlay"/>, E10 — the same roster-walk caveat as the
-    /// fuse above: no physics query is involved, so the collision layer alone would not shield
-    /// it) — takes the weapon's own
-    /// ARMOR/HEALTH damage scaled by the same linear falloff the destructible sink applies,
-    /// measured to the nearest point on the plane's OWN collision boxes (the
-    /// blast-neighbor-shape rule) and struck at that box, so part mapping and kill attribution
-    /// run the exact direct-hit path.</summary>
+    // The blast's aircraft pass: every registered flying plane inside the weapon's
+    // IMPACT_PROXIMITY radius — never the shooter's own (the guns invariant applied
+    // consistently, not a balance opinion) and never one out of play, a wreck or an INERT
+    // airframe (FlightController.InPlay, E10 — the same roster-walk caveat as the
+    // fuse above: no physics query is involved, so the collision layer alone would not shield
+    // it) — takes the weapon's own
+    // ARMOR/HEALTH damage scaled by the same linear falloff the destructible sink applies,
+    // measured to the nearest point on the plane's OWN collision boxes (the
+    // blast-neighbor-shape rule) and struck at that box, so part mapping and kill attribution
+    // run the exact direct-hit path.
     private void BlastAircraftPass(WeaponDef weapon, Vector3 point, float radius, int shooter)
     {
         foreach (var plane in _aircraft)
@@ -1789,8 +1789,8 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>Whether this gun's impact effect may play again now, stamping the time when it may.
-    /// The throttle is per effect name = per firing group (see <see cref="_gunEffectAt"/>).</summary>
+    // Whether this gun's impact effect may play again now, stamping the time when it may.
+    // The throttle is per effect name = per firing group (see _gunEffectAt).
     private bool GunEffectDue(string fxName)
     {
         if (_gunEffectAt.TryGetValue(fxName, out float last) && _simClock - last < GunEffectInterval)
@@ -1799,9 +1799,9 @@ public sealed partial class ProjectilePool : Node3D
         return true;
     }
 
-    /// <summary>A stand-in fireball: a cluster of large, bright, additive sprites at the hit point,
-    /// varied in size/life/tint, so a hardpoint impact reads as an explosion where the real puffer
-    /// effect cannot be built (no world-effects runtime).</summary>
+    // A stand-in fireball: a cluster of large, bright, additive sprites at the hit point,
+    // varied in size/life/tint, so a hardpoint impact reads as an explosion where the real puffer
+    // effect cannot be built (no world-effects runtime).
     private void SpawnExplosion(Vector3 point, Basis orient)
     {
         for (int i = 0; i < ExplosionSprites && _impact.Count < MaxFlashes; i++)
@@ -1819,10 +1819,10 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>A gun round ricocheting off a buildings-classed surface: fast, bright sparks
-    /// flying off the wall (additive, on the impact pool) plus the brief hit flash. A stand-in —
-    /// the authored `bld_damage.flt`/`rcochet1` assets do not exist in the install; magnitudes
-    /// are TUNE.</summary>
+    // A gun round ricocheting off a buildings-classed surface: fast, bright sparks
+    // flying off the wall (additive, on the impact pool) plus the brief hit flash. A stand-in —
+    // the authored `bld_damage.flt`/`rcochet1` assets do not exist in the install; magnitudes
+    // are TUNE.
     private void SpawnRicochet(Vector3 point, Basis orient)
     {
         if (_impact.Count < MaxFlashes)
@@ -1843,13 +1843,13 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>Ejects one shell casing: a pooled instance of the chapter-gamez
-    /// <c>gunshell</c> prototype (its <c>g1</c> child carries the shell mesh), launched with the
-    /// gunshell def's own <c>OBJECT_MOTION</c> read verbatim from the anim program — the ranged
-    /// ballistic drop and the forward-rotation tumble over its <c>RUN_TIME</c>, same semantics as
-    /// <c>MotionRuntime</c>. Each casing rides its own transient node, so sustained fire ejects at
-    /// gun rate — nothing shares the <c>gunshell</c> anchor. No-op without a world scene/anim
-    /// program (the weapon lab, the empty stage).</summary>
+    // Ejects one shell casing: a pooled instance of the chapter-gamez
+    // `gunshell` prototype (its `g1` child carries the shell mesh), launched with the
+    // gunshell def's own `OBJECT_MOTION` read verbatim from the anim program — the ranged
+    // ballistic drop and the forward-rotation tumble over its `RUN_TIME`, same semantics as
+    // `MotionRuntime`. Each casing rides its own transient node, so sustained fire ejects at
+    // gun rate — nothing shares the `gunshell` anchor. No-op without a world scene/anim
+    // program (the weapon lab, the empty stage).
     private void SpawnCasing(Transform3D muzzle)
     {
         var spec = CasingSpecResolve();
@@ -1879,9 +1879,9 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>The authored muzzlepuffer smoke: a few short-lived puffs at the muzzle with
-    /// the def's aft velocity, size, lifetime and deviation — the aircraft flies out of them, so
-    /// they read as the smoke the shot leaves behind.</summary>
+    // The authored muzzlepuffer smoke: a few short-lived puffs at the muzzle with
+    // the def's aft velocity, size, lifetime and deviation — the aircraft flies out of them, so
+    // they read as the smoke the shot leaves behind.
     private void SpawnMuzzleSmoke(Transform3D muzzle)
     {
         var aft = muzzle.Basis.Z.Normalized(); // Godot forward is -Z; the puffer drifts aft
@@ -1905,9 +1905,9 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>The dynamic muzzle-light flash: a pooled <see cref="OmniLight3D"/> set to one
-    /// of the muzzle_burst def's three third-person variants — the same 3-way RandomWeight over
-    /// range and colour the data rolls — shown for a couple of frames at the muzzle.</summary>
+    // The dynamic muzzle-light flash: a pooled OmniLight3D set to one
+    // of the muzzle_burst def's three third-person variants — the same 3-way RandomWeight over
+    // range and colour the data rolls — shown for a couple of frames at the muzzle.
     private void FlashMuzzleLight(Vector3 pos)
     {
         // A pre-tree volley (the weapon lab engages while still building) has no world transform
@@ -2010,8 +2010,8 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>A free (or freshly built) pooled casing instance, or null when the pool is at cap
-    /// or the chapter gamez lacks the <c>gunshell</c> prototype.</summary>
+    // A free (or freshly built) pooled casing instance, or null when the pool is at cap
+    // or the chapter gamez lacks the `gunshell` prototype.
     private CasingSlot? AcquireCasing()
     {
         foreach (var c in _casings)
@@ -2051,11 +2051,11 @@ public sealed partial class ProjectilePool : Node3D
         return slot;
     }
 
-    /// <summary>Resolves the gunshell def's OBJECT_MOTION out of the anim program, once — gravity,
-    /// the ranged launch, the tumble (its <c>Time</c> value is a RATE, the MotionRuntime decode:
-    /// 20.94 rad/s about the launch's own perpendicular, whose length at gunshell's −75…−85° of
-    /// elevation is 0.06–0.17, so the casing turns at 1.3–3.6 rad/s) and the run time. Null without a program
-    /// or when the def is absent; the miss is cached and logged once.</summary>
+    // Resolves the gunshell def's OBJECT_MOTION out of the anim program, once — gravity,
+    // the ranged launch, the tumble (its `Time` value is a RATE, the MotionRuntime decode:
+    // 20.94 rad/s about the launch's own perpendicular, whose length at gunshell's −75…−85° of
+    // elevation is 0.06–0.17, so the casing turns at 1.3–3.6 rad/s) and the run time. Null without a program
+    // or when the def is absent; the miss is cached and logged once.
     private CasingSpec? CasingSpecResolve()
     {
         if (_casingSpecResolved)
@@ -2118,10 +2118,10 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>The exclusion list a round's hit ray carries: its shooter's own registered body,
-    /// so identity — not weapon — is what keeps a pilot's rounds off their own airframe (the same
-    /// reading the near-miss cue uses). An unowned round (<see cref="NoShooter"/>) excludes
-    /// nothing and can hit any plane.</summary>
+    // The exclusion list a round's hit ray carries: its shooter's own registered body,
+    // so identity — not weapon — is what keeps a pilot's rounds off their own airframe (the same
+    // reading the near-miss cue uses). An unowned round (NoShooter) excludes
+    // nothing and can hit any plane.
     private Godot.Collections.Array<Rid> ExcludeFor(int shooter)
     {
         if (shooter != NoShooter)
@@ -2180,10 +2180,10 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>The NEAREST <see cref="PlayerPositions"/> entry to <paramref name="worldPos"/> —
-    /// D31's "nearest human" reading, C21's <c>PLAYER_RANGE</c> seam reused for audio.
-    /// <see cref="float.MaxValue"/> with nobody wired (the weapon bench, <c>Suites.cs</c> labs),
-    /// which <see cref="DistanceGain"/> reads as "skip the term".</summary>
+    // The NEAREST PlayerPositions entry to `worldPos` —
+    // D31's "nearest human" reading, C21's `PLAYER_RANGE` seam reused for audio.
+    // float.MaxValue with nobody wired (the weapon bench, `Suites.cs` labs),
+    // which DistanceGain reads as "skip the term".
     private float NearestPlayerDistance(Vector3 worldPos)
     {
         var positions = PlayerPositions?.Invoke();
@@ -2199,12 +2199,12 @@ public sealed partial class ProjectilePool : Node3D
         return nearest;
     }
 
-    /// <summary>The floor for one round across every bound viewer: the SMALLEST size that satisfies
-    /// <paramref name="pixels"/> for any one of them, i.e. the nearest viewer's. One world-space
-    /// mesh is drawn in every pane, so no single size can satisfy them all; taking the minimum means
-    /// a round is never INFLATED for a pane whose camera is closer than the one it was sized
-    /// against — the splitscreen failure this avoids. Each viewer is measured with its own
-    /// pane height and FOV. 0 with no viewers bound (the weapon lab, the headless dumps).</summary>
+    // The floor for one round across every bound viewer: the SMALLEST size that satisfies
+    // `pixels` for any one of them, i.e. the nearest viewer's. One world-space
+    // mesh is drawn in every pane, so no single size can satisfy them all; taking the minimum means
+    // a round is never INFLATED for a pane whose camera is closer than the one it was sized
+    // against — the splitscreen failure this avoids. Each viewer is measured with its own
+    // pane height and FOV. 0 with no viewers bound (the weapon lab, the headless dumps).
     private float TracerFloor(Vector3 worldPos, float pixels)
     {
         _viewerScratch.Clear();

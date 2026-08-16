@@ -113,8 +113,8 @@ public class BankCouplingTests
             + $"{invertedExtra:0.000000}");
     }
 
-    /// <summary>The Bloodhawk's real dynamics — the coupling is scaled by <c>rec_moments_inertia</c>,
-    /// so the placeholder defaults would hide a wrong axis behind near-equal components.</summary>
+    // The Bloodhawk's real dynamics — the coupling is scaled by `rec_moments_inertia`,
+    // so the placeholder defaults would hide a wrong axis behind near-equal components.
     private static PlaneStats Bhawk() => new()
     {
         PitchTorque = 3.3f,
@@ -129,8 +129,8 @@ public class BankCouplingTests
         DragFactor = 0.37f,
     };
 
-    /// <summary>Bank about the nose, positive = LEFT (right wing up), matching
-    /// <see cref="FlightInput.Roll"/>'s sign.</summary>
+    // Bank about the nose, positive = LEFT (right wing up), matching
+    // FlightInput.Roll's sign.
     private static Basis BankedLeft(float deg) =>
         Basis.Identity.Rotated(Vector3.Back, Mathf.DegToRad(deg));
 

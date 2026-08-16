@@ -131,11 +131,11 @@ public sealed class WorldWind
             (_magnitude * MathF.Sin(_heading)) + _static.Z);
     }
 
-    /// <summary>The engine's own symmetric draw: <c>rand()·3.051851e-05 + rand()·3.051851e-05 −
-    /// 1.0</c> with one <c>rand()</c> result reused, i.e. <c>rand()/16384 − 1</c> over
-    /// <c>rand()</c>'s 0…32767 — <c>[−1, +0.99994]</c>, not quite symmetric, and quantised to
-    /// 1/16384. Reproduced at that quantisation because it is free to do so. ⚠ This idiom is the
-    /// engine's ±1 draw and is deliberately NOT what the spawn deviation uses.</summary>
+    // The engine's own symmetric draw: `rand()·3.051851e-05 + rand()·3.051851e-05 −
+    // 1.0` with one `rand()` result reused, i.e. `rand()/16384 − 1` over
+    // `rand()`'s 0…32767 — `[−1, +0.99994]`, not quite symmetric, and quantised to
+    // 1/16384. Reproduced at that quantisation because it is free to do so. ⚠ This idiom is the
+    // engine's ±1 draw and is deliberately NOT what the spawn deviation uses.
     private float Symmetric() => (_rng.Next(32768) / 16384f) - 1f;
 }
 

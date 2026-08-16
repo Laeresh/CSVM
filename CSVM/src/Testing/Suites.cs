@@ -32,12 +32,12 @@ public static class Suites
     private const float ScanRange = 1000f;
     private const float ScanConeDeg = 6f; // the shipped CANNON_SPREAD, asserted in AimAssistShippedData
 
-    /// <summary>The fixed step <c>ordnance-burst-timeline</c> drives its three bursts at.
-    /// Deliberately FOUR TIMES finer than <see cref="SequenceRunner.AnimFrame"/>: the authored gaps
-    /// under test go down to 0.01 s, which one 1/60 s step cannot resolve at all, and nothing in
-    /// those three definitions is denominated in animation frames (none of them carries a
-    /// <c>LOOP</c>, so the AnimFrame floor is never reached). A finer step makes every authored
-    /// instant a real measurement instead of a rounding.</summary>
+    // The fixed step `ordnance-burst-timeline` drives its three bursts at.
+    // Deliberately FOUR TIMES finer than SequenceRunner.AnimFrame: the authored gaps
+    // under test go down to 0.01 s, which one 1/60 s step cannot resolve at all, and nothing in
+    // those three definitions is denominated in animation frames (none of them carries a
+    // `LOOP`, so the AnimFrame floor is never reached). A finer step makes every authored
+    // instant a real measurement instead of a rounding.
     private const float BurstDt = 1f / 240f;
 
     // How far a burst's dispatch may sit from its authored instant: one step because the stamp is
@@ -46,20 +46,20 @@ public static class Suites
     // than this bar two, and those two are carried by the rows behind them.
     private const float BurstSlack = 6f * BurstDt;
 
-    /// <summary>How long each burst is driven for — past the last authored event of its longest
-    /// lane, with room for the lag above. Sonic is the long one: its <c>sonic_growlight</c> ends at
-    /// an authored 3.2 s.</summary>
+    // How long each burst is driven for — past the last authored event of its longest
+    // lane, with room for the lag above. Sonic is the long one: its `sonic_growlight` ends at
+    // an authored 3.2 s.
     private const float BurstSeconds = 3.5f;
 
-    /// <summary>The burst suite's instance TTL — an order of magnitude past the longest burst, so
-    /// the bound never truncates a timeline. Explicitly NOT <c>--effects-test</c>'s 0.3 s, which
-    /// exists for the gun path and would cut the 1.2 s wash off at 0.3 s while every remaining
-    /// assertion still passed.</summary>
+    // The burst suite's instance TTL — an order of magnitude past the longest burst, so
+    // the bound never truncates a timeline. Explicitly NOT `--effects-test`'s 0.3 s, which
+    // exists for the gun path and would cut the 1.2 s wash off at 0.3 s while every remaining
+    // assertion still passed.
     private const float BurstTtl = 32f;
 
-    /// <summary>Gun-group slots <see cref="Loadout.ForRig"/> seats on any airframe — the
-    /// weapon bench fires every gun from all of them, so a drop here would quietly shrink its
-    /// coverage without changing the 48/48 line.</summary>
+    // Gun-group slots Loadout.ForRig seats on any airframe — the
+    // weapon bench fires every gun from all of them, so a drop here would quietly shrink its
+    // coverage without changing the 48/48 line.
     private const int RigGunGroups = 4;
 
     // Destructible instances / distinct node groups per chapter, at each chapter's default mission.
@@ -78,8 +78,8 @@ public static class Suites
         ("C5", 176, 112),
     };
 
-    /// <summary>C1 textures spanning the three alpha classes the flatten must leave alone: opaque,
-    /// hard cutout, and the soft overlays the builder alpha-blends.</summary>
+    // C1 textures spanning the three alpha classes the flatten must leave alone: opaque,
+    // hard cutout, and the soft overlays the builder alpha-blends.
     private static readonly string[] DropInSamples =
     {
         "lkzepskin", "grass1", "cloudlayer", "sky1", // no alpha channel
@@ -557,10 +557,10 @@ public static class Suites
 
     // ---- the camera-distance fade ---------------------------------------------------------------
 
-    /// <summary>The distance alpha, driven entirely off the numbers two shipped readers author.
-    /// Every distance below is a VIEW-SPACE DEPTH: the camera sits at the origin looking down −Z
-    /// (Godot's forward), so a particle placed at <c>(0, 0, −d)</c> is at depth <c>d</c>, and one
-    /// pushed sideways is deliberately used to prove the measure is depth and not range.</summary>
+    // The distance alpha, driven entirely off the numbers two shipped readers author.
+    // Every distance below is a VIEW-SPACE DEPTH: the camera sits at the origin looking down −Z
+    // (Godot's forward), so a particle placed at `(0, 0, −d)` is at depth `d`, and one
+    // pushed sideways is deliberately used to prove the measure is depth and not range.
     private static void PufferDistanceFade(TestContext ctx)
     {
         var clock = GameClock.Current;
@@ -579,10 +579,10 @@ public static class Suites
         }
     }
 
-    /// <summary>One particle that never moves and never dies, carrying a COLORS ramp so the drawn
-    /// alpha channel is the DISTANCE alpha alone: the ramp path writes <c>1 × distAlpha</c> and
-    /// leaves the life envelope out of it (the ramp's own alpha rides in the colour, exactly as
-    /// the shader's <c>v_alpha × v_color.a</c> expects).</summary>
+    // One particle that never moves and never dies, carrying a COLORS ramp so the drawn
+    // alpha channel is the DISTANCE alpha alone: the ramp path writes `1 × distAlpha` and
+    // leaves the life envelope out of it (the ramp's own alpha rides in the colour, exactly as
+    // the shader's `v_alpha × v_color.a` expects).
     private static PufferState FadeTestState(string name,
         float nearStart, float nearEnd, float farStart, float farEnd) => new()
         {
@@ -601,11 +601,10 @@ public static class Suites
             Colors = new[] { (0f, Colors.White), (1f, Colors.White) },
         };
 
-    /// <summary>Bursts one particle at <paramref name="at"/> and returns the alpha it was drawn
-    /// with, or null when it was discarded. The burst is fired AT the point (burst mode stores
-    /// positions in the node's own frame, whose origin is the burst point), and a single
-    /// <c>_Process</c> at a dt small enough to leave the particle where it was born runs the draw.
-    /// </summary>
+    // Bursts one particle at `at` and returns the alpha it was drawn
+    // with, or null when it was discarded. The burst is fired AT the point (burst mode stores
+    // positions in the node's own frame, whose origin is the burst point), and a single
+    // `_Process` at a dt small enough to leave the particle where it was born runs the draw.
     private static float? FadeAlphaAt(TestContext ctx, PufferState state, Vector3 at,
         EffectAmbience ambience, PufferFadeSwitches? switches = null)
     {
@@ -627,9 +626,9 @@ public static class Suites
         }
     }
 
-    /// <summary>C3's <c>spew_puffer</c> exactly as <c>waterfalls.zrd.json</c> authors it —
-    /// <c>FADE_RANGE [300, 400]</c>, <c>NEAR_FADE [40, 5]</c> — the only puffer in the install
-    /// carrying both a near fade and the tightest far band.</summary>
+    // C3's `spew_puffer` exactly as `waterfalls.zrd.json` authors it —
+    // `FADE_RANGE [300, 400]`, `NEAR_FADE [40, 5]` — the only puffer in the install
+    // carrying both a near fade and the tightest far band.
     private static void PufferFadeBands(TestContext ctx)
     {
         var state = FadeTestState("spew_puffer", 40f, 5f, 300f, 400f);
@@ -682,9 +681,9 @@ public static class Suites
             $"ABLE-TO-FAIL CONTROL: with NEAR_FADE[0] as the ramp origin the 50 m sample would have drawn at alpha {repaired:0.000}");
     }
 
-    /// <summary>The author's three switches, each shown to switch. Config is file-backed with no
-    /// setter, so these come through <c>CreateWith</c>'s test-only override — see
-    /// <see cref="PufferFadeSwitches"/>.</summary>
+    // The author's three switches, each shown to switch. Config is file-backed with no
+    // setter, so these come through `CreateWith`'s test-only override — see
+    // PufferFadeSwitches.
     private static void PufferFadeSwitchesOff(TestContext ctx)
     {
         var state = FadeTestState("spew_puffer", 40f, 5f, 300f, 400f);
@@ -727,10 +726,10 @@ public static class Suites
             $"and it does NOT reach the near band, which still culls at 20 m on the unscaled depth");
     }
 
-    /// <summary>No camera published ⇒ no distance fade at all, rather than one measured against
-    /// the world origin. This is what keeps the unit suites, the plane viewer and the damage lab
-    /// out of the unauthored near cull at depth 0, and it is the state every OTHER puffer suite
-    /// runs in — which is why none of them moved.</summary>
+    // No camera published ⇒ no distance fade at all, rather than one measured against
+    // the world origin. This is what keeps the unit suites, the plane viewer and the damage lab
+    // out of the unauthored near cull at depth 0, and it is the state every OTHER puffer suite
+    // runs in — which is why none of them moved.
     private static void PufferFadeNoCameraNoFade(TestContext ctx)
     {
         var state = FadeTestState("no_camera", 40f, 5f, 300f, 400f);
@@ -744,11 +743,11 @@ public static class Suites
             $"and one inside the near cull draws too");
     }
 
-    /// <summary>The splitscreen rule (<c>BL-339</c>): the bands are evaluated against EVERY
-    /// pane's camera and the particle takes the most favourable answer, so a trail 20 m in front of
-    /// player 2 draws even while player 1's own camera near-culls it. Driven through the real
-    /// <see cref="ViewerSet"/> over real <c>Camera3D</c> nodes, which is the seam
-    /// <c>WeatherRig.Tick</c> publishes from.</summary>
+    // The splitscreen rule (`BL-339`): the bands are evaluated against EVERY
+    // pane's camera and the particle takes the most favourable answer, so a trail 20 m in front of
+    // player 2 draws even while player 1's own camera near-culls it. Driven through the real
+    // ViewerSet over real `Camera3D` nodes, which is the seam
+    // `WeatherRig.Tick` publishes from.
     private static void PufferFadeEveryPane(TestContext ctx)
     {
         var state = FadeTestState("spew_puffer", 40f, 5f, 300f, 400f);
@@ -815,8 +814,8 @@ public static class Suites
         }
     }
 
-    /// <summary>A bare <c>Camera3D</c> at a world position looking down −Z, parented to the test
-    /// host — a stand-in for a pane's camera, which is all a <see cref="ViewerSet"/> reads.</summary>
+    // A bare `Camera3D` at a world position looking down −Z, parented to the test
+    // host — a stand-in for a pane's camera, which is all a ViewerSet reads.
     private static Camera3D ViewerCamera(TestContext ctx, Vector3 at)
     {
         var cam = new Camera3D { Current = false };
@@ -827,10 +826,10 @@ public static class Suites
 
     // ---- PRIORITY inflates the sprite -------------------------------------------------------------
 
-    /// <summary>A PRIORITY 10 puffer spawns particles exactly 20% larger
-    /// than the same state at PRIORITY 0 — <c>1 + 0.02·10 = 1.2</c>, the hardware-path <c>K</c>
-    /// (<c>PriorityScaleDefault</c>). Burst mode, NUMBER 1, a degenerate SIZE_RANGE so the drawn
-    /// size is deterministic and the only thing that can move it is PRIORITY.</summary>
+    // A PRIORITY 10 puffer spawns particles exactly 20% larger
+    // than the same state at PRIORITY 0 — `1 + 0.02·10 = 1.2`, the hardware-path `K`
+    // (`PriorityScaleDefault`). Burst mode, NUMBER 1, a degenerate SIZE_RANGE so the drawn
+    // size is deterministic and the only thing that can move it is PRIORITY.
     private static void PufferPrioritySize(TestContext ctx)
     {
         static PufferState State(float priority) => new()
@@ -873,9 +872,9 @@ public static class Suites
             $"PRIORITY 10 draws 20% larger than PRIORITY 0 — 1 + 0.02·10 baseline={baseline:0.0000} inflated={inflated:0.0000}");
     }
 
-    /// <summary>One particle, no randomness: NUMBER 1, a degenerate random-velocity range (min ==
-    /// max, so the draw is exact), no deviation, no growth, no ramps. Burst mode, so the single
-    /// batch lands at t = 0 at the burst point.</summary>
+    // One particle, no randomness: NUMBER 1, a degenerate random-velocity range (min ==
+    // max, so the draw is exact), no deviation, no growth, no ramps. Burst mode, so the single
+    // batch lands at t = 0 at the burst point.
     private static PufferState WindTestState(string name, Vector3 v0, Vector3 accel,
         float friction, float windFactor) => new()
         {
@@ -894,10 +893,10 @@ public static class Suites
             Textures = new[] { "smoke101" },
         };
 
-    /// <summary>Runs one <see cref="WindTestState"/> particle for <paramref name="frames"/> steps of
-    /// <paramref name="dt"/> and returns its displacement. The burst is fired at the world origin
-    /// and a burst puffer's particles are stored in its own (there, identity) frame, so the
-    /// written position IS the displacement.</summary>
+    // Runs one WindTestState particle for `frames` steps of
+    // `dt` and returns its displacement. The burst is fired at the world origin
+    // and a burst puffer's particles are stored in its own (there, identity) frame, so the
+    // written position IS the displacement.
     private static Vector3 RunWindParticle(TestContext ctx, PufferState state, EffectAmbience ambience,
         int frames, float dt)
     {
@@ -953,11 +952,11 @@ public static class Suites
             $"and the crosswind leaves the unblown axis alone x={carried.X:0.0000}");
     }
 
-    /// <summary>The reorder, isolated: friction 0, no wind, a pure world acceleration. The traced
-    /// order steps position on LAST frame's velocity and only then adds <c>a·dt</c>, giving
-    /// <c>pos_n = a·dt²·n(n−1)/2</c>. Our old order (<c>v += a·dt</c> first, position after) gave
-    /// <c>a·dt²·n(n+1)/2</c> — larger by exactly <c>a·dt²·n</c>, i.e. one frame of the current
-    /// velocity, which is the whole of the difference and is asserted as such.</summary>
+    // The reorder, isolated: friction 0, no wind, a pure world acceleration. The traced
+    // order steps position on LAST frame's velocity and only then adds `a·dt`, giving
+    // `pos_n = a·dt²·n(n−1)/2`. Our old order (`v += a·dt` first, position after) gave
+    // `a·dt²·n(n+1)/2` — larger by exactly `a·dt²·n`, i.e. one frame of the current
+    // velocity, which is the whole of the difference and is asserted as such.
     private static void PufferAccelOrder(TestContext ctx)
     {
         const float Dt = 1f / 60f;
@@ -978,10 +977,10 @@ public static class Suites
             $"the gap is exactly one frame of the final velocity gap={oldOrder - traced:0.00000}");
     }
 
-    /// <summary>The per-puffer coupling. Both particles start at rest with no acceleration, so the
-    /// ONLY thing that can move them is the wind: <c>WIND_FACTOR</c> 0 must therefore not move at
-    /// all, and 1 must converge on the wind velocity. The carried one's closed form is exact —
-    /// <c>v_n = w(1 − damp^n)</c>, <c>pos_n = w·dt·(n − (1 − damp^n)/(1 − damp))</c>.</summary>
+    // The per-puffer coupling. Both particles start at rest with no acceleration, so the
+    // ONLY thing that can move them is the wind: `WIND_FACTOR` 0 must therefore not move at
+    // all, and 1 must converge on the wind velocity. The carried one's closed form is exact —
+    // `v_n = w(1 − damp^n)`, `pos_n = w·dt·(n − (1 − damp^n)/(1 − damp))`.
     private static void PufferWindFactorCoupling(TestContext ctx)
     {
         const float Dt = 1f / 60f, Friction = 3f;
@@ -1010,10 +1009,10 @@ public static class Suites
             $"and the coupling is linear in WIND_FACTOR — 0.3 drifts 0.3× as far x={half.X:0.0000}");
     }
 
-    /// <summary>The engine's own gate: the whole damp-toward-wind block sits inside
-    /// <c>if (friction != 0)</c>, so a frictionless puffer is untouched by any wind at any factor.
-    /// It is load-bearing only because there is a wind term inside the block: with an unconditional
-    /// <c>Exp(0) == 1</c> damp and no wind the gate would be the identity.</summary>
+    // The engine's own gate: the whole damp-toward-wind block sits inside
+    // `if (friction != 0)`, so a frictionless puffer is untouched by any wind at any factor.
+    // It is load-bearing only because there is a wind term inside the block: with an unconditional
+    // `Exp(0) == 1` damp and no wind the gate would be the identity.
     private static void PufferFrictionlessIgnoresWind(TestContext ctx)
     {
         const float Dt = 1f / 60f;
@@ -1027,9 +1026,9 @@ public static class Suites
             $"a FRICTION 0 puffer feels no wind at all drift={end.Length():0.000000}");
     }
 
-    /// <summary>The gust itself (<see cref="WorldWind"/>), against the shipped authored values —
-    /// <c>STATIC_VELOCITY (0,2,0)</c>, <c>RANDOM_MAX_SPEED 10</c>, <c>RANDOM_ACCEL 5</c>,
-    /// <c>RANDOM_ANG_VEL 5</c>, which every one of the install's 53 weather readers carries.</summary>
+    // The gust itself (WorldWind), against the shipped authored values —
+    // `STATIC_VELOCITY (0,2,0)`, `RANDOM_MAX_SPEED 10`, `RANDOM_ACCEL 5`,
+    // `RANDOM_ANG_VEL 5`, which every one of the install's 53 weather readers carries.
     private static void PufferWindGustModel(TestContext ctx)
     {
         var wind = new WorldWind(new Vector3(0f, 2f, 0f), 10f, 5f, 5f, new System.Random(7));
@@ -1060,9 +1059,9 @@ public static class Suites
         ctx.Check(still.Velocity == Vector3.Zero, $"WorldWind.Still() never blows v={still.Velocity}");
     }
 
-    /// <summary>A moving DISTANCE_INTERVAL host keeps AT_NODE's offset in the host frame for every
-    /// emitted puff, not only the still-host fallback. The retail speed cue is the canary: its
-    /// player,0,0,-60 attachment is what places the wisps 60 m ahead of the aircraft.</summary>
+    // A moving DISTANCE_INTERVAL host keeps AT_NODE's offset in the host frame for every
+    // emitted puff, not only the still-host fallback. The retail speed cue is the canary: its
+    // player,0,0,-60 attachment is what places the wisps 60 m ahead of the aircraft.
     private static void PufferTrailOffset(TestContext ctx, PufferState state)
     {
         ctx.Check(state.AtNodeOffset.IsEqualApprox(new Vector3(0f, 0f, -60f)),
@@ -1089,9 +1088,9 @@ public static class Suites
         }
     }
 
-    /// <summary>The speed-cue adapter selects the retail altitude bands, preserves the selected
-    /// puffer above the final authored threshold, suppresses every cue near ground, and Reset
-    /// removes live particles so a respawn cannot bridge positions.</summary>
+    // The speed-cue adapter selects the retail altitude bands, preserves the selected
+    // puffer above the final authored threshold, suppresses every cue near ground, and Reset
+    // removes live particles so a respawn cannot bridge positions.
     private static void SpeedCueBands(TestContext ctx, params PufferState[] states)
     {
         var gpu = new RecordingEmitterRenderer[3];
@@ -1166,8 +1165,8 @@ public static class Suites
         }
     }
 
-    /// <summary>C1 and C4 share cue geometry and timing but retain their chapter-authored alpha
-    /// variants instead of collapsing onto one global tune.</summary>
+    // C1 and C4 share cue geometry and timing but retain their chapter-authored alpha
+    // variants instead of collapsing onto one global tune.
     private static void SpeedCueChapterVariants(TestContext ctx)
     {
         var expected = new[]
@@ -1193,9 +1192,9 @@ public static class Suites
         }
     }
 
-    /// <summary>Burst: the pool is sized from the calling animation's stop time, the first batch is
-    /// spawned at t = 0 rather than one interval in, the flipbook walks its whole sequence, and the
-    /// emitter puts itself away once the last particle dies.</summary>
+    // Burst: the pool is sized from the calling animation's stop time, the first batch is
+    // spawned at t = 0 rather than one interval in, the flipbook walks its whole sequence, and the
+    // emitter puts itself away once the last particle dies.
     private static void PufferBurstMode(TestContext ctx, PufferState state)
     {
         var gpu = new RecordingEmitterRenderer();
@@ -1366,10 +1365,10 @@ public static class Suites
         }
     }
 
-    /// <summary>A DISTANCE_INTERVAL state through <c>Emit</c>: the first call homes the trail and
-    /// time-sputters one batch (the still-host rule — on the homing frame no motion has elapsed
-    /// yet), a moving host emits one puff per interval of actual motion with the remainder carried
-    /// across frames instead of rounded away.</summary>
+    // A DISTANCE_INTERVAL state through `Emit`: the first call homes the trail and
+    // time-sputters one batch (the still-host rule — on the homing frame no motion has elapsed
+    // yet), a moving host emits one puff per interval of actual motion with the remainder carried
+    // across frames instead of rounded away.
     private static void PufferTrailMode(TestContext ctx, PufferState state)
     {
         var gpu = new RecordingEmitterRenderer();
@@ -1402,9 +1401,9 @@ public static class Suites
         }
     }
 
-    /// <summary>A distance state whose host stands still keeps the time cadence (the damaged
-    /// building's sputter): the authored interval can never elapse, so <c>Emit</c> with no burn
-    /// rate falls back to one batch per synthetic 0.1 s TIME_INTERVAL, at the held point.</summary>
+    // A distance state whose host stands still keeps the time cadence (the damaged
+    // building's sputter): the authored interval can never elapse, so `Emit` with no burn
+    // rate falls back to one batch per synthetic 0.1 s TIME_INTERVAL, at the held point.
     private static void PufferStillSputter(TestContext ctx, PufferState state)
     {
         var gpu = new RecordingEmitterRenderer();
@@ -1430,10 +1429,10 @@ public static class Suites
         }
     }
 
-    /// <summary>A host that CANNOT move (the damage lab's parked plane) declares a burn rate:
-    /// <c>Emit</c> with <c>staticBurnMps</c> spends virtual metres at the held point — the
-    /// authored per-metre density, not the time cadence — through the same carry as the moving
-    /// trail.</summary>
+    // A host that CANNOT move (the damage lab's parked plane) declares a burn rate:
+    // `Emit` with `staticBurnMps` spends virtual metres at the held point — the
+    // authored per-metre density, not the time cadence — through the same carry as the moving
+    // trail.
     private static void PufferStaticBurn(TestContext ctx, PufferState state)
     {
         var gpu = new RecordingEmitterRenderer();
@@ -1460,11 +1459,11 @@ public static class Suites
         }
     }
 
-    /// <summary>The pause + far revive, through <c>Stop</c> itself: a pooled effect-template slot
-    /// is teleported to each new call site, so a distance-state emitter stopped at one blast and
-    /// revived at the next must re-home there — a kept trail origin draws a puff line across the
-    /// whole jump (the rocket-explosion ghost trails). <c>Stop</c> ends trail AND sustain
-    /// unconditionally; the revive's first call sputters fresh at the new site.</summary>
+    // The pause + far revive, through `Stop` itself: a pooled effect-template slot
+    // is teleported to each new call site, so a distance-state emitter stopped at one blast and
+    // revived at the next must re-home there — a kept trail origin draws a puff line across the
+    // whole jump (the rocket-explosion ghost trails). `Stop` ends trail AND sustain
+    // unconditionally; the revive's first call sputters fresh at the new site.
     private static void PufferStopRevive(TestContext ctx, PufferState state)
     {
         var gpu = new RecordingEmitterRenderer();
@@ -1698,10 +1697,10 @@ public static class Suites
         });
     }
 
-    /// <summary>Drives one sustained emitter for 30 s of held-still emission and reports the
-    /// column it built: the highest particle CENTRE, the highest drawn sprite TOP (centre plus the
-    /// quad's half-side — the renderer scales a 1×1 quad by <c>Size</c>), the peak live population
-    /// and the largest sprite ever drawn. Heights are relative to the emitter's own origin.</summary>
+    // Drives one sustained emitter for 30 s of held-still emission and reports the
+    // column it built: the highest particle CENTRE, the highest drawn sprite TOP (centre plus the
+    // quad's half-side — the renderer scales a 1×1 quad by `Size`), the peak live population
+    // and the largest sprite ever drawn. Heights are relative to the emitter's own origin.
     private static (float Centre, float Top, float PreA1Top, int Live, float Sprite) MeasureFireColumn(
         TestContext ctx, PufferState state, EffectAmbience ambience)
     {
@@ -1871,12 +1870,12 @@ public static class Suites
         }
     }
 
-    /// <summary>B2's per-muzzle slot state (the forget + catch-up pass), B3's intercept solver and
-    /// B4's candidate scan, the first three in isolation — no plane, no pool,
-    /// <see cref="AimAssist"/> is engine-free by design — plus a golden check that the player.json
-    /// and weapons.json values the assist consumes parse at their documented shipped figures
-    /// at their shipped figures. The ordnance list is the one
-    /// case that needs a live pool, since the list IS a filter over the rounds in flight.</summary>
+    // B2's per-muzzle slot state (the forget + catch-up pass), B3's intercept solver and
+    // B4's candidate scan, the first three in isolation — no plane, no pool,
+    // AimAssist is engine-free by design — plus a golden check that the player.json
+    // and weapons.json values the assist consumes parse at their documented shipped figures
+    // at their shipped figures. The ordnance list is the one
+    // case that needs a live pool, since the list IS a filter over the rounds in flight.
     private static void AimAssistSuite(TestContext ctx)
     {
         AimAssistCatchup(ctx);
@@ -1890,10 +1889,10 @@ public static class Suites
         AimAssistFireDirection(ctx);
     }
 
-    /// <summary>The catch-up slerp: a ~0.2 s time constant at the shipped catchup_rate (5.0), full
-    /// convergence given enough time, and an outright snap on a single frame at or past
-    /// 1/catchup_rate — the real hitch-behaviour difference docs/org/aim-assist.md flags, not a
-    /// rounding detail to smooth away.</summary>
+    // The catch-up slerp: a ~0.2 s time constant at the shipped catchup_rate (5.0), full
+    // convergence given enough time, and an outright snap on a single frame at or past
+    // 1/catchup_rate — the real hitch-behaviour difference docs/org/aim-assist.md flags, not a
+    // rounding detail to smooth away.
     private static void AimAssistCatchup(TestContext ctx)
     {
         const float catchupRate = 5f;       // shipped sticky_bullet_catchup_rate
@@ -1942,9 +1941,9 @@ public static class Suites
             $"aim-assist catch-up: a frame ≥ 1/catchup_rate snaps the gun line in one step");
     }
 
-    /// <summary>The forget timer measures time since the barrel last FIRED, not time since a lock
-    /// was lost: stop restamping and the target unwinds to local forward exactly
-    /// forget_interval seconds later; keep restamping (as B5's fire call will) and it never does.</summary>
+    // The forget timer measures time since the barrel last FIRED, not time since a lock
+    // was lost: stop restamping and the target unwinds to local forward exactly
+    // forget_interval seconds later; keep restamping (as B5's fire call will) and it never does.
     private static void AimAssistForgetTimer(TestContext ctx)
     {
         const float forgetInterval = 1.5f; // shipped sticky_bullet_forget_interval
@@ -2001,11 +2000,11 @@ public static class Suites
             $"aim-assist forget: continuous fire never lets the target unwind");
     }
 
-    /// <summary>Golden check: the keys B2/B4 consume parse off the real player.json and
-    /// weapons.json at their documented shipped values, not just their compiled-in defaults. The
-    /// dist_factor one matters most — it ships at 0.0 where the executable's compiled fallback is
-    /// 2.5e-4, so a reader that quietly failed to find the key would restore a distance term the
-    /// shipped data deliberately turns off.</summary>
+    // Golden check: the keys B2/B4 consume parse off the real player.json and
+    // weapons.json at their documented shipped values, not just their compiled-in defaults. The
+    // dist_factor one matters most — it ships at 0.0 where the executable's compiled fallback is
+    // 2.5e-4, so a reader that quietly failed to find the key would restore a distance term the
+    // shipped data deliberately turns off.
     private static void AimAssistShippedData(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -2029,12 +2028,12 @@ public static class Suites
         }
     }
 
-    /// <summary>B3's constant-velocity intercept solver (<see cref="AimAssist.TryIntercept"/>): a
-    /// stationary target dead ahead solves to the plain displacement direction with t =
-    /// distance/speed; a crossing target's solved direction and t place the round at exactly the
-    /// target's projected position (self-consistency, not an independent re-derivation of the
-    /// quadratic); a target receding faster than the round returns no solution rather than a
-    /// bogus direction.</summary>
+    // B3's constant-velocity intercept solver (AimAssist.TryIntercept): a
+    // stationary target dead ahead solves to the plain displacement direction with t =
+    // distance/speed; a crossing target's solved direction and t place the round at exactly the
+    // target's projected position (self-consistency, not an independent re-derivation of the
+    // quadratic); a target receding faster than the round returns no solution rather than a
+    // bogus direction.
     private static void AimAssistIntercept(TestContext ctx)
     {
         var muzzle = Vector3.Zero;
@@ -2092,12 +2091,12 @@ public static class Suites
         return new Vector3(Mathf.Sin(a), 0f, -Mathf.Cos(a)) * range;
     }
 
-    /// <summary>B4's rejection gates, each proved able to fail: the same candidate that is accepted
-    /// on the baseline is rejected when exactly one thing changes. Covers the engine's order —
-    /// self, not live, same team (and either side unaffiliated), out of RANGE, outside the cone —
-    /// plus the per-target <c>+0x50</c> cone override, which nothing ships but which is ported
-    /// deliberately (Decision 2), and the turret pass, which exists and iterates nothing until M4
-    /// puts a list in it.</summary>
+    // B4's rejection gates, each proved able to fail: the same candidate that is accepted
+    // on the baseline is rejected when exactly one thing changes. Covers the engine's order —
+    // self, not live, same team (and either side unaffiliated), out of RANGE, outside the cone —
+    // plus the per-target `+0x50` cone override, which nothing ships but which is ported
+    // deliberately (Decision 2), and the turret pass, which exists and iterates nothing until M4
+    // puts a list in it.
     private static void AimAssistScanGates(TestContext ctx)
     {
         int enemy = AimAssist.TeamOfPilot(1);
@@ -2168,11 +2167,11 @@ public static class Suites
             $"aim-assist scan: the turret pass exists and scores — M4 wires a list in, it does not re-derive this");
     }
 
-    /// <summary>Selection among survivors, on the shipped <c>dist_factor 0.0</c>: a distant
-    /// on-axis target outranks a near off-axis one at any range inside RANGE, because the distance
-    /// term is deleted outright. The contrast case runs the identical geometry at the executable's
-    /// compiled 2.5e-4 default and shows the winner FLIPS — so this is a measurement of the shipped
-    /// value, not of the arithmetic being insensitive to it.</summary>
+    // Selection among survivors, on the shipped `dist_factor 0.0`: a distant
+    // on-axis target outranks a near off-axis one at any range inside RANGE, because the distance
+    // term is deleted outright. The contrast case runs the identical geometry at the executable's
+    // compiled 2.5e-4 default and shows the winner FLIPS — so this is a measurement of the shipped
+    // value, not of the arithmetic being insensitive to it.
     private static void AimAssistSelection(TestContext ctx)
     {
         int enemy = AimAssist.TeamOfPilot(1);
@@ -2188,11 +2187,11 @@ public static class Suites
             $"aim-assist selection: at the executable's 2.5e-4 default the same pair flips to the near one — the term is live, the shipped data turns it off");
     }
 
-    /// <summary>The rocket snap, on a live pool: a real proximity-fused round in flight is a
-    /// candidate, and it outranks the aircraft behind it. The ordnance list is a FILTER over the
-    /// rounds in flight, so this is the one B4 case that cannot be proved off-engine — and the gun
-    /// round fired alongside is the able-to-fail half: it is in the same pool, alive, and must NOT
-    /// be collected, since it carries no proximity fuse.</summary>
+    // The rocket snap, on a live pool: a real proximity-fused round in flight is a
+    // candidate, and it outranks the aircraft behind it. The ordnance list is a FILTER over the
+    // rounds in flight, so this is the one B4 case that cannot be proved off-engine — and the gun
+    // round fired alongside is the able-to-fail half: it is in the same pool, alive, and must NOT
+    // be collected, since it carries no proximity fuse.
     private static void AimAssistOrdnancePriority(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -2253,12 +2252,12 @@ public static class Suites
         }
     }
 
-    /// <summary>B5's launch scatter (<see cref="AimAssist.Scatter"/>): every round lands inside the
-    /// cone, the polar angle is UNIFORM IN THE ANGLE rather than over the cone's solid angle (the
-    /// reflex port, and what <c>ProjectilePool.ApplySpread</c>'s <c>sqrt(rand)</c> does, which would
-    /// pile shots at the rim), and the roll about the aim axis covers the full circle. The
-    /// able-to-fail control is the solid-angle sampling itself, computed alongside from the same
-    /// draws: it fails the flatness test this one passes.</summary>
+    // B5's launch scatter (AimAssist.Scatter): every round lands inside the
+    // cone, the polar angle is UNIFORM IN THE ANGLE rather than over the cone's solid angle (the
+    // reflex port, and what `ProjectilePool.ApplySpread`'s `sqrt(rand)` does, which would
+    // pile shots at the rim), and the roll about the aim axis covers the full circle. The
+    // able-to-fail control is the solid-angle sampling itself, computed alongside from the same
+    // draws: it fails the flatness test this one passes.
     private static void AimAssistScatter(TestContext ctx)
     {
         const int shots = 20000;
@@ -2305,12 +2304,12 @@ public static class Suites
             $"aim-assist scatter: the roll about the aim axis covers the whole circle (thinnest quadrant {rollMin} of {shots / 4} even)");
     }
 
-    /// <summary>B5's fire-call step order (<c>FUN_004b6530</c>), which is asymmetric on purpose: the
-    /// scan updates the slot's TARGET, and what leaves the muzzle is the SMOOTHED direction from
-    /// previous frames. Run on a rolled plane basis, so a world/local mix-up cannot pass: the fired
-    /// direction must be the smoothed LOCAL vector rotated out to world (inside the scatter cone),
-    /// and the stored target must be the scan winner rotated INTO local. Firing this frame's scan
-    /// result instead would remove the lag entirely and read as an aimbot.</summary>
+    // B5's fire-call step order (`FUN_004b6530`), which is asymmetric on purpose: the
+    // scan updates the slot's TARGET, and what leaves the muzzle is the SMOOTHED direction from
+    // previous frames. Run on a rolled plane basis, so a world/local mix-up cannot pass: the fired
+    // direction must be the smoothed LOCAL vector rotated out to world (inside the scatter cone),
+    // and the stored target must be the scan winner rotated INTO local. Firing this frame's scan
+    // result instead would remove the lag entirely and read as an aimbot.
     private static void AimAssistFireDirection(TestContext ctx)
     {
         var rng = new RandomNumberGenerator { Seed = 4242 };
@@ -2365,10 +2364,10 @@ public static class Suites
             $"aim-assist fire: with nothing to snap onto the slot's target is seeded with the plane's own forward axis");
     }
 
-    /// <summary><see cref="Loadout.ForRig"/> against all 11 player airframes — 4 gun groups
-    /// covering every <c>firepointN</c> the rig actually carries (the Kestrel's odd 7th), one
-    /// hardpoint per <c>pylonN</c>, no marker bound to two groups, and every synthesized group
-    /// fireable even where stock marks the slot a turret.</summary>
+    // Loadout.ForRig against all 11 player airframes — 4 gun groups
+    // covering every `firepointN` the rig actually carries (the Kestrel's odd 7th), one
+    // hardpoint per `pylonN`, no marker bound to two groups, and every synthesized group
+    // fireable even where stock marks the slot a turret.
     private static void LoadoutForRig(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2939,8 +2938,8 @@ public static class Suites
         }
     }
 
-    /// <summary>A static world plate for the graze runs — layer 1 (the world), placed once at its
-    /// final pose because a body MOVED after creation is invisible to space queries this frame.</summary>
+    // A static world plate for the graze runs — layer 1 (the world), placed once at its
+    // final pose because a body MOVED after creation is invisible to space queries this frame.
     private static StaticBody3D Plate(string name, Vector3 size, Vector3 at)
     {
         var body = new StaticBody3D { Name = name };
@@ -3877,11 +3876,11 @@ public static class Suites
         }
     }
 
-    /// <summary>The F12 zeppelin run: the objective-zeppelin selection, the builder's own switch,
-    /// and the wave arm that replaces E11's teleport. Everything runs over C1/IA1's real
-    /// <c>ia.zrd.json</c> / <c>egen.zrd.json</c> / <c>zeppelins.zrd.json</c>, on the same host +
-    /// <c>cargobay</c> stand-in world the <c>zeppelin-launch</c> suite uses, so the drop geometry
-    /// under test is the one <c>AiGeneratorRuntime</c> already owns.</summary>
+    // The F12 zeppelin run: the objective-zeppelin selection, the builder's own switch,
+    // and the wave arm that replaces E11's teleport. Everything runs over C1/IA1's real
+    // `ia.zrd.json` / `egen.zrd.json` / `zeppelins.zrd.json`, on the same host +
+    // `cargobay` stand-in world the `zeppelin-launch` suite uses, so the drop geometry
+    // under test is the one `AiGeneratorRuntime` already owns.
     private static void InstantActionZeppelin(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -4133,11 +4132,11 @@ public static class Suites
         });
     }
 
-    /// <summary>How many collision shapes hang anywhere under this node, and how many of those are
-    /// switched off — the state <c>Mech3/WorldCollision</c> derives from its owner's visibility.
-    /// Recursive, because a world node's shapes hang off its MESH children rather than off the
-    /// named node itself; a non-recursive count reads 0 of 0 and passes an "all disabled" test
-    /// vacuously.</summary>
+    // How many collision shapes hang anywhere under this node, and how many of those are
+    // switched off — the state `Mech3/WorldCollision` derives from its owner's visibility.
+    // Recursive, because a world node's shapes hang off its MESH children rather than off the
+    // named node itself; a non-recursive count reads 0 of 0 and passes an "all disabled" test
+    // vacuously.
     private static (int Total, int Disabled) ShapeStates(Node node)
     {
         int total = 0, disabled = 0;
@@ -4475,10 +4474,10 @@ public static class Suites
         });
     }
 
-    /// <summary>A hand-authored <c>--ia=</c> file for one end-condition case, written to the
-    /// scratch folder and read back through the REAL reader — so a change to how
-    /// <c>mission_type</c>/<c>lives</c> parse moves this suite too, and no test builds an
-    /// <c>InstantActionDef</c> the CLI could not produce.</summary>
+    // A hand-authored `--ia=` file for one end-condition case, written to the
+    // scratch folder and read back through the REAL reader — so a change to how
+    // `mission_type`/`lives` parse moves this suite too, and no test builds an
+    // `InstantActionDef` the CLI could not produce.
     private static InstantActionDef EndDef(TestContext ctx, string tag, string missionType,
         int? lives = null, string? cargoZeppelin = null)
     {
@@ -4941,12 +4940,12 @@ public static class Suites
         }
     }
 
-    /// <summary>The world AA emplacements against the real C1 chapter world: the NODES
-    /// placement census, the shipped-ACTIVATED default, the --wake-turrets stand-in, the
-    /// enemy-default/ally team split, the aim-assist candidate list, and the healthy-node kill
-    /// switch. Zeppelin-slung entries are placed (they are world nodes) and their one gameplay
-    /// path is checked here too: the Instant Action builder's subtree-scoped activation of the
-    /// objective hull's rings, both directions, plus the fire it puts on a plane alongside.</summary>
+    // The world AA emplacements against the real C1 chapter world: the NODES
+    // placement census, the shipped-ACTIVATED default, the --wake-turrets stand-in, the
+    // enemy-default/ally team split, the aim-assist candidate list, and the healthy-node kill
+    // switch. Zeppelin-slung entries are placed (they are world nodes) and their one gameplay
+    // path is checked here too: the Instant Action builder's subtree-scoped activation of the
+    // objective hull's rings, both directions, plus the fire it puts on a plane alongside.
     private static void WorldTurrets(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -6252,12 +6251,12 @@ public static class Suites
         }
     }
 
-    /// <summary>The E16 dispatch on a live AI aircraft, over the same B8 lifecycle the session
-    /// runs (prewarm the accent's clips, retire the loader, play after the archive is closed).
-    /// The talker chance is pinned to 1 so the assertions are about the dispatch rules, not the
-    /// dice; audibility itself is the user's half (docs/verification.md, "What this project
-    /// cannot verify itself") — what IS assertable is the dispatch decision, the resolved clip
-    /// name and the PlayOneShot call.</summary>
+    // The E16 dispatch on a live AI aircraft, over the same B8 lifecycle the session
+    // runs (prewarm the accent's clips, retire the loader, play after the archive is closed).
+    // The talker chance is pinned to 1 so the assertions are about the dispatch rules, not the
+    // dice; audibility itself is the user's half (docs/verification.md, "What this project
+    // cannot verify itself") — what IS assertable is the dispatch decision, the resolved clip
+    // name and the PlayOneShot call.
     private static void AiVoice(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -6406,7 +6405,7 @@ public static class Suites
         }
     }
 
-    /// <summary>The most recent one-shot player under a <see cref="WorldSounds"/> node.</summary>
+    // The most recent one-shot player under a WorldSounds node.
     private static AudioStreamPlayer3D? LastOneShotPlayer(WorldSounds sounds)
     {
         AudioStreamPlayer3D? last = null;
@@ -7284,8 +7283,8 @@ public static class Suites
         });
     }
 
-    /// <summary>A copy of a shipped record with <c>cannon_inaccuracy</c> authored — the scatter
-    /// phase's instrument (no C1 record authors one; C2B/M04's 10° is the shipped value).</summary>
+    // A copy of a shipped record with `cannon_inaccuracy` authored — the scatter
+    // phase's instrument (no C1 record authors one; C2B/M04's 10° is the shipped value).
     private static ZeppelinDef CloneWithInaccuracy(ZeppelinDef def, float inaccuracyDeg) => new()
     {
         Node = def.Node,
@@ -7314,9 +7313,9 @@ public static class Suites
         CannonInaccuracyDeg = inaccuracyDeg,
     };
 
-    /// <summary>A minimal constructed zeppelin record for the zeppelin-vs-zeppelin phase:
-    /// near-static (rates/speed floored) so the constructed bearings hold while cannons
-    /// deploy on the fallback timing.</summary>
+    // A minimal constructed zeppelin record for the zeppelin-vs-zeppelin phase:
+    // near-static (rates/speed floored) so the constructed bearings hold while cannons
+    // deploy on the fallback timing.
     private static ZeppelinDef SyntheticZep(string node, Vector3 pos, string net,
         string[]? targets = null, string[]? healthy = null, bool deactivated = false)
     {
@@ -7403,8 +7402,8 @@ public static class Suites
         }
     }
 
-    /// <summary>How many <see cref="MeshInstance3D"/> in the subtree carry a material with an albedo
-    /// texture — the glTF importer hands each surface back a <see cref="StandardMaterial3D"/>.</summary>
+    // How many MeshInstance3D in the subtree carry a material with an albedo
+    // texture — the glTF importer hands each surface back a StandardMaterial3D.
     private static int CountTexturedMeshes(Node node)
     {
         int count = 0;
@@ -7444,10 +7443,10 @@ public static class Suites
         });
     }
 
-    /// <summary>The invisible-wall tripwire: after a chapter's world has bootstrapped — mission
-    /// setup script, RESET_STATEs, ON_STARTUP, the unplaced sweep — no collider may still be
-    /// enabled where nothing is drawn. Every chapter, because what each mission hides differs and
-    /// the failure is silent until someone flies into it (C1/IA1's <c>hk_zep</c>).</summary>
+    // The invisible-wall tripwire: after a chapter's world has bootstrapped — mission
+    // setup script, RESET_STATEs, ON_STARTUP, the unplaced sweep — no collider may still be
+    // enabled where nothing is drawn. Every chapter, because what each mission hides differs and
+    // the failure is silent until someone flies into it (C1/IA1's `hk_zep`).
     private static void CollisionVisibility(TestContext ctx)
     {
         foreach (var (chapter, _, _) in Census)
@@ -8144,11 +8143,11 @@ public static class Suites
         });
     }
 
-    /// <summary>Is the emitter <paramref name="name"/> ON <paramref name="host"/> emitting? Null when
-    /// no such emitter is known. Host-qualified on purpose: puffer names are NOT unique across
-    /// definitions — `small_fireball` declares a `trailpuffer2` of its own, and a name-only read
-    /// answers about whichever row comes first, which lets a debris assertion pass against a
-    /// runtime with the stop deleted outright.</summary>
+    // Is the emitter `name` ON `host` emitting? Null when
+    // no such emitter is known. Host-qualified on purpose: puffer names are NOT unique across
+    // definitions — `small_fireball` declares a `trailpuffer2` of its own, and a name-only read
+    // answers about whichever row comes first, which lets a debris assertion pass against a
+    // runtime with the stop deleted outright.
     private static bool? EmitterOn(AnimRuntime runtime, string name, string host)
     {
         foreach (var row in runtime.Emitters.Census)
@@ -8161,10 +8160,10 @@ public static class Suites
         return null;
     }
 
-    /// <summary>A bare stage carrying the nodes a definition names, plus a runtime bound to it
-    /// through a <see cref="CountingEmitterFactory"/>. Flat children, never a hierarchy: the point is
-    /// to give each named host its own subtree, so a stop that reaches the wrong one is visible
-    /// rather than being absorbed by a shared ancestor.</summary>
+    // A bare stage carrying the nodes a definition names, plus a runtime bound to it
+    // through a CountingEmitterFactory. Flat children, never a hierarchy: the point is
+    // to give each named host its own subtree, so a stop that reaches the wrong one is visible
+    // rather than being absorbed by a shared ancestor.
     private static void WithEmitterStage(TestContext ctx, AnimProgram program, string stageName,
         IEnumerable<string> nodeNames,
         System.Action<Node3D, AnimRuntime, CountingEmitterFactory> body,
@@ -8415,11 +8414,11 @@ public static class Suites
         }
     }
 
-    /// <summary>The wash's own gate — `If PlayerRange 10000` — answers to the NEAREST human, not
-    /// one camera (`BL-365`): a burst still fires while the camera this stage was built
-    /// against sits 5 km off, as long as SOME entry in `PlayerPositions` is inside the 100 m
-    /// gate. This is upstream of B12's routing (which panes a fired wash reaches) — here nothing
-    /// has fired yet, so no pane would have anything to route.</summary>
+    // The wash's own gate — `If PlayerRange 10000` — answers to the NEAREST human, not
+    // one camera (`BL-365`): a burst still fires while the camera this stage was built
+    // against sits 5 km off, as long as SOME entry in `PlayerPositions` is inside the 100 m
+    // gate. This is upstream of B12's routing (which panes a fired wash reaches) — here nothing
+    // has fired yet, so no pane would have anything to route.
     private static void PlayerRangeNearestHuman(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -8453,9 +8452,9 @@ public static class Suites
         });
     }
 
-    /// <summary>A two-pane <see cref="ScreenFlash"/> over bare HUD parents — the shape
-    /// <c>GameSession</c> builds from the rigs, with nothing but the parents and the viewer set,
-    /// since that is all the routing reads.</summary>
+    // A two-pane ScreenFlash over bare HUD parents — the shape
+    // `GameSession` builds from the rigs, with nothing but the parents and the viewer set,
+    // since that is all the routing reads.
     private static (ScreenFlash Flash, Node[] Panes) PaneFlash(TestContext ctx, ViewerSet? viewers)
     {
         var panes = new[] { new Node { Name = "pane1_hud" }, new Node { Name = "pane2_hud" } };
@@ -8466,12 +8465,12 @@ public static class Suites
         return (flash, panes);
     }
 
-    /// <summary>A miniature world-effects stage: the named template roots built from the chapter's
-    /// real gamez into one pool slot, each hidden, under an effects-role runtime bound to the
-    /// subset of the program the effect needs. Real geometry on purpose — this suite is about mesh
-    /// VISIBILITY, which named empty nodes cannot express — and the roles are the production ones
-    /// (<c>TemplateStage.Shown</c> + <c>Pooled</c>, the pair <c>WorldEffectsFactory</c> seals into
-    /// the stage it builds), since the reveal exists only under them.</summary>
+    // A miniature world-effects stage: the named template roots built from the chapter's
+    // real gamez into one pool slot, each hidden, under an effects-role runtime bound to the
+    // subset of the program the effect needs. Real geometry on purpose — this suite is about mesh
+    // VISIBILITY, which named empty nodes cannot express — and the roles are the production ones
+    // (`TemplateStage.Shown` + `Pooled`, the pair `WorldEffectsFactory` seals into
+    // the stage it builds), since the reveal exists only under them.
     private static void WithEffectStage(TestContext ctx, TestWorld world, string animName,
         IEnumerable<string> rootNames, System.Action<Node3D, AnimRuntime, Vector3> body)
     {
@@ -8529,9 +8528,9 @@ public static class Suites
         ctx.WriteArtifact("ordnance-burst-timeline.txt", report.ToString());
     }
 
-    /// <summary>`he_ring-he_ground_effect.json` — five sequences, two of them unnamed and Initial,
-    /// three ON_CALL — plus `flame_ball_01-large_fireball.json`, which its fourth CALL_ANIMATION
-    /// reaches and which carries the parked-stopper case.</summary>
+    // `he_ring-he_ground_effect.json` — five sequences, two of them unnamed and Initial,
+    // three ON_CALL — plus `flame_ball_01-large_fireball.json`, which its fourth CALL_ANIMATION
+    // reaches and which carries the parked-stopper case.
     private static void HeBurstTimeline(TestContext ctx, TestWorld world, System.Text.StringBuilder report)
     {
         // The first unnamed Initial sequence: eight events, none carrying a start, so the whole
@@ -8616,8 +8615,8 @@ public static class Suites
         });
     }
 
-    /// <summary>`flash_control-flash_effect.json` — the pure light case, two sequences. The one
-    /// timed event in it is a `START_TIME ANIMATION 1.5`, read against the instance clock.</summary>
+    // `flash_control-flash_effect.json` — the pure light case, two sequences. The one
+    // timed event in it is a `START_TIME ANIMATION 1.5`, read against the instance clock.
     private static void FlashBurstTimeline(TestContext ctx, TestWorld world, System.Text.StringBuilder report)
     {
         var lanes = new[]
@@ -8644,9 +8643,9 @@ public static class Suites
             fired => CheckLanes(ctx, "flash_effect", fired, lanes, report));
     }
 
-    /// <summary>`sonic_effect-sonic_ground_effect.json` — four sequences, two unnamed and Initial.
-    /// The repeat-call case: the first Initial sequence calls `sonic_light_seq` at #0 and again at #4,
-    /// 1.2 s later.</summary>
+    // `sonic_effect-sonic_ground_effect.json` — four sequences, two unnamed and Initial.
+    // The repeat-call case: the first Initial sequence calls `sonic_light_seq` at #0 and again at #4,
+    // 1.2 s later.
     private static void SonicBurstTimeline(TestContext ctx, TestWorld world, System.Text.StringBuilder report)
     {
         // The 15-event Initial sequence. #3 carries `START_TIME ANIMATION 1.2`; everything behind
@@ -8923,8 +8922,8 @@ public static class Suites
         });
     }
 
-    /// <summary>A flat named call-site node for <see cref="DamageTemplatePool"/> — name meta set
-    /// the way the crash rig's own anchor scaffold sets it, so resolution finds it.</summary>
+    // A flat named call-site node for DamageTemplatePool — name meta set
+    // the way the crash rig's own anchor scaffold sets it, so resolution finds it.
     private static Node3D PoolAnchorNode(string name, Vector3 at)
     {
         var node = new Node3D { Name = name, Position = at };
@@ -9197,9 +9196,9 @@ public static class Suites
         });
     }
 
-    /// <summary>Every wreck node's rest pose — the local mirror of
-    /// <c>WorldEffectsFactory.CollectRestPoses</c>, so the suite's respawn ritual can re-home the
-    /// flung pieces the way <c>FlightController.Respawn</c> does.</summary>
+    // Every wreck node's rest pose — the local mirror of
+    // `WorldEffectsFactory.CollectRestPoses`, so the suite's respawn ritual can re-home the
+    // flung pieces the way `FlightController.Respawn` does.
     private static void CollectRestPoses(Node3D node, List<(Node3D Node, Transform3D RestPose)> into)
     {
         into.Add((node, node.Transform));
@@ -9212,8 +9211,8 @@ public static class Suites
         }
     }
 
-    /// <summary>Meshes drawing under one staged template copy — visibility taken in-tree, so a
-    /// parent the reset pass switched off darkens the whole copy the way it does on screen.</summary>
+    // Meshes drawing under one staged template copy — visibility taken in-tree, so a
+    // parent the reset pass switched off darkens the whole copy the way it does on screen.
     private static int LitMeshCount(Node3D copy)
     {
         int n = copy is MeshInstance3D lit && lit.IsVisibleInTree() ? 1 : 0;
@@ -10196,9 +10195,9 @@ public static class Suites
         });
     }
 
-    /// <summary>One bounce-terminated piece: it must launch, and its bounce sequence must fire a
-    /// flight time later that lands inside the band its authored <c>translation_range</c> allows.
-    /// A missing launch and a missing landing are reported apart — they are different bugs.</summary>
+    // One bounce-terminated piece: it must launch, and its bounce sequence must fire a
+    // flight time later that lands inside the band its authored `translation_range` allows.
+    // A missing launch and a missing landing are reported apart — they are different bugs.
     private static void CheckFlight(
         TestContext ctx, string node, string seq, float launchAt, float bounceAt, float min, float max)
     {
@@ -10317,9 +10316,9 @@ public static class Suites
         });
     }
 
-    /// <summary>The <c>part1</c>…<c>part8</c> the flying-parts def drives, by node name, from
-    /// anywhere under the staged template. Named lookup rather than a child index: the wreck is
-    /// real gamez geometry and its parts sit at whatever depth it authors them.</summary>
+    // The `part1`…`part8` the flying-parts def drives, by node name, from
+    // anywhere under the staged template. Named lookup rather than a child index: the wreck is
+    // real gamez geometry and its parts sit at whatever depth it authors them.
     private static void CollectNamed(Node node, Dictionary<string, Node3D> into)
     {
         if (node is Node3D n3 && n3.Name.ToString().StartsWith("part", System.StringComparison.Ordinal))
@@ -10460,12 +10459,12 @@ public static class Suites
         }
     }
 
-    /// <summary>The B13 rule (<c>BL-366</c>): <see cref="WorldLights.Commit"/> fades and ranks
-    /// each light against the NEAREST of every pane's camera, not a single position. Driven
-    /// straight against a real <see cref="WorldLights"/> instance with synthetic positions —
-    /// there is no per-player placement flag to give two scripted panes independent spots (the
-    /// same CLI gap B11/B12 hit), so the rule is pinned here instead and the visual verdict is
-    /// PT-52's, alongside B11/B12's own owed at-the-controls check.</summary>
+    // The B13 rule (`BL-366`): WorldLights.Commit fades and ranks
+    // each light against the NEAREST of every pane's camera, not a single position. Driven
+    // straight against a real WorldLights instance with synthetic positions —
+    // there is no per-player placement flag to give two scripted panes independent spots (the
+    // same CLI gap B11/B12 hit), so the rule is pinned here instead and the visual verdict is
+    // PT-52's, alongside B11/B12's own owed at-the-controls check.
     private static void WorldLightsNearestViewer(TestContext ctx)
     {
         var p1 = Vector3.Zero;
@@ -10518,22 +10517,22 @@ public static class Suites
             $"one viewer (single player) is the unchanged, pre-B13 rule");
     }
 
-    /// <summary>One authored event on an <c>ordnance-burst-timeline</c> lane: where it sits in its
-    /// sequence, what it is, and the instant the JSON says it fires — a cumulative sum of the
-    /// preceding events' <c>run_time</c>s and start offsets, read off the definition by hand.
-    /// Never computed from the runtime, which is the whole point of the assertion.</summary>
+    // One authored event on an `ordnance-burst-timeline` lane: where it sits in its
+    // sequence, what it is, and the instant the JSON says it fires — a cumulative sum of the
+    // preceding events' `run_time`s and start offsets, read off the definition by hand.
+    // Never computed from the runtime, which is the whole point of the assertion.
     private readonly record struct BurstStep(int Index, string Kind, string? Name, float At);
 
-    /// <summary>One recorded dispatch, off <see cref="AnimRuntime.OnEventDispatched"/>: the
-    /// playhead instant plus the identity the seam already carries. <c>Anim</c> is the DEFINITION's
-    /// animation name, so a burst's own timeline can be told apart from the timelines of the
-    /// definitions its CALL_ANIMATIONs reach.</summary>
+    // One recorded dispatch, off AnimRuntime.OnEventDispatched: the
+    // playhead instant plus the identity the seam already carries. `Anim` is the DEFINITION's
+    // animation name, so a burst's own timeline can be told apart from the timelines of the
+    // definitions its CALL_ANIMATIONs reach.
     private readonly record struct BurstFire(float T, string Anim, string Sequence, int Index,
         string Kind, string? Name);
 
-    /// <summary>One authored sequence PASS. A pass, not a sequence: <c>sonic_ground_effect</c>
-    /// calls <c>sonic_light_seq</c> from two sites 1.2 s apart, and each call is its own lane,
-    /// which is how the timeline says the second call restarted a parked sequence rather than
-    /// being swallowed or running a second concurrent copy.</summary>
+    // One authored sequence PASS. A pass, not a sequence: `sonic_ground_effect`
+    // calls `sonic_light_seq` from two sites 1.2 s apart, and each call is its own lane,
+    // which is how the timeline says the second call restarted a parked sequence rather than
+    // being swallowed or running a second concurrent copy.
     private sealed record BurstLane(string Sequence, BurstStep[] Steps);
 }

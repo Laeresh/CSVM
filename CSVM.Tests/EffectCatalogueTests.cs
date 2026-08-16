@@ -16,10 +16,10 @@ namespace CSVM.Tests;
 /// </summary>
 public class EffectCatalogueTests
 {
-    /// <summary>Every player airframe's node name (the same 11 <see cref="ExtractedGoldenTests
-    /// .ShippedChaseDistances"/> lists), so <see cref="PlaneStats.Load"/> can walk every plane's
-    /// data rather than just the one (the Devastator) that happens to carry a 0.99 entry today —
-    /// a future plane picking one up must be caught here too.</summary>
+    // Every player airframe's node name (the same 11 ExtractedGoldenTests
+    // .ShippedChaseDistances lists), so PlaneStats.Load can walk every plane's
+    // data rather than just the one (the Devastator) that happens to carry a 0.99 entry today —
+    // a future plane picking one up must be caught here too.
     private static readonly string[] AllPlaneNodeNames =
     {
         "player_bhawk", "player_fury", "player_peacemaker", "player_kestrel", "player_fbrand",

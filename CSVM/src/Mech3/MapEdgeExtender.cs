@@ -599,15 +599,15 @@ public sealed partial class MapEdgeExtender : Node3D
 
     // ---------------------------------------------------------------- tile-grid overlay
 
-    /// <summary>Stamps (or clears) one extension cell's tile-grid tint. Ground only — the clutter
-    /// multimeshes are left alone deliberately: this overlay is read as a map of the terrain
-    /// sheets, and tinting a forest's worth of sprites the same colour buries the tile boundaries
-    /// the overlay exists to show.
-    ///
-    /// <para>The mix goes through <see cref="SceneBuilder.TintParam"/>, the world shaders' own
-    /// per-instance parameter — never a <c>MaterialOverride</c>/<c>MaterialOverlay</c>, which is a
-    /// different shader entirely (see <see cref="SceneBuilder.TintLine"/> for the three ways that
-    /// breaks).</para></summary>
+    // Stamps (or clears) one extension cell's tile-grid tint. Ground only — the clutter
+    // multimeshes are left alone deliberately: this overlay is read as a map of the terrain
+    // sheets, and tinting a forest's worth of sprites the same colour buries the tile boundaries
+    // the overlay exists to show.
+    //
+    // The mix goes through SceneBuilder.TintParam, the world shaders' own
+    // per-instance parameter — never a `MaterialOverride`/`MaterialOverlay`, which is a
+    // different shader entirely (see SceneBuilder.TintLine for the three ways that
+    // breaks).
     private void ApplyTint(Node cell, int ix, int iz)
     {
         var color = _tinted ? new Color(TintFor(ix, iz), TintStrength) : Untinted;
@@ -621,16 +621,16 @@ public sealed partial class MapEdgeExtender : Node3D
         Walk(cell);
     }
 
-    /// <summary>The tile-grid colour for a cell. Hue is the <b>repetition band</b>'s parity
-    /// (<see cref="FoldBandIndex"/>), so one run of a single hue spans exactly
-    /// <see cref="BlockCells"/> cells and the <b>width of a colour band reads off the block depth
-    /// directly</b>; the two axes band independently so corner regions stay unambiguous. Value
-    /// alternates on a per-cell checker inside the band, which is what turns "wide-ish" into a
-    /// countable number of cells. In-map cells take a neutral tint so the map boundary is never in
-    /// doubt.
-    /// <para>⚠ Keyed on the band, <b>not</b> on <see cref="FoldAxis"/>'s flip. Under repetition —
-    /// the default — nothing ever flips, so keying on the flip paints the whole continuation one
-    /// colour, destroying the only thing the overlay is for.</para></summary>
+    // The tile-grid colour for a cell. Hue is the repetition band's parity
+    // (FoldBandIndex), so one run of a single hue spans exactly
+    // BlockCells cells and the width of a colour band reads off the block depth
+    // directly; the two axes band independently so corner regions stay unambiguous. Value
+    // alternates on a per-cell checker inside the band, which is what turns "wide-ish" into a
+    // countable number of cells. In-map cells take a neutral tint so the map boundary is never in
+    // doubt.
+    // ⚠ Keyed on the band, not on FoldAxis's flip. Under repetition —
+    // the default — nothing ever flips, so keying on the flip paints the whole continuation one
+    // colour, destroying the only thing the overlay is for.
     private Color TintFor(int ix, int iz)
     {
         bool inMap = ix >= 0 && ix < _cols && iz >= 0 && iz < _rows;

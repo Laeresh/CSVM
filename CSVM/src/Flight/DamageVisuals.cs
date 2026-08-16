@@ -284,9 +284,9 @@ public sealed class DamageVisuals
         _panelTrails.Clear();
     }
 
-    /// <summary>Merged mesh-AABB center of the panel's subtree, in the plane root's
-    /// frame. The pdpN nodes carry transforms but the _h twins sit at the origin with
-    /// their placement baked into the mesh — mesh AABBs locate both.</summary>
+    // Merged mesh-AABB center of the panel's subtree, in the plane root's
+    // frame. The pdpN nodes carry transforms but the _h twins sit at the origin with
+    // their placement baked into the mesh — mesh AABBs locate both.
     private static bool TryMeshCenter(Node3D panel, Node3D root, out Vector3 center)
     {
         var merged = default(Aabb);
@@ -307,8 +307,8 @@ public sealed class DamageVisuals
         return any;
     }
 
-    /// <summary>Transform of <paramref name="node"/> relative to <paramref name="root"/>
-    /// by walking parents — works before the subtree enters the scene tree.</summary>
+    // Transform of `node` relative to `root`
+    // by walking parents — works before the subtree enters the scene tree.
     private static Transform3D RelativeTo(Node3D node, Node3D root)
     {
         var xf = Transform3D.Identity;
@@ -317,8 +317,8 @@ public sealed class DamageVisuals
         return xf;
     }
 
-    /// <summary>First node under <paramref name="root"/> whose Godot name or gamez
-    /// <c>cs_name</c> meta matches — the same two names AnimRuntime resolution reads.</summary>
+    // First node under `root` whose Godot name or gamez
+    // `cs_name` meta matches — the same two names AnimRuntime resolution reads.
     private static Node3D? FindByName(Node root, string name)
     {
         if (root is Node3D n3
@@ -335,8 +335,8 @@ public sealed class DamageVisuals
         return null;
     }
 
-    /// <summary>Routes one authored stage anim out through the rig runtime, or says (once) why it
-    /// cannot: a world-less flight has no rig runtime and renders panel flips alone.</summary>
+    // Routes one authored stage anim out through the rig runtime, or says (once) why it
+    // cannot: a world-less flight has no rig runtime and renders panel flips alone.
     private void PlayStage(string anim, string partName, float fraction)
     {
         if (DamageEffectSink != null)
@@ -352,14 +352,14 @@ public sealed class DamageVisuals
         }
     }
 
-    /// <summary>Pairs every healthy pdpN_h skin with the torn panel occupying the same
-    /// spot on the airframe (nearest mesh-AABB center within <see cref="MaxPairDistance"/>,
-    /// same side of the centerline). The CANDIDATE sets come from the authored defs when
-    /// given: only skins `plane_reset` re-ACTIVEs are hideable, only `pdpanelN` targets are
-    /// torn panels — an `_h` node outside the authored list is never hidden, by construction.
-    /// The assignment inside those sets stays positional: the defs never say which torn panel
-    /// hides which skin, and name-based pairing is wrong on three planes — see the class
-    /// comment.</summary>
+    // Pairs every healthy pdpN_h skin with the torn panel occupying the same
+    // spot on the airframe (nearest mesh-AABB center within MaxPairDistance,
+    // same side of the centerline). The CANDIDATE sets come from the authored defs when
+    // given: only skins `plane_reset` re-ACTIVEs are hideable, only `pdpanelN` targets are
+    // torn panels — an `_h` node outside the authored list is never hidden, by construction.
+    // The assignment inside those sets stays positional: the defs never say which torn panel
+    // hides which skin, and name-based pairing is wrong on three planes — see the class
+    // comment.
     private void PairHealthySkins(Node3D planeRoot, PanelPairing? defPairing)
     {
         if (defPairing == null)

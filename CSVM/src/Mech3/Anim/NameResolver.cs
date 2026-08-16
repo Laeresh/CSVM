@@ -529,22 +529,22 @@ public sealed class NameResolver<TNode>
         return (anchors, how);
     }
 
-    /// <summary>Picks the one instance a compiled definition actually belongs to, when its NAME
-    /// matches several. The compiler expands a multi-instance object into one def per instance but
-    /// leaves them all sharing a NAME — C1's two airfield hangars are both <c>air_gen</c>, telling
-    /// them apart only by their symbol tables (<c>air_gen</c> names the nodes under
-    /// <c>eairg32</c>, <c>air_gen#1</c> those under <c>eairg31</c>). Name matching hands BOTH defs
-    /// BOTH anchors, so the pair cross-binds: shooting one hangar resolved to the other def, whose
-    /// events then target its own hangar by exact index — destroy <c>eairg31</c> and
-    /// <c>eairg32</c> explodes.
-    ///
-    /// <para>So resolve the def's ANIMATION_ROOT_NAME through the symbol table — the same
-    /// authority <see cref="SymbolClaims"/> gives every event — and keep only the anchors
-    /// containing that exact node. Returns null when it cannot decide: a reader def (no symbol
-    /// table), an index the builder never built, or a root outside every candidate — all of which
-    /// leave the name match standing. A <see cref="NameResolveFallback"/> runtime gets null for
-    /// free, since its by-index map is empty. ⚠ Null (undecidable) and an empty narrowing are
-    /// different outcomes — an empty result never leaves this method.</para></summary>
+    // Picks the one instance a compiled definition actually belongs to, when its NAME
+    // matches several. The compiler expands a multi-instance object into one def per instance but
+    // leaves them all sharing a NAME — C1's two airfield hangars are both `air_gen`, telling
+    // them apart only by their symbol tables (`air_gen` names the nodes under
+    // `eairg32`, `air_gen#1` those under `eairg31`). Name matching hands BOTH defs
+    // BOTH anchors, so the pair cross-binds: shooting one hangar resolved to the other def, whose
+    // events then target its own hangar by exact index — destroy `eairg31` and
+    // `eairg32` explodes.
+    //
+    // So resolve the def's ANIMATION_ROOT_NAME through the symbol table — the same
+    // authority SymbolClaims gives every event — and keep only the anchors
+    // containing that exact node. Returns null when it cannot decide: a reader def (no symbol
+    // table), an index the builder never built, or a root outside every candidate — all of which
+    // leave the name match standing. A NameResolveFallback runtime gets null for
+    // free, since its by-index map is empty. ⚠ Null (undecidable) and an empty narrowing are
+    // different outcomes — an empty result never leaves this method.
     private List<TNode?>? NarrowToSymbolRoot(AnimDefinition def, List<TNode?> anchors)
     {
         if (anchors.Count < 2

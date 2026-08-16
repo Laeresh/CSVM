@@ -143,8 +143,8 @@ public class KnifeEdgeTests
         }
     }
 
-    /// <summary>The Bloodhawk's real dynamics — the placeholder <c>PlaneStats()</c> defaults are the
-    /// executable's fallback aircraft and carry a different inertia and damping.</summary>
+    // The Bloodhawk's real dynamics — the placeholder `PlaneStats()` defaults are the
+    // executable's fallback aircraft and carry a different inertia and damping.
     private static PlaneStats Bhawk() => new()
     {
         PitchTorque = 3.3f,

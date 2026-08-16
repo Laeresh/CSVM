@@ -22,8 +22,8 @@ namespace CSVM.Tests;
 /// </summary>
 public class FlightEnvelopeTests
 {
-    /// <summary>How many flight scenarios carry a measured target to assert. Pinned so that
-    /// silently demoting one to informational cannot read as a green run.</summary>
+    // How many flight scenarios carry a measured target to assert. Pinned so that
+    // silently demoting one to informational cannot read as a green run.
     private const int FlightScenarios = 7;
 
     private static string ZrdrPath =>

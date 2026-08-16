@@ -359,21 +359,21 @@ public sealed class WeaponDefs
         InheritDefaultRow(into, authored);
     }
 
-    /// <summary>Give every id the weapon names no block for the <c>default</c> row, verbatim —
-    /// <c>FUN_005ad630</c>'s per-id loop, whose miss arm copies row 0 over row <c>i</c> whole
-    /// (<c>0x005ae268</c>: <c>ECX = 0x19</c>, <c>REP MOVSD</c>, i.e. all 100 bytes of the row, both
-    /// its effect names and its sound list). The table is built by walking the registry, so "this
-    /// weapon said nothing about that surface" means "inherit", not "stay silent".
-    ///
-    /// <para><b>Naming an id and binding nothing on it is the opposite case, and stays empty</b> —
-    /// the original finds the block, parses it, and gets a row with no variants. That is the
-    /// difference between <c>dirt</c>(13), which no weapon names at all, and the 30 cal slug's
-    /// <c>player</c>(6), whose slots are all authored empty. Only the miss arm copies, which is why
-    /// presence is tracked apart from what parsed.</para>
-    ///
-    /// <para>The row is shared rather than cloned. The original copies bytes, but nothing mutates a
-    /// parsed row, so one instance per weapon reads the same and says what it means: this id
-    /// resolves the weapon's <c>default</c> row.</para></summary>
+    // Give every id the weapon names no block for the `default` row, verbatim —
+    // `FUN_005ad630`'s per-id loop, whose miss arm copies row 0 over row `i` whole
+    // (`0x005ae268`: `ECX = 0x19`, `REP MOVSD`, i.e. all 100 bytes of the row, both
+    // its effect names and its sound list). The table is built by walking the registry, so "this
+    // weapon said nothing about that surface" means "inherit", not "stay silent".
+    //
+    // Naming an id and binding nothing on it is the opposite case, and stays empty —
+    // the original finds the block, parses it, and gets a row with no variants. That is the
+    // difference between `dirt`(13), which no weapon names at all, and the 30 cal slug's
+    // `player`(6), whose slots are all authored empty. Only the miss arm copies, which is why
+    // presence is tracked apart from what parsed.
+    //
+    // The row is shared rather than cloned. The original copies bytes, but nothing mutates a
+    // parsed row, so one instance per weapon reads the same and says what it means: this id
+    // resolves the weapon's `default` row.
     private static void InheritDefaultRow(WeaponEffect?[] into, bool[] authored)
     {
         // Row 0 has nothing to inherit from: a weapon authoring no `default` row supplies no

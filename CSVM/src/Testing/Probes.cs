@@ -35,14 +35,14 @@ public static class Probes
     private const float Ft = 0.3048f;           // m per foot
     private const float EnvDt = 1f / 60f;       // the sim step --det pins every session to
 
-    /// <summary>The eight chapter codes an AI dump walks — every one that ships its own
-    /// <c>&lt;Cx&gt;/zrdr/</c> patrol-net scope and mission dirs.</summary>
+    // The eight chapter codes an AI dump walks — every one that ships its own
+    // `&lt;Cx&gt;/zrdr/` patrol-net scope and mission dirs.
     private static readonly string[] AiChapters = { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" };
 
-    /// <summary>Chapter-scope directory names that are NOT mission dirs, so a plain
-    /// <see cref="Directory.EnumerateDirectories(string)"/> over a chapter folder can tell a
-    /// mission (<c>IA1</c>/<c>M0x</c>/<c>MP1-3</c>) from the chapter's own gamez/texture/zrdr/anim
-    /// scopes without a fixed mission-name table.</summary>
+    // Chapter-scope directory names that are NOT mission dirs, so a plain
+    // Directory.EnumerateDirectories(string) over a chapter folder can tell a
+    // mission (`IA1`/`M0x`/`MP1-3`) from the chapter's own gamez/texture/zrdr/anim
+    // scopes without a fixed mission-name table.
     private static readonly HashSet<string> AiChapterScopeDirs =
         new(StringComparer.OrdinalIgnoreCase) { "gamez", "texture", "cam_anim", "zrdr" };
 
@@ -1662,10 +1662,10 @@ public static class Probes
         return r;
     }
 
-    /// <summary>Every mission dir under a chapter — <c>IA1</c>/<c>M0x</c>/<c>MP1-3</c> — sorted so
-    /// campaign missions list before multiplayer ones. Empty when the chapter is not extracted
-    /// here. See <c>analysis/m4-ai-data/aiv_skill_slots.py</c>'s <c>*/*/zrdr/aiv.zrd.json</c> glob
-    /// for the same discovery done from the shell.</summary>
+    // Every mission dir under a chapter — `IA1`/`M0x`/`MP1-3` — sorted so
+    // campaign missions list before multiplayer ones. Empty when the chapter is not extracted
+    // here. See `analysis/m4-ai-data/aiv_skill_slots.py`'s `*/*/zrdr/aiv.zrd.json` glob
+    // for the same discovery done from the shell.
     private static List<string> DiscoverMissions(string dataRoot, string chapter)
     {
         var dir = Path.Combine(dataRoot, "extracted", chapter);
@@ -1688,10 +1688,10 @@ public static class Probes
         return missions;
     }
 
-    /// <summary>A mission-scope reader file that is a list of alternating-dict records wrapped in
-    /// one outer element — the shape <c>zeppelins.zrd.json</c> and <c>egen.zrd.json</c> both use:
-    /// <c>[[record0, record1, …]]</c> when the mission carries any, bare <c>[null]</c> when it
-    /// ships none. Loosely parsed (a dump probe, not a typed reader — B7/F17/F20 own those).</summary>
+    // A mission-scope reader file that is a list of alternating-dict records wrapped in
+    // one outer element — the shape `zeppelins.zrd.json` and `egen.zrd.json` both use:
+    // `[[record0, record1, …]]` when the mission carries any, bare `[null]` when it
+    // ships none. Loosely parsed (a dump probe, not a typed reader — B7/F17/F20 own those).
     private static List<List<object?>> LoadRecordList(string missionZrdrPath, string fileName)
     {
         var root = Zrdr.LoadFile(missionZrdrPath, fileName);
@@ -1711,17 +1711,17 @@ public static class Probes
 
     private static Basis Level() => Basis.Identity;
 
-    /// <summary>Attitude with the nose <paramref name="deg"/>° above the horizon (negative = dive),
-    /// wings level. Verified by the report's own settled-path readout rather than assumed.</summary>
+    // Attitude with the nose `deg`° above the horizon (negative = dive),
+    // wings level. Verified by the report's own settled-path readout rather than assumed.
     private static Basis Pitched(float deg) => Basis.Identity.Rotated(Vector3.Right, Mathf.DegToRad(deg));
 
-    /// <summary>Attitude banked <paramref name="deg"/>° about the nose, nose level. Over 90° is past
-    /// vertical, which is where the original's ADI reads; this is the ENTRY only — the run's own
-    /// settled bank is reported beside it, because nothing holds this one there.</summary>
+    // Attitude banked `deg`° about the nose, nose level. Over 90° is past
+    // vertical, which is where the original's ADI reads; this is the ENTRY only — the run's own
+    // settled bank is reported beside it, because nothing holds this one there.
     private static Basis Banked(float deg) => Basis.Identity.Rotated(Vector3.Forward, Mathf.DegToRad(deg));
 
-    /// <summary>A model parked at an attitude and speed, with the flight path along the nose —
-    /// <see cref="FlightModel.Reset"/>'s own convention, so a scenario starts trimmed.</summary>
+    // A model parked at an attitude and speed, with the flight path along the nose —
+    // FlightModel.Reset's own convention, so a scenario starts trimmed.
     private static FlightModel Fresh(PlaneStats stats, Basis attitude, float speed, float throttle)
     {
         var m = new FlightModel(stats);
@@ -1738,9 +1738,9 @@ public static class Probes
         }
     }
 
-    /// <summary>Steps until <paramref name="done"/> or <paramref name="limit"/>, returning the
-    /// elapsed sim seconds (the limit itself if it never finished — a scenario that ran out of time
-    /// reports as far off rather than as a hang).</summary>
+    // Steps until `done` or `limit`, returning the
+    // elapsed sim seconds (the limit itself if it never finished — a scenario that ran out of time
+    // reports as far off rather than as a hang).
     private static double RunUntil(FlightModel m, float throttle, float limit, Func<bool> done,
                                    float pitch = 0f, float roll = 0f, float yaw = 0f,
                                    Action? onStep = null)
@@ -1757,12 +1757,12 @@ public static class Probes
         return limit;
     }
 
-    /// <summary>Full throttle and full back stick from a banked entry, settled for
-    /// <paramref name="settle"/> s and then averaged over <paramref name="window"/> s — the shape
-    /// the original was flown in. Heading is accumulated off the flight path with wrap unfolded, so
-    /// a turn past 360° reports what it swept rather than what is left over; sink is the window's
-    /// net altitude change over its own duration, which is the quantity the original's altimeter
-    /// gave. No roll input: see the call site for why forcing the bank cannot be measured.</summary>
+    // Full throttle and full back stick from a banked entry, settled for
+    // `settle` s and then averaged over `window` s — the shape
+    // the original was flown in. Heading is accumulated off the flight path with wrap unfolded, so
+    // a turn past 360° reports what it swept rather than what is left over; sink is the window's
+    // net altitude change over its own duration, which is the quantity the original's altimeter
+    // gave. No roll input: see the call site for why forcing the bank cannot be measured.
     private static (double SpeedMph, double SinkFtS, double RateDegS, double Alpha, double BankDeg,
                     double SweptDeg) SustainedTurn(
         PlaneStats stats, float entryBankDeg, float entrySpeed, float settle, float window)
@@ -1797,9 +1797,9 @@ public static class Probes
                 Math.Abs(swept));
     }
 
-    /// <summary>One knife-edge hold. Sink is read over the second ENDING at each sample, which is
-    /// what an altimeter needle gives; heading is read off the flight path over the same second and
-    /// unfolded, so a slow turn is not confused with a wrap.</summary>
+    // One knife-edge hold. Sink is read over the second ENDING at each sample, which is
+    // what an altimeter needle gives; heading is read off the flight path over the same second and
+    // unfolded, so a slow turn is not confused with a wrap.
     private static KnifeEdgeRun KnifeEdgeHold(PlaneStats stats, string plane, float bankDeg, float entryMph)
     {
         float throttle = TrimThrottle(stats, entryMph * Mph);
@@ -1890,11 +1890,11 @@ public static class Probes
         return run;
     }
 
-    /// <summary>The lever position that holds <paramref name="speed"/> in level flight, bisected on
-    /// the model itself rather than solved against a copy of the thrust and drag formulas — the
-    /// copy is what goes stale. Saturates at 1 for a speed the airframe cannot reach, which is the
-    /// honest answer for it: a run entered above its own top speed decelerates whatever the
-    /// lever does.</summary>
+    // The lever position that holds `speed` in level flight, bisected on
+    // the model itself rather than solved against a copy of the thrust and drag formulas — the
+    // copy is what goes stale. Saturates at 1 for a speed the airframe cannot reach, which is the
+    // honest answer for it: a run entered above its own top speed decelerates whatever the
+    // lever does.
     private static float TrimThrottle(PlaneStats stats, float speed)
     {
         bool Accelerates(float th)
@@ -1917,8 +1917,8 @@ public static class Probes
         return 0.5f * (lo + hi);
     }
 
-    /// <summary>One level of a mip chain as a standalone image. Godot stores the chain as one buffer
-    /// with the levels end to end, so a level is a slice at its own offset.</summary>
+    // One level of a mip chain as a standalone image. Godot stores the chain as one buffer
+    // with the levels end to end, so a level is a slice at its own offset.
     private static Image MipLevel(Image img, int level)
     {
         if (level == 0)
@@ -1934,9 +1934,9 @@ public static class Probes
             Mathf.Max(1, img.GetHeight() >> level), false, img.GetFormat(), data[start..end]);
     }
 
-    /// <summary>Mean luminance and the share of pixels above 128, formatted as one column pair.
-    /// Rec.601 luma, the weighting <c>analysis/item9-depth-bias/CBLOCK-LOD.md</c> §1b measured with,
-    /// so the two numbers are comparable to the ones in that file.</summary>
+    // Mean luminance and the share of pixels above 128, formatted as one column pair.
+    // Rec.601 luma, the weighting `analysis/item9-depth-bias/CBLOCK-LOD.md` §1b measured with,
+    // so the two numbers are comparable to the ones in that file.
     private static string Luma(Image image)
     {
         var (mean, bright) = LumaStats(image);
@@ -1979,8 +1979,8 @@ public static class Probes
         return Math.Abs(a.Mean - b.Mean) < 0.005 && Math.Abs(a.Bright - b.Bright) < 0.0005;
     }
 
-    /// <summary>Predicate that integrates the body roll rate and trips at a full turn — the rate is
-    /// what the stopwatch and the video's bank readout both timed, and nothing else is commanded.</summary>
+    // Predicate that integrates the body roll rate and trips at a full turn — the rate is
+    // what the stopwatch and the video's bank readout both timed, and nothing else is commanded.
     private static Func<bool> RollAccum(FlightModel m)
     {
         double turned = 0;
@@ -2424,9 +2424,9 @@ public static class Probes
             }
         }
 
-        /// <summary>Counts meshes that would draw if the template ROOT were revealed — the root's
-        /// own flag is skipped and every flag below it honoured, since the root's is the engine's
-        /// to set (<c>TemplateStage.Shown</c>) and everything under it is the data's.</summary>
+        // Counts meshes that would draw if the template ROOT were revealed — the root's
+        // own flag is skipped and every flag below it honoured, since the root's is the engine's
+        // to set (`TemplateStage.Shown`) and everything under it is the data's.
         private static void CountSelfVisible(Node node, bool shown, ref int selfVisible,
             ref int total)
         {

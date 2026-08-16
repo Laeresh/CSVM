@@ -201,15 +201,15 @@ public static class TestHarness
         };
     }
 
-    /// <summary>The engine log Godot's <c>--log-file &lt;path&gt;</c> is writing, or null when the
-    /// run was launched without it. Error lines are flushed as they are printed, so reading it
-    /// while the process still holds it open is sound.
-    ///
-    /// <para>Read from the process command line, not <c>OS.GetCmdlineArgs()</c>: Godot hands that
-    /// method only the arguments its own parser did <b>not</b> recognise, and <c>--log-file</c> is
-    /// one it consumes. Without the flag this falls back to the project's own rotating log, which
-    /// desktop builds enable by default — so the screen runs without anyone remembering a
-    /// flag.</para></summary>
+    // The engine log Godot's `--log-file &lt;path&gt;` is writing, or null when the
+    // run was launched without it. Error lines are flushed as they are printed, so reading it
+    // while the process still holds it open is sound.
+    //
+    // Read from the process command line, not `OS.GetCmdlineArgs()`: Godot hands that
+    // method only the arguments its own parser did not recognise, and `--log-file` is
+    // one it consumes. Without the flag this falls back to the project's own rotating log, which
+    // desktop builds enable by default — so the screen runs without anyone remembering a
+    // flag.
     private static string? EngineLogPath()
     {
         var args = System.Environment.GetCommandLineArgs();

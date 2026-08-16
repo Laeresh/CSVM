@@ -348,8 +348,8 @@ public sealed class Loadout
             $"loadout {def.Def} ({def.Model}) {where}: marker '{name}' not found on the built plane");
     }
 
-    /// <summary>Builds a <c>cs_name → Node3D</c> map of the plane's marker nodes (firepoints,
-    /// pylons, target) from the built tree — the same <c>cs_name</c> meta SceneBuilder stamps.</summary>
+    // Builds a `cs_name → Node3D` map of the plane's marker nodes (firepoints,
+    // pylons, target) from the built tree — the same `cs_name` meta SceneBuilder stamps.
     private static Dictionary<string, Node3D> CollectMarkers(Node3D plane)
     {
         var map = new Dictionary<string, Node3D>(StringComparer.OrdinalIgnoreCase);

@@ -518,9 +518,9 @@ public class FireControlTests
         bool autoFireRockets = false, bool infiniteAmmo = false, int initialGunSelect = 0) =>
         new(guns, pylons, autoFireRockets, infiniteAmmo, initialGunSelect);
 
-    /// <summary>One tick. Held levels only (no edges — <see cref="FireControl"/> does its own edge
-    /// detection), dt fixed at 60 Hz throughout. The returned <see cref="FireOutcome"/> is the SAME
-    /// reused instance every call — callers must read what they need before the next Step.</summary>
+    // One tick. Held levels only (no edges — FireControl does its own edge
+    // detection), dt fixed at 60 Hz throughout. The returned FireOutcome is the SAME
+    // reused instance every call — callers must read what they need before the next Step.
     private static FireOutcome Step(FireControl fc, bool fire = false, bool rocket = false, bool gunSel = false, bool rocketSel = false) =>
         fc.Step(Dt, new FireInputs { FireHeld = fire, RocketHeld = rocket, GunSelectHeld = gunSel, RocketSelectHeld = rocketSel });
 

@@ -301,8 +301,8 @@ public sealed partial class WeaponLab : Node3D
 
     // ---- weapon + mount resolution -----------------------------------------------------------
 
-    /// <summary>The raw firepoint/pylon marker nodes, each with its ordinal, sorted — the
-    /// no-loadout fallback for a plane the stock table omits.</summary>
+    // The raw firepoint/pylon marker nodes, each with its ordinal, sorted — the
+    // no-loadout fallback for a plane the stock table omits.
     private static void CollectRawMarkers(Node3D plane,
         out List<(int Ord, Node3D Node)> firepoints, out List<(int Ord, Node3D Node)> pylons)
     {
@@ -431,8 +431,8 @@ public sealed partial class WeaponLab : Node3D
 
     // ---- click to place ------------------------------------------------------------------------
 
-    /// <summary>The struck body's readable name: colliders are unnamed children of the mesh node,
-    /// so the name lives on the nearest ancestor carrying the <c>cs_name</c> meta.</summary>
+    // The struck body's readable name: colliders are unnamed children of the mesh node,
+    // so the name lives on the nearest ancestor carrying the `cs_name` meta.
     private static string NameOfStruck(Node? body)
     {
         for (var n = body; n != null; n = n.GetParent())
@@ -445,9 +445,9 @@ public sealed partial class WeaponLab : Node3D
         return body?.Name.ToString() ?? "?";
     }
 
-    /// <summary>The closest point of a body's collision geometry to <paramref name="from"/>, in
-    /// world space, measured over the trimesh's own vertices. Null when the body carries no
-    /// concave shape (nothing in a built chapter does, but a hand-made body might).</summary>
+    // The closest point of a body's collision geometry to `from`, in
+    // world space, measured over the trimesh's own vertices. Null when the body carries no
+    // concave shape (nothing in a built chapter does, but a hand-made body might).
     private static (Vector3 Point, float Dist)? NearestVertex(StaticBody3D body, Vector3 from)
     {
         (Vector3 Point, float Dist)? best = null;
@@ -471,13 +471,13 @@ public sealed partial class WeaponLab : Node3D
         return best is { } found ? (found.Point, Mathf.Sqrt(found.Dist)) : null;
     }
 
-    /// <summary>Hands the rig's camera to a free <see cref="Flight.SpectatorCamera"/> and back
-    /// (<b>V</b>). Out: the controller stops writing the camera entirely
-    /// (<see cref="Flight.FlightController.CameraOwned"/>) and the free camera takes over from
-    /// exactly where the orbit had the eye, so there is no jump. Back: the free camera is dropped
-    /// and the controller re-seeds its orbit from wherever the eye now is, so there is no jump that
-    /// way either. The aircraft keeps flying/holding, firing and drawing its HUD throughout — only
-    /// the view changes hands.</summary>
+    // Hands the rig's camera to a free Flight.SpectatorCamera and back
+    // (V). Out: the controller stops writing the camera entirely
+    // (CameraOwned) and the free camera takes over from
+    // exactly where the orbit had the eye, so there is no jump. Back: the free camera is dropped
+    // and the controller re-seeds its orbit from wherever the eye now is, so there is no jump that
+    // way either. The aircraft keeps flying/holding, firing and drawing its HUD throughout — only
+    // the view changes hands.
     private void SetFreeCamera(bool on)
     {
         if (_camera == null || _host == null || on == _freeCamera)
@@ -511,16 +511,16 @@ public sealed partial class WeaponLab : Node3D
         SyncState();
     }
 
-    /// <summary>Fires the lab's own physics ray through <paramref name="screen"/>, reports what it
-    /// struck — its <c>cs_name</c>, its surface id and its distance — and re-parks the
-    /// held aircraft on that same camera ray at the stand-off distance, nose on the struck point.
-    /// <paramref name="aimOnly"/> (shift-click) turns the aircraft toward it without moving it.
-    ///
-    /// <para>The id comes from <see cref="ProjectilePool.SurfaceIdOf"/> — the one read the impact
-    /// path itself makes, so the panel cannot disagree with what the round does — applied
-    /// to <b>the body the ray returned and nothing else</b>: one mesh yields a separate body per
-    /// texture-derived surface class present, and those siblings can carry different ids, so a
-    /// coastal tile's `col` and `col_water` bodies report separately.</para></summary>
+    // Fires the lab's own physics ray through `screen`, reports what it
+    // struck — its `cs_name`, its surface id and its distance — and re-parks the
+    // held aircraft on that same camera ray at the stand-off distance, nose on the struck point.
+    // `aimOnly` (shift-click) turns the aircraft toward it without moving it.
+    //
+    // The id comes from ProjectilePool.SurfaceIdOf — the one read the impact
+    // path itself makes, so the panel cannot disagree with what the round does — applied
+    // to the body the ray returned and nothing else: one mesh yields a separate body per
+    // texture-derived surface class present, and those siblings can carry different ids, so a
+    // coastal tile's `col` and `col_water` bodies report separately.
     private void PickAt(Vector2 screen, bool aimOnly)
     {
         if (_camera == null || _host == null || !IsInsideTree())
@@ -545,11 +545,11 @@ public sealed partial class WeaponLab : Node3D
         PlaceOn(hit["position"].AsVector3(), dir, body, NameOfStruck(body), aimOnly);
     }
 
-    /// <summary>Re-parks the held aircraft on the aim line through <paramref name="point"/>: back up
-    /// <paramref name="dir"/> by the stand-off, nose on the point. Shared by the click (where
-    /// <paramref name="dir"/> is the camera ray) and by the scripted target/surface twins (where it
-    /// is the line from the spawn), so all three place the aircraft the same way and report the same
-    /// line. <paramref name="aimOnly"/> turns the aircraft without moving it.</summary>
+    // Re-parks the held aircraft on the aim line through `point`: back up
+    // `dir` by the stand-off, nose on the point. Shared by the click (where
+    // `dir` is the camera ray) and by the scripted target/surface twins (where it
+    // is the line from the spawn), so all three place the aircraft the same way and report the same
+    // line. `aimOnly` turns the aircraft without moving it.
     private void PlaceOn(Vector3 point, Vector3 dir, Node? body, string name, bool aimOnly)
     {
         if (_host == null)
@@ -569,11 +569,11 @@ public sealed partial class WeaponLab : Node3D
         SyncState();
     }
 
-    /// <summary><c>--weapon-target=x,y,z</c>: park facing that world point, on the line from the
-    /// aircraft's spawn — the mouse-free twin of a click, for a point already known from a log or a
-    /// previous capture. The point is taken as given: a coordinate in mid-air is a legitimate aim,
-    /// so nothing is raycast and the surface class reads <c>default</c> unless a body is under
-    /// it.</summary>
+    // `--weapon-target=x,y,z`: park facing that world point, on the line from the
+    // aircraft's spawn — the mouse-free twin of a click, for a point already known from a log or a
+    // previous capture. The point is taken as given: a coordinate in mid-air is a legitimate aim,
+    // so nothing is raycast and the surface class reads `default` unless a body is under
+    // it.
     private void PlaceOnTarget(Vector3 point)
     {
         var dir = point - _plane.GlobalPosition;
@@ -591,20 +591,20 @@ public sealed partial class WeaponLab : Node3D
         PlaceOn(point, dir, body, body != null ? NameOfStruck(body) : "(world point)", aimOnly: false);
     }
 
-    /// <summary><c>--weapon-surface=&lt;registry name&gt;</c>: park facing the NEAREST piece of that
-    /// surface id to the aircraft's spawn. The search walks the built world once for
-    /// <see cref="StaticBody3D"/>s, reads each one's id through the same
-    /// <see cref="ProjectilePool.SurfaceIdOf"/> the impact path uses, and measures to the
-    /// nearest <b>vertex of its collision geometry</b> — not to the body's origin, which for a
-    /// chapter's water is the world origin on every tile and would send the aircraft kilometres off
-    /// to aim at (0,0,0). Ties fall to the earlier node in tree order (strictly-less), so a
-    /// <c>--det</c> capture is reproducible. A chapter with no collider carrying that id warns and
-    /// leaves the aircraft at spawn; it is not a failed launch.
-    ///
-    /// <para>Any of the registry's fourteen names is namable since B12, not just the three texture
-    /// classes this took before — <c>dirt</c> now means id 13 (real dirt-tagged ground), NOT "every
-    /// untagged surface", which is <c>default</c>. Six ids no shipped material carries at all, so
-    /// those legitimately report "this chapter has none" everywhere.</para></summary>
+    // `--weapon-surface=&lt;registry name&gt;`: park facing the NEAREST piece of that
+    // surface id to the aircraft's spawn. The search walks the built world once for
+    // StaticBody3Ds, reads each one's id through the same
+    // ProjectilePool.SurfaceIdOf the impact path uses, and measures to the
+    // nearest vertex of its collision geometry — not to the body's origin, which for a
+    // chapter's water is the world origin on every tile and would send the aircraft kilometres off
+    // to aim at (0,0,0). Ties fall to the earlier node in tree order (strictly-less), so a
+    // `--det` capture is reproducible. A chapter with no collider carrying that id warns and
+    // leaves the aircraft at spawn; it is not a failed launch.
+    //
+    // Any of the registry's fourteen names is namable since B12, not just the three texture
+    // classes this took before — `dirt` now means id 13 (real dirt-tagged ground), NOT "every
+    // untagged surface", which is `default`. Six ids no shipped material carries at all, so
+    // those legitimately report "this chapter has none" everywhere.
     private void PlaceOnNearestSurface(string want)
     {
         if (SurfaceRegistry.IdForName(want) is not { } target)
@@ -659,10 +659,10 @@ public sealed partial class WeaponLab : Node3D
         PlaceOn(point, dir, body, NameOfStruck(body), aimOnly: false);
     }
 
-    /// <summary>The stand-off the panel asks for, shortened if the ray back from the struck point
-    /// re-enters geometry — re-parking the aircraft inside a hillside or a warehouse would be worse
-    /// than standing closer than requested. Probed from just off the struck face, so the surface the
-    /// ray just hit is not itself the obstruction.</summary>
+    // The stand-off the panel asks for, shortened if the ray back from the struck point
+    // re-enters geometry — re-parking the aircraft inside a hillside or a warehouse would be worse
+    // than standing closer than requested. Probed from just off the struck face, so the surface the
+    // ray just hit is not itself the obstruction.
     private float ClampedStandoff(Vector3 point, Vector3 dir)
     {
         var back = -dir;
@@ -679,9 +679,9 @@ public sealed partial class WeaponLab : Node3D
         return clamped;
     }
 
-    /// <summary>Drops the aim marker on the struck point — a small unshaded ball, built on first
-    /// use. Tagged as an overlay so the inspect tools' subtree measurements skip it, and meshes
-    /// carry no collider, so it can never be picked or shot itself.</summary>
+    // Drops the aim marker on the struck point — a small unshaded ball, built on first
+    // use. Tagged as an overlay so the inspect tools' subtree measurements skip it, and meshes
+    // carry no collider, so it can never be picked or shot itself.
     private void ShowMarker(Vector3 point)
     {
         if (_marker == null)
@@ -704,11 +704,11 @@ public sealed partial class WeaponLab : Node3D
         _marker.GlobalPosition = point;
     }
 
-    /// <summary>Builds the two mount banks from the bound loadout: one entry per <b>firable</b> gun
-    /// group (in <see cref="Loadout.FirableGuns"/> order, which is the order
-    /// <see cref="Flight.FlightController.SelectGunGroup"/> indexes) and one per pylon. Falls back
-    /// to the raw firepoint/pylon markers when no loadout is bound — a read-only list then, since
-    /// there is nothing live to arm.</summary>
+    // Builds the two mount banks from the bound loadout: one entry per firable gun
+    // group (in Loadout.FirableGuns order, which is the order
+    // SelectGunGroup indexes) and one per pylon. Falls back
+    // to the raw firepoint/pylon markers when no loadout is bound — a read-only list then, since
+    // there is nothing live to arm.
     private void BuildMounts(Loadout? loadout)
     {
         if (loadout != null)
@@ -744,10 +744,10 @@ public sealed partial class WeaponLab : Node3D
         }
     }
 
-    /// <summary>Snapshots the weapon every group and pylon carries before the panel touches
-    /// anything — the fit "reset to stock" restores. Not read back out of
-    /// <c>stock_loadouts.json</c>: <c>--rocket=</c>/<c>--loadout=</c> are part of how the session
-    /// was launched, and the button restores the launch, not the file.</summary>
+    // Snapshots the weapon every group and pylon carries before the panel touches
+    // anything — the fit "reset to stock" restores. Not read back out of
+    // `stock_loadouts.json`: `--rocket=`/`--loadout=` are part of how the session
+    // was launched, and the button restores the launch, not the file.
     private void RememberLaunchFit(Loadout? loadout)
     {
         if (loadout == null)
@@ -805,8 +805,8 @@ public sealed partial class WeaponLab : Node3D
 
     // ---- driving the live loadout --------------------------------------------------------------
 
-    /// <summary>Points the controller's own gun/pylon selector at the selected mount, so the
-    /// aircraft's trigger fires from the mount the panel names.</summary>
+    // Points the controller's own gun/pylon selector at the selected mount, so the
+    // aircraft's trigger fires from the mount the panel names.
     private void ApplyMount()
     {
         if (_host == null || SelectedMount is not { } mount)
@@ -824,9 +824,9 @@ public sealed partial class WeaponLab : Node3D
         Log.Debug("weapons", $"weapon lab: mount {mount.Label} selected ({NodeNames(mount.Nodes)})");
     }
 
-    /// <summary>Arms the selection: a gun goes onto the selected group alone (with a full clip of
-    /// its own <c>CLUSTER_SIZE</c>); a hardpoint weapon re-arms <b>every</b> pylon and rebuilds the
-    /// mounted ordnance models, so the wings show the new type.</summary>
+    // Arms the selection: a gun goes onto the selected group alone (with a full clip of
+    // its own `CLUSTER_SIZE`); a hardpoint weapon re-arms every pylon and rebuilds the
+    // mounted ordnance models, so the wings show the new type.
     private void ApplyWeapon()
     {
         if (_host == null || _loadout == null || SelectedWeapon is not { } w)
@@ -855,11 +855,11 @@ public sealed partial class WeaponLab : Node3D
         }
     }
 
-    /// <summary>Re-hangs the mounted ordnance after a hardpoint swap. The old set comes off the
-    /// pylons FIRST (<see cref="PylonOrdnance.Unmount"/> detaches immediately) — rebuilding without
-    /// that leaves the previous body under every pylon, so a stepper held down leaks one model per
-    /// pylon per swap. A weapon with no <c>FLYOUT</c> model in this chapter's gamez mounts nothing:
-    /// <see cref="PylonOrdnance.Build"/> returns null and the wings simply go empty.</summary>
+    // Re-hangs the mounted ordnance after a hardpoint swap. The old set comes off the
+    // pylons FIRST (PylonOrdnance.Unmount detaches immediately) — rebuilding without
+    // that leaves the previous body under every pylon, so a stepper held down leaks one model per
+    // pylon per swap. A weapon with no `FLYOUT` model in this chapter's gamez mounts nothing:
+    // PylonOrdnance.Build returns null and the wings simply go empty.
     private void RebuildOrdnance(WeaponDef w)
     {
         if (_host == null || _loadout == null)
@@ -871,9 +871,9 @@ public sealed partial class WeaponLab : Node3D
         Log.Debug("weapons", $"weapon lab: hardpoints -> {w.Id} ({w.Name}) flyout='{w.Flyout?.Model ?? "-"}' per_pylon={_loadout.Hardpoints[0].Ammo} mounted={_host.Ordnance?.Count ?? 0} ordnance_nodes={CountOrdnanceNodes()}");
     }
 
-    /// <summary>How many ordnance bodies are actually parented to the rig's pylons right now — the
-    /// leak tripwire the swap path is verified with (it must equal the mounted count, whatever the
-    /// panel has been stepped through).</summary>
+    // How many ordnance bodies are actually parented to the rig's pylons right now — the
+    // leak tripwire the swap path is verified with (it must equal the mounted count, whatever the
+    // panel has been stepped through).
     private int CountOrdnanceNodes()
     {
         int n = 0;
@@ -890,8 +890,8 @@ public sealed partial class WeaponLab : Node3D
         return n;
     }
 
-    /// <summary>Holds the aircraft's own trigger — the gun one or the rocket one, by bank. The
-    /// other is always released, so switching banks moves the held trigger with it.</summary>
+    // Holds the aircraft's own trigger — the gun one or the rocket one, by bank. The
+    // other is always released, so switching banks moves the held trigger with it.
     private void SetAutoFire(bool on)
     {
         _autoFire = on;
@@ -902,8 +902,8 @@ public sealed partial class WeaponLab : Node3D
         }
     }
 
-    /// <summary>Points the weapon stepper at what the selected mount actually carries, so the panel
-    /// reads the live loadout rather than its own last click.</summary>
+    // Points the weapon stepper at what the selected mount actually carries, so the panel
+    // reads the live loadout rather than its own last click.
     private void SyncWeaponIndexToMount()
     {
         var carried = _bank == Guns ? SelectedMount?.Group?.Weapon : SelectedMount?.Hp?.Weapon;
@@ -917,8 +917,8 @@ public sealed partial class WeaponLab : Node3D
         }
     }
 
-    /// <summary>Puts the launch fit back on every group and pylon, full clips, and re-hangs the
-    /// ordnance models.</summary>
+    // Puts the launch fit back on every group and pylon, full clips, and re-hangs the
+    // ordnance models.
     private void ResetToStock()
     {
         if (_host == null || _loadout == null)
@@ -946,8 +946,8 @@ public sealed partial class WeaponLab : Node3D
 
     // ---- panel + state -----------------------------------------------------------------------
 
-    /// <summary>Pushes the current state onto the widgets: panel visibility and every
-    /// readout/toggle.</summary>
+    // Pushes the current state onto the widgets: panel visibility and every
+    // readout/toggle.
     private void SyncState()
     {
         _suppress = true;
@@ -983,9 +983,9 @@ public sealed partial class WeaponLab : Node3D
         _suppress = false;
     }
 
-    /// <summary>The selected mount's live counter. Infinite ammo is called out because it hides a
-    /// real behaviour: the counters never drain, so a pylon never empties and its mounted model
-    /// never disappears.</summary>
+    // The selected mount's live counter. Infinite ammo is called out because it hides a
+    // real behaviour: the counters never drain, so a pylon never empties and its mounted model
+    // never disappears.
     private string AmmoLine()
     {
         if (SelectedMount is not { } m)
@@ -1000,7 +1000,7 @@ public sealed partial class WeaponLab : Node3D
             : $"ammo: {ammo} / {cap}";
     }
 
-    /// <summary>The arguments that reproduce this selection — the lab's output.</summary>
+    // The arguments that reproduce this selection — the lab's output.
     private string CliArgs()
     {
         var sb = new StringBuilder();
@@ -1205,11 +1205,11 @@ public sealed partial class WeaponLab : Node3D
         PanelFocus.Strip(_ui, "weapon lab: panel built");
     }
 
-    /// <summary>One selectable place on the airframe: a firable gun group or a pylon.
-    /// <see cref="Nodes"/> are its live muzzle / pylon <see cref="Node3D"/>s and <see cref="Cli"/>
-    /// the <c>--weapon-mount=</c> token (<c>g1</c>, <c>pylon1</c>). <see cref="Group"/> /
-    /// <see cref="Hp"/> are the live loadout entries the panel writes into — both null for the
-    /// raw-marker fallback, which has nothing to arm.</summary>
+    // One selectable place on the airframe: a firable gun group or a pylon.
+    // Nodes are its live muzzle / pylon Node3Ds and Cli
+    // the `--weapon-mount=` token (`g1`, `pylon1`). Group /
+    // Hp are the live loadout entries the panel writes into — both null for the
+    // raw-marker fallback, which has nothing to arm.
     private sealed class Mount
     {
         public Mount(string label, string cli, IReadOnlyList<Node3D> nodes)

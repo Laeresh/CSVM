@@ -97,9 +97,9 @@ public class AngularDampingTests
             + $"the linear form's {linearFactor:0.000000}");
     }
 
-    /// <summary>The Bloodhawk's real dynamics — see WeathervaneTests/BankCouplingTests for why the
-    /// placeholder <c>PlaneStats()</c> defaults would hide a wrong axis behind near-equal
-    /// components.</summary>
+    // The Bloodhawk's real dynamics — see WeathervaneTests/BankCouplingTests for why the
+    // placeholder `PlaneStats()` defaults would hide a wrong axis behind near-equal
+    // components.
     private static PlaneStats Stats() => new()
     {
         PitchTorque = 3.3f,

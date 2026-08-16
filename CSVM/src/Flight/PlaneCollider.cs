@@ -119,33 +119,33 @@ public sealed class PlaneCollider
         return parts.Count > 0 ? new PlaneCollider(parts) : null;
     }
 
-    /// <summary>Corrects the label of a refined <c>tail</c> piece that is really wing
-    /// geometry. The tail region is clipped on z ALONE, at full span,
-    /// so on a swept or trailing-edge-heavy plane its outboard slabs are the wing's
-    /// trailing edge rather than the empennage — the Bloodhawk's two flat 4.9 × 0.4
-    /// strips are literally its <c>leftwing</c> / <c>rightwing</c> nodes. Refinement
-    /// splits that slab but propagates the region name verbatim, and
-    /// <see cref="PlaneDamage.MapStruckPart"/>'s <c>"tail"</c> arm is the only one
-    /// that ignores the impact point, so a wingtip strike 4 m off-centre subtracted
-    /// HP from the tail. Renaming here rather than side-splitting in PlaneDamage is
-    /// the right seam: the half-span is known here, and MapStruckPart would otherwise
-    /// need a widened signature.
-    ///
-    /// A piece is wing when its box lies wholly on one side of the centerline (so
-    /// every impact inside it maps to the correct side) AND its center is outboard of
-    /// the same WingBandFrac threshold that defines wing geometry in the first place.
-    /// Applied AFTER refinement, so each final box is judged on its own extent — a
-    /// piece renamed mid-refinement could be cut again into an inboard remainder.
-    ///
-    /// Twin-boom / twin-fin designs are the risk case, since their booms genuinely
-    /// ARE tail at outboard |x|. Measured across all 11 player aircraft: every
-    /// <c>*_rudder*</c> node in the fleet sits inside a box this rule leaves alone —
-    /// the Devastator's and Firebrand's fins at |x| 3.03 fall in their planes' centre
-    /// tail box, and the Kestrel's twin fins sit at |x| 1.98 against a 2.58 m band.
-    /// What moves is only aileron and wing-panel geometry (Devastator
-    /// <c>l/r_aileron2</c>, Bloodhawk <c>leftwing</c>/<c>rightwing</c>, Firebrand
-    /// <c>l/r_aileron1</c>, Fury's wingtip damage panels, and the autogyro's overhead
-    /// rotor — which the class doc already calls that plane's wing).</summary>
+    // Corrects the label of a refined `tail` piece that is really wing
+    // geometry. The tail region is clipped on z ALONE, at full span,
+    // so on a swept or trailing-edge-heavy plane its outboard slabs are the wing's
+    // trailing edge rather than the empennage — the Bloodhawk's two flat 4.9 × 0.4
+    // strips are literally its `leftwing` / `rightwing` nodes. Refinement
+    // splits that slab but propagates the region name verbatim, and
+    // PlaneDamage.MapStruckPart's `"tail"` arm is the only one
+    // that ignores the impact point, so a wingtip strike 4 m off-centre subtracted
+    // HP from the tail. Renaming here rather than side-splitting in PlaneDamage is
+    // the right seam: the half-span is known here, and MapStruckPart would otherwise
+    // need a widened signature.
+    //
+    // A piece is wing when its box lies wholly on one side of the centerline (so
+    // every impact inside it maps to the correct side) AND its center is outboard of
+    // the same WingBandFrac threshold that defines wing geometry in the first place.
+    // Applied AFTER refinement, so each final box is judged on its own extent — a
+    // piece renamed mid-refinement could be cut again into an inboard remainder.
+    //
+    // Twin-boom / twin-fin designs are the risk case, since their booms genuinely
+    // ARE tail at outboard |x|. Measured across all 11 player aircraft: every
+    // `*_rudder*` node in the fleet sits inside a box this rule leaves alone —
+    // the Devastator's and Firebrand's fins at |x| 3.03 fall in their planes' centre
+    // tail box, and the Kestrel's twin fins sit at |x| 1.98 against a 2.58 m band.
+    // What moves is only aileron and wing-panel geometry (Devastator
+    // `l/r_aileron2`, Bloodhawk `leftwing`/`rightwing`, Firebrand
+    // `l/r_aileron1`, Fury's wingtip damage panels, and the autogyro's overhead
+    // rotor — which the class doc already calls that plane's wing).
     private static string Relabel(string name, List<Tri> tris, float wingBand)
     {
         if (name != "tail" || tris.Count == 0)
@@ -155,10 +155,10 @@ public sealed class PlaneCollider
         return oneSide && Mathf.Abs(box.GetCenter().X) > wingBand ? "wing" : name;
     }
 
-    /// <summary>Splits the wing triangles at the widest chord (z) gap: a canard
-    /// plane's outboard geometry forms two clusters (nose canards, aft main wing)
-    /// that would otherwise merge into one nose-to-tail slab. The forward cluster is
-    /// the canard.</summary>
+    // Splits the wing triangles at the widest chord (z) gap: a canard
+    // plane's outboard geometry forms two clusters (nose canards, aft main wing)
+    // that would otherwise merge into one nose-to-tail slab. The forward cluster is
+    // the canard.
     private static IEnumerable<(string Name, List<Tri> Tris)> WingClusters(List<Tri> wing)
     {
         if (wing.Count == 0)
@@ -187,11 +187,11 @@ public sealed class PlaneCollider
         yield return ("wing", wing.GetRange(splitAt, wing.Count - splitAt));
     }
 
-    /// <summary>Greedy volume-guided refinement: repeatedly cut the cluster whose
-    /// best cut removes the most enclosed volume (bridged air), until no cut removes
-    /// at least VolumeSplitFrac of its box or the MaxBoxes budget is reached.
-    /// Cutting the biggest offender first spends the budget where the misfit is
-    /// worst.</summary>
+    // Greedy volume-guided refinement: repeatedly cut the cluster whose
+    // best cut removes the most enclosed volume (bridged air), until no cut removes
+    // at least VolumeSplitFrac of its box or the MaxBoxes budget is reached.
+    // Cutting the biggest offender first spends the budget where the misfit is
+    // worst.
     private static List<(string Name, List<Tri> Tris)> Refine(
         List<(string Name, List<Tri> Tris)> clusters)
     {
@@ -221,20 +221,20 @@ public sealed class PlaneCollider
         return result;
     }
 
-    /// <summary>Finds the axis cut of this cluster that most reduces the summed
-    /// volume of the resulting boxes vs the whole box (dimensions clamped to
-    /// MinThickness so flat slabs still count area; x = twin fins/booms, y = biplane
-    /// wing stacks, z = fin vs boom). Considers one OR two parallel cut planes per
-    /// axis — the double cut is what separates bilateral pairs: slicing one Kestrel
-    /// tail fin off alone gains nothing because the remainder still holds the other
-    /// fin's height, but two cuts drop the middle to the thin stabilizer in a single
-    /// decision. Candidate planes are Bins bin edges; triangles bin by centroid while
-    /// bins enclose all their corners, so surfaces crossing a cut stay covered (the
-    /// pieces overlap a little instead of leaking). An empty middle range (twin booms
-    /// bridged over air) yields no piece at all. True when the best cut removes at
-    /// least VolumeSplitFrac of the whole and every cut plane is at least MinCutWidth
-    /// from the cluster's rim; gain is the removed volume (m³) for cross-cluster
-    /// ranking.</summary>
+    // Finds the axis cut of this cluster that most reduces the summed
+    // volume of the resulting boxes vs the whole box (dimensions clamped to
+    // MinThickness so flat slabs still count area; x = twin fins/booms, y = biplane
+    // wing stacks, z = fin vs boom). Considers one OR two parallel cut planes per
+    // axis — the double cut is what separates bilateral pairs: slicing one Kestrel
+    // tail fin off alone gains nothing because the remainder still holds the other
+    // fin's height, but two cuts drop the middle to the thin stabilizer in a single
+    // decision. Candidate planes are Bins bin edges; triangles bin by centroid while
+    // bins enclose all their corners, so surfaces crossing a cut stay covered (the
+    // pieces overlap a little instead of leaking). An empty middle range (twin booms
+    // bridged over air) yields no piece at all. True when the best cut removes at
+    // least VolumeSplitFrac of the whole and every cut plane is at least MinCutWidth
+    // from the cluster's rim; gain is the removed volume (m³) for cross-cluster
+    // ranking.
     private static bool BestCut(List<Tri> tris, out List<List<Tri>> pieces, out float gain)
     {
         pieces = null!;
@@ -354,9 +354,9 @@ public sealed class PlaneCollider
             new Transform3D(Basis.Identity, box.GetCenter())));
     }
 
-    /// <summary>Clips every triangle against an axis-aligned plane (axis 0=x, 2=z),
-    /// keeping the pieces on the requested side — Sutherland–Hodgman against one
-    /// plane, re-fanned into triangles. Degenerate slivers are dropped.</summary>
+    // Clips every triangle against an axis-aligned plane (axis 0=x, 2=z),
+    // keeping the pieces on the requested side — Sutherland–Hodgman against one
+    // plane, re-fanned into triangles. Degenerate slivers are dropped.
     private static List<Tri> ClipAxis(List<Tri> tris, int axis, float plane, bool keepGreater)
     {
         var result = new List<Tri>();
@@ -397,8 +397,8 @@ public sealed class PlaneCollider
         return box;
     }
 
-    /// <summary>Gathers every visible mesh triangle, transformed by the accumulated
-    /// node transforms (xf already includes node's own).</summary>
+    // Gathers every visible mesh triangle, transformed by the accumulated
+    // node transforms (xf already includes node's own).
     private static void Collect(Node node, Transform3D xf, List<Tri> tris)
     {
         if (node is Node3D n3d)

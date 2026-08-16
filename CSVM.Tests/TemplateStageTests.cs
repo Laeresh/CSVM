@@ -406,9 +406,9 @@ public class TemplateStageTests
 
     private static AnimDefinition Def(string name) => new() { Name = name };
 
-    /// <summary>The token adapter: reference-equality nodes, a parent-chain slot walk, transform
-    /// reads/writes on plain fields, prints collected, and the runtime hooks backed by
-    /// dictionaries — each the one-line stand-in for the engine adapter's one-line hook.</summary>
+    // The token adapter: reference-equality nodes, a parent-chain slot walk, transform
+    // reads/writes on plain fields, prints collected, and the runtime hooks backed by
+    // dictionaries — each the one-line stand-in for the engine adapter's one-line hook.
     private sealed class Harness
     {
         public readonly Dictionary<string, List<TestNode>> Roots = new(StringComparer.OrdinalIgnoreCase);

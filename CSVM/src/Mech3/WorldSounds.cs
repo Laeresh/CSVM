@@ -362,9 +362,9 @@ public sealed partial class WorldSounds : Node3D
         LogOnce();
     }
 
-    /// <summary>Range from the closest listener to <paramref name="at"/>, or -1 with no listeners —
-    /// which is not a formatting quirk but the state that silences every 3D emitter, so the log says
-    /// it rather than printing a distance from the world origin.</summary>
+    // Range from the closest listener to `at`, or -1 with no listeners —
+    // which is not a formatting quirk but the state that silences every 3D emitter, so the log says
+    // it rather than printing a distance from the world origin.
     private static (float Range, int Index) NearestEar(IReadOnlyList<Vector3> ears, Vector3 at)
     {
         float best = -1f;
@@ -471,8 +471,8 @@ public sealed partial class WorldSounds : Node3D
         }
     }
 
-    /// <summary>One live fire-and-forget one-shot; <see cref="Source"/> non-null makes it follow
-    /// that node's pose until the clip ends or the node dies.</summary>
+    // One live fire-and-forget one-shot; Source non-null makes it follow
+    // that node's pose until the clip ends or the node dies.
     private sealed class OneShot
     {
         public AudioStreamPlayer3D Player = null!;
@@ -480,7 +480,7 @@ public sealed partial class WorldSounds : Node3D
         public Node3D? Source;
     }
 
-    /// <summary>One live emitter: the player plus the world node whose pose it rides.</summary>
+    // One live emitter: the player plus the world node whose pose it rides.
     private sealed class Emitter
     {
         public string Name = "";

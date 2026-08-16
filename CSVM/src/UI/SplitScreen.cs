@@ -184,8 +184,8 @@ public sealed partial class SplitScreen : CanvasLayer
         Relayout();
     }
 
-    /// <summary>Places the panes over the current window rect: 2P stacked top/bottom, 3–4P in a
-    /// 2×2 grid (3P's fourth quadrant stays backdrop-black). Runs on every resize.</summary>
+    // Places the panes over the current window rect: 2P stacked top/bottom, 3–4P in a
+    // 2×2 grid (3P's fourth quadrant stays backdrop-black). Runs on every resize.
     private void Relayout()
     {
         var size = _root.Size;

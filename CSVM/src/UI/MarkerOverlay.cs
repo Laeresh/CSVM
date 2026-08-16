@@ -163,8 +163,8 @@ public sealed partial class MarkerOverlay : Node3D
         }
     }
 
-    /// <summary>Built lazily on first show — an untouched viewer session adds no nodes at all, so
-    /// nothing it renders can differ.</summary>
+    // Built lazily on first show — an untouched viewer session adds no nodes at all, so
+    // nothing it renders can differ.
     private void EnsureBuilt()
     {
         if (_holder != null)
@@ -235,9 +235,9 @@ public sealed partial class MarkerOverlay : Node3D
         AddChild(_hudLayer);
     }
 
-    /// <summary>Nearest-first screen-cell de-clutter over the fixed marker set: firepoints claim
-    /// cells before pylons, then within each band the camera-nearest wins. A label loses to
-    /// something more important or closer, exactly like <see cref="NodeLabels"/>.</summary>
+    // Nearest-first screen-cell de-clutter over the fixed marker set: firepoints claim
+    // cells before pylons, then within each band the camera-nearest wins. A label loses to
+    // something more important or closer, exactly like NodeLabels.
     private void Relayout()
     {
         var camera = GetViewport().GetCamera3D();
@@ -281,8 +281,8 @@ public sealed partial class MarkerOverlay : Node3D
         }
     }
 
-    /// <summary>Reserves this label's screen cell, or reports it taken. Checks the 3×3
-    /// neighbourhood so two labels can't sit a pixel apart across a cell boundary.</summary>
+    // Reserves this label's screen cell, or reports it taken. Checks the 3×3
+    // neighbourhood so two labels can't sit a pixel apart across a cell boundary.
     private bool Claim(Vector2 screen)
     {
         int cx = Mathf.FloorToInt(screen.X / GapX), cy = Mathf.FloorToInt(screen.Y / GapY);

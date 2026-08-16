@@ -775,10 +775,10 @@ public class SequenceRunnerTests
         return inst;
     }
 
-    /// <summary>An instance over a definition that KNOWS the given sequences (so CALL_SEQUENCE /
-    /// STOP_SEQUENCE can look them up by name), with runners started only for
-    /// <paramref name="run"/> — the rest sit ON_CALL, and are MARKED so: only an ON_CALL sequence
-    /// is ever parked, and CALL_SEQUENCE starts nothing else.</summary>
+    // An instance over a definition that KNOWS the given sequences (so CALL_SEQUENCE /
+    // STOP_SEQUENCE can look them up by name), with runners started only for
+    // `run` — the rest sit ON_CALL, and are MARKED so: only an ON_CALL sequence
+    // is ever parked, and CALL_SEQUENCE starts nothing else.
     private static AnimInstance Instance(AnimSequence[] defined, params AnimSequence[] run)
     {
         var def = new AnimDefinition();
@@ -800,8 +800,8 @@ public class SequenceRunnerTests
         return s;
     }
 
-    /// <summary>An instantaneous OBJECT_ACTIVE_STATE swap named <paramref name="name"/> (the SWAP the
-    /// bowl sign flickers with).</summary>
+    // An instantaneous OBJECT_ACTIVE_STATE swap named `name` (the SWAP the
+    // bowl sign flickers with).
     private static AnimEvent Swap(string name, string? offset = null, float time = 0f) =>
         new()
         {
@@ -811,7 +811,7 @@ public class SequenceRunnerTests
             Data = new AnimData(new Dictionary<string, object?> { ["name"] = name })
         };
 
-    /// <summary>An instantaneous LIGHT_STATE named <paramref name="name"/>.</summary>
+    // An instantaneous LIGHT_STATE named `name`.
     private static AnimEvent Light(string name) =>
         new()
         {
@@ -819,8 +819,8 @@ public class SequenceRunnerTests
             Data = new AnimData(new Dictionary<string, object?> { ["name"] = name })
         };
 
-    /// <summary>A timed motion whose run time the host reports (its Kind keys
-    /// <see cref="RecordingHost.Durations"/>).</summary>
+    // A timed motion whose run time the host reports (its Kind keys
+    // RecordingHost.Durations).
     private static AnimEvent Timed(string name, string? offset = null, float time = 0f) =>
         new()
         {
@@ -877,9 +877,9 @@ public class SequenceRunnerTests
 
     private static AnimEvent Ctrl(string kind) => new() { Kind = kind };
 
-    /// <summary>Drives the instance in fixed <paramref name="dt"/> steps and returns, per step, the
-    /// names dispatched during that step — so a test can assert both order and which step each fire
-    /// landed on (the timing evidence).</summary>
+    // Drives the instance in fixed `dt` steps and returns, per step, the
+    // names dispatched during that step — so a test can assert both order and which step each fire
+    // landed on (the timing evidence).
     private static List<List<string>> RunSteps(AnimInstance inst, RecordingHost host, float dt, int steps)
     {
         var timeline = new List<List<string>>();
@@ -894,10 +894,10 @@ public class SequenceRunnerTests
 
     // ---- the fake host: the interpreter's 3-point view, scripted and recording ----
 
-    /// <summary>An <see cref="ISequenceHost"/> that records every real dispatch, returns a scripted
-    /// duration per event kind, and answers conditions from a tag→verdict table. Control-flow kinds
-    /// return <c>false</c> from <see cref="Dispatch"/> — returning true would silently bypass the
-    /// LOOP/IF branch logic and every test would pass while testing nothing.</summary>
+    // An ISequenceHost that records every real dispatch, returns a scripted
+    // duration per event kind, and answers conditions from a tag→verdict table. Control-flow kinds
+    // return `false` from Dispatch — returning true would silently bypass the
+    // LOOP/IF branch logic and every test would pass while testing nothing.
     private sealed class RecordingHost : ISequenceHost
     {
         public readonly List<string> Fired = new();

@@ -26,15 +26,15 @@ namespace CSVM.UI;
 /// </summary>
 public sealed partial class TargetingOverlay : Node
 {
-    /// <summary>Firing this tick: every gate passed.</summary>
+    // Firing this tick: every gate passed.
     private static readonly Color FiringColor = new(1f, 0.25f, 0.2f);
 
-    /// <summary>Acquired, tracking, trigger held by a gate that will pass on its own (the shot
-    /// clock, a bored window, a barrel still slewing).</summary>
+    // Acquired, tracking, trigger held by a gate that will pass on its own (the shot
+    // clock, a bored window, a barrel still slewing).
     private static readonly Color TrackingColor = new(1f, 0.8f, 0.2f);
 
-    /// <summary>Acquired and held by a gate that will NOT pass where it stands: no intercept
-    /// solution, or the line of sight is blocked.</summary>
+    // Acquired and held by a gate that will NOT pass where it stands: no intercept
+    // solution, or the line of sight is blocked.
     private static readonly Color HeldColor = new(0.55f, 0.6f, 0.7f);
 
     private readonly Func<IReadOnlyList<TurretController>> _turrets;

@@ -118,8 +118,8 @@ public sealed partial class LiveryLab : Node
         return label;
     }
 
-    /// <summary>Position of a scheme's pattern in this aircraft's pattern list. Matches on
-    /// either spelling — vehicle.json says `player_fortune`, the archive folder is `FORTUNE`.</summary>
+    // Position of a scheme's pattern in this aircraft's pattern list. Matches on
+    // either spelling — vehicle.json says `player_fortune`, the archive folder is `FORTUNE`.
     private int IndexOfPattern(PaintScheme scheme)
     {
         for (int i = 0; i < _patterns.Count; i++)
@@ -129,8 +129,8 @@ public sealed partial class LiveryLab : Node
         return -1;
     }
 
-    /// <summary>The catalog's canonical colours for a pattern folder name, or null when
-    /// vehicle.json names no such pattern (BROADWAY and ITSTAXI ship masks but no def).</summary>
+    // The catalog's canonical colours for a pattern folder name, or null when
+    // vehicle.json names no such pattern (BROADWAY and ITSTAXI ship masks but no def).
     private PaintScheme? CatalogFor(string folder)
     {
         foreach (var s in _catalog)
@@ -141,12 +141,12 @@ public sealed partial class LiveryLab : Node
 
     // ---- edits -------------------------------------------------------------------------
 
-    /// <summary>Steps to the next/previous pattern this aircraft carries and puts on that
-    /// squadron's whole livery — colours and decals, not just the mask layout. Switching
-    /// squadron means switching to their colours; stepping the Bloodhawk's three gives you
-    /// Fortune Hunters red, Blake blue-gray and Hughes yellow, each with its own logos.
-    /// A pattern vehicle.json names no colours for (BROADWAY, ITSTAXI) keeps the current
-    /// ones, since there is nothing canonical to load.</summary>
+    // Steps to the next/previous pattern this aircraft carries and puts on that
+    // squadron's whole livery — colours and decals, not just the mask layout. Switching
+    // squadron means switching to their colours; stepping the Bloodhawk's three gives you
+    // Fortune Hunters red, Blake blue-gray and Hughes yellow, each with its own logos.
+    // A pattern vehicle.json names no colours for (BROADWAY, ITSTAXI) keeps the current
+    // ones, since there is nothing canonical to load.
     private void SelectPattern(int delta)
     {
         if (_patterns.Count == 0)
@@ -155,9 +155,9 @@ public sealed partial class LiveryLab : Node
         LoadSquadronLivery();
     }
 
-    /// <summary>(Re)loads the current pattern's shipped squadron colours and decals — the
-    /// livery as the game's own defs define it. Also the panel's "squadron colours" button,
-    /// which is how you get back to canonical after dragging the RGB sliders.</summary>
+    // (Re)loads the current pattern's shipped squadron colours and decals — the
+    // livery as the game's own defs define it. Also the panel's "squadron colours" button,
+    // which is how you get back to canonical after dragging the RGB sliders.
     private void LoadSquadronLivery()
     {
         if (_patternIndex < 0 || _patternIndex >= _patterns.Count)
@@ -228,7 +228,7 @@ public sealed partial class LiveryLab : Node
         Apply();
     }
 
-    /// <summary>Repaints the model and refreshes the panel. The single write path.</summary>
+    // Repaints the model and refreshes the panel. The single write path.
     private void Apply()
     {
         _builder.Repaint(_scheme);
@@ -266,9 +266,9 @@ public sealed partial class LiveryLab : Node
         return name != null ? $"{index:00}  {name}" : $"{index:00}  (absent)";
     }
 
-    /// <summary>The exact CLI arguments that reproduce the current livery — the lab's output.
-    /// A pattern is emitted only when the colours and decals still match it verbatim;
-    /// otherwise the explicit colour/decal overrides carry the whole scheme.</summary>
+    // The exact CLI arguments that reproduce the current livery — the lab's output.
+    // A pattern is emitted only when the colours and decals still match it verbatim;
+    // otherwise the explicit colour/decal overrides carry the whole scheme.
     private string CliArgs()
     {
         if (_scheme == null)

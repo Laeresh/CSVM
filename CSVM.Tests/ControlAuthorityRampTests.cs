@@ -178,18 +178,18 @@ public class ControlAuthorityRampTests
         Assert.Equal(expected, fast.BodyRates.Y / slow.BodyRates.Y, 4);
     }
 
-    /// <summary>The authored globals, as the shipped player.json carries them (verified against
-    /// <c>extracted/zrdr/player.zrd.json</c> and pinned by <see cref="PlaneStatsFlightGlobalsTests"/>).
-    /// Written out here so the curve tests do not need the extracted tree.</summary>
+    // The authored globals, as the shipped player.json carries them (verified against
+    // `extracted/zrdr/player.zrd.json` and pinned by PlaneStatsFlightGlobalsTests).
+    // Written out here so the curve tests do not need the extracted tree.
     private static PlaneStats Authored() => new()
     {
         TurnFadeIn = 10f * Mph,
         TurnFadeOut = 50f * Mph,
     };
 
-    /// <summary>A plant that can be flown slowly without the stall block or the weathervane taking
-    /// the nose: <c>return_rate</c> zero, and a weight/area pair whose computed stall speed is below
-    /// the whole ramp, so nothing but the stick moves the body rates.</summary>
+    // A plant that can be flown slowly without the stall block or the weathervane taking
+    // the nose: `return_rate` zero, and a weight/area pair whose computed stall speed is below
+    // the whole ramp, so nothing but the stick moves the body rates.
     private static FlightModel Hover() => new(new PlaneStats
     {
         PitchTorque = 3.3f,

@@ -155,8 +155,8 @@ public sealed class CaptureDirector
         Log.Info("core", $"placement: --pos=\"{Vec3Arg(pos)}\" --lookat=\"{Vec3Arg(orbit.OrbitCenter)}\"");
     }
 
-    /// <summary>Insert a zero-padded frame index before the extension:
-    /// foo.png -> foo_00.png. Used for --shots=N burst capture.</summary>
+    // Insert a zero-padded frame index before the extension:
+    // foo.png -> foo_00.png. Used for --shots=N burst capture.
     private static string IndexedShotPath(string path, int index)
     {
         var dir = Path.GetDirectoryName(path) ?? "";
@@ -165,12 +165,12 @@ public sealed class CaptureDirector
         return Path.Combine(dir, $"{stem}_{index:D2}{ext}");
     }
 
-    /// <summary>Rotate the burst camera a hair around the framed point each --shots frame so
-    /// coplanar surfaces re-decide the depth test and z-fighting flicker surfaces across the
-    /// sequence (a dead-still camera can render bit-identical frames). The eye micro-orbits
-    /// the pivot — depths change, but the camera keeps looking at the pivot so the subject
-    /// stays centred. Static mode only: in --fly the FlightController owns the camera each
-    /// frame (and the plane's own motion already surfaces the fight).</summary>
+    // Rotate the burst camera a hair around the framed point each --shots frame so
+    // coplanar surfaces re-decide the depth test and z-fighting flicker surfaces across the
+    // sequence (a dead-still camera can render bit-identical frames). The eye micro-orbits
+    // the pivot — depths change, but the camera keeps looking at the pivot so the subject
+    // stays centred. Static mode only: in --fly the FlightController owns the camera each
+    // frame (and the plane's own motion already surfaces the fight).
     private void ApplyShotJitter(OrbitCamera orbit, Camera3D camera, SessionSpec spec)
     {
         if (_shotBaseXform is not { } baseX)
