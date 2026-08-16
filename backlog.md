@@ -891,55 +891,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   half, whose blocker this decode voids), `docs/formats/ai-nets.md`, `docs/architecture.md` on
   `AiPilot` and `AiModeMachine`.
 
-- `BL-378` `[Bug]` **Our AI has no terrain avoidance, so a net authored below a ridge flies AI into
-  it. DECODED 2026-08-15; what is left is implementation.** *Evidence:* the user at the controls,
-  2026-08-15, on the build that made anchored nets ride their target (`BL-377`, closed): C1's
-  patrol nets sit at an authored 400 m (`M4ReinfAce`) and 350 m (`M2Ace`), which clashes with
-  elevated terrain, and the nets now ride the player into any part of the map.
-  ⚠ **The two natural fixes are both wrong, and the binary says so outright.** A net node's
-  altitude is neither above-ground nor target-relative: `FUN_00432010` returns `out.y = node.y`
-  verbatim, with the trailer offset applied to X and Z only
-  ([`docs/org/aiPilot.md`](docs/org/aiPilot.md) "The trailer"). There is no terrain sample anywhere
-  in the node read, and none in the patrol follower `FUN_0041d1f0` either. Making our Y
-  terrain-relative or player-relative would put every AI on a different route from the original's,
-  on all 222 nets, to paper over a missing behaviour.
-  **The behaviour that is actually missing is a crash-avoidance MODE.** `FUN_0041f810` is a
-  per-plane ground-proximity check that writes the AI substate at vehicle `+0x358`:
-  - below the global altitude floor `DAT_0071c3f0` (**20.0** in the image, the only unconditional
-    store) it sets state **3** outright;
-  - between that floor and `DAT_0071c3f4` (**8000.0**) it casts a ray **4.5 ×** the vector the
-    vehicle's virtual `+0x04` accessor returns (velocity by shape and use, so ~4.5 s of travel,
-    which is the one inferred step here) through `FUN_004c8f70`, and sets state 3 on a hit;
-  - above 8000 m it runs no check and CLEARS state 3 back to 0.
-  The re-check is throttled per plane to the game clock plus `0.5–1.0 s`, drawn from
-  `rand()/32767`, so it is not a per-frame cast. State 3 is then handled by the follower's own
-  switch (`FUN_0041d1f0` case 3): the steering target becomes the plane's own position with
-  **Y + 1000**, flown through parameter block `DAT_0061fb48` (throttle band 0.6–1.3) instead of
-  patrol's `DAT_0061fb68` (0.8–1.1). `FUN_0041b560`, the shared steering law, reads the same
-  `DAT_0071c3f0` floor directly, and `FUN_004216e0`'s maneuver suspends it (writing −FLT_MAX, with
-  a paired per-vehicle ceiling at `+0x314` set to +FLT_MAX) for its duration.
-  *Fix shape:* a mode in `AiModeMachine`, not a change to `AiNetFollower`. `AiPilot` currently sets
-  `TargetAltitude = patrol.CurrentTarget.Y` and its only altitude leash handles being too HIGH
-  (`_altRecovering`, `AltLeashEnterM`), so there is no floor and no lookahead at all. The ray needs
-  a world collision query; `GameSession.GroundSampler()` is a height sampler, not a ray, so decide
-  which of the two to use rather than assuming the sampler is enough on a cliff face.
-  ⚠ *Traps.* (a) **Do not clamp the net.** The climb-out is a state that overrides steering and
-  then releases; a clamped node altitude would permanently move the route. (b) The 20 m floor is a
-  flat world-Y floor, NOT terrain-following, so it does not by itself save a plane over a 600 m
-  ridge; the raycast is what does. (c) The +1000 m target is relative to the PLANE, not to the
-  terrain or the net. (d) `ZeppelinMotion` shares the follower but is a different actor with no
-  flight model; do not fold zeppelins into an aircraft crash-avoid mode without checking whether
-  the original runs one for them. (e) The throttle-band swap is part of the behaviour, not
-  decoration: a climb-out at patrol throttle is a slower climb than the original's.
-  *Playtest after fix:* fly Instant Action in C1 over the high ground east of the spawn with F13 up
-  and `--debug-markers`, and watch a netted enemy cross a ridge that sits above the net's authored
-  400 m: it should pitch up and climb out of the state on its own rather than fly into the slope,
-  and it should return to the graph afterwards rather than stay in the climb.
-  *Cross-refs:* `BL-364`,
-  [`docs/org/aiPilot.md`](docs/org/aiPilot.md) "The trailer" (the anchored-net ride that carries a
-  net over any terrain and so made this visible; closed as `BL-377`,
-  `git log --grep=BL-377`).
-
 - `BL-398` `[Feature]` **A rebindable keymap — the real answer to targeting's key placement, not a
   targeting-specific fix.** *Evidence:* the player-targeting plan's own out-of-scope call (a),
   2026-08-15: every one of the original's eleven targeting keys collides with our WASD +
@@ -1025,31 +976,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   fraction, so a regression shows up as a count.
   *Playtest after fix:* fly against a Black Hat flight and confirm rockets are aimed at you and
   read as a threat rather than noise.
-  *Cross-refs:* `BL-394` (what an AI carries; this item is only the trigger), `BL-396` (the gun
-  gates the same decode calls into question), `BL-227` (blast falloff),
-  `analysis/ai-ordnance-census/`.
-
-- `BL-396` `[Research]` **Verify our AI gun gates against the decoded fire path.** `AiGunner`'s
-  three gates were assembled from authored data, not read out of the executable: the RANGE-reach
-  test, the ±11° `gun_pitch`/`gun_yaw` airframe cone as a hard fire gate, and the quick-draw cone
-  off the target's nose/tail axis. The `BL-395` decode reached the routine that actually fires
-  (`FUN_0041f420` + `FUN_004b6820`) and it does not obviously agree. It applies a **10° aim-quality
-  gate on the mount's lead solution**, a per-weapon **squared** `[min, max]` range window from the
-  def (1–900 m for every AI gun), and the quick-draw cosine as an early all-or-nothing return
-  rather than a per-shot filter. Whether `gun_pitch`/`gun_yaw` gate firing at all, or only the
-  mount's traverse, is the open question.
-  *Do:* read `FUN_0041f420`'s gun path and `FUN_004b6820`'s aim gate against
-  `AiGunner.Solve`/`ShotDirection` gate by gate, and record the verdict as a line in
-  [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md). Confirmation closes this item;
-  a contradiction re-tags it `[Bug]` and it carries its own fix.
-  ⚠ *Traps.* (a) `AiGunner` is landed, unit-tested (`AiGunnerTests`) and covered by the
-  `ai-gunnery` suite, and a gate change is a regression risk with its own verification burden, which
-  is why this is separate from `BL-395`. (b) The dead-eye scatter is a different mechanism from the
-  aim gate; do not conflate the cone the AI *shoots inside* with the quality threshold it *waits
-  for*. (c) The min-range floor of 1 m is authored, not a sentinel. It is the same field that
-  carries 200 m on ordnance.
-  *Cross-refs:* `BL-395`, `docs/formats/ai-rosters.md` ("ai_skill_parameters"),
-  `docs/architecture.md` `src/Flight/AiGunner.cs`.
+  *Cross-refs:* `BL-394` (what an AI carries; this item is only the trigger), `BL-227` (blast
+  falloff), `analysis/ai-ordnance-census/`. The gun half of the same decode is settled: `AiGunner`
+  runs the squared engagement window and the clamp-then-residual aim gate, so an `AiRocketeer`
+  copies that shape with the ordnance thresholds (5°, the vehicle-wide lockout, the roll).
 
 - `BL-401` `[Bug]` **The node names we spawn do not match the names the rosters author, so
   `rating_biases` matches nothing.** *Evidence:* `ObjectiveBiasFor(fc.Name, gunner.RatingBiases)`
@@ -2090,67 +2020,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   **Pick these up when the thing they depend on exists** — a cutscene player for `Callback` — not
   before. `ObjectCycleTexture` needs neither; it needs a mission that
   actually builds a `taildamage` node, which none of the ones this project defaults to do.
-
-- `BL-135` `[Bug]` `[Blocked: original-engine evidence]` **The one-frame `CallSequence` dispatch lag.**
-  **Found 2026-07-22 while fixing C1's police siren** (that fix landed; see `docs/HISTORY.md`). This
-  is the *other* defect that investigation turned up — real, engine-wide, and deliberately left
-  unfixed because it was not what silenced anything.
-
-  **⚠ Re-measured and RE-DEFERRED 2026-08-04** (`PLAN-m3-polish-6` B12). The bounded drain was
-  built, measured across the whole install and then taken back out. Read
-  [`analysis/bl-135-callsequence-lag/FINDINGS.md`](analysis/bl-135-callsequence-lag/FINDINGS.md)
-  before touching this again — the implementation, the sized bound and the full measurement are
-  there, and the "behaviour-neutral" claim below is superseded. Summary of what changed:
-
-  - **It is no longer behaviour-neutral.** 4 of the 13 goldens move, deterministically:
-    `c1-crash` 79.7 % of pixels, `c1-destroy-effects` 0.228 %, `c3-island` 0.029 %,
-    `c5-city-night` 0.015 %. All four are particle shots and the difference is phase — same camera,
-    same terrain, the effect one tick further along (C5 877 → 927 live particles at frame 120).
-    7 of the 8 `--freecam --det` chapter captures stay pixel-identical.
-  - **Nothing observable is repaired.** No content appears or disappears; every runtime total is
-    unchanged. What moves is the bootstrap CENSUS (C1 35 → 53 lights, C5 9 → 37 puffer emitters),
-    which is trap 3 below — those objects already existed one tick later.
-  - **The bound is sized, not guessed.** The deepest same-tick CALL fan-out authored anywhere is
-    **15** (every zeppelin's `main_altitude_check` → `rotatezep` → `breakupzep` → 13 `break*`
-    pieces), so the cap was 64. It is load-bearing: C2/M02's `marypickford` really does ring
-    (`randomloop → mpickford_bob → randomloop`), and it is instantaneous in THIS engine because
-    `OBJECT_MOTION_SI_SCRIPT_ALL_NAMES` has no handler and reports duration 0.
-  - **The blocking question is not capture-answerable**, so no `CAP-nn` was minted: the difference is
-    one tick per hop over chains at most 3 hops deep (≈50 ms) off a trigger that is not on screen.
-
-  **The mechanism.** `AnimInstance.CallSequence` appends to `Runners` (`SequenceRunner.cs:84`) while
-  `AnimInstance.Advance` walks that list **descending** (`SequenceRunner.cs:67`). An appended runner
-  therefore lands at an index the loop has already passed, so **every called sequence's first event
-  fires one frame late** — not just the siren's. Scale: 22,391 compiled `CallSequence` events across
-  3,434 defs, plus 1,865 in the reader files.
-
-  **Why it was not fixed with the siren.** Draining same-pass-appended runners was implemented and
-  measured behaviour-neutral at the time (exactly one number moved across all 8 chapters) — a claim
-  the 2026-08-04 re-measurement above **supersedes**. But it repairs
-  the siren only because the sound loader *happens* to still be alive at that instant, and leaves
-  the other 947 late `SOUND_NODE` events broken. The loader lifetime was the real defect and is
-  fixed; this lag is a separate question about dispatch timing fidelity.
-
-  **⚠ Traps — read before touching this.**
-
-  1. **The descending walk is deliberate, not a bug.** `AnimRuntime.cs:250` records why: instances
-     can be added *during* the walk. Do not "fix" it by iterating forwards.
-  2. **Any same-pass drain needs a bound.** A sequence that calls itself would spin within a single
-     frame. (The siren's own `siren_police` is safe — 3 zero-delay events, no `Loop`, so its runner
-     completes and is removed in one pass — but that is a property of that data, not a guarantee.)
-     Confirmed 2026-08-04: `marypickford` is the def that proves it, and 64 is the sized cap.
-  3. **Do not measure this with the bootstrap emitter census.** `anim: N ambient sound emitter(s)`
-     is printed inside `Bootstrap`, so it is a snapshot that cannot see anything created afterwards
-     — which is exactly how the siren's real cause stayed hidden through a full investigation
-     (`docs/verification.md` LOG-2). C1 legitimately reports 38 while 39 emitters exist.
-
-  **Open question this should answer:** does the original dispatch a called sequence in the same
-  tick? If yes, every `CallSequence` in the install is currently a frame late and the fix is a
-  fidelity improvement rather than a no-op. Nobody has checked, and as of 2026-08-04 nobody can from
-  film — the difference is below a capture's resolution (see the re-deferral note above). Until it is
-  settled from the original's code, the drain buys a golden rebaseline for an unverified direction,
-  which is why it is not landed. Measured behaviour movement says only that *our* observable output
-  changes; it is still not evidence about the original.
 
 - `BL-218` `[Tuning]` `[Owed-playtest]` **Puffer `NUMBER` default (2026-08-01)** — `NUMBER` is absent from 680 of C1's 721
   `PufferState` events, including `large_30sec_fire`'s `fire_n_smoke`, and `PufferState.FromAnimEvent`

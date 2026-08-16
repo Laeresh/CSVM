@@ -379,7 +379,7 @@ re-deferred with a fresh measured reason — not left ambiguous.
 drain was already implemented once and measured **behaviour-neutral** (exactly one number moved
 across all 8 chapters), then deliberately not kept because it wasn't what silenced the siren.
 Whether the original dispatches a called sequence in the same tick is unknown — nobody has
-checked. Full evidence + traps: `backlog.md` `BL-135`.
+checked. Full evidence + traps: `analysis/bl-135-callsequence-lag/FINDINGS.md`.
 
 **Approach.** Re-implement the same-pass drain **with a bound** (a self-calling sequence must not
 spin within one frame — cap drain iterations per frame and log on hitting the cap). Re-measure

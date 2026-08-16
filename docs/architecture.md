@@ -100,7 +100,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver: mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; each mode picks the aim point and table `AiControlLaw` steers on. `SteeringPatrol` reports whether the last step actually flew the net (F13's leashes read it).
 - `src/Flight/AiControlLaw.cs` — the original's own AI steering law (decoded in `docs/org/aiControlLaw.md`): aim point + that point's velocity + one of four decoded parameter tables → stick and throttle lever. Engine-free and pure.
 - `src/Flight/AiModeMachine.cs` — the nine-mode AI state machine, the engine's decoded mode vocabulary: patrol/pursue/lay off/evade/evasive maneuver/stunned/avoid crash + two enum-only danger-zone modes; steady-hand and sixth-sense reaction rolls on the shipped chances.
-- `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery: intercept lead via `AimAssist.TryIntercept`, the ±11° gun cone and the quick-draw cone as fire gates, per-shot dead-eye scatter; mutable target, primary-target name and rating biases (the D12 script seams).
+- `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery: intercept lead via `AimAssist.TryIntercept`, the quick-draw cone and the engagement window as fire gates, the ±11° traverse clamp with its 10° residual gate, per-shot dead-eye scatter; mutable target, primary-target name and rating biases (the D12 script seams).
 - `src/Flight/AiVoiceDispatcher.cs` — the combat-voice trigger dispatch, engine-free: the talker roll, the 15 s per-slot cooldown armed on failure too, the bearing halving, the broadcast election, the DI tiers, the death cries with force, the computed bearing index.
 - `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula: rank = weight × 1200 + distance + objectiveBias, minimised; player base weight 0.7, ±0.2 bearing/altitude/facing terms, 1e21 beyond activation; rating-bias matching and the allied-attacker deconfliction pick.
 - `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints: nearest node first, then edge-list neighbours, seeded branch draws, and an anchored net offset onto its live trailer target (`BL-377`); aircraft-agnostic, shared by `AiPilot` and `ZeppelinMotion`.
@@ -781,8 +781,14 @@ observe the difference; the constraint and its one residual live in `Scan`'s own
 function map, the three START_TIME origins, the LOOP's pass counter and 60 Hz frame denomination,
 and the clock-carry a timed loop needs; the authored side stays in
 [formats/anim-definitions.md](formats/anim-definitions.md).
-`AnimInstance` holds a definition's concurrent runners and removes them as they finish, and carries
-the CALL_SEQUENCE/STOP_SEQUENCE semantics (decode in `docs/org/sequences.md`;
+`AnimInstance` holds **one slot per `Def.Sequences` entry and walks them ASCENDING**, mirroring the
+original's per-definition sequence array, plus an unslotted list for runners the definition does not
+list (the death slot, the damage-stage host), which the original likewise keeps off the array and
+steps outside the walk. The walk order is behaviour, not housekeeping: `CALL_SEQUENCE` writes the
+callee's own slot, so a call runs in the same tick exactly when the callee is declared AFTER the
+caller and waits a tick when it is declared before — 99.5 % of the install's calls point forward.
+One slot stepped at most once per pass is also why no same-tick recursion cap is needed.
+It carries the CALL_SEQUENCE/STOP_SEQUENCE semantics (decode in `docs/org/sequences.md`;
 `AnimRuntime`'s dispatch cases are thin shims over these). **One runner per sequence, keyed on the
 `AnimSequence` OBJECT and never on its name** — the original holds a sequence's state inside the
 definition's own sequence array (`004eb570`), so `CallSequence` starts a sequence only when nothing
@@ -1319,8 +1325,9 @@ D11's nine-mode state machine, which when set is stepped first and picks this st
 parameter table: patrol/danger-zone fly the net node itself, pursue leads the gunner's target on
 the engaged table (or aims at it outright for the head-on firing solution), lay off holds its
 entry course and then walks the throttle toward `sixth_sense_factor` × the pursuer's speed so the
-human catches up, evade flies the machine's orders, avoid crash aims 1000 m straight up on the
-emergency arm, an evasive maneuver plays its `ManeuverExecutor`, stunned returns neutral sticks),
+human catches up, evade flies the machine's orders, avoid crash aims 1000 m up on the emergency
+arm, displaced 1000 m right of its own ground track (`ClimbOutBreakM`, invented and measured),
+an evasive maneuver plays its `ManeuverExecutor`, stunned returns neutral sticks),
 one `FlightInput` per sim step out, read by a `FlightController` whose `Pilot` is set. Pure over
 the model state and its own fields, seeded randomness only, so a fixed-dt run is deterministic
 (`AiPilotTests`). The original's own steering law is `AiControlLaw`; this class is only its driver
@@ -1349,10 +1356,14 @@ assist (decoded: the mode and `sixth_sense_factor` 0.994→1.07, "the ease-off w
 pursue eases into it when a chasing HUMAN target has fallen behind, and it releases when the
 pursuer catches up or stops chasing; `AssistEnabled` false (`--no-assist`) never enters it.
 Transitions raise `ModeChanged` (the session's `ai mode:` log lines); rolls raise `RollLogged`
-in the engine's pass/fail wording. Engine-free; pinned by `AiModeMachineTests` + the `ai-modes`
-suite. Named inventions (evade's scramble run, the avoid-crash probe geometry, lay off's
-entry/exit cones) are marked at their own declaration; the danger-zone gate data is the
-undecoded net-tag system (docs/formats/ai-nets.md).
+in the engine's pass/fail wording. `avoid crash` runs the original's three altitude bands: below
+`AltitudeFloorM` (20) the climb-out arms with no ray at all, above `ProbeCeilingM` (8000) nothing
+is cast and a running one releases, and between them a probe every 0.5–1.0 s per plane decides,
+releasing on the first clear ray (docs/org/aiPilot.md). Engine-free; pinned by
+`AiModeMachineTests` + the `ai-modes` suite. Named inventions (evade's scramble run, the
+avoid-crash probe GEOMETRY inside that middle band, lay off's entry/exit cones) are marked at
+their own declaration; the danger-zone gate data is the undecoded net-tag system
+(docs/formats/ai-nets.md).
 
 ## src/Flight/ManeuverExecutor.cs
 Plays one library maneuver's timed step program as `FlightInput` values — `Next(model,
@@ -1369,9 +1380,11 @@ The AI's forward-gun gunnery: per sim tick the host `FlightController` hands it 
 fire geometry (`Solve`), it answers with the trigger (`WantsFire`) and the intercept, and each
 round leaves along `ShotDirection(muzzlePos)` — the line from THAT barrel to the intercept point
 (wing guns converge; parallel lines straddle a fuselage) perturbed inside the dead-eye cone, one
-seeded draw per shot. Gates in order: an intercept reachable inside the weapon's RANGE
-(`AimAssist.TryIntercept`, consumed never re-derived), the airframe's ±11° `gun_pitch`/`gun_yaw`
-forward cone as a hard fire gate, and the quick-draw cone off the TARGET's nose/tail axis.
+seeded draw per shot. Gates in the engine's order: the quick-draw cone off the TARGET's nose/tail
+axis, the separation inside the slot's authored engagement window (1–900 m on every AI gun), then
+the airframe's ±11° `gun_pitch`/`gun_yaw` clamp on the lead (`AimAssist.TryIntercept`, consumed
+never re-derived) with the residual the clamp leaves gated at 10°, so the employable cone is the
+traverse limit plus the gate (`docs/org/aiPilot/aiWeapons.md`).
 Engine-free (`AiGunnerTests`); the live half is the `ai-gunnery` suite.
 
 ## src/Flight/AiVoiceDispatcher.cs

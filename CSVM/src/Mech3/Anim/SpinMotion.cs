@@ -20,6 +20,10 @@ internal sealed class SpinMotion : IAnimMotion
 
     private float _t;
 
+    // ⚠ Rest comes from the LIVE pose, never from RestOf. The original holds no rest pose for a
+    // spin at all: it adds rate·dt onto the node's own euler angles every frame, so a replacing
+    // event continues from wherever the node is (docs/org/objectMotion.md). Seeding the authored
+    // pose here would snap the node back at every rate change, which the original never does.
     public SpinMotion(Node3D target, Vector3 rate, float runTime)
     {
         Target = target;
