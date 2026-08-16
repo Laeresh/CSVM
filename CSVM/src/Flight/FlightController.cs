@@ -149,6 +149,11 @@ public partial class FlightController : Node3D
     /// chapter gamez lacking the prototype roots).</summary>
     public PylonOrdnance? Ordnance;
 
+    /// <summary>The world's smoke screens, which a <c>SMOKE_SCREEN</c> pylon lays into instead of
+    /// spawning a round. Null in a session that runs no screens (the weapon lab, a suite): the
+    /// weapon then still spends its ammo and lays nothing.</summary>
+    public SmokeScreens? SmokeScreens;
+
     /// <summary>--infinite-ammo: guns/hardpoints fire without depleting (frictionless testing).</summary>
     public bool InfiniteAmmo;
 
@@ -626,6 +631,16 @@ public partial class FlightController : Node3D
             _cameraOwned = value;
         }
     }
+
+    /// <summary>The direction an ordnance round leaves along, which the player and the AI decide
+    /// differently in the original (docs/org/ordnanceTypes.md, "Who aims ordnance, and who does
+    /// not"): a human's comes from the aircraft's own basis axis, negated, or taken as-is for a
+    /// <c>REAR</c> weapon, with the mount giving the spawn position alone; an AI's is the mount's
+    /// clamped aim in world space. Null keeps the mount's own axis, which is what an AI with no
+    /// rocketeer to clamp an aim has. No ordnance round of either shooter is aim-assisted.</summary>
+    public static Vector3? OrdnanceLaunchDir(bool humanPiloted, Basis planeBasis, bool rear,
+        Vector3? mountAimWorld) =>
+        humanPiloted ? (rear ? planeBasis.Z : -planeBasis.Z) : mountAimWorld;
 
     /// <summary>Wires the flight model and (for a piloted view) the chase camera, then spawns.
     /// <paramref name="camera"/> is null on an AI rig: no camera rides the plane and every camera
@@ -1947,18 +1962,24 @@ public partial class FlightController : Node3D
         if (outcome.RocketPylon >= 0)
         {
             var hp = Loadout!.Hardpoints[outcome.RocketPylon];
-            // A human's rocket leaves along the pylon axis, unassisted (`FUN_004b6530` is reached
-            // from the gun branch alone; `BL-404` re-checks that). An AI's leaves along the clamped
-            // mount aim its 5° gate cleared (`AiRocketeer.LaunchDirWorld`).
-            var rocketAim = !IsHumanPiloted && Pilot?.Rocketeer is { } launcher
-                ? launcher.LaunchDirWorld
-                : (Vector3?)null;
+            var rocketAim = OrdnanceLaunchDir(IsHumanPiloted, planeBasis, hp.Weapon.Rear,
+                !IsHumanPiloted && Pilot?.Rocketeer is { } launcher ? launcher.LaunchDirWorld : null);
             // The round's target, the second half of `ProjectilePool.SteeringStepRuns`'s gate: a
             // human's own selection, an AI's gunner quarry. A LOCK_ON round holding none never
             // sheds its inherited launch velocity.
             object? launchTarget = IsHumanPiloted ? Targeting?.Current?.Source : Pilot?.Gunner?.Target;
-            Projectiles!.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel, PlayerIndex, hp.Pylon,
-                rocketAim, Team, launchTarget);
+            // A SMOKE_SCREEN weapon spawns no round: the original's launch branch builds a world
+            // object carrying the weapon's TIME instead, and skips the spawn that would have
+            // played the FIRE row's sound and animation. Ammo and the fire clock are already spent.
+            if (hp.Weapon.SmokeScreenTime is { } screenTime)
+            {
+                SmokeScreens?.Lay(this, screenTime);
+            }
+            else
+            {
+                Projectiles!.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel, PlayerIndex, hp.Pylon,
+                    rocketAim, Team, launchTarget);
+            }
             if (_rocketsLaunched < 12)
             {
                 _rocketsLaunched++;

@@ -402,6 +402,7 @@ public partial class GameSession : Node3D
         }
         var ai = _aiSpawner.Spawn(planeName, pos, lookAt, pilot, scheme, team, inert, shippedSkins);
         _aiPlanes.Add(ai);
+        ai.SmokeScreens = _smokeScreens;   // a shipped AI smoker lays through the same fire path
         // Mode transitions and reaction rolls, in the engine's own vocabulary — the D11
         // observability lines. Through Log (not GD.Print) so a play session's file sink
         // (.scratch/logs/<mode>-<stamp>.log) carries them for post-flight reading.
@@ -1836,6 +1837,10 @@ public partial class GameSession : Node3D
         for (int pi = 0; pi < _rigs.Count; pi++)
         {
             assembler.Assemble(pi, _rigs[pi]);
+            // The registry is built before the rigs are, so the fire path is bound here rather
+            // than through the assembler's inputs.
+            if (_rigs[pi].Controller is { } layer)
+                layer.SmokeScreens = _smokeScreens;
         }
         state.MeshInstances += assembler.MeshInstances;
         state.What += assembler.WhatSuffix;

@@ -188,7 +188,13 @@ spawn call. Without it, the round goes to the ordinary projectile spawn `FUN_005
 registered by `FUN_00441830`. With it, neither runs: the routine allocates a 0x18-byte object through
 `FUN_004b8d50`, handing it the shared `TIME` at ext `+0x18`, and pushes it onto a world list
 (`DAT_0071dbbc`, counted by `DAT_0071dbc0`). The smoker is a world effect placed at the mount, not a
-round in flight.
+round in flight. ⚠ The weapon's `FIRE` row does **not** play on a smoke launch. The row's sound
+(weapon `+0xc4` indexed by the `+0xe8` slot `FUN_005ac120` selects) and its animation list
+(`+0x98`) are both spent inside `FUN_005aef40`, the spawn the `0x10000` branch skips; what the
+launch does emit is the screen object's own emitter, created in `FUN_004b8d50` through the effect
+system. The **ammo** decrement sits after the branch and is shared, so the smoker spends a round
+like any other pylon weapon. Our side is `FlightController.ApplyFireOutcome`, which calls
+`SmokeScreens.Lay` in place of the spawn.
 
 **Firing a `LOCK_ON` weapon with no target acquires one.** Gated on `+0x74` bit `0x8000`, which is
 `LOCK_ON` being present, and taken only when the player currently holds no target, the routine writes
@@ -215,10 +221,10 @@ What separates the two is the direction each hands the spawn `FUN_005aef40`:
 - **The player's ordnance leaves along the aircraft's own basis axis**, negated, or taken as-is for a
   `REAR` weapon. The mount contributes the spawn **position** only; its aim is not read.
 
-So the original gives the player no aim component on ordnance, and gives the AI one. ⚠ Note the
-remaining difference on our side: we launch along the **pylon marker's** transform, where the
-original uses the **aircraft's** axis. Those coincide only for a pylon whose marker is aligned with
-the airframe.
+So the original gives the player no aim component on ordnance, and gives the AI one. Our side splits
+the same way, in `FlightController.OrdnanceLaunchDir`. ⚠ No shipped player airframe cants a pylon
+marker: every `pylonN` node's basis is square to its airframe, so the marker axis and the aircraft
+axis coincide on the shipped fit and the split is a guard rather than a visible difference.
 
 ## Guidance
 

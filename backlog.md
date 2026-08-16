@@ -973,13 +973,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ordnance branches bypass it, for the player and the AI alike. **(c)** The player skips the aim gate
   outright, `FUN_004b6820` jumping the whole block when the shooter is the player; when it does run
   the threshold is cos 5° for ordnance against cos 10° for guns.
-  ⚠ **The residual is not the one this item expected.** "No aim on rockets" is confirmed for the
-  player, so the shipped assumption holds in kind, but our direction is the **pylon marker's**
-  transform where the original uses the **aircraft's axis**. Those agree only for a marker aligned
-  with the airframe, so a canted pylon is a real deviation. That, not the assist, is what to fix.
-  *Why it matters now:* an AI's rocket already leaves along the clamped mount aim
-  (`AiRocketeer.LaunchDirWorld`) while the player's leaves along the pylon axis, so the two differ
-  by decision rather than by evidence until this is settled.
+  ⚠ **The residual this raised is itself settled.** "No aim on rockets" is confirmed for the player,
+  so the shipped assumption holds in kind; the launch axis it left open is now
+  `FlightController.OrdnanceLaunchDir`, a human's round taking the aircraft's basis axis and an AI's
+  the clamped mount aim (`AiRocketeer.LaunchDirWorld`). That asymmetry is the original's, not a
+  decision of ours, and no shipped airframe cants a pylon marker, so it changes nothing a player
+  sees on the shipped fit.
   *Cross-refs:* `AiRocketeer` (the AI ordnance trigger),
   [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md) ("The fire routine, and the aim
   gate", and its "Open" note on the muzzle-position branch),
@@ -1022,32 +1021,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   Scope it against the terrain system's constraints (chunking, LOD, the golden manifest's mesh
   counts), not against the weapon table.
   *Cross-refs:* `BL-412`, `BL-406`.
-
-- `BL-408` `[Bug]` **A player's ordnance leaves along the pylon marker's axis; the original launches
-  it along the aircraft's axis.** *Evidence:* decoded, `FUN_004b6820`'s player ordnance branch builds
-  the direction it hands the spawn `FUN_005aef40` from the **aircraft's own basis axis**, negated
-  (taken as-is for a `REAR` weapon), and reads the mount for the spawn **position** only
-  ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md), "Who aims ordnance, and who does not").
-  We instead spawn from the pylon marker's full transform, direction included
-  (`FlightController.cs:1860-1865`, `PylonOrdnance`). The two agree only for a marker whose forward
-  axis is parallel to the airframe's, so any canted or toed-in pylon sends our round off the
-  original's line, and a salvo from pylons canted in opposite directions fans where the original's
-  flies parallel.
-  *Fix shape:* take the position from the pylon marker and the direction from the aircraft basis.
-  Small and local: one call site, no new data.
-  *⚠ Traps:* (a) **This is not the aim-assist question.** `BL-404` settled that no ordnance round is
-  aim-assisted, for the player or the AI; this item is only about which axis the unassisted round
-  leaves along, so do not reach for `FUN_004b6530`. (b) The AI is **not** wrong and must not be
-  changed to match: its branch passes mount `+0x3c`, the clamped mount aim in world space, and that
-  is what the original does for an AI. The player and the AI genuinely differ here. (c) `REAR` takes
-  the axis unnegated, so whatever sign convention the fix lands on has to survive both cases, though
-  no player-fittable stock loadout carries the one `REAR` weapon (`wep_13`).
-  *How you'd know it worked:* fire a full pylon salvo straight and level and watch whether the rounds
-  fly parallel to the nose. On an airframe whose pylon markers are canted, today they will not.
-  *Cross-refs:* `BL-404` (the decode this came out of, and the aiming question it settles),
-  `BL-405` (whether the mounted body should track the aim before launch, which is the visual half of
-  the same mount question), `BL-406` (the ordnance implementation item this was split out of, which
-  deliberately does **not** cover the launch axis), `PylonOrdnance`, `Projectile.cs`.
 
 - `BL-405` `[Fidelity]` **Mounted ordnance should track the aim before it launches, not hang fixed
   along the pylon.** *Evidence:* the mount model is decoded
@@ -1165,7 +1138,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the decode, which is why the page leads with the convention. (c) **`SONIC`, `BEEPER` and `TANGLER`
   author damage figures the engine discards** — do not spend them. (d) `TORPEDO` selects **only** a
   force-feedback effect; hang no behaviour on it. (e) The player's ordnance gets no aim component and
-  the AI's does; that asymmetry is correct and `BL-408` covers the one axis bug in it.
+  the AI's does; that asymmetry is correct and must not be flattened.
   *How you'd know it worked:* per-type acceptance in `--weapon-lab`, one clip each: a torpedo
   launched fast visibly settling to 60 m/s over 2.5 s; a choker cutting an engine for 13 s at the
   centre and 5 s at the edge; a smoker leaving a screen and no round; a seeker turning onto a
@@ -1173,7 +1146,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-227` (splash falloff, whose fix is landing **C**), `BL-233` (the fuse), `BL-293` (the
   `SURFACE_ANIMATION` normal rule), `BL-353` (the Weapon Loadout screen, the only route by which a
   player ever fits a non-HE type, so it gates whether most of this is reachable in a real flight),
-  `BL-408` (the player's launch axis), `BL-404`/`BL-405`, `WeaponDefs.cs`, `Projectile.cs`.
+  `BL-404`/`BL-405`, `WeaponDefs.cs`, `Projectile.cs`.
 
 ## Flight model & collision physics
 

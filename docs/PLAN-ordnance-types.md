@@ -153,7 +153,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ Launch-velocity inheritance and its decay over `LOCK_ON`
 3. ☑ `ACCELERATION` toward the speed cap, and no drag
 4. ☑ The three end conditions: range, timed fuse, target proximity
-5. ☐ Launch the player's ordnance along the aircraft axis, not the pylon's
+5. ☑ Launch the player's ordnance along the aircraft axis, not the pylon's
 
 ### Wave B — Guidance and seeking
 
@@ -175,7 +175,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 15. ☐ The player's screen wash: colour, weight, duration, blending
 16. ☑ The AI stun
 17. ◐ `TANGLER`: the engine-dead timer
-18. ◐ `SMOKE_SCREEN`: the stun trap
+18. ☑ `SMOKE_SCREEN`: the stun trap
 
 ### Wave E — Flyout and gates
 
@@ -370,7 +370,20 @@ world geometry. The per-round target check is a different path and is not bound 
 [`formats/weapons.md`](formats/weapons.md) glosses `RANGE_MINIMUM` as "minimum arming range", which
 the decode contradicts; that gloss is corrected as part of this item.
 
-## A5 ☐ Launch the player's ordnance along the aircraft axis, not the pylon's
+## A5 ☑ Launch the player's ordnance along the aircraft axis, not the pylon's
+
+**Verdict.** Landed, and `BL-408` is closed, but the item's own premise did not survive the census:
+**no shipped player airframe cants a pylon marker.** All eleven airframes' `pylonN` nodes come out
+of planes.zbd square to the airframe, so the marker axis and the aircraft axis coincide on every fit
+a player can fly and the change is a guard rather than a visible correction. The rule is
+`FlightController.OrdnanceLaunchDir`, a named static both branches read: a human's round takes the
+aircraft's basis axis, negated, or as-is for a `REAR` weapon, while an AI's takes the clamped mount
+aim `AiRocketeer` wrote and an AI with no rocketeer keeps the mount's own axis, which is the AI
+behaviour unchanged. The mount still gives the spawn position for both. Because the data cants
+nothing, the `ordnance-launch-axis` suite cants the widest rig's markers 20° itself and asserts that
+census first: the human salvo then flies parallel to the nose within 0.5° from each marker's own
+position, while the same airframe flown by an AI fans the full 20°. Reverting the rule was run as a
+negative control and the human salvo fans 20°.
 
 **Goal.** A player's pylon salvo flies parallel to the nose. Closes `BL-408`.
 
@@ -750,7 +763,7 @@ and is recorded as disproven on the decode page. Do not add an airspeed clamp to
 AI code reads the disabled-systems mask, so a choked AI is not told it has been choked and gets no
 evasive reaction; that is correct.
 
-## D18 ◐ `SMOKE_SCREEN`: the stun trap
+## D18 ☑ `SMOKE_SCREEN`: the stun trap
 
 **Verdict.** The mechanism landed as `Flight/SmokeScreens.cs`: `SmokeScreens.Lay(layer, TIME)` is
 the fire path's entry, the session steps the registry after every aircraft, and each running screen
@@ -763,8 +776,19 @@ settled from `FUN_004b8fd0` and recorded on the decode page: the pose is read li
 captured at the lay; a layer that dies ends its screen on the spot; and the "2 s per-victim
 cooldown" is a 2 s timer that re-arms below 0.5 s, so a victim inside is re-washed every 1.5 s at
 0.9, and 0.97 only when the timer had fully run down. The stun interval's loader default is 3 s.
-Pinned by `SmokeScreenTests` and the `smoke-screen` suite; owed at the controls once the hook
-lands: the 1v1 and the coop pair below.
+Pinned by `SmokeScreenTests` and the `smoke-screen` suite.
+
+**The launch hook has since landed with `A5`.** A pylon whose weapon carries `SmokeScreenTime` calls
+`SmokeScreens.Lay(this, TIME)` from `FlightController.ApplyFireOutcome` and spawns nothing, which is
+what `FUN_004b6820`'s `0x10000` branch does on both the player's and the AI's side; the registry
+reaches every aircraft on `FlightController.SmokeScreens`, assigned to each AI as it spawns and to
+each rig's controller as the assembler builds it, so a shipped AI smoker lays through the same path.
+One thing this item did not state, settled from the branch: the weapon's `FIRE` row does **not**
+sound or animate on a smoke launch, because both live inside the spawn `FUN_005aef40` the branch
+skips; only the screen object's own emitter is created. Ammo, the fire clock and the rate limit sit
+after the branch and are shared, so the smoker spends a round like any other pylon weapon. The
+`ordnance-launch-axis` suite pins all three (one screen laid, zero rounds in the pool, one round of
+ammo gone). Owed at the controls: the 1v1 and the coop pair below.
 
 **Goal.** A smoke screen laid by an aircraft stuns AI and blinds humans behind it, and spawns no
 projectile.

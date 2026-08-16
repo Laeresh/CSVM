@@ -148,6 +148,13 @@ public static class Suites
             "0.9 every 1.5 s while a second human elsewhere and the layer's own pane stay clear, " +
             "and a layer going down ends its screen on the spot",
             SmokeScreenSuite));
+        into.Add(new TestHarness.Suite("ordnance-launch-axis",
+            "a player's pylon salvo leaves along the AIRCRAFT's axis while an AI's leaves along its " +
+            "mount's (A5): no shipped airframe cants a pylon marker, so the widest rig's markers are " +
+            "canted 20° here, and every round a human fires still flies parallel to the nose from " +
+            "its own marker's position while the same rig flown by an AI fans by the full 20°; plus " +
+            "D18's launch hook, where a wep_13 pylon lays a screen, spends its ammo and spawns no round",
+            OrdnanceLaunchAxis));
         into.Add(new TestHarness.Suite("motor-acceleration",
             "a round authoring ACCELERATION climbs to its speed cap and stops there (A3): wep_04 " +
             "off a standing launcher reads 150/300/450 m/s at 1/2/3 s and holds 450 from then on, " +
@@ -4244,6 +4251,263 @@ public static class Suites
             pool?.Free();
             textures.Dispose();
         }
+    }
+
+    // A5's launch axis and D18's launch hook over a live fire path: the rig fires its own pylons
+    // through FireControl, and the pool is never stepped, so every round still stands at the pose
+    // it launched from. No shipped airframe cants a pylon marker, so the salvo flies off markers
+    // this suite cants itself; an aligned rig cannot tell the aircraft axis from the marker's.
+    private static void OrdnanceLaunchAxis(TestContext ctx)
+    {
+        // The yaw this suite puts on each pylon marker, alternating in sign: big enough that a
+        // salvo launched off the markers misses by hundreds of metres at rocket range.
+        const float CantDeg = 20f;
+
+        // The rule itself, both branches, with no airframe in it.
+        var canted = new Basis(Vector3.Up, Mathf.DegToRad(30f));
+        var mountAim = new Vector3(0.6f, 0f, -0.8f);
+        ctx.Check(FlightController.OrdnanceLaunchDir(true, canted, false, mountAim) is { } humanDir
+                  && humanDir.IsEqualApprox(-canted.Z),
+            $"a human's round leaves along the aircraft's own axis, negated, ignoring any mount aim");
+        ctx.Check(FlightController.OrdnanceLaunchDir(true, canted, true, null) is { } rearDir
+                  && rearDir.IsEqualApprox(canted.Z),
+            $"a REAR weapon takes the same axis unnegated");
+        ctx.Check(FlightController.OrdnanceLaunchDir(false, canted, false, mountAim) is { } aiDir
+                  && aiDir.IsEqualApprox(mountAim),
+            $"an AI's round leaves along the clamped mount aim instead — the original's own asymmetry");
+        ctx.Check(FlightController.OrdnanceLaunchDir(false, canted, false, null) == null,
+            $"and an AI with no aim to clamp keeps the mount's own axis");
+
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        if (!weapons.TryGet("wep_13", out var smoker) || smoker.SmokeScreenTime is not { } screenTime)
+        {
+            ctx.Check(false, $"wep_13 resolves and carries a SMOKE_SCREEN TIME");
+            return;
+        }
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var stockLoadouts = StockLoadouts.Load();
+        var textures = new TextureArchive(texturesPath);
+        try
+        {
+            // The census: how far off the airframe's own axis any shipped pylon marker sits.
+            string worstModel = string.Empty;
+            string worstDisplay = string.Empty;
+            float shippedCantDeg = 0f;
+            int mostPylons = 0;
+            foreach (var (model, display) in MarkerRig.PlayerAirframes)
+            {
+                Node3D? plane = null;
+                try
+                {
+                    plane = new PlaneBuilder(planesGamez, textures).Build(model);
+                    ctx.Host.AddChild(plane);
+                    var scan = Loadout.ForRig(plane, weapons, StockFor(stockLoadouts, model));
+                    foreach (var hp in scan.Hardpoints)
+                    {
+                        shippedCantDeg = Mathf.Max(shippedCantDeg, Mathf.RadToDeg(
+                            (-hp.Pylon.GlobalTransform.Basis.Z).AngleTo(-plane.GlobalTransform.Basis.Z)));
+                    }
+                    // The salvo flies off the widest rig there is, so the fan has the most pylons
+                    // it can have.
+                    if (scan.Hardpoints.Count > mostPylons)
+                    {
+                        (mostPylons, worstModel, worstDisplay) = (scan.Hardpoints.Count, model, display);
+                    }
+                }
+                finally
+                {
+                    plane?.Free();
+                }
+            }
+            // ⚠ Every shipped pylon marker is square to its airframe, so the two launch axes agree
+            // on the shipped fit and the fix is a guard rather than a visible change. The salvo
+            // below therefore cants its own markers; nothing else here can tell the two apart.
+            ctx.Check(shippedCantDeg < 0.5f && mostPylons > 1,
+                $"no shipped airframe cants a pylon marker (worst {shippedCantDeg:0.00}°); the salvo flies the {worstDisplay}'s {mostPylons} pylons");
+
+            var stats = PlaneStats.Load(ctx.ZrdrPath, worstModel);
+            var stock = StockFor(stockLoadouts, worstModel);
+            ProjectilePool? pool = null;
+            FlightController? human = null;
+            FlightController? ai = null;
+            var live = new List<(Vector3 Pos, Vector3 Velocity)>();
+            try
+            {
+                pool = new ProjectilePool(textures, null, null);
+                ctx.Host.AddChild(pool);
+
+                // Nose 45° off world -Z, so a round flying down the world axis instead of the
+                // aircraft's would read as an obvious failure rather than a rounding difference.
+                var spawn = new Vector3(0f, 1000f, 0f);
+                var lookAt = spawn + new Vector3(1f, 0f, -1f);
+                FlightController BuildRig(int playerIndex, bool isHuman)
+                {
+                    var model = new PlaneBuilder(planesGamez, textures).Build(worstModel);
+                    var rig = new FlightController
+                    {
+                        PlaneModel = model,
+                        Collider = PlaneCollider.Build(model),
+                        Damage = new PlaneDamage(stats.DestroyableParts),
+                        Loadout = Loadout.ForRig(model, weapons, stock),
+                        PlayerIndex = playerIndex,
+                        IsHumanPiloted = isHuman,
+                        Pilot = isHuman ? null : AiPilot.HoldingCourse(spawn, lookAt),
+                        Projectiles = pool,
+                        UseKeyboard = false,
+                        PadDevices = System.Array.Empty<int>(),
+                        AllowPause = false,
+                        AutoFireRockets = true,
+                    };
+                    rig.AddChild(model);
+                    rig.Setup(new FlightModel(stats), null, new CamParams(), spawn, lookAt);
+                    rig.Name = (isHuman ? "p" : "ai") + playerIndex;
+                    ctx.Host.AddChild(rig);
+                    rig.Held = true;   // the pose the launch axis is asserted against must stand still
+                    for (int i = 0; i < rig.Loadout!.Hardpoints.Count; i++)
+                    {
+                        var hp = rig.Loadout.Hardpoints[i];
+                        // One round per pylon, so the salvo walks every pylon instead of draining
+                        // one, and a cant the shipped rig does not carry, alternating side to side.
+                        hp.Capacity = 1;
+                        hp.Ammo = 1;
+                        hp.Pylon.Transform = new Transform3D(
+                            new Basis(Vector3.Up, Mathf.DegToRad(i % 2 == 0 ? CantDeg : -CantDeg)),
+                            hp.Pylon.Position);
+                    }
+                    return rig;
+                }
+
+                human = BuildRig(0, isHuman: true);
+                int pylons = human.Loadout!.Hardpoints.Count;
+                var nose = -human.GlobalTransform.Basis.Orthonormalized().Z;
+                float appliedCant = 0f;
+                foreach (var hp in human.Loadout.Hardpoints)
+                {
+                    appliedCant = Mathf.Max(appliedCant,
+                        Mathf.RadToDeg((-hp.Pylon.GlobalTransform.Basis.Orthonormalized().Z).AngleTo(nose)));
+                }
+                ctx.Check(Mathf.Abs(appliedCant - CantDeg) < 0.5f,
+                    $"the rig under test carries {appliedCant:0.00}° of pylon cant, which the old launch axis fanned by");
+                // The pool is never stepped, so the rounds pile up where they were launched.
+                for (int i = 0; i < 900 && CountLive(pool, live) < pylons; i++)
+                {
+                    human.SimStep(1f / 60f);
+                }
+                ctx.Same(pylons, CountLive(pool, live), $"the human salvo puts one round on every pylon");
+                float worstFan = 0f;
+                foreach (var round in live)
+                {
+                    worstFan = Mathf.Max(worstFan, Mathf.RadToDeg(round.Velocity.Normalized().AngleTo(nose)));
+                }
+                ctx.Check(worstFan < 0.5f,
+                    $"every round of the salvo flies parallel to the nose worst={worstFan:0.00}° (markers cant {appliedCant:0.00}°)");
+                float worstOrigin = 0f;
+                foreach (var round in live)
+                {
+                    worstOrigin = Mathf.Max(worstOrigin, NearestMarkerDistance(human.Loadout!, round.Pos));
+                }
+                ctx.Check(live.Select(r => r.Pos).Distinct().Count() == pylons && worstOrigin < 0.05f,
+                    $"and each leaves from its own pylon marker, which is what the mount still gives worst={worstOrigin:0.000} m");
+
+                // The AI branch is a different rule and must not have moved: with no rocketeer to
+                // clamp an aim it still launches down the marker's own axis, cant and all.
+                pool.Clear();
+                ai = BuildRig(AiAircraftSpawner.ShooterIdBase, isHuman: false);
+                var aiNose = -ai.GlobalTransform.Basis.Orthonormalized().Z;
+                for (int i = 0; i < 900 && CountLive(pool, live) < pylons; i++)
+                {
+                    ai.SimStep(1f / 60f);
+                }
+                float offMarker = 0f;
+                float offNose = 0f;
+                foreach (var round in live)
+                {
+                    var dir = round.Velocity.Normalized();
+                    offMarker = Mathf.Max(offMarker, NearestMarkerAngleDeg(ai.Loadout!, dir));
+                    offNose = Mathf.Max(offNose, Mathf.RadToDeg(dir.AngleTo(aiNose)));
+                }
+                ctx.Check(live.Count == pylons && offMarker < 0.5f,
+                    $"an AI's launch is unchanged: every round leaves along its own mount's axis worst={offMarker:0.00}°");
+                ctx.Check(Mathf.Abs(offNose - CantDeg) < 0.5f,
+                    $"and that axis is the canted one, so the AI's salvo still fans by {offNose:0.00}°");
+
+                // D18's hook: a SMOKE_SCREEN pylon lays a screen and spawns nothing at all.
+                pool.Clear();
+                var screens = new SmokeScreens(SmokeScreenTunables.Image,
+                    System.Array.Empty<FlightController>, null);
+                human.SmokeScreens = screens;
+                foreach (var hp in human.Loadout!.Hardpoints)
+                {
+                    hp.Weapon = smoker;
+                    hp.Capacity = 1;
+                    hp.Ammo = 1;
+                }
+                int before = human.Loadout.Hardpoints.Sum(h => h.Ammo);
+                for (int i = 0; i < 900 && !screens.IsLaying(human); i++)
+                {
+                    human.SimStep(1f / 60f);
+                }
+                ctx.Check(screens.IsLaying(human) && screens.ActiveCount == 1,
+                    $"firing wep_13 lays one screen on the aircraft that fired it");
+                ctx.Same(0, CountLive(pool, live), $"and spawns no round at all — the pool stays empty");
+                ctx.Check(human.Loadout.Hardpoints.Sum(h => h.Ammo) == before - 1,
+                    $"the smoker still spends its round of ammo, as every other pylon weapon does");
+            }
+            finally
+            {
+                ai?.Free();
+                human?.Free();
+                pool?.Free();
+            }
+        }
+        finally
+        {
+            textures.Dispose();
+        }
+    }
+
+    private static LoadoutDef? StockFor(StockLoadouts stock, string model)
+    {
+        foreach (var d in stock.All.Values)
+        {
+            if (d.Model == model)
+            {
+                return d;
+            }
+        }
+        return null;
+    }
+
+    private static float NearestMarkerDistance(Loadout loadout, Vector3 pos)
+    {
+        float best = float.MaxValue;
+        foreach (var hp in loadout.Hardpoints)
+        {
+            best = Mathf.Min(best, hp.Pylon.GlobalPosition.DistanceTo(pos));
+        }
+        return best;
+    }
+
+    private static float NearestMarkerAngleDeg(Loadout loadout, Vector3 dir)
+    {
+        float best = float.MaxValue;
+        foreach (var hp in loadout.Hardpoints)
+        {
+            best = Mathf.Min(best,
+                Mathf.RadToDeg(dir.AngleTo(-hp.Pylon.GlobalTransform.Basis.Orthonormalized().Z)));
+        }
+        return best;
+    }
+
+    private static int CountLive(ProjectilePool pool, List<(Vector3 Pos, Vector3 Velocity)> into)
+    {
+        into.Clear();
+        pool.CollectLiveRounds(into);
+        return into.Count;
     }
 
     private static void InstantActionAce(TestContext ctx)

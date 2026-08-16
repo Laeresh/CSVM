@@ -1129,7 +1129,9 @@ occluder: no collision, no visibility, no targeting role, and no visual (the wea
 the fire path's). Pinned by `SmokeScreenTests` (rules, tunables) and the `smoke-screen` suite (a
 live five-aircraft roster: the AI astern stunned throughout and recovering after expiry, the AI
 beyond 85° untouched, the human astern washed on its own pane while the layer's and a third human's
-stay clear, a downed layer's screen ending at once). Not a `Node`; the session owns and steps it.
+stay clear, a downed layer's screen ending at once) and by the `ordnance-launch-axis` suite for the
+launch side (a `wep_13` pylon lays one screen, spends its ammo and puts no round in the pool). Not a
+`Node`; the session owns and steps it.
 
 ## src/Flight/BeeperTags.cs
 The `BEEPER` / `BEEPER_SEEKER` pair (`FUN_004b88a0`, `FUN_004b8ad0`, `FUN_004b8ce0`, `FUN_004b8b50`,
@@ -1584,7 +1586,7 @@ interval instead of retrying next tick.
 
 Three properties of the original hold here by construction rather than by a test. The aim gate is
 skipped for the player, and this class only runs for a non-human pilot, so player fire never reaches
-it (a human's rocket leaves along the pylon axis through `FireControl`). It holds no target of its
+it (a human's rocket leaves along the aircraft's own axis through `FireControl`). It holds no target of its
 own, mirroring the original's single validated target across the whole weapon walk. And the
 `DAMAGES_ZEPPELIN` match's zeppelin side is unexercised in play: the AI acquisition admits aircraft
 alone (`BL-363`), so `targetIsGasbag` is always false at the call site, and no shipped stock loadout
@@ -2282,13 +2284,21 @@ the attacker queue `Next Enemy/Objective` walks backwards. Decode:
 `AimAssist`'s candidate set ONCE per tick (aircraft + fused ordnance off the pool, the world's
 destructibles off `Destructibles` when a world runtime wired one), then `AssistedGunDirection`
 runs each firing barrel's slot through `AimAssist.FireDirection` and hands the result to
-`ProjectilePool.Spawn`. The rocket call deliberately gets none — the original reaches its assist
-from the gun branch alone. What the rocket call does pass is the shooter's current target, a
-human's own `Targeting.Current` selection or an AI's `Gunner.Target` quarry: it is the second half
-of `ProjectilePool.SteeringStepRuns`'s gate, so it decides whether a `LOCK_ON` round sheds the
-launcher velocity it left with. The original's own shot routine hands a `LOCK_ON` weapon a
-synthetic target when the player holds none; CSVM does not, so a round fired with nothing selected
-holds its inherited speed.
+`ProjectilePool.Spawn`. The rocket call deliberately gets no assist — the original reaches it from
+the gun branch alone — but it does get a launch direction, from `OrdnanceLaunchDir`, and the two
+shooters differ there: a human's round leaves along the AIRCRAFT's own basis axis, negated (as-is
+for a `REAR` weapon), with the pylon marker giving the spawn position alone, while an AI's leaves
+along the clamped mount aim `AiRocketeer` wrote. That asymmetry is the original's
+([`org/ordnanceTypes.md`](org/ordnanceTypes.md), "Who aims ordnance, and who does not"); no shipped
+airframe cants a pylon marker, so the human rule is a guard on this data rather than a visible
+change. A pylon whose weapon carries `SmokeScreenTime` spawns nothing at all: it calls
+`SmokeScreens.Lay` instead, so no round, no `FIRE` sound and no `FIRE` animation, while ammo, the
+fire clock and the rate limit run as for any other pylon weapon. What the rocket call also passes is
+the shooter's current target, a human's own `Targeting.Current` selection or an AI's `Gunner.Target`
+quarry: it is the second half of `ProjectilePool.SteeringStepRuns`'s gate, so it decides whether a
+`LOCK_ON` round sheds the launcher velocity it left with. The original's own shot routine hands a
+`LOCK_ON` weapon a synthetic target when the player holds none; CSVM does not, so a round fired with
+nothing selected holds its inherited speed. The `ordnance-launch-axis` suite pins both halves.
 Two one-shot breadcrumbs on the first gun round make the wiring visible in any flight log: the
 candidate counts per list **with the nearest structure's range** (a registry whose anchors carried
 no world transform would report its full count from the world origin — untargetable, and the count
@@ -2872,8 +2882,9 @@ roster read (the rigs' controllers, then `_aiPlanes`, in a reused list rebuilt p
 both the targeting overlay and `_smokeScreens` (`SmokeScreens`, built beside `_screenFlash` with
 `SmokeScreenTunables.Load` off `player.json`, image defaults with a warning if that fails, washing
 through `_screenFlash.PlayBlend`); the screens step after every aircraft in `DriveSimSteps` and at
-the end of `_PhysicsProcess` on a realtime clock. Nothing lays a screen yet: the `SMOKE_SCREEN`
-fire path's call to `SmokeScreens.Lay` is the spawn lane's. `_beeperTags`
+the end of `_PhysicsProcess` on a realtime clock. The registry is handed to every aircraft that can
+lay one, on `FlightController.SmokeScreens`: to each AI as it is spawned, and to each rig's
+controller as the assembler builds it, since the registry exists before either. `_beeperTags`
 (`BeeperTags<FlightController>`, a fresh list per build beside `_smokeScreens`) is handed to the
 projectile pool as `ProjectilePool.BeeperTags` and stepped at the same two points, after the smoke
 screens: after the pool has hit and the aircraft have died this step, so a tag on a crashed
