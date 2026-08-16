@@ -219,7 +219,7 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Active plan: [`docs/PLAN-ordnance-types.md`](docs/PLAN-ordnance-types.md)** (`BL-406`), 22 items in six waves, at Wave A. Its decode is [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md).
 
-**Next:** `A1` (the squared-radius convention, which blocks Waves B and C), then `A2`–`A5`.
+**Next:** `A2`–`A5` in order, with `D13`, `D14`, `E21` landing beside them.
 
 Verify any change with **`.\RunTests.ps1`** (build → units →in-engine suites → golden hashes → one exit code); read[`docs/verification.md`](docs/verification.md) first.
 

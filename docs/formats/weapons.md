@@ -95,8 +95,8 @@ against each caliber's slug, not something the engine computes.
 | `ROCKET` | 15 | flag | marks a self-propelled projectile |
 | `LOCK_ON` | 13 | 1.3–3.0 | lock-acquisition time, s |
 | `LOCK_ON_LEAD` | 3 | `[4,8]` / `[5,10]` | target-lead parameters |
-| `DETONATION_DISTANCE` | 13 | 1–50 | proximity-fuse trigger distance, m |
-| `IMPACT_PROXIMITY` | 14 | 15–500 | blast / effect radius, m |
+| `DETONATION_DISTANCE` | 13 | 1–50 | proximity-fuse trigger distance, m (**stored squared**, see below) |
+| `IMPACT_PROXIMITY` | 14 | 15–500 | blast / effect radius, m (**stored raw and squared**, see below) |
 | `DETONATION_DOT_PRODUCT` | 3 | 0.1 / 0.3 | cone-alignment threshold for a proximity detonation |
 | `DETONATION_TIME` | 1 | 2.0 | timed fuse, s (rear-arc flare) |
 | `CRATER` | 6 | 0 | ground-crater flag/scale; marks the ground-attack munitions |
@@ -107,6 +107,15 @@ against each caliber's slug, not something the engine computes.
 `LOCK_ON` is *not* the discriminator — it is present on dumbfire rockets too (the HE rocket carries
 `LOCK_ON 1.3`), because it is the aiming/lead acquisition time, not a steering promise. The Seeker is
 also the sole `BEEPER_SEEKER`. Reader convenience: `WeaponDef.IsGuided` (`TURN_RATE > 0.01`).
+
+**Three radii are stored squared.** `FUN_005ad630` keeps `IMPACT_PROXIMITY` twice, raw at weapon
+`+0x3c` and squared at `+0x40`, and keeps `DETONATION_DISTANCE` squared at `+0x44` and `RANGE`
+squared at `+0x20`; every distance the original compares them against comes from `FUN_00538880`,
+which returns a squared distance with no square root. Read as plain radii they give the wrong
+falloff curve and the wrong trigger range, so `WeaponDef` exposes both forms
+(`ImpactProximitySqM`, `DetonationDistanceSqM`, `RangeSqM` beside the authored fields). The full
+decode, including which offsets stay raw, is in
+[`org/ordnanceTypes.md`](../org/ordnanceTypes.md#the-engine-stores-radii-squared).
 
 ### Class flags & specials
 

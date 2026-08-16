@@ -70,8 +70,8 @@ public sealed class WeaponDef
     public float FireRate;            // shots/second
     public float? Velocity;           // muzzle / flyout speed, m/s
     public float? Acceleration;       // rocket-motor accel, m/s²
-    public float? Range;              // max effective / despawn range, m
-    public float? RangeMinimum;       // minimum arming range (torpedo)
+    public float? Range;              // max effective / despawn range, m (authored; see RangeSqM)
+    public float? RangeMinimum;       // flyout visibility gate, m of path travelled (torpedo)
     public float? Gravity;            // projectile-gravity scale (0 throughout this install)
     public float? CannonSpread;       // aim-assist acceptance cone half-angle, degrees — NOT a dispersion cone
     public float? FiringHeat;         // heat per shot (base guns only); dead data, the original parses it and never reads it
@@ -85,10 +85,20 @@ public sealed class WeaponDef
     // Guidance / detonation.
     public float? LockOn;             // lock-acquisition time, s
     public (float, float)? LockOnLead;
-    public float? DetonationDistance; // proximity-fuse trigger distance, m
-    public float? ImpactProximity;    // blast / effect radius, m
+    public float? DetonationDistance; // proximity-fuse trigger distance, m (authored)
+    public float? ImpactProximity;    // blast / effect radius, m (authored; also the query radius)
     public float? DetonationDotProduct;
     public float? DetonationTime;     // timed fuse, s
+
+    /// <summary>The squared radii, held beside the authored ones exactly as <c>FUN_005ad630</c>
+    /// holds them (weapon <c>+0x20</c>, <c>+0x44</c>, <c>+0x40</c>; the squaring idiom sits at
+    /// <c>0x005add73</c>). Every distance the original compares them against comes from
+    /// <c>FUN_00538880</c>, which returns a squared distance, so compare these against a
+    /// <c>DistanceSquaredTo</c>. Never take a square root to reach the authored field instead: a
+    /// root moves the boundary, and matching the engine's comparison is the whole point.</summary>
+    public float? RangeSqM;
+    public float? DetonationDistanceSqM;
+    public float? ImpactProximitySqM;
 
     // Class flags.
     public bool IsCannon;             // hitscan-style gun (pairs with LoopedSoundName)
@@ -259,6 +269,13 @@ public sealed class WeaponDefs
         };
         def.DisplayName = messages != null ? messages.Get(def.DescKey) : def.DescKey;
 
+        // Squared once here, as the original squares them once at parse. TANGLER's RADIUS is
+        // deliberately absent: FUN_004ba6f0 stores it raw and the choker compares it against a
+        // squared distance anyway, a unit mismatch every player of the shipped game flew with.
+        def.RangeSqM = Square(def.Range);
+        def.DetonationDistanceSqM = Square(def.DetonationDistance);
+        def.ImpactProximitySqM = Square(def.ImpactProximity);
+
         if (d.TryFloat("LOCK_ON_LEAD", out var lead0) && d.TryFloat("LOCK_ON_LEAD", out var lead1, 1))
             def.LockOnLead = (lead0, lead1);
 
@@ -305,6 +322,8 @@ public sealed class WeaponDefs
         }
         return def;
     }
+
+    private static float? Square(float? v) => v is { } f ? f * f : null;
 
     private static WeaponEffect? ParseEffect(ZrdrDict? d)
     {

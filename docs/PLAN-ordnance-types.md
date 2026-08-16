@@ -149,7 +149,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Projectile foundations
 
-1. ☐ Adopt the engine's squared-radius convention in `WeaponDef`
+1. ☑ Adopt the engine's squared-radius convention in `WeaponDef`
 2. ☐ Launch-velocity inheritance and its decay over `LOCK_ON`
 3. ☐ `ACCELERATION` toward the speed cap, and no drag
 4. ☐ The three end conditions: range, timed fuse, target proximity
@@ -215,7 +215,14 @@ worktree session here; use a local commit or a file copy.
 
 # Wave A — Projectile foundations
 
-## A1 ☐ Adopt the engine's squared-radius convention in `WeaponDef`
+## A1 ☑ Adopt the engine's squared-radius convention in `WeaponDef`
+
+**Verdict.** Landed. `WeaponDef` carries `RangeSqM`, `DetonationDistanceSqM` and
+`ImpactProximitySqM` beside the authored fields, squared once at parse; a test over every entry of
+the retail `weapons.zrd.json` asserts each square against its authored value. The audit of every
+existing consumer found no squared-vs-raw comparison to fix: each one either wants a real length (a
+sphere-query radius, a path cap) or measures through a geometry helper that already returns a plain
+distance, so nothing was converted and no square root was added.
 
 **Goal.** Every radius comparison in the ordnance code compares like with like, and a reader of
 `WeaponDef` cannot mistake a stored square for an authored radius.

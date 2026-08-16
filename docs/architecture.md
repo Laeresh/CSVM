@@ -863,6 +863,16 @@ damage, allotment, the class flags, the specials, and the `FIRE`/`FLYOUT`/`IMPAC
 (`IMPACT` keyed by `SurfaceRegistry` id); `DESC` resolved through `Messages`. Modelled on PlaneStats.
 Schema: docs/formats/weapons.md. Verify/inspect with `--dump-weapons`.
 
+`RANGE`, `DETONATION_DISTANCE` and `IMPACT_PROXIMITY` are exposed twice: the authored metres, and
+`RangeSqM` / `DetonationDistanceSqM` / `ImpactProximitySqM`, squared once at parse as the original
+squares them (`FUN_005ad630`). Compare a `Sq` field against a squared distance and never square-root
+one to reach the authored field. The authored form is still the right one where a real length is
+wanted — the blast sphere-query radius, the reticle's `RANGE` path cap, a threshold on the authored
+number — and every comparison in the tree today measures through a geometry helper that already
+returns a plain distance, so none of them changed. `TANGLER`'s `RADIUS` has no square by design:
+the original stores it raw and compares it against a squared distance
+(docs/org/ordnanceTypes.md).
+
 ## src/Flight/Loadout.cs
 Two layers over `CSVM/data/stock_loadouts.json`. `StockLoadouts.Load` parses the file (default
 `res://data/`) into per-plane `LoadoutDef`s; `Loadout.Bind(def, builtPlane, WeaponDefs)` resolves
