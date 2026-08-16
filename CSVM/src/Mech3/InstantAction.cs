@@ -24,7 +24,7 @@ public readonly record struct InstantActionWave(
 /// names: the shipped <c>ia.zrd.json</c> (<see cref="Load"/>), a hand-authored <c>--ia=&lt;path&gt;</c>
 /// file using the same field names as an ordinary JSON object rather than the zrdr archive's
 /// flat-alternating shape (<see cref="LoadFromJson"/>), and the launchscreen's Instant Action
-/// wizard (<see cref="BuildFromWizard"/>, H16), which starts from a chosen environment's own
+/// wizard (<see cref="BuildFromWizard"/>), which starts from a chosen environment's own
 /// <see cref="Load"/> result and overlays only what the wizard actually lets a pilot configure.
 /// The first two share one field-population path (<c>BuildDef</c>, over <see cref="ZrdrDict"/>) —
 /// <see cref="LoadFromJson"/>'s only job is the small mapping from a plain JSON object onto the
@@ -128,7 +128,7 @@ public static class InstantAction
     /// from <paramref name="baseDef"/> unedited, since the wizard has no control for any of them
     /// (they are chapter-level facts, not mission-type-level ones). <c>dogfight_ace</c> forces the
     /// wingman count and every wave's enemy count to 0 — the same rule <see cref="BuildDef"/>
-    /// applies when reading the file (A3/B6): the ace duel is solo whichever producer built the
+    /// applies when reading the file: the ace duel is solo whichever producer built the
     /// def, so a wizard pilot who configured wingmen and then switched to Dogfighting an Ace does
     /// not get a solo-breaking def out of stale wizard state.</summary>
     public static InstantActionDef BuildFromWizard(InstantActionDef baseDef, string missionType,

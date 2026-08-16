@@ -156,7 +156,7 @@ firepoint pair:
 > **slot _n_ → `firepoint(9 − 2n)`, `firepoint(10 − 2n)`** — W1 → fp7,8; W2 → fp5,6;
 > W3 → fp3,4; W4 → fp1,2.
 
-This is **confirmed in-engine (M3 A10)** — the single binding documented here.
+This is **confirmed in-engine** — the single binding documented here.
 Cross-referencing `--dump-loadout` (each slot's bound firepoints) against `--dump-markers` (their
 plane-frame positions) for all 11 aircraft: every **firing** gun group lands on the mount its name
 says — the Devastator 3/3 on both axes, the Peacemaker 2/2 with sides correct, the Bloodhawk (40 inner

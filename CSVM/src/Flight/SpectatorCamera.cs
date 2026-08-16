@@ -19,7 +19,7 @@ namespace CSVM.Flight;
 ///
 /// Every non-splitscreen call site (`--freecam`, the anim lab, the weapon lab) takes the
 /// default device filter — every connected pad plus the keyboard, unchanged from before E44.
-/// A splitscreen instant-action spectator (E44, `BL-375`) is constructed with its downed
+/// A splitscreen instant-action spectator (`BL-375`) is constructed with its downed
 /// pilot's own `PadDevices`/`UseKeyboard`, so two seats watching at once move independently;
 /// mouse look has no such split (one physical mouse) and stays shared.
 /// </summary>
@@ -44,7 +44,7 @@ public sealed partial class SpectatorCamera : Node
     private const float OrbitPitchLimit = 1.396f; // ~80°
 
     private readonly Camera3D _camera;
-    // The device filter (E44, `BL-375`): null/true (the default) reads every connected pad plus
+    // The device filter (`BL-375`): null/true (the default) reads every connected pad plus
     // the keyboard, matching every pre-E44 call site (--freecam, the anim lab, the weapon lab —
     // all single-seat). A downed splitscreen pilot's spectator gets its rig's own PadDevices/
     // UseKeyboard instead, so two pilots watching at once no longer move together.
@@ -214,12 +214,12 @@ public sealed partial class SpectatorCamera : Node
     }
 
     // -1 when only `negative` is down, +1 when only `positive` is, 0 for neither or both.
-    // Honors _useKeyboard (E44): a pad-only spectator seat reads no keys at all.
+    // Honors _useKeyboard: a pad-only spectator seat reads no keys at all.
     private float Axis(Key negative, Key positive) =>
         !_useKeyboard ? 0f :
         (Input.IsKeyPressed(positive) ? 1f : 0f) - (Input.IsKeyPressed(negative) ? 1f : 0f);
 
-    // Pad reads restricted to _padDevices (E44) — null (every pre-E44 call site) is every
+    // Pad reads restricted to _padDevices — null (every pre-E44 call site) is every
     // connected pad, matching the project's phantom-device policy (never pads[0]): take the
     // largest-magnitude value across the device set, so idle/phantom devices read ~0.
     // Through Pads.For(_padDevices) rather than Pads.Connected(): these are input *reads*, so
@@ -323,7 +323,7 @@ public sealed partial class SpectatorCamera : Node
     private void Move(float dt)
     {
         // Keyboard is silenced while typing a filter (KeyboardCaptured) or unassigned to this
-        // seat (_useKeyboard, E44); the pad is not.
+        // seat (_useKeyboard); the pad is not.
         float kb = (_useKeyboard && !KeyboardCaptured) ? 1f : 0f;
         var basis = _camera.Basis;
         // Forward is the camera's -Z (the project's convention everywhere); strafe its +X.

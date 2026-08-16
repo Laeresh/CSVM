@@ -3,7 +3,7 @@
 Part of the [format documentation](README.md). The chapter-scoped patrol graphs the
 original's AI flies: waypoint sets with an **explicit edge list**, referenced by every
 AI-consuming reader family. Engine reader: `CSVM/src/Mech3/AiNets.cs`; the
-`--debug-ainets` overlay (F13) renders them, and `CSVM/src/Flight/AiNetFollower.cs` (M4 B5)
+`--debug-ainets` overlay (F13) renders them, and `CSVM/src/Flight/AiNetFollower.cs`
 flies them as a patrol behaviour (`--ai=<plane>:<net>`), traversal along the edge list, an anchored
 trailer ridden (`BL-377`), per-node tags preserved unacted-on.
 

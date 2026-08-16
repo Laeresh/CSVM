@@ -206,7 +206,7 @@ public sealed class EffectAmbience
         _viewers.Add(new ViewerSet.ViewerPose(position, forward));
     }
 
-    /// <summary>Publishes this frame's pose for EVERY pane, from the session's viewer set (B11).
+    /// <summary>Publishes this frame's pose for EVERY pane, from the session's viewer set.
     /// Throws on <see cref="Still"/>, for the same reason <see cref="SetWind"/> does.
     ///
     /// <para>Unlike the wind — one for the world, stepped once — the fade is a DRAW rule, and the

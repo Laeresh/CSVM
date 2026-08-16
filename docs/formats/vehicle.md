@@ -37,7 +37,7 @@ Keys the remake consumes (see `src/Flight/PlaneStats.cs`):
 | `injure_anims` | def-level damage thresholds (below) |
 | `destroyable_parts` | the damage model (below) |
 | `collision` | 6 collision probe points (below) |
-| `bullethole_anims`, `weapons`, `turrets`, `cannon_jam`, `armor`/`health`, AI tuning | only `turrets` consumed (M4 C9a) — [Weapons, damage & AI keys](#weapons-damage-and-ai-keys) below |
+| `bullethole_anims`, `weapons`, `turrets`, `cannon_jam`, `armor`/`health`, AI tuning | only `turrets` consumed — [Weapons, damage & AI keys](#weapons-damage-and-ai-keys) below |
 
 ## Units, dynamics, and engines
 
@@ -286,7 +286,7 @@ The effect emitters these anims call (`short_firetrail`, `dense_firetrail`,
 ## Weapons, damage, and AI keys
 
 The airframe half of the combat data — of which only `turrets` is consumed by the remake so
-far (M4 C9a). Player defs carry `weapons` (as a catalogue), `cannon_jam`, `turrets` and
+far. Player defs carry `weapons` (as a catalogue), `cannon_jam`, `turrets` and
 `bullethole_anims`; the `armor`/`health` pair and the AI-tuning keys live only on the AI
 variant defs.
 

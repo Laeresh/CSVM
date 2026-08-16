@@ -115,7 +115,7 @@ the decompiler:
 - The altitude fade is by **fragment** altitude — full fog below `FOG_ALTITUDE[0]`, none above
   `FOG_ALTITUDE[1]`, so the deck and sky overhead stay clear. Settled in C2, the only chapter whose
   flown band (256–1024 m) sits inside the flight envelope.
-- The near→far ramp is **linear**, per the gamez world node's own `fog_state == 1` (B15).
+- The near→far ramp is **linear**, per the gamez world node's own `fog_state == 1`.
 
 ⚠ **`ZONE3`'s `CLIP_RANGES` far of 300 is NOT applied.** The original hard-clips; the remake fogs
 instead and keeps a much larger far plane, and that is a deliberate, standing divergence (B11's
@@ -400,7 +400,7 @@ Everything here is a known, deliberate divergence — not a gap waiting to be cl
 Kept because in each case a *measurement* died, not just a use — and the next reader must not
 re-fit it.
 
-### ⚠ `DeckCeilingHeight` — RETIRED (B14, 2026-08-09)
+### ⚠ `DeckCeilingHeight` — RETIRED (2026-08-09)
 
 The height at which the deck sheet was hung above a below-band camera as the overcast **ceiling**.
 **There is no such mechanism.** The deck tiles are ordinary `zone_id 2` world meshes, the original
@@ -419,7 +419,7 @@ Both of its fits measured a surface the original does not fog:
 below-band rim lands inside the fog-saturated band). **That geometry is unchanged** — it is still
 what keeps the above-band floor's edge out of frame.
 
-### ⚠ The band-centre deck pin — SUPERSEDED (B13)
+### ⚠ The band-centre deck pin — SUPERSEDED
 
 The deck was pinned to the cloud band's centre. It sits at the tiles' **own authored altitude**,
 read off the built data. C4 was unmoved by the change (its authored altitude *equals* its band
@@ -427,7 +427,7 @@ centre, 1050 — a coincidence that made the pin look right); C1's 960 against t
 an 87 m drop. Earlier still, until A6, the pin applied in *both* regimes, which buried the deck
 inside the `fvol` slab and hung every sprite below it.
 
-### ⚠ The altitude-keyed cloud-population gate — SUPERSEDED (B12)
+### ⚠ The altitude-keyed cloud-population gate — SUPERSEDED
 
 A hand-rolled rule that decided whether the two ambient cloud populations rendered, keyed on camera
 altitude. It was the `zone_id 2` special case of `FUN_0056c430`. The case that killed it is C2B's
@@ -451,7 +451,7 @@ what is unreliable there.
 166–175 in its own still while ours rendered 200–220 *before* any fog — that was the deck's own
 underside brightness seen from below, and it is fixed (now 168–170 unfogged against 167.7).
 
-### ⚠ The zone1 fog/band coincidence — RETIRED as evidence (B12)
+### ⚠ The zone1 fog/band coincidence — RETIRED as evidence
 
 "zone1's 970→1047 is exactly cloud-band bottom → whiteout centre" was used to corroborate the
 altitude-fade reading. C1 flies **zone2**, whose band is 4000→5000 m — above the 2,500 m flight

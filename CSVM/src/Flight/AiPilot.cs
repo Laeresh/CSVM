@@ -42,7 +42,7 @@ public sealed class AiPilot
     /// fixed-dt, fixed-seed run is still deterministic.</summary>
     public AiNetFollower? Patrol;
 
-    /// <summary>The forward-gun gunnery (D14), or null for an unarmed pilot. When its target is
+    /// <summary>The forward-gun gunnery, or null for an unarmed pilot. When its target is
     /// live and there is no <see cref="Machine"/>, each <see cref="Next"/> re-derives the
     /// heading/altitude orders from the target's position — a plain pursuit through
     /// <see cref="AiControlLaw"/>, taking precedence over <see cref="Patrol"/> — so the plane
@@ -51,10 +51,10 @@ public sealed class AiPilot
     /// steers. Mutable like every other order.</summary>
     public AiGunner? Gunner;
 
-    /// <summary>The nine-mode state machine (D11), or null for the bare-orders pilot above.
+    /// <summary>The nine-mode state machine, or null for the bare-orders pilot above.
     /// When set, each <see cref="Next"/> steps the machine and dispatches on its mode: patrol
     /// flies <see cref="Patrol"/>, pursue chases the gunner's target, lay off holds its entry
-    /// course at eased throttle so the pursuer catches up (D15), evade and avoid crash fly the
+    /// course at eased throttle so the pursuer catches up, evade and avoid crash fly the
     /// machine's own orders, an evasive maneuver plays its <see cref="ManeuverExecutor"/> until
     /// done, and stunned holds the controls neutral. Mutable like every other order.</summary>
     public AiModeMachine? Machine;
@@ -178,7 +178,7 @@ public sealed class AiPilot
         var quarry = Gunner is { Target: { InPlay: true } t } ? t : null;
         SteeringPatrol = false;   // SteerPatrol sets it when it actually flies the net
 
-        // The mode machine (D11), when present, decides which input source flies this step;
+        // The mode machine, when present, decides which input source flies this step;
         // without one the pre-D11 priority stands (gunner target, then patrol, then orders).
         if (Machine is { } machine)
         {
@@ -269,7 +269,7 @@ public sealed class AiPilot
         return Fly(model, dt, aim, aimVelocity, AiLawParams.Engaged, engaged: true, gunLead: onAxis);
     }
 
-    /// <summary>Lay off (D15, the rubber-band assist): let the pursuer catch up. Steers the course
+    /// <summary>Lay off (the rubber-band assist): let the pursuer catch up. Steers the course
     /// captured at mode entry on the cruise table, staying ahead of the pursuer rather than
     /// turning back into a head-on, and then OVERRIDES the law's lever with D15's own walk toward
     /// <see cref="AiModeMachine.SixthSenseFactor"/> × the pursuer's speed.

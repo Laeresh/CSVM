@@ -382,7 +382,7 @@ Everything here is a known, deliberate divergence — not a gap waiting to be cl
 
 Kept because in each case a reading *died*, and the next reader must not re-derive it.
 
-### ⚠ `translation_range.y` as a spherical elevation — RETIRED (B4, 2026-08-11)
+### ⚠ `translation_range.y` as a spherical elevation — RETIRED (2026-08-11)
 
 The elevation was applied as `sin(el)` with `cos(el)` on the horizontal, giving a unit-length
 direction. The binary computes `elev/90` with the L1 remainder and never passes the elevation
@@ -391,7 +391,7 @@ varies with elevation looks like a bug and is the whole finding; normalising it 
 error. Measured at the controls, the unit-sphere reading launched `m_build03`'s 60–70° debris
 20–25 % too fast and cut six of its nine pieces at 67–72 % of their arc, still climbing.
 
-### ⚠ `DebrisTune.LaunchScale = 0.65` — DELETED (D10, 2026-08-13)
+### ⚠ `DebrisTune.LaunchScale = 0.65` — DELETED (2026-08-13)
 
 A global multiplier on every launch speed, judged at the controls against
 `OriginalScreenshots/Videos/m_build03 destruction.mp4`. It was a decode error wearing a tune's
@@ -402,7 +402,7 @@ rule a footage-derived measurement never contests a decode. The knob is gone in 
 `--debris-launch`/`--debris-gravity` flags, the `debris.*` config keys and the lab panel. **If an arc
 reads wrong from here on, the answer is a further decode or a filed item, never a scalar.**
 
-### ⚠ `forward_rotation.Time.initial` as a total angle over `RUN_TIME`, about local X — RETIRED (C10, 2026-08-13)
+### ⚠ `forward_rotation.Time.initial` as a total angle over `RUN_TIME`, about local X — RETIRED (2026-08-13)
 
 It is a rate in rad/s about the launch's own horizontal perpendicular. The reasoning that produced
 the total-angle reading — that "5π and 4.44π are clean multiples of π" — is a coincidence of the
@@ -411,26 +411,26 @@ measured **20–30 °/s** (**measured off footage**) and was recorded as *confir
 reading; it fits "those pieces do not tumble at all" better than either reading, and it is noted as
 agreement only. No measurement off that footage decides this (`docs/verification.md` **DET-12**).
 
-### ⚠ `translation.delta` as a ramp divided by `run_time` — RETIRED (B5, 2026-08-11)
+### ⚠ `translation.delta` as a ramp divided by `run_time` — RETIRED (2026-08-11)
 
 The reasoning was that a change spread *over* the run time must be divided by it. The original
 stores `dir·delta` straight into the acceleration slot. The units change by the run time itself: a
 `delta` under a 5 s `RUN_TIME` now contributes **five times** as much acceleration. If a specific def
 looks wrong afterwards, re-read its block — do not reinstate the division.
 
-### ⚠ "`do_intersections: false` means the original ran no contact test" — RETIRED (C6, 2026-08-12)
+### ⚠ "`do_intersections: false` means the original ran no contact test" — RETIRED (2026-08-12)
 
 The default path **is** a contact test; `DO_INTERSECTIONS` only upgrades it to the geometry sweep.
 This claim is what justified 1,466 bodies sinking through the world as fidelity, and what left
 `BL-245`'s falls deferred on "a decision to diverge" that never existed. Its companion — "`RUN_TIME`
 is a flight duration" — died with it.
 
-### ⚠ "`no_altitude` is gravity or spawn positioning reckoned relative to terrain altitude" — RETIRED (C7, 2026-08-13)
+### ⚠ "`no_altitude` is gravity or spawn positioning reckoned relative to terrain altitude" — RETIRED (2026-08-13)
 
 Exactly inverted: `NO_ALTITUDE` is the **opt-out from the landing test**. The reasoning that killed
 the correct reading ran from `PT-46` (d), below.
 
-### ⚠ `PT-46` (d) — the OBSERVATION stands, the MECHANISM was misattributed (C6/C7)
+### ⚠ `PT-46` (d) — the OBSERVATION stands, the MECHANISM was misattributed
 
 At the controls, the original's debris was seen sinking through terrain, and that observation is
 real and is not withdrawn. What was wrong is the mechanism drawn from it — "so the original runs no
@@ -440,7 +440,7 @@ direction: the original *does* test, and it rests a piece's node **origin** on t
 with no extent term, so a piece whose geometry hangs below its origin looks sunk. ⚠ Recorded as a
 conflict resolved by the decode, not as something the user did not see.
 
-### ⚠ "Every golden capture builds no world colliders" — RETIRED (A1, 2026-08-10)
+### ⚠ "Every golden capture builds no world colliders" — RETIRED (2026-08-10)
 
 `Fly` sessions build collision, and three goldens are flight sessions. What was true is narrower and
 was measured rather than assumed: none of the 13 goldens then pinned contained a piece actually

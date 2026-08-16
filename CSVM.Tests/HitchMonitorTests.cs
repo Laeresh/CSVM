@@ -220,7 +220,7 @@ public class HitchMonitorTests
         Assert.Equal(2.0, mon.Last.PhysicsMs, 6);
     }
 
-    // ---- FrameCount is exposed one call early, for --hitch-inject= (B5) to act on ----
+    // ---- FrameCount is exposed one call early, for --hitch-inject= to act on ----
 
     [Fact]
     public void FrameCountIsOneAheadOfTheNextTicksFrame()

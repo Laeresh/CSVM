@@ -9,7 +9,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The patrol-net walk (M4 B5), engine-free on hand-authored nets: traversal follows the EDGE
+/// The patrol-net walk, engine-free on hand-authored nets: traversal follows the EDGE
 /// list (never node order), starts at the nearest node, refuses to backtrack while an onward
 /// edge exists, turns back at a dead end, resolves branches reproducibly from its seed, and the
 /// id/name lookups cover both ways the data references a net.

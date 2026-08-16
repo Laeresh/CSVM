@@ -845,7 +845,7 @@ public sealed partial class Puffer : Node3D
         return sum / (w * h);
     }
 
-    /// <summary>The distance alpha across EVERY pane (B11, `BL-339`): <see cref="DistanceAlpha"/>
+    /// <summary>The distance alpha across EVERY pane (`BL-339`): <see cref="DistanceAlpha"/>
     /// evaluated against each viewer, keeping the most favourable answer — the particle is drawn if
     /// any pane should see it, with the alpha of the pane that sees it best. Returns <c>false</c>
     /// only when every pane discards it.

@@ -6,18 +6,18 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>The decoded AI mode vocabulary (M4 D11): the nine states the original engine's debug
+/// <summary>The decoded AI mode vocabulary: the nine states the original engine's debug
 /// readout dispatches on, in its own naming (docs/formats/ai-rosters.md "AI modes, engine-side").
 /// There is no flee and no inactive mode in that dispatch.</summary>
 public enum AiMode
 {
-    /// <summary>Flying the assigned net (B5) or holding course.</summary>
+    /// <summary>Flying the assigned net or holding course.</summary>
     Patrol,
 
-    /// <summary>Chasing the target; the gunner (D14) fires in this mode.</summary>
+    /// <summary>Chasing the target; the gunner fires in this mode.</summary>
     Pursue,
 
-    /// <summary>The rubber-band assist (D15): a pursued AI lets its human pursuer catch up —
+    /// <summary>The rubber-band assist: a pursued AI lets its human pursuer catch up —
     /// course held, throttle eased by the decoded <c>sixth_sense_factor</c>, fire held.
     /// Disabled session-wide by <c>--no-assist</c> (<see cref="AiModeMachine.AssistEnabled"/>).</summary>
     LayOff,
@@ -42,7 +42,7 @@ public enum AiMode
     NavigatingDangerZone,
 }
 
-/// <summary>The nine-mode AI state machine (M4 D11), owned by an <see cref="AiPilot"/> and stepped
+/// <summary>The nine-mode AI state machine, owned by an <see cref="AiPilot"/> and stepped
 /// once per sim tick from <see cref="AiPilot.Next"/>. The mode list is decoded (the engine's debug
 /// readout dispatches on exactly these states); the transitions below are decoded where the plan
 /// says so and NAMED AS INVENTED where they are not:
@@ -189,7 +189,7 @@ public sealed class AiModeMachine
     /// difficulty (no interpolation table, by design).</summary>
     public int NaturalTouch = 1;
 
-    /// <summary>The maneuver library (D13), or null for a maneuver-less pilot (a failed
+    /// <summary>The maneuver library, or null for a maneuver-less pilot (a failed
     /// steady-hand test then evades plainly instead).</summary>
     public IReadOnlyList<Maneuver>? Library;
 
@@ -285,7 +285,7 @@ public sealed class AiModeMachine
     /// state. A human target reports null: detecting a human player's maneuver is undecoded, so
     /// the sixth-sense roll fires only against AI targets today.
     /// <paramref name="targetVelocity"/>/<paramref name="targetIsHuman"/> feed the lay-off
-    /// pursued test (D15): the assist is only ever extended to a human-piloted pursuer — in
+    /// pursued test: the assist is only ever extended to a human-piloted pursuer — in
     /// splitscreen that is whichever human the AI is currently engaging, an extension decision
     /// (the original is single-player and its "the player" needs no choosing).</summary>
     public AiMode Update(Vector3 pos, Vector3 velocity, Vector3? targetPos, AiMode? targetMode,
@@ -454,7 +454,7 @@ public sealed class AiModeMachine
         Transition(back, "reaction complete");
     }
 
-    /// <summary>The rubber-band assist's transitions (D15). Decoded: the mode, its "let the
+    /// <summary>The rubber-band assist's transitions. Decoded: the mode, its "let the
     /// player catch up" intent (the design's Sixth Sense pursued-side role) and the
     /// <c>sixth_sense_factor</c> ease-off constant. Invented, named on the constants above: the
     /// pursued-test cones, the fallen-behind / caught-up distances and the anti-chatter hold.

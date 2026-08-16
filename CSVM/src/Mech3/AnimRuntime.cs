@@ -112,7 +112,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// so a bootstrap-time miss corrects on the next frame.</summary>
     public Func<Vector3>? PlayerPosition;
 
-    /// <summary>Every player's position, for the EXECUTION_BY_RANGE proximity gate and (C21,
+    /// <summary>Every player's position, for the EXECUTION_BY_RANGE proximity gate and (
     /// `BL-365`) every <c>PLAYER_RANGE</c> condition — both measure from the nearest human, not
     /// one camera. In flight this is the aircraft themselves — the chase camera trails far
     /// enough behind the plane to eat most of a 50 m radius. Null → both fall back to
@@ -120,7 +120,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// test) on the pre-C21 single-camera behaviour.</summary>
     public Func<IReadOnlyList<Vector3>>? PlayerPositions;
 
-    /// <summary>Every pane's camera position, for budgeting <see cref="Lights"/> (B13, `BL-366`):
+    /// <summary>Every pane's camera position, for budgeting <see cref="Lights"/> (`BL-366`):
     /// a world light must not fade or lose its slot just because player 1 is far from it. This is
     /// the draw-rule seam (<c>ViewerSet.Positions</c>), not <see cref="PlayerPositions"/> (the
     /// gameplay one) — null or empty falls back to <see cref="PlayerPos"/> alone, keeping a
@@ -293,7 +293,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// then WHERE the burst was and how far its own def gates the wash — metres SQUARED, the
     /// compiled <c>PLAYER_RANGE</c> convention <see cref="AnimDefs"/> normalises both sources to, and
     /// 0 for a def that gates on nothing. Those last two are what routes the wash to the right
-    /// pane(s) in splitscreen (B12); the sink decides which panes, since pane geometry is the
+    /// pane(s) in splitscreen; the sink decides which panes, since pane geometry is the
     /// overlay's business and not this runtime's.</para></summary>
     public Action<Color, Color, float, Vector3, float>? ScreenFlash;
 
@@ -2854,7 +2854,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     if (!instant && ScreenFlash != null)
                     {
                         // Where the burst is and how far its def admits the wash, so the overlay can
-                        // paint the pane(s) it reached instead of all four (B12). The anchor is the
+                        // paint the pane(s) it reached instead of all four. The anchor is the
                         // effect instance's own node — the same point the def's gate measures.
                         ScreenFlash(Rgba(ev.Data.Obj("from")), Rgba(ev.Data.Obj("to")), runTime,
                             anchor != null ? WorldPos(anchor) : Vector3.Zero,
@@ -3697,7 +3697,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     /// <summary>The nearest human's squared distance to a world point — a <c>PLAYER_RANGE</c>
-    /// condition's own answer (C21, `BL-365`), the same nearest-of-every-player rule
+    /// condition's own answer (`BL-365`), the same nearest-of-every-player rule
     /// <see cref="TickDeferredByRange"/>'s EXECUTION_BY_RANGE gate already uses, so a wash or
     /// door gated by a burst near player 4 fires even while player 1 sits kilometres off. Falls
     /// back to <see cref="PlayerPos"/> when no <see cref="PlayerPositions"/> seam is wired.</summary>

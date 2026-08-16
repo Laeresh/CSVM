@@ -31,9 +31,9 @@ One chapter-scope reader file, root = an [alternating key/list dict](README.md#s
 |---|---|---|
 | `fog_zone` | `[int]` | **A bool**: non-zero arms the engine's in-volume whiteout + `ZONE3` camera state — see [the decompile section](#what-the-engine-does-with-the-volumes). Consumed by the reader and weather runtime |
 | `distance` | `[float]` | The scatter's mean spacing, metres — an areal density, not a lattice phase. Engine default **206.25** |
-| `fog_fade_dist` | `[float]` | *(C5 only, **16**)* whiteout approach ramp, metres before the volume wall. Engine default **400**. Consumed (`C21`) |
-| `interior_fog_fade_dist` | `[float]` | *(C5 only, **16**)* whiteout decay depth inside the volume. Engine default **20**. Consumed (`C21`) |
-| `fog_color` | `[r,g,b]` | *(C5 only, **[16,16,16]** — near black)* the whiteout's colour, integer 0–255. Engine default: the mission's `CLOUD_COVER` `TOP_COLOR`. Consumed (`C21`) |
+| `fog_fade_dist` | `[float]` | *(C5 only, **16**)* whiteout approach ramp, metres before the volume wall. Engine default **400**. Consumed |
+| `interior_fog_fade_dist` | `[float]` | *(C5 only, **16**)* whiteout decay depth inside the volume. Engine default **20**. Consumed |
+| `fog_color` | `[r,g,b]` | *(C5 only, **[16,16,16]** — near black)* the whiteout's colour, integer 0–255. Engine default: the mission's `CLOUD_COVER` `TOP_COLOR`. Consumed |
 | `clutter` | `[block, …]` | The scatter table — one or more blocks, each an alternating dict |
 
 A `clutter` block:
@@ -80,7 +80,7 @@ C1/C1C/C2B/C4's `fvol1`–`fvol9` tile the whole 12,288 m map as a single flat s
 and they are an **exact 3 × 3 partition of the `World` node's own `area`** (x and z each split at
 −10240 and −2048 over [−12288, 0]), so the field's footprint *is* the base map, to the metre, with
 no interior seam. The authored field DOES end at the base map's outer rim — "The map-edge
-continuation (`A5`)" below continues it past there, engine-side, for these four chapters only.
+continuation" below continues it past there, engine-side, for these four chapters only.
 **C1C additionally stacks twelve smaller volumes on top of that footprint**, reaching 1,688 m —
 authored build-ups over particular places, and the reason the scatter fills *each* volume rather
 than taking the first one that contains a cell. C5's are not a slab at all: seventeen
@@ -312,7 +312,7 @@ degenerate ranges).
   39 % under the tallest slab, 51 % under the shortest build-up — so no shipped volume is a close
   call.
   - **Why sampling AT the top (not inventing a band) still respects a sloped or tapered top:**
-    `Contains` already runs the exact face test (`A2`), so for a volume whose top isn't a simple
+    `Contains` already runs the exact face test, so for a volume whose top isn't a simple
     flat plane the (x, box.End.Y, z) point drawn in a cell is rejected exactly when that XZ falls
     outside the true top footprint at that height. No separate per-column top lookup was needed;
     the geometry the containment test already reads does the work.
@@ -321,7 +321,7 @@ degenerate ranges).
     measurement is 1003–1085 m and both fit) — **C4's 1135 m clear-air frame remains the clean
     discriminator**, and the render now reproduces it (below).
   - ⚠ **The deck mesh is the slab's floor, authored: every deck chapter puts its `CloudDeck`
-    tiles ~10 m BELOW its `fvol1`–`fvol9` slab floor** (`A6`,, from each gamez's
+    tiles ~10 m BELOW its `fvol1`–`fvol9` slab floor** (from each gamez's
     `model_bbox`). The invariant, all four:
 
     | chapter | deck tiles | `fvol1`–`fvol9` floor | gap | `CLOUD_COVER` centre |
@@ -337,7 +337,7 @@ degenerate ranges).
     the `A6` defect.
 
     ⚠ **The authored altitude is where the data puts the sheet; it is NOT where the deck mesh is
-    rendered** (`A7`). The original's deck is engine trickery — below the
+    rendered**. The original's deck is engine trickery — below the
     `CLOUD_COVER` centre a ceiling carried 400 m above the camera, above it a world-fixed floor at
     the centre — so `WeatherRig.Tick` places it at neither chapter's authored 960/1050. What the
     table above still decides is the **relationship** the scatter is read against (mesh 10 m under
@@ -422,7 +422,7 @@ degenerate ranges).
 **Undecoded / not implemented:**
 
 - ~~**`fog_zone`, and C5's `fog_color` / `fog_fade_dist` / `interior_fog_fade_dist`** are read and
-  reported and nothing in the remake consumes them yet.~~ **Struck (`C21`): all four keys
+  reported and nothing in the remake consumes them yet.~~ **Struck: all four keys
   are now CONSUMED — see [Consumed by the remake](#consumed-by-the-remake) below.**
 - ⚠ **`fog_zone` is not the sky/fog zone selector** — and as of it is no longer
   unidentified: the decompile (section above) shows it is a **bool** arming the in-volume
@@ -500,8 +500,8 @@ volume, 112× the 16 m ramp (predicted before the run, pinned in
   ±15 % jitter, and it combed at grazing angles where the original (`CAP-12` t=44/59/97/124,
   t=29.2) shows soft continuous mottling at every angle. The grid is gone; do not re-derive one
   from `distance`.
-- **The sky→tops transition-depth gap survived BOTH the horizontal fix (`A2`) and the vertical
-  one (`A3`) — it is evidence for neither scatter axis.** `A2` measured 0–0.5 px of movement from
+- **The sky→tops transition-depth gap survived BOTH the horizontal fix and the vertical
+  one — it is evidence for neither scatter axis.** `A2` measured 0–0.5 px of movement from
   randomising the horizontal placement (13 → 13.5 px at the pinned above-deck pose); `A3`'s
   top-anchoring moved the same four poses by 0–5 px, still nowhere near the original's 91–103 px
   (see the vertical-spread entry above for the per-pose numbers). A 132.3 m card is nearly as tall

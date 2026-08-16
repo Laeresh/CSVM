@@ -190,7 +190,7 @@ pair per stat**, the endpoints the rating interpolates between.
 |---|---|---|---|
 | `daredevil_chance` | 0.35 | 0.99 | probability of taking an available Danger Zone run |
 | `sixth_sense_chance` | 0.45 | 0.71 | passing the test to follow a target's maneuver (a failure leaves the AI stunned) |
-| `sixth_sense_factor` | 0.994 | 1.07 | ~~the ease-off factor applied while being pursued~~ **decoded  (`D31`): a flat multiplier on the AI's three stick channels, applied every frame on the non-emergency path** ([aiControlLaw.md](../org/aiControlLaw.md#the-skill-scalar-and-how-a-1-to-9-rating-interpolates)). Not conditional on being pursued |
+| `sixth_sense_factor` | 0.994 | 1.07 | ~~the ease-off factor applied while being pursued~~ **decoded: a flat multiplier on the AI's three stick channels, applied every frame on the non-emergency path** ([aiControlLaw.md](../org/aiControlLaw.md#the-skill-scalar-and-how-a-1-to-9-rating-interpolates)). Not conditional on being pursued |
 | `dead_eye_angle` | 4.0° | 1.45° | half-angle of the aiming-error cone around the lead point |
 | `quick_draw_angle` | 50° | 89° | half-angle of the cones off the target's nose/tail within which a shot is taken |
 | `quick_draw_chance` | 0.05 | 0.44 | probability of taking a marginal shot |
@@ -201,7 +201,7 @@ pair per stat**, the endpoints the rating interpolates between.
 
 Notes that matter to anyone implementing this:
 
-- ~~**Only the two endpoints are decoded.**~~ **Traced (`D31`), and the working assumption
+- ~~**Only the two endpoints are decoded.**~~ **Traced, and the working assumption
   was the right shape with the wrong origin.** The engine computes
   `value = lo + (hi − lo) · rating · 1/9` (`FUN_0047c210` at `0x47d0c1`–`0x47d101`, the constant at
   `0x608028` being exactly `0.11111112`). The endpoints therefore sit at rating **0 and 9**, not 1

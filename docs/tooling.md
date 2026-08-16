@@ -181,7 +181,7 @@ read back as `<that path minus .log>.hitches.jsonl`. A `FAIL` here means the det
 detecting (or started firing on nothing) with nobody watching, which is exactly the failure mode an
 always-on, silent-when-clean instrument invites. The injected record's C8 attribution is checked as
 an identity — `attributed_ms + unattributed_ms` must close over `frame_ms`, with no scope violations
-— rather than as "no samples": the injected stall is deliberately unscoped (B5), and C9 seeding a
+— rather than as "no samples": the injected stall is deliberately unscoped, and C9 seeding a
 site that fires during this launch must not turn the check red.
 
 ### The perf stage (`-Perf`)
@@ -274,7 +274,7 @@ XInput/HIDAPI. Direct editor or exe launches don't get the workaround. Removal c
 **"Windows Desktop"**: release export, x86_64, `embed_pck=true` — a single `CSVM.exe` with the
 pck inside, plus the .NET publish output beside it as `data_CSVM_windows_x86_64/`
 (**self-contained**: `coreclr.dll`/`hostfxr.dll` ship in it, so a recipient installs no .NET
-runtime). The exported build resolves every root to the exe's own folder (A1): it reads
+runtime). The exported build resolves every root to the exe's own folder: it reads
 `extracted/` beside the exe and writes its logs to `.scratch/logs/` beside the exe.
 
 **One-time template install.** The Godot export templates are user-global, not part of the

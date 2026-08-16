@@ -63,7 +63,7 @@ public sealed class WorldLights : IDisposable
 
     /// <summary>The positions actually packed into the shader texture by the last
     /// <see cref="Commit"/> — never read by anything that draws (the shader reads the texture,
-    /// not this); it exists so the nearest-viewer budget (B13, `BL-366`) can be asserted directly
+    /// not this); it exists so the nearest-viewer budget (`BL-366`) can be asserted directly
     /// instead of decoding the packed texture back out.</summary>
     public IReadOnlyList<Vector3> CommittedPositions => _committedPositions;
 
@@ -104,7 +104,7 @@ public sealed class WorldLights : IDisposable
         // Distance fade, then nearest-first, then the budget. Order matters: fading before the
         // sort is what lets the budget cut only lights that are already contributing nothing.
         // "Distance" is to the NEAREST viewer, not a single camera — a light beside player 4 must
-        // not fade out because player 1 is far away (B13, BL-366); one viewer (single player)
+        // not fade out because player 1 is far away (BL-366); one viewer (single player)
         // reduces to the original rule exactly, so the goldens don't move.
         for (int i = _pending.Count - 1; i >= 0; i--)
         {

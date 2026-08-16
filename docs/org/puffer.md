@@ -317,7 +317,7 @@ the original**, which copies its templates per call and bounds its particles onl
 born alive. Do not read any of those numbers back as an engine constant, and do not defend one by
 citing this page — they are TUNE values, sized against measured live counts.
 
-### The fire pair, measured and then DELETED (D10, 2026-08-10)
+### The fire pair, measured and then DELETED (2026-08-10)
 
 `large_30sec_fire`'s `fire_n_smoke` measured through the real emitter for its authored 30 s, still
 host, heights above the emitter (suite `puffer-fire-column`). The tuned rows are the build as it

@@ -62,7 +62,7 @@ public sealed partial class ScreenFlash : Node
 
     /// <summary>Builds one hidden overlay per rendered view. <paramref name="hudParents"/> is each
     /// rig's <c>HudParent</c> — the window root with one player, the pane's SubViewport with
-    /// several. <paramref name="viewers"/> is the session's viewer set (A3), read INDEX-ALIGNED with
+    /// several. <paramref name="viewers"/> is the session's viewer set, read INDEX-ALIGNED with
     /// those parents because both come from the same rig list; null (a build with no session behind
     /// it) leaves every wash painting every pane, as it did before the routing existed.</summary>
     public static ScreenFlash Build(IEnumerable<Node> hudParents, Flight.ViewerSet? viewers = null)

@@ -63,7 +63,7 @@ public sealed class ViewerSet
     }
 
     /// <summary>The same poses into a caller-owned buffer, cleared first — for the one consumer
-    /// that reads them EVERY frame (<c>EffectAmbience</c>, B11), where a fresh list per frame is a
+    /// that reads them EVERY frame (<c>EffectAmbience</c>), where a fresh list per frame is a
     /// per-frame allocation for a set that changes only when the rigs are rebuilt.</summary>
     public void Poses(List<ViewerPose> into)
     {

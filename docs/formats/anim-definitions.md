@@ -734,7 +734,7 @@ then `{min −50, max −160}` over 0.05 s, and a negative range is not a value 
 The reader's `RANGE` carries four numbers (`[min, max, altMin, altMax]`) where the compiled
 form splits the trailing pair into `range_alt` (null throughout this install).
 
-**The ramp is the event's DURATION — it holds its sequence** (decoded, D31). The
+**The ramp is the event's DURATION — it holds its sequence** (decoded). The
 handler is dispatch slot 5, `004e82b0`. On its first dispatch (`seq+0x20 == 0`, i.e. state
 *starting*) it copies the authored per-second deltas into the event's working slots
 (`+0x30/0x34 → +0x40/0x44` for the range pair, `+0x48/0x4c/0x50 → +0x60/0x64/0x68` for the

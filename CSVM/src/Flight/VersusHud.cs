@@ -50,7 +50,7 @@ public sealed partial class VersusHud : Control
     /// session — nothing to mark.</summary>
     public IReadOnlyList<PlayerRig>? Rigs;
 
-    /// <summary>The pool whose registered aircraft the hostile tracker scans (H22). Null leaves
+    /// <summary>The pool whose registered aircraft the hostile tracker scans. Null leaves
     /// the tracker off (a VS-only HUD); set, <see cref="UpdateHostile"/> re-selects the nearest
     /// live AI aircraft every frame, so a runtime spawn (generators) is picked up and a downed
     /// hostile drops without extra plumbing.</summary>
@@ -125,7 +125,7 @@ public sealed partial class VersusHud : Control
         };
     }
 
-    /// <summary>The matchless build (H22): no status line, no banner, no opponent list, only the
+    /// <summary>The matchless build: no status line, no banner, no opponent list, only the
     /// nearest-AI-hostile marker off <paramref name="pool"/>. One per human pane in every non-VS
     /// flight session; it draws nothing until a hostile exists, so an AI-free session's HUD
     /// output is unchanged.</summary>
@@ -305,7 +305,7 @@ public sealed partial class VersusHud : Control
             return;
         }
 
-        // The tracked AI hostile (H22): the same marker as a VS opponent, in the hostile red.
+        // The tracked AI hostile: the same marker as a VS opponent, in the hostile red.
         // UpdateHostile ran this frame, so the reference is at most one scan old; the validity
         // guard covers a hostile freed between the scan and this draw.
         if (GodotObject.IsInstanceValid(_hostile) && _hostile is { InPlay: true } hostile

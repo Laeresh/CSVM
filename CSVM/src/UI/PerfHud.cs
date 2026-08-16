@@ -11,7 +11,7 @@ namespace CSVM.UI;
 /// frame's wall cost, and the worst frame in the last few seconds — a peak that spikes and
 /// decays, so a hitch you felt leaves readable evidence on screen a moment later rather than
 /// only an instantaneous number nobody was watching at the right instant.
-/// The Full tier (D11) adds the per-frame cost split, count and memory
+/// The Full tier adds the per-frame cost split, count and memory
 /// terms, GC counts by generation, the last few named breadcrumbs, and a rolling bar graph of
 /// recent frame times.
 ///

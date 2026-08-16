@@ -25,7 +25,7 @@ toggle a gamez node of the same name active for one frame:
 The flash animation and the flash *node* share a name; the reader animates the prototype node
 listed under [Projectile prototypes](#ordnance-effects-and-projectile-prototypes).
 
-### Engine wiring (M3, C22) — casing, muzzle smoke, muzzle light
+### Engine wiring (M3) — casing, muzzle smoke, muzzle light
 
 `ProjectilePool` renders `muzzle_burst`'s three secondaries per gun shot, each from the def's own
 values, none through a shared `gunshell` anchor (whose `RUN_TIME 2` under `CallAnimation`'s
@@ -50,7 +50,7 @@ The **white puff cluster** the retail captures show riding each ejected casing m
 shipped effect def** (only `muzzle_burst` references `gunshell`, and the `gunshell` def carries
 no puffer) — the "cluster" in the captures is the muzzlepuffer's own smoke misread as a casing
 effect.
-(`BL-261`, A2): the casing now flies bare and the muzzlepuffer plays at its authored 6-puffs/0.3 s
+(`BL-261`): the casing now flies bare and the muzzlepuffer plays at its authored 6-puffs/0.3 s
 window instead.
 
 ## Bullet impacts
@@ -103,7 +103,7 @@ gets the other one wrong. The slug def's only other authored bound is its debris
 draws the engine's ricochet stand-in and no smoke. The `gunhit` family is reached through
 `default` — i.e. terrain. Verify gun-impact work by strafing **dirt**, not a hangar.
 
-### Engine wiring (M3, D30)
+### Engine wiring (M3)
 
 On a projectile impact `ProjectilePool` plays the struck surface's `IMPACT` sound and, for the
 effect **animation**, splits by what the bound name resolves to:
@@ -120,8 +120,8 @@ effect **animation**, splits by what the bound name resolves to:
   are torn down after the world build (`KeepArchivesOpen` is lab-only), so a runtime `PUFFER_STATE`
   builds nothing. Rendering them needs a dedicated world-effects runtime that keeps textures open
   and relocates the effect templates onto the hit point — the same machinery the per-player crash
-  runtime already proves (`BuildFlightCrashRuntime`) and that **destruction effects (D32)** share,
-  so the impact-puffer wiring folds into D32. The per-class stand-ins these names fall to (A2):
+  runtime already proves (`BuildFlightCrashRuntime`) and that **destruction effects** share,
+  so the impact-puffer wiring folds into D32. The per-class stand-ins these names fall to:
   dirt → the single spark, i.e. no arm of its own (the tumbling chips on the `bit01–04` textures
   were **deleted, `BL-313`**, see the `PLAYER_RANGE 200` note above; ground still
   resolves to a non-`None` stand-in because the world-effects sink is gated on it); a gun round on a
@@ -143,7 +143,7 @@ retail captures show white splashes at night) with full-white vertex colors. Geo
 `splash1_splash` is a **5 cm × 1.4 cm** quad (`Facade` SphericalY — camera-Y-billboarded), the
 base disc 24 cm across.
 
-**Engine wiring (A2, C6).** `ProjectilePool` drives the scale curves procedurally on each per-hit
+**Engine wiring.** `ProjectilePool` drives the scale curves procedurally on each per-hit
 instance (`AdvanceSplash`, values verbatim; per-hit instances rather than def playback so 8
 rounds/s give concurrent walking splashes) and honours `lighting/fog: false` with unshaded
 override materials (the shared world materials multiply mission SUNLIGHT in). C6 (`BL-265`) adds
@@ -165,7 +165,7 @@ quad is 5 cm wide — sub-pixel past ~30 m — while the reference ticks measure
 matches. The authored 1× stays reachable, same `static readonly` pattern as A3's
 `MuzzleFlashCount`.
 
-### Engine wiring (M3, D32) — the world-effects runtime
+### Engine wiring (M3) — the world-effects runtime
 
 That dedicated runtime is now built (`WorldEffectsFactory.BuildWorldEffectsRuntime`): one per session, a
 world-scoped `AnimRuntime` bound to the closure of every impact/destruction effect name, over a
@@ -197,7 +197,7 @@ A `PUFFER_STATE` whose `AT_NODE` is `INPUT_NODE`/`MAIN_ROOT_NODE` emits on the e
 relocated root (the sentinel = "the node this def was invoked on"; see
 [anim-definitions.md](anim-definitions.md)).
 
-**The staged set must be the closure's WHOLE anchor-root set** (D31, `analysis/effect-anchor-roots/`).
+**The staged set must be the closure's WHOLE anchor-root set** (`analysis/effect-anchor-roots/`).
 A definition anchors on the gamez node its `NAME` names, so a root the stage omits leaves every def
 anchored on it unanchored — it plays nothing, silently. Staging only 19 of the 28 roots the rocket
 IMPACT closure needs cost the per-type explosion rings below, all four smoke-trail columns

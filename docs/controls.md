@@ -27,8 +27,8 @@ Flags are specified in [`cli.md`](cli.md).
 | `Tab` | | cycle stunt target |
 | `numpad 1–9` (not `5`) | | hold a fixed camera view around the plane (P1's keyboard) — `--view=` |
 | `numpad 0` | | hold the look-behind view: ahead of the nose looking back, at the authored `back_dist` range — `--view=back` |
-| | right stick | swing the external view around the plane while deflected, snapping back to the ordinary chase view the instant the stick returns to centre (E42, `BL-372`) — not in the original, a UX call for this port |
-| | click right stick | hold to look back — the pad twin of `numpad 0` (E42, `BL-372`) |
+| | right stick | swing the external view around the plane while deflected, snapping back to the ordinary chase view the instant the stick returns to centre (`BL-372`) — not in the original, a UX call for this port |
+| | click right stick | hold to look back — the pad twin of `numpad 0` (`BL-372`) |
 | `C` | | show the built colliders, coloured by the surface id they resolve to (see `--collision`) — `--debug-colliders` |
 | `X` | | colour world objects by class (destructible/facade/clutter/scenery) — `--debug-classoverlay` |
 
@@ -36,8 +36,8 @@ Flags are specified in [`cli.md`](cli.md).
 
 | Input | Does |
 |---|---|
-| `P` | pause — halts the sim; `.` steps one frame. Splitscreen: any player's `P`/pad Start pauses everyone, and shows a shared "PAUSED" board naming who paused (E43, `BL-373`) — only that player's `P`/Start resumes it |
-| — | a pilot out of lives watches from the `--freecam` controls (WASD/QE move, RMB look) on its own pane. Splitscreen: each downed pilot's spectator reads only its own pad/keyboard (E44, `BL-375`) — two players watching at once move independently, not lockstep. Mouse look stays shared (one physical mouse) |
+| `P` | pause — halts the sim; `.` steps one frame. Splitscreen: any player's `P`/pad Start pauses everyone, and shows a shared "PAUSED" board naming who paused (`BL-373`) — only that player's `P`/Start resumes it |
+| — | a pilot out of lives watches from the `--freecam` controls (WASD/QE move, RMB look) on its own pane. Splitscreen: each downed pilot's spectator reads only its own pad/keyboard (`BL-375`) — two players watching at once move independently, not lockstep. Mouse look stays shared (one physical mouse) |
 | `.` | step one frame while paused |
 | `T` | node-name labels |
 | `F12` | screenshot |

@@ -412,7 +412,7 @@ only a set flag holds.
 
 ## Timed events, and what a handler reports back
 
-The stepper needs each dispatched event's run time to place the next one. Two handlers traced (D31)
+The stepper needs each dispatched event's run time to place the next one. Two handlers traced
 establish the pattern:
 
 - `LIGHT_ANIMATION` (`004e82b0`, dispatch slot 5) advances the light by one tick's worth of the

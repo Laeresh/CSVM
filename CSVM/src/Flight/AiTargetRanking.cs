@@ -4,7 +4,7 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>One target-selection candidate, as a snapshot (M4 D12). Built per acquisition by
+/// <summary>One target-selection candidate, as a snapshot. Built per acquisition by
 /// whoever holds the live lists; the ranker reads nothing else, so the formula unit-tests
 /// without a scene tree (the <see cref="AiModeMachine"/> pattern).</summary>
 public struct RankedTargetCandidate
@@ -56,7 +56,7 @@ public readonly struct TargetScore
     public float Rank { get; }
 }
 
-/// <summary>The decoded target-ranking formula (M4 D12), recovered from the engine's own debug
+/// <summary>The decoded target-ranking formula, recovered from the engine's own debug
 /// readout (docs/formats/ai-rosters.md "AI modes, engine-side"):
 /// <c>rank = weight × 1200 + distance + objectiveBias</c>, MINIMISED, where the weight starts at
 /// 1.0 for any target except the player, which starts at 0.7, then takes ±0.2 terms for bearing,

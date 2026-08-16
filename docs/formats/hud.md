@@ -112,7 +112,7 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
     (0.2989–0.2996 across four clips); inside the clip that measured it the lamp led
     the Bloodhawk's break by 2.64 sim s / 14.9 mph. The remake carries the lamp as
     `FlightModel.StallWarnFrac` over `FlightModel.StallFraction`; the nose-drop itself
-    is no longer a fixed fraction (B15) — it is the airframe's own computed
+    is no longer a fixed fraction — it is the airframe's own computed
     `FlightModel.StallSpeed`, the speed at which the aerodynamic lift ceiling can no
     longer carry that airframe's weight.
   The LOW ALT cue beside it is a plain fixed 400 ms blink — it has never been
@@ -250,7 +250,7 @@ gauges):
 
 `%1` names the **gun group / rocket type** — which is *why* these strings exist: the counters are
 per gun group and per pylon, so the readout has to say *which* one. `%2!d!` is the integer count.
-The remake (E36, `src/Flight/WeaponReadout.cs`) resolves both through `Messages`, fills `%1` with the
+The remake (`src/Flight/WeaponReadout.cs`) resolves both through `Messages`, fills `%1` with the
 gun group's **mount name** (`Inner Wing Guns`, from `IDS_AIRFRAMEGUNGROUPNAMES`) or the rocket's
 resolved **display name** (`High-explosive rocket`, from its `MSG_WEAP_*` `DESC`), and `%2` with the
 selected group's per-group rounds / the next-to-fire pylon's per-pylon rounds. It draws in the

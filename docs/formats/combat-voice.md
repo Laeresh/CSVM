@@ -129,7 +129,7 @@ The extraction shows:
   nor WAVs. Id 47 (the multiplayer announcer) is the inverse: 51 WAVs with no `id47` set.
   Availability is only answerable after decode, per pilot, per clip.
 
-**Runtime (B8, `CSVM/src/Mech3/CombatVoice.cs`).** The chain above is a queryable service:
+**Runtime (`CSVM/src/Mech3/CombatVoice.cs`).** The chain above is a queryable service:
 `accentID` → pool → `PilotFor` (random pick, clipless ids skipped) → `PlayableFor(voId, family)`,
 which returns the `_random` group when authored, else the bare def; both feed
 `WorldSounds.PlayOneShot`, whose `Node3D` overload follows a moving speaker. Because a clip that
@@ -206,7 +206,7 @@ site is recorded here:
 | 16 | unwired | no dispatch site located in the binary (above) |
 | 22–24 | unwired | the polarity is decoded (above) and the 22/23 split is answerable now that a team model exists — no dispatch site chosen yet, left for a future item |
 | 26 | unwired | the original's shake-attempt check is undecoded; no machine transition maps to it without force-fitting |
-| 28 | unwired | both arms (above) are answerable now that a team model exists (B7) — no dispatch site chosen yet, left for a future item |
+| 28 | unwired | both arms (above) are answerable now that a team model exists — no dispatch site chosen yet, left for a future item |
 
 Stand-ins and inventions, named:
 

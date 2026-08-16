@@ -76,7 +76,7 @@ fill order is a permutation covering all eight positions either way.
 W4 (and the Balmoral's W3) is a **turret** on the five turret airframes (`pavenger`, `pbalmoral`,
 `pbrigand`, `pfirebrand`, `pkestrel` — the Balmoral is the only two-turret airframe: Nose + Rear).
 Those slots carry `"turret": true` and the loader parses them but constructs them inert — and
-**they stay inert even now that the gunner is live (M4 C9a)**: the running turret is built from
+**they stay inert even now that the gunner is live**: the running turret is built from
 the vehicle def's `turrets` block against `ai.zrd` (`TurretController`,
 [turrets.md](turrets.md)), so its weapon is the `ai.zrd` row's `WEAPON.NAME` (`wep_140` on every
 carried entry), **not** this file's caliber. The slot rows here remain the configurator-facing

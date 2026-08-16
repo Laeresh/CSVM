@@ -80,7 +80,7 @@ public partial class Launcher : Node3D
     // consumed there: a later return to the menu keeps whoever really joined.
     private int _pendingJoin;
     // --debug-waves=/--debug-wingmen=, the same one-shot hold as _pendingJoin above but for the
-    // Instant Action wizard's own screenshot aids (H16).
+    // Instant Action wizard's own screenshot aids.
     private int _pendingWaves, _pendingWingmen;
     // The --screenshot=/--shots=/--frames= state machine and F11/F12's placement print and
     // ad-hoc save — see src/Testing/CaptureDirector.cs's entry. Process-scoped: constructed once
@@ -677,7 +677,7 @@ public partial class Launcher : Node3D
         {
             InjectHitch(injectMs, _spec.HitchInjectAlloc);
         }
-        // Detection is unconditional, logging (B6) is not: a hitch nobody was watching for is the
+        // Detection is unconditional, logging is not: a hitch nobody was watching for is the
         // case this exists to catch, so it cannot sit behind --perf. The frame cost it is fed is
         // our OWN QPC pair rather than Godot's `delta`, which is post-processed (OS.delta_smoothing,
         // on by default) and measures here as a quantised constant: an --no-vsync --det empty-stage
@@ -807,7 +807,7 @@ public partial class Launcher : Node3D
             _pendingJoin = 0; // one-shot: a return to the menu keeps whoever really joined
         }
         // --debug-waves=/--debug-wingmen=: the same screenshot aid for the Instant Action wizard's
-        // own screens (H16).
+        // own screens.
         if (_pendingWaves > 0)
         {
             _menu.DebugWaves(_pendingWaves);

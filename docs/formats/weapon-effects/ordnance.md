@@ -46,7 +46,7 @@ The `sonic` def additionally runs a `sonic_spinner` sequence: a steady `OBJECT_M
 `XYZ_ROTATION` roll of the round's body at **8.7266 rad/s (500°/s)** about z, looped forever —
 the only rocket that spins.
 
-**Engine wiring (M3, C21).** `ProjectilePool` resolves each rocket's `MODEL_ANIMATION` name
+**Engine wiring (M3).** `ProjectilePool` resolves each rocket's `MODEL_ANIMATION` name
 through the world `AnimProgram`, takes every ACTIVE `DISTANCE_INTERVAL` `PUFFER_STATE` verbatim
 (`PufferState.FromAnimEvent`) and drives one `Puffer.TrailAdvance` per live round; the spinner
 rate rolls the FLYOUT body. Emitters are pooled and reused once their smoke decays. Deliberately

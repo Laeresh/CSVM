@@ -91,12 +91,12 @@ public sealed class PlaneStats
     public float EnginePower = 1f;       // engines.json factor for the plane's stock engine
     public float FlightCeiling = 2500f;
 
-    // The AI mode machine's range gates (D11): vehicle.json 'attack' / 'return_range', both
+    // The AI mode machine's range gates: vehicle.json 'attack' / 'return_range', both
     // authored once on basic_airplane and inherited install-wide (2000 / 1200).
     public float AiAttackRange = 2000f;
     public float AiReturnRange = 1200f;
 
-    // The AI control law's per-axis output stage (docs/org/aiControlLaw.md, E41): the law's roll,
+    // The AI control law's per-axis output stage (docs/org/aiControlLaw.md): the law's roll,
     // pitch and yaw commands are multiplied by these three scales and then clamped to these three
     // limits. Fallbacks are the def initialiser's own compiled defaults, which is what every
     // airframe in this install actually flies on — no roster block authors them (all twelve slots
@@ -129,7 +129,7 @@ public sealed class PlaneStats
 
     // player.json flight globals, plumbed here so the flight model reads authored data instead of
     // hardcoding it: LiftAccelRate/LiftAoaCosLo/Hi feed the lift demand, Yaw* the rudder-authority
-    // curve, TurnFadeIn/Out the roll-and-pitch base ramp (C24).
+    // curve, TurnFadeIn/Out the roll-and-pitch base ramp.
     // Unread ON PURPOSE, not pending: MaxAoaCos and HighG/LowG* are the control limiters' authored
     // thresholds and this install puts them out of reach (peak demand 2.13-5.01 G against 9, peak
     // alpha 8.9-25.6 deg against 46, all eleven airframes — ControlLimiterTests pins it), and

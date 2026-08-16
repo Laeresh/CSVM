@@ -222,7 +222,7 @@ public class SessionSpecMenuTests
 
     // ---- Instant Action wizard steps 1-2 --------------------------
 
-    /// <summary>The Environment screen's roster, in the decoded dropdown order (A5) — seven rows,
+    /// <summary>The Environment screen's roster, in the decoded dropdown order — seven rows,
     /// C1C never among them (the chapter Instant Action omits). Matches
     /// docs/formats/instant-action.md's "Environment → chapter" table exactly.</summary>
     [Fact]

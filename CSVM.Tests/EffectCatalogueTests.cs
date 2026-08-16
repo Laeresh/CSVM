@@ -92,7 +92,7 @@ public class EffectCatalogueTests
         Assert.Empty(table.PlayableDefs);
     }
 
-    /// <summary>The AI aircraft family (G21) rides the same cascade as the player's: against the
+    /// <summary>The AI aircraft family rides the same cascade as the player's: against the
     /// trio this install ships, <c>dirt</c>(13) and <c>water</c>(1) resolve their own def and
     /// every other arm — ordinary terrain, the def-less ids, out-of-range, null material — falls
     /// to slot 0, <c>ai_crash_default</c>.</summary>

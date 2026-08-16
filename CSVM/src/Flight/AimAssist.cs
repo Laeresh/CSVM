@@ -149,9 +149,9 @@ public struct AimScanResult
 }
 
 /// <summary>The per-muzzle gun aim assist: slot state (above), the per-frame forget + catch-up
-/// pass (B2), the constant-velocity intercept solver (B3, docs/org/aim-assist.md "The lead
+/// pass, the constant-velocity intercept solver (docs/org/aim-assist.md "The lead
 /// solver — <c>FUN_00460e30</c>") and the candidate scan with its rejection gates and scorer
-/// (B4, "Scoring one candidate"), so the whole assist is one testable unit that
+/// ("Scoring one candidate"), so the whole assist is one testable unit that
 /// <see cref="FlightController"/> calls into.</summary>
 public static class AimAssist
 {
@@ -165,7 +165,7 @@ public static class AimAssist
     /// enemy".</summary>
     public const int NeutralTeam = 0;
 
-    /// <summary>The player's side, id 1 — the decoded turret convention (M4 C9b: 0 neutral, 1
+    /// <summary>The player's side, id 1 — the decoded turret convention (0 neutral, 1
     /// ally, 2+ enemy) carried into the team model:
     /// every human and every wingman is this team, regardless of pilot index. Use this rather than
     /// <see cref="TeamOfPilot"/>(0) wherever "the player's side" is a fixed identity, not a

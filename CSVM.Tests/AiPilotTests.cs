@@ -6,7 +6,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The AI actor seam's input driver (M4 A2), engine-free: <see cref="AiPilot"/> over a real
+/// The AI actor seam's input driver, engine-free: <see cref="AiPilot"/> over a real
 /// <see cref="FlightModel"/> on the shipped Bloodhawk stats, on the fixed sim dt. Pins that the
 /// control law holds a level course, converges onto an ordered heading, and — the seam's design
 /// requirement — that its orders are mutable mid-flight: a retarget and a new altitude issued

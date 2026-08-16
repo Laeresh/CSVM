@@ -62,7 +62,7 @@ public readonly struct AiLawParams
 }
 
 /// <summary>The original's AI steering law (<c>FUN_0041b560</c>), decoded in
-/// <c>docs/org/aiControlLaw.md</c> (plan D31) and ported here (E41). An aim point and that point's
+/// <c>docs/org/aiControlLaw.md</c> (plan D31) and ported here. An aim point and that point's
 /// velocity in, one <see cref="FlightInput"/> out: desired speed from the aim point's own speed
 /// plus range-weighted lead terms, an intercept solve for the direction, bank-to-turn with an
 /// elevator pull once the bank is nearly satisfied, and a per-axis scale/limit output stage.

@@ -153,7 +153,7 @@ never a hole, and why the controls saw `ZONE1` haze persist above its 1024 m `FO
 and
 C5, the one chapter with a `ZONE3` and `fog_zone 1`, is exactly the fog-volume-interior case.
 What changes is the model: a deck chapter flies **both** zones, switched at the core's bottom
-edge — a different altitude from the deck-regime flip at the band *centre* (`A7`), but both sit
+edge — a different altitude from the deck-regime flip at the band *centre*, but both sit
 inside the fully-opaque core (C1: switch 1032, flip 1047, core 1032–1062), which is what makes
 either invisible. The remake's one-static-zone `--sky-zone` model is therefore an approximation
 that is exact above the band and wrong below it (a below-deck C1 should wear `ZONE1`'s fog);
@@ -329,9 +329,9 @@ own frames show no such gradient near the horizon** — `C1 IA1 Fog river.png` i
 (per-row sd 0.00) for 36 px above its horizon — so whatever hides it in the original is *not* a wall
 painting rule. Do not "fix" the wall's colours.
 
-⚠ **Engine-side consequence, landed (`C26`):** this ring's own colours and gradient are untouched —
+⚠ **Engine-side consequence, landed:** this ring's own colours and gradient are untouched —
 what changed is how far out the below-band CEILING reaches before it hands off to them. The rim sits
-at `f·K/halfSpan` px (`C21`/`C25`); extending the ceiling sheet's half-span from 6144 m (its 144
+at `f·K/halfSpan` px; extending the ceiling sheet's half-span from 6144 m (its 144
 textured tiles) to 20,480 m (a plain fog-saturated annulus around them, `WorldBuilder.AddDeckAnnulus`)
 pushes the rim from 13 px to ~4 px, where this ring has lost only ~2 units of its own gradient —
 invisible, and every deck chapter (C1/C1C/C2B/C4) gets the same extension since `K` and the camera
@@ -414,7 +414,7 @@ C2B ships **zero** `cloudparent` nodes (C1/C1C/C4 have 28–45), and its `fvol*`
 state at all, unlike the other three deck chapters'. Both are real per-chapter authoring facts,
 not a reading error (re-run, same result). Neither breaks the visibility-gate mechanism itself
 (`zone_id −1` just means "always drawn," which `FUN_0056c430` handles the same as any other −1
-node), but a `zone_id`-gate implementation (`B12`) must not assume every deck chapter's `fvol*`
+node), but a `zone_id`-gate implementation must not assume every deck chapter's `fvol*`
 population is gated.
 
 **`B12` landed the gate on exactly this reading .** The remake now reads the zone off

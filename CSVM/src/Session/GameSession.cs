@@ -71,12 +71,12 @@ public partial class GameSession : Node3D
     // sees (skydome / cloud deck / whiteout). Exactly one entry in single player,
     // wrapping the main-viewport _camera below — so the 1P render path is unchanged.
     private readonly List<PlayerRig> _rigs = new();
-    // Every pane's camera, bound once right after BuildRigs (A3) — the session-owned "what do the
+    // Every pane's camera, bound once right after BuildRigs — the session-owned "what do the
     // cameras see" registry draw rules read instead of `_rigs[0]`/`GetViewport().GetCamera3D()`.
     // ProjectilePool.Viewers takes this same instance; B11/B13 are its next consumers.
     private readonly ViewerSet _viewers = new();
 
-    // Every AI aircraft spawned into this session (M4 A2) — stepped in DriveSimSteps after the
+    // Every AI aircraft spawned into this session — stepped in DriveSimSteps after the
     // player rigs, freed with the world subtree.
     private readonly List<FlightController> _aiPlanes = new();
     // scratch: rig camera positions for the edge extender
@@ -157,7 +157,7 @@ public partial class GameSession : Node3D
     private Effects.EffectAmbience _ambience = new();
     private LensFlareRig? _lensFlareRig;
     // The FBFX_COLOR_FROM_TO wash — one ramp per rendered view, painted into the pane(s) the burst
-    // was near (B12).
+    // was near.
     private UI.ScreenFlash? _screenFlash;
     private Node3D? _plane;
     // The session's simulation clock (see GameClock). Also published as GameClock.Current, which
@@ -167,7 +167,7 @@ public partial class GameSession : Node3D
     // the tree order Godot's physics tick would have used. Dropped by ReturnToMenu.
     private ProjectilePool? _projectiles;
     private IncomingFire? _incomingFire;   // --incoming: the near-miss test rig
-    // The AI actor seam (M4 A2): the spawner is built with the rigs; every AI aircraft it has
+    // The AI actor seam: the spawner is built with the rigs; every AI aircraft it has
     // spawned is stepped in DriveSimSteps after the player rigs and freed with the world.
     private AiAircraftSpawner? _aiSpawner;
     private AiSkills? _aiSkills; // ai_skill_parameters, loaded once on the first AI spawn
@@ -176,7 +176,7 @@ public partial class GameSession : Node3D
     // The E16 voice dispatch (built with the rigs when the world has sounds; its mission clock
     // steps in DriveSimSteps). Null in a soundless/world-less session — chatter simply off.
     private AiVoiceRuntime? _aiVoice;
-    // The egen enemy generators (M4 B6, --generators): loaded with the rigs, stepped in
+    // The egen enemy generators (--generators): loaded with the rigs, stepped in
     // DriveSimSteps before the AI planes it spawns into _aiPlanes, freed with the world subtree.
     private AiGeneratorRuntime? _generators;
     private ZeppelinRuntime? _zeppelins;
@@ -202,7 +202,7 @@ public partial class GameSession : Node3D
     private FlightController? _iaAce;
     // --debug-scoreboard (IA): single-fire, same shape as _crashFired/_versusDebugKillFired.
     private bool _iaDebugForceFired;
-    // The world AA emplacements (M4 C9b): built with the rigs whenever a chapter world and the
+    // The world AA emplacements: built with the rigs whenever a chapter world and the
     // shared pool exist, stepped in DriveSimSteps after the zeppelins (slung mounts read the
     // moved pose). Shipped ACTIVATED honoured; --wake-turrets is the WAKEUP_TURRETS stand-in.
     private TurretEmplacementRuntime? _turretEmplacements;
@@ -314,7 +314,7 @@ public partial class GameSession : Node3D
     /// draw); <paramref name="attackRating"/>, given, arms the D14 gunner/mode machine at that
     /// rating regardless of <c>--ai-attack=</c> (the ace fights at its
     /// own authored rating, not the session's). <paramref name="inert"/> builds the aircraft held
-    /// out of the session (E10) — its pilot, gunner and mode machine are wired exactly as a live
+    /// out of the session — its pilot, gunner and mode machine are wired exactly as a live
     /// one's, it simply takes no step until <see cref="FlightController.Activate"/> puts it in
     /// play, which is how a wave can be built at session time and arrive later.
     /// <paramref name="shippedSkins"/> forwards to <see cref="AiAircraftSpawner.Spawn"/>: the
@@ -459,7 +459,7 @@ public partial class GameSession : Node3D
         // as soon as the rigs exist so every runtime below can be handed the same sink. Screen-space
         // and session-scoped on purpose — an AnimRuntime is world-scoped and is instanced per effect
         // pool and per crash rig. The viewer set goes with it because the routing rule is per pane
-        // (B12): the same rig list builds both, so the two are index-aligned by construction.
+        //: the same rig list builds both, so the two are index-aligned by construction.
         _screenFlash = UI.ScreenFlash.Build(_rigs.Select(r => r.HudParent), _viewers);
         _worldRoot!.AddChild(_screenFlash);
         _worldEffectsFactory.ScreenFlash = _screenFlash.Play;
@@ -484,7 +484,7 @@ public partial class GameSession : Node3D
             ?? (_spec.WorldMode ? SessionPaths.ChapterGamez(_dataRoot, _spec.Chapter) : _planesGamezPath);
         state.MissionZrdrPath = SessionPaths.MissionZrdr(_dataRoot, _spec.Chapter, _spec.Mission);
 
-        // Instant Action's def: the wizard's own build (SessionSpec.IaDef, H16) or --ia=<path>,
+        // Instant Action's def: the wizard's own build (SessionSpec.IaDef) or --ia=<path>,
         // loaded before anything chapter-dependent builds — no
         // archives needed, so this can run first. Either producer converges on the same
         // InstantActionRuntime construction from here on ("one build path from wizard and CLI",
@@ -897,13 +897,13 @@ public partial class GameSession : Node3D
                         positions[i] = _rigs[i].Camera.GlobalPosition;
                     return positions;
                 },
-                // The EXECUTION_BY_RANGE gate and every PLAYER_RANGE condition (C21, `BL-365`)
+                // The EXECUTION_BY_RANGE gate and every PLAYER_RANGE condition (`BL-365`)
                 // measure from the aircraft themselves (every player, nearest wins) — the chase
                 // camera trails far enough behind the plane to eat most of a 50 m radius. Camera
                 // fallback for the plane-less modes. Same closure the world-effects runtime gets
                 // (WorldEffectsFactory's own `_playerPositions`, wired below).
                 PlayerPositions = PlayerPositionsSnapshot,
-                // The world lights' own nearest-viewer budget (B13) — the draw-rule seam A3
+                // The world lights' own nearest-viewer budget — the draw-rule seam A3
                 // promoted, so a light beside player 4's pane stays lit even while player 1 is
                 // far from it. Single player: one entry, same as every other _viewers consumer.
                 LightViewerPositions = () => _viewers.Positions(),
@@ -1192,7 +1192,7 @@ public partial class GameSession : Node3D
             // SUNLIGHT_ORIENTATION, applied by the same zone-apply that writes the fog. The
             // ambience rides along as the wind seam — same reason, different authored block.
             // The viewer set rides along beside the ambience: Tick publishes every pane's camera
-            // pose onto it each frame for the puffer distance fade (B11).
+            // pose onto it each frame for the puffer distance fade.
             _weatherRig = new WeatherRig(_spec, _worldRoot!, _sun, _ambience, _viewers);
             // The deck's own zone_id, the one gated population that cannot ride a visual layer (it
             // is a per-rig camera-anchored copy — see WeatherRig.SetDeckZoneId).
@@ -1778,7 +1778,7 @@ public partial class GameSession : Node3D
         var weaponDefs = WeaponDefs.Load(state.ZrdrPath, weaponMessages);
         var stockLoadouts = StockLoadouts.Load();
         var shakeDefs = ShakeDefs.Load(state.ZrdrPath);
-        // The ai.zrd turret table (C9a). A missing/broken file costs the gunners, not the session.
+        // The ai.zrd turret table. A missing/broken file costs the gunners, not the session.
         TurretDefs? turretDefs = null;
         try
         {
@@ -1842,7 +1842,7 @@ public partial class GameSession : Node3D
         // An Instant Action stunt_flying mission IS a stunt run — the mission type is what asks
         // for the zones, the way a zeppelin run asks for the zeppelin and generator runtimes
         // itself (F12), so --stunt is not the tester's flag to remember on an --ia= launch. The
-        // spawn list is already the mission type's own (_spawnPicker.ScenarioOverride, C8).
+        // spawn list is already the mission type's own (_spawnPicker.ScenarioOverride).
         bool iaStunt = _instantAction is { } iaStuntMission
             && string.Equals(iaStuntMission.Def.MissionType, "stunt_flying", StringComparison.OrdinalIgnoreCase);
         bool wantStunt = _spec.Stunt || iaStunt;
@@ -1956,7 +1956,7 @@ public partial class GameSession : Node3D
         state.MeshInstances += assembler.MeshInstances;
         state.What += assembler.WhatSuffix;
 
-        // Splitscreen pause (E43, `BL-373`): one shared PauseState on every rig — any human's
+        // Splitscreen pause (`BL-373`): one shared PauseState on every rig — any human's
         // Start/P pauses everybody, but PauseState.TryToggle only lets the pauser resume it.
         // Single player gets the exact same wiring (one rig, one owner), so there is one pause
         // path rather than a solo one plus a splitscreen one. The board covers the WHOLE window
@@ -2130,7 +2130,7 @@ public partial class GameSession : Node3D
                      (_spec.IncomingWeapon != null ? $" ({_spec.IncomingWeapon})" : " (their own gun)"));
         }
 
-        // The AI actor seam (M4 A2): the spawner shares the session data the rigs were built
+        // The AI actor seam: the spawner shares the session data the rigs were built
         // from, and SpawnAiAircraft works from here on — at build (--ai=), or at any later sim
         // step (generators, the mission script, the ai-actor suite's runtime-spawn case).
         _aiSpawner = new AiAircraftSpawner(_spec, _liveryResolver, _worldEffectsFactory,
@@ -2165,9 +2165,9 @@ public partial class GameSession : Node3D
                 ? trailerHits[0]
                 : null);
         // Instant Action's authored ace — dogfight_ace only; the
-        // wave sequencer (D9/E11) and the zeppelin arm (F12) are later items, so any other
+        // wave sequencer and the zeppelin arm (F12) are later items, so any other
         // mission_type spawns no actor yet. Kept as a local so the end-condition block at the
-        // bottom of this method can hang the mode's win signal on it (G13).
+        // bottom of this method can hang the mode's win signal on it.
         FlightController? iaAce = null;
         int iaWaveEnemies = 0;
         // BL-364: every Instant Action actor is handed the chapter's FIRST patrol net, the ace,
@@ -2273,7 +2273,7 @@ public partial class GameSession : Node3D
                     GD.Print($"ia: wingmen clamped to {flown} of {iaWingmen.Def.NumWingmen} " +
                               $"configured ({humans} human(s), flight cap 6 — decision 8a)");
                 }
-                // player_fortune (A3/D9): the wingmen's shared livery. The six colour/decal
+                // player_fortune: the wingmen's shared livery. The six colour/decal
                 // values ride the setup SCREEN in the original, not ia.json, so the catalog's own
                 // inferred red/black/white (docs/formats/paint.md) stands in for every wingman.
                 var wingmanScheme = _liveryResolver.PaintCatalog(_zrdrPath)
@@ -2301,7 +2301,7 @@ public partial class GameSession : Node3D
                     // attackRating: 5, not null/--ai-attack= — the roster's skill vector is left
                     // UNSET in the original (docs/formats/instant-action.md "The player and the
                     // wingmen"), but a wingman still needs its own Gunner/Machine armed
-                    // unconditionally (like the ace, C8) so PrimaryTargetName/ActivationRange
+                    // unconditionally (like the ace) so PrimaryTargetName/ActivationRange
                     // below have something to set; leaving it null would only arm one when a CLI
                     // launch happened to also carry --ai-attack=.
                     var wingman = SpawnAiAircraft(wingmanNode, pos, pos + wmFwd, pilot,
@@ -2309,7 +2309,7 @@ public partial class GameSession : Node3D
                     wingmen[i] = wingman;
                     if (wingman == null)
                         continue;
-                    // primary_target (A3/D9): 0, 1 and 3 escort the player; 2 and 4 escort
+                    // primary_target: 0, 1 and 3 escort the player; 2 and 4 escort
                     // wingmen 1 and 3 — FlightController.SelectRankedTarget's own by-name/"player"
                     // match, the same seam the D12 ranking already reads.
                     if (pilot.Gunner != null)
@@ -2360,9 +2360,9 @@ public partial class GameSession : Node3D
                     {
                         for (int m = 0; m < wave.NumEnemies; m++)
                         {
-                            // Built at the origin, inert (E10) — position is irrelevant until
+                            // Built at the origin, inert — position is irrelevant until
                             // ActivateInstantActionWave teleports it in, same as the original's
-                            // own "deactivated at the world origin" (A3).
+                            // own "deactivated at the world origin".
                             var pilot = AiPilot.HoldingCourse(Vector3.Zero, Vector3.Forward);
                             // The net is armed here, at build, but the follower only seats
                             // itself on the nearest node at its first update, and
@@ -2372,7 +2372,7 @@ public partial class GameSession : Node3D
                             armIaPatrol(pilot);
                             // A wave's militia livery is a setup-SCREEN-only value
                             // (docs/formats/instant-action.md "The ace and the waves"): unlike
-                            // the wingmen (D9, always Fortune Hunter, a decidable constant), a
+                            // the wingmen (always Fortune Hunter, a decidable constant), a
                             // wave's militia varies per chapter and ia.json never carries it, so
                             // wave members keep their shipped skins (shippedSkins: true, still
                             // overridable by --paint=) rather than invent a mapping. ⚠ NOT the
@@ -2430,7 +2430,7 @@ public partial class GameSession : Node3D
             && _rigs[0].Controller is { } lead)
         {
             // Without a net: ahead of P1 on its own spawn heading, fanned right/left, holding
-            // that course. With one (B5): on the net's first node, patrolling the graph.
+            // that course. With one: on the net's first node, patrolling the graph.
             var basis = lead.GlobalTransform.Basis;
             var fwd = -basis.Z;
             var right = basis.X;
@@ -2581,7 +2581,7 @@ public partial class GameSession : Node3D
             }
         }
 
-        // --generators: the mission's egen enemy generators (M4 B6), spawning through the seam
+        // --generators: the mission's egen enemy generators, spawning through the seam
         // above. Loaded here because the drop rules need the built world (host-node resolution).
         // An Instant Action zeppelin run asks for them itself (F12): the objective zeppelin's
         // generator is the ONLY way an enemy reaches the air on that mode.
@@ -2668,7 +2668,7 @@ public partial class GameSession : Node3D
             // G14's "Enemies Shot Down": every EnemyTeam actor that goes down to an attributed
             // shooter counts (docs/formats/instant-action.md "What the four numbers count") —
             // regardless of which objective this mission type actually ends on, since a stunt
-            // chapter still authors its four waves (G13) even though ZonesFlown, not
+            // chapter still authors its four waves even though ZonesFlown, not
             // WavesCleared, is what wins it. `killer != null` is the decode's own filter: a bare
             // terrain/mid-air crash (FlightController.Downed's other causes) never reached the
             // take-hit body the original counts in, so it must not reach this counter either. The
@@ -2803,7 +2803,7 @@ public partial class GameSession : Node3D
             };
         }
 
-        // World AA emplacements (M4 C9b): the standalone ai.zrd family, placed at its NODES
+        // World AA emplacements: the standalone ai.zrd family, placed at its NODES
         // patterns against this chapter's built world — unconditional, like the original's world
         // placement pass. Shipped ACTIVATED is the default (4 awake entries engage, 22 dormant
         // entries sleep); --wake-turrets is the explicit stand-in for the mission script's
@@ -3383,7 +3383,7 @@ public partial class GameSession : Node3D
     /// same one the anim lab uses and it releases on any translation input, so the watcher can fly
     /// off rather than being stuck on one aircraft.
     ///
-    /// <para>The spectator gets this pilot's own device filter (E44, `BL-375`):
+    /// <para>The spectator gets this pilot's own device filter (`BL-375`):
     /// <see cref="FlightController.PadDevices"/>/<see cref="FlightController.UseKeyboard"/>, the
     /// same split the flying panes use, so in splitscreen two downed pilots watching at once move
     /// independently rather than lockstep. Mouse look stays shared (one physical mouse).</para></summary>
@@ -3448,7 +3448,7 @@ public partial class GameSession : Node3D
     }
 
     /// <summary>One sim step of the Instant Action mission: the wave sequencer's own tick
-    /// (E11/F12) plus the mission clock and the wave-cleared win signal (G13). Called from BOTH
+    /// (E11/F12) plus the mission clock and the wave-cleared win signal. Called from BOTH
     /// drive paths for the same reason the match clock is — a realtime session never enters
     /// <see cref="DriveSimSteps"/>, because every consumer paces itself off Godot's physics tick
     /// there, and a sequencer stepped only in the fixed-clock path would advance no wave at the
@@ -3523,7 +3523,7 @@ public partial class GameSession : Node3D
         // headless trigger for FlightController.Crash(), which a live collision otherwise gates.
         // Spawned AI planes crash too, taking the same null-material arm into THEIR family's
         // slot 0 (ai_crash_default) — the headless demo of the G21 split, read off the CRASH line.
-        // An inert plane (E10) declines: DebugForceCrash is gated on InPlay, so an unflown wave
+        // An inert plane declines: DebugForceCrash is gated on InPlay, so an unflown wave
         // does not answer this flag with a wreck at its parking pose.
         if (_spec.CrashFrame is int crashFrame && !_crashFired && clock.Frame >= crashFrame)
         {
@@ -3543,7 +3543,7 @@ public partial class GameSession : Node3D
             _versusDebugKillFired = true;
             _rigs[1].Controller?.DebugForceCrash(_rigs[0].Controller?.PlayerIndex);
         }
-        // --debug-scoreboard (IA, G14): force this mission's own win signal on the first sim step,
+        // --debug-scoreboard (IA): force this mission's own win signal on the first sim step,
         // the same single-fire shape as --crash/--debug-scoreboard --vs above — dogfight_ace and
         // dogfight_squadron through the very DebugForceCrash path a real kill takes, attributed to
         // P1 so the wrap-up board's "Enemies Shot Down" reads non-zero on a scripted screenshot
@@ -3561,7 +3561,7 @@ public partial class GameSession : Node3D
             }
             else if (iaDebug.Objective == InstantActionObjective.WavesCleared && _iaWaveRosters != null)
             {
-                // DebugForceCrash self-gates on InPlay (E10), so this reaches only whatever wave
+                // DebugForceCrash self-gates on InPlay, so this reaches only whatever wave
                 // is currently active — the rest are still parked inert awaiting their own turn.
                 foreach (var roster in _iaWaveRosters)
                     foreach (var member in roster)
@@ -3594,7 +3594,7 @@ public partial class GameSession : Node3D
             // planes above have taken this step's crashes — the alive count
             // InstantActionWaves.Step reads must reflect them.
             StepInstantAction(dt);
-            // The voice dispatch's mission clock (E16): the 2 s mute window and every 15 s
+            // The voice dispatch's mission clock: the 2 s mute window and every 15 s
             // slot cooldown run on sim time, so a halted clock halts the chatter too.
             _aiVoice?.Step(dt);
             // The weapon lab has no sim step of its own: it is hosted by player 1's
@@ -3603,7 +3603,7 @@ public partial class GameSession : Node3D
         }
     }
 
-    /// <summary>Gives a spawned AI aircraft its voice (E16): the accent resolves through the
+    /// <summary>Gives a spawned AI aircraft its voice: the accent resolves through the
     /// B8 chain, the talker/constitution chances come from <c>ai_skill_parameters</c> at
     /// <paramref name="ratingOverride"/> when given, else the session's skill rating
     /// (<c>--ai-attack=</c>, default 5). No accent, no voice runtime or no skills = a silent

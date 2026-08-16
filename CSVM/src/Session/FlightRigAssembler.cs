@@ -100,7 +100,7 @@ public sealed class FlightRigAssembler
             // The level's one touchdown vector (the original's global), not one per plane.
             TouchdownDefs = _in.TouchdownDefs,
             // splitscreen: this player's own device(s), own pane for the HUD.
-            // Start/P reads on every rig, splitscreen included (E43, `BL-373`) — GameSession wires
+            // Start/P reads on every rig, splitscreen included (`BL-373`) — GameSession wires
             // every rig's PauseState to the same shared instance, so any human can pause the
             // world but only the pauser can resume it.
             PadDevices = _in.PadAssignment?[pi],
@@ -187,7 +187,7 @@ public sealed class FlightRigAssembler
             GD.Print($"weapons: no stock loadout for '{loadoutDefName}' — unarmed");
         }
 
-        // The carried turret gunners (C9a): the vehicle def's thirdp turrets block resolved
+        // The carried turret gunners: the vehicle def's thirdp turrets block resolved
         // by TITLE against ai.zrd and by node against this built model. Independent of the
         // stock loadout — the gunner's weapon comes from its ai.zrd row, not from a gun slot.
         if (_in.TurretDefs is { } turretDefs && stats.TurretMounts.Count > 0)
@@ -364,7 +364,7 @@ public sealed class FlightRigAssembler
             // player assembles, so by the time this pane draws, every opponent's is populated.
             controller.VersusHud = VersusHud.Build(versus, pi, rig.Camera);
             controller.VersusHud.Rigs = _in.Rigs;
-            // AI hostiles spawned into a dogfight get the same marker (H22); the scan is empty
+            // AI hostiles spawned into a dogfight get the same marker; the scan is empty
             // (and the draw unchanged) until one exists.
             controller.VersusHud.HostilePool = _in.Projectiles;
             if (verbose)
@@ -372,7 +372,7 @@ public sealed class FlightRigAssembler
         }
         else
         {
-            // No match: the same HUD tracks this pane's nearest AI hostile (H22), so an
+            // No match: the same HUD tracks this pane's nearest AI hostile, so an
             // --ai / --generators enemy stays findable in ANY flight session. Built
             // unconditionally because generators spawn hostiles mid-session; with none in the
             // pool it draws nothing.
@@ -398,7 +398,7 @@ public sealed class FlightRigAssembler
         // and so the caller keeps constructing the assembler before the rigs are known.
         var (spawnPos, spawnLookAt) = (_starts ??= _spawns.ChooseStarts(
             _in.SpawnList, _in.MissionZrdrPath, _in.SpawnBase, _in.RigCount))[pi];
-        // The plant's force path is chosen once, here, off who is flying (C21) — a person, so the
+        // The plant's force path is chosen once, here, off who is flying — a person, so the
         // player path. FlightModel.UsesAiForcePath carries why this is a construction argument
         // rather than the original's own pointer-compare-against-the-player test.
         controller.Setup(new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
@@ -525,7 +525,7 @@ public sealed class FlightRigAssembler
         public WeaponDefs WeaponDefs = null!;
         public Messages WeaponMessages = null!;
         public StockLoadouts StockLoadouts = null!;
-        /// The ai.zrd turret table (C9a) — null when the archive lacks ai.zrd, which builds
+        /// The ai.zrd turret table — null when the archive lacks ai.zrd, which builds
         /// every plane turretless rather than failing the session.
         public TurretDefs? TurretDefs;
         /// The shake-oscillator sources (shakes.json) — one load, one PlaneShake per rig.

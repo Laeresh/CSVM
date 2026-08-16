@@ -133,7 +133,7 @@ public sealed class AiAircraftSpawner
                 PadDevices = Array.Empty<int>(),
                 AllowPause = false,
                 // Set here, before Setup and before the node joins the tree, so an inert airframe is
-                // never stepped, drawn or hittable for even one frame (E10): both Setup's Respawn and
+                // never stepped, drawn or hittable for even one frame: both Setup's Respawn and
                 // _Ready re-assert the state as the pieces that carry it come into existence.
                 Inert = inert,
             };
@@ -163,7 +163,7 @@ public sealed class AiAircraftSpawner
 
             // No camera rides an AI plane — Setup(null) skips the whole camera half — and CamParams
             // is camera tuning, so the default is passed rather than loading the plane's block.
-            // The plant's force path is chosen once, here, off who is flying (C21): nobody, so the
+            // The plant's force path is chosen once, here, off who is flying: nobody, so the
             // AI path. See FlightModel.UsesAiForcePath.
             controller.Setup(
                 new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),

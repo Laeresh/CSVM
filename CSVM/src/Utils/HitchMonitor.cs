@@ -59,7 +59,7 @@ public readonly record struct FrameSample(
 ///
 /// <para>Godot-free by construction: the caller samples the engine's counters and hands them in, so
 /// the trigger math, the wraparound and the grace window are unit-testable off-engine. The single
-/// exception is <see cref="PerfSample"/> (C8), read ambiently when a record is filled — a scope
+/// exception is <see cref="PerfSample"/>, read ambiently when a record is filled — a scope
 /// several call layers away cannot be handed an accumulator by whoever ticks the monitor, which is
 /// the whole reason that class is a set of statics. It is engine-free too, so nothing above changes.</para>
 /// </summary>

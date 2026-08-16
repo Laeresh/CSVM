@@ -56,7 +56,7 @@ public sealed class WorldEffectsFactory
     private readonly SessionSpec _spec;
     private readonly Node3D _worldRoot;
     private readonly Func<Vector3> _playerPosition;
-    // Every human's position (C21, `BL-365`) — the world-effects runtime's own PLAYER_RANGE
+    // Every human's position (`BL-365`) — the world-effects runtime's own PLAYER_RANGE
     // gates (the ordnance washes' `If PlayerRange`) answer to the nearest of these, not the
     // single _playerPosition above. Null (a caller with no seam, e.g. AiCrashDefs' test rig)
     // leaves the runtime on _playerPosition alone, same as before C21.
@@ -406,7 +406,7 @@ public sealed class WorldEffectsFactory
         // builds no colliders hands nothing and they keep flying their authored clock out. Only the
         // 4 Fly-mode goldens hand it over at all, and `c1-crash`'s own sweep IS armed by this branch
         // — but its 20-frame capture window closes 0.333 s into piece1-4's 6 s run, long before
-        // contact, so no golden today actually shows a completed landing (A1,
+        // contact, so no golden today actually shows a completed landing (
         // analysis/object-motion-goldens/FINDINGS.md).
         if (_spec.BuildsCollision)
         {

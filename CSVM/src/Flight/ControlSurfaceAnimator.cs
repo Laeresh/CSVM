@@ -33,7 +33,7 @@ namespace CSVM.Flight;
 /// alone, so its AI aircraft fly with frozen surfaces; ours deflect on every
 /// aircraft, which is a deliberate divergence and not an unported guard.</para>
 ///
-/// <para>The original's own deflection angles are decoded (C24) and NOT ported: the
+/// <para>The original's own deflection angles are decoded and NOT ported: the
 /// rudder is ±35°, the ailerons ±0.6 rad mixing roll at 0.6 with pitch at 0.18
 /// (they are elevons), the elevators ±0.5 rad from pitch alone, all smoothed
 /// exponentially at 2/s by <c>FUN_00460490</c> rather than slewed linearly. Adopting

@@ -36,7 +36,7 @@ namespace CSVM.Session;
 /// <para>Spawned aircraft drop at the origin node's LIVE position (it rides F17's moving
 /// zeppelin) in the authored drop attitude — <c>rotation</c>'s pitch, clamped shy of vertical
 /// so the spawn basis stays valid — and patrol their generator's cyclic net pick through
-/// <see cref="AiNetFollower"/> (B5).</para>
+/// <see cref="AiNetFollower"/>.</para>
 /// </summary>
 public sealed partial class AiGeneratorRuntime : Node
 {

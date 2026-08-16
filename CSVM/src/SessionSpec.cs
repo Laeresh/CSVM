@@ -311,7 +311,7 @@ public sealed record SessionSpec
     /// spawned into the flight session through the runtime spawn seam
     /// (<c>GameSession.SpawnAiAircraft</c>). Without a net the plane is placed ahead of player 1
     /// holding its course; with one (a chapter neindex id or name after <c>:</c>) it spawns on
-    /// that net and patrols it (B5). <c>accent=</c> gives the pilot a voice (E16): the roster
+    /// that net and patrols it. <c>accent=</c> gives the pilot a voice: the roster
     /// slot-65 <c>accentID</c> chain resolves it to a pilot VO clip set; without it a CLI spawn
     /// is voiceless (a roster spawn carries its own). Null when the flag was absent.</summary>
     public IReadOnlyList<(string Plane, string? Net, int? Accent)>? AiPlanes { get; private set; }
@@ -324,7 +324,7 @@ public sealed record SessionSpec
     /// machine gets <c>AssistEnabled</c> false, so the lay-off mode is never entered (pursue
     /// only). Default off: the assist is the original's shipped behaviour.</summary>
     public bool NoAssist { get; private set; }
-    /// <summary><c>--generators[=plane]</c>: run the mission's egen enemy generators (M4 B6);
+    /// <summary><c>--generators[=plane]</c>: run the mission's egen enemy generators;
     /// each surviving generator spawns AI aircraft on its decoded wave/period cycle through the
     /// same runtime spawn seam <c>--ai=</c> uses. The optional value picks the spawned airframe
     /// (a stand-in until the roster's <c>vehicle.params</c> chain resolves one).</summary>
@@ -539,12 +539,12 @@ public sealed record SessionSpec
     /// <c>UI.WorldDamageLab.ParseDebugSpec</c>.</summary>
     public string? DebugDamage { get; private set; }
     public int DebugJoin { get; private set; }
-    /// <summary><c>--debug-waves=N</c> (launchscreen only, H16): pre-configure the first N
+    /// <summary><c>--debug-waves=N</c> (launchscreen only): pre-configure the first N
     /// (clamped 0-4) Instant Action wizard wave slots with a representative load, so the wave
     /// editor's "N waves configured" states are screenshot-able with nobody at the controls. Same
     /// role <see cref="DebugJoin"/> plays for the plane screen's join strip.</summary>
     public int DebugWaves { get; private set; }
-    /// <summary><c>--debug-wingmen=N</c> (launchscreen only, H16): pre-configure the Instant
+    /// <summary><c>--debug-wingmen=N</c> (launchscreen only): pre-configure the Instant
     /// Action wizard's wingman count (clamped 0-5), so the plane screen's flown-wingmen re-clamp
     /// (decision 8a) is screenshot-able alongside <c>--debug-join=</c>.</summary>
     public int DebugWingmen { get; private set; }
@@ -1051,7 +1051,7 @@ public sealed record SessionSpec
     /// launchscreen's Plane screen withholds the launch gesture until enough pilots have joined
     /// (see <c>LaunchMenu</c>); this factory trusts whatever roster it is handed.</para>
     ///
-    /// <para><paramref name="iaDef"/> is the Instant Action wizard's own built def (H16), null for
+    /// <para><paramref name="iaDef"/> is the Instant Action wizard's own built def, null for
     /// every other launch. When given, it — not <paramref name="mode"/>'s own Free/Stunt/Versus
     /// guess — decides <see cref="Scenario"/> and <see cref="Stunt"/>: the wizard already knows
     /// exactly which of the four mission types was picked, so this stops approximating it the way

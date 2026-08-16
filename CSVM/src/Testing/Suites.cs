@@ -789,7 +789,7 @@ public static class Suites
             $"and one inside the near cull draws too");
     }
 
-    /// <summary>The splitscreen rule (B11, <c>BL-339</c>): the bands are evaluated against EVERY
+    /// <summary>The splitscreen rule (<c>BL-339</c>): the bands are evaluated against EVERY
     /// pane's camera and the particle takes the most favourable answer, so a trail 20 m in front of
     /// player 2 draws even while player 1's own camera near-culls it. Driven through the real
     /// <see cref="ViewerSet"/> over real <c>Camera3D</c> nodes, which is the seam
@@ -2800,7 +2800,7 @@ public static class Suites
 
             // --- flat ground. A 15° descent at 60 m/s puts 15.5 m/s on the normal, under the 25 m/s
             // crash threshold, so this is the survivable graze the impulse belongs to. Started a few
-            // metres out on purpose: the AI plant's own ground blow (C23) is a fixed push away from
+            // metres out on purpose: the AI plant's own ground blow is a fixed push away from
             // terrain, and given a long approach it flies the AI rig off this trajectory entirely.
             surface = Plate("graze-floor", new Vector3(600f, 4f, 600f), new Vector3(0f, -2f, 0f));
             ctx.Host.AddChild(surface);
@@ -2861,7 +2861,7 @@ public static class Suites
         }
     }
 
-    /// <summary>The per-spawn jitter (C26) where only a real spawn can show it: through
+    /// <summary>The per-spawn jitter where only a real spawn can show it: through
     /// <see cref="AiAircraftSpawner"/>, over the session's shared per-airframe stats cache, read out
     /// as flown trajectory rather than as a field. Two aircraft off one airframe, given the same
     /// pose and the same orders, must fly apart; the same ordinal drawn again must fly the same
@@ -3373,7 +3373,7 @@ public static class Suites
                     p => p.Def == nose || (p.Hp >= p.Def.MaxHp && p.Armor >= p.Def.MaxArmor)),
                 $"no part but the nose moved");
 
-            // --- the kill, under the decoded rule (A4/D14): whole-vehicle health exhausted, not
+            // --- the kill, under the decoded rule: whole-vehicle health exhausted, not
             // one dead critical part. Fire each zone's own bearing until its health empties —
             // nose from ahead, tail from astern, each wing from its own side (a dead part keeps
             // its collider, so its box shields the far side; per-zone budgets are derived from
@@ -4483,7 +4483,7 @@ public static class Suites
 
             // ---- lives: the two ends of the ledger, on a real aircraft -----------------------
             // The mechanism is FlightController's own crash/respawn path, which an AI-piloted
-            // aircraft takes byte-for-byte (M4 A2), so the probe is a spawned plane rather than a
+            // aircraft takes byte-for-byte, so the probe is a spawned plane rather than a
             // rig: what is under test is the arming and the Spectating pin, not who is at the
             // controls.
             var lifeLedger = new InstantActionRuntime(EndDef(ctx, "lives3", "dogfight_squadron", lives: 3));
@@ -4761,7 +4761,7 @@ public static class Suites
             if (target?.Body == null)
                 return;
 
-            // ScoredShooters (G14): shooter 0 stands in for a registered human seat, 999 for an
+            // ScoredShooters: shooter 0 stands in for a registered human seat, 999 for an
             // AI's shooter id, which a mission never adds to the set.
             live.ScoredShooters.Add(0);
 
@@ -5169,7 +5169,7 @@ public static class Suites
         }
     }
 
-    /// <summary>The world AA emplacements (M4 C9b) against the real C1 chapter world: the NODES
+    /// <summary>The world AA emplacements against the real C1 chapter world: the NODES
     /// placement census, the shipped-ACTIVATED default, the --wake-turrets stand-in, the
     /// enemy-default/ally team split, the aim-assist candidate list, and the healthy-node kill
     /// switch. Zeppelin-slung entries are placed (they are world nodes) and their one gameplay
@@ -5485,7 +5485,7 @@ public static class Suites
         });
     }
 
-    /// <summary>The AI actor seam (M4 A2), against real engine state on manual sim steps. A human
+    /// <summary>The AI actor seam, against real engine state on manual sim steps. A human
     /// rig is built and stepped first, so the AI plane demonstrably joins a RUNNING sim — the
     /// runtime-spawn half of the seam — with an <see cref="AiPilot"/> for input, no camera
     /// (<c>Setup(null)</c>), no HUD, no input devices, and <c>IsHumanPiloted</c> false. Pins:
@@ -5493,7 +5493,7 @@ public static class Suites
     /// <c>player</c> surface id); it TICKS — displacement along its ordered course, altitude
     /// held; its orders are mutable mid-flight (a 90° retarget between steps is flown to);
     /// a round moves its part pools by the weapon's own ARMOR_DAMAGE; and sustained fire downs
-    /// it — under the whole-vehicle kill rule (D14), the other zones pre-emptied as scaffolding —
+    /// it — under the whole-vehicle kill rule, the other zones pre-emptied as scaffolding —
     /// with the kill attributed to the human shooter's id through <c>Downed</c>.</summary>
     private static void AiActor(TestContext ctx)
     {
@@ -6367,7 +6367,7 @@ public static class Suites
             ctx.Check(machine.Mode != AiMode.AvoidCrash,
                 $"a cleared probe releases the override mode={AiModeMachine.NameOf(machine.Mode)}");
 
-            // --- lay off (D15, the rubber-band assist). Entry A/B on fixed geometry through
+            // --- lay off (the rubber-band assist). Entry A/B on fixed geometry through
             // the machine's own tick: a chasing human 600 m dead astern enters lay off with
             // the assist on, and never with --no-assist's switch off.
             machine.Enter(AiMode.Pursue, "test: rejoin for lay off");
@@ -8644,11 +8644,11 @@ public static class Suites
     /// ramps arrive in order with their authored run times and colours, and that the chain
     /// actually spans its authored 1.1 s from the first fire to the last.
     ///
-    /// <para>Then the routing half (B12): each step must also report WHERE the burst was and the
+    /// <para>Then the routing half: each step must also report WHERE the burst was and the
     /// def's own <c>PlayerRange</c> gate, and <see cref="ScreenFlash"/> must paint only the panes
     /// that gate admits.</para>
     ///
-    /// <para>Then the gate's own source (C21, `BL-365`): the <c>If PlayerRange</c> that decides
+    /// <para>Then the gate's own source (`BL-365`): the <c>If PlayerRange</c> that decides
     /// whether the wash fires AT ALL must answer to the nearest human, not one camera — otherwise
     /// B12's routing has nothing to route for a burst near player 4 while player 1 is
     /// kilometres away.</para></summary>
@@ -8724,7 +8724,7 @@ public static class Suites
     }
 
     /// <summary>
-    /// The wash reaches the panes the burst reached and no others (B12, `BL-340`). Two panes 120 m
+    /// The wash reaches the panes the burst reached and no others (`BL-340`). Two panes 120 m
     /// apart under the authored 100 m gate, so each of the three cases — one pane, the other pane,
     /// both — is reachable by moving the burst alone.
     ///
@@ -8809,7 +8809,7 @@ public static class Suites
     }
 
     /// <summary>The wash's own gate — `If PlayerRange 10000` — answers to the NEAREST human, not
-    /// one camera (C21, `BL-365`): a burst still fires while the camera this stage was built
+    /// one camera (`BL-365`): a burst still fires while the camera this stage was built
     /// against sits 5 km off, as long as SOME entry in `PlayerPositions` is inside the 100 m
     /// gate. This is upstream of B12's routing (which panes a fired wash reaches) — here nothing
     /// has fired yet, so no pane would have anything to route.</summary>
@@ -9667,7 +9667,7 @@ public static class Suites
         return n;
     }
 
-    // ---- an AI plane's crash picks from the ai_crash_* vector (G21) ----------------------------
+    // ---- an AI plane's crash picks from the ai_crash_* vector ----------------------------
 
     /// <summary>The AI arm of the crash-family split, through the REAL factory call
     /// (<c>WorldEffectsFactory.BuildFlightCrashRuntime</c> keys the family on
