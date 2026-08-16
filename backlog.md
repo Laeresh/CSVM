@@ -2108,10 +2108,31 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   before. `ObjectCycleTexture` needs neither; it needs a mission that
   actually builds a `taildamage` node, which none of the ones this project defaults to do.
 
-- `BL-135` `[Bug]` `[Blocked: original-engine evidence]` **The one-frame `CallSequence` dispatch lag.**
+- `BL-135` `[Bug]` **The one-frame `CallSequence` dispatch lag.**
   **Found 2026-07-22 while fixing C1's police siren** (that fix landed; see `docs/HISTORY.md`). This
   is the *other* defect that investigation turned up — real, engine-wide, and deliberately left
   unfixed because it was not what silenced anything.
+
+  ✅ **The blocking question is DECODED, and the answer is neither "same tick" nor "next tick".**
+  The original walks a definition's sequences as one ascending pass over a fixed array (base
+  `anim+0xcc`, count `anim+0xd8`, stride `0x40`, loop `004ecedc`–`004ecf53`), stepping each slot at
+  most once; `CALL_SEQUENCE` (`004eb570`) writes state 0 into the callee's own slot at
+  `base + index*0x40` (`004eb5fa`–`004eb605`). So **a call runs in the same tick if and only if the
+  callee's index is higher than the caller's** — authored declaration order decides it. Full decode:
+  [`docs/org/sequences.md`](docs/org/sequences.md), "The tick walk is ascending". Two corrections
+  fall out, both of them to this entry's own reasoning:
+  - **The drain is the wrong mechanism.** It made every call same-tick, which the original does not
+    do either. Matching means giving each sequence a fixed slot indexed by its position in
+    `Def.Sequences` and walking ascending, which retires the descending walk, the bound and the
+    `_startedThisPass` list together. The death slot (`AnimRuntime.cs:2979`, `def.DeathSlot`) is the
+    one runner with no index and needs a slot appended past the end.
+  - **A same-tick sequence gets the FULL frame delta**, not zero. `DAT_009fd1a8` is reloaded from
+    `DAT_009ad744` at the top of every walk iteration. The drain advanced newly-appended runners
+    with `0f`, on the reasoning that the sequence did not exist for that slice of time.
+
+  ⚠ **Unverified assumption before any code**: that our `Def.Sequences` order is the original's
+  array order. Every same-tick decision rests on it, and if it does not hold the result is worse
+  than today's uniform lag.
 
   **⚠ Re-measured and RE-DEFERRED 2026-08-04** (`PLAN-m3-polish-6` B12). The bounded drain was
   built, measured across the whole install and then taken back out. Read
@@ -2152,22 +2173,31 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
   1. **The descending walk is deliberate, not a bug.** `AnimRuntime.cs:250` records why: instances
      can be added *during* the walk. Do not "fix" it by iterating forwards.
-  2. **Any same-pass drain needs a bound.** A sequence that calls itself would spin within a single
-     frame. (The siren's own `siren_police` is safe — 3 zero-delay events, no `Loop`, so its runner
-     completes and is removed in one pass — but that is a property of that data, not a guarantee.)
-     Confirmed 2026-08-04: `marypickford` is the def that proves it, and 64 is the sized cap.
+  2. **Any same-pass drain needs a bound — but the array walk needs none.** A drain over a runner
+     list must cap itself, since a sequence that calls itself would spin within a single frame
+     (`marypickford` is the def that proves it, and 64 was the sized cap). That hazard is an
+     artefact of the list model. In the original no slot is stepped twice in a pass, so a ring
+     cannot spin and a forward chain is bounded by the sequence count. Reproduce the walk and the
+     cap has nothing left to guard.
   3. **Do not measure this with the bootstrap emitter census.** `anim: N ambient sound emitter(s)`
      is printed inside `Bootstrap`, so it is a snapshot that cannot see anything created afterwards
      — which is exactly how the siren's real cause stayed hidden through a full investigation
      (`docs/verification.md` LOG-2). C1 legitimately reports 38 while 39 emitters exist.
 
-  **Open question this should answer:** does the original dispatch a called sequence in the same
-  tick? If yes, every `CallSequence` in the install is currently a frame late and the fix is a
-  fidelity improvement rather than a no-op. Nobody has checked, and as of 2026-08-04 nobody can from
-  film — the difference is below a capture's resolution (see the re-deferral note above). Until it is
-  settled from the original's code, the drain buys a golden rebaseline for an unverified direction,
-  which is why it is not landed. Measured behaviour movement says only that *our* observable output
-  changes; it is still not evidence about the original.
+  **The size of the prize is measured, and it is nearly the whole install.**
+  `analysis/bl-135-callsequence-lag/call-index-order.ps1` classifies every compiled CALL edge by the
+  index test: **22,057 of the 22,173 edges the walk sees (99.48 %) point forward**, i.e. run in the
+  same tick in the original and a tick late here. 116 are backward, 0 self, 218 name a sequence the
+  definition does not have. It is not one outlier: excluding the six `gasbag*` definitions the
+  forward share is still 98.29 %, and 398 of the 403 definitions carrying a call have at least one
+  forward edge. So the lag is not a rounding error against the original, it is the wrong rule for
+  essentially every call, and the array rewrite is a real fidelity gain rather than a phase shuffle.
+
+  ⚠ **The police siren, the call this item was born from, is one of the 116 backward edges**
+  (`police_car`: `start_walkin` idx 2 → `siren_police` idx 1). The original defers it too and our
+  behaviour there already matches, which is a second reason the drain was the wrong mechanism: it
+  would have moved that call *away* from the original. `marypickford`'s ring is forward out and
+  backward back, so the original breaks it at the return hop every tick and never needed a cap.
 
 - `BL-218` `[Tuning]` `[Owed-playtest]` **Puffer `NUMBER` default (2026-08-01)** — `NUMBER` is absent from 680 of C1's 721
   `PufferState` events, including `large_30sec_fire`'s `fire_n_smoke`, and `PufferState.FromAnimEvent`

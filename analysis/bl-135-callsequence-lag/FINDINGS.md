@@ -6,6 +6,16 @@ behaviour-neutral. It moves 4 of the 13 golden shots, one of them by 79.7 % of i
 fixes nothing observable: no content appears, disappears or ends up anywhere different. It is
 re-deferred on that measurement, per this item's own pre-registered stop rule.**
 
+⚠ **Sections 2, 3 and 5 are superseded by the decode.** `crimson.exe` walks a definition's
+sequences as one ascending pass over a fixed array and `CALL_SEQUENCE` writes state into the
+callee's own slot, so a call is same-tick exactly when the callee's index is higher than the
+caller's ([`docs/org/sequences.md`](../../docs/org/sequences.md), "The tick walk is ascending").
+Three consequences for what is written below: the drain measured here made **every** call same-tick,
+which is not what the original does; the sized cap of 64 (§2) guards a spin the original's walk
+makes impossible, so it is an artefact of our runner-list model; and §5's "the direction is the
+whole question" is answered, which unblocks the item. Section 4's measurement stands as a record of
+what the drain cost, not as a preview of what matching would cost.
+
 Scripts here are read-only and carry no game data; they read the local `extracted/` tree, launch
 probes through `RunProbe.ps1`, and write to `.scratch/bl-135/`.
 
@@ -15,6 +25,7 @@ probes through `RunProbe.ps1`, and write to `.scratch/bl-135/`.
 | `same-tick.ps1` | how many sequences one definition can start inside ONE tick — the number the bound is sized from |
 | `sweep.ps1` | the 8-chapter `--freecam --det --debug-anim` sweep, normalized into diffable per-chapter logs |
 | `compare-shots.ps1` | pixel delta (count, %, max channel delta, row span) between two directories of captures |
+| `call-index-order.ps1` | per CALL edge, whether the callee's array index is forward or backward of the caller's — the share of the install our uniform lag gets wrong |
 
 ## 1. The mechanism, re-confirmed
 
@@ -164,3 +175,41 @@ original's code, not from film.
 The patch is not kept in the tree — a disabled drain is a landmine for the next reader (the
 `BL-050` lesson). Section 3 is the implementation, section 2 is the bound and why it is 64, and
 section 4 is what to expect the moment it goes back in.
+
+## 6. The decode, and how much of the install our lag gets wrong
+
+`crimson.exe` walks a definition's sequences as one **ascending** pass over a fixed array (base
+`anim+0xcc`, count `anim+0xd8`, stride `0x40`; loop `004ecedc`–`004ecf53`), stepping each slot at
+most once and re-reading its state byte each iteration. `CALL_SEQUENCE` (`004eb570`) writes state 0
+into the callee's own slot at `base + index*0x40` (`004eb5fa`–`004eb605`). A call therefore runs in
+the same tick exactly when the callee's index is **higher** than the caller's, and defers when it is
+lower or equal. Full decode: [`docs/org/sequences.md`](../../docs/org/sequences.md), "The tick walk
+is ascending".
+
+`call-index-order.ps1` classifies every compiled CALL edge on that test:
+
+| Bucket | Events | Share | The original |
+|---|---:|---:|---|
+| forward (callee index higher) | 22,057 | 98.51 % | same tick |
+| backward | 116 | 0.52 % | next tick |
+| self | 0 | 0 % | next tick |
+| unresolved (name not in the def) | 218 | 0.97 % | no-op |
+
+Of the 22,173 edges the walk actually sees, **99.48 % are forward**, so the original dispatches
+essentially every call in the same tick and CSVM defers all of them. This is not one outlier
+inflating a total: the six `gasbag*` definitions contribute about 15,000 edges, and excluding them
+the forward share is still **98.29 %** (6,663 of 6,779). By definition rather than by edge, **398 of
+the 403** definitions carrying a call have at least one forward edge, 15 have any backward edge, and
+exactly **one** is backward-only.
+
+Two of the 116 backward edges settle arguments this file already had:
+
+* **`marypickford` behaves exactly as the walk predicts.** Its ring is `randomloop` (idx 2) →
+  `mpickford_bob` (idx 3) → back to `randomloop`, so the outbound hops are forward and the return
+  hop is backward. The original breaks the ring at that back edge once per tick, which is why it
+  needs no cap and cannot spin. Section 2's cap of 64 guards a hazard only the runner-list model
+  has.
+* **The police siren is a backward call.** `police_car` runs `start_walkin` (idx 2) →
+  `siren_police` (idx 1), so the original defers it too, and our behaviour there already matches.
+  The drain would have made that call same-tick, which is *further* from the original, not closer.
+  The item was born from this call; it turns out to be one of the 0.52 %.
