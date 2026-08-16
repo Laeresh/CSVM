@@ -217,9 +217,9 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1 through 4 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, Instant Action, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 added guns, rockets and world destructibles that take damage, die, lose collision, throw debris and reset; M4 added the combat AI: aircraft that patrol, engage, evade and die, turrets, zeppelins, and pilot voice. All four Instant Action mission types (ace, squadron, stunt flying, zeppelin run) are playable and scored, solo or in splitscreen, over the seven shipped environments.
 
-**Active plan: [`docs/PLAN-ordnance-types.md`](docs/PLAN-ordnance-types.md)** (`BL-406`), 22 items in six waves, at Wave A. Its decode is [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md).
+**Active plan: [`docs/PLAN-ordnance-types.md`](docs/PLAN-ordnance-types.md)** (`BL-406`), 22 items in six waves, Wave A closing and Wave D half landed. Its decode is [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md).
 
-**Next:** `A2`–`A5` in order, with `D13`, `D14`, `E21` landing beside them.
+**Next:** `A5`, then `B6`–`B9`, `C10`–`C12`, and the hit-side wiring of `D15`/`D17`.
 
 Verify any change with **`.\RunTests.ps1`** (build → units →in-engine suites → golden hashes → one exit code); read[`docs/verification.md`](docs/verification.md) first.
 
