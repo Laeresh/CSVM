@@ -591,7 +591,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `sec*` = Studio Security, `sti*`/`german*` = the two Hellhound militias. Two table entries have
   no def (Sacred Trust's Warhawk, Broadway Bomber's Peacemaker) — expected, since that table comes
   from `.BM` paint coverage, not from `vehicle.json`.
-  *The 5-tuple is decoded, so that risk is gone (2026-08-16, `BL-395`):*
+  *The 5-tuple is decoded, so that risk is gone:*
   `[weapon_id, rounds_carried, refire_interval_s, min_range_m, max_range_m]`, read out of the
   builder `FUN_004b59b0` ([`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md),
   census in `analysis/ai-ordnance-census/`).
@@ -607,8 +607,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-386` (the damage half — landed and closed 2026-08-16,
   `git log --grep=BL-386`; this builds on the `PlaneStats.AiDefName` seam it left),
   `docs/formats/vehicle.md` (the def-family census), `docs/formats/instant-action.md` (the militia
-  table's provenance), `BL-395` (the AI rocket trigger, which lands on the player loadout and wants
-  this item's armament afterwards).
+  table's provenance).
+  *The AI ordnance trigger is already built and waiting on this item.* `AiRocketeer` fires under
+  the decoded gates but on the *player's* pylons, so its shipped defaults (200–800 m band, 30 s
+  refire) stand in for the per-vehicle `weapons` tuple this item parses; they are fields, ready to
+  be fed. Two things only become reachable once it lands, and neither is a defect until then:
+  launch rates are worth tuning at all, and the `DAMAGES_ZEPPELIN` rule (a Black Hat Warhawk's
+  eight torpedoes must never be launched at an aircraft) becomes exercisable in the cockpit
+  rather than only in `AiRocketeerTests`. Fly a Black Hat flight when it lands and confirm the
+  torpedoes stay on the rail against aircraft.
 
 ## Weapons & combat
 
@@ -928,42 +935,54 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   = bracketed, inside = not), reusing the same hysteresis machinery already built.
   *Cross-refs:* `TargetHud.GunReaches`.
 
-- `BL-395` `[Bug]` **Enemy AI never fires ordnance: the rocket trigger is human-input only.**
-  `AiGunner` is forward-gun only, and `FlightController.cs:1229` derives `RocketHeld` from
-  `RocketFirePressed()` (keyboard/pad), so a non-human pilot cannot pull the rocket trigger at
-  all. AI planes nonetheless carry live pylons: `AiAircraftSpawner.cs:150-156` binds the stock
-  loadout and builds `PylonOrdnance`, so enemy rockets are modelled, visible on the rail, and
-  never leave it.
-  *The original's employment model is decoded* (2026-08-16,
-  [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md)): the fire decision
-  `FUN_0041f420` walks one weapon list holding guns and ordnance together, and an ordnance entry
-  passes when its slot cooldown has expired, the target's gasbag class matches the weapon's
-  `DAMAGES_ZEPPELIN` bit, and the squared separation sits inside the authored `[min, max]` band.
-  The shot itself (`FUN_004b6820`) then needs the mount's aim inside **5°** (the gun's gate is
-  10°), a vehicle-wide ordnance lockout to have expired, and a **`quick_draw_chance` roll** to
-  pass (0.05 at pilot rating 1, 0.44 at 9), and that roll is the parameter's only consumer.
-  *Fix shape:* a new `AiRocketeer` beside `AiGunner` holding those gates, whose `WantsFire`
-  replaces `RocketFirePressed()` for a non-human pilot, exactly as `AiGunner.WantsFire` already
-  replaces `FirePressed()` one line above. Feed the existing `FireControl` rocket input, never a
-  direct projectile spawn, so ammo, pylon selection, the dry cue, `PylonOrdnance` visibility and
-  the self-blast exemption stay in the one place that implements them.
-  ⚠ *Traps.* (a) **Scope is damaging ordnance.** Five militias fly the `wep_12` choker, two the
-  `wep_15` flare, one the rear-firing `wep_13` smoke (fired only while being pursued, aimed
-  backwards). Those need their own triggers and are a separate item, not a widening of this one.
-  (b) **A `DAMAGES_ZEPPELIN` weapon is fired ONLY at gasbags**, so the Black Hat Warhawk's eight
-  torpedoes must never be launched at an aircraft. (c) The engagement window is a **band**, 200 m
-  to 800 m on the shipped defs; a max-range-only gate is wrong. (d) **Do not tune launch rates
-  yet.** An AI still flies the *player's* loadout (`BL-394`), so counts and refire are wrong at
-  the source; wire the trigger, land it, tune after `BL-394`.
-  *How you'd know it worked:* engine-free assertions on the decoded gates mirroring
-  `AiGunnerTests`, plus a scripted `--ai` engagement reporting launches per engagement and hit
-  fraction, so a regression shows up as a count.
-  *Playtest after fix:* fly against a Black Hat flight and confirm rockets are aimed at you and
-  read as a threat rather than noise.
-  *Cross-refs:* `BL-394` (what an AI carries; this item is only the trigger), `BL-227` (blast
-  falloff), `analysis/ai-ordnance-census/`. The gun half of the same decode is settled: `AiGunner`
-  runs the squared engagement window and the clamp-then-residual aim gate, so an `AiRocketeer`
-  copies that shape with the ordnance thresholds (5°, the vehicle-wide lockout, the roll).
+- `BL-404` `[Research]` **Does the player's rocket get an aim component in the original, the way
+  the player's guns get the assist?** *Evidence:* our rocket launch spawns from the pylon marker's
+  transform with no aim direction at all (`FlightController.cs:1860-1865`), on the stated ground
+  that the original's aim assist `FUN_004b6530` is reached from the gun branch alone. That claim
+  was made from the assist's call sites, not from reading the ordnance branch of the shot routine
+  `FUN_004b6820` end to end, so it settles where the *assist* is called and not what direction an
+  ordnance round actually leaves along. The decoded mount model gives a concrete reason to doubt
+  it: an AI's round leaves along the mount's clamped aim, which tracks the lead to within the
+  5° gate, and the mount machinery (`FUN_004b7670`, `FUN_0041afe0`) is not AI-only.
+  *What to settle:* (a) whether `FUN_004b6820`'s ordnance path hands the projectile spawner the
+  mount's aim `+0x48`–`+0x50` or the vehicle's forward axis, and whether that differs for the
+  player; (b) whether any assist or lead solve runs for a player rocket, including the
+  `FUN_00440ad0` muzzle-position branch the decode leaves unread; (c) whether the player's own
+  ordnance skips the aim gate entirely the way it skips the `quick_draw_chance` roll
+  (`0x004b6b41`).
+  ⚠ *Trap:* a "no aim on rockets" answer is what the shipped code already assumes, so a decode
+  that merely fails to find an assist has not confirmed it. The confirmation is the spawn call's
+  direction argument, named by address.
+  *Why it matters now:* an AI's rocket already leaves along the clamped mount aim
+  (`AiRocketeer.LaunchDirWorld`) while the player's leaves along the pylon axis, so the two differ
+  by decision rather than by evidence until this is settled.
+  *Cross-refs:* `AiRocketeer` (the AI ordnance trigger),
+  [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md) ("The fire routine, and the aim
+  gate", and its "Open" note on the muzzle-position branch),
+  [`docs/org/aim-assist.md`](docs/org/aim-assist.md).
+
+- `BL-405` `[Fidelity]` **Mounted ordnance should track the aim before it launches, not hang fixed
+  along the pylon.** *Evidence:* the mount model is decoded
+  ([`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md), "`gun_pitch`/`gun_yaw` clamp
+  the mount"): `FUN_004b7670` rotates the desired lead into the vehicle frame, clamps each axis
+  into its authored band and writes the result as the mount's actual aim (`+0x48`–`+0x50`), and a
+  mount carrying an animated node (`+0x34`/`+0x38`) slews toward that direction through
+  `FUN_00460840` instead of snapping to it. Our pylons do not move: `PylonOrdnance` parents the
+  body to the pylon marker at identity and never touches it again (`PylonOrdnance.cs:46-49`).
+  An AI round leaves along a launch direction up to the traverse limit off the pylon axis
+  (`AiRocketeer.LaunchDirWorld`), so the mounted body and the round it becomes point different
+  ways at the launch instant, which the mounting comment's "seamless" claim no longer covers.
+  ⚠ *Settle the data question first.* The slewing mechanism is decoded; whether any shipped
+  aircraft authors an animated node on the mount its ordnance hangs from is **not**. A fixed
+  forward gun has no node and reaches the clamped direction the same frame, and if the ordnance
+  mounts are the same, the original's rocket body does not visibly track either and this item is
+  closed by the census rather than by code.
+  *Fix shape (only if the census says yes):* the pylon marker takes the clamped direction the fire
+  decision already computes, with the mounted body riding it as it does today. Ours would snap
+  where the original slews unless `FUN_00460840`'s rate is read too.
+  *Size:* localized, and probably closed as no-change.
+  *Cross-refs:* `AiRocketeer` (whose launch direction creates the mismatch), `BL-404` (whether the
+  player's rocket gets a direction at all), `docs/formats/vehicle.md` (`gun_pitch`/`gun_yaw`).
 
 - `BL-401` `[Bug]` **The node names we spawn do not match the names the rosters author, so
   `rating_biases` matches nothing.** *Evidence:* `ObjectiveBiasFor(fc.Name, gunner.RatingBiases)`
@@ -999,6 +1018,51 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-363` (the candidate pool is aircraft-only, the other half of why the biases do
   nothing), [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) (slot 33 and the
   `bias × −750` decode), `AiTargetRanking.ObjectiveBiasFor`, `AiSkills.RosterRatingBiases`.
+
+- `BL-406` `[Research]` **What each ordnance type actually does at runtime is undecoded: twelve
+  distinct rocket types ship, and every one of them flies as the same generic projectile.**
+  *Evidence:* the authored side is fully decoded and documented
+  ([`docs/formats/weapons.md`](docs/formats/weapons.md)). `wep_04`–`15` are twelve separate types
+  (incendiary, armor-piercing, high-explosive, `FLAK`, `SONIC`, `FLASH`, `BEEPER`, `SEEKER`,
+  `CHOKER`, `SMOKER`, aerial torpedo, rear-arc `FLARE`), plus the world weapons `wep_24`–`28`
+  (multiplayer HE, glidebomb, AA flak, zeppelin cannonball). The *behavioural* side is not
+  decoded: `WeaponDefs.cs` parses `SONIC`, `FLASH`, `BEEPER`/`TIME`, `BEEPER_SEEKER`, `TANGLER`,
+  `SMOKE_SCREEN`, `REAR`, `TORPEDO`, `TARGETABLE`/`FLYOUT_HEALTH`, `CRATER`, `TURN_RATE` and
+  `DETONATION_DOT_PRODUCT` into fields marked "unimplemented, parsed so no key is dropped"
+  (`WeaponDefs.cs:107`), and `Projectile` flies all of them identically: straight line at
+  `VELOCITY`, blast at `IMPACT_PROXIMITY`, damage from the armor/health pair. Nothing homes
+  (`IsGuided` "describes the data rather than driving flight", `WeaponDefs.cs:129-133`), nothing
+  is choked, no smoke is laid, no flare fires rearward, and no flyout can be shot down.
+  *Fix shape:* a Ghidra pass over the executable's ordnance dispatch, delivering one docs section
+  per type: what the flag selects, which routine consumes it, what the struct fields mean in
+  engine units, and what the player sees. `FUN_004ba6f0` is the entry point, being the weapon
+  flag parser with three bits already named (`CANNON` `0x40`, `DAMAGES_ZEPPELIN` `0x1000`,
+  `REAR` `0x20000`, [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md)), so the rest
+  of that dword is the map of which types the engine branches on at all. From there follow the
+  game-side weapon-extension struct (0x38 bytes, hung off the ZWEP record at `+0x210`) to its
+  consumers, the way [`docs/org/weaponImpact.md`](docs/org/weaponImpact.md) followed the `IMPACT`
+  table. The deliverable is a decode doc (`docs/org/ordnanceTypes.md`, or a section of
+  `weaponImpact.md`), not code; each type's implementation is then its own item, sized against
+  what the decode found.
+  *⚠ Traps:* (a) **Do not invent behaviour from the flag name.** `FIRING_HEAT` and `cannon_jam`
+  are parsed and never read by the original, and `SHAKES_CAMERA`'s sole carrier is a zero-damage
+  fake weapon, so "the key exists" is not evidence the engine acts on it. A type whose flag has
+  no reader is a finding, and one of the more valuable ones. (b) The type set is **not** the flag
+  set: `HIGH_EXPLOSIVE` vs armor-piercing is a damage-pair difference with no special routine,
+  while guidance is `TURN_RATE` with no flag at all, so enumerate by behaviour and say which
+  types collapse onto the generic model on purpose. (c) The choker's felt behaviour is user
+  recollection, not decode (`weapons.md`, `TANGLER`): the open question is whether the instant
+  stall is the `ENGINE_DEAD [5,13]` thrust cutout alone or a second airspeed clamp. Answer it
+  from the routine, and do not carry the recollection forward as settled. (d) `CLUSTER_SIZE`,
+  `AMMO_LIMIT` and `PRIORITY` are allotment and selection, already decoded; this item is about
+  flight and effect, do not re-litigate them.
+  *Cross-refs:* `BL-290` (torpedo flight dynamics, the one per-type behaviour already minted, and
+  the model case this decode should subsume or confirm), `BL-353` (the Weapon Loadout screen, the
+  only route by which a player ever fits a non-HE type, so this research is what makes that screen
+  worth having), `BL-227` (blast falloff, which excludes the `DAMAGE 0` specials whose real
+  effect this item defines), `BL-233` (the proximity fuse, and the six plain rockets'
+  `DETONATION_DISTANCE == IMPACT_PROXIMITY` quirk), `BL-404`/`BL-405` (where an ordnance round is
+  aimed, as opposed to what it does once launched), `WeaponDefs.cs`, `Projectile.cs`.
 
 ## Flight model & collision physics
 

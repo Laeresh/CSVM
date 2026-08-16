@@ -1,9 +1,9 @@
 # AI weapon employment: when an AI pulls the trigger, decoded from `crimson.exe`
 
 Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
-`crimson.exe`, `language x86:LE:32:default`), 2026-08-16, for `BL-395` (our AI never fires
-ordnance) and to settle the gun gates `AiGunner` had inferred from authored data. Every claim names
-the function or address it came from; the data census names the file it counted.
+`crimson.exe`, `language x86:LE:32:default`), 2026-08-16, to settle the gun gates `AiGunner` had
+inferred from authored data and to give the AI an ordnance trigger of its own (`AiRocketeer`).
+Every claim names the function or address it came from; the data census names the file it counted.
 
 This is the firing half of [`../aiPilot.md`](../aiPilot.md), which decodes what an AI *flies*:
 target acquisition, steering, escort, crash avoidance. Nothing here is about steering. The authored
@@ -143,6 +143,26 @@ Then, still before the shot:
   rating (`0x0047cf8b`, interpolated `(max − min) × rating ÷ 9 + min` like every other skill).
   Fail it and the launch is skipped entirely (`0x004b6b59`). **This is `quick_draw_chance`'s only
   consumer**, the per-launch ordnance dice, not a gun modifier.
+- ⚠ **Both cooldowns are stamped before the dice are thrown.** The slot's next-ready `+0x10` is
+  written at `0x004b6b36` and the vehicle-wide `+0xec` at `0x004b6b3b`, and only then does control
+  reach the roll at `0x004b6b59`. A failed roll therefore does not retry on the next frame: it has
+  already spent the full refire interval, and the AI waits the whole 30 seconds out before it gets
+  another attempt. This is what makes ordnance rare rather than constant. Read the other way round,
+  a 0.05 chance re-rolled every frame fires within a third of a second at 60 Hz.
+  The draw is `rand()` scaled by the float at `0x00603598`, `0x38000100` = `1/32767`, so it is
+  uniform on `[0, 1]`; the comparison at `0x004b6b77` takes the C0 and C3 flags together, so the
+  pass is **at or under**, inclusive. The two skips are read off the same site: the shooter is
+  compared against the player pointer `DAT_0071c298` at `0x004b6b41` and jumps past the roll when
+  they match, and the `mode` at `+0x67c` must be `0` or `4` for the roll to run at all, every other
+  mode firing unrolled.
+- **The failed roll has an override, and it is the `Network` flag.** Only on a failed roll does
+  control reach `0x004b6b84`, which calls `FUN_00440ad0`, a one-line read of `DAT_0064f750`. That
+  global is the config entry named `Network`, registered by the settings loader `FUN_0043fb50` at
+  `0x00440247` and defaulted to zero twice, at registration and again at the loader's tail. Zero
+  abandons the launch: it jumps to `0x004b6ea7`, which advances the slot cursor by `0x30` and loops
+  back to `0x004b685a`, the next weapon slot. Non-zero fires the round anyway. **In a single-player
+  session the roll is therefore the gate, unconditionally**, and the override belongs to networked
+  play, where the launch is decided elsewhere rather than locally.
 - Guns are subject to neither.
 
 The lead solution both classes consume is `FUN_0041afe0`, per mount, using the weapon def's speed
@@ -209,8 +229,16 @@ same clamp-then-cone the turret gunners use.
 Three things here have no counterpart on our side yet. The quick draw's aircraft-against-aircraft
 condition is satisfied by our target type rather than tested, and needs a real test once a gasbag or
 a ground target can be aimed at. The aim gate's two skips (the player, and any vehicle carrying the
-`+0xf8` byte) are not modelled. The `REAR` handling and the ordnance thresholds arrive with the
-ordnance trigger (`BL-395`).
+`+0xf8` byte) are not modelled. The `REAR` handling belongs to the smoke screen and is a separate
+item.
+
+`AiRocketeer` runs the ordnance path: the quick-draw cone gating the whole pass, then per pylon the
+armed check, the two-sided `DAMAGES_ZEPPELIN` match, the squared band and the clamp-then-residual
+against `0.9962`, then the vehicle-wide lockout stamped ahead of the `quick_draw_chance` roll. It
+holds no target of its own, mirroring the original's single validated target across the whole weapon
+walk. Two divergences are deliberate: it does not arbitrate the weapon selection against the gun
+(our two classes share no mount and no aim vector, so there is nothing to arbitrate), and its round
+leaves along the clamped aim while the mounted body stays fixed to the pylon.
 
 ## What the shipped data amounts to
 
@@ -255,9 +283,9 @@ rarer still for the 89 mook blocks whose only authored skill is `dead_eye 1`.
 
 ## Open
 
-- `FUN_00440ad0` (a read of `DAT_0064f750`) appears in the ordnance dice as an override that lets a
-  failed roll fire anyway, and again in the shot routine's muzzle-position branch. What the global
-  means is unread; a network or demo-playback mode is the likely candidate.
+- `FUN_00440ad0` also guards the shot routine's muzzle-position branch. The global it reads is
+  identified (the `Network` config flag, above), but what that branch does differently under it is
+  unread.
 - Slot `+0x0c` is never written by either builder and never read. Padding or a dead field.
 - Why the trigger routine considers only the first cannon in the list is unread. No shipped AI def
   carries two guns, so nothing distinguishes "deliberate" from "never exercised".

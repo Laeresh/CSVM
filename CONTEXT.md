@@ -55,6 +55,42 @@ One placement of a decoration by the UV-lattice stamper. Not a Godot instance, w
 rendering mechanism a stamp may be drawn by.
 _Avoid_: place, scatter, plant, dress, decorate
 
+## Boards and the sim clock
+
+**Board**:
+A full-screen overlay panel drawn over the flight, in the shared board style.
+_Avoid_: overlay, screen, popup, dialog, panel
+
+**Results board**:
+The boards shown when a run is over: the Instant Action wrap-up, the dogfight result, the race
+result, the solo stunt result.
+_Avoid_: end screen, endscreen, game over screen, wrap-up screen
+
+**Board menu**:
+The cursor and item list a board carries, driven by pad or keyboard rather than Godot focus.
+_Avoid_: pause menu (it appears on results boards too), overlay menu, button list
+
+**Menu owner**:
+The one player whose input drives a board menu. Every other pad is inert while it is up.
+_Avoid_: focus (Godot focus is deliberately unused here), active player, controlling player
+
+**Halt**:
+The sim clock is not advancing, whatever the cause.
+_Avoid_: freeze, frozen, stop, stopped
+
+**Halt reason**:
+One cause of a halt. The clock advances only when there are none.
+_Avoid_: halt flag, pause flag, halt source
+
+**Pause**:
+A player-requested halt, as distinct from a halt any other reason caused.
+_Avoid_: using it for a halt a results board caused
+
+**Rerun**:
+Resetting the running mode in place to its start, same seed and same world, with no session
+teardown. Distinct from a respawn, which returns one plane to the air mid-run.
+_Avoid_: restart (ambiguous with rebuilding the session), soft restart, reset
+
 ## Format documentation
 
 **Format family**:
