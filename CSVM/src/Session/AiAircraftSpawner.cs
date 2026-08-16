@@ -14,7 +14,9 @@ namespace CSVM.Session;
 /// ⚠ Livery draws come from the shared paint stream after every player has drawn; keep that
 /// ordering, or player liveries would shift when AI exists.
 /// ⚠ The spawned subtree is deliberately not indexed into the world runtime's
-/// <c>NameResolver</c> — see this module's entry in docs/architecture.md.</summary>
+/// <c>NameResolver</c>, like a player's plane: planes.zbd gamez indices collide with the
+/// chapter's by-index map. A mission animation needing an AI plane by name goes through
+/// <c>AnimRuntime.IndexStage</c> instead.</summary>
 public sealed class AiAircraftSpawner
 {
     /// <summary>The first AI shooter id. Outside every player index (0–3, and
@@ -42,17 +44,17 @@ public sealed class AiAircraftSpawner
 
     /// <summary>Builds one AI aircraft at <paramref name="pos"/> facing <paramref name="lookAt"/>,
     /// flown by <paramref name="pilot"/>, and adds it to the world. <paramref name="scheme"/>/
-    /// <paramref name="team"/>, given, are worn/set as-is rather than derived;
+    /// <paramref name="team"/>, given, are worn/set as-is — a given scheme short-circuits the
+    /// resolver draw, so an authored livery consumes no RNG under <c>--det</c>.
     /// <paramref name="inert"/> builds straight into <see cref="FlightController.Inert"/>;
-    /// <paramref name="shippedSkins"/> uses the plane's own shipped textures. Rules for each:
-    /// this module's entry in docs/architecture.md.</summary>
+    /// <paramref name="shippedSkins"/> uses the plane's own shipped textures.</summary>
     public FlightController Spawn(string planeName, Vector3 pos, Vector3 lookAt, AiPilot pilot,
         PaintScheme? scheme = null, int? team = null, bool inert = false, bool shippedSkins = false)
     {
         int index = _spawned++;
         // Jittered airframe copy (WithAiSpawnJitter), keyed by spawn ordinal for --det replay.
         // ⚠ The original exempts its class-4 `w*` wingman family; this engine cannot — see
-        // org/flightModel.md and this module's entry in docs/architecture.md.
+        // org/flightModel.md "The class-4 wingman exemption has no analogue here".
         var stats = _in.AiStatsFor(planeName).WithAiSpawnJitter(Rng.NewSystemRandom(Rng.Spawn, index, 0));
         if (pilot.Machine is { } machine)
         {
@@ -84,7 +86,7 @@ public sealed class AiAircraftSpawner
                 WingLights = WingLightBlinker.Build(planeBuilder.WingFlares, _spec.AnimLod),
                 Surfaces = ControlSurfaceAnimator.Build(planeModel),
                 Collider = PlaneCollider.Build(planeModel),
-                // Zones or an authored whole pair (BL-386): an AI airframe resolves the pair and
+                // Zones or an authored whole pair: an AI airframe resolves the pair and
                 // no zones, so a parts-only test would leave it undamageable. PlaneDamage handles
                 // the zone-less case natively.
                 Damage = stats.DestroyableParts.Count > 0 || stats.VehicleHealth is > 0f

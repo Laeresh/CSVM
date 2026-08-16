@@ -38,7 +38,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private const int ErrorFont = 15;
     // Splitscreen plane select (several players): the bottom strip that keeps the breadcrumb +
     // join hint out of the panes, as a fraction of viewport height, and the pane's inner padding.
-    // Reference values at 720p. Confirmed at the controls (BL-126, 2026-08-15): join/lock feel
+    // Reference values at 720p. Confirmed at the controls: join/lock feel
     // reads right at 2P and 4P, no retune owed.
     private const float StripHeightFrac = 0.12f;
     private const int PanePad = 10;

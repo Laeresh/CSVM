@@ -67,8 +67,9 @@ public readonly struct AiLawParams
 /// plus range-weighted lead terms, an intercept solve for the direction, bank-to-turn with an
 /// elevator pull once the bank is nearly satisfied, and a per-axis scale/limit output stage.
 /// Engine-free and pure over its arguments, so a fixed-dt run is deterministic. Two pieces of the
-/// original are deliberately unported (docs/architecture.md): the emergency arm's altitude/velocity
-/// assist and the intercept solver's second-root preference.</summary>
+/// original are deliberately unported: the emergency arm's altitude/velocity assist (it writes
+/// model state, which this seam must not) and the intercept solver's second-root preference
+/// (unexposed by <see cref="AimAssist.TryIntercept"/>, and unreachable on patrol).</summary>
 public static class AiControlLaw
 {
     /// <summary>The desired speed's floor, 50 mph.</summary>
@@ -221,8 +222,8 @@ public static class AiControlLaw
                 yaw = -bx;
         }
 
-        // ⚠ The DEAD-ASTERN case, not the straight-ahead one — reads backwards at a glance
-        // (docs/architecture.md); AiControlLawTests exists to keep it honest.
+        // ⚠ The DEAD-ASTERN case, not the straight-ahead one — reads backwards at a glance;
+        // AiControlLawTests exists to keep it honest.
         if (!emergency && absBx < p.CrossDeadband && Mathf.Abs(by) < p.LevelDeadband
             && Mathf.Abs(noseY) < NearVerticalNoseY)
         {
@@ -237,6 +238,9 @@ public static class AiControlLaw
             lever = p.SpeedCap;
         }
 
+        // ⚠ NEAR-BANG-BANG, not proportional: the shipped scale (3.5) against a limit of 1 means
+        // anything past ~0.29 of body-frame error saturates. Limits above 1 are the original's own
+        // range; FlightModel.Step clamps to ±1, so do not clamp here too.
         float scaleBonus = engaged ? EngagedScaleBonus : 0f;
         float limitBonus = engaged ? EngagedLimitBonus : 0f;
         roll = Limit(roll * (stats.AiInputScaleRoll + scaleBonus), stats.AiInputLimitRoll + limitBonus);

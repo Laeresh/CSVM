@@ -201,6 +201,10 @@ Three gates, in order:
    byte `+0x6e`, written by the entry loader at `0x004aa7bb` and read as the tick's gate at
    `0x004aac16`.
 
+⚠ **The awake-at-load set is WORLD-MODEL dependent, not per-chapter authored.** The `piratezep`
+model (and its allied TEAM-1 rings) is part of every chapter's world, so C1 and C4 both census 15
+awake at load; C5 adds the hostile `thug*` boats.
+
 ### Waking a whole subtree
 
 The two script ops are two different primitives, which is why they have separate names. The
@@ -213,6 +217,8 @@ flag on every turret it finds standing there, so one call arms (or stows) every 
 ([instant-action.md](instant-action.md#the-turret-arm-is-what-arms-the-instant-action-zeppelin)).
 Since the four `multiplayer1zep`/`multiplayer2zep` entries all ship dormant and Instant Action runs
 no objectives script, that builder call is the only reason the zeppelin you attack shoots back.
+The builder's own subtree write runs BEFORE a mission-script wake — the order the binary has — so
+a stand-in for the mission-script layer applied afterward still wins on the same turrets.
 
 Separately, **both loaders bail out entirely if a global world-state flag is clear** — the same
 flag that gates the `capacity` read in the generator loader

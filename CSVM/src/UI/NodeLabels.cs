@@ -40,6 +40,9 @@ public sealed partial class NodeLabels : Node
     private Mode _mode = Mode.Off;
     private double _sinceRefresh = 1e9;
 
+    // In splitscreen, GameSession passes rig 0's camera here: the nearest/de-clutter pick is
+    // P1's viewpoint alone. The Label3D nodes built from it are ordinary world-space children of
+    // the root, so every pane's own camera still renders them regardless.
     public NodeLabels(Node3D root, Camera3D camera)
     {
         _root = root;
@@ -116,9 +119,9 @@ public sealed partial class NodeLabels : Node
         return false;
     }
 
-    // ⚠ Anchor at the mesh-AABB centre in node-local space, never the node origin — see
-    // docs/architecture.md. Computed once per scan and transformed per refresh, so it follows
-    // a node that moves (aircraft parts) without being recomputed.
+    // ⚠ Anchor at the mesh-AABB centre in node-local space, never the node origin. Computed once
+    // per scan and transformed per refresh, so it follows a node that moves (aircraft parts)
+    // without being recomputed.
     private static Vector3 LocalAnchor(Node3D n)
     {
         var sum = Vector3.Zero;

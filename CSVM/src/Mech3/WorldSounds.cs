@@ -10,8 +10,7 @@ namespace CSVM.Mech3;
 /// train, the firetruck and police sirens, the zeppelin nacelle engines, the fire crackle and the
 /// warning beeper. One pooled <see cref="AudioStreamPlayer3D"/> per live emitter, positioned each
 /// frame from the world node the animation attached it to. <c>SOUND_NODE</c> vs one-shot
-/// <c>SOUND</c>: docs/formats/anim-definitions.md. Plumbing and the remake-only rules: this
-/// module's entry in docs/architecture.md.
+/// <c>SOUND</c>: docs/formats/anim-definitions.md.
 /// ⚠ Emitters are pooled here, never parented into the world subtree they follow:
 /// <see cref="AnimRuntime"/>'s <c>FindAll</c> memoization is sound only while nothing reparents
 /// world nodes at runtime.

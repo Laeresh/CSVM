@@ -6,7 +6,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The decoded collision restitution (closed BL-172): <c>FUN_0048d7f0</c>'s normal-only impulse,
+/// The decoded collision restitution: <c>FUN_0048d7f0</c>'s normal-only impulse,
 /// scaled by <c>f_lin · bounce_factor</c>, ported as <see cref="FlightModel.BounceNormalSpeed"/>.
 /// Decode: docs/org/flightModel.md, "Collision response and bounce_factor".
 /// Its three separately-wrong-able parts (restitution, the doubled rotation term, the rebound/spin
@@ -21,7 +21,7 @@ public class BounceRestitutionTests
 
     /// <summary>The restitution proper, isolated: a non-rotating contact on an arm along the normal
     /// rebounds at exactly <c>bounce_factor</c>. That is the decode's [0, 0.6] ceiling touched, and
-    /// the number CAP-14 measured on flat ground (0.62 ± 0.19 against a shipped 0.60).</summary>
+    /// the number measured on flat ground (0.62 ± 0.19 against a shipped 0.60).</summary>
     [Fact]
     public void AnAxialNonRotatingContactReboundsAtExactlyBounceFactor()
     {
@@ -51,7 +51,7 @@ public class BounceRestitutionTests
     }
 
     /// <summary>The contact-point velocity's rotational term is doubled, so a rotating contact
-    /// leaves the surface faster than <c>bounce_factor</c> permits — the decode's answer to CAP-14's
+    /// leaves the surface faster than <c>bounce_factor</c> permits — the decode's answer to the
     /// above-0.6 flat-ground readings (docs/org/flightModel.md), which raising the constant instead
     /// would delete. A 2 m arm with 1 rad/s yaw gives 20.7 m/s outward, above the 18 m/s the same
     /// contact gives at rest.</summary>
@@ -96,7 +96,7 @@ public class BounceRestitutionTests
 
     /// <summary>No surface dependence anywhere: the identical contact geometry rotated from a floor
     /// onto a vertical face rebounds identically. The original has no verticality test and no
-    /// material lookup, so CAP-14's flat-versus-vertical split must NOT arrive here as a per-surface
+    /// material lookup, so the flat-versus-vertical split must NOT arrive here as a per-surface
     /// coefficient.</summary>
     [Fact]
     public void TheImpulseHasNoSurfaceDependence()

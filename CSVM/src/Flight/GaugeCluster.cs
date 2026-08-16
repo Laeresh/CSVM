@@ -225,7 +225,9 @@ public sealed partial class GaugeCluster : Control
     /// <summary>Advances a weapon-gauge arrow angle at most <see cref="ArrowSweepDegPerSimS"/> ×
     /// simDt toward target, routed the shortest way round. NaN snaps instead of sweeping
     /// in from an undefined pose (gauge just appeared, or a respawn cleared it via Reset). Public
-    /// so CSVM.Tests (GaugeArrowTweenTests) can assert the sweep directly.</summary>
+    /// so CSVM.Tests (GaugeArrowTweenTests) can assert the sweep directly.
+    /// ⚠ Only the arrow sweeps — the readout digits/type name still snap on the sweep's first
+    /// frame. Do not tween those too.</summary>
     public static float TweenArrow(float current, float target, float simDt)
     {
         if (float.IsNaN(current))
@@ -265,6 +267,8 @@ public sealed partial class GaugeCluster : Control
     public override void _Process(double delta)
     {
         _time += delta;
+        // ⚠ Both animated cues advance on SIM dt, never the raw frame delta: their rates are
+        // video-decoded in sim seconds, and the wall figures would run them 39% fast.
         float simDt = GameClock.Current?.FrameDt ?? (float)delta;
         if (GunGauge is { } gg)
             _gunArrow.Advance(TargetArrowAngle(_gunGaugeGeom.Positions, gg.Selected), simDt);

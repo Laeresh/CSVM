@@ -13,7 +13,10 @@ namespace CSVM.Session;
 /// <c>WorldSounds.PlayOneShot(name, Node3D, rng)</c> playing it from the speaker's own aircraft.
 /// The wired/unwired dispatch-site table is docs/formats/combat-voice.md "The remake's dispatch
 /// sites". Speakers register on their real <see cref="FlightController.Team"/>; a broadcast
-/// elects among a caller's own side.</summary>
+/// elects among a caller's own side.
+/// ⚠ Free flight and --vs give every pilot a default Team, so a broadcast still only elects
+/// within a "teamless" match there — wiring engages once a mission shares an explicit team
+/// between AI, or between an AI and the player.</summary>
 public sealed partial class AiVoiceRuntime : Node
 {
     /// <summary>The player's WA-HighDmg broadcast threshold — decoded (id 13 fires when the
@@ -155,6 +158,8 @@ public sealed partial class AiVoiceRuntime : Node
 
     // B8's availability contract: the resolved name must have a decoded stream behind it — for a
     // variant group that means a playable member, which the group name itself cannot answer.
+    // ⚠ A CLI accent must join the prewarm set (SessionPrewarmNames' extraAccents) — unprewarmed,
+    // this returns null silently, with no error anywhere else.
     private string? ResolvePlayable(int voId, string family)
     {
         string? name = _voice.PlayableFor(voId, family);

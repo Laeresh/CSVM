@@ -71,7 +71,7 @@ public sealed partial class AiNetsOverlay : Node
     public Action<List<AiNetLeash>>? CollectLeashes { get; init; }
 
     /// <summary>How far this net's nodes sit from their authored coordinates right now: the
-    /// trailer offset an anchored net rides its target by (`BL-377`, supplied by the session from
+    /// trailer offset an anchored net rides its target by (supplied by the session from
     /// <c>NetTrailerTargets</c>). The drawn graph is moved by it every frame, so the ring on screen
     /// is the ring the AI is flying rather than the one in the file. Null draws every net at its
     /// authored coordinates, which is also what an unanchored or unresolved net gets.</summary>

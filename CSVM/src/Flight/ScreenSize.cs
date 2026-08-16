@@ -10,7 +10,7 @@ public static class ScreenSize
 {
     /// <summary>The minimum world-space size (m) that projects to <paramref name="pixels"/> on
     /// screen at <paramref name="distance"/> from a camera, inverting Godot's default vertical
-    /// (KEEP_HEIGHT) perspective projection (docs/architecture.md). Returns 0 for a degenerate
+    /// (KEEP_HEIGHT) perspective projection. Returns 0 for a degenerate
     /// distance, pixel target or viewport, which callers read as "no floor".</summary>
     /// <param name="viewportHeight">The camera's OWN viewport height — a splitscreen pane is
     /// shorter than the window.</param>
@@ -27,7 +27,7 @@ public static class ScreenSize
     /// <summary>The floor to apply to ONE shared world-space mesh seen by several viewers: the
     /// SMALLEST size that meets <paramref name="pixels"/> for any of them. Minimum, not maximum, is
     /// load-bearing — sizing for the farthest viewer inflates every nearer pane, the splitscreen bug
-    /// (docs/architecture.md). Degenerate viewers are skipped; a wholly degenerate set means no
+    /// docs/org/tracers.md describes. Degenerate viewers are skipped; a wholly degenerate set means no
     /// floor.</summary>
     public static float NearestFloor(float pixels, IReadOnlyList<ViewerSample> viewers)
     {

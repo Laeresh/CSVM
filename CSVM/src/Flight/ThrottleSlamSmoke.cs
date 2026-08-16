@@ -7,7 +7,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The throttle-slam exhaust smoke (observed in the original's footage, <c>CAP-21</c>): a large,
+/// The throttle-slam exhaust smoke (observed in the original's footage): a large,
 /// sudden throttle increase streams the <c>nitro_boost</c> def's own puffers from the exhaust
 /// nodes, reused without the rest of that def. Decode + evidence: this module's entry in
 /// docs/architecture.md.

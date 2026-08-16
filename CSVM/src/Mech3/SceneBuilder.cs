@@ -54,9 +54,11 @@ public sealed class SceneBuilder
     public const float NodeOrderBias = 5e-8f;
 
     // The world's cross-node tie-break: one slot per conflicting layer, not per node
-    // (ConflictRank). ⚠ Do not change this step in isolation; it is boxed in from both sides and is
-    // the only value that fits. The bounds and the capture that set them are in ConflictRank.cs's
-    // entry in docs/architecture.md.
+    // (ConflictRank). ⚠ Do not change this step in isolation. It must exceed SurfaceRankCap x
+    // SurfaceRankBias (1e-5), or within-mesh rank out-bids it, and ConflictRankCap x it + 1e-5
+    // must also stay under NoClutterLayerBias. Measured in Godot: 5e-6 leaves a coplanar pair
+    // swapping winner on 1,774 px under a 1 mm camera move, 1.2e-5 leaves 0
+    // (analysis/bl-053-dense-rank).
     public const float ConflictRankBias = 1.2e-5f;
     // Measured worst across all eight chapters is 7. The cap keeps the whole tie-break
     // (7 x 1.2e-5 + 5 x SurfaceRankBias = 9.4e-5) below NoClutterLayerBias, so a no_clutter
@@ -662,6 +664,9 @@ void fragment() {
         // binds them unambiguously where names do not: names are duplicated and carry a '.flt'
         // suffix inconsistently. See AnimRuntime.
         n3d.SetMeta(AnimRuntime.IndexMeta, node.Index);
+        // Root transform is the node's OWN Local, not its world transform — a caller slicing a
+        // nested node must overwrite it with GameZ.WorldTransformOf(node) or it lands at the
+        // parent's origin.
         if (node.Local is { } local)
             n3d.Transform = local;
 

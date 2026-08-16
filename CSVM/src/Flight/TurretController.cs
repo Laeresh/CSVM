@@ -106,6 +106,10 @@ public sealed class TurretController
 
     public TurretDef Def { get; }
 
+    /// <summary>The gunner's own weapon, from its <c>ai.zrd</c> row (docs/formats/turrets.md).
+    /// ⚠ Never take it from the stock loadout's turret slot. Those slots stay bound but inert
+    /// (<see cref="GunGroup.IsTurret"/>), and reading one arms the gunner with the wrong
+    /// calibre.</summary>
     public WeaponDef Weapon { get; }
 
     /// <summary>The traverse ring (<c>PARTS[0]</c> of the 3-element form) — null on the
@@ -506,6 +510,8 @@ public sealed class TurretController
         // INACCURACY perturbs the SHOT after the pose is written: the turret aims true and the
         // rounds spread. Same uniform-polar cone as the player assist's launch scatter.
         var dir = AimAssist.Scatter(aimWorld, Mathf.DegToRad(Def.InaccuracyDeg), _rng);
+        // ⚠ Pass team explicitly. A world emplacement has no shooter id, so the shooter-id default
+        // reads its rounds as neutral in the aim assist's ordnance candidate list.
         _pool.Spawn(Weapon, fp.GlobalTransform, PlatformVelocity,
             _host?.PlayerIndex ?? ProjectilePool.NoShooter, fp, dir, team: _team);
         if (_host == null && !_firstShotLogged)

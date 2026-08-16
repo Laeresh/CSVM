@@ -13,14 +13,14 @@ namespace CSVM.Flight;
 /// never a second derivation. Built once from the model's mesh triangles (PropAnimator-style
 /// tree walk), transformed into FlightController's frame; hidden subtrees and the nose prop's
 /// blur discs are excluded, but the autogyro's overhead rotor discs stay in — that plane's wing.
-/// See <c>docs/architecture.md</c>'s "src/Flight/PlaneCollider.cs" entry for the region split,
-/// the refinement, and the Relabel/overlap/canard-limit traps. All threshold consts below are
-/// TUNE — see <c>CONTEXT.md</c>.
+/// ⚠ Boxes deliberately overlap; the earliest in <see cref="Parts"/> order is what a caller
+/// reports. Known limit: the Bloodhawk's canard tips stay uncovered.
+/// All threshold consts below are TUNE — see <c>CONTEXT.md</c>.
 /// </summary>
 public sealed class PlaneCollider
 {
     // ⚠ Do not lower WingBandFrac to close the Bloodhawk canard gap: it pulls the
-    // inboard wing-root chord into the wing slab. See architecture.md's canard-limit note.
+    // inboard wing-root chord into the wing slab (the class doc's known limit).
     private const float WingBandFrac = 0.35f;        // |x| beyond this × half-span = wing verts
     private const float TailStartFrac = 0.7f;        // z beyond this × length (nose −Z → tail +Z) = tail verts
     private const float FuselageBandFrac = 0.15f;    // |x| within this × half-span = fuselage verts
@@ -86,9 +86,10 @@ public sealed class PlaneCollider
     }
 
     // Corrects a refined `tail` piece that is really wing geometry (tail is
-    // clipped on z alone, so a swept plane's outboard trailing edge lands there).
-    // See architecture.md's PlaneCollider entry for the Relabel rule and why
-    // PlaneDamage must not side-split instead. Applied AFTER refinement so each
+    // clipped on z alone, so a swept plane's outboard trailing edge lands there): a box wholly
+    // one side of the centerline, centred outboard of WingBandFrac, is relabelled wing so
+    // PlaneDamage's localImpact-blind "tail" arm never sees a wingtip strike. The half-span is
+    // known here — do not side-split in PlaneDamage instead. Applied AFTER refinement so each
     // final box is judged on its own extent.
     private static string Relabel(string name, List<Tri> tris, float wingBand)
     {
@@ -166,8 +167,8 @@ public sealed class PlaneCollider
     }
 
     // Best single or double axis cut by volume removed (dims clamped to MinThickness
-    // so flat slabs still count). See architecture.md's PlaneCollider entry for why
-    // two cuts exist. Bins enclose full triangle corners so a surface crossing a cut
+    // so flat slabs still count); a double cut exists to separate bilateral pairs like twin fins
+    // in one pass. Bins enclose full triangle corners so a surface crossing a cut
     // stays covered on both sides (overlap, not a leak) — do not bin by centroid alone.
     // Returns false below VolumeSplitFrac gain or inside MinCutWidth of the rim.
     private static bool BestCut(List<Tri> tris, out List<List<Tri>> pieces, out float gain)

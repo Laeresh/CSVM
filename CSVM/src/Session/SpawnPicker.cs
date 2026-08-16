@@ -30,7 +30,9 @@ public sealed class SpawnPicker : IFlightStarts
 
     /// <summary>The spawn index player 1 starts from: --spawn=N if given, else a random pick per
     /// launch like the original. Each further player takes the next index in list order (wrapping),
-    /// so splitscreen players never share a spawn point.</summary>
+    /// so splitscreen players never share a spawn point.
+    /// ⚠ The random draw is <c>Rng.Stream(Rng.Spawn)</c> — keep its position relative to the
+    /// session's other RNG draws; reordering moves pinned --det goldens.</summary>
     public int ChooseSpawnBase(IReadOnlyList<SpawnPoint>? spawns)
     {
         if (spawns == null || spawns.Count == 0)
@@ -66,9 +68,9 @@ public sealed class SpawnPicker : IFlightStarts
     public (Vector3 pos, Vector3 lookAt) ChooseSpawn(IReadOnlyList<SpawnPoint>? spawns,
         string missionZrdrPath, int spawnBase, int playerIndex, string tag)
     {
-        // Debug/testing override: place the plane exactly (position + nose direction), bypassing
-        // the mission spawn list — lets a scripted run start just short of a target pointed at it,
-        // so a neutral --hold flies a straight, deterministic path (no complex maneuvering).
+        // ⚠ Tested BEFORE the spawn list — that order is why --pos beats it, and RaceGrid
+        // inherits the override for free by delegating here rather than reimplementing it.
+        // Bypasses the list entirely: a scripted run starts short of a target, no maneuvering.
         if (_spec.SpawnAt is { } at)
         {
             var dir = _spec.SpawnDir ?? Vector3.Forward;

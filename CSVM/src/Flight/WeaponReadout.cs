@@ -9,8 +9,7 @@ namespace CSVM.Flight;
 /// their live ammo. Text comes from the game's own message templates, resolved through
 /// <see cref="Messages"/> and never hardcoded: <c>MSG_HUD_GUNGAUGE</c> / <c>MSG_HUD_MISSLES</c>.
 /// <see cref="FlightController"/> pushes the state each frame.
-/// ⚠ A null name hides that line (no guns / no hardpoints / no loadout). Decode: this module's
-/// entry in docs/architecture.md.</summary>
+/// ⚠ A null name hides that line (no guns / no hardpoints / no loadout).</summary>
 public sealed partial class WeaponReadout : Control
 {
     // Per-frame state set by the FlightController. Null name ⇒ that line is hidden.

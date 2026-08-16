@@ -6,8 +6,9 @@ namespace CSVM.Utils;
 /// The session's simulation clock — one object owning "how much sim time does this rendered
 /// frame advance". Every sim consumer takes its dt from here instead of its own
 /// <c>_Process</c>/<c>_PhysicsProcess</c> delta, so pausing, single-stepping and fixed-dt replay
-/// all work from one place and mean the same thing everywhere. Modes, published-instance shape
-/// and the shader-time tie-in: this module's entry in docs/architecture.md.
+/// all work from one place and mean the same thing everywhere. Modes and published-instance
+/// shape: this module's entry in docs/architecture.md; the shader tie-in is <c>ShaderTime.cs</c>'s
+/// entry right after it.
 /// ⚠ A once-per-frame consumer reads <see cref="FrameDt"/>; one that must see each sub-step loops
 /// <see cref="Steps"/> times on <see cref="Dt"/>. A <c>_PhysicsProcess</c> consumer calls
 /// <see cref="PhysicsDt"/>, where a zero return means the session drives it explicitly this frame.

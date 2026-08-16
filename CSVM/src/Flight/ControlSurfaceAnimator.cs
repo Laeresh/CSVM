@@ -9,8 +9,10 @@ namespace CSVM.Flight;
 /// frame. Deflection is an absolute pose, not an incremental spin: each surface stores its
 /// build-time local basis and gets <c>Basis = base · Rot(hingeAxis, angle)</c>, so it tracks the
 /// input without accumulating. The original drives this procedurally with no zrdr anim, so the max
-/// angles and slew rate are TUNE, validated visually (docs/architecture.md, <c>BL-393</c>).
-/// </summary>
+/// angles and slew rate are TUNE, validated visually (<c>BL-393</c>): its six node lists do not
+/// map onto our four kinds, and the whole surface block is player-only there, so the original's AI
+/// aircraft fly with frozen surfaces and ours do not — a deliberate divergence, not a missing
+/// guard.</summary>
 public sealed class ControlSurfaceAnimator
 {
     private const float MaxAileronDeg = 20f;  // TUNE: full-stick deflection
@@ -73,8 +75,9 @@ public sealed class ControlSurfaceAnimator
             if (kind != ControlSurfaces.Kind.None)
             {
                 var axis = ControlSurfaces.HingeAxis(kind);
-                // Hinge groups can be mounted rotated (canard groups carry yaw π); flip when the
-                // hinge axis points against its canonical plane-frame direction (docs/architecture.md).
+                // The final sign bakes three flips: the stick convention below, a canard flip
+                // (nose-mounted elevator reverses pitch), and this frame flip for a rotated mount
+                // (canard groups carry yaw π). Account for all three before touching any sign.
                 float d = (acc.Basis * axis).Dot(axis);
                 float flip = d < 0f ? -1f : 1f;
                 float sign; float maxDeg; int channel;

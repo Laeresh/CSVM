@@ -14,11 +14,10 @@ namespace CSVM.Testing;
 /// <summary>
 /// The assertion cores behind the <c>--dump-*</c> / <c>--damage-test</c> inspection reports.
 ///
-/// <para>Each probe does the work once and returns <b>both</b> halves: the human-readable report
-/// text the <c>--dump-*</c> flag prints and writes, and a structured verdict (counts, per-row
-/// booleans, failure strings) a <c>--run-tests</c> suite asserts on. That split is the point: a
-/// verdict rendered only as a <c>✓</c>/<c>✗</c> glyph inside a formatted string can be automated
-/// only by parsing the report back.</para>
+/// <para>One source of truth: each probe does the work once and returns <b>both</b> halves — the
+/// human-readable report text the <c>--dump-*</c> flag prints and writes, and a structured verdict
+/// (counts, per-row booleans, failure strings) a <c>--run-tests</c> suite asserts on. A check
+/// belongs here; never re-implement one directly in a suite.</para>
 ///
 /// <para>Every probe renders numbers with <see cref="CultureInfo.InvariantCulture"/>: a German
 /// machine otherwise writes <c>HEALTH 0,01</c> into a committed verification artifact.</para>
@@ -1086,8 +1085,8 @@ public static class Probes
             info: true, upperBound: true);
 
         // ⚠ OPEN, INFORMATIONAL: no authored field explains this gap (G limiter inert, turn_fade
-        // keys on airspeed alone). Do not chase the ADI's +100° — CAP-33 confirmed it reads
-        // attitude, not bank. docs/org/flightModel.md.
+        // keys on airspeed alone). Do not chase the ADI's +100° — it reads attitude, not
+        // bank. docs/org/flightModel.md.
         Row("sustained-turn-rate", "sustained max-pull turn, heading rate", "°/s",
             turn.RateDegS, 18.95, 3.0,
             $"{turn.RateDegS / 18.95:0.00}x the original — OPEN. The original pulls 1.6x slower "

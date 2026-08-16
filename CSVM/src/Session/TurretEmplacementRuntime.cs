@@ -14,6 +14,8 @@ namespace CSVM.Session;
 /// ⚠ Must step from both <see cref="_PhysicsProcess"/> and <c>GameSession.DriveSimSteps</c>, and
 /// must be added to the tree after the zeppelin runtime. A plain class stepped from
 /// <c>DriveSimSteps</c> alone left every emplacement inert in ordinary play.
+/// ⚠ Shipped `ACTIVATED` is the default; <see cref="WakeAll"/> and <see cref="SetActivatedUnder"/>
+/// are the only two wake paths, both logged. Never wake a turret silently.
 /// </summary>
 public sealed partial class TurretEmplacementRuntime : Node
 {

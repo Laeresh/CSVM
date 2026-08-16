@@ -5,8 +5,8 @@ namespace CSVM.Mech3;
 
 /// <summary>
 /// Wingtip navigation lights: the flare-node predicate (<c>wing_flare1</c>/<c>wing_flare2</c>),
-/// glow texture, blink colour and period, and point-light range. See
-/// <c>docs/architecture.md</c> for the full decode.
+/// glow texture, blink colour and period, and point-light range — each constant below names its
+/// own <c>wing_light.json</c> source.
 /// PlaneBuilder hides and re-skins the flares (additive tint, one-sided as authored, no
 /// billboard); <see cref="Flight.WingLightBlinker"/> flashes them and emits a matching
 /// OmniLight3D per side.

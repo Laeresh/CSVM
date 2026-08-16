@@ -10,8 +10,8 @@ namespace CSVM.Flight;
 /// part's own health fraction (<see cref="OnPartDamage"/>) and the whole vehicle's health
 /// fraction (<see cref="OnHullDamage"/>) each drive their own list — see
 /// <c>docs/org/vehicleDamage.md</c>'s "Damage staging" for the two pools and why armour is in
-/// neither. See <c>docs/architecture.md</c>'s "src/Flight/DamageVisuals.cs" entry for what each
-/// authored stage plays and the panel-pairing/gimmeflakes traps.
+/// neither. What each authored stage plays is on <see cref="RigAnimFor"/>; the panel-pairing
+/// traps are on <see cref="PairHealthySkins"/>.
 /// FlightController calls <see cref="OnPartDamage"/>/<see cref="OnHullDamage"/> after each hit
 /// and <see cref="Reset"/> on respawn.
 /// </summary>
@@ -167,7 +167,8 @@ public sealed class DamageVisuals
                     PlayStage(anim, partName, healthFraction);
                 }
                 // else: *_damage_green/yellow/red cockpit indicator and got_hit_anim's nosedamage
-                // blink — unwired (no cockpit; GaugeCluster.OnPartDamage approximates the latter)
+                // blink — unwired (no cockpit; GaugeCluster.OnPartDamage approximates the latter
+                // by hand, off different data — do not merge the two)
             }
     }
 
@@ -312,9 +313,9 @@ public sealed class DamageVisuals
 
     // Pairs each healthy pdpN_h skin with the nearest torn panel (mesh-AABB centers,
     // same side of the centerline). CANDIDATE sets are def-derived when given — see
-    // architecture.md's DamageVisuals entry. The ASSIGNMENT inside those sets is
-    // always positional: no def says which panel hides which skin, and name-based
-    // pairing is wrong on three planes.
+    // PanelPairingSets. The ASSIGNMENT inside those sets is always positional: no def
+    // says which panel hides which skin, and name-based pairing is wrong on three
+    // planes (docs/formats/gamez.md).
     private void PairHealthySkins(Node3D planeRoot, PanelPairing? defPairing)
     {
         if (defPairing == null)

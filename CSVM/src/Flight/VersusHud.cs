@@ -329,6 +329,8 @@ public sealed partial class VersusHud : Control
     // One opponent's marker: on screen, their tag floats just above the projected
     // point; off screen (or behind), an edge arrow + "N o'clock" bearing — MarkerHud's on-screen/
     // edge-arrow branch, one instance per opponent instead of one stunt zone.
+    // Positions come off the caller's own FlightController.GlobalPosition, never
+    // AnimRuntime.PlayerPosition (a P1-only singleton) — the same rule MarkerHud follows.
     private void DrawOpponent(Font font, Vector3 pos, Color color, string tag, float s, int fontSize,
         int stagger = 0)
     {

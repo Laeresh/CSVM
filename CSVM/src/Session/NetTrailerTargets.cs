@@ -6,10 +6,10 @@ using Godot;
 namespace CSVM.Session;
 
 /// <summary>
-/// Turns a patrol net's TRAILER name into a live position supplier: the session half of
-/// `BL-377`, so <see cref="Flight.AiNetFollower"/> can do the offset arithmetic knowing nothing
-/// about players or world nodes. Detail on the lazy-once resolve: this module's
-/// docs/architecture.md entry.
+/// Turns a patrol net's TRAILER name into a live position supplier, so
+/// <see cref="Flight.AiNetFollower"/> can do the offset arithmetic knowing nothing
+/// about players or world nodes. Detail on the lazy-once resolve: see the private
+/// <c>Position</c> method's own comment.
 /// ⚠ An anchored net resolves to the FIRST rig in split play, so it matches single player. Do not
 /// invent a nearest-player, host-player or per-plane pick; the original has no splitscreen and
 /// there is no behaviour to copy.
@@ -51,13 +51,16 @@ public sealed class NetTrailerTargets
     }
 
     /// <summary>Where this net's nodes sit right now, relative to their authored coordinates: the
-    /// overlay's read of the same offset the followers fly (`BL-377`). Zero for an unanchored net
+    /// overlay's read of the same offset the followers fly. Zero for an unanchored net
     /// or an unresolved target.</summary>
     public Vector3 OffsetOf(AiNet net) =>
         Flight.AiNetFollower.TrailerOffset(net, For(net)?.Invoke());
 
     private Vector3? Position(string name)
     {
+        // Lazy-once, cached hit or miss: the original resolves at net build, but here the nets
+        // are read and armed before ZeppelinRuntime places its hosts, so resolving at
+        // construction would miss targets that exist a few hundred lines later.
         if (!_resolved.TryGetValue(name, out var node))
         {
             node = _worldNode!(name);

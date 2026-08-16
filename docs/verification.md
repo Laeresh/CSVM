@@ -64,6 +64,9 @@ and leave gaps when retiring old ones.
   ~1,035 death calls sat in the unparsed `unknown_seq` block for the project's whole life while the
   direct-Start `stop-sequence` suite and two cockpit passes all read the absence as a working stop
   (`BL-276`).
+- **DIAG-21** — **A puffer's particle spread is unseeded RNG, not the pinned run seed.** Two
+  captures at the same step can differ in particle placement alone; do not read that difference as
+  a behaviour change (the anim lab's own determinism boundary).
 
 ## SHOT — screenshots and pixel evidence
 
@@ -184,6 +187,9 @@ and leave gaps when retiring old ones.
 - **GOLD-10** — **Hash the raw pixel buffer, never the saved PNG.** Encoded bytes differ between
   two byte-identical images — all 881 of C1's texture PNGs do — so a PNG hash reports encoder
   state, not pixels.
+- **GOLD-11** — **Do not move where a `Puffer` is constructed, or construct one on a capture
+  path outside its normal init.** Each emitter draws one RNG seed off `Rng.Puffer` at
+  construction, so construction order alone re-pins every puffer-bearing golden.
 - **GOLD-7** — **A golden shot that exits nonzero with no PNG is retried once, with evidence kept
   either way.** `RunTests.ps1`'s `goldens` stage reuses `.scratch\goldens\` every run, so a silent
   exit-1 (`BL-039`: a `c1-flight` shot once built its world, rendered a frame, then died with no
@@ -223,6 +229,11 @@ and leave gaps when retiring old ones.
   which that same 10–15° of apparent motion under a moving camera fits at least as well. One piece,
   near edge-on, is one axis of one sample.
 
+- **DET-13** — **A per-instance draw sequence off a dedicated `Rng` stream pins its field's whole
+  layout to the master seed.** Measured on the same `--det` pose across two runs: `Precipitation`'s
+  `Rng.Precip` draw took C2B rain from 5.44% of pixels differing to 0.00%, C4 snow from 25.84% to
+  0.00%.
+
 ## PERF — performance
 
 - **PERF-1** — **Do not interpret `script_ms` as literal frame cost.**
@@ -260,6 +271,12 @@ and leave gaps when retiring old ones.
   (three runs, ~59–63 ns, zero allocation) — a third of a microsecond for six coarse scopes a
   frame, but the same 60 ns times a few thousand particle draws rivals the frame budget it exists
   to explain.
+- **PERF-16** — **`StartupProfile`'s `boot` figure is engine start → build start, so on a
+  launchscreen-driven rebuild it also holds however long the menu sat idle** — do not read it as
+  pure engine overhead on a relaunch.
+- **PERF-17** — **`StartupProfile`'s `rest` term is `build − Σ(phases)`, real uninstrumented work
+  — on a probe run it also holds whatever the probe itself did before the build closed, not only
+  build overhead.**
 
 ## LOG — logs, error censuses, and exit codes
 
@@ -380,6 +397,17 @@ and leave gaps when retiring old ones.
   stepped only there, so waves 2 to 4 could never arrive at the controls, while its suite and its
   scripted probes were both green. A per-step consumer belongs in one
   method called from both paths, the way the match clock already was.
+
+- **INSTR-16** — **A capture taken on the very first rendered frame can beat the first per-frame
+  publish.** `EffectAmbience`'s camera pose is written once per frame by `WeatherRig.Tick`; an
+  emitter that draws before that call sees `HasCamera` still false and renders one frame unfaded —
+  not evidence the distance fade is broken.
+- **INSTR-17** — **A high per-site violation count on a dominant `PerfSample` site is not proof the
+  instrument is broken — cross-site nesting is routine.** A death's event dispatch legitimately
+  reaches the effect and audio sites, and a pool miss always reaches its own material-create site,
+  so the outer site's record absorbs the inner ones' cost by construction. Read a high
+  `sample_violations` on a dominant site as "more happened here than the named sites show," not as
+  a defect to chase.
 
 ## SRC — sources and documents
 

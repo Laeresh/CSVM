@@ -5,7 +5,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// <see cref="Pads.AssignPads(int, IReadOnlyList{int})"/> — the pure half of BL-374's fix, engine-
+/// <see cref="Pads.AssignPads(int, IReadOnlyList{int})"/> — the pure half of the fix, engine-
 /// free so a phantom-device scenario can be asserted without real hardware. The IDs below are
 /// arbitrary; what matters is which slot in the roster they occupy.
 /// </summary>

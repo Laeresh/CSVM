@@ -26,7 +26,7 @@ public sealed partial class ZeppelinRuntime : Node
     private float _sinceLog;
     private int _gateLogged;
 
-    /// <param name="trailerTarget">Where an anchored net's trailer target is (<c>BL-377</c>), per
+    /// <param name="trailerTarget">Where an anchored net's trailer target is, per
     /// net; null flies every route at its authored coordinates.
     /// ⚠ Wired because it is the decoded behaviour; unobservable in this install's shipped data —
     /// see this module's entry in docs/architecture.md.</param>
@@ -74,7 +74,7 @@ public sealed partial class ZeppelinRuntime : Node
 
     /// <summary>Raised once when a zeppelin's last live engine dies — Instant Action's own win
     /// signal on <c>zeppelin_run</c>, matching the original's empty-engine-vector test
-    /// (<c>FUN_0045b9d0</c>; addresses in this module's entry in docs/architecture.md).
+    /// (<c>FUN_0045b9d0</c>; addresses in docs/formats/instant-action.md's "two winning paths").
     /// ⚠ A record authoring no engines fires this on the first step, matching the original;
     /// unobservable in this install (all 58 records author 12 or 14).</summary>
     public event Action<string>? ZeppelinEnginesDisabled;
@@ -450,6 +450,8 @@ public sealed partial class ZeppelinRuntime : Node
     // The authored hull death: the def anchored on the zeppelin node whose activation
     // prerequisite counts anims (all_pzep_gasbags — pops the remaining bags and calls
     // killpzep). Data-selected, never a hardcoded name; a zeppelin shipping none logs so.
+    // ⚠ Effect templates snap to absolute world points and never track a moving host — this
+    // plays where the hull died at that instant, not where it drifts to afterward.
     private void PlayHullDeath(LiveZeppelin zep)
     {
         if (_runtime == null)

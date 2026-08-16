@@ -11,6 +11,9 @@ namespace CSVM.Testing;
 /// ⚠ Hash the raw pixel buffer (<see cref="Image.GetData"/>), never the saved PNG — see GOLD-10 in
 /// docs/verification.md. The adapter travels with the hash so a driver/GPU change reads as a
 /// one-line explanation rather than an unexplained mass failure.
+/// ⚠ The manifest comparison lives in PowerShell, not here: every suite in
+/// <c>TestHarness</c> runs inside one <c>_Ready</c> call and never yields a frame, so nothing
+/// in-engine can photograph anything to compare.
 /// </summary>
 public static class GoldenShot
 {

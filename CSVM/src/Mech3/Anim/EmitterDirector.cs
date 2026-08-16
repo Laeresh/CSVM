@@ -9,10 +9,10 @@ using Godot;
 namespace CSVM.Mech3.Anim;
 
 /// <summary>An emitter's whole life on one runtime: the keying rule, the start, all four stops, the
-/// respawn wipe, the per-frame follow, and a census of what exists. Plumbing and the stop-selector
-/// rules: this module's entry in docs/architecture.md.
-/// ⚠ Do not collapse the four stops into one parameterised call; every shipped bug in this family
-/// was a selector error.
+/// respawn wipe, the per-frame follow, and a census of what exists.
+/// ⚠ Do not collapse the four stops into one parameterised call. They vary on two independent
+/// axes — SELECTOR (key / host subtree / owning instance) × DISPOSITION (pause-revivable /
+/// pause-and-forget) — and every shipped bug in this family has been a selector error.
 /// Handed already-resolved host and anchor nodes: the effect-template pool is not a keying scheme
 /// and stays out of here.
 /// </summary>
@@ -20,8 +20,9 @@ public sealed class EmitterDirector
 {
     // One emitter per (puffer name, emitter node[, owning def]). Assert is idempotent: a
     // re-assert of an already-running emitter is a no-op, matching data that loops PUFFER_STATE.
-    // ⚠ Whether def is in the key is `_defScopedKeys`; both cases are load-bearing and covered in
-    // this module's docs/architecture.md entry — do not hard-code either choice.
+    // ⚠ Do not hard-code _defScopedKeys either way: true is required on the effects runtime (two
+    // damage-stage sputters both declare black_smoke and would mask each other), false is
+    // required on the world runtime (C5's six same-node m_crane_go spark defs would stack six).
     private readonly Dictionary<(string Name, Node3D Node, AnimDefinition? Def), Entry> _emitters = new();
 
     // The emitting emitters, each stamped with the INSTANT it started — the runtime
@@ -163,8 +164,9 @@ public sealed class EmitterDirector
     }
 
     /// <summary>Ends emission for every emitter on <paramref name="root"/> or its subtree — what
-    /// <c>OBJECT_ACTIVE_STATE false</c> means for emitters. The same-instant carve-out, the
-    /// entries-stay revival and the visibility caveat: this module's docs/architecture.md entry.
+    /// <c>OBJECT_ACTIVE_STATE false</c> means for emitters. Pauses rather than removes the entry,
+    /// so a later <see cref="Assert"/> revives it; an emitter started this same instant is spared
+    /// unless <paramref name="sparingSameInstant"/> is false.
     /// ⚠ Only an explicit host deactivation counts; visibility is not the test, since particles go
     /// TopLevel into world space.</summary>
     public void EndOn(Node3D root, bool sparingSameInstant = true)
@@ -272,7 +274,9 @@ public sealed class EmitterDirector
 
     /// <summary>Swaps in the factory a runtime has once its texture archive is released. Nothing
     /// already built is disturbed; only further requests change answer, from "here is an emitter" to
-    /// a named, once-warned miss.</summary>
+    /// a named, once-warned miss.
+    /// ⚠ That miss must stay a warn, not a silent no-op: swallowing it reads as a world with no
+    /// fire, dust or smoke and a clean log, and the bootstrap census runs too early to catch it.</summary>
     public void RetireFactory() => _factory = new SpentEmitterFactory();
 
     private (string, Node3D, AnimDefinition?) KeyFor(string name, Node3D host, AnimDefinition def) =>

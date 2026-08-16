@@ -349,7 +349,8 @@ public sealed class AiModeMachine
     /// absorbed damage; a FAILED test breaks off into an evasive maneuver when an eligible one
     /// exists, plain evade otherwise. <paramref name="threatDir"/> is a world-space hint toward
     /// the threat (the remake passes the impact offset — the shooter's position is not carried
-    /// on the round); evade's first heading turns away from it.</summary>
+    /// on the round); evade's first heading turns away from it. No player-health condition is
+    /// modelled on this roll — nothing decoded supports one.</summary>
     public void NotifyDamage(float absorbed, Vector3 threatDir)
     {
         if (Mode is AiMode.Stunned or AiMode.AvoidCrash)
@@ -428,6 +429,8 @@ public sealed class AiModeMachine
     // intent, and sixth_sense_factor; the geometry is invented, named on the constants above).
     // Pursue eases into lay off when a chasing human target has fallen behind; lay off returns
     // when the pursuer catches up or stops chasing. AssistEnabled false never enters.
+    // Splitscreen extension: the assist follows whichever human the AI is engaging, not a fixed
+    // player one.
     private void UpdateLayOff(Vector3 pos, Vector3 velocity, Vector3 targetPos,
         Vector3? targetVelocity, bool targetIsHuman, float dt)
     {

@@ -13,7 +13,8 @@ namespace CSVM.UI;
 /// <see cref="TurretController.Gate"/>, and an AI pilot's <see cref="AiGunner.Target"/> with its
 /// <see cref="AiGunner.WantsFire"/>, both drawn from their own live state, never re-derived. The
 /// line's colour is the answer: red firing, amber tracking, grey held; the HUD names each held
-/// shooter's gate. Splitscreen behaviour: this module's line in docs/architecture.md's index.
+/// shooter's gate. One instance sits under the shared world root, so every splitscreen pane draws
+/// the same lines with no per-pane copy.
 /// ⚠ Depth test off, unlike <c>AiNetsOverlay</c>: a line into a hull is the one worth seeing.
 /// </summary>
 public sealed partial class TargetingOverlay : Node

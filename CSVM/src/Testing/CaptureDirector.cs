@@ -30,7 +30,8 @@ public sealed class CaptureDirector
     }
 
     /// <summary>A capture is still owed — every other `--screenshot`-conditioned display choice
-    /// (HUD/panel visibility, exit-on-build-failure) reads this instead of the raw field.</summary>
+    /// (HUD/panel visibility, exit-on-build-failure) reads this instead of the raw field. Never
+    /// re-derive it from the spec: a burst clears it mid-session.</summary>
     public bool Pending => _pendingShot != null;
 
     /// <summary>Format a vector as the "x,y,z" argument value ParseVec3 reads back (invariant
@@ -80,7 +81,9 @@ public sealed class CaptureDirector
         {
             return;
         }
-        if (--_shotDelay > 0)             // still counting down the warm-up delay
+        // --frames=N is a SIM coordinate, not a wall-clock delay: this decrement must run exactly
+        // once per _Process call, here and nowhere else, or a golden lands on a different sim frame.
+        if (--_shotDelay > 0)
         {
             return;
         }

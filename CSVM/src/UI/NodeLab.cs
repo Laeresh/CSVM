@@ -705,6 +705,8 @@ public sealed partial class NodeLab : Node
         {
             return;
         }
+        // A direct Select bypasses SelectionService's click-pick size cap, so a row here can reach
+        // an object (terrain) the click ray refuses.
         _syncing = true;
         _selection.Select(node);
         _syncing = false;

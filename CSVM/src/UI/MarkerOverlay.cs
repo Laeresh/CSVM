@@ -9,8 +9,7 @@ namespace CSVM.UI;
 /// aim <c>target</c> on the parked aircraft as a labelled gizmo, so the user can read which
 /// physical mount is which (<c>docs/formats/markers.md</c>). Firepoints, pylons and the target
 /// draw in distinct colours; firepoints sharing one mount draw in a fourth colour with stacked
-/// names. Marker sourcing, the label de-clutter rule and the splitscreen constraint: this
-/// module's entry in docs/architecture.md.
+/// names. Splitscreen never applies: <c>--viewer</c> is single-pane by construction.
 /// ⚠ Gizmo dots always show; only the labels de-clutter, so no mount position is ever lost. The
 /// full named table stays in <c>--dump-markers</c>.
 /// </summary>
@@ -225,6 +224,8 @@ public sealed partial class MarkerOverlay : Node3D
     // something more important or closer, exactly like NodeLabels.
     private void Relayout()
     {
+        // The session's only camera: this overlay builds only under --viewer, which forces
+        // --players=1, so a splitscreen session never stands this camera down under it.
         var camera = GetViewport().GetCamera3D();
         if (camera == null)
         {

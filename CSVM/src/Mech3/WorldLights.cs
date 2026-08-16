@@ -10,8 +10,6 @@ namespace CSVM.Mech3;
 /// <see cref="SceneBuilder"/> already draws.
 /// ⚠ Not real <see cref="OmniLight3D"/> nodes: the world renders unshaded, so a dynamic light
 /// contributes nothing to it (docs/formats/gotchas.md's fullbright entry).
-/// Packing layout, the multi-viewer fade rule and <c>BL-366</c>: this module's docs/architecture.md
-/// entry.
 /// </summary>
 public sealed class WorldLights : IDisposable
 {
@@ -52,7 +50,7 @@ public sealed class WorldLights : IDisposable
 
     /// <summary>The positions actually packed into the shader texture by the last
     /// <see cref="Commit"/> — never read by anything that draws (the shader reads the texture,
-    /// not this); it exists so the nearest-viewer budget (`BL-366`) can be asserted directly
+    /// not this); it exists so the nearest-viewer budget can be asserted directly
     /// instead of decoding the packed texture back out.</summary>
     public IReadOnlyList<Vector3> CommittedPositions => _committedPositions;
 
@@ -91,7 +89,7 @@ public sealed class WorldLights : IDisposable
     {
         LiveCount = _pending.Count;
         // Fade before sort, so the budget only ever drops lights already contributing nothing.
-        // Distance is to the nearest viewer (BL-366), never a single camera.
+        // Distance is to the nearest viewer, never a single camera.
         for (int i = _pending.Count - 1; i >= 0; i--)
         {
             float fade = 1f - Mathf.SmoothStep(FadeStart, FadeEnd, NearestDistance(_pending[i].Pos, viewerPositions));

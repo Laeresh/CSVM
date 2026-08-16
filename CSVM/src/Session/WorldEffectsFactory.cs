@@ -44,7 +44,7 @@ public sealed class WorldEffectsFactory
     private readonly SessionSpec _spec;
     private readonly Node3D _worldRoot;
     private readonly Func<Vector3> _playerPosition;
-    // Every human's position (`BL-365`) — the world-effects runtime's own PLAYER_RANGE
+    // Every human's position — the world-effects runtime's own PLAYER_RANGE
     // gates (the ordnance washes' `If PlayerRange`) answer to the nearest of these, not the
     // single _playerPosition above. Null (a caller with no seam, e.g. AiCrashDefs' test rig)
     // leaves the runtime on _playerPosition alone, same as before C21.
@@ -225,10 +225,10 @@ public sealed class WorldEffectsFactory
 
     /// <summary>The session's one world-effects runtime — the only way to reach
     /// <see cref="BuildWorldEffectsRuntime"/>; a second entry point recreates the two-runtimes bug.
-    /// Built on first demand, wired into <see cref="AnimRuntime.ExternalEffect"/> and (when
-    /// <paramref name="projectiles"/> is given) the pool's <c>EffectSink</c>, both gated on unset
-    /// so a caller that already wired one leaves it alone. Returns null when the build fails; the
-    /// HP/kill/swap/reset mechanics do not depend on it.</summary>
+    /// Wired into <see cref="AnimRuntime.ExternalEffect"/> and (when <paramref name="projectiles"/>
+    /// is given) the pool's <c>EffectSink</c>, both gated on unset. Returns null on a failed build.
+    /// ⚠ Keep the world params here rather than on the factory: it is constructed before the world
+    /// exists, so folding them was examined and declined.</summary>
     public AnimRuntime? EnsureWorldEffects(GameZ gamez, SceneBuilder worldScene,
         TextureArchive textures, AnimProgram worldProgram, AnimRuntime worldRuntime,
         ProjectilePool? projectiles = null)

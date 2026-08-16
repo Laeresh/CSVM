@@ -44,7 +44,7 @@ public static class Pads
         InputBlocked ? NoPads : bound ?? Connected();
 
     /// <summary>Splits the connected gamepads across the players: P2–P4 each get the next roster
-    /// slot, P1 gets every pad none of them claimed (BL-374, docs/architecture.md). Null for a
+    /// slot, P1 gets every pad none of them claimed (docs/architecture.md). Null for a
     /// single player, so every pad flies the one plane. A player with no pad left sits still,
     /// logged; P1 still has the keyboard.</summary>
     public static int[][]? AssignPads(int players)

@@ -9,8 +9,9 @@ namespace CSVM.Session;
 /// <c>"touchdown_" + name</c> over every <see cref="SurfaceRegistry.Names"/> slot — plus the
 /// cascade that indexes it with a struck material's numeric surface id
 /// (<see cref="SceneBuilder.SurfaceIdMeta"/>, ultimately <see cref="GameZMaterial.SoilId"/>).
-/// Faithful to <c>FUN_0048b920</c>: this module's docs/architecture.md entry has the addresses
-/// and the two families' one difference (touchdown's empty last-resort arm plays nothing).
+/// Faithful to <c>FUN_0048b920</c>; the touchdown family's one difference (its empty last-resort
+/// arm plays nothing, `FUN_0048d2c0`) is decoded in
+/// analysis/surface-classification/FINDINGS.md's 2026-08-12 section.
 /// ⚠ The empty-slot arm is the mechanism, not a special case. Never hardcode which ids fall
 /// back to slot 0; ask the bound program.
 /// Engine-free and pure, so the cascade is testable without a scene.

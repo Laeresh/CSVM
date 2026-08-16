@@ -108,6 +108,8 @@ public sealed class ManeuverExecutor
 
     // The step's target attitude in the world frame: entry frame · yaw · pitch · roll
     // (degrees; body axes — pitch +up about X, yaw +left about Y, roll +left about Z).
+    // ⚠ Whether the original mirrors a maneuver left/right at selection time is undecided —
+    // do not bake a side in here.
     private Basis TargetBasis(ManeuverStep step) =>
         _reference
         * new Basis(Vector3.Up, Mathf.DegToRad(step.YawDeg))

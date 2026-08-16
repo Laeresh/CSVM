@@ -61,7 +61,7 @@ public readonly record struct ImpactOutcome
 
     // The stand-in ladder, ordered: model beats all; a hardpoint weapon with no scene gets the
     // explosion; a gun on `buildings` gets ricochet sparks; everything else gets the single spark.
-    // Ground has no arm of its own (backlog.md `BL-289`/`BL-313`) but must still return non-`None`
+    // Ground has no arm of its own (backlog.md `BL-289`) but must still return non-`None`
     // — `ProjectilePool` gates the `EffectSink` call on that, and the `blacksmokepuffer` rides it.
     private static ImpactStandIn StandInFor(WeaponDef weapon, int surfaceId, bool modelResolved,
         bool hasEffectsRuntime)

@@ -11,6 +11,9 @@ namespace CSVM.Utils;
 /// resolved value logs for replay via <c>--seed=</c>. Full list: docs/architecture.md.
 /// ⚠ Never derive a subsystem seed via <see cref="string.GetHashCode"/>. .NET randomizes it per
 /// process, so the stream would differ every launch and silently break <c>--det</c>.
+/// ⚠ Only the DRAW ORDER within one subsystem's own stream is significant; that order is
+/// deterministic only because <see cref="GameClock"/>'s fixed step makes every consumer run its
+/// draws in the same sequence run to run.
 /// </summary>
 public static class Rng
 {
@@ -102,9 +105,11 @@ public static class Rng
     /// <summary>A per-cell <see cref="System.Random"/> keyed by coordinate, not draw order: the
     /// seed is a pure function of the subsystem, the master and the coordinates alone. Use this
     /// instead of <see cref="NewSystemRandom(string)"/> when the set being drawn is itself a
-    /// runtime computation over coordinates. Decode: docs/architecture.md.
+    /// runtime computation over coordinates.
     /// ⚠ A shared sequential stream would reroll every surviving cell if the cell count or
     /// enumeration order changed, which is why this stays keyed.</summary>
+    // Deliberately touches only System.Random, never Godot.RandomNumberGenerator/GD.Seed, so it
+    // stays callable off-engine and pinnable directly in CSVM.Tests.
     public static Random NewSystemRandom(string subsystem, int cellX, int cellZ)
     {
         ulong h = Mix(SeedFor(subsystem) ^ Fnv1a($"{cellX},{cellZ}"));

@@ -94,15 +94,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// so a bootstrap-time miss corrects on the next frame.</summary>
     public Func<Vector3>? PlayerPosition;
 
-    /// <summary>Every player's position, for the EXECUTION_BY_RANGE proximity gate and (
-    /// `BL-365`) every <c>PLAYER_RANGE</c> condition — both measure from the nearest human, not
+    /// <summary>Every player's position, for the EXECUTION_BY_RANGE proximity gate and
+    /// every <c>PLAYER_RANGE</c> condition — both measure from the nearest human, not
     /// one camera. In flight this is the aircraft themselves — the chase camera trails far
     /// enough behind the plane to eat most of a 50 m radius. Null → both fall back to
     /// <see cref="PlayerPosition"/> alone, keeping a runtime built without this seam (a lab, a
     /// test) on the pre-C21 single-camera behaviour.</summary>
     public Func<IReadOnlyList<Vector3>>? PlayerPositions;
 
-    /// <summary>Every pane's camera position, for budgeting <see cref="Lights"/> (`BL-366`):
+    /// <summary>Every pane's camera position, for budgeting <see cref="Lights"/>:
     /// a world light must not fade or lose its slot just because player 1 is far from it. This is
     /// the draw-rule seam (<c>ViewerSet.Positions</c>), not <see cref="PlayerPositions"/> (the
     /// gameplay one) — null or empty falls back to <see cref="PlayerPos"/> alone, keeping a
@@ -2379,9 +2379,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     // How far from its anchor a definition's own `If PlayerRange` gate admits its wash, in metres
     // SQUARED (the compiled convention both sources normalise to), and 0 for a def that gates on
-    // nothing. This is the routing radius for ScreenFlash, and it is the authored one.
+    // nothing — the routing radius for ScreenFlash, and the authored one.
     // ⚠ Take the largest gate, not the first, so a def with several cannot route a wash by
-    // whichever happens to be listed first.
+    // whichever is listed first. ⚠ Never re-derive it from the weapon: wash defs are ground
+    // effects on terrain impacts where no aircraft was hit.
     private float WashGateRadiusSquared(AnimDefinition def)
     {
         if (_washGates.TryGetValue(def, out float cached))
@@ -3052,8 +3053,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return IsInsideTree() && GetViewport().GetCamera3D() is { } cam ? cam.GlobalPosition : Vector3.Zero;
     }
 
-    // The nearest human's squared distance to a world point — a PLAYER_RANGE condition's own answer
-    // (`BL-365`), the same nearest-of-every-player rule TickDeferredByRange's EXECUTION_BY_RANGE
+    // The nearest human's squared distance to a world point — a PLAYER_RANGE condition's own answer,
+    // the same nearest-of-every-player rule TickDeferredByRange's EXECUTION_BY_RANGE
     // gate already uses, so a wash or door gated by a burst near player 4 fires even while player 1
     // sits kilometres off. Falls back to PlayerPos when no PlayerPositions seam is wired.
     private float NearestPlayerDistanceSquared(Vector3 point)

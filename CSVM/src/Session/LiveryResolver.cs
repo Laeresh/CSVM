@@ -67,7 +67,7 @@ public sealed class LiveryResolver
     /// unpainted skins. With no --paint= this is <see cref="DefaultPattern"/> everywhere;
     /// --paint=none asks for the bare shipped skins. <paramref name="useDefaultPattern"/> false
     /// drops that default for an enemy that must not wear the player militia's colours
-    /// (this module's docs/architecture.md entry).</summary>
+    /// (docs/formats/instant-action.md "CSVM does not model the wave militia livery").</summary>
     public PaintScheme? SchemeFor(int index, string zrdrPath, RandomNumberGenerator rng,
         IReadOnlyList<string>? available = null, bool useDefaultPattern = true)
     {
@@ -129,7 +129,9 @@ public sealed class LiveryResolver
 
     /// <summary>The RNG the session's random liveries draw from: the master seed's paint stream,
     /// so an unpinned launch repaints the field and a pinned one repeats it. --paint-seed=N
-    /// overrides the derived seed, pinning liveries alone in an otherwise random run.</summary>
+    /// overrides the derived seed, pinning liveries alone in an otherwise random run.
+    /// ⚠ Construct/advance it the same number of times, same order relative to the other
+    /// per-session RNGs, every launch — reordering reshuffles pinned liveries under --det.</summary>
     public RandomNumberGenerator NewPaintRng() => new()
     {
         Seed = _spec.PaintSeedExplicit ? _spec.PaintSeed : Rng.SeedFor(Rng.Paint),

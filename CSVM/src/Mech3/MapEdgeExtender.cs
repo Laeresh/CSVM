@@ -684,7 +684,7 @@ public sealed partial class MapEdgeExtender : Node3D
     // A cell short of ground adopts the flat sheets the classifier dropped for being thin, or
     // every extension copy of that cell carries a hole its footprint. ⚠ Keyed on the coverage
     // test, never the sheet alone: a dropped sheet in an already-covered cell is not adopted.
-    // Not a widening of ClassifyGroundMesh; that still answers "is this a tile". Decode: docs/architecture.md.
+    // Not a widening of ClassifyGroundMesh; that still answers "is this a tile".
     private void AdoptComplements()
     {
         foreach (var (cell, spares) in _spares)

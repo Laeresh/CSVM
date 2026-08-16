@@ -10,9 +10,9 @@ namespace CSVM.Utils;
 /// <summary>
 /// Dev-facing tuning-override layer. The hand-tuned <c>const</c>s stay in their modules as the
 /// default; this reads an optional sparse <c>res://config.json</c> and, for any key present
-/// there, overrides that default read-through at the point of use. Key grammar, the self-
-/// registering template dump and the orphan-key warning: this module's entry in
-/// docs/architecture.md.
+/// there, overrides that default read-through at the point of use. Key grammar: this module's
+/// entry in docs/architecture.md. The self-registering template dump and the orphan-key warning
+/// are documented on <see cref="DumpConfig"/> and <see cref="ReportOrphans"/>.
 /// ⚠ A missing file, a missing key, or a wrong-typed value all fall through to the passed default
 /// verbatim, so deleting config.json reproduces stock behaviour exactly and keeps scripted
 /// <c>--screenshot</c> runs byte-identical.

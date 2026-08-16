@@ -9,8 +9,8 @@ namespace CSVM.Flight;
 /// projected through the live camera at <see cref="_Draw"/> time (never cached, mirrors
 /// <see cref="MarkerHud"/>). Fixed screen size scaled by <see cref="HudMetrics"/>.
 /// ⚠ Deliberately not pinned to screen centre, and it marks the nose axis, not the aim assist's
-/// line, so an assisted round does not go where the pipper points. Decode: this module's entry
-/// in docs/architecture.md, docs/org/aim-assist.md.</summary>
+/// line, so an assisted round does not go where the pipper points — the assist is meant to be
+/// felt, not seen (docs/org/aim-assist.md "What the gun pipper follows").</summary>
 public sealed partial class ImpactReticle : Control
 {
     private const float RefSize = 40f; // pipper draw size in px at the 1440p reference (TUNE)

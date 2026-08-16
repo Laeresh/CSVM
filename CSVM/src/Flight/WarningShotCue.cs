@@ -8,13 +8,15 @@ namespace CSVM.Flight;
 /// unit-tests without a live node — the same split <see cref="WeaponCursor"/> uses. One round
 /// passing close accrues 1.0, saturating at <c>max</c>, draining at <c>dissipation</c> per
 /// second, cue re-triggering no faster than <c>interval</c>.
-/// ⚠ The three values ship but their units do not; this reading is chosen. Decode + the
-/// <see cref="PassRadius"/> tune: this module's entry in docs/architecture.md.</summary>
+/// ⚠ The three values ship but their units do not; this reading is chosen. The
+/// <see cref="PassRadius"/> tune is explained at its own declaration.</summary>
 public sealed class WarningShotCue
 {
     /// <summary>How close a round's swept segment must pass to the aircraft to count, in metres.
     /// TUNE — chosen, not read: roughly one wingspan out, so a pass that reads as frightening
-    /// sounds and a round crossing the sky two hundred metres off does not.</summary>
+    /// sounds and a round crossing the sky two hundred metres off does not (<c>BL-230</c>).
+    /// The sound def's <c>RANGE [20,200]</c> is a 3D falloff window, NOT a trigger radius — never
+    /// read one as the other.</summary>
     public const float PassRadius = 15f;
 
     private readonly float _max;

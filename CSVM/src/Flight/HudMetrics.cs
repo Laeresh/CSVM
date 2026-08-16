@@ -4,7 +4,7 @@ namespace CSVM.Flight;
 
 /// <summary>The one place the flight HUD decides how big it draws (docs/architecture.md). The
 /// window height sets the base scale against a 1440p reference; a splitscreen pane's share of
-/// that window is damped through a square root, confirmed at the controls (<c>BL-126</c>). A
+/// that window is damped through a square root, confirmed at the controls. A
 /// full-screen single-player view has <see cref="PaneFactor"/> exactly 1, so <see cref="Scale"/>
 /// returns the plain height ratio unchanged. Damped sizes stay on screen only if positions anchor
 /// to a pane EDGE, not the top-left.</summary>

@@ -6,9 +6,9 @@ namespace CSVM.Mech3;
 /// Keeps every world collider's <c>Disabled</c> flag DERIVED from its owner's state: enabled
 /// exactly while the owner is visible in the scene tree and no ancestor is faded out. Callers
 /// that hide something write <c>Visible</c> (or <see cref="SetFaded"/>) and nothing else.
-/// ⚠ Do not write <c>Disabled</c> independently, and do not replace this with a recursive
-/// collider walk; see the architecture.md entry for the asymmetry between Godot's inherited
-/// visibility and the absolute <c>Disabled</c> flag that makes both wrong.
+/// ⚠ Godot visibility is INHERITED, <c>Disabled</c> is not — do not write <c>Disabled</c>
+/// independently, and do not replace this with a recursive collider walk; the two must derive
+/// from one source or the built world grows solid-but-invisible colliders.
 /// Only colliders <see cref="SceneBuilder"/> builds are tracked; other solid bodies (plane
 /// hitboxes, the empty stage's ground) are untracked and keep working.
 /// </summary>

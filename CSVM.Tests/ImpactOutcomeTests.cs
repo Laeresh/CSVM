@@ -48,7 +48,7 @@ public class ImpactOutcomeTests
     }
 
     /// <summary>Ground gets the single spark, gun or rocket alike, at every terrain id — it has no
-    /// arm of its own since BL-313 deleted the chip burst. The assertion that matters is that the
+    /// arm of its own since the chip burst was removed. The assertion that matters is that the
     /// answer is not <c>None</c>: <c>ProjectilePool</c> gates the world-effects sink (the
     /// <c>blacksmokepuffer</c>) on <c>StandIn != None</c>, so a terrain hit resolving to nothing
     /// would silently take the gunhit smoke with it.</summary>

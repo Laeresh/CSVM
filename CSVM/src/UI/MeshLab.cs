@@ -15,8 +15,9 @@ namespace CSVM.UI;
 /// <c>--freecam</c>/<c>--anim-lab</c> it is scoped to whatever <see cref="SelectionService"/> has
 /// selected, and restores that subtree's original material and mesh on change or deselection.
 /// Starts hidden so an unadorned <c>--viewer</c> screenshot stays byte-identical; M toggles it,
-/// DamageLab owns H and LiveryLab owns L, so all three can be open at once. Module map, override
-/// fidelity and the FLAT-normal heuristic: docs/architecture.md.
+/// DamageLab owns H and LiveryLab owns L, so all three can be open at once. The FLAT heuristic can
+/// false-positive: a lone triangle whose vertex normals equal its own face normal reads as flat
+/// though the data is smooth-shaded.
 /// </summary>
 public sealed partial class MeshLab : Node
 {
@@ -669,7 +670,8 @@ public sealed partial class MeshLab : Node
 
     // Reads every built surface back out of its ArrayMesh into the target's local space.
     // Done once per target: the parked aircraft never moves, and re-reading per toggle would make
-    // the cyclers feel sticky on the bigger models.
+    // the cyclers feel sticky on the bigger models. The target must already be in the tree —
+    // GlobalTransform on a detached node reads identity and logs an error.
     private void CollectGeometry()
     {
         if (_target == null)

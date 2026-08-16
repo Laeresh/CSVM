@@ -493,7 +493,7 @@ public sealed class WorldBuilder
             && !n.Name.Equals(zone, StringComparison.OrdinalIgnoreCase);
         // ⚠ Do not force-fog the dome. Every horizon model is authored `fog: false` and the
         // FOG_ALTITUDE fade never reaches the dome's own authored size, so force-fogging paints
-        // nothing but flat fog colour (docs/architecture.md, this module's entry).
+        // nothing but flat fog colour. Decode: docs/formats/weather.md.
         var built = _scene.BuildSubtree(horizon, SkipOtherZones, collisionSkip: _ => true);
         if (built == null)
             return null;
@@ -1026,7 +1026,7 @@ public sealed class WorldBuilder
         bool isDeck = _deckNodes.Contains(nodeIndex);
         // ⚠ Deck tiles are the one exception to the world's backface culling. They are authored
         // single-sided, but the player flies through the deck, so the same quad must read as a
-        // ceiling from below and a floor from above. The other two deck flags: architecture.md.
+        // ceiling from below and a floor from above. The other two deck flags: weather.md.
         var built = _scene.BuildSubtree(node, SkipWorldNode, NoCollisionNode,
             forceDoubleSided: isDeck, forceLit: isDeck, zoneGate: !isDeck);
         if (built != null)
@@ -1058,12 +1058,12 @@ public sealed class WorldBuilder
         }
     }
 
-    // Extends the deck sheet with a flat untextured rim, so its own edge does not read as a hard
-    // step near the horizon. Where the half-span comes from and why it is near a ceiling:
-    // docs/architecture.md, this module's entry.
-    // ⚠ Build it as a picture frame, never a full plane under the tiles, which would z-fight them.
-    // ⚠ Add it as a CHILD of `deck`, never a sibling. Nesting is the whole mechanism by which the
-    // rim follows the camera and flips regime with the sheet, with no per-frame code of its own.
+    // Extends the deck sheet with a flat untextured rim so its edge does not read as a hard step
+    // near the horizon. ⚠ Keep `TargetHalfSpan` under the zone2 dome's 21.85 km render distance;
+    // do not re-derive it from a camera-anchored ceiling — that mechanism is gone (`BL-328`).
+    // ⚠ Build it as a picture frame, never a full plane, which would z-fight the tiles.
+    // ⚠ Add it as a CHILD of `deck`, never a sibling — nesting alone makes the rim follow the
+    // camera and flip regime with the sheet.
     private void AddDeckAnnulus(Node3D deck, Aabb tilesAabb)
     {
         const float TargetHalfSpan = 20480f;

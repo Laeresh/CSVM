@@ -47,7 +47,9 @@ public sealed class WorldSession
     public WorldLights Lights { get; private set; } = null!;
 
     /// <summary>Build the world named <c>world1</c> and bind its animation program. The archives
-    /// are the caller's <c>using</c> locals — see the disposal-lifetime contract on the class.</summary>
+    /// are the caller's <c>using</c> locals — see the disposal-lifetime contract on the class.
+    /// ⚠ Keep each phase's <see cref="StartupProfile.Record"/> call next to its step; moving one
+    /// without the other makes a dropped phase read as a growing <c>rest</c>, not as missing.</summary>
     public static WorldSession Build(Options o, GameZ gamez, TextureArchive textures,
         SoundArchive? sounds, Dictionary<string, SoundDef>? soundDefs,
         IReadOnlyDictionary<string, SoundGroup>? soundGroups = null)
@@ -60,8 +62,9 @@ public sealed class WorldSession
         MissionSetup? missionSetup = null;
         if (o.NodeSubtree != null)
         {
-            // Skipped deliberately: the one verb that reliably resolves switches the subject off
-            // (docs/architecture.md, this file's entry).
+            // Skipped deliberately: the one verb MissionSetup reliably resolves switches the
+            // subject off (C1/IA1 hides hk_zep); a node stage shows the subtree in its gamez
+            // base state instead.
             Log.Info("world", $"node stage: mission setup skipped for {o.Chapter}/{o.Mission} — the subtree renders in its gamez base state");
         }
         else
@@ -362,7 +365,7 @@ public sealed class WorldSession
         public required Node3D EffectsParent { get; init; }
 
         /// <summary>The PLAYER_RANGE fallback for a runtime with no <see cref="PlayerPositions"/>
-        /// wired (`BL-365`: a real session always wires both). Resolved per call because no
+        /// wired (a real session always wires both). Resolved per call because no
         /// camera exists yet at build time; player 1's camera is the honest single-camera answer
         /// in every mode (chase cam, free camera, or the orbit eye).</summary>
         public required Func<Vector3> PlayerPosition { get; init; }
@@ -373,13 +376,13 @@ public sealed class WorldSession
         public Func<IReadOnlyList<Vector3>>? ListenerPositions { get; init; }
 
         /// <summary>Every player's position, for the EXECUTION_BY_RANGE proximity gate and every
-        /// PLAYER_RANGE condition (`BL-365`) — the aircraft themselves in flight, not the
+        /// PLAYER_RANGE condition — the aircraft themselves in flight, not the
         /// chase cameras (a chase camera trails ~25 m behind, which is most of the spiderweb's
         /// 50 m radius). Null → both fall back to <see cref="PlayerPosition"/>.</summary>
         public Func<IReadOnlyList<Vector3>>? PlayerPositions { get; init; }
 
         /// <summary>Every pane's camera, for budgeting the world's <c>LIGHT_STATE</c> spill
-        /// against the nearest one (`BL-366`) — the draw-rule seam (`ViewerSet.Positions`),
+        /// against the nearest one — the draw-rule seam (`ViewerSet.Positions`),
         /// not <see cref="PlayerPositions"/>. Null → the runtime falls back to
         /// <see cref="PlayerPosition"/> alone.</summary>
         public Func<IReadOnlyList<Vector3>>? LightViewerPositions { get; init; }

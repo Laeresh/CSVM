@@ -121,7 +121,9 @@ public static class WeaponBench
         public required int Skipped { get; init; }
 
         /// <summary>How many mounts of each class the bench actually fired from — the coverage the
-        /// 48/48 line does NOT show, since one mount is enough to make every weapon pass.</summary>
+        /// 48/48 line does NOT show, since one mount is enough to make every weapon pass.
+        /// Suites pin this at <c>ForRig</c>'s 4, so shrunk coverage cannot hide behind an
+        /// unchanged 48/48.</summary>
         public required int GunMounts { get; init; }
 
         public required int PylonMounts { get; init; }

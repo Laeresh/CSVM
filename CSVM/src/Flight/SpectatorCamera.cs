@@ -28,7 +28,7 @@ public sealed partial class SpectatorCamera : Node
     private const float OrbitPitchLimit = 1.396f; // ~80°
 
     private readonly Camera3D _camera;
-    // The device filter (`BL-375`): null/true (the default) reads every connected pad plus
+    // The device filter: null/true (the default) reads every connected pad plus
     // the keyboard, matching every pre-E44 call site (--freecam, the anim lab, the weapon lab —
     // all single-seat). A downed splitscreen pilot's spectator gets its rig's own PadDevices/
     // UseKeyboard instead, so two pilots watching at once no longer move together.

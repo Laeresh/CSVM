@@ -73,7 +73,7 @@ public sealed class WeaponDef
     public float? Range;              // max effective / despawn range, m
     public float? RangeMinimum;       // minimum arming range (torpedo)
     public float? Gravity;            // projectile-gravity scale (0 throughout this install)
-    public float? CannonSpread;       // aim-assist acceptance cone half-angle, degrees — NOT a dispersion cone (BL-342)
+    public float? CannonSpread;       // aim-assist acceptance cone half-angle, degrees — NOT a dispersion cone
     public float? FiringHeat;         // heat per shot (base guns only); dead data, the original parses it and never reads it
     public float? TurnRate;           // guidance turn rate
 

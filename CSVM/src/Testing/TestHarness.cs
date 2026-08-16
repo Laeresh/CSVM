@@ -25,7 +25,10 @@ public enum SuiteStatus
 /// <summary>
 /// The in-engine test harness behind <c>--run-tests[=filter]</c>: a registry of assertion suites,
 /// a PASS/FAIL/SKIP table, a <c>.scratch/test-report.json</c>, and a nonzero exit code on failure.
-/// Scope, error policy and the windowed-run rule: this module's entry in docs/architecture.md.
+/// Scope and error policy: this module's entry in docs/architecture.md. Windowed-run rule:
+/// docs/verification.md LOG-8.
+/// ⚠ In-engine is the SMALLER half. Only a check that needs a live Godot belongs here; anything
+/// that runs without the engine belongs in <c>CSVM.Tests</c> (<c>dotnet test</c>) instead.
 /// </summary>
 public static class TestHarness
 {
@@ -126,6 +129,8 @@ public static class TestHarness
         int pass = results.Count(r => r.Status == SuiteStatus.Pass);
         int fail = results.Count(r => r.Status == SuiteStatus.Fail);
         int skip = results.Count(r => r.Status == SuiteStatus.Skip);
+        // An unknown error fails the run; an over-cap allowance fails it; no log SKIPs the engine
+        // errors row — it never counts as a pass, but it never fails the run either.
         bool screenFailed = screen is { Ok: false };
 
         Log.Raw(FormatTable(results, screen, logPath));

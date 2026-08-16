@@ -269,6 +269,8 @@ public sealed class HitchMonitor
         _last.RingCount = _ringCount;
     }
 
+    // A TRUE median, never a mean: a mean would be dragged up by the hitch it just saw and would
+    // hide the next one. See verification.md PERF-13 for the vsync case this degenerates into.
     private double Median()
     {
         int mid = _windowCount / 2;

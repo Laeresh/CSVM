@@ -6,8 +6,7 @@ namespace CSVM.Mech3;
 /// <summary>
 /// The <c>--stage=empty</c> test stage: a flat collidable ground plane under a grid drawn in
 /// code, standing in for a chapter world so a flight or ballistics run boots quickly with
-/// nothing else in the frame. See <c>docs/architecture.md</c> for the collider and texture
-/// prohibitions.
+/// nothing else in the frame.
 /// </summary>
 public sealed class EmptyStage
 {
@@ -73,6 +72,8 @@ public sealed class EmptyStage
             var body = new StaticBody3D { Name = "col" };
             body.AddChild(new CollisionShape3D
             {
+                // A BoxShape3D, not a WorldBoundaryShape3D or a trimesh: the weapon and airframe
+                // raycasts want a definite thickness under the surface, not an infinite plane.
                 Shape = new BoxShape3D { Size = new Vector3(HalfExtent * 2f, GroundThickness, HalfExtent * 2f) },
                 // Sunk so the box's TOP face is the y=0 surface the quad draws.
                 Position = new Vector3(0f, -GroundThickness * 0.5f, 0f),

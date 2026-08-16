@@ -117,9 +117,11 @@ public sealed class AnimInstance
     }
 
     /// <summary>Starts a runner for one sequence — the ONE way a runner joins an instance, so
-    /// nothing can put a sequence into flight behind the list's back. The bootstrap that starts a
-    /// definition's non-ON_CALL sequences goes through here too, as do the death slot and the
-    /// damage-stage host, which feed sequences that are not in <c>Def.Sequences</c> at all.</summary>
+    /// nothing can put a sequence into flight behind the list's back. Also the bootstrap, the
+    /// death slot and the damage-stage host, feeding sequences not in <c>Def.Sequences</c>.
+    /// ⚠ A runner added mid-<see cref="Advance"/> fires its first event one tick late — appended
+    /// past the descending walk's cursor. Deliberately unfixed; read `BL-135` and
+    /// analysis/bl-135-callsequence-lag/FINDINGS.md before changing it.</summary>
     public void AddRunner(AnimSequence seq)
     {
         Runners.Add(new SequenceRunner(seq, Clock));

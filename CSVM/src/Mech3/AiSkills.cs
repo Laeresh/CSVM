@@ -45,8 +45,8 @@ public sealed class AiRatingBias
     /// <summary>The candidate-node-name pattern; <c>*</c> matches any run of characters.</summary>
     public string Pattern { get; }
 
-    /// <summary>The authored bias (shipped values are −1.0); how it scales into the ranking is
-    /// <c>AiTargetRanking.BiasScale</c>'s documented assumption.</summary>
+    /// <summary>The authored bias; −1.0 dominates the shipped data and means NEVER target. How it
+    /// resolves into a rank is <c>AiTargetRanking.ObjectiveBiasFor</c>.</summary>
     public float Bias { get; }
 
     /// <summary>The undecoded third element, raw. Preserved, never interpreted.</summary>

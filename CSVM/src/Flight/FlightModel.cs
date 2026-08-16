@@ -580,7 +580,7 @@ public sealed class FlightModel
     /// <summary>The decoded collision restitution: the velocity's component along the contact normal
     /// AFTER the original's impulse (docs/org/flightModel.md, "Collision response").
     /// ⚠ Nothing here depends on the struck surface — no verticality test, no material lookup, no
-    /// friction — so CAP-14's flat-versus-vertical split must not be implemented as one.</summary>
+    /// friction — so a flat-versus-vertical split must not be implemented as one.</summary>
     /// <param name="contactArm">NOT normalised: its length sets the rebound/spin partition, and a
     /// LONG arm rebounds harder than a short one.</param>
     public float BounceNormalSpeed(Vector3 velocity, Vector3 normal, Vector3 contactArm)

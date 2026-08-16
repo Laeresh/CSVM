@@ -94,6 +94,8 @@ public sealed partial class WeaponLab : Node3D
     private CheckButton _infiniteAmmoToggle = null!;
     private bool _suppress; // set while rewriting widgets from a state change
 
+    // In splitscreen the caller builds one lab on rig 0's aircraft/camera only, by design —
+    // the other rigs fly with no panel and no camera hand-off.
     public WeaponLab(Node3D plane, WeaponDefs weapons, Loadout? loadout, string planeModel,
         Flight.FlightController? host = null, Camera3D? camera = null)
     {

@@ -257,6 +257,13 @@ under `GRAVITY [COMPLEX, DO_INTERSECTIONS]`; a falling wreck with a fixed pose i
 and the sequences are named `spin_rotor`. Verified in flight: the rendered prop advances
 −40.5°/−81.0° at 1 s/2 s, i.e. exactly the authored −40°/s.
 
+**The player aircraft's own prop/rotor discs (`Mech3.PropParts`) go through the same
+conversion.** Their rates are the authored `spin_rotorN`/`spin_rotorNb` values from
+`plane_props.json` (`spinprops`) and `autogyro.json` (`agyro_rotors`) — settled fact, not a
+tuned guess: `PropAnimator` converts them via the identical `Mathf.DegToRad` +
+accumulate-from-rest path this section's `AnimDefs.Spin` does, and the rendered rotation
+matches the authored deg/s exactly, the same check made above for the ambient spins.
+
 **`delta` is NOT decoded and is deliberately not guessed.** It reads as acceleration on a blown
 chassis (`+15°/s` added to a 30°/s spin), as a *decelerating* ramp on `chuteman_sway`
 (initial `(-10,0,10)`, delta `(+10,0,-10)`, `RUN_TIME` 2 — a parachutist swaying back), and

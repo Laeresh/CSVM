@@ -444,6 +444,22 @@ with no tile-flag component at all**; the tiles' `fog: true` is instead what mak
 floor — the 144 tiles and `C26`'s annulus alike, both through the same fogged material path — fade
 to `FOG_COLOR` at the horizon.
 
+#### Deck tiles carry two SUNLIGHT-dimmed variants
+
+The deck tiles author `lighting: false` like the dome and the `fvol` cloud cards, but the deck
+alone was measured to be SUNLIGHT-dimmed in the original — `Flight/Weather.cs`'s `SunIncidence`
+was calibrated on this exact texture. `WorldBuilder.Add` therefore force-lights the deck's own
+tiles (`forceLit: isDeck`) regardless of the authored flag, applying `csky_world_light` deck-local,
+never as a change to the `lighting` gate or to `csky_world_light` itself.
+
+⚠ **That dimming is the BELOW-band regime only.** The ceiling a camera under the band sees is the
+overcast's dimmed underside; the floor a camera above it sees is the undimmed top — the original's
+own above-band frames contain no pixel below `FOG_COLOR` at all. `WorldBuilder` therefore builds
+each tile in BOTH `forceLit` variants (`RecordDeckUndimmedMesh`) and `Session/WeatherRig.Tick`
+assigns one per rig at the band crossing. C4's deck is unaffected by construction (its
+`WorldLight` clamps to 1.0), which is the control proving the fix is deck-local rather than a
+hidden global change.
+
 #### Below-deck ceiling profile
 
 At the C1 river pose (`-7323,192,-3829` / `-0.997,-0.1,0.070`) against

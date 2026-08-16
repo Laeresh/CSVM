@@ -73,7 +73,7 @@ public sealed class PlaneStats
     /// <summary>The AI def the damage trio came from ("bloodhawk"), or null on a player load
     /// (<see cref="Load"/>). Set only by <see cref="LoadForAi"/>, and deliberately NOT used as
     /// <see cref="DefName"/>: that name keys the stock-loadout table, which holds the eleven
-    /// player defs alone, so swapping it would leave every AI plane unarmed (BL-386).</summary>
+    /// player defs alone, so swapping it would leave every AI plane unarmed.</summary>
     public string? AiDefName;
 
     // dynamics block
@@ -247,7 +247,7 @@ public sealed class PlaneStats
     /// resolves down the player chain (<see cref="DefName"/>, <see cref="TurretMounts"/> and the
     /// built model must stay there — the loadout table and the rig key off them). The damage
     /// model instead resolves down the AI def's own chain: an authored <c>armor</c>/<c>health</c>
-    /// pair and no <c>destroyable_parts</c>, so an AI aircraft is zone-less (BL-386, docs/architecture.md).
+    /// pair and no <c>destroyable_parts</c>, so an AI aircraft is zone-less.
     /// ⚠ The <c>r*</c> family carries parts but is the remote-player family; no roster spawns one.</summary>
     public static PlaneStats LoadForAi(string zrdrPath, string planeNodeName) =>
         LoadCore(zrdrPath, planeNodeName, forAi: true);
@@ -464,7 +464,7 @@ public sealed class PlaneStats
         }
 
         // destroyable_parts schema: docs/formats/vehicle.md. An AI load resolves none — no
-        // roster-named chain authors the block, so an AI aircraft is zone-less (BL-386).
+        // roster-named chain authors the block, so an AI aircraft is zone-less.
         foreach (var d in damageChain)
         {
             if (d.List("destroyable_parts") is not { } partsList)

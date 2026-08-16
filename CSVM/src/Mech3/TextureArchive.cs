@@ -13,8 +13,7 @@ namespace CSVM.Mech3;
 /// docs/cli.md), hooked into <see cref="TextureArchive.Find"/> because that is the one place
 /// every consumer resolves a name. ⚠ Only RGB bytes change — size, pixel format, alpha channel
 /// and mip chain stay the original's, so a diagnostic never alters what it measures. Census
-/// colours are a pure hash of the name, read back by chromaticity (docs/cli.md); plumbing: this
-/// module's entry in docs/architecture.md.</summary>
+/// colours are a pure hash of the name, read back by chromaticity (docs/cli.md).</summary>
 public static class TextureDropIn
 {
     /// <summary>How far a pixel's chromaticity may sit from a census colour's and still be counted
@@ -862,7 +861,7 @@ public sealed class TextureArchive : IDisposable
 
     // Rescales each generated mip level's alpha so its scissor coverage (a > 127) matches the
     // base level's, instead of letting the box filter erode it — the fix for lattices/foliage
-    // thinning at distance (this module's entry in docs/architecture.md). Boost-only; a level
+    // thinning at distance. Boost-only; a level
     // already at coverage is untouched. Blend-class textures (no scissor) never reach this.
     private static void ScissorMipsKeepCoverage(Image img)
     {
@@ -965,7 +964,7 @@ public sealed class TextureArchive : IDisposable
         // offsets, and levels 3-and-below have no authored sibling to take their place.
         img.GenerateMipmaps();
         // Scissor cutouts only: box-filtered alpha sinks below the 0.5 threshold at distance and
-        // the object thins away (docs/architecture.md). Must run BEFORE the authored install.
+        // the object thins away. Must run BEFORE the authored install.
         if (LastHadAlpha && !LastAlphaIsSoft)
         {
             ScissorMipsKeepCoverage(img);

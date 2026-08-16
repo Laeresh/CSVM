@@ -25,7 +25,11 @@ public enum AnchorPlacement
 
 /// <summary>The record of which authored anims are playable effects, and what their defs need
 /// staged. Owns the name tables every effect producer must stay inside — <see cref="WorldEffectsFactory"/>
-/// consumes these names to build and stage the runtime; the naming lives here, never there.</summary>
+/// consumes these names to build and stage the runtime; the naming lives here, never there.
+/// ⚠ Names cross every play seam (<c>GrazeEffectSink</c>, <c>ExternalEffect</c>,
+/// <c>ProjectilePool.EffectSink</c>) as bare strings, never a typed entry — a typed entry would
+/// thread this module's types through the deliberately engine-free <c>ImpactOutcome</c>. The
+/// producer-range tripwires in <c>CSVM.Tests</c> close the drift a typo would otherwise open.</summary>
 public static class EffectCatalogue
 {
     // The crash def vector's prefix: slot i is "player_crash_" + SurfaceRegistry.Names[i], the
@@ -41,8 +45,8 @@ public static class EffectCatalogue
     public const string CrashAnimRoot = "player";
 
     // The AI aircraft family's vector prefix: slot i is "ai_crash_" + SurfaceRegistry.Names[i].
-    // Same cascade as the player family (addresses: docs/architecture.md's SurfaceDefTable.cs
-    // entry), swapped for player_crash_* only on the vehicle named "player" — every AI aircraft
+    // Same cascade as the player family (decode: analysis/surface-classification/FINDINGS.md),
+    // swapped for player_crash_* only on the vehicle named "player" — every AI aircraft
     // crashes through this one shared cascade.
     public const string AiCrashDefPrefix = "ai_crash_";
 
@@ -62,7 +66,6 @@ public static class EffectCatalogue
     // The impact/destruction/graze effect animation names the world-effects runtime binds; the
     // closure of these is staged and playable via PlayEffectAt.
     // ⚠ `random_gun_impact` is excluded: its root is the generic `player` and would mis-anchor.
-    // Curation and exclusions: this module's entry in docs/architecture.md.
     public static readonly string[] EffectAnimNames =
     {
         // rocket / ordnance IMPACT (default + buildings), puffer-bearing and otherwise
@@ -124,8 +127,9 @@ public static class EffectCatalogue
     };
 
     // Anchors the closure below reports that no bind stages, because the CALL reaching the
-    // definition supplies its anchor instead of its own NAME. Curation, not derivation — see this
-    // module's entry in docs/architecture.md for why each one is excluded.
+    // definition supplies its anchor instead of its own NAME: `zep_can_dstry1.flt` (absent from
+    // C2's gamez entirely) and `warhawk` (startprops/stopprops' own NAME, a shared authoring
+    // label no real airframe carries). Curation, not derivation.
     // ⚠ Extend this list, never the mechanical closure walk itself.
     public static readonly string[] CallSuppliedAnchors = { "zep_can_dstry1.flt", "warhawk" };
 
@@ -152,8 +156,8 @@ public static class EffectCatalogue
         new(CrashDefPrefix, CrashAnimRoot, DefExistsIn(program));
 
     /// <summary>The AI aircraft counterpart of <see cref="CrashDefTable"/>: the
-    /// <c>ai_crash_*</c> vector, selected by the same cascade as the player family (addresses:
-    /// this module's entry in docs/architecture.md). Same fallback arms, including the bare last
+    /// <c>ai_crash_*</c> vector, selected by the same cascade as the player family (decode:
+    /// analysis/surface-classification/FINDINGS.md). Same fallback arms, including the bare last
     /// resort, which the original sets to the vehicle's own name — so the caller passes the
     /// plane's own name. Unreachable in this install: all eight chapters ship
     /// <c>ai_crash_default</c>, so slot 0 always resolves.</summary>
@@ -195,7 +199,7 @@ public static class EffectCatalogue
     /// <see cref="SurfaceDefTable"/>). Both crash and touchdown families are asked, because either
     /// shipping a def for an id makes it resolve as itself; the weapon impact table is not asked,
     /// since an id it authors no row for plays nothing rather than falling back to row 0.
-    /// Written for the collider overlay's colour key (<c>BL-345</c>).</summary>
+    /// Written for the collider overlay's colour key.</summary>
     public static IReadOnlyList<int> ResolvedSurfaceIds(Func<string, bool> defExists)
     {
         var crash = new SurfaceDefTable(CrashDefPrefix, CrashAnimRoot, defExists);

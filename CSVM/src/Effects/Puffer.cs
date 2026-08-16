@@ -538,6 +538,8 @@ public sealed partial class Puffer : Node3D
             return;
         }
         TrailAdvance(trailPos);
+        // An unmoved DISTANCE_INTERVAL state still runs one SustainAt batch: the synthetic
+        // TIME_INTERVAL cadence sputters a single homing puff at the muzzle/exhaust.
         if (!moved)
             SustainAt(worldPos, worldBasis, dt);
     }
@@ -696,7 +698,7 @@ public sealed partial class Puffer : Node3D
         return sum / (w * h);
     }
 
-    // The distance alpha across every pane (`BL-339`): keeps the most favourable
+    // The distance alpha across every pane: keeps the most favourable
     // answer of DistanceAlpha evaluated per viewer, drawing if any pane would draw it.
     // ⚠ Must be per-viewer, not nearest-by-range: the fade is view-space depth along each camera's
     // own forward axis, and a pane facing away can still be the range-nearest one. See

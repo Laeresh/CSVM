@@ -87,10 +87,13 @@ public static class AiTargetRanking
     /// the arc width is the design's, the collapse is an assumption).</summary>
     public const float FrontArcCos = 0.5f;
 
-    /// <summary>ASSUMPTION: an authored rating bias scales by the weight scale, so the shipped
-    /// −1.0 entries offset one full weight unit. Raw metres would make every shipped value
-    /// inert, which cannot be the authored intent.</summary>
-    public const float BiasScale = WeightScale;
+    /// <summary>An authored <c>rating_biases</c> weight resolves to rank units directly and
+    /// NEGATED, so a positive bias attracts under minimisation (docs/formats/ai-rosters.md).
+    /// ⚠ Not the weight scale: a bias is not in metres and is not multiplied by 1200.</summary>
+    public const float BiasScale = -750f;
+
+    /// <summary>The rank a bias of 1.0 or more collapses to: always target.</summary>
+    public const float AlwaysTarget = -100000f;
 
     /// <summary>One candidate's rank and its inputs. <paramref name="ownForward"/> must be
     /// unit-length (a basis column).</summary>
@@ -152,18 +155,25 @@ public static class AiTargetRanking
         return bestAny;
     }
 
-    /// <summary>The objectiveBias term for a named candidate: the FIRST matching
-    /// <c>rating_biases</c> entry's bias × <see cref="BiasScale"/>, 0 with no list or no match.
-    /// AI spawned without a roster block (<c>--ai</c>, egen) carry no biases — the documented
-    /// gap until mission spawns attach roster identities.</summary>
+    /// <summary>The objectiveBias term for a named candidate, from the FIRST matching
+    /// <c>rating_biases</c> entry; 0 with no list or no match. The ends saturate rather than scale:
+    /// 1.0 or more is always-target, −1.0 or less a hard exclusion.
+    /// ⚠ An authored −1.0 means NEVER target, not a penalty. It is the dominant shipped value, so
+    /// reading it as a penalty inverts the intent across most of the install.
+    /// ⚠ The turret's flat term is not implemented; no caller distinguishes one.</summary>
     public static float ObjectiveBiasFor(string name, IReadOnlyList<AiRatingBias>? biases)
     {
         if (biases == null)
             return 0f;
         foreach (var b in biases)
         {
-            if (b.Matches(name))
-                return b.Bias * BiasScale;
+            if (!b.Matches(name))
+                continue;
+            if (b.Bias >= 1f)
+                return AlwaysTarget;
+            if (b.Bias <= -1f)
+                return NotRanked;
+            return b.Bias * BiasScale;
         }
 
         return 0f;

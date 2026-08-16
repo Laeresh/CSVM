@@ -509,6 +509,9 @@ public static class Suites
             $"smokepuffer authors no TIME_INTERVAL — the still-host cadence is the synthetic 0.1 s");
         ctx.Same(1, trailState.Number, $"smokepuffer authors no NUMBER — a still-host batch is one puff");
 
+        // Detached for the duration: the harness's own clock is a FixedStep one nothing steps, so
+        // left installed every emitter tick would advance no sim and every check would pass
+        // vacuously. The suites below drive their own dt directly instead.
         var clock = GameClock.Current;
         GameClock.Current = null;
         try
@@ -743,7 +746,7 @@ public static class Suites
             $"and one inside the near cull draws too");
     }
 
-    // The splitscreen rule (`BL-339`): the bands are evaluated against EVERY
+    // The splitscreen rule: the bands are evaluated against EVERY
     // pane's camera and the particle takes the most favourable answer, so a trail 20 m in front of
     // player 2 draws even while player 1's own camera near-culls it. Driven through the real
     // ViewerSet over real `Camera3D` nodes, which is the seam
@@ -753,7 +756,7 @@ public static class Suites
         var state = FadeTestState("spew_puffer", 40f, 5f, 300f, 400f);
 
         // Two panes looking the same way down −Z, player 2 astern of player 1 by 200 m — the
-        // BL-339 repro's geometry (P2 behind P1, shooting past him).
+        // repro's geometry (P2 behind P1, shooting past him).
         var p1 = ViewerCamera(ctx, Vector3.Zero);
         var p2 = ViewerCamera(ctx, new Vector3(0f, 0f, 200f));
         try
@@ -1747,6 +1750,10 @@ public static class Suites
         }
     }
 
+    // Stays whole here rather than splitting an engine-free half into CSVM.Tests: Probes.Loadouts
+    // calls StockLoadouts.Load (Godot.FileAccess) and PlaneBuilder.Build to resolve Loadout.Bind's
+    // markers, both native-backed and fatal off-engine (AccessViolationException). Binding needs a
+    // built plane, so there is no pure half to extract without reimplementing marker resolution.
     private static void LoadoutBind(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2584,7 +2591,7 @@ public static class Suites
     // along a vertical wall, flown by a real rig through the real collision sweep. Two things need a
     // live contact and cannot be read off FlightModel (whose arithmetic BounceRestitutionTests pins):
     // the player-only gate, where an AI rig on the same trajectory gets only the position correction,
-    // and CAP-14's two orientations. ⚠ The wall assertion is about the rebound AXIS, not a
+    // and both orientations. ⚠ The wall assertion is about the rebound AXIS, not a
     // per-surface coefficient; the impulse has no surface dependence, only the contact normal differs.
     private static void GrazeBounce(TestContext ctx)
     {
@@ -6515,7 +6522,7 @@ public static class Suites
             ctx.Check(Mathf.Abs(ai.WorldPosition.Y - 400f) < 250f,
                 $"…within the placeholder law's altitude leash of the net's 400 m y={ai.WorldPosition.Y:0}");
 
-            // BL-377: the same net, now RIDING a stand-in for the player 6 km east of where it
+            // The same net, now RIDING a stand-in for the player 6 km east of where it
             // was authored. The ring must move with it and keep its authored 400 m; the plane
             // must fly the moved ring, not the one in the file.
             var trailed = net.Nodes[10].Position + new Vector3(6000f, -300f, 0f);
@@ -8415,7 +8422,7 @@ public static class Suites
     }
 
     // The wash's own gate — `If PlayerRange 10000` — answers to the NEAREST human, not
-    // one camera (`BL-365`): a burst still fires while the camera this stage was built
+    // one camera: a burst still fires while the camera this stage was built
     // against sits 5 km off, as long as SOME entry in `PlayerPositions` is inside the 100 m
     // gate. This is upstream of B12's routing (which panes a fired wash reaches) — here nothing
     // has fired yet, so no pane would have anything to route.
@@ -10459,7 +10466,7 @@ public static class Suites
         }
     }
 
-    // The B13 rule (`BL-366`): WorldLights.Commit fades and ranks
+    // The B13 rule: WorldLights.Commit fades and ranks
     // each light against the NEAREST of every pane's camera, not a single position. Driven
     // straight against a real WorldLights instance with synthetic positions —
     // there is no per-player placement flag to give two scripted panes independent spots (the

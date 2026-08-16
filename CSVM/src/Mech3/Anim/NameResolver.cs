@@ -217,7 +217,7 @@ public sealed class NameResolver<TNode>
     {
         // Multi-target NAME1 defs (zeppelin nacelles/turrets) parse with an empty NAME but anchor
         // through their own (pattern, path) pairs, never the ANIMATION_ROOT_NAME lift — which would
-        // anchor them onto every building (docs/architecture.md, this file's entry, F18).
+        // anchor them onto every building.
         if (string.IsNullOrEmpty(def.Name))
         {
             if (def.MultiTargets.Count == 0)

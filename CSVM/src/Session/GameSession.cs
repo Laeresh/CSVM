@@ -30,7 +30,7 @@ public partial class GameSession : Node3D
 
     // The fraction of the camera's far plane the scaled skydome may reach; past it the dome clips
     // and the clear colour shows through. 0.9 leaves room for the one-frame anchor lag.
-    // See docs/architecture.md on HorizonScale.
+    // See HorizonScaleFor.
     private const float HorizonFarFraction = 0.9f;
 
     // How many near-miss names a failed --node= lookup offers: a usable hint, not a census.
@@ -205,7 +205,7 @@ public partial class GameSession : Node3D
     // advanced on the sim dt (never wall time). Null outside Versus — the Downed events then
     // simply have no subscriber. Freed with this node; flight holds no match state.
     private VersusMatch? _versus;
-    // BL-377: the trailer-target resolver every net follower this session builds shares. Built
+    // The trailer-target resolver every net follower this session builds shares. Built
     // with the rigs (it needs the player rig), so the F13 overlay, built earlier, reads it through
     // this field rather than holding a reference it could not have had yet.
     private NetTrailerTargets? _netTrailers;
@@ -909,7 +909,7 @@ public partial class GameSession : Node3D
                         }
                     }
                 },
-                // BL-377: an anchored net is drawn where it actually is, not where the file says.
+                // An anchored net is drawn where it actually is, not where the file says.
                 // Zero until the rigs are built, which is before anything flies it.
                 TrailerOffsetOf = net => _netTrailers?.OffsetOf(net) ?? Vector3.Zero,
             });
@@ -1179,7 +1179,7 @@ public partial class GameSession : Node3D
     // dome's far wall past the camera's far plane and let the clear colour show through.
     // ⚠ HorizonScale is a MAXIMUM, not a constant, and the fit is measured from the built dome's
     // own AABB, never a per-chapter table. Scaling only Y is refuted; the domes keep one uniform
-    // fitted scale. Full reasoning and the audit: docs/architecture.md on GameSession.cs.
+    // fitted scale.
     private float HorizonScaleFor(Node3D dome)
     {
         if (Mech3.WorldBuilder.DetachedWorldAabb(dome) is not { } aabb)
@@ -2277,7 +2277,7 @@ public partial class GameSession : Node3D
 
         // Instant Action's own zeppelin switch. ⚠ Visible is the WHOLE write, since world colliders
         // derive Disabled from it, and each switched node must reach the turret arm below or the
-        // objective zeppelin flies unarmed. See docs/architecture.md on GameSession.cs.
+        // objective zeppelin flies unarmed.
         var iaZepTurretSwitch = new List<(Node3D Node, bool Objective, string Name)>();
         if (_instantAction is { } iaZeppelins && rigInputs.WorldRuntime is { } iaZepWorld)
         {
@@ -2692,7 +2692,7 @@ public partial class GameSession : Node3D
                 Planes = planeColliders,
                 // What each surface id resolves to on contact, asked of this session's own program
                 // rather than listed: the overlay colours by the id a touch will select, and which
-                // ids have a def of their own is whatever the bound program defines (BL-345).
+                // ids have a def of their own is whatever the bound program defines.
                 ResolvedSurfaceIds = state.CrashProgram != null
                     ? EffectCatalogue.ResolvedSurfaceIds(state.CrashProgram)
                     : null,

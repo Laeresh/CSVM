@@ -8,12 +8,13 @@ namespace CSVM.Mech3.Anim;
 /// <summary>
 /// The effect-template stage as one module: pool-slot arithmetic, template placement, the
 /// "which copy is mine" identity rule and the reveal/retire/sweep ritual. Generic over the node
-/// type like <see cref="NameResolver{TNode}"/>. Plumbing, the three policy flags and the pin
-/// history: this module's entry in docs/architecture.md.
-/// ⚠ Do not move slot arithmetic into <see cref="EmitterDirector"/>; the pool must never become
-/// a third emitter-keying scheme.
-/// ⚠ Root resolution goes through <c>findAll</c>, never <c>Anchors</c>, on per-event paths
-/// (<see cref="RootsFor"/>, <see cref="IsAt"/>) — see docs/architecture.md for the asymmetry.
+/// type like <see cref="NameResolver{TNode}"/>.
+/// ⚠ Do not move slot arithmetic into <see cref="EmitterDirector"/> or <see cref="AnimRuntime"/>;
+/// the pool must never become a third emitter-keying scheme.
+/// ⚠ Per-event root resolution (<see cref="RootsFor"/>, <see cref="IsAt"/>) must use <c>findAll</c>
+/// only, never <see cref="NameResolver{TNode}.Anchors"/>, which records a census once per
+/// definition; per-call paths (<see cref="TakeNextSlot"/>, <see cref="AssignCallerSlot"/>) may use
+/// the <c>anchors</c> hook once each. Do not "clean up" this asymmetry.
 /// </summary>
 public sealed class TemplateStage<TNode>
     where TNode : class
@@ -68,7 +69,7 @@ public sealed class TemplateStage<TNode>
 
     // A relocating CALL_ANIMATION whose anchor sits in no slot container claims a slot per
     // (template root, anchor) here on its first call and keeps it. Keyed per root, since one
-    // root's callers are a subset of all anchors (docs/architecture.md).
+    // root's callers are a subset of all anchors.
     private readonly Dictionary<string, Dictionary<TNode, int>> _callerSlots =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -114,6 +115,8 @@ public sealed class TemplateStage<TNode>
         bool placesCalled = false,
         IEnumerable<string>? placeExempt = null)
     {
+        // ⚠ Sealed here on purpose — no setter exists. A later write (the old post-Bind
+        // mirror) let two roles read different configs off one flag; do not reintroduce it.
         Pooled = pooled;
         Shown = shown;
         Places = placesCalled;

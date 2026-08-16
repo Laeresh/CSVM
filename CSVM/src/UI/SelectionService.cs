@@ -12,10 +12,12 @@ namespace CSVM.UI;
 /// the mesh under the cursor, then PgUp/PgDn walk the <c>cs_name</c> ancestor ladder from that
 /// leaf up to the placed world object it belongs to. A breadcrumb HUD line names every rung and a
 /// wireframe box outlines the current one. Every other inspect tool reads this state rather than
-/// picking for itself. Ladder construction and the splitscreen constraint: this module's entry in
-/// docs/architecture.md.
+/// picking for itself. Ladder construction: this module's entry in docs/architecture.md.
 /// ⚠ The pick is a manual ray-vs-AABB scan, not a physics raycast: neither mode builds collision.
 /// It is AABB-accurate, not triangle-accurate — a click just off a thin object can still take it.
+/// Unreachable in splitscreen by construction: <c>--freecam</c>/<c>--anim-lab</c> are not
+/// <c>Fly</c>, and <c>SessionSpec.Resolve</c> clamps players back to 1 whenever more than one
+/// joined a non-flight mode, so this single-camera pick never has a second pane to be wrong about.
 /// </summary>
 public sealed partial class SelectionService : Node
 {

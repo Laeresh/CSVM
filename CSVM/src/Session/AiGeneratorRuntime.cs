@@ -44,7 +44,7 @@ public sealed partial class AiGeneratorRuntime : Node
     private readonly Action<string, Node3D>? _stopAnim;
     private readonly Func<AiNet, Func<Vector3?>?>? _trailerTarget;
 
-    /// <param name="trailerTarget">Where an anchored net's trailer target is (`BL-377`), per net;
+    /// <param name="trailerTarget">Where an anchored net's trailer target is, per net;
     /// null leaves every generated patroller on its net's authored coordinates. One generator's
     /// nets are player-anchored in the shipped data (C5's <c>M4Miles</c>), so this is not
     /// hypothetical.</param>
@@ -224,6 +224,8 @@ public sealed partial class AiGeneratorRuntime : Node
                  (started > 0 ? $", {started} instance(s))" : ", not in this program)"));
     }
 
+    // pos/drop below are computed once and shared by the release and net-pick branches; the
+    // F12 zeppelin arm must not re-derive its own drop point.
     private void Spawn(LiveGenerator gen)
     {
         var anchor = gen.Origin ?? gen.Host;

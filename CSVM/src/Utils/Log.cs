@@ -16,6 +16,8 @@ namespace CSVM.Utils;
 /// list: this module's entry in docs/architecture.md.
 /// ⚠ Messages are interpolated strings rendered with <see cref="CultureInfo.InvariantCulture"/>,
 /// so a float reads <c>16.667</c> on every machine, never the current-culture form.
+/// ⚠ Migration off the remaining <c>GD.Print</c> call sites is incremental by decision — a
+/// family converts when an item touches it, never a bulk sweep.
 /// </summary>
 public static class Log
 {
@@ -214,7 +216,9 @@ public static class Log
         return level <= (Thresholds.TryGetValue(cat, out var t) ? t : _threshold);
     }
 
-    /// <summary>The canonical file line for a message — the console line with its level token.</summary>
+    /// <summary>The canonical file line for a message — the console line with its level token.
+    /// No timestamp column, deliberately: a <c>--det</c> run must produce a byte-identical log,
+    /// so a line that needs the time carries it as an explicit <c>key=value</c>.</summary>
     public static string FileLine(Level level, string cat, string message) =>
         $"{Tag(level)} [{cat}] {message}";
 

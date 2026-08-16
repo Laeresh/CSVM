@@ -26,8 +26,9 @@ public sealed class PlayerRig
     public int Index;
 
     /// <summary>This player's camera. Single player: GameSession's own camera in the main
-    /// viewport. Splitscreen: a camera parented to the player's SubViewport (whose local
-    /// transform is therefore its world transform).</summary>
+    /// viewport. Splitscreen: a camera parented to the player's SubViewport, not a Node3D — its
+    /// local <c>Position</c> IS the world transform, so per-frame anchoring can read
+    /// <c>Camera.Position</c> directly in both modes.</summary>
     public Camera3D Camera = null!;
 
     /// <summary>The player's SubViewport, or null in single player (the main viewport).</summary>

@@ -47,7 +47,9 @@ public sealed class AiGunner
     public float DeadEyeAngleDeg = 4f;
 
     /// <summary>Quick-draw shot-acceptance cone half-angle off the target's nose/tail axis,
-    /// degrees — <c>quick_draw_angle</c> at the pilot's rating (50° at 1, 89° at 9).</summary>
+    /// degrees — <c>quick_draw_angle</c> at the pilot's rating (50° at 1, 89° at 9). The
+    /// marginal-shot roll <c>quick_draw_chance</c> is not modelled yet; this angle is the only
+    /// quick-draw term wired.</summary>
     public float QuickDrawAngleDeg = 50f;
 
     /// <summary>Forward-cone yaw half-limit, degrees (<c>gun_yaw</c>).</summary>

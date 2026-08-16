@@ -320,7 +320,7 @@ public sealed partial class ProjectilePool : Node3D
     private bool _flyoutPoseLogged;
     private int _muzzleBasisLogs;
     private int _impactsLogged;
-    private int _soundGainsLogged;               // D31 (BL-370) one-shot gain breadcrumb, first 8
+    private int _soundGainsLogged;               // D31 one-shot gain breadcrumb, first 8
     private float _simClock;                   // sim seconds since the pool started (the gun-effect throttle)
     private CasingSpec? _casingSpec;           // the gunshell OBJECT_MOTION, resolved once
     private bool _casingSpecResolved;
@@ -356,12 +356,12 @@ public sealed partial class ProjectilePool : Node3D
     /// <summary>Splitscreen's overall gain for this pool's one-shots, the same equal-power figure
     /// (1 for 1P, 1/√N for N — <c>GameSession.mixGain</c>) <see cref="FlightAudio.MixGain"/> already
     /// applies to a plane's own-ship loops, so N simultaneous firefights don't sum to a wall of
-    /// noise either (`BL-370`).</summary>
+    /// noise either.</summary>
     public float MixGain { get; set; } = 1f;
 
     /// <summary>The nearest-human seam (<c>GameSession.PlayerPositionsSnapshot</c>, C21's
-    /// <c>PLAYER_RANGE</c>/`BL-365` seam) — read here so a gun/rocket one-shot's distance term
-    /// (`BL-370`) answers "how far is this from the nearest pilot", not player 1's alone. Null
+    /// <c>PLAYER_RANGE</c> seam) — read here so a gun/rocket one-shot's distance term
+    /// answers "how far is this from the nearest pilot", not player 1's alone. Null
     /// outside a real session (the weapon bench, `Suites.cs` labs), where the distance term is
     /// skipped entirely rather than guessing a listener.</summary>
     public Func<IReadOnlyList<Vector3>>? PlayerPositions { get; set; }
@@ -1976,7 +1976,7 @@ public sealed partial class ProjectilePool : Node3D
         float gain = def.Volume * 0.2f * MixGain * distanceGain;
         player.VolumeDb = Mathf.LinearToDb(Mathf.Max(0.002f, gain));
         player.Play();
-        // Verification breadcrumb (BL-370): the first few one-shots confirm the computed
+        // Verification breadcrumb: the first few one-shots confirm the computed
         // gain without needing a lucky --volume=0 listen, same convention as the impact fx/snd
         // breadcrumb above.
         if (_soundGainsLogged < 8)

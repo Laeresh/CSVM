@@ -6,8 +6,9 @@ namespace CSVM.Flight;
 /// <see cref="FlightInput"/> per sim step out. A <see cref="FlightController"/> with
 /// <see cref="FlightController.Pilot"/> set reads this instead of the keyboard/pad, so an AI
 /// aircraft flies the exact same flight model, collision sweep and damage path a player does.
-/// Orders are plain mutable fields by design (docs/architecture.md): the mission script retargets
-/// an AI at runtime, so nothing here is read once at spawn. The steering law is the original's own,
+/// Orders are plain mutable fields by design: the mission script retargets an AI at runtime
+/// (<c>SET_AI_NET</c>, <c>ADD_OTHER_TARGET</c>, …), so nothing here is read once at spawn.
+/// The steering law is the original's own,
 /// <see cref="AiControlLaw"/> (docs/org/aiControlLaw.md); this class only drives it.</summary>
 public sealed class AiPilot
 {
@@ -23,12 +24,12 @@ public sealed class AiPilot
     /// (<c>SpawnPoint.HeadingDeg</c>): the nose (−Z) yawed about world up by this angle.</summary>
     public float TargetHeadingDeg;
 
-    /// <summary>The patrol net being flown, or null for bare heading/altitude orders. When set,
-    /// each <see cref="Next"/> re-derives the heading and altitude orders from the follower's
-    /// current target node, so a net assignment IS the standing order, and it stays mutable
-    /// like the rest (assigning a different follower is <c>SET_AI_NET</c>'s seam; null returns
-    /// to the last derived course). Branch choices draw from the follower's own seeded rng, so a
-    /// fixed-dt, fixed-seed run is still deterministic.</summary>
+    /// <summary>The patrol net being flown, or null for bare heading/altitude orders (assigning a
+    /// different follower is <c>SET_AI_NET</c>'s seam; null returns to the last derived course).
+    /// Each <see cref="Next"/> re-derives heading/altitude from the follower's current target node
+    /// when set; branch choices draw from its own seeded rng, so a fixed-dt run stays deterministic.
+    /// ⚠ Null (netless) is a configuration the original never reaches — it hunts in roll and does
+    /// not settle through <see cref="AiControlLaw"/>, including AvoidCrash (`BL-387`).</summary>
     public AiNetFollower? Patrol;
 
     /// <summary>The forward-gun gunnery, or null for an unarmed pilot. When its target is live and
@@ -49,11 +50,12 @@ public sealed class AiPilot
     /// <summary>Ordered altitude, metres (world Y).</summary>
     public float TargetAltitude = 400f;
 
-    /// <summary>The commanded throttle lever, 0–1. ⚠ Since E41 this is the lever's CURRENT state,
-    /// which <see cref="AiControlLaw"/> walks toward its own desired speed each step, not a
-    /// standing order the pilot holds — the original's lever (<c>obj+0x124</c>) works the same way.
-    /// Presetting it still seeds the walk, and <see cref="AiMode.LayOff"/> is the one mode that
-    /// overrides the law's answer (see <see cref="SteerLayOff"/>).</summary>
+    /// <summary>The commanded throttle lever, 0–1 — the lever's CURRENT state, walked toward
+    /// <see cref="AiControlLaw"/>'s own desired speed each step, not a standing order the pilot
+    /// holds (the original's lever, <c>obj+0x124</c>, works the same way). ⚠ Do not reintroduce an
+    /// altitude-leash throttle rule here: the real law's wings-level rule and elevator deadband
+    /// replaced that placeholder. Presetting still seeds the walk; <see cref="AiMode.LayOff"/> is
+    /// the one mode that overrides the law's answer (<see cref="FlyLayOff"/>).</summary>
     public float Throttle = 0.85f;
 
     /// <summary>The player's world position, when the owner knows it, or null. The law's far-field
@@ -89,8 +91,8 @@ public sealed class AiPilot
     /// <summary>Whether the LAST <see cref="Next"/> actually steered to <see cref="Patrol"/>'s
     /// node, as opposed to pursuing, evading or holding the bare orders. Reported rather than
     /// re-derived from the mode: the dispatch in <see cref="Next"/> is the only thing that
-    /// decides it, so an observer (F13's leashes) that asked the mode machine instead could
-    /// drift from it.</summary>
+    /// decides it, so an observer (the debug overlay's leashes) that asked the mode machine
+    /// instead could drift from it.</summary>
     public bool SteeringPatrol { get; private set; }
 
     /// <summary>Aims the standing orders at holding the given spawn pose: heading from the
@@ -177,7 +179,7 @@ public sealed class AiPilot
         SteeringPatrol = false;   // SteerPatrol sets it when it actually flies the net
 
         // The mode machine, when present, decides which input source flies this step;
-        // without one the pre-D11 priority stands (gunner target, then patrol, then orders).
+        // without one the bare priority stands (gunner target, then patrol, then orders).
         if (Machine is { } machine)
         {
             var mode = machine.Update(model.Position, model.VelocityDir * model.Speed,
@@ -262,10 +264,9 @@ public sealed class AiPilot
     }
 
     // Lay off (the rubber-band assist): steers the course captured at mode entry on the cruise
-    // table, then OVERRIDES the law's lever with D15's own walk toward SixthSenseFactor × the
-    // pursuer's speed. ⚠ That override is this engine's assist, not the original's lay-off, which
-    // flies the same table with a flat 0.8 lever floor and no speed match. Kept because D15 is
-    // landed and playtested; revisit at F52, not here.
+    // table, then OVERRIDES the law's lever with a walk toward SixthSenseFactor × the pursuer's
+    // speed. ⚠ That override is a remake-only assist, not the original's lay-off, which flies the
+    // same table with a flat 0.8 lever floor and no speed match — keep it, landed and playtested.
     private FlightInput FlyLayOff(FlightModel model, float dt, AiModeMachine machine,
         FlightController pursuer)
     {

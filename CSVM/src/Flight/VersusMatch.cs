@@ -15,7 +15,8 @@ public readonly record struct VersusStanding(int PlayerIndex, int Kills, int Dea
 /// (<see cref="RegisterKill"/>, <see cref="RegisterDeath"/>, <see cref="Advance"/>) and this class
 /// turns them into standings and one completion event. The match completes once, on whichever
 /// comes first: a player reaching <see cref="KillTarget"/>, or the clock reaching
-/// <see cref="TimeLimit"/>; with both disabled (0) it never completes on its own.
+/// <see cref="TimeLimit"/>; with both disabled (0) it never completes on its own. Deliberately
+/// not a Node — freed with the session, host-fed exactly like <see cref="StuntRace"/>'s timekeeping.
 /// ⚠ Zero engine dependency of any kind, not even <c>Log</c> — a <c>GD.Print</c> in this family
 /// once crashed the xUnit host. Keep it engine-free by construction.</summary>
 public sealed class VersusMatch

@@ -177,7 +177,9 @@ public sealed class ProbeRunner
 
     /// <summary>Writes one report into the workspace scratch folder, by absolute path. Relative
     /// paths resolve against the process working directory, not the repo, so a run launched from
-    /// anywhere else would silently scatter its artifacts.</summary>
+    /// anywhere else would silently scatter its artifacts. The one shared write path — even
+    /// <c>GameSession</c>'s <c>--weapon-test</c> report writes through this rather than
+    /// duplicating it.</summary>
     public void WriteScratch(string fileName, string text)
     {
         var scratch = Path.Combine(_repoRoot, ".scratch");

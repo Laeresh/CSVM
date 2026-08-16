@@ -51,8 +51,7 @@ public enum MenuMode
 /// One immutable value for everything the command line settles about a session: parsed once,
 /// then resolved once, so a consumer reads an answer instead of re-deriving one.
 /// <see cref="Parse"/> returns a RESOLVED spec; the mode flags arrive as private fields and
-/// arbitration turns them into <see cref="Mode"/>. Detail on the purity contract and the
-/// resolution quirks preserved for the equivalence gate: this module's docs/architecture.md entry.
+/// arbitration turns them into <see cref="Mode"/> — see <see cref="Resolve"/> for the step order.
 /// ⚠ Pure — no engine state, no globals, no logging, no clock. Complaints go to
 /// <see cref="Warnings"/>, never a print.
 /// </summary>
@@ -196,8 +195,8 @@ public sealed record SessionSpec
     public string? IaPath { get; private set; }
     /// <summary>Set only by <see cref="FromMenu"/>: the launchscreen wizard's own built
     /// <c>InstantActionDef</c>, null on every CLI launch since <c>--ia=</c> carries a path
-    /// instead. Detail on the wizard/CLI convergence: this module's docs/architecture.md
-    /// entry.</summary>
+    /// instead. Only ever carried onto the record here, never loaded or built — the same
+    /// purity contract <see cref="IaPath"/> (a path, not a load) already keeps.</summary>
     public InstantActionDef? IaDef { get; private set; }
     /// <summary>The <c>--stage=</c> value as given, unvalidated — only "empty" names a stage.
     /// Whether it survived is <see cref="EmptyStage"/>.</summary>
@@ -997,10 +996,12 @@ public sealed record SessionSpec
         return s;
     }
 
-    /// <summary>The spec for a launchscreen launch, one plane per player. Derived from
-    /// <paramref name="cli"/>, the pristine command line, never the last session's spec. Detail
-    /// on the re-resolve/Dogfight-lock rules and <paramref name="iaDef"/>: docs/architecture.md.
-    /// ⚠ Does not re-resolve. No mode arbitration re-runs and placement is not re-routed.</summary>
+    /// <summary>The spec for a launchscreen launch, one plane per player, derived from
+    /// <paramref name="cli"/> — the pristine command line — never the last session's spec.
+    /// ⚠ Does not re-resolve: every menu-settable field must be written here, or the pristine
+    /// base re-opens the carry-over bug. <paramref name="mode"/> is Free/Stunt/Versus, not a bool
+    /// — the &gt;= 2-player Dogfight lock is <see cref="UI.LaunchMenu"/>'s job. <paramref
+    /// name="iaDef"/>, when given, decides <see cref="Scenario"/>/<see cref="Stunt"/> instead.</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
         MenuMode mode, InstantActionDef? iaDef = null)
     {

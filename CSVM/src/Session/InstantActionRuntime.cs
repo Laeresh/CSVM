@@ -38,7 +38,11 @@ public enum InstantActionObjective
 /// selection, and the mission's end (<see cref="Objective"/>, the lives ledger,
 /// <see cref="Outcome"/>). Detail: this module's docs/architecture.md entry.
 /// The end half holds no engine type and calls no <c>GD.*</c>, the same construction rule
-/// <see cref="Flight.VersusMatch"/> follows.</summary>
+/// <see cref="Flight.VersusMatch"/> follows.
+/// ⚠ Environment→chapter resolution belongs to the launch menu, never here — a --ia=&lt;path&gt;
+/// CLI launch already names its chapter via --chapter=.
+/// ⚠ <see cref="WingmanSlotFor"/>/<see cref="FlownWingmen"/> place and clamp only; livery, team
+/// and the AiGunner/AiModeMachine wiring stay <c>GameSession.BuildFlightRigs</c>'s job.</summary>
 public sealed class InstantActionRuntime
 {
     /// <summary>Every Instant Action enemy's team ("the
@@ -211,7 +215,9 @@ public sealed class InstantActionRuntime
     /// <summary>Puts <see cref="ActorVolumeRadiusM"/> on all three of a spawned Instant Action
     /// pilot's range gates. ⚠ Call after the spawn, and set all three: the spawner's own
     /// airframe-def fallback (docs/formats/ai-rosters.md "The three unnamed slots") must not
-    /// survive an Instant Action block, which authors them.</summary>
+    /// survive an Instant Action block, which authors them.
+    /// ⚠ Stays the last word even once a patrol net is assigned — the original applies the
+    /// roster block after the net too (docs/org/aiPilot.md "Net assignment").</summary>
     public static void ApplyActorVolumes(AiModeMachine? machine)
     {
         if (machine == null)

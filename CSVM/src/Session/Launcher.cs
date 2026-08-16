@@ -369,9 +369,9 @@ public partial class Launcher : Node3D
         _probeRunner = new Testing.ProbeRunner(_repoRoot, _dataRoot, _zrdrPath, _soundsPath,
             _interpPath, _messagesPath, _planesGamezPath);
 
-        // Register the distance-fog global shader parameters SceneBuilder's world/aircraft
-        // shader references, before any material using it is built. Defaults are a no-op
-        // (nothing fades) — only --fly overrides them from the mission's weather.json below.
+        // Registers the distance-fog params SceneBuilder's shaders reference; defaults are a
+        // no-op until --fly's weather.json overrides them.
+        // ⚠ Runs once here — GlobalShaderParameterAdd errors on a second call; a rebuild must Set.
         RenderingServer.GlobalShaderParameterAdd("csky_fog_color",
             RenderingServer.GlobalShaderParameterType.Vec3, new Vector3(0.69f, 0.69f, 0.69f));
         RenderingServer.GlobalShaderParameterAdd("csky_fog_range",
@@ -387,8 +387,7 @@ public partial class Launcher : Node3D
         // with no lit animations renders exactly as it did before they existed.
         WorldLights.RegisterGlobals();
         // Registered before the --dump-* branches below, which build materials of their own:
-        // registering after them left every dump run emitting a missing-global error. See
-        // Utils/ShaderTime.cs's docs/architecture.md entry.
+        // registering after them left every dump run emitting a missing-global error.
         ShaderTime.RegisterGlobal();
 
         // --dump-markers: a pure-data report — print the marker rig tables and quit. Runs
@@ -438,7 +437,6 @@ public partial class Launcher : Node3D
 
         // Exercises the wired modules once so Config's tuning registry is complete, then flags
         // any config.json key no tunable matched — data-free, so a typo is caught before flight.
-        // See Utils/Config.cs's docs/architecture.md entry.
         Config.WarmTuningRegistry();
         Config.ReportOrphans();
         // --dump-config: write a fully-populated tuning template (every registered key + its default,
@@ -606,7 +604,7 @@ public partial class Launcher : Node3D
         }
         // Detection is unconditional; logging is not — a hitch nobody watched for is what this
         // catches. Fed our own QPC pair, never Godot's post-processed `delta`, which measures
-        // as a quantised constant. See Utils/HitchMonitor.cs's docs/architecture.md entry.
+        // as a quantised constant.
         long stamp = System.Diagnostics.Stopwatch.GetTimestamp();
         double frameMs = _lastFrameStamp == 0
             ? 0
@@ -796,8 +794,8 @@ public partial class Launcher : Node3D
     // Settles the master output gain: --volume= if given, else audio.volume, else silent.
     // Deliberately not --mute: at volume 0 both audio paths still load, play, count and log, so
     // the run is silent but not blind. A bus write for the same reason SetFocusMuted is one —
-    // see this file's docs/architecture.md entry. The config read stays unconditional so it
-    // self-registers for --dump-config; see Utils/Config.cs's entry.
+    // see this file's docs/architecture.md entry, which also covers why the config read stays
+    // unconditional so it self-registers for --dump-config.
     private void ApplyMasterVolume()
     {
         float volume = Config.GetFloat("audio.volume", MasterVolumeDefault);

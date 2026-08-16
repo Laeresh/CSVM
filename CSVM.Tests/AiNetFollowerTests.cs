@@ -131,7 +131,7 @@ public class AiNetFollowerTests
         };
         var f = new AiNetFollower(net, new Random(1));
         // Tags are exposed raw and acted on by nothing (stop-point vs segment id is still open,
-        // F17 owns resolving it). The trailer IS decoded (BL-377), but riding it is the caller's
+        // F17 owns resolving it). The trailer IS decoded, but riding it is the caller's
         // opt-in: no supplier, no offset.
         Assert.Equal(new[] { 3f, 1f }, f.Net.Nodes[0].Tags);
         Assert.Equal(new AiNetTrailer(1, "piratezep"), f.Net.Trailer);
@@ -143,7 +143,7 @@ public class AiNetFollowerTests
     [Fact]
     public void AnAnchoredNetRidesItsTargetAndKeepsItsAuthoredAltitude()
     {
-        // BL-377: out = (node − anchor) + target in X/Z, node.y untouched. The target sits at
+        // out = (node − anchor) + target in X/Z, node.y untouched. The target sits at
         // 50 m; the ring stays at its authored 400 m.
         var target = new Vector3(5000f, 50f, -2000f);
         var f = new AiNetFollower(Anchored(), new Random(1), trailerTarget: () => target);

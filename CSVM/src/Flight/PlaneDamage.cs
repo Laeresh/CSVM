@@ -56,7 +56,9 @@ public sealed class PlaneDamage
     /// <summary>Worst (lowest) combined armor+HP fraction across all parts — 1f (pristine) when
     /// there are no parts or none has taken damage. Drives whole-plane damage feedback keyed to
     /// "how hurt is the airframe" rather than any one part (e.g. FlightAudio's damaged-engine
-    /// loop).</summary>
+    /// loop). ⚠ A zone-less AI aircraft (<see cref="PlaneStats.LoadForAi"/>) always reads a
+    /// constant 1f here — read <see cref="SummaryHealthFraction"/> for a reading that works on
+    /// both flavours.</summary>
     public float WorstFraction => _parts.Count == 0 ? 1f : _parts.Values.Min(p => p.Fraction);
 
     /// <summary>The whole-vehicle health fraction — the real pair's current over max, no longer
@@ -75,10 +77,12 @@ public sealed class PlaneDamage
     public static PlaneDamage For(PlaneStats stats) =>
         new(stats.DestroyableParts, stats.VehicleArmor, stats.VehicleHealth);
 
-    /// <summary>Maps the struck collider box (fuselage/wing/canard/tail, or the
-    /// backstop ray's "center") + the impact point in the PLANE's local frame to
-    /// the data's part name: wings split by side (x &lt; 0 = left — verified against
-    /// the planes.zbd node boxes), the fuselage fore/aft between nose and tail.</summary>
+    /// <summary>Maps the struck collider box (fuselage/wing/canard/tail, or the backstop ray's
+    /// "center") + the impact point in the PLANE's local frame to the data's part name: wings
+    /// split by side (x &lt; 0 = left — verified against the planes.zbd node boxes), the fuselage
+    /// fore/aft between nose and tail. ⚠ The <c>tail</c> arm ignores <paramref name="localImpact"/>
+    /// — only correct because <see cref="PlaneCollider"/>'s relabelling hands it no outboard boxes.
+    /// Do not "fix" tail sidedness here.</summary>
     public static string MapStruckPart(string colliderPart, Vector3 localImpact) => colliderPart switch
     {
         "wing" or "canard" => localImpact.X < 0f ? "leftwing" : "rightwing",
@@ -102,7 +106,9 @@ public sealed class PlaneDamage
     /// <summary>Spends one hit's <c>HEALTH_DAMAGE</c>/<c>ARMOR_DAMAGE</c> through the decoded
     /// take-hit flow: the named zone armor-first, a dead or unknown zone redirected to a random
     /// surviving one, the leftover draining the whole pair directly. Returns the zone actually
-    /// struck (null when zone-less) — test <see cref="IsDestroyed"/> regardless.</summary>
+    /// struck (null when zone-less) — test <see cref="IsDestroyed"/> regardless. To pre-set a zone
+    /// without draining the whole pool (test scaffolding), spend exact amounts: strip its armor,
+    /// then a bare-zone health spend — an overkill call still kills.</summary>
     public PartState? Apply(string partName, float healthDamage, float armorDamage)
     {
         if (healthDamage <= 0f && armorDamage <= 0f)

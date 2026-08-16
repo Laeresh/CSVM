@@ -19,8 +19,8 @@ namespace CSVM.UI;
 /// pools and driving one nothing can ever hit would read as a working feature. Lowering the
 /// slider spends the difference through <see cref="AnimRuntime.DamageAt"/>, the same call a
 /// rocket makes; raising it runs <see cref="AnimRuntime.ResetDestructible"/> and re-damages down,
-/// since the data has no healing. Full decode, including the collider-census and freecam-runtime
-/// traps: docs/architecture.md.
+/// since the data has no healing. The collider-census caveats live on <c>Kill</c>; the freecam
+/// stage-build trap lives on <see cref="EffectsSource"/>.
 /// </summary>
 public sealed partial class WorldDamageLab : Node
 {

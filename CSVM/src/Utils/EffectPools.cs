@@ -10,8 +10,7 @@ namespace CSVM.Utils;
 /// template the stage builds, per effect template root, scaled by the session's player count.
 /// Hand-authored engine config, not extracted data: the original instances a fresh copy per
 /// CALL_ANIMATION, so every value here is a finite approximation the user can edit without a
-/// rebuild. Three sections, the crash-rig sizing, and why this lives in <c>CSVM.Utils</c> rather
-/// than <c>CSVM.Session</c>: this module's entry in docs/architecture.md.
+/// rebuild. Three sections and the crash-rig sizing: this module's entry in docs/architecture.md.
 /// ⚠ A missing or unreadable file warns and falls back to <see cref="Fallback"/>, the same policy
 /// <c>Config</c>'s defaults use. Keep the fallback values in step with the shipped file.
 /// </summary>

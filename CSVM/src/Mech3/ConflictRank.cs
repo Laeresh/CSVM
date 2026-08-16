@@ -11,7 +11,7 @@ namespace CSVM.Mech3;
 /// whole index range and lets a within-mesh surface rank out-bid it — see analysis/bl-053-dense-rank.
 /// Every edge runs low node index → high node index, so the longest-path layering is a
 /// topological order of the original's own draw order and cannot invert authored layering.
-/// Mechanism and the bias-value derivation: this module's docs/architecture.md entry.
+/// The bias-value derivation lives on <see cref="SceneBuilder.ConflictRankBias"/>.
 /// </summary>
 internal static class ConflictRank
 {
@@ -70,9 +70,9 @@ internal static class ConflictRank
         var merged = new List<Tri>();
         foreach (var (key, bucket) in buckets)
         {
-            // A pair can be coplanar in the data yet land on either side of a quantisation
-            // boundary, since the two sides reach the shared plane through different transforms.
-            // Pairing each bucket with the next plane offset up recovers those (docs/architecture.md).
+            // A pair can be coplanar yet land either side of a quantisation boundary: the two
+            // sides reach the shared plane through different transforms. Pairing each bucket
+            // with the next plane offset up recovers those splits (C5: 294 -> 326 pairs).
             var neighbour = (key.Item1, key.Item2, key.Item3, key.Item4 + 1);
             if (!buckets.TryGetValue(neighbour, out var above))
             {

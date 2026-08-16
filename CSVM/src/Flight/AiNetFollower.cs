@@ -7,8 +7,9 @@ namespace CSVM.Flight;
 
 /// <summary>Walks an <see cref="AiNet"/> patrol graph as a stream of waypoints: positions in, the
 /// current target node out. Aircraft-agnostic on purpose, so <c>ZeppelinMotion</c> (F17) reuses it
-/// unchanged; <see cref="AiPilot.Patrol"/> is the aircraft consumer. Traversal, the arrival radius
-/// and the anchored-trailer ride are all decoded in docs/architecture.md; per-node tags
+/// unchanged; <see cref="AiPilot.Patrol"/> is the aircraft consumer. Traversal is decoded in this
+/// module's docs/architecture.md entry; the anchored-trailer ride is docs/formats/ai-nets.md.
+/// The arrival radius is invented (see <see cref="DefaultArrivalRadius"/>). Per-node tags
 /// (<see cref="AiNetNode.Tags"/>) are preserved raw and unacted on (docs/formats/ai-nets.md).
 /// </summary>
 public sealed class AiNetFollower
@@ -27,8 +28,8 @@ public sealed class AiNetFollower
     private int _previousIndex = -1;
 
     /// <param name="trailerTarget">Where the net's trailer target is right now, or null when it
-    /// cannot be located this frame. Supplied only by a caller that WANTS the net to ride
-    /// (`BL-377`); omitted, or paired with a net whose trailer has no anchor node, the authored
+    /// cannot be located this frame. Supplied only by a caller that WANTS the net to ride;
+    /// omitted, or paired with a net whose trailer has no anchor node, the authored
     /// coordinates are flown. Called once per node read, so it must be cheap.</param>
     public AiNetFollower(AiNet net, Random rng, float arrivalRadius = DefaultArrivalRadius,
         Func<Vector3?>? trailerTarget = null)
@@ -76,7 +77,7 @@ public sealed class AiNetFollower
     /// <summary>How many node captures have advanced the target so far.</summary>
     public int Advances { get; private set; }
 
-    /// <summary>True when this follower rides its net's trailer target (`BL-377`): the net has an
+    /// <summary>True when this follower rides its net's trailer target: the net has an
     /// anchor node AND the caller supplied a target. False is the fixed-route case, which is every
     /// unanchored net and every caller that did not opt in.</summary>
     public bool Anchored => _anchorIndex >= 0;
@@ -167,7 +168,7 @@ public sealed class AiNetFollower
         _anchorIndex < 0 ? Vector3.Zero : TrailerOffset(Net, _trailerTarget!());
 
     // The seat scan runs in authored space: a uniform offset moves every node equally.
-    // ⚠ Edgeless nodes are skipped, the engine's own rule (docs/architecture.md); a net whose nodes
+    // ⚠ Edgeless nodes are skipped, the engine's own rule (docs/org/aiPilot.md); a net whose nodes
     // are all edgeless still gets a seat rather than nothing.
     private int NearestNode(Vector3 position)
     {

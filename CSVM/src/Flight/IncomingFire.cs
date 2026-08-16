@@ -11,10 +11,10 @@ namespace CSVM.Flight;
 /// aims to hit) or a second pilot in splitscreen.
 /// Fires the target's own gun (or the named weapon) into the shared pool under a shooter identity
 /// no player holds, so the rounds are real. The muzzle sits <see cref="Standoff"/> behind the
-/// aircraft, offset laterally by the pass distance and aimed along the target's own nose, so the
-/// round overtakes it on a parallel track and the geometry holds without lead maths.
-/// ⚠ Never aim this rig at the plane. It exists for a near miss by construction; hit feedback
-/// needs a real shooter.
+/// aircraft, aimed along the target's own nose, so the round overtakes on a parallel track.
+/// ⚠ Never aim this rig at the plane: an aircraft IS a projectile target (<see
+/// cref="AircraftBody"/>). Hit feedback comes from a real shooter — another pilot, or an AI
+/// gunner (<c>BL-226</c>).
 /// </summary>
 public sealed partial class IncomingFire : Node
 {

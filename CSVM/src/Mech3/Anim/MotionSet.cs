@@ -145,8 +145,8 @@ internal sealed class MotionSet
         _motions.Any(m => m.Target == target && m.Channel == MotionChannel.Transform);
 
     /// <summary>Whether this exact spin is already running, so a <c>Loop{-1}</c> sequence
-    /// re-asserting it is left alone instead of rebuilt. Why it can't fold into <see cref="Add"/>:
-    /// this module's docs/architecture.md entry.
+    /// re-asserting it is left alone instead of rebuilt. Checked before <see cref="Add"/>, whose
+    /// evict-then-insert would otherwise treat every re-assert as a fresh launch.
     /// ⚠ A needless rebuild restarts the clock at 0 every frame, so the prop looks driven in the
     /// logs while sitting almost still.</summary>
     public bool HasSpinOn(Node3D target, Vector3 rate, float runTime) =>

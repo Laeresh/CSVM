@@ -128,8 +128,9 @@ public sealed partial class ScreenFlash : Node
         }
     }
 
-    // The panes a burst at `origin` washes, into _selected:
-    // every pane whose own camera is within the def's authored gate of it.
+    // The panes a burst at `origin` washes, into _selected: every pane whose own camera is within
+    // the def's authored gate of it — never "the hit player". Two of the three carriers are ground
+    // effects that play on terrain/water impacts, where no aircraft was struck at all.
     private void SelectPanes(Vector3 origin, float radiusSquared)
     {
         _selected.Clear();

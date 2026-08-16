@@ -17,7 +17,9 @@ public sealed partial class ClassOverlay : Node
 {
     // How much of the class colour is mixed over the object's real appearance. At 0.5 a target
     // reads as its class and stays recognisable as itself. Applied via SceneBuilder.TintParam,
-    // never a MaterialOverride — see this module's entry in docs/architecture.md for why.
+    // never a MaterialOverride: an installed material is a different shader from the world's
+    // (opposite cull default, no depth bias, no clutter billboard spin), so it renders wrong and
+    // cannot blend with the texture the way a parameter into the real shader can.
     private const float TintStrength = 0.5f;
 
     private static readonly Color DestructibleColor = new(0.95f, 0.15f, 0.15f);

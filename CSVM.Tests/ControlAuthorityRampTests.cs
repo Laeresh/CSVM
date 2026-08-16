@@ -6,7 +6,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The original's low-speed control-authority ramp (closed BL-330). Decode:
+/// The original's low-speed control-authority ramp. Decode:
 /// docs/org/flightModel.md, "The low-speed ramp". Saturated at 1 across the whole speed band the
 /// flight-envelope suite measures, so a green suite there says nothing here (verification.md
 /// METHOD-10); this asserts the curve's shape and the rotation it produces where it bites.
@@ -82,7 +82,7 @@ public class ControlAuthorityRampTests
     }
 
     /// <summary>At <c>turn_fade_in</c> and below there is no roll or pitch left at all — the end of
-    /// the ramp that BL-330 describes as "at 10 mph roll and pitch are gone entirely", and the one a
+    /// the ramp described as "at 10 mph roll and pitch are gone entirely", and the one a
     /// clamped-to-a-floor implementation would quietly miss. The rudder still works there: its own
     /// curve bottoms out at <c>yaw_low_speed</c>, not at zero.</summary>
     [Fact]

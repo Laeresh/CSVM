@@ -13,7 +13,7 @@ namespace CSVM.UI;
 /// <see cref="SetVisualLayer"/> moves the copies, <see cref="PlayerCullMask"/> culls the rest of
 /// the band. Every pane is a 3D audio listener, or a splitscreen session has no listener at all.
 /// The zone-gate band (<c>Mech3.ZoneGate.LayerBand</c>) is a separate, shared allocation of the
-/// same 20 layers. Both layer bands and the listener model: docs/architecture.md.
+/// same 20 layers. The listener model: this module's entry in docs/architecture.md.
 /// </summary>
 public sealed partial class SplitScreen : CanvasLayer
 {
@@ -33,7 +33,7 @@ public sealed partial class SplitScreen : CanvasLayer
     // OFF, never something a new camera has to remember to switch on. It is allocated in Mech3
     // rather than here because SceneBuilder stamps it at build time, node by node.
 
-    private const int Gutter = 2;   // px between panes — confirmed at the controls, BL-126 2026-08-15
+    private const int Gutter = 2;   // px between panes — confirmed at the controls
 
     // Per-player identity colours: the launchscreen's join strip and plane-select
     // cursors, and later the race HUD/scoreboard rows, all key off these so a player

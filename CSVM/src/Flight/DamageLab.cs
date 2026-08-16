@@ -128,10 +128,11 @@ public sealed class FlightDamageTarget : IDamageLabTarget
 
 /// <summary>The damage lab (F5 toggles): one armor slider plus one health slider per destroyable
 /// part, driving <see cref="DamageVisuals"/> through an <see cref="IDamageLabTarget"/> off their
-/// combined fraction (docs/architecture.md). Two hosts, one panel: <c>--viewer</c>'s sliders ARE
-/// the state on a parked plane, <c>--fly</c>/<c>--stunt</c> write P1's real <c>PlaneDamage</c>
-/// while the sim runs and mirror it back. <see cref="ReadSliders"/> floors a part's armor at 0
-/// whenever its health reads below full, mirroring the real armor-first damage path.</summary>
+/// HEALTH fraction (<see cref="PartFrac.Combined"/> feeds the gauge dial, not the visuals stages).
+/// Two hosts, one panel: <c>--viewer</c>'s sliders ARE the state on a parked plane,
+/// <c>--fly</c>/<c>--stunt</c> write P1's real <c>PlaneDamage</c> while the sim runs and mirror it
+/// back. <see cref="ReadSliders"/> floors a part's armor at 0 whenever its health reads below
+/// full, mirroring the real armor-first damage path.</summary>
 public sealed partial class DamageLab : Node
 {
     private readonly PlaneStats _stats;
@@ -452,9 +453,10 @@ public sealed partial class DamageLab : Node
         _target.Apply(fractions, rebuild);
     }
 
-    // The anim set the current fractions demand — mirrors DamageVisuals'
-    // crossing rule (an entry applies when the combined fraction ≤ its threshold; the
-    // def-level anims read the worst part).
+    // The anim set the current fractions demand, used only to decide whether a drag needs a
+    // visual rebuild: an entry applies when the COMBINED fraction ≤ its threshold (the lab's own
+    // one-number approximation), where DamageVisuals itself crosses on health alone — a
+    // combined-only change can flag a rebuild the health-gated apply then no-ops.
     private HashSet<string> TargetAnims(Dictionary<string, PartFrac> fractions)
     {
         var target = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

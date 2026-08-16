@@ -27,7 +27,8 @@ public sealed class ZeppelinMotion
         Follower = follower;
         Position = def.Position;
         YawRad = Mathf.DegToRad(def.YawDeg);
-        // Verbatim, per the load-clamp decision above — shipped data authors 0 throughout.
+        // Verbatim: the original's own initial-pitch clamp never fires (unit bug — it compares
+        // the already-radian pitch against still-degree bounds, docs/formats/mission-entities.md).
         PitchRad = Mathf.DegToRad(def.PitchDeg);
         _maxRateYaw = Mathf.DegToRad(def.MaxRateYawDeg);
         _maxRatePitch = Mathf.DegToRad(def.MaxRatePitchDeg);

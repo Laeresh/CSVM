@@ -52,7 +52,6 @@ public sealed class PlaneBuilder
         _textures = textures;
         _scheme = scheme;
         _patterns = patterns ?? PatternLibrary.Empty;
-        // blendTexture/cullBackfaces prohibitions: this module's docs/architecture.md entry.
         _scene = new SceneBuilder(gamez, textures, blendTexture: IsPropBlurTexture, cullBackfaces: true,
             textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex);
         _spinningProps = spinningProps;
@@ -143,10 +142,13 @@ public sealed class PlaneBuilder
         _scene.Repaint();
     }
 
+    // ⚠ Blur disc textures must alpha-blend, never scissor: their alpha peaks around 26%,
+    // which a scissor cutout erases outright.
     private static bool IsPropBlurTexture(string tex) =>
         tex.Contains("blur", StringComparison.OrdinalIgnoreCase);
 
-    // pdp/pcdp naming and the pdpN_h render-always rule: this module's docs/architecture.md entry.
+    // ⚠ pdpN_h (the healthy twin, see IsHealthyPanel) must always render: skipping all of
+    // player_damage_on amputates real airframe sections, not just the torn-skin state.
     private static bool IsDamagePanel(string name, out bool cockpit)
     {
         cockpit = name.StartsWith("pcdp", StringComparison.OrdinalIgnoreCase);
@@ -244,9 +246,11 @@ public sealed class PlaneBuilder
         if (node.Name.EndsWith("_hook", StringComparison.OrdinalIgnoreCase))
             return true;
         var kind = PropParts.Classify(node.Name);
-        // Exterior shows only the static disc; nitropropN prohibition: docs/architecture.md.
+        // Exterior shows only the static disc.
         if (!_spinningProps)
             return PropParts.IsDynamic(kind);
+        // ⚠ nitropropN stays hidden even here: a non-spinning blur disc overlaid on the
+        // spinning ones shimmers.
         if (kind == PropParts.Kind.Nitro)
             return true;
         // staticprop-vs-staticrotor build rule: this module's docs/architecture.md entry.

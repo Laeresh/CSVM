@@ -78,8 +78,7 @@ public sealed partial class MarkerHud : Control
 
     public override void _Draw()
     {
-        // A draw can land before _Process has sized us; Godot's font cache errors on zero size
-        // (docs/architecture.md).
+        // A draw can land before _Process has sized us; Godot's font cache errors on zero size.
         float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
         if (s <= 0f)
             return;

@@ -10,7 +10,9 @@ namespace CSVM.Flight;
 /// parented to the pylon marker at an identity local transform. Built once at session setup and
 /// rides the plane; freed with it.
 /// ⚠ One model per pylon, never one per <c>CLUSTER_SIZE</c> round — the original shows a single
-/// rocket per hardpoint. Decode: this module's entry in docs/architecture.md.</summary>
+/// rocket per hardpoint. No plane model carries static ordnance mesh of its own (every
+/// rocket/missile/bomb/torpedo name search is empty, and pylon nodes are all <c>model_index -1</c>
+/// markers), so there is no double-up to guard against.</summary>
 public sealed class PylonOrdnance
 {
     private readonly List<Mount> _mounts;

@@ -163,7 +163,7 @@ public class EffectCatalogueTests
         }
     }
 
-    /// <summary>What the collider overlay colours by (<c>BL-345</c>): against the three defs per
+    /// <summary>What the collider overlay colours by: against the three defs per
     /// family this install ships, only <c>default</c>(0), <c>water</c>(1) and <c>dirt</c>(13)
     /// resolve to themselves — every other id resolves slot 0, because that is the def a touch
     /// there plays. Pinned as a list rather than as "the ids we ship", since which ids resolve is

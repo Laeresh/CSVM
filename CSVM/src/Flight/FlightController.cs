@@ -249,7 +249,7 @@ public partial class FlightController : Node3D
     /// dogfight results board.</summary>
     public Action? RestartMatch;
 
-    /// <summary>Splitscreen pause bookkeeping (`BL-373`) — the SAME instance on every rig
+    /// <summary>Splitscreen pause bookkeeping — the SAME instance on every rig
     /// (assigned by <c>GameSession</c>, the same way <see cref="Match"/> is), so any player's
     /// Start/P here can pause everyone but only <see cref="PauseState.OwnerPlayerIndex"/> can
     /// resume. Null only where no session builds one (the suites' bare rigs), in which case
@@ -262,7 +262,7 @@ public partial class FlightController : Node3D
     public int PlayerIndex;
 
     /// <summary>Whether a person is flying this plane. Gates the gun aim assist
-    /// (<c>BL-342</c>/B6): true runs <see cref="AimAssist"/> as normal, false takes the muzzle axis
+    /// (B6): true runs <see cref="AimAssist"/> as normal, false takes the muzzle axis
     /// unassisted, the same fallback a barrel with no slot already uses. Defaults true; the AI
     /// spawner sets it false. It is the original's human-versus-AI split (`FUN_004b6530`'s
     /// else-branch), not "pane 1 only".</summary>
@@ -282,7 +282,7 @@ public partial class FlightController : Node3D
     public AiPilot? Pilot;
 
     /// <summary>The world's destructibles, when this session has a world runtime — the aim assist's
-    /// third candidate list (`BL-342`, an approximation of the original's `targets.zrd`
+    /// third candidate list (an approximation of the original's `targets.zrd`
     /// `MStructList`). Null in every build with no world (the weapon lab, the suites), which costs
     /// the scan nothing: that pass simply iterates an empty list.</summary>
     public DestructibleRegistry? Destructibles;
@@ -306,7 +306,7 @@ public partial class FlightController : Node3D
     public Node? HudParent;
 
     /// <summary>Whether P / gamepad-Start reads on this rig at all. True for every human rig,
-    /// splitscreen included (`BL-373`): the freeze halts the shared simulation for everyone
+    /// splitscreen included: the freeze halts the shared simulation for everyone
     /// regardless of who pressed it, and <see cref="PauseState"/> is what keeps a second player
     /// from stealing the resume. False for AI rigs and the suites' bare test rigs, which have no
     /// pause key to read.</summary>
@@ -1249,7 +1249,7 @@ public partial class FlightController : Node3D
             {
                 _cam.FixedView(view, _renderPose);
             }
-            // E42 (BL-372): this player's right-stick click looks back, the pad twin of holding
+            // E42: this player's right-stick click looks back, the pad twin of holding
             // numpad 0 — read here, not in CameraController, same "no pad devices in the camera"
             // rule OrbitInput/PadLookInput follow.
             else if (_cam.BackActive(PadPressed(JoyButton.RightStick)))
@@ -1262,7 +1262,7 @@ public partial class FlightController : Node3D
                 var (lookX, lookY) = PadLookInput();
                 if (lookX != 0f || lookY != 0f)
                 {
-                    // E42 (BL-372): the right stick swings the view around the plane instead of
+                    // E42: the right stick swings the view around the plane instead of
                     // the usual chase pose — see CameraController.PadLook.
                     _cam.PadLook(_renderPose, lookX, lookY);
                     view = CameraController.PadLookLog;
@@ -2132,7 +2132,7 @@ public partial class FlightController : Node3D
     // The D12 acquisition: the decoded ranking formula over the pool's registered
     // aircraft, same roster and team gate as the aim assist (Team). A live
     // AiGunner.PrimaryTargetName assignment is picked outright; its
-    // `"player"` token resolves to the NEAREST human (C22/BL-367). Decode: docs/org/aiPilot.md.
+    // `"player"` token resolves to the NEAREST human (C22). Decode: docs/org/aiPilot.md.
     // ⚠ Deconfliction (AiTargetRanking) stays zero outside a mission.
     private FlightController? SelectRankedTarget(AiGunner gunner, out TargetScore score,
         out string how)
@@ -2171,7 +2171,7 @@ public partial class FlightController : Node3D
                 else if (fc.IsHumanPiloted
                     && wanted.Equals("player", StringComparison.OrdinalIgnoreCase))
                 {
-                    // "player" is a role, not a name (C22/BL-367); resolved ONCE per acquisition.
+                    // "player" is a role, not a name (C22); resolved ONCE per acquisition.
                     float d = ownPos.DistanceSquaredTo(c.Position);
                     if (d < nearestHumanDistSq)
                     {
@@ -2553,7 +2553,7 @@ public partial class FlightController : Node3D
                 KeyAxis(Key.KpSubtract, Key.KpAdd) + padZoom); // Kp- out, Kp+ in, RT out, LT in
     }
 
-    // E42's (BL-372) pad look-around stick: this player's right stick, curved the same
+    // E42's pad look-around stick: this player's right stick, curved the same
     // way OrbitInput's is. Read here, not in CameraController, for the
     // same reason `OrbitInput` is — the camera never learns about pad devices or the stick
     // response curve. Both components read exactly 0 inside the deadzone, which is what tells the

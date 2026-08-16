@@ -28,7 +28,10 @@ public enum ArchiveIntent
 /// <summary>The five archives one chapter world needs, opened together because every caller
 /// (`GameSession`, the anim lab, the test harness) opens the same five — plus the
 /// <see cref="WorldSession.Options"/> lifetime flags <see cref="ArchiveIntent"/> implies, so a
-/// caller sets them by naming its intent, not by hand.</summary>
+/// caller sets them by naming its intent, not by hand.
+/// ⚠ <see cref="OpenFor"/> only opens the archives and states the two flags; it does not dispose
+/// anything. Ownership past its return is each caller's own (session fields, lab fields, the
+/// harness's own <c>using</c> locals).</summary>
 public sealed class SessionArchives
 {
     public required GameZ Gamez { get; init; }

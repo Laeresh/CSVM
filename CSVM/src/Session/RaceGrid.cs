@@ -10,7 +10,10 @@ namespace CSVM.Session;
 /// on that anchor's heading, and the whole field raised as one to clear the ground. Detail on the
 /// anchor delegation and the injected terrain sampler: this module's docs/architecture.md entry.
 /// ⚠ Not a splitscreen spawner. Dogfight deliberately does not use this; only a race may
-/// construct it, since four dogfighters abreast on one heading is an instant head-on merge.</summary>
+/// construct it, since four dogfighters abreast on one heading is an instant head-on merge.
+/// ⚠ Scripted paths (--det, solo flight, --vs, zone-less chapters) bypass this by never
+/// constructing it — the caller picks the implementation once. Never add a bypass branch inside
+/// this class; the --det spawn guarantee is structural, not a runtime check.</summary>
 public sealed class RaceGrid : IFlightStarts
 {
     /// <summary>TUNE: default metres between neighbouring grid slots, measured across the line;

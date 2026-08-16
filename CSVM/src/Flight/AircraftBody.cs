@@ -9,7 +9,8 @@ namespace CSVM.Flight;
 /// plane stays Node3D-moved, the physics engine never pushes it, and an impact with it routes
 /// through the striking plane's own SurviveHit/Crash resolution, never a solver response.
 /// The shapes are the SAME <see cref="BoxShape3D"/> resources the terrain sweep casts —
-/// single-sourced from <see cref="PlaneCollider.Parts"/>, never a second derivation. The box
+/// single-sourced from <see cref="PlaneCollider.Parts"/>, never a second derivation: a fidelity
+/// upgrade edits <see cref="PlaneCollider"/>, not this class. The box
 /// set also answers the proximity-fuse and blast geometry questions (<see cref="NearestShape"/>,
 /// <see cref="SegmentDistance"/>) directly, so those passes measure against the exact same
 /// hull the hit ray strikes.</summary>

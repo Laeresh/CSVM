@@ -22,7 +22,9 @@ public static class ZoneGate
     // Bits 13-15 (layers 14-16) of Godot's 20, immediately below UI.SplitScreen's reserved
     // per-player band at 16-19. The world builds everything else on the default layer 1 (bit 0).
     // The altitude gate over the two ambient cloud populations is a special case of this band,
-    // not a separate mechanism.
+    // not a separate mechanism. Every cull mask the engine builds starts with all three bits
+    // set, so CullMask only ever narrows: a mode, chapter or camera that never calls it renders
+    // every zone.
     private const int LayerBit0 = 13;
 
     /// <summary>The shared visual layer carrying every mesh built for a node of

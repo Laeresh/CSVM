@@ -98,7 +98,7 @@ public sealed class FlightRigAssembler
             // The level's one touchdown vector (the original's global), not one per plane.
             TouchdownDefs = _in.TouchdownDefs,
             // splitscreen: this player's own device(s), own pane for the HUD. Start/P reads on
-            // every rig (BL-373); GameSession wires every PauseState to one shared instance.
+            // every rig; GameSession wires every PauseState to one shared instance.
             PadDevices = _in.PadAssignment?[pi],
             UseKeyboard = pi == 0,
             PinnedView = _spec.View,
@@ -134,7 +134,7 @@ public sealed class FlightRigAssembler
                     ? Loadout.ForRig(planeModel, _in.WeaponDefs, ldef)
                     : Loadout.Bind(ldef, planeModel, _in.WeaponDefs);
                 controller.Projectiles = _in.Projectiles;
-                // The gun aim assist's structure candidates (`BL-342`/B4): the world's
+                // The gun aim assist's structure candidates (B4): the world's
                 // destructibles, when this session built a world at all.
                 controller.Destructibles = _in.WorldRuntime?.Destructibles;
                 controller.InfiniteAmmo = _spec.InfiniteAmmo;
@@ -432,6 +432,8 @@ public sealed class FlightRigAssembler
             // built after the controller joins the tree, later than DamageVisuals itself.
             if (controller.Visuals != null && controller.CrashRuntime is { } rigRuntime)
             {
+                // This closure also arbitrates node ownership against other per-frame systems:
+                // add a future contested case here by name, not as a generic scan.
                 controller.Visuals.DamageEffectSink = anim =>
                 {
                     // applyReset:false as the crash trigger does — a reset would re-pose nodes
@@ -475,7 +477,7 @@ public sealed class FlightRigAssembler
         /// This plane's stats, loaded once per distinct aircraft (splitscreen players differ).
         public Func<string, PlaneStats> StatsFor = null!;
         /// The same aircraft as the AI flies it: the player chain for everything except the damage
-        /// model, which comes from the AI def (PlaneStats.LoadForAi, BL-386). Cached separately
+        /// model, which comes from the AI def (PlaneStats.LoadForAi). Cached separately
         /// from <see cref="StatsFor"/> — the two flavours of one airframe are different objects,
         /// so a single name-keyed cache would hand whichever loaded first to both.
         public Func<string, PlaneStats> AiStatsFor = null!;
