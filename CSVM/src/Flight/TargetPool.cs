@@ -5,7 +5,7 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>The player's classed candidate pool (<c>PLAN-targeting.md</c> B12): everything
+/// <summary>The player's classed candidate pool: everything
 /// selectable right now, split into the original's three cycles. Rebuilt from scratch on every
 /// <see cref="Rebuild"/> call, which is the original's own contract (<c>FUN_004b5fb0</c> releases
 /// the previous frame's list before walking the pools again, and nothing about it persists), so a
@@ -18,8 +18,9 @@ namespace CSVM.Flight;
 /// split and the per-source identity that <see cref="TargetRef"/> carries.</para>
 ///
 /// <para>Ordering is deliberately NOT done here. The cycle order (objectives first, then the
-/// ahead/behind/left/right sector sort with distance inside a sector) is B13's, because it needs the
-/// selecting plane's own basis, which a pool has no business holding.</para></summary>
+/// ahead/behind/left/right sector sort with distance inside a sector) belongs to
+/// <see cref="TargetSelection"/>, because it needs the selecting plane's own basis, which a pool
+/// has no business holding.</para></summary>
 public sealed class TargetPool
 {
     private readonly List<TargetRef> _enemy = new();
@@ -151,7 +152,7 @@ public sealed class TargetPool
             case AimTargetKind.Vehicle:
                 var plane = c.Source as FlightController;
                 var dmg = plane?.Damage;
-                // The MARKER prints the airframe's common name (C22, decision 10: plane type alone),
+                // The MARKER prints the airframe's common name (plane type alone, decision 10),
                 // not the node name the selection is held and pinned by. A rig with no flight model
                 // bound has no airframe to name, and falls back to that node name.
                 return TargetRef.ForAircraft(c, cls, name,

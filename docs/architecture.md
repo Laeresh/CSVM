@@ -1998,14 +1998,14 @@ about the aim axis, then a polar angle **uniform in `[0, inaccuracy]`**.
   the suite's able-to-fail control is exactly that sampling scored alongside.
 
 ## src/Flight/TargetRef.cs
-The one abstraction over everything the player can select (`PLAN-targeting.md` B11), decoded in
+The one abstraction over everything the player can select, decoded in
 [org/targeting.md](org/targeting.md). An enemy Fury, a zeppelin engine and a turret emplacement are
 three unrelated C# types (`FlightController`, `DestructibleRegistry.Instance`, `TurretController`),
-and every consumer downstream of this (the classed pool B12, the cycles B13, the label formatter and
-the marker C22) reads `TargetRef` and never the underlying type. `TargetHud`'s
+and every consumer downstream of this (the classed pool, the cycles, the label formatter and
+the marker) reads `TargetRef` and never the underlying type. `TargetHud`'s
 `c.Source is not FlightController fc` test in both `NearestHostile` and `CollectMarks` is the shape
 that would otherwise have multiplied across four modules.
-**It WRAPS an `AimCandidate` rather than restating it** (B11's open question, settled here). Position,
+**It WRAPS an `AimCandidate` rather than restating it.** Position,
 velocity, team, liveness and the source object are the same five facts the aim assist already needs,
 filled by the same collectors off the same four pools (`ProjectilePool.CollectAircraft`/
 `CollectTurrets`, `AimCandidateSet.AddStructures`), so a second copy could only drift; the forwarding
@@ -2013,9 +2013,9 @@ properties (`Position`/`Velocity`/`Team`/`Live`/`Source`) make that invisible at
 `TargetRef` adds is what the assist has no use for: `Kind` (which pool, reusing `AimTargetKind` rather
 than minting a second enum), `Class` + `Objective`, `Name`/`TypeLabel`/`Category`, and optional
 `Health`/`Armor`. The assist's `AimCandidate.ConeOverride` rides along unused, since it is the same
-entity's data rather than a duplicate. Pure data, no Godot node, so B12/B13 unit-test with no tree the
-way `NearestHostile` already does.
-⚠ **`Name` and `DisplayName` are two strings for CSVM's sake, not the original's** (C22). There one
+entity's data rather than a duplicate. Pure data, no Godot node, so the pool and the cycles unit-test
+with no tree the way `NearestHostile` already does.
+⚠ **`Name` and `DisplayName` are two strings for CSVM's sake, not the original's.** There one
   entity string is both; here the aircraft's node name (`ai1_player_fury`) is IDENTITY — what
   `--target=` matches and what the breadcrumbs print — while the marker prints the airframe's common
   name (`Fury`, `PlaneRoster.PlaneDisplayName`, decision 10). A golden pinned on "Fury" could not
@@ -2049,7 +2049,7 @@ onto, not the world, and that is why `DestructibleRegistry` never feeds this poo
 Pinned by the `target-ref` suite (`Suites.cs`), which is deliberately tree-free and data-free.
 
 ## src/Flight/TargetPool.cs
-The player's classed candidate pool (`PLAN-targeting.md` B12), decoded in
+The player's classed candidate pool, decoded in
 [org/targeting.md](org/targeting.md) "The candidate list". Three lists of `TargetRef` (`Enemy`,
 `Ally`, `NonAircraft`, reachable by name through `Of(TargetClass)`), rebuilt from scratch on every
 `Rebuild` call. That is the original's own contract: `FUN_004b5fb0` releases the previous frame's
@@ -2074,27 +2074,27 @@ selectable by construction. `Describe` is the ONLY place in the targeting path t
 source type — the kind picks the shape, the source supplies only the name and the health figures.
 ⚠ **Read `FlightController.Team`, never `AimAssist.TeamOfPilot(PlayerIndex)`.** Deriving the side
   from the pilot index is right for P1 by coincidence (`TeamOfPilot(0)` == `PlayerTeam`) and wrong
-  for P2–P4 in any session that sets teams explicitly. That is the wingman-in-the-marker bug this
-  item diagnosed: see the `TargetHud.OwnTeam` entry. The suite carries the derivation as a named
+  for P2–P4 in any session that sets teams explicitly. That is the wingman-in-the-marker bug: see
+  the `TargetHud.OwnTeam` entry. The suite carries the derivation as a named
   able-to-fail CONTROL so the wrong read cannot quietly come back.
-⚠ `NameOf` is the plain **node** name — identity, not a label. C22 added the marker's own
-  `TargetRef.DisplayName` beside it, `PlaneRoster.PlaneDisplayName(plane.Stats)` for an aircraft
-  (through the `FlightController.Stats` accessor that item added) and the node name for everything
+⚠ `NameOf` is the plain **node** name — identity, not a label. The marker's own
+  `TargetRef.DisplayName` sits beside it, `PlaneRoster.PlaneDisplayName(plane.Stats)` for an aircraft
+  (through the `FlightController.Stats` accessor) and the node name for everything
   else. A rig with no flight model bound has no airframe to name and falls back to the node name.
 ⚠ **Zeppelin sub-part enumeration is a deliberate divergence, not a port.** The decode found no
   sub-part enumeration anywhere in the original's targeting path: a gasbag is selectable there only
   because the mission authored it as its own `MStruct` carrying the flag. Decision 8 asked for the
   parts, so CSVM enumerates what it already models as damageable. Do not "correct" it back by citing
   the decode.
-⚠ `TargetSelection` (B13) owns the instance and prints the per-session `target pool:` count
-  breadcrumb; B14 wires one per human pane in `FlightRigAssembler` and feeds it every frame from
+⚠ `TargetSelection` owns the instance and prints the per-session `target pool:` count
+  breadcrumb; `FlightRigAssembler` wires one per human pane and feeds it every frame from
   `FlightController.StepTargeting`.
 Pinned by the `target-pool` suite (a synthetic half with no world, plus C1's real emplacement census
 through the same pool); the carried-gunner exclusion rides the `turret-gunner` suite, where a real
 carried turret already exists.
 
 ## src/Flight/TargetSelection.cs
-One pilot's target selection (`PLAN-targeting.md` B13), decoded in
+One pilot's target selection, decoded in
 [org/targeting.md](org/targeting.md). One instance per pane; it OWNS its `TargetPool`, since the pool
 is per-selector state and nothing else needs one. No Godot node dependency — `Resolve` takes the pose
 it needs — so the whole lifecycle drives from the suite with no tree.
@@ -2119,9 +2119,8 @@ the Z column IS `row2` (the negated forward axis), so no sign fixing is needed.
   half-angle cone about the plane's forward axis, plain slant range as the score, and a **2 km hard
   cap** because the running best starts at 2000.0. It ignores the cycle entirely, runs its own scan
   over all three classes, **includes friendlies** (which is how one keypress reaches an ally), and
-  writes the class back from what it found. B13's original plan text said the `ImpactReticle` pipper;
-  that was written pre-decode and is wrong — the pipper is a separate velocity-derived point nothing
-  in this path reads.
+  writes the class back from what it found. Not the `ImpactReticle` pipper — that guess predates the
+  decode and is wrong; the pipper is a separate velocity-derived point nothing in this path reads.
 ⚠ **`Target Nothing` must STAY cleared.** `Clear` nulls the class as well as the target, and `Rebuild`
   short-circuits on a null class so the pool is left empty rather than built and discarded. That is
   the original's mechanism, not a convenience: with the class flags zero its collection pass is
@@ -2152,13 +2151,13 @@ the Z column IS `row2` (the negated forward axis), so no sign fixing is needed.
   cannot be**: the string is in the executable, but neither `extracted/zrdr/sounds.zrd.json` (whose
   entries are all `snd_*`) nor the 2521 assets under `extracted/soundsh/` carry it. `snd_select`
   exists and is a plausible candidate, but no resolution from `sg_switchtarget` to it has been
-  traced, so picking it would be an invention. B14 ships silent; the original is silent for
+  traced, so picking it would be an invention. CSVM ships silent; the original is silent for
   nearest-crosshairs, Target Nothing and Next Enemy's attacker-queue branch anyway.
 ⚠ The player's own death/respawn was **not traced** (`FUN_00421500` and `FUN_00469e20` both zero the
   field; neither was tied to the respawn path). Doing nothing on own respawn already gives the
   required behaviour — a live selection survives the rebuild, a dead one drops to the head — so no
   rule is invented here.
-`Select(name)` and `ApplyInitial(spec, pose)` are B15's `--target=` seam and the only things here with
+`Select(name)` and `ApplyInitial(spec, pose)` are `--target=`'s seam and the only things here with
 no counterpart in the original, which has no scripted input at all. `Select` matches
 `TargetRef.Name` case-insensitively across the three cycles (Enemy, then Ally, then Non-Aircraft, in
 the pool's own collector order, so a duplicated name resolves the same way on every run) and writes
@@ -2168,14 +2167,14 @@ anything else onto `Select`, then re-resolves in the same frame so the caller ca
 ⚠ `ApplyInitial` sets the INITIAL selection and does not hold it. It mutates the same two pieces of
   state a keypress does and returns; calling it once is the caller's job (`FlightController`
   `ApplyInitialTarget`). A flag that re-asserted itself per frame would freeze targeting in an
-  interactive session started with it, which is B15's own recorded trap.
+  interactive session started with it — a known trap, guarded against on purpose.
 Pinned by the `target-selection` suite, which is tree-free and data-free; its geometry deliberately
 makes the sector order and a plain range order DISAGREE, so an implementation that quietly sorted by
 distance fails it. The `--target=` grammar is pinned by `target-flag`, whose pool is built from real
 sources rather than hand-filed refs because the claim is about the names `TargetPool` produces.
 
 ## src/Utils/TapHoldButton.cs
-One button carrying two actions, split by how long it is held (`PLAN-targeting.md` B14, decision 7).
+One button carrying two actions, split by how long it is held (decision 7).
 Feed it the button's LEVEL each frame; it edge-detects, times over `HoldToRepeat` (zero repeat
 interval, so no second timer), and answers `TapHold.Tap` / `Hold` / `None`. Engine-free: the input
 read stays with the caller, which is what makes the *decoding* unit-testable when the device is not.
@@ -3088,14 +3087,14 @@ The nearest-AI-hostile tracker and `--debug-markers` used to live here too; both
 class never did.
 
 ## src/Flight/TargetHud.cs
-The per-pane targeting HUD (`PLAN-targeting.md` C21/C22): the pilot's own selected-target marker,
-the H22 nearest-AI-hostile fallback and `--debug-markers`, split out of `VersusHud` because all
+The per-pane targeting HUD: the pilot's own selected-target marker,
+the nearest-AI-hostile fallback and `--debug-markers`, split out of `VersusHud` because all
 three draw in EVERY flight session, not only `--vs` — a Versus-only class was the wrong home for a
 feature every pane gets. `Build(playerIndex, camera, pool)` is unconditional, one per human pane,
 built by `FlightRigAssembler` whether or not the session has a `VersusMatch`; a `--vs` pane gets
 BOTH this and a `VersusHud`, so an AI hostile spawned into a dogfight is still marked alongside the
 human opponents.
-**The shipped marker is `Selected`** (`Own.Targeting.Current`, C22), drawn in the original's own
+**The shipped marker is `Selected`** (`Own.Targeting.Current`), drawn in the original's own
 shape and decoded in [`org/targeting.md`](org/targeting.md): the fixed 20 x 16 bracket box with
 4-pixel arms (`FUN_004574d0`'s three absolute constants, taken at the 1440p reference and scaled by
 `HudMetrics` — the deliberate divergence, since the original never scales its box and 20 px is
@@ -3104,8 +3103,7 @@ and clock bearing stacked. `MarkerColor` is `Target::GetColor` (`FUN_004a5f40`) 
 objective is red for the four destructive categories (`Destroy`/`Disable`/`Disable Engines`/
 `Damage`) and blue for any other, and anything categoryless is red when the teams differ and both
 are non-zero, green otherwise.
-⚠ **A friendly is GREEN, not blue.** C22's own goal line said blue; that was written pre-decode and
-  the decode wins. Blue is the non-destructive objective (protect, escort).
+⚠ **A friendly is GREEN, not blue.** Blue is the non-destructive objective (protect, escort).
 ⚠ **The bracket gate is the SELECTED GUN's reach, not a distance constant**
   (`FlightController.GunReachesTarget` → `TargetHud.GunReaches`): the aim assist's own lead solve,
   accepted when the round is still inside the weapon's authored `RANGE` at the intercept. So the
@@ -3131,16 +3129,16 @@ so an out-of-range target's label does not move.
 (`ProjectilePool.CollectAircraft`, the same list the AI gunners read) and `NearestHostile` picks
 the nearest LIVE AI-piloted `FlightController` past the engine's team gate; the winner draws
 through `DrawOpponent`, in the HUD red, tagged `HostileTag(name)` ("ai1_player_fury" reads "AI1").
-That marker is now a FALLBACK (C22): it draws only where there is no selection at all — a pane with
+That marker is now a FALLBACK: it draws only where there is no selection at all — a pane with
 no `TargetSelection` bound (a spectator, a suite rig) or a pilot who pressed Target Nothing —
 because a pane that HAS a selection marks that one target and nothing else (decision 11).
-Humans carry no `AiGunner`, so there is no D12 "the target" to mirror; nearest-hostile re-selected
+Humans carry no `AiGunner`, so there is no ranked "the target" to mirror; nearest-hostile re-selected
 per frame is the shipped rule, which also picks up generator spawns and drops a crashed hostile
 (listed but not live) with no extra plumbing. Acquire/lose transitions log one `targeting hud:`
 breadcrumb each. Pinned by the `hostile-marker-hud` suite + `HostileTagTests`; a hud built without
 a pool never tracks.
 `--debug-markers` (`MarkAll`, set by the rig assembler alongside `Own`) widens that to EVERY live
-aircraft in the same scan: `CollectMarks` (C23) wraps each candidate as a `TargetRef` — the same
+aircraft in the same scan: `CollectMarks` wraps each candidate as a `TargetRef` — the same
 aircraft construction `TargetPool`'s Vehicle branch uses, reading `FlightController.Damage`/
 `Stats` — paired with whether it is on the pane's own team, each drawn through the same
 `DrawOpponent` in HUD blue on the pane's own team and HUD red otherwise, tagged with
@@ -3152,7 +3150,7 @@ machine's own `NameOf` vocabulary; empty for a pilot without a machine). Off-scr
 the screen edge (`RefStaggerStep`) so a flight sharing one bearing does not stack into one string.
 It REPLACES the hostile-tracker draw rather than adding to it, so the tracked plane is never drawn
 twice in two colours — but NOT the selected target's marker, which keeps drawing under the flag
-(different shape, and C24's golden shot pins brackets, label and debug string together in one
+(different shape, and the golden shot pins brackets, label and debug string together in one
 frame — `analysis/goldens/manifest.json`'s `c1-targeting-hud`).
 ⚠ **Health and armor are omitted, not defaulted, when the `TargetRef` carries no figure**
   (`Health`/`Armor` null — a bare rig with no `Damage` ledger bound): `H100 A100` for a source with
@@ -3164,7 +3162,7 @@ frame — `analysis/goldens/manifest.json`'s `c1-targeting-hud`).
   the pair. A debugging overlay that silently omitted a plane would be worse than one that
   mis-colours it.
 ⚠ **`OwnTeam` is `Own?.Team`, not `AimAssist.TeamOfPilot(PlayerIndex)`** — the fix for the
-  wingman-in-the-marker bug (`PLAN-targeting.md` B12 trap (a)). Both team tests here (`UpdateHostile`
+  wingman-in-the-marker bug. Both team tests here (`UpdateHostile`
   and `--debug-markers`' `CollectMarks`) used to derive the pane's side from its pilot index, which
   is right for P1 by coincidence (`TeamOfPilot(0)` == `AimAssist.PlayerTeam`) and wrong for everyone
   else the moment a mission sets teams: in Instant Action and under `--coop` every human is team 1
@@ -3178,12 +3176,12 @@ own copy of them — the same relationship `VersusHud` already has with `MarkerH
 per-HUD copy documented as verbatim, not a shared base class for two `Control`s); `TargetHud`'s
 copy additionally carries the `stagger` step `--debug-markers` needs when several planes share one
 bearing, which `VersusHud`'s opponent loop never does.
-Pinned by the `hostile-marker-hud` suite, which carries C22's three pure rules as well: the colour
-table (three colours, the Destroy override, the neutral-own-side case), the gun-reach gate (inside
-`RANGE` brackets, past it does not, an outrunning target never does, and the hysteresis holds the
-boundary case) and the label lines. C23's `DebugTag` is pinned there too — the full format string,
-health/armor omitted with no source, and `CollectMarks`' `TargetRef` wrapping reading a live
-`Damage` ledger. The drawn geometry itself is C24's golden (`c1-targeting-hud`).
+Pinned by the `hostile-marker-hud` suite, which carries the shipped marker's three pure rules as
+well: the colour table (three colours, the Destroy override, the neutral-own-side case), the
+gun-reach gate (inside `RANGE` brackets, past it does not, an outrunning target never does, and the
+hysteresis holds the boundary case) and the label lines. `DebugTag` is pinned there too — the full
+format string, health/armor omitted with no source, and `CollectMarks`' `TargetRef` wrapping
+reading a live `Damage` ledger. The drawn geometry itself is the `c1-targeting-hud` golden.
 
 ## src/Flight/VersusBoard.cs
 The dogfight's shared results overlay — `StuntRaceBoard`'s construction
@@ -4051,8 +4049,8 @@ as state, by the private `ApplyPresence()` — the model's `Visible` and `Body.S
 runs from `Respawn` AND `_Ready`, because `Setup` calls `Respawn` before `_Ready` has built the
 body. Everything else consults the flag: `TakeProjectileHit`/`DebugForceCrash` refuse,
 `DriveAiGunner` drops a standing target that leaves play, and outside this class
-`ProjectilePool.CollectAircraft` (which carries the aim assist, `SelectRankedTarget` and the H22
-tracker with it), the pool's fuse/blast passes, `TurretController.Alive`, `AiPilot.Next`'s quarry
+`ProjectilePool.CollectAircraft` (which carries the aim assist, `SelectRankedTarget` and the
+hostile tracker with it), the pool's fuse/blast passes, `TurretController.Alive`, `AiPilot.Next`'s quarry
 test and `TargetHud`'s hostile draw all read `InPlay`. `InertChanged` is the event a session-level
 roster mirrors it into (`AiVoiceRuntime` → `Speaker.Alive`). `Activate(pos, lookAt)` is the
 inverse — re-home, clear the flag, `Respawn` — the original's teleport-then-reactivate in one call.
@@ -4087,13 +4085,13 @@ free camera left the eye.
   (0.5 s of flight; see `ImpactReticle.cs`), so the two agree for every gun and the reticle does not
   grow a second integration.
 `SelectedGun`/`MuzzleMidpoint` are the shared "which gun is selected, and where does its fire leave
-from" answer: the pipper reads them, and so does `GunReachesTarget`, the C22 bracket gate
-(`FUN_004574d0` — the decoded range threshold is this weapon's authored `RANGE` through a lead
+from" answer: the pipper reads them, and so does `GunReachesTarget`, the targeting marker's bracket
+gate (`FUN_004574d0` — the decoded range threshold is this weapon's authored `RANGE` through a lead
 solve, not a HUD constant; see `TargetHud.cs`). `Stats` exposes the flight model's own `PlaneStats`,
-which C22 needs for the airframe's display name and which was unreachable while `_model` was
+needed for the airframe's display name and unreachable while `_model` was
 private; it is null on a rig `Setup` has not run on.
 
-`StepTargeting` is the player-targeting frame (`PLAN-targeting.md` B14), run for every human pane
+`StepTargeting` is the player-targeting frame, run for every human pane
 whose `Targeting` is set: rebuild the pool and re-resolve, prune the attacker queue, then dispatch
 input. That order is the original's — its candidate pass runs in the sim step and a handler steps the
 list it just built, which is why a class change reads one frame late and self-heals. The scan is
@@ -4112,13 +4110,13 @@ rigs are). D-pad Up runs through `TapHoldButton` (tap = next enemy, hold = neare
   head of the cycle.
 ⚠ The collection pass is skipped entirely while `ActiveClass` is null. That is the original's own
   short-circuit and the mechanism that keeps `Target Nothing` cleared, not a saving.
-`ApplyInitialTarget` spends `--target=`'s one application (B15, `cli.md`), before the input dispatch
+`ApplyInitialTarget` spends `--target=`'s one application (`cli.md`), before the input dispatch
 and before the `InPlay` gate so a `--det` run with no pilot pressing anything still gets it. It waits
-for a non-empty pool first — the things a name can reach are all built after the rigs are, the same
-ordering that made B14's count breadcrumb print zeroes — except for `none`, which needs no pool.
-⚠ It is spent whether or not it MATCHED. A retry loop would re-assert the flag against later input,
-  which is the trap the item recorded; a miss logs `WARN [core]` naming what was selectable instead,
-  which is why the flag needs no listing mode of its own.
+for a non-empty pool first — the things a name can reach are all built after the rigs are — except
+for `none`, which needs no pool.
+⚠ It is spent whether or not it MATCHED. A retry loop would re-assert the flag against later input;
+  a miss logs `WARN [core]` naming what was selectable instead, which is why the flag needs no
+  listing mode of its own.
 `TakeProjectileHit` also feeds the attacker queue: a hit whose shooter resolves through
 `ProjectilePool.RigOfShooter` to a plane on a **different, non-zero team** is recorded, so
 `Next Enemy/Objective` reaches whoever just shot you before it touches the ordinary cycle. Friendly
@@ -6045,7 +6043,7 @@ aimed at a rand()-picked in-arc gasbag), gates on `cannon_fire_range` + the arc,
 authored deploy/retract anims scoped to the hull, and spawns unowned rounds
 (`ProjectilePool.NoShooter`, C9b's convention) scattered by `cannon_inaccuracy`. Pinned by
 `zeppelin-motion` + `zeppelin-damage` + `zeppelin-broadside` suites.
-`CollectTargetParts(List<AimCandidate>)` (`PLAN-targeting.md` B12) offers those same F18 zones —
+`CollectTargetParts(List<AimCandidate>)` offers those same F18 zones —
 gasbags, engines, cannons — to the player's `TargetPool`, one candidate per part, each carrying the
 hull's own velocity (`Motion.Forward * Motion.Speed`) rather than zero so the bracket gate has
 something to lead; a destroyed zone is offered but not live, and a part whose anchor has left the

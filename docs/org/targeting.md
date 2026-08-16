@@ -1,7 +1,7 @@
 # Player target selection and the target marker, decoded from `crimson.exe`
 
 Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
-`crimson.exe`, `language x86:LE:32:default`), 2026-08-16, for `PLAN-targeting.md` A1. Every claim
+`crimson.exe`, `language x86:LE:32:default`), 2026-08-16. Every claim
 below names the function or address it came from. The HUD geometry is additionally measured off
 `OriginalScreenshots/Targeting HUD Kestrel.png` and `OriginalScreenshots/C1 M04 Zeppelin.png`, and
 the measurements agree with the constants to the pixel.
@@ -293,7 +293,7 @@ Non-Aircraft, and `+0x4d` → the Objective companion pair.
 - **Explicit clear.** `0x2e` nulls the target *and* all four class flags. With every flag zero,
   `FUN_004b5fb0` skips the collection pass, the list stays empty, and the re-resolve returns 0. So
   **`Target Nothing` stays cleared**, because the auto-acquire cannot fire again until a class key is
-  pressed. This is the mechanism behind the sticky-clear the plan's B13 wanted tested.
+  pressed. This is the mechanism behind the sticky-clear, and it is worth pinning with a test.
 - **Range, line of sight and field of view drop nothing.** No such gate exists anywhere in the
   path.
 - **The player's own death** was not traced. `FUN_00421500` and `FUN_00469e20` both zero a plane's
@@ -327,7 +327,7 @@ and x = 1859 and span rows 834–850. Same 20 × 16 box.
 
 ### The range gate is the selected gun's `RANGE`
 
-This is the number `PLAN-targeting.md` A1 was opened to find, and it is not a HUD constant.
+This is the bracket range threshold, and it is not a HUD constant.
 
 If a gun group is selected (plane `+0x604` index is non-negative and its weapon def resolves),
 `FUN_004574d0`:
@@ -450,10 +450,9 @@ element draws the triangle, and how it is rotated, is unresolved.
 | Colour | red hostile, green friendly, blue non-destructive objective | HUD red for hostiles, HUD blue for own team under `--debug-markers` |
 | Off screen | edge position plus the same three lines, clamped with a 3 px margin | edge arrow plus a one-line tag (`DrawOpponent`) |
 
-⚠ **The "no reference to copy" comment in `VersusHud`'s module doc is false and must be corrected.**
-The original draws an edge arrow with a stacked tag and clock bearing, which is what our
-`DrawOpponent` edge branch already does. A1 is documentation-only by standing constraint, so the
-C# comment edit itself rides `PLAN-targeting.md` C21, which already carries it.
+⚠ **The "no reference to copy" claim once made in `VersusHud`'s module doc was false.** The
+original draws an edge arrow with a stacked tag and clock bearing, which is what CSVM's
+`DrawOpponent` edge branch already does — corrected in the code itself.
 
 ⚠ **Fixed 20 × 16 pixels does not port literally.** The original never scales its box, so on a
 modern display it would be nearly invisible. Scaling through `HudMetrics` like every other CSVM HUD

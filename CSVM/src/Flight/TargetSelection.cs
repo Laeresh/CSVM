@@ -4,7 +4,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>One pilot's target selection: the sticky choice, the three cycles, the nearest queries
-/// and the lifecycle (<c>PLAN-targeting.md</c> B13, decoded in docs/org/targeting.md). One instance
+/// and the lifecycle (decoded in docs/org/targeting.md). One instance
 /// per pane; it OWNS its <see cref="TargetPool"/>, since the pool is per-selector state and nothing
 /// else needs one.
 ///
@@ -153,8 +153,8 @@ public sealed class TargetSelection
     /// before the ordinary cycle, walking it BACKWARDS from the end so the most recent shooter comes
     /// first: not in the queue selects the last entry, in the queue selects the one before it, and
     /// the queue's first entry falls through to an ordinary <c>+1</c> step. An empty queue falls
-    /// through too. (The original plays its switch sound only on the fall-through; the sound is
-    /// B14's to wire.)</summary>
+    /// through too. (The original plays its switch sound only on the fall-through; CSVM ships this
+    /// silent — no resolvable asset, see the input wiring's own notes.)</summary>
     public void NextEnemy()
     {
         if (ActiveClass != TargetClass.Enemy)
@@ -259,8 +259,8 @@ public sealed class TargetSelection
     /// <summary>Point the selection at a named pool entry, matching <see cref="TargetRef.Name"/>
     /// case-insensitively across all three cycles and writing the class back from what it found
     /// (the same rule <see cref="NearestCrosshairs"/> uses, and the reason a sub-part pin is not
-    /// dropped by the next <see cref="Resolve"/>). B15's <c>--target=&lt;name&gt;</c>; nothing in the
-    /// original has an equivalent, since the original has no scripted input at all.
+    /// dropped by the next <see cref="Resolve"/>). This is <c>--target=&lt;name&gt;</c>'s seam;
+    /// nothing in the original has an equivalent, since the original has no scripted input at all.
     ///
     /// <para>Cycles are searched Enemy, Ally, Non-Aircraft, and within a cycle in the pool's own
     /// collector order — so a name carried by two entities (two zeppelins with identically named
@@ -291,7 +291,7 @@ public sealed class TargetSelection
         return false;
     }
 
-    /// <summary>Apply one <c>--target=</c> spec (B15): <c>nearest</c>, <c>crosshair</c>, <c>next</c>,
+    /// <summary>Apply one <c>--target=</c> spec: <c>nearest</c>, <c>crosshair</c>, <c>next</c>,
     /// <c>none</c>, or a target's name for <see cref="Select"/>. The four words run the ordinary
     /// actions rather than a scripted path of their own, so the flag can only reach a state the pilot
     /// could have reached by hand.

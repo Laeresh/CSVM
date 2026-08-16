@@ -388,19 +388,19 @@ public static class Suites
         into.Add(new TestHarness.Suite("ai-crash-defs",
             "an AI plane's crash rig binds the ai_crash_* family and its crash indexes it by the struck surface id — dirt(13) plays ai_crash_dirt, no material plays ai_crash_default — while a human rig off the same factory keeps player_crash_* (G21)", AiCrashDefs));
         into.Add(new TestHarness.Suite("hostile-marker-hud",
-            "the H22 targeting HUD (TargetHud, every flight session): the tracker picks the " +
+            "the targeting HUD (TargetHud, every flight session): the tracker picks the " +
             "pane's nearest LIVE AI hostile off the pool's own aircraft roster (a closer human, " +
             "dead plane or neutral is never picked), switches to a closer hostile, drops a " +
             "crashed one, and a hud built without a pool never tracks; plus --debug-markers' " +
             "own selection, which takes EVERY live aircraft instead of the nearest, flags each " +
             "by team against the pane's own, skips a crashed one and skips the pane's own " +
-            "aircraft; plus C22's marker rules — the three decoded colours, the bracket gate's " +
-            "gun reach (inside RANGE brackets, past it does not, a target outrunning the round " +
-            "never does, and the hysteresis holds the boundary case), and the label lines an " +
-            "aircraft, an off-screen target and a named objective each compose",
+            "aircraft; plus the shipped marker's rules — the three decoded colours, the bracket " +
+            "gate's gun reach (inside RANGE brackets, past it does not, a target outrunning the " +
+            "round never does, and the hysteresis holds the boundary case), and the label lines " +
+            "an aircraft, an off-screen target and a named objective each compose",
             HostileMarkerHud));
         into.Add(new TestHarness.Suite("target-ref",
-            "B11's one abstraction over every selectable thing, tree-free: a TargetRef built for "
+            "the one abstraction over every selectable thing, tree-free: a TargetRef built for "
             + "each of the three source kinds (aircraft, zeppelin sub-part, turret emplacement) "
             + "forwards the wrapped AimCandidate's pose/team/liveness/source and reads its own "
             + "identity back; health and armor are genuinely optional, so the turret carries "
@@ -409,7 +409,7 @@ public static class Suites
             + "otherTarget over the team split, an unflagged turret not selectable at all); and "
             + "identity is the SOURCE object, not the wrapper", TargetRefModel));
         into.Add(new TestHarness.Suite("target-pool",
-            "B12's classed candidate pool: the three cycles built off the aim assist's own typed "
+            "the classed candidate pool: the three cycles built off the aim assist's own typed "
             + "lists. A wingman lands in Ally and an enemy in Enemy off the TEAM FIELD (never the "
             + "pilot-index derivation, which is the wingman-in-the-marker bug), the selecting plane "
             + "is excluded from its own pool, a dead plane and a destroyed zeppelin engine are "
@@ -418,7 +418,7 @@ public static class Suites
             + "contributes one entry per gasbag/engine/cannon with its hull's velocity; plus C1's "
             + "real emplacements landing on the Non-Aircraft cycle", TargetPoolModel));
         into.Add(new TestHarness.Suite("target-selection",
-            "B13's sticky selection, tree-free: the decoded cycle order in one assertion "
+            "the sticky selection, tree-free: the decoded cycle order in one assertion "
             + "(objectives, then ahead/behind/left/right with distance inside a sector), the "
             + "auto-acquire at the head, Next/Previous stepping and wrapping, Nearest as HEAD OF "
             + "CYCLE rather than nearest-in-space, target death dropping to the head and not to the "
@@ -427,15 +427,15 @@ public static class Suites
             + "rebuilds, nearest-crosshairs scoring the NOSE cone (not the pipper) with its 2 km cap "
             + "and reaching an ally, and 0x24's attacker queue walked backwards", TargetSelectionModel));
         into.Add(new TestHarness.Suite("target-input",
-            "B14's decoding, which is what the suite CAN read (a gamepad and a bare key press it "
-            + "cannot): TapHoldButton's resolve-on-release rule — a short press taps, crossing 250 "
-            + "ms fires the hold ONCE mid-press and the release is then spent, a held button never "
-            + "repeats, and an up button with no press reports nothing; plus the attacker queue's "
-            + "live wiring, where a real hostile round through TakeProjectileHit records its "
-            + "shooter, a friendly-fire round and an unowned one record nothing, and "
+            "the tap/hold decoding, which is what the suite CAN read (a gamepad and a bare key "
+            + "press it cannot): TapHoldButton's resolve-on-release rule — a short press taps, "
+            + "crossing 250 ms fires the hold ONCE mid-press and the release is then spent, a held "
+            + "button never repeats, and an up button with no press reports nothing; plus the "
+            + "attacker queue's live wiring, where a real hostile round through TakeProjectileHit "
+            + "records its shooter, a friendly-fire round and an unowned one record nothing, and "
             + "ProjectilePool.RigOfShooter resolves a shooter id to its plane", TargetInputModel));
         into.Add(new TestHarness.Suite("target-flag",
-            "B15's --target= scripted twin: the four words mapping onto the ordinary actions "
+            "the --target= scripted twin: the four words mapping onto the ordinary actions "
             + "(nearest as head-of-cycle, next, crosshair, none), a name pinning an aircraft the "
             + "auto-acquire would NOT have chosen, the same one grammar reaching an ally and a "
             + "zeppelin sub-part by writing the class back, case-insensitive matching, an unknown "
@@ -5142,7 +5142,7 @@ public static class Suites
                       && candidates.Turrets[0].Team == AimAssist.TeamOfPilot(host.PlayerIndex)
                       && candidates.Turrets[0].Live,
                 $"CollectTurrets feeds the candidate scan count={candidates.Turrets.Count}");
-            // B12: the same list feeds the player's target pool, which takes emplacements only. A
+            // The same list feeds the player's target pool, which takes emplacements only. A
             // carried gunner's host is already a target in its own right, so offering both would put
             // two entries on one silhouette; the discriminator is the placement Site.
             var carriedPool = new TargetPool();
@@ -5736,7 +5736,7 @@ public static class Suites
         }
     }
 
-    /// <summary>B11's <see cref="TargetRef"/>. Entirely tree-free — no plane is built, no pool is
+    /// <summary><see cref="TargetRef"/>. Entirely tree-free — no plane is built, no pool is
     /// registered, no data root is required — because that is the seam's whole claim: the cycles,
     /// the label formatter and the marker read this and never the underlying C# type, so they all
     /// unit-test without a Godot tree.
@@ -5773,7 +5773,7 @@ public static class Suites
         ctx.Check(kestrel.Kind == AimTargetKind.Vehicle && kestrel.Class == TargetClass.Enemy
                   && !kestrel.Objective && kestrel.Name == "ai1_player_kestrel"
                   && kestrel.DisplayName == "Kestrel",
-            $"…and reads back its own pool, cycle, identity name '{kestrel.Name}' and the marker's own '{kestrel.DisplayName}' (C22: --target= pins the node name, the marker prints the airframe)");
+            $"…and reads back its own pool, cycle, identity name '{kestrel.Name}' and the marker's own '{kestrel.DisplayName}' (--target= pins the node name, the marker prints the airframe)");
         ctx.Check(TargetRef.ForAircraft(planeCandidate, TargetClass.Enemy, "bandit").DisplayName
                   == "bandit",
             $"a source with no roster entry prints its own name rather than an empty label");
@@ -5862,8 +5862,8 @@ public static class Suites
             $"two different sources never match, and a null source matches nothing — including another null, which would otherwise make every sourceless ref the same target");
     }
 
-    /// <summary>B14's decoding. The suite reads no gamepad and no bare key press (A2 and A3 both
-    /// recorded that gap), so what is pinned here is everything BETWEEN the device read and the
+    /// <summary>The tap/hold decoding. The suite reads no gamepad and no bare key press, so what
+    /// is pinned here is everything BETWEEN the device read and the
     /// action: <see cref="TapHoldButton"/>'s tap-versus-hold rule, and the attacker queue's live
     /// wiring through a real <see cref="FlightController.TakeProjectileHit"/> on real rigs in a real
     /// pool. The key and pad reads themselves are owed as live play.</summary>
@@ -5990,7 +5990,7 @@ public static class Suites
         }
     }
 
-    /// <summary>B13's <see cref="TargetSelection"/>, entirely tree-free and data-free: plain
+    /// <summary><see cref="TargetSelection"/>, entirely tree-free and data-free: plain
     /// <c>object</c> sources through the real <see cref="TargetPool"/>, a plane at the origin on the
     /// identity basis (nose down −Z, right +X), and no world at all.
     ///
@@ -6181,7 +6181,7 @@ public static class Suites
             $"the death hook prunes the queue, so a dead shooter is never offered again");
     }
 
-    /// <summary>B15's <c>--target=</c>. Everything the flag means lives in
+    /// <summary><c>--target=</c>. Everything the flag means lives in
     /// <see cref="TargetSelection.ApplyInitial"/> and <see cref="TargetSelection.Select"/>, which take
     /// a pose and no tree, so the whole grammar is pinned here rather than only by the two screenshot
     /// runs — those cover the wiring and the pixels, this covers what each word does.
@@ -6319,7 +6319,7 @@ public static class Suites
         }
     }
 
-    /// <summary>B12's <see cref="TargetPool"/>. The pure half runs over a hand-built
+    /// <summary><see cref="TargetPool"/>. The pure half runs over a hand-built
     /// <see cref="AimCandidateSet"/> with no world at all: bare <see cref="FlightController"/>s and
     /// <see cref="DestructibleRegistry.Instance"/>s on plain <see cref="Node3D"/> anchors, which is
     /// enough to pin every membership and exclusion rule the plan asks for. The world half then runs
@@ -6468,7 +6468,7 @@ public static class Suites
         }
     }
 
-    /// <summary>The H22 targeting HUD (<see cref="TargetHud"/>, C21) on AI hostiles. Two halves:
+    /// <summary>The targeting HUD (<see cref="TargetHud"/>) on AI hostiles. Two halves:
     /// the pure selection (<see cref="TargetHud.NearestHostile"/> over a constructed candidate
     /// set, no scene) pins the filters (live only, AI-piloted only, the engine's
     /// either-side-neutral rejection, nearest wins) plus <see cref="TargetHud.HostileTag"/>; the
@@ -6512,7 +6512,7 @@ public static class Suites
                 && TargetHud.HostileTag("bandit") == "BANDIT" && TargetHud.HostileTag("") == "AI",
                 $"the marker tag is the name's first segment uppercased, 'AI' as the fallback");
 
-            // B12 trap (a), the wingman-in-the-marker bug: OwnTeam must read the pane's own Team
+            // The wingman-in-the-marker bug: OwnTeam must read the pane's own Team
             // FIELD. Deriving it from the pilot index is right for P1 by coincidence
             // (TeamOfPilot(0) == PlayerTeam) and wrong for P2-P4 the moment a mission sets teams,
             // which is every Instant Action and every --coop session.
@@ -6546,9 +6546,9 @@ public static class Suites
             pureHuman.Free();
         }
 
-        // --- C22's marker rules: colour, the gun-reach bracket gate, the label lines ------------
+        // --- The shipped marker's rules: colour, the gun-reach bracket gate, the label lines -----
         // All three are pure and decoded (FUN_004a5f40 / FUN_004574d0 / FUN_004579e0); what no test
-        // can reach is the drawn geometry itself, which is C24's golden.
+        // can reach is the drawn geometry itself, which is the c1-targeting-hud golden.
         int hostileTeam = AimAssist.TeamOfPilot(100);
         var enemyRef = TargetRef.ForAircraft(
             new AimCandidate { Team = hostileTeam, Live = true, Source = new object() },
@@ -6607,7 +6607,7 @@ public static class Suites
                   && lines[1] == "Promised Land",
             $"a named objective composes both lines, C1 M04 Zeppelin.png's case, with no wrap width to port ({string.Join(" / ", lines)})");
 
-        // --- C23's debug-marker string: identity kept whole, health/armor gated on the source ------
+        // --- The debug-marker string: identity kept whole, health/armor gated on the source -------
         var healthyRef = TargetRef.ForAircraft(
             new AimCandidate { Team = hostileTeam, Live = true, Source = new object() },
             TargetClass.Enemy, "ai1_player_fury", "Fury",
@@ -6705,7 +6705,7 @@ public static class Suites
             string airframeName = PlaneRoster.PlaneDisplayName(stats);
             ctx.Check(marks[0].Target.DisplayName == airframeName
                       && marks[0].Target.Health == null && marks[0].Target.Armor == null,
-                $"CollectMarks wraps a TargetRef carrying the airframe's display name (C23), and a bare rig with no Damage ledger bound omits both figures: name={marks[0].Target.DisplayName} h={marks[0].Target.Health} a={marks[0].Target.Armor}");
+                $"CollectMarks wraps a TargetRef carrying the airframe's display name, and a bare rig with no Damage ledger bound omits both figures: name={marks[0].Target.DisplayName} h={marks[0].Target.Health} a={marks[0].Target.Armor}");
             ai1.Team = AimAssist.PlayerTeam;
             marks.Clear();
             scan.Clear();
@@ -6717,7 +6717,7 @@ public static class Suites
             TargetHud.CollectMarks(AimAssist.PlayerTeam, ai1, scan, marks);
             ctx.Check(marks.Count == 0, $"the pane's own aircraft is excluded marks={marks.Count}");
 
-            // C23: once the plane carries a damage ledger, CollectMarks' TargetRef reads it straight
+            // Once the plane carries a damage ledger, CollectMarks' TargetRef reads it straight
             // off — the same optional-field contract a sub-part or emplacement would use once the
             // scan widens past aircraft, not a plane-specific field read of its own.
             ai1.Damage = new PlaneDamage(stats.DestroyableParts);

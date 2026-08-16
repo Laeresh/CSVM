@@ -4,7 +4,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The H22 hostile-marker tag (<see cref="TargetHud.HostileTag"/>), off-engine: the AI spawner's
+/// The hostile-marker tag (<see cref="TargetHud.HostileTag"/>), off-engine: the AI spawner's
 /// "ai1_player_fury" naming reads back as "AI1". The selection itself
 /// (<see cref="TargetHud.NearestHostile"/>) filters on live <see cref="FlightController"/>
 /// sources, which are engine nodes, so its pins live in the <c>hostile-marker-hud</c> in-engine

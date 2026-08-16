@@ -294,7 +294,7 @@ public sealed record SessionSpec
     public string? RocketOverride { get; private set; }
     public int GunSelect { get; private set; }
 
-    /// <summary><c>--target=</c>: the scripted twin of the targeting keys (PLAN-targeting.md B15).
+    /// <summary><c>--target=</c>: the scripted twin of the targeting keys.
     /// <c>nearest</c> / <c>crosshair</c> / <c>next</c> / <c>none</c>, or the name of a target to pin
     /// (<c>ai1_player_fury</c>). Applied ONCE per human pane, on the first frame its pool has
     /// anything in it; the selection cycles normally afterwards. Null when the flag was absent, which

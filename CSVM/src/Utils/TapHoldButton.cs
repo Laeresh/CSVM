@@ -14,9 +14,9 @@ public enum TapHold
     Tap,
 }
 
-/// <summary>One button carrying two actions, split by how long it is held
-/// (<c>PLAN-targeting.md</c> B14 decision 7). Feed it the button's LEVEL each frame and it
-/// edge-detects, times and classifies; the caller only switches on the answer.
+/// <summary>One button carrying two actions, split by how long it is held (decision 7). Feed it
+/// the button's LEVEL each frame and it edge-detects, times and classifies; the caller only
+/// switches on the answer.
 ///
 /// <para><b>The tap resolves on RELEASE, not on press.</b> That is the whole point: firing the tap
 /// action on press and the hold action later means every long press starts by performing the wrong

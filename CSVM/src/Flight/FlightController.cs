@@ -285,7 +285,7 @@ public partial class FlightController : Node3D
     /// identity a round it fired carries (<c>ProjectilePool.Spawn</c>'s shooter id).</summary>
     public int PlayerIndex;
 
-    /// <summary>This pilot's target selection (`PLAN-targeting.md` B13/B14), or null for a seat that
+    /// <summary>This pilot's target selection, or null for a seat that
     /// does no targeting (every AI rig, and the suites' bare rigs). Set by
     /// <c>FlightRigAssembler</c> on each human pane; <see cref="StepTargeting"/> feeds it every
     /// frame. Read <c>Targeting.Current</c> for the selected target — that is the property the
@@ -299,7 +299,7 @@ public partial class FlightController : Node3D
     /// same sink shape <see cref="CollideDamageSink"/> already uses.</summary>
     public System.Action<List<AimCandidate>>? TargetSubParts;
 
-    /// <summary><c>--target=</c>'s spec (B15), or null for an unscripted session. Applied ONCE, on
+    /// <summary><c>--target=</c>'s spec, or null for an unscripted session. Applied ONCE, on
     /// the first frame <see cref="Targeting"/>'s pool has anything in it, and never consulted again —
     /// it sets the initial selection, it does not hold it, so an interactive session started with the
     /// flag still cycles normally.</summary>
@@ -321,7 +321,7 @@ public partial class FlightController : Node3D
     /// <summary>The non-player input source: set (with <see cref="IsHumanPiloted"/> false), it
     /// replaces the keyboard/pad read each sim step, the way <see cref="HoldSegments"/> does for
     /// scripted runs — collision, weapons, damage and crash downstream of it are byte-for-byte the
-    /// player's path. The FLIGHT MODEL is the one exception, and only since C21: the plant selects
+    /// player's path. The FLIGHT MODEL is the one exception: the plant selects
     /// the original's AI force path off this same human/AI split, once at construction
     /// (<see cref="FlightModel.UsesAiForcePath"/>). Its orders are mutable between steps;
     /// see <see cref="AiPilot"/>.</summary>
@@ -424,8 +424,8 @@ public partial class FlightController : Node3D
                                                       // ANIMATION_OFFSET 1.5, so this is one whole authored
                                                       // reaction per scrape rather than a restart per frame
     private const float DamageFlashTime = 2.5f;  // s the HUD shows the impact line
-    private const int InitialTargetGrace = 300;    // B15: frames --target= waits for the pool to fill
-    private const float TargetHoldSeconds = 0.25f; // B14 decision 7: D-pad Up past this is a HOLD,
+    private const int InitialTargetGrace = 300;    // frames --target= waits for the pool to fill
+    private const float TargetHoldSeconds = 0.25f; // decision 7: D-pad Up past this is a HOLD,
                                                    // not a tap. ⚠ TUNE — ours, not the original's,
                                                    // which needs no threshold because it has a key
                                                    // per action
@@ -447,12 +447,12 @@ public partial class FlightController : Node3D
     private readonly List<RankedTargetCandidate> _rankCandidates = new(); // the D12 ranking snapshots
     private readonly List<FlightController> _rankSources = new();         // …and their controllers, by index
     private readonly RandomNumberGenerator _aimRng = Rng.Stream(Rng.Weapons); // the assist's 1° launch scatter
-    private readonly AimCandidateSet _targetScan = new();   // B14: the targeting pass's own scan, rebuilt per frame
-    private readonly List<AimCandidate> _targetParts = new(); // B14: this frame's selectable sub-parts
-    private readonly bool[] _targetKeyPrev = new bool[5];   // B14: T/Y/U/I/O edge detection
-    private readonly TapHoldButton _targetHold = new(TargetHoldSeconds); // B14: D-pad Up tap vs hold
+    private readonly AimCandidateSet _targetScan = new();   // the targeting pass's own scan, rebuilt per frame
+    private readonly List<AimCandidate> _targetParts = new(); // this frame's selectable sub-parts
+    private readonly bool[] _targetKeyPrev = new bool[5];   // T/Y/U/I/O edge detection
+    private readonly TapHoldButton _targetHold = new(TargetHoldSeconds); // D-pad Up tap vs hold
 
-    private bool _initialTargetDone;             // B15: --target= has had its one chance
+    private bool _initialTargetDone;             // --target= has had its one chance
     private int _initialTargetWaits;             // …frames it has waited for a non-empty pool
     private FlightModel _model = null!;
     private CameraController? _cam;              // null on an AI rig — no view rides this plane
@@ -585,8 +585,8 @@ public partial class FlightController : Node3D
 
     /// <summary>This airframe's stats, the flight model's own copy (jittered for an AI spawn, so it
     /// is the plane's data and not the cached def's). Read for the airframe's DISPLAY NAME
-    /// (<c>PlaneRoster.PlaneDisplayName</c> → <c>Fury</c>) by the targeting pool's label pass
-    /// (<c>PLAN-targeting.md</c> C22), which had no way to reach it while the model was private.
+    /// (<c>PlaneRoster.PlaneDisplayName</c> → <c>Fury</c>) by the targeting pool's label pass,
+    /// which had no way to reach it while the model was private.
     ///
     /// <para>Null before <see cref="Setup"/> has bound a flight model — a bare rig the suites
     /// construct to exercise one seam. A caller that wants a name falls back to the node's.</para></summary>
@@ -973,8 +973,8 @@ public partial class FlightController : Node3D
     /// answers TRUE there rather than hiding the brackets.</para></summary>
     /// <param name="targetPos">The target's world position.</param>
     /// <param name="targetVel">The target's world velocity, m/s.</param>
-    /// <param name="margin">Extra metres of authored range, C22's bracket hysteresis. Zero to turn
-    /// the brackets on, <see cref="TargetHud.BracketHysteresis"/> to keep them on.</param>
+    /// <param name="margin">Extra metres of authored range, the bracket gate's hysteresis. Zero to
+    /// turn the brackets on, <see cref="TargetHud.BracketHysteresis"/> to keep them on.</param>
     public bool GunReachesTarget(Vector3 targetPos, Vector3 targetVel, float margin = 0f)
     {
         if (SelectedGun() is not { } sel)
@@ -1517,7 +1517,7 @@ public partial class FlightController : Node3D
                 Stunt.CycleTarget();
             _cyclePrev = cycle;
         }
-        // Player target selection (B14): rebuild-then-input, the original's own order — the
+        // Player target selection: rebuild-then-input, the original's own order — the
         // per-frame candidate pass runs first and a handler then steps the list it just built.
         if (Targeting != null && IsHumanPiloted)
             StepTargeting(simDt);
@@ -1917,8 +1917,8 @@ public partial class FlightController : Node3D
 
     /// <summary>The selected firable gun group — the one the trigger fires — or null when there is
     /// no loadout, no fire control, no group at the selected index, or the group has no muzzle to
-    /// fire from. Shared by the pipper and the C22 bracket gate so both read the same "which gun is
-    /// selected" answer.</summary>
+    /// fire from. Shared by the pipper and the targeting marker's bracket gate so both read the
+    /// same "which gun is selected" answer.</summary>
     private GunGroup? SelectedGun()
     {
         if (Loadout == null || _fire == null)
@@ -2390,7 +2390,7 @@ public partial class FlightController : Node3D
     private bool CycleTargetPressed() =>
         KeyDown(Key.Tab) || PadPressed(JoyButton.X);
 
-    /// <summary>One frame of player targeting (B14): rebuild the pool and re-resolve, prune the
+    /// <summary>One frame of player targeting: rebuild the pool and re-resolve, prune the
     /// attacker queue, then dispatch this frame's input. That order is the original's — its
     /// per-frame candidate pass runs in the sim step and a handler steps the list it just built,
     /// which is why a class change reads one frame late and self-heals.</summary>
@@ -2421,7 +2421,7 @@ public partial class FlightController : Node3D
                 sel.ForgetTarget(dead);
         }
 
-        // --target= (B15), before the input dispatch and before the InPlay gate: a --det run pins its
+        // --target=, before the input dispatch and before the InPlay gate: a --det run pins its
         // selection without a pilot who can press anything, and a real keypress on the same frame
         // should win over the scripted one rather than be overwritten by it.
         if (InitialTarget != null && !_initialTargetDone)
@@ -2463,11 +2463,10 @@ public partial class FlightController : Node3D
         DispatchTargetKey(4, Key.O, () => sel.Clear());
     }
 
-    /// <summary>Spends <c>--target=</c>'s one application (B15). Waits for a non-empty pool first:
+    /// <summary>Spends <c>--target=</c>'s one application. Waits for a non-empty pool first:
     /// the things it can name (AI spawns, the zeppelins, a generator's first drop) are all built
-    /// after the rigs are, so applying on frame one would match nothing in every session — the same
-    /// ordering that made B14's count breadcrumb print zeroes. <c>none</c> needs no pool and does not
-    /// wait.</summary>
+    /// after the rigs are, so applying on frame one would match nothing in every session.
+    /// <c>none</c> needs no pool and does not wait.</summary>
     private void ApplyInitialTarget(TargetSelection sel)
     {
         bool needsPool = !string.Equals(InitialTarget, "none", System.StringComparison.OrdinalIgnoreCase);

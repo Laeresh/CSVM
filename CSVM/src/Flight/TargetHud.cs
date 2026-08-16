@@ -7,29 +7,29 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The per-pane targeting HUD (<c>PLAN-targeting.md</c> C21): the tracked-hostile marker, split
+/// The per-pane targeting HUD: the tracked-hostile marker, split
 /// out of <see cref="VersusHud"/> because it draws in EVERY flight session, not only
-/// <c>--vs</c> (H22) — a Versus-only class was the wrong home for a feature every pane gets.
+/// <c>--vs</c> — a Versus-only class was the wrong home for a feature every pane gets.
 /// <see cref="Build"/> is unconditional, one per human pane, whether or not the session has a
 /// <see cref="VersusMatch"/>; a <c>--vs</c> pane gets BOTH this and a <see cref="VersusHud"/>, so
 /// an AI hostile spawned into a dogfight is still marked alongside the human opponents.
 ///
-/// <para><b>The shipped marker is the pilot's own sticky selection</b> (<see cref="Selected"/>,
-/// C22), drawn in the original's shape: a fixed-size bracket box gated on the SELECTED GUN's reach
+/// <para><b>The shipped marker is the pilot's own sticky selection</b> (<see cref="Selected"/>),
+/// drawn in the original's shape: a fixed-size bracket box gated on the SELECTED GUN's reach
 /// (<see cref="GunReaches"/>), the label always BELOW it, and off screen an edge arrow with the name
 /// and clock bearing stacked beside it. Colour is the decoded <c>Target::GetColor</c>
 /// (<see cref="MarkerColor"/>): red hostile, green friendly, blue non-destructive objective.</para>
 ///
 /// <para><see cref="HostilePool"/> is scanned each frame through the pool's one live aircraft
 /// roster (<c>ProjectilePool.CollectAircraft</c>, the same list the AI gunners read) and the
-/// NEAREST live AI aircraft becomes <see cref="TrackedHostile"/>. That H22 marker is now a
+/// NEAREST live AI aircraft becomes <see cref="TrackedHostile"/>. That marker is now a
 /// FALLBACK: it draws only on a pane with no selection at all (no <see cref="TargetSelection"/>
 /// bound, or the pilot pressed Target Nothing), because a pane that HAS a selection marks that one
 /// target and nothing else (decision 11).</para>
 ///
 /// <para><c>--debug-markers</c> (<see cref="MarkAll"/>) widens the one marker to EVERY live
 /// aircraft the pool lists, red for a hostile team and blue for this pane's own side
-/// (<see cref="Own"/>), each tagged with the FULL identity string (<see cref="DebugTag"/>, C23):
+/// (<see cref="Own"/>), each tagged with the FULL identity string (<see cref="DebugTag"/>):
 /// the hostile tag, the airframe type, slant range, health/armor as whole percentages with no
 /// percent sign (omitted, not defaulted, where the source carries no figure), and the AI mode. It
 /// is a watching aid for AI work, not a gameplay feature: the shipped HUD marks exactly one
@@ -49,8 +49,8 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed partial class TargetHud : Control
 {
-    /// <summary>Extra metres of authored gun range that keep the brackets on once they are on
-    /// (C22). <b>TUNE, and ours rather than the original's</b> — the original re-runs its gate every
+    /// <summary>Extra metres of authored gun range that keep the brackets on once they are on.
+    /// <b>TUNE, and ours rather than the original's</b> — the original re-runs its gate every
     /// frame with no memory, which strobes the box on a target sitting exactly at the reach
     /// boundary.</summary>
     public const float BracketHysteresis = 50f;
@@ -59,7 +59,7 @@ public sealed partial class TargetHud : Control
     /// back to with no aircraft bound.</summary>
     public int PlayerIndex;
 
-    /// <summary>The pool whose registered aircraft the hostile tracker scans (H22). Null leaves
+    /// <summary>The pool whose registered aircraft the hostile tracker scans. Null leaves
     /// the tracker off; set, <see cref="UpdateHostile"/> re-selects the nearest live AI aircraft
     /// every frame, so a runtime spawn (generators) is picked up and a downed hostile drops
     /// without extra plumbing.</summary>
@@ -161,7 +161,7 @@ public sealed partial class TargetHud : Control
     /// <summary>Binds this pane's own camera (the marker projects through it) and, when
     /// <paramref name="pool"/> is non-null, the hostile tracker. Add to the HUD canvas;
     /// <see cref="PlanePos"/>/<see cref="HeadingDeg"/> every frame — nothing else needs feeding.
-    /// One per human pane, in EVERY flight session (H22); it draws nothing until a hostile
+    /// One per human pane, in EVERY flight session; it draws nothing until a hostile
     /// exists, so an AI-free session's HUD output is unchanged.</summary>
     public static TargetHud Build(int playerIndex, Camera3D camera, ProjectilePool pool)
     {
@@ -203,7 +203,7 @@ public sealed partial class TargetHud : Control
     }
 
     /// <summary>Every live aircraft in <paramref name="scan"/>, wrapped as a <see cref="TargetRef"/>
-    /// (C23) and paired with whether it is on <paramref name="ownTeam"/> (<c>--debug-markers</c>),
+    /// and paired with whether it is on <paramref name="ownTeam"/> (<c>--debug-markers</c>),
     /// skipping <paramref name="own"/>. The team test is the plain identity one, not the assist's: a
     /// neutral aircraft is nobody's friend, so it marks hostile rather than vanishing, which is what
     /// a debugging overlay wants.
@@ -250,7 +250,7 @@ public sealed partial class TargetHud : Control
         return head.Length > 0 ? head.ToUpperInvariant() : "AI";
     }
 
-    /// <summary><c>--debug-markers</c>' own tag (C23): <c>AI1 Fury 640 m H78 A91 pursue</c>. This is
+    /// <summary><c>--debug-markers</c>' own tag: <c>AI1 Fury 640 m H78 A91 pursue</c>. This is
     /// the one marker that keeps the FULL identity string — <paramref name="identity"/>
     /// (<see cref="HostileTag"/>), never collapsed to <paramref name="target"/>'s plane-type-alone
     /// label the way the shipped marker is (decision 10) — plus the plane type, the slant range,
@@ -289,9 +289,8 @@ public sealed partial class TargetHud : Control
     /// anything without a category is red when the teams differ and both are non-zero, green
     /// otherwise.
     ///
-    /// <para>⚠ A friendly is GREEN. Blue is the non-destructive objective (protect, escort), not the
-    /// friendly — C22's own goal line said "blue for a friendly", which was written before A1
-    /// decoded this, and the decode wins.</para></summary>
+    /// <para>⚠ A friendly is GREEN. Blue is the non-destructive objective (protect, escort), never
+    /// the friendly.</para></summary>
     public static Color MarkerColor(in TargetRef target, int ownTeam)
     {
         if (target.Category is { Length: > 0 } category)
@@ -441,10 +440,10 @@ public sealed partial class TargetHud : Control
         var font = GetThemeDefaultFont();
         int markerFont = Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s));
 
-        // The shipped marker (C22): the pilot's own sticky selection, in the original's shape.
+        // The shipped marker: the pilot's own sticky selection, in the original's shape.
         // Drawn in BOTH modes, unlike the hostile tracker below — --debug-markers replaces that
-        // tracker (same shape, two colours) but not this, and C24's golden wants the brackets, the
-        // label and the debug string in one frame.
+        // tracker (same shape, two colours) but not this, so the brackets, the label and the debug
+        // string can all draw together in one frame (the c1-targeting-hud golden).
         bool selected = Selected is { } target && DrawSelected(font, target, s, markerFont);
 
         // --debug-markers: every live aircraft at once, red hostile / blue own side, each with
@@ -470,7 +469,7 @@ public sealed partial class TargetHud : Control
             return;
         }
 
-        // The tracked AI hostile (H22), now a FALLBACK: a pane whose pilot has a selection marks
+        // The tracked AI hostile, now a FALLBACK: a pane whose pilot has a selection marks
         // that one target and nothing else (decision 11), so this draws only where no selection
         // exists at all — a pane with no TargetSelection bound (a spectator, a suite rig) or one
         // whose pilot pressed Target Nothing.

@@ -25,8 +25,8 @@ public enum TargetClass
 /// <c>c.Source is not FlightController fc</c> test in <see cref="TargetHud.NearestHostile"/> and
 /// <see cref="TargetHud.CollectMarks"/> multiplies across four modules.
 ///
-/// <para><b>It WRAPS an <see cref="AimCandidate"/> rather than restating it</b> (B11's open
-/// question). Position, velocity, team, liveness and the source object are the same five facts the
+/// <para><b>It WRAPS an <see cref="AimCandidate"/> rather than restating it.</b> Position, velocity,
+/// team, liveness and the source object are the same five facts the
 /// aim assist already needs, read off the same four pools by the same collectors
 /// (<c>ProjectilePool.CollectAircraft</c>/<c>CollectTurrets</c>, <c>AimCandidateSet.AddStructures</c>),
 /// so a second copy of them could only drift. What this adds is everything the assist has no use
@@ -73,7 +73,7 @@ public readonly struct TargetRef
     public bool Objective { get; }
 
     /// <summary>The entity's own name: <c>ai1_player_kestrel</c> for an aircraft, <c>gasbag1</c> for
-    /// a sub-part. CSVM's IDENTITY string — what <c>--target=</c> (B15) matches and what the
+    /// a sub-part. CSVM's IDENTITY string — what <c>--target=</c> matches and what the
     /// breadcrumbs print. Never null; empty is legal.</summary>
     public string Name { get; }
 
@@ -83,8 +83,8 @@ public readonly struct TargetRef
     ///
     /// <para>⚠ Split from <see cref="Name"/> for CSVM's sake, not the original's: there one string
     /// is both, but our aircraft carry a node name that is identity rather than a label, and the two
-    /// consumers want opposite things. The marker wants <c>Fury</c> (C22, decision 10: plane type
-    /// alone, ambiguity accepted); <c>--target=</c> wants <c>ai2_player_fury</c>, because a golden
+    /// consumers want opposite things. The marker wants <c>Fury</c> (plane type alone, ambiguity
+    /// accepted); <c>--target=</c> wants <c>ai2_player_fury</c>, because a golden
     /// that pinned "Fury" could not say WHICH of three Furies it meant. Every other source's own
     /// name IS its label, so they carry one string in both.</para></summary>
     public string DisplayName { get; }

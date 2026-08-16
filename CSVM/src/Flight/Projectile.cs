@@ -529,7 +529,7 @@ public sealed partial class ProjectilePool : Node3D
     /// null for an unowned round (<see cref="NoShooter"/>) or a plane no longer registered. Shooter
     /// ids ARE unique across a session — a human's is its pane index and an AI's is
     /// <c>AiAircraftSpawner.ShooterIdBase + n</c>, well clear of it — so this resolves one plane, not
-    /// a class of them. Used by the player's attacker queue (`PLAN-targeting.md` B14), which needs
+    /// a class of them. Used by the player's attacker queue, which needs
     /// the shooter as an object rather than as an id.</summary>
     public FlightController? RigOfShooter(int shooterId)
     {

@@ -146,8 +146,8 @@ public sealed partial class ZeppelinRuntime : Node
         Find(node) is { Damage: { } damage } zep ? damage.Survivors(zep.ZoneAlive) : -1;
 
     /// <summary>Appends every live zeppelin's damage zones (gasbags, engines, cannons) to
-    /// <paramref name="into"/>, one candidate per part, for the player-target pool
-    /// (<c>PLAN-targeting.md</c> B12). Each part rides its hull, so it carries the zeppelin's own
+    /// <paramref name="into"/>, one candidate per part, for the player-target pool.
+    /// Each part rides its hull, so it carries the zeppelin's own
     /// velocity (<c>Forward * Speed</c>) rather than zero; a destroyed zone is offered but not live,
     /// and a part whose anchor has left the tree is skipped rather than read (its global transform
     /// is meaningless there, the same rule <see cref="AimCandidateSet.AddStructures"/> follows).
