@@ -133,6 +133,13 @@ public static class Suites
         into.Add(new TestHarness.Suite("blast-neighbor-shape",
             "splash falloff on a neighbour scores to its nearest collision-shape surface, not its " +
             "transform origin (BL-239)", BlastNeighborShape));
+        into.Add(new TestHarness.Suite("launch-velocity-decay",
+            "a LOCK_ON round carries its launcher's velocity and sheds it linearly over LOCK_ON " +
+            "seconds (BL-290): wep_14 launched at 120 m/s leaves at 180, reads 120 at half the " +
+            "window and holds its authored 60 from 2.5 s on, while a slow launch barely changes; " +
+            "the decay obeys the steering step's gate, so a round holding no target keeps its " +
+            "launcher's speed; and neither a gun nor a rocket without LOCK_ON changes",
+            LaunchVelocityDecay));
         into.Add(new TestHarness.Suite("air-to-air",
             "a round strikes the target plane's body, maps to the data part, moves armor/HP by the " +
             "weapon's own values, downs it when whole-vehicle health exhausts (a lone dead critical " +
@@ -3088,6 +3095,103 @@ public static class Suites
             pool?.Free();
             wall?.Free();
             neighbor?.Free();
+            textures.Dispose();
+        }
+    }
+
+    // A2's launch-velocity inheritance and its decay, on a live pool with no world around it: a
+    // torpedo launched fast leaves fast and settles onto its authored VELOCITY over LOCK_ON
+    // seconds, one launched slow barely changes, a round holding no target sheds nothing, and
+    // neither a gun nor a rocket without LOCK_ON reads any differently than it does today.
+    private static void LaunchVelocityDecay(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        if (!weapons.TryGet("wep_14", out var torpedo) || !weapons.TryGet("wep_12", out var choker)
+            || !weapons.TryGet("wep_00", out var gun))
+        {
+            ctx.Check(false, $"wep_14, wep_12 and wep_00 all resolve");
+            return;
+        }
+        float cruise = torpedo.Velocity ?? 0f;
+        float window = torpedo.LockOn ?? 0f;
+        ctx.Check(Mathf.IsEqualApprox(cruise, 60f) && Mathf.IsEqualApprox(window, 2.5f),
+            $"wep_14 authors VELOCITY {cruise:0.#} and LOCK_ON {window:0.##} — the decode's 60 m/s over 2.5 s");
+        ctx.Check(ProjectilePool.CarriesLockOn(torpedo) && !ProjectilePool.CarriesLockOn(choker)
+                  && !ProjectilePool.CarriesLockOn(gun),
+            $"the inherit-at-all flag is LOCK_ON itself: wep_14 carries it, the choker and the gun do not");
+        ctx.Check(ProjectilePool.SteeringStepRuns(torpedo, hasTarget: true)
+                  && !ProjectilePool.SteeringStepRuns(torpedo, hasTarget: false)
+                  && !ProjectilePool.SteeringStepRuns(choker, hasTarget: true),
+            $"the steering step's gate needs BOTH halves — LOCK_ON and a held target (wrong-claim 3)");
+
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        try
+        {
+            pool = new ProjectilePool(textures, null, null);
+            ctx.Host.AddChild(pool);
+            // Well clear of anything another suite may have left in the host, so the round's hit
+            // ray finds nothing and the whole flight is the integrator's.
+            var muzzle = new Transform3D(Basis.LookingAt(Vector3.Forward, Vector3.Up),
+                new Vector3(0f, 2000f, 0f));
+            var target = new object();
+            var live = new List<(Vector3 Pos, Vector3 Velocity)>();
+
+            float SpeedAt(WeaponDef weapon, float launchSpeed, object? held, float seconds)
+            {
+                pool!.Clear();
+                pool.Spawn(weapon, muzzle, Vector3.Forward * launchSpeed, target: held);
+                for (int i = 0; i < Mathf.RoundToInt(seconds * 60f); i++)
+                {
+                    pool.SimStep(1f / 60f);
+                }
+                live.Clear();
+                pool.CollectLiveRounds(live);
+                return live.Count > 0 ? live[0].Velocity.Length() : 0f;
+            }
+
+            // The decode's own worked example: a launcher at 120 m/s over the torpedo's 2.5 s.
+            float fast0 = SpeedAt(torpedo, 120f, target, 0f);
+            float fastHalf = SpeedAt(torpedo, 120f, target, 1.25f);
+            float fastEnd = SpeedAt(torpedo, 120f, target, 2.5f);
+            float fastLate = SpeedAt(torpedo, 120f, target, 4f);
+            ctx.Check(Mathf.Abs(fast0 - 180f) < 0.5f,
+                $"a torpedo launched at 120 m/s leaves at launcher + VELOCITY speed={fast0:0.##} expected=180");
+            ctx.Check(Mathf.Abs(fastHalf - 120f) < 0.5f,
+                $"half a LOCK_ON window in, half the inherited velocity is left speed={fastHalf:0.##} expected=120");
+            ctx.Check(Mathf.Abs(fastEnd - 60f) < 0.5f,
+                $"at LOCK_ON the round is down to its authored VELOCITY speed={fastEnd:0.##} expected=60");
+            ctx.Check(Mathf.Abs(fastLate - 60f) < 0.5f,
+                $"and it HOLDS there rather than continuing to fall speed={fastLate:0.##} expected=60");
+
+            // The other half of the goal: a slow launch has almost nothing to shed.
+            float slow0 = SpeedAt(torpedo, 10f, target, 0f);
+            float slowEnd = SpeedAt(torpedo, 10f, target, 2.5f);
+            ctx.Check(Mathf.Abs(slow0 - 70f) < 0.5f && Mathf.Abs(slowEnd - 60f) < 0.5f,
+                $"a torpedo launched at 10 m/s barely slows at all launch={slow0:0.##} settled={slowEnd:0.##}");
+
+            // ⚠ The decay lives INSIDE the steering step, which a round holding no target never
+            // enters, so it keeps the launcher's velocity for its whole flight.
+            float untargeted = SpeedAt(torpedo, 120f, null, 4f);
+            ctx.Check(Mathf.Abs(untargeted - 180f) < 0.5f,
+                $"a LOCK_ON round holding NO target sheds nothing speed={untargeted:0.##} expected=180");
+
+            float chokerSpeed = SpeedAt(choker, 120f, target, 0.3f);
+            ctx.Check(Mathf.Abs(chokerSpeed - (choker.Velocity ?? 0f)) < 0.5f,
+                $"a rocket without LOCK_ON inherits nothing at all speed={chokerSpeed:0.##} expected={choker.Velocity ?? 0f:0.##}");
+
+            float gun0 = SpeedAt(gun, 120f, null, 0f);
+            float gunLater = SpeedAt(gun, 120f, null, 0.2f);
+            float gunExpected = (gun.Velocity ?? 0f) + 120f;
+            ctx.Check(Mathf.Abs(gun0 - gunExpected) < 0.5f && Mathf.Abs(gunLater - gunExpected) < 0.5f,
+                $"a gun round still carries its launcher's velocity, undecayed launch={gun0:0.##} later={gunLater:0.##} expected={gunExpected:0.##}");
+        }
+        finally
+        {
+            pool?.Free();
             textures.Dispose();
         }
     }

@@ -1930,8 +1930,12 @@ public partial class FlightController : Node3D
             var rocketAim = !IsHumanPiloted && Pilot?.Rocketeer is { } launcher
                 ? launcher.LaunchDirWorld
                 : (Vector3?)null;
+            // The round's target, the second half of `ProjectilePool.SteeringStepRuns`'s gate: a
+            // human's own selection, an AI's gunner quarry. A LOCK_ON round holding none never
+            // sheds its inherited launch velocity.
+            object? launchTarget = IsHumanPiloted ? Targeting?.Current?.Source : Pilot?.Gunner?.Target;
             Projectiles!.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel, PlayerIndex, hp.Pylon,
-                rocketAim, Team);
+                rocketAim, Team, launchTarget);
             if (_rocketsLaunched < 12)
             {
                 _rocketsLaunched++;

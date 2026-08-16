@@ -321,6 +321,7 @@ public sealed partial class ProjectilePool : Node3D
     private int _muzzleBasisLogs;
     private int _impactsLogged;
     private int _soundGainsLogged;               // D31 one-shot gain breadcrumb, first 8
+    private int _decaysLogged;                   // launch-velocity decay breadcrumb, first 4
     private float _simClock;                   // sim seconds since the pool started (the gun-effect throttle)
     private CasingSpec? _casingSpec;           // the gunshell OBJECT_MOTION, resolved once
     private bool _casingSpecResolved;
@@ -393,6 +394,22 @@ public sealed partial class ProjectilePool : Node3D
     public static bool HasBlastDamage(WeaponDef weapon) =>
         ImpactOutcome.Resolve(weapon, SurfaceRegistry.Default, modelResolved: false, hasEffectsRuntime: true)
             .HasBlastDamage;
+
+    /// <summary>Whether the weapon authors <c>LOCK_ON</c> (weapon <c>+0x74</c> bit <c>0x8000</c>).
+    /// The key does three jobs and lock acquisition is none of them
+    /// (docs/org/ordnanceTypes.md): it decides whether a round inherits its launcher's velocity at
+    /// all, it is the window that inheritance decays over, and it is the guidance ramp's
+    /// denominator. No <c>CANNON</c> in this install authors it; ten of the twelve ordnance types
+    /// do.</summary>
+    public static bool CarriesLockOn(WeaponDef weapon) => weapon.LockOn is > 0f;
+
+    /// <summary>The steering step's gate (<c>FUN_005af720</c> → <c>FUN_005af960</c>): the weapon
+    /// carries <c>LOCK_ON</c> AND the round holds a target. A round failing either is never stepped
+    /// through it, so it neither steers nor sheds its inherited launch velocity, which is why a
+    /// <c>LOCK_ON</c> round fired with no target keeps its launcher's speed indefinitely. B6 hangs
+    /// the turn clamp and the per-frame speed penalty on this same predicate.</summary>
+    public static bool SteeringStepRuns(WeaponDef weapon, bool hasTarget) =>
+        CarriesLockOn(weapon) && hasTarget;
 
     /// <summary>Linear blast falloff: full at the centre and zero at the authored radius.</summary>
     public static float BlastDamage(float fullDamage, float radius, float distance) =>
@@ -485,7 +502,23 @@ public sealed partial class ProjectilePool : Node3D
             {
                 continue;
             }
-            into.AddOrdnance(p.Pos, p.Vel, p.Team, source: null);
+            into.AddOrdnance(p.Pos, WorldVelocity(in p), p.Team, source: null);
+        }
+    }
+
+    /// <summary>Appends every live round's position and world velocity, in slot order. The seam a
+    /// scripted run samples a round's speed through, so an assertion about how fast a round is
+    /// flying reads the same number the integrator moved it by rather than a second derivation of
+    /// it. Adds nothing when no round is alive.</summary>
+    public void CollectLiveRounds(List<(Vector3 Pos, Vector3 Velocity)> into)
+    {
+        for (int i = 0; i < _projHigh; i++)
+        {
+            ref var p = ref _proj[i];
+            if (p.Alive)
+            {
+                into.Add((p.Pos, WorldVelocity(in p)));
+            }
         }
     }
 
@@ -567,14 +600,14 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>Fires one round of <paramref name="weapon"/> from the muzzle transform, inheriting
-    /// platform velocity, along <paramref name="aimDir"/> or the muzzle axis when none is given.
-    /// <c>CANNON_SPREAD</c> is the aim assist's acceptance cone, not a scatter — no dispersion here.
-    /// Silently drops the round if the pool is momentarily full. <paramref name="shooterId"/> is who
-    /// fired, used for the near-miss cue's self-exclusion; <paramref name="team"/> stamps the
-    /// round's team once, read by <see cref="CollectFusedOrdnance"/>.</summary>
+    /// <summary>Fires one round of <paramref name="weapon"/> from the muzzle transform, along
+    /// <paramref name="aimDir"/> or the muzzle axis when none is given, carrying as much of
+    /// <paramref name="inheritVel"/> as <see cref="InheritedAtLaunch"/> allows. <c>CANNON_SPREAD</c>
+    /// is the aim assist's acceptance cone, not a scatter. Drops the round silently if the pool is
+    /// full. <paramref name="shooterId"/> is the near-miss cue's self-exclusion, <paramref name="team"/>
+    /// stamps the round once, and <paramref name="target"/> is what it holds (null: none).</summary>
     public void Spawn(WeaponDef weapon, Transform3D muzzle, Vector3 inheritVel, int shooterId = NoShooter,
-        Node3D? muzzleAnchor = null, Vector3? aimDir = null, int? team = null)
+        Node3D? muzzleAnchor = null, Vector3? aimDir = null, int? team = null, object? target = null)
     {
         // The launch bark: only rockets/ordnance carry a FIRE.SOUND — every cannon's is
         // null in the data (LOOPED_SOUND_NAME covers continuous gunfire instead), so this is a
@@ -622,10 +655,11 @@ public sealed partial class ProjectilePool : Node3D
             // trigger pull — matching the decode's "only when a round is actually created".
             if (weapon.IsCannon && ScoredShooters.Contains(shooterId))
                 CannonRoundsFired++;
-            var vel = forward * speed + inheritVel;
+            var inherited = InheritedAtLaunch(weapon, inheritVel);
+            var vel = forward * speed;
             var model = weapon.IsRocket ? BuildFlyoutModel(weapon) : null;
             if (model != null)
-                model.GlobalTransform = FlyoutPose(muzzle.Origin, vel);
+                model.GlobalTransform = FlyoutPose(muzzle.Origin, vel + inherited);
             float rollRate = 0f;
             var trails = weapon.IsRocket ? AcquireTrails(weapon, muzzle.Origin, muzzle.Basis, out rollRate) : null;
             // Team is stamped once here, never re-derived from shooterId on a later scan, so a
@@ -647,6 +681,8 @@ public sealed partial class ProjectilePool : Node3D
                 RollRate = rollRate,
                 Shooter = shooterId,
                 Team = team ?? AimAssist.TeamOfPilot(shooterId),
+                Inherited = inherited,
+                Target = target,
             };
             if (slot >= _projHigh)
                 _projHigh = slot + 1;
@@ -759,7 +795,25 @@ public sealed partial class ProjectilePool : Node3D
             // Integrate (fixed physics step, frame-rate independent).
             var prev = p.Pos;
             var next = p.Pos;
+            // The inherited launch velocity rides on top of the round's own, at whatever the decay
+            // has left of it; ACCELERATION and GRAVITY act on the round's own alone.
+            float carried = InheritedFraction(in p);
+            // Verification breadcrumb (first few): the shed is invisible from outside the round, so
+            // report the pair the decode predicts as each one settles onto its authored VELOCITY.
+            // Clearing the spent vector is what keeps this to one line per round.
+            if (carried <= 0f && p.Inherited != Vector3.Zero)
+            {
+                if (_decaysLogged < 4)
+                {
+                    _decaysLogged++;
+                    GD.Print($"launch-velocity decay: {p.Weapon.Id} shed {p.Inherited.Length():0.#} m/s of launcher"
+                             + $" over LOCK_ON {p.Weapon.LockOn ?? 0f:0.##} s, now {p.Vel.Length():0.#} m/s");
+                }
+                p.Inherited = Vector3.Zero;
+            }
             Ballistics.Step(ref next, ref p.Vel, p.Accel, p.Grav, dt);
+            next += p.Inherited * (carried * dt);
+            var vel = p.Vel + p.Inherited * carried;
             float stepLen = (next - prev).Length();
 
             if (space != null && stepLen > 1e-5f)
@@ -785,7 +839,7 @@ public sealed partial class ProjectilePool : Node3D
                 // Checked AFTER the ray, so a round that would strike its target keeps the direct
                 // hit. Damage arrives through the blast's aircraft pass, not this branch (shapeIdx
                 // -1 keeps it out of the direct-hit path).
-                if (ProximityFuseTriggered(p.Weapon, p.Shooter, prev, next, p.Vel,
+                if (ProximityFuseTriggered(p.Weapon, p.Shooter, prev, next, vel,
                         out var fusePoint, out var fused, out var towardHull))
                 {
                     NearMissPass(prev, fusePoint, p.Shooter);
@@ -805,7 +859,7 @@ public sealed partial class ProjectilePool : Node3D
             // meters of flight, emitted in world space and left behind.
             if (p.Trails != null)
             {
-                var trailBasis = FlyoutPose(next, p.Vel).Basis;
+                var trailBasis = FlyoutPose(next, vel).Basis;
                 foreach (var t in p.Trails)
                     t.Puffer.Emit(next, trailBasis, dt);
             }
@@ -976,6 +1030,31 @@ public sealed partial class ProjectilePool : Node3D
         var y = z.Cross(x).Normalized();
         return new Basis(x, y, z);
     }
+
+    // The launcher's velocity a round actually carries away. FUN_005aef40 gives it to a LOCK_ON
+    // weapon and zeroes it for one without. ⚠ Guns are held outside that rule: no CANNON authors
+    // LOCK_ON, so applying it to them would strip every bullet of its launcher's velocity, and both
+    // the gun aim assist and the impact reticle (Ballistics.March) are built on the inheriting
+    // round. Whether the original's guns fly without it is the gun path's question, not this one's.
+    private static Vector3 InheritedAtLaunch(WeaponDef weapon, Vector3 launcherVel) =>
+        !weapon.IsRocket || CarriesLockOn(weapon) ? launcherVel : Vector3.Zero;
+
+    // What is left of the inherited launch velocity this frame: 1 at launch, falling linearly to 0
+    // at LOCK_ON seconds. FUN_005af960 applies the decay, so only a round that step actually runs
+    // on sheds anything (SteeringStepRuns); every other round holds its vector for its whole
+    // flight, which is both the no-target case and the gun case.
+    private static float InheritedFraction(in Proj p)
+    {
+        float window = p.Weapon.LockOn ?? 0f;
+        return SteeringStepRuns(p.Weapon, p.Target != null) && window > 0f
+            ? Mathf.Clamp((window - p.Age) / window, 0f, 1f)
+            : 1f;
+    }
+
+    // A round's velocity through the world. Proj.Vel alone is its OWN velocity (the original's
+    // heading × speed, which is what ACCELERATION raises), so every reader asking which way and how
+    // fast a round is travelling comes here for the inherited component on top.
+    private static Vector3 WorldVelocity(in Proj p) => p.Vel + p.Inherited * InheritedFraction(in p);
 
     private static void KillModel(ref Proj p)
     {
@@ -2059,9 +2138,10 @@ public sealed partial class ProjectilePool : Node3D
             if (!p.Alive)
                 continue;
             // Carry the rocket body along with the round, nose down its velocity.
+            var worldVel = WorldVelocity(in p);
             if (p.Model != null)
             {
-                var pose = FlyoutPose(p.Pos, p.Vel);
+                var pose = FlyoutPose(p.Pos, worldVel);
                 // The def's spinner (the sonic's ObjectMotion XYZ_ROTATION, 8.73 rad/s): a steady
                 // roll about the round's own nose axis — pure roll, so the nose stays on velocity.
                 if (p.RollRate != 0f)
@@ -2074,7 +2154,7 @@ public sealed partial class ProjectilePool : Node3D
                 {
                     _flyoutPoseLogged = true;
                     var nose = -p.Model.GlobalTransform.Basis.Z.Normalized();
-                    var vdir = p.Vel.Normalized();
+                    var vdir = worldVel.Normalized();
                     GD.Print($"flyout orientation: nose·velocity = {nose.Dot(vdir):0.000} (1.000 = nose-forward)");
                 }
             }
@@ -2082,7 +2162,7 @@ public sealed partial class ProjectilePool : Node3D
             // trail is the MODEL_ANIMATION puffer smoke AcquireTrails already runs.
             if (p.Weapon.IsRocket)
                 continue;
-            var yAxis = p.Vel.Normalized();
+            var yAxis = worldVel.Normalized();
             // The two width axes. Any pair ⟂ to the flight direction will do — the crossed mesh
             // reads the same from every angle, which is exactly why the original consults no camera
             // here and why nothing in this basis depends on the eye any more.
@@ -2120,7 +2200,14 @@ public sealed partial class ProjectilePool : Node3D
     {
         public bool Alive;
         public Vector3 Pos;
-        public Vector3 Vel;      // m/s, world
+        public Vector3 Vel;      // m/s, world — the round's OWN velocity (heading × speed), which
+                                 // ACCELERATION raises; the launcher's share rides in Inherited
+        public Vector3 Inherited; // the launcher's velocity copied at spawn (FUN_005aef40's
+                                  // +0x30..+0x38); zero for ordnance carrying no LOCK_ON
+        public object? Target;   // what this round holds as its target — the second half of the
+                                 // steering step's gate. B6/B9 write and re-write it; A2 only asks
+                                 // whether one is held. Typed loosely because the original's target
+                                 // slot takes an aircraft, an emplacement or a beeper tag alike.
         public float DistLeft;   // m until it expires at RANGE
         public float Accel;      // ACCELERATION along the velocity direction, m/s²
         public float Grav;       // GRAVITY scale × world gravity, m/s² (0 throughout this install)

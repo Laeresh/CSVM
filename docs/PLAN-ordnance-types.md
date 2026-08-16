@@ -150,7 +150,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Projectile foundations
 
 1. ☑ Adopt the engine's squared-radius convention in `WeaponDef`
-2. ☐ Launch-velocity inheritance and its decay over `LOCK_ON`
+2. ☑ Launch-velocity inheritance and its decay over `LOCK_ON`
 3. ☐ `ACCELERATION` toward the speed cap, and no drag
 4. ☐ The three end conditions: range, timed fuse, target proximity
 5. ☐ Launch the player's ordnance along the aircraft axis, not the pylon's
@@ -248,7 +248,18 @@ proves nothing, so assert the relationship rather than a value.
 **⚠ Traps.** This is where wrong-claim 2 came from. Do not "tidy" a comparison into distance space;
 the original never takes a square root on these paths.
 
-## A2 ☐ Launch-velocity inheritance and its decay over `LOCK_ON`
+## A2 ☑ Launch-velocity inheritance and its decay over `LOCK_ON`
+
+**Verdict.** Landed, and `BL-290` is closed. A round now carries two vectors: its own
+`heading × speed` and the launcher's, the second copied in only for a weapon authoring `LOCK_ON`
+and blended out linearly over that window. The gate came with it as a named predicate
+(`ProjectilePool.SteeringStepRuns`, which B6 reuses), so a `LOCK_ON` round holding no target keeps
+its launcher's speed. `Proj.Target` carries the reference; the pylon spawn fills it from a human's
+own selection or an AI's gunner quarry, since nothing plumbed a target to a round before. The
+original's synthetic target for a player firing with none selected is NOT reproduced, so a player
+who has selected nothing sees no decay. Guns are held outside the rule deliberately: no `CANNON`
+authors `LOCK_ON`, and both the gun aim assist and the impact reticle are built on the inheriting
+round, so that is the gun path's question rather than this one's.
 
 **Goal.** A round launched from a fast aircraft leaves fast and visibly settles to its own cruise
 speed; one launched from a slow aircraft does not. Closes `BL-290`.
@@ -271,8 +282,8 @@ decays.
 **Verify.** `--weapon-lab=wep_14` launched at high speed with the surface in frame: the round must
 visibly slow over about 2.5 s and then hold. Then the same at low speed, where it must not slow.
 
-**⚠ Traps.** `CAP-28` was filmed for this question and is **no longer needed to answer it**; do not
-measure the decay off video to contest the constant. The playtest row is marked accordingly.
+**⚠ Traps.** `CAP-28` was owed for this question and is **no longer needed to answer it**; its
+playtest row is retired with `BL-290`. Do not measure the decay off video to contest the constant.
 
 ## A3 ☐ `ACCELERATION` toward the speed cap, and no drag
 

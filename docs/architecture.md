@@ -1150,6 +1150,25 @@ launch bark through the pool's own one-shot pool. `DefaultVelocity` (500 m/s, th
 launch speed for a def with no `VELOCITY`) is shared with the scan so the lead is solved for the
 speed the round actually leaves at.
 
+**A round's velocity is two vectors, not one** (`org/ordnanceTypes.md`, "Launch velocity is
+inherited"). `Proj.Vel` is the round's OWN velocity, the original's `heading × speed` and what
+`ACCELERATION` raises; `Proj.Inherited` is the launcher's velocity the spawn copied into it. Every
+reader asking how fast and which way a round is travelling goes through `WorldVelocity`, which adds
+what `InheritedFraction` has left of the second: 1 at launch falling linearly to 0 at `LOCK_ON`
+seconds. `CarriesLockOn` is the inherit-at-all flag (`FUN_005aef40` copies the launcher's vector
+only for a weapon authoring `LOCK_ON` and zeroes it otherwise, so the choker and the two
+non-`LOCK_ON` emplacement rounds inherit nothing), and `SteeringStepRuns` is the decay's gate:
+`FUN_005af720` runs the steering step only for a `LOCK_ON` weapon whose round **holds a target**, so
+a round holding none keeps its launcher's speed for its whole flight. That gate is the predicate B6
+hangs the turn clamp and the speed penalty on, and `Proj.Target` is the reference it reads —
+deliberately typed as `object?`, because the original's target slot takes an aircraft, an
+emplacement or a beeper tag alike, and B6/B9 are what write it. **Guns are held outside the rule on
+purpose** (`InheritedAtLaunch`): no `CANNON` in this install authors `LOCK_ON`, so applying it to
+them would strip every bullet of its launcher's velocity, and both the gun aim assist and the impact
+reticle (`Ballistics.March`) are built on the inheriting round. `CollectLiveRounds` is the seam a
+scripted run samples a round's speed through, and a breadcrumb reports the first four rounds that
+finish shedding.
+
 `ProjectilePool` — the shared-world weapon-fire subsystem: a fixed pool of projectiles integrated
 with `Ballistics` (VELOCITY/ACCELERATION/GRAVITY, expiring at RANGE), plus tracer streaks,
 muzzle flashes, and the per-surface IMPACT sound + effect model. Per-class impact looks: a
@@ -2133,7 +2152,12 @@ the attacker queue `Next Enemy/Objective` walks backwards. Decode:
 destructibles off `Destructibles` when a world runtime wired one), then `AssistedGunDirection`
 runs each firing barrel's slot through `AimAssist.FireDirection` and hands the result to
 `ProjectilePool.Spawn`. The rocket call deliberately gets none — the original reaches its assist
-from the gun branch alone.
+from the gun branch alone. What the rocket call does pass is the shooter's current target, a
+human's own `Targeting.Current` selection or an AI's `Gunner.Target` quarry: it is the second half
+of `ProjectilePool.SteeringStepRuns`'s gate, so it decides whether a `LOCK_ON` round sheds the
+launcher velocity it left with. The original's own shot routine hands a `LOCK_ON` weapon a
+synthetic target when the player holds none; CSVM does not, so a round fired with nothing selected
+holds its inherited speed.
 Two one-shot breadcrumbs on the first gun round make the wiring visible in any flight log: the
 candidate counts per list **with the nearest structure's range** (a registry whose anchors carried
 no world transform would report its full count from the world origin — untargetable, and the count

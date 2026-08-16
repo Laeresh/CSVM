@@ -763,37 +763,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ~30 m; the reference ticks measure ~0.35 m, which 8× matches). A/B the rest against
   `Dirt Splash.png` at the controls; the splash *height/timing* curves are authored data, not TUNE.
 
-- `BL-290` `[Bug]` **Torpedo flight dynamics: the original's torpedo has a max/cruise speed and
-  visibly slows after firing; ours flies the generic projectile model** (PT-38, 2026-08-06). Data
-  check done: the decoded weapon block carries only `VELOCITY` (muzzle/flyout speed) and
-  `ACCELERATION` (0 = constant velocity) — no drag or speed-cap field (`docs/formats/weapons.md`) —
-  so this is engine behaviour to measure, not data to consume. Hypothesis recorded, not evidence:
-  the torpedo may inherit the launching plane's speed and decay toward its own authored
-  `VELOCITY`; a fast launch would then visibly slow, as a drop-torpedo physically should.
-  ✅ **The hypothesis is confirmed, decoded, and `CAP-28` is no longer needed to answer it**
-  ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md), "Launch velocity is inherited"). At spawn
-  (`FUN_005aef40`) a weapon carrying `LOCK_ON` gets the **launcher's velocity vector** copied into the
-  round at `+0x30`–`+0x38`; a weapon without `LOCK_ON` gets a zero vector. The guidance step
-  (`FUN_005af960`) then sets, every frame,
-  `velocity = heading × speed + ((LOCK_ON − age) / LOCK_ON) × inheritedLaunchVelocity`,
-  so the launcher's contribution decays **linearly to zero over `LOCK_ON` seconds** and the round
-  settles at its own authored `VELOCITY`. `wep_14` authors `LOCK_ON [2.5]`, so the torpedo's
-  slowdown takes 2.5 s. This is not torpedo-specific: it applies to every `LOCK_ON` carrier, which is
-  13 of the 14 rockets. Two more constants from the same routine that our generic model also lacks:
-  a steering round's speed is multiplied by `0.8 + 0.2 × cos(turnAngle)` each frame it turns, and
-  guidance authority ramps as `(age − TURN_SUSPEND_TIME) / LOCK_ON` (with `TURN_SUSPEND_TIME`
-  unauthored, hence 0, hence full authority from frame one).
-  ⚠ *One gate to carry with it:* the decay lives inside the steering step, which the projectile tick
-  `FUN_005af720` runs only for a `LOCK_ON` weapon whose round **holds a target**. A torpedo fired
-  with no target keeps its inherited launch velocity indefinitely. The usual case is the decaying one
-  (the shot routine hands a `LOCK_ON` weapon a target when the player has none), but implement the
-  gate, not just the curve.
-  *Fix shape:* consume the inheritance and its decay in `Projectile`; the item is now
-  implementation, not investigation. ⚠ **Land it inside `BL-406`'s landing A, not separately** — the
-  same routine carries the acceleration and end-condition work, and splitting it means touching
-  `Projectile`'s integrator twice. `wep_14` is mountable via `--rocket=wep_14` (no stock loadout
-  carries it).
-
 - `BL-357` `[Feature]` **The hardpoint selector steps one way only; the original cycles in both
   directions.** *Evidence:* the user at the controls of the original, 2026-08-14: the player selects
   an individual hardpoint (the half that settled `BL-062`, closed the same day), and the selection
@@ -1201,8 +1170,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   launched fast visibly settling to 60 m/s over 2.5 s; a choker cutting an engine for 13 s at the
   centre and 5 s at the edge; a smoker leaving a screen and no round; a seeker turning onto a
   beeper-tagged target; a torpedo shot down in flight; and a blast behind cover doing nothing.
-  *Cross-refs:* `BL-227` (splash falloff, whose fix is landing **C**), `BL-290` (torpedo dynamics, a
-  strict subset of **A** — do not land it separately), `BL-233` (the fuse), `BL-293` (the
+  *Cross-refs:* `BL-227` (splash falloff, whose fix is landing **C**), `BL-233` (the fuse), `BL-293` (the
   `SURFACE_ANIMATION` normal rule), `BL-353` (the Weapon Loadout screen, the only route by which a
   player ever fits a non-HE type, so it gates whether most of this is reachable in a real flight),
   `BL-408` (the player's launch axis), `BL-404`/`BL-405`, `WeaponDefs.cs`, `Projectile.cs`.

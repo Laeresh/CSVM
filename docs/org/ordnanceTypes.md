@@ -732,7 +732,8 @@ Every part of `wep_14`'s flight is now accounted for by keys that **do** have re
 
 So it leaves the rail at launcher speed plus 60 m/s, flies straight with no gravity drop, and sheds
 the inherited component over 2.5 s down to a 60 m/s cruise. An aircraft at 120 m/s launches one that
-**halves its speed** across those 2.5 s, which is the slowdown `BL-290` recorded from the controls.
+**halves its speed** across those 2.5 s, which is the slowdown a player at the controls of the
+original reports seeing after a torpedo drop.
 
 ## What a round collides with
 
