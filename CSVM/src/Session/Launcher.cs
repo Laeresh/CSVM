@@ -547,13 +547,10 @@ public partial class Launcher : Node3D
             // While the launchscreen is up it owns Esc (back / quit from the Mode screen).
             if (_menu is { Visible: true })
                 return;
-            // Esc out of a menu-launched flight tears the world down and returns to the
-            // launchscreen; a CLI-launched run just quits, as before.
-            if (_menuDriven && _session is { InSession: true })
-            {
-                ReturnToMenu();
+            // ⚠ Esc no longer leaves a live flight; it opens the pause board, whose Exit item does.
+            // FlightController polls it as a pause toggle, so nothing is done here.
+            if (_session is { InSession: true })
                 return;
-            }
             GetTree().Quit();
             return;
         }
@@ -665,6 +662,7 @@ public partial class Launcher : Node3D
             Env = _env,
             MenuDriven = _menuDriven,
             MenuPads = _menuPads,
+            ExitSession = ExitSession,
         });
         AddChild(_session);
         bool built = _session.StartSession();
@@ -795,12 +793,24 @@ public partial class Launcher : Node3D
         GD.Print($"rng: master seed {_masterSeed} ({how})");
     }
 
-    // Frees the current session node and shows the launchscreen again — the in-process
-    // rebuild path for Esc-from-flight and failed builds. The whole session subtree hangs under the
-    // node, so `QueueFree` tears it down; the non-child duties (the published clock, the world
+    // The boards' Exit item: back to the launchscreen when this process launched into it, out of
+    // the game otherwise. The routing Esc used to do, now reachable from a pad.
+    private void ExitSession()
+    {
+        if (_menuDriven && _session is { InSession: true })
+        {
+            ReturnToMenu();
+            return;
+        }
+        GetTree().Quit();
+    }
+
+    // Frees the current session node and shows the launchscreen again — the in-process rebuild
+    // path for the boards' Exit item and for failed builds. The whole session subtree hangs under
+    // the node, so `QueueFree` tears it down; the non-child duties (the published clock, the world
     // lights, the session texture archive, the main-camera restore) run in the node's
-    // `_Notification` on `NotificationExitTree`. The camera / lights / shader globals
-    // persist on `this`.
+    // `_Notification` on `NotificationExitTree`. The camera, lights and shader globals persist
+    // on `this`.
     private void ReturnToMenu()
     {
         if (_session != null)
@@ -978,4 +988,9 @@ public sealed class LauncherContext
     /// <summary>Per-player pad binding from the launchscreen's join flow (null = derive from the
     /// connected roster, which is what every CLI launch does).</summary>
     public required int[][]? MenuPads { get; init; }
+
+    /// <summary>Leaves the session the way <see cref="MenuDriven"/> says: back to the launchscreen,
+    /// or out of the game. The boards' Exit item calls it, so the one routing rule lives on the
+    /// Launcher rather than being restated per board.</summary>
+    public required System.Action ExitSession { get; init; }
 }

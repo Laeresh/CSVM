@@ -1,15 +1,16 @@
+using System;
 using CSVM.UI;
 using Godot;
 
 namespace CSVM.Flight;
 
 /// <summary>
-/// The shared pause overlay — the same WHOLE-window
-/// CanvasLayer shape as <see cref="VersusBoard"/>/<see cref="StuntRaceBoard"/>: pausing stops the
-/// game for everybody at once, so this is one overlay above every pane, not a per-pane HUD
-/// element. Names the pausing player (their own <see cref="SplitScreen.PlayerColor"/>) and, since
-/// <see cref="PauseState"/> lets only that player resume, tells everyone else to wait rather than
-/// showing a resume prompt they cannot act on.
+/// The shared pause board and its menu — the same WHOLE-window CanvasLayer shape as
+/// <see cref="VersusBoard"/>/<see cref="StuntRaceBoard"/>, since pausing stops the game for
+/// everybody at once. Names the pausing player (their own <see cref="SplitScreen.PlayerColor"/>)
+/// and hands them the cursor: <see cref="PauseState"/> lets only that player resume, so only that
+/// player's pad drives the menu. Everyone else's input is ignored while it is up rather than
+/// fighting over a cursor whose Restart and Exit decide the whole session.
 /// </summary>
 public sealed partial class PauseBoard : Control
 {
@@ -17,25 +18,35 @@ public sealed partial class PauseBoard : Control
     // as the same screen whichever one is up. All TUNE.
     private const int TitleFont = 30;
     private const int ContextFont = 18;
-    private const int FooterFont = 15;
 
     private static readonly Color TitleColor = new(0.93f, 0.96f, 1f);
-    private static readonly Color FooterColor = new(0.68f, 0.74f, 0.82f);
 
     private PauseState _state = null!;
-    private string _exitHint = "";
+    private string _exitLabel = "";
+    private Func<int, MenuInput> _inputFor = null!;
     private CenterContainer _center = null!;
     private PanelContainer? _panel;
+    private BoardMenu? _menu;
+    private BoardMenuView? _menuView;
+    private MenuInput? _input;
+
+    /// <summary>Rerun the running mode in place, chosen from the menu.</summary>
+    public Action? Restart { get; set; }
+
+    /// <summary>Leave the session, chosen from the menu.</summary>
+    public Action? Exit { get; set; }
 
     /// <summary>Builds the (hidden) board and subscribes to the shared pause state. Add it to a
     /// CanvasLayer above the splitscreen panes; it wakes on <see cref="PauseState.Changed"/> and
-    /// hides itself the same way once resumed.</summary>
-    public static PauseBoard Build(PauseState state, bool exitsToMenu)
+    /// hides itself the same way. <paramref name="inputFor"/> answers with a player's own menu
+    /// reader, which is what binds the cursor to the pauser.</summary>
+    public static PauseBoard Build(PauseState state, bool exitsToMenu, Func<int, MenuInput> inputFor)
     {
         var board = new PauseBoard
         {
             _state = state,
-            _exitHint = exitsToMenu ? "Esc — Menu" : "Esc — Quit",
+            _exitLabel = exitsToMenu ? "Exit to Menu" : "Quit Game",
+            _inputFor = inputFor,
             MouseFilter = MouseFilterEnum.Ignore,
             FocusMode = FocusModeEnum.None,
             Visible = false,
@@ -61,6 +72,17 @@ public sealed partial class PauseBoard : Control
         // Track the window (resizable) so the backdrop always covers it — VersusBoard's same rule.
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
+
+        if (!Visible || _menu == null || _input == null)
+            return;
+
+        // Wall time, not sim time: the clock this menu is holding does not advance, so the cursor's
+        // auto-repeat would never fire on sim dt.
+        _input.Poll((float)delta);
+        // Escape and Start are the pause toggle FlightController already polls, so only the pad's
+        // B is read here; reading both would resume and dismiss on one press.
+        if (_menu.Handle(_input.Move, _input.Accept, _input.PadBack))
+            _menuView?.Refresh();
     }
 
     private static Label Label(string text, int fontSize, Color color)
@@ -76,7 +98,7 @@ public sealed partial class PauseBoard : Control
 
     private static CenterContainer Centered(Control c)
     {
-        var cc = new CenterContainer();
+        var cc = new CenterContainer { MouseFilter = MouseFilterEnum.Ignore };
         cc.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         cc.AddChild(c);
         return cc;
@@ -87,6 +109,23 @@ public sealed partial class PauseBoard : Control
         if (_state.Paused)
             Populate();
         Visible = _state.Paused;
+    }
+
+    private void OnActivated(BoardMenuItem item)
+    {
+        switch (item)
+        {
+            case BoardMenuItem.Resume:
+                _state.ForceResume();
+                break;
+            case BoardMenuItem.Restart:
+                _state.ForceResume();   // the rerun runs against a live clock, not a held one
+                Restart?.Invoke();
+                break;
+            case BoardMenuItem.Exit:
+                Exit?.Invoke();
+                break;
+        }
     }
 
     private void Populate()
@@ -127,7 +166,22 @@ public sealed partial class PauseBoard : Control
 
         body.AddChild(Centered(Label("PAUSED", (int)(TitleFont * s), TitleColor)));
         body.AddChild(Centered(Label($"{ownerTag} paused", (int)(ContextFont * s), ownerColor)));
-        body.AddChild(Centered(Label($"Start/P ({ownerTag}) — Resume        {_exitHint}",
-            (int)(FooterFont * s), FooterColor)));
+
+        // A fresh menu each pause: the cursor starts on Resume, so a stray confirm on a board that
+        // just appeared cannot restart or leave the session.
+        _menu = new BoardMenu(
+            dismissable: true,
+            (BoardMenuItem.Resume, "Resume"),
+            (BoardMenuItem.Restart, "Restart"),
+            (BoardMenuItem.Exit, _exitLabel));
+        _menu.Activated += OnActivated;
+        _menu.Dismissed += () => _state.ForceResume();
+        _menuView = BoardMenuView.Build(_menu, s);
+        body.AddChild(_menuView);
+
+        // Primed against the owner's live device state, so the Start or B still held from the press
+        // that opened this board is not read as a fresh one on the next frame.
+        _input = _inputFor(owner);
+        _input.Prime();
     }
 }

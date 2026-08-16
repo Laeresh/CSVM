@@ -791,6 +791,15 @@ public partial class FlightController : Node3D
         }
     }
 
+    /// <summary>Rerun this plane's own run: fresh clock and every zone incomplete, then the
+    /// respawn below. A plane with no stunt run is simply respawned, which is all a free flight's
+    /// rerun amounts to.</summary>
+    public void Rerun()
+    {
+        Stunt?.Reset();
+        Respawn();
+    }
+
     /// <summary>Back to the spawn pose at half throttle with a healthy, repaired airframe: the
     /// crash respawn (R), and the session's per-plane reset for a race rematch. Leaves the
     /// stunt run alone — a mid-run crash deliberately keeps its zones and clock.</summary>
@@ -1103,7 +1112,7 @@ public partial class FlightController : Node3D
             _simPrev = _simCurr;   // hold the finish pose — no stale pair left to interpolate
             // The solo scoreboard accepts R as a fresh run, distinct from a mid-run respawn.
             if (RespawnPressed())
-                RestartStuntRun();
+                Rerun();
             return;
         }
         _autoRestartIn = AutoRespawnDelay; // re-armed while the run is live
@@ -1969,11 +1978,6 @@ public partial class FlightController : Node3D
     // Full stunt restart from the results scoreboard (R): fresh clock + every
     // zone incomplete, then the normal respawn (spawn pose / throttle / cleared damage). The
     // scoreboard hides itself once AllComplete clears; the marker HUD replays its intro line.
-    private void RestartStuntRun()
-    {
-        Stunt?.Reset();
-        Respawn();
-    }
 
     // True if the segment crosses any solid collider — the static world, or another
     // aircraft's body (never this plane's own, excluded by RID); on a hit,
@@ -2181,10 +2185,11 @@ public partial class FlightController : Node3D
     private bool RespawnPressed() =>
         KeyDown(Key.R) || PadPressed(JoyButton.Y);
 
-    // P (or gamepad Start), edge-detected so one press toggles once, gated on
-    // AllowPause (false for AI rigs and the suites' bare test rigs).
+    // P, Esc or gamepad Start, edge-detected so one press toggles once, gated on AllowPause
+    // (false for AI rigs and the suites' bare test rigs). Esc opens the pause board rather than
+    // leaving the flight; the board's Exit item is what leaves, and a pad can reach it.
     private bool PauseTogglePressed() =>
-        AllowPause && (KeyDown(Key.P) || PadPressed(JoyButton.Start));
+        AllowPause && (KeyDown(Key.P) || KeyDown(Key.Escape) || PadPressed(JoyButton.Start));
 
     // Tab / gamepad X — cycles the stunt marker's displayed target (caller edge-detects).
     // Gamepad Y would clash with the respawn button, so X (a free face button) instead.

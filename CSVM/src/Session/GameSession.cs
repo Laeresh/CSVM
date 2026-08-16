@@ -89,8 +89,10 @@ public partial class GameSession : Node3D
     // The static inspection view's orbit camera (LMB orbit, wheel zoom, AABB framing); the
     // Launcher creates it once and seeds --yaw=/--pitch= into its initial angles.
     private readonly OrbitCamera _orbit;
-    // launched into the menu → Esc from flight returns there, not quit
+    // launched into the menu → the boards' Exit item returns there, not quit
     private readonly bool _menuDriven;
+    // The boards' Exit item, routed by the Launcher (launchscreen or quit).
+    private readonly Action _exitSession;
     // Base (chapter-independent) paths, settled by the Launcher once per process and handed in via
     // the context; StartSession reads them each build and recomputes the chapter-dependent
     // gamez/texture/mission paths from _spec.Chapter.
@@ -205,6 +207,12 @@ public partial class GameSession : Node3D
     // advanced on the sim dt (never wall time). Null outside Versus — the Downed events then
     // simply have no subscriber. Freed with this node; flight holds no match state.
     private VersusMatch? _versus;
+    // The stunt race (--stunt with several pilots), for the same reason: a rerun resets it rather
+    // than each pilot's own run. Null outside a race.
+    private StuntRace? _race;
+    // One menu reader per player, built with that player's own pad binding, so a board menu can be
+    // driven by its owner alone. Null before the rigs exist.
+    private UI.MenuInput[]? _menuInputs;
     // The trailer-target resolver every net follower this session builds shares. Built
     // with the rigs (it needs the player rig), so the F13 overlay, built earlier, reads it through
     // this field rather than holding a reference it could not have had yet.
@@ -264,6 +272,7 @@ public partial class GameSession : Node3D
         _env = ctx.Env;
         _menuDriven = ctx.MenuDriven;
         _menuPads = ctx.MenuPads;
+        _exitSession = ctx.ExitSession;
     }
 
     /// <summary>Whether the build completed — the Launcher's Esc routing reads it (return to the
@@ -1751,7 +1760,10 @@ public partial class GameSession : Node3D
         foreach (var rig in _rigs)
             if (rig.Controller is { } pausable)
                 pausable.PauseState = pauseState;
-        var pauseBoard = PauseBoard.Build(pauseState, exitsToMenu: _menuDriven);
+        _menuInputs = BuildMenuInputs(padAssignment);
+        var pauseBoard = PauseBoard.Build(pauseState, exitsToMenu: _menuDriven, MenuInputFor);
+        pauseBoard.Restart = Rerun;
+        pauseBoard.Exit = _exitSession;
         var pauseLayer = new CanvasLayer { Name = "pause_board", Layer = UI.HudLayers.Board };
         pauseLayer.AddChild(pauseBoard);
         _worldRoot!.AddChild(pauseLayer);
@@ -1838,6 +1850,7 @@ public partial class GameSession : Node3D
         // so it routes back through the session.
         if (race != null)
         {
+            _race = race;
             var board = StuntRaceBoard.Build(race, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
                 exitsToMenu: _menuDriven);
             var boardLayer = new CanvasLayer { Name = "race_board", Layer = UI.HudLayers.Board };
@@ -2874,6 +2887,43 @@ public partial class GameSession : Node3D
             parent.AddChild(copy);
             _rigs[i].Deck = copy;
         }
+    }
+
+    // One menu reader per player, bound the way that player's plane is bound: player 1 also has the
+    // keyboard, and a session with no per-player split reads every connected pad (null).
+    private UI.MenuInput[] BuildMenuInputs(int[][]? padAssignment)
+    {
+        var inputs = new UI.MenuInput[Math.Max(1, _rigs.Count)];
+        for (int i = 0; i < inputs.Length; i++)
+            inputs[i] = new UI.MenuInput { Keyboard = i == 0, Pads = padAssignment?[i] };
+        return inputs;
+    }
+
+    // The reader a board menu drives its cursor from. An owner outside the roster (a board that
+    // named no player) falls back to player 1, who always exists.
+    private UI.MenuInput MenuInputFor(int playerIndex)
+    {
+        var inputs = _menuInputs ??= BuildMenuInputs(null);
+        return playerIndex >= 0 && playerIndex < inputs.Length ? inputs[playerIndex] : inputs[0];
+    }
+
+    // Rerun the running mode in place, from a board menu's Restart item: the race and the match
+    // own session-wide bookkeeping, and anything else is per-plane. Same seed and same world in
+    // every case — nothing here rebuilds the session.
+    private void Rerun()
+    {
+        if (_race is { } race)
+        {
+            RestartRace(race);
+            return;
+        }
+        if (_versus is { } match)
+        {
+            RestartMatch(match);
+            return;
+        }
+        foreach (var rig in _rigs)
+            rig.Controller?.Rerun();
     }
 
     // Rematch from the shared race board (R): every player's zones, clock and placing cleared, then
