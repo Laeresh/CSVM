@@ -1293,12 +1293,14 @@ a weapon uses (so its death — swap, debris, collider removal — is identical)
 ramming it crashes the plane and leaves it intact (⚠ decision 6 upheld — collision damage is NOT
 extended to `WeaponHit`). Data confirmed: exactly 44 `WeaponOrCollideHit` defs across cam_anim.
 
-> ⚠ **The "leaves it intact" half is REFUTED by original-game tests (2026-08-07, `BL-302`).** In
-> the original, every destructible takes severity-scaled collision damage — a rammed C1 hangar
-> (plain `WeaponHit`) dies alongside the plane crash, and a survivable graze advances its damage
-> stages. The `ACTIVATION` enum gates the *plane's* fate (solid vs fly-through), not the object's.
-> Decision 6's "follow the data exactly" was an inference from the census, tested against the
-> original only now. The 44-def fly-through set and this landing's mechanism stay correct.
+> ⚠ **The "leaves it intact" half above is wrong, and has since been replaced.** Every destructible
+> takes severity-scaled collision damage: a rammed `WeaponHit` building dies alongside the plane
+> crash, and a survivable graze advances its damage stages. `ACTIVATION` gates the *plane's* fate
+> (solid vs fly-through), not the object's. Decision 6's "follow the data exactly" was an inference
+> from the census rather than a reading of behaviour. The `vn × 8` figure here is superseded too: the
+> law carries no airspeed term at all. The 44-def fly-through set and this landing's mechanism stay
+> correct. Current state: [`../org/flightModel.md`](../org/flightModel.md)'s "Collision damage" and
+> [`../formats/destructibles.md`](../formats/destructibles.md).
 
 **Verified.** `--damage-hd` gained a `collide[✓/✗, ACTIVATION]` probe: the facades, windows and
 `agyrobus` `collide[✓ broke]`; the C2 signs and `kkgate` `collide[✗ ignored]`. 8-chapter freecam

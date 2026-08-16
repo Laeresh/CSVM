@@ -187,7 +187,7 @@ public sealed partial class ZeppelinRuntime : Node
     /// damage a gasbag, and every other zeppelin part passes.
     /// ⚠ A ram carries no <see cref="WeaponDef"/>, so it cannot reuse
     /// <see cref="GateWeaponDamage"/>. The original needs no second entry point: it delivers a ram
-    /// as a <c>wep_24</c> weapon hit, which lacks <c>DAMAGES_ZEPPELIN</c> (`BL-402`).</summary>
+    /// as a <c>wep_24</c> weapon hit, which lacks <c>DAMAGES_ZEPPELIN</c>.</summary>
     public bool GateCollisionDamage(DestructibleRegistry.Instance inst)
     {
         foreach (var zep in _live)

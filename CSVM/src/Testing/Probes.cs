@@ -839,7 +839,7 @@ public static class Probes
             }
 
             // Collide-gate probe: an overkill COLLISION must break a WeaponHit tower just as it
-            // breaks a WeaponOrCollideHit facade (`BL-302`). ACTIVATION decides only what the
+            // breaks a WeaponOrCollideHit facade. ACTIVATION decides only what the
             // PLANE does, the second column: through, or solid.
             string collide = "";
             if (damageHd > 0f)

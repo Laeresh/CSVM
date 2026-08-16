@@ -8,7 +8,7 @@ namespace CSVM.Tests;
 /// The decoded collision damage law (<c>FUN_0048d2c0</c>), ported as
 /// <see cref="CollisionDamage"/>. Decode: docs/org/flightModel.md, "Collision damage".
 /// The property that matters most is the NEGATIVE one — there is no airspeed term — so it is
-/// asserted directly rather than left to follow from the arithmetic (`BL-302`).
+/// asserted directly rather than left to follow from the arithmetic.
 /// </summary>
 public class CollisionDamageTests
 {
@@ -82,8 +82,8 @@ public class CollisionDamageTests
         Assert.True(CollisionDamage.Term(Crossing + 0.05f, Floor, Scale) > Floor);
     }
 
-    /// <summary>The law against the real struck object, which is what `BL-302`'s two original-game
-    /// observations constrain. C1's airfield buildings (<c>m_build01</c>–<c>07</c>) carry
+    /// <summary>The law against the real struck object, which is what the original's own graze and
+    /// ram outcomes constrain. C1's airfield buildings (<c>m_build01</c>–<c>07</c>) carry
     /// <c>health 60</c> and <c>DAMAGE_SEQUENCE</c> thresholds at 36 and 18. A shallow graze deals
     /// the flat floor 50, leaving 10 HP: alive, past the deepest threshold, the stage-2 burn the
     /// original showed. A steeper contact passes 60 and destroys it, as a full ram did. Nothing

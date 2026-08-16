@@ -1720,7 +1720,8 @@ constructor `FUN_004aff80`, so it differs per object and per run. On a skipped f
 not simply do nothing: it accumulates that frame's translation into `obj+0x6B0`…`obj+0x6B8` and
 returns severity `0.0`, and the next sweep that does run applies the accumulated motion. This halves
 the collision rate and is why two aircraft in the same contact do not necessarily resolve on the
-same frame.
+same frame. **Not ported**: our sweep runs every sim step, which resolves a contact sooner than the
+original would but never differently.
 
 ⚠ **Only the player bounces.** The impulse branch is entered only when `obj == DAT_0071c298` and the
 player is not already crashed. AI aircraft get position correction and an impact cosine, and no
@@ -1814,9 +1815,11 @@ Neither is a damage-invulnerability timer; `obj+0xAC` disables collision itself.
 ## Collision damage (`FUN_0048d2c0`)
 
 The section above is the response; this is the damage. `FUN_0048d7f0` returns an impact severity and
-`FUN_0048d2c0` turns it into a damage pair. Not ported: `FlightController.CollideDamagePerVn` is a
-hand-picked scalar on a different variable, and no part of the law below is implemented
-(`BL-302`, `BL-402`).
+`FUN_0048d2c0` turns it into a damage pair. **Ported**, as `Flight/CollisionDamage.cs` with the
+authored ranges read in `PlaneStats` and the contact resolved in `FlightController.ResolveContact`;
+the struck party's damage runs through `AnimRuntime.CollideDamageAt` and the striker's through
+`PlaneDamage.Apply`. Two parts of the section below are knowingly not ported and say so where they
+appear: the object's own `+0xbc` damage reduction, and the every-other-frame sweep parity.
 
 **The severity is a cosine.** `FUN_0048d7f0` normalises the velocity through `FUN_00422690` (at
 `0x0048df8b` on the player path, `0x0048dba0` / `0x0048dbba` otherwise) **before** dotting it with
@@ -1891,7 +1894,7 @@ animation record by `FUN_005230d0`, the animation-definition loader (`D:\zipper\
 `FUN_005abcf0` dispatches through **slot 0**, and `0x004e7220` re-checks the byte itself, accepting
 `+0xa1 ∈ {0, 2}` and refusing everything else (`0x004e7234`). That byte is the `ACTIVATION` enum,
 with `WeaponHit` 0 and `WeaponOrCollideHit` 2, so a ram damages **both** kinds and the enum decides
-only the plane's fate. That is `BL-302`'s playtest reading, decoded.
+only the plane's fate.
 
 With `+0xb4` the max health, `+0xb8` the current pool and `+0xbc` a per-object damage reduction:
 
@@ -1903,7 +1906,10 @@ if net > 0:  animRecord[+0xb8] -= net
 ```
 
 ⚠ **A destructible consumes the health term only.** `armorDmg` is never read on this path, and
-`healthDmg` is reduced by the object's own `+0xbc` before anything is subtracted. Every non-aircraft
+`healthDmg` is reduced by the object's own `+0xbc` before anything is subtracted. **`+0xbc` is not
+ported**: our destructible data carries no equivalent field, and the law reproduces the original's
+observed graze and ram outcomes on C1's 60 HP buildings without it, so it is zero or near zero on
+those defs. Every non-aircraft
 handler behaves this way (the two zeppelin handlers above, and clutter's `0x004df420` from
 `FUN_004deab0`, `D:\zipper\gamez\zclass\cls_clutter.cpp`); only the aircraft handler `0x004b9750`
 consumes both through the armour split.
@@ -1933,7 +1939,9 @@ bits `0x4` and `0x10` plus the layer filter `FUN_0056c430` and recursing into it
 its cell range spans more than one cell, so a large moving object lives in the root child list and is
 descended into on every sweep.
 
-This is why a zeppelin's sub-parts are rammable. They are ordinary descendants of the zeppelin root
+This is why a zeppelin's sub-parts are rammable, which they are here too: a cannon mount takes ram
+damage and a gasbag takes none, the exemption holding because a ram carries no `DAMAGES_ZEPPELIN`
+ordnance. They are ordinary descendants of the zeppelin root
 in the hierarchy the recursion walks; `gwNodeNew` stamps every node `node+0x24 = 0x0108001C` and
 `node+0x30 = 0xFF` at birth, so both predicate bits and the layer filter pass by default, and neither
 the zeppelin parser nor its two part-registration helpers clears them on a part. There is no

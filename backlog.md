@@ -449,205 +449,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`docs/plans/PLAN-m3-polish-10.md` A1), `DamageVisuals.cs` (the consumer),
   `extracted/zrdr/vehicle.zrd.json` (the authority).
 
-- `BL-302` `[Bug]` **Every destructible takes collision damage in the original — `ACTIVATION` gates the
-  *plane's* fate, not the object's. Refutes M3 Decision 6's behavioural reading.** We currently damage
-  only the 44 `WeaponOrCollideHit` defs on contact and leave every `WeaponHit` destructible untouched
-  by a ram ("ramming a water tower kills *you*, and the tower is untouched" —
-  `docs/plans/PLAN-M3-weapons.md`, wave item C27). That reading was inferred from the activation
-  census alone and never tested against the original. **Three original-game tests (user, C1,
-  2026-08-07) overturn it:**
-  1. **Full ram into a C1 hangar: the plane crash AND the hangar's destruction both play.** No C1 def
-     is in the 44-def collide set (all are C2 facades / C5 windows / C5 `agyrobus`,
-     `docs/formats/destructibles.md`), so the hangar is a plain `WeaponHit` destructible — and the
-     collision still killed it.
-  2. **A survivable graze along a hangar advanced it to its stage-2 smoke-and-burn damage stage**
-     while the plane flew on — so collision damage is *severity-scaled* and flows through the ordinary
-     `DAMAGE_SEQUENCE` thresholds, not an instant kill.
-  3. **Crashing on bare ground next to a destructible damages nothing** — the plane's death explosion
-     has no blast radius (consistent with the data: rockets are the only blast-radius carriers), so
-     test 1's hangar died from the *contact*, not the boom.
-  **What stands:** the 2,565 `WeaponHit` / 44 `WeaponOrCollideHit` census is a data fact. **What the
-  enum actually means:** `WeaponOrCollideHit` = the object breaks and the plane flies *through*
-  unharmed (fly-through set dressing); `WeaponHit` = the object is solid — the plane grazes or
-  crashes on it — but it still takes the collision damage.
-  ✅ **Decoded in `crimson.exe`, and the binary confirms the premise independently of the three
-  tests.** The impact handler `FUN_0048d2c0` carries NO activation test: it damages whatever node
-  the sweep resolved, gated only on `contact+0x24 != 0`. `WeaponHit` and `WeaponOrCollideHit` are
-  indistinguishable to it, so if the enum matters it does so in the sweep's solidity set, never in
-  the damage.
-  **The severity is a cosine, and carries no airspeed term at all.** `FUN_0048d7f0` normalises the
-  velocity (`FUN_00422690`, at `0x0048df8b` on the player path and `0x0048dba0`/`0x0048dbba`
-  otherwise) BEFORE dotting it with the contact normal, and returns `s = -(v̂ · n̂)`, dimensionless.
-  Nothing registers unless `s > 0` (`0x006032c8`). The law is
-  `armorDmg = healthDmg = max(300 × s³, 50)`: the cube at `0x0048d4c1`, the scale read from
-  `0x0071c34c` / `0x0071c354`, the floor from `0x0071c350` / `0x0071c358`. Those four globals are
-  `player.zrd.json`'s `crash` block (`armor_damage_range` and `health_damage_range`, both
-  `[50, 300]`, `extracted/zrdr/player.zrd.json:241-257`, parsed by `FUN_004735b0` with element 0 the
-  floor and element 1 the scale), so they are DATA, not constants to hardcode; the compiled
-  fallbacks `[15, 200]` (`0x00473b8d`, `0x00473b97`, `0x00473ba1`, `0x00473bab`) never stand on this
-  install. The floor dominates below `s ≈ 0.550`, so any contact shallower than about 33° off the
-  surface deals a flat 50.
-  **The damage is dealt by re-entering the ordinary weapon pipeline as `wep_24`** (string
-  `0x00628a14`, looked up by name at `0x0048d53e`, applied through the same applier a rocket uses,
-  `FUN_005abcf0`, at `0x0048d55b`), so a rammed object dies exactly as a weapon kill does, through
-  its normal thresholds. That is test 2's severity scaling, decoded.
-  ✅ **The receiving handler is `0x004e7220`, and `ACTIVATION` is its gate, decoded.** The
-  animation-definition loader `FUN_005230d0` registers a damage handler per animation record keyed on
-  the record's `+0xa1` byte, which IS the `ACTIVATION` enum (0 registers slot 0 only, 1 slot 1 only,
-  2 both). A collision arrives through slot 0, and `0x004e7220` re-checks the byte itself, accepting
-  `+0xa1 ∈ {0, 2}` at `0x004e7234`. So `WeaponHit` AND `WeaponOrCollideHit` both take collision
-  damage, from the binary, independently of the three tests. The handler subtracts the object's own
-  damage reduction at `+0xbc` from `healthDmg`, applies the remainder to the pool at `+0xb8`, re-runs
-  the `DAMAGE_SEQUENCE` evaluation (`FUN_004e71e0`) and fires the death sequence at zero. The armour
-  term is never read on this path: a destructible consumes `healthDmg` only, as do the zeppelin
-  handlers and clutter's `0x004df420` (`FUN_004deab0`, `cls_clutter.cpp`). Only the aircraft handler
-  `0x004b9750` consumes both.
-  ⚠ **`0x004e7220`'s weapon gate refuses when the bit is SET, and reading it backwards would say
-  collisions damage nothing.** `0x004e7227` tests `weaponRecord+0x74 & 0x400` and the `JZ` at
-  `0x004e722a` jumps INTO the damage body when it is zero. Bit `0x400` is the `FREEZE` impact type
-  (`FUN_005ad630`, alongside `0x40` `HEAT` and `0x1000` `DESIGNATE`); no shipped weapon carries
-  `FREEZE` and `wep_24` does not, so the gate is open and this item stands.
-  ⚠ **A ram borrows the HE rocket's IMPACT effects along with its record.** `wep_24` is
-  `MSG_WEAP_HEXPLOSIVE_ROCKET` / `"BOOM"`. Its authored `ARMOR_DAMAGE 100` and `HEALTH_DAMAGE 100`
-  are NOT used (the caller's pair is forwarded), but its `IMPACT` block still fires: ramming a
-  building plays `large_fireball`, ramming water plays `bsplsh.flt`. Landing the damage without the
-  effect will look wrong at the controls.
-  *Fix shape:* apply collision damage to ANY struck destructible (`FlightController.cs:882-894`
-  currently consults `CollideDamageSink` and `AnimRuntime.CollideDamageAt:1257-1269` rejects
-  non-`WeaponOrCollideHit` defs — lift that gate for the damage half), keeping the fly-through-on-break
-  behaviour gated on `WeaponOrCollideHit` exactly as now, and dealing the damage on the crash branch
-  too, not only the graze/fly-through one.
-  *Playtest after fix:* `PT-59` — ram + graze a C1 `m_build` in our build and A/B the damage stages
-  against the original. Landed and awaiting that flight; the predictions it checks are in the ✅
-  note above.
-  ⚠ **Traps.** (a) Do **not** add a crash blast radius — test 3 refuted it directly. (b)
-  `CollideDamagePerVn` 8 (`FlightController.cs:385`) has the wrong INDEPENDENT VARIABLE, not merely
-  the wrong value: it scales by `|v · n|`, which grows with airspeed, where the decoded law above has
-  no airspeed term at all. Swapping the constant without swapping the variable leaves a fast shallow
-  graze lethal and a slow steep ram harmless, both backwards. Port the formula and read its four
-  numbers from `player.zrd.json`'s `crash` block instead of hardcoding them. `SurviveHit`'s own
-  `vn >= CrashSpeed` test (`FlightController.cs:2490`) is the same mistake on the plane's side of the
-  contact.
-  ✅ **The owed def lookup is done, and the decoded law reproduces BOTH original-game observations
-  with nothing tuned.** The struck C1 building is the `m_build01`–`m_build07` family (the
-  `--destroy=m_build` probe's target), not `hangar3`, which is the ON_CALL *doors* anim as suspected.
-  Each carries `health 60`, `activation WeaponHit`, and `DAMAGE_SEQUENCE` thresholds at **36** and
-  **18** (`extracted/C1/cam_anim/m_build03-m_build03-m_bld_healthy.json`). Against the authored
-  `[50, 300]`: any contact shallower than ~33° deals the flat floor 50, leaving **10 HP**, which is
-  alive and past the deepest threshold, so a survivable graze lands it in stage-2 smoke-and-burn,
-  which is test 2 exactly. A contact steeper than ~36° exceeds 60 and destroys it, which is test 1.
-  Pinned by `CollisionDamageTests.AGrazeLeavesAC1BuildingAliveInItsDeepestDamageStage`. The playtest
-  is now a confirmation, not a calibration.
-  ⚠ **The object's own damage reduction (`+0xbc`) is still unmodelled**, and our destructible data
-  carries no equivalent field. The agreement above suggests it is zero or small for these defs; a
-  playtest that lands stage 2 on a graze and death on a ram leaves it that way, and one that lands
-  a stage short is the evidence that it is not. (c) The `--damage-hd`
-  `collide[✓/✗]` gate (`Probes.cs:683`) *asserts the old semantics* — WeaponHit towers ignoring
-  collision is its ✗ leg — and must flip with the code, or it will fail green. (d) Plane-vs-plane ram
-  damage, the plane's OWN damage on a survivable contact, and zeppelin parts are NOT this item: they
-  are `BL-402`, which shares this decode and this call site. The two want landing together, but the
-  scopes stay apart because only this one is evidenced by the three original-game tests.
-  *Supersedes:* the "decision 6 upheld" caveat (`PLAN-M3-weapons.md:1281`,
-  `docs/HISTORY.md:5295` records the old behaviour landing) and `docs/formats/destructibles.md`'s
-  `ACTIVATION` reading (⚠-noted in place).
-
-- `BL-402` `[Bug]` **A collision damages BOTH parties in the original, and ours damages neither: the
-  rammed aircraft, the rammed zeppelin part and the ramming plane itself all come away clean.**
-  Split out of `BL-302` trap (d), which fenced this off for want of original-game evidence. The
-  evidence now exists and is stronger than a playtest: the whole path is decoded out of `crimson.exe`
-  and it is one handler, `FUN_0048d2c0`, shared with `BL-302`. Today `SweepAirframe` already resolves
-  another aircraft (`CollisionLayers.WorldAndAircraft`, `FlightController.cs:1944`), so our contact
-  finds the body and then drops it: `CollideDamageAt` (`AnimRuntime.cs:1215`) resolves it against the
-  destructible registry, gets null, and returns false. The struck plane takes nothing, and
-  `SurviveHit` deals the rammer nothing either.
-  **What the original does, in three parts.**
-  1. **The struck party** takes `max(300 × s³, 50)` on the same `wep_24` path `BL-302` documents,
-     with no class test on it. For an aircraft target that runs
-     `FUN_004b9750` → `FUN_004b9770` → `FUN_004b9b30` → `FUN_004b9bc0`, landing on the identical
-     `FUN_004b3bf0` / `FUN_004b8070` primitives the striker applies to itself, so the law is
-     symmetric in form.
-  2. **The ramming plane** takes the same pair, applied after an invulnerability early-out at
-     `0x0048d563` (`obj+0x920`) that sits AFTER the struck object is damaged, so an invulnerable
-     striker still destroys what it hits. Per-part first where the airframe has a part list
-     (`FUN_004b3950` picks the struck node's own part, else the part nearest the contact,
-     `FUN_004b3bf0` at `0x0048d724`), then the remainder in aggregate (`FUN_004b8070` at
-     `0x0048d783`). The armour-to-health split is `FUN_004b7f80`: with
-     `f = min(1, armor / armorDmg)`, armour drops by `armorDmg` floored at zero, and health drops by
-     `(1 - f) × healthDmg`, so a fully-armoured contact costs no health at all. Survival is then
-     `health > 0` (`obj+0x2d0`, `0x0048d78b`).
-  3. **Both parties go collision-free for 1.0 s** afterwards, the `obj+0xAC` clock `BL-382` already
-     tracks: written to the striker at `0x0048d383` and to the struck entity at `0x0048d395`
-     (literal at `0x006032dc`). It suppresses the whole sweep, not just the damage:
-     `FUN_0048d7f0` returns zero severity outright while the clock is in the future.
-  ⚠ **The player is deliberately asymmetric, and flattening that is the trap.** At `0x0048d2ed` a
-  player-owned striker jumps past the entity-detection block entirely, with three consequences that
-  must all survive the port: the player never takes the 0.2 entity-versus-entity cut
-  (`0x0048d51a`/`0x0048d526`) that scales an AI's ram down to a fifth; the player writes no grace
-  clock, so the contact can re-resolve on following frames while the two aircraft are still
-  overlapped; and the player is never subject to `local_11`, the flag that forces destruction
-  regardless of remaining health (`0x0048d79e`). `local_11` is set for a non-player striker that did
-  NOT resolve an aeroplane, so an AI that rams terrain or a building always dies while an AI that
-  rams another aircraft survives if health remains. Entity detection requires node flag `0x40000000`
-  and a dispatch class at `+0x67c` of 0 or 4, the two aeroplane classes (`0x0048d360`).
-  ⚠ **There is no pairwise broadphase: each aircraft sweeps itself, so a player ram is applied
-  TWICE.** `FUN_0048d7f0` reads only `this`'s probe list, and the two callers of `FUN_0048d2c0` are
-  both per-object update paths. When the player rams an AI, the AI's own sweep finds the same contact
-  from its own probes and applies its own reciprocal `wep_24` hit, with its own normal and therefore
-  its own severity, and nothing suppresses it because the player path armed no grace clock on either
-  party. Timing is non-deterministic rather than the occurrence: an object sweeps only every OTHER
-  frame on a `rand()`-seeded phase (`obj+0x6BC`, seeded in `FUN_004aff80`; gate at the head of
-  `FUN_0048d7f0`), so the reciprocal hit lands on the same frame or the next. A remake that resolves
-  one contact once, symmetrically, will under-damage a player ram relative to the original.
-  ⚠ **Gasbags are exempt and the rest of the zeppelin is not.** The zeppelin parser `FUN_004bd8d0`
-  registers a different damage handler per part list. The gasbag handler `FUN_004c0640` tests
-  `DAMAGES_ZEPPELIN` (`weaponRecord+0x210` → flags `& 0x1000`, `TEST AH,0x10` at `0x004c0665`)
-  before any health subtraction and returns without damage when it is clear; `wep_24` does not carry
-  the flag, so ramming a gasbag deals it nothing while still killing the plane. The cannon and
-  turret handler `FUN_004c0880` has no such test and subtracts at `0x004c090b`, so those parts DO
-  take collision damage, un-cut by the 0.2 factor (a zeppelin part is not class 0 or 4), and a
-  non-player rammer is destroyed outright by the `local_11` rule. This confirms the reading that
-  every zeppelin part except the gasbags is rammable.
-  ✅ **Reachability is settled: zeppelin sub-parts ARE in the sweep's candidate set.** The sweep's
-  set is not a static level index. `FUN_004ca320` walks the terrain grid and then loops the world
-  root's DIRECT CHILD list (`root+0x5c`, count `root+0x56`) with **no spatial test and no class
-  test** on it, admitting a node on bits `0x4` and `0x10` of `node+0x24` plus the layer filter
-  `FUN_0056c430`, then recursing through `FUN_004cad00` into that node's children. A multi-cell
-  object (which a zeppelin is) is registered into exactly that root child list by `FUN_004dae80`.
-  Gasbag and turret nodes are ordinary descendants of the zeppelin root in the same hierarchy the
-  recursion walks, `gwNodeNew` stamps every node `node+0x24 = 0x0108001C` (both bits set) and
-  `node+0x30 = 0xFF` at birth, and nothing in the zeppelin parser or its two registration helpers
-  clears either on a sub-part. So `FUN_004c0880` accepting a ram is reachable in the shipped game,
-  and the cannon-mount leg is real work rather than a dead branch.
-  ⚠ **Our side probably already reaches it, which makes this a verification job, not a build job.**
-  A zeppelin part is an ordinary world collider on `CollisionLayers.World`, which is what
-  `SweepAirframe` already queries, so a ram should resolve `hitBody`, reach `CollideDamageAt`,
-  resolve the part's destructible instance and damage it, with the gasbag exemption already refusing
-  the gasbag case. Fly it before writing any code: the cheapest outcome is that the leg is done.
-  ⚠ **Our gasbag gate is on the PROJECTILE path only, and a collision will walk straight past it.**
-  This is the one place our architecture and the original's diverge in a way that bites here.
-  `0x1000` is read in exactly two places in the image: `0x0042008c` (`FUN_00420070`, the AI ordnance
-  check that decides what an AI is OFFERED, `docs/org/aiPilot.md`) and `0x004c0665`, inside the
-  gasbag DAMAGE handler. Because the original delivers a ram as an ordinary `wep_24` weapon hit, that
-  downstream handler catches the collision for free. Ours cannot: `ProjectilePool.WorldDamageGate` →
-  `ZeppelinRuntime.GateWeaponDamage` (`ZeppelinRuntime.cs:158`) is consulted by `Projectile.cs:1576`
-  and nowhere else, while the collision path runs `FlightController.CollideDamageSink` →
-  `AnimRuntime.CollideDamageAt`, which never asks it. So the gasbag exemption that F18 already
-  implements correctly for weapons will NOT hold for a ram unless the collision path is routed
-  through the same gate. Route it rather than re-testing the flag at the collision site, or the rule
-  ends up stated in two places that can drift.
-  *Fix shape:* land with `BL-302`, since both hang off the one contact resolution in
-  `FlightController.cs:1129-1143`. Give the sink a second leg for a struck AIRCRAFT and for a
-  zeppelin sub-part, deal the decoded pair to the striker through an armour-then-health split
-  (`Damage` has no armour pool today, so that pool is the real work), and thread the 1.0 s
-  both-parties grace through the same per-aircraft clock `BL-382` needs for its 2.5 s drop window.
-  *How you'd know it worked:* `PT-60` (ram an AI fighter head-on and both aircraft take damage,
-  neither re-collides for a second, and the wreck count is two) and `PT-61` (ram a zeppelin's cannon
-  mount and it damages; ram its gasbag and only you die). The aircraft half is landed and awaiting
-  `PT-60`; the zeppelin half is unbuilt and `PT-61` decides whether it needs building at all.
-  *Cross-refs:* `BL-302` (the same handler, the struck-destructible half), `BL-382` (the `obj+0xAC`
-  clock family), `BL-291` / `BL-239` (zeppelin damage harness), `docs/org/flightModel.md` (collision
-  response timers).
-
 - `BL-384` `[Bug]` `[Owed-playtest]` **Our `injure_anims` staging latches one-way where the original
   retracts.** Filed 2026-08-15 from `BL-246`'s decode; the original's rules are
   `docs/org/vehicleDamage.md` ("Damage staging"). **Items (1) scope and (2) pool landed 2026-08-15**
@@ -804,6 +605,44 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   this item's armament afterwards).
 
 ## Weapons & combat
+
+- `BL-403` `[Bug]` **A zeppelin's turrets shoot the fighters that zeppelin just launched: emplacement
+  teams and aircraft teams are two different numbering spaces that can never agree.** *Evidence:* the
+  user at the controls, C2 IA1 `zeppelin_run`, watching the bay-launched wave die to its own airship.
+  The log shows both halves of the mismatch in plain numbers: `ia: 24 wave enemies across 4 wave(s),
+  built inert, team=2` and `ia: zeppelin 'multiplayer1zep' turrets: 14 emplacement(s) ACTIVATED with
+  the objective`, then every one of those turrets reporting
+  `turret MSG_TUR_BELLY@ctur3: engaging (first shot, team 202)`.
+  **The mechanism.** `TurretController.EngineTeamFor` (`TurretController.cs:264-269`) maps an
+  emplacement's authored `TEAM` id into a band clear of the pilot teams: 0 stays neutral, 1 becomes
+  `PlayerTeam`, and **anything else becomes `EmplacementEnemyBand + id`**, with the band at 200
+  (`:53`). An aircraft's team is not banded: `InstantActionRuntime.EnemyTeam` is literally
+  `PlayerTeam + 1` = 2 (`InstantActionRuntime.cs:51`). So a turret authored `TEAM 2` and a fighter on
+  enemy team 2 are engine teams **202 and 2**, and the hostility test
+  (`TurretController.cs:617`, same-team-or-either-neutral rejects) can never match them. The turret
+  therefore treats every aircraft in the sky as hostile, its own side included.
+  ⚠ **The band is not a mistake to delete.** It exists so the 22 no-`TEAM` world emplacements
+  default to the original loader's "first enemy team" and engage the player (`:49-52`,
+  `docs/formats/turrets.md` "Teams"). Collapsing 200+id onto the raw id would make every one of those
+  emplacements share a team with the Instant Action wave and stop them shooting at anyone. The fix is
+  to make the two spaces meet, not to remove one.
+  ⚠ **The zeppelin case is the one that shows it, not the only one.** Any mission that puts an
+  emplacement and an AI aircraft on the same authored side has this, so a fix wants checking against
+  the `world-turrets` census (C1: 5 `aagun`, 9 `bbtur`, 9 `ctur`, 14 `ltur`/`rtur`, 2 zep
+  `doublecannon`, 12 `locklear_*`) rather than against the zeppelin alone.
+  *Fix shape:* one team space for both. Either band the aircraft teams the same way at the point an
+  authored side becomes an engine team, or (cleaner) drop the band and give the no-`TEAM` default its
+  own explicit enemy id, so an authored `TEAM 2` means team 2 whether it is bolted to a hull or
+  flying. `TurretController.EngineTeamFor` is the single seam; `AimAssist.WorldTeam` (100, for
+  destructibles) is a third space and should be looked at in the same pass.
+  ⚠ **Do not fix this by exempting the launching zeppelin's own turrets.** That hides the mismatch
+  for one mission type and leaves it live everywhere else.
+  *How you'd know it worked:* fly `--chapter=C2 --mission=IA1 --zeppelins`; the bay-launched wave
+  forms up and attacks the player, and the zeppelin's 14 emplacements engage the player and its
+  wingmen while never firing on their own wave.
+  *Cross-refs:* `docs/formats/turrets.md` ("Teams"), `InstantActionRuntime.cs` (`EnemyTeam`),
+  `TurretController.cs` (`EngineTeamFor`, `EmplacementEnemyBand`), `BL-350` (the drop is not gated on
+  the doors opening, open in the same mission).
 
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
   (`messages.json` 126–129), implying world pickups that restore ammo. **Carries research

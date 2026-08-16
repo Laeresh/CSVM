@@ -7,7 +7,7 @@ using Godot;
 /// striker. Pure, so the suites pin it without a world.
 /// ⚠ The severity is a COSINE and carries NO airspeed term: a 400 mph belly-flop and a 90 mph
 /// belly-flop at the same attitude cost the same. Scaling by closing speed is the mistake this
-/// replaced (`BL-302`), and no choice of constant repairs it.</summary>
+/// replaced, and no choice of constant repairs it.</summary>
 public static class CollisionDamage
 {
     /// <summary>The entity-versus-entity cut (<c>0x0048d51a</c>): a NON-PLAYER striker that

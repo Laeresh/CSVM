@@ -111,7 +111,7 @@ public partial class FlightController : Node3D
     /// <summary>Applies a plane collision's health damage to the struck world node, returning true
     /// iff it was a <c>WeaponOrCollideHit</c> destructible (the 44 facades/windows/agyrobus), in
     /// which case the object breaks and the plane flies THROUGH it. EVERY destructible takes the
-    /// damage (`BL-302`); the return value is the plane's fate alone. Wired to
+    /// damage; the return value is the plane's fate alone. Wired to
     /// <c>AnimRuntime.CollideDamageAt</c>; null (a viewer/static build with no world runtime)
     /// makes every collision solid and harmless.</summary>
     public System.Func<Node?, float, bool>? CollideDamageSink;
@@ -1012,7 +1012,7 @@ public partial class FlightController : Node3D
         _damageFlash = DamageFlashTime;
     }
 
-    /// <summary>The receiving half of a plane-versus-plane ram (`BL-402`): the striker's decoded
+    /// <summary>The receiving half of a plane-versus-plane ram: the striker's decoded
     /// pair spent through this plane's own ledger, the flow a projectile hit uses.
     /// ⚠ Do not suppress the struck plane hitting back. Each aircraft sweeps itself, so both
     /// resolve the contact; that is the original's behaviour, not a double-count.</summary>

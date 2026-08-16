@@ -99,7 +99,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// nothing; null gates nothing. It sits on the sink every rig shares, so AI aircraft need no
     /// second wiring.
     /// ⚠ The original needs no equivalent: it delivers a ram as a <c>wep_24</c> weapon hit, so its
-    /// one gasbag gate catches a ram for free (`BL-402`).</summary>
+    /// one gasbag gate catches a ram for free.</summary>
     public Func<DestructibleRegistry.Instance, bool>? CollideDamageGate;
 
     /// <summary>Every player's position, for the EXECUTION_BY_RANGE proximity gate and
@@ -1219,8 +1219,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <see cref="DamageAt"/>, so the death is identical to a weapon kill; the return value says
     /// only what happens to the PLANE, true for a <c>WeaponOrCollideHit</c> object it flies
     /// THROUGH and false for a solid one it grazes or crashes on.
-    /// ⚠ <c>ACTIVATION</c> gates the plane's fate, never the object's. Re-adding a damage-side
-    /// gate here restores the reading `BL-302` refuted (docs/formats/destructibles.md).</summary>
+    /// ⚠ <c>ACTIVATION</c> gates the plane's fate, never the object's. A damage-side gate here
+    /// would leave every rammed building untouched (docs/formats/destructibles.md).</summary>
     public bool CollideDamageAt(Node? struck, float healthDamage)
     {
         var inst = _destructibles.Resolve(struck);

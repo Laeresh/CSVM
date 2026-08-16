@@ -2730,7 +2730,7 @@ public static class Suites
                 $"the player rig grazed the floor and survived it vn={-player.NormalIn:0.0} m/s");
             // ⚠ The AI does NOT survive this, and that is the decoded local_11 rule (0x0048d79e),
             // not a regression: a non-player striker that resolved anything other than an
-            // aeroplane is destroyed whatever health it has left (`BL-402`).
+            // aeroplane is destroyed whatever health it has left.
             ctx.Check(ai.Crashed,
                 $"an AI aircraft is destroyed outright by the same terrain contact the player grazes (crashed={ai.Crashed})");
             if (player.Contacted)
