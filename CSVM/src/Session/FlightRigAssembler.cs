@@ -386,6 +386,7 @@ public sealed class FlightRigAssembler
         // its own pool — the cycles are sorted against THIS plane's pose, so they cannot be shared.
         // GameSession binds TargetSubParts later, once the zeppelins exist.
         controller.Targeting = new TargetSelection();
+        controller.InitialTarget = _spec.TargetSelect;   // --target=, the scripted twin (B15)
 
         // Bound on EVERY pane, not just under --debug-markers: it is what the HUD's team tests read
         // this pane's side off (VersusHud.OwnTeam). Deriving the side from the pilot index instead

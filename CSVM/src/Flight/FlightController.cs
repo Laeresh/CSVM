@@ -294,6 +294,12 @@ public partial class FlightController : Node3D
     /// same sink shape <see cref="CollideDamageSink"/> already uses.</summary>
     public System.Action<List<AimCandidate>>? TargetSubParts;
 
+    /// <summary><c>--target=</c>'s spec (B15), or null for an unscripted session. Applied ONCE, on
+    /// the first frame <see cref="Targeting"/>'s pool has anything in it, and never consulted again —
+    /// it sets the initial selection, it does not hold it, so an interactive session started with the
+    /// flag still cycles normally.</summary>
+    public string? InitialTarget;
+
     /// <summary>Whether a person is flying this plane. Gates the gun aim assist
     /// (<c>BL-342</c>/B6): true runs <see cref="AimAssist"/> as normal, false takes the muzzle axis
     /// unassisted, the same fallback a barrel with no slot already uses. Defaults true; the AI
@@ -414,6 +420,7 @@ public partial class FlightController : Node3D
                                                       // ANIMATION_OFFSET 1.5, so this is one whole authored
                                                       // reaction per scrape rather than a restart per frame
     private const float DamageFlashTime = 2.5f;  // s the HUD shows the impact line
+    private const int InitialTargetGrace = 300;    // B15: frames --target= waits for the pool to fill
     private const float TargetHoldSeconds = 0.25f; // B14 decision 7: D-pad Up past this is a HOLD,
                                                    // not a tap. ⚠ TUNE — ours, not the original's,
                                                    // which needs no threshold because it has a key
@@ -441,6 +448,8 @@ public partial class FlightController : Node3D
     private readonly bool[] _targetKeyPrev = new bool[5];   // B14: T/Y/U/I/O edge detection
     private readonly TapHoldButton _targetHold = new(TargetHoldSeconds); // B14: D-pad Up tap vs hold
 
+    private bool _initialTargetDone;             // B15: --target= has had its one chance
+    private int _initialTargetWaits;             // …frames it has waited for a non-empty pool
     private FlightModel _model = null!;
     private CameraController? _cam;              // null on an AI rig — no view rides this plane
     private Camera3D? _viewCamera;
@@ -2305,6 +2314,14 @@ public partial class FlightController : Node3D
                 sel.ForgetTarget(dead);
         }
 
+        // --target= (B15), before the input dispatch and before the InPlay gate: a --det run pins its
+        // selection without a pilot who can press anything, and a real keypress on the same frame
+        // should win over the scripted one rather than be overwritten by it.
+        if (InitialTarget != null && !_initialTargetDone)
+        {
+            ApplyInitialTarget(sel);
+        }
+
         // Input only while this pilot is actually flying. A downed pilot watches from the freecam
         // controls (E44), which bind WASD/QE — and `U` among them — so reading targeting keys from a
         // spectator would both re-target a plane that is not there and fight the camera. The
@@ -2337,6 +2354,54 @@ public partial class FlightController : Node3D
         DispatchTargetKey(2, Key.U, () => sel.Next(TargetClass.NonAircraft));
         DispatchTargetKey(3, Key.I, () => sel.NearestCrosshairs(_model.Position, _model.Attitude));
         DispatchTargetKey(4, Key.O, () => sel.Clear());
+    }
+
+    /// <summary>Spends <c>--target=</c>'s one application (B15). Waits for a non-empty pool first:
+    /// the things it can name (AI spawns, the zeppelins, a generator's first drop) are all built
+    /// after the rigs are, so applying on frame one would match nothing in every session — the same
+    /// ordering that made B14's count breadcrumb print zeroes. <c>none</c> needs no pool and does not
+    /// wait.</summary>
+    private void ApplyInitialTarget(TargetSelection sel)
+    {
+        bool needsPool = !string.Equals(InitialTarget, "none", System.StringComparison.OrdinalIgnoreCase);
+        if (needsPool && sel.Pool.Count == 0 && ++_initialTargetWaits < InitialTargetGrace)
+        {
+            return;
+        }
+
+        _initialTargetDone = true;      // spent whether or not it matched: one chance, then hands off
+        if (sel.ApplyInitial(InitialTarget!, _model.Position, _model.Attitude))
+        {
+            string picked = sel.Current is { } t && t.Name.Length > 0 ? t.Name : "nothing";
+            GD.Print($"--target={InitialTarget}: {picked} (class={sel.ActiveClass?.ToString() ?? "cleared"})");
+            return;
+        }
+
+        // Naming what IS selectable is the whole diagnosis for a mistyped node name, and it is why
+        // the flag needs no separate listing mode.
+        var names = new List<string>();
+        foreach (var cls in new[] { TargetClass.Enemy, TargetClass.Ally, TargetClass.NonAircraft })
+        {
+            foreach (var t in sel.Pool.Of(cls))
+            {
+                if (t.Name.Length > 0 && !names.Contains(t.Name))
+                {
+                    names.Add(t.Name);
+                }
+            }
+        }
+
+        names.Sort(System.StringComparer.OrdinalIgnoreCase);
+        const int MaxNamed = 24;    // a C1 session offers ~100; enough to recognise a typo, not a wall
+        int extra = names.Count - MaxNamed;
+        if (extra > 0)
+        {
+            names.RemoveRange(MaxNamed, extra);
+        }
+
+        string listed = names.Count == 0 ? "(nothing)"
+            : string.Join(", ", names) + (extra > 0 ? $", +{extra} more" : "");
+        Log.Warn("core", $"--target={InitialTarget}: no match — selectable now: {listed}");
     }
 
     /// <summary>Edge-detects one targeting key against its own slot and runs its action once per

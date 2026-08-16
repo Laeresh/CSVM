@@ -256,6 +256,90 @@ public sealed class TargetSelection
         _ordered.Clear();
     }
 
+    /// <summary>Point the selection at a named pool entry, matching <see cref="TargetRef.Name"/>
+    /// case-insensitively across all three cycles and writing the class back from what it found
+    /// (the same rule <see cref="NearestCrosshairs"/> uses, and the reason a sub-part pin is not
+    /// dropped by the next <see cref="Resolve"/>). B15's <c>--target=&lt;name&gt;</c>; nothing in the
+    /// original has an equivalent, since the original has no scripted input at all.
+    ///
+    /// <para>Cycles are searched Enemy, Ally, Non-Aircraft, and within a cycle in the pool's own
+    /// collector order — so a name carried by two entities (two zeppelins with identically named
+    /// zones) resolves to the same one on every run, which is the whole point of the flag.</para></summary>
+    /// <returns>False when no entry carries that name, in which case the selection is left alone.</returns>
+    public bool Select(string name)
+    {
+        if (name.Length == 0)
+        {
+            return false;
+        }
+
+        foreach (var cls in new[] { TargetClass.Enemy, TargetClass.Ally, TargetClass.NonAircraft })
+        {
+            foreach (var t in Pool.Of(cls))
+            {
+                if (!string.Equals(t.Name, name, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                ActiveClass = t.Class;
+                _selected = t.Source;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Apply one <c>--target=</c> spec (B15): <c>nearest</c>, <c>crosshair</c>, <c>next</c>,
+    /// <c>none</c>, or a target's name for <see cref="Select"/>. The four words run the ordinary
+    /// actions rather than a scripted path of their own, so the flag can only reach a state the pilot
+    /// could have reached by hand.
+    ///
+    /// <para>⚠ This sets the INITIAL selection and nothing more. It mutates the same two pieces of
+    /// state a keypress does and then returns; the caller is responsible for calling it once, and
+    /// from that point the selection cycles and re-resolves normally. A flag that held the selection
+    /// against later input would freeze targeting in an interactive session started with it.</para>
+    ///
+    /// <para>⚠ <c>nearest</c> is the original's Nearest action, so it means the HEAD of the cycle,
+    /// not the nearest thing in space — see <see cref="Nearest"/>.</para></summary>
+    /// <returns>False when the spec selected nothing (an empty crosshair cone, an unknown name).</returns>
+    public bool ApplyInitial(string spec, Vector3 position, Basis basis)
+    {
+        bool ok;
+        switch (spec.ToLowerInvariant())
+        {
+            case "none":
+                Clear();
+                ok = true;
+                break;
+            case "nearest":
+                Nearest(TargetClass.Enemy);
+                ok = true;
+                break;
+            case "next":
+                NextEnemy();
+                ok = true;
+                break;
+            case "crosshair":
+                ok = NearestCrosshairs(position, basis);
+                break;
+            default:
+                ok = Select(spec);
+                break;
+        }
+
+        // Re-resolve in the SAME frame rather than leaving the one-frame lag a keypress has: the
+        // caller logs what was picked, and a --frames=N --screenshot run should not need one more
+        // frame than it asked for to have the flag's target on screen.
+        if (ok && ActiveClass != null)
+        {
+            Resolve(position, basis);
+        }
+
+        return ok;
+    }
+
     /// <summary>Records a shooter that just hit this pilot, for <see cref="NextEnemy"/>'s queue
     /// (<c>FUN_004b9770</c>: an end insert, made only for a shooter on a different, non-zero team).
     /// The queue survives for the whole mission and is pruned only by death

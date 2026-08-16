@@ -89,7 +89,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/TargetRef.cs` — the player-targeting abstraction (`PLAN-targeting.md` B11): one value over every selectable thing (aircraft, mission structure, turret), wrapping an `AimCandidate` for the pose/team/liveness/source half and adding class, label, optional health/armor, plus `Classify` (the decoded class model) and source-identity matching.
 - `src/Flight/TargetPool.cs` — the player's classed candidate pool (`PLAN-targeting.md` B12): the three cycles (Enemy/Objective, Ally, Non-Aircraft) of `TargetRef`, rebuilt from scratch off the aim assist's `Vehicles`/`Turrets` lists plus an explicit sub-part list; the one place a concrete source type is read.
 - `src/Utils/TapHoldButton.cs` — one button carrying two actions, split by hold duration (`PLAN-targeting.md` B14): edge-detects a level read, times it over `HoldToRepeat`, and answers tap / hold / nothing. The tap resolves on RELEASE; a press whose hold fired is spent. Pure, so the decoding unit-tests even though a gamepad does not.
-- `src/Flight/TargetSelection.cs` — the sticky player selection (`PLAN-targeting.md` B13): owns a `TargetPool`, sorts it into the decoded cycle order, re-finds the selection by entity each frame, and carries every action (next/previous/nearest per class, nearest-crosshairs, target-nothing) plus the attacker queue and the lifecycle.
+- `src/Flight/TargetSelection.cs` — the sticky player selection (`PLAN-targeting.md` B13): owns a `TargetPool`, sorts it into the decoded cycle order, re-finds the selection by entity each frame, and carries every action (next/previous/nearest per class, nearest-crosshairs, target-nothing) plus the attacker queue and the lifecycle. `ApplyInitial` is `--target=`'s seam (B15).
 - `src/Flight/TurretDefs.cs` — typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
 - `src/Flight/TurretController.cs` — one carried turret gunner (M4 C9a): acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
 - `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; each mode picks the aim point and table `AiControlLaw` steers on. `SteeringPatrol` reports whether the last step actually flew the net (F13's leashes read it).
@@ -2158,9 +2158,21 @@ the Z column IS `row2` (the negated forward axis), so no sign fixing is needed.
   field; neither was tied to the respawn path). Doing nothing on own respawn already gives the
   required behaviour — a live selection survives the rebuild, a dead one drops to the head — so no
   rule is invented here.
+`Select(name)` and `ApplyInitial(spec, pose)` are B15's `--target=` seam and the only things here with
+no counterpart in the original, which has no scripted input at all. `Select` matches
+`TargetRef.Name` case-insensitively across the three cycles (Enemy, then Ally, then Non-Aircraft, in
+the pool's own collector order, so a duplicated name resolves the same way on every run) and writes
+the class back from what it found — without that write-back the next `Resolve` would drop a
+cross-class pin. `ApplyInitial` maps `nearest`/`crosshair`/`next`/`none` onto the ordinary actions and
+anything else onto `Select`, then re-resolves in the same frame so the caller can log what was picked.
+⚠ `ApplyInitial` sets the INITIAL selection and does not hold it. It mutates the same two pieces of
+  state a keypress does and returns; calling it once is the caller's job (`FlightController`
+  `ApplyInitialTarget`). A flag that re-asserted itself per frame would freeze targeting in an
+  interactive session started with it, which is B15's own recorded trap.
 Pinned by the `target-selection` suite, which is tree-free and data-free; its geometry deliberately
 makes the sector order and a plain range order DISAGREE, so an implementation that quietly sorted by
-distance fails it.
+distance fails it. The `--target=` grammar is pinned by `target-flag`, whose pool is built from real
+sources rather than hand-filed refs because the claim is about the names `TargetPool` produces.
 
 ## src/Utils/TapHoldButton.cs
 One button carrying two actions, split by how long it is held (`PLAN-targeting.md` B14, decision 7).
@@ -4027,6 +4039,13 @@ rigs are). D-pad Up runs through `TapHoldButton` (tap = next enemy, hold = neare
   head of the cycle.
 ⚠ The collection pass is skipped entirely while `ActiveClass` is null. That is the original's own
   short-circuit and the mechanism that keeps `Target Nothing` cleared, not a saving.
+`ApplyInitialTarget` spends `--target=`'s one application (B15, `cli.md`), before the input dispatch
+and before the `InPlay` gate so a `--det` run with no pilot pressing anything still gets it. It waits
+for a non-empty pool first — the things a name can reach are all built after the rigs are, the same
+ordering that made B14's count breadcrumb print zeroes — except for `none`, which needs no pool.
+⚠ It is spent whether or not it MATCHED. A retry loop would re-assert the flag against later input,
+  which is the trap the item recorded; a miss logs `WARN [core]` naming what was selectable instead,
+  which is why the flag needs no listing mode of its own.
 `TakeProjectileHit` also feeds the attacker queue: a hit whose shooter resolves through
 `ProjectilePool.RigOfShooter` to a plane on a **different, non-zero team** is recorded, so
 `Next Enemy/Objective` reaches whoever just shot you before it touches the ordinary cycle. Friendly

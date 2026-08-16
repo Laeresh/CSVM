@@ -234,7 +234,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ The classed candidate pool, including zeppelin sub-parts and turret emplacements
 13. ☑ `TargetSelection` — sticky choice, cycles, nearest queries, lifecycle
 14. ☑ Input: `D-pad Up` tap/hold, and the curated keyboard set
-15. ☐ `--target=` scripted twin
+15. ☑ `--target=` scripted twin
 
 ### Wave C — The HUD
 
@@ -785,7 +785,7 @@ the way `PadPressed` does (`FlightController.cs:2196`) — never `pads[0]`, and 
 once **A3** lands. (c) Do not reach for `Shift`/`Ctrl` combos — that is ⚠ table row 2, and it is the
 exact mistake this plan already made once.
 
-## B15 ☐ `--target=` scripted twin
+## B15 ☑ `--target=` scripted twin
 
 **Goal.** A screenshot or `--det` run can pin the initial selection without a human, so a golden
 shot is reproducible.
@@ -807,6 +807,50 @@ deterministically across two runs.
 
 **⚠ Traps.** The flag sets the *initial* selection; it must not pin it against later input, or an
 interactive session started with the flag would have targeting frozen.
+
+**Landed 2026-08-16.**
+
+**TODO resolved — the sub-part grammar needs no grammar of its own; the TODO's premise was wrong.**
+`TargetPool.NameOf` already names a sub-part by its own world node
+(`DestructibleRegistry.Instance.Anchor.Name` → `gasbag1`, `engine2`), which is exactly the shape an
+aircraft's name has (`ai1_player_fury`), so `--target=<name>` covers all three cycles with one match.
+Confirmed live rather than from the code alone: a C1 session with `--zeppelins` answers a miss with
+`selectable now: ai1_player_fury, gasbag1, gasbag2, gasbag3, …`. What the match does need is the
+**class write-back** — `Select` sets `ActiveClass` from the entry it found, the same rule
+nearest-crosshairs uses, without which the next `Resolve` would immediately drop a pin outside the
+active cycle. Duplicate names (two zeppelins carrying identically named zones) resolve to the first in
+Enemy → Ally → Non-Aircraft order and then in the pool's own collector order, which is stable per run,
+so the flag stays reproducible; a disambiguating suffix is not invented until something needs it.
+
+**Divergence, recorded.** A miss logs `WARN [core] --target=…: no match — selectable now: <names>`
+(capped at 24 with a `+N more` count). That listing is why there is no `--target=list` mode.
+
+**Verified (2026-08-16):**
+
+- **Pinned by tests** — the new `target-flag` suite, tree-free, over a pool built from REAL sources
+  (bare `FlightController`s and a `DestructibleRegistry.Instance` on its own anchor), because the
+  claim is about the names `TargetPool` actually produces. It has an able-to-fail control: the pool's
+  auto-acquire takes the *nearer* enemy, so every assertion naming the far one would fail if the flag
+  did nothing. Covers all four words (`nearest` returning to the head of the cycle after a step off
+  it, `next`, `crosshair` reaching the ally on the nose, `none` clearing and staying cleared through
+  the next rebuild), the name form reaching an aircraft, an ally and a zeppelin sub-part,
+  case-insensitive matching, an unknown name reporting failure and leaving the selection alone, two
+  independently built selectors given one spec landing on the same target, and the trap: a keypress
+  after the flag moves off the pinned target and the next rebuild does not snap back.
+- **Pinned in-engine**, six runs of `--fly --chapter=C1 --zeppelins --ai=player_fury --frames=400
+  --screenshot`: `--target=ai1_player_fury` twice (identical), then `gasbag1`, `none`, `crosshair`,
+  `next`, each printing its own `--target=<spec>: <picked> (class=…)` line —
+  `gasbag1 (class=NonAircraft)` is the sub-part decision proven end to end, `nothing (class=cleared)`
+  is Target Nothing. No script errors in any run.
+- **⚠ The screenshot pair does not photograph the pin, and cannot yet.** Both runs are
+  `pixmd5=b6a3936f…` — but so is a run with no flag at all, because C22 has not landed and nothing
+  draws the selection. The pair proves the run is reproducible; the *printed line* is what proves the
+  flag selected what it says. C24's golden is where the pixels start carrying the claim, and it needs
+  C22 first. Recorded rather than dressed up as a passing Verify step.
+- **Regression:** 1378/1378 units, 69/69 in-engine suites, engine errors clean, 14/14 goldens
+  hash-identical, the hitch detector still firing on an injected stall and silent without one, the
+  8-chapter `--freecam` sweep (C1, C1B, C1C, C2, C2B, C3, C4, C5) at zero engine errors, and
+  `dotnet format --verify-no-changes` clean.
 
 # Wave C — The HUD
 

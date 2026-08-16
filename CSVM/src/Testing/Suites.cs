@@ -424,6 +424,13 @@ public static class Suites
             + "live wiring, where a real hostile round through TakeProjectileHit records its "
             + "shooter, a friendly-fire round and an unowned one record nothing, and "
             + "ProjectilePool.RigOfShooter resolves a shooter id to its plane", TargetInputModel));
+        into.Add(new TestHarness.Suite("target-flag",
+            "B15's --target= scripted twin: the four words mapping onto the ordinary actions "
+            + "(nearest as head-of-cycle, next, crosshair, none), a name pinning an aircraft the "
+            + "auto-acquire would NOT have chosen, the same one grammar reaching an ally and a "
+            + "zeppelin sub-part by writing the class back, case-insensitive matching, an unknown "
+            + "name leaving the selection alone, two selectors given one spec landing on the same "
+            + "target, and the flag NOT pinning against later input", TargetFlagModel));
         into.Add(new TestHarness.Suite("splitscreen-listeners",
             "every 2–4P pane is a 3D audio listener, which a SubViewport is not by default — the "
             + "pinned listener model (A2), and the one thing standing between splitscreen and a "
@@ -6010,6 +6017,144 @@ public static class Suites
         shot.ForgetTarget(ahead1);
         ctx.Check(shot.Attackers.Count == 1 && ReferenceEquals(shot.Attackers[0], right),
             $"the death hook prunes the queue, so a dead shooter is never offered again");
+    }
+
+    /// <summary>B15's <c>--target=</c>. Everything the flag means lives in
+    /// <see cref="TargetSelection.ApplyInitial"/> and <see cref="TargetSelection.Select"/>, which take
+    /// a pose and no tree, so the whole grammar is pinned here rather than only by the two screenshot
+    /// runs — those cover the wiring and the pixels, this covers what each word does.
+    ///
+    /// <para>The pool is built from REAL sources (bare <see cref="FlightController"/>s and a
+    /// <see cref="DestructibleRegistry.Instance"/> on its own anchor) rather than hand-filed refs,
+    /// because the claim being made is about the names <see cref="TargetPool"/> actually
+    /// produces.</para></summary>
+    private static void TargetFlagModel(TestContext ctx)
+    {
+        int own = AimAssist.PlayerTeam;
+        int foe = InstantActionRuntime.EnemyTeam;
+        var basis = Basis.Identity;
+        var self = new FlightController { Name = "player_fury", Team = own };
+        var far = new FlightController { Name = "ai1_player_fury", IsHumanPiloted = false, Team = foe };
+        var near = new FlightController { Name = "ai2_player_fury", IsHumanPiloted = false, Team = foe };
+        var wing = new FlightController { Name = "wing1_kestrel", IsHumanPiloted = false, Team = own };
+        var gasbagNode = new Node3D { Name = "gasbag1" };
+        try
+        {
+            ctx.Host.AddChild(gasbagNode);
+            var scan = new AimCandidateSet();
+            scan.AddVehicle(Vector3.Zero, Vector3.Zero, own, live: true, self);
+            scan.AddVehicle(new Vector3(0f, 0f, -900f), Vector3.Zero, foe, live: true, far);
+            scan.AddVehicle(new Vector3(0f, 0f, -400f), Vector3.Zero, foe, live: true, near);
+            scan.AddVehicle(new Vector3(0f, 0f, -300f), Vector3.Zero, own, live: true, wing);
+            var registry = new DestructibleRegistry();
+            var gasbagInst = registry.Register(
+                new AnimDefinition { Name = "gasbag1", AnimName = "zep_zone_gasbag1" }, gasbagNode, 200f);
+            var parts = new List<AimCandidate>
+            {
+                new() { Position = new Vector3(60f, 0f, -600f), Velocity = Vector3.Zero, Team = AimAssist.WorldTeam, Live = true, Source = gasbagInst },
+            };
+
+            TargetSelection Fresh()
+            {
+                var s = new TargetSelection();
+                s.Rebuild(scan, parts, own, self, Vector3.Zero, basis);
+                return s;
+            }
+
+            ctx.Check(SessionSpec.Parse(new[] { "--target=ai1_player_fury" }).TargetSelect == "ai1_player_fury"
+                      && SessionSpec.Parse(System.Array.Empty<string>()).TargetSelect == null,
+                $"--target= reaches the spec verbatim, and its absence is null rather than 'none' — an unscripted session keeps the ordinary auto-acquire");
+
+            // The auto-acquire picks the NEARER enemy ahead. Everything below that names the far one
+            // is therefore a claim the flag actually moved the selection.
+            var auto = Fresh();
+            ctx.Check(ReferenceEquals(auto.Current?.Source, near),
+                $"CONTROL: with no flag the pool auto-acquires the nearer enemy ahead, so pinning the far one cannot pass by coincidence");
+
+            var pinned = Fresh();
+            ctx.Check(pinned.ApplyInitial("ai1_player_fury", Vector3.Zero, basis)
+                      && ReferenceEquals(pinned.Current?.Source, far)
+                      && pinned.ActiveClass == TargetClass.Enemy,
+                $"--target=<node name> pins the named aircraft, not the one the auto-acquire chose");
+            var upper = Fresh();
+            ctx.Check(upper.ApplyInitial("AI1_PLAYER_FURY", Vector3.Zero, basis)
+                      && ReferenceEquals(upper.Current?.Source, far),
+                $"…matched case-insensitively, so a shell's capitalisation cannot change what a golden shot frames");
+
+            // One grammar reaches all three cycles, which is this item's open TODO settled: a
+            // zeppelin sub-part is named by its own world node (TargetPool.NameOf -> Instance.Anchor),
+            // exactly the shape an aircraft's name has, so no second grammar is needed for it.
+            var ally = Fresh();
+            ctx.Check(ally.ApplyInitial("wing1_kestrel", Vector3.Zero, basis)
+                      && ReferenceEquals(ally.Current?.Source, wing)
+                      && ally.ActiveClass == TargetClass.Ally,
+                $"the same grammar reaches an ALLY, writing the class back — without that the next Resolve would drop a target outside the active cycle");
+            var part = Fresh();
+            ctx.Check(part.ApplyInitial("gasbag1", Vector3.Zero, basis)
+                      && ReferenceEquals(part.Current?.Source, gasbagInst)
+                      && part.Current?.Kind == AimTargetKind.Structure
+                      && part.ActiveClass == TargetClass.NonAircraft,
+                $"…and a zeppelin SUB-PART by its part node's name, on the Non-Aircraft cycle: the TODO's premise (a sub-part has no node name of an aircraft's shape) is wrong, so one grammar covers all three");
+
+            // The four words, each mapping onto the ordinary action rather than a scripted path.
+            var nearest = Fresh();
+            nearest.Next(TargetClass.Enemy);      // walk off the head first, so returning to it means something
+            nearest.Resolve(Vector3.Zero, basis);
+            ctx.Check(ReferenceEquals(nearest.Current?.Source, far)
+                      && nearest.ApplyInitial("nearest", Vector3.Zero, basis)
+                      && ReferenceEquals(nearest.Current?.Source, near),
+                $"--target=nearest is the original's Nearest action: the HEAD of the cycle");
+            var next = Fresh();
+            ctx.Check(next.ApplyInitial("next", Vector3.Zero, basis)
+                      && ReferenceEquals(next.Current?.Source, far),
+                $"--target=next steps the enemy cycle once from the auto-acquired head");
+            var cross = Fresh();
+            ctx.Check(cross.ApplyInitial("crosshair", Vector3.Zero, basis)
+                      && ReferenceEquals(cross.Current?.Source, wing),
+                $"--target=crosshair runs the nose-cone scan, which reaches the nearest thing on the nose whatever its side — here the ally at 300 m");
+            var cleared = Fresh();
+            ctx.Check(cleared.ApplyInitial("none", Vector3.Zero, basis)
+                      && cleared.Current == null && cleared.ActiveClass == null,
+                $"--target=none is Target Nothing: no target and no class");
+            cleared.Rebuild(scan, parts, own, self, Vector3.Zero, basis);
+            ctx.Check(cleared.Current == null && cleared.Pool.Count == 0,
+                $"…and stays cleared through the next rebuild, so a --screenshot run can capture the HUD with nothing selected");
+
+            // A name nothing carries: the selection is left exactly as it was.
+            var miss = Fresh();
+            ctx.Check(!miss.ApplyInitial("ai7_nonesuch", Vector3.Zero, basis)
+                      && ReferenceEquals(miss.Current?.Source, near),
+                $"an unknown name reports failure and leaves the selection alone rather than clearing it");
+
+            // Determinism, the flag's whole purpose: the claim the two screenshot runs make, made
+            // here against two independently built selectors.
+            var runA = Fresh();
+            var runB = Fresh();
+            runA.ApplyInitial("ai1_player_fury", Vector3.Zero, basis);
+            runB.ApplyInitial("ai1_player_fury", Vector3.Zero, basis);
+            ctx.Check(ReferenceEquals(runA.Current?.Source, runB.Current?.Source)
+                      && ReferenceEquals(runA.Current?.Source, far),
+                $"two selectors given the same spec land on the same target — the property a reproducible golden shot rests on");
+
+            // ⚠ The item's own trap: the flag sets the INITIAL selection and must not hold it.
+            var live = Fresh();
+            live.ApplyInitial("ai1_player_fury", Vector3.Zero, basis);
+            live.Next(TargetClass.Enemy);
+            live.Resolve(Vector3.Zero, basis);
+            ctx.Check(ReferenceEquals(live.Current?.Source, near),
+                $"a keypress after the flag moves the selection off the pinned target");
+            live.Rebuild(scan, parts, own, self, Vector3.Zero, basis);
+            ctx.Check(ReferenceEquals(live.Current?.Source, near),
+                $"…and the next frame's rebuild does NOT snap back to it — the flag is spent, so an interactive session started with it still cycles");
+        }
+        finally
+        {
+            gasbagNode.Free();
+            self.Free();
+            far.Free();
+            near.Free();
+            wing.Free();
+        }
     }
 
     /// <summary>B12's <see cref="TargetPool"/>. The pure half runs over a hand-built
