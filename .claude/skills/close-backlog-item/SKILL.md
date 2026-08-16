@@ -80,8 +80,14 @@ survive an ID-only sweep.
 
 Everywhere it turns up — `docs/formats/*.md`, `docs/architecture.md`, `docs/verification.md`,
 `CLAUDE.md`/`PROJECT_CONTEXT.md`, and XML doc comments in `CSVM/src` — replace the hedge with the
-settled fact and the evidence that settled it. Keep any ⚠ that is still true (a trap about *how* the
+settled fact, in the present tense. Keep any ⚠ that is still true (a trap about *how* the
 mechanism works outlives the question of whether it was right).
+
+⚠ **The fact goes in the doc; the evidence and the date stay in the commit message.** Write "the
+unscaled arc reads like the original at the controls", never "judged at the controls on
+2026-08-16" or "`PT-46` retired 2026-08-16". A closed item leaves no trace of its own closing in
+live prose — that is the whole point of step 4 holding the record. A doc line that narrates a past
+event ages, and sends the reader building a timeline instead of reading the current state.
 
 Finish with a grep of the ID across the repo: the only hits left should be pre-freeze entries in
 the frozen `docs/HISTORY.md` — no hits in any live file. (Post-freeze retirements live only in
