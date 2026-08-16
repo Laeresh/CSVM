@@ -805,7 +805,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (the shot routine hands a `LOCK_ON` weapon a target when the player has none), but implement the
   gate, not just the curve.
   *Fix shape:* consume the inheritance and its decay in `Projectile`; the item is now
-  implementation, not investigation. `wep_14` is mountable via `--rocket=wep_14` (no stock loadout
+  implementation, not investigation. ⚠ **Land it inside `BL-406`'s landing A, not separately** — the
+  same routine carries the acceleration and end-condition work, and splitting it means touching
+  `Projectile`'s integrator twice. `wep_14` is mountable via `--rocket=wep_14` (no stock loadout
   carries it).
 
 - `BL-357` `[Feature]` **The hardpoint selector steps one way only; the original cycles in both
@@ -1053,7 +1055,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   fly parallel to the nose. On an airframe whose pylon markers are canted, today they will not.
   *Cross-refs:* `BL-404` (the decode this came out of, and the aiming question it settles),
   `BL-405` (whether the mounted body should track the aim before launch, which is the visual half of
-  the same mount question), `BL-406` (the decode item), `PylonOrdnance`, `Projectile.cs`.
+  the same mount question), `BL-406` (the ordnance implementation item this was split out of, which
+  deliberately does **not** cover the launch axis), `PylonOrdnance`, `Projectile.cs`.
 
 - `BL-405` `[Fidelity]` **Mounted ordnance should track the aim before it launches, not hang fixed
   along the pylon.** *Evidence:* the mount model is decoded
@@ -1113,114 +1116,58 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   nothing), [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) (slot 33 and the
   `bias × −750` decode), `AiTargetRanking.ObjectiveBiasFor`, `AiSkills.RosterRatingBiases`.
 
-- `BL-406` `[Research]` **What each ordnance type actually does at runtime is undecoded: twelve
-  distinct rocket types ship, and every one of them flies as the same generic projectile.**
-  *Evidence:* the authored side is fully decoded and documented
-  ([`docs/formats/weapons.md`](docs/formats/weapons.md)). `wep_04`–`15` are twelve separate types
-  (incendiary, armor-piercing, high-explosive, `FLAK`, `SONIC`, `FLASH`, `BEEPER`, `SEEKER`,
-  `CHOKER`, `SMOKER`, aerial torpedo, rear-arc `FLARE`), plus the world weapons `wep_24`–`28`
-  (multiplayer HE, glidebomb, AA flak, zeppelin cannonball). The *behavioural* side is not
-  decoded: `WeaponDefs.cs` parses `SONIC`, `FLASH`, `BEEPER`/`TIME`, `BEEPER_SEEKER`, `TANGLER`,
-  `SMOKE_SCREEN`, `REAR`, `TORPEDO`, `TARGETABLE`/`FLYOUT_HEALTH`, `CRATER`, `TURN_RATE` and
-  `DETONATION_DOT_PRODUCT` into fields marked "unimplemented, parsed so no key is dropped"
-  (`WeaponDefs.cs:107`), and `Projectile` flies all of them identically: straight line at
-  `VELOCITY`, blast at `IMPACT_PROXIMITY`, damage from the armor/health pair. Nothing homes
-  (`IsGuided` "describes the data rather than driving flight", `WeaponDefs.cs:129-133`), nothing
-  is choked, no smoke is laid, no flare fires rearward, and no flyout can be shot down.
-  *Fix shape:* a Ghidra pass over the executable's ordnance dispatch, delivering one docs section
-  per type: what the flag selects, which routine consumes it, what the struct fields mean in
-  engine units, and what the player sees. `FUN_004ba6f0` is the entry point, being the weapon
-  flag parser with three bits already named (`CANNON` `0x40`, `DAMAGES_ZEPPELIN` `0x1000`,
-  `REAR` `0x20000`, [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md)), so the rest
-  of that dword is the map of which types the engine branches on at all. From there follow the
-  game-side weapon-extension struct (0x38 bytes, hung off the ZWEP record at `+0x210`) to its
-  consumers, the way [`docs/org/weaponImpact.md`](docs/org/weaponImpact.md) followed the `IMPACT`
-  table. The deliverable is a decode doc (`docs/org/ordnanceTypes.md`, or a section of
-  `weaponImpact.md`), not code; each type's implementation is then its own item, sized against
-  what the decode found.
-  *⚠ Traps:* (a) **Do not invent behaviour from the flag name.** `FIRING_HEAT` and `cannon_jam`
-  are parsed and never read by the original, and `SHAKES_CAMERA`'s sole carrier is a zero-damage
-  fake weapon, so "the key exists" is not evidence the engine acts on it. A type whose flag has
-  no reader is a finding, and one of the more valuable ones. (b) The type set is **not** the flag
-  set: `HIGH_EXPLOSIVE` vs armor-piercing is a damage-pair difference with no special routine,
-  while guidance is `TURN_RATE` with no flag at all, so enumerate by behaviour and say which
-  types collapse onto the generic model on purpose. (c) **Settled, do not re-open:** the choker
-  question (thrust cutout alone, or a second airspeed clamp?) is answered in
-  [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md). The hit routine sets the engine-dead
-  bit with a timer and touches nothing else; there is no clamp. (d) `CLUSTER_SIZE`,
-  `AMMO_LIMIT` and `PRIORITY` are allotment and selection, already decoded; this item is about
-  flight and effect, do not re-litigate them.
-  *Cross-refs:* `BL-290` (torpedo flight dynamics, the one per-type behaviour already minted, and
-  the model case this decode should subsume or confirm), `BL-353` (the Weapon Loadout screen, the
-  only route by which a player ever fits a non-HE type, so this research is what makes that screen
-  worth having), `BL-227` (blast falloff, which excludes the `DAMAGE 0` specials whose real
-  effect this item defines), `BL-233` (the proximity fuse, and the six plain rockets'
-  `DETONATION_DISTANCE == IMPACT_PROXIMITY` quirk), `BL-404`/`BL-405` (where an ordnance round is
-  aimed, as opposed to what it does once launched), `WeaponDefs.cs`, `Projectile.cs`.
-  *Decoded so far:* the flags dword and the weapon-extension struct layout (`FUN_004ba6f0`, complete
-  for this build) and the hit-side dispatch (`FUN_004b9bc0`), written up in
-  [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md). Headlines: `SONIC`, `FLASH`, `BEEPER` and
-  `TANGLER` each zero the damage pair before returning, so four of the twelve types cannot damage an
-  aircraft at all, and the damage figures `wep_08`/`wep_10`/`wep_12` author are discarded. The
-  choker's engine-dead duration is `ENGINE_DEAD_max × (1 − distance / RADIUS)` floored at
-  `ENGINE_DEAD_min`, and its two bounds are **globals** (`DAT_0062b120`/`DAT_0062b124`), set by the
-  last-parsed `TANGLER` weapon rather than per-weapon. Second pass adds the launch side
-  (`FUN_004b6820`) and the proximity fuse (`FUN_004b5fb0`): `SMOKE_SCREEN` spawns no projectile at
-  all, `REAR` inverts the aim test so the flare fires backwards and only within 8 s of the shooter
-  being hit, `DAMAGES_ZEPPELIN` refuses its weapon against **non**-zeppelins as well as the reverse,
-  and the AI's aim gate wants cos 5° for ordnance against cos 10° for guns. Third pass adds guidance
-  (`FUN_005af960`) and the shootable flyout (`FUN_005aef40`), and finds a **second flags word** at
-  weapon record `+0x74`, written by the `.zrd` dispatcher and unrelated to the extension struct's bit
-  space, which is where guidance and the spawn actually branch. Guidance runs for every round;
-  `maxTurn = TURN_RATE × dt × ramp`, turning costs up to 20% of speed per frame, and launch velocity
-  is inherited then decayed over `LOCK_ON` (this answers `BL-290`, now unblocked from `CAP-28`).
-  `FLYOUT_HEALTH`, not `TARGETABLE`, is what makes a round shootable. Four parsed keys
-  (`PITCH_RATE`, `TURN_SUSPEND_TIME`, `TETHER_GUIDED`, `REMOTE_DETONATE`) are authored by no shipped
-  weapon and so are absent from `weapons.md`'s census, but their defaults shape behaviour.
-  Fourth pass closes the beeper pair and the targeting join via `FUN_00441830`, the post-spawn
-  registration: `BEEPER_SEEKER` installs a per-frame retarget callback that queries the beeper-tag
-  list and rewrites the round's target fields, which the guidance step then steers toward, so
-  `wep_10` paints and `wep_11` homes and neither is useful alone. `TARGETABLE` is what wraps a round
-  into the `TargetProjectile` list and sets the `+0x6c` admission byte `aiPilot.md` names, while
-  `FLYOUT_HEALTH` is what lets it absorb damage; the two flags are different halves of "shootable".
-  Same pass answers `BL-404` in full and mints `BL-408` off its residual. Fifth pass settles
-  `TORPEDO`: three sweeps (`TEST <mem>, 0x8` over the whole weapon-bearing span, `AND <mem>, 0x8`
-  program-wide, `AND <reg>, 0x8` in range) find **no reader at all**, so the flag joins `FIRING_HEAT`
-  and `cannon_jam` as parsed-and-never-acted-on, and every part of the torpedo's flight is accounted
-  for by keys that do have readers. ⚠ **That `TORPEDO` finding was wrong and is retracted on the
-  page:** its reader is `FUN_00480f50`, the force-feedback effect selector, which gives a torpedo
-  launch its own direction and magnitude (0 / 1.0) against a rear weapon's (180 / 0.58) and ordinary
-  ordnance's (0 / 0.79). The three sweeps shared a blind spot, `TEST <register>, 0x8`, which is the
-  form the compiler used. Sixth pass closes the last two: `FUN_005abcf0` spends the
-  flyout's pair armour-then-health exactly as an aircraft zone is spent (with the armour pool always
-  0, so it is inert), and `FUN_005af720` destroys the round the frame its health reads 0, which is
-  why the not-shootable sentinel is −1.0; and the beeper query's selection rule is read off the
-  disassembly with all four constants (1.2, 1.0, 0.7, 0.1). Same pass **corrects the third-pass
-  claim that guidance runs for every round**: `FUN_005af720` gates the steering step on `LOCK_ON`
-  **and** the round holding a target.
-  Seventh pass clears the remainder. `+0x74` bit `0x800` is `INSTANT`, a fifth unauthored key that
-  would make a round hitscan. `FUN_005afd50`, the motion step, holds the rest of the ballistics:
-  `ACCELERATION` raises speed toward a cap and **nothing anywhere applies drag**; `GRAVITY` has a
-  working reader that every entry authors as 0.0; a round ends by `RANGE`, by `DETONATION_TIME`, or
-  by coming within `DETONATION_DISTANCE` of its own target (a second fuse path beside the list
-  sweep); and an unguided or far-from-target round **wanders** on a bounded random walk rather than
-  flying a straight line. *This item is answered.* What is left unread bears on no shipped ordnance
-  type: `FUN_005ac3a0` (detonation, whose effect side is `weaponImpact.md`), `FUN_005b03f0` (the
-  swept-step collision query), and the key behind `+0x74` bit `0x8000000`. Eighth pass corrects that
-  last sentence, which was wrong: the detonation was **not** covered by `weaponImpact.md`, which
-  documents the per-surface `IMPACT` table and nothing about what a burst does. `FUN_005ac3a0` is now
-  decoded through both halves, the direct impact (`FUN_005ac7a0`, including the per-weapon impact
-  hook at weapon `+0x20c` that `TANGLER` installs) and the splash (`FUN_005aca30` gathers,
-  `FUN_005acac0` applies); `BL-293` is amended with the `SURFACE_ANIMATION` normal rule.
-  Ninth pass traces the last four offsets to their parse sites and **overturns the eighth pass's
-  falloff claim**: `+0x3c` is `IMPACT_PROXIMITY` raw but `+0x40` is `IMPACT_PROXIMITY` **squared**,
-  `+0x44` is `DETONATION_DISTANCE` squared, and `FUN_00538880` returns a squared distance, so the
-  splash falloff is **quadratic**, not linear. `BL-227` is corrected accordingly. Same pass names the
-  last two flag bits (`MINE`, `RANDOM_DEVIATION`), decodes the sphere query (bounding-sphere surface
-  distance, occlusion test, 32-object cap) and `FUN_005b03f0` (precomputed hit list or live swept
-  query, nearer wins). **Ten keys the parser accepts are authored by nothing**, so the engine
-  supports mines, wandering rounds, wire-guided rounds with a ceiling, remote detonation and
-  multi-target seeking that the shipped table never uses. *This item is answered.*
+- `BL-406` `[Feature]` **The ordnance runtime is fully decoded and none of it is implemented: every
+  round we fire is still the same generic projectile.** *Evidence:* the decode is
+  [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md), covering the flag map and the
+  weapon-extension struct, the **second** flags word at weapon `+0x74`, the launch dispatch, the
+  aiming split between player and AI, guidance, the motion step, the proximity fuse, the shootable
+  flyout, the beeper/seeker pair, and detonation with its splash. Our side has not moved:
+  `WeaponDefs.cs` parses every special into fields marked "unimplemented, parsed so no key is
+  dropped" (`WeaponDefs.cs:107`), `IsGuided` "describes the data rather than driving flight"
+  (`WeaponDefs.cs:129-133`), and `Projectile` flies all twelve types identically.
+  *Fix shape:* seven landings, each consuming a decoded rule rather than a judged one.
+  (**A**) *Motion.* Launch-velocity inheritance decaying linearly over `LOCK_ON`, gated on the round
+  holding a target; `ACCELERATION` toward the speed cap; and the three end conditions, `RANGE`,
+  `DETONATION_TIME`, and coming within `DETONATION_DISTANCE` of the round's own target.
+  (**B**) *Guidance.* The two gates (`LOCK_ON` present **and** a target held),
+  `maxTurn = TURN_RATE × dt × ramp`, the slerp by `maxTurn / angle`, the `0.8 + 0.2·cos(angle)`
+  speed penalty every steering frame, and `LOCK_ON_LEAD`'s slerp from bearing to intercept.
+  (**C**) *Splash.* Replace the invented linear falloff with `1 − d²/IMPACT_PROXIMITY²`, measure `d`
+  to the target's bounding-sphere surface clamped at zero, add the occlusion test, cap the gather at
+  32. This is `BL-227`'s falloff half and should land here, not twice.
+  (**D**) *The four no-damage types.* `SONIC` (red screen flash), `FLASH` (white), `BEEPER` (tag
+  object, world list, countdown with the five-second tail), `TANGLER` (engine-dead timer). All four
+  zero the damage pair first.
+  (**E**) *`SMOKE_SCREEN` and `REAR`.* The smoker spawns **no projectile**, only a world object
+  carrying `TIME`; `REAR` inverts the aim test and the spawn axis and is gated on the being-hit
+  latch.
+  (**F**) *The flyout.* `TARGETABLE` admits the round to the target list; `FLYOUT_HEALTH` gives it a
+  health pair spent armour-then-health; zero destroys it, playing `DESTROY_ANIMATION`.
+  (**G**) *Gates.* `DAMAGES_ZEPPELIN` refuses its weapon against non-zeppelins as well as the
+  reverse, and the AI's aim gate is cos 5° for ordnance against cos 10° for guns.
+  *Size:* **LARGER, plan-sized.** Seven landings across `Projectile`, `WeaponDefs`, the damage path
+  and the AI fire path, several of which want their own playtest. Scaffold it with `/new-plan` rather
+  than starting at A.
+  *⚠ Traps:* (a) **Do not implement the ten unauthored keys.** `MINE`, `RANDOM_DEVIATION`, `INSTANT`,
+  `TETHER_GUIDED`, `PITCH_RATE`, `TURN_SUSPEND_TIME`, `REMOTE_DETONATE`, `MULTI_TARGET`, `EXPIRES`
+  and `IMPACT_TYPE` are parsed by the original and authored by no shipped weapon. Their **defaults**
+  are what shape shipped behaviour; building the behaviours themselves is inventing content the game
+  never had. (b) **The engine stores radii squared** (`IMPACT_PROXIMITY²` at `+0x40`,
+  `DETONATION_DISTANCE²` at `+0x44`, and `FUN_00538880` returns squared distances). Reading one of
+  those as a plain radius flips a falloff from quadratic to linear; it did exactly that once during
+  the decode, which is why the page leads with the convention. (c) **`SONIC`, `BEEPER` and `TANGLER`
+  author damage figures the engine discards** — do not spend them. (d) `TORPEDO` selects **only** a
+  force-feedback effect; hang no behaviour on it. (e) The player's ordnance gets no aim component and
+  the AI's does; that asymmetry is correct and `BL-408` covers the one axis bug in it.
+  *How you'd know it worked:* per-type acceptance in `--weapon-lab`, one clip each: a torpedo
+  launched fast visibly settling to 60 m/s over 2.5 s; a choker cutting an engine for 13 s at the
+  centre and 5 s at the edge; a smoker leaving a screen and no round; a seeker turning onto a
+  beeper-tagged target; a torpedo shot down in flight; and a blast behind cover doing nothing.
+  *Cross-refs:* `BL-227` (splash falloff, whose fix is landing **C**), `BL-290` (torpedo dynamics, a
+  strict subset of **A** — do not land it separately), `BL-233` (the fuse), `BL-293` (the
+  `SURFACE_ANIMATION` normal rule), `BL-353` (the Weapon Loadout screen, the only route by which a
+  player ever fits a non-HE type, so it gates whether most of this is reachable in a real flight),
+  `BL-408` (the player's launch axis), `BL-404`/`BL-405`, `WeaponDefs.cs`, `Projectile.cs`.
 
 ## Flight model & collision physics
 
