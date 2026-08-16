@@ -31,6 +31,11 @@ public sealed class DamageVisuals
     /// <see cref="Reset"/>; null when there is no runtime to stop.</summary>
     public Action? DamageEffectStop;
 
+    /// <summary>Stops ONE stage's closure, for the upward crossing a repair makes: the other
+    /// stages stay live, which <see cref="DamageEffectStop"/> cannot express. Same closure rule as
+    /// the whole-menu stop. Null leaves a retracted stage running until <see cref="Reset"/>.</summary>
+    public Action<string>? DamageEffectStopOne;
+
     private const float StaticBurnSpeed = 15f; // m/s of virtual motion the damage lab's parked
                                                // plane spends on its in-place stand-in trails; TUNE
 
@@ -45,8 +50,14 @@ public sealed class DamageVisuals
     private readonly Dictionary<string, Node3D> _panels = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<Node3D>> _pairedHealthy = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DestroyablePart> _parts = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> _applied = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<(float Frac, string Anim)> _vehicleInjure;
+
+    // The original's handle arrays (inst+0x890 def-level, part+0x4c per-part), reduced to a flag
+    // because our runtime stops by anim name: one slot per LADDER ENTRY, set on the downward
+    // crossing and cleared only on the upward one. Keyed on the entry and never on the anim name —
+    // an AI ladder names one anim at six thresholds, and a name-keyed set fires it once.
+    private readonly bool[] _vehicleStaged;
+    private readonly Dictionary<string, bool[]> _partStaged = new(StringComparer.OrdinalIgnoreCase);
     private readonly Puffer? _standInTrailPuffer, _standInFirePuffer;
     private readonly List<Puffer> _panelTrailPool;
     private readonly List<(Node3D Panel, Puffer Trail)> _panelTrails = new();
@@ -66,10 +77,16 @@ public sealed class DamageVisuals
     {
         foreach (var p in panels)
             _panels[p.Name] = p;
-        PairHealthySkins(planeRoot, defPairing);
         foreach (var part in stats.DestroyableParts)
+        {
             _parts[part.Name] = part;
+            _partStaged[part.Name] = new bool[part.InjureAnims.Count];
+        }
         _vehicleInjure = stats.VehicleInjureAnims;
+        _vehicleStaged = new bool[_vehicleInjure.Count];
+        PairsPanels = NamesPanelStage(stats);
+        if (PairsPanels)
+            PairHealthySkins(planeRoot, defPairing);
         _standInTrailPuffer = standInTrail;
         _standInFirePuffer = standInFire;
         _panelTrailPool = panelTrails ?? new List<Puffer>();
@@ -77,6 +94,11 @@ public sealed class DamageVisuals
     }
 
     public int PanelCount => _panels.Count;
+
+    /// <summary>Whether this airframe's own data stages a torn panel, which is what decides
+    /// whether panels are paired at all (<see cref="PairHealthySkins"/>). An AI airframe names no
+    /// pdpanel* entry and resolves no zones, so it pairs nothing and warns about nothing.</summary>
+    public bool PairsPanels { get; }
 
     /// <summary>The panel candidate sets the authored data names: the healthy skins
     /// damage may hide are exactly the `*_h` nodes `plane_reset` re-ACTIVEs on reset (pdp2_h and
@@ -130,46 +152,53 @@ public sealed class DamageVisuals
             : null;
     }
 
+    /// <summary>How many ladder entries hold this anim right now, vehicle-level and per part.
+    /// Staging is per ENTRY: fury names random_remote_damage at six thresholds and stages six.
+    /// Across a descent with no repair this is also the number of starts.</summary>
+    public int StagedEntryCount(string anim)
+    {
+        int n = 0;
+        for (int i = 0; i < _vehicleInjure.Count; i++)
+            if (_vehicleStaged[i] && Same(_vehicleInjure[i].Anim, anim))
+                n++;
+        foreach (var (partName, staged) in _partStaged)
+        {
+            var entries = _parts[partName].InjureAnims;
+            for (int i = 0; i < staged.Length; i++)
+                if (staged[i] && Same(entries[i].Anim, anim))
+                    n++;
+        }
+        return n;
+    }
+
     /// <summary>Applies every per-part visual whose threshold the part's health fraction has
     /// crossed (health-only, not combined armour+HP — see <c>docs/org/vehicleDamage.md</c>'s
-    /// "Damage staging"). Idempotent per anim name. The whole-vehicle stages are
-    /// <see cref="OnHullDamage"/>, off a different pool.</summary>
+    /// "Damage staging"), and retracts the ones it has risen back over. Once per downward
+    /// crossing, per ENTRY. The whole-vehicle stages are <see cref="OnHullDamage"/>.</summary>
     public void OnPartDamage(string partName, float healthFraction)
     {
-        if (_parts.TryGetValue(partName, out var def))
-            foreach (var (frac, anim) in def.InjureAnims)
+        if (!_parts.TryGetValue(partName, out var def)
+            || !_partStaged.TryGetValue(partName, out var staged))
+        {
+            return;
+        }
+        for (int i = 0; i < def.InjureAnims.Count; i++)
+        {
+            var (frac, anim) = def.InjureAnims[i];
+            if (healthFraction > frac)
             {
-                if (healthFraction > frac || !_applied.Add(anim))
-                    continue;
-                if (anim.StartsWith("pdpanel", StringComparison.OrdinalIgnoreCase))
+                if (staged[i])
                 {
-                    string n = anim["pdpanel".Length..];
-                    if (_panels.TryGetValue("pdp" + n, out var torn))
-                    {
-                        torn.Visible = true;
-                        GD.Print($"damage panel: {anim} on ({partName} {healthFraction * 100f:0}%)");
-                        // the parked stand-in: a firepuffer burning in place at the panel
-                        // (the flight path plays the authored def through the sink below)
-                        if (DamageEffectSink == null && _panelTrailPool.Count > _panelTrails.Count)
-                            _panelTrails.Add((torn, _panelTrailPool[_panelTrails.Count]));
-                    }
-                    // hide the healthy skin at the torn panel's own spot (paired by
-                    // position — the _h names are crossed on three planes)
-                    if (_pairedHealthy.TryGetValue("pdp" + n, out var healthySkins))
-                        foreach (var healthy in healthySkins)
-                            healthy.Visible = false;
-                    PlayStage(anim, partName, healthFraction);
+                    staged[i] = false;
+                    Retract(anim);
                 }
-                else if (anim.EndsWith("_damage_effects", StringComparison.OrdinalIgnoreCase))
-                {
-                    // The per-impact spark burst; see docs/formats/vehicle.md for
-                    // random_gun_impact's panel pick. Health-gated like every other entry.
-                    PlayStage(anim, partName, healthFraction);
-                }
-                // else: *_damage_green/yellow/red cockpit indicator and got_hit_anim's nosedamage
-                // blink — unwired (no cockpit; GaugeCluster.OnPartDamage approximates the latter
-                // by hand, off different data — do not merge the two)
+                continue;
             }
+            if (staged[i])
+                continue;
+            staged[i] = true;
+            ApplyPartStage(anim, partName, healthFraction);
+        }
     }
 
     /// <summary>Applies every def-level visual whose threshold the WHOLE VEHICLE's health fraction
@@ -180,10 +209,23 @@ public sealed class DamageVisuals
     /// the hull pair.</summary>
     public void OnHullDamage(float healthFraction)
     {
-        foreach (var (frac, anim) in _vehicleInjure)
+        for (int i = 0; i < _vehicleInjure.Count; i++)
         {
-            if (healthFraction > frac || !_applied.Add(anim))
+            var (frac, anim) = _vehicleInjure[i];
+            if (healthFraction > frac)
+            {
+                if (_vehicleStaged[i])
+                {
+                    _vehicleStaged[i] = false;
+                    Retract(anim);
+                }
                 continue;
+            }
+            if (_vehicleStaged[i])
+                continue;
+            // The slot records the CROSSING, so an entry we play nothing for still holds one:
+            // the original starts every entry, and the whitelist below is our own porting seam.
+            _vehicleStaged[i] = true;
             if (RigAnimFor(anim) is not { } stage)
                 continue;
             if (DamageEffectSink == null
@@ -236,11 +278,33 @@ public sealed class DamageVisuals
         DamageEffectStop?.Invoke();
         foreach (var (name, node) in _panels)
             node.Visible = name.EndsWith("_h", StringComparison.OrdinalIgnoreCase);
-        _applied.Clear();
+        Array.Clear(_vehicleStaged);
+        foreach (var staged in _partStaged.Values)
+            Array.Clear(staged);
         _smoking = false;
         foreach (var (_, trail) in _panelTrails)
             trail.Clear();
         _panelTrails.Clear();
+    }
+
+    private static bool Same(string a, string b) => a.Equals(b, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPanelStage(string anim) =>
+        anim.StartsWith("pdpanel", StringComparison.OrdinalIgnoreCase);
+
+    // Does this airframe's data stage a torn panel anywhere? Decides whether the constructor pairs
+    // panels at all: the pairing walk is a mesh-AABB pass over every panel and its missing-data
+    // warning is a real alarm on the player path, while an AI airframe names no pdpanel* entry.
+    private static bool NamesPanelStage(PlaneStats stats)
+    {
+        foreach (var (_, anim) in stats.VehicleInjureAnims)
+            if (IsPanelStage(anim))
+                return true;
+        foreach (var part in stats.DestroyableParts)
+            foreach (var (_, anim) in part.InjureAnims)
+                if (IsPanelStage(anim))
+                    return true;
+        return false;
     }
 
     // Merged mesh-AABB center of the panel's subtree, in the plane root's
@@ -291,6 +355,85 @@ public sealed class DamageVisuals
         foreach (var child in root.GetChildren())
             if (FindByName(child, name) is { } hit)
                 return hit;
+        return null;
+    }
+
+    // One per-part entry's downward crossing: the torn panel, its healthy twin, the parked
+    // stand-in fire, and the authored stage. The cockpit indicators (*_damage_green/yellow/red)
+    // and got_hit_anim's blink are deliberately unwired — no cockpit, and GaugeCluster
+    // approximates the latter by hand off different data, so do not merge the two.
+    private void ApplyPartStage(string anim, string partName, float healthFraction)
+    {
+        if (IsPanelStage(anim))
+        {
+            string n = anim["pdpanel".Length..];
+            if (_panels.TryGetValue("pdp" + n, out var torn))
+            {
+                torn.Visible = true;
+                GD.Print($"damage panel: {anim} on ({partName} {healthFraction * 100f:0}%)");
+                // the parked stand-in: a firepuffer burning in place at the panel
+                // (the flight path plays the authored def through the sink below)
+                if (DamageEffectSink == null && FreeTrailPuffer() is { } puffer)
+                    _panelTrails.Add((torn, puffer));
+            }
+            // hide the healthy skin at the torn panel's own spot (paired by
+            // position — the _h names are crossed on three planes)
+            if (_pairedHealthy.TryGetValue("pdp" + n, out var healthySkins))
+                foreach (var healthy in healthySkins)
+                    healthy.Visible = false;
+            PlayStage(anim, partName, healthFraction);
+        }
+        else if (anim.EndsWith("_damage_effects", StringComparison.OrdinalIgnoreCase))
+        {
+            // The per-impact spark burst; see docs/formats/vehicle.md for
+            // random_gun_impact's panel pick. Health-gated like every other entry.
+            PlayStage(anim, partName, healthFraction);
+        }
+    }
+
+    // The upward crossing (a repair): the entry's stage stops and its panel goes back, so the
+    // entry can fire again on the next descent. Nothing stops while another entry still holds the
+    // same anim — the runtime stops by NAME, so one stop would take all six of an AI ladder's.
+    private void Retract(string anim)
+    {
+        if (StagedEntryCount(anim) > 0)
+            return;
+        if (IsPanelStage(anim))
+        {
+            string torn = "pdp" + anim["pdpanel".Length..];
+            if (_panels.TryGetValue(torn, out var panel))
+            {
+                panel.Visible = false;
+                for (int i = _panelTrails.Count - 1; i >= 0; i--)
+                    if (_panelTrails[i].Panel == panel)
+                    {
+                        _panelTrails[i].Trail.Clear();
+                        _panelTrails.RemoveAt(i);
+                    }
+            }
+            if (_pairedHealthy.TryGetValue(torn, out var healthySkins))
+                foreach (var healthy in healthySkins)
+                    healthy.Visible = true;
+        }
+        if (anim.Equals("player_smoketrail", StringComparison.OrdinalIgnoreCase))
+            _smoking = false;
+        if (RigAnimFor(anim) is { } stage)
+            DamageEffectStopOne?.Invoke(stage);
+    }
+
+    // A stand-in puffer no live panel trail holds. ⚠ Pick by occupancy, not by _panelTrails.Count:
+    // a retraction removes from the middle, and an index-by-count pick would then hand one puffer
+    // to two panels.
+    private Puffer? FreeTrailPuffer()
+    {
+        foreach (var puffer in _panelTrailPool)
+        {
+            bool taken = false;
+            foreach (var (_, trail) in _panelTrails)
+                taken |= trail == puffer;
+            if (!taken)
+                return puffer;
+        }
         return null;
     }
 

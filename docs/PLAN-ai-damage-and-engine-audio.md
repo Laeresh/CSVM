@@ -154,8 +154,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Make the staging correct before anything reads it
 
-1. ☐ Replace `_applied` with per-entry slots, and add retraction (absorbs `BL-384` item 3)
-2. ☐ Derive panel-pairing need from the data, and let `DamageVisuals` be built hull-only
+1. ☑ Replace `_applied` with per-entry slots, and add retraction (absorbs `BL-384` item 3)
+2. ☑ Derive panel-pairing need from the data, and let `DamageVisuals` be built hull-only
 3. ☐ Play `ai_crash_*` on the aircraft: drop the `kestrel` scaffold for a context node
 
 ### Wave B — Wire the AI up
@@ -188,7 +188,9 @@ changes B12's approach. C17 lands last.
 
 File ownership if these are split across agents: A1+A2 own `DamageVisuals.cs`; A3+B13 own
 `WorldEffectsFactory.cs`; B11 owns `FlightRigAssembler.cs` and `AiAircraftSpawner.cs`; B12 owns
-`EffectCatalogue.cs`; B14+B15 own `FlightAudio.cs` and `PlaneStats.cs`.
+`EffectCatalogue.cs` **and `RigAnimFor` in `DamageVisuals.cs`**, which the original ownership note
+missed; B14+B15 own `FlightAudio.cs` and `PlaneStats.cs`. A1 landed the `DamageEffectStopOne` end of
+the wiring in `FlightRigAssembler.cs`, so B11 inherits that seam rather than a clean file.
 
 ---
 
@@ -205,6 +207,10 @@ name (`DamageVisuals.cs:48`), tested with `!_applied.Add(anim)` at `:142` (per-p
 (hull). `fury`'s ladder names `random_remote_damage` at six thresholds
 (`extracted/zrdr/vehicle.zrd.json:4738-4768`), so five of the six are suppressed. The same set is
 shared across parts, so an entry authored on all four player zones fires once instead of four times.
+⚠ That second half has **no shipped instance**: a census of all 22 defs carrying `destroyable_parts`
+(the eleven `p*` plus eleven `r*`) found none naming one anim on two of its zones. The per-(part,
+entry) keying is still what the original does and stands, but its test is driven from a synthetic
+four-zone ladder; the break that bites in shipped data is `fury`'s six same-named hull entries.
 The original keys per entry: one handle slot per ladder entry in `inst+0x890` (def-level) and
 `part+0x4c` (per-part), started when the slot reads zero, cleared on the **upward** crossing alone
 via `FUN_004ed480` — never when the anim finishes (`docs/org/vehicleDamage.md`, "One start per

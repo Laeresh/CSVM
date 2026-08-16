@@ -468,6 +468,15 @@ public sealed class FlightRigAssembler
                     foreach (var n in stageClosure)
                         rigRuntime.Stop(n);
                 };
+                // The retraction a repair makes stops one stage's own closure, leaving the rest
+                // live. Same derivation as above, per stage, since the whole-menu stop cannot
+                // express it.
+                controller.Visuals.DamageEffectStopOne = stage =>
+                {
+                    foreach (var d in _in.CrashProgram.Subset(stage).Defs)
+                        if ((d.AnimName ?? d.Name) is { Length: > 0 } n)
+                            rigRuntime.Stop(n);
+                };
             }
         }
     }

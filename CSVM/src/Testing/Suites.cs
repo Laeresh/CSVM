@@ -372,6 +372,8 @@ public static class Suites
             "a second panel's tear takes its own pooled gimmeflakes copy and leaves the first burst flying at its site (BL-288)", DamageTemplatePool));
         into.Add(new TestHarness.Suite("damage-staging-pool",
             "the injure staging reads health only: a zone stripped of armour tears no panel though its combined fraction has crossed the threshold, and the panel appears once health itself crosses (BL-384)", DamageStagingPool));
+        into.Add(new TestHarness.Suite("damage-stage-slots",
+            "the injure ladder stages per ENTRY: fury's six random_remote_damage thresholds each fire, a repair retracts what it lifted back over, and one entry on four zones fires four times (BL-385/BL-384)", DamageStageSlots));
         into.Add(new TestHarness.Suite("crash-rig-anchors",
             "binding the crash rig leaves the airframe model under the controller — even the Devastator, whose model root shares the crash defs' authored NAME — and stages every pooled copy in the same reset pose", CrashRigAnchors));
         into.Add(new TestHarness.Suite("ai-crash-defs",
@@ -9919,6 +9921,108 @@ public static class Suites
         finally
         {
             model.Free();
+        }
+    }
+
+    // ---- the injure ladder stages per ENTRY, and retracts on the upward crossing ---------------
+
+    // fury's AI ladder names random_remote_damage at six of its seven thresholds, so a latch keyed
+    // on the anim name plays five of them never. Three halves: the count over the real ladder, the
+    // retraction a repair makes (cleared on the upward crossing alone, never by staying below), and
+    // the per-(part, entry) keying, which no shipped def exercises — see the synthetic ladder below.
+    private static void DamageStageSlots(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var stats = PlaneStats.LoadForAi(ctx.ZrdrPath, "player_fury");
+        ctx.Check(stats.VehicleInjureAnims.Count == 7,
+            $"fury's AI ladder carries {stats.VehicleInjureAnims.Count} entries (want 7)");
+
+        var root = new Node3D { Name = "fury_root" };
+        ctx.Host.AddChild(root);
+        try
+        {
+            var visuals = new DamageVisuals(System.Array.Empty<Node3D>(), root, stats);
+            ctx.Check(!visuals.PairsPanels,
+                $"fury's AI data names no pdpanel stage, so nothing is paired and nothing warns");
+
+            // one step per band, so each threshold is crossed on its own
+            foreach (float frac in new[] { 0.99f, 0.9f, 0.7f, 0.55f, 0.47f, 0.42f, 0.3f, 0.2f })
+                visuals.OnHullDamage(frac);
+            int repeats = visuals.StagedEntryCount("random_remote_damage");
+            ctx.Check(repeats == 6,
+                $"the whole ladder walked down: {repeats} random_remote_damage entries staged (want 6)");
+            ctx.Check(visuals.StagedEntryCount("pfsmoketrail") == 1,
+                $"…and the one pfsmoketrail entry at 0.40 staged with them");
+
+            // repaired to half: the three entries under 0.5 retract, the four at or above hold
+            visuals.OnHullDamage(0.5f);
+            ctx.Check(visuals.StagedEntryCount("random_remote_damage") == 4
+                      && visuals.StagedEntryCount("pfsmoketrail") == 0,
+                $"repaired to 50%: {visuals.StagedEntryCount("random_remote_damage")} random_remote_damage and {visuals.StagedEntryCount("pfsmoketrail")} pfsmoketrail entries still staged (want 4 and 0)");
+            visuals.OnHullDamage(0.2f);
+            ctx.Check(visuals.StagedEntryCount("random_remote_damage") == 6
+                      && visuals.StagedEntryCount("pfsmoketrail") == 1,
+                $"…and every retracted entry fires again on the next descent");
+        }
+        finally
+        {
+            root.Free();
+        }
+
+        // Per-(part, entry) keying. A census of all 22 shipped defs carrying destroyable_parts found
+        // no anim authored on two zones of one def, so the shared-entry case is driven from a
+        // synthetic ladder: four zones naming pdpanel1. The pairing warning fires here by design.
+        var multi = new PlaneStats();
+        foreach (string zone in new[] { "nose", "tail", "leftwing", "rightwing" })
+            multi.DestroyableParts.Add(new DestroyablePart { Name = zone, InjureAnims = { (0.5f, "pdpanel1") } });
+
+        var zoneRoot = new Node3D { Name = "zoned_root" };
+        ctx.Host.AddChild(zoneRoot);
+        try
+        {
+            var visuals = new DamageVisuals(System.Array.Empty<Node3D>(), zoneRoot, multi);
+            int starts = 0, stops = 0;
+            visuals.DamageEffectSink = _ => starts++;
+            visuals.DamageEffectStopOne = _ => stops++;
+            foreach (var part in multi.DestroyableParts)
+                visuals.OnPartDamage(part.Name, 0.4f);
+            ctx.Check(starts == 4 && visuals.StagedEntryCount("pdpanel1") == 4,
+                $"one entry authored on four zones started {starts} times and holds {visuals.StagedEntryCount("pdpanel1")} slots (want 4 and 4)");
+
+            foreach (var part in multi.DestroyableParts)
+                visuals.OnPartDamage(part.Name, 0.3f);
+            ctx.Check(starts == 4, $"…and staying below the threshold started nothing new ({starts} total)");
+
+            visuals.OnPartDamage("nose", 1f);
+            ctx.Check(visuals.StagedEntryCount("pdpanel1") == 3 && stops == 0,
+                $"one zone repaired clears its own slot and stops nothing — three zones still hold the anim");
+            foreach (var part in multi.DestroyableParts)
+                visuals.OnPartDamage(part.Name, 1f);
+            ctx.Check(visuals.StagedEntryCount("pdpanel1") == 0 && stops == 1,
+                $"…and the last one to retract stops the stage exactly once (stops={stops})");
+
+            visuals.OnPartDamage("nose", 0.4f);
+            ctx.Check(starts == 5, $"a repaired zone re-crossing fires again ({starts} starts)");
+        }
+        finally
+        {
+            zoneRoot.Free();
+        }
+
+        // A2's other half: a player airframe DOES name pdpanel stages, so pairing (and its
+        // missing-data alarm) stays armed on that path.
+        var player = PlaneStats.Load(ctx.ZrdrPath, "player_fury");
+        var playerRoot = new Node3D { Name = "player_root" };
+        ctx.Host.AddChild(playerRoot);
+        try
+        {
+            var visuals = new DamageVisuals(System.Array.Empty<Node3D>(), playerRoot, player);
+            ctx.Check(visuals.PairsPanels,
+                $"the player fury names pdpanel stages, so panel pairing still runs for it");
+        }
+        finally
+        {
+            playerRoot.Free();
         }
     }
 

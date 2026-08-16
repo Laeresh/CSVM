@@ -2069,10 +2069,13 @@ on that panel being ACTIVE, so it renders only once torn), the `<part>_damage_ef
 surface, live since M4 A2+D14 fielded AI shooters), and, for the data's 0.10 `player_smoketrail`, `player_damage_trail`
 (short_firetrail at prop1 + the fire_lt light) — `RigAnimFor` owns that one mapping.
 `DamageEffectStop` (Reset, first) stops the whole stage CLOSURE, derived from the program — a
-stopped pdpanelN cannot reach the trail it CALLed, and prop1's trail has no authored exit.
-Panel pairing (def-derived candidate sets, positional assignment, the three crossed-naming
-outliers) is decoded on `PairHealthySkins`; the null-sink stand-in fallback is on `UpdateStatic`/
-`PlayStage`.
+stopped pdpanelN cannot reach the trail it CALLed, and prop1's trail has no authored exit;
+`DamageEffectStopOne` is the single-stage form a retraction uses. Staging is keyed per LADDER
+ENTRY and cleared on the upward crossing alone, so a repair un-stages and the entry can fire again
+(`StagedEntryCount`). Panel pairing (def-derived candidate sets, positional assignment, the three
+crossed-naming outliers) is decoded on `PairHealthySkins` and runs only for an airframe whose own
+data names a `pdpanel*` stage (`PairsPanels`); the null-sink stand-in fallback is on
+`UpdateStatic`/`PlayStage`.
 
 ## src/Flight/DamageLab.cs
 The damage lab (F5 toggles): one armor slider (parts the data gives an armor pool) plus one health
