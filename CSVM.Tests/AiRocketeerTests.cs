@@ -1,5 +1,8 @@
 using System.Collections.Generic;
+using System.IO;
+using CSVM;
 using CSVM.Flight;
+using CSVM.Mech3;
 using Godot;
 using Xunit;
 
@@ -17,6 +20,9 @@ public class AiRocketeerTests
 
     private static readonly Vector3 TargetPos = Vector3.Zero;
     private static readonly Vector3 TargetForward = Vector3.Forward; // nose on -Z
+
+    private static string ZrdrPath =>
+        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
 
     [Fact]
     public void ADeadAsternShotPassesEveryGateAndTakesThePylon()
@@ -89,6 +95,62 @@ public class AiRocketeerTests
             TargetPos, Vector3.Zero, TargetForward, targetIsGasbag,
             Pylons(ownPos, damagesZeppelin));
         Assert.Equal(fires, r.WantsFire);
+    }
+
+    // The two aim gates are one decoded pair, per weapon class, and the discriminating case above
+    // (18°, which the gun takes and the ordnance refuses) only means anything while they stay
+    // distinct. Pinned as angles as well as cosines so a later tidy cannot fold them onto one
+    // shared constant without the arithmetic saying so.
+    [Fact]
+    public void TheOrdnanceAndGunAimGatesAreTheDecodedPairAtFiveAndTenDegrees()
+    {
+        Assert.Equal(0.9962f, AiRocketeer.AimQualityCos);
+        Assert.Equal(0.9848f, AiGunner.AimQualityCos);
+        Assert.Equal(5f, Mathf.RadToDeg(Mathf.Acos(AiRocketeer.AimQualityCos)), 1);
+        Assert.Equal(10f, Mathf.RadToDeg(Mathf.Acos(AiGunner.AimQualityCos)), 1);
+        Assert.True(AiRocketeer.AimQualityCos > AiGunner.AimQualityCos,
+            "ordnance is aimed more precisely than a gun, not the same or less");
+    }
+
+    // The Black Hat Warhawk's own fit, read out of the install rather than invented: the vehicle
+    // def gives it eight wep_14, and wep_14's weapon def carries DAMAGES_ZEPPELIN. Those two
+    // authored facts together are what keeps the game's heaviest ordnance load on the rail against
+    // aircraft, so the gate is exercised on the shipped numbers.
+    [ExtractedDataFact]
+    public void TheWarhawksAuthoredTorpedoIsRefusedAgainstAircraftAndOfferedAgainstAGasbag()
+    {
+        var weapons = WeaponDefs.Load(ZrdrPath, null);
+        var fit = AuthoredOrdnance("bhatwarhawk", weapons);
+        Assert.Equal("wep_14", fit.Id);
+        Assert.Equal(8, fit.Rounds);
+        var torpedo = weapons.Get(fit.Id)!;
+        Assert.True(torpedo.DamagesZeppelin, "the aerial torpedo is the shipped zeppelin weapon");
+
+        var ownPos = new Vector3(0f, 0f, 500f); // inside the authored 350 to 800 m band
+        var pylon = new RocketPylonView
+        {
+            Index = 0,
+            DamagesZeppelin = torpedo.DamagesZeppelin,
+            Armed = fit.Rounds > 0,
+            MountPos = ownPos,
+            RoundSpeed = torpedo.Velocity ?? Speed,
+        };
+        var basis = Basis.LookingAt(TargetPos - ownPos, Vector3.Up);
+        var pylons = new List<RocketPylonView> { pylon };
+
+        // The authored band and interval, so the case runs on the Warhawk's numbers and not on
+        // the militia defaults the fields still carry (BL-394 wires them per vehicle).
+        var atAircraft = Warhawk(fit, rollsPass: true);
+        atAircraft.Solve(ownPos, Vector3.Zero, basis,
+            TargetPos, Vector3.Zero, TargetForward, targetIsGasbag: false, pylons);
+        Assert.False(atAircraft.WantsFire);
+        Assert.Equal(-1, atAircraft.SelectedPylon);
+
+        var atGasbag = Warhawk(fit, rollsPass: true);
+        atGasbag.Solve(ownPos, Vector3.Zero, basis,
+            TargetPos, Vector3.Zero, TargetForward, targetIsGasbag: true, pylons);
+        Assert.True(atGasbag.WantsFire);
+        Assert.Equal(0, atGasbag.SelectedPylon);
     }
 
     // The walk names the pylon, so a torpedo sitting first cannot capture a launch the gates
@@ -200,6 +262,42 @@ public class AiRocketeerTests
     private static List<RocketPylonView> Pylons(Vector3 mountPos, bool damagesZeppelin = false) =>
         new() { Pylon(0, mountPos, damagesZeppelin) };
 
+    private static AiRocketeer Warhawk(AuthoredFit fit, bool rollsPass) =>
+        new(() => rollsPass ? 0f : 1f)
+        {
+            QuickDrawChance = 0.05f,
+            MinRangeM = fit.MinRange,
+            MaxRangeM = fit.MaxRange,
+            RefireSeconds = fit.Refire,
+        };
+
+    // One AI vehicle def's first ordnance entry, straight out of vehicle.zrd.json. The engine reads
+    // the 5-tuple as id, rounds, refire interval, then the engagement band; the field order is
+    // decoded in docs/org/aiPilot/aiWeapons.md. Nothing in the runtime parses this block yet
+    // (BL-394), so the test reads it here rather than pretending a reader exists.
+    private static AuthoredFit AuthoredOrdnance(string defName, WeaponDefs weapons)
+    {
+        var root = Zrdr.LoadFile(ZrdrPath, "vehicle.json")[0] as List<object?>;
+        Assert.NotNull(root);
+        for (int i = 0; i + 1 < root!.Count; i += 2)
+        {
+            if (root[i] as string != defName || root[i + 1] is not List<object?> props)
+                continue;
+            var block = ZrdrDict.FromAlternating(props).List("weapons");
+            Assert.NotNull(block);
+            foreach (var slot in block!)
+            {
+                if (slot is not List<object?> t || t.Count < 5 || t[0] is not string id)
+                    continue;
+                if (weapons.Get(id) is not { IsCannon: false })
+                    continue; // the gun entry rides the same block and is not the ordnance path's
+                return new AuthoredFit(id, (int)(float)t[1]!, (float)t[2]!, (float)t[3]!, (float)t[4]!);
+            }
+        }
+        Assert.Fail($"'{defName}' carries no ordnance entry in vehicle.zrd.json");
+        return default!;
+    }
+
     private static RocketPylonView Pylon(int index, Vector3 mountPos,
         bool damagesZeppelin = false, bool armed = true) =>
         new()
@@ -210,4 +308,7 @@ public class AiRocketeerTests
             MountPos = mountPos,
             RoundSpeed = Speed,
         };
+
+    /// <summary>One AI vehicle def's authored ordnance slot, in the engine's own field order.</summary>
+    private sealed record AuthoredFit(string Id, int Rounds, float Refire, float MinRange, float MaxRange);
 }

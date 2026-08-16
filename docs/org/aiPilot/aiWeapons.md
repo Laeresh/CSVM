@@ -228,9 +228,10 @@ same clamp-then-cone the turret gunners use.
 
 Three things here have no counterpart on our side yet. The quick draw's aircraft-against-aircraft
 condition is satisfied by our target type rather than tested, and needs a real test once a gasbag or
-a ground target can be aimed at. The aim gate's two skips (the player, and any vehicle carrying the
-`+0xf8` byte) are not modelled. The `REAR` handling belongs to the smoke screen and is a separate
-item.
+a ground target can be aimed at. Of the aim gate's two skips, the player's holds by construction
+(neither `AiGunner` nor `AiRocketeer` runs for a human pilot, and a human's rocket leaves through
+`FireControl` with no aim gate at all), while the `+0xf8` vehicle byte is not modelled. The `REAR`
+handling belongs to the smoke screen and is a separate item.
 
 `AiRocketeer` runs the ordnance path: the quick-draw cone gating the whole pass, then per pylon the
 armed check, the two-sided `DAMAGES_ZEPPELIN` match, the squared band and the clamp-then-residual
@@ -239,6 +240,13 @@ holds no target of its own, mirroring the original's single validated target acr
 walk. Two divergences are deliberate: it does not arbitrate the weapon selection against the gun
 (our two classes share no mount and no aim vector, so there is nothing to arbitrate), and its round
 leaves along the clamped aim while the mounted body stays fixed to the pylon.
+
+⚠ The match's zeppelin side is written but unexercised in play, for two reasons that are both
+elsewhere. The AI acquisition admits aircraft alone (`BL-363`), so the gasbag argument is always
+false at the call site, and no stock loadout carries `wep_14` because the vehicle def's `weapons`
+tuple is unparsed (`BL-394`), so no AI in a session flies the Warhawk's eight torpedoes. Until both
+land, the two-way match and the Warhawk's authored fit are held by `AiRocketeerTests` against the
+install's own data rather than by anything at the controls.
 
 ## What the shipped data amounts to
 

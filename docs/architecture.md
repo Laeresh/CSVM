@@ -101,6 +101,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AiControlLaw.cs` — the original's own AI steering law (decoded in `docs/org/aiControlLaw.md`): aim point + that point's velocity + one of four decoded parameter tables → stick and throttle lever. Engine-free and pure.
 - `src/Flight/AiModeMachine.cs` — the nine-mode AI state machine, the engine's decoded mode vocabulary: patrol/pursue/lay off/evade/evasive maneuver/stunned/avoid crash + two enum-only danger-zone modes; steady-hand and sixth-sense reaction rolls on the shipped chances.
 - `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery: intercept lead via `AimAssist.TryIntercept`, the quick-draw cone and the engagement window as fire gates, the ±11° traverse clamp with its 10° residual gate, per-shot dead-eye scatter; mutable target, primary-target name and rating biases (the D12 script seams).
+- `src/Flight/AiRocketeer.cs` — the AI's ordnance employment: the quick-draw cone over the whole pass, then per pylon the armed check, the two-way `DAMAGES_ZEPPELIN` match, the 200–800 m band and the traverse clamp with its 5° residual gate (tighter than the gun's 10°), then the vehicle-wide lockout stamped ahead of the `quick_draw_chance` roll. Holds no target of its own: the host walks it against `AiGunner.Target`.
 - `src/Flight/AiVoiceDispatcher.cs` — the combat-voice trigger dispatch, engine-free: the talker roll, the 15 s per-slot cooldown armed on failure too, the bearing halving, the broadcast election, the DI tiers, the death cries with force, the computed bearing index.
 - `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula: rank = weight × 1200 + distance + objectiveBias, minimised; player base weight 0.7, ±0.2 bearing/altitude/facing terms, 1e21 beyond activation; rating-bias matching and the allied-attacker deconfliction pick.
 - `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints: nearest node first, then edge-list neighbours, seeded branch draws, and an anchored net offset onto its live trailer target (`BL-377`); aircraft-agnostic, shared by `AiPilot` and `ZeppelinMotion`.
@@ -1414,6 +1415,29 @@ the airframe's ±11° `gun_pitch`/`gun_yaw` clamp on the lead (`AimAssist.TryInt
 never re-derived) with the residual the clamp leaves gated at 10°, so the employable cone is the
 traverse limit plus the gate (`docs/org/aiPilot/aiWeapons.md`).
 Engine-free (`AiGunnerTests`); the live half is the `ai-gunnery` suite.
+
+## src/Flight/AiRocketeer.cs
+The AI's ordnance employment, the gun path's twin (`docs/org/aiPilot/aiWeapons.md`): per sim tick
+the host `FlightController` (`DriveAiRocketeer`) ages the vehicle-wide lockout and hands over the
+fire geometry (`Solve`), which answers with the trigger (`WantsFire`), the hardpoint it chose
+(`SelectedPylon`) and the direction the round leaves along (`LaunchDirWorld`, the clamped mount aim
+rather than the raw lead). Gates in the engine's order: the quick-draw cone aborting the whole pass,
+then per pylon the armed check, the two-way `DAMAGES_ZEPPELIN` match, the squared engagement band
+and the traverse clamp's residual against `AimQualityCos` = 0.9962, cos 5°. That constant is the
+ordnance half of a decoded pair and is deliberately not shared with `AiGunner.AimQualityCos` = 0.9848,
+cos 10°: a lead 18° off the nose clamps to 11° and is taken by the gun and refused by the ordnance.
+The lockout is stamped BEFORE the `quick_draw_chance` roll, so a failed roll spends the whole refire
+interval instead of retrying next tick.
+
+Three properties of the original hold here by construction rather than by a test. The aim gate is
+skipped for the player, and this class only runs for a non-human pilot, so player fire never reaches
+it (a human's rocket leaves along the pylon axis through `FireControl`). It holds no target of its
+own, mirroring the original's single validated target across the whole weapon walk. And the
+`DAMAGES_ZEPPELIN` match's zeppelin side is unexercised in play: the AI acquisition admits aircraft
+alone (`BL-363`), so `targetIsGasbag` is always false at the call site, and no shipped stock loadout
+carries `wep_14` because the vehicle def's `weapons` tuple is not parsed yet (`BL-394`). Both halves
+of the match are pinned in tests against the Black Hat Warhawk's authored fit instead.
+Engine-free (`AiRocketeerTests`).
 
 ## src/Flight/AiVoiceDispatcher.cs
 The E16 trigger dispatch, engine-free (`docs/formats/combat-voice.md`): events in, (speaker,

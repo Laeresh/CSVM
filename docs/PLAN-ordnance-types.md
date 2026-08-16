@@ -181,7 +181,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 19. ☐ `TARGETABLE`: admission to the target list
 20. ☐ `FLYOUT_HEALTH`: the health pair, and destruction at zero
-21. ☐ `DAMAGES_ZEPPELIN` two-way gate and the AI ordnance aim threshold
+21. ☑ `DAMAGES_ZEPPELIN` two-way gate and the AI ordnance aim threshold
 
 ### Wave F — Sign-off
 
@@ -705,7 +705,16 @@ sentinel rather than a bool: it is what makes the equality test safe.
 **⚠ Traps.** The two-pool structure is real but inert as shipped. Implement both pools so the spend
 order is right, but do not invent an authored armour value to make the first pool meaningful.
 
-## E21 ☐ `DAMAGES_ZEPPELIN` two-way gate and the AI ordnance aim threshold
+## E21 ☑ `DAMAGES_ZEPPELIN` two-way gate and the AI ordnance aim threshold
+
+**Verdict: already correct, and now pinned.** Every claim in this item was confirmed against the
+code and lands no behavioural change: `AiRocketeer` runs the two-way match, its 5° gate is the
+ordnance threshold (`AimQualityCos` 0.9962) and is a separate constant from the gun's 10°
+(`AiGunner.AimQualityCos` 0.9848), and the player skips both by construction because neither class
+runs for a human pilot. What landed is the evidence: the threshold pair is pinned as angles, and the
+match is exercised on the Black Hat Warhawk's authored fit read out of `vehicle.zrd.json`. The
+at-the-controls half is blocked elsewhere: the AI acquisition admits aircraft alone (`BL-363`) and
+no stock loadout carries `wep_14` because the vehicle def's `weapons` tuple is unparsed (`BL-394`).
 
 **Goal.** The AI fires the right weapon at the right target class, and aims ordnance more precisely
 than guns.
