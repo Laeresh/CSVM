@@ -415,9 +415,24 @@ is null, and registers the same callback.
 
 ### What happens to the wreck
 
+⚠ **Two anim slots, two moments.** The slot at `+0x6d0` is the DESTROY anim and starts the instant
+health reaches zero; the table at `[+0x6e0 … +0x6e4]` is the GROUND-IMPACT anim and starts when the
+falling wreck lands. Reading `ai_crash_*` as the death anim collapses the two and deletes the whole
+fall: the aircraft vanishes on the kill instead of burning its way down. The destroy anim is
+resolved by NAME, and the name is the airframe's own, so it is the self-named def every airframe
+ships (`fury-fury`, `kestrel-kestrel`, `player-player`), never a `*_crash_*` one.
+
+`fury-fury`'s `destroy_craft` sequence is the choreography: `large_fireball` with `air_mixed_exp_sg`
+(the airburst), `large_firetrail` (the trail the wreck wears down), `chuteman` at **3.0 s** (the
+pilot's parachute), eight `ObjectActiveState` events swapping healthy for destroyed, `Callback 16`,
+`Callback 15`, then `CallSequence randomdestseq` — a second `large_fireball`/`plane_destroy_sg` pass
+with `call_trailburst` and the `ObjectMotion` that actually flies the hull down. Its own
+`destroyed_dirt`, `destroyed_water` and `bounce_effects` sequences carry the landing.
+`has_callbacks` is **true** here and false on every `*_crash_*` def, which is the tell.
+
 **Nothing removes a destroyed vehicle.** There is no timeout, no distance cull, no count cap and no
-recycling on the death path. The wreck stops being visible because the crash anim switches its nodes
-off, and the object stays allocated, dead and hidden, until the mission tears down.
+recycling on the death path. The wreck stops being visible when the GROUND-IMPACT anim switches its
+nodes off, and the object stays allocated, dead and hidden, until the mission tears down.
 
 The `ai_crash_default` / `_dirt` / `_water` defs (the `ai_crash_` prefix is at `0x00627d40`, resolved
 by `FUN_00478a00`; the player's `player_crash_` counterpart is `0x00627cf8`, resolved by

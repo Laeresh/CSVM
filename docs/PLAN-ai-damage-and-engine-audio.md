@@ -175,6 +175,49 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 17. ☑ Tests, golden and audio debug line (the golden is disproven as an instrument, measured; see
     `docs/verification.md` SHOT-29)
 
+### Wave D — The destroy anim and the falling wreck
+
+18. ☐ Handle `Callback` events, 16 (velocity into the instance) and 15 (stop the stage anims)
+19. ☐ Play the self-named destroy anim on death, and move `*_crash_*` to ground impact
+20. ☐ The parachute: `chuteman` at 3.0 s, and the wreck's own landing sequences
+21. ☐ Evidence for the fall, against the two reference recordings
+
+## ⚠ Wave D — what Waves A to C got wrong
+
+`BL-385`'s wreck half was implemented against a misreading, caught at the controls against two
+recordings of the original (`OriginalScreenshots/Videos/Enemy AI Shotdown.mp4` and `…Shotdown2.mp4`).
+The original's shot-down aircraft explodes in the air, then **falls as a burning wreck holding its
+`x`/`z` heading**, drops a **parachuting pilot**, throws a second smokier explosion, and only then
+hits the ground and explodes. The second recording ends before two downed `fury` wrecks reach the
+water, with both plainly visible on the way down. We showed none of it: the aircraft vanished on the
+kill.
+
+The decode was right and the reading of it was wrong. There are **two anim slots on the death path**,
+and Waves A to C collapsed them into one:
+
+| Slot | Started by | When | The def | `has_callbacks` |
+|---|---|---|---|---|
+| `+0x6d0` | `FUN_004b82d0` | health reaches zero | the **self-named** def: `fury-fury`, `kestrel-kestrel`, `player-player` | **true** |
+| `[+0x6e0 … +0x6e4]` | `FUN_0048b920` | the wreck lands, indexed by struck material | `ai_crash_*` / `player_crash_*` | false |
+
+`docs/org/vehicleDamage.md` said as much for the player ("an anim named `player` **plus** a set of
+`player_crash_*` variants"); A3 read the second as the death anim and wired it to the kill, which is
+why the airframe is hidden on the frame it dies. **A3's own work is not wrong** — playing the crash
+family on the aircraft with the crash root as context node is right *for ground impact*. What is
+missing is the destroy anim in front of it, and the move of `*_crash_*` off the death event.
+
+`fury-fury`'s `destroy_craft` maps event for event onto the recording: `large_fireball` +
+`air_mixed_exp_sg`, `large_firetrail`, `chuteman` at 3.0 s, eight `ObjectActiveState` swaps,
+`Callback 16`, `Callback 15`, then `randomdestseq` (a second `large_fireball` / `plane_destroy_sg`
+with `call_trailburst` and the `ObjectMotion` that flies the hull down), with `destroyed_dirt`,
+`destroyed_water` and `bounce_effects` for the landing.
+
+**This closes `BL-343`'s mechanism** (wreck momentum): Callback 16 pushes the vehicle's velocity into
+the anim instance via `FUN_004ee0e0`, and it sits inside the def we never played.
+
+⚠ **It is not AI-only.** A shot-down player leaves no wreck either, confirmed at the controls. Both
+paths are missing the same def.
+
 ## Dependency and parallelism notes
 
 A1 blocks B11, B12 and C17 — every stage that fires depends on the slot rework being right, and
@@ -587,3 +630,118 @@ Two more, both owed by items inside this plan rather than by its goal: `B14`'s o
 controls (the dual engine voice gone, no whine layer in a dive, the damaged engine replaced outright
 rather than joined), and `A1`'s inherited `BL-384` line — repair in the F5 damage lab and watch the
 stage retract, which is faithful rather than a regression.
+
+---
+
+# Wave D — The destroy anim and the falling wreck
+
+## D18 ☐ Handle `Callback` events, 16 and 15
+
+**Goal.** The anim runtime acts on a `Callback` event instead of skipping it, so a destroy anim can
+hand the wreck its velocity and can end the injure-ladder trail at the right moment.
+
+**Evidence (confidence: traced).** `Callback` is **absent from `AnimRuntime.HandledEventKinds`**
+(`AnimRuntime.cs:46-53`), so every one is unhandled today. The original's handler is `LAB_00480710`
+and takes three codes (`docs/org/vehicleDamage.md`, "What happens to the wreck"): **16** pushes the
+vehicle's velocity into the anim instance through `FUN_004ee0e0`, which is how a wreck inherits the
+aircraft's motion; **15** clears `+0x91f` and calls `FUN_0047b9c0`, stopping the damage-stage anims
+and `start_anims`, which is where an injure-ladder smoke trail ends; **0** is the delete arm and is
+**never authored** anywhere in the install, so it is out of scope. `fury-fury`'s `destroy_craft`
+authors 16 then 15, in that order.
+
+**Approach.** Add `Callback` to the handled kinds with a seam the caller supplies, the way
+`ScreenFlash` and `LevelPlacedTemplateNames` are already injected: the runtime raises the code and
+the rig decides what it means. Code 16 needs the dying vehicle's world velocity, which the rig has
+and the runtime does not. Code 15 maps onto the existing `DamageEffectStop` closure. An unknown code
+stays counted-and-ignored, never invented.
+
+**Model recommendation.** high — a new event kind in the runtime's dispatch, and code 16 is the
+mechanism `BL-343` has been waiting for.
+
+**Verify.** A suite asserting a def authoring `Callback 16` transfers a known velocity into the
+instance, and one authoring `Callback 15` stops a running stage anim. Then the census: no def in the
+install authors code 0 (the plan's own claim, re-checked mechanically).
+
+**⚠ Traps.** Do not implement code 0. It is the free/delete arm, it is unreachable in the shipped
+data, and a "helpful" implementation would start deleting live wrecks. `has_callbacks` is false on
+every `*_crash_*` def and true on the self-named destroy defs, so that flag is the tell for which
+family you are looking at.
+
+## D19 ☐ Play the self-named destroy anim on death, and move `*_crash_*` to ground impact
+
+**Goal.** A shot-down aircraft, AI or player, plays its own `<airframe>-<airframe>` def at the moment
+health reaches zero and stays visible as a burning wreck; the `*_crash_*` family fires when that
+wreck reaches the ground, indexed by the struck material as it already is.
+
+**Evidence (confidence: traced).** The two-slot table in "⚠ Wave D — what Waves A to C got wrong"
+above. Every airframe ships a self-named def (`fury-fury`, `bloodhawk-bloodhawk`,
+`piratefighter-piratefighter`, `player-player`, one per airframe per chapter), and they are the only
+defs whose `has_callbacks` is true. Our `SurfaceDefTable` (`EffectCatalogue.cs:168-188`) binds
+`CrashDefPrefix`/`AiCrashDefPrefix` alone, and `FlightController.Crash` plays the selected slot on
+the death event (`FlightController.cs:2103`), so the ground-impact def IS our death def today.
+
+**Approach.** A second def reference beside `CrashDefs`, resolved by the airframe's own name, played
+on the death event; the existing surface-indexed table moves to the wreck's ground contact. The
+destroy anim's own `destroyed_dirt` / `destroyed_water` / `bounce_effects` sequences already carry a
+landing, so establish which of the two actually fires on impact in the original before wiring both
+and double-playing the explosion. <TODO: resolve whether the destroy anim's own landing sequences and
+`FUN_0048b920`'s table both run, or whether the table is the fallback the decode describes when the
+material index is out of range.>
+
+**Model recommendation.** high — it re-times the whole death path and it is the item the reference
+recordings judge.
+
+**Verify.** Shoot down an AI plane and watch it fall, burning, holding its heading, then explode on
+the ground, against `Enemy AI Shotdown.mp4` beat for beat. Then the same for the player. Full
+8-chapter `--freecam` regression.
+
+**⚠ Traps.** A3 moved `kestrel` into `AirframeScopedAnchors` and dropped the meshless scaffold; the
+self-named defs resolve the same way and must not bring the scaffold back. The wreck must not be
+hidden on the death frame, which is exactly the bug. Do not delete the wreck afterwards either: the
+decode is firm that nothing frees a destroyed vehicle, and the ground-impact def hides it.
+
+## D20 ☐ The parachute, and the wreck's own landing
+
+**Goal.** The pilot's parachute appears three seconds after the kill, and the wreck's landing plays
+its authored dirt/water/bounce outcome.
+
+**Evidence (confidence: traced).** `destroy_craft` authors `CallAnimation: chuteman` at `start` time
+**3.0**, and `chuteman-chuteman` is a shipped def in every chapter's `cam_anim`. The landing
+sequences are `destroyed_dirt` (`snd_exp_ground_a` + `call_car_trails`), `destroyed_water`
+(`plane_big_splash`) and `bounce_effects` (`ground_mixed_exp_sg` + `call_car_trails`).
+
+**Approach.** Falls out of D19 if the def is played whole; this item is the check that it did, plus
+whatever anchoring `chuteman` needs. Report rather than invent if the parachute has no anchor.
+
+**Model recommendation.** medium — mostly verification, unless `chuteman` needs its own anchoring.
+
+**Verify.** The parachute is visible in `Enemy AI Shotdown.mp4`; match it. Confirm the timing is the
+authored 3.0 s and not a guess.
+
+**⚠ Traps.** Do not hand-schedule the parachute in code. It is an authored timed event; if it does
+not appear, the fault is in the def's timing or anchoring, not a missing feature.
+
+## D21 ☐ Evidence for the fall
+
+**Goal.** The death path is pinned by something that fails when the wreck stops falling.
+
+**Evidence (confidence: traced).** `SHOT-29` (`docs/verification.md`) records that a golden cannot
+see an AI aircraft: the chase camera cannot frame one, and the whole staged ladder moves 0.043 % of
+the pixels. A falling wreck is a much larger subject, so re-test that judgement rather than
+inheriting it.
+
+**Approach.** A suite over the death path: the destroy anim starts on the kill, the airframe stays
+visible for the fall, the velocity arrives through `Callback 16`, and the ground-impact def fires on
+landing and only then hides it. Assert counts and states, never "something happened".
+
+**Model recommendation.** medium — mechanical once D18 and D19 settle.
+
+**Verify.** The suite fails when the destroy anim is unwired.
+
+**⚠ Traps.** The manifest's `exercises` field is hook-checked: under 250 chars, no item id, no date,
+no "also exercises" clause, rewritten on a re-pin.
+
+**Playtest (owed, Wave D).** Shoot down an enemy and watch the whole sequence against
+`Enemy AI Shotdown.mp4`: airburst, burning wreck falling on its old heading, parachute, second
+smokier explosion, ground impact. Then get shot down yourself and confirm the player leaves a wreck
+too.
