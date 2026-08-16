@@ -2022,6 +2022,12 @@ than minting a second enum), `Class` + `Objective`, `Name`/`TypeLabel`/`Category
 `Health`/`Armor`. The assist's `AimCandidate.ConeOverride` rides along unused, since it is the same
 entity's data rather than a duplicate. Pure data, no Godot node, so B12/B13 unit-test with no tree the
 way `NearestHostile` already does.
+⚠ **`Name` and `DisplayName` are two strings for CSVM's sake, not the original's** (C22). There one
+  entity string is both; here the aircraft's node name (`ai1_player_fury`) is IDENTITY — what
+  `--target=` matches and what the breadcrumbs print — while the marker prints the airframe's common
+  name (`Fury`, `PlaneRoster.PlaneDisplayName`, decision 10). A golden pinned on "Fury" could not
+  say which of three Furies it meant, which is why the split exists. Every other source's own name
+  is its label, so it carries one string in both.
 `Classify` is the decoded class model (`FUN_004b5cd0`) in its own order: the liveness predicate, then
 `objectiveTarget` (`+0x4d`), then `otherTarget` (`+0x4c`), then the vehicle/ordnance restriction, then
 the team split (different and both non-zero = Enemy, else Ally). It returns null for "not selectable
@@ -2078,9 +2084,10 @@ source type — the kind picks the shape, the source supplies only the name and 
   for P2–P4 in any session that sets teams explicitly. That is the wingman-in-the-marker bug this
   item diagnosed: see the `TargetHud.OwnTeam` entry. The suite carries the derivation as a named
   able-to-fail CONTROL so the wrong read cannot quietly come back.
-⚠ The aircraft display name is the plain **node** name here (`ai1_player_fury`). C22 replaces it with
-  the airframe's common name (`Fury`), which needs an accessor `FlightController` does not have yet.
-  Do not build that accessor here.
+⚠ `NameOf` is the plain **node** name — identity, not a label. C22 added the marker's own
+  `TargetRef.DisplayName` beside it, `PlaneRoster.PlaneDisplayName(plane.Stats)` for an aircraft
+  (through the `FlightController.Stats` accessor that item added) and the node name for everything
+  else. A rig with no flight model bound has no airframe to name and falls back to the node name.
 ⚠ **Zeppelin sub-part enumeration is a deliberate divergence, not a port.** The decode found no
   sub-part enumeration anywhere in the original's targeting path: a gasbag is selectable there only
   because the mission authored it as its own `MStruct` carrying the flag. Decision 8 asked for the
@@ -3079,16 +3086,52 @@ to `TargetHud` (below), because that marker draws in EVERY flight session, not o
 this class never did.
 
 ## src/Flight/TargetHud.cs
-The per-pane targeting HUD (`PLAN-targeting.md` C21): the H22 nearest-AI-hostile tracker and
-`--debug-markers`, split out of `VersusHud` because both draw in EVERY flight session, not only
-`--vs` — a Versus-only class was the wrong home for a feature every pane gets. `Build(playerIndex,
-camera, pool)` is unconditional, one per human pane, built by `FlightRigAssembler` whether or not
-the session has a `VersusMatch`; a `--vs` pane gets BOTH this and a `VersusHud`, so an AI hostile
-spawned into a dogfight is still marked alongside the human opponents.
+The per-pane targeting HUD (`PLAN-targeting.md` C21/C22): the pilot's own selected-target marker,
+the H22 nearest-AI-hostile fallback and `--debug-markers`, split out of `VersusHud` because all
+three draw in EVERY flight session, not only `--vs` — a Versus-only class was the wrong home for a
+feature every pane gets. `Build(playerIndex, camera, pool)` is unconditional, one per human pane,
+built by `FlightRigAssembler` whether or not the session has a `VersusMatch`; a `--vs` pane gets
+BOTH this and a `VersusHud`, so an AI hostile spawned into a dogfight is still marked alongside the
+human opponents.
+**The shipped marker is `Selected`** (`Own.Targeting.Current`, C22), drawn in the original's own
+shape and decoded in [`org/targeting.md`](org/targeting.md): the fixed 20 x 16 bracket box with
+4-pixel arms (`FUN_004574d0`'s three absolute constants, taken at the 1440p reference and scaled by
+`HudMetrics` — the deliberate divergence, since the original never scales its box and 20 px is
+invisible on a modern display), the label block BELOW it, and off screen an edge arrow with the name
+and clock bearing stacked. `MarkerColor` is `Target::GetColor` (`FUN_004a5f40`) verbatim — an
+objective is red for the four destructive categories (`Destroy`/`Disable`/`Disable Engines`/
+`Damage`) and blue for any other, and anything categoryless is red when the teams differ and both
+are non-zero, green otherwise.
+⚠ **A friendly is GREEN, not blue.** C22's own goal line said blue; that was written pre-decode and
+  the decode wins. Blue is the non-destructive objective (protect, escort).
+⚠ **The bracket gate is the SELECTED GUN's reach, not a distance constant**
+  (`FlightController.GunReachesTarget` → `TargetHud.GunReaches`): the aim assist's own lead solve,
+  accepted when the round is still inside the weapon's authored `RANGE` at the intercept. So the
+  marker is weapon-dependent, a target outrunning the round is never bracketed at any range, and a
+  rocket-only loadout falls to the original's own `distance <= 1e6`, which never rejects. The reach
+  is measured along the muzzle velocity WITH the plane's own velocity added (the assist's range gate
+  uses the round speed alone), which is why flying away from a target extends its bracket range and
+  closing on it shortens it. `BracketHysteresis` (50 m, TUNE and ours) is the only addition: the
+  original re-answers with no memory and strobes at the boundary. `UpdateBrackets` runs in
+  `_Process`, never `_Draw`, so the hysteresis cannot advance per repaint, and logs its transitions.
+⚠ **A blank category line still holds its slot under a box.** The original's three text lines sit at
+  fixed 15-pixel offsets from the anchor and a blank one draws nothing, so an aircraft's name is the
+  SECOND line's distance below the box — compacting it puts the name inside the silhouette (seen and
+  fixed by eye against `Targeting HUD Kestrel.png`). At the screen edge there is no box to measure
+  from, so `LabelLines(keepSlots: false)` compacts instead.
+⚠ **The clock line is the off-screen case only.** `FUN_004579e0` draws its third line
+  unconditionally, but the string comes out of `FUN_0049d940`'s off-screen pass, and the Kestrel
+  shot shows an on-screen target with its name alone.
+The label anchor is `FUN_004574d0`'s: 3 px under the box, flipping to 30 px above when the box sits
+within 33 px of the viewport's bottom edge — computed from the box whether or not the box is drawn,
+so an out-of-range target's label does not move.
 `UpdateHostile` (every `_Process`) rescans `HostilePool`'s one live aircraft roster
 (`ProjectilePool.CollectAircraft`, the same list the AI gunners read) and `NearestHostile` picks
 the nearest LIVE AI-piloted `FlightController` past the engine's team gate; the winner draws
 through `DrawOpponent`, in the HUD red, tagged `HostileTag(name)` ("ai1_player_fury" reads "AI1").
+That marker is now a FALLBACK (C22): it draws only where there is no selection at all — a pane with
+no `TargetSelection` bound (a spectator, a suite rig) or a pilot who pressed Target Nothing —
+because a pane that HAS a selection marks that one target and nothing else (decision 11).
 Humans carry no `AiGunner`, so there is no D12 "the target" to mirror; nearest-hostile re-selected
 per frame is the shipped rule, which also picks up generator spawns and drops a crashed hostile
 (listed but not live) with no extra plumbing. Acquire/lose transitions log one `targeting hud:`
@@ -3100,8 +3143,9 @@ aircraft in the same scan: `CollectMarks` is the pure selection (live, a `Flight
 otherwise, tagged with its slant range and its current AI mode (`ModeSuffix`, the mode machine's
 own `NameOf` vocabulary; empty for a pilot without a machine), and off-screen tags stepped along
 the screen edge (`RefStaggerStep`) so a flight sharing one bearing does not stack into one string.
-It REPLACES the single-hostile draw rather than adding to it, so the tracked plane is never drawn
-twice in two colours.
+It REPLACES the hostile-tracker draw rather than adding to it, so the tracked plane is never drawn
+twice in two colours — but NOT the selected target's marker, which keeps drawing under the flag
+(different shape, and C24's golden wants brackets, label and debug string in one frame).
 ⚠ A neutral-team aircraft marks HOSTILE here, unlike `NearestHostile`'s engine gate which rejects
   the pair. A debugging overlay that silently omitted a plane would be worse than one that
   mis-colours it.
@@ -3120,9 +3164,10 @@ own copy of them — the same relationship `VersusHud` already has with `MarkerH
 per-HUD copy documented as verbatim, not a shared base class for two `Control`s); `TargetHud`'s
 copy additionally carries the `stagger` step `--debug-markers` needs when several planes share one
 bearing, which `VersusHud`'s opponent loop never does.
-⚠ This class does not yet read the player's own STICKY selection (`TargetSelection`,
-  `Targeting.Current`) — only the H22 auto-nearest hostile. C22 draws that marker here, in the
-  original's own shape (fixed-size brackets, the label always below, a two-line edge tag).
+Pinned by the `hostile-marker-hud` suite, which carries C22's three pure rules as well: the colour
+table (three colours, the Destroy override, the neutral-own-side case), the gun-reach gate (inside
+`RANGE` brackets, past it does not, an outrunning target never does, and the hysteresis holds the
+boundary case) and the label lines. The drawn geometry itself is C24's golden.
 
 ## src/Flight/VersusBoard.cs
 The dogfight's shared results overlay (`PLAN-vs-mode.md` C25) — `StuntRaceBoard`'s construction
@@ -4031,6 +4076,12 @@ free camera left the eye.
   that still differs between them (`dt`). `UpdateReticle` marches it exactly the decoded distance
   (0.5 s of flight; see `ImpactReticle.cs`), so the two agree for every gun and the reticle does not
   grow a second integration.
+`SelectedGun`/`MuzzleMidpoint` are the shared "which gun is selected, and where does its fire leave
+from" answer: the pipper reads them, and so does `GunReachesTarget`, the C22 bracket gate
+(`FUN_004574d0` — the decoded range threshold is this weapon's authored `RANGE` through a lead
+solve, not a HUD constant; see `TargetHud.cs`). `Stats` exposes the flight model's own `PlaneStats`,
+which C22 needs for the airframe's display name and which was unreachable while `_model` was
+private; it is null on a rig `Setup` has not run on.
 
 `StepTargeting` is the player-targeting frame (`PLAN-targeting.md` B14), run for every human pane
 whose `Targeting` is set: rebuild the pool and re-resolve, prune the attacker queue, then dispatch

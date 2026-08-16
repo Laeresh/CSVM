@@ -369,14 +369,15 @@ public sealed class FlightRigAssembler
                 GD.Print("dogfight HUD: match timer/K-D/leader line + kill banner + opponent markers");
         }
 
-        // The targeting HUD (PLAN-targeting.md C21): one per human pane, in EVERY flight session
-        // — not only --vs, which VersusHud is. Tracks this pane's nearest AI hostile (H22) off the
-        // pool's own roster; built unconditionally because generators spawn hostiles mid-session,
-        // and with none in the pool it draws nothing. A --vs pane gets one alongside VersusHud, so
-        // an AI hostile spawned into a dogfight is still marked.
+        // The targeting HUD (PLAN-targeting.md C21/C22): one per human pane, in EVERY flight
+        // session — not only --vs, which VersusHud is. Draws this pilot's own selected target
+        // (below), falling back to the nearest AI hostile (H22) on a pane with no selection; built
+        // unconditionally because generators spawn hostiles mid-session, and with nothing selected
+        // and none in the pool it draws nothing. A --vs pane gets one alongside VersusHud, so an AI
+        // hostile spawned into a dogfight is still marked.
         controller.TargetHud = TargetHud.Build(pi, rig.Camera, _in.Projectiles);
         if (verbose)
-            GD.Print("targeting HUD: nearest-AI-hostile marker (edge arrow + clock bearing)");
+            GD.Print("targeting HUD: selected-target marker (brackets + label, edge arrow off screen)");
 
         // The player's target selection (PLAN-targeting.md B13/B14): one per human pane, each with
         // its own pool — the cycles are sorted against THIS plane's pose, so they cannot be shared.

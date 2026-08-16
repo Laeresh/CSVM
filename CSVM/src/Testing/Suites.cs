@@ -388,7 +388,11 @@ public static class Suites
             "crashed one, and a hud built without a pool never tracks; plus --debug-markers' " +
             "own selection, which takes EVERY live aircraft instead of the nearest, flags each " +
             "by team against the pane's own, skips a crashed one and skips the pane's own " +
-            "aircraft", HostileMarkerHud));
+            "aircraft; plus C22's marker rules — the three decoded colours, the bracket gate's " +
+            "gun reach (inside RANGE brackets, past it does not, a target outrunning the round " +
+            "never does, and the hysteresis holds the boundary case), and the label lines an " +
+            "aircraft, an off-screen target and a named objective each compose",
+            HostileMarkerHud));
         into.Add(new TestHarness.Suite("target-ref",
             "B11's one abstraction over every selectable thing, tree-free: a TargetRef built for "
             + "each of the three source kinds (aircraft, zeppelin sub-part, turret emplacement) "
@@ -5605,16 +5609,20 @@ public static class Suites
             Live = true,
             Source = plane,
         };
-        var kestrel = TargetRef.ForAircraft(planeCandidate, TargetClass.Enemy, "Kestrel",
-            TargetRef.Fraction(70.2f, 90f), TargetRef.Fraction(91f, 100f));
+        var kestrel = TargetRef.ForAircraft(planeCandidate, TargetClass.Enemy, "ai1_player_kestrel",
+            "Kestrel", TargetRef.Fraction(70.2f, 90f), TargetRef.Fraction(91f, 100f));
         ctx.Check(kestrel.Position == planeCandidate.Position
                   && kestrel.Velocity == planeCandidate.Velocity
                   && kestrel.Team == planeCandidate.Team && kestrel.Live
                   && ReferenceEquals(kestrel.Source, plane),
             $"the aircraft ref forwards the wrapped candidate's pose, team, liveness and source");
         ctx.Check(kestrel.Kind == AimTargetKind.Vehicle && kestrel.Class == TargetClass.Enemy
-                  && !kestrel.Objective && kestrel.Name == "Kestrel",
-            $"…and reads back its own pool, cycle and name '{kestrel.Name}'");
+                  && !kestrel.Objective && kestrel.Name == "ai1_player_kestrel"
+                  && kestrel.DisplayName == "Kestrel",
+            $"…and reads back its own pool, cycle, identity name '{kestrel.Name}' and the marker's own '{kestrel.DisplayName}' (C22: --target= pins the node name, the marker prints the airframe)");
+        ctx.Check(TargetRef.ForAircraft(planeCandidate, TargetClass.Enemy, "bandit").DisplayName
+                  == "bandit",
+            $"a source with no roster entry prints its own name rather than an empty label");
         ctx.Check(kestrel.CategoryLine.Length == 0,
             $"an ordinary aircraft carries neither label half, so line 1 is blank (the Kestrel shot shows line 2 alone) got='{kestrel.CategoryLine}'");
         ctx.Check(kestrel.Health is { } h && Mathf.IsEqualApprox(h, 0.78f)
@@ -6383,6 +6391,67 @@ public static class Suites
             pureDead.Free();
             pureHuman.Free();
         }
+
+        // --- C22's marker rules: colour, the gun-reach bracket gate, the label lines ------------
+        // All three are pure and decoded (FUN_004a5f40 / FUN_004574d0 / FUN_004579e0); what no test
+        // can reach is the drawn geometry itself, which is C24's golden.
+        int hostileTeam = AimAssist.TeamOfPilot(100);
+        var enemyRef = TargetRef.ForAircraft(
+            new AimCandidate { Team = hostileTeam, Live = true, Source = new object() },
+            TargetClass.Enemy, "ai1_player_fury", "Fury");
+        var allyRef = TargetRef.ForAircraft(
+            new AimCandidate { Team = AimAssist.PlayerTeam, Live = true, Source = new object() },
+            TargetClass.Ally, "ai2_player_kestrel", "Kestrel");
+        var destroyRef = TargetRef.ForStructure(
+            new AimCandidate { Team = AimAssist.WorldTeam, Live = true, Source = new object() },
+            TargetClass.Enemy, "Promised Land", "Zeppelin", "Destroy", objective: true);
+        var protectRef = TargetRef.ForStructure(
+            new AimCandidate { Team = AimAssist.PlayerTeam, Live = true, Source = new object() },
+            TargetClass.Enemy, "Convoy", "Freighter", "Protect", objective: true);
+        ctx.Check(TargetHud.MarkerColor(enemyRef, AimAssist.PlayerTeam)
+                  != TargetHud.MarkerColor(allyRef, AimAssist.PlayerTeam)
+                  && TargetHud.MarkerColor(allyRef, AimAssist.PlayerTeam)
+                     != TargetHud.MarkerColor(protectRef, AimAssist.PlayerTeam),
+            $"three colours, not two: a hostile, a friendly and a non-destructive objective all read differently (the decode's own rule — a FRIENDLY is green, blue is the objective)");
+        ctx.Check(TargetHud.MarkerColor(destroyRef, AimAssist.PlayerTeam)
+                  == TargetHud.MarkerColor(enemyRef, AimAssist.PlayerTeam),
+            $"a Destroy objective is the hostile colour, whatever team the entity carries — the four destructive categories override the team test");
+        ctx.Check(TargetHud.MarkerColor(enemyRef, AimAssist.NeutralTeam)
+                  == TargetHud.MarkerColor(allyRef, AimAssist.PlayerTeam),
+            $"a neutral own side has no enemies: with either team 0 the categoryless rule falls to the friendly colour");
+
+        // The gate is the SELECTED GUN's reach through a lead solve, not a distance constant. A
+        // 860 m/s round with RANGE 1000 reaches ~1 km; the same target 2 km out does not.
+        const float RoundSpeed = 860f, GunRange = 1000f;
+        var muzzle = Vector3.Zero;
+        ctx.Check(TargetHud.GunReaches(muzzle, Vector3.Zero, RoundSpeed, GunRange,
+                      new Vector3(0f, 0f, -600f), Vector3.Zero)
+                  && !TargetHud.GunReaches(muzzle, Vector3.Zero, RoundSpeed, GunRange,
+                      new Vector3(0f, 0f, -2000f), Vector3.Zero),
+            $"a target inside the gun's authored RANGE is bracketed and one past it is not");
+        ctx.Check(!TargetHud.GunReaches(muzzle, Vector3.Zero, RoundSpeed, GunRange,
+                      new Vector3(0f, 0f, -600f), new Vector3(0f, 0f, -900f)),
+            $"a target OUTRUNNING the round is never bracketed, at any range — the solver returns no intercept (the port of 'a fixed-metres threshold would lose this')");
+        ctx.Check(!TargetHud.GunReaches(muzzle, Vector3.Zero, RoundSpeed, GunRange,
+                      new Vector3(0f, 0f, -1010f), Vector3.Zero)
+                  && TargetHud.GunReaches(muzzle, Vector3.Zero, RoundSpeed,
+                      GunRange + TargetHud.BracketHysteresis, new Vector3(0f, 0f, -1010f),
+                      Vector3.Zero),
+            $"the hysteresis is what a target hovering at the boundary rides: off by the plain gate, still on by the widened one (TUNE, ours not the original's)");
+
+        var lines = new List<string>();
+        TargetHud.LabelLines(enemyRef, null, lines);
+        ctx.Check(lines.Count == 2 && lines[0].Length == 0 && lines[1] == "Fury",
+            $"an ordinary aircraft under a box is its airframe name alone, in the SECOND slot — the blank category line still holds the first, which is what keeps the name out of the silhouette ({string.Join(" / ", lines)})");
+        lines.Clear();
+        TargetHud.LabelLines(enemyRef, "4 o'clock", lines, keepSlots: false);
+        ctx.Check(lines.Count == 2 && lines[0] == "Fury" && lines[1] == "4 o'clock",
+            $"…and off screen, where there is no box to measure the slot from, it compacts to the two lines HUD.png shows ({string.Join(" / ", lines)})");
+        lines.Clear();
+        TargetHud.LabelLines(destroyRef, null, lines);
+        ctx.Check(lines.Count == 2 && lines[0] == "Zeppelin [Destroy] -"
+                  && lines[1] == "Promised Land",
+            $"a named objective composes both lines, C1 M04 Zeppelin.png's case, with no wrap width to port ({string.Join(" / ", lines)})");
 
         // --- the live tracker, against real AI planes registered in a real pool ---
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);

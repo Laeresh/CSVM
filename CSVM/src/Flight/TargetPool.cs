@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CSVM.Mech3;
+using CSVM.Session;
 using Godot;
 
 namespace CSVM.Flight;
@@ -126,9 +127,9 @@ public sealed class TargetPool
     private static bool IsEmplacement(object? source) =>
         source is TurretController { Site: not null };
 
-    /// <summary>The display name for a source. Deliberately the plain node/label name here: C22
-    /// replaces the aircraft case with the airframe's common name (<c>Fury</c>, <c>Kestrel</c>),
-    /// which needs an accessor on <see cref="FlightController"/> that does not exist yet.</summary>
+    /// <summary>The IDENTITY name for a source: the plain node/label name. What <c>--target=</c>
+    /// matches and what the breadcrumbs print — see <see cref="TargetRef.DisplayName"/> for what the
+    /// marker prints instead.</summary>
     private static string NameOf(object? source) => source switch
     {
         FlightController fc => fc.Name,
@@ -148,8 +149,13 @@ public sealed class TargetPool
         switch (kind)
         {
             case AimTargetKind.Vehicle:
-                var dmg = (c.Source as FlightController)?.Damage;
+                var plane = c.Source as FlightController;
+                var dmg = plane?.Damage;
+                // The MARKER prints the airframe's common name (C22, decision 10: plane type alone),
+                // not the node name the selection is held and pinned by. A rig with no flight model
+                // bound has no airframe to name, and falls back to that node name.
                 return TargetRef.ForAircraft(c, cls, name,
+                    plane?.Stats is { } stats ? PlaneRoster.PlaneDisplayName(stats) : null,
                     dmg == null ? null : TargetRef.Fraction(dmg.WholeHealth, dmg.WholeHealthMax),
                     dmg == null ? null : TargetRef.Fraction(dmg.WholeArmor, dmg.WholeArmorMax));
             case AimTargetKind.Turret:

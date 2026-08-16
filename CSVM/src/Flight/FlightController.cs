@@ -584,6 +584,15 @@ public partial class FlightController : Node3D
     /// already placed the plane at its spawn throttle.</summary>
     public float Throttle => _model.Throttle;
 
+    /// <summary>This airframe's stats, the flight model's own copy (jittered for an AI spawn, so it
+    /// is the plane's data and not the cached def's). Read for the airframe's DISPLAY NAME
+    /// (<c>PlaneRoster.PlaneDisplayName</c> → <c>Fury</c>) by the targeting pool's label pass
+    /// (<c>PLAN-targeting.md</c> C22), which had no way to reach it while the model was private.
+    ///
+    /// <para>Null before <see cref="Setup"/> has bound a flight model — a bare rig the suites
+    /// construct to exercise one seam. A caller that wants a name falls back to the node's.</para></summary>
+    public PlaneStats? Stats => _model?.Stats;
+
     /// <summary>Whether this plane is crashed — frozen at the impact, airframe hidden, waiting
     /// for respawn. The fact the session (and the in-engine suites) read; only Respawn clears it.</summary>
     public bool Crashed => _crashed;
@@ -711,7 +720,7 @@ public partial class FlightController : Node3D
             if (VersusHud != null)
                 canvas.AddChild(VersusHud); // dogfight HUD: status line, kill banner, opponent markers
             if (TargetHud != null)
-                canvas.AddChild(TargetHud); // targeting HUD: tracked AI hostile / --debug-markers (H22)
+                canvas.AddChild(TargetHud); // targeting HUD: selected target / --debug-markers
             if (Scoreboard != null)
                 canvas.AddChild(Scoreboard); // end-of-run results, drawn over everything
             if (FontTest != null)
@@ -952,6 +961,33 @@ public partial class FlightController : Node3D
     /// look at, not a mount to fire); the firing path's own armed scan still advances off it when
     /// the trigger is pulled.</summary>
     public void SelectPylon(int index) => _fire?.SelectPylon(index);
+
+    /// <summary>The decoded bracket gate for the targeting marker (<c>FUN_004574d0</c>,
+    /// docs/org/targeting.md "The range gate is the selected gun's RANGE"): whether the SELECTED
+    /// gun group could reach an intercept on this target inside the weapon's authored
+    /// <c>RANGE</c>. That, not a HUD distance constant, is the original's "brackets only under a
+    /// range threshold" — so the marker is weapon-dependent, and a target outrunning the round is
+    /// never bracketed at any range because the solver returns no intercept.
+    ///
+    /// <para>With no gun group resolvable (a rocket-only loadout, a rig with no weapons) the
+    /// original falls back to a plain <c>distance &lt;= 1e6</c>, which never rejects — so this
+    /// answers TRUE there rather than hiding the brackets.</para></summary>
+    /// <param name="targetPos">The target's world position.</param>
+    /// <param name="targetVel">The target's world velocity, m/s.</param>
+    /// <param name="margin">Extra metres of authored range, C22's bracket hysteresis. Zero to turn
+    /// the brackets on, <see cref="TargetHud.BracketHysteresis"/> to keep them on.</param>
+    public bool GunReachesTarget(Vector3 targetPos, Vector3 targetVel, float margin = 0f)
+    {
+        if (SelectedGun() is not { } sel)
+        {
+            return true;
+        }
+
+        float speed = sel.Weapon.Velocity ?? ProjectilePool.DefaultVelocity;
+        float range = sel.Weapon.Range ?? 0f;
+        return TargetHud.GunReaches(MuzzleMidpoint(sel), _model.VelocityDir * _model.Speed, speed,
+            range + margin, targetPos, targetVel);
+    }
 
     /// <summary>--crash[=frame]: forces this player's crash outside any live collision — the only
     /// headless trigger for the per-player crash rig. <c>hitName</c>/<c>part</c> are nominal and
@@ -1812,30 +1848,13 @@ public partial class FlightController : Node3D
         }
         // The selected firable gun group — the one the trigger fires. Its muzzles' averaged world
         // pose is where THAT group's fire converges.
-        GunGroup? sel = null;
-        int gi = 0;
-        foreach (var g in Loadout.FirableGuns)
-        {
-            if (gi == _fire.GunSel)
-            {
-                sel = g;
-                break;
-            }
-            gi++;
-        }
-        if (sel == null || sel.Muzzles.Count == 0)
+        var sel = SelectedGun();
+        if (sel == null)
         {
             Reticle.Active = false;
             return;
         }
-        // The muzzle MIDPOINT of the selected group — the original averages that group's live
-        // barrel attachments (and falls back to the plane's own position when it has none).
-        var origin = Vector3.Zero;
-        foreach (var m in sel.Muzzles)
-        {
-            origin += m.GlobalPosition;
-        }
-        origin /= sel.Muzzles.Count;
+        var origin = MuzzleMidpoint(sel);
 
         // Where a round fired now would be after ReticleFlightTime: nose × VELOCITY + the plane's
         // own velocity. No ballistic march — no weapon a gun group can resolve carries ACCELERATION
@@ -1876,6 +1895,50 @@ public partial class FlightController : Node3D
         Reticle.Active = true;
     }
 
+    /// <summary>The selected firable gun group — the one the trigger fires — or null when there is
+    /// no loadout, no fire control, no group at the selected index, or the group has no muzzle to
+    /// fire from. Shared by the pipper and the C22 bracket gate so both read the same "which gun is
+    /// selected" answer.</summary>
+    private GunGroup? SelectedGun()
+    {
+        if (Loadout == null || _fire == null)
+        {
+            return null;
+        }
+        int gi = 0;
+        foreach (var g in Loadout.FirableGuns)
+        {
+            if (gi == _fire.GunSel)
+            {
+                return g.Muzzles.Count > 0 ? g : null;
+            }
+            gi++;
+        }
+        return null;
+    }
+
+    /// <summary>A gun group's muzzle MIDPOINT: the original averages that group's live barrel
+    /// attachments, which is where that group's fire converges.</summary>
+    private Vector3 MuzzleMidpoint(GunGroup group)
+    {
+        var origin = Vector3.Zero;
+        foreach (var m in group.Muzzles)
+        {
+            origin += m.GlobalPosition;
+        }
+        return origin / group.Muzzles.Count;
+    }
+
+    /// <summary>The decoded bracket gate for the targeting marker (<c>FUN_004574d0</c>,
+    /// docs/org/targeting.md "The range gate is the selected gun's RANGE"): whether the SELECTED
+    /// gun group could reach an intercept on this target inside the weapon's authored
+    /// <c>RANGE</c>. That, not a HUD distance constant, is the original's "brackets only under a
+    /// range threshold" — so the marker is weapon-dependent, and a target outrunning the round is
+    /// never bracketed at any range because the solver returns no intercept.
+    ///
+    /// <para>With no gun group resolvable (a rocket-only loadout, a crashed plane, a rig with no
+    /// weapons) the original falls back to a plain <c>distance &lt;= 1e6</c>, which never rejects —
+    /// so this answers TRUE there rather than hiding the brackets.</para></summary>
     /// <summary>One gun round's launch direction: the per-muzzle aim assist (`BL-342`/B5,
     /// <c>FUN_004b6530</c>) — scan, lead, plane-local smoothing, 1° scatter — through
     /// <see cref="AimAssist.FireDirection"/>, which also restamps this barrel's slot so the forget

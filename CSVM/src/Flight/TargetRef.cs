@@ -39,13 +39,15 @@ public enum TargetClass
 public readonly struct TargetRef
 {
     private TargetRef(AimCandidate candidate, AimTargetKind kind, TargetClass cls, bool objective,
-        string name, string? typeLabel, string? category, float? health, float? armor)
+        string name, string? displayName, string? typeLabel, string? category, float? health,
+        float? armor)
     {
         Candidate = candidate;
         Kind = kind;
         Class = cls;
         Objective = objective;
         Name = name;
+        DisplayName = displayName ?? name;
         TypeLabel = typeLabel;
         Category = category;
         Health = health;
@@ -70,9 +72,22 @@ public readonly struct TargetRef
     /// everything else in the cycle and colours the marker by its category.</summary>
     public bool Objective { get; }
 
-    /// <summary>The entity's own name (<c>+0x14</c>), the marker's line 2: <c>Kestrel</c> for an
-    /// aircraft, <c>Promised Land</c> for a named zeppelin. Never null; empty is legal.</summary>
+    /// <summary>The entity's own name: <c>ai1_player_kestrel</c> for an aircraft, <c>gasbag1</c> for
+    /// a sub-part. CSVM's IDENTITY string — what <c>--target=</c> (B15) matches and what the
+    /// breadcrumbs print. Never null; empty is legal.</summary>
     public string Name { get; }
+
+    /// <summary>What the MARKER prints (the original's entity <c>+0x14</c>, its line 2):
+    /// <c>Kestrel</c> for an aircraft, <c>Promised Land</c> for a named zeppelin, <c>gasbag1</c> for
+    /// a sub-part. Never null; defaults to <see cref="Name"/>.
+    ///
+    /// <para>⚠ Split from <see cref="Name"/> for CSVM's sake, not the original's: there one string
+    /// is both, but our aircraft carry a node name that is identity rather than a label, and the two
+    /// consumers want opposite things. The marker wants <c>Fury</c> (C22, decision 10: plane type
+    /// alone, ambiguity accepted); <c>--target=</c> wants <c>ai2_player_fury</c>, because a golden
+    /// that pinned "Fury" could not say WHICH of three Furies it meant. Every other source's own
+    /// name IS its label, so they carry one string in both.</para></summary>
+    public string DisplayName { get; }
 
     /// <summary>The label half of the marker's line 1 (entity <c>+0x28</c>), e.g. <c>Zeppelin</c>.
     /// Null on an ordinary aircraft, which carries neither half and so renders line 1
@@ -128,9 +143,12 @@ public readonly struct TargetRef
     /// <summary>A live aircraft. Team and liveness come off the candidate;
     /// <paramref name="cls"/> is <see cref="Classify"/>'s answer, passed in rather than
     /// re-derived so the pool decides class exactly once.</summary>
+    /// <param name="displayName">The airframe's common name for the marker (<c>Fury</c>); null
+    /// prints the node name, which is what a source with no roster entry has.</param>
     public static TargetRef ForAircraft(AimCandidate candidate, TargetClass cls, string name,
-        float? health = null, float? armor = null) =>
-        new(candidate, AimTargetKind.Vehicle, cls, objective: false, name, null, null, health, armor);
+        string? displayName = null, float? health = null, float? armor = null) =>
+        new(candidate, AimTargetKind.Vehicle, cls, objective: false, name, displayName, null, null,
+            health, armor);
 
     /// <summary>A mission structure, which covers CSVM's zeppelin sub-parts and destructibles.
     /// Health only: <c>DestructibleRegistry.Instance</c> carries <c>Health</c>/<c>MaxHealth</c> and
@@ -138,15 +156,15 @@ public readonly struct TargetRef
     public static TargetRef ForStructure(AimCandidate candidate, TargetClass cls, string name,
         string? typeLabel = null, string? category = null, bool objective = false,
         float? health = null) =>
-        new(candidate, AimTargetKind.Structure, cls, objective, name, typeLabel, category, health,
-            armor: null);
+        new(candidate, AimTargetKind.Structure, cls, objective, name, null, typeLabel, category,
+            health, armor: null);
 
     /// <summary>A turret. **No health figure exists** (see <see cref="Health"/>); do not invent one
     /// from the gate state.</summary>
     public static TargetRef ForTurret(AimCandidate candidate, TargetClass cls, string name,
         string? category = null, bool objective = false) =>
-        new(candidate, AimTargetKind.Turret, cls, objective, name, null, category, health: null,
-            armor: null);
+        new(candidate, AimTargetKind.Turret, cls, objective, name, null, null, category,
+            health: null, armor: null);
 
     /// <summary>A current/maximum pair as a 0..1 fraction, or null when the maximum is zero or
     /// negative, i.e. when the source has no pool of that kind. The one place the

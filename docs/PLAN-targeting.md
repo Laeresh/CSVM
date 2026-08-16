@@ -239,7 +239,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — The HUD
 
 21. ☑ Split the targeting marker out of `VersusHud` into `TargetHud`
-22. ☐ Draw the original's marker: name label, range-gated brackets, two-line edge tag
+22. ☑ Draw the original's marker: name label, range-gated brackets, two-line edge tag
 23. ☐ `--debug-markers`: keep full identity, add `H78 A91`
 24. ☐ One golden screenshot for the geometry
 
@@ -919,7 +919,7 @@ identity colour, not by team), so nothing stayed behind needing them.
   panes' status line/dials/reticle drawing normally with no missing chrome or exception. No golden is
   minted for this — no `--vs` shot exists in the manifest yet (C24 is a Wave C item still open).
 
-## C22 ☐ Draw the original's marker
+## C22 ☑ Draw the original's marker
 
 **Goal.** The selected target reads like the original: the plane's common name below it, fixed-size
 red brackets when within the range threshold and none beyond it, and off screen an edge arrow with
@@ -952,6 +952,70 @@ figure, which is from the deferred modernization and is the *inverse* rule (⚠ 
 pixel size means scaling by `HudMetrics.Scale` for resolution but **not** by range. (c) The two-line
 edge tag needs the stagger logic (`RefStaggerStep`, `VersusHud.cs:383`) rechecked — two lines are
 taller, so the existing spacing may overlap.
+
+**Landed 2026-08-16.**
+
+**Three things the Approach could not have known, all decided by A1's decode:**
+
+- **The range threshold is not a number.** It is the SELECTED GUN's reach through a lead solve
+  (`FUN_004574d0`): brackets draw when the round would still be inside the weapon's authored `RANGE`
+  at the intercept. `FlightController.GunReachesTarget` owns the weapon half, `TargetHud.GunReaches`
+  the arithmetic. So the marker is weapon-dependent, a target outrunning the round is never bracketed
+  at any range, and a rocket-only loadout takes the original's own `distance <= 1e6` fallback, which
+  never rejects. The reach is measured along the muzzle velocity **with the plane's own velocity
+  added** (the aim assist's gate uses the round speed alone) — the original composes that vector,
+  which is why flying away from a target extends its bracket range and closing on it shortens it.
+  The 50 m hysteresis is ours and TUNE, kept because the original re-answers with no memory.
+- **A friendly is GREEN.** This item's own goal line said "blue for a friendly"; that was written
+  pre-decode. `Target::GetColor` returns red / green / blue where blue is the *non-destructive
+  objective* (protect, escort). Ported verbatim in `TargetHud.MarkerColor`, including the four
+  destructive categories overriding the team test.
+- **The clock line is the off-screen case only.** `FUN_004579e0` draws three lines unconditionally,
+  but the bearing string comes out of `FUN_0049d940`'s off-screen pass and
+  `Targeting HUD Kestrel.png` shows an on-screen target with its name alone. Trap (c) resolved
+  itself: the stagger step belongs to the one-line `--debug-markers` tags, and the selected target is
+  a single marker that never staggers.
+
+**Two decisions the Approach left open.**
+`TargetRef` gained a `DisplayName` beside `Name` rather than replacing it: the marker wants `Fury`
+and `--target=` wants `ai2_player_fury`, and a golden pinned on "Fury" could not say which of three
+Furies it meant (B15's node-name form and its `selectable now:` list both keep working). And the
+**blank category line keeps its slot** under a box — the original's three lines sit at fixed 15-pixel
+offsets and a blank one just draws nothing, so an aircraft's name is the SECOND line's distance below
+the box. Compacting it put the name inside the silhouette, which is what the first by-eye comparison
+against the Kestrel shot caught.
+
+The H22 nearest-hostile marker is now a **fallback**: it draws only on a pane with no selection at
+all (decision 11, one selected target). `--debug-markers` still replaces that fallback, but no longer
+replaces the selection marker, so one frame can carry brackets, label and the debug string — which is
+what C24 needs.
+
+**Verified (2026-08-16):**
+
+- **By eye against the originals** (C24 is still open, so this is the Verify step's stated
+  substitute). `--fly --chapter=C1 --plane=player_fury --ai=player_kestrel
+  --target=ai1_player_kestrel --det --mute --frames=90 --screenshot=`: fixed-size red brackets
+  straddling the Kestrel's centre and sitting *inside* the silhouette, with `Kestrel` in red below —
+  `Targeting HUD Kestrel.png`'s own composition. A banking run to put the same target off screen
+  gives the red edge arrow with `Kestrel` / `1 o'clock` stacked on two lines, which is `HUD.png`.
+  With `--debug-markers` and two AI planes, the overlay's `AI1 270 m patrol` and the selection's
+  brackets + `Kestrel` draw together on one plane.
+- **The range gate, live.** A run that turns away from the target logs
+  `targeting hud: P1 brackets on Kestrel at 250 m` and then
+  `targeting hud: P1 brackets off Kestrel at 1317 m` — past 1 km, and past it by the margin the
+  plane's own velocity adds to the muzzle vector.
+- **Pinned by tests.** The `hostile-marker-hud` suite gained C22's three pure rules: the colour table
+  (three colours, the Destroy override, the neutral-own-side case), the gun-reach gate (inside
+  `RANGE` brackets, past it does not, an outrunning target never does, the hysteresis holds the
+  boundary case) and the label lines (the aircraft's kept slot, the compacted edge block, the
+  objective's two lines). `target-ref` covers `DisplayName` and its fallback.
+- **Regression:** 1378/1378 units, 69/69 in-engine suites, engine errors clean, 14/14 goldens
+  hash-identical, the hitch detector firing on an injected stall and silent without one, and
+  `dotnet format --verify-no-changes` clean. One flake seen and not reproduced:
+  `PerfSampleTests.AScopeAllocatesNothing` failed once in a whole-suite run and passed on a re-run of
+  both the file and the full unit stage; it measures allocations and nothing here touches it.
+- **Not run, deliberately:** the 8-chapter `--freecam` sweep. This item touches HUD drawing only, no
+  world-load path, and the 14 goldens (which cover all eight chapters) are byte-identical.
 
 ## C23 ☐ `--debug-markers`: keep full identity, add `H78 A91`
 
