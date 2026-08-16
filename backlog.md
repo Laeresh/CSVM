@@ -542,20 +542,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *⚠ Traps.* (a) Per-AI-plane panel pairing and puffer pools at spawn time is a real cost on a
   chapter holding many aircraft — measure before wiring it unconditionally, and consider gating the
   panel-flip half on distance or aircraft count. The trail half is one puffer pair and is cheap.
-  (b) `pfsmoketrail`'s `anim_root_name` is `piratefighter`; whether it retargets onto every AI
-  airframe through the runtime's root fallback (the `player_pfighter` shape noted at
-  `FlightRigAssembler.cs:458-459`) or needs an explicit OPERAND_NODE retarget is **unverified** —
-  check before assuming the player path's resolution carries over. (c) Do not give AI planes the
+  (b) `pfsmoketrail`'s `anim_root_name` is `piratefighter`, and it needs **no retarget**: decoded
+  2026-08-16, `anim_root_name` is an offset within the caller's context node, not a target selector,
+  and a def whose root name equals its own name (`FUN_0051dcf0`) has both fields overwritten with the
+  context node's name at play time (`FUN_00520910` / `FUN_00521180`). The real hazard is the
+  **anchor**: an anchor missing from the airframe is a soft failure that still starts the anim, and
+  the global by-name fallback in `FUN_004efaf0` binds it to any node of that name anywhere in the
+  scene. Confirm `prop1` exists on each AI airframe. See `docs/org/vehicleDamage.md`, "Which airframe
+  a stage's anim binds to". (c) Do not give AI planes the
   `player_*` stage menu; their data names one stage and a different anim.
-  *Open question, not part of this item:* an AI wreck never leaves. `Crash` arms `_autoRespawnIn`
-  but the respawn gate (`FlightController.cs:1090-1107`) needs a key press or
-  `HoldSegments`/`AutoRespawnAfter`, none of which the spawner sets, and nothing calls `QueueFree`
-  on an AI controller — so wrecks accumulate for the session. Whether the original also leaves them
-  is unchecked; do not "fix" it without that check.
+  *Not part of this item, and settled:* an AI wreck never leaves ours, and it never leaves the
+  original either. Decoded 2026-08-16: nothing on the death path frees a vehicle, and there is no
+  timeout, distance cull, count cap or recycling. What ends the wreck visually is the `ai_crash_*`
+  def switching **all four** aircraft nodes (`dontmove`, `markers`, `healthy`, `destroyed`) inactive
+  on the frame the crash anim dispatches, every event untimed; the object stays allocated, dead and
+  hidden, until mission teardown. The only free path (`FUN_0047bab0`) is reached from mission
+  teardown, an ambient-plane pool a roster aircraft is not in, and the player's change-aircraft
+  command. So do not add a despawn timer. The question that remains is whether OUR `ai_crash_*`
+  playback actually performs those four deactivations; if it does not, the visible wreck is a
+  data-playback bug. ⚠ The player is authored the other way (`player_crash_dirt` keeps `destroyed`
+  active with `large_10sec_fire`), so a burning player hulk is correct and is not a template for the
+  AI. Details in `docs/org/vehicleDamage.md`, "What happens to the wreck".
   *Playtest after fix:* shoot down a wingman and an enemy in C1 — smoke should start around half
   health and the fireball should be audible.
   *Cross-refs:* `BL-384` (the fraction correction this depends on), `BL-246` (the decode),
-  `BL-343` (wreck momentum — the other AI-wreck item). Which def the AI list is read from was
+  `BL-343` (wreck momentum — the other AI-wreck item; the 2026-08-16 decode found its mechanism,
+  authored `Callback 16` handled by `LAB_00480710` pushing the vehicle's velocity into the crash anim
+  through `FUN_004ee0e0`). Which def the AI list is read from was
   `BL-386`, closed 2026-08-16 (`git log --grep=BL-386`) — see the update below.
   *Correction 2026-08-15 (found minting `BL-386`):* the `[[0.5, pfsmoketrail]]` cited above is NOT
   on `basic_airplane` — `vehicle.zrd.json:4108-4114` sits inside the `bswingman` def (line 3993),

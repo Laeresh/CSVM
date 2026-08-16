@@ -47,6 +47,11 @@ consumed (`init_health`, the four zone pairs, `armor`).
 | `FUN_004b3d70` | The per-part `injure_anims` driver, keyed on **that part's** fraction |
 | `FUN_004b1790` | The low-health test that arms the damage-state call (`FUN_004b1690`) |
 | `FUN_004b82d0` | Death: plays the def's destroy anim, and everything that follows from being dead |
+| `FUN_0048b920` | Ground impact: picks a crash anim from the per-material table and registers the same callback |
+| `LAB_00480710` | The native completion callback a dying vehicle registers on its destroy/crash anim |
+| `FUN_0047bab0` | Vehicle removal, the only path that frees a vehicle; defers while a death anim is live |
+| `FUN_00520910` / `FUN_00521180` | Start an anim on a context node: clone a template, or rebind an instance |
+| `FUN_004533c0` | The ambient/reinforcement plane pool, the one place a dead vehicle is recycled |
 | `FUN_0048ad20` | The surface-vehicle terrain update, which carries a health drain of its own |
 | `FUN_0041c470` | The debug info panel, which is what names these fields |
 
@@ -266,6 +271,35 @@ each zone first crosses. And because the fraction is health-only while `FUN_004b
 damage outright until a part's armour is spent, a fully-armoured part crosses nothing at all: even a
 0.99 entry waits for the armour pool. Decoded 2026-08-15 (`BL-297`).
 
+### Which airframe a stage's anim binds to
+
+`anim_root_name` is not a target selector. It names an offset *within* whatever root the caller
+hands over, and in the common case it is discarded outright. `FUN_00520910` (clone a template def
+into a live instance) and `FUN_00521180` (rebind an existing instance) both take a context **node
+pointer** from the caller and branch on one pointer-identity test:
+
+- **`def+0x6c == def+0x48`**, the authored anim root being the def's own root: `inst+0x48` and
+  `inst+0x6c` both become the context node, and `name` (`+0x28`) and `anim_root_name` (`+0x4c`) are
+  both `strcpy`'d from the context node's name. The authored string is overwritten.
+- **`def+0x6c != def+0x48`**, the authored root being a proper descendant: `FUN_004efa70(contextNode,
+  def+0x4c)` re-searches the new context's subtree for that name. A miss logs `"Animation node not
+  found. Animation: %s; Node: %s"` (`0x00634220`), sets the state byte `+0xa0` to 5, and the
+  animation does not play at all.
+
+Which branch a def takes is fixed at load. `FUN_0051dcf0`, the `zrdr` reader, sets `+0x48` and
+`+0x6c` to the same node on `ANIMATION_NAME`, then resolves `ANIMATION_ROOT_NAME` (keyword at
+`0x00633f30`) through `FUN_004efaf0` at `0x0051e15a`, whose subtree search compares the root node
+itself first. So a def whose `anim_root_name` equals its own `name` still holds `+0x6c == +0x48` and
+takes the first branch forever. If the root name cannot be resolved at parse time the reader logs
+`0x00633e64` and forces the same state by copying `+0x28` over `+0x4c`.
+
+⚠ **A cross-airframe anim therefore needs no retarget.** `piratefighter-pfsmoketrail` is named
+`piratefighter` and roots at `piratefighter`, so playing it on a `fury` rewrites both fields to
+`fury` and binds the whole anim to that airframe. The mismatch is erased before anything can test
+it. What the caller chooses is the context node, not the anim: for `injure_anims`, `FUN_004b3800`
+passes the vehicle's own scene node (`inst+0xc`) when the entry's `+0x0c` is zero, and a named
+sub-node via `FUN_004d8cf0` otherwise.
+
 ### Where a stage's effects land
 
 Node names in a started anim are bound in `FUN_00521180`, which walks the anim's node tables and
@@ -281,6 +315,16 @@ subtree falls through to the global lookup. The `pdpN` panel nodes are unique, s
 `pdp1` sparks at `pdp1` regardless of which part's list started it. There is no part-relative
 retarget on this path. Decoded 2026-08-15 (`BL-297`).
 
+A missing anchor is a **soft** failure, unlike a missing root. When a node reference resolves to
+zero after the whole chain, `FUN_00521180` logs the same `0x00634220` message, stores zero in the
+slot and carries on, so the anim still starts. What that costs depends on the event: the
+`PUFFER_STATE` handler `FUN_004e7e40` reads its attach-node index at `event+0x34` and treats -200 as
+"use the event's own coordinates" and -100 as "use the context root" (`inst+0x48`); any other index
+with a zero pointer leaves `EAX` zero at `0x004e8277` and `FUN_00550370` writes NULL into the
+puffer's parent slot `+0x74`. Combined with the global by-name fallback above, an anchor absent from
+the airframe that is playing the anim binds to any node of that name anywhere in the loaded scene
+before it reaches the NULL case. Decoded 2026-08-16 (`BL-385`).
+
 ## Death
 
 `FUN_004b82d0` starts the anim reference the def supplied at `+0x158` (instance `+0x6d0`), keeps its
@@ -291,7 +335,62 @@ exactly `patrolboat`, and it is that def's sequence (parts thrown clear, `sinker
 sliding under, `ptboat_slick` fading in) that plays. For the player specifically, `FUN_00476250`
 resolves an anim named `player` plus a set of `player_crash_*` variants into the same slot.
 
-## The surface-vehicle drain
+`FUN_004b82d0` also sets `+0x91f` when the vehicle's mode class (`+0x67c`) is 0 (jet) or 4
+(wingman), registers a native completion callback on the anim it just started
+(`FUN_004ee160(anim, &LAB_00480710, vehicle)` at `0x004b84c6`, or `LAB_00470900` in a network game),
+and clears node flag `0x10000000` on `vehicle+0xc`. Ground impact runs the same shape from
+`FUN_0048b920`, which picks a crash anim from the per-vehicle table `[+0x6e0 … +0x6e4]` **indexed by
+the struck material's `+0x20`**, falls back to `+0x6d0` when that index is out of range or its slot
+is null, and registers the same callback.
+
+### What happens to the wreck
+
+**Nothing removes a destroyed vehicle.** There is no timeout, no distance cull, no count cap and no
+recycling on the death path. The wreck stops being visible because the crash anim switches its nodes
+off, and the object stays allocated, dead and hidden, until the mission tears down.
+
+The `ai_crash_default` / `_dirt` / `_water` defs (the `ai_crash_` prefix is at `0x00627d40`, resolved
+by `FUN_00478a00`; the player's `player_crash_` counterpart is `0x00627cf8`, resolved by
+`FUN_00476250`) carry `has_callbacks: false` and no timed event at all: `ObjectActiveState` false on
+`dontmove`, `markers`, `healthy` and `destroyed`, a sound, and one or two `CallAnimation` effects.
+The aircraft is fully hidden on the frame the crash anim dispatches, and what remains visible
+(`flydirt_plane`, `call_car_trails`, `plane_big_splash`) is separately-instanced anims anchored at
+the crash point, owned by the anim system and expiring on their own sequences. ⚠ The **player** is
+authored differently: `player-player_crash_dirt` leaves `destroyed` active and plays
+`large_10sec_fire` on it, so a player dirt crash does leave a burning hulk. The difference is
+entirely in the data; both take the same code path.
+
+`LAB_00480710`, the callback, handles three event codes. **16** pushes the vehicle's velocity into
+the anim instance through `FUN_004ee0e0`, which is how a wreck inherits the aircraft's motion.
+**15** clears `+0x91f` and calls `FUN_0047b9c0`, stopping the damage-stage anims and `start_anims`,
+which is where an injure-ladder smoke trail ends. **0** is the delete arm: it frees the vehicle
+(`FUN_004b0aa0` then `operator_delete` at `0x004807e3`) when node flag `0x8000000` is set, and
+otherwise only sets flag `0x10000000` and returns.
+
+Code 0 is never authored. The authored `Callback` handler is `FUN_004ec5e0` and passes the event's
+own value; code 0 is emitted only by `FUN_004ebbb0`, which tears an anim instance down, and no
+compiled anim def in the install authors a `Callback` of 0. Flag `0x8000000` likewise has exactly
+one writer, `FUN_0047bab0` at `0x0047bc93`. So the free is a handshake between the callback and
+`FUN_0047bab0`, the removal function, which frees immediately when `0x10000000` is set (no death
+anim outstanding) and otherwise defers by setting `0x8000000`. **The trigger is always a call to
+`FUN_0047bab0`, never the crash.**
+
+Its callers are mission teardown (`FUN_00472c40` drains the whole vehicle list), the ambient
+plane pool below, an objective trigger (`FUN_00465b40`) that explicitly skips dead vehicles, and the
+player's change-aircraft command (`FUN_0047fd50`). A mission-roster aircraft is on none of those, so
+its wreck persists for the mission. The live-vehicle count `DAT_0071dac0` is never compared against
+a maximum.
+
+`FUN_004533c0` is the one recycling mechanism: a fixed-size pool of ambient or reinforcement planes
+(named `"%s_re%d"`, `0x00624d54`, spawned on a random bearing around the player at radius `pool+0x8`
+and minimum altitude `pool+0xc`). It removes a slot's occupant when the vehicle is dead or further
+than `pool+0x14` from the player, then respawns into the freed slot once the mission clock passes
+`pool+0x24`, re-arming to `clock + pool+0x20`. Those bounds are per-pool data, not code constants.
+
+The player and an AI plane run the same lifetime code, splitting only on which crash table was
+resolved at load. The player-only branches in `FUN_004b82d0` and `FUN_0048b920` are announcements
+and mode changes; the player's object is reset in place (`+0x91d` written back to zero in
+`FUN_004735b0`, `FUN_00480480` and `FUN_0047fd50`) rather than freed. Decoded 2026-08-16 (`BL-385`).
 
 `FUN_0048ad20`, the terrain-conform update for ground vehicles and ships, carries a health path of
 its own: while one global flag is set it kills the vehicle outright, and while a second is set it
@@ -551,3 +650,21 @@ airframes and a real spawn.
   it resolved by `FUN_004b3950` (live parts only, random-survivor fallback); that function's
   geometric matchers (`FUN_004b39d0`/`FUN_004b3aa0`) remain untraced.
 - **What sets the surface-vehicle drain flags**, as above.
+- **What `DAT_00654120` gates.** It branches the death and ground-impact paths at `0x004b845b`,
+  `0x004b84d3` and `0x0048ba95`. Its only writer is `FUN_00450550` (sets 1, never cleared), and the
+  airframe tuner readout in `FUN_00492040` runs only while it is 0, so the death path above is read
+  as the normal-play path. The mode `FUN_00450550` enters was not identified. If it is instead 1 in
+  ordinary flight, the **player** takes neither the destroy anim nor the callback registration; the
+  AI behaviour is unchanged either way.
+- **Callback value 12**, authored eight times each by the three `player_crash_*` defs.
+  `LAB_00480710` handles 0, 15 and 16 only and falls through on 12, so either a second callback is
+  registered on that instance or the value is inert. Not traced.
+- **Whether a dead, hidden vehicle is still ticked.** `FUN_004b82d0` calls `FUN_004cd2a0(node, 0)`,
+  the crash sequence deactivates the nodes, and `FUN_0048c470` has a `crashed` early-out, but the
+  per-frame consumers were not enumerated, so the standing cost of an accumulated wreck is unknown.
+- **What a puffer with a NULL parent slot renders as** (model origin, world origin, or suppressed).
+  The NULL store at `0x004e8277` / `FUN_00550370` is confirmed; the emitter-side consequence is not.
+- **The compiled-archive anim loader's initialisation of `+0x48` / `+0x6c`.** The retarget rule above
+  was read out of the `zrdr` reader `FUN_0051dcf0`. For defs whose `anim_root_name` equals their
+  `name` both fields must resolve to the same prototype root either way, but that the compiled path
+  enters with `+0x6c == +0x48` is inferred from the data, not read from its loader.
