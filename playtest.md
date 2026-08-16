@@ -416,6 +416,22 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
   early relative to its own stall, the Balmoral barely at all, and the Fury somewhere between.
   *Blocks:* F52's player-side verdict.
 
+- `PT-59` `[Own]` **The stick ramp on the keyboard (`BL-147`).** The original's keyboard axes are
+  accumulators, not switches: a held key takes **0.4 s** to reach full deflection, and releasing or
+  reversing it centres the stick in a single frame. The remake used to go to full deflection
+  instantly, so every keyboard input is now softer at its start and unchanged once held. A gamepad
+  is unaffected — its analogue axes bypass the ramp, as the original's joystick does.
+  ```powershell
+  ./RunGame.ps1 --plane=player_bhawk --chapter=C1
+  ```
+  *Look for:* whether a short tap still turns the aeroplane enough to aim with, since a tap now
+  reaches under a third of full stick; whether quick reversals (a flick left then right) feel
+  responsive or notchy, that being where the instant centring shows; and whether holding a turn
+  feels the same as before, which it should. ⚠ **The measured roll-off is not in question here** —
+  the sweep pins the ramp against the original's own footage, so this is about whether the aeroplane
+  is pleasant to fly, not about whether 2.5/s is right.
+  *Blocks:* nothing; it is a feel check on a landed decode.
+
 ---
 
 ## Everything else

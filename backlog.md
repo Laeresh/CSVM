@@ -1201,7 +1201,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-120` `[Tuning]` `[Owed-playtest]` **Collision feel** — behaviour against building corners.
 
-- `BL-147` `[Research]` **Pitch's transient shape. NARROWED to a 1.57× residual, and the two
+- `BL-147` `[Research]` `[Owed-playtest]` **Pitch's transient shape. NARROWED to a 1.57× residual, and the two
   mechanisms that got it there are landed and measured rather than pending. Measured 2026-08-03 from
   `CAP-04`; the capture is discharged and retired. The A/B against our own build is DONE: the
   original's 1300 → 570 ms cadence roll-off is 42× against our 26.8×, the weathervane torque (`C23`)
@@ -1277,7 +1277,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   stick than its slow ones: at 1300 ms the deflection saturates, at 570 ms it barely reaches full,
   below that it never gets there. Ported as `StickRamp` and driven through `ZzCadenceSweep`, the
   1300 → 570 ms roll-off goes **20.5× → 26.8×** against the original's **42×**, dropping the deficit
-  from 2.05× to **1.57×**.
+  from 2.05× to **1.57×**. The feel check the ramp owes at the controls is `PT-59`.
   ⚠ **Quote the sweep's WALL reading.** The macro drove the keys in wall milliseconds, so the period
   the game saw is that × 1.390 (`docs/verification.md` DET-11) — the sim column (36.4× for the same
   run) answers a question nobody flew. Quoting either was defensible while both sides ran square
