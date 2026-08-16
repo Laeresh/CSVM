@@ -25,7 +25,7 @@ the extension struct means `TORPEDO`, while `0x08` at `+0x74` means the weapon a
 | `+0x74` bit | Set by |
 |---|---|
 | `0x08` | `FLYOUT_HEALTH` is present |
-| `0x800` | (a key parsed just before `LOCK_ON`) |
+| `0x800` | `INSTANT` |
 | `0x8000` | `LOCK_ON` is present |
 | `0x10000` | `LOCK_ON_LEAD` is present |
 | `0x100000` | `REMOTE_DETONATE` |
@@ -43,11 +43,13 @@ And the scalar slots the guidance path uses:
 | `+0x84` | derived from the two above |
 | `+0x8c`, `+0x90` | the flyout's damage accumulator (initialised to 0) and `FLYOUT_HEALTH` |
 
-⚠ **Four of those keys are parsed and authored by nothing.** `PITCH_RATE`, `TURN_SUSPEND_TIME`,
-`TETHER_GUIDED` and `REMOTE_DETONATE` appear in no entry of this install's `weapons.zrd.json`, so
-they are absent from [`formats/weapons.md`](../formats/weapons.md)'s field census, which enumerates
-what the data carries. They still shape the shipped behaviour by their **defaults**: a
-`TURN_SUSPEND_TIME` of zero is what gives every guided round its turn authority from the first frame.
+⚠ **Five of those keys are parsed and authored by nothing.** `PITCH_RATE`, `TURN_SUSPEND_TIME`,
+`TETHER_GUIDED`, `REMOTE_DETONATE` and `INSTANT` appear in no entry of this install's
+`weapons.zrd.json`, so they are absent from [`formats/weapons.md`](../formats/weapons.md)'s field
+census, which enumerates what the data carries. They still shape the shipped behaviour by their
+**defaults**: a `TURN_SUSPEND_TIME` of zero is what gives every guided round its turn authority from
+the first frame, and `INSTANT` being unset is what makes every round in this install a travelling
+projectile rather than a one-step hitscan.
 
 ## The weapon-extension struct
 
@@ -79,7 +81,7 @@ Every bit `FUN_004ba6f0` sets, in the order the function tests for them:
 
 | Bit | Key |
 |---|---|
-| `0x08` | `TORPEDO` (no reader, see below) |
+| `0x08` | `TORPEDO` |
 | `0x10` | `ROCKET` |
 | `0x20` | `TARGETABLE` |
 | `0x40` | `CANNON` |
@@ -234,6 +236,40 @@ has none, so the usual case is the decaying one, but the two are not the same ru
 denominator, the launch-velocity decay window, and the flag that decides whether launch velocity is
 inherited at all. [`formats/weapons.md`](../formats/weapons.md) describes it as lock-acquisition
 time; that is the one job this decode did **not** find it doing.
+
+## The motion step, and where a round dies
+
+`FUN_005afd50` moves every round that is not being steered, and it holds most of the remaining
+ballistics keys. In order:
+
+- **Acceleration.** While the round's speed is below its cap (`+0x644`), speed increases by
+  `ACCELERATION * dt` (weapon `+0x38`) and is clamped to the cap. Nothing anywhere reduces speed
+  except the steering step's turn penalty, so **there is no drag term in the original**.
+- **Gravity.** When the weapon authors `GRAVITY` (weapon `+0x54`), the round's vertical velocity
+  loses `GRAVITY * dt` each frame. The reader exists and works; every entry in this install authors
+  0.0, which is why the shipped rounds fly flat.
+- **First-frame guard.** On the frame a round is spawned, the integration delta uses `1e-6` instead
+  of the real frame time, so a round never jumps a full step on its birth frame.
+- **Wander.** Under `+0x74` bit `0x8000000`, and only when the round has no target or its target is
+  farther than `max(4 * DETONATION_DISTANCE, 400 m)`, three `rand()` draws build an angular
+  acceleration of magnitude `5 * dt`, sign-flipped to keep pushing outward, integrated into an offset
+  bounded at ±1.0, ±0.75, ±1.0 with a restoring `10 * dt`. An unguided or far-from-target round
+  wobbles rather than flying a perfect line.
+- **Reveal distance.** A `FLYOUT_HEALTH` round with `+0x74` bit `0x80000000` is made visible only
+  once it has travelled weapon `+0x24`, so the flyout does not pop into view on the rail.
+- **The ceiling.** `TETHER_GUIDED` clamps the vertical step so the round cannot climb past a global
+  limit, confirming the reading in the guidance section.
+
+**Three independent ways a round ends**, all resolved here by calling `FUN_005ac3a0`:
+
+1. **Range.** Distance travelled accumulates in `+0x664`; once it reaches `RANGE` (weapon `+0x1c`)
+   the round is done. A weapon with `+0x74` bit `0x4000` accumulates only **half** of each step, so
+   it flies twice its nominal range.
+2. **Timed fuse.** If the weapon authors `DETONATION_TIME` (weapon `+0x48`) and the round's age
+   exceeds it, the round detonates. This is the rear-arc flare's 2.0 s.
+3. **Target proximity.** A round with a target that comes within `DETONATION_DISTANCE` of it
+   detonates. This is a **second, per-round fuse path** alongside the list sweep in `FUN_004b5fb0`:
+   the sweep catches anything passing near any aircraft, this one catches the round's own target.
 
 ## The proximity fuse
 
@@ -421,22 +457,29 @@ routine computes the bearing to the hit source as an `atan2` converted to degree
 `FUN_00481330` for a `CANNON` hit or `FUN_004813c0` for anything else, passing the damage magnitude
 alongside.
 
-## `TORPEDO` is parsed and never read
+## `TORPEDO` selects a force-feedback effect
 
-`FUN_004ba6f0` sets extension-struct bit `0x08` from the `TORPEDO` key, and **nothing in the
-executable tests it**. Three sweeps back that:
+Its one reader is `FUN_00480f50`, which drives the Immersion TouchSense force-feedback API
+(`CImmCompoundEffect`). Gated on `ROCKET` (`0x10`), so guns are handled elsewhere, it picks one of
+three launch effects and gives each its own direction and magnitude:
 
-- `TEST <memory>, 0x8` across the whole `0x400000`–`0x535c43` span, which contains every weapon,
-  projectile and vehicle routine: every hit dereferences a **scene-node** flag word (`node+0x38`,
-  `+0x0c`, `+0x24`), and none dereferences the weapon-extension pointer.
-- `AND <memory>, 0x8` across the entire program: **zero** matches.
-- `AND <register>, 0x8` in the weapon range: only `FUN_00442200`, which writes 0-or-8 masks into a
-  viewport block from a global mode and never touches a weapon.
+| Weapon | Effect slot | Direction | Magnitude |
+|---|---|---|---|
+| `TORPEDO` (`0x08`) | `+0x158` | 0 | 1.0 |
+| `REAR` (`0x20000`) | `+0x154` | 180 | 0.58 |
+| any other ordnance | `+0x150` | 0 | 0.79 |
 
-So the aerial torpedo's behaviour comes entirely from its other keys, and `TORPEDO` itself is inert.
-It joins `FIRING_HEAT` and `cannon_jam` as a key the original parses and never acts on.
-⚠ A `CMP`-based or shift-and-test idiom would evade all three sweeps, and the first sweep was
-truncated above `0x535c43`, which is past all weapon code but not past the whole image.
+So the torpedo is the heaviest thing you can launch and the stick says so, and a rear-firing weapon
+kicks from behind. This is the only behaviour `TORPEDO` selects; everything else about the aerial
+torpedo comes from its other keys.
+
+⚠ **This corrects an earlier claim on this page that `TORPEDO` had no reader at all.** That claim
+rested on three instruction sweeps, and the gap between them was exactly this instruction form:
+`TEST <memory>, 0x8` covered memory operands, `AND <memory>, 0x8` and `AND <register>, 0x8` covered
+the `AND` forms, and **`TEST <register>, 0x8` was never swept**. The compiler loads the flags dword
+into a register here and tests it there. A negative result about a flag is only as good as the
+instruction forms behind it, and three sweeps that share a blind spot are not three independent
+checks.
 
 ### What the torpedo actually does, then
 
@@ -460,12 +503,10 @@ the inherited component over 2.5 s down to a 60 m/s cruise. An aircraft at 120 m
 
 ## Still open
 
-- `FUN_00480f50` tests `REAR` on the player's fire-feedback path and was not opened.
-- `+0x74` bit `0x800`, parsed just before `LOCK_ON` from a key not identified here, selects a plain
-  constant-velocity integration in place of the normal motion step `FUN_005afd50`. Which key sets it
-  was not traced, and no shipped weapon's behaviour was attributed to it.
-- `FUN_005afd50`, the non-guided motion step, was not opened. Drag, gravity and the fuse's own
-  swept-step handling live there or below it.
+Nothing that bears on what a shipped ordnance type does. The remaining unread pieces are
+`FUN_005ac3a0` (the detonation itself, whose effect side is [`weaponImpact.md`](weaponImpact.md)),
+`FUN_005b03f0` (the swept-step collision query) and the identity of `+0x74` bit `0x8000000`, which
+gates the wander and which no key was traced to.
 - `FUN_004881e0` is the player's fire-input tick. It routes by `CANNON` (`0x40`) and `ROCKET`
   (`0x10`) only, feeding `CALIBER` to `FUN_004810d0` for guns and the whole weapon to `FUN_00480f50`
   for ordnance.
@@ -478,9 +519,13 @@ the inherited component over 2.5 s down to a 60 m/s cruise. An aircraft at 120 m
   stated for aircraft targets.
 - `FUN_004b6820`, `FUN_004b5fb0`, `FUN_004b9770`, `FUN_005aef40`, `FUN_005af960`, `FUN_005af720`,
   `FUN_005abcf0`, `FUN_00441830`, `FUN_00441780`, `FUN_004b8b50`, `FUN_004b8ad0`, `FUN_004b89c0`,
-  `FUN_004b7670` and `FUN_004b1690` were read in full. `FUN_004b8b50`'s selection rule was taken from
-  its disassembly rather than its decompilation, because the decompiler's rendering of the branch
-  order there is misleading.
+  `FUN_004b7670`, `FUN_004b1690`, `FUN_005afd50` and `FUN_00480f50` were read in full.
+  `FUN_004b8b50`'s selection rule was taken from its disassembly rather than its decompilation,
+  because the decompiler's rendering of the branch order there is misleading.
+- Weapon-record offsets named by their use in `FUN_005afd50`: `+0x1c` `RANGE`, `+0x38`
+  `ACCELERATION`, `+0x44` `DETONATION_DISTANCE`, `+0x48` `DETONATION_TIME`, `+0x54` `GRAVITY`. Each
+  is inferred from the arithmetic it appears in rather than traced to its parse site, though all five
+  agree with the value ranges [`formats/weapons.md`](../formats/weapons.md) reports for those keys.
 - The `+0x74` bit assignments and the guidance scalar offsets were read from `FUN_005ad630`'s parse
   sites one key at a time, each confirmed against the key string it is stored beside. `+0x84` is
   computed from `LOCK_ON_LEAD`'s two elements by an expression that was not read.

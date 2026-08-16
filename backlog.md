@@ -1175,15 +1175,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `TORPEDO`: three sweeps (`TEST <mem>, 0x8` over the whole weapon-bearing span, `AND <mem>, 0x8`
   program-wide, `AND <reg>, 0x8` in range) find **no reader at all**, so the flag joins `FIRING_HEAT`
   and `cannon_jam` as parsed-and-never-acted-on, and every part of the torpedo's flight is accounted
-  for by keys that do have readers. Sixth pass closes the last two: `FUN_005abcf0` spends the
+  for by keys that do have readers. ⚠ **That `TORPEDO` finding was wrong and is retracted on the
+  page:** its reader is `FUN_00480f50`, the force-feedback effect selector, which gives a torpedo
+  launch its own direction and magnitude (0 / 1.0) against a rear weapon's (180 / 0.58) and ordinary
+  ordnance's (0 / 0.79). The three sweeps shared a blind spot, `TEST <register>, 0x8`, which is the
+  form the compiler used. Sixth pass closes the last two: `FUN_005abcf0` spends the
   flyout's pair armour-then-health exactly as an aircraft zone is spent (with the armour pool always
   0, so it is inert), and `FUN_005af720` destroys the round the frame its health reads 0, which is
   why the not-shootable sentinel is −1.0; and the beeper query's selection rule is read off the
   disassembly with all four constants (1.2, 1.0, 0.7, 0.1). Same pass **corrects the third-pass
   claim that guidance runs for every round**: `FUN_005af720` gates the steering step on `LOCK_ON`
   **and** the round holding a target.
-  *Remaining, all minor:* `FUN_00480f50`'s `REAR` branch, the unidentified key behind `+0x74` bit
-  `0x800`, and the non-guided motion step `FUN_005afd50` (where drag and gravity would live).
+  Seventh pass clears the remainder. `+0x74` bit `0x800` is `INSTANT`, a fifth unauthored key that
+  would make a round hitscan. `FUN_005afd50`, the motion step, holds the rest of the ballistics:
+  `ACCELERATION` raises speed toward a cap and **nothing anywhere applies drag**; `GRAVITY` has a
+  working reader that every entry authors as 0.0; a round ends by `RANGE`, by `DETONATION_TIME`, or
+  by coming within `DETONATION_DISTANCE` of its own target (a second fuse path beside the list
+  sweep); and an unguided or far-from-target round **wanders** on a bounded random walk rather than
+  flying a straight line. *This item is answered.* What is left unread bears on no shipped ordnance
+  type: `FUN_005ac3a0` (detonation, whose effect side is `weaponImpact.md`), `FUN_005b03f0` (the
+  swept-step collision query), and the key behind `+0x74` bit `0x8000000`.
 
 ## Flight model & collision physics
 
