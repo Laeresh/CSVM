@@ -63,5 +63,7 @@ the "Current status" pointer. This file holds only what's specific to Claude Cod
 - No punchy fragments for drama. Write complete sentences.
 - Do not build to a turn of phrase. State the claim directly.
 - Technical documentation, not marketing copy.
-- Comments explain why, in one line. No paragraph-length comments.
+- Comments explain why. Length caps and what belongs in one are in
+  [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md)'s coding conventions; the terms to use are in
+  [`CONTEXT.md`](CONTEXT.md).
 - Write no documentation unless explicitly asked.

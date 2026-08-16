@@ -63,6 +63,29 @@ previews, debug dumps, golden-test captures, etc. — always write them into
 
 ## Coding conventions
 - Comments state what and why, briefly — never provenance (dates, plan/milestone/item references), never history, never instructions to a reviewer. If a comment's only content is where a change came from, it should not exist.
+- **Use the terms in [`CONTEXT.md`](CONTEXT.md)**, and never a word that file lists under `_Avoid_`.
+- **Comment length is capped, in `CSVM/src` and `CSVM.Tests`.** A comment block over its cap fails the commit.
+
+  | comment | cap |
+  |---|---|
+  | `///` on a type | 12 lines |
+  | `///` on a member | 6 lines |
+  | `//` above a declaration | 6 lines |
+  | `//` above a statement | 2 lines |
+
+  Sentences are ≤ 25 words; a block is ≤ 6 sentences and covers one topic. A warning states the
+  prohibition first and the reason second: `⚠ Do not remove the seen dedup; C1 and C4 still need it.`
+- **What a comment holds depends on what it is attached to.** Above a statement, the code says the
+  what, so the comment says only why. Above a `const`, field or member, the value itself is
+  unrecoverable from the code, so the comment holds the binding rule and a pointer to the decode:
+  `docs/org/<module>.md` or `docs/formats/<format>.md`.
+- **Evidence lives in `docs/`, not in a comment.** Measurement tables, refuted hypotheses and how a
+  value was arrived at go on the module's docs page. Before cutting a block, check that page
+  actually covers the claim, and write it there in the same commit if it does not. The removed
+  prose goes in the commit message body, as diagnosis narratives already do.
+- **No XML doc on private members**, and no `<para>`, `<b>`, `<i>`, `<list>` or `<item>` anywhere:
+  the build generates no documentation file (`.editorconfig` silences SA0001 for that reason), so
+  they render for nobody. `<see cref>` and `<c>` stay; the IDE reads them.
 
 ## Repo layout
 
