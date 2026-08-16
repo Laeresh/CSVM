@@ -2177,11 +2177,12 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
     120.000 mph exactly. Spawn throttle is `PLAYER_INIT[3]` (0.8 in 49 of 51 records), replacing
     the remake's 0.5. Full decode, including the mode-3 Instant Action branch and the reset paths:
     [../formats/spawns.md](../formats/spawns.md), "Story mission spawns".
-    ⚠ **This makes the spawn depend on the force-scale conflict recorded above.** A start at 18 m/s
-    sits well below cruise, where the polar reads 2–3.6× too strong against `CAP-05`, and the
-    aircraft accelerates through its own computed stall speed at about 4.4 G rather than dropping.
-    Whether that climb-out is right is a live-cockpit question; it is not a reason to tune the
-    spawn speed, which is authored data.
+    ⚠ **The spawn now sits inside the force-scale conflict recorded above.** A start at 18 m/s is
+    well below cruise, where the polar reads 2–3.6× too strong against `CAP-05`, and the aircraft
+    accelerates through its own computed stall speed at about 4.4 G rather than dropping. The
+    climb-out reads right at the controls, so this is a dependency to know about rather than a
+    defect: a change to the sub-cruise force path moves the feel of every mission's first seconds.
+    The spawn speed is authored data and is not the knob to compensate with.
     The per-airframe spawn rule that does exist belongs to **AI** aircraft: the vehicle factory
     `FUN_0047c210` gives a pathless aircraft `min(plane_speed_max, fd_speed)` along its nose
     (comparison at `0047d84f`) and gives one with an authored waypoint path zero velocity and

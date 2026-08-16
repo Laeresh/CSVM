@@ -371,7 +371,7 @@ public partial class FlightController : Node3D
     // ⚠ These two are only the no-mission fallback (labs, tests, AI rigs), and they are the OLD
     // placeholder, deliberately: the original gives an AI aircraft min(plane_speed_max, fd_speed),
     // which is decoded but not landed, so moving them to the player's 18 m/s would be a third
-    // invented answer rather than that rule (BL-074).
+    // invented answer rather than that rule (docs/org/flightModel.md, "What this changes" #13).
     private const float FallbackSpawnThrottle = 0.5f;
     private const float FallbackSpawnSpeed = 53.6f;
     // The pipper's placement and smoothing are decoded (docs/org/aim-assist.md "What the pipper follows"); no TUNE left in it.
