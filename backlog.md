@@ -470,6 +470,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   enum actually means:** `WeaponOrCollideHit` = the object breaks and the plane flies *through*
   unharmed (fly-through set dressing); `WeaponHit` = the object is solid — the plane grazes or
   crashes on it — but it still takes the collision damage.
+  ✅ **Decoded in `crimson.exe`, and the binary confirms the premise independently of the three
+  tests.** The impact handler `FUN_0048d2c0` carries NO activation test: it damages whatever node
+  the sweep resolved, gated only on `contact+0x24 != 0`. `WeaponHit` and `WeaponOrCollideHit` are
+  indistinguishable to it, so if the enum matters it does so in the sweep's solidity set, never in
+  the damage.
+  **The severity is a cosine, and carries no airspeed term at all.** `FUN_0048d7f0` normalises the
+  velocity (`FUN_00422690`, at `0x0048df8b` on the player path and `0x0048dba0`/`0x0048dbba`
+  otherwise) BEFORE dotting it with the contact normal, and returns `s = -(v̂ · n̂)`, dimensionless.
+  Nothing registers unless `s > 0` (`0x006032c8`). The law is
+  `armorDmg = healthDmg = max(300 × s³, 50)`: the cube at `0x0048d4c1`, the scale read from
+  `0x0071c34c` / `0x0071c354`, the floor from `0x0071c350` / `0x0071c358`. Those four globals are
+  `player.zrd.json`'s `crash` block (`armor_damage_range` and `health_damage_range`, both
+  `[50, 300]`, `extracted/zrdr/player.zrd.json:241-257`, parsed by `FUN_004735b0` with element 0 the
+  floor and element 1 the scale), so they are DATA, not constants to hardcode; the compiled
+  fallbacks `[15, 200]` (`0x00473b8d`, `0x00473b97`, `0x00473ba1`, `0x00473bab`) never stand on this
+  install. The floor dominates below `s ≈ 0.550`, so any contact shallower than about 33° off the
+  surface deals a flat 50.
+  **The damage is dealt by re-entering the ordinary weapon pipeline as `wep_24`** (string
+  `0x00628a14`, looked up by name at `0x0048d53e`, applied through the same applier a rocket uses,
+  `FUN_005abcf0`, at `0x0048d55b`), so a rammed object dies exactly as a weapon kill does, through
+  its normal thresholds. That is test 2's severity scaling, decoded. Non-aircraft targets consume
+  the health term only and ignore the armour term (gasbag handler `0x004c06c8`, zeppelin turret
+  `0x004c090b`, and the two other registered handlers `0x004df420` / `0x004e7220`).
   *Fix shape:* apply collision damage to ANY struck destructible (`FlightController.cs:882-894`
   currently consults `CollideDamageSink` and `AnimRuntime.CollideDamageAt:1257-1269` rejects
   non-`WeaponOrCollideHit` defs — lift that gate for the damage half), keeping the fly-through-on-break
@@ -478,17 +501,87 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* ram + graze a C1 hangar in our build and A/B the damage stages against the
   original.
   ⚠ **Traps.** (a) Do **not** add a crash blast radius — test 3 refuted it directly. (b)
-  `CollideDamagePerVn` 8 (`FlightController.cs:313`) has only ever fed 0.01-HP set dressing, where any
-  value shatters it; once 40–60 HP buildings take collision damage the constant is live and untuned —
-  test 2 (a graze reaching stage 2, not death) is the first calibration point, once the struck
-  hangar's def and its HP/thresholds are identified (the C1 building def is not `hangar3` — that
-  zrdr def is the ON_CALL *doors* anim; one lookup owed during the fix). (c) The `--damage-hd`
+  `CollideDamagePerVn` 8 (`FlightController.cs:385`) has the wrong INDEPENDENT VARIABLE, not merely
+  the wrong value: it scales by `|v · n|`, which grows with airspeed, where the decoded law above has
+  no airspeed term at all. Swapping the constant without swapping the variable leaves a fast shallow
+  graze lethal and a slow steep ram harmless, both backwards. Port the formula and read its four
+  numbers from `player.zrd.json`'s `crash` block instead of hardcoding them. `SurviveHit`'s own
+  `vn >= CrashSpeed` test (`FlightController.cs:2490`) is the same mistake on the plane's side of the
+  contact. The struck C1 hangar's def and its HP/thresholds are still owed (the C1 building def is
+  not `hangar3` — that zrdr def is the ON_CALL *doors* anim), but only to CHECK the ported formula,
+  no longer to calibrate a free constant. (c) The `--damage-hd`
   `collide[✓/✗]` gate (`Probes.cs:683`) *asserts the old semantics* — WeaponHit towers ignoring
-  collision is its ✗ leg — and must flip with the code, or it will fail green. (d) Plane-vs-plane
-  ram damage is NOT this item — no original evidence yet; the struck plane taking damage stays
-  unowned. *Supersedes:* the "decision 6 upheld" caveat (`PLAN-M3-weapons.md:1281`,
+  collision is its ✗ leg — and must flip with the code, or it will fail green. (d) Plane-vs-plane ram
+  damage, the plane's OWN damage on a survivable contact, and zeppelin parts are NOT this item: they
+  are `BL-402`, which shares this decode and this call site. The two want landing together, but the
+  scopes stay apart because only this one is evidenced by the three original-game tests.
+  *Supersedes:* the "decision 6 upheld" caveat (`PLAN-M3-weapons.md:1281`,
   `docs/HISTORY.md:5295` records the old behaviour landing) and `docs/formats/destructibles.md`'s
   `ACTIVATION` reading (⚠-noted in place).
+
+- `BL-402` `[Bug]` **A collision damages BOTH parties in the original, and ours damages neither: the
+  rammed aircraft, the rammed zeppelin part and the ramming plane itself all come away clean.**
+  Split out of `BL-302` trap (d), which fenced this off for want of original-game evidence. The
+  evidence now exists and is stronger than a playtest: the whole path is decoded out of `crimson.exe`
+  and it is one handler, `FUN_0048d2c0`, shared with `BL-302`. Today `SweepAirframe` already resolves
+  another aircraft (`CollisionLayers.WorldAndAircraft`, `FlightController.cs:1944`), so our contact
+  finds the body and then drops it: `CollideDamageAt` (`AnimRuntime.cs:1215`) resolves it against the
+  destructible registry, gets null, and returns false. The struck plane takes nothing, and
+  `SurviveHit` deals the rammer nothing either.
+  **What the original does, in three parts.**
+  1. **The struck party** takes `max(300 × s³, 50)` on the same `wep_24` path `BL-302` documents,
+     with no class test on it. For an aircraft target that runs
+     `FUN_004b9750` → `FUN_004b9770` → `FUN_004b9b30` → `FUN_004b9bc0`, landing on the identical
+     `FUN_004b3bf0` / `FUN_004b8070` primitives the striker applies to itself, so the law is
+     symmetric in form.
+  2. **The ramming plane** takes the same pair, applied after an invulnerability early-out at
+     `0x0048d563` (`obj+0x920`) that sits AFTER the struck object is damaged, so an invulnerable
+     striker still destroys what it hits. Per-part first where the airframe has a part list
+     (`FUN_004b3950` picks the struck node's own part, else the part nearest the contact,
+     `FUN_004b3bf0` at `0x0048d724`), then the remainder in aggregate (`FUN_004b8070` at
+     `0x0048d783`). The armour-to-health split is `FUN_004b7f80`: with
+     `f = min(1, armor / armorDmg)`, armour drops by `armorDmg` floored at zero, and health drops by
+     `(1 - f) × healthDmg`, so a fully-armoured contact costs no health at all. Survival is then
+     `health > 0` (`obj+0x2d0`, `0x0048d78b`).
+  3. **Both parties go collision-free for 1.0 s** afterwards, the `obj+0xAC` clock `BL-382` already
+     tracks: written to the striker at `0x0048d383` and to the struck entity at `0x0048d395`
+     (literal at `0x006032dc`). It suppresses the whole sweep, not just the damage:
+     `FUN_0048d7f0` returns zero severity outright while the clock is in the future.
+  ⚠ **The player is deliberately asymmetric, and flattening that is the trap.** At `0x0048d2ed` a
+  player-owned striker jumps past the entity-detection block entirely, with three consequences that
+  must all survive the port: the player never takes the 0.2 entity-versus-entity cut
+  (`0x0048d51a`/`0x0048d526`) that scales an AI's ram down to a fifth; the player writes no grace
+  clock, so the contact can re-resolve on following frames while the two aircraft are still
+  overlapped; and the player is never subject to `local_11`, the flag that forces destruction
+  regardless of remaining health (`0x0048d79e`). `local_11` is set for a non-player striker that did
+  NOT resolve an aeroplane, so an AI that rams terrain or a building always dies while an AI that
+  rams another aircraft survives if health remains. Entity detection requires node flag `0x40000000`
+  and a dispatch class at `+0x67c` of 0 or 4, the two aeroplane classes (`0x0048d360`).
+  ⚠ **Gasbags are exempt and the rest of the zeppelin is not.** The zeppelin parser `FUN_004bd8d0`
+  registers a different damage handler per part list. The gasbag handler `FUN_004c0640` tests
+  `DAMAGES_ZEPPELIN` (`weaponRecord+0x210` → flags `& 0x1000`, `TEST AH,0x10` at `0x004c0665`)
+  before any health subtraction and returns without damage when it is clear; `wep_24` does not carry
+  the flag, so ramming a gasbag deals it nothing while still killing the plane. The cannon and
+  turret handler `FUN_004c0880` has no such test and subtracts at `0x004c090b`, so those parts DO
+  take collision damage, un-cut by the 0.2 factor (a zeppelin part is not class 0 or 4), and a
+  non-player rammer is destroyed outright by the `local_11` rule. This confirms the reading that
+  every zeppelin part except the gasbags is rammable.
+  ⚠ **The gate lives in the handler, not in the weapon pipeline.** `0x1000` is read in exactly two
+  places in the image: `0x0042008c` (`FUN_00420070`) and `0x004c0665`. `FUN_00420070` only decides
+  what ordnance an AI is OFFERED; the enforcement that actually refuses damage is
+  `FUN_004c0640`. `docs/org/targeting.md` and `BL-291`/`BL-239` attribute enforcement to
+  `FUN_00420070`, which is why collision damage looks like it should be gated upstream and is not.
+  *Fix shape:* land with `BL-302`, since both hang off the one contact resolution in
+  `FlightController.cs:1129-1143`. Give the sink a second leg for a struck AIRCRAFT and for a
+  zeppelin sub-part, deal the decoded pair to the striker through an armour-then-health split
+  (`Damage` has no armour pool today, so that pool is the real work), and thread the 1.0 s
+  both-parties grace through the same per-aircraft clock `BL-382` needs for its 2.5 s drop window.
+  *How you'd know it worked:* ram an AI fighter head-on and both aircraft take damage, neither
+  re-collides for a second, and the wreck count is two. Ram a zeppelin's cannon mount and it damages;
+  ram its gasbag and only you die.
+  *Cross-refs:* `BL-302` (the same handler, the struck-destructible half), `BL-382` (the `obj+0xAC`
+  clock family), `BL-291` / `BL-239` (zeppelin damage harness), `docs/org/flightModel.md` (collision
+  response timers).
 
 - `BL-384` `[Bug]` `[Owed-playtest]` **Our `injure_anims` staging latches one-way where the original
   retracts.** Filed 2026-08-15 from `BL-246`'s decode; the original's rules are
