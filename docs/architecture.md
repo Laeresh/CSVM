@@ -1898,7 +1898,11 @@ shows no HUD — footage), restoring it on respawn. Sweeps the
 PlaneCollider boxes via CastMotion each physics frame — mask world+aircraft with its own
 `Body` (`AircraftBody`, built in `_Ready` from the same boxes) excluded by RID, so another plane
 is solid and a mid-air resolves through the same SurviveHit/Crash as terrain; `Crash`/`Respawn`
-toggle the body's hittability; the sim half is `SimStep(dt)`, called by
+toggle the body's hittability. The DEATH family (`CRASH into`, `midair aspect`, every
+`vehicle health exhausted`, `graze`, `ground stop`, `AI ram`, `impact severity`) routes through
+`Log.Info("flight", …)`, so a play session's file sink carries how each aircraft died; the
+per-round weapon breadcrumbs around them are a different family and still `GD.Print`.
+The sim half is `SimStep(dt)`, called by
 `_PhysicsProcess` (realtime clock) or by `GameSession` (fixed/halted clock). `SimStep` also ticks
 `Turrets` (the carried gunners) after the fire outcome, so the crash branch's early
 return silences them; `WorldBlocksLine` is their world-only line-of-sight ray. An AI aircraft
@@ -2088,7 +2092,9 @@ surface, live since M4 A2+D14 fielded AI shooters), and, for the data's 0.10 `pl
 (short_firetrail at prop1 + the fire_lt light) — `RigAnimFor` owns that one mapping.
 `DamageEffectStop` (Reset, first) stops the whole stage CLOSURE, derived from the program — a
 stopped pdpanelN cannot reach the trail it CALLed, and prop1's trail has no authored exit;
-`DamageEffectStopOne` is the single-stage form a retraction uses. Staging is keyed per LADDER
+`DamageEffectStopOne` is the single-stage form a retraction uses. Its lines route through `Log`
+(`flight` for the panel and smoke-trail state, `anim` for the stage routing), not a bare `GD.Print`,
+so a play session's own file sink records which stages fired. Staging is keyed per LADDER
 ENTRY and cleared on the upward crossing alone, so a repair un-stages and the entry can fire again
 (`StagedEntryCount`). Panel pairing (def-derived candidate sets, positional assignment, the three
 crossed-naming outliers) is decoded on `PairHealthySkins` and runs only for an airframe whose own

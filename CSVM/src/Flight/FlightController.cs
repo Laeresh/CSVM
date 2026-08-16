@@ -997,7 +997,7 @@ public partial class FlightController : Node3D
         // flag) — reachable through the zone-less overflow, so it is tested on every hit.
         if (Damage.IsDestroyed)
         {
-            GD.Print($"vehicle health exhausted ({struckPart} last) — shot down by {weapon.Id}");
+            Log.Info("flight", $"vehicle health exhausted ({struckPart} last) — shot down by {weapon.Id}");
             Crash(impact, $"gunfire ({weapon.Id})", colliderPart, null,
                 killer: shooter != ProjectilePool.NoShooter ? shooter : null);
             return;
@@ -1036,12 +1036,11 @@ public partial class FlightController : Node3D
         }
 
         Visuals?.OnHullDamage(Damage.SummaryHealthFraction);
-        GD.Print($"rammed P{PlayerIndex + 1} by P{striker + 1} ({struckPart}): " +
-                 $"a={armorDamage:0.0} h={healthDamage:0.0} " +
-                 $"hull={Damage.WholeHealth:0.0}/{Damage.WholeHealthMax:0}");
+        Log.Info("flight",
+            $"rammed P{PlayerIndex + 1} by P{striker + 1} ({struckPart}): a={armorDamage:0.0} h={healthDamage:0.0} hull={Damage.WholeHealth:0.0}/{Damage.WholeHealthMax:0}");
         if (Damage.IsDestroyed)
         {
-            GD.Print($"vehicle health exhausted ({struckPart} last) — rammed by P{striker + 1}");
+            Log.Info("flight", $"vehicle health exhausted ({struckPart} last) — rammed by P{striker + 1}");
             Crash(impact, "collision", "center", null);
         }
     }
@@ -2146,15 +2145,11 @@ public partial class FlightController : Node3D
             var mine = _model.VelocityDir;
             var theirs = struckAir.Rig.WorldVelocity;
             var los = struckAir.Rig.WorldPosition - _model.Position;
-            GD.Print($"midair aspect: into {hitName} — tracks {AngleBetweenDeg(mine, theirs):0}° " +
-                     $"apart (0 = same heading, 180 = head-on), line of sight " +
-                     $"{AngleBetweenDeg(mine, los):0}° off own track, " +
-                     $"spd mine={_model.Speed:0} theirs={theirs.Length():0} m/s");
+            Log.Info("flight",
+                $"midair aspect: into {hitName} — tracks {AngleBetweenDeg(mine, theirs):0}° apart (0 = same heading, 180 = head-on), line of sight {AngleBetweenDeg(mine, los):0}° off own track, spd mine={_model.Speed:0} theirs={theirs.Length():0} m/s");
         }
-        GD.Print($"CRASH into {hitName} ({part}) surface={surface} def={crashDef ?? "-"} " +
-                 $"impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) " +
-                 $"pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) " +
-                 $"spd={_model.Speed:0} m/s — waiting for respawn");
+        Log.Info("flight",
+            $"CRASH into {hitName} ({part}) surface={surface} def={crashDef ?? "-"} impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) spd={_model.Speed:0} m/s — waiting for respawn");
         Downed?.Invoke(PlayerIndex, killer);
     }
 
@@ -2590,7 +2585,7 @@ public partial class FlightController : Node3D
             // No destroyable_parts data, so there is no health pool to survive on: fall back to
             // the old speed threshold rather than inventing a ledger.
             if (vn >= CrashSpeed)
-                GD.Print($"impact severity: vn={vn:0.0} m/s ≥ {CrashSpeed} — crash (no damage data)");
+                Log.Info("flight", $"impact severity: vn={vn:0.0} m/s ≥ {CrashSpeed} — crash (no damage data)");
             return false;
         }
 
@@ -2599,7 +2594,7 @@ public partial class FlightController : Node3D
         // checks it after spending but independently of the result.
         if (_collideDooms)
         {
-            GD.Print($"AI ram into {hitName} — destroyed outright (the decoded local_11 rule)");
+            Log.Info("flight", $"AI ram into {hitName} — destroyed outright (the decoded local_11 rule)");
             return false;
         }
 
@@ -2627,8 +2622,8 @@ public partial class FlightController : Node3D
 
             if (Damage.IsDestroyed)
             {
-                GD.Print($"vehicle health exhausted ({struckPart} last) — " +
-                         $"vn={vn:0.0} m/s into {hitName}");
+                Log.Info("flight",
+                    $"vehicle health exhausted ({struckPart} last) — vn={vn:0.0} m/s into {hitName}");
                 return false; // the decoded kill rule: whole-vehicle health at zero (A4/D14)
             }
 
@@ -2636,10 +2631,8 @@ public partial class FlightController : Node3D
             {
                 _damageFlashText = $"⚠ IMPACT {struckPart.ToUpperInvariant()} {state.Fraction * 100f:0}%";
                 _damageFlash = DamageFlashTime;
-                GD.Print($"graze ({part}→{struckPart}): {hitName} " +
-                         $"vn={vn:0.0} m/s dmg={dmg:0.0} " +
-                         $"armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0} " +
-                         $"hull={Damage.WholeHealth:0.0}/{Damage.WholeHealthMax:0}");
+                Log.Info("flight",
+                    $"graze ({part}→{struckPart}): {hitName} vn={vn:0.0} m/s dmg={dmg:0.0} armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0} hull={Damage.WholeHealth:0.0}/{Damage.WholeHealthMax:0}");
             }
         }
 
@@ -2677,7 +2670,7 @@ public partial class FlightController : Node3D
         // (user-reported: it sat there collecting zero-damage kisses forever).
         if (_model.Speed < GrazeStopSpeed)
         {
-            GD.Print($"ground stop: slid to {_model.Speed:0.0} m/s — destroyed");
+            Log.Info("flight", $"ground stop: slid to {_model.Speed:0.0} m/s — destroyed");
             return false;
         }
 
@@ -2710,7 +2703,7 @@ public partial class FlightController : Node3D
                     break;
                 if (attempt >= EmbedTries)
                 {
-                    GD.Print("embedded in terrain after a graze — destroyed");
+                    Log.Info("flight", $"embedded in terrain after a graze — destroyed");
                     return false;
                 }
                 _model.Position += normal * EmbedPushOut;

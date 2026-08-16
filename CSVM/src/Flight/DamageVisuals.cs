@@ -235,7 +235,7 @@ public sealed class DamageVisuals
                 && anim.Equals("player_smoketrail", StringComparison.OrdinalIgnoreCase))
             {
                 _smoking = true; // the parked stand-in pair burns at prop1 (UpdateStatic)
-                GD.Print($"smoke trail: on (hull {healthFraction * 100f:0}%)");
+                Utils.Log.Info("flight", $"smoke trail: on (hull {healthFraction * 100f:0}%)");
             }
             PlayStage(stage, "hull", healthFraction);
         }
@@ -373,7 +373,7 @@ public sealed class DamageVisuals
             if (_panels.TryGetValue("pdp" + n, out var torn))
             {
                 torn.Visible = true;
-                GD.Print($"damage panel: {anim} on ({partName} {healthFraction * 100f:0}%)");
+                Utils.Log.Info("flight", $"damage panel: {anim} on ({partName} {healthFraction * 100f:0}%)");
                 // the parked stand-in: a firepuffer burning in place at the panel
                 // (the flight path plays the authored def through the sink below)
                 if (DamageEffectSink == null && FreeTrailPuffer() is { } puffer)
@@ -447,13 +447,13 @@ public sealed class DamageVisuals
         if (DamageEffectSink != null)
         {
             DamageEffectSink(anim);
-            GD.Print($"damage stage: {anim} on ({partName} {fraction * 100f:0}%)");
+            Utils.Log.Info("anim", $"damage stage: {anim} on ({partName} {fraction * 100f:0}%)");
         }
         else if (_panelTrailPool.Count == 0 && !_noRuntimeLogged)
         {
             _noRuntimeLogged = true;
-            GD.Print($"damage stage: no rig runtime — authored anim '{anim}' (and any later stage) " +
-                     "not played; panel flips only");
+            Utils.Log.Info("anim",
+                $"damage stage: no rig runtime — authored anim '{anim}' (and any later stage) not played; panel flips only");
         }
     }
 
@@ -478,7 +478,7 @@ public sealed class DamageVisuals
             {
                 if (defPairing != null && !defPairing.HideableHealthy.Contains(name))
                 {
-                    GD.Print($"damage panels: {name} is not in the authored reset list — never hidden");
+                    Utils.Log.Info("flight", $"damage panels: {name} is not in the authored reset list — never hidden");
                     continue;
                 }
                 healthy.Add((name, node, c));
@@ -487,7 +487,7 @@ public sealed class DamageVisuals
             {
                 if (defPairing != null && !defPairing.TornTargets.Contains(name))
                 {
-                    GD.Print($"damage panels: {name} is not an authored pdpanelN target — not paired");
+                    Utils.Log.Info("flight", $"damage panels: {name} is not an authored pdpanelN target — not paired");
                     continue;
                 }
                 torn.Add((name, c));
@@ -508,16 +508,16 @@ public sealed class DamageVisuals
                 && Mathf.Abs(c.X) > MirrorMinX && Mathf.Abs(bestCenter.X) > MirrorMinX;
             if (bestName == null || bestDist > MaxPairDistance || mirrored)
             {
-                GD.Print($"damage panels: {name} has no co-located torn panel " +
-                         $"(nearest {bestName ?? "none"} {bestDist:0.0} m{(mirrored ? ", mirrored" : "")}) — never hidden");
+                Utils.Log.Info("flight",
+                    $"damage panels: {name} has no co-located torn panel (nearest {bestName ?? "none"} {bestDist:0.0} m{(mirrored ? ", mirrored" : "")}) — never hidden");
                 continue;
             }
             if (!_pairedHealthy.TryGetValue(bestName, out var list))
                 _pairedHealthy[bestName] = list = new List<Node3D>();
             list.Add(node);
             if (!name.Equals(bestName + "_h", StringComparison.OrdinalIgnoreCase))
-                GD.Print($"damage panels: {name} is the healthy skin of {bestName} " +
-                         $"(names crossed in the model) — paired by position");
+                Utils.Log.Info("flight",
+                    $"damage panels: {name} is the healthy skin of {bestName} (names crossed in the model) — paired by position");
         }
     }
 }

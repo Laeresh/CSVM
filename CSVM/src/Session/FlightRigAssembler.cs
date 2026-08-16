@@ -295,8 +295,8 @@ public sealed class FlightRigAssembler
         {
             controller.Visuals = BuildDamageVisuals(planeBuilder, planeModel, stats, _in.CrashProgram);
             if (verbose)
-                GD.Print($"damage visuals: {controller.Visuals.PanelCount} panels — " +
-                         "authored stage anims via the rig runtime");
+                Log.Info("flight",
+                    $"damage visuals: {controller.Visuals.PanelCount} panels — authored stage anims via the rig runtime");
         }
 
         // The data-driven crash rig is built AFTER the controller enters the tree
