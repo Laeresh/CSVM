@@ -39,6 +39,11 @@ public sealed class AiPilot
     /// steers.</summary>
     public AiGunner? Gunner;
 
+    /// <summary>The ordnance employment, or null for a pilot that launches nothing. Armed together
+    /// with <see cref="Gunner"/> and useless without it: it holds no target of its own, so the host
+    /// hands it the gunner's. Steering never reads it.</summary>
+    public AiRocketeer? Rocketeer;
+
     /// <summary>The nine-mode state machine, or null for the bare-orders pilot above.
     /// When set, each <see cref="Next"/> steps the machine and dispatches on its mode: patrol
     /// flies <see cref="Patrol"/>, pursue chases the gunner's target, lay off holds its entry

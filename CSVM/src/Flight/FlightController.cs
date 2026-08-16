@@ -417,6 +417,7 @@ public partial class FlightController : Node3D
     private readonly List<float> _missileGaugeSlots = new();
     private readonly AimCandidateSet _aimCandidates = new(); // rebuilt once per fire call (B4/B5)
     private readonly AimCandidateSet _gunnerScan = new();    // the AI gunner's acquisition scan (D14)
+    private readonly List<RocketPylonView> _pylonViews = new();          // the AI rocketeer's pylon walk
     private readonly List<RankedTargetCandidate> _rankCandidates = new(); // the D12 ranking snapshots
     private readonly List<FlightController> _rankSources = new();         // …and their controllers, by index
     private readonly RandomNumberGenerator _aimRng = Rng.Stream(Rng.Weapons); // the assist's 1° launch scatter
@@ -464,6 +465,7 @@ public partial class FlightController : Node3D
     private bool _groundBlowLoggedFirst;         // verification breadcrumb: ground blow's first repelling hit
     private bool _gunnerLoggedTarget;            // verification breadcrumb: the AI gunner's first acquisition
     private bool _gunnerLoggedFire;              // verification breadcrumb: the AI gunner's first open fire
+    private bool _rocketeerLoggedFire;           // verification breadcrumb: the AI's first ordnance launch
     private bool _gunLoopOn;                     // the firing loop sound is currently playing
     private bool[] _gunLoggedFirst = Array.Empty<bool>(); // verification breadcrumb: each group logs its first live round once
     private int _rocketsLaunched;                // verification breadcrumb: the first few launches log their pylon
@@ -1157,7 +1159,13 @@ public partial class FlightController : Node3D
         // BEFORE the fire step reads them. Runs for AI pilots only; a gunner-less AI keeps the
         // released trigger it always had.
         if (!IsHumanPiloted && Pilot?.Gunner is { } aiGunner)
+        {
             DriveAiGunner(aiGunner);
+            // The ordnance half runs off the gunner's target, never its own acquisition, so the
+            // two weapon classes cannot chase different aircraft the way the original never does.
+            if (Pilot?.Rocketeer is { } aiRocketeer)
+                DriveAiRocketeer(aiRocketeer, aiGunner, dt);
+        }
 
         // Weapons: poll the raw held controls, let FireControl decide (selector edges, fire
         // clocks, ammo draw-down, cues), then perform its outcome against the pool and audio.
@@ -1174,7 +1182,8 @@ public partial class FlightController : Node3D
                 // trigger; without one the raw controls (--fire's AutoFire included) decide.
                 FireHeld = Projectiles != null
                     && (!IsHumanPiloted && Pilot?.Gunner is { } g ? g.WantsFire : FirePressed()),
-                RocketHeld = Projectiles != null && RocketFirePressed(),
+                RocketHeld = Projectiles != null
+                    && (!IsHumanPiloted && Pilot?.Rocketeer is { } r ? r.WantsFire : RocketFirePressed()),
                 GunSelectHeld = GunSelectPressed(),
                 RocketSelectHeld = RocketSelectPressed(),
             };
@@ -1860,9 +1869,14 @@ public partial class FlightController : Node3D
         if (outcome.RocketPylon >= 0)
         {
             var hp = Loadout!.Hardpoints[outcome.RocketPylon];
-            // No aim assist on a rocket: the original's assist is the GUN fire path's
-            // (`FUN_004b6530` is reached from the gun branch alone). It leaves along the pylon axis.
-            Projectiles!.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel, PlayerIndex, hp.Pylon, team: Team);
+            // A human's rocket leaves along the pylon axis, unassisted (`FUN_004b6530` is reached
+            // from the gun branch alone; `BL-403` re-checks that). An AI's leaves along the clamped
+            // mount aim its 5° gate cleared (`AiRocketeer.LaunchDirWorld`).
+            var rocketAim = !IsHumanPiloted && Pilot?.Rocketeer is { } launcher
+                ? launcher.LaunchDirWorld
+                : (Vector3?)null;
+            Projectiles!.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel, PlayerIndex, hp.Pylon,
+                rocketAim, Team);
             if (_rocketsLaunched < 12)
             {
                 _rocketsLaunched++;
@@ -2354,6 +2368,50 @@ public partial class FlightController : Node3D
             _gunnerLoggedFire = true; // verification breadcrumb: the gates first opened
             Log.Info("flight",
                 $"ai gunner: shooter {PlayerIndex} opens fire on P{target.PlayerIndex + 1} at {WorldPosition.DistanceTo(target.WorldPosition):0} m ({group.Weapon.Id})");
+        }
+    }
+
+    // One AI-rocketeer tick: age the lockout unconditionally (it is a vehicle timer, not one that
+    // stops when the AI loses its target), then walk the pylons against the GUNNER's target and let
+    // the decision name the pylon it chose, so a DAMAGES_ZEPPELIN round cannot be launched by a
+    // cursor that disagrees with the gates that cleared it.
+    private void DriveAiRocketeer(AiRocketeer rocketeer, AiGunner gunner, float dt)
+    {
+        rocketeer.Tick(dt);
+        if (_fire == null || Projectiles == null || Loadout is not { Hardpoints.Count: > 0 })
+            return;
+        if (gunner.Target is not { } target || !target.InPlay || !target.IsInsideTree())
+            return;
+        // ⚠ Only Pursue shoots, the same deliberate hold the guns take. The original restricts
+        // neither, so revisiting this is one change for both classes, not two.
+        if (Pilot?.Machine is { } modes && modes.Mode != AiMode.Pursue)
+            return;
+        _pylonViews.Clear();
+        for (int i = 0; i < Loadout.Hardpoints.Count; i++)
+        {
+            var hp = Loadout.Hardpoints[i];
+            _pylonViews.Add(new RocketPylonView
+            {
+                Index = i,   // the list position FireControl selects by, not the 1-based pylon number
+                DamagesZeppelin = hp.Weapon.DamagesZeppelin,
+                Armed = hp.Ammo > 0 || InfiniteAmmo,
+                MountPos = hp.Pylon.GlobalPosition,
+                RoundSpeed = hp.Weapon.Velocity ?? ProjectilePool.DefaultVelocity,
+            });
+        }
+        // No AI can aim at a gasbag yet (the acquisition collects aircraft alone), so the match's
+        // other half is unexercised rather than unwritten — this argument is what supplies it.
+        rocketeer.Solve(WorldPosition, WorldVelocity, _model.Attitude,
+            target.WorldPosition, target.WorldVelocity, target.NoseDirection,
+            targetIsGasbag: false, _pylonViews);
+        if (rocketeer.SelectedPylon >= 0)
+            _fire.SelectPylon(rocketeer.SelectedPylon);
+        if (rocketeer.WantsFire && !_rocketeerLoggedFire)
+        {
+            _rocketeerLoggedFire = true; // verification breadcrumb: the ordnance gates first opened
+            var weapon = Loadout.Hardpoints[rocketeer.SelectedPylon].Weapon;
+            Log.Info("flight",
+                $"ai rocketeer: shooter {PlayerIndex} launches at P{target.PlayerIndex + 1} at {WorldPosition.DistanceTo(target.WorldPosition):0} m ({weapon.Id}, pylon {rocketeer.SelectedPylon})");
         }
     }
 

@@ -23,8 +23,7 @@ public sealed class AiGunner
 
     /// <summary>The gun aim-quality gate: the clamped mount aim must sit within
     /// <c>acos(0.9848)</c>, 10°, of the lead direction. The original's own literal, per weapon
-    /// class (ordnance takes a tighter 0.9962); the ordnance one lands with its
-    /// trigger (<c>BL-395</c>).</summary>
+    /// class — ordnance takes the tighter <see cref="AiRocketeer.AimQualityCos"/>.</summary>
     public const float AimQualityCos = 0.9848f;
 
     /// <summary>The standing target — mutable at any time (the mission-script seam). Null with
@@ -97,6 +96,22 @@ public sealed class AiGunner
     /// so wing-mounted guns do not fire parallel lines that straddle the fuselage.</summary>
     public Vector3 InterceptPoint { get; private set; }
 
+    /// <summary>The quick-draw gate at an explicit cone, so <see cref="AiRocketeer"/> runs this
+    /// implementation rather than a second copy: the original applies the quick draw once at the
+    /// top of the fire decision, ahead of the weapon walk, so it governs both weapon classes.
+    /// The instance overload below is the gun's own call, at this gunner's cone.</summary>
+    public static bool QuickDrawAccepts(Vector3 ownPos, Vector3 targetPos, Vector3 targetForward,
+        float angleDeg)
+    {
+        var away = ownPos - targetPos;
+        if (away.LengthSquared() < 1e-6f || targetForward.LengthSquared() < 1e-6f)
+            return true;
+        // |cos| covers both cones at once — the fore and aft cones are mirror images and the
+        // shipped angles never exceed 89°.
+        float cos = Mathf.Abs(away.Normalized().Dot(targetForward.Normalized()));
+        return cos >= Mathf.Cos(Mathf.DegToRad(angleDeg));
+    }
+
     /// <summary>Clears the trigger — no target, no fire step this tick.</summary>
     public void HoldFire() => WantsFire = false;
 
@@ -140,16 +155,8 @@ public sealed class AiGunner
     /// owns that case). ⚠ The original applies this only aircraft-against-aircraft, a condition
     /// <see cref="Target"/>'s type satisfies rather than tests; it needs a real test once a
     /// gasbag or a ground target can be aimed at (<c>BL-395</c>).</summary>
-    public bool QuickDrawAccepts(Vector3 ownPos, Vector3 targetPos, Vector3 targetForward)
-    {
-        var away = ownPos - targetPos;
-        if (away.LengthSquared() < 1e-6f || targetForward.LengthSquared() < 1e-6f)
-            return true;
-        // |cos| covers both cones at once — the fore and aft cones are mirror images and the
-        // shipped angles never exceed 89°.
-        float cos = Mathf.Abs(away.Normalized().Dot(targetForward.Normalized()));
-        return cos >= Mathf.Cos(Mathf.DegToRad(QuickDrawAngleDeg));
-    }
+    public bool QuickDrawAccepts(Vector3 ownPos, Vector3 targetPos, Vector3 targetForward) =>
+        QuickDrawAccepts(ownPos, targetPos, targetForward, QuickDrawAngleDeg);
 
     /// <summary>One round's launch direction from one barrel: the line from THIS muzzle to the
     /// solved intercept point (wing guns converge rather than firing parallel), perturbed
