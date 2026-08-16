@@ -10,9 +10,9 @@ effect table is [`weaponImpact.md`](weaponImpact.md). The AI's side of firing th
 [`aiPilot/aiWeapons.md`](aiPilot/aiWeapons.md). Our implementation is `WeaponDefs.cs` (which parses
 every key below and acts on none of the special ones) and `Projectile.cs`.
 
-**Scope.** This page covers the **flag map** and the **hit-side dispatch**: what happens when a round
-reaches an aircraft. The launch and flight side (guidance, the rear-firing spawn, the torpedo's
-shootable flyout, proximity detonation) is named here only by its entry points, not decoded.
+**Scope.** This page covers the **flag map**, the **launch-side dispatch** (which types fire at all,
+and what they spawn), the **proximity fuse**, and the **hit-side dispatch** (what happens when a
+round reaches an aircraft). Guidance and the torpedo's shootable flyout are not decoded.
 
 ## The weapon-extension struct
 
@@ -70,6 +70,65 @@ guidance is `TURN_RATE` with no flag at all.
 
 Parsing `TANGLER` has a side effect the other flags do not: `FUN_004ba6f0` registers a handler on the
 weapon record (`FUN_005aec90`, target `0x004ba660`, which Ghidra has not resolved as a function).
+
+## The launch-side dispatch
+
+`FUN_004b6820` is the shot routine. It walks the shooter's weapon-slot list and acts on each slot
+whose trigger byte is set. Everywhere in it, gun versus ordnance is decided by shifting the flags
+dword right by 6 and taking bit 0, which is `CANNON`.
+
+**The aim gate, and who it applies to.** Before anything is spawned, the mount's aim quality
+(the `+0xa4` written by `FUN_004b7670`, see [`aiPilot/aiWeapons.md`](aiPilot/aiWeapons.md)) must
+reach a threshold that differs by weapon class: **0.9962 for ordnance, 0.9848 for guns**, that is
+cos 5 degrees against cos 10 degrees. Ordnance must be aimed more than twice as precisely as a gun
+before it will leave the rail. The whole gate is **skipped when the shooter is the player**, and also
+under a shooter flag at `+0x3e`.
+
+**`REAR` inverts the gate and the spawn.** For a `REAR` weapon (`0x20000`) the routine negates the
+mount's aim quality before testing it, so the weapon fires when the target is **behind** rather than
+ahead. It additionally requires the shooter's `+0xba` flag, which the hit handler sets when the
+aircraft absorbs damage and refreshes with an expiry 8 seconds out. So the rear-arc flare is not a
+freely-fired weapon: an AI throws it only while it is being shot at. `REAR` then flips the spawn
+direction (the launch axis is negated for an ordinary weapon and taken as-is for a rear one) and
+flips the sign of a 10 m offset along that axis.
+
+**`DAMAGES_ZEPPELIN` is a two-way gate, not a permission.** The routine asks the current target
+whether it is a zeppelin (vtable slot `+0x1c`) and drops the trigger both when a non-`DAMAGES_ZEPPELIN`
+weapon is pointed at a zeppelin **and** when a `DAMAGES_ZEPPELIN` weapon is pointed at anything else.
+The torpedo is therefore restricted to zeppelins on this path, not merely permitted against them.
+
+**`SMOKE_SCREEN` spawns no projectile.** Both the player and the AI branch test `0x10000` around the
+spawn call. Without it, the round goes to the ordinary projectile spawn `FUN_005aef40` and is
+registered by `FUN_00441830`. With it, neither runs: the routine allocates a 0x18-byte object through
+`FUN_004b8d50`, handing it the shared `TIME` at ext `+0x18`, and pushes it onto a world list
+(`DAT_0071dbbc`, counted by `DAT_0071dbc0`). The smoker is a world effect placed at the mount, not a
+round in flight.
+
+**A decoy registration sits on the `REAR` path**, gated on a bit `0x8000` of a word at weapon record
+`+0x74` (not the extension struct's flags dword) and taken only when the player currently holds no
+target. It writes an entry into a 20-slot ring buffer at `DAT_0071dbc8` and points the player's target
+block (`+0xa4`..`+0xa6`, `+0x1ca`) at it. Reading that as the flare's decoy behaviour is an inference
+from the writes, not from a decoded consumer.
+
+**The firing shake is sized by `CALIBER`.** When the player fires, the routine calls `FUN_0042c070`
+with kind **0** and `CALIBER` times a global at `DAT_0064ef78 + 0x3c`. That is the same feedback call
+the hit handler uses with kinds 1, 2 and 3, which confirms from the other direction that
+`SHAKES_CAMERA` is not the fire-path mechanism.
+
+## The proximity fuse
+
+`FUN_004b5fb0` runs the fuse as part of the world tick. For each round in flight (`DAT_0064f78c`) it
+walks **the aircraft list** (`DAT_0071dabc`), skips anything on the shooter's own side, and tests
+range against the round's weapon def `+0x44`. Nothing else is a candidate: the loop never touches
+world geometry, which decodes what was previously a recollection, that the original fuses on
+aircraft and never on terrain.
+
+When the weapon carries `DETONATION_DOT_PRODUCT` (`0x80000`), passing the range test is not enough.
+The routine normalises the vector between the two and dots it against **the candidate's** orientation
+axis (`+0x198`..`+0x1a0`), and requires that dot to reach the authored threshold at ext `+0x20`. Below
+it, the candidate is skipped and the round flies on. The cone is measured against the target's
+facing, not the round's. `FUN_004b9770`, the terminal-impact path, repeats the same test against the
+victim's basis before it will resolve a hit.
 
 ## The hit-side dispatch
 
@@ -146,19 +205,21 @@ routine computes the bearing to the hit source as an `atan2` converted to degree
 `FUN_00481330` for a `CANNON` hit or `FUN_004813c0` for anything else, passing the damage magnitude
 alongside.
 
-## Entry points for the launch and flight side, not decoded
+## Still open
 
-- `FUN_004b6820`, the shot routine, tests `REAR` (`0x20000`) at four sites. That is where a
-  rear-firing round's spawn direction is decided.
-- `FUN_00480f50` also tests `REAR`, on the player's fire-feedback path.
-- `FUN_004b5fb0` and `FUN_004b9770` test the `DETONATION_DOT_PRODUCT` presence bit (`0x80000`), so
-  they are the proximity-detonation cone's readers.
+- **Guidance.** `TURN_RATE` is the only thing separating the Seeker from a dumbfire rocket, and its
+  reader has not been located. Nothing in the shot routine, the fuse or the hit handler steers a
+  round.
+- **The torpedo's shootable flyout.** No reader was located for `TORPEDO` (`0x08`) or `TARGETABLE`
+  (`0x20`), so how `FLYOUT_HEALTH` is spent, and how a round becomes a target, is unread.
+- **`BEEPER_SEEKER`** (`0x8000`). No reader located. The `BEEPER` half is decoded on both the launch
+  and hit sides, but what consumes the tag it leaves is not.
+- Absence of a located reader is not proof of absence. The bit searches behind these three were
+  truncated by the tool's result cap and are not exhaustive.
+- `FUN_00480f50` tests `REAR` on the player's fire-feedback path and was not opened.
 - `FUN_004881e0` is the player's fire-input tick. It routes by `CANNON` (`0x40`) and `ROCKET`
   (`0x10`) only, feeding `CALIBER` to `FUN_004810d0` for guns and the whole weapon to `FUN_00480f50`
   for ordnance.
-- No reader was located for `TORPEDO` (`0x08`), `TARGETABLE` (`0x20`), `BEEPER_SEEKER` (`0x8000`) or
-  `SMOKE_SCREEN` (`0x10000`). Absence of a located reader is not proof of absence; these were not
-  searched exhaustively.
 
 ## Evidence & limits
 
@@ -166,8 +227,13 @@ alongside.
 - `FUN_004b9bc0` was read in full. It handles hits **on an aircraft**; whether ground objects and
   zeppelins route through the same function is unread, so the "four types deal no damage" finding is
   stated for aircraft targets.
-- `FUN_004b1690` was read in full. `FUN_0042c070`, `FUN_0042e840`, `FUN_0042e9d0`, `FUN_0048f5e0`,
-  `FUN_004b8ce0`, `FUN_004b15c0` and `FUN_004b1630` were not opened; their roles above are inferred
+- `FUN_004b6820`, `FUN_004b5fb0`, `FUN_004b9770` and `FUN_004b1690` were read in full.
+- `FUN_0042c070`, `FUN_0042e840`, `FUN_0042e9d0`, `FUN_0048f5e0`, `FUN_004b8ce0`, `FUN_004b8d50`,
+  `FUN_005aef40`, `FUN_004b15c0` and `FUN_004b1630` were not opened; their roles above are inferred
   from their arguments and call sites, and are labelled as such.
-- The globals indexed off `DAT_0064ef78` (the feedback multipliers at `+0x68`, `+0x94`, `+0x98`,
-  `+0xc0`) were not resolved to values.
+- Weapon-record offsets `+0x40` (an effect radius), `+0x44` (the fuse trigger distance) and `+0x74`
+  (a second flags word) are named by use. Which authored key writes each one was not traced back
+  through the `.zrd` parse, so the mapping to `IMPACT_PROXIMITY` and `DETONATION_DISTANCE` is
+  inferred from the arithmetic they appear in.
+- The globals indexed off `DAT_0064ef78` (the feedback multipliers at `+0x3c`, `+0x68`, `+0x94`,
+  `+0x98`, `+0xc0`) were not resolved to values.

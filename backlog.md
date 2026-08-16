@@ -725,6 +725,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   anything else that flies) collision bodies, they join the fuse's candidate list — the natural
   seam is `CollisionLayers.Aircraft` or a shared targetable layer read by
   `ProximityFuseTriggered`'s registry.
+  ✅ **The aircraft-only rule is now decoded, not recollected.** `FUN_004b5fb0` runs the fuse over the
+  aircraft list (`DAT_0071dabc`) and never touches world geometry
+  ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md)). Also decoded: when the weapon carries
+  `DETONATION_DOT_PRODUCT`, range alone does not trigger it. The dot is taken against **the
+  candidate's** orientation axis, not the round's, and must reach the authored threshold.
   ⚠ Traps: (a) the six plain rockets author `DETONATION_DISTANCE == IMPACT_PROXIMITY`, so a
   first-entry-into-range fuse always detonates exactly where the linear blast falls to zero and
   deals nothing — the closest-approach rule is load-bearing, keep it for any new candidate class;
@@ -972,6 +977,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `FUN_00440ad0` muzzle-position branch the decode leaves unread; (c) whether the player's own
   ordnance skips the aim gate entirely the way it skips the `quick_draw_chance` roll
   (`0x004b6b41`).
+  ✅ **(c) is settled: the player skips the aim gate outright.** `FUN_004b6820` jumps over the whole
+  gate when the shooter is the player, so neither the player's guns nor the player's ordnance are
+  tested against it. When it does run, the threshold differs by class: **cos 5° for ordnance against
+  cos 10° for guns** ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md)).
+  📎 **(a), read but not yet confirmed to the trap's standard.** In the player's ordnance branch the
+  spawn `FUN_005aef40` is handed a direction built from the **vehicle's** basis axis
+  (`param_1[0x66]`–`[0x68]`), negated, or taken as-is for a `REAR` weapon; the mount contributes the
+  position only. The AI's ordnance branch instead takes the direction from the mount record at
+  `+0x3c`, which is neither the `+0x48` actual aim nor the `+0x78` desired direction that
+  `aiWeapons.md` names, so which mount field that is remains open. The argument roles above are
+  inferred from position in the call, not from reading `FUN_005aef40`.
   ⚠ *Trap:* a "no aim on rockets" answer is what the shipped code already assumes, so a decode
   that merely fails to find an assist has not confirmed it. The confirmation is the spawn call's
   direction argument, named by address.
@@ -1092,8 +1108,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   aircraft at all, and the damage figures `wep_08`/`wep_10`/`wep_12` author are discarded. The
   choker's engine-dead duration is `ENGINE_DEAD_max × (1 − distance / RADIUS)` floored at
   `ENGINE_DEAD_min`, and its two bounds are **globals** (`DAT_0062b120`/`DAT_0062b124`), set by the
-  last-parsed `TANGLER` weapon rather than per-weapon. Still open: the launch and flight side, whose
-  entry points that page names.
+  last-parsed `TANGLER` weapon rather than per-weapon. Second pass adds the launch side
+  (`FUN_004b6820`) and the proximity fuse (`FUN_004b5fb0`): `SMOKE_SCREEN` spawns no projectile at
+  all, `REAR` inverts the aim test so the flare fires backwards and only within 8 s of the shooter
+  being hit, `DAMAGES_ZEPPELIN` refuses its weapon against **non**-zeppelins as well as the reverse,
+  and the AI's aim gate wants cos 5° for ordnance against cos 10° for guns. Still open: guidance
+  (`TURN_RATE` has no located reader), the torpedo's shootable flyout (`TORPEDO`/`TARGETABLE`), and
+  `BEEPER_SEEKER`.
 
 ## Flight model & collision physics
 
