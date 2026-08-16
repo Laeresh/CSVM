@@ -56,12 +56,39 @@ public sealed class AnimInstance
 {
     public readonly AnimDefinition Def;
     public readonly Node3D? Anchor;
-    public readonly List<SequenceRunner> Runners = new();
+
+    /// <summary>One slot per <see cref="AnimDefinition.Sequences"/> entry, null when that sequence
+    /// is not running — the original's per-definition sequence array (`anim+0xcc`, count
+    /// `anim+0xd8`, stride 0x40), whose INDEX decides same-tick dispatch. Decode:
+    /// docs/org/sequences.md.</summary>
+    private readonly SequenceRunner?[] _slots;
+
+    /// <summary>Runners for sequences the definition does not list, so they have no index: the
+    /// death slot and the damage-stage host. The original keeps these as standalone records off
+    /// `anim+0xd0`/`+0xd4` and steps them outside the walk, so nothing can CALL them.</summary>
+    private readonly List<SequenceRunner> _unslotted = new();
 
     public AnimInstance(AnimDefinition def, Node3D? anchor)
     {
         Def = def;
         Anchor = anchor;
+        _slots = def.Sequences.Count == 0
+            ? Array.Empty<SequenceRunner?>()
+            : new SequenceRunner?[def.Sequences.Count];
+    }
+
+    /// <summary>Every runner still executing, slots in index order first. Allocates a snapshot; the
+    /// runtime's own hot paths use <see cref="Finished"/> and <see cref="Live"/> instead.</summary>
+    public IReadOnlyList<SequenceRunner> Runners
+    {
+        get
+        {
+            var live = new List<SequenceRunner>(_slots.Length + _unslotted.Count);
+            foreach (var r in Live())
+                if (!r.Done)
+                    live.Add(r);
+            return live;
+        }
     }
 
     /// <summary>Seconds since this instance started — the original's <c>anim+0xb0</c>, shared by
@@ -74,18 +101,51 @@ public sealed class AnimInstance
     /// instance open while one of its
     /// motions still owes a BOUNCE_SEQUENCE, since such a launch is the last event of its sequence
     /// and its runner ends the moment the piece leaves the ground.</summary>
-    public bool Finished => Runners.Count == 0;
+    public bool Finished
+    {
+        get
+        {
+            foreach (var r in Live())
+                if (!r.Done)
+                    return false;
+            return true;
+        }
+    }
 
+    /// <summary>⚠ The slot walk is ASCENDING, and that is the whole of same-tick CALL dispatch: a
+    /// call to a higher index lands ahead of the cursor and runs this tick, a call to a lower one
+    /// waits for the next. The original does exactly this (`004ecedc`-`004ecf53`), and 99.5% of the
+    /// install's calls point forward. Do not reorder it. Decode: docs/org/sequences.md.</summary>
     public void Advance(ISequenceHost rt, float dt)
     {
         // Before the runners, so a sequence clock and the instance clock advance together within
         // a tick — a runner reads Clock back during its own advance to gate origin ANIMATION.
         Clock += dt;
-        for (int i = Runners.Count - 1; i >= 0; i--)
+        for (int i = 0; i < _slots.Length; i++)
         {
-            Runners[i].Advance(rt, this, dt);
-            if (Runners[i].Done)
-                Runners.RemoveAt(i);
+            var r = _slots[i];
+            if (r == null)
+                continue;
+            // The original steps a slot only in state 0/1; a halted one is cleared, not stepped.
+            if (r.Done)
+            {
+                _slots[i] = null;
+                continue;
+            }
+            r.Advance(rt, this, dt);
+            // ⚠ Identity-check before clearing: a STOP then CALL of this same sequence during the
+            // advance replaces the slot, and that fresh runner is behind the cursor, not garbage.
+            if (r.Done && ReferenceEquals(_slots[i], r))
+                _slots[i] = null;
+        }
+
+        // Unslotted runners cannot be called into, so their order is not observable; kept
+        // descending because the death slot can join the list during its own advance.
+        for (int i = _unslotted.Count - 1; i >= 0; i--)
+        {
+            _unslotted[i].Advance(rt, this, dt);
+            if (_unslotted[i].Done)
+                _unslotted.RemoveAt(i);
         }
     }
 
@@ -110,21 +170,25 @@ public sealed class AnimInstance
     /// into one and lose half the burst.</summary>
     public bool IsRunning(AnimSequence seq)
     {
-        foreach (var r in Runners)
+        foreach (var r in Live())
             if (ReferenceEquals(r.Sequence, seq) && !r.Done)
                 return true;
         return false;
     }
 
     /// <summary>Starts a runner for one sequence — the ONE way a runner joins an instance, so
-    /// nothing can put a sequence into flight behind the list's back. Also the bootstrap, the
-    /// death slot and the damage-stage host, feeding sequences not in <c>Def.Sequences</c>.
-    /// ⚠ A runner added mid-<see cref="Advance"/> fires its first event one tick late — appended
-    /// past the descending walk's cursor. Deliberately unfixed; read `BL-135` and
-    /// analysis/bl-135-callsequence-lag/FINDINGS.md before changing it.</summary>
+    /// nothing can put a sequence into flight behind the array's back. It lands in the sequence's
+    /// own slot, which is what makes a mid-<see cref="Advance"/> call same-tick or not; a sequence
+    /// the definition does not list has no slot and runs unslotted (the bootstrap's death slot and
+    /// the damage-stage host feed those).</summary>
     public void AddRunner(AnimSequence seq)
     {
-        Runners.Add(new SequenceRunner(seq, Clock));
+        var runner = new SequenceRunner(seq, Clock);
+        int slot = SlotOf(seq);
+        if (slot < 0)
+            _unslotted.Add(runner);
+        else
+            _slots[slot] = runner;
     }
 
     /// <summary>STOP_SEQUENCE: halts every active runner named <paramref name="name"/>, including
@@ -135,7 +199,7 @@ public sealed class AnimInstance
     public bool StopSequence(string name)
     {
         bool halted = false;
-        foreach (var r in Runners)
+        foreach (var r in Live())
         {
             if (!string.Equals(r.SequenceName, name, StringComparison.OrdinalIgnoreCase))
                 continue;
@@ -145,6 +209,27 @@ public sealed class AnimInstance
 
         return halted || Def.Sequences.Any(s =>
             string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // Slots in index order, then the unslotted. Order matters only to Advance, which walks the
+    // slots itself; every other caller is a membership test.
+    private IEnumerable<SequenceRunner> Live()
+    {
+        foreach (var r in _slots)
+            if (r != null)
+                yield return r;
+        foreach (var r in _unslotted)
+            yield return r;
+    }
+
+    // Identity is the sequence OBJECT, never its name — see IsRunning: the empty name is not
+    // unique, so a name-keyed lookup would collapse two sequences onto one slot.
+    private int SlotOf(AnimSequence seq)
+    {
+        for (int i = 0; i < _slots.Length; i++)
+            if (ReferenceEquals(Def.Sequences[i], seq))
+                return i;
+        return -1;
     }
 }
 
@@ -233,7 +318,11 @@ public sealed class SequenceRunner
 
     public void Advance(ISequenceHost rt, AnimInstance inst, float dt)
     {
-        _clock += dt;
+        // ⚠ Never charge a runner the dt of the pass it was created in — SetDue's ANIMATION
+        // restatement needs the two clocks in step. An unmoved instance clock is exactly that
+        // case, and is the original's own test. Decode: docs/org/sequences.md.
+        if (inst.Clock != _animClock)
+            _clock += dt;
         _animClock = inst.Clock;
         if (!_done && _waitingOn != null)
         {

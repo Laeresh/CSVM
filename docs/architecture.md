@@ -781,8 +781,14 @@ observe the difference; the constraint and its one residual live in `Scan`'s own
 function map, the three START_TIME origins, the LOOP's pass counter and 60 Hz frame denomination,
 and the clock-carry a timed loop needs; the authored side stays in
 [formats/anim-definitions.md](formats/anim-definitions.md).
-`AnimInstance` holds a definition's concurrent runners and removes them as they finish, and carries
-the CALL_SEQUENCE/STOP_SEQUENCE semantics (decode in `docs/org/sequences.md`;
+`AnimInstance` holds **one slot per `Def.Sequences` entry and walks them ASCENDING**, mirroring the
+original's per-definition sequence array, plus an unslotted list for runners the definition does not
+list (the death slot, the damage-stage host), which the original likewise keeps off the array and
+steps outside the walk. The walk order is behaviour, not housekeeping: `CALL_SEQUENCE` writes the
+callee's own slot, so a call runs in the same tick exactly when the callee is declared AFTER the
+caller and waits a tick when it is declared before — 99.5 % of the install's calls point forward.
+One slot stepped at most once per pass is also why no same-tick recursion cap is needed.
+It carries the CALL_SEQUENCE/STOP_SEQUENCE semantics (decode in `docs/org/sequences.md`;
 `AnimRuntime`'s dispatch cases are thin shims over these). **One runner per sequence, keyed on the
 `AnimSequence` OBJECT and never on its name** — the original holds a sequence's state inside the
 definition's own sequence array (`004eb570`), so `CallSequence` starts a sequence only when nothing
@@ -1319,8 +1325,9 @@ D11's nine-mode state machine, which when set is stepped first and picks this st
 parameter table: patrol/danger-zone fly the net node itself, pursue leads the gunner's target on
 the engaged table (or aims at it outright for the head-on firing solution), lay off holds its
 entry course and then walks the throttle toward `sixth_sense_factor` × the pursuer's speed so the
-human catches up, evade flies the machine's orders, avoid crash aims 1000 m straight up on the
-emergency arm, an evasive maneuver plays its `ManeuverExecutor`, stunned returns neutral sticks),
+human catches up, evade flies the machine's orders, avoid crash aims 1000 m up on the emergency
+arm, displaced 1000 m right of its own ground track (`ClimbOutBreakM`, invented and measured),
+an evasive maneuver plays its `ManeuverExecutor`, stunned returns neutral sticks),
 one `FlightInput` per sim step out, read by a `FlightController` whose `Pilot` is set. Pure over
 the model state and its own fields, seeded randomness only, so a fixed-dt run is deterministic
 (`AiPilotTests`). The original's own steering law is `AiControlLaw`; this class is only its driver
@@ -1349,10 +1356,14 @@ assist (decoded: the mode and `sixth_sense_factor` 0.994→1.07, "the ease-off w
 pursue eases into it when a chasing HUMAN target has fallen behind, and it releases when the
 pursuer catches up or stops chasing; `AssistEnabled` false (`--no-assist`) never enters it.
 Transitions raise `ModeChanged` (the session's `ai mode:` log lines); rolls raise `RollLogged`
-in the engine's pass/fail wording. Engine-free; pinned by `AiModeMachineTests` + the `ai-modes`
-suite. Named inventions (evade's scramble run, the avoid-crash probe geometry, lay off's
-entry/exit cones) are marked at their own declaration; the danger-zone gate data is the
-undecoded net-tag system (docs/formats/ai-nets.md).
+in the engine's pass/fail wording. `avoid crash` runs the original's three altitude bands: below
+`AltitudeFloorM` (20) the climb-out arms with no ray at all, above `ProbeCeilingM` (8000) nothing
+is cast and a running one releases, and between them a probe every 0.5–1.0 s per plane decides,
+releasing on the first clear ray (docs/org/aiPilot.md). Engine-free; pinned by
+`AiModeMachineTests` + the `ai-modes` suite. Named inventions (evade's scramble run, the
+avoid-crash probe GEOMETRY inside that middle band, lay off's entry/exit cones) are marked at
+their own declaration; the danger-zone gate data is the undecoded net-tag system
+(docs/formats/ai-nets.md).
 
 ## src/Flight/ManeuverExecutor.cs
 Plays one library maneuver's timed step program as `FlightInput` values — `Next(model,

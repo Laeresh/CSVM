@@ -17,6 +17,9 @@ namespace CSVM.Tests;
 /// </summary>
 public class AiModeMachineTests
 {
+    // A dt that always leaves the per-plane probe timer due, whatever it drew from its rng.
+    private const float Due = AiModeMachine.ProbeIntervalMaxS;
+
     private static readonly Vector3 Home = new(0f, 400f, 0f);
     private static readonly Vector3 Level = new(0f, 0f, -100f); // 100 m/s along -Z
 
@@ -227,18 +230,44 @@ public class AiModeMachineTests
         m.ProbeBlocked = (_, _) => blocked ? "test/obstacle" : null;
 
         // Clear probes: patrol undisturbed.
-        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, null, null, AiModeMachine.ProbeIntervalS));
+        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, null, null, Due));
 
         // Terrain inside the lookahead: the override takes the mode and orders a climb-out.
         blocked = true;
-        Assert.Equal(AiMode.AvoidCrash, m.Update(Home, Level, null, null, AiModeMachine.ProbeIntervalS));
+        Assert.Equal(AiMode.AvoidCrash, m.Update(Home, Level, null, null, Due));
         Assert.Equal(Home.Y + AiModeMachine.ClimbOutM, m.ClimbOutAltitude, 3);
 
-        // Clear again: released after the clear-streak, back to the prior mode.
+        // Clear again: ONE clear ray releases it, in that same call. The original holds no
+        // clear-streak (docs/org/aiPilot.md, "A clear ray releases the state in the same call").
         blocked = false;
-        for (int i = 0; i <= AiModeMachine.ClearProbesToExit; i++)
-            m.Update(Home, Level, null, null, AiModeMachine.ProbeIntervalS);
-        Assert.Equal(AiMode.Patrol, m.Mode);
+        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, null, null, Due));
+    }
+
+    [Fact]
+    public void BelowTheFloorTheClimbOutArmsWithNoProbeAtAll()
+    {
+        var m = Machine();
+        m.ProbeBlocked = (_, _) => null; // a clear line everywhere: only the floor can arm this
+
+        var low = new Vector3(0f, AiModeMachine.AltitudeFloorM - 1f, 0f);
+        Assert.Equal(AiMode.AvoidCrash, m.Update(low, Level, null, null, 0f));
+        Assert.Equal(low.Y + AiModeMachine.ClimbOutM, m.ClimbOutAltitude, 3);
+
+        // And back above it, the clear ray releases as usual.
+        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, null, null, Due));
+    }
+
+    [Fact]
+    public void AboveTheCeilingNothingIsCastAndAClimbOutIsReleased()
+    {
+        var m = Machine();
+        m.ProbeBlocked = (_, _) => "test/obstacle"; // blocked everywhere
+
+        Assert.Equal(AiMode.AvoidCrash, m.Update(Home, Level, null, null, Due));
+
+        // Above the ceiling the original runs no check and clears the state, blocked line or not.
+        var high = new Vector3(0f, AiModeMachine.ProbeCeilingM + 1f, 0f);
+        Assert.Equal(AiMode.Patrol, m.Update(high, Level, null, null, Due));
     }
 
     // ---- Lay off: the rubber-band assist ----------------------------------------------

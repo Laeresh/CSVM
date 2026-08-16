@@ -16,6 +16,12 @@ fails loudly instead of silently pointing at the wrong item. **Mint a new ID by 
 counter lives in `.git/item-id-counters.json` (shared by every worktree, outside version
 control) and the script increments it under an exclusive file lock, so two concurrent sessions
 cannot be handed the same number.
+⚠ **Run it for EVERY id, every time — it is not a once-per-session lookup.** Minting one id and
+then deriving the next by adding 1, or reusing a number the script handed you earlier in the
+session, desynchronises the counter from the file: the id you invented is not recorded, so the
+next call hands it out again and the duplicate-id hook fails a later commit. Need several at
+once? `-Count n` reserves a block in one call. The failure is silent at the time and surfaces
+in someone else's commit, which is why the rule is absolute rather than a default.
 
 **Structure.** Items are grouped into twelve theme sections, in this fixed order: Damage &
 destruction · Weapons & combat · Flight model & collision physics · Environment & world · Effects
@@ -449,140 +455,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`docs/plans/PLAN-m3-polish-10.md` A1), `DamageVisuals.cs` (the consumer),
   `extracted/zrdr/vehicle.zrd.json` (the authority).
 
-- `BL-302` `[Bug]` **Every destructible takes collision damage in the original — `ACTIVATION` gates the
-  *plane's* fate, not the object's. Refutes M3 Decision 6's behavioural reading.** We currently damage
-  only the 44 `WeaponOrCollideHit` defs on contact and leave every `WeaponHit` destructible untouched
-  by a ram ("ramming a water tower kills *you*, and the tower is untouched" —
-  `docs/plans/PLAN-M3-weapons.md`, wave item C27). That reading was inferred from the activation
-  census alone and never tested against the original. **Three original-game tests (user, C1,
-  2026-08-07) overturn it:**
-  1. **Full ram into a C1 hangar: the plane crash AND the hangar's destruction both play.** No C1 def
-     is in the 44-def collide set (all are C2 facades / C5 windows / C5 `agyrobus`,
-     `docs/formats/destructibles.md`), so the hangar is a plain `WeaponHit` destructible — and the
-     collision still killed it.
-  2. **A survivable graze along a hangar advanced it to its stage-2 smoke-and-burn damage stage**
-     while the plane flew on — so collision damage is *severity-scaled* and flows through the ordinary
-     `DAMAGE_SEQUENCE` thresholds, not an instant kill.
-  3. **Crashing on bare ground next to a destructible damages nothing** — the plane's death explosion
-     has no blast radius (consistent with the data: rockets are the only blast-radius carriers), so
-     test 1's hangar died from the *contact*, not the boom.
-  **What stands:** the 2,565 `WeaponHit` / 44 `WeaponOrCollideHit` census is a data fact. **What the
-  enum actually means:** `WeaponOrCollideHit` = the object breaks and the plane flies *through*
-  unharmed (fly-through set dressing); `WeaponHit` = the object is solid — the plane grazes or
-  crashes on it — but it still takes the collision damage.
-  ✅ **Decoded in `crimson.exe`, and the binary confirms the premise independently of the three
-  tests.** The impact handler `FUN_0048d2c0` carries NO activation test: it damages whatever node
-  the sweep resolved, gated only on `contact+0x24 != 0`. `WeaponHit` and `WeaponOrCollideHit` are
-  indistinguishable to it, so if the enum matters it does so in the sweep's solidity set, never in
-  the damage.
-  **The severity is a cosine, and carries no airspeed term at all.** `FUN_0048d7f0` normalises the
-  velocity (`FUN_00422690`, at `0x0048df8b` on the player path and `0x0048dba0`/`0x0048dbba`
-  otherwise) BEFORE dotting it with the contact normal, and returns `s = -(v̂ · n̂)`, dimensionless.
-  Nothing registers unless `s > 0` (`0x006032c8`). The law is
-  `armorDmg = healthDmg = max(300 × s³, 50)`: the cube at `0x0048d4c1`, the scale read from
-  `0x0071c34c` / `0x0071c354`, the floor from `0x0071c350` / `0x0071c358`. Those four globals are
-  `player.zrd.json`'s `crash` block (`armor_damage_range` and `health_damage_range`, both
-  `[50, 300]`, `extracted/zrdr/player.zrd.json:241-257`, parsed by `FUN_004735b0` with element 0 the
-  floor and element 1 the scale), so they are DATA, not constants to hardcode; the compiled
-  fallbacks `[15, 200]` (`0x00473b8d`, `0x00473b97`, `0x00473ba1`, `0x00473bab`) never stand on this
-  install. The floor dominates below `s ≈ 0.550`, so any contact shallower than about 33° off the
-  surface deals a flat 50.
-  **The damage is dealt by re-entering the ordinary weapon pipeline as `wep_24`** (string
-  `0x00628a14`, looked up by name at `0x0048d53e`, applied through the same applier a rocket uses,
-  `FUN_005abcf0`, at `0x0048d55b`), so a rammed object dies exactly as a weapon kill does, through
-  its normal thresholds. That is test 2's severity scaling, decoded. Non-aircraft targets consume
-  the health term only and ignore the armour term (gasbag handler `0x004c06c8`, zeppelin turret
-  `0x004c090b`, and the two other registered handlers `0x004df420` / `0x004e7220`).
-  *Fix shape:* apply collision damage to ANY struck destructible (`FlightController.cs:882-894`
-  currently consults `CollideDamageSink` and `AnimRuntime.CollideDamageAt:1257-1269` rejects
-  non-`WeaponOrCollideHit` defs — lift that gate for the damage half), keeping the fly-through-on-break
-  behaviour gated on `WeaponOrCollideHit` exactly as now, and dealing the damage on the crash branch
-  too, not only the graze/fly-through one.
-  *Playtest after fix:* ram + graze a C1 hangar in our build and A/B the damage stages against the
-  original.
-  ⚠ **Traps.** (a) Do **not** add a crash blast radius — test 3 refuted it directly. (b)
-  `CollideDamagePerVn` 8 (`FlightController.cs:385`) has the wrong INDEPENDENT VARIABLE, not merely
-  the wrong value: it scales by `|v · n|`, which grows with airspeed, where the decoded law above has
-  no airspeed term at all. Swapping the constant without swapping the variable leaves a fast shallow
-  graze lethal and a slow steep ram harmless, both backwards. Port the formula and read its four
-  numbers from `player.zrd.json`'s `crash` block instead of hardcoding them. `SurviveHit`'s own
-  `vn >= CrashSpeed` test (`FlightController.cs:2490`) is the same mistake on the plane's side of the
-  contact. The struck C1 hangar's def and its HP/thresholds are still owed (the C1 building def is
-  not `hangar3` — that zrdr def is the ON_CALL *doors* anim), but only to CHECK the ported formula,
-  no longer to calibrate a free constant. (c) The `--damage-hd`
-  `collide[✓/✗]` gate (`Probes.cs:683`) *asserts the old semantics* — WeaponHit towers ignoring
-  collision is its ✗ leg — and must flip with the code, or it will fail green. (d) Plane-vs-plane ram
-  damage, the plane's OWN damage on a survivable contact, and zeppelin parts are NOT this item: they
-  are `BL-402`, which shares this decode and this call site. The two want landing together, but the
-  scopes stay apart because only this one is evidenced by the three original-game tests.
-  *Supersedes:* the "decision 6 upheld" caveat (`PLAN-M3-weapons.md:1281`,
-  `docs/HISTORY.md:5295` records the old behaviour landing) and `docs/formats/destructibles.md`'s
-  `ACTIVATION` reading (⚠-noted in place).
-
-- `BL-402` `[Bug]` **A collision damages BOTH parties in the original, and ours damages neither: the
-  rammed aircraft, the rammed zeppelin part and the ramming plane itself all come away clean.**
-  Split out of `BL-302` trap (d), which fenced this off for want of original-game evidence. The
-  evidence now exists and is stronger than a playtest: the whole path is decoded out of `crimson.exe`
-  and it is one handler, `FUN_0048d2c0`, shared with `BL-302`. Today `SweepAirframe` already resolves
-  another aircraft (`CollisionLayers.WorldAndAircraft`, `FlightController.cs:1944`), so our contact
-  finds the body and then drops it: `CollideDamageAt` (`AnimRuntime.cs:1215`) resolves it against the
-  destructible registry, gets null, and returns false. The struck plane takes nothing, and
-  `SurviveHit` deals the rammer nothing either.
-  **What the original does, in three parts.**
-  1. **The struck party** takes `max(300 × s³, 50)` on the same `wep_24` path `BL-302` documents,
-     with no class test on it. For an aircraft target that runs
-     `FUN_004b9750` → `FUN_004b9770` → `FUN_004b9b30` → `FUN_004b9bc0`, landing on the identical
-     `FUN_004b3bf0` / `FUN_004b8070` primitives the striker applies to itself, so the law is
-     symmetric in form.
-  2. **The ramming plane** takes the same pair, applied after an invulnerability early-out at
-     `0x0048d563` (`obj+0x920`) that sits AFTER the struck object is damaged, so an invulnerable
-     striker still destroys what it hits. Per-part first where the airframe has a part list
-     (`FUN_004b3950` picks the struck node's own part, else the part nearest the contact,
-     `FUN_004b3bf0` at `0x0048d724`), then the remainder in aggregate (`FUN_004b8070` at
-     `0x0048d783`). The armour-to-health split is `FUN_004b7f80`: with
-     `f = min(1, armor / armorDmg)`, armour drops by `armorDmg` floored at zero, and health drops by
-     `(1 - f) × healthDmg`, so a fully-armoured contact costs no health at all. Survival is then
-     `health > 0` (`obj+0x2d0`, `0x0048d78b`).
-  3. **Both parties go collision-free for 1.0 s** afterwards, the `obj+0xAC` clock `BL-382` already
-     tracks: written to the striker at `0x0048d383` and to the struck entity at `0x0048d395`
-     (literal at `0x006032dc`). It suppresses the whole sweep, not just the damage:
-     `FUN_0048d7f0` returns zero severity outright while the clock is in the future.
-  ⚠ **The player is deliberately asymmetric, and flattening that is the trap.** At `0x0048d2ed` a
-  player-owned striker jumps past the entity-detection block entirely, with three consequences that
-  must all survive the port: the player never takes the 0.2 entity-versus-entity cut
-  (`0x0048d51a`/`0x0048d526`) that scales an AI's ram down to a fifth; the player writes no grace
-  clock, so the contact can re-resolve on following frames while the two aircraft are still
-  overlapped; and the player is never subject to `local_11`, the flag that forces destruction
-  regardless of remaining health (`0x0048d79e`). `local_11` is set for a non-player striker that did
-  NOT resolve an aeroplane, so an AI that rams terrain or a building always dies while an AI that
-  rams another aircraft survives if health remains. Entity detection requires node flag `0x40000000`
-  and a dispatch class at `+0x67c` of 0 or 4, the two aeroplane classes (`0x0048d360`).
-  ⚠ **Gasbags are exempt and the rest of the zeppelin is not.** The zeppelin parser `FUN_004bd8d0`
-  registers a different damage handler per part list. The gasbag handler `FUN_004c0640` tests
-  `DAMAGES_ZEPPELIN` (`weaponRecord+0x210` → flags `& 0x1000`, `TEST AH,0x10` at `0x004c0665`)
-  before any health subtraction and returns without damage when it is clear; `wep_24` does not carry
-  the flag, so ramming a gasbag deals it nothing while still killing the plane. The cannon and
-  turret handler `FUN_004c0880` has no such test and subtracts at `0x004c090b`, so those parts DO
-  take collision damage, un-cut by the 0.2 factor (a zeppelin part is not class 0 or 4), and a
-  non-player rammer is destroyed outright by the `local_11` rule. This confirms the reading that
-  every zeppelin part except the gasbags is rammable.
-  ⚠ **The gate lives in the handler, not in the weapon pipeline.** `0x1000` is read in exactly two
-  places in the image: `0x0042008c` (`FUN_00420070`) and `0x004c0665`. `FUN_00420070` only decides
-  what ordnance an AI is OFFERED; the enforcement that actually refuses damage is
-  `FUN_004c0640`. `docs/org/targeting.md` and `BL-291`/`BL-239` attribute enforcement to
-  `FUN_00420070`, which is why collision damage looks like it should be gated upstream and is not.
-  *Fix shape:* land with `BL-302`, since both hang off the one contact resolution in
-  `FlightController.cs:1129-1143`. Give the sink a second leg for a struck AIRCRAFT and for a
-  zeppelin sub-part, deal the decoded pair to the striker through an armour-then-health split
-  (`Damage` has no armour pool today, so that pool is the real work), and thread the 1.0 s
-  both-parties grace through the same per-aircraft clock `BL-382` needs for its 2.5 s drop window.
-  *How you'd know it worked:* ram an AI fighter head-on and both aircraft take damage, neither
-  re-collides for a second, and the wreck count is two. Ram a zeppelin's cannon mount and it damages;
-  ram its gasbag and only you die.
-  *Cross-refs:* `BL-302` (the same handler, the struck-destructible half), `BL-382` (the `obj+0xAC`
-  clock family), `BL-291` / `BL-239` (zeppelin damage harness), `docs/org/flightModel.md` (collision
-  response timers).
-
 - `BL-384` `[Bug]` `[Owed-playtest]` **Our `injure_anims` staging latches one-way where the original
   retracts.** Filed 2026-08-15 from `BL-246`'s decode; the original's rules are
   `docs/org/vehicleDamage.md` ("Damage staging"). **Items (1) scope and (2) pool landed 2026-08-15**
@@ -746,6 +618,44 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   torpedoes stay on the rail against aircraft.
 
 ## Weapons & combat
+
+- `BL-403` `[Bug]` **A zeppelin's turrets shoot the fighters that zeppelin just launched: emplacement
+  teams and aircraft teams are two different numbering spaces that can never agree.** *Evidence:* the
+  user at the controls, C2 IA1 `zeppelin_run`, watching the bay-launched wave die to its own airship.
+  The log shows both halves of the mismatch in plain numbers: `ia: 24 wave enemies across 4 wave(s),
+  built inert, team=2` and `ia: zeppelin 'multiplayer1zep' turrets: 14 emplacement(s) ACTIVATED with
+  the objective`, then every one of those turrets reporting
+  `turret MSG_TUR_BELLY@ctur3: engaging (first shot, team 202)`.
+  **The mechanism.** `TurretController.EngineTeamFor` (`TurretController.cs:264-269`) maps an
+  emplacement's authored `TEAM` id into a band clear of the pilot teams: 0 stays neutral, 1 becomes
+  `PlayerTeam`, and **anything else becomes `EmplacementEnemyBand + id`**, with the band at 200
+  (`:53`). An aircraft's team is not banded: `InstantActionRuntime.EnemyTeam` is literally
+  `PlayerTeam + 1` = 2 (`InstantActionRuntime.cs:51`). So a turret authored `TEAM 2` and a fighter on
+  enemy team 2 are engine teams **202 and 2**, and the hostility test
+  (`TurretController.cs:617`, same-team-or-either-neutral rejects) can never match them. The turret
+  therefore treats every aircraft in the sky as hostile, its own side included.
+  ⚠ **The band is not a mistake to delete.** It exists so the 22 no-`TEAM` world emplacements
+  default to the original loader's "first enemy team" and engage the player (`:49-52`,
+  `docs/formats/turrets.md` "Teams"). Collapsing 200+id onto the raw id would make every one of those
+  emplacements share a team with the Instant Action wave and stop them shooting at anyone. The fix is
+  to make the two spaces meet, not to remove one.
+  ⚠ **The zeppelin case is the one that shows it, not the only one.** Any mission that puts an
+  emplacement and an AI aircraft on the same authored side has this, so a fix wants checking against
+  the `world-turrets` census (C1: 5 `aagun`, 9 `bbtur`, 9 `ctur`, 14 `ltur`/`rtur`, 2 zep
+  `doublecannon`, 12 `locklear_*`) rather than against the zeppelin alone.
+  *Fix shape:* one team space for both. Either band the aircraft teams the same way at the point an
+  authored side becomes an engine team, or (cleaner) drop the band and give the no-`TEAM` default its
+  own explicit enemy id, so an authored `TEAM 2` means team 2 whether it is bolted to a hull or
+  flying. `TurretController.EngineTeamFor` is the single seam; `AimAssist.WorldTeam` (100, for
+  destructibles) is a third space and should be looked at in the same pass.
+  ⚠ **Do not fix this by exempting the launching zeppelin's own turrets.** That hides the mismatch
+  for one mission type and leaves it live everywhere else.
+  *How you'd know it worked:* fly `--chapter=C2 --mission=IA1 --zeppelins`; the bay-launched wave
+  forms up and attacks the player, and the zeppelin's 14 emplacements engage the player and its
+  wingmen while never firing on their own wave.
+  *Cross-refs:* `docs/formats/turrets.md` ("Teams"), `InstantActionRuntime.cs` (`EnemyTeam`),
+  `TurretController.cs` (`EngineTeamFor`, `EmplacementEnemyBand`), `BL-350` (the drop is not gated on
+  the doors opening, open in the same mission).
 
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
   (`messages.json` 126–129), implying world pickups that restore ammo. **Carries research
@@ -987,55 +897,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* [`docs/org/aiPilot.md`](docs/org/aiPilot.md) (the decode), `BL-362` (the wingman
   half, whose blocker this decode voids), `docs/formats/ai-nets.md`, `docs/architecture.md` on
   `AiPilot` and `AiModeMachine`.
-
-- `BL-378` `[Bug]` **Our AI has no terrain avoidance, so a net authored below a ridge flies AI into
-  it. DECODED 2026-08-15; what is left is implementation.** *Evidence:* the user at the controls,
-  2026-08-15, on the build that made anchored nets ride their target (`BL-377`, closed): C1's
-  patrol nets sit at an authored 400 m (`M4ReinfAce`) and 350 m (`M2Ace`), which clashes with
-  elevated terrain, and the nets now ride the player into any part of the map.
-  ⚠ **The two natural fixes are both wrong, and the binary says so outright.** A net node's
-  altitude is neither above-ground nor target-relative: `FUN_00432010` returns `out.y = node.y`
-  verbatim, with the trailer offset applied to X and Z only
-  ([`docs/org/aiPilot.md`](docs/org/aiPilot.md) "The trailer"). There is no terrain sample anywhere
-  in the node read, and none in the patrol follower `FUN_0041d1f0` either. Making our Y
-  terrain-relative or player-relative would put every AI on a different route from the original's,
-  on all 222 nets, to paper over a missing behaviour.
-  **The behaviour that is actually missing is a crash-avoidance MODE.** `FUN_0041f810` is a
-  per-plane ground-proximity check that writes the AI substate at vehicle `+0x358`:
-  - below the global altitude floor `DAT_0071c3f0` (**20.0** in the image, the only unconditional
-    store) it sets state **3** outright;
-  - between that floor and `DAT_0071c3f4` (**8000.0**) it casts a ray **4.5 ×** the vector the
-    vehicle's virtual `+0x04` accessor returns (velocity by shape and use, so ~4.5 s of travel,
-    which is the one inferred step here) through `FUN_004c8f70`, and sets state 3 on a hit;
-  - above 8000 m it runs no check and CLEARS state 3 back to 0.
-  The re-check is throttled per plane to the game clock plus `0.5–1.0 s`, drawn from
-  `rand()/32767`, so it is not a per-frame cast. State 3 is then handled by the follower's own
-  switch (`FUN_0041d1f0` case 3): the steering target becomes the plane's own position with
-  **Y + 1000**, flown through parameter block `DAT_0061fb48` (throttle band 0.6–1.3) instead of
-  patrol's `DAT_0061fb68` (0.8–1.1). `FUN_0041b560`, the shared steering law, reads the same
-  `DAT_0071c3f0` floor directly, and `FUN_004216e0`'s maneuver suspends it (writing −FLT_MAX, with
-  a paired per-vehicle ceiling at `+0x314` set to +FLT_MAX) for its duration.
-  *Fix shape:* a mode in `AiModeMachine`, not a change to `AiNetFollower`. `AiPilot` currently sets
-  `TargetAltitude = patrol.CurrentTarget.Y` and its only altitude leash handles being too HIGH
-  (`_altRecovering`, `AltLeashEnterM`), so there is no floor and no lookahead at all. The ray needs
-  a world collision query; `GameSession.GroundSampler()` is a height sampler, not a ray, so decide
-  which of the two to use rather than assuming the sampler is enough on a cliff face.
-  ⚠ *Traps.* (a) **Do not clamp the net.** The climb-out is a state that overrides steering and
-  then releases; a clamped node altitude would permanently move the route. (b) The 20 m floor is a
-  flat world-Y floor, NOT terrain-following, so it does not by itself save a plane over a 600 m
-  ridge; the raycast is what does. (c) The +1000 m target is relative to the PLANE, not to the
-  terrain or the net. (d) `ZeppelinMotion` shares the follower but is a different actor with no
-  flight model; do not fold zeppelins into an aircraft crash-avoid mode without checking whether
-  the original runs one for them. (e) The throttle-band swap is part of the behaviour, not
-  decoration: a climb-out at patrol throttle is a slower climb than the original's.
-  *Playtest after fix:* fly Instant Action in C1 over the high ground east of the spawn with F13 up
-  and `--debug-markers`, and watch a netted enemy cross a ridge that sits above the net's authored
-  400 m: it should pitch up and climb out of the state on its own rather than fly into the slope,
-  and it should return to the graph afterwards rather than stay in the climb.
-  *Cross-refs:* `BL-364`,
-  [`docs/org/aiPilot.md`](docs/org/aiPilot.md) "The trailer" (the anchored-net ride that carries a
-  net over any terrain and so made this visible; closed as `BL-377`,
-  `git log --grep=BL-377`).
 
 - `BL-398` `[Feature]` **A rebindable keymap — the real answer to targeting's key placement, not a
   targeting-specific fix.** *Evidence:* the player-targeting plan's own out-of-scope call (a),
@@ -2178,67 +2039,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   **Pick these up when the thing they depend on exists** — a cutscene player for `Callback` — not
   before. `ObjectCycleTexture` needs neither; it needs a mission that
   actually builds a `taildamage` node, which none of the ones this project defaults to do.
-
-- `BL-135` `[Bug]` `[Blocked: original-engine evidence]` **The one-frame `CallSequence` dispatch lag.**
-  **Found 2026-07-22 while fixing C1's police siren** (that fix landed; see `docs/HISTORY.md`). This
-  is the *other* defect that investigation turned up — real, engine-wide, and deliberately left
-  unfixed because it was not what silenced anything.
-
-  **⚠ Re-measured and RE-DEFERRED 2026-08-04** (`PLAN-m3-polish-6` B12). The bounded drain was
-  built, measured across the whole install and then taken back out. Read
-  [`analysis/bl-135-callsequence-lag/FINDINGS.md`](analysis/bl-135-callsequence-lag/FINDINGS.md)
-  before touching this again — the implementation, the sized bound and the full measurement are
-  there, and the "behaviour-neutral" claim below is superseded. Summary of what changed:
-
-  - **It is no longer behaviour-neutral.** 4 of the 13 goldens move, deterministically:
-    `c1-crash` 79.7 % of pixels, `c1-destroy-effects` 0.228 %, `c3-island` 0.029 %,
-    `c5-city-night` 0.015 %. All four are particle shots and the difference is phase — same camera,
-    same terrain, the effect one tick further along (C5 877 → 927 live particles at frame 120).
-    7 of the 8 `--freecam --det` chapter captures stay pixel-identical.
-  - **Nothing observable is repaired.** No content appears or disappears; every runtime total is
-    unchanged. What moves is the bootstrap CENSUS (C1 35 → 53 lights, C5 9 → 37 puffer emitters),
-    which is trap 3 below — those objects already existed one tick later.
-  - **The bound is sized, not guessed.** The deepest same-tick CALL fan-out authored anywhere is
-    **15** (every zeppelin's `main_altitude_check` → `rotatezep` → `breakupzep` → 13 `break*`
-    pieces), so the cap was 64. It is load-bearing: C2/M02's `marypickford` really does ring
-    (`randomloop → mpickford_bob → randomloop`), and it is instantaneous in THIS engine because
-    `OBJECT_MOTION_SI_SCRIPT_ALL_NAMES` has no handler and reports duration 0.
-  - **The blocking question is not capture-answerable**, so no `CAP-nn` was minted: the difference is
-    one tick per hop over chains at most 3 hops deep (≈50 ms) off a trigger that is not on screen.
-
-  **The mechanism.** `AnimInstance.CallSequence` appends to `Runners` (`SequenceRunner.cs:84`) while
-  `AnimInstance.Advance` walks that list **descending** (`SequenceRunner.cs:67`). An appended runner
-  therefore lands at an index the loop has already passed, so **every called sequence's first event
-  fires one frame late** — not just the siren's. Scale: 22,391 compiled `CallSequence` events across
-  3,434 defs, plus 1,865 in the reader files.
-
-  **Why it was not fixed with the siren.** Draining same-pass-appended runners was implemented and
-  measured behaviour-neutral at the time (exactly one number moved across all 8 chapters) — a claim
-  the 2026-08-04 re-measurement above **supersedes**. But it repairs
-  the siren only because the sound loader *happens* to still be alive at that instant, and leaves
-  the other 947 late `SOUND_NODE` events broken. The loader lifetime was the real defect and is
-  fixed; this lag is a separate question about dispatch timing fidelity.
-
-  **⚠ Traps — read before touching this.**
-
-  1. **The descending walk is deliberate, not a bug.** `AnimRuntime.cs:250` records why: instances
-     can be added *during* the walk. Do not "fix" it by iterating forwards.
-  2. **Any same-pass drain needs a bound.** A sequence that calls itself would spin within a single
-     frame. (The siren's own `siren_police` is safe — 3 zero-delay events, no `Loop`, so its runner
-     completes and is removed in one pass — but that is a property of that data, not a guarantee.)
-     Confirmed 2026-08-04: `marypickford` is the def that proves it, and 64 is the sized cap.
-  3. **Do not measure this with the bootstrap emitter census.** `anim: N ambient sound emitter(s)`
-     is printed inside `Bootstrap`, so it is a snapshot that cannot see anything created afterwards
-     — which is exactly how the siren's real cause stayed hidden through a full investigation
-     (`docs/verification.md` LOG-2). C1 legitimately reports 38 while 39 emitters exist.
-
-  **Open question this should answer:** does the original dispatch a called sequence in the same
-  tick? If yes, every `CallSequence` in the install is currently a frame late and the fix is a
-  fidelity improvement rather than a no-op. Nobody has checked, and as of 2026-08-04 nobody can from
-  film — the difference is below a capture's resolution (see the re-deferral note above). Until it is
-  settled from the original's code, the drain buys a golden rebaseline for an unverified direction,
-  which is why it is not landed. Measured behaviour movement says only that *our* observable output
-  changes; it is still not evidence about the original.
 
 - `BL-218` `[Tuning]` `[Owed-playtest]` **Puffer `NUMBER` default (2026-08-01)** — `NUMBER` is absent from 680 of C1's 721
   `PufferState` events, including `large_30sec_fire`'s `fire_n_smoke`, and `PufferState.FromAnimEvent`

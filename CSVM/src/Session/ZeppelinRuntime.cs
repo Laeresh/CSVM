@@ -146,6 +146,8 @@ public sealed partial class ZeppelinRuntime : Node
             return;
         }
         _runtime = runtime;
+        // The gasbag exemption on the collision path, on the shared sink so every rig inherits it.
+        runtime.CollideDamageGate = GateCollisionDamage;
         foreach (var zep in _live)
         {
             WireZones(zep, runtime);
@@ -174,6 +176,28 @@ public sealed partial class ZeppelinRuntime : Node
                     _gateLogged++;
                     GD.Print($"zep: gasbag hit by {weapon.Id} ({weapon.Name}) blocked — " +
                              $"no DAMAGES_ZEPPELIN");
+                }
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>The same gate for a COLLISION (<c>AnimRuntime.CollideDamageGate</c>): a ram cannot
+    /// damage a gasbag, and every other zeppelin part passes.
+    /// ⚠ A ram carries no <see cref="WeaponDef"/>, so it cannot reuse
+    /// <see cref="GateWeaponDamage"/>. The original needs no second entry point: it delivers a ram
+    /// as a <c>wep_24</c> weapon hit, which lacks <c>DAMAGES_ZEPPELIN</c>.</summary>
+    public bool GateCollisionDamage(DestructibleRegistry.Instance inst)
+    {
+        foreach (var zep in _live)
+        {
+            if (zep.GasbagInstances.Contains(inst))
+            {
+                if (_gateLogged < 8)
+                {
+                    _gateLogged++;
+                    GD.Print("zep: gasbag RAM blocked — a collision carries no DAMAGES_ZEPPELIN");
                 }
                 return false;
             }

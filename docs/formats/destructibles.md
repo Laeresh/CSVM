@@ -26,7 +26,7 @@ A destructible is any animation definition whose header carries these:
 | Field | Reader key | Compiled key | Meaning |
 |---|---|---|---|
 | Hit points | `HEALTH [n]` | `health` (float) | The object's HP pool. **Any def with `health > 0` is destructible** — this is the whole test. |
-| Damage mode | `ACTIVATION` (usually absent) | `activation` | The plane's fate on contact: `WeaponHit` (solid — graze/crash) or `WeaponOrCollideHit` (breaks, plane flies through). Both take collision damage (`BL-302`). |
+| Damage mode | `ACTIVATION` (usually absent) | `activation` | The plane's fate on contact: `WeaponHit` (solid — graze/crash) or `WeaponOrCollideHit` (breaks, plane flies through). Both take collision damage. |
 | Damage script | `DAMAGE_SEQUENCE [ … ]` | a sequence named `DAMAGE_SEQUENCE` | A threshold script of `IF ANIM_HEALTH n` branches escalating visible damage as HP falls. |
 
 Everything else is ordinary sequences and events. When the object dies, a normal named
@@ -47,13 +47,23 @@ always states it explicitly. The two values:
 - **`WeaponOrCollideHit`** — the object **breaks and the plane flies through unharmed**. Exactly
   **44 defs** in the whole install, and they are a deliberate, hand-picked set (below).
 
-> ⚠ **reading (`BL-302`).** This page originally read the enum as
-> "what can damage it" — `WeaponHit` = weapon fire only, ramming damages the plane and leaves the
-> object intact. Original-game tests refute that: ramming a C1 hangar (a plain `WeaponHit` def)
-> plays both the plane crash and the hangar's destruction, and a survivable graze advances its
-> `DAMAGE_SEQUENCE` stages. **Every destructible takes severity-scaled collision damage; the enum
-> gates the *plane's* fate (solid vs fly-through), not the object's.** The crash explosion has no
-> blast radius (crashing beside a destructible damages nothing), so the damage is contact-borne.
+> ⚠ **The enum gates the PLANE's fate, not the object's.** Every destructible takes severity-scaled
+> collision damage, whichever value it carries: ramming a `WeaponHit` building plays both the plane
+> crash and the building's destruction, and a survivable graze advances its `DAMAGE_SEQUENCE` stages
+> while the plane flies on. Reading it as "what can damage it" (`WeaponHit` = weapon fire only,
+> ramming leaves the object intact) is the mistake to avoid; the census below does not support it.
+> The crash explosion has no blast radius, so the damage is contact-borne: crashing beside a
+> destructible damages it not at all.
+>
+> `activation` is the animation record's `+0xa1` byte. The animation-definition loader
+> `FUN_005230d0` registers a damage handler per record keyed on it (0 registers slot 0 only, 1 slot 1
+> only, 2 both), and the slot-0 handler `0x004e7220` re-checks the byte itself, accepting
+> `+0xa1 ∈ {0, 2}` and refusing everything else (`0x004e7234`). A collision is delivered through slot
+> 0 as an ordinary `wep_24` weapon hit, so `WeaponHit` (0) and `WeaponOrCollideHit` (2) both take it.
+> The handler subtracts the object's own damage reduction (`+0xbc`) from the incoming health damage,
+> applies the remainder to the pool at `+0xb8`, and re-runs the `DAMAGE_SEQUENCE` evaluation, which
+> is where the severity scaling shows. See [`../org/flightModel.md`](../org/flightModel.md)'s
+> "Collision damage" for the severity law and the handler's arithmetic.
 
 `proximity_damage` is a **separate** header flag and is `false` on every case examined here,
 including both collide members and plain `WeaponHit` destructibles — it does *not* encode the

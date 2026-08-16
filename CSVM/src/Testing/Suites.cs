@@ -237,9 +237,10 @@ public static class Suites
         into.Add(new TestHarness.Suite("graze-bounce",
             "the decoded graze restitution (C25) on real contacts: a player rig flown into a floor " +
             "rebounds along the contact normal off the shipped bounce_factor, an AI rig on the " +
-            "identical trajectory gets the position correction and nothing else (the original's " +
-            "player-only impulse gate), and the same impulse on a vertical face is entirely " +
-            "horizontal — one coefficient, no surface test anywhere in it", GrazeBounce));
+            "identical trajectory never gains normal speed (the original's player-only impulse " +
+            "gate) and is destroyed outright by that same contact (the decoded local_11 rule), " +
+            "and the same impulse on a vertical face is entirely horizontal — one coefficient, " +
+            "no surface test anywhere in it", GrazeBounce));
         into.Add(new TestHarness.Suite("ai-spawn-jitter",
             "the decoded per-spawn dynamics spread (C26) through the real spawner: two AI aircraft " +
             "off ONE airframe cache, given the same pose and the same orders, fly measurably apart " +
@@ -2728,18 +2729,20 @@ public static class Suites
 
             ctx.Check(player.Contacted && !player.Crashed,
                 $"the player rig grazed the floor and survived it vn={-player.NormalIn:0.0} m/s");
-            ctx.Check(ai.Contacted && !ai.Crashed,
-                $"the AI rig grazed the same floor on the same trajectory vn={-ai.NormalIn:0.0} m/s");
-            if (player.Contacted && ai.Contacted)
+            // ⚠ The AI does NOT survive this, and that is the decoded local_11 rule (0x0048d79e),
+            // not a regression: a non-player striker that resolved anything other than an
+            // aeroplane is destroyed whatever health it has left.
+            ctx.Check(ai.Crashed,
+                $"an AI aircraft is destroyed outright by the same terrain contact the player grazes (crashed={ai.Crashed})");
+            if (player.Contacted)
             {
                 ctx.Check(player.NormalOut > 0.3f * -player.NormalIn,
                     $"the player rebounds along the contact normal in={player.NormalIn:0.00} out={player.NormalOut:0.00} m/s (bounce_factor {stats.BounceFactor:0.##} × the lever partition)");
                 ctx.Check(player.VerticalOut > 0f,
                     $"…and on flat ground that rebound is what the altimeter reads vy {player.VerticalIn:0.00} → {player.VerticalOut:0.00} m/s");
-                // The divergence: same trajectory, same geometry, no impulse at all.
-                ctx.Check(Mathf.Abs(ai.NormalOut) < 0.05f * -ai.NormalIn,
-                    $"an AI aircraft gets the position correction ALONE — no impulse (0x0048d7f0's player gate) in={ai.NormalIn:0.00} out={ai.NormalOut:0.00} m/s");
-                ctx.Note($"floor graze: player {player.NormalIn:0.00} → {player.NormalOut:0.00} m/s on the normal (e={player.NormalOut / -player.NormalIn:0.00}), AI {ai.NormalIn:0.00} → {ai.NormalOut:0.00}");
+                ctx.Check(!ai.Contacted || Mathf.Abs(ai.NormalOut) < 0.05f * -ai.NormalIn,
+                    $"an AI aircraft never gains normal speed from a contact — no impulse (0x0048d7f0's player gate) in={ai.NormalIn:0.00} out={ai.NormalOut:0.00} m/s");
+                ctx.Note($"floor graze: player {player.NormalIn:0.00} → {player.NormalOut:0.00} m/s on the normal (e={player.NormalOut / -player.NormalIn:0.00}), AI crashed={ai.Crashed}");
             }
 
             // --- a vertical face, same approach angle, so the only thing that changes is which way
@@ -6966,11 +6969,12 @@ public static class Suites
                 $"…and recovered to the prior mode after it mode={AiModeMachine.NameOf(machine.Mode)}");
 
             // --- avoid crash: a blocked probe overrides with a climb-out, a cleared one
-            // releases back.
+            // releases back. Stepped past ProbeIntervalMaxS, since the probe's cadence is the
+            // original's per-plane 0.5…1.0 s draw and this plane's is unknown to the test.
             machine.SixthSenseChance = 1f;
             float yBefore = ai.WorldPosition.Y;
             terrainBlocked = true;
-            Step(30);
+            Step((int)(AiModeMachine.ProbeIntervalMaxS * 60f) + 6);
             ctx.Check(machine.Mode == AiMode.AvoidCrash,
                 $"a blocked terrain probe takes the mode mode={AiModeMachine.NameOf(machine.Mode)}");
             ctx.Check(machine.ClimbOutAltitude > yBefore,
@@ -6987,6 +6991,10 @@ public static class Suites
             // the machine's own tick: a chasing human 600 m dead astern enters lay off with
             // the assist on, and never with --no-assist's switch off.
             machine.Enter(AiMode.Pursue, "test: rejoin for lay off");
+            // Pursue's own lever, to ease off FROM. ⚠ Not a fixed number: the law walks the lever
+            // toward its desired speed, so what pursue is commanding here depends on how fast the
+            // plane happens to be after the climb-out above.
+            float leverPursuing = pilot.Throttle;
             var aiPos2 = ai.WorldPosition;
             var ownVel = new Vector3(0f, 0f, -100f);               // flying -Z
             var pursuerPos = aiPos2 + new Vector3(0f, 0f, 600f);   // 600 m dead astern
@@ -7015,8 +7023,8 @@ public static class Suites
             Step(30);
             ctx.Check(machine.Mode == AiMode.LayOff,
                 $"the anti-chatter hold keeps the mode mode={AiModeMachine.NameOf(machine.Mode)}");
-            ctx.Check(pilot.Throttle < 1f,
-                $"the throttle is eased off flat-out throttle={pilot.Throttle:0.00}");
+            ctx.Check(pilot.Throttle < leverPursuing,
+                $"the throttle is eased off pursue's own lever throttle={pilot.Throttle:0.000} from {leverPursuing:0.000}");
             ctx.Check(!pilot.Gunner.WantsFire, $"fire is held while laying off");
 
             // Once the hold expires the machine releases back to pursue and the lever runs up to its ceiling.

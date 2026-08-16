@@ -838,19 +838,21 @@ public static class Probes
                 runtime.Stop(anim, anchor);
             }
 
-            // Collide-gate probe: reset and apply a plane COLLISION via CollideDamageAt. Only a
-            // WeaponOrCollideHit destructible (the facades/windows/agyrobus) accepts it and breaks;
-            // a WeaponHit object (tower, gate) ignores the collision and stands.
+            // Collide-gate probe: an overkill COLLISION must break a WeaponHit tower just as it
+            // breaks a WeaponOrCollideHit facade. ACTIVATION decides only what the
+            // PLANE does, the second column: through, or solid.
             string collide = "";
             if (damageHd > 0f)
             {
                 target.Health = target.MaxHealth;
                 target.Status = DestructibleRegistry.State.Healthy;
                 target.DamageStage = 0;
-                bool accepted = runtime.CollideDamageAt(target.Anchor, target.MaxHealth + 1f);
+                bool flyThrough = runtime.CollideDamageAt(target.Anchor, target.MaxHealth + 1f);
                 bool broke = target.Status == DestructibleRegistry.State.Destroyed;
-                row.CollideAccepted = accepted;
-                collide = $"collide[{(accepted ? (broke ? "✓ broke" : "✓ hit, survived") : "✗ ignored")}, {row.Activation}]; ";
+                row.CollideAccepted = broke;
+                row.CollideFlyThrough = flyThrough;
+                collide = $"collide[{(broke ? "✓ damaged" : "✗ IGNORED")}, "
+                    + $"plane {(flyThrough ? "through" : "solid")}, {row.Activation}]; ";
             }
 
             // Reset/restore check: from a destroyed state, ResetDestructible returns the object to
@@ -1939,7 +1941,8 @@ public static class Probes
         public int Sounds;
         public bool? ResetHealthy;     // null when the mode never reset (continuous sweep)
         public bool? RekillMatched;
-        public bool? CollideAccepted;
+        public bool? CollideAccepted;   // the object took the damage — now true for EVERY activation
+        public bool? CollideFlyThrough; // the plane passed through it — the ACTIVATION half
         public string Line = "";
     }
 

@@ -62,8 +62,23 @@ public sealed class AiModeMachine
     /// <summary>Invented: seconds between evade heading scrambles.</summary>
     public const float EvadeScrambleIntervalS = 2f;
 
-    /// <summary>Invented: obstacle-probe cadence, seconds.</summary>
-    public const float ProbeIntervalS = 0.25f;
+    /// <summary>Obstacle-probe cadence floor, seconds — decoded: the original re-arms its per-plane
+    /// timer to the game clock plus 0.5…1.0 s (<c>FUN_0041f810</c>), the fraction drawn as
+    /// <c>rand()/32767</c>. Was an invented flat 0.25 s.</summary>
+    public const float ProbeIntervalMinS = 0.5f;
+
+    /// <summary>Obstacle-probe cadence ceiling, seconds (see <see cref="ProbeIntervalMinS"/>).</summary>
+    public const float ProbeIntervalMaxS = 1f;
+
+    /// <summary>The world-Y floor below which the climb-out arms with no ray at all — decoded:
+    /// <c>DAT_0071c3f0</c>, written 20.0 at level setup (<c>FUN_004735b0</c>, <c>0x0047415b</c>).
+    /// ⚠ Flat world Y, not a terrain follow: it saves a plane over water and does nothing over a
+    /// ridge, which is what the ray is for.</summary>
+    public const float AltitudeFloorM = 20f;
+
+    /// <summary>The world-Y ceiling above which no ray is cast and a running climb-out is released
+    /// — decoded: <c>DAT_0071c3f4</c>, written 8000.0 alongside the floor above.</summary>
+    public const float ProbeCeilingM = 8000f;
 
     /// <summary>Obstacle-probe lookahead, seconds of current velocity — decoded: the original's
     /// ray is the vehicle's own velocity scaled by 4.5 (<c>FUN_0041f810</c>), so 4.5 seconds of
@@ -77,11 +92,10 @@ public sealed class AiModeMachine
     /// terrain under a level flight path still registers.</summary>
     public const float ProbeDeckM = 40f;
 
-    /// <summary>Invented: the avoid-crash climb-out altitude gain, metres.</summary>
-    public const float ClimbOutM = 250f;
-
-    /// <summary>Invented: consecutive clear probe rounds before avoid-crash releases.</summary>
-    public const int ClearProbesToExit = 4;
+    /// <summary>The avoid-crash climb-out altitude gain, metres — decoded: the original's climb-out
+    /// aim is the aeroplane's own position with Y + 1000 (<c>FUN_0041d1f0</c> case 3), which is the
+    /// same 1000 m <see cref="AiPilot.ClimbOutAim"/> flies. Was an invented 250.</summary>
+    public const float ClimbOutM = 1000f;
 
     /// <summary>Invented: selection weight multiplier for a roster-authored signature maneuver
     /// ("weighted up during selection" is decoded; the factor is not).</summary>
@@ -191,7 +205,6 @@ public sealed class AiModeMachine
     private float _evadeRemaining;
     private float _evadeScramble;
     private float _probeCooldown;
-    private int _clearProbes;
 
     public AiModeMachine(Random rng)
     {
@@ -483,18 +496,37 @@ public sealed class AiModeMachine
         return chaseCos >= Mathf.Cos(Mathf.DegToRad(LayOffPursuerConeDeg));
     }
 
-    // The obstacle-closure override (invented probe geometry, marked above): two rays
-    // along the velocity lookahead, every ProbeIntervalS, seeing world and other
-    // aircraft alike (decoded; the caster alone is excluded). Blocked → avoid crash (dropping a
-    // running maneuver); clear for ClearProbesToExit rounds → back.
+    // The obstacle-closure override, in the original's three altitude bands (FUN_0041f810): below
+    // AltitudeFloorM the climb-out arms outright, above ProbeCeilingM nothing is cast and a running
+    // one is released, and between them a due probe decides. The probe geometry inside that middle
+    // band is ours (two rays, marked invented above); what it sees is decoded, the caster alone
+    // being excluded. Blocked → avoid crash, dropping a running maneuver, which is the original's
+    // precedence (FUN_004897c0 runs the check in states 0-3 and starts a maneuver only from 0-1).
     private void UpdateAvoidCrash(Vector3 pos, Vector3 velocity, float dt)
     {
+        // Stunned never reaches here (Update returns above), matching the caller's state < 4 gate.
+        if (pos.Y < AltitudeFloorM)
+        {
+            // No ray and no cadence on this arm: the original stores the state every call.
+            if (Mode != AiMode.AvoidCrash)
+                EnterAvoidCrash(pos, FormattableString.Invariant($"below the {AltitudeFloorM:0} m floor"));
+            return;
+        }
+
+        if (pos.Y >= ProbeCeilingM)
+        {
+            if (Mode == AiMode.AvoidCrash)
+                Transition(_returnMode, "above the probe ceiling");
+            return;
+        }
+
         if (ProbeBlocked is not { } probe)
             return;
         _probeCooldown -= dt;
         if (_probeCooldown > 0f)
-            return;
-        _probeCooldown = ProbeIntervalS;
+            return; // not due: the state stands until a probe changes it, as the original's does
+        _probeCooldown = ProbeIntervalMinS
+            + ((float)_rng.NextDouble() * (ProbeIntervalMaxS - ProbeIntervalMinS));
 
         float speed = velocity.Length();
         var dir = speed > 1e-3f ? velocity / speed : Vector3.Forward;
@@ -502,21 +534,25 @@ public sealed class AiModeMachine
         var ahead = pos + dir * reach;
         string? struck = probe(pos, ahead) ?? probe(pos, ahead + Vector3.Down * ProbeDeckM);
 
-        if (Mode == AiMode.AvoidCrash)
+        if (struck is null)
         {
-            _clearProbes = struck is null ? _clearProbes + 1 : 0;
-            if (_clearProbes >= ClearProbesToExit)
+            // One clear ray releases, in the same call. The original holds no clear streak.
+            if (Mode == AiMode.AvoidCrash)
                 Transition(_returnMode, "clear of obstacles");
         }
-        else if (struck is not null && Mode != AiMode.Stunned)
+        else if (Mode != AiMode.AvoidCrash)
         {
-            if (Mode is AiMode.Pursue or AiMode.LayOff or AiMode.Patrol)
-                _returnMode = Mode;
-            Executor = null; // a running maneuver is abandoned to the override
-            _clearProbes = 0;
-            ClimbOutAltitude = pos.Y + ClimbOutM;
-            Transition(AiMode.AvoidCrash, $"obstacle inside {reach:0} m ({struck})");
+            EnterAvoidCrash(pos, $"obstacle inside {reach:0} m ({struck})");
         }
+    }
+
+    private void EnterAvoidCrash(Vector3 pos, string reason)
+    {
+        if (Mode is AiMode.Pursue or AiMode.LayOff or AiMode.Patrol)
+            _returnMode = Mode;
+        Executor = null; // a running maneuver is abandoned to the override
+        ClimbOutAltitude = pos.Y + ClimbOutM;
+        Transition(AiMode.AvoidCrash, reason);
     }
 
     // An eligible library maneuver, signature entries weighted up, one seeded draw;

@@ -11,7 +11,10 @@ Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs a
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
 Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — run
 **`./New-ItemId.ps1 -Kind CAP`** (or `-Kind PT`), which increments a shared locked counter in
-`.git/item-id-counters.json` and is safe under concurrent sessions. Retired IDs' verdicts are in
+`.git/item-id-counters.json` and is safe under concurrent sessions. ⚠ **Run it for EVERY id, every
+time**: it is not a once-per-session lookup, and deriving the next id by adding 1 leaves the counter
+behind the file, so the number you invented gets handed out again later. `-Count n` reserves a block
+in one call when you need several. Retired IDs' verdicts are in
 the retiring commit's message (`git log --grep=<ID>`); pre-2026-08-06 retirements are in
 `docs/HISTORY.md` (frozen).
 
@@ -381,6 +384,19 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
   actually cycling patrol/pursue/lay off rather than idling in an empty stage.
   *Variations:* pair with `--debug-ainets=M4ReinfAce` to watch the drawn route alongside the flight.
   *Blocks:* F52's AI-side verdict.
+
+- `PT-58` `[Own]` **Crash avoidance over a ridge that sits above the net's authored altitude.**
+  ```powershell
+  ./RunGame.ps1 --chapter=C1 --plane=player_bhawk --ai=player_fury:M4ReinfAce --ai-attack=9 --debug-markers
+  ```
+  *Look for:* fly out over the high ground east of the spawn with F13 up and watch a netted enemy
+  cross ground that stands above the net's authored 400 m. It should pitch up and climb out on its
+  own rather than fly into the slope, and it should rejoin the graph afterwards rather than hold the
+  climb. The mode transitions print as `patrol -> avoid crash` and back, naming what the ray struck.
+  *Look for also:* the climb-out is a 45° break up and to the right of the aircraft's own track, not
+  a vertical pull-up, and the state releases as soon as the line is clear rather than dwelling.
+  *Blocks:* the cockpit half of crash avoidance; the mechanism itself is decoded and measured
+  (`docs/org/aiPilot.md`, "Crash avoidance is a STATE, not an altitude rule").
 
 ### Autogyro, Balmoral, Fury — low-speed authority ramp (F52 player arm)
 
