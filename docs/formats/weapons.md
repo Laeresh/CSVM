@@ -62,8 +62,8 @@ See [CLUSTER_SIZE vs AMMO_LIMIT](#cluster-size-and-ammo-limit) for which entries
 | `FIRE_RATE` | 48 | 0.3–10.5 | shots per second (guns 6–10.5; rockets ≈1.0) |
 | `VELOCITY` | 47 | 1.0–1200 | muzzle / flyout speed, m/s — with `ACCELERATION` it is the speed the motor climbs to **above the launcher's own**, not the launch speed |
 | `ACCELERATION` | 16 | 0–150 | rocket-motor acceleration, m/s² (0 = constant velocity). A round carrying one leaves at its launcher's speed and climbs from there; the cap is `VELOCITY` plus that speed. Decoded in [`org/ordnanceTypes.md`](../org/ordnanceTypes.md) |
-| `RANGE` | 46 | 900–10000 | max effective / despawn range, m (Seeker 10000) |
-| `RANGE_MINIMUM` | 1 | `[300, 0]` | **a visibility gate, not an arming range** (torpedo): the flyout is hidden until it has travelled this far. Decoded in [`org/ordnanceTypes.md`](../org/ordnanceTypes.md); nothing on that path gates arming |
+| `RANGE` | 46 | 900–10000 | path length a round may fly before it ends, m (Seeker 10000). **Defaults to 500** when unauthored, which is what the smoke screen and the rear-arc flare fly. Reaching it detonates a round only if the weapon carries `LOCK_ON`, so the choker, the cannonball and the fake weapon vanish instead ([`org/ordnanceTypes.md`](../org/ordnanceTypes.md)) |
+| `RANGE_MINIMUM` | 1 | `[300, 0]` | **a visibility gate, not an arming range** (torpedo): the flyout is hidden until it has travelled element 0. Element 1 is stored too and the reveal demands it be zero, which the sole entry authors; what a non-zero one would mean is unknown. Decoded in [`org/ordnanceTypes.md`](../org/ordnanceTypes.md); nothing on that path gates arming |
 | `GRAVITY` | 5 | 0.0 | the round's own downward acceleration, m/s² — an absolute rate, not a scale on world gravity (0 throughout this install, so inert as shipped) |
 | `CANNON_SPREAD` | 31 | 6.0 | **not a dispersion cone** — the gun aim assist's acceptance-cone half-angle, degrees (constant). See [`org/aim-assist.md`](../org/aim-assist.md) |
 | `FIRING_HEAT` | 4 | 5.0 | nominally heat added per shot; only the base guns `wep_00`–`03`. **Parsed but never consumed by the original** : `FUN_004ba6f0` stores it at `+0x14` of the game-side weapon-extension struct (0x38 bytes, hung off the ZWEP record at `+0x210`), defaulting to 0 when the key is absent, and no consumer of that struct reads the field. Its partner `cannon_jam` is dead data too, see [vehicle.md](vehicle.md) |
@@ -98,7 +98,7 @@ against each caliber's slug, not something the engine computes.
 | `DETONATION_DISTANCE` | 13 | 1–50 | proximity-fuse trigger distance, m (**stored squared**, see below) |
 | `IMPACT_PROXIMITY` | 14 | 15–500 | blast / effect radius, m (**stored raw and squared**, see below) |
 | `DETONATION_DOT_PRODUCT` | 3 | 0.1 / 0.3 | cone-alignment threshold for a proximity detonation |
-| `DETONATION_TIME` | 1 | 2.0 | timed fuse, s (rear-arc flare) |
+| `DETONATION_TIME` | 1 | 2.0 | timed fuse, s (rear-arc flare). Defaults to −1.0 and the fuse demands a positive value, so an unauthored one is off rather than instant |
 | `CRATER` | 6 | 0 | ground-crater flag/scale; marks the ground-attack munitions |
 
 **Guided vs unguided is `TURN_RATE`, not a flag.** There is no `GUIDED` boolean. 13 of the 14

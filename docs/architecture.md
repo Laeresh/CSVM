@@ -1228,8 +1228,36 @@ the launch direction instead of a velocity too short to normalise. `Proj.Grav` i
 `GRAVITY` verbatim in m/s²; `WorldGravity` is now the sprite debris' fall rate alone. The
 `motor-acceleration` suite flies all of this on a live pool.
 
+**A round ends itself for one of exactly three reasons, and never on the step it collides**
+(`org/ordnanceTypes.md`, "The motion step, and where a round dies"). `EndConditionMet` is the
+original's own branch: `Proj.Travelled` reaching `Proj.Range` wins outright and neither fuse is
+consulted after it, `TargetFuseTriggered` is the per-round fuse on the round's OWN target (squared
+throughout, gated on `LOCK_ON` and a held target and a non-zero `DETONATION_DISTANCE`), and the
+`DETONATION_TIME` age test is what a round failing that gate falls through to. All three run
+**before** the swept step's ray, because the original ends a round inside its motion step and only
+moves and collides what survives, and all three leave through `EndRound`, which shares the effect,
+sound and splash paths a struck surface gets. `DetonatesAtRange` is the expiry's own question: the
+original's rule is `LOCK_ON` and not `EXPIRES`, or `DETONATE_AT_RANGE`, and since this install
+authors neither of the last two, carrying `LOCK_ON` is the whole rule — the choker, the cannonball
+and the fake weapon vanish at their range where every other ordnance type detonates. `DefaultRange`
+is the engine's own 500 m for a def authoring no `RANGE`. ⚠ `ProximityFuseTriggered` is a
+DIFFERENT path and stays as it is: it sweeps the aircraft roster for anything passed near, is
+aircraft-only by decode (`BL-233`), and holds fire while a candidate is still being closed on. The
+two are complementary, and the `ordnance-end-conditions` suite flies a case where the sweep is
+holding fire on a nearer aircraft while the target fuse goes off anyway.
+
+**`RANGE_MINIMUM` is a visibility gate riding the same accumulator.** A weapon carrying both
+`FLYOUT_HEALTH` and `RANGE_MINIMUM` (`FlyoutHiddenAtLaunch`, the torpedo alone) spawns with no
+flyout body shown and no trail emitters acquired at all; `RevealFlyout` shows the body and acquires
+the trail together once `Proj.Travelled` passes the authored distance, so the smoke homes at the
+reveal point rather than dumping the hidden leg's worth of puffs at once. Holding the trail back is
+a judgement rather than a decode: the original's reveal switches the round's scene node, and
+whether its `MODEL_ANIMATION` puffer rides that flag was not traced. `CollectFlyoutReveal` is the
+seam a scripted run reads the gate through, since a pool with no world scene builds no body to look
+at.
+
 `ProjectilePool` — the shared-world weapon-fire subsystem: a fixed pool of projectiles integrated
-with `Ballistics` (VELOCITY/ACCELERATION/GRAVITY, expiring at RANGE), plus tracer streaks,
+with `Ballistics` (VELOCITY/ACCELERATION/GRAVITY, ending at RANGE), plus tracer streaks,
 muzzle flashes, and the per-surface IMPACT sound + effect model. Per-class impact looks: a
 water hit instances the authored splash model and plays its def's own curves for the 2 s run
 (`AdvanceSplash` — base disc 1→2→1.8 xz, column popped to ×100 Y collapsing to 0, the splash1/bsplsh

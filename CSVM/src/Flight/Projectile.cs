@@ -29,6 +29,12 @@ public sealed partial class ProjectilePool : Node3D
     /// assist's scan so the lead it solves is solved for the speed the round actually leaves at.</summary>
     public const float DefaultVelocity = 500f;
 
+    /// <summary>Path length a def carrying no <c>RANGE</c> flies before it ends, m — the value
+    /// <c>FUN_005ad630</c> writes into weapon <c>+0x1c</c> before it reads the key. Only the smoke
+    /// screen and the rear-arc flare leave it unauthored, and the flare's 2.0 s
+    /// <c>DETONATION_TIME</c> ends it long before.</summary>
+    public const float DefaultRange = 500f;
+
     /// <summary>Where a hit's damage goes: given the struck collider and the weapon's
     /// <c>HEALTH_DAMAGE</c>, apply it to the destructible that collider belongs to. Wired to
     /// <c>AnimRuntime.DamageAt</c> in flight; null when there is no destructible system (the static
@@ -324,6 +330,7 @@ public sealed partial class ProjectilePool : Node3D
     private int _impactsLogged;
     private int _soundGainsLogged;               // D31 one-shot gain breadcrumb, first 8
     private int _decaysLogged;                   // launch-velocity decay breadcrumb, first 4
+    private int _revealsLogged;                  // RANGE_MINIMUM reveal breadcrumb, first 2
     private float _simClock;                   // sim seconds since the pool started (the gun-effect throttle)
     private CasingSpec? _casingSpec;           // the gunshell OBJECT_MOTION, resolved once
     private bool _casingSpecResolved;
@@ -412,6 +419,21 @@ public sealed partial class ProjectilePool : Node3D
     /// the turn clamp and the per-frame speed penalty on this same predicate.</summary>
     public static bool SteeringStepRuns(WeaponDef weapon, bool hasTarget) =>
         CarriesLockOn(weapon) && hasTarget;
+
+    /// <summary>Whether a round that reaches <c>RANGE</c> detonates on its way out or simply
+    /// vanishes (<c>FUN_005afd50</c>, the branch at <c>LAB_005b02ba</c> against
+    /// <c>LAB_005b0318</c>). The original's rule is <c>LOCK_ON</c> and not <c>EXPIRES</c>, or
+    /// <c>DETONATE_AT_RANGE</c>; this install authors neither of those two keys, so carrying
+    /// <c>LOCK_ON</c> is the whole rule and the choker, the cannonball and the fake weapon expire
+    /// silently.</summary>
+    public static bool DetonatesAtRange(WeaponDef weapon) => CarriesLockOn(weapon);
+
+    /// <summary>Whether the weapon's <c>FLYOUT</c> body starts hidden and is revealed only after
+    /// <c>RANGE_MINIMUM</c> metres of flight — <c>FLYOUT_HEALTH</c> and <c>RANGE_MINIMUM</c> both
+    /// present, which the torpedo alone is (<c>FUN_005afd50</c> at <c>0x005b01c4</c>). The key is a
+    /// visibility gate and arms nothing.</summary>
+    public static bool FlyoutHiddenAtLaunch(WeaponDef weapon) =>
+        weapon.FlyoutHealth is > 0 && weapon.RangeMinimum is > 0f;
 
     /// <summary>Linear blast falloff: full at the centre and zero at the authored radius.</summary>
     public static float BlastDamage(float fullDamage, float radius, float distance) =>
@@ -520,6 +542,22 @@ public sealed partial class ProjectilePool : Node3D
             if (p.Alive)
             {
                 into.Add((p.Pos, WorldVelocity(in p)));
+            }
+        }
+    }
+
+    /// <summary>Appends every live round's path length so far and whether the
+    /// <c>RANGE_MINIMUM</c> gate is still hiding its flyout, in slot order. The seam a scripted run
+    /// reads the reveal through, since a pool with no world scene builds no flyout body to look
+    /// at.</summary>
+    public void CollectFlyoutReveal(List<(float Travelled, bool Hidden)> into)
+    {
+        for (int i = 0; i < _projHigh; i++)
+        {
+            ref var p = ref _proj[i];
+            if (p.Alive)
+            {
+                into.Add((p.Travelled, p.FlyoutHidden));
             }
         }
     }
@@ -673,8 +711,15 @@ public sealed partial class ProjectilePool : Node3D
                 model.GlobalTransform = FlyoutPose(muzzle.Origin,
                     poseVel.LengthSquared() > 1e-6f ? poseVel : forward);
             }
+            // The torpedo runs its first RANGE_MINIMUM metres unseen, so neither its body nor the
+            // trail that would announce it exists yet; RevealFlyout builds both at the reveal
+            // point, where the trail's emitters home instead of at the launcher.
+            bool hidden = FlyoutHiddenAtLaunch(weapon);
+            if (hidden && model != null)
+                model.Visible = false;
             float rollRate = 0f;
-            var trails = weapon.IsRocket ? AcquireTrails(weapon, muzzle.Origin, muzzle.Basis, out rollRate) : null;
+            var trails = weapon.IsRocket && !hidden
+                ? AcquireTrails(weapon, muzzle.Origin, muzzle.Basis, out rollRate) : null;
             // Team is stamped once here, never re-derived from shooterId on a later scan, so a
             // caller with a real FlightController.Team is answered faithfully for the round's
             // whole flight.
@@ -683,7 +728,8 @@ public sealed partial class ProjectilePool : Node3D
                 Alive = true,
                 Pos = muzzle.Origin,
                 Vel = vel,
-                DistLeft = weapon.Range ?? 1000f,
+                Range = weapon.Range ?? DefaultRange,
+                FlyoutHidden = hidden,
                 Accel = accel,
                 Cap = cap,
                 Grav = weapon.Gravity ?? 0f,
@@ -794,8 +840,9 @@ public sealed partial class ProjectilePool : Node3D
         SimStep(dt);
     }
 
-    /// <summary>One ballistics step: integrate every live round, raycast its segment, expire it at
-    /// RANGE, and age the muzzle/impact sprites. Public because a non-realtime clock has the
+    /// <summary>One ballistics step: integrate every live round, end it on whichever of the three
+    /// end conditions it reaches (<see cref="EndConditionMet"/>), raycast the segment a surviving
+    /// round swept, and age the muzzle/impact sprites. Public because a non-realtime clock has the
     /// session call this instead of Godot's physics tick.</summary>
     public void SimStep(float dt)
     {
@@ -829,6 +876,18 @@ public sealed partial class ProjectilePool : Node3D
             next += p.Inherited * (carried * dt);
             var vel = p.Vel + p.Inherited * carried;
             float stepLen = (next - prev).Length();
+            p.Age += dt;
+            p.Travelled += stepLen;
+            RevealFlyout(ref p, prev, vel);
+
+            // ⚠ Resolve the three end conditions BEFORE the swept step, never after: the original
+            // ends a round inside its motion step and moves and collides only what survives
+            // (FUN_005afd50 returning to FUN_005af720's alive test).
+            if (EndConditionMet(in p, out bool detonates))
+            {
+                EndRound(ref p, prev, detonates);
+                continue;
+            }
 
             if (space != null && stepLen > 1e-5f)
             {
@@ -845,9 +904,7 @@ public sealed partial class ProjectilePool : Node3D
                     NearMissPass(prev, hitPoint, p.Shooter);
                     Impact(p.Weapon, hitPoint, hit["collider"].Obj as Node, (Vector3)hit["normal"],
                         hit["shape"].AsInt32(), p.Shooter);
-                    p.Alive = false;
-                    KillModel(ref p);
-                    ReleaseTrails(ref p);
+                    RetireRound(ref p);
                     continue;
                 }
                 // Checked AFTER the ray, so a round that would strike its target keeps the direct
@@ -860,15 +917,12 @@ public sealed partial class ProjectilePool : Node3D
                     var fuseNormal = towardHull.LengthSquared() > 1e-8f
                         ? towardHull.Normalized() : Vector3.Zero;
                     Impact(p.Weapon, fusePoint, fused, fuseNormal, -1, p.Shooter);
-                    p.Alive = false;
-                    KillModel(ref p);
-                    ReleaseTrails(ref p);
+                    RetireRound(ref p);
                     continue;
                 }
             }
             NearMissPass(prev, next, p.Shooter);
             p.Pos = next;
-            p.Age += dt;
             // The FLYOUT smoke trail rides the round: one authored puff per DISTANCE_INTERVAL
             // meters of flight, emitted in world space and left behind.
             if (p.Trails != null)
@@ -876,23 +930,6 @@ public sealed partial class ProjectilePool : Node3D
                 var trailBasis = FlyoutPose(next, vel).Basis;
                 foreach (var t in p.Trails)
                     t.Puffer.Emit(next, trailBasis, dt);
-            }
-            p.DistLeft -= stepLen;
-            if (p.DistLeft <= 0f)
-            {
-                // A hardpoint round detonates at max range — same impact path as a surface hit
-                // (null collider ⇒ `default` IMPACT sound + named puffer effect, no damage). Gun
-                // rounds must NOT: that would pop a spark/sound at ~1000 m on every bullet.
-                if (p.Weapon.IsRocket)
-                {
-                    // Mid-air range-expiry detonation: no struck surface, so no normal — the impact
-                    // sprite falls back to the world-facing quad (SurfaceBasis handles a zero
-                    // normal). The shooter rides along so the blast's aircraft pass attributes.
-                    Impact(p.Weapon, p.Pos, null, Vector3.Zero, shooter: p.Shooter);
-                }
-                p.Alive = false;   // spent
-                KillModel(ref p);
-                ReleaseTrails(ref p);
             }
         }
 
@@ -1069,6 +1106,44 @@ public sealed partial class ProjectilePool : Node3D
     // heading × speed, which is what ACCELERATION raises), so every reader asking which way and how
     // fast a round is travelling comes here for the inherited component on top.
     private static Vector3 WorldVelocity(in Proj p) => p.Vel + p.Inherited * InheritedFraction(in p);
+
+    // The three ways a round ends itself, in the original's own order (FUN_005afd50 from the RANGE
+    // compare to LAB_005b0318). Range wins outright: neither fuse is consulted once the path is
+    // spent. `detonates` is false only for the round that expires quietly at RANGE.
+    private static bool EndConditionMet(in Proj p, out bool detonates)
+    {
+        if (p.Travelled >= p.Range)
+        {
+            detonates = DetonatesAtRange(p.Weapon);
+            return true;
+        }
+        detonates = true;
+        if (TargetFuseTriggered(in p))
+            return true;
+        return p.Weapon.DetonationTime is { } fuse && fuse > 0f && p.Age > fuse;
+    }
+
+    // The per-round fuse on the round's OWN target, the second fuse path beside the aircraft sweep
+    // in ProximityFuseTriggered. Squared throughout, as the original is: FUN_00538880 returns a
+    // squared distance and weapon +0x44 stores DETONATION_DISTANCE squared.
+    private static bool TargetFuseTriggered(in Proj p)
+    {
+        if (!CarriesLockOn(p.Weapon) || p.Weapon.DetonationDistanceSqM is not > 0f)
+            return false;
+        return TargetPosition(p.Target) is { } at
+            && p.Pos.DistanceSquaredTo(at) <= p.Weapon.DetonationDistanceSqM.Value;
+    }
+
+    // Where a round's held target is. Typed loosely because the slot takes an aircraft, an
+    // emplacement or (once B9 lands) a beeper tag alike; anything with no position in the world
+    // answers null and fuses nothing.
+    private static Vector3? TargetPosition(object? target) => target switch
+    {
+        FlightController rig => rig.WorldPosition,
+        TurretController turret => turret.WorldPosition,
+        Node3D node => node.GlobalPosition,
+        _ => null,
+    };
 
     private static void KillModel(ref Proj p)
     {
@@ -1611,6 +1686,45 @@ public sealed partial class ProjectilePool : Node3D
             towardHull = hull - candidate;
         }
         return fused != null;
+    }
+
+    // The one exit every self-ended round takes, so the range expiry and both fuses share the
+    // effect, sound and splash paths a struck surface gets. No collider and no normal: the impact
+    // sprite falls back to the world-facing quad, and the shooter rides along so the blast's
+    // aircraft pass attributes its kills.
+    private void EndRound(ref Proj p, Vector3 at, bool detonate)
+    {
+        if (detonate)
+            Impact(p.Weapon, at, null, Vector3.Zero, shooter: p.Shooter);
+        RetireRound(ref p);
+    }
+
+    // Takes a round out of the pool and releases what it was carrying. The live smoke of a released
+    // trail decays where it was left rather than vanishing with the round.
+    private void RetireRound(ref Proj p)
+    {
+        p.Alive = false;
+        KillModel(ref p);
+        ReleaseTrails(ref p);
+    }
+
+    // The RANGE_MINIMUM visibility gate: a torpedo runs its first 300 m with no body and no trail,
+    // and both appear together once the accumulator passes the authored distance. The original also
+    // requires RANGE_MINIMUM's second element to be zero, which the sole carrier authors.
+    private void RevealFlyout(ref Proj p, Vector3 at, Vector3 vel)
+    {
+        if (!p.FlyoutHidden || p.Travelled <= (p.Weapon.RangeMinimum ?? 0f))
+            return;
+        p.FlyoutHidden = false;
+        if (p.Model != null)
+            p.Model.Visible = true;
+        p.Trails ??= AcquireTrails(p.Weapon, at, FlyoutPose(at, vel).Basis, out p.RollRate);
+        if (_revealsLogged < 2)
+        {
+            _revealsLogged++;
+            GD.Print($"flyout reveal: {p.Weapon.Id} shown after {p.Travelled:0.#} m of its"
+                     + $" RANGE_MINIMUM {p.Weapon.RangeMinimum ?? 0f:0.#} m");
+        }
     }
 
     private void ConfigureSphereQuery(float radius, Vector3 point)
@@ -2222,7 +2336,10 @@ public sealed partial class ProjectilePool : Node3D
                                  // steering step's gate. B6/B9 write and re-write it; A2 only asks
                                  // whether one is held. Typed loosely because the original's target
                                  // slot takes an aircraft, an emplacement or a beeper tag alike.
-        public float DistLeft;   // m until it expires at RANGE
+        public float Travelled;  // m of path flown so far — the original's accumulator at round
+                                 // +0x664, read by both the RANGE end condition and the reveal gate
+        public float Range;      // m of path this round may fly (RANGE, or DefaultRange unauthored)
+        public bool FlyoutHidden; // the RANGE_MINIMUM visibility gate is still holding the body back
         public float Accel;      // ACCELERATION along the velocity direction, m/s²
         public float Cap;        // the own speed ACCELERATION climbs to and stops at, m/s — seeded
                                  // with Vel at spawn (Ballistics.LaunchSpeed)

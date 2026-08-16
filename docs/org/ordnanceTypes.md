@@ -25,12 +25,14 @@ the extension struct means `TORPEDO`, while `0x08` at `+0x74` means the weapon a
 | `+0x74` bit | Set by |
 |---|---|
 | `0x08` | `FLYOUT_HEALTH` is present |
+| `0x80` | `EXPIRES` |
 | `0x800` | `INSTANT` |
 | `0x4000` | `MINE` |
 | `0x8000` | `LOCK_ON` is present |
 | `0x10000` | `LOCK_ON_LEAD` is present |
 | `0x100000` | `REMOTE_DETONATE` |
 | `0x200000` | `TETHER_GUIDED` |
+| `0x2000000` | `DETONATE_AT_RANGE` |
 | `0x8000000` | `RANDOM_DEVIATION` |
 
 And the scalar slots the guidance path uses:
@@ -63,12 +65,19 @@ Six of the ten have traced behaviour; four were only ever seen parsed:
 | `PITCH_RATE` | `+0x34` | Terrain avoidance: a guided round within 10 m of the ground adds `PITCH_RATE × 2/π` of "up" to its desired heading. |
 | `TETHER_GUIDED` | `0x200000` | Swaps that pull-up for a ceiling clamp: the round may not climb past a global altitude. |
 | `INSTANT` | `0x800` | The round resolves in one step instead of travelling. Hitscan. |
-| `MINE` | `0x4000` | No acceleration; accumulates half of each step, so it flies twice its nominal range; its own motion routine; and its blast applies full damage with **no falloff** anywhere in the radius. |
+| `MINE` | `0x4000` | No acceleration; halves its whole path accumulator every frame, so it never reaches `RANGE`; its own motion routine; and its blast applies full damage with **no falloff** anywhere in the radius. |
 | `RANDOM_DEVIATION` | `0x8000000` | A bounded random walk when the round has no target or its target is far. |
 | `REMOTE_DETONATE` | `0x100000` | **Reader not traced.** |
-| `MULTI_TARGET` | — | **Reader not traced.** |
-| `EXPIRES` | — | **Reader not traced.** |
+| `MULTI_TARGET` | `0x20000` | **Reader not traced.** |
+| `EXPIRES` | `0x80` | Suppresses the detonation a `LOCK_ON` round would otherwise get when it reaches `RANGE`, leaving it to vanish. |
 | `IMPACT_TYPE` | `+0x190` | **Reader not traced.** |
+
+⚠ The ten are the unauthored keys this page enumerated, **not** every key the parser accepts and
+nothing authors. `FUN_005ad630` also reads `DETONATE_AT_RANGE`, `DETONATE_ON_WATER`, `HIT_OWNER`,
+`RELATIVE_SPEED`, `SHOW_ON_RADAR`, `FIXED_ROTATE` and `RELOAD`, none of them present in this
+install's data. `DETONATE_AT_RANGE` is the one that matters to a shipped behaviour, since it is half
+of the range-expiry detonation rule below; the rest are listed so the next reader does not take the
+count of ten for a complete census.
 
 ⚠ Four of those defaults are load-bearing, and one is easy to miss: **`PITCH_RATE` defaulting to 0
 means no shipped round avoids terrain.** The avoidance code runs on every guided round; it just adds
@@ -312,9 +321,16 @@ ballistics keys. In order:
   bounded at ±1.0, ±0.75, ±1.0 with a restoring `10 * dt`. An unguided or far-from-target round
   wobbles rather than flying a perfect line.
 - **Reveal distance, which is what `RANGE_MINIMUM` actually is.** The key sets `+0x74` bit
-  `0x80000000` and stores at `+0x24` (`FUN_005ad630` at `0x005adfbb`), and a `FLYOUT_HEALTH` round
-  carrying that bit is made **visible** only once it has travelled `+0x24`. So `wep_14`'s
-  `RANGE_MINIMUM [300]` hides the torpedo for its first 300 m rather than disarming it.
+  `0x80000000` and stores **both** its elements, element 0 at `+0x24` and element 1 at `+0x28`
+  (`FUN_005ad630` at `0x005adfbb`), and a `FLYOUT_HEALTH` round carrying that bit is made
+  **visible** only once it has travelled `+0x24`. So `wep_14`'s `RANGE_MINIMUM [300, 0]` hides the
+  torpedo for its first 300 m rather than disarming it. The gate is a four-way conjunction at
+  `0x005b01c4`: `(flags & 0x8) && (flags & 0x80000000) && +0x28 == 0 && travelled > +0x24`, calling
+  `FUN_004cd210(node, 1)` to set the scene node's `0x10` visibility flag. The same parse **clears**
+  that flag for every `FLYOUT_HEALTH` weapon (`0x005ae188`), which is what makes the round start
+  hidden; a weapon with the health but no `RANGE_MINIMUM` therefore has no reveal call at all.
+  Element 1 is 0.0 in the sole authored entry, so the third clause holds throughout this install and
+  what element 1 would otherwise mean is unknown.
   ⚠ [`formats/weapons.md`](../formats/weapons.md) glosses the key as "minimum arming range". That
   reading is contradicted here: nothing on this path gates arming.
 - **The ceiling.** `TETHER_GUIDED` clamps the vertical step so the round cannot climb past a global
@@ -323,13 +339,37 @@ ballistics keys. In order:
 **Three independent ways a round ends**, all resolved here by calling `FUN_005ac3a0`:
 
 1. **Range.** Distance travelled accumulates in `+0x664`; once it reaches `RANGE` (weapon `+0x1c`)
-   the round is done. A `MINE` accumulates only **half** of each step, so it flies twice its nominal
-   range before expiring.
+   the round is done. `RANGE` **defaults to 500 m**, written into `+0x1c` by `FUN_005ad630`'s
+   per-entry initialisation before the key is read, so the two entries authoring none (the smoke
+   screen and the rear-arc flare) fly 500 m rather than forever.
 2. **Timed fuse.** If the weapon authors `DETONATION_TIME` (weapon `+0x48`) and the round's age
-   exceeds it, the round detonates. This is the rear-arc flare's 2.0 s.
+   (`+0x668`) exceeds it, the round detonates. This is the rear-arc flare's 2.0 s. The field
+   defaults to **−1.0**, and the test demands a positive value, so an unauthored fuse is off rather
+   than instant.
 3. **Target proximity.** A round with a target that comes within `DETONATION_DISTANCE` of it
    detonates. This is a **second, per-round fuse path** alongside the list sweep in `FUN_004b5fb0`:
    the sweep catches anything passing near any aircraft, this one catches the round's own target.
+
+The three are not symmetric, and the branch structure is what says so. Range is tested first and
+wins outright: neither fuse is consulted once the path is spent. Under range, the target fuse is
+gated on `LOCK_ON` **and** a held target **and** a non-zero `+0x44`, and the timed fuse is what a
+round failing any of those three falls through to (`LAB_005b029a`). All three positions are read
+from the round's **un-advanced** position: the motion step computes the frame's delta and ends the
+round before `FUN_005af720` applies it, so a round that ends this frame neither moves nor collides.
+
+**Reaching `RANGE` does not always detonate.** The expiry branch takes `LAB_005b02ba`, which writes
+the detonation position and calls `FUN_005ac3a0`, only when
+`(LOCK_ON && !EXPIRES) || DETONATE_AT_RANGE`; otherwise it jumps to `LAB_005b0318` and the round is
+simply removed. `EXPIRES` is `+0x74` bit `0x80` and `DETONATE_AT_RANGE` is bit `0x2000000`, both set
+by `FUN_005ad630` and **neither authored by any entry in this install**, so the shipped rule is
+exactly "carries `LOCK_ON`". The choker, the cannonball and the fake weapon therefore vanish at
+their range where every other ordnance type goes off.
+
+⚠ `MINE` does **not** accumulate half of each step. The halving is applied to the whole accumulator
+every frame (`+0x664 *= 0.5` after the step is added), so the accumulator converges on one step's
+length and never reaches `RANGE` at all. Nothing authors `MINE`, so the branch is unreachable; the
+earlier "flies twice its nominal range" reading was wrong and is recorded here so it is not
+re-derived.
 
 ## The proximity fuse
 

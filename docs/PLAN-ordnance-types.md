@@ -152,7 +152,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ Adopt the engine's squared-radius convention in `WeaponDef`
 2. ☑ Launch-velocity inheritance and its decay over `LOCK_ON`
 3. ☑ `ACCELERATION` toward the speed cap, and no drag
-4. ☐ The three end conditions: range, timed fuse, target proximity
+4. ☑ The three end conditions: range, timed fuse, target proximity
 5. ☐ Launch the player's ordnance along the aircraft axis, not the pylon's
 
 ### Wave B — Guidance and seeking
@@ -322,7 +322,27 @@ reduces speed outside the turn penalty.
 **⚠ Traps.** Do not add drag "for realism". Its absence is a decoded fact and the reason rounds carry
 so far.
 
-## A4 ☐ The three end conditions: range, timed fuse, target proximity
+## A4 ☑ The three end conditions: range, timed fuse, target proximity
+
+**Verdict.** Landed, and reading `FUN_005afd50` to the end added a fourth fact the item did not
+ask for: **reaching `RANGE` does not always detonate**. The expiry branch calls the detonation only
+when `(LOCK_ON && !EXPIRES) || DETONATE_AT_RANGE`, and since this install authors neither of those
+two keys, carrying `LOCK_ON` is the whole rule, so the choker, the cannonball and the fake weapon
+now vanish at their range where our old `IsRocket` test detonated them. `DETONATE_AT_RANGE` was not
+on the decode page at all, which also means the "ten unauthored keys" count is the set that page
+enumerated rather than a census; that caveat is now recorded. The three conditions resolve in the
+original's own order (range wins outright, then the target fuse, then the timed fuse as the
+fall-through) and all three run **before** the swept step's ray, because the original ends a round
+inside its motion step and moves and collides only what survives. They leave through one
+`EndRound`, so the effect, sound and splash paths are shared. `ProximityFuseTriggered` is untouched
+and stays aircraft-only. Three smaller corrections landed with it: `RANGE` defaults to **500 m**,
+not our 1000, `DETONATION_TIME` defaults to −1.0 so an unauthored fuse is off rather than instant,
+and `MINE` halves its whole accumulator every frame rather than accumulating half a step, so it
+would never reach `RANGE` at all. `RANGE_MINIMUM`'s gloss needed no change in
+[`formats/weapons.md`](formats/weapons.md) (`A1` had already corrected it); what it gained is the
+second element the gate demands be zero. Owed at the controls: the four clips this item's Verify
+names, all of which are asserted in the `ordnance-end-conditions` suite but none of which has been
+looked at.
 
 **Goal.** A round ends for one of exactly three reasons, and the right one.
 

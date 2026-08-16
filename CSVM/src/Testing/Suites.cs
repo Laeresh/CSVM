@@ -155,6 +155,15 @@ public static class Suites
             "flight — motor, coasting rocket or gun — ever reduces its own speed, because the " +
             "original carries no drag term",
             MotorAcceleration));
+        into.Add(new TestHarness.Suite("ordnance-end-conditions",
+            "the three ways a round ends itself (A4): wep_24 flies its authored 1000 m and " +
+            "detonates there while wep_12, authoring no LOCK_ON, flies the same 1000 m and " +
+            "expires silently; wep_15's 2.0 s timed fuse ends it two metres out with nothing near; a " +
+            "round fuses on its OWN target while a registered aircraft is nearer, and the same " +
+            "round holding no target flies past that point and is fused by the aircraft sweep " +
+            "instead, proving the two paths are separate; and wep_14 is hidden for its first 300 m " +
+            "and shown from there on",
+            OrdnanceEndConditions));
         into.Add(new TestHarness.Suite("air-to-air",
             "a round strikes the target plane's body, maps to the data part, moves armor/HP by the " +
             "weapon's own values, downs it when whole-vehicle health exhausts (a lone dead critical " +
@@ -3298,6 +3307,188 @@ public static class Suites
         }
         finally
         {
+            pool?.Free();
+            textures.Dispose();
+        }
+    }
+
+    // A4's three end conditions on a live pool, plus the RANGE_MINIMUM reveal that rides the same
+    // travelled-distance accumulator. The detonation observer is the pool's EffectSink: a round
+    // that ends by detonating hands its IMPACT row's effect name and the point it went off, and one
+    // that expires quietly hands nothing, so the same seam reads all four outcomes.
+    private static void OrdnanceEndConditions(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        if (!weapons.TryGet("wep_24", out var he) || !weapons.TryGet("wep_12", out var choker)
+            || !weapons.TryGet("wep_15", out var flare) || !weapons.TryGet("wep_08", out var sonic)
+            || !weapons.TryGet("wep_14", out var torpedo))
+        {
+            ctx.Check(false, $"wep_24, wep_12, wep_15, wep_08 and wep_14 all resolve");
+            return;
+        }
+
+        ctx.Check(he.Range is 1000f && choker.Range is 1000f && flare.Range is null,
+            $"the two 1000 m rounds author RANGE and the flare authors none, taking the engine's own {ProjectilePool.DefaultRange:0} m default");
+        ctx.Check(ProjectilePool.DetonatesAtRange(he) && !ProjectilePool.DetonatesAtRange(choker),
+            $"a round detonates at RANGE only if its weapon carries LOCK_ON: the HE rocket does, the choker does not");
+        ctx.Check(flare.DetonationTime is 2.0f && he.DetonationTime is null,
+            $"the rear-arc flare is the one weapon authoring a timed fuse, at 2.0 s");
+        ctx.Check(sonic.DetonationDistance is 35f && sonic.DetonationDistanceSqM is 1225f,
+            $"the sonic's DETONATION_DISTANCE is 35 m, stored squared as 1225 the way the engine keeps it");
+        ctx.Check(torpedo.RangeMinimum is 300f && torpedo.FlyoutHealth is 10
+                  && ProjectilePool.FlyoutHiddenAtLaunch(torpedo) && !ProjectilePool.FlyoutHiddenAtLaunch(he),
+            $"the torpedo alone carries both halves of the reveal gate (RANGE_MINIMUM 300 m and FLYOUT_HEALTH)");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightController? bystander = null;
+        Node3D? mark = null;
+        try
+        {
+            var effects = new List<(string Name, Vector3 At)>();
+            var live = new ProjectilePool(textures, null, null)
+            {
+                EffectSink = (name, at, ttl) => effects.Add((name, at)),
+            };
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            // Well clear of anything another suite left in the host, so every flight below is the
+            // integrator's alone until this suite registers an aircraft of its own.
+            var origin = new Vector3(0f, 2000f, 0f);
+            var muzzle = new Transform3D(Basis.LookingAt(Vector3.Forward, Vector3.Up), origin);
+            // The round's own target: 300 m downrange and 30 m off the flight line, so a 35 m fuse
+            // catches it without the round ever passing through it.
+            mark = new Node3D { Name = "end-conditions-target" };
+            ctx.Host.AddChild(mark);
+            mark.GlobalPosition = origin + new Vector3(30f, 0f, -300f);
+
+            var reveal = new List<(float Travelled, bool Hidden)>();
+
+            // Flies one round until it ends or the bound runs out. `At` is where it detonated (null
+            // for a quiet expiry), `Travelled` its path length on the last step it was alive, and
+            // `Steps` how many steps it survived.
+            (Vector3? At, float Travelled, int Steps) Fly(WeaponDef weapon, object? held, float seconds)
+            {
+                live.Clear();
+                effects.Clear();
+                live.Spawn(weapon, muzzle, Vector3.Zero, shooterId: 0, target: held);
+                float travelled = 0f;
+                int steps = 0;
+                for (int i = 0; i < Mathf.RoundToInt(seconds * 60f); i++)
+                {
+                    live.SimStep(1f / 60f);
+                    reveal.Clear();
+                    live.CollectFlyoutReveal(reveal);
+                    if (reveal.Count == 0)
+                        break;
+                    travelled = reveal[0].Travelled;
+                    steps++;
+                }
+                return (effects.Count > 0 ? effects[0].At : null, travelled, steps);
+            }
+
+            // 1. RANGE. The HE rocket ends within one step of its authored 1000 m and detonates
+            // there; the choker, authoring no LOCK_ON, reaches the same 1000 m and goes out silent.
+            float heStep = (he.Velocity ?? 0f) / 60f;
+            var ranged = Fly(he, null, 2f);
+            ctx.Check(ranged.At is { } heAt && heAt.DistanceTo(origin) > (he.Range ?? 0f) - heStep
+                      && heAt.DistanceTo(origin) <= he.Range,
+                $"the HE rocket detonates at its authored RANGE at={ranged.At?.DistanceTo(origin):0.#} m range={he.Range:0} step={heStep:0.#}");
+            var quiet = Fly(choker, null, 2f);
+            ctx.Check(quiet.At == null && quiet.Travelled > (choker.Range ?? 0f) - (choker.Velocity ?? 0f) / 60f,
+                $"the choker flies the same full RANGE and expires with no detonation at all travelled={quiet.Travelled:0.#} m");
+
+            // 2. The timed fuse, with nothing near and 498 m of range left unspent.
+            var fused = Fly(flare, null, 4f);
+            float fuseSeconds = fused.Steps / 60f;
+            ctx.Check(fused.At != null && Mathf.Abs(fuseSeconds - 2f) < 0.05f,
+                $"the flare detonates on its 2.0 s fuse t={fuseSeconds:0.###} s");
+            ctx.Check(fused.Travelled < 5f,
+                $"and does so two metres from the launcher, nowhere near a range expiry travelled={fused.Travelled:0.##} m");
+
+            // 3. The round's own target, and the LOCK_ON half of its gate.
+            var onTarget = Fly(sonic, mark, 3f);
+            float onTargetRange = onTarget.At?.DistanceTo(origin) ?? 0f;
+            ctx.Check(onTarget.At != null && onTargetRange > 270f && onTargetRange < 295f,
+                $"a sonic holding a target detonates as it comes within DETONATION_DISTANCE of it at={onTargetRange:0.#} m");
+            var noTarget = Fly(sonic, null, 3f);
+            ctx.Check(noTarget.At is { } freeAt && freeAt.DistanceTo(origin) > 900f,
+                $"the same round holding NO target flies past that point to its RANGE at={noTarget.At?.DistanceTo(origin):0.#} m");
+            var gated = Fly(choker, mark, 3f);
+            ctx.Check(gated.At == null && gated.Travelled > 500f,
+                $"and a weapon without LOCK_ON holding the same target flies past it untouched travelled={gated.Travelled:0.#} m");
+
+            // 4. The reveal, on the same accumulator. The torpedo's 60 m/s puts 300 m at 5 s.
+            live.Clear();
+            live.Spawn(torpedo, muzzle, Vector3.Zero);
+            bool hiddenEarly = true, shownLate = false;
+            float shownAt = 0f;
+            for (int i = 0; i < 400; i++)
+            {
+                live.SimStep(1f / 60f);
+                reveal.Clear();
+                live.CollectFlyoutReveal(reveal);
+                if (reveal.Count == 0)
+                    break;
+                var (travelled, hidden) = reveal[0];
+                if (travelled < (torpedo.RangeMinimum ?? 0f) && !hidden)
+                    hiddenEarly = false;
+                if (!hidden && !shownLate)
+                {
+                    shownLate = true;
+                    shownAt = travelled;
+                }
+            }
+            ctx.Check(hiddenEarly, $"the torpedo's flyout stays hidden for every metre short of RANGE_MINIMUM");
+            ctx.Check(shownLate && Mathf.Abs(shownAt - (torpedo.RangeMinimum ?? 0f)) < 2f,
+                $"and is shown as it passes it at={shownAt:0.#} m minimum={torpedo.RangeMinimum:0} m");
+            live.Clear();
+
+            // 5. The two fuse paths are separate. An aircraft 25 m off the flight line, closer to
+            // the round than its own target is, and still being closed on — so the sweep is holding
+            // fire (StillClosingFraction) while the per-round target fuse goes off anyway.
+            var planePos = origin + new Vector3(25f, 0f, -300f);
+            var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+            bystander = new FlightController
+            {
+                PlaneModel = model,
+                Collider = PlaneCollider.Build(model),
+                Damage = new PlaneDamage(stats.DestroyableParts),
+                PlayerIndex = 1,
+                Projectiles = live,
+                UseKeyboard = false,
+                AllowPause = false,
+            };
+            bystander.AddChild(model);
+            bystander.Setup(new FlightModel(stats), ctx.Camera, new CamParams(),
+                planePos, planePos + Vector3.Forward);
+            ctx.Host.AddChild(bystander);
+            ctx.Check(bystander.Body != null, $"the bystander derived a collider box and built an AircraftBody");
+
+            var beside = Fly(sonic, mark, 3f);
+            float besideRange = beside.At?.DistanceTo(origin) ?? 0f;
+            float toPlane = beside.At?.DistanceTo(planePos) ?? 0f;
+            float toMark = beside.At?.DistanceTo(mark.GlobalPosition) ?? 0f;
+            ctx.Check(beside.At != null && Mathf.Abs(besideRange - onTargetRange) < 1f,
+                $"the target fuse fires in the same place with an aircraft alongside at={besideRange:0.#} m");
+            ctx.Check(toPlane < toMark,
+                $"and the aircraft was the NEARER of the two when it did plane={toPlane:0.#} m target={toMark:0.#} m");
+            var sweptUp = Fly(sonic, null, 3f);
+            float sweepRange = sweptUp.At?.DistanceTo(origin) ?? 0f;
+            ctx.Check(sweptUp.At != null && sweepRange > besideRange + 5f && sweepRange < 340f,
+                $"the same round holding no target is fused by the aircraft sweep instead, further downrange at={sweepRange:0.#} m");
+        }
+        finally
+        {
+            bystander?.Free();
+            mark?.Free();
             pool?.Free();
             textures.Dispose();
         }
