@@ -588,7 +588,10 @@ public sealed partial class LaunchMenu : CanvasLayer
                     free.Add(pad);
         }
         var p1 = _slots[0].Input;
-        if (free.Count != p1.Pads.Length)
+        // The launchscreen always binds an explicit set here; null (every connected pad) is the
+        // in-session reading, which this screen never uses.
+        var bound = p1.Pads ?? Array.Empty<int>();
+        if (free.Count != bound.Length)
         {
             p1.Pads = free.ToArray();
             p1.Prime(); // a button still held on a pad that just changed hands is not a press
@@ -597,7 +600,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         else
         {
             for (int i = 0; i < free.Count; i++)
-                if (free[i] != p1.Pads[i])
+                if (free[i] != bound[i])
                 {
                     p1.Pads = free.ToArray();
                     p1.Prime();
@@ -937,7 +940,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         var choices = new List<PlayerChoice>(_slots.Count);
         foreach (var slot in _slots)
-            choices.Add(new PlayerChoice(Planes[slot.PlaneIndex].Node, slot.Input.Pads));
+            choices.Add(new PlayerChoice(Planes[slot.PlaneIndex].Node,
+                slot.Input.Pads ?? Array.Empty<int>()));
 
         string chapter;
         InstantActionDef? iaDef = null;

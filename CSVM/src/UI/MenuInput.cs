@@ -17,13 +17,13 @@ public sealed class MenuInput
     /// <summary>Whether this player also flies the keyboard (player 1 only).</summary>
     public bool Keyboard;
 
-    /// <summary>The gamepad devices this player reads. A joined player has exactly one (the pad
-    /// they pressed Start on); <b>player 1 holds every pad nobody has claimed</b>, which is what
-    /// preserves the any-pad fix: phantom joypad devices (a wireless dongle enumerating
-    /// with the pad asleep, a non-pad HID exposing a joypad interface) can occupy the early slots,
-    /// so binding player 1 to <c>pads[0]</c> would leave a real controller dead in the menu. Idle
-    /// devices read as zero, so reading several is safe.</summary>
-    public int[] Pads = Array.Empty<int>();
+    /// <summary>The gamepad devices this player reads, or null for every connected pad — the same
+    /// binding <see cref="CSVM.Flight.FlightController"/> takes. A joined player has exactly one
+    /// (the pad they pressed Start on); <b>player 1 holds every pad nobody has claimed</b>, which
+    /// preserves the any-pad fix: phantom joypad devices can occupy the early slots, so binding
+    /// player 1 to <c>pads[0]</c> would leave a real controller dead. Idle devices read as zero,
+    /// so reading several is safe.</summary>
+    public int[]? Pads = Array.Empty<int>();
 
     // Results of the last Poll, valid until the next one.
     public int Move;        // −1 up, +1 down, 0 none (auto-repeat already applied)
@@ -34,6 +34,10 @@ public sealed class MenuInput
     public int MoveX;
     public bool Accept;     // pressed this frame (edge)
     public bool Back;       // pressed this frame (edge)
+    /// <summary>Back on the pad alone, without Escape — for a reader whose Escape is already spoken
+    /// for elsewhere. A board menu's is: Escape toggles the pause that owns the board, so reading
+    /// it here as well would toggle twice on one press.</summary>
+    public bool PadBack;
     public bool Start;      // pressed this frame (edge)
 
     /// <summary>The last of this player's pads seen actually doing something (a menu button or the
@@ -49,20 +53,22 @@ public sealed class MenuInput
     private const float RepeatInterval = 0.12f;  // s between repeats after that
     private const float StickDeadzone = 0.5f;    // |LeftY| past this counts as a d-pad press
 
-    private bool _acceptPrev, _backPrev, _startPrev;
+    private bool _acceptPrev, _backPrev, _padBackPrev, _startPrev;
     private int _dirPrev, _dirXPrev;
     private float _repeatTimer, _repeatTimerX;
 
     /// <summary>The single pad this player is bound to, or −1 when it has none or several
     /// (player 1's unclaimed set) — for logging and the join bookkeeping.</summary>
-    public int Pad => Pads.Length == 1 ? Pads[0] : -1;
+    public int Pad => Pads is { Length: 1 } ? Pads[0] : -1;
 
     /// <summary>A short description of what drives this player, for the menu's join strip.</summary>
     public string DeviceLabel
     {
         get
         {
-            string pads = Pads.Length == 0 ? "" : Pads.Length == 1 ? $"pad {Pads[0]}" : $"{Pads.Length} pads";
+            string pads = Pads == null ? "any pad"
+                : Pads.Length == 0 ? ""
+                : Pads.Length == 1 ? $"pad {Pads[0]}" : $"{Pads.Length} pads";
             if (Keyboard)
                 return pads.Length == 0 ? "keyboard" : $"keyboard + {pads}";
             return pads.Length == 0 ? "no device" : pads;
@@ -121,6 +127,10 @@ public sealed class MenuInput
         Back = back && !_backPrev;
         _backPrev = back;
 
+        bool padBack = RawPadBack();
+        PadBack = padBack && !_padBackPrev;
+        _padBackPrev = padBack;
+
         bool start = RawStart();
         Start = start && !_startPrev;
         _startPrev = start;
@@ -136,6 +146,7 @@ public sealed class MenuInput
     {
         _acceptPrev = RawAccept();
         _backPrev = RawBack();
+        _padBackPrev = RawPadBack();
         _startPrev = RawStart();
         _dirPrev = RawDir();
         _repeatTimer = RepeatInitial;
@@ -143,7 +154,7 @@ public sealed class MenuInput
         _dirXPrev = RawDirX();
         _repeatTimerX = RepeatInitial;
         MoveX = 0;
-        Accept = Back = Start = false;
+        Accept = Back = PadBack = Start = false;
     }
 
     // The first of this player's pads currently producing menu input (excluding Start).
@@ -211,7 +222,9 @@ public sealed class MenuInput
     private bool RawAccept() =>
         KeyDown(Key.Enter) || KeyDown(Key.KpEnter) || KeyDown(Key.Space) || PadButton(JoyButton.A);
 
-    private bool RawBack() => KeyDown(Key.Escape) || PadButton(JoyButton.B);
+    private bool RawBack() => KeyDown(Key.Escape) || RawPadBack();
+
+    private bool RawPadBack() => PadButton(JoyButton.B);
 
     // Start is the join gesture, so it is pad-only: the keyboard is always player 1,
     // who is joined from the start and has nothing to join.
