@@ -1,0 +1,11 @@
+{
+  "mission_type": "dogfight_squadron",
+  "player_plane": "Bloodhawk",
+  "num_wingmen": 5,
+  "wingman_plane": "Bloodhawk",
+  "group1": {
+    "num_enemies": 5,
+    "enemy_plane": "Bloodhawk"
+  },
+  "lives": 0
+}
