@@ -152,9 +152,7 @@ Semantics worth knowing:
   global guess cannot. No mission this project defaults to (an IA1) uses either verb, so the
   goldens cannot catch a wrong guess here — verified instead by targeted `--freecam` captures at
   C1/M05 (boats/`redcross`/`workersvoyagezep` at their authored positions and headings) and
-  C3/MP1 (`cargozep1` at ≈π). Cross-ref `BL-034`: the same question over animation-layer
-  `OBJECT_3D_ROTATE`/`OBJECT_ROTATE_STATE` data must not be resolved differently there.
-
+  C3/MP1 (`cargozep1` at ≈π).
 ## `Object3DSetScroll` — the second source of texture scrolling
 
 The gamez *model* carries a `texture_scroll` field ([gamez.md](gamez.md)), and the boot

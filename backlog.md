@@ -2071,26 +2071,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   lens flare's anchor (`BL-165`, closed; `analysis/bl-165-lens-flare/FINDINGS.md`,
   `CSVM/src/Session/LensFlareRig.cs`).
 
-- `BL-034` `[Bug]` **`SpinMotion` re-seeds its rest pose from an already-spun pose (found 2026-07-22, deliberately
-  not fixed).** `SpinMotion` captures `_rest = target.Transform.Basis` from the CURRENT pose at
-  construction, and the idempotence guard in `Dispatch` matches only on identical
-  `(rate, runTime)`. `zeppelin_rocksleft` fires five events with five different rate/runtime pairs
-  at the same `rock_zeppelin`, so each replacement motion anchors to wherever the previous one
-  left the node, and a looping call drifts. It is **bounded** — rotation is orthonormal, so this
-  can never produce the 1e27 blowup it was originally suspected of (that was the unread
-  `spline_interp` flag, fixed 2026-07-22 — see `docs/HISTORY.md`) — but the drift is real.
-  **Not fixed because both candidate fixes risk a visible regression to cure an invisible one,
-  and the data does not adjudicate:** (a) seeding from `RestOf` would discard a deliberately-posed
-  starting orientation on all 590 spins in the install — C1/M05's `random_prop` poses `propstill`
-  to a random angle *before* spinning it, and that pattern would break; (b) inheriting the
-  previous motion's `_rest` assumes the five rock events oscillate about a fixed pose, but a
-  chained eased rock (accelerate, decelerate, reverse) is at least as plausible a reading, and
-  under (b) each event would snap back to rest. **Needs the original game**: watch a zeppelin rock
-  through several loops and see whether it returns to the same attitude or walks. Same class of
-  call as `MissionSetup`'s `Object3DRotate` angle unit, resolved 2026-08-06 by a per-script
-  magnitude heuristic rather than a global guess (`BL-249`, `docs/plans/PLAN-m3-polish-10.md` C22) — do
-  not resolve this differently.
-
 - `BL-035` `[Feature]` `[Blocked: cutscene player]` **Animation event kinds that need weapons or cutscenes — `CALLBACK`, `OBJECT_CYCLE_TEXTURE`,
   one-shot `SOUND`** (triaged 2026-07-22, the last of `docs/plans/PLAN-anim-rendering-followups.md`
   item 2 after `OBJECT_MOTION` landed). All three still dispatch at bootstrap, so the counts in
