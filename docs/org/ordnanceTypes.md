@@ -11,8 +11,43 @@ effect table is [`weaponImpact.md`](weaponImpact.md). The AI's side of firing th
 every key below and acts on none of the special ones) and `Projectile.cs`.
 
 **Scope.** This page covers the **flag map**, the **launch-side dispatch** (which types fire at all,
-and what they spawn), the **proximity fuse**, and the **hit-side dispatch** (what happens when a
-round reaches an aircraft). Guidance and the torpedo's shootable flyout are not decoded.
+and what they spawn), **guidance**, the **proximity fuse**, the **shootable flyout**, and the
+**hit-side dispatch** (what happens when a round reaches an aircraft).
+
+## A second flags word, and four keys nothing authors
+
+`FUN_004ba6f0`'s extension struct is not the only place a weapon's behaviour lives. The `.zrd`
+dispatcher `FUN_005ad630` writes a **separate** flags word at weapon record `+0x74`, and the guidance
+and spawn paths read that one, not the extension struct. The two are unrelated bit spaces: `0x08` in
+the extension struct means `TORPEDO`, while `0x08` at `+0x74` means the weapon authored
+`FLYOUT_HEALTH`.
+
+| `+0x74` bit | Set by |
+|---|---|
+| `0x08` | `FLYOUT_HEALTH` is present |
+| `0x800` | (a key parsed just before `LOCK_ON`) |
+| `0x8000` | `LOCK_ON` is present |
+| `0x10000` | `LOCK_ON_LEAD` is present |
+| `0x100000` | `REMOTE_DETONATE` |
+| `0x200000` | `TETHER_GUIDED` |
+
+And the scalar slots the guidance path uses:
+
+| Offset | Key |
+|---|---|
+| `+0x30` | `TURN_RATE` |
+| `+0x34` | `PITCH_RATE` |
+| `+0x58` | `LOCK_ON` |
+| `+0x5c` | `TURN_SUSPEND_TIME` |
+| `+0x7c`, `+0x80` | `LOCK_ON_LEAD` element 0 and element 1 |
+| `+0x84` | derived from the two above |
+| `+0x8c`, `+0x90` | the flyout's damage accumulator (initialised to 0) and `FLYOUT_HEALTH` |
+
+⚠ **Four of those keys are parsed and authored by nothing.** `PITCH_RATE`, `TURN_SUSPEND_TIME`,
+`TETHER_GUIDED` and `REMOTE_DETONATE` appear in no entry of this install's `weapons.zrd.json`, so
+they are absent from [`formats/weapons.md`](../formats/weapons.md)'s field census, which enumerates
+what the data carries. They still shape the shipped behaviour by their **defaults**: a
+`TURN_SUSPEND_TIME` of zero is what gives every guided round its turn authority from the first frame.
 
 ## The weapon-extension struct
 
@@ -84,13 +119,15 @@ cos 5 degrees against cos 10 degrees. Ordnance must be aimed more than twice as 
 before it will leave the rail. The whole gate is **skipped when the shooter is the player**, and also
 under a shooter flag at `+0x3e`.
 
-**`REAR` inverts the gate and the spawn.** For a `REAR` weapon (`0x20000`) the routine negates the
-mount's aim quality before testing it, so the weapon fires when the target is **behind** rather than
-ahead. It additionally requires the shooter's `+0xba` flag, which the hit handler sets when the
-aircraft absorbs damage and refreshes with an expiry 8 seconds out. So the rear-arc flare is not a
-freely-fired weapon: an AI throws it only while it is being shot at. `REAR` then flips the spawn
-direction (the launch axis is negated for an ordinary weapon and taken as-is for a rear one) and
-flips the sign of a 10 m offset along that axis.
+**`REAR` inverts the gate and the spawn.** Already decoded in
+[`aiPilot/aiWeapons.md`](aiPilot/aiWeapons.md), and repeated here only for what it adds: for a `REAR`
+weapon (`0x20000`) the routine negates the mount's aim quality before testing it, so the weapon fires
+when the target is **behind**, and it requires the shooter's `+0xba` byte, which that page reads as
+being-pursued and which the hit handler sets when the aircraft absorbs damage, refreshing an expiry
+8 seconds out. New here: `REAR` also flips the **spawn** direction (the launch axis is negated for an
+ordinary weapon and taken as-is for a rear one) and flips the sign of a 10 m offset along that axis.
+⚠ The `REAR` carrier in this install is `wep_13`, the **smoke screen**, not the flare: it is the one
+entry carrying both `REAR` and `SMOKE_SCREEN`, which makes it a screen laid behind a pursued aircraft.
 
 **`DAMAGES_ZEPPELIN` is a two-way gate, not a permission.** The routine asks the current target
 whether it is a zeppelin (vtable slot `+0x1c`) and drops the trigger both when a non-`DAMAGES_ZEPPELIN`
@@ -104,16 +141,67 @@ registered by `FUN_00441830`. With it, neither runs: the routine allocates a 0x1
 (`DAT_0071dbbc`, counted by `DAT_0071dbc0`). The smoker is a world effect placed at the mount, not a
 round in flight.
 
-**A decoy registration sits on the `REAR` path**, gated on a bit `0x8000` of a word at weapon record
-`+0x74` (not the extension struct's flags dword) and taken only when the player currently holds no
-target. It writes an entry into a 20-slot ring buffer at `DAT_0071dbc8` and points the player's target
-block (`+0xa4`..`+0xa6`, `+0x1ca`) at it. Reading that as the flare's decoy behaviour is an inference
-from the writes, not from a decoded consumer.
+**Firing a `LOCK_ON` weapon with no target acquires one.** Gated on `+0x74` bit `0x8000`, which is
+`LOCK_ON` being present, and taken only when the player currently holds no target, the routine writes
+an entry into a 20-slot ring buffer at `DAT_0071dbc8` and points the player's target block
+(`+0xa4`..`+0xa6`, `+0x1ca`) at it.
 
 **The firing shake is sized by `CALIBER`.** When the player fires, the routine calls `FUN_0042c070`
 with kind **0** and `CALIBER` times a global at `DAT_0064ef78 + 0x3c`. That is the same feedback call
 the hit handler uses with kinds 1, 2 and 3, which confirms from the other direction that
 `SHAKES_CAMERA` is not the fire-path mechanism.
+
+## Guidance
+
+`FUN_005af960`, reached from `FUN_005af720`, is the per-round steering step. It runs for **every**
+round, not only guided ones; what makes a rocket dumbfire is that its `TURN_RATE` sentinel of 0.001
+buys it almost no turn per frame.
+
+**The desired direction** starts as the bearing from the round's position to its target. If the
+weapon authored `LOCK_ON_LEAD` (`+0x74` bit `0x10000`) and the round is older than `+0x7c`, the
+routine solves an intercept instead of a bearing, and between `+0x7c` and `+0x80` it **slerps** from
+the plain bearing to the full lead solution. So the lead comes in gradually rather than at once.
+
+**The turn authority per frame** is
+
+    maxTurn = TURN_RATE * dt * ramp,  where
+    ramp    = 0                                       while age < TURN_SUSPEND_TIME
+            = (age - TURN_SUSPEND_TIME) / LOCK_ON     when TURN_SUSPEND_TIME > 0
+            = 1                                       when TURN_SUSPEND_TIME is 0 (every shipped weapon)
+
+in radians. The routine takes the angle between the current heading and the desired one, and if it
+exceeds `maxTurn` it slerps by exactly `maxTurn / angle` and renormalises; otherwise it snaps to the
+desired direction outright.
+
+**Turning costs speed.** After the turn, the round's speed is multiplied by `0.8 + 0.2 * cos(angle)`
+every frame it steers, so a hard-turning round bleeds up to 20% of its speed per frame while the turn
+lasts. Nothing in the authored data hints at this.
+
+**Terrain avoidance is a weapon field.** When the round is within 10 m of the ground and a collision
+probe comes back clear, the routine adds `PITCH_RATE * 2/pi` of "up" to the desired direction and
+renormalises, so a guided round noses up to clear terrain. A `TETHER_GUIDED` weapon takes a different
+branch: instead of the pull-up it **zeroes any climb component** once the round is near a global
+altitude limit, which reads as a ceiling clamp rather than a floor.
+
+### Launch velocity is inherited, and decays over `LOCK_ON`
+
+This is the piece with the most consequence, and it is not visible in the data at all.
+
+At spawn (`FUN_005aef40`), a weapon carrying `LOCK_ON` (`+0x74` bit `0x8000`) has the **launcher's
+velocity vector** copied into the round at `+0x30`..`+0x38`. A weapon without `LOCK_ON` gets a zero
+vector there. Then every frame, while the round is younger than `LOCK_ON` seconds, the guidance step
+sets
+
+    velocity = heading * speed  +  ((LOCK_ON - age) / LOCK_ON) * inheritedLaunchVelocity
+
+so the launcher's contribution is blended out **linearly to zero over `LOCK_ON` seconds**, leaving
+the round travelling at its own authored `VELOCITY`. A round launched from a fast aircraft therefore
+starts fast and visibly slows to its own cruise, and one launched from a slow aircraft does not.
+
+`LOCK_ON` is doing three separate jobs, which is why the name misleads: it is the lead-guidance ramp
+denominator, the launch-velocity decay window, and the flag that decides whether launch velocity is
+inherited at all. [`formats/weapons.md`](../formats/weapons.md) describes it as lock-acquisition
+time; that is the one job this decode did **not** find it doing.
 
 ## The proximity fuse
 
@@ -129,6 +217,23 @@ axis (`+0x198`..`+0x1a0`), and requires that dot to reach the authored threshold
 it, the candidate is skipped and the round flies on. The cone is measured against the target's
 facing, not the round's. `FUN_004b9770`, the terminal-impact path, repeats the same test against the
 victim's basis before it will resolve a hit.
+
+## The shootable flyout
+
+`FLYOUT_HEALTH`, not `TARGETABLE`, is what makes a round shootable. At the end of the spawn
+`FUN_005aef40`:
+
+- **Without** `FLYOUT_HEALTH` (`+0x74` bit `0x08` clear), the round's `+0x19c` and `+0x19d` are both
+  set to **-1.0**, the not-shootable sentinel, and its scene node's `0x8000000` flag is cleared.
+- **With** it, `+0x19c` takes the weapon's `+0x8c` (the zero the parser wrote, so a damage
+  accumulator starting empty) and `+0x19d` takes `FLYOUT_HEALTH` itself. The node gets the
+  `0x8000000` flag set, a `1` at node `+0xbc`, and a **back-pointer to the round at node `+0x40`**,
+  which is what lets a collision against the node find the round it belongs to.
+
+The AI's side of this is decoded separately: [`aiPilot.md`](aiPilot.md) has `TargetProjectile`
+(list `DAT_0064f78c`, constructor `FUN_004a63b0`) as the consumer of `TARGETABLE`, admitted on the
+round's `+0x6c` byte. What writes `+0x6c` from the flag was not traced, so the join between the
+`TARGETABLE` admission and the `FLYOUT_HEALTH` health pair is the one link still missing.
 
 ## The hit-side dispatch
 
@@ -207,15 +312,16 @@ alongside.
 
 ## Still open
 
-- **Guidance.** `TURN_RATE` is the only thing separating the Seeker from a dumbfire rocket, and its
-  reader has not been located. Nothing in the shot routine, the fuse or the hit handler steers a
-  round.
-- **The torpedo's shootable flyout.** No reader was located for `TORPEDO` (`0x08`) or `TARGETABLE`
-  (`0x20`), so how `FLYOUT_HEALTH` is spent, and how a round becomes a target, is unread.
-- **`BEEPER_SEEKER`** (`0x8000`). No reader located. The `BEEPER` half is decoded on both the launch
-  and hit sides, but what consumes the tag it leaves is not.
-- Absence of a located reader is not proof of absence. The bit searches behind these three were
-  truncated by the tool's result cap and are not exhaustive.
+- **`BEEPER_SEEKER`** (extension struct `0x8000`). No reader located. The `BEEPER` half is decoded on
+  both the launch and hit sides, but what consumes the tag it leaves is not. The Seeker steers
+  through the ordinary guidance step like every other round, so whatever `BEEPER_SEEKER` adds is
+  target **selection**, not steering.
+- **`TORPEDO`** (extension struct `0x08`). No reader located. The torpedo's shootability comes from
+  `FLYOUT_HEALTH` and its zeppelin restriction from `DAMAGES_ZEPPELIN`, so this flag may carry
+  nothing.
+- **What writes the round's `+0x6c`**, the `TARGETABLE` admission byte that `aiPilot.md` names.
+- Absence of a located reader is not proof of absence. The bit searches behind the two flags above
+  were truncated by the tool's result cap and are not exhaustive.
 - `FUN_00480f50` tests `REAR` on the player's fire-feedback path and was not opened.
 - `FUN_004881e0` is the player's fire-input tick. It routes by `CANNON` (`0x40`) and `ROCKET`
   (`0x10`) only, feeding `CALIBER` to `FUN_004810d0` for guns and the whole weapon to `FUN_00480f50`
@@ -227,7 +333,14 @@ alongside.
 - `FUN_004b9bc0` was read in full. It handles hits **on an aircraft**; whether ground objects and
   zeppelins route through the same function is unread, so the "four types deal no damage" finding is
   stated for aircraft targets.
-- `FUN_004b6820`, `FUN_004b5fb0`, `FUN_004b9770` and `FUN_004b1690` were read in full.
+- `FUN_004b6820`, `FUN_004b5fb0`, `FUN_004b9770`, `FUN_005aef40`, `FUN_005af960` and `FUN_004b1690`
+  were read in full.
+- The `+0x74` bit assignments and the guidance scalar offsets were read from `FUN_005ad630`'s parse
+  sites one key at a time, each confirmed against the key string it is stored beside. `+0x84` is
+  computed from `LOCK_ON_LEAD`'s two elements by an expression that was not read.
+- `FUN_00538ca0` (bearing), `FUN_0053e56d` (the intercept solve), `FUN_00538d70` (slerp) and
+  `FUN_004c7630` (the terrain probe) were not opened; their roles are inferred from arguments and
+  from the arithmetic around the call.
 - `FUN_0042c070`, `FUN_0042e840`, `FUN_0042e9d0`, `FUN_0048f5e0`, `FUN_004b8ce0`, `FUN_004b8d50`,
   `FUN_005aef40`, `FUN_004b15c0` and `FUN_004b1630` were not opened; their roles above are inferred
   from their arguments and call sites, and are labelled as such.

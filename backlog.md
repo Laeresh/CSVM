@@ -767,15 +767,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ~30 m; the reference ticks measure ~0.35 m, which 8× matches). A/B the rest against
   `Dirt Splash.png` at the controls; the splash *height/timing* curves are authored data, not TUNE.
 
-- `BL-290` `[Bug]` `[Blocked: CAP-28]` **Torpedo flight dynamics: the original's torpedo has a max/cruise speed and
+- `BL-290` `[Bug]` **Torpedo flight dynamics: the original's torpedo has a max/cruise speed and
   visibly slows after firing; ours flies the generic projectile model** (PT-38, 2026-08-06). Data
   check done: the decoded weapon block carries only `VELOCITY` (muzzle/flyout speed) and
   `ACCELERATION` (0 = constant velocity) — no drag or speed-cap field (`docs/formats/weapons.md`) —
   so this is engine behaviour to measure, not data to consume. Hypothesis recorded, not evidence:
   the torpedo may inherit the launching plane's speed and decay toward its own authored
-  `VELOCITY`; a fast launch would then visibly slow, as a drop-torpedo physically should. `CAP-28`
-  films it; measurement can reuse `analysis/video-flight-calibration` if the HUD is in frame.
-  `wep_14` is mountable via `--rocket=wep_14` (no stock loadout carries it).
+  `VELOCITY`; a fast launch would then visibly slow, as a drop-torpedo physically should.
+  ✅ **The hypothesis is confirmed, decoded, and `CAP-28` is no longer needed to answer it**
+  ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md), "Launch velocity is inherited"). At spawn
+  (`FUN_005aef40`) a weapon carrying `LOCK_ON` gets the **launcher's velocity vector** copied into the
+  round at `+0x30`–`+0x38`; a weapon without `LOCK_ON` gets a zero vector. The guidance step
+  (`FUN_005af960`) then sets, every frame,
+  `velocity = heading × speed + ((LOCK_ON − age) / LOCK_ON) × inheritedLaunchVelocity`,
+  so the launcher's contribution decays **linearly to zero over `LOCK_ON` seconds** and the round
+  settles at its own authored `VELOCITY`. `wep_14` authors `LOCK_ON [2.5]`, so the torpedo's
+  slowdown takes 2.5 s. This is not torpedo-specific: it applies to every `LOCK_ON` carrier, which is
+  13 of the 14 rockets. Two more constants from the same routine that our generic model also lacks:
+  a steering round's speed is multiplied by `0.8 + 0.2 × cos(turnAngle)` each frame it turns, and
+  guidance authority ramps as `(age − TURN_SUSPEND_TIME) / LOCK_ON` (with `TURN_SUSPEND_TIME`
+  unauthored, hence 0, hence full authority from frame one).
+  *Fix shape:* consume the inheritance and its decay in `Projectile`; the item is now
+  implementation, not investigation. `wep_14` is mountable via `--rocket=wep_14` (no stock loadout
+  carries it).
 
 - `BL-357` `[Feature]` **The hardpoint selector steps one way only; the original cycles in both
   directions.** *Evidence:* the user at the controls of the original, 2026-08-14: the player selects
@@ -1112,9 +1126,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`FUN_004b6820`) and the proximity fuse (`FUN_004b5fb0`): `SMOKE_SCREEN` spawns no projectile at
   all, `REAR` inverts the aim test so the flare fires backwards and only within 8 s of the shooter
   being hit, `DAMAGES_ZEPPELIN` refuses its weapon against **non**-zeppelins as well as the reverse,
-  and the AI's aim gate wants cos 5° for ordnance against cos 10° for guns. Still open: guidance
-  (`TURN_RATE` has no located reader), the torpedo's shootable flyout (`TORPEDO`/`TARGETABLE`), and
-  `BEEPER_SEEKER`.
+  and the AI's aim gate wants cos 5° for ordnance against cos 10° for guns. Third pass adds guidance
+  (`FUN_005af960`) and the shootable flyout (`FUN_005aef40`), and finds a **second flags word** at
+  weapon record `+0x74`, written by the `.zrd` dispatcher and unrelated to the extension struct's bit
+  space, which is where guidance and the spawn actually branch. Guidance runs for every round;
+  `maxTurn = TURN_RATE × dt × ramp`, turning costs up to 20% of speed per frame, and launch velocity
+  is inherited then decayed over `LOCK_ON` (this answers `BL-290`, now unblocked from `CAP-28`).
+  `FLYOUT_HEALTH`, not `TARGETABLE`, is what makes a round shootable. Four parsed keys
+  (`PITCH_RATE`, `TURN_SUSPEND_TIME`, `TETHER_GUIDED`, `REMOTE_DETONATE`) are authored by no shipped
+  weapon and so are absent from `weapons.md`'s census, but their defaults shape behaviour.
+  Still open: `BEEPER_SEEKER`, `TORPEDO` (which may carry nothing), and what writes a round's
+  `+0x6c` `TARGETABLE` admission byte.
 
 ## Flight model & collision physics
 
