@@ -268,7 +268,7 @@ public sealed class WorldEffectsFactory
     /// model as fallback anchor.</summary>
     public void BuildFlightCrashRuntime(FlightController controller, PlaneBuilder planeBuilder,
         string planeName, GameZ gamez, SceneBuilder worldScene, TextureArchive textures,
-        AnimProgram crashProgram, bool verbose)
+        AnimProgram crashProgram, bool verbose, WorldSounds? worldSounds = null)
     {
         // The crash root: the def's `player` anim-root anchor, in the plane model's frame so the
         // wreck (built relative to the plane root) lands at the plane. Effect templates position
@@ -310,12 +310,17 @@ public sealed class WorldEffectsFactory
         }
 
         // Scoped crash runtime: no ambient start, puffers via the session textures, non-portable
-        // crash-def node ptrs resolved by name. No audio here; FlightAudio.Crash() already plays it.
+        // crash-def node ptrs resolved by name.
         // ⚠ The emitter factory parents at the world root, not the crash root — see its own doc.
         var crashRuntime = AnimRuntime.ForCrashRig(
             NewCrashTemplateStage(_spec.DebugAnim),
             Rng.NewIntSeed(Rng.Crash),
             new PufferEmitterFactory(textures, _worldRoot, _ambience), _spec.DebugAnim);
+        // ⚠ Deliberately asymmetric, do not "fix" into one branch: an AI kill's boom is its crash
+        // def's own authored Sound events, played positionally, while own-ship crash audio has one
+        // owner in FlightAudio.Crash(). Letting a human rig play here would double it.
+        crashRuntime.SoundHandledElsewhere = controller.IsHumanPiloted;
+        crashRuntime.Sounds = controller.IsHumanPiloted ? null : worldSounds;
         // Excuses the ground splash from the momentum nudge FlightController.Crash sets on
         // InheritedWorldVelocity — set once here, unlike the velocity itself (which is
         // per-crash), because which defs are exempt never changes across a session.
@@ -354,6 +359,9 @@ public sealed class WorldEffectsFactory
         if (controller.PlaneModel != null)
             CollectVisibility(controller.PlaneModel, planeVis);
         controller.CrashPlaneVisibility = planeVis;
+        // Phase 2 of the damage-visuals setup: the sink and the stops, which need a live rig
+        // runtime and so cannot be wired where the object is built.
+        WireDamageStages(controller, crashProgram);
         if (slot0Roots != rootNames.Count)
             Log.Warn("anim", $"crash rig '{planeName}': staged {slot0Roots} of {rootNames.Count} template root(s) the bound defs anchor on — the rest built nothing from this chapter's gamez, so their defs play nothing");
         foreach (var unknown in _pools.UnknownCrashRoots(rootNames))
@@ -361,6 +369,57 @@ public sealed class WorldEffectsFactory
         if (verbose)
             GD.Print($"data-crash: {effectRoots} effect template cop(ies) over {_pools.CrashDepthFor(rootNames)} pool slot(s) "
                      + $"+ {restPoses.Count} wreck node(s) — crash runtime bound (scoped, no auto-start)");
+    }
+
+    // The crash runtime also carries the damage-stage menu, so a part crossing an injure_anims
+    // threshold plays its authored def. This is phase 2 of a setup split across two files:
+    // FlightRigAssembler.BuildDamageVisuals is phase 1 and runs for every rig, while this half
+    // exists only where a crash runtime does.
+    private static void WireDamageStages(FlightController controller, AnimProgram crashProgram)
+    {
+        if (controller.Visuals is not { } visuals || controller.CrashRuntime is not { } rigRuntime)
+            return;
+        var planeModel = controller.PlaneModel;
+        // This closure also arbitrates node ownership against other per-frame systems:
+        // add a future contested case here by name, not as a generic scan.
+        visuals.DamageEffectSink = anim =>
+        {
+            // applyReset:false as the crash trigger does — a reset would re-pose nodes
+            // the damage state owns, not just the effect's.
+            int started = rigRuntime.Play(anim, planeModel, applyReset: false).Count;
+            // ⚠ started is instances, not emitters — PufferState events dispatch on the
+            // runtime's next tick, so sample the puffer count later, not off this delta.
+            Log.Info("anim", $"damage stage anim={anim} started={started} rig_puffers_total={rigRuntime.PuffersBuilt}");
+            // player_fuelleak's ELSE branch deactivates wing_flare2 for the rest of
+            // the leak (the def never re-activates it) — hand that lamp to the leak so
+            // WingLightBlinker's 1.5 s cycle stops re-asserting the blink over it.
+            if (anim.Equals("player_fuelleak", StringComparison.OrdinalIgnoreCase))
+                controller.WingLights?.Suspend("wing_flare2");
+        };
+        // ⚠ The stop must cover the CALL closure, not the played roots alone, or a
+        // called-onto instance never gets its NODE_ACTIVE exit. Derived from the program
+        // so no hand list can rot.
+        var stageClosure = new List<string>();
+        foreach (var d in crashProgram.Subset(EffectCatalogue.DamageStageAnims).Defs)
+        {
+            var n = d.AnimName ?? d.Name;
+            if (!string.IsNullOrEmpty(n) && !stageClosure.Contains(n))
+                stageClosure.Add(n);
+        }
+        visuals.DamageEffectStop = () =>
+        {
+            foreach (var n in stageClosure)
+                rigRuntime.Stop(n);
+        };
+        // The retraction a repair makes stops one stage's own closure, leaving the rest
+        // live. Same derivation as above, per stage, since the whole-menu stop cannot
+        // express it.
+        visuals.DamageEffectStopOne = stage =>
+        {
+            foreach (var d in crashProgram.Subset(stage).Defs)
+                if ((d.AnimName ?? d.Name) is { Length: > 0 } n)
+                    rigRuntime.Stop(n);
+        };
     }
 
     // Every name a bind's own scope answers — the Godot node name and the gamez

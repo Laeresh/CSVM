@@ -131,6 +131,15 @@ public sealed class AiAircraftSpawner
                 }
             }
 
+            // Visible damage, phase 1: the same object the player rig gets, built from this
+            // airframe's own injure_anims. Phase 2 (the sink and the stops) is wired by
+            // BuildFlightCrashRuntime below, once the runtime it plays into exists.
+            if (controller.Damage != null)
+            {
+                controller.Visuals = FlightRigAssembler.BuildDamageVisuals(
+                    planeBuilder, planeModel, stats, _in.CrashProgram);
+            }
+
             // No camera rides an AI plane: Setup(null) skips it, CamParams gets the default. The
             // force path is chosen once here, off who is flying — nobody, so AiForcePath.
             // See FlightModel.UsesAiForcePath.
@@ -139,6 +148,9 @@ public sealed class AiAircraftSpawner
                 null, new CamParams(), pos, lookAt);
             controller.Name = $"ai{index + 1}_{planeName}";
             _worldRoot.AddChild(controller);
+            // The engine loop, positional and culled at 2000 units. Attach no-ops to null when the
+            // session found no sound archive; the own-ship FlightAudio is never built for an AI.
+            controller.EngineAudio = AiEngineAudio.Attach(controller, _in.Sounds, _in.SoundDefs, stats);
 
             // Standard crash choreography, built after the controller joins the tree (its reset
             // states read global transforms). Keys onto ai_crash_<surface>, the original's AI
@@ -146,7 +158,8 @@ public sealed class AiAircraftSpawner
             if (_in.CrashProgram != null && _in.WorldScene != null)
             {
                 _worldEffects.BuildFlightCrashRuntime(controller, planeBuilder, planeName, _in.Gamez,
-                    _in.WorldScene, _in.Textures, _in.CrashProgram, verbose: false);
+                    _in.WorldScene, _in.Textures, _in.CrashProgram, verbose: false,
+                    worldSounds: _in.WorldRuntime?.Sounds);
                 controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
             }
         }
