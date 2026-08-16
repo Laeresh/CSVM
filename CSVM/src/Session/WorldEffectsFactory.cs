@@ -58,6 +58,11 @@ public sealed class WorldEffectsFactory
 
     private AnimRuntime? _worldEffects;
 
+    // The builder for the planes-gamez half of a crash rig's template stage. Kept for the session
+    // rather than per rig so all rigs share one material cache, the way every rig already shares
+    // the world scene builder. Unpainted: the chute is not livery-bearing.
+    private SceneBuilder? _planesScene;
+
     public WorldEffectsFactory(SessionSpec spec, Node3D worldRoot, Func<Vector3> playerPosition,
         EffectAmbience? ambience = null, Func<IReadOnlyList<Vector3>>? playerPositions = null)
     {
@@ -102,19 +107,25 @@ public sealed class WorldEffectsFactory
     /// <paramref name="parent"/>, each reset to sit at the stage origin; a CALL_ANIMATION
     /// relocates them onto the call site. Returns how many built. Roots always come from
     /// <see cref="EffectCatalogue.WorldStageRoots"/>/<see cref="EffectCatalogue.CrashStageRoots"/>,
-    /// never a hand list, so an anchor nobody stages fails the build instead of playing
-    /// nothing.</summary>
+    /// never a hand list. <paramref name="altGamez"/>/<paramref name="altScene"/> are a second
+    /// source, asked only for a root the first has none of (the crash rig's planes gamez).</summary>
     public static int BuildEffectStage(GameZ gamez, SceneBuilder scene, Node3D parent,
-        IEnumerable<string> roots)
+        IEnumerable<string> roots, GameZ? altGamez = null, SceneBuilder? altScene = null)
     {
         int n = 0;
         foreach (var rootName in roots)
         {
+            var node = gamez.FindByName(rootName);
+            var builder = scene;
+            if (node == null && altGamez != null && altScene != null)
+            {
+                node = altGamez.FindByName(rootName);
+                builder = altScene;
+            }
             // Effect templates are pure presentation with no collider: several carry
             // intersect_surface, and a collidable copy relocated onto an impact point would
             // leave an invisible plate floating at the blast site.
-            if (gamez.FindByName(rootName) is { } node
-                && scene.BuildSubtree(node, collisionSkip: _ => true) is { } built)
+            if (node is { } found && builder.BuildSubtree(found, collisionSkip: _ => true) is { } built)
             {
                 built.Transform = Transform3D.Identity; // sit at the stage; reposition moves it on call
                 parent.AddChild(built);
@@ -126,24 +137,15 @@ public sealed class WorldEffectsFactory
 
     /// <summary>The anchor lookup <see cref="EffectCatalogue.StageRootsFor"/> binds (one resolver,
     /// two scopes): a parentless gamez node is a template root the bind must build; a name already
-    /// under one is satisfied by it; a name the bind's own <paramref name="scope"/> already carries
-    /// resolves without a template; anything else resolves nowhere.
-    /// ⚠ Gamez roots are tested first, so a template the scope already staged still reads as a
-    /// root it needs.</summary>
-    public static Func<string, AnchorPlacement> StageRootResolver(GameZ gamez, Node3D? scope = null)
+    /// under one, or one the bind's own <paramref name="scope"/> carries, needs no template;
+    /// anything else resolves nowhere. ⚠ Gamez roots are tested first, so a template the scope
+    /// already staged still reads as a root it needs, and <paramref name="altGamez"/>'s roots
+    /// LAST, so a second source can only rescue a name that resolved nowhere.</summary>
+    public static Func<string, AnchorPlacement> StageRootResolver(GameZ gamez, Node3D? scope = null,
+        GameZ? altGamez = null)
     {
-        var parented = new HashSet<int>();
-        foreach (var n in gamez.Nodes)
-            foreach (var c in n.Children)
-                parented.Add(c);
-        var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var n in gamez.Nodes)
-        {
-            known.Add(n.Name);
-            if (!parented.Contains(n.Index))
-                roots.Add(n.Name);
-        }
+        var roots = RootNames(gamez, out var known);
+        var altRoots = altGamez != null ? RootNames(altGamez, out _) : null;
         var inScope = scope != null ? NamesUnder(scope) : null;
         return name =>
         {
@@ -151,7 +153,10 @@ public sealed class WorldEffectsFactory
                 return AnchorPlacement.Stage;
             if (inScope != null && inScope.Contains(name))
                 return AnchorPlacement.InScope;
-            return known.Contains(name) ? AnchorPlacement.InScope : AnchorPlacement.Missing;
+            if (known.Contains(name))
+                return AnchorPlacement.InScope;
+            return altRoots != null && altRoots.Contains(name)
+                ? AnchorPlacement.Stage : AnchorPlacement.Missing;
         };
     }
 
@@ -160,8 +165,9 @@ public sealed class WorldEffectsFactory
     /// can ask it on a replica rig (the wreck and part names vary by airframe, so the answer is
     /// per-plane).</summary>
     public static IReadOnlyList<string> CrashStageRootNames(AnimProgram program, GameZ gamez,
-        Node3D rigScope, SurfaceDefTable? crashDefs = null, string? destroyAnim = null) =>
-        EffectCatalogue.CrashStageRoots(program, StageRootResolver(gamez, rigScope),
+        Node3D rigScope, SurfaceDefTable? crashDefs = null, string? destroyAnim = null,
+        GameZ? planesGamez = null) =>
+        EffectCatalogue.CrashStageRoots(program, StageRootResolver(gamez, rigScope, planesGamez),
             crashDefs ?? EffectCatalogue.CrashDefTable(program), destroyAnim);
 
     /// <summary>Stages the crash rig's pooled effect-template copies under
@@ -171,7 +177,8 @@ public sealed class WorldEffectsFactory
     /// the call's own copy. Shared by the production rig and the <c>crash-rig-anchors</c> suite.
     /// Returns (copies staged, of which in slot 0).</summary>
     public static (int Roots, int Slot0) StageCrashTemplates(GameZ gamez, SceneBuilder worldScene,
-        Node3D crashRoot, IReadOnlyList<string> rootNames, Utils.EffectPools pools)
+        Node3D crashRoot, IReadOnlyList<string> rootNames, Utils.EffectPools pools,
+        GameZ? planesGamez = null, SceneBuilder? planesScene = null)
     {
         int depth = pools.CrashDepthFor(rootNames);
         int effectRoots = 0, slot0Roots = 0;
@@ -182,7 +189,7 @@ public sealed class WorldEffectsFactory
             crashRoot.AddChild(pool);
             int at = slot;
             int built = BuildEffectStage(gamez, worldScene, pool,
-                rootNames.Where(r => pools.CrashSlotsFor(r) > at));
+                rootNames.Where(r => pools.CrashSlotsFor(r) > at), planesGamez, planesScene);
             foreach (var child in pool.GetChildren())
             {
                 if (child is Node3D copy)
@@ -265,10 +272,11 @@ public sealed class WorldEffectsFactory
     /// the effect-template roots and the plane's wreck under a <c>player</c> crash root, then binds
     /// a non-auto-start <see cref="AnimRuntime"/> to the controller, scoped so every anchor is unique.
     /// ⚠ <c>startprops</c>/<c>stopprops</c> never resolve on any airframe, so callers pass the plane
-    /// model as fallback anchor.</summary>
+    /// model as fallback anchor; <paramref name="planesGamez"/> is the second stage source.</summary>
     public void BuildFlightCrashRuntime(FlightController controller, PlaneBuilder planeBuilder,
         string planeName, GameZ gamez, SceneBuilder worldScene, TextureArchive textures,
-        AnimProgram crashProgram, bool verbose, WorldSounds? worldSounds = null)
+        AnimProgram crashProgram, bool verbose, WorldSounds? worldSounds = null,
+        GameZ? planesGamez = null)
     {
         // The crash root: the def's `player` anim-root anchor, in the plane model's frame so the
         // wreck (built relative to the plane root) lands at the plane. Effect templates position
@@ -297,12 +305,18 @@ public sealed class WorldEffectsFactory
         // the def instead of silently playing nothing.
         // ⚠ Parent the crash root first: `player` is the defs' own anchor, and an unparented scope reports the whole rig unanchorable.
         controller.AddChild(crashRoot);
-        var rootNames = CrashStageRootNames(crashProgram, gamez, controller, crashDefs, destroyAnim);
+        // The second source, asked only for a root this chapter's gamez has none of: the destroy
+        // def's `chuteman` lives in planes.zbd. Same reference on the empty stage, where the
+        // session gamez IS the plane source, so the alt arm never fires there.
+        var altGamez = planesGamez != null && !ReferenceEquals(planesGamez, gamez) ? planesGamez : null;
+        var altScene = altGamez != null ? PlanesScene(altGamez, textures) : null;
+        var rootNames = CrashStageRootNames(crashProgram, gamez, controller, crashDefs, destroyAnim,
+            altGamez);
         // Staged in pool slots: a single shared copy would be relocated onto every new tear,
         // discarding the previous panel's burst mid-flight. Sizes come from effect_pools.json's
         // crash section; AnimRuntime.AssignCallerSlot pins each call anchor to its own slot.
         var (effectRoots, slot0Roots) = StageCrashTemplates(gamez, worldScene, crashRoot,
-            rootNames, _pools);
+            rootNames, _pools, altGamez, altScene);
 
         // The plane's destroyed wreck (pieceN meshes), built hidden; the crash def shows + flings it.
         // ⚠ Keep the whole rig one name scope: a crash def spans this subtree and the plane model's
@@ -441,6 +455,25 @@ public sealed class WorldEffectsFactory
         };
     }
 
+    // A gamez's parentless node names (the template roots), with every node name it carries at all
+    // as the out param — the two halves StageRootResolver decides on.
+    private static HashSet<string> RootNames(GameZ gamez, out HashSet<string> known)
+    {
+        var parented = new HashSet<int>();
+        foreach (var n in gamez.Nodes)
+            foreach (var c in n.Children)
+                parented.Add(c);
+        var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var n in gamez.Nodes)
+        {
+            known.Add(n.Name);
+            if (!parented.Contains(n.Index))
+                roots.Add(n.Name);
+        }
+        return roots;
+    }
+
     // Every name a bind's own scope answers — the Godot node name and the gamez
     // AnimRuntime.NameMeta both, since name resolution reads the meta.
     private static HashSet<string> NamesUnder(Node root)
@@ -479,6 +512,11 @@ public sealed class WorldEffectsFactory
                 CollectVisibility(c, into);
             }
     }
+
+    // Built once per session (see the field): cullBackfaces matches PlaneBuilder's own builder,
+    // since these subtrees are authored as aircraft geometry.
+    private SceneBuilder PlanesScene(GameZ planesGamez, TextureArchive textures) =>
+        _planesScene ??= new SceneBuilder(planesGamez, textures, cullBackfaces: true);
 
     // The world-scoped generalization of the per-player crash runtime: stages effect templates
     // under a dedicated subtree, keeps a live `IEmitterFactory`, and binds

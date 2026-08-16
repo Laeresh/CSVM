@@ -439,12 +439,12 @@ public sealed class FlightRigAssembler
         // states resolve valid global transforms.
         if (_in.CrashProgram != null && _in.WorldScene != null)
         {
-            // The world's WorldSounds goes in on every rig alike; BuildFlightCrashRuntime drops it
-            // for a human one, so the asymmetry is stated once, there, rather than as a missing
-            // argument here that reads like an oversight.
+            // WorldSounds goes in on every rig alike; BuildFlightCrashRuntime drops it for a human
+            // one, so that asymmetry is stated once, there. The planes gamez goes in on every rig
+            // too, or a kill would drop a parachute for one spawner and not the other.
             _worldEffects.BuildFlightCrashRuntime(controller, planeBuilder, planeName, _in.Gamez,
                 _in.WorldScene, _in.Textures, _in.CrashProgram, verbose,
-                worldSounds: _in.WorldRuntime?.Sounds);
+                worldSounds: _in.WorldRuntime?.Sounds, planesGamez: _in.PlanesGamez);
             // The start choreography for the very first spawn: Respawn() plays this same def on
             // every later respawn, but Setup() above called Respawn() before this runtime existed.
             controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);

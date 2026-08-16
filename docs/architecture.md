@@ -3278,7 +3278,10 @@ family gets one copy per authored call anchor), the runtime's `TemplateStage` bu
 beside the slot build and handed into `ForCrashRig` sealed, and
 the stage's caller-slot assignment pins each call anchor (`pdpN`, `prop1`, `pieceN`) to its own
 copy — see `AnimRuntime`'s pool paragraphs for the mechanism and the `damage-template-pool` suite
-for the regression shape. `LevelPlacedTemplateNames` is set beside
+for the regression shape. The stage has **two** sources: the chapter gamez, then the planes gamez
+for a root it has none of, which is the only place the destroy def's parachute (`chuteman`) lives;
+both spawners pass it, and its own builder is cached here for the session.
+`LevelPlacedTemplateNames` is set beside
 `InheritedVelocityExempt`, once, from `EffectCatalogue.CrashSurfaceLevelAnimNames` (`BL-292`) — the
 named defs only ever play from within a crash sequence, so unlike `InheritedWorldVelocity` (set
 per-crash in `FlightController.Crash`, since it depends on the live impact speed/direction) this

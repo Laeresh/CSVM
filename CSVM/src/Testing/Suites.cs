@@ -10555,8 +10555,11 @@ public static class Suites
                 ai.AddChild(aiModel);
                 ai.Setup(new FlightModel(stats), null, new CamParams(), spawn, spawn + Vector3.Forward);
                 ctx.Host.AddChild(ai);
+                // The planes gamez goes in as both spawners pass it: the destroy def's `chuteman`
+                // is a template root of planes.zbd, and without it the rig cannot stage it.
                 factory.BuildFlightCrashRuntime(ai, builder, ctx.PlaneName, world.Gamez,
-                    world.Session.Builder.Scene, textures, world.Session.Program, verbose: false);
+                    world.Session.Builder.Scene, textures, world.Session.Program, verbose: false,
+                    planesGamez: planesGamez);
 
                 ctx.Check(ai.CrashRuntime != null && ai.CrashDefs != null,
                     $"the AI rig built a crash runtime with a def table");
@@ -10612,7 +10615,8 @@ public static class Suites
                     spawn + new Vector3(2000f, 0f, 0f), spawn + new Vector3(2000f, 0f, -1f));
                 ctx.Host.AddChild(human);
                 factory.BuildFlightCrashRuntime(human, humanBuilder, ctx.PlaneName, world.Gamez,
-                    world.Session.Builder.Scene, textures, world.Session.Program, verbose: false);
+                    world.Session.Builder.Scene, textures, world.Session.Program, verbose: false,
+                    planesGamez: planesGamez);
                 ctx.Check(human.CrashDefs != null && human.CrashDefs.PlayableDefs.All(d =>
                         d.StartsWith(Session.EffectCatalogue.CrashDefPrefix, System.StringComparison.Ordinal)),
                     $"the same factory keeps a human rig on player_crash_* [{string.Join(", ", human.CrashDefs?.PlayableDefs ?? System.Array.Empty<string>())}]");

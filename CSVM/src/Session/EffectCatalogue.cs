@@ -146,12 +146,11 @@ public static class EffectCatalogue
 
     // Anchors the closure below reports that no bind stages, because the CALL reaching the
     // definition supplies its anchor instead of its own NAME: `zep_can_dstry1.flt` (absent from
-    // C2's gamez entirely), `warhawk` (startprops/stopprops' own NAME, a shared authoring
-    // label no real airframe carries) and `chuteman`, the destroy def's parachute. Curation.
-    // ⚠ `chuteman` is a template root of the PLANES gamez, which the crash rig does not stage
-    // from, so the pilot's chute is bound and called but draws nothing yet.
-    public static readonly string[] CallSuppliedAnchors =
-        { "zep_can_dstry1.flt", "warhawk", "chuteman" };
+    // C2's gamez entirely) and `warhawk` (startprops/stopprops' own NAME, a shared authoring
+    // label no real airframe carries). Curation.
+    // ⚠ Do not park an anchor here that a bind could stage; the entry means "nothing stages this",
+    // and a staged root listed here is dropped from the closure and draws nothing.
+    public static readonly string[] CallSuppliedAnchors = { "zep_can_dstry1.flt", "warhawk" };
 
     // The DESTROY def each of the eleven airframes ships under its own name, keyed by the plane
     // model node a rig is built from. Slot one of the two on the death path

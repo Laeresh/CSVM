@@ -157,9 +157,12 @@ public sealed class AiAircraftSpawner
             // family, since IsHumanPiloted is false.
             if (_in.CrashProgram != null && _in.WorldScene != null)
             {
+                // The planes gamez goes in here exactly as it does on the player rig: the destroy
+                // def's `chuteman` is a template root of planes.zbd, and an asymmetry here would
+                // give the parachute to one kind of kill only.
                 _worldEffects.BuildFlightCrashRuntime(controller, planeBuilder, planeName, _in.Gamez,
                     _in.WorldScene, _in.Textures, _in.CrashProgram, verbose: false,
-                    worldSounds: _in.WorldRuntime?.Sounds);
+                    worldSounds: _in.WorldRuntime?.Sounds, planesGamez: _in.PlanesGamez);
                 controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
             }
         }

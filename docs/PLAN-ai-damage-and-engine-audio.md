@@ -179,9 +179,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 18. ☑ Handle `Callback` events, 16 (velocity into the instance) and 15 (stop the stage anims)
 19. ☑ Play the self-named destroy anim on death, and move `*_crash_*` to ground impact
-20. ◐ The parachute: `chuteman` at 3.0 s, and the wreck's own landing sequences — the landing lands
-    with D19; the chute is **blocked**, `chuteman` is a template root of the **planes** gamez and the
-    crash rig stages from the **chapter** gamez only
+20. ☑ The parachute: `chuteman` at 3.0 s, and the wreck's own landing sequences (the planes gamez is
+    now a second stage source for the crash rig; ⚠ the Balmoral's three chutes still collapse to
+    one, see D21)
 21. ☐ Evidence for the fall, against the two reference recordings
 
 ## ⚠ Wave D — what Waves A to C got wrong
@@ -731,14 +731,17 @@ sequences are `destroyed_dirt` (`snd_exp_ground_a` + `call_car_trails`), `destro
 **Approach.** Falls out of D19 if the def is played whole; this item is the check that it did, plus
 whatever anchoring `chuteman` needs. Report rather than invent if the parachute has no anchor.
 
-**Standing after D19.** The timed 3.0 s `CallAnimation` and the landing sequences do fall out: the
-def is played whole and its `bounce_sequence` carries `bounce_effects`/`destroyed_water`.
-`chuteman` does NOT. Its anchor is a parentless template root of the **planes** gamez
-(`extracted/planes`), and the crash rig stages template roots from the CHAPTER gamez only, so
-`EffectCatalogue.StageRootsFor` reported it unstageable and the rig build threw. D19 parked it in
-`CallSuppliedAnchors`, which keeps the def bound and called but stages no copy, so the parachute
-draws nothing. Making it draw means giving `WorldEffectsFactory.BuildFlightCrashRuntime` the planes
-gamez as a second stage source, which changes both spawners' call sites.
+**Result.** The crash rig's template stage now has two sources: the chapter gamez, then the planes
+gamez for a root the chapter has none of. `chuteman` is a parentless template root of the planes
+gamez alone, so that second source is what stages it; it is out of `CallSuppliedAnchors` again, and
+both spawners pass the gamez, since `player-player` calls the chute as well as the ten AI airframe
+defs. Order is deliberate: the planes roots are asked LAST, after the chapter gamez has answered
+every way it can, so the second source can only rescue a name that resolved nowhere. The landing
+sequences and the timed call already fell out of D19 playing the def whole.
+
+**The authored timing.** Ten airframes author `CallAnimation chuteman` at `Animation` offset **3.0**
+with `AtNode destroyed`; the Balmoral authors three of them at `Event` offset 1.0 (a bomber's crew),
+and `player-player`'s is untimed. Nothing schedules the chute in code.
 
 **Model recommendation.** medium — mostly verification, unless `chuteman` needs its own anchoring.
 
@@ -767,6 +770,31 @@ landing and only then hides it. Assert counts and states, never "something happe
 
 **⚠ Traps.** The manifest's `exercises` field is hook-checked: under 250 chars, no item id, no date,
 no "also exercises" clause, rewritten on a re-pin.
+
+**Three findings this item inherits, none of them fixed yet.**
+
+**(a) The Balmoral's crew loses two of its three parachutes.** `balmoral-balmoral`'s `destroy_craft`
+authors `chuteman` **three times**, all at node `destroyed`, all at `Event` offset 1.0 — a bomber's
+crew, and the only airframe that does. `AnimRuntime.AssignCallerSlot(target, callAnchor)` pins each
+`(root, call anchor)` pair to one slot, so all three calls share it, and the repeat-site guard
+(`movedAway`, gated on the site having moved) suppresses the second and third outright. ⚠ **Raising
+`crashRoots.chuteman` does not fix this** — the slot is keyed on the pair, not counted, so extra
+slots go unused. The fix is a per-call slot for a root called repeatedly from one anchor, which is a
+change to the keying and wants its own decision.
+
+**(b) The crash pool's sizes are owed a re-count.** `effect_pools.json` states its `crashRoots`
+numbers are "the AUTHORED distinct-anchor counts read off the C1 cam_anim defs", and that a re-count
+is owed if the bound def set changes. D19 bound the destroy defs, which is exactly that. A kill frame
+logs `effect_pool_miss:5x37.86` against a 40 ms threshold, so the closure is calling more at once
+than the crash section sizes.
+
+**(c) The fall may not start for three seconds.** In `fury-fury`'s `destroy_craft` the events after
+the 3.0 s `chuteman` call (`Callback 16`, `Callback 15`, `CallSequence randomdestseq`) carry
+`start: null` and dispatch after it, so `randomdestseq`'s `ObjectMotion` (the fall itself) does not
+begin until 3 s after the kill, with the wreck holding the death position meanwhile. The reference
+recording shows the wreck falling well before the parachute appears, so either our reading of
+`start: null` after a timed event is wrong or the ordering is. **Settle this against the recording
+before adjusting anything** — it is the one beat of the choreography that currently disagrees.
 
 **Playtest (owed, Wave D).** Shoot down an enemy and watch the whole sequence against
 `Enemy AI Shotdown.mp4`: airburst, burning wreck falling on its old heading, parachute, second
