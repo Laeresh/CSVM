@@ -694,6 +694,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   encode a falloff curve or impulse. D10 uses linear falloff to zero at the edge and
   `BlastImpulsePerDamage = 1 N·s` on a directly struck rigid body. Judge clustered-object damage
   and physical push against the original before changing either.
+  ⚠ **The impulse half is no longer a TUNE.** `FUN_004b9bc0` applies a per-hit impulse
+  (`FUN_0048f5e0`) whose two magnitudes are `damage × vehicle_def[+0xa0]` scaled by **0.005** and
+  **0.0333**, gated on the larger damage figure exceeding **5.0**
+  ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md)). So the original scales with damage and
+  with a per-airframe constant, carries two magnitudes rather than one, and has a threshold below
+  which nothing moves. Read the constant and consume it; do not tune `BlastImpulsePerDamage`.
   ⚠ Traps: do not retune the authored radius or fuse distance; `DAMAGE 0` specials carry large
   effect radii and are deliberately excluded from blast damage.
 
@@ -1066,10 +1072,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   no reader is a finding, and one of the more valuable ones. (b) The type set is **not** the flag
   set: `HIGH_EXPLOSIVE` vs armor-piercing is a damage-pair difference with no special routine,
   while guidance is `TURN_RATE` with no flag at all, so enumerate by behaviour and say which
-  types collapse onto the generic model on purpose. (c) The choker's felt behaviour is user
-  recollection, not decode (`weapons.md`, `TANGLER`): the open question is whether the instant
-  stall is the `ENGINE_DEAD [5,13]` thrust cutout alone or a second airspeed clamp. Answer it
-  from the routine, and do not carry the recollection forward as settled. (d) `CLUSTER_SIZE`,
+  types collapse onto the generic model on purpose. (c) **Settled, do not re-open:** the choker
+  question (thrust cutout alone, or a second airspeed clamp?) is answered in
+  [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md). The hit routine sets the engine-dead
+  bit with a timer and touches nothing else; there is no clamp. (d) `CLUSTER_SIZE`,
   `AMMO_LIMIT` and `PRIORITY` are allotment and selection, already decoded; this item is about
   flight and effect, do not re-litigate them.
   *Cross-refs:* `BL-290` (torpedo flight dynamics, the one per-type behaviour already minted, and
@@ -1079,6 +1085,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   effect this item defines), `BL-233` (the proximity fuse, and the six plain rockets'
   `DETONATION_DISTANCE == IMPACT_PROXIMITY` quirk), `BL-404`/`BL-405` (where an ordnance round is
   aimed, as opposed to what it does once launched), `WeaponDefs.cs`, `Projectile.cs`.
+  *Decoded so far:* the flags dword and the weapon-extension struct layout (`FUN_004ba6f0`, complete
+  for this build) and the hit-side dispatch (`FUN_004b9bc0`), written up in
+  [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md). Headlines: `SONIC`, `FLASH`, `BEEPER` and
+  `TANGLER` each zero the damage pair before returning, so four of the twelve types cannot damage an
+  aircraft at all, and the damage figures `wep_08`/`wep_10`/`wep_12` author are discarded. The
+  choker's engine-dead duration is `ENGINE_DEAD_max × (1 − distance / RADIUS)` floored at
+  `ENGINE_DEAD_min`, and its two bounds are **globals** (`DAT_0062b120`/`DAT_0062b124`), set by the
+  last-parsed `TANGLER` weapon rather than per-weapon. Still open: the launch and flight side, whose
+  entry points that page names.
 
 ## Flight model & collision physics
 
