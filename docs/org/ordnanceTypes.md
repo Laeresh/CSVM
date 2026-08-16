@@ -138,8 +138,13 @@ when the target is **behind**, and it requires the shooter's `+0xba` byte, which
 being-pursued and which the hit handler sets when the aircraft absorbs damage, refreshing an expiry
 8 seconds out. New here: `REAR` also flips the **spawn** direction (the launch axis is negated for an
 ordinary weapon and taken as-is for a rear one) and flips the sign of a 10 m offset along that axis.
-⚠ The `REAR` carrier in this install is `wep_13`, the **smoke screen**, not the flare: it is the one
-entry carrying both `REAR` and `SMOKE_SCREEN`, which makes it a screen laid behind a pursued aircraft.
+⚠ **`REAR` appears exactly once in the whole weapon table, on `wep_13`, the smoke screen.** The flare
+`wep_15` is *called* `MSG_WEAP_REARARC_FLASH` and does **not** carry the flag. Its rear-arc character
+comes from its own numbers instead: `VELOCITY [1.0]` so it barely moves, `LOCK_ON [2.5]` so it leaves
+at the launching aircraft's speed and sheds it over 2.5 s, and `DETONATION_TIME [2.0]` so it goes off
+two seconds after release. You drop it and fly away; it hangs where you left it and flashes at
+whoever is still there. `IMPACT_PROXIMITY [500]` gives it an enormous radius, and `FLASH`'s
+facing requirement is what keeps it from blinding you as you leave.
 
 **`DAMAGES_ZEPPELIN` is a two-way gate, not a permission.** The routine asks the current target
 whether it is a zeppelin (vtable slot `+0x1c`) and drops the trigger both when a non-`DAMAGES_ZEPPELIN`
@@ -478,10 +483,10 @@ and the branch order is what decides which types can ever deal damage:
    it is unread here).
    ⚠ The `HIGH_EXPLOSIVE` branch tests `distance <= 400.0` and then applies the **same** multiplier in
    both arms. The comparison is dead as shipped.
-2. **`SONIC` or `FLASH`** (`0x200 | 0x800` tested together). Calls `FUN_0042e840` with a boolean taken
-   from bit `0xb`, which is what separates the two. On a hit against the player it then builds a
-   colour and calls `FUN_0042e9d0`: white for `FLASH`, **red for `SONIC`**. Then it zeroes both damage
-   figures and returns.
+2. **`SONIC` or `FLASH`** (`0x200 | 0x800` tested together). `FUN_0042e840` computes an intensity;
+   if it is non-zero the victim is affected, and **the victim's kind decides how**. The player gets a
+   screen flash through `FUN_0042e9d0`, white for `FLASH` and **red for `SONIC`**. An AI gets
+   `FUN_004200d0`, which is a **stun**. Either way both damage figures are then zeroed.
 3. **`BEEPER`** (`0x4000`). Tests the shooter against the victim (`FUN_004b8ce0`), then tags the
    victim by handing `FUN_004b88a0` the shared `TIME` at `+0x18`. Zeroes both damage figures and
    returns.
@@ -494,9 +499,57 @@ and the branch order is what decides which types can ever deal damage:
 
 **Four of the twelve types cannot damage anything.** `SONIC`, `FLASH`, `BEEPER` and `TANGLER` each
 zero the damage pair before returning, so their authored `ARMOR_DAMAGE`/`HEALTH_DAMAGE` figures are
-never spent. For `FLASH` (`wep_09`) and the rear-arc flare (`wep_15`) that matches the authored
-`DAMAGE 0`; for `SONIC` (`wep_08`), the `BEEPER` (`wep_10`) and the choker (`wep_12`), which all
-carry a real damage pair, **the data is misleading and the engine discards it**.
+never spent. For `FLASH` (`wep_09`) and the flare (`wep_15`) that matches the authored `DAMAGE 0`;
+for `SONIC` (`wep_08`), the `BEEPER` (`wep_10`) and the choker (`wep_12`), which all carry a real
+damage pair, **the data is misleading and the engine discards it**. Dealing no damage is not the same
+as doing nothing, though: three of the four disable the victim instead, which is the section below.
+
+## What the no-damage types do to an AI
+
+The player and an AI take **different** effects from the same weapon, decided at the point of impact.
+
+### `SONIC` and `FLASH`: an intensity, then a stun
+
+`FUN_0042e840` produces one intensity in `[0, 1]` from the squared distance ratio
+`d² / IMPACT_PROXIMITY²`:
+
+    ratio     = min(1, d² / IMPACT_PROXIMITY²)
+    intensity = 1                          while ratio < 0.6
+              = 1 - (ratio - 0.6) * 2.5    from there to the radius
+
+So the effect is at **full strength out to √0.6 ≈ 77% of the radius** and only fades over the last
+quarter. It is a plateau, not a falloff.
+
+**`FLASH` additionally requires the victim to be facing it**, and `SONIC` does not. For a `FLASH`,
+the routine dots the unit vector toward the burst against the victim's forward axis and returns zero
+if that dot is negative, halving in below 0.5. A flash going off behind you does nothing; a sonic
+burst behind you works at full strength. That is the one place the two flags differ beyond the
+screen colour.
+
+The routine returns the intensity and **five times** the intensity. The player's screen flash takes
+the first; `FUN_004200d0` takes the second as a **stun duration in seconds**, so a dead-centre hit
+stuns for the full 5 s.
+
+`FUN_004200d0` refuses a dead victim, the player, a victim with `+0xf8` set, and any AI not in state
+0 or 4. Otherwise it sets AI state **4**, **zeroes four control inputs** (`+0x100`, `+0x108`,
+`+0x10c`, `+0x114`) and two more at `+0x11c`/`+0x120`, and writes the expiry to `+0xc0`. Its debug
+line reads "Stunned for %f seconds based on s…" off `+0x978`, so a per-pilot term is involved;
+where that term multiplies was not traced.
+
+So a sonic or flash round against an AI takes its hands off the controls for up to five seconds. It
+is the strongest non-damaging effect in the weapon table and we model none of it.
+
+### `TANGLER`: mechanical only
+
+The choker sets the engine-dead bit and its timer, and nothing in the AI decision layer reads that
+mask. Its readers are in the flight model (`FUN_0048fc40` and the `FUN_004b18a0` group), so a choked
+AI is not told it has been choked; it simply flies an aircraft with no thrust. There is no stun, no
+state change and no evasive reaction.
+
+### `BEEPER`: nothing at all to the victim
+
+The tag is a world-list entry that seeker rounds query. The victim gets no effect, no state change
+and no notification.
 
 ## The choker, settled
 
@@ -615,7 +668,11 @@ code, and were not opened.
 - `FUN_004b6820`, `FUN_004b5fb0`, `FUN_004b9770`, `FUN_005aef40`, `FUN_005af960`, `FUN_005af720`,
   `FUN_005abcf0`, `FUN_00441830`, `FUN_00441780`, `FUN_004b8b50`, `FUN_004b8ad0`, `FUN_004b89c0`,
   `FUN_004b7670`, `FUN_004b1690`, `FUN_005afd50`, `FUN_00480f50`, `FUN_005ac3a0`, `FUN_005ac7a0`,
-  `FUN_005ac690`, `FUN_005ac580`, `FUN_005aca30` and `FUN_005acac0` were read in full.
+  `FUN_005ac690`, `FUN_005ac580`, `FUN_005aca30`, `FUN_005acac0`, `FUN_0042e840` and `FUN_004200d0`
+  were read in full.
+- The claim that no AI code reads the disabled-systems mask rests on an enumeration of every
+  instruction referencing `+0x2dc`: twelve sites, all in the flight-model and damage ranges, none in
+  the AI decision range. `FUN_0048fc40`, the flight model's reader, was not opened.
   `FUN_004b8b50`'s selection rule was taken from its disassembly rather than its decompilation,
   because the decompiler's rendering of the branch order there is misleading.
 - `+0x3c`, `+0x40`, `+0x44` and `+0x48` were traced to their parse sites in `FUN_005ad630` and are

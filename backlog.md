@@ -1135,12 +1135,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (**C**) *Splash.* Replace the invented linear falloff with `1 − d²/IMPACT_PROXIMITY²`, measure `d`
   to the target's bounding-sphere surface clamped at zero, add the occlusion test, cap the gather at
   32. This is `BL-227`'s falloff half and should land here, not twice.
-  (**D**) *The four no-damage types.* `SONIC` (red screen flash), `FLASH` (white), `BEEPER` (tag
-  object, world list, countdown with the five-second tail), `TANGLER` (engine-dead timer). All four
-  zero the damage pair first.
-  (**E**) *`SMOKE_SCREEN` and `REAR`.* The smoker spawns **no projectile**, only a world object
-  carrying `TIME`; `REAR` inverts the aim test and the spawn axis and is gated on the being-hit
-  latch.
+  (**D**) *The four no-damage types.* All four zero the damage pair first, and the player and an AI
+  take **different** effects. `SONIC` and `FLASH` share one intensity model (full strength out to
+  ≈77% of the radius, then a linear fade; `FLASH` additionally requires the victim to be facing it):
+  the player gets a screen flash, red for `SONIC` and white for `FLASH`, while an AI gets a **stun**
+  of up to 5 s that zeroes its control inputs. `BEEPER` does nothing to its victim beyond leaving the
+  tag. `TANGLER` cuts the engine and no AI code reads that, so a choked AI simply flies without
+  thrust.
+  (**E**) *`SMOKE_SCREEN` and `REAR`.* Both belong to `wep_13`, the only entry carrying either: the
+  smoker spawns **no projectile**, only a world object carrying `TIME [8]`, and `REAR` inverts the
+  aim test and the spawn axis and is gated on the being-hit latch. Neither deals damage. ⚠ The flare
+  `wep_15` is named `MSG_WEAP_REARARC_FLASH` but does **not** carry `REAR`; it is a `FLASH` round
+  that hangs where it is dropped (`VELOCITY [1.0]`) and goes off on `DETONATION_TIME [2.0]`.
   (**F**) *The flyout.* `TARGETABLE` admits the round to the target list; `FLYOUT_HEALTH` gives it a
   health pair spent armour-then-health; zero destroys it, playing `DESTROY_ANIMATION`.
   (**G**) *Gates.* `DAMAGES_ZEPPELIN` refuses its weapon against non-zeppelins as well as the
