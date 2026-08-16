@@ -42,10 +42,8 @@ public class CamParamsTests
     [Fact]
     public void TheFirebrandResolvesThroughItsModelNodeName()
     {
-        // The regression guard for the join key: player_fbrand -> "Firebrand" only via
-        // MarkerRig.PlayerAirframes. Deriving the display name by stripping the leading 'p' and
-        // title-casing (PlaneRoster.PlaneDisplayName) yields "Fbrand", which matches no block, so
-        // this plane would silently fall back to the defaults.
+        // player_fbrand -> "Firebrand" only via MarkerRig.PlayerAirframes; stripping the leading
+        // 'p' and title-casing instead yields "Fbrand", matching no block.
         var cam = Load("player_fbrand");
         Assert.Equal("Firebrand", cam.DisplayName);
         Assert.Equal(21.5f, cam.Dist);

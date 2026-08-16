@@ -7,20 +7,11 @@ namespace CSVM.Flight;
 /// <summary>The zeppelin kill arithmetic (M4 F18), pure and engine-free: the decoded survivor
 /// threshold over the record's <c>healthy</c> list, the engine recount that drives
 /// <see cref="ZeppelinMotion.AliveEngines"/>, the <c>DAMAGES_ZEPPELIN</c> gasbag gate and the
-/// record-authored cannon damage stages. The per-zone hit points live in the world's
-/// <c>DestructibleRegistry</c> scalar pools; this class only counts, so the session runtime
-/// (<c>Session/ZeppelinRuntime</c>) feeds it zone-aliveness predicates.
-///
-/// <para>⚠ POLARITY: <c>num_healthy_required</c> is how many critical zones must SURVIVE — the
-/// zeppelin dies when <c>survivors &lt; required</c> (decoded against the engine,
-/// docs/formats/mission-entities.md "The kill threshold counts survivors"). The design document
-/// states the same rule as a destroy count, which is the inverse; that reading yields an
-/// immortal zeppelin and reads as a damage bug. The reader (<see cref="ZeppelinDef"/>) already
-/// applies the decoded load rule — default 1, clamped to the <c>healthy</c> length.</para>
-///
-/// <para>The <c>healthy</c> list is counted literally, entry by entry, exactly as the engine
-/// walks it: C5/M01 authors <c>gasbag5</c> twice (a shipped typo), so that node dying removes
-/// two survivors at once.</para></summary>
+/// record-authored cannon damage stages. Decode: docs/formats/mission-entities.md. The per-zone
+/// hit points live in the world's <c>DestructibleRegistry</c> pools; this class only counts.
+/// ⚠ POLARITY: <c>num_healthy_required</c> is how many critical zones must SURVIVE — the
+/// zeppelin dies when <c>survivors &lt; required</c>. The design document's destroy-count
+/// reading is the inverse and yields an immortal zeppelin.</summary>
 public sealed class ZeppelinDamage
 {
     public ZeppelinDamage(ZeppelinDef def)

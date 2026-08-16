@@ -10,12 +10,12 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The D12 target-ranking formula (docs/formats/ai-rosters.md "AI modes, engine-side"):
+/// The target-ranking formula (docs/formats/ai-rosters.md "AI modes, engine-side"):
 /// rank = weight × 1200 + distance + objectiveBias, minimised, player base weight 0.7, ±0.2
 /// bearing/altitude/facing terms, 1e21 beyond the activation radius. The term sign conventions
-/// and the bias scale are documented assumptions; these tests pin the decoded arithmetic and
-/// the assumptions both, so a re-decode that moves either fails loudly. Plus the roster
-/// accessors for slots 6 (primary_target) and 33 (rating_biases), with install-wide goldens.
+/// are still documented assumptions; these tests pin the decoded arithmetic and the assumptions
+/// both, so a re-decode that moves either fails loudly. Plus the roster accessors for slots 6
+/// (primary_target) and 33 (rating_biases), with install-wide goldens.
 /// </summary>
 public class AiTargetRankingTests
 {
@@ -139,24 +139,40 @@ public class AiTargetRankingTests
     }
 
     [Fact]
-    public void ObjectiveBiasScalesByTheWeightScaleFirstMatchWins()
+    public void ObjectiveBiasSaturatesAtBothEndsAndFirstMatchWins()
     {
         var biases = new List<AiRatingBias>
         {
             new("bloodhawk_*", -1f, 0f),
             new("bloodhawk_2", -0.5f, 0f), // shadowed: first match wins (authored order)
         };
-        Assert.Equal(-AiTargetRanking.BiasScale,
+        // −1.0 is the exclusion, not a penalty — the dominant shipped value.
+        Assert.Equal(AiTargetRanking.NotRanked,
             AiTargetRanking.ObjectiveBiasFor("bloodhawk_2", biases), 1);
         Assert.Equal(0f, AiTargetRanking.ObjectiveBiasFor("piratezep", biases), 1);
         Assert.Equal(0f, AiTargetRanking.ObjectiveBiasFor("bloodhawk_2", null), 1);
 
-        // The shipped −1.0 bias offsets a full weight unit: a matched target 900 m farther
-        // still wins.
-        var plain = Ahead(500f);
-        var biased = Ahead(1400f, bias: -1f * AiTargetRanking.BiasScale, xOffset: 50f);
+        // Between the ends it scales to rank units directly and negated, so a positive bias
+        // attracts: 0.4 is worth 300 rank units in the candidate's favour.
+        Assert.Equal(-300f,
+            AiTargetRanking.ObjectiveBiasFor("x", new List<AiRatingBias> { new("x", 0.4f, null) }), 1);
+        // And 1.0 or more is always-target.
+        Assert.Equal(AiTargetRanking.AlwaysTarget,
+            AiTargetRanking.ObjectiveBiasFor("x", new List<AiRatingBias> { new("x", 1f, null) }), 1);
+    }
+
+    [Fact]
+    public void AnExcludedTargetIsNeverPickedEvenWhenItIsTheOnlyCandidate()
+    {
+        // The whole point of the exclusion: a −1.0 target is not merely deprioritised.
+        var excluded = Ahead(500f, bias: AiTargetRanking.NotRanked);
+        Assert.Equal(-1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation,
+            new[] { excluded }, out _));
+
+        // …and a plain target beats it however much farther away it is, inside the radius.
+        var plain = Ahead(1900f, xOffset: 50f);
         Assert.Equal(1, AiTargetRanking.SelectBest(OwnPos, OwnFwd, Activation,
-            new[] { plain, biased }, out _));
+            new[] { excluded, plain }, out _));
     }
 
     // ---- deconfliction -----------------------------------------------------------------------
@@ -265,8 +281,8 @@ public class AiTargetRankingTests
         Assert.Equal(0, thirds);
     }
 
-    /// <summary>A candidate ahead of the shooter with every ±0.2 term on the same arm as its
-    /// peers: in the front arc, above the shooter (level counts as above), nose pointing away.</summary>
+    // A candidate ahead of the shooter with every ±0.2 term on the same arm as its
+    // peers: in the front arc, above the shooter (level counts as above), nose pointing away.
     private static RankedTargetCandidate Ahead(float distance, bool isPlayer = false,
         float bias = 0f, int attackers = 0, float xOffset = 0f) => new()
         {

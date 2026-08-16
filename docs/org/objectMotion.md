@@ -326,7 +326,9 @@ i.e. a turn per metre travelled. **All 1,399 tumbles in the install author `Time
 
 - `XYZ_ROTATION` (`0x20`) is a steady spin about the node's own axes, rad/s compiled.
 - `SCALE` (`0x100`) is a linear ramp, clamped at 0.001, and the authored numbers are **offsets from
-  unit scale** rather than absolute sizes.
+  unit scale** rather than absolute sizes. CSVM ramps that offset from `Vector3.One`; whether it
+  should instead be the node's own authored scale is undecided — every node carrying this channel
+  in the install is authored at exactly unit scale, so the two readings coincide.
 - `MORPH` (`0x200`) writes `node+0x3c` into `+0x24`, clamped to 1. The original reads it; this
   engine does not, and no chapter in this install authors it.
 
@@ -377,6 +379,22 @@ Everything here is a known, deliberate divergence — not a gap waiting to be cl
 | **A defensive contact cap (8)** | The energy test ends a body in two or three contacts, so it is never reached; it exists so a mistake in that test cannot spin a body forever on the hot path |
 | **`MORPH` and `FORWARD_ROTATION DISTANCE` are not built** | No chapter authors the first, and all 1,399 tumbles author `Time` for the second |
 | **`IMPACT_FORCE` is not built** | ⚠ Not a harmless gap: 120 of its 182 events do fire in the original, and on the eleven airframes it is the wreck's only launch velocity. It needs the `CALLBACK` event and an anim-instance velocity slot, neither of which this engine has. Tracked as `BL-343` |
+
+### The re-home rule, and the three nodes exempt from it
+
+A motion normally starts from the node's authored rest pose (`AnimRuntime.RestOf`), so a repeat
+does not compound onto where the last one finished. That is what stops a pooled effect template
+drifting across repeated explosions. Three cases keep the live pose instead, each because
+re-basing them is visibly wrong rather than merely different:
+
+- **A placed template ROOT** (`TopLevel`). The CALL that started the motion has just placed it, so
+  its authored rest is wherever it was authored, not where it now stands. Re-basing replays every
+  repeat at the first placement's site.
+- **A piece continuing from a contact landing** (`AnimRuntime._resumeFromLanding`, one-shot and
+  consumed by the launch that follows). A bounce is a continuation; re-basing teleports the piece
+  back to the crash point mid-flight.
+- **A TAKEOVER of a node another motion is driving.** `agyrobus` has no placement of its own, so its
+  authored rest is the map origin, and re-basing threw the shot-down bus kilometres off-map.
 
 ## Retired and superseded readings
 

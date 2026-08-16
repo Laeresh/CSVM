@@ -33,13 +33,10 @@ internal sealed class MotionSet
     /// event, so zeroing it here would make a crash respawn read as a negative launch count.</summary>
     public int LaunchCount { get; private set; }
 
-    /// <summary>How many contact-tested bodies ended on a collider, and how many ran their clock
-    /// out instead. Only bodies that actually TEST contact are counted, so the pair answers one
-    /// question: is contact doing anything? A <c>--fly</c> session that launched tested bodies and
-    /// reports <see cref="ContactLandings"/> 0 is the failure mode worth catching, since a query
-    /// silently finding nothing looks exactly like no test at all.
-    /// ⚠ Left standing by <see cref="Reset"/>, the same rule (and for the same reason) as
-    /// <see cref="LaunchCount"/>: every reader takes a delta across an event.</summary>
+    /// <summary>Contact-tested bodies that landed on a collider, vs ran their clock out. Only
+    /// bodies that TEST contact are counted, so a zero after a tested launch is a real failure,
+    /// not a query finding nothing.
+    /// ⚠ Not zeroed by <see cref="Reset"/>, same rule as <see cref="LaunchCount"/>.</summary>
     public int ContactLandings { get; private set; }
 
     public int ClockEndings { get; private set; }
@@ -108,11 +105,8 @@ internal sealed class MotionSet
                 }
             }
 
-            // BOUNCE_SEQUENCE: the piece has come back down, which for a bounce-terminated
-            // launch is the whole meaning of its flight ending. The named sequence
-            // belongs to the same definition — `sparkoutN` deactivates the piece and pops its
-            // fireball, and that OBJECT_ACTIVE_STATE is what stops the trail through the
-            // EndSustainedOn path, with no effects-side change here.
+            // BOUNCE_SEQUENCE fires the def's own sparkoutN elsewhere; this only reports the
+            // landing, it does not act on it.
             if (done is MotionRuntime { PendingBounce: { } bounce })
             {
                 landed ??= new List<Landing>();
@@ -133,20 +127,12 @@ internal sealed class MotionSet
     /// <see cref="LaunchCount"/> alone.</summary>
     public void Reset() => _motions.Clear();
 
-    /// <summary>Whether an instance still owes a <c>BOUNCE_SEQUENCE</c>, which holds it open past
-    /// the end of its runners. Ordinarily "finished" means an instance's runners have all ended —
-    /// but a bounce-terminated launch is the last event of its sequence, so the runner is done the
-    /// frame the piece leaves the ground while the flight has seconds to run, and the landing needs
-    /// a live instance to dispatch into. Measured without this hold: killing C1's seven
-    /// <c>m_build</c> at once, one instance in seven lost its <c>part4</c> bounce — and which one
-    /// depends on the randomised launch draw, so it is an intermittent miss, not a fixed one.
-    ///
-    /// <para>⚠ Deliberately narrow: a motion OWING A BOUNCE, not any live motion.
-    /// <see cref="SpinMotion.Finished"/> is <c>_runTime > 0f &amp;&amp; _t >= _runTime</c> and the
-    /// OBJECT_MOTION handler builds spins with <c>run_time ?? 0f</c>, so an unbounded steady spin
-    /// is never finished — 2,181 of them across 1,037 definition files. Pinning on those would make
-    /// every one of their instances immortal and break end-of-instance emitter teardown install-wide.
-    /// A pending bounce self-expires; a spin does not.</para></summary>
+    /// <summary>Whether an instance still owes a <c>BOUNCE_SEQUENCE</c>: the retirement hold
+    /// <see cref="AnimRuntime.Retirable"/> consults (this module's docs/architecture.md entry). A
+    /// bounce-terminated launch's runner finishes before the piece lands, so the instance needs
+    /// this to stay open that long.
+    /// ⚠ Deliberately narrow: a motion OWING a bounce, not any live motion. An unbounded
+    /// <see cref="SpinMotion"/> never finishes, so pinning on any live motion makes it immortal.</summary>
     public bool OwesBounce(AnimDefinition def, Node3D? anchor) =>
         _motions.Any(m => m is MotionRuntime { PendingBounce: not null }
                           && m.Owner.Def == def && m.Owner.Anchor == anchor);
@@ -158,14 +144,11 @@ internal sealed class MotionSet
     public bool DrivesTransform(Node3D target) =>
         _motions.Any(m => m.Target == target && m.Channel == MotionChannel.Transform);
 
-    /// <summary>Whether this exact spin is already running on the node, so a looping sequence
-    /// re-asserting it can be left alone instead of restarted. The other half of the registration
-    /// rule, and it cannot fold into <see cref="Add"/>: the guard has to run before the
-    /// <see cref="SpinMotion"/> is constructed, since that constructor writes
-    /// <c>Target.Transform</c>. These sit inside `Loop{-1}` sequences, so an already-turning prop
-    /// would otherwise be rebuilt every frame — each rebuild re-reading rest from the current pose
-    /// and restarting the clock at 0, which advances one frame's worth of angle and then throws it
-    /// away. The prop would sit almost still while looking, in the logs, perfectly driven.</summary>
+    /// <summary>Whether this exact spin is already running, so a <c>Loop{-1}</c> sequence
+    /// re-asserting it is left alone instead of rebuilt. Checked before <see cref="Add"/>, whose
+    /// evict-then-insert would otherwise treat every re-assert as a fresh launch.
+    /// ⚠ A needless rebuild restarts the clock at 0 every frame, so the prop looks driven in the
+    /// logs while sitting almost still.</summary>
     public bool HasSpinOn(Node3D target, Vector3 rate, float runTime) =>
         _motions.Any(m => m.Target == target && m is SpinMotion s && s.Matches(rate, runTime));
 }

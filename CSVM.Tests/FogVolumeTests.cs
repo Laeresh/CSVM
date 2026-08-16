@@ -56,12 +56,9 @@ public class FogVolumeTests
     };
 
     /// <summary>Per chapter: the map-spanning slab the map-edge continuation would extend, or
-    /// "none". <c>cardHeight</c> is the authored card size docs/formats/fogvol.md documents
-    /// (132.3 m for the four deck chapters, 70 m for C5) and 1.5 is
-    /// <c>TopAnchorHeightFactor</c> — real per-chapter numbers, not a synthetic fixture. Bounds and
-    /// top are the exact <c>fvol1</c> <c>model_bbox</c> values read from each chapter's own
-    /// <c>extracted/&lt;ch&gt;/gamez/nodes.json</c> (C1/C2B's slabs and C4's share the world's own
-    /// [-12288, 0] area to the metre — the exact 3x3 partition).</summary>
+    /// "none". Real per-chapter numbers, not a synthetic fixture — see
+    /// <c>docs/formats/fogvol.md</c> for <c>cardHeight</c> and the exact <c>fvol1</c>
+    /// <c>model_bbox</c> values these bounds are read from.</summary>
     public static TheoryData<string, float, string> ChapterMapSpanningSlab => new()
     {
         { "C1", 132.3f, "found|-12288|0|-12288|0|1090.55" },

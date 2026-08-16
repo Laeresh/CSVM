@@ -91,3 +91,26 @@ the `g1` mesh with its own materials — never assume the root alone shows anyth
 
 `firepoint` is the marker prototype (the aircraft's own firepoints are documented in
 [markers.md](../markers.md)).
+
+## Water splash playback (`splash1.flt` / `bsplsh.flt`)
+
+The two defs are identical in shape. Read from their `OBJECT_MOTION`/`OBJECT_OPACITY_FROM_TO`
+events over the model's `*_base` disc and `*_splash` column:
+
+- `*_base` disc: `SCALE` xz 1→2 over the first 0.2 s, then eases back to 1.8 over
+  `[1.0, 2.0]` s (`EVENT_OFFSET 0.8`).
+- `*_splash` column: pops to its authored scale `(1, 100, 1)` and collapses to zero over the
+  full 2.0 s run.
+- Opacity, on the whole root (base disc **and** column together, not the column alone):
+  fade-in 0→1 over 0.05 s, hold, then fade-out 1→0 over 1.0 s starting at 1.0 s
+  (`0.05 + EVENT_OFFSET 0.95`). That start coincides numerically with the base disc's own
+  ease-start above, but the two are independent authored events, not one shared value.
+- Column flipbook: `OBJECT_CYCLE_TEXTURE` resets `splash01`→`splash03`, 3 frames at 4 fps
+  (C1B `materials.json` material 135's `cycle` block).
+- `splash1_splash`'s authored quad is 5 cm wide — sub-pixel past ~30 m. The reference stills
+  (`Water Splash.png`) measure its ticks at ~0.35 m, an 8× match; judged at the controls with
+  the fades in, 1× reads as a thin stripe. `ProjectilePool.SplashColumnWidthScale` is the 8×
+  gloss, kept a `static readonly` rather than a `const` so a run can still be set to 1 to reach
+  the authored literal width.
+
+Implementation: `ProjectilePool`'s `Splash*` constants and `AdvanceSplash`.

@@ -9,20 +9,12 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// Splitscreen stunt-race bookkeeping (<see cref="StuntRace"/>), off-engine: who placed in what
-/// order, a rematch's reset, and the standings sort.
-/// <see cref="StuntRace"/> is a plain sealed class with no
-/// engine dependency — its own <c>GD.Print</c> calls route through <see cref="Log"/> —
-/// but its collaborator <see cref="StuntMission"/> calls
-/// <c>GD.Print</c>/<c>GD.PushWarning</c> directly from <c>Load</c> and <c>Complete</c> — either one
-/// crashes the whole test host outside the engine (an unmanaged <c>AccessViolationException</c>,
-/// verified empirically), not just fails the one test. So these tests never
-/// call either: a fake mission comes from <see cref="StuntMission"/>'s private constructor
-/// (reflection — it has no public one, and adding one only for tests would widen its
-/// surface), and a finish is simulated by setting <c>Elapsed</c> and raising the private
-/// <c>RunCompleted</c> backing delegate directly — exactly what <c>Complete()</c> itself does once
-/// every zone is in, minus the call that would crash.
-/// Lines that DO go through <see cref="Log"/> are safe without any per-test ceremony: the
-/// process-wide no-op sink in <c>TestHostLogSink</c> keeps them off the engine fallthrough.
+/// order, a rematch's reset, and the standings sort. <see cref="StuntRace"/> itself routes
+/// <c>GD.Print</c> through <see cref="Log"/>, safe under <c>TestHostLogSink</c>'s no-op sink.
+/// ⚠ Never call <see cref="StuntMission"/>'s <c>Load</c>/<c>Complete</c> directly: both call
+/// <c>GD.Print</c>/<c>GD.PushWarning</c>, which crashes the test host outside the engine
+/// (verified). A fake mission comes from its private constructor via reflection, and a finish is
+/// simulated by setting <c>Elapsed</c> and raising the private <c>RunCompleted</c> delegate.
 /// </summary>
 public class StuntRaceTests
 {

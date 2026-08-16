@@ -46,15 +46,11 @@ public class GaugeColoursTests
         Assert.Equal(2, GaugeCluster.SlotIndicatorColor(new float[0], 7, isGun: false));
     }
 
-    /// <summary>A damage zone's colour is the COMBINED
-    /// armor+health fraction (<see cref="PlaneDamage.PartState.Fraction"/>), armor spent first,
-    /// against the shipped thresholds (docs/formats/hud.md "Thresholds") — never a synthetic split
-    /// from one pool. The three checkpoints reproduce the reconciliation with the
-    /// game manual's four bands as a regression: on a stock zone (armor == hp), 56% of the armor
-    /// gone lands exactly on the shipped yellow threshold, armor-zero-plus-8%-airframe on orange,
-    /// and 60%-airframe on red. Each pool is spent through its own single-pool
-    /// <see cref="PlaneDamage.Apply"/> call (armor's with healthDamage=0, health's with
-    /// armorDamage=0) — the same technique DamageLab's two independent sliders use.</summary>
+    /// <summary>A damage zone's colour is the combined armor+health fraction
+    /// (<see cref="PlaneDamage.PartState.Fraction"/>), armor spent first, against the shipped
+    /// thresholds (<c>docs/formats/hud.md</c> "Thresholds"), never a synthetic split from one
+    /// pool. Each pool is spent through its own single-pool <see cref="PlaneDamage.Apply"/> call,
+    /// the same technique DamageLab's two independent sliders use.</summary>
     [Fact]
     public void DamageZoneColourWalksTheCombinedArmorAndHealthFraction()
     {

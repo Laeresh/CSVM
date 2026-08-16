@@ -6,19 +6,13 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The puffer's two camera-distance bands (see <c>docs/org/puffer.md</c>): both parsers must wire
-/// <c>NEAR_FADE</c>/<c>unk_range</c> and <c>FADE_RANGE</c>|<c>FAR_FADE</c>/<c>fade_range</c>
-/// through, an unauthored state must keep the puffer object's own ctor defaults (near
-/// <c>(0, 0)</c>, far <c>(FLT_MAX, FLT_MAX)</c> — i.e. no fade and no cull), and the reader's two
-/// spellings of the far band must land in the same place.
-///
-/// <para>⚠ The values below are copied from the shipped readers, descending near pairs and all.
-/// <c>NEAR_FADE [40, 5]</c> is not a typo and must not be "repaired" into <c>[5, 40]</c>: index 0
-/// is the hard cull cutoff and index 1 is where alpha would reach 1, an order settled in
-/// <c>crimson.exe</c> at six independent points and NOT inferable from the authored numbers.</para>
-///
-/// <para>The alpha arithmetic those fields feed is asserted in the <c>puffer-distance-fade</c>
-/// engine suite, which needs a live <c>Puffer</c>; these tests cover only the two parsers.</para>
+/// The puffer's two camera-distance bands (see <c>docs/org/puffer.md</c>): both parsers must
+/// wire <c>NEAR_FADE</c>/<c>FAR_FADE</c> through, keep the ctor defaults on an unauthored state,
+/// and land the reader's two spellings of the far band in the same place.
+/// ⚠ Values below are copied from the shipped readers, descending near pairs and all; do not
+/// "repair" <c>NEAR_FADE [40, 5]</c> into <c>[5, 40]</c>.
+/// These cover only the two parsers; the alpha arithmetic is the <c>puffer-distance-fade</c>
+/// engine suite's job.
 /// </summary>
 public class PufferDistanceFadeTests
 {

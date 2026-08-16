@@ -5,45 +5,14 @@ using Godot;
 
 namespace CSVM.Mech3;
 
-/// <summary>
-/// Builds one chapter world and binds its animation program to it: the world+anim half of
-/// <see cref="CSVM.Session.GameSession"/>'s session build. Extracted from that class
-/// so the <c>--anim-lab</c> mode builds the same world+runtime a
-/// normal flight/viewer session does, without duplicating any of it.
-///
-/// <para>Does the load → <see cref="WorldBuilder"/> → clutter → mission setup →
-/// <see cref="AnimProgram"/> → <see cref="AnimRuntime"/> collaborator wiring → <c>Bind</c> →
-/// sound-prewarm core. It deliberately stops before the per-rig horizon, weather, edge-extender,
-/// and unplaced-entity watch — those are per-view and stay in the caller, which drives them off
-/// the returned <see cref="Builder"/>. It also does NOT add <see cref="Root"/> to the scene tree;
-/// the caller owns that, and the effect siblings (world sounds, puffers) go under the caller's
-/// <see cref="Options.EffectsParent"/> exactly as before.</para>
-///
-/// <para><b>Disposal-lifetime contract (semantics, not incidental).</b> A puffer bakes its atlas
-/// at construction and world-sound streams decode on demand, so both the <c>IEmitterFactory</c> and
-/// the sound <c>Loader</c> outlive this build holding a reference to an archive whose zip handle
-/// the caller may close. Each is therefore retired after the bootstrap **unless the caller says it
-/// owns that archive for longer** — <see cref="Options.TexturesOutliveBuild"/> and
-/// <see cref="Options.SoundsOutliveBuild"/>. The two are separate because the two lifetimes are:
-/// a game session hands the <see cref="TextureArchive"/> to the session (freed on return-to-menu)
-/// while its <see cref="SoundArchive"/> stays a <c>using</c> local of the build, and only the lab
-/// keeps both. Sounds are also prewarmed while the archive is open regardless, which is what makes
-/// clearing the loader survivable; puffers have no equivalent, since a puffer bakes per authored
-/// state rather than per name — so a retired factory is no fire, no dust, no smoke for
-/// every <c>PUFFER_STATE</c> reached after the bootstrap, which is why it says so once.</para>
-///
-/// <para><b>The <c>--node=</c> stage is the same pipeline with three steps switched off.</b>
-/// <see cref="Options.NodeSubtree"/> replaces the world build with one named gamez subtree
-/// (<see cref="WorldBuilder.BuildNode"/>), skips the mission setup script and the clutter pass, and
-/// turns on the animation runtime's bind census — the program still loads and still binds, because
-/// what a partial world does to the bind is the whole question that stage exists to answer.</para>
-///
-/// <para><b>The phase boundaries are a reported contract.</b> Each step above records its own
-/// span into <see cref="StartupProfile"/> (<c>zrdr</c>, <c>world</c>, <c>clutter</c>, <c>anim</c>,
-/// <c>bind</c>, <c>prewarm</c>) and those spans are the bulk of the <c>[perf] startup</c> line's
-/// accounting. Reordering or merging a step means moving its <c>Record</c> call with it — a phase
-/// silently dropped does not read as missing, it reads as a shrinking <c>rest</c>.</para>
-/// </summary>
+/// <summary>Builds one chapter world and binds its animation program to it: the world+anim half of
+/// <see cref="CSVM.Session.GameSession"/>'s session build, extracted so <c>--anim-lab</c>
+/// builds the same world+runtime a normal session does without duplicating it.
+/// Load → <see cref="WorldBuilder"/> → clutter → mission setup → <see cref="AnimProgram"/> →
+/// <see cref="AnimRuntime"/> wiring → <c>Bind</c> → sound-prewarm. Stops before the per-view steps
+/// (horizon, weather, edge-extender, unplaced-entity watch), which stay in the caller and drive off
+/// <see cref="Builder"/>. Does NOT add <see cref="Root"/> to the scene tree; the caller owns
+/// that. Decode: docs/architecture.md, this file's entry.</summary>
 public sealed class WorldSession
 {
     private WorldSession() { }
@@ -78,26 +47,24 @@ public sealed class WorldSession
     public WorldLights Lights { get; private set; } = null!;
 
     /// <summary>Build the world named <c>world1</c> and bind its animation program. The archives
-    /// are the caller's <c>using</c> locals — see the disposal-lifetime contract on the class.</summary>
+    /// are the caller's <c>using</c> locals — see the disposal-lifetime contract on the class.
+    /// ⚠ Keep each phase's <see cref="StartupProfile.Record"/> call next to its step; moving one
+    /// without the other makes a dropped phase read as a growing <c>rest</c>, not as missing.</summary>
     public static WorldSession Build(Options o, GameZ gamez, TextureArchive textures,
         SoundArchive? sounds, Dictionary<string, SoundDef>? soundDefs,
         IReadOnlyDictionary<string, SoundGroup>? soundGroups = null)
     {
         var s = new WorldSession();
 
-        // The engine's per-mission world setup script (interp support\<ch>\<mis>.gw): which of the
-        // chapter's entities this mission shows, and which of its surfaces animate their UVs.
-        // Loaded before the build because the scroll rates are part of the material cache key (see
-        // MissionSetup.ScrollByModel); the entity half is applied afterwards, as the animation
-        // runtime's bootstrap pass 0.
+        // Loaded before the build: scroll rates feed the material cache key
+        // (MissionSetup.ScrollByModel); the entity half applies later, in the animation bootstrap.
         long mark = StartupProfile.Mark();
         MissionSetup? missionSetup = null;
         if (o.NodeSubtree != null)
         {
-            // The node stage deliberately skips it: nearly every verb would name a node this
-            // subtree does not contain, and the one thing the script reliably WOULD do is switch
-            // the requested subject off (C1/IA1 hides `hk_zep`). So a --node= build shows the
-            // subtree in its gamez base state, not in this mission's state.
+            // Skipped deliberately: the one verb MissionSetup reliably resolves switches the
+            // subject off (C1/IA1 hides hk_zep); a node stage shows the subtree in its gamez
+            // base state instead.
             Log.Info("world", $"node stage: mission setup skipped for {o.Chapter}/{o.Mission} — the subtree renders in its gamez base state");
         }
         else
@@ -146,19 +113,14 @@ public sealed class WorldSession
             GD.Print("debug: dzpaths route ribbons built");
         }
 
-        // Clutter: forest trees / river bushes, and C2/C5's 3D city-block buildings. The chapter's
-        // boot script names the templates; ClutterBuilder stamps them onto every matching-textured
-        // world polygon (see Clutter.cs). Sprites are never solid — a billboard has no side to hit
-        // (user decision; the "trees are hittable" justification rested on a misread of
-        // `spruce_destroy`, which is the Spruce Goose) — but the 3D decorations are, in flight,
-        // since they are real geometry (also a user decision).
+        // Clutter: forest trees, river bushes, and C2/C5's 3D city blocks (Clutter.cs). Sprites are
+        // never solid (billboards have no side to hit); 3D decorations are, in flight — both user
+        // decisions; see docs/org/clutter.md for the Spruce Goose misread this settled.
         mark = StartupProfile.Mark();
         ClutterBuilder? clutterBuilder = null;
         Node3D? clutterRoot = null;
-        // Clutter stamps onto matching-textured world terrain, of which a --node= stage has none.
-        // --clutter-templates= replaces the chapter's registered set outright, so one district can
-        // be A/B'd against the original; the per-polygon no_clutter gate still applies either way.
-        // --no-clutter still wins, since it is the stronger statement.
+        // --node= has no clutter terrain; --clutter-templates= A/Bs one district (no_clutter still
+        // gates per polygon); --no-clutter wins over both as the stronger statement.
         var clutterNames = o.NodeSubtree != null || o.NoClutter
             ? new List<string>()
             : o.ClutterTemplates is { } wanted
@@ -201,11 +163,9 @@ public sealed class WorldSession
         StartupProfile.Record("clutter", mark);
         s.Clutter = clutterBuilder;
 
-        // --debug-clutterflag: force every clutter population blue, and print the census that
-        // explains the picture. The blue is the one colour the world shader cannot express by
-        // itself — a decoration's OWN polygons are unflagged, so under the flag colours a whole
-        // city block would read as clutter-eligible ground, which is exactly how an earlier
-        // throwaway probe was misread.
+        // --debug-clutterflag: force clutter blue and print the census. Blue is the one colour
+        // the world shader cannot express itself — a decoration's own polygons are unflagged,
+        // so without it a flagged city block misreads as clutter-eligible ground.
         if (o.DebugClutterFlag)
         {
             int painted = clutterRoot != null ? TintClutterBlue(clutterRoot) : 0;
@@ -216,13 +176,9 @@ public sealed class WorldSession
                      + (painted == 1 ? ")" : "es)"));
         }
 
-        // Animations: bind the mission's animation program to the built world and run it. Base
-        // states first (hides the destroyed building variants behind their healthy twins, and the
-        // zeppelins/trains this mission deactivates), then the ON_STARTUP definitions and the
-        // mission's startanims — which now *play* rather than being posed at their end state, so
-        // hangar doors swing and the C1 train drives its SI-script track loop. The program merges
-        // the compiled cam_anim/mis_anim archives (richer, and the only source of SI scripts) with
-        // the three zrdr scopes (the only source of zepstate/startanims).
+        // Base states first, then ON_STARTUP + startanims, which now play rather than being posed
+        // at end state (hangar doors swing, the C1 train drives its loop). The program merges the
+        // compiled cam_anim/mis_anim archives with the three zrdr scopes.
         mark = StartupProfile.Mark();
         var chapterZrdrPath = SessionPaths.ChapterZrdr(o.DataRoot, o.Chapter);
         var (chapterAnimPath, missionAnimPath) =
@@ -231,16 +187,11 @@ public sealed class WorldSession
             chapterAnimPath, missionAnimPath);
         StartupProfile.Record("anim", mark);
         s.Program = animProgram;
-        // The runtime builds PUFFER_STATE emitters through this factory rather than holding the
-        // TextureArchive: an emitter bakes its atlas at construction. Retired right after the
-        // bootstrap only when `textures` dies with the caller's build scope — see
-        // Options.TexturesOutliveBuild.
+        // Puffer factory retirement: see Options.TexturesOutliveBuild.
         var lights = new WorldLights();
         s.Lights = lights;
-        // The world runtime's template stage, sealed at construction: the
-        // ambient world pools nothing and stages nothing hidden — its templates ARE the world's own
-        // nodes — and only the animation debugger's quiet stage relocates a called template onto the
-        // call site, which is why that one flag is an Option rather than a constant.
+        // Sealed template stage: the ambient world pools/stages nothing hidden — its templates ARE
+        // the world's own nodes. See Options.PlacesCalledTemplates for the one exception.
         var animRuntime = new AnimRuntime(AnimRuntime.NewTemplateStage(
             placesCalled: o.PlacesCalledTemplates, debugMotions: o.DebugAnim))
         {
@@ -285,43 +236,8 @@ public sealed class WorldSession
             worldSounds.SetListeners(o.ListenerPositions
                                      ?? (() => new[] { o.PlayerPosition() }));
         }
-        // A death-triggered CALL_ANIMATION whose callee anchors on a "library root" gamez node —
-        // staged with the game but never PLACED in it (docs/formats/gamez.md; GameZ.IsLibraryRoot)
-        // — needs that root built before AnimRuntime can drive it: WorldBuilder's own walk never
-        // reaches it (C2's facade panels' shared `facdsticks` template is exactly this
-        // shape). Built LAZILY, the first time a call actually needs it, rather than eagerly with
-        // the rest of the ~150-member library: eager construction has no reliable way to also
-        // exclude every OTHER subsystem that already claims some of these same roots by name — the
-        // effects/crash runtimes' own `EffectStageRoots`/`EffectTemplateRoots` staging, and
-        // `Projectile`'s own on-demand weapon-model `BuildSubtree` calls — and at least one library
-        // root (`genx12`) must stay UNBUILT on purpose (its own `Targets` rescue redirects onto the
-        // caller's subtree instead; see `AnimRuntime`'s `CallAnimation` case). Lazy-on-call is
-        // naturally scoped to exactly the defs an anim actually calls, so it can never duplicate or
-        // pre-empt any of them — observationally identical to the original's own loading strategy
-        // from the cockpit either way (every library root starts parked and inert regardless of
-        // when its node is constructed).
-        //
-        // POOLED, not one shared copy: the original runs several call sites' copies of one
-        // template in parallel (measured from original-game footage — several broken facade panels'
-        // four-log sets airborne at once, not "latest wins"). Pool SIZE is the same three-layer
-        // answer `EffectPools`/`effect_pools.json` already gives the effects-runtime side: the
-        // gamez census is checked FIRST for an authored duplicate-copy count (several effect
-        // templates ship exactly that — sonic_ring/sonic_flare x5, flame_ball_01-_03, etc. — see
-        // docs/formats/gamez.md), and only when a template ships exactly one record (facdsticks
-        // does) does the count fall to `effect_pools.json`'s own `localCallRoots` TUNE entry, one
-        // config surface for every pool this engine invents rather than one number per subsystem.
-        // No authored-duplicate lookup is wired here YET because nothing today calls a
-        // multi-record library root through this path — see that file's own remark before adding
-        // one. Each caller (keyed by its own anchor) keeps its OWN copy across repeat calls (a
-        // re-killed panel gets its copy back, not a fresh one) and a pool at capacity recycles its
-        // oldest — the same "later call wins" collapse the single-copy path always had, now
-        // bounded to the wrap instead of every call. `IndexPooledCopy` both indexes the new
-        // subtree by NAME only (never `_byIndex` — every copy shares the source's compiled
-        // indices, so a second copy claiming `_byIndex` would silently steal the first copy's
-        // node references, see that method's own remark) and RESET_STATE-poses whatever anchors
-        // on it — the same "arrives hidden until summoned" pass the anim-lab's own effect-template
-        // stage gets via `IndexStage`. A no-op for `--node=`, which deliberately builds only the
-        // requested subtree.
+        // A CALL_ANIMATION callee on a library-root gamez node (docs/formats/gamez.md) builds
+        // LAZILY on first call, pooled per anchor and sized by EffectPools (docs/architecture.md).
         if (o.NodeSubtree == null)
         {
             var pools = EffectPools.Load();
@@ -366,19 +282,15 @@ public sealed class WorldSession
         {
             Log.Info("anim", $"{line}");
         }
-        // Only the REAL factory this method built itself is tied to `textures`'s scope — a
-        // caller-supplied one (the harness's CountingEmitterFactory) holds no archive reference at
-        // all, so it needs no retirement and TexturesOutliveBuild is not its caller's concern.
+        // Only the REAL factory this method built is tied to `textures`'s scope; a caller-supplied
+        // one holds no archive reference, so it needs no retirement.
         if (o.EmitterFactory == null && !o.TexturesOutliveBuild)
         {
             animRuntime.Emitters.RetireFactory();
         }
-        // Same rule as the puffer factory: the zip handle dies with the caller's build scope. The
-        // decoded streams stay cached in WorldSounds, so an emitter created later reusing a name
-        // already heard still works — but "already heard" is not enough on its own. Most SOUND_NODE
-        // events are first reached at RUNTIME (an OnCall def, or a CallSequence that lands a frame
-        // after bootstrap, like C1's police siren), i.e. always after this line. So decode
-        // everything the program can ask for first.
+        // Same rule as the puffer factory: the zip handle dies with the caller's scope. Most
+        // SOUND_NODE events are first reached at RUNTIME (an OnCall def, a delayed CallSequence),
+        // so decode everything the program can ask for now, before the archive closes.
         if (animRuntime.Sounds is { } builtSounds)
         {
             mark = StartupProfile.Mark();
@@ -411,12 +323,12 @@ public sealed class WorldSession
         return s;
     }
 
-    /// <summary>Stamps <see cref="SceneBuilder.ClutterColor"/> onto every clutter draw under
-    /// <paramref name="clutter"/> as a full-strength <see cref="SceneBuilder.TintParam"/>, and
-    /// returns how many it painted. Per instance rather than per material because both clutter
-    /// paths are MultiMeshes sharing the placed world's materials — the sprite cards' own shader
-    /// and, for the 3D decorations, literally the world's — so a material-level colour would
-    /// repaint the ground with them.</summary>
+    // Stamps SceneBuilder.ClutterColor onto every clutter draw under
+    // `clutter` as a full-strength SceneBuilder.TintParam, and
+    // returns how many it painted. Per instance rather than per material because both clutter
+    // paths are MultiMeshes sharing the placed world's materials — the sprite cards' own shader
+    // and, for the 3D decorations, literally the world's — so a material-level colour would
+    // repaint the ground with them.
     private static int TintClutterBlue(Node3D clutter)
     {
         int painted = 0;
@@ -453,7 +365,7 @@ public sealed class WorldSession
         public required Node3D EffectsParent { get; init; }
 
         /// <summary>The PLAYER_RANGE fallback for a runtime with no <see cref="PlayerPositions"/>
-        /// wired (`BL-365`: a real session always wires both). Resolved per call because no
+        /// wired (a real session always wires both). Resolved per call because no
         /// camera exists yet at build time; player 1's camera is the honest single-camera answer
         /// in every mode (chase cam, free camera, or the orbit eye).</summary>
         public required Func<Vector3> PlayerPosition { get; init; }
@@ -464,13 +376,13 @@ public sealed class WorldSession
         public Func<IReadOnlyList<Vector3>>? ListenerPositions { get; init; }
 
         /// <summary>Every player's position, for the EXECUTION_BY_RANGE proximity gate and every
-        /// PLAYER_RANGE condition (`BL-365`) — the aircraft themselves in flight, not the
+        /// PLAYER_RANGE condition — the aircraft themselves in flight, not the
         /// chase cameras (a chase camera trails ~25 m behind, which is most of the spiderweb's
         /// 50 m radius). Null → both fall back to <see cref="PlayerPosition"/>.</summary>
         public Func<IReadOnlyList<Vector3>>? PlayerPositions { get; init; }
 
         /// <summary>Every pane's camera, for budgeting the world's <c>LIGHT_STATE</c> spill
-        /// against the nearest one (`BL-366`) — the draw-rule seam (`ViewerSet.Positions`),
+        /// against the nearest one — the draw-rule seam (`ViewerSet.Positions`),
         /// not <see cref="PlayerPositions"/>. Null → the runtime falls back to
         /// <see cref="PlayerPosition"/> alone.</summary>
         public Func<IReadOnlyList<Vector3>>? LightViewerPositions { get; init; }
@@ -498,28 +410,20 @@ public sealed class WorldSession
         /// own list. <see cref="NoClutter"/> wins over this.</summary>
         public IReadOnlyList<string>? ClutterTemplates { get; init; }
 
-        /// <summary>The caller's <see cref="TextureArchive"/> outlives this build, so the runtime
-        /// keeps its emitter factory and every <c>PUFFER_STATE</c> reached at RUNTIME — a
-        /// destructible's death trails and sustained fire, the ON_CALL ambient dust and smoke —
-        /// can still bake its atlas. True in every game session (the archive belongs to the
-        /// session, freed on return-to-menu); false only where it is genuinely a <c>using</c> local
-        /// of the build, i.e. the test harness.
-        /// <para>⚠ Default false is the SAFE answer, not the common one. Left false by a caller
-        /// that does own its archive, every runtime-reached puffer in the world silently builds
-        /// nothing and the log stays clean — the miss is counted as
-        /// <c>PufferState(after build)</c> into a census printed at the end of the bootstrap, which
-        /// is before the first death can happen.</para></summary>
+        /// <summary>The caller's <see cref="TextureArchive"/> outlives this build, so a
+        /// runtime-reached <c>PUFFER_STATE</c> (death trails, ON_CALL dust/smoke) can still bake
+        /// its atlas. True in a game session (archive freed on return-to-menu); false only where the
+        /// archive is genuinely a <c>using</c> local of the build (the test harness).
+        /// ⚠ Default false is the SAFE choice, not the common one — left false by a caller that
+        /// owns its archive, a runtime-reached puffer silently builds nothing.</summary>
         public bool TexturesOutliveBuild { get; init; }
 
         /// <summary>The factory <see cref="AnimRuntime"/> builds <c>PUFFER_STATE</c> emitters
-        /// through. Null (the default) means the real <see cref="Anim.PufferEmitterFactory"/> over
-        /// this build's <see cref="TextureArchive"/> and <see cref="EffectsParent"/>, subject to
-        /// <see cref="TexturesOutliveBuild"/> exactly as before; a caller supplies its own — the
-        /// test harness's <c>CountingEmitterFactory</c> — to observe emitter lifetime with no GPU,
-        /// and a caller-supplied factory is never auto-retired (it holds no archive reference for
-        /// <see cref="TexturesOutliveBuild"/> to be about). A post-build swap would miss the
-        /// bootstrap, where most <c>PUFFER_STATE</c>s fire, so this is read once, here, not assigned
-        /// after <see cref="Build"/> returns.</summary>
+        /// through. Null (default) is the real <see cref="Anim.PufferEmitterFactory"/> over this
+        /// build's archive, subject to <see cref="TexturesOutliveBuild"/>; a caller-supplied one
+        /// (the test harness's <c>CountingEmitterFactory</c>) holds no archive reference and is
+        /// never auto-retired. ⚠ Read once, here — a post-<see cref="Build"/> swap would miss the
+        /// bootstrap, where most <c>PUFFER_STATE</c>s fire.</summary>
         public Anim.IEmitterFactory? EmitterFactory { get; init; }
 
         /// <summary>The mission's combat-voice clip defs (<see cref="CombatVoice.SessionPrewarmNames"/>),
@@ -543,12 +447,11 @@ public sealed class WorldSession
         public bool AutoStart { get; init; } = true;
 
         /// <summary>Whether a CALL_ANIMATION relocates its callee's effect-template root onto the
-        /// call site (<see cref="Anim.TemplateStage{TNode}.Places"/>). False — the default — in
-        /// every game/viewer/flight session, where the ambient world boot must stay byte-identical;
-        /// the animation lab sets true so the templates it stages in front of the camera play at the
-        /// call site instead of at their gamez origin. Read once, at construction: the flag is
-        /// sealed onto the runtime's template stage, not writable
-        /// afterwards, which makes a post-<c>Bind</c> write unexpressible.</summary>
+        /// call site (<see cref="Anim.TemplateStage{TNode}.Places"/>). False (default) in every
+        /// game/viewer/flight session, where the ambient boot must stay byte-identical; the
+        /// animation lab sets true so staged templates play at the call site. ⚠ Read once, at
+        /// construction — sealed onto the runtime's template stage, not writable
+        /// afterwards.</summary>
         public bool PlacesCalledTemplates { get; init; }
 
         /// <summary>Pins the runtime's RNG for a reproducible run (see

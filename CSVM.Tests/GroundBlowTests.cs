@@ -5,23 +5,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// Ground blow (`BL-359`, decoded in docs/org/flightModel.md): the original biases the player's
-/// control response away from anything large the nose is closing on, by multiplying the command
-/// accumulator's own component along an escape axis. Everything here is asserted as the DIFFERENCE
-/// between two otherwise identical steps, one fed a probe hit and one not — because the term is
-/// proportional to the accumulator it reads, that difference has a closed form that needs no
-/// knowledge of the stick, the bank coupling, the weathervane or any tuning constant:
-///
-///   <c>withHit = baseline + V · dot(baseline, V) · groundblow_mag</c>          commanding away
-///   <c>withHit = baseline + V · 0.05 · |dot(baseline, V)| · groundblow_mag</c>  commanding into
-///
-/// with <c>V = normalize(n × b) · S</c> and <c>S = sqrt(dot(b, n)) · (elev − d) / elev</c>. The
-/// per-tick <c>dt</c> and damping factors cancel out of both sides, which is what makes these exact.
-///
-/// <para>The three failure modes these exist to catch, all of them from the entry's own trap list:
-/// a term built on the world axis instead of the body one (right wings-level, wrong everywhere
-/// else), a proximity power of one or three instead of two, and a head-on that gets help it must
-/// never get.</para>
+/// Ground blow: the original biases the player's control response away from anything large the
+/// nose is closing on. Decode, the closed-form law and its constants: docs/org/flightModel.md's
+/// "Ground blow" section. Everything here is asserted as the difference between two otherwise
+/// identical steps, one fed a probe hit and one not, which needs no knowledge of the stick, the
+/// bank coupling, the weathervane or any tuning constant.
 /// </summary>
 public class GroundBlowTests
 {
@@ -37,9 +25,9 @@ public class GroundBlowTests
     // no-hit BASELINE.
     private const float AngDamp = 5f;
 
-    /// <summary>A slope ahead and below, its normal facing up and back at the aircraft — the cliff
-    /// case, in BODY coordinates (nose −Z, up +Y, right +X). Its escape axis is body +X, i.e. the
-    /// bias is pitch-up.</summary>
+    // A slope ahead and below, its normal facing up and back at the aircraft — the cliff
+    // case, in BODY coordinates (nose −Z, up +Y, right +X). Its escape axis is body +X, i.e. the
+    // bias is pitch-up.
     private static readonly Vector3 SlopeNormalBody = new Vector3(0f, 1f, 1f).Normalized();
 
     [Fact]
@@ -146,10 +134,8 @@ public class GroundBlowTests
     [Fact]
     public void TheEscapeAxisIsBodyFrameNotWorldFrame()
     {
-        // The same geometry RELATIVE TO THE AIRFRAME must give the same body-frame bias whatever the
-        // attitude. The mistake this catches — dotting and adding a world-frame axis into a
-        // body-frame accumulator — is invisible wings-level (where the two frames agree) and wrong
-        // at every other attitude, so wings-level is exactly where it must not be checked.
+        // A world-frame axis mistake is invisible wings-level (the two frames agree there), so
+        // this must not check wings-level.
         var attitude = Basis.Identity.Rotated(Vector3.Back, Mathf.DegToRad(90f));
         var baseline = OneStep(attitude, pitch: 1f, normal: Vector3.Zero, dist: 0f);
         var probed = OneStep(attitude, pitch: 1f, normal: attitude * SlopeNormalBody, dist: 0f);
@@ -161,13 +147,9 @@ public class GroundBlowTests
     [Fact]
     public void TheVelocitySteerRidesAlongAtTwiceProximity()
     {
-        // The second, smaller effect: the velocity direction is pulled onto the nose at 2·S per
-        // second, on top of the model's own nose-chase. Measured with the stick CENTRED and the
-        // flight path offset in YAW, which makes the assertion exact — the escape axis is body
-        // pitch, so the command's component along it is identically zero, the ground-blow TORQUE is
-        // identically zero, and the two runs' attitudes stay bit-identical. Both chases then slerp
-        // toward the same nose from the same start, so the leftover gaps are in the ratio of their
-        // decay factors alone, and every tuning constant in the chase cancels.
+        // Stick centred, path offset in yaw: the escape axis is body pitch, so the torque is
+        // identically zero and the two runs' attitudes stay bit-identical, leaving only the
+        // chases' decay-factor ratio.
         float alone = GapAfter(pitch: 0f, normal: Vector3.Zero);
         float away = GapAfter(pitch: 0f, normal: SlopeNormalBody);
         float expected = alone * Mathf.Exp(-2f * ExpectedProximity(0f) * Dt);
@@ -180,11 +162,8 @@ public class GroundBlowTests
     [Fact]
     public void TheVelocitySteerStopsWhenCommandingIntoTheSurface()
     {
-        // The original zeroes its proximity on the into-obstacle branch, and that proximity is what
-        // the steer runs on — so pushing at the wall switches this off entirely. Here the two runs'
-        // torques DO differ (that is the bias doing its job), but the resulting nose displacement is
-        // in pitch and the gap is in yaw, so it moves this angle only at second order — 3e-6 of it,
-        // against the 2.8 % an unsuppressed steer would take off.
+        // The original zeroes proximity on the into-obstacle branch, so the steer runs on nothing;
+        // the torques still differ, but only in pitch, moving this yaw gap at second order.
         float intoAlone = GapAfter(pitch: -1f, normal: Vector3.Zero);
         float into = GapAfter(pitch: -1f, normal: SlopeNormalBody);
         float ifItRanAnyway = intoAlone * Mathf.Exp(-2f * ExpectedProximity(0f) * Dt);
@@ -197,13 +176,9 @@ public class GroundBlowTests
     [Fact]
     public void TheAiLawIsAFixedPushNotACommandProportionalOne()
     {
-        // 0x0048c317: accum += V · (ai_groundblow · groundblow_mag), authored 0.5 × 10 = 5.0 — NOT
-        // ai_groundblow alone (0.15 is a different quantity: a further ×0.15 cut for the 2.5 s
-        // post-carrier-drop settling window, reachable via a zeppelin fighter-drop launch but not
-        // modelled here — see FlightModel.GroundBlowTerm's own note). This test fixes AiGroundBlow
-        // at the un-cut authored value, matching every production spawn outside that window. The
-        // push does not read cmd at all, so a full-deflection pitch command and a centred stick get
-        // the SAME bias relative to their own no-hit baseline.
+        // The un-cut authored value (docs/org/flightModel.md's "Ground blow"); the 2.5 s
+        // post-carrier-drop cut is a separate, unmodelled factor. The push does not read cmd, so
+        // a deflected and a centred stick get the same bias relative to their own baseline.
         const float aiGroundBlow = 0.5f;
         var deflectedBase = OneStep(Basis.Identity, pitch: 1f, normal: Vector3.Zero, dist: 0f, ai: true);
         var deflectedHit = OneStep(Basis.Identity, pitch: 1f, normal: SlopeNormalBody, dist: 0f, ai: true);
@@ -261,15 +236,15 @@ public class GroundBlowTests
             + $"rad, got {pushingIn:0.000000}");
     }
 
-    /// <summary>The escape axis the law should build for <see cref="SlopeNormalBody"/>, in body
-    /// coordinates and already scaled by proximity — <c>normalize(n × b) · S</c>, which for this
-    /// slope is body +X (pitch up).</summary>
+    // The escape axis the law should build for SlopeNormalBody, in body
+    // coordinates and already scaled by proximity — `normalize(n × b) · S`, which for this
+    // slope is body +X (pitch up).
     private static Vector3 ExpectedAxis(float dist) => new(ExpectedProximity(dist), 0f, 0f);
 
-    /// <summary>The AI law's contribution to one step's <c>BodyRates</c>: <c>v · (ai_groundblow ·
-    /// groundblow_mag)</c> is a command-accumulator torque like the player law's, carrying no dt of
-    /// its own — the same single <c>dt</c> then <c>exp(−dt·damp)</c> the caller applies to the whole
-    /// accumulator applies here too.</summary>
+    // The AI law's contribution to one step's `BodyRates`: `v · (ai_groundblow ·
+    // groundblow_mag)` is a command-accumulator torque like the player law's, carrying no dt of
+    // its own — the same single `dt` then `exp(−dt·damp)` the caller applies to the whole
+    // accumulator applies here too.
     private static Vector3 ExpectedAiDelta(Vector3 v, float aiGroundBlow) =>
         v * (aiGroundBlow * Mag) * Dt * Mathf.Exp(-Dt * AngDamp);
 
@@ -282,9 +257,9 @@ public class GroundBlowTests
             $"at {dist:0} m the rates must be {expected} (baseline + V·dot(baseline, V)·{Mag}), got {actual}");
     }
 
-    /// <summary>The angle in radians between the flight path and the nose after one step, with the
-    /// path started 10° off the nose IN YAW so there is a gap for the steer to close on an axis the
-    /// pitch-axis bias does not move.</summary>
+    // The angle in radians between the flight path and the nose after one step, with the
+    // path started 10° off the nose IN YAW so there is a gap for the steer to close on an axis the
+    // pitch-axis bias does not move.
     private static float GapAfter(float pitch, Vector3 normal, bool ai = false)
     {
         var m = Fresh(ai: ai);
@@ -315,9 +290,9 @@ public class GroundBlowTests
         return m;
     }
 
-    /// <summary>The Bloodhawk's real dynamics, with this install's authored ground-blow values
-    /// rather than the executable's 100/1.5/0.9 fallbacks (PlaneStatsFlightGlobalsTests pins the
-    /// read itself). <c>AiGroundBlow</c> at the authored 0.5 for the AI-path tests.</summary>
+    // The Bloodhawk's real dynamics, with this install's authored ground-blow values
+    // rather than the executable's 100/1.5/0.9 fallbacks (PlaneStatsFlightGlobalsTests pins the
+    // read itself). `AiGroundBlow` at the authored 0.5 for the AI-path tests.
     private static PlaneStats Bhawk() => new()
     {
         PitchTorque = 3.3f,

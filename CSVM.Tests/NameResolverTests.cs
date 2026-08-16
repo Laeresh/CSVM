@@ -7,16 +7,11 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The off-engine charter for <c>src/Mech3/Anim/NameResolver.cs</c>: the wildcard matcher, the
-/// memoized <c>FindAll</c>, the three-tier scope chain (<c>ResolveScoped</c>: anchor subtree,
-/// own template roots via the <c>ownRootsOf</c> hook, global), the symbol-table authority
-/// (<c>SymbolClaims</c>/<c>NarrowToSymbolRoot</c>) and the anchoring rules (<c>Anchors</c>' NAME
-/// match, twin narrowing and root lift with its policy inputs), asserted against a plain token
-/// node type — no Godot, no chapter world. <see cref="TestNode"/> carries no overridden
-/// <c>Equals</c>, so its default identity is reference equality, the same discipline the engine's
-/// <c>Node3D</c> instantiation gets from an explicit instance-id comparer (⚠ trap: a generic
-/// resolver must not inherit a node type's own equality). Fixture shapes (twin-instance templates
-/// sharing a child name, a model-file suffix, the <c>caboose</c>/<c>eairg31</c> stories) mirror
-/// the cases named in the resolver's own doc comments; the values are invented.
+/// memoized <c>FindAll</c>, the three-tier scope chain, the symbol-table authority and the
+/// anchoring rules, asserted against a plain token node type — no Godot, no chapter world.
+/// ⚠ <see cref="TestNode"/> deliberately has no overridden <c>Equals</c>, so a generic resolver
+/// cannot be shown to inherit a node type's own equality. Fixture shapes mirror the cases named
+/// in the resolver's own doc comments; the values are invented.
 /// </summary>
 public class NameResolverTests
 {

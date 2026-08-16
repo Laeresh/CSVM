@@ -8,17 +8,12 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// The cheap, world-less "do all 48 weapons mount and fire without throwing" pass check behind
-/// <c>--weapon-test</c> and the <c>weapons-fire</c> in-engine suite. It is deliberately NOT part of
-/// the weapon lab: the lab is a flight-mode panel that fires nothing of its own, while this
-/// is a one-shot harness over a <b>parked</b> plane that spawns straight into a caller-supplied
-/// <see cref="ProjectilePool"/> and needs no world, no colliders and no frame — <c>Spawn</c> does the
-/// muzzle math and the pool insert synchronously.
-///
-/// <para>Each weapon fires from every mount of its own class — a gun from the loadout's firable gun
-/// groups, a hardpoint weapon from its pylons. Hand it <see cref="Loadout.ForRig"/>'s loadout and
-/// that is the airframe's <b>whole</b> rig (4 gun groups + every pylon), so a weapon that only ever
-/// mounts on a slot <c>stock_loadouts.json</c> omits is still covered.</para>
-/// </summary>
+/// <c>--weapon-test</c> and the <c>weapons-fire</c> in-engine suite: a one-shot harness over a
+/// parked plane that spawns straight into a caller-supplied <see cref="ProjectilePool"/> and
+/// needs no world, no colliders and no frame.
+/// ⚠ Deliberately not part of the weapon lab, which fires nothing of its own; do not fold this
+/// back in. Hand it <see cref="Loadout.ForRig"/>'s loadout so every mount class is covered.
+/// Decode + measured counts: this module's entry in docs/architecture.md.</summary>
 public static class WeaponBench
 {
     /// <summary>Mounts and fires every weapon in the catalogue once per mount of its class,
@@ -126,14 +121,16 @@ public static class WeaponBench
         public required int Skipped { get; init; }
 
         /// <summary>How many mounts of each class the bench actually fired from — the coverage the
-        /// 48/48 line does NOT show, since one mount is enough to make every weapon pass.</summary>
+        /// 48/48 line does NOT show, since one mount is enough to make every weapon pass.
+        /// Suites pin this at <c>ForRig</c>'s 4, so shrunk coverage cannot hide behind an
+        /// unchanged 48/48.</summary>
         public required int GunMounts { get; init; }
 
         public required int PylonMounts { get; init; }
     }
 
-    /// <summary>One place on the airframe the bench fires from: a firable gun group's muzzles or a
-    /// single pylon.</summary>
+    // One place on the airframe the bench fires from: a firable gun group's muzzles or a
+    // single pylon.
     private sealed class Mount
     {
         public Mount(string label, IReadOnlyList<Node3D> nodes)

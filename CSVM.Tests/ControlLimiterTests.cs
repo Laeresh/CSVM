@@ -9,34 +9,17 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The original's two control limiters — the G limiter (authority falls above <c>highGs[0]</c>,
-/// reaching zero at <c>highGs[1]</c>, mirrored below <c>lowGs</c>) and the AOA limiter (authority
-/// falls to zero at <c>maxAOA</c>) — are present in the executable and <b>unreachable with this
-/// install's authored values</b>. Nothing implements them, and these tests are what keeps that
-/// decision honest: they fail if a data edit, a per-plane override or a model change ever brings
-/// either threshold into reach, which is the only condition under which the code would be owed.
-///
-/// <para><b>G side.</b> <c>highGs [9, 15]</c> / <c>lowGs [−6, −9]</c> sit at or past the model's
-/// own hard ±5/9 G lift clamp, so a delivered load factor can never exceed the point where the
-/// limiter's ramp begins. The tests below do not lean on that structural argument: they measure
-/// the <b>demanded</b> load factor (<see cref="FlightModel.LoadFactorDemand"/>, read before both
-/// clamps — the most generous reading available) through the real model, on every airframe, in
-/// the manoeuvres that produce the most G there is.</para>
-///
-/// <para><b>AOA side.</b> <c>maxAOA</c> is authored at 46°. α in this model is an emergent
-/// alignment lag, and the hardest sustained pull reaches roughly half that.</para>
-///
-/// <para><b>The executable's fallbacks are a different story, and that is the able-to-fail
-/// control:</b> <see cref="TheExecutablesFallbackGLimiterWouldEngage"/> shows the same manoeuvre
-/// crossing the compiled fallback <c>highGs[0] = 5</c>. The limiter is real code on a real
-/// mechanism — this install simply authors it out of reach, and a build that read the fallbacks
-/// would owe the implementation.</para>
+/// The original's G and AOA control limiters are present in the executable and unreachable with
+/// this install's authored values, so neither is implemented. Decode and the per-airframe margin
+/// table: docs/org/flightModel.md, "Corrected — both the G and AOA limiters are inert".
+/// These tests measure the demanded load factor and α through the real model on every airframe,
+/// in the manoeuvres that produce the most of each, and fail if either threshold comes into reach.
 /// </summary>
 public class ControlLimiterTests
 {
     private const float Dt = 1f / 60f;
 
-    /// <summary>The executable's compiled fallback <c>highGs</c> — NOT what this install authors.</summary>
+    // The executable's compiled fallback `highGs` — NOT what this install authors.
     private const float FallbackHighGStart = 5f;
 
     private static readonly string[] AllPlanes =
@@ -46,10 +29,10 @@ public class ControlLimiterTests
         "player_peacemaker",
     };
 
-    /// <summary>The manoeuvres that make G and α, at full throttle: the sustained max-performance
-    /// pull at cruise and again entered fast (G grows with speed), the same pull banked, a full
-    /// forward push (the <c>lowGs</c> side), and full rudder. Ten seconds each — more than a full
-    /// loop — so nothing transient is missed.</summary>
+    // The manoeuvres that make G and α, at full throttle: the sustained max-performance
+    // pull at cruise and again entered fast (G grows with speed), the same pull banked, a full
+    // forward push (the `lowGs` side), and full rudder. Ten seconds each — more than a full
+    // loop — so nothing transient is missed.
     private static readonly (string Name, float EntryFdFrac, FlightInput In)[] Manoeuvres =
     {
         ("pull @ fd", 1.0f, new FlightInput { Pitch = 1f, Throttle = 1f }),
@@ -115,18 +98,11 @@ public class ControlLimiterTests
         }
     }
 
-    /// <summary>The able-to-fail control: the two disproofs above are worth nothing if
-    /// the manoeuvre they fly is too gentle to trip any threshold. Halving both authored
-    /// thresholds — the stand-in for a data edit or a per-plane override that brings them into
-    /// reach — makes both checks fail, so each is measuring the margin rather than asserting an
-    /// unreachable constant.
-    ///
-    /// <para>⚠ The G margin is not as wide as the authored numbers make it look: the Bloodhawk's
-    /// peak demand lands at 5.01 G, within 0.2 % of the executable's compiled fallback
-    /// <c>highGs[0] = 5</c> (<see cref="FallbackHighGStart"/>). Under the fallbacks the limiter
-    /// would engage — barely, a fraction of a percent into a 4 G-wide ramp. It is the AUTHORED 9 G
-    /// that puts it firmly out of reach, which is the trap this suite is written around: a
-    /// fallback is evidence of intent, not of behaviour.</para></summary>
+    /// <summary>The able-to-fail control: halving both authored thresholds, the stand-in for a
+    /// data edit or override that brings them into reach, must make both checks fail.
+    /// ⚠ The G margin is narrower than the authored numbers suggest: the Bloodhawk's peak demand
+    /// is within 0.2% of the compiled fallback <see cref="FallbackHighGStart"/>. See
+    /// docs/org/flightModel.md; a fallback is evidence of intent, not of behaviour.</summary>
     [ExtractedDataFact]
     public void TheDisproofIsAbleToFail()
     {
@@ -178,7 +154,7 @@ public class ControlLimiterTests
         Assert.Equal(AllPlanes.Length, rows.Count);
     }
 
-    /// <summary>Peak demanded load factor and peak α over one manoeuvre.</summary>
+    // Peak demanded load factor and peak α over one manoeuvre.
     private static (float PeakG, float PeakAlpha) Fly(PlaneStats stats, float entrySpeed, FlightInput input)
     {
         var m = new FlightModel(stats);
@@ -193,7 +169,7 @@ public class ControlLimiterTests
         return (peakG, peakAlpha);
     }
 
-    /// <summary>Worst case over every manoeuvre, for one airframe.</summary>
+    // Worst case over every manoeuvre, for one airframe.
     private static (float PeakG, string GWhere, float PeakAlpha, string AlphaWhere) Worst(PlaneStats stats)
     {
         float peakG = 0f, peakAlpha = 0f;

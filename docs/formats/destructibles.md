@@ -194,6 +194,26 @@ perpendicular of that draw's own 30–70° launch, so the section turns at 0.22�
 loop of 13 iterations on the `splashbase` texture (`PUFFER_STATE` schema in
 [effects.md](effects.md)), invoked from the death sequences via `CALL_SEQUENCE`.
 
+## Remake node resolution (`DestructibleRegistry`)
+
+A raycast hit lands on a collider deep under an anchor's subtree, so resolving it climbs the whole
+parent chain rather than stopping at the first registered anchor: a compiled def and a reader
+wildcard can anchor to *different* nodes of one object. The water tower's compiled def roots on
+`ap_h2otwr1` while its reader def's `*` also grabs the inner `ap_h2otwr.flt`, which sits nearer the
+collider — and the compiled def is the authoritative one, since its `DAMAGE_SEQUENCE` and death
+sequence are the real ones. The nearest **compiled** anchor up the chain wins; failing any compiled
+anchor, the nearest reader one.
+
+Two death-sequence shapes the registry's per-instance state has to track beyond the swap above:
+
+- **A chained death**, where the healthy→destroyed swap is authored in a `CALL_ANIMATION` target
+  rather than the def's own sequences (C1's `gate2` chains to `blockit2`). The registry remembers
+  the chained def so a reset can stop it too and restore whatever it moved.
+- **A death that dispatches `CALL_ANIMATION` onto its own anchor**, not a chained def — C2's facade
+  panels each call the shared `facade_parts` template. The registry records the actual anchor the
+  call used (a pooled library root uses its own copy, not the call site) so a reset can find and
+  stop it.
+
 ## Evidence & limits
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

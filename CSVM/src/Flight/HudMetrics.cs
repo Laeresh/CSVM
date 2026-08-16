@@ -2,28 +2,12 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>
-/// The one place the flight HUD decides how big it draws. Every HUD element
-/// (compass tape, gauge cluster, marker HUD, results scoreboard, the text block) is calibrated
-/// against a 1440p reference — <c>OriginalScreenshots/HUD.png</c>. A plain
-/// <c>viewportHeight / 1440</c> scale breaks in splitscreen: a HUD element in a quarter-height 4P
-/// pane would draw at a quarter size while the pane is still half the screen WIDE, so the dials
-/// shrink to unreadable dots in a lot of empty space.
-///
-/// <para>The rule here separates the two factors: the <b>window</b> height sets the base
-/// scale (so a 4K screen gets a big HUD and a 720p one a small one), and the
-/// pane's share of that window is damped through a square root — a half-height 2P pane draws at
-/// ~71% instead of 50%, a quarter-height 4P pane at 50% instead of 25%. Console splitscreen does
-/// the same thing for the same reason. **Confirmed at the controls (`BL-126`, 2026-08-15): the
-/// sqrt damping reads right at both 2P and 4P, no retune owed.** What is NOT tunable is the
-/// single-player identity: with one full-screen view the pane fraction is exactly 1, so
-/// <see cref="PaneFactor"/> is 1 and <see cref="Scale"/> returns plain
-/// <c>viewportHeight / reference</c> unchanged — the pane damping cannot move a
-/// single-player pixel.</para>
-///
-/// <para>Note that damped sizes only stay on screen if positions are anchored to a pane EDGE
-/// rather than scaled from the top-left: see GaugeCluster's bottom-anchored dial placement.</para>
-/// </summary>
+/// <summary>The one place the flight HUD decides how big it draws (docs/architecture.md). The
+/// window height sets the base scale against a 1440p reference; a splitscreen pane's share of
+/// that window is damped through a square root, confirmed at the controls. A
+/// full-screen single-player view has <see cref="PaneFactor"/> exactly 1, so <see cref="Scale"/>
+/// returns the plain height ratio unchanged. Damped sizes stay on screen only if positions anchor
+/// to a pane EDGE, not the top-left.</summary>
 public static class HudMetrics
 {
     /// <summary>The reference viewport height every HUD metric was measured at (HUD.png).</summary>

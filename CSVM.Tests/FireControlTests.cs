@@ -8,20 +8,12 @@ namespace CSVM.Tests;
 /// <see cref="FireControl"/>, the firing half extracted from <see cref="FlightController"/>: trigger
 /// edges, per-group fire-rate accumulators, muzzle rotation, ammo draw-down, the two weapon
 /// selectors with their on-empty auto-advance, the rocket launch gate and both dry-clip cues.
-/// The module is a plain engine-free class: give it fakes for <see cref="IGunSlot"/> and
-/// <see cref="IPylonSlot"/>, drive <see cref="FireControl.Step"/> tick by tick with held inputs (no
-/// engine, no clock), and read the decisions back off the reused <see cref="FireOutcome"/>.
-///
-/// <para>The slot-selection cursor cases below prove the internal <see cref="WeaponCursor"/>'s
-/// facts through the interface that actually calls it, rather than against the cursor
-/// directly.</para>
-///
-/// <para>Several cases below depend on exact fire-rate/ammo/tick arithmetic (when a burst spans more
-/// than one shot per tick, when a group hand-off lands in the same tick as the drain versus a tick
-/// later). Where that arithmetic matters the fire rate is chosen so every accumulator threshold is
-/// hit by an EXACT tick multiple of <c>dt</c> (1/60 s) — the comparisons involved are then between
-/// bit-identical floats (the same <c>1f/60f</c> literal added to itself), not results that depend on
-/// rounding.</para>
+/// Engine-free: fakes for <see cref="IGunSlot"/>/<see cref="IPylonSlot"/>, tick-by-tick
+/// <see cref="FireControl.Step"/>, decisions read off the reused <see cref="FireOutcome"/>.
+/// The slot-selection cases prove <see cref="WeaponCursor"/>'s facts through the calling interface.
+/// ⚠ Where a case depends on exact fire-rate/ammo/tick arithmetic, its rate is chosen so every
+/// accumulator threshold falls on an exact multiple of <c>dt</c>, so the comparisons are between
+/// bit-identical floats rather than results that depend on rounding.
 /// </summary>
 public class FireControlTests
 {
@@ -44,13 +36,10 @@ public class FireControlTests
         Assert.Single(o.GunShots);
     }
 
-    /// <summary>Holding fire at a 10/s rate: the press-edge boost front-loads one extra shot at
-    /// t≈0 ON TOP of the steady 10 Hz cadence (the accumulator starts a full interval deep, then
-    /// keeps integrating dt from there) — deliberate, and faithful to the pre-extraction
-    /// UpdateGuns arithmetic. The window is 61 ticks, not 60: the press-tick subtraction
-    /// ((interval + dt) − interval) loses a float epsilon against a pure dt, which can push the
-    /// cadence's interval-crossing tick one tick either way — but any window just OVER the second
-    /// holds exactly 1 press shot + 10 cadence shots on both sides of that boundary.</summary>
+    /// <summary>Holding fire at a 10/s rate front-loads one press-edge shot on top of the steady
+    /// 10 Hz cadence, pinned to 11 total. The window is 61 ticks, not 60, because the press-tick
+    /// subtraction loses a float epsilon that can push the interval-crossing tick either
+    /// way.</summary>
     [Fact]
     public void HoldingFireJustOverASecondFiresThePressShotPlusTheStatedRate()
     {
@@ -103,13 +92,10 @@ public class FireControlTests
         Assert.Equal(0, gun.Ammo);
     }
 
-    /// <summary>The selected group runs dry mid-burst and the selector hands off to
-    /// the next armed group WITHOUT a gap in the firing loop's sound. Group 0 is given FireRate=60 so
-    /// its accumulator threshold (interval == dt exactly) is only ever crossed by an exact multiple of
-    /// dt — the drain and the "found it empty, hand off" tick land where the arithmetic below says
-    /// they will, with no float-rounding risk. Group 1 has a much lower rate (10/s) precisely so its
-    /// COLD accumulator (0 + one dt) cannot itself cross its own threshold on the hand-off tick — that
-    /// is what proves the hand-off tick fires no shot from group 1.</summary>
+    /// <summary>The selected group runs dry mid-burst and the selector hands off to the next armed
+    /// group without a gap in the firing loop's sound. Group 0's FireRate=60 makes interval == dt
+    /// exactly, so its drain tick is exact-multiple arithmetic; group 1's much lower rate keeps its
+    /// cold accumulator short of its own threshold on the hand-off tick.</summary>
     [Fact]
     public void MidBurstGroupHandOffKeepsTheLoopSoundContinuous()
     {
@@ -134,16 +120,9 @@ public class FireControlTests
         Assert.True(o2.GunLoopWanted);
         Assert.Equal("loop0", o2.GunLoopSound);
 
-        // Tick 3: group 0's last round was already consumed on tick 2 (its accumulator's remainder
-        // there was exactly 0, so the while loop stopped without ever finding it dry that tick) --
-        // "the round leaves the barrel" and "the machine notices the clip is empty" are two different
-        // ticks whenever a shot's remainder doesn't itself clear the interval. So THIS tick's pre-shot
-        // check on group 0 already sees ammo==0 and contributes nothing; the while loop then detects
-        // the dry clip and hands off to group 1 in this same Step call. Group 1's fresh accumulator
-        // (0 + this tick's dt only, no boost since the trigger wasn't just pressed) is far short of
-        // its own interval (10 Hz => interval 6x dt), so it fires nothing yet -- but its pre-shot
-        // check DOES see ammo>0, so it is what carries the loop this tick: no gap, and the sound has
-        // already switched to group 1's, one tick before any shot of its own leaves the barrel.
+        // Group 0's pre-shot check now sees ammo==0 and hands off to group 1 within this Step;
+        // group 1 fires nothing yet but its pre-shot check sees ammo>0, so the loop sound
+        // switches one tick before group 1's first shot leaves the barrel.
         var o3 = Step(fc, fire: true);
         Assert.Empty(o3.GunShots);
         Assert.Equal(1, fc.GunSel);
@@ -518,9 +497,9 @@ public class FireControlTests
         bool autoFireRockets = false, bool infiniteAmmo = false, int initialGunSelect = 0) =>
         new(guns, pylons, autoFireRockets, infiniteAmmo, initialGunSelect);
 
-    /// <summary>One tick. Held levels only (no edges — <see cref="FireControl"/> does its own edge
-    /// detection), dt fixed at 60 Hz throughout. The returned <see cref="FireOutcome"/> is the SAME
-    /// reused instance every call — callers must read what they need before the next Step.</summary>
+    // One tick. Held levels only (no edges — FireControl does its own edge
+    // detection), dt fixed at 60 Hz throughout. The returned FireOutcome is the SAME
+    // reused instance every call — callers must read what they need before the next Step.
     private static FireOutcome Step(FireControl fc, bool fire = false, bool rocket = false, bool gunSel = false, bool rocketSel = false) =>
         fc.Step(Dt, new FireInputs { FireHeld = fire, RocketHeld = rocket, GunSelectHeld = gunSel, RocketSelectHeld = rocketSel });
 

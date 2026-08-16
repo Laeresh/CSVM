@@ -9,25 +9,13 @@ namespace CSVM.Utils;
 
 /// <summary>
 /// Dev-facing tuning-override layer. The hand-tuned <c>const</c>s stay in their modules as the
-/// DEFAULT (with the rationale comments that explain them); this reads an optional sparse
-/// <c>res://config.json</c> and, for any key present there, overrides that default. A missing
-/// file, a missing key, or a wrong-typed value all fall through to the default — so deleting
-/// config.json reproduces stock behaviour exactly, which is what keeps scripted <c>--screenshot</c>
-/// runs byte-identical.
-///
-/// <para>Access is read-through at the point of use:
-/// <c>Config.GetFloat("flightModel.thrustConst", ThrustConst)</c>. Keys are
-/// <c>moduleCamelCase.fieldCamelCase</c>, grouped one nesting level in the JSON
-/// (<c>{"flightModel": {"thrustConst": 40}}</c>) and flattened to dot-keys internally. Comments
-/// and trailing commas are tolerated on input so a hand-edited file can carry notes.</para>
-///
-/// <para>Every query self-registers <c>(key, default)</c> so <see cref="DumpConfig"/> can emit a
-/// fully populated template. A key present in the file but never queried is an orphan (a typo or
-/// stale key that silently does nothing) and is warned about by <see cref="ReportOrphans"/>; a
-/// queried key absent from a loaded file warns once (its default is used).</para>
-///
-/// <para>Read-only this pass: nothing writes config.json. <c>res://</c> was chosen so a writable
-/// <c>user://</c> layer can later stack under the getters without touching a single call site.</para>
+/// default; this reads an optional sparse <c>res://config.json</c> and, for any key present
+/// there, overrides that default read-through at the point of use. Key grammar: this module's
+/// entry in docs/architecture.md. The self-registering template dump and the orphan-key warning
+/// are documented on <see cref="DumpConfig"/> and <see cref="ReportOrphans"/>.
+/// ⚠ A missing file, a missing key, or a wrong-typed value all fall through to the passed default
+/// verbatim, so deleting config.json reproduces stock behaviour exactly and keeps scripted
+/// <c>--screenshot</c> runs byte-identical.
 /// </summary>
 public static class Config
 {
@@ -61,11 +49,9 @@ public static class Config
     /// <summary>How many distinct tunable keys have been queried so far (the --dump-config size).</summary>
     public static int RegisteredCount => _registry.Count;
 
-    /// <summary>Drop every loaded override, so all subsequent reads take their in-code default.
-    /// <para>A deterministic run uses this: <c>config.json</c> is a git-ignored dev tuning file, so a
-    /// capture that honoured it would be a function of one machine's uncommitted state rather than of
-    /// the committed tree — the same shot then differs between a checkout and a worktree, and a
-    /// golden hash silently bakes in whatever someone was tuning that day.</para></summary>
+    /// <summary>Drop every loaded override, so all subsequent reads take their in-code default. A
+    /// deterministic run uses this: <c>config.json</c> is git-ignored, so honouring it would make a
+    /// capture a function of one machine's uncommitted state instead of the committed tree.</summary>
     public static void ClearOverrides()
     {
         _values.Clear();
@@ -247,11 +233,9 @@ public static class Config
             GetFloat("puffer.burstSizeScale", Effects.Puffer.SizeScaleDefault);
             GetFloat("puffer.trailSizeScale", Effects.Puffer.SizeScaleDefault);
             GetFloat("puffer.sustainSizeScale", Effects.Puffer.SizeScaleDefault);
-            // ⚠ There are deliberately no `puffer.fireRiseScale` / `puffer.fireLifetimeScale` keys
-            // — see Puffer.cs. The fire rise and lifetime are authored data the decode already
-            // measured; do not re-add a knob to compensate for them.
-            // The three distance switches and the original's own far-band multiplier, read at the
-            // same Init the warmup never reaches. All three default to the original's behaviour.
+            // ⚠ Do not add `puffer.fireRiseScale`/`fireLifetimeScale` keys; fire rise and
+            // lifetime are decoded authored data, not tunables (Puffer.cs). The three distance
+            // switches below default to the original's own behaviour.
             GetBool("puffer.distanceFade", true);
             GetBool("puffer.farCull", true);
             GetBool("puffer.nearCull", true);

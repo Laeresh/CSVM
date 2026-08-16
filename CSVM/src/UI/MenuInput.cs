@@ -4,19 +4,13 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// One launchscreen player's input source: the keyboard (player 1 only) and/or that
-/// player's gamepads, polled every frame with edge detection + auto-repeat. Splitting this out
-/// of <see cref="LaunchMenu"/> is what makes the join flow possible at all — before the split,
-/// every menu read was an any-pad OR across the whole roster (correct for one player, useless
-/// once two people need separate cursors).
-///
-/// <para>Polling rather than Godot's input map / focus system is deliberate and carried over from
-/// the original launchscreen: it needs no project-settings wiring, works identically for keyboard and pad, and — the
-/// reason it matters here — reads a <b>named device</b>, which the action system cannot do.</para>
-///
-/// <para><see cref="Prime"/> seeds the edge flags from the current raw state, so a button still
-/// held from whatever brought us here (the Start press that joined this player, the Esc that left
-/// a flight) is not read as a fresh press on the next frame.</para>
+/// One launchscreen player's input source: the keyboard (player 1 only) and that player's own
+/// gamepads, polled every frame with edge detection and auto-repeat. Per-player rather than an
+/// any-pad OR across the roster, which is what makes the join flow possible at all.
+/// ⚠ Poll raw device state; do not move this to Godot's input map or focus system. Only raw
+/// polling can read a NAMED device, and the join flow needs to know which pad pressed.
+/// <see cref="Prime"/> seeds the edge flags from the current raw state, so a button still held
+/// from whatever brought us here is not read as a fresh press on the next frame.
 /// </summary>
 public sealed class MenuInput
 {
@@ -50,7 +44,7 @@ public sealed class MenuInput
     public int LastActivePad = -1;
 
     // Auto-repeat while a direction is held (carried over from the original LaunchMenu). Confirmed
-    // at the controls (BL-126, 2026-08-15): join/lock feel reads right at 2P and 4P, no retune owed.
+    // at the controls: join/lock feel reads right at 2P and 4P, no retune owed.
     private const float RepeatInitial = 0.42f;   // s before the first repeat
     private const float RepeatInterval = 0.12f;  // s between repeats after that
     private const float StickDeadzone = 0.5f;    // |LeftY| past this counts as a d-pad press
@@ -152,9 +146,9 @@ public sealed class MenuInput
         Accept = Back = Start = false;
     }
 
-    /// <summary>The first of this player's pads currently producing menu input (excluding Start).
-    /// Phantom devices never register — they read idle — so a pad found here is demonstrably a
-    /// real one somebody is holding.</summary>
+    // The first of this player's pads currently producing menu input (excluding Start).
+    // Phantom devices never register — they read idle — so a pad found here is demonstrably a
+    // real one somebody is holding.
     private int ScanActivePad()
     {
         foreach (int pad in CSVM.Pads.For(Pads))
@@ -171,11 +165,11 @@ public sealed class MenuInput
 
     private bool KeyDown(Key key) => Keyboard && Input.IsKeyPressed(key);
 
-    /// <summary>Button pressed on ANY of this player's pads (a set of one for a joined player,
-    /// every unclaimed device for player 1). Through <c>CSVM.Pads.For</c> rather than the
-    /// <see cref="Pads"/> field directly, so the read is gated on window focus and on
-    /// <c>--no-pads</c> — the field stays the player's <i>binding</i>, which
-    /// the join bookkeeping still needs while unfocused.</summary>
+    // Button pressed on ANY of this player's pads (a set of one for a joined player,
+    // every unclaimed device for player 1). Through `CSVM.Pads.For` rather than the
+    // Pads field directly, so the read is gated on window focus and on
+    // `--no-pads` — the field stays the player's binding, which
+    // the join bookkeeping still needs while unfocused.
     private bool PadButton(JoyButton button)
     {
         foreach (int pad in CSVM.Pads.For(Pads))
@@ -184,8 +178,8 @@ public sealed class MenuInput
         return false;
     }
 
-    /// <summary>The largest-magnitude value of the axis across this player's pads — idle phantom
-    /// devices read ~0 and never mask a real stick.</summary>
+    // The largest-magnitude value of the axis across this player's pads — idle phantom
+    // devices read ~0 and never mask a real stick.
     private float PadAxis(JoyAxis axis)
     {
         float v = 0f;
@@ -219,7 +213,7 @@ public sealed class MenuInput
 
     private bool RawBack() => KeyDown(Key.Escape) || PadButton(JoyButton.B);
 
-    /// <summary>Start is the join gesture, so it is pad-only: the keyboard is always player 1,
-    /// who is joined from the start and has nothing to join.</summary>
+    // Start is the join gesture, so it is pad-only: the keyboard is always player 1,
+    // who is joined from the start and has nothing to join.
     private bool RawStart() => PadButton(JoyButton.Start);
 }

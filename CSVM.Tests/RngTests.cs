@@ -7,18 +7,12 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// <see cref="Rng"/>'s per-CELL generator (<see cref="Rng.NewSystemRandom(string, int, int)"/>),
-/// serving the map-edge continuation: a field extended past its
-/// authored bounds needs a seed keyed by coordinate rather than by draw order, since the set of
-/// cells it covers is itself a runtime computation (bounded by each kind's <c>far_fade</c>), not a
-/// fixed walk over authored volumes. These pin the two properties that guarantee matters here —
-/// deterministic per cell, and independent of every other cell/subsystem — off-engine, without
-/// building a whole cloud field or touching <c>Rng.Reset</c>/the shared per-subsystem stream
-/// (both go through native Godot objects — <c>GD.Seed</c>, <c>Godot.RandomNumberGenerator</c> —
-/// that only run inside the engine; this overload deliberately does not, which is why it can be
-/// pinned here at all).
-///
-/// <para>Plus <see cref="Rng.SortieSeed"/>, the per-flight master step, which is pure arithmetic
-/// for the same reason and so can be pinned here too.</para>
+/// serving the map-edge continuation: a field extended past its authored bounds needs a seed keyed
+/// by coordinate rather than by draw order, since the set of cells it covers is a runtime
+/// computation. These pin the two properties that matter, deterministic per cell and independent of
+/// every other cell, off-engine. They can be pinned here at all because this overload takes no
+/// native Godot object, unlike <c>Rng.Reset</c> and the shared per-subsystem stream.
+/// <see cref="Rng.SortieSeed"/>, the per-flight master step, is pure arithmetic for the same reason.
 /// </summary>
 public class RngTests
 {

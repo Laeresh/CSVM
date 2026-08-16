@@ -6,19 +6,13 @@ namespace CSVM.Flight;
 /// <summary>
 /// The shared results board for a splitscreen stunt race. Where the single-player
 /// <see cref="StuntScoreboard"/> shows one pilot's per-zone splits inside their own pane, this
-/// ranks the whole field and covers the <b>entire window</b> — it goes on its own CanvasLayer over
-/// the splitscreen panes, not into a SubViewport, because the race ends for everybody at once.
-///
-/// <para>One row per player in finishing order: placing, their colour-coded tag, aircraft, zones
-/// cleared and total time (plus the gap to the winner). The winner's row is highlighted in their
-/// own identity colour, the same one they carried through the launchscreen's join strip and plane
-/// select. R (any player's respawn button) is a rematch — fresh clocks and zones for everyone,
-/// same aircraft and spawns; Esc leaves.</para>
-///
-/// <para>Best times are deliberately not recorded here (<see cref="ScoreStore"/> is
-/// single-player-only): race totals aren't comparable across player counts, and each player starts
-/// from a different mission spawn point.</para>
-/// </summary>
+/// ranks the whole field and covers the entire window on its own CanvasLayer over the splitscreen
+/// panes, because the race ends for everybody at once.
+/// One row per player in finishing order: placing, colour-coded tag, aircraft, zones cleared and
+/// total time. R is a rematch; Esc leaves. Construction detail: this module's entry in
+/// docs/architecture.md.
+/// ⚠ Best times are deliberately not recorded here (<see cref="ScoreStore"/> is single-player
+/// only): race totals aren't comparable across player counts.</summary>
 public sealed partial class StuntRaceBoard : Control
 {
     // Base metrics at 720p (scaled by window height). All TUNE — mirrors StuntScoreboard so the

@@ -9,7 +9,8 @@ namespace CSVM.Flight;
 /// (e.g. <c>C1/IA1/player_bhawk</c>) → <c>{ best: seconds, date: "YYYY-MM-DD" }</c>.
 ///
 /// Read/written through Godot's <see cref="FileAccess"/> + <see cref="Json"/> rather than
-/// System.Text.Json: only the Godot API resolves the <c>user://</c> scheme. A missing or
+/// System.Text.Json: only the Godot API resolves the <c>user://</c> scheme, and
+/// <see cref="Json.Stringify"/> is locale-neutral where <c>ToString()</c> is not. A missing or
 /// corrupt file is an empty store (a first run has no best), never an exception — a persistence
 /// hiccup must not break the scoreboard.
 /// </summary>

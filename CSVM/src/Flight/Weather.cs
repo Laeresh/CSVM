@@ -8,32 +8,12 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// Per-mission atmosphere from the mission's own <c>weather.json</c> (a zrdr reader, same
-/// archive as ia.json/objectives.json — see <see cref="SpawnPoints"/>). Feeds the remake's
-/// distance fog, the cloud-band whiteout, and the precipitation field.
-///
-/// <para>weather.json layout (validated on C1/IA1): a single alternating dict with blocks
-/// <c>VIEWING_RANGE</c>, <c>WIND</c>, <c>CLOUD_COVER</c>, and per-zone <c>ZONE<i>n</i></c>
-/// (each with an <c>SW_*</c> software-renderer twin we ignore). Fog is per zone (which zone a
-/// mission shows isn't in these readers — the remake picks it via <c>--sky-zone</c>, default
-/// zone2 = night); the cloud band and wind are global.</para>
-///
-/// <para><see cref="CameraWeatherState"/> is the binary's per-frame camera zone 1/2/3, computed
-/// from a camera position
-/// against this mission's <c>CLOUD_COVER</c> band plus the chapter's fog volumes; published each
-/// frame by <c>WeatherRig.Tick</c> but consumed by nothing yet.</para>
-///
-/// <para><b>The zone names are per chapter, not a fixed pair.</b> C1–C4 ship
-/// <c>ZONE1</c>+<c>ZONE2</c>, but all 8 C5 missions ship <c>ZONE1</c>+<b><c>ZONE3</c></b> — so
-/// the zone table is read from whatever <c>ZONE*</c> keys the file carries, and
-/// <see cref="ResolveZone"/> falls the default back to the file's first zone where the
-/// requested one is absent. Without that fallback, C5's `zone2` lookup misses and every C5 flight
-/// silently renders with <see cref="NoFog"/>: no fog and <c>WorldLight</c> 1 = fullbright.</para>
-///
-/// <para>The <c>CLOUD_COVER</c> and <c>WIND</c> blocks pair each key with a bare scalar (e.g.
-/// <c>"TOP", 1124</c>), not a list, so <see cref="ZrdrDict.FromAlternating"/> — which expects
-/// list values — can't read them; they're walked as raw key/next-element pairs here. The
-/// per-zone blocks use list values throughout, so they go through the normal dict.</para>
+/// Per-mission atmosphere from the mission's own <c>weather.json</c>, a zrdr reader. Feeds the
+/// remake's distance fog, the cloud-band whiteout, and the precipitation field. Decode and reader
+/// layout: docs/formats/weather.md and docs/formats/weather/atmosphere.md.
+/// The zone names are per chapter, not a fixed pair — see <see cref="ResolveZone(string)"/> for
+/// the fallback this requires. <see cref="CameraWeatherState"/> is the binary's per-frame camera
+/// zone 1/2/3, published each frame by <c>WeatherRig.Tick</c> but consumed by nothing yet.
 /// </summary>
 public sealed class WeatherState
 {
@@ -42,23 +22,11 @@ public sealed class WeatherState
     private const float SunIncidence = 0.46f;
     private const float MinWorldLight = 0.15f;
 
-    // The original lights the baked-vertex world by the mission's SUNLIGHT (weather.json's
-    // per-zone SUNLIGHT_AMBIENT + SUNLIGHT_DIFFUSE·(N·L_sun)); we render the world fullbright,
-    // so we're missing it. Averaged over the predominantly up-facing world (ground + cloud
-    // deck) that directional term collapses to a single per-mission brightness scalar
-    // AMBIENT + DIFFUSE·<incidence>. SunIncidence is that average up-facing sun incidence — one
-    // TUNE calibrated to the C1/IA1 reference (A=0.25,D=1.2 → 0.80, matching the original's
-    // deck 210→169 and terrain →~57). It then self-scales the scene from the data: C1B night
-    // (0.15,0.6)→0.42, C1C day (0.6,2.0)→clamp 1.0. MinWorldLight floors it off pure black.
-    // (This is the data-driven half; the gamma-space modulate is the other half.)
-    // Confirmed against original footage at 0.426/0.784/clamp-1.0 (matched-pose A/B). Known
-    // exemptions in the original, not yet ours: water is unmodulated; night cloud sprites are
-    // moonlit directionally. See docs/org/weather.md.
-    // The sun bearing here is the LAUNCHER's hand-picked (-45, 150, 0) rather than the binary's
-    // straight-down default: NoFog is what a mission with no weather.json (and --viewer, and the
-    // menu) wears, and there the angle's only job is to make the plane model read — which is
-    // exactly what that value was chosen for. A mission that HAS a weather.json never reaches
-    // this; its zone's authored bearing wins.
+    // SunIncidence/MinWorldLight are a TUNE for the world-brightness scalar the original derives
+    // from its per-zone SUNLIGHT_AMBIENT/DIFFUSE; see docs/org/weather.md for the calibration.
+    // The sun bearing here is the LAUNCHER's own hand-picked value, not the binary's straight-down
+    // default: it only has to make the plane model read in a mission with no weather.json. A
+    // mission that has one never reaches this; its zone's authored bearing wins.
     private static readonly ZoneWeather NoFog = new(new Color(0.69f, 0.69f, 0.69f), 1e8f, 1e9f, 1e8f, 1e9f, 1e9f, 1f,
         new Vector3(Mathf.DegToRad(-45f), Mathf.DegToRad(150f), 0f));
 
@@ -86,15 +54,10 @@ public sealed class WeatherState
     /// <see cref="HasCloudBand"/>.</summary>
     public float CloudBandCentre => (CloudTop + CloudBottom) * 0.5f;
 
-    /// <summary>The whiteout core's BOTTOM edge — <c>CloudBandCentre - CloudThickness/2</c>,
-    /// precomputed by the binary at world init and checked every frame: camera altitude at/above
-    /// this is camera state
-    /// 2. Deliberately a THIRD spelling, distinct from <see cref="CloudBandCentre"/> (the
-    /// deck-regime ceiling/floor flip, <c>WeatherRig.DeckRegime</c>) and from
-    /// <see cref="CloudBottom"/> (the visual band's own floor) — the three sit within 80 m of each
-    /// other in C1 but the binary computes state-2 and the deck flip as two separate thresholds.
-    /// Meaningless without
-    /// <see cref="HasCloudBand"/> (see <see cref="CameraWeatherState"/>, which guards it).</summary>
+    /// <summary>The whiteout core's BOTTOM edge: camera altitude at or above this is camera state
+    /// 2 (see <see cref="CameraWeatherState"/>, which guards it). Deliberately a third spelling,
+    /// distinct from <see cref="CloudBandCentre"/> and <see cref="CloudBottom"/> — the original
+    /// computes state-2 and the deck-regime flip as two separate thresholds.</summary>
     public float CloudCoreBottom => CloudBandCentre - (CloudThickness * 0.5f);
 
     /// <summary>The cloud band's own colours from CLOUD_COVER's <c>TOP_COLOR</c>/<c>BOTTOM_COLOR</c>,
@@ -106,17 +69,10 @@ public sealed class WeatherState
     public Color? CloudBottomColor { get; private set; }
 
     /// <summary>The <c>WIND</c> block: a steady base velocity (m/s) plus the three parameters of
-    /// the horizontal random-walk gust laid over it. Consumed by <c>WeatherRig</c>, which builds
-    /// the mission's <see cref="CSVM.Effects.WorldWind"/> from these four and publishes the
-    /// resulting per-frame vector to every puffer through <c>EffectAmbience</c>.
-    ///
-    /// <para>⚠ It still does not move the cloud clutter — that is the authored <c>fogvol.zrd</c>
-    /// geometry (docs/formats/fogvol.md), static world geometry, and no reader says wind touches
-    /// it. Wind's one decoded consumer is the puffer particle system.</para>
-    ///
-    /// <para>Every one of the install's 53 <c>weather.zrd.json</c> files authors all four keys
-    /// with identical values: <c>STATIC_VELOCITY (0, 2, 0)</c>, <c>RANDOM_MAX_SPEED 10</c>,
-    /// <c>RANDOM_ACCEL 5</c>, <c>RANDOM_ANG_VEL 5</c>.</para></summary>
+    /// the horizontal random-walk gust laid over it (docs/formats/weather/atmosphere.md "Wind").
+    /// Consumed by <c>WeatherRig</c>, which builds <see cref="CSVM.Effects.WorldWind"/> and
+    /// publishes it to every puffer through <c>EffectAmbience</c>. ⚠ Wind's one decoded consumer
+    /// is the puffer particle system; it does not move the cloud clutter.</summary>
     public Vector3 WindStatic { get; private set; }
 
     public float WindRandomMaxSpeed { get; private set; }
@@ -186,33 +142,20 @@ public sealed class WeatherState
                 w._zones[zone] = new ZoneWeather(color, near, far, low, high, clip,
                     WorldLightFactor(z), SunOrientationOf(z));
                 var zf = w._zones[zone];
-                // The fields, not the record: a composite ToString() renders its own floats in
-                // the current culture, so it would escape Log's invariant formatting outright.
-                // The sun bearing is logged in DEGREES, as the file authors it — radians here
-                // would have to be converted back by hand at every reading of the log.
+                // The fields, not the record: a composite ToString() would escape Log's invariant
+                // formatting. Sun bearing logged in DEGREES, as the file authors it.
                 Log.Info("world", $"weather zone zone={zone} fog_color={zf.FogColor.ToHtml(false)} fog_near={zf.FogNear:0.###} fog_far={zf.FogFar:0.###} fog_low={zf.FogLow:0.###} fog_high={zf.FogHigh:0.###} clip_far={zf.ClipFar:0.###} world_light={zf.WorldLight:0.###} sun_pitch={Mathf.RadToDeg(zf.SunOrientation.X):0.###} sun_yaw={Mathf.RadToDeg(zf.SunOrientation.Y):0.###} sun_roll={Mathf.RadToDeg(zf.SunOrientation.Z):0.###}");
             }
         w.ParsePrecip(inner);
         return w;
     }
 
-    /// <summary>Swaps a zone whose horizon subtree is empty for the one zone that has geometry —
+    /// <summary>Swaps a zone whose horizon subtree is empty for the one zone that has geometry,
     /// the geometry half of <see cref="ResolveZone(string, IReadOnlyList{HorizonZone})"/>, public
-    /// on its own only so a mission with no weather.json still gets the correction.
-    ///
-    /// <para>Deliberately narrow: it fires only when the request <b>is</b> one of the horizon's
-    /// zones <b>and</b> builds nothing <b>and</b> exactly one sibling does build something. Every
-    /// other shape keeps the request:</para>
-    /// <list type="bullet">
-    /// <item>the request draws a dome (C1, C1C, C2B, C4 — untouched);</item>
-    /// <item>the request is not a zone this horizon has at all (C5, which ships zone3/zone1) —
-    /// that is <see cref="ResolveZone(string)"/>'s fallback to the weather file's first zone, and
-    /// it must stay there: the two orders disagree (C5's weather.json lists ZONE1 first, its
-    /// horizon lists zone3 first), so picking the horizon's first zone would render one zone's sky
-    /// under another's fog;</item>
-    /// <item>no zone or more than one zone builds geometry — ambiguous, so the request stands and
-    /// the choice remains the open fidelity question (C1 and C4).</item>
-    /// </list></summary>
+    /// on its own so a mission with no weather.json still gets the correction. Fires only when the
+    /// request is one of the horizon's zones, builds nothing, and exactly one sibling builds
+    /// something; every other shape keeps the request. ⚠ Never take the horizon's first zone as a
+    /// C5 fallback instead — see docs/formats/weather.md on the two orders disagreeing.</summary>
     public static string PreferPopulatedHorizonZone(string zone, IReadOnlyList<HorizonZone> horizonZones)
     {
         bool requestedIsAZone = false;
@@ -237,54 +180,30 @@ public sealed class WeatherState
         return only ?? zone;
     }
 
-    /// <summary>The zone to actually render, given the one the caller asked for: the request
-    /// itself when this mission defines it, otherwise the first zone the file defines (and the
-    /// request unchanged when the file defines none, so the caller still gets <see cref="NoFog"/>).
-    ///
-    /// <para>This is what makes the <c>zone2</c> default safe on C5, which ships zone1+zone3 and
-    /// would otherwise fall through to <see cref="NoFog"/> — no fog and no sunlight model at all.
-    /// The default stays <c>zone2</c> (a user decision): which zone a mission actually
-    /// flies is in no reader file, so it is settled per chapter by A/B against the original.
-    ///
-    /// <para><b>C5 = <c>zone1</c>, confirmed by playtest.</b> The fallback already
-    /// lands there, so this is not a special case — but it is deliberate rather than accidental, and
-    /// it is stable: all 8 C5 missions list <c>ZONE1</c> before <c>ZONE3</c>, so every one of
-    /// them resolves to <c>zone1</c>. Do not "fix" the fallback into picking <c>zone3</c>; the
-    /// user flew C5/IA1 in the original and can see across the city, which its 50–250 m fog and
-    /// 300 m clip would make impossible. C1–C4 all define <c>zone2</c> and resolve to themselves;
-    /// their A/B is still open (C1 has conflicting script evidence).
-    /// See docs/formats/weather.md.</para></summary>
+    /// <summary>The zone to actually render: the request itself when this mission defines it,
+    /// otherwise the file's first zone, keeping the request unchanged only when the file defines
+    /// none (<see cref="NoFog"/>). This is what makes the <c>zone2</c> default safe on C5, which
+    /// ships zone1+zone3 and lands on <c>zone1</c>, confirmed by playtest.
+    /// ⚠ Do not "fix" the fallback into picking <c>zone3</c> for C5. See docs/formats/weather.md
+    /// for the per-chapter A/B this default is settled by.</summary>
     public string ResolveZone(string requested) =>
         _zones.ContainsKey(requested) || _zoneNames.Count == 0 ? requested : _zoneNames[0];
 
-    /// <summary>The zone a given camera weather state wears: state <i>n</i> asks for
-    /// <c>zone<i>n</i></c> and goes through <see cref="ResolveZone(string)"/>'s file fallback —
-    /// which is what the binary does, indexing <c>ZONE1</c>–<c>ZONE3</c> straight off the
-    /// state.
-    ///
-    /// <para>The fallback is what keeps this safe on data that does not author the requested
-    /// zone: C5 flying into a volume asks for <c>zone3</c> and gets it, but a hypothetical state-2
-    /// flip in a mission with no <c>ZONE2</c> lands on the file's first zone instead of
-    /// <see cref="NoFog"/> — no fog and fullbright, which is what an unguarded lookup would
-    /// render. Deliberately NOT routed through
+    /// <summary>The zone a given camera weather state wears: state N asks for <c>zoneN</c>
+    /// through <see cref="ResolveZone(string)"/>'s file fallback, keeping this safe on data that
+    /// does not author the requested zone. Deliberately NOT routed through
     /// <see cref="ResolveZone(string, IReadOnlyList{HorizonZone})"/>: the horizon correction owns
-    /// the DOME's zone (one per flight, resolved at build), and the fog zone changes underneath it
-    /// every time the camera crosses the cloud core. Reconciling the two is open.</para></summary>
+    /// the dome's zone once per flight, while the fog zone changes every camera crossing of the
+    /// cloud core. Reconciling the two is open.</summary>
     public string ZoneForState(int cameraState) =>
         ResolveZone("zone" + cameraState.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
     /// <summary>The zone to render when the chapter's own <c>horizon</c> subtree gets a say:
     /// <see cref="ResolveZone(string)"/> first, then <see cref="PreferPopulatedHorizonZone"/>,
-    /// and the correction is taken only if <b>this</b> mission also defines fog for it — so the
-    /// sky and the fog stay the same zone, which is the whole invariant the pair has
-    /// (docs/formats/weather.md).
-    ///
-    /// <para>This is what fixes C1B, C2 and C3, whose <c>horizon/zone2</c> is a bare marker: the
-    /// <c>zone2</c> request resolved to itself (they <i>do</i> define <c>ZONE2</c> fog), so the
-    /// dome built with zero meshes and the fog came from the wrong zone — C3's night-blue on a
-    /// mission its own data lights at diffuse 1.5, C1B's 1128–1256 m band under a 10000–11000 m
-    /// one. Nothing on disk names the zone a mission flies (searched exhaustively),
-    /// so the horizon's own contents are the evidence, not a lookup table.</para></summary>
+    /// with the correction taken only if this mission also defines fog for it, so the sky and the
+    /// fog stay the same zone (docs/formats/weather.md). This is what fixes C1B, C2 and C3, whose
+    /// <c>horizon/zone2</c> is a bare marker even though the mission does define <c>ZONE2</c>
+    /// fog.</summary>
     public string ResolveZone(string requested, IReadOnlyList<HorizonZone> horizonZones)
     {
         var zone = ResolveZone(requested);
@@ -320,27 +239,10 @@ public sealed class WeatherState
     }
 
     /// <summary>The colour the whiteout paints at a given altitude, or null when the mission
-    /// authors no <c>CLOUD_COVER</c> colour and the caller should keep its own default.
-    /// <see cref="CloudBottomColor"/> at the band's floor lerping to <see cref="CloudTopColor"/>
-    /// at its ceiling.</summary>
-    /// <remarks>
-    /// <para>Authored data, and the target is not a judgement call: the original's C4 veil
-    /// measures a flat 192 and C4 authors <c>TOP_COLOR</c>/<c>BOTTOM_COLOR</c> = 192,192,192
-    /// (measured off original footage of C4). A hardcoded 0.95 white reads 242 in-cloud against
-    /// the original's 192; taking the authored pair gives 192 exactly.</para>
-    /// <para>⚠ The <b>lerp</b> is inferred and this install cannot falsify it. Of the four
-    /// chapters whose band you can reach (C1 970–1124, C1C 1055–1110, C2B 924–1124, C4
-    /// 1000–1100) only C4 authors colours and its pair is EQUAL, so every blend rule renders the
-    /// same picture. The one chapter that would discriminate is C5 (top 220, bottom 64) and its
-    /// band sits at 9950–10150 m — unreachable, so its values may never have been checked by
-    /// their own authors either. C1B/C3 are likewise 10 km up.</para>
-    /// <para>These are NOT deck-mesh face tints, whatever the names suggest: three of the four
-    /// colour-carrying chapters (C1B, C3, C5) have no <c>CloudDeck</c> mesh at all
-    /// (<c>WorldBuilder</c>'s coverage table), so there is nothing there to tint. Nor are they a
-    /// skydome grade: the dome's colour is authored per vertex and anchored on the zone's
-    /// <c>FOG_COLOR</c> (<see cref="Mech3.WorldBuilder.BuildHorizon"/>), and it reproduces the
-    /// original's without any tint stage.</para>
-    /// </remarks>
+    /// authors no <c>CLOUD_COVER</c> colour: <see cref="CloudBottomColor"/> lerping to
+    /// <see cref="CloudTopColor"/> by altitude across the band, decoded from <c>FUN_0042ee40</c>
+    /// (docs/formats/weather/atmosphere.md). Not a deck-mesh face tint or a skydome grade; see
+    /// that page for why.</summary>
     public Color? WhiteoutColor(float altitude)
     {
         if (CloudTopColor is not { } top)
@@ -352,22 +254,12 @@ public sealed class WeatherState
         return bottom.Lerp(top, Mathf.Clamp((altitude - CloudBottom) / (CloudTop - CloudBottom), 0f, 1f));
     }
 
-    /// <summary>The camera's per-frame weather state (the binary's camera state 1/2/3):
-    /// 1 by default; 2 when this mission authors a
-    /// <c>CLOUD_COVER</c> band and <paramref name="cameraPosition"/>'s altitude is at/above
-    /// <see cref="CloudCoreBottom"/> (the whiteout core's bottom edge, NOT the band centre and
-    /// NOT <see cref="CloudBottom"/>); 3 when <paramref name="fogZoneArmed"/> and the camera sits
-    /// inside any of <paramref name="volumes"/> — the AUTHORED shape
-    /// (<c>FogVolumeBox.Contains</c>'s exact half-space test), not the volume's AABB.
-    ///
-    /// <para>State 3 takes precedence over state 2, matching the binary's assignment order (it
-    /// computes state 3 after state 2, so an in-volume camera is always state 3 regardless of
-    /// altitude) — this never actually arbitrates in shipped data, since only C5 arms
-    /// <paramref name="fogZoneArmed"/> and its band sits at 9950-10150 m, far above any C5
-    /// volume.</para>
-    ///
-    /// <para>Exposed but consumed by nothing yet — <c>WeatherRig.Tick</c> publishes it per camera
-    /// each frame.</para></summary>
+    /// <summary>The camera's per-frame weather state (the binary's camera state 1/2/3): 1 by
+    /// default; 2 at or above <see cref="CloudCoreBottom"/>; 3 when <paramref name="fogZoneArmed"/>
+    /// and the camera sits inside any of <paramref name="volumes"/>'s authored shape. State 3
+    /// takes precedence, matching the binary's assignment order, though this never arbitrates in
+    /// shipped data. Exposed but consumed by nothing yet; <c>WeatherRig.Tick</c> publishes it per
+    /// camera each frame.</summary>
     public int CameraWeatherState(
         Vector3 cameraPosition, bool fogZoneArmed, IReadOnlyList<FogVolumeBox> volumes)
     {
@@ -386,11 +278,11 @@ public sealed class WeatherState
         return Mathf.Clamp(ambient + diffuse * SunIncidence, MinWorldLight, 1f);
     }
 
-    /// <summary>The zone's <c>SUNLIGHT_ORIENTATION</c> as Godot euler RADIANS, ready to assign
-    /// straight to a <see cref="DirectionalLight3D"/>'s <c>Rotation</c> — see
-    /// <see cref="ZoneWeather.SunOrientation"/> for why no axis conversion is needed. The data is
-    /// degrees; the binary multiplies by the same 0.017453292. Absent (or short) → the binary's
-    /// own default, pitch −π/2: straight down.</summary>
+    // The zone's `SUNLIGHT_ORIENTATION` as Godot euler RADIANS, ready to assign
+    // straight to a DirectionalLight3D's `Rotation` — see
+    // ZoneWeather.SunOrientation for why no axis conversion is needed. The data is
+    // degrees; the binary multiplies by the same 0.017453292. Absent (or short) → the binary's
+    // own default, pitch −π/2: straight down.
     private static Vector3 SunOrientationOf(ZrdrDict zone)
     {
         if (zone.List("SUNLIGHT_ORIENTATION") is not { Count: >= 2 } so
@@ -403,16 +295,10 @@ public sealed class WeatherState
         return new Vector3(Mathf.DegToRad(pitch), Mathf.DegToRad(yaw), Mathf.DegToRad(roll));
     }
 
-    // The file's own per-zone block names, in FILE ORDER — "ZONE1", "ZONE2" in C1–C4;
-    // "ZONE1", "ZONE3" in all 8 C5 missions (the whole reason this isn't a hardcoded pair;
-    // see docs/formats/weather.md). File order is what ResolveZone falls back along, so it
-    // must come from this raw walk over `inner` rather than from ZrdrDict, which is a
-    // Dictionary and does not preserve it.
-    //
-    // "ZONE" + digits only: the SW_ZONE* twins are the software-renderer variants
-    // (SUNLIGHT_ACTIVE 0, ambient 1.0) and must never enter the selectable set. Matching on
-    // the "ZONE" prefix alone would be enough today, but the digit test also keeps any future
-    // ZONE-prefixed sibling block out.
+    // The file's own per-zone block names, in FILE ORDER (docs/formats/weather.md). ResolveZone
+    // falls back along this order, so it must come from this raw walk, not ZrdrDict, which is a
+    // Dictionary and does not preserve it. "ZONE" + digits only: the SW_ZONE* software-renderer
+    // twins must never enter the selectable set.
     private static List<string> ZoneKeys(List<object?> inner)
     {
         var keys = new List<string>();
@@ -516,63 +402,20 @@ public sealed class WeatherState
             AlphaGradient: Vec2After(inner, "ALPHA_GRADIENT"));
     }
 
-    /// <summary>One day/night zone's weather: everything the original's zone-apply
-    /// writes in a single call when the camera's weather state changes —
-    /// the distance fog, the world-brightness scalar, and the sun's bearing. Named for the whole
-    /// block rather than for the fog alone because those three genuinely travel together: a zone
-    /// change that applied the fog and forgot the light would be a bug the single record exists to
-    /// make unrepresentable.
-    ///
-    /// <para>Distance fog: haze toward <see cref="FogColor"/> between</para>
-    /// <see cref="FogNear"/> and <see cref="FogFar"/> metres of **horizontal** view distance —
-    /// the original's fog volume is a vertical cylinder around the camera, not a sphere
-    /// (user-diagnosed) — scaled by an altitude fade from <c>FOG_ALTITUDE</c>: full
-    /// fog below <see cref="FogLow"/>, none above <see cref="FogHigh"/>, so the cloud deck /
-    /// sky overhead stays clear. The fade is by FRAGMENT altitude, settled at the controls of the
-    /// original in C2 — the only chapter whose flown band (256–1024 m) is inside the flight
-    /// envelope (docs/formats/weather.md).
-    /// ⚠ Do not take "zone1's 970→1047 is exactly cloud-band bottom → whiteout centre" as
-    /// corroboration of anything: C1 flies zone2, whose band is 4000→5000 m — above the 2,500 m
-    /// flight ceiling, i.e. night fog at every flyable altitude — so that identity lives in a zone
-    /// C1 never flies. It is real and unexplained, not evidence.
-    /// The ramp between near and far is LINEAR, per the gamez world node's own
-    /// <c>fog_state == 1</c>. <see cref="ClipFar"/> is the original's hard far clip (informational —
-    /// our far plane is much larger; the fog is what hides distant terrain, matching the
-    /// original's short view distance).
-    ///
-    /// <para><see cref="SunOrientation"/> is the zone's <c>SUNLIGHT_ORIENTATION</c> as Godot euler
-    /// RADIANS — assign it straight to a <see cref="DirectionalLight3D"/>'s <c>Rotation</c>. The
-    /// gamez→Godot mapping is the <b>identity</b>, which is worth stating because it looks like it
-    /// should not be: the binary writes these three radians into an ordinary gamez node rotation
-    /// triple (<c>zclass\Light.c</c>), <see cref="Mech3.GameZ"/> already reads
-    /// gamez node eulers as <c>Basis.FromEuler(v, EulerOrder.Yxz)</c> verbatim, Godot's
-    /// <c>Node3D</c> default order is YXZ, and a directional light shines along local −Z. That
-    /// reproduces the original's own euler→direction helper
-    /// (<c>(-cos p·sin y, sin p, -cos p·cos y)</c>) exactly — pinned at (0,0), (−90,0) and (0,90)
-    /// in <c>CSVM.Tests</c>. Varies by chapter (C1 <c>[-25, 90]</c>, C3 <c>[-25, 135]</c>,
-    /// C5 <c>[-25, -135]</c>), and is adopted with no TUNE: it is authored data, not a look to
-    /// tune.
-    /// ⚠ It is the <b>shading</b> direction, NOT the sun object's position — the gamez <c>sun</c>
-    /// billboard the lens flare anchors to is a different node entirely and disagrees with this in
-    /// C3 by 90°. That disagreement is the original's, and reproducing it is correct.</para></summary>
+    /// <summary>One day/night zone's weather: distance fog, world-brightness scalar, and sun
+    /// bearing, written together in one call by the original's zone-apply (docs/formats/weather.md).
+    /// Fog is a vertical cylinder with a linear near/far ramp and a <c>FOG_ALTITUDE</c> fade.
+    /// <see cref="SunOrientation"/> is Godot euler RADIANS, assignable straight to a
+    /// <see cref="DirectionalLight3D"/>'s <c>Rotation</c>. ⚠ It is the shading direction, not the
+    /// gamez <c>sun</c> billboard's position; the two disagree in C3 by 90 degrees.</summary>
     public readonly record struct ZoneWeather(Color FogColor, float FogNear, float FogFar, float FogLow, float FogHigh, float ClipFar, float WorldLight, Vector3 SunOrientation);
 
     /// <summary>The mission's precipitation, from the bare-scalar block at the end of
-    /// weather.json (after <c>SHADOW_ANGLES</c>). Only some missions carry one — C4 (SNOW),
-    /// C1C/C2B (RAIN); C1/C5 IA1 have none. Consumed by <see cref="Effects.Precipitation"/>.
-    /// <list type="bullet">
-    /// <item><see cref="Color"/> — the particle tint (integer-RGB in the data, e.g.
-    /// <c>[128,128,128]</c> → mid-gray; normalized by <see cref="ParseColor"/>).</item>
-    /// <item><see cref="WindDir"/> (degrees) / <see cref="WindVel"/> — the precipitation's own
-    /// horizontal drift (separate from the cloud <c>WIND</c> block above).</item>
-    /// <item><see cref="Gravity"/> — the fall-rate multiplier in the data's own units (SNOW 1,
-    /// RAIN 3 — rain falls faster); mapped to a metres/second fall speed by the renderer's TUNE
-    /// scale.</item>
-    /// <item><see cref="Particles"/> — a density hint (RAIN carries <c>PARTICLES 100</c>; SNOW
-    /// omits it → 0, the renderer substitutes a default).</item>
-    /// <item><see cref="AlphaGradient"/> — the <c>[0.5, 0.0]</c> pair; <c>.X</c> is the peak
-    /// opacity (the field is quite translucent).</item>
-    /// </list></summary>
+    /// weather.json. Only some missions carry one; C1/C5 IA1 have none. Consumed by
+    /// <see cref="Effects.Precipitation"/>. <see cref="WindDir"/>/<see cref="WindVel"/> are the
+    /// precipitation's own drift, separate from the cloud <c>WIND</c> block above;
+    /// <see cref="Gravity"/> is a fall-rate multiplier in the data's own units. Field-by-field
+    /// detail: docs/formats/weather/atmosphere.md.</summary>
     public readonly record struct PrecipData(
         PrecipKind Kind, Color Color, float WindDir, float WindVel,
         float Gravity, int Particles, Vector2 AlphaGradient);

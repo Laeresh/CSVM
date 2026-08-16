@@ -7,53 +7,34 @@ using Godot;
 
 namespace CSVM.Session;
 
-/// <summary>
-/// Runs a mission's enemy generators (M4 B6 + F20): each loaded <see cref="EnemyGeneratorDef"/>
-/// gets a <see cref="GeneratorCycle"/> and spawns AI aircraft through the session's runtime
-/// spawn seam (<c>GameSession.SpawnAiAircraft</c>) as its waves come due. Load-time semantics
-/// follow the decode (docs/formats/mission-entities.md "The generator cycle"): a generator whose
-/// host node does not resolve, or whose ENTIRE nets list fails to resolve, is dropped at load,
-/// never loaded inert. Every load drop, door transition and spawn prints an <c>egen:</c> line,
-/// which is the <c>--generators</c> flag's observability.
-///
-/// <para><b>The hangar door (F20).</b> <see cref="GeneratorCycle.DoorOpen"/> drives the authored
-/// <c>open_anim</c>/<c>close_anim</c> mission animations (OnCall defs over the zeppelin's
-/// <c>door_left</c>/<c>door_right</c> nodes) through the play/stop hooks; a transition whose
-/// anim the program does not carry still logs, so the timing law stays observable. A generator
-/// authoring neither name runs the timing machine log-only — the engine would default
-/// <c>&lt;node&gt;_open_&lt;nn&gt;</c>/<c>close_&lt;nn&gt;</c>, but no such def ships for any
-/// non-zeppelin host in this install, so that default is not reproduced.</para>
-///
-/// <para><b>The F18 seam:</b> <see cref="NotifyHostDied"/> — the zeppelin death aggregator (or
-/// the submarine's <c>healthy</c>-node death) calls it with the dead node's name and the
-/// matching generators disable permanently (decoded rule). Nothing calls it until F18 lands.</para>
-///
-/// <para><b>The F12 seam:</b> <see cref="UseInstantActionLaunches"/> +
-/// <see cref="GrantWaveCapacity"/> — on an Instant Action <c>zeppelin_run</c> the objective
-/// zeppelin's generator is the ONLY way an enemy gets airborne, and it runs on a budget the wave
-/// sequencer credits wave by wave rather than on a plane name of its own.</para>
-///
-/// <para>Spawned aircraft drop at the origin node's LIVE position (it rides F17's moving
-/// zeppelin) in the authored drop attitude — <c>rotation</c>'s pitch, clamped shy of vertical
-/// so the spawn basis stays valid — and patrol their generator's cyclic net pick through
-/// <see cref="AiNetFollower"/>.</para>
-/// </summary>
+/// <summary>Runs a mission's enemy generators (M4 B6 + F20): each loaded
+/// <see cref="EnemyGeneratorDef"/> gets a <see cref="GeneratorCycle"/> and spawns AI aircraft
+/// through <c>GameSession.SpawnAiAircraft</c> as its waves come due, dropping at the origin
+/// node's live position in the authored drop attitude and patrolling the cyclic net pick through
+/// <see cref="AiNetFollower"/>. A generator whose host or whole nets list fails to resolve is
+/// dropped at load, never loaded inert (docs/formats/mission-entities.md). Every load drop, door
+/// transition and spawn prints an <c>egen:</c> line.
+/// <see cref="GeneratorCycle.DoorOpen"/> drives the authored door anims; unauthored doors run the
+/// timing machine log-only. <see cref="NotifyHostDied"/> is F18's seam: the dead host's
+/// generators disable permanently.
+/// ⚠ <see cref="UseInstantActionLaunches"/>/<see cref="GrantWaveCapacity"/> are F12's seam — see
+/// this module's entry in docs/architecture.md before touching either.</summary>
 public sealed partial class AiGeneratorRuntime : Node
 {
     /// <summary>The most recent spawn's net pick, per generator node.</summary>
     public readonly Dictionary<string, string> SpawnedNet = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>The spawn basis needs a horizontal component (Basis.LookingAt with world up),
-    /// so the authored −90° drop pitch is clamped this far shy of vertical. Invented margin;
-    /// the −90° drop attitude itself is the authored <c>rotation</c>.</summary>
+    // The spawn basis needs a horizontal component (Basis.LookingAt with world up),
+    // so the authored −90° drop pitch is clamped this far shy of vertical. Invented margin;
+    // the −90° drop attitude itself is the authored `rotation`.
     private const float MaxDropPitchDeg = 80f;
 
-    /// <summary>INVENTED clearance below the origin node. The authored <c>cargobay</c> sits on
-    /// the bay floor inside the hull, so an airframe spawned exactly there overlaps the bay
-    /// geometry and crashes on frame one (measured: C1B/M03's drop dies into the vostok's own
-    /// <c>g459</c>). The binary carries two untraced launch timers (BL-350 trap b) that are NOT
-    /// interpreted here; instead the fighter appears this far straight below the doors, in
-    /// open air under the hull.</summary>
+    // INVENTED clearance below the origin node. The authored `cargobay` sits on
+    // the bay floor inside the hull, so an airframe spawned exactly there overlaps the bay
+    // geometry and crashes on frame one (measured: C1B/M03's drop dies into the vostok's own
+    // `g459`). The binary carries two untraced launch timers (BL-350 trap b) that are NOT
+    // interpreted here; instead the fighter appears this far straight below the doors, in
+    // open air under the hull.
     private const float DropClearanceM = 12f;
 
     private readonly List<LiveGenerator> _live = new();
@@ -63,7 +44,7 @@ public sealed partial class AiGeneratorRuntime : Node
     private readonly Action<string, Node3D>? _stopAnim;
     private readonly Func<AiNet, Func<Vector3?>?>? _trailerTarget;
 
-    /// <param name="trailerTarget">Where an anchored net's trailer target is (`BL-377`), per net;
+    /// <param name="trailerTarget">Where an anchored net's trailer target is, per net;
     /// null leaves every generated patroller on its net's authored coordinates. One generator's
     /// nets are player-anchored in the shipped data (C5's <c>M4Miles</c>), so this is not
     /// hypothetical.</param>
@@ -125,17 +106,12 @@ public sealed partial class AiGeneratorRuntime : Node
     /// <summary>Generators that survived the load drops.</summary>
     public int LiveCount => _live.Count;
 
-    /// <summary>Instant Action's zeppelin arm: every generator hosted
-    /// on <paramref name="hostNode"/> goes onto the wave-credit budget
-    /// (<see cref="GeneratorCycle.UseWaveCredits"/> — nothing launches until
-    /// <see cref="GrantWaveCapacity"/> credits it) and releases an ALREADY-BUILT wave member
-    /// through <paramref name="release"/> instead of spawning a fresh aircraft, which is the
-    /// decoded shape: <c>FUN_00452450</c> finds the parked airframes whose group matches and drops
-    /// them from the bay. The release hook takes the same drop position and look-at point a spawn
-    /// would have got and returns the aircraft it released, or null when the current wave has no
-    /// parked member left (the launch is then accounted exactly like a failed spawn). Returns how
-    /// many generators this claimed — 0 means the selected zeppelin carries no generator, and on
-    /// that mode nothing will ever launch.</summary>
+    /// <summary>Instant Action's zeppelin arm: every generator hosted on
+    /// <paramref name="hostNode"/> goes onto the wave-credit budget and releases an already-built
+    /// wave member through <paramref name="release"/> instead of spawning a fresh aircraft — the
+    /// decoded shape (this module's entry in docs/architecture.md). A null release is accounted
+    /// like a failed spawn. Returns how many generators this claimed; 0 means the selected
+    /// zeppelin carries no generator, so nothing on that mode will ever launch.</summary>
     public int UseInstantActionLaunches(string hostNode,
         Func<Vector3, Vector3, FlightController?> release)
     {
@@ -212,10 +188,8 @@ public sealed partial class AiGeneratorRuntime : Node
     {
         foreach (var gen in _live)
         {
-            // Host death arrives through NotifyHostDied (zeppelin hosts, via F18's kill
-            // event); fixed-installation hosts still have no death source. The altitude read
-            // is live off the host node, so the min_altitude gate holds (not cancels)
-            // whenever F17's flown zeppelin sits below it.
+            // The altitude read is live off the host node, so the min_altitude gate holds (not
+            // cancels) whenever F17's flown zeppelin sits below it.
             bool spawned = gen.Cycle.Step(dt, gen.Host.GlobalPosition.Y);
             if (gen.Cycle.DoorOpen != gen.DoorOpen)
             {
@@ -238,10 +212,8 @@ public sealed partial class AiGeneratorRuntime : Node
             GD.Print($"egen: '{gen.Def.Node}' door {what} (no authored anim)");
             return;
         }
-        // Stop the opposite motion first: the 4 s minimum-open sits inside the 5 s authored
-        // door travel, so a fast cycle can otherwise leave both from-to motions writing. Both
-        // hooks are scoped to the HOST's subtree — C1 has three 'hangerdoors' namesakes and
-        // only the zeppelin's own may swing.
+        // Stop the opposite motion first: a fast cycle can otherwise leave both from-to motions
+        // writing. Hooks are scoped to the host's subtree — C1 has three 'hangerdoors' namesakes.
         string? other = opening ? gen.Def.CloseAnim : gen.Def.OpenAnim;
         if (other != null)
         {
@@ -252,6 +224,8 @@ public sealed partial class AiGeneratorRuntime : Node
                  (started > 0 ? $", {started} instance(s))" : ", not in this program)"));
     }
 
+    // pos/drop below are computed once and shared by the release and net-pick branches; the
+    // F12 zeppelin arm must not re-derive its own drop point.
     private void Spawn(LiveGenerator gen)
     {
         var anchor = gen.Origin ?? gen.Host;
@@ -264,10 +238,8 @@ public sealed partial class AiGeneratorRuntime : Node
         forward.Y = 0f;
         forward = forward.LengthSquared() > 1e-6f ? forward.Normalized() : Vector3.Forward;
 
-        // The authored drop attitude: rotation's pitch (−90° = straight down on all 17
-        // zeppelin generators) about the host's right axis, clamped shy of vertical so
-        // Basis.LookingAt keeps a horizontal component. The plane dives out of the bay and
-        // the pilot's own law pulls it onto its net.
+        // The authored drop attitude: rotation's pitch about the host's right axis, clamped shy
+        // of vertical so Basis.LookingAt keeps a horizontal component.
         var drop = forward;
         if (gen.Def.RotationDeg is { } rot && Mathf.Abs(rot.X) > 0.01f)
         {

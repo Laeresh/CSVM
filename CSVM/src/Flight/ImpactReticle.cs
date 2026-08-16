@@ -4,20 +4,13 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The gun aiming reticle: the game's own <c>impact_point.png</c> pipper drawn at the
-/// projected ballistic impact point of the SELECTED gun group's rounds at a fixed convergence
-/// distance — deliberately NOT pinned to screen centre. Because the reticle marks where a round
-/// fired <i>now</i> would be at that distance, and the rounds inherit the plane's velocity (which
-/// lags the nose during a hard roll or pull), the pipper visibly TRAILS the nose in a hard manoeuvre
-/// and sits where the rounds land in steady flight (user-confirmed).
-///
-/// <para>Follows the <see cref="MarkerHud"/> pattern: a viewport-filling <see cref="Control"/> fed a
-/// world impact point each frame by <see cref="FlightController"/> (which owns the ballistics and
-/// integrates them exactly as <see cref="ProjectilePool"/> fires), projecting it through the live
-/// camera at <see cref="_Draw"/> time — no cached projection, so the reticle never lags the chase
-/// camera itself. The pipper keeps a fixed screen size (a HUD element), scaled by
-/// <see cref="HudMetrics"/>; it does not shrink with range. Draw sizes are TUNE.</para>
-/// </summary>
+/// The gun aiming reticle: the game's own <c>impact_point.png</c> pipper, a viewport-filling
+/// <see cref="Control"/> fed a world impact point each frame by <see cref="FlightController"/>,
+/// projected through the live camera at <see cref="_Draw"/> time (never cached, mirrors
+/// <see cref="MarkerHud"/>). Fixed screen size scaled by <see cref="HudMetrics"/>.
+/// ⚠ Deliberately not pinned to screen centre, and it marks the nose axis, not the aim assist's
+/// line, so an assisted round does not go where the pipper points — the assist is meant to be
+/// felt, not seen (docs/org/aim-assist.md "What the gun pipper follows").</summary>
 public sealed partial class ImpactReticle : Control
 {
     private const float RefSize = 40f; // pipper draw size in px at the 1440p reference (TUNE)

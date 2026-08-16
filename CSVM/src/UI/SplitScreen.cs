@@ -4,44 +4,16 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The splitscreen rendering rig: N panes, each a
-/// <see cref="SubViewportContainer"/> + <see cref="SubViewport"/> with its own
-/// <see cref="Camera3D"/>, all rendering the SAME <see cref="World3D"/> as the main viewport —
-/// one shared world, N views into it. Built only for 2+ players; a single player keeps
-/// GameSession's original main-viewport camera untouched (so the 1P render path is unchanged).
-///
-/// <para><b>Layout</b> (the plan's decision): 2P = a horizontal split, one pane above the other;
-/// 3P and 4P = a 2×2 grid, with 3P leaving the last quadrant empty (black). Panes are laid out
-/// manually on every resize rather than through a Container so the split stays exact and the
-/// gutter width is ours; the backdrop rect paints the gutters and the empty 3P quadrant.</para>
-///
-/// <para><b>Per-player visibility layers.</b> Most of the world is shared geometry every camera
-/// sees. But the skydome, the cloud deck and the whiteout overlay are *camera-anchored*
-/// singletons (GameSession re-centers them on "the camera" each frame) — with several players
-/// they must exist once per player and each camera must see only its own copy. So each player
-/// owns one visual layer out of a reserved band at the top of Godot's 20 (<see cref="PlayerLayerBit0"/>
-/// = layers 17–20): the player's private copies are moved onto that layer
-/// (<see cref="SetVisualLayer"/>) and the player's camera culls the whole band except its own bit
-/// (<see cref="PlayerCullMask"/>). Everything the world builds stays on the default layer 1 and
-/// is therefore visible in every pane — including the other players' aircraft.</para>
-///
-/// <para><b>Every pane is a 3D audio listener</b> (<see cref="Viewport.AudioListenerEnable3D"/>
-/// on each SubViewport). Godot's <c>AudioStreamPlayer3D</c> takes the per-channel MAXIMUM over all
-/// listener-enabled viewports of its World3D, so an emitter is heard at its NEAREST pane's volume
-/// with no N-fold buildup and no manual attenuation; the price is that panning is unioned across
-/// panes, since the panes share one stereo output. Without this a splitscreen session has NO
-/// listener at all — the main camera stands down below, and a camera only joins the World3D
-/// listener set while it is current — and every 3D emitter in the world goes silent.</para>
-///
-/// <para><b>The zone-gate band</b> (<c>Mech3.ZoneGate.LayerBand</c>, layers 14–16) is the other
-/// named allocation out of the same 20, and it is not per player either: three SHARED layers, one
-/// per gamez <c>zone_id</c> 1/2/3, carrying every mesh built for a node of that zone — the placed
-/// <c>cloudparent</c> clusters, the <c>fvol</c> clutter field, the zone-1 mission targets and
-/// ground world. <c>SceneBuilder</c> stamps them at build time and <c>WeatherRig.Tick</c> keeps
-/// exactly one of the three bits in each camera's cull mask — that camera's own weather state —
-/// which is the original's own zone gate, applied per CAMERA. Every cull mask built here
-/// includes all three bits, so a chapter, a mode or a <c>--no-zone-cull</c> run that never applies
-/// the gate renders every zone exactly as an ungated build does.</para>
+/// The splitscreen rendering rig: N panes, each a <see cref="SubViewportContainer"/> +
+/// <see cref="SubViewport"/> with its own <see cref="Camera3D"/>, all rendering the same
+/// <see cref="World3D"/> as the main viewport. Built only for 2+ players; a single player keeps
+/// GameSession's original main-viewport camera untouched. Layout: 2P is a horizontal split, 3P
+/// and 4P a 2x2 grid with 3P's last quadrant black. Each player owns one visual layer out of a
+/// reserved band (<see cref="PlayerLayerBit0"/>) for camera-anchored singletons like the skydome;
+/// <see cref="SetVisualLayer"/> moves the copies, <see cref="PlayerCullMask"/> culls the rest of
+/// the band. Every pane is a 3D audio listener, or a splitscreen session has no listener at all.
+/// The zone-gate band (<c>Mech3.ZoneGate.LayerBand</c>) is a separate, shared allocation of the
+/// same 20 layers. The listener model: this module's entry in docs/architecture.md.
 /// </summary>
 public sealed partial class SplitScreen : CanvasLayer
 {
@@ -61,7 +33,7 @@ public sealed partial class SplitScreen : CanvasLayer
     // OFF, never something a new camera has to remember to switch on. It is allocated in Mech3
     // rather than here because SceneBuilder stamps it at build time, node by node.
 
-    private const int Gutter = 2;   // px between panes — confirmed at the controls, BL-126 2026-08-15
+    private const int Gutter = 2;   // px between panes — confirmed at the controls
 
     // Per-player identity colours: the launchscreen's join strip and plane-select
     // cursors, and later the race HUD/scoreboard rows, all key off these so a player
@@ -184,8 +156,8 @@ public sealed partial class SplitScreen : CanvasLayer
         Relayout();
     }
 
-    /// <summary>Places the panes over the current window rect: 2P stacked top/bottom, 3–4P in a
-    /// 2×2 grid (3P's fourth quadrant stays backdrop-black). Runs on every resize.</summary>
+    // Places the panes over the current window rect: 2P stacked top/bottom, 3–4P in a
+    // 2×2 grid (3P's fourth quadrant stays backdrop-black). Runs on every resize.
     private void Relayout()
     {
         var size = _root.Size;

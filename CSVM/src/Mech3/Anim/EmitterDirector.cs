@@ -10,42 +10,24 @@ namespace CSVM.Mech3.Anim;
 
 /// <summary>An emitter's whole life on one runtime: the keying rule, the start, all four stops, the
 /// respawn wipe, the per-frame follow, and a census of what exists.
-///
-/// <para>The four stops stay four. They vary on two independent axes — SELECTOR (key / host subtree /
-/// owning instance) × DISPOSITION (pause-revivable / pause-and-forget) — and the axes really are
-/// independent: <see cref="EndFor"/> and <see cref="Discard"/> share a selector and differ only in
-/// disposition. One named method per selector, disposition implied by the name. ⚠ Do not collapse
-/// them into one parameterised stop: every shipped bug in this family was a SELECTOR error, so the
-/// selectors are the distinctions worth naming at the call
-/// site.</para>
-///
-/// <para>Handed already-resolved host and anchor nodes: the effect-template pool is NOT a keying
-/// scheme and stays out of here (`SlotOf`/`NextPooledAnchors`/`PlaceTemplateAt` remain on
-/// <see cref="AnimRuntime"/>). Distinct emitters per pooled call fall out of each slot's host being
-/// a different node.</para></summary>
+/// ⚠ Do not collapse the four stops into one parameterised call. They vary on two independent
+/// axes — SELECTOR (key / host subtree / owning instance) × DISPOSITION (pause-revivable /
+/// pause-and-forget) — and every shipped bug in this family has been a selector error.
+/// Handed already-resolved host and anchor nodes: the effect-template pool is not a keying scheme
+/// and stays out of here.
+/// </summary>
 public sealed class EmitterDirector
 {
-    /// <summary>One emitter per (puffer name, emitter node[, owning def]). Definitions re-assert
-    /// their PUFFER_STATE every loop iteration — C1's waterfall is [PufferState ×3, Loop{-1}] — so
-    /// the start has to be idempotent: re-asserting an already-running emitter must be a no-op, not
-    /// a second emitter. Safe by the data: all 2,774 compiled PUFFER_STATE events reference only
-    /// puffers their own def declares (measured install-wide).
-    ///
-    /// <para>⚠ The def is in the key only where <c>defScopedKeys</c> says so, and both cases are
-    /// measured. REQUIRED on the world-effects runtime: two effect defs can declare same-named
-    /// puffers on one host — the two damage-stage sputters both call theirs `black_smoke`, and a
-    /// shared key let the stage-1 smoke emitter mask the stage-2 fire build. FORBIDDEN on the world
-    /// runtime: C5's six `m_crane_go(#N)` twins all name-resolve `man_spark` onto one node, and
-    /// def-scoped keys there stacked six spark emitters on it and moved the `c5-city-night`
-    /// golden — the collapsed key doubles as the de-dup for that name-resolution artifact.</para>
-    ///
-    /// <para>The value carries the owning (def, anchor) so a stop can reach exactly the emitters a
-    /// stopped instance created.</para></summary>
+    // One emitter per (puffer name, emitter node[, owning def]). Assert is idempotent: a
+    // re-assert of an already-running emitter is a no-op, matching data that loops PUFFER_STATE.
+    // ⚠ Do not hard-code _defScopedKeys either way: true is required on the effects runtime (two
+    // damage-stage sputters both declare black_smoke and would mask each other), false is
+    // required on the world runtime (C5's six same-node m_crane_go spark defs would stack six).
     private readonly Dictionary<(string Name, Node3D Node, AnimDefinition? Def), Entry> _emitters = new();
 
-    /// <summary>The emitting emitters, each stamped with the INSTANT it started — the runtime
-    /// batch (one <see cref="AnimRuntime.Advance"/> pass) that dispatched its <c>PUFFER_STATE 1</c>.
-    /// <see cref="EndOn"/> reads the stamp; nothing else does. See <see cref="_instant"/>.</summary>
+    // The emitting emitters, each stamped with the INSTANT it started — the runtime
+    // batch (one AnimRuntime.Advance pass) that dispatched its `PUFFER_STATE 1`.
+    // EndOn reads the stamp; nothing else does. See _instant.
     private readonly List<(IEmitter Emitter, Node3D Node, ulong Started)> _active = new();
 
     // Each host node's emission point in its own frame (see AnimRuntime.VisualOriginOf) — zero for
@@ -116,20 +98,12 @@ public sealed class EmitterDirector
         var key = KeyFor(name, host, def);
         if (_emitters.TryGetValue(key, out var existing))
         {
-            // Re-asserting a RUNNING emitter is a no-op (the loop idiom). A SustainEnd'ed one
-            // REVIVES instead: the damage-stage `puffit` loop cycles ACTIVE_STATE 0/1 on a 50%
-            // dice every pass, and reading "stopped" as "still running" collapsed the authored
-            // sputter to at most one burst per stage.
+            // ⚠ A SustainEnd'ed emitter REVIVES on re-assert; reading "stopped" as "still running"
+            // collapses the sputter loop to one burst per stage.
             if (!Emitting(existing.Emitter))
                 _active.Add((existing.Emitter, host, _instant));
-            // The re-asserting instance TAKES OWNERSHIP (same def, later anchor). Ownership is what
-            // every stop resolves through — End, the TTL sweep and EndFor all ask "which emitters
-            // does (def, anchor) own?" — so an emitter left attributed to the FIRST asserter
-            // outlives every later one: three torpedoes' `fire_n_smoke` share a host (their pooled
-            // `torp_effects` copies all resolve through the def's own node index), so calls 2 and 3
-            // revived call 1's emitter, and when they ended they owned nothing to stop. Guarded on
-            // the def: a name colliding across two defs on an un-def-scoped runtime is the "builds
-            // beside" case below, not one def's own pool, and must not change hands.
+            // ⚠ Ownership must move to the re-asserter (same def, later anchor); every stop
+            // resolves through it, and leaving it with the first asserter strands later calls.
             if (existing.Def == def && existing.Anchor != anchor)
                 _emitters[key] = existing with { Anchor = anchor };
             return;
@@ -159,18 +133,8 @@ public sealed class EmitterDirector
 
     /// <summary>The authored stop: <c>PUFFER_STATE &lt;name&gt; 0</c>. Pauses the emitter on the
     /// event's own key, keeping the entry so a later re-assert revives it.
-    ///
-    /// <para>⚠ Falls back to the same-named emitter this INSTANCE owns when the key misses. The two
-    /// halves of an authored on/off pair do not always name the same host: measured on a C1 crash,
-    /// all four defs whose stop missed start the emitter at their OWN template root and
-    /// stop it with no AT_NODE at all, which falls to the anchor — `large_10sec_fire` ON at
-    /// `fire_here` / OFF at `destroyed`, `large_fireball` ON at `flame_ball_01` / OFF at `healthy`,
-    /// likewise `small_yellow_sparks` and `large_black_smokeball`. Two keys, one emitter: the stop
-    /// looked up a key nothing ever wrote and returned silently. Narrowed on the name as well as the
-    /// owner, so a def running several emitters (`he_trails`' five spurt columns) still stops only
-    /// the one the event names. Every miss is counted out loud — all four were masked by a backstop
-    /// that happened to fire at the authored moment, and a future def without that luck would just
-    /// leak.</para></summary>
+    /// ⚠ Falls back to the instance's same-named emitter when the key misses; an authored on/off
+    /// pair does not always name the same host. Every miss is counted, never left silent.</summary>
     public void End(string name, Node3D host, AnimDefinition def, Node3D? anchor)
     {
         if (_emitters.TryGetValue(KeyFor(name, host, def), out var running))
@@ -199,33 +163,12 @@ public sealed class EmitterDirector
                          : "this instance owns no emitter of that name"));
     }
 
-    /// <summary>Ends emission for every emitter hosted on <paramref name="root"/> or inside its
-    /// subtree — what an <c>OBJECT_ACTIVE_STATE false</c> means for emitters, and the only AUTHORED
-    /// stop a stop-less PUFFER_STATE has. `he_trails`' five spurt columns carry no
-    /// ACTIVE_STATE 0; what the data turns off is the HOST — without honouring that, a rocket's
-    /// smoke ends only at the 32 s runtime TTL or when the next rocket restarts the def.
-    ///
-    /// <para>⚠ Visibility is NOT the test, unlike the light sweep. The world-effects stage keeps
-    /// every template root hidden deliberately and its emitters still show, because particles go
-    /// TopLevel into world space — gating emission on <c>IsVisibleInTree</c> would silence every
-    /// staged impact effect. Only an explicit deactivation of the host counts.</para>
-    ///
-    /// <para>The entry stays, so a later <c>PUFFER_STATE 1</c> revives it — the sputter loop cycles
-    /// 0/1 forever and relies on that. Leaving <see cref="_active"/> is not optional though:
-    /// <see cref="IEmitter.SustainAt"/> re-arms emission on its own, so a still-ticked emitter would
-    /// resume on the very next frame.</para>
-    ///
-    /// <para>⚠ It does NOT reach an emitter that started in this same instant, because
-    /// the data writes both halves of a one-tick idiom and means only the second: the four splash
-    /// definitions activate <c>sp_1</c>, call an emitter definition onto it, and switch it off again
-    /// with no START_TIME anywhere, while the callee authors a 0.5 s run. Censused install-wide
-    /// (`analysis/bl-229-emitter-host-deactivation/`): 414 activate/emit/deactivate pairs, and the
-    /// split is total — the 32 same-instant ones are those four shapes, every one of which authors a
-    /// run this stop would cut to nothing, and the other 382 sit a median 3.5 s later, which is the
-    /// whole population this stop exists for (`m_build*`'s debris trails end when their
-    /// flying part is switched off after its 5 s OBJECT_MOTION). No pair sits in between.
-    /// <paramref name="sparingSameInstant"/> is false only on the RESET_STATE path, where every op
-    /// is a base state and "last write wins" is the whole semantics.</para></summary>
+    /// <summary>Ends emission for every emitter on <paramref name="root"/> or its subtree — what
+    /// <c>OBJECT_ACTIVE_STATE false</c> means for emitters. Pauses rather than removes the entry,
+    /// so a later <see cref="Assert"/> revives it; an emitter started this same instant is spared
+    /// unless <paramref name="sparingSameInstant"/> is false.
+    /// ⚠ Only an explicit host deactivation counts; visibility is not the test, since particles go
+    /// TopLevel into world space.</summary>
     public void EndOn(Node3D root, bool sparingSameInstant = true)
     {
         for (int i = _active.Count - 1; i >= 0; i--)
@@ -331,7 +274,9 @@ public sealed class EmitterDirector
 
     /// <summary>Swaps in the factory a runtime has once its texture archive is released. Nothing
     /// already built is disturbed; only further requests change answer, from "here is an emitter" to
-    /// a named, once-warned miss.</summary>
+    /// a named, once-warned miss.
+    /// ⚠ That miss must stay a warn, not a silent no-op: swallowing it reads as a world with no
+    /// fire, dust or smoke and a clean log, and the bootstrap census runs too early to catch it.</summary>
     public void RetireFactory() => _factory = new SpentEmitterFactory();
 
     private (string, Node3D, AnimDefinition?) KeyFor(string name, Node3D host, AnimDefinition def) =>
@@ -339,11 +284,11 @@ public sealed class EmitterDirector
 
     private bool Emitting(IEmitter emitter) => _active.Any(a => a.Emitter == emitter);
 
-    /// <summary>The host's emission point in its own frame, cached per node. Zero — and the emission
-    /// point exactly the node origin, byte-identical with the pre-cache behaviour — for every node
-    /// whose origin sits inside its mesh bounds; the offset to the bounds centre for
-    /// absolute-modelled world subtrees, whose origin is the map corner. Local-frame, so
-    /// a motion-driven host carries its emission point along.</summary>
+    // The host's emission point in its own frame, cached per node. Zero — and the emission
+    // point exactly the node origin, byte-identical with the pre-cache behaviour — for every node
+    // whose origin sits inside its mesh bounds; the offset to the bounds centre for
+    // absolute-modelled world subtrees, whose origin is the map corner. Local-frame, so
+    // a motion-driven host carries its emission point along.
     private Vector3 HostOffsetOf(Node3D host, in Transform3D xform)
     {
         if (_hostOffsets.TryGetValue(host, out var offset))

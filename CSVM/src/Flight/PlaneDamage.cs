@@ -6,20 +6,12 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// The vehicle damage ledger for a flying aircraft: the per-part pools from the def's
-/// 'destroyable_parts' (see <see cref="DestroyablePart"/>) plus an independent whole-vehicle
-/// (armor, health) pair, ported instruction-for-instruction from the decoded take-hit wrapper
-/// (docs/org/vehicleDamage.md: FUN_004b9b30 the loop, FUN_004b7f80 the spend, FUN_004b3950 the
-/// zone resolver, FUN_004b3bf0 the part spend + recompute). One hit is a damage pair spent on
-/// the struck zone armor-first; a dead or unknown zone REDIRECTS to a random surviving zone
-/// (the resolver only returns parts with health left); after a part spend the whole pair is
-/// recomputed as the parts' fraction of their summed maxima times the whole maxima; the
-/// unabsorbed leftover then re-enters zone-less and spends against the whole pair directly,
-/// with no recompute. Death is whole-vehicle health at or below zero — never a part flag.
-/// The whole maxima are the def's authored armor/health pair where one exists (AI defs);
-/// player defs author none, so the pair seeds as the sum over parts (FUN_0047bd90's
-/// re-derivation is the decoded precedent for sum-over-parts as the whole pair).
-/// FlightController applies severity-scaled damage on survivable collisions and crashes
-/// outright on hard ones. Respawn calls <see cref="Reset"/>.
+/// <c>destroyable_parts</c> (see <see cref="DestroyablePart"/>) plus an independent whole-vehicle
+/// (armor, health) pair, ported instruction-for-instruction from the decoded take-hit wrapper.
+/// Decode: docs/org/vehicleDamage.md. <see cref="Apply"/> spends one hit through that flow;
+/// <see cref="IsDestroyed"/> is the decoded death test. FlightController applies severity-scaled
+/// damage on survivable collisions and crashes outright on hard ones. Respawn calls
+/// <see cref="Reset"/>.
 /// </summary>
 public sealed class PlaneDamage
 {
@@ -64,7 +56,9 @@ public sealed class PlaneDamage
     /// <summary>Worst (lowest) combined armor+HP fraction across all parts — 1f (pristine) when
     /// there are no parts or none has taken damage. Drives whole-plane damage feedback keyed to
     /// "how hurt is the airframe" rather than any one part (e.g. FlightAudio's damaged-engine
-    /// loop).</summary>
+    /// loop). ⚠ A zone-less AI aircraft (<see cref="PlaneStats.LoadForAi"/>) always reads a
+    /// constant 1f here — read <see cref="SummaryHealthFraction"/> for a reading that works on
+    /// both flavours.</summary>
     public float WorstFraction => _parts.Count == 0 ? 1f : _parts.Values.Min(p => p.Fraction);
 
     /// <summary>The whole-vehicle health fraction — the real pair's current over max, no longer
@@ -83,10 +77,12 @@ public sealed class PlaneDamage
     public static PlaneDamage For(PlaneStats stats) =>
         new(stats.DestroyableParts, stats.VehicleArmor, stats.VehicleHealth);
 
-    /// <summary>Maps the struck collider box (fuselage/wing/canard/tail, or the
-    /// backstop ray's "center") + the impact point in the PLANE's local frame to
-    /// the data's part name: wings split by side (x &lt; 0 = left — verified against
-    /// the planes.zbd node boxes), the fuselage fore/aft between nose and tail.</summary>
+    /// <summary>Maps the struck collider box (fuselage/wing/canard/tail, or the backstop ray's
+    /// "center") + the impact point in the PLANE's local frame to the data's part name: wings
+    /// split by side (x &lt; 0 = left — verified against the planes.zbd node boxes), the fuselage
+    /// fore/aft between nose and tail. ⚠ The <c>tail</c> arm ignores <paramref name="localImpact"/>
+    /// — only correct because <see cref="PlaneCollider"/>'s relabelling hands it no outboard boxes.
+    /// Do not "fix" tail sidedness here.</summary>
     public static string MapStruckPart(string colliderPart, Vector3 localImpact) => colliderPart switch
     {
         "wing" or "canard" => localImpact.X < 0f ? "leftwing" : "rightwing",
@@ -107,14 +103,12 @@ public sealed class PlaneDamage
         _rng = RngSeed; // a respawned plane redirects identically — suite determinism
     }
 
-    /// <summary>Spends one hit's two damage magnitudes (the weapon data's HEALTH_DAMAGE /
-    /// ARMOR_DAMAGE) through the decoded take-hit flow. The named zone takes the spend
-    /// armor-first while it lives; a dead or unknown zone redirects to a random surviving zone
-    /// (the resolver rule — a dead zone never absorbs, and never soaks a hit either); the part
-    /// spend recomputes the whole pair from the parts; the leftover the part could not absorb
-    /// then drains the whole pair directly. With no surviving zone the hit is spent on the
-    /// whole pair alone. Returns the zone actually struck (null when the hit went zone-less) —
-    /// callers must test <see cref="IsDestroyed"/> regardless of the return.</summary>
+    /// <summary>Spends one hit's <c>HEALTH_DAMAGE</c>/<c>ARMOR_DAMAGE</c> through the decoded
+    /// take-hit flow: the named zone armor-first, a dead or unknown zone redirected to a random
+    /// surviving one, the leftover draining the whole pair directly. Returns the zone actually
+    /// struck (null when zone-less) — test <see cref="IsDestroyed"/> regardless. To pre-set a zone
+    /// without draining the whole pool (test scaffolding), spend exact amounts: strip its armor,
+    /// then a bare-zone health spend — an overkill call still kills.</summary>
     public PartState? Apply(string partName, float healthDamage, float armorDamage)
     {
         if (healthDamage <= 0f && armorDamage <= 0f)
@@ -162,11 +156,11 @@ public sealed class PlaneDamage
         return hurt.Count == 0 ? whole : whole + " · " + string.Join(" · ", hurt.Select(PoolText));
     }
 
-    /// <summary>FUN_004b7f80 verbatim: armor spends first and its covered share shields health
-    /// 1:1; the leftovers are written back into the damage pair. Quirks kept on purpose: armor
-    /// standing against a hit with NO armor damage nulls the health damage outright, and the
-    /// health leftover is measured against the full magnitude, so the armor-shielded share
-    /// re-enters the wrapper loop rather than vanishing.</summary>
+    // FUN_004b7f80 verbatim: armor spends first and its covered share shields health
+    // 1:1; the leftovers are written back into the damage pair. Quirks kept on purpose: armor
+    // standing against a hit with NO armor damage nulls the health damage outright, and the
+    // health leftover is measured against the full magnitude, so the armor-shielded share
+    // re-enters the wrapper loop rather than vanishing.
     private static void Spend(ref float dmgA, ref float dmgH, ref float poolA, ref float poolH)
     {
         float covered = 0f;
@@ -212,9 +206,9 @@ public sealed class PlaneDamage
         return text;
     }
 
-    /// <summary>FUN_004b3950 + FUN_004b3b60: the named zone while its health lasts; otherwise a
-    /// uniform pick among the first up-to-3 surviving zones in def order; null only when none
-    /// survives (or the vehicle has no parts).</summary>
+    // FUN_004b3950 + FUN_004b3b60: the named zone while its health lasts; otherwise a
+    // uniform pick among the first up-to-3 surviving zones in def order; null only when none
+    // survives (or the vehicle has no parts).
     private PartState? ResolveStruckPart(string partName)
     {
         if (_parts.TryGetValue(partName, out var named) && named.Hp > 0f)
@@ -232,10 +226,10 @@ public sealed class PlaneDamage
         return live.Count == 0 ? null : live[(int)(NextRand() % (uint)live.Count)];
     }
 
-    /// <summary>FUN_004b3bf0's tail: after a part spend, whole current = parts' fraction of
-    /// their summed maxima × whole maxima, both pools. ⚠ The decoded quirk, reproduced on
-    /// purpose: this OVERWRITES any earlier zone-less overflow dent, partially healing the
-    /// whole pair back onto the parts' fraction. The engine's own arithmetic does this.</summary>
+    // FUN_004b3bf0's tail: after a part spend, whole current = parts' fraction of
+    // their summed maxima × whole maxima, both pools. ⚠ The decoded quirk, reproduced on
+    // purpose: this OVERWRITES any earlier zone-less overflow dent, partially healing the
+    // whole pair back onto the parts' fraction. The engine's own arithmetic does this.
     private void RecomputeWhole()
     {
         float hpCur = 0f, hpMax = 0f, armorCur = 0f, armorMax = 0f;

@@ -4,28 +4,13 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>Plays one maneuver's timed step program as a sequence of <see cref="FlightInput"/>
-/// values — the maneuver counterpart of <c>FlightController.NextHoldInput</c>'s scripted
-/// segments, shaped like <see cref="AiPilot"/> so wave D's state machine consumes it the same
-/// way (<c>Next(model, dt)</c> each sim step until <see cref="Done"/>).
-///
-/// <para><b>Step values are target attitudes in degrees, not stick deflections or rates</b>
-/// (docs/formats/ai-rosters.md): magnitudes run to 180, the loop/immelman/split_s sequences are
-/// the Euler waypoints of those maneuvers, and a rate reading would make every zero-duration
-/// step a no-op. Targets compose onto the entry frame — the level entry-heading frame normally,
-/// the full entry attitude for a <c>relative</c> maneuver — as yaw·pitch·roll. A positive-yaw
-/// step turns LEFT here (matching <see cref="FlightInput"/>'s sign); whether the original
-/// mirrors a maneuver left/right at selection time is D11's question, not this class's.</para>
-///
-/// <para>A step with a positive duration is held for that many sim seconds; a zero-duration
-/// step advances when the attitude is within <see cref="StepToleranceDeg"/> — or after
-/// <see cref="ZeroDurationTimeoutS"/>, an invented safety net so a target the placeholder
-/// control law cannot reach (near-vertical Euler poles) skips instead of wedging the program.
-/// The tracking law itself (proportional body-frame attitude error with rate damping) is a
-/// placeholder in <see cref="AiPilot"/>'s style, not original behaviour.</para>
-///
-/// <para>Pure over the model state and its own fields — no clocks, no node reads, no
-/// randomness — so a fixed-dt run is deterministic (<c>ManeuverExecutorTests</c>).</para></summary>
+/// <summary>Plays one library maneuver's timed step program as <see cref="FlightInput"/> values,
+/// <c>Next(model, dt)</c> each sim step until <see cref="Done"/>, consumed the way
+/// <see cref="AiPilot"/> is (docs/architecture.md). Steps are TARGET ATTITUDES in degrees, not
+/// stick deflections or rates, composed onto the entry frame. A positive-duration step is held
+/// for its time; a zero-duration step advances once the attitude is captured, or after
+/// <see cref="ZeroDurationTimeoutS"/>. The tracking law is placeholder/invented, same status as
+/// <see cref="AiPilot"/>'s.</summary>
 public sealed class ManeuverExecutor
 {
     /// <summary>"Attitude reached" for a zero-duration step, degrees of total rotation error.</summary>
@@ -108,8 +93,8 @@ public sealed class ManeuverExecutor
         };
     }
 
-    /// <summary>The rotation from the current attitude to the target as a body-frame
-    /// axis·angle vector (radians), whose components line up with the stick axes.</summary>
+    // The rotation from the current attitude to the target as a body-frame
+    // axis·angle vector (radians), whose components line up with the stick axes.
     private static Vector3 BodyFrameError(Basis attitude, Basis target)
     {
         var q = (attitude.Orthonormalized().Inverse() * target).GetRotationQuaternion();
@@ -121,8 +106,10 @@ public sealed class ManeuverExecutor
         return len < 1e-6f ? Vector3.Zero : axis * (angle / len);
     }
 
-    /// <summary>The step's target attitude in the world frame: entry frame · yaw · pitch · roll
-    /// (degrees; body axes — pitch +up about X, yaw +left about Y, roll +left about Z).</summary>
+    // The step's target attitude in the world frame: entry frame · yaw · pitch · roll
+    // (degrees; body axes — pitch +up about X, yaw +left about Y, roll +left about Z).
+    // ⚠ Whether the original mirrors a maneuver left/right at selection time is undecided —
+    // do not bake a side in here.
     private Basis TargetBasis(ManeuverStep step) =>
         _reference
         * new Basis(Vector3.Up, Mathf.DegToRad(step.YawDeg))

@@ -30,6 +30,11 @@ and leave gaps when retiring old ones.
 - **METHOD-21** — **A scenario entered at a speed it cannot hold is not a measurement at that speed.** The original's 143 mph knife-edge take, replayed at full throttle, accelerates past 290 mph inside three seconds and reports the 300 mph take's numbers under the 143 mph label — the instrument manufactures its own operating point. `Probes.KnifeEdge` bisects a level-flight trim throttle for the entry speed instead; hold the *condition* the capture was flown in, not just its initial value.
 - **METHOD-22** — **Re-measure a fitted constant ALONE once the mechanisms it was fitted on top of have been replaced — it may now push the wrong way.** `ClimbGravityScale = 0.6` was fitted to make a climb hold speed, on drag and thrust shapes that `B12`/`B13` later replaced. Removing it *by itself*, with nothing else changed, moved the sustained climb from 276.7 to 257.7 mph **toward** the original's 163.1: by then it was making the manoeuvre it existed for worse. A constant that survives a rewrite because it was never re-tested is indistinguishable from one that is still doing its job, and only its own single-variable ablation separates them.
 - **METHOD-23** — **"Unreachable" is a measurement, not an inference from the constants around it.** The original's G limiter starts where the lift clamp ends (9 G against a ±5/9 clamp), so the structural argument proves only that the reduction is zero *at the boundary* — it says nothing about the margin. Flying it says: peak demand is 2.13–5.01 G across the eleven airframes, and the Bloodhawk's 5.01 sits 0.2 % **past** the executable's own fallback threshold of 5. Two constants that look far apart can be one hundredth of a unit apart in the quantity that matters, so pin the margin with an instrument and assert it against the loaded value, never against the literal (`ControlLimiterTests`).
+- **METHOD-24** — **Fit a trend and a periodic signal simultaneously; never detrend first and fit
+  the residual.** A sliding high-pass filter has real gain at the signal's own frequency: on the
+  cadence-sweep data it moved the 930 ms amplitude by 45% as the filter's span changed. A
+  polynomial and a sinusoid fitted together, inside a window of at least eight periods, leaves a
+  cubic almost nothing of the fundamental to absorb (`ZzCadenceSweep`).
 
 ## DIAG — chasing a symptom
 
@@ -59,6 +64,9 @@ and leave gaps when retiring old ones.
   ~1,035 death calls sat in the unparsed `unknown_seq` block for the project's whole life while the
   direct-Start `stop-sequence` suite and two cockpit passes all read the absence as a working stop
   (`BL-276`).
+- **DIAG-21** — **A puffer's particle spread is unseeded RNG, not the pinned run seed.** Two
+  captures at the same step can differ in particle placement alone; do not read that difference as
+  a behaviour change (the anim lab's own determinism boundary).
 
 ## SHOT — screenshots and pixel evidence
 
@@ -176,6 +184,12 @@ and leave gaps when retiring old ones.
   `git diff` before believing a golden PASS**, and when you need genuine before-images, reproduce
   HEAD's own hashes from a temporarily neutralised build and check they match the committed ones
   digit for digit — a before-image that does not reproduce HEAD's hash is not a before-image.
+- **GOLD-10** — **Hash the raw pixel buffer, never the saved PNG.** Encoded bytes differ between
+  two byte-identical images — all 881 of C1's texture PNGs do — so a PNG hash reports encoder
+  state, not pixels.
+- **GOLD-11** — **Do not move where a `Puffer` is constructed, or construct one on a capture
+  path outside its normal init.** Each emitter draws one RNG seed off `Rng.Puffer` at
+  construction, so construction order alone re-pins every puffer-bearing golden.
 - **GOLD-7** — **A golden shot that exits nonzero with no PNG is retried once, with evidence kept
   either way.** `RunTests.ps1`'s `goldens` stage reuses `.scratch\goldens\` every run, so a silent
   exit-1 (`BL-039`: a `c1-flight` shot once built its world, rendered a frame, then died with no
@@ -215,6 +229,11 @@ and leave gaps when retiring old ones.
   which that same 10–15° of apparent motion under a moving camera fits at least as well. One piece,
   near edge-on, is one axis of one sample.
 
+- **DET-13** — **A per-instance draw sequence off a dedicated `Rng` stream pins its field's whole
+  layout to the master seed.** Measured on the same `--det` pose across two runs: `Precipitation`'s
+  `Rng.Precip` draw took C2B rain from 5.44% of pixels differing to 0.00%, C4 snow from 25.84% to
+  0.00%.
+
 ## PERF — performance
 
 - **PERF-1** — **Do not interpret `script_ms` as literal frame cost.**
@@ -247,6 +266,17 @@ and leave gaps when retiring old ones.
   (PERF-12) is a live, scriptable event that does trip it — measured: `--crash=300` under
   `--no-vsync` produced two real sidecar records, `part_detach` 48.4 ms and `effect_pool_miss`
   62.1 ms, both ~500 ms clear of the 2000 ms grace.
+- **PERF-15** — **A flat-leaf sampler's "negligible" cost only holds outside per-particle loops; a
+  scope placed inside one becomes the thing it measures.** `PerfSample`'s open+close costs ~60 ns
+  (three runs, ~59–63 ns, zero allocation) — a third of a microsecond for six coarse scopes a
+  frame, but the same 60 ns times a few thousand particle draws rivals the frame budget it exists
+  to explain.
+- **PERF-16** — **`StartupProfile`'s `boot` figure is engine start → build start, so on a
+  launchscreen-driven rebuild it also holds however long the menu sat idle** — do not read it as
+  pure engine overhead on a relaunch.
+- **PERF-17** — **`StartupProfile`'s `rest` term is `build − Σ(phases)`, real uninstrumented work
+  — on a probe run it also holds whatever the probe itself did before the build closed, not only
+  build overhead.**
 
 ## LOG — logs, error censuses, and exit codes
 
@@ -299,6 +329,14 @@ and leave gaps when retiring old ones.
 - **SHELL-10** — **Launch scripted Godot probes through `RunProbe.ps1`.**
 - **SHELL-11** — **Assert exit codes, counts, and hashes are non-empty.**
 - **SHELL-12** — **Give every scripted probe an exit condition, and check the flag you chose actually is one.** `--frames=N` is `ScreenshotFrames` (`SessionSpec.cs:586`) — a warm-up counter that terminates the run only alongside `--screenshot`. Passed on its own it reads as valid, changes nothing, and the probe runs until killed: one `--debug-anim` run left this way spent six hours writing a 45 MB log.
+- **SHELL-13** — **A scripted run must not steal desktop focus.** The window is created with
+  `no_focus` in project.godot; setting `WindowSetFlag` at runtime after the fact does not hand
+  focus back, so an interactive session must request focus explicitly instead
+  (`Launcher._Ready`).
+- **SHELL-14** — **Test window-focus handling by alt-tabbing, not minimising.** Minimising a
+  Godot window delivers only the mouse enter/exit pair, never a focus notification; on Windows
+  11 / Godot 4.7 a real focus change delivers `APPLICATION_FOCUS_OUT`/`_IN`, not the
+  `WM_WINDOW_FOCUS_*` pair.
 
 ## INSTR — building instruments
 
@@ -348,6 +386,9 @@ and leave gaps when retiring old ones.
   result looking straight up is a fact about billboard orientation, not proof the field is absent
   below that altitude — a compound-thing narrowness in INSTR-11's shape (the A3 probe it corrects).
 
+- **INSTR-15** — **Report a collider-swap census by direction, never as a signed sum.** A death both
+  disables the healthy collider and enables wreck colliders, so a net count can read positive while
+  the real removal happened — count OFF and ON separately (see `Probes.EnabledColliders`).
 - **INSTR-14** — **Every automated check here runs on a PARENT-DRIVEN clock, so a consumer stepped
   only from `GameSession.DriveSimSteps` is invisible to all of them.** `--det` — implied by
   `--run-tests`, `--screenshot=` and every other flag that drives a session by itself — makes
@@ -356,6 +397,17 @@ and leave gaps when retiring old ones.
   stepped only there, so waves 2 to 4 could never arrive at the controls, while its suite and its
   scripted probes were both green. A per-step consumer belongs in one
   method called from both paths, the way the match clock already was.
+
+- **INSTR-16** — **A capture taken on the very first rendered frame can beat the first per-frame
+  publish.** `EffectAmbience`'s camera pose is written once per frame by `WeatherRig.Tick`; an
+  emitter that draws before that call sees `HasCamera` still false and renders one frame unfaded —
+  not evidence the distance fade is broken.
+- **INSTR-17** — **A high per-site violation count on a dominant `PerfSample` site is not proof the
+  instrument is broken — cross-site nesting is routine.** A death's event dispatch legitimately
+  reaches the effect and audio sites, and a pool miss always reaches its own material-create site,
+  so the outer site's record absorbs the inner ones' cost by construction. Read a high
+  `sample_violations` on a dominant site as "more happened here than the named sites show," not as
+  a defect to chase.
 
 ## SRC — sources and documents
 

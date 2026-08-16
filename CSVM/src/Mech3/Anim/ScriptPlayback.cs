@@ -5,25 +5,15 @@ namespace CSVM.Mech3.Anim;
 
 /// <summary>Plays a compiled SI script onto a node: per-frame cubics for translation and
 /// the half-angle quaternion composition for rotation (docs/formats/anim-definitions.md).
-/// Loops when the owning sequence loops — the runner restarts it.
-///
-/// <para>Rotation, translation and scale are held as three SEPARATE running components
-/// seeded from the node's authored rest pose, not read back out of the live transform.
-/// Both halves of that matter. Reading the live basis made this the one transform writer
-/// that could compound: a frame carrying <c>scale</c> but no <c>rotate</c> multiplied its
-/// factor into an already-scaled basis every single frame, and a looping sequence
-/// re-registering the playback re-entered at the blown-up pose (207 such frames across 12
-/// scripts, all of them the C1 zeppelins). Keeping the components apart is what makes
-/// `Seek(t)` a pure function of `t` rather than of call history. But they must be
-/// components rather than one rest transform, because an ABSENT channel means "hold the
-/// last value this script wrote", not "return to rest": C1/M04's `piratezep` sets its
-/// orientation once in frame 0 and then ships 47 translate-only frames that must keep
-/// it.</para></summary>
+/// Loops when the owning sequence loops — the runner restarts it.</summary>
 internal sealed class ScriptPlayback : IAnimMotion
 {
     private readonly SiScript _script;
 
-    private Basis _rot;      // orthonormal; the scale is kept out of it on purpose
+    // Rotation, translation and scale, held as three separate running components seeded from
+    // rest rather than read back from the live transform, so a scale-only frame cannot
+    // compound into an already-scaled basis. See Seek for why they stay apart.
+    private Basis _rot;
 
     private Vector3 _scale;
 
@@ -50,6 +40,8 @@ internal sealed class ScriptPlayback : IAnimMotion
 
     public void Tick(float dt) => Seek(_t + dt);
 
+    // ⚠ Do not collapse the three components into one rest transform. An absent channel means
+    // hold the last value this script wrote, not return to rest.
     public void Seek(float t)
     {
         _t = t;

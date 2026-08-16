@@ -131,7 +131,7 @@ public class AiNetFollowerTests
         };
         var f = new AiNetFollower(net, new Random(1));
         // Tags are exposed raw and acted on by nothing (stop-point vs segment id is still open,
-        // F17 owns resolving it). The trailer IS decoded (BL-377), but riding it is the caller's
+        // F17 owns resolving it). The trailer IS decoded, but riding it is the caller's
         // opt-in: no supplier, no offset.
         Assert.Equal(new[] { 3f, 1f }, f.Net.Nodes[0].Tags);
         Assert.Equal(new AiNetTrailer(1, "piratezep"), f.Net.Trailer);
@@ -143,7 +143,7 @@ public class AiNetFollowerTests
     [Fact]
     public void AnAnchoredNetRidesItsTargetAndKeepsItsAuthoredAltitude()
     {
-        // BL-377: out = (node − anchor) + target in X/Z, node.y untouched. The target sits at
+        // out = (node − anchor) + target in X/Z, node.y untouched. The target sits at
         // 50 m; the ring stays at its authored 400 m.
         var target = new Vector3(5000f, 50f, -2000f);
         var f = new AiNetFollower(Anchored(), new Random(1), trailerTarget: () => target);
@@ -236,8 +236,8 @@ public class AiNetFollowerTests
 
     private static AiNetNode Node(float x, float z) => new(new Vector3(x, 400f, z), Array.Empty<float>());
 
-    /// <summary>A 4-node square loop, 0-1-2-3-0. Edge (0,3) closes it, so a directed reading
-    /// would dead-end; the undirected walk is what carries the lap.</summary>
+    // A 4-node square loop, 0-1-2-3-0. Edge (0,3) closes it, so a directed reading
+    // would dead-end; the undirected walk is what carries the lap.
     private static AiNet Loop() => new()
     {
         Id = 7,
@@ -246,7 +246,7 @@ public class AiNetFollowerTests
         Edges = new[] { (0, 1), (1, 2), (2, 3), (0, 3) },
     };
 
-    /// <summary>An open 3-node path 0-1-2, with no loop to hide a backtracking bug in.</summary>
+    // An open 3-node path 0-1-2, with no loop to hide a backtracking bug in.
     private static AiNet Path() => new()
     {
         Id = 8,
@@ -255,9 +255,9 @@ public class AiNetFollowerTests
         Edges = new[] { (0, 1), (1, 2) },
     };
 
-    /// <summary>C1's <c>M4ReinfAce</c> in miniature: a square ring 0-1-2-3-0 plus an EDGELESS
-    /// anchor node parked off it, and a <c>[4, "player"]</c> trailer. That is the shipped shape of
-    /// all 76 anchored nets: the anchor is the last node and carries no edge.</summary>
+    // C1's `M4ReinfAce` in miniature: a square ring 0-1-2-3-0 plus an EDGELESS
+    // anchor node parked off it, and a `[4, "player"]` trailer. That is the shipped shape of
+    // all 76 anchored nets: the anchor is the last node and carries no edge.
     private static AiNet Anchored() => new()
     {
         Id = 10,
@@ -270,7 +270,7 @@ public class AiNetFollowerTests
         Trailer = new AiNetTrailer(4, "player"),
     };
 
-    /// <summary>A hub with three spokes: node 0 connects to 1, 2 and 3 (the branch case).</summary>
+    // A hub with three spokes: node 0 connects to 1, 2 and 3 (the branch case).
     private static AiNet Star() => new()
     {
         Id = 9,

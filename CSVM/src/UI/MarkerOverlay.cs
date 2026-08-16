@@ -5,29 +5,13 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The <c>--viewer</c> marker overlay (key <b>K</b>): draws every gun firepoint, ordnance pylon
-/// and the aim <c>target</c> on the parked aircraft as a labelled gizmo, so the user can read
-/// which physical mount is which and hand back the airframe gun-group table
-/// (<c>docs/formats/markers.md</c>). Firepoints, pylons and the target draw
-/// in distinct colours; the firepoints that <b>share one mount</b> — two gun groups at the same
-/// coordinate, the Balmoral/Brigand duplicate-coordinate case the user most needs to
-/// disambiguate — draw in a fourth colour and stack their names so both are legible instead of
-/// one hiding behind the other.
-///
-/// <para>Markers come out of the built plane tree, not GameZ: they survive as mesh-less
-/// <see cref="Node3D"/>s carrying the <c>cs_name</c> meta SceneBuilder stamps, so the same
-/// classification (<see cref="MarkerRig.Classify"/>) and co-location grouping
-/// (<see cref="MarkerRig.GroupCoLocated"/>) the <c>--dump-markers</c> tool uses apply here, and
-/// the on-model gizmos agree with the dumped table by construction.</para>
-///
-/// <para><b>Gizmos always show; labels de-clutter.</b> A ¾ view piles ~17 names into a few
-/// hundred pixels, so — as with <see cref="NodeLabels"/> — the labels are thinned nearest-first
-/// by a screen-cell claim, recomputed as the camera orbits, while every gizmo dot stays visible
-/// so no mount position is ever lost. The full named table is always in <c>--dump-markers</c>.</para>
-///
-/// <para>Like the other <c>--viewer</c> labs it builds nothing until first shown, so an
-/// unadorned viewer screenshot is byte-identical; <c>--markers</c> opens it at launch (and keeps
-/// it up for a scripted <c>--screenshot</c> verification run).</para>
+/// The <c>--viewer</c> marker overlay (key K): draws every gun firepoint, ordnance pylon and the
+/// aim <c>target</c> on the parked aircraft as a labelled gizmo, so the user can read which
+/// physical mount is which (<c>docs/formats/markers.md</c>). Firepoints, pylons and the target
+/// draw in distinct colours; firepoints sharing one mount draw in a fourth colour with stacked
+/// names. Splitscreen never applies: <c>--viewer</c> is single-pane by construction.
+/// ⚠ Gizmo dots always show; only the labels de-clutter, so no mount position is ever lost. The
+/// full named table stays in <c>--dump-markers</c>.
 /// </summary>
 public sealed partial class MarkerOverlay : Node3D
 {
@@ -163,8 +147,8 @@ public sealed partial class MarkerOverlay : Node3D
         }
     }
 
-    /// <summary>Built lazily on first show — an untouched viewer session adds no nodes at all, so
-    /// nothing it renders can differ.</summary>
+    // Built lazily on first show — an untouched viewer session adds no nodes at all, so
+    // nothing it renders can differ.
     private void EnsureBuilt()
     {
         if (_holder != null)
@@ -235,11 +219,13 @@ public sealed partial class MarkerOverlay : Node3D
         AddChild(_hudLayer);
     }
 
-    /// <summary>Nearest-first screen-cell de-clutter over the fixed marker set: firepoints claim
-    /// cells before pylons, then within each band the camera-nearest wins. A label loses to
-    /// something more important or closer, exactly like <see cref="NodeLabels"/>.</summary>
+    // Nearest-first screen-cell de-clutter over the fixed marker set: firepoints claim
+    // cells before pylons, then within each band the camera-nearest wins. A label loses to
+    // something more important or closer, exactly like NodeLabels.
     private void Relayout()
     {
+        // The session's only camera: this overlay builds only under --viewer, which forces
+        // --players=1, so a splitscreen session never stands this camera down under it.
         var camera = GetViewport().GetCamera3D();
         if (camera == null)
         {
@@ -281,8 +267,8 @@ public sealed partial class MarkerOverlay : Node3D
         }
     }
 
-    /// <summary>Reserves this label's screen cell, or reports it taken. Checks the 3×3
-    /// neighbourhood so two labels can't sit a pixel apart across a cell boundary.</summary>
+    // Reserves this label's screen cell, or reports it taken. Checks the 3×3
+    // neighbourhood so two labels can't sit a pixel apart across a cell boundary.
     private bool Claim(Vector2 screen)
     {
         int cx = Mathf.FloorToInt(screen.X / GapX), cy = Mathf.FloorToInt(screen.Y / GapY);

@@ -11,22 +11,12 @@ namespace CSVM.UI;
 /// <summary>
 /// The node lab (N) in <c>--freecam</c>/<c>--anim-lab</c>: a dockable panel holding the world's
 /// node tree by <c>cs_name</c>, a search box, per-node actions (frame the camera, hide/show the
-/// subtree) and a dependency readout for whatever <see cref="SelectionService"/> currently has.
-/// A second view lists the chapter's destructibles with coverage columns.
-///
-/// <para><b>The tree is lazy.</b> A chapter world is thousands of nodes, so a branch is populated
-/// only when it is expanded — each expandable row carries one placeholder child that is reused as
-/// its first real child on expand. Nothing is rebuilt per frame; the only per-frame work while the
-/// panel is open is one status line at 4 Hz.</para>
-///
-/// <para><b>The tree reaches what a click cannot.</b> <see cref="SelectionService"/> skips
-/// map-scale meshes, so terrain is unpickable; selecting a row here goes through
-/// <see cref="SelectionService.Select"/>, which has no such limit.</para>
-///
-/// <para><b>A dependency source that this mode does not build says so.</b> Colliders exist only in
-/// the flight build, so an empty collider list here would be the instrument missing rather than the
-/// colliders — the readout prints the fact instead of the empty list. The same applies to a
-/// <c>--node=</c> slice, whose anim bind is deliberately partial.</para>
+/// subtree) and a dependency readout for whatever <see cref="SelectionService"/> currently has. A
+/// second view lists the chapter's destructibles with coverage columns. The tree is lazy: a
+/// branch populates only when expanded. Full behaviour: this module's entry in
+/// docs/architecture.md.
+/// ⚠ A dependency source this mode does not build must say so, never show an empty list: an empty
+/// collider list here is the instrument missing, not missing colliders.
 /// </summary>
 public sealed partial class NodeLab : Node
 {
@@ -346,10 +336,10 @@ public sealed partial class NodeLab : Node
         return node.Visible ? name : name + "  (hidden)";
     }
 
-    /// <summary>The nearest <c>cs_name</c>-bearing descendants of a node — the exact inverse of
-    /// the selection ladder's ancestor walk, so the tree's parent/child relation and the
-    /// breadcrumb's rungs are the same relation. SceneBuilder's unnamed wrappers are stepped
-    /// through, never shown.</summary>
+    // The nearest `cs_name`-bearing descendants of a node — the exact inverse of
+    // the selection ladder's ancestor walk, so the tree's parent/child relation and the
+    // breadcrumb's rungs are the same relation. SceneBuilder's unnamed wrappers are stepped
+    // through, never shown.
     private static void CollectNamed(Node parent, List<Node3D> into)
     {
         foreach (var child in parent.GetChildren())
@@ -628,9 +618,9 @@ public sealed partial class NodeLab : Node
         RefreshTreeVisibility();
     }
 
-    /// <summary>Re-reads live <c>Visible</c> for every bound row on the panel's existing 4 Hz
-    /// status cadence, so a def re-showing a node updates its row without user input — the row
-    /// reflects the node, it never latches what a button last did.</summary>
+    // Re-reads live `Visible` for every bound row on the panel's existing 4 Hz
+    // status cadence, so a def re-showing a node updates its row without user input — the row
+    // reflects the node, it never latches what a button last did.
     private void RefreshTreeVisibility()
     {
         if (_tree == null || _destView)
@@ -715,6 +705,8 @@ public sealed partial class NodeLab : Node
         {
             return;
         }
+        // A direct Select bypasses SelectionService's click-pick size cap, so a row here can reach
+        // an object (terrain) the click ray refuses.
         _syncing = true;
         _selection.Select(node);
         _syncing = false;
@@ -1483,9 +1475,9 @@ public sealed partial class NodeLab : Node
         }
     }
 
-    /// <summary>One destructible definition's row: how many world node groups it actually bound,
-    /// whether its <c>ANIMATION_ROOT_NAME</c> resolves inside each of them, and whether its
-    /// sequences use only event kinds the runtime acts on.</summary>
+    // One destructible definition's row: how many world node groups it actually bound,
+    // whether its `ANIMATION_ROOT_NAME` resolves inside each of them, and whether its
+    // sequences use only event kinds the runtime acts on.
     private sealed class DestRow
     {
         public AnimDefinition Def = null!;

@@ -12,29 +12,15 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The world damage lab (F5) in <c>--freecam</c>/<c>--anim-lab</c>: when
-/// <see cref="SelectionService"/> lands on a destructible, this panel shows that object's live HP
-/// pools with a slider, a Kill and a Reset — the interactive twin of <c>--damage-test</c>, on any
-/// object, in the running world. Elsewhere F5 means the aircraft's
-/// <see cref="Flight.DamageLab"/>; the two never exist in the same session.
-///
-/// <para><b>The unit of control is a pool, not an object.</b> A node can carry several
-/// <c>(def, anchor)</c> pools — the compiler's per-instance definition and a reader wildcard's both
-/// bind the C1 water tower — and each holds its own HP. Only the pool
-/// <see cref="DestructibleRegistry.Resolve"/> names is reachable by weapon fire, so only that one
-/// gets controls; the rest are listed with their live HP and the reason they are inert. Driving a
-/// twin directly would damage a pool nothing can ever hit and read as a working feature.</para>
-///
-/// <para><b>The slider is absolute HP.</b> Lowering it spends the difference through
-/// <see cref="AnimRuntime.DamageAt"/> — the same call a rocket makes, so stages, death, swap,
-/// debris and audio are the real ones. Raising it runs
-/// <see cref="AnimRuntime.ResetDestructible"/> and re-damages down to the new value, because the
-/// data has no healing: <c>DamageStage</c> only ever climbs, and a reset is the object's own
-/// authored way back to healthy.</para>
-///
-/// <para><b>A source this mode does not build says so.</b> Colliders exist only where collision was
-/// built, so a kill's collider census prints the not-built notice rather than a silent zero, and
-/// when it is built the two directions are counted <b>separately</b> — a death switches the healthy
-/// collider off and wreck colliders on, and the net hides the removal.</para>
+/// <see cref="SelectionService"/> lands on a destructible, this panel shows its live HP pools
+/// with a slider, a Kill and a Reset, the interactive twin of <c>--damage-test</c>. Elsewhere F5
+/// means the aircraft's <see cref="Flight.DamageLab"/>; the two never coexist. Only the pool
+/// <see cref="DestructibleRegistry.Resolve"/> names gets controls, since a node can carry several
+/// pools and driving one nothing can ever hit would read as a working feature. Lowering the
+/// slider spends the difference through <see cref="AnimRuntime.DamageAt"/>, the same call a
+/// rocket makes; raising it runs <see cref="AnimRuntime.ResetDestructible"/> and re-damages down,
+/// since the data has no healing. The collider-census caveats live on <c>Kill</c>; the freecam
+/// stage-build trap lives on <see cref="EffectsSource"/>.
 /// </summary>
 public sealed partial class WorldDamageLab : Node
 {
@@ -237,12 +223,8 @@ public sealed partial class WorldDamageLab : Node
         var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
         root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
 
-        // Down the RIGHT edge: the node lab owns the left, and the two are meant to be readable
-        // together (pick a node there, damage it here). Anchored top-right (not RightWide) so the
-        // panel's own height is under our control below rather than stretched to fill the screen —
-        // ResizeToContent sets OffsetBottom to hug whatever the rows need, capped at BottomMargin
-        // above the bottom edge, so a short pool list is a compact block instead of a tall panel
-        // with dead translucent space over the debris line.
+        // Down the right edge; the node lab owns the left. Top-right, not RightWide, so
+        // ResizeToContent can hug the panel's own height instead of stretching it full-screen.
         var panel = new PanelContainer { SelfModulate = new Color(1, 1, 1, 0.88f) };
         panel.AnchorLeft = 1;
         panel.AnchorRight = 1;
@@ -290,17 +272,17 @@ public sealed partial class WorldDamageLab : Node
         RequestResize();
     }
 
-    /// <summary>Queues <see cref="ResizeToContent"/> for after Godot's own container layout pass.
-    /// Container sizing (and therefore any word-wrapped label's real height) is resolved lazily on a
-    /// deferred call the engine queues itself when children change, so measuring synchronously right
-    /// after <c>AddChild</c> reads stale, pre-layout sizes — queuing ours after theirs (both FIFO on
-    /// the same deferred-call queue) is what makes the measurement below correct.</summary>
+    // Queues ResizeToContent for after Godot's own container layout pass.
+    // Container sizing (and therefore any word-wrapped label's real height) is resolved lazily on a
+    // deferred call the engine queues itself when children change, so measuring synchronously right
+    // after `AddChild` reads stale, pre-layout sizes — queuing ours after theirs (both FIFO on
+    // the same deferred-call queue) is what makes the measurement below correct.
     private void RequestResize() => Callable.From(ResizeToContent).CallDeferred();
 
-    /// <summary>Sizes the panel to exactly what the current rows need, capped at the window height
-    /// minus <see cref="BottomMargin"/>: a short pool list shrinks the whole block instead of
-    /// leaving blank panel below it, and a pool list taller than the cap gets a real scrollbar
-    /// rather than being squeezed silently.</summary>
+    // Sizes the panel to exactly what the current rows need, capped at the window height
+    // minus BottomMargin: a short pool list shrinks the whole block instead of
+    // leaving blank panel below it, and a pool list taller than the cap gets a real scrollbar
+    // rather than being squeezed silently.
     private void ResizeToContent()
     {
         if (_panel == null || _box == null || _scroll == null || _rowBox == null || !IsInstanceValid(_panel))
@@ -344,10 +326,10 @@ public sealed partial class WorldDamageLab : Node
         }
     }
 
-    /// <summary>Rebuilds the rows for the current selection: every pool anchored on the selected
-    /// node, plus the one a weapon hit there would actually reach — which can be an enclosing
-    /// node's, since a reader wildcard can grab an inner node the compiled def roots above. The
-    /// reachable pool is listed first and is the only one with controls.</summary>
+    // Rebuilds the rows for the current selection: every pool anchored on the selected
+    // node, plus the one a weapon hit there would actually reach — which can be an enclosing
+    // node's, since a reader wildcard can grab an inner node the compiled def roots above. The
+    // reachable pool is listed first and is the only one with controls.
     private void Rebuild()
     {
         _rows.Clear();
@@ -509,9 +491,9 @@ public sealed partial class WorldDamageLab : Node
 
     // ---- driving ----------------------------------------------------------------------------
 
-    /// <summary>Takes a pool to an absolute HP. Down spends the difference through the weapon-hit
-    /// path; up resets the object and re-damages to the new value, since the model has no healing
-    /// (the stage counter only climbs, and RESET_STATE is the authored way back).</summary>
+    // Takes a pool to an absolute HP. Down spends the difference through the weapon-hit
+    // path; up resets the object and re-damages to the new value, since the model has no healing
+    // (the stage counter only climbs, and RESET_STATE is the authored way back).
     private void DriveTo(PoolRow row, float targetHp, string via)
     {
         if (_runtime == null || !row.Drivable)
@@ -548,10 +530,10 @@ public sealed partial class WorldDamageLab : Node
         UpdateReadouts();
     }
 
-    /// <summary>Kills a pool outright through the weapon-hit path — one hit spending more than the
-    /// whole pool — and reports the immediate consequences: the healthy→destroyed swap and the
-    /// collider census. Both are read <b>before</b> any clock advance, because they are what the
-    /// death does synchronously; the debris is scheduled and belongs to <see cref="Tick"/>.</summary>
+    // Kills a pool outright through the weapon-hit path — one hit spending more than the
+    // whole pool — and reports the immediate consequences: the healthy→destroyed swap and the
+    // collider census. Both are read before any clock advance, because they are what the
+    // death does synchronously; the debris is scheduled and belongs to Tick.
     private void Kill(PoolRow row, string via)
     {
         if (_runtime == null || !row.Drivable)
@@ -605,7 +587,7 @@ public sealed partial class WorldDamageLab : Node
         Log.Info("ui", $"damagelab kill debris={_runtime.BallisticMotionsLaunched - debrisBefore} sounds={_runtime.OneShotSoundsPlayed - soundsBefore} (immediate, pre-tick — the death's debris motion is SCHEDULED seconds in)");
     }
 
-    /// <summary>Returns a pool to healthy through the definition's own RESET_STATE.</summary>
+    // Returns a pool to healthy through the definition's own RESET_STATE.
     private void Reset(PoolRow row, string via)
     {
         if (_runtime == null || !row.Drivable)
@@ -619,10 +601,10 @@ public sealed partial class WorldDamageLab : Node
         UpdateReadouts();
     }
 
-    /// <summary>Fast-forwards the world runtime past a scheduled effect and reports what launched
-    /// in that window. Interactively the world clock already runs, so this exists for scripted
-    /// runs, which do their whole script inside one frame and would otherwise read t=0 and conclude
-    /// the debris was never implemented.</summary>
+    // Fast-forwards the world runtime past a scheduled effect and reports what launched
+    // in that window. Interactively the world clock already runs, so this exists for scripted
+    // runs, which do their whole script inside one frame and would otherwise read t=0 and conclude
+    // the debris was never implemented.
     private void Tick(float seconds)
     {
         if (_runtime == null)

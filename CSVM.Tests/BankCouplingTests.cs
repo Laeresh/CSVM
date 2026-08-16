@@ -79,10 +79,8 @@ public class BankCouplingTests
         var rates = OneStepFrom(BankedLeft(180f));
         float decay = Mathf.Exp(-Dt * stats.AngMomentumDamp);
 
-        // Wings-level inverted: the bank term is identically zero (the wings are horizontal again),
-        // yet the aircraft is still pulled — by the 0.205 constant, on the PITCH axis. An
-        // implementation that read "an extra contribution when inverted" as more of the 0.165 term,
-        // or as a yaw contribution, reads 0.165 here or leaves a yaw rate behind.
+        // Wings-level inverted, the bank term is zero, but the inverted pull is the same 0.205
+        // constant applied to the pitch axis, not a yaw contribution; see docs/org/flightModel.md.
         Assert.True(Mathf.Abs(rates.Y) < 1e-6f,
             $"inverted and wings level, nothing couples into yaw (got {rates.Y:0.000000})");
         Assert.True(Mathf.IsEqualApprox(rates.X, YawCoef * stats.RecInertia.X * Dt * decay, 1e-6f),
@@ -113,8 +111,8 @@ public class BankCouplingTests
             + $"{invertedExtra:0.000000}");
     }
 
-    /// <summary>The Bloodhawk's real dynamics — the coupling is scaled by <c>rec_moments_inertia</c>,
-    /// so the placeholder defaults would hide a wrong axis behind near-equal components.</summary>
+    // The Bloodhawk's real dynamics — the coupling is scaled by `rec_moments_inertia`,
+    // so the placeholder defaults would hide a wrong axis behind near-equal components.
     private static PlaneStats Bhawk() => new()
     {
         PitchTorque = 3.3f,
@@ -129,8 +127,8 @@ public class BankCouplingTests
         DragFactor = 0.37f,
     };
 
-    /// <summary>Bank about the nose, positive = LEFT (right wing up), matching
-    /// <see cref="FlightInput.Roll"/>'s sign.</summary>
+    // Bank about the nose, positive = LEFT (right wing up), matching
+    // FlightInput.Roll's sign.
     private static Basis BankedLeft(float deg) =>
         Basis.Identity.Rotated(Vector3.Back, Mathf.DegToRad(deg));
 

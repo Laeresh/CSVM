@@ -2,27 +2,11 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>
-/// Free-flying observation camera (`--freecam`). Drives the
-/// session camera directly with no aircraft in the world: the point is to park in front of
-/// a moving train or a hangar door and watch it, without scripting a flight past it.
-///
-/// Controls — keyboard: WASD/arrows move, Q/E (or Z/U) down/up, hold Shift for ×6 and
-/// Ctrl for ÷6, mouse wheel sets the base speed, hold the RIGHT mouse button to look
-/// (the mouse is captured only while held, so the window stays usable). Arrow-free look
-/// fallback: IJKL. Gamepad: left stick moves, right stick looks, LB/RB descend/climb,
-/// left trigger slows, right trigger boosts.
-///
-/// Deliberately has NO collision — flying through terrain to get a vantage point is the
-/// feature. Pitch is clamped just short of vertical and roll is never applied, so the
-/// horizon stays level and the view cannot tumble into an unrecoverable attitude.
-///
-/// Every non-splitscreen call site (`--freecam`, the anim lab, the weapon lab) takes the
-/// default device filter — every connected pad plus the keyboard, unchanged from before E44.
-/// A splitscreen instant-action spectator (`BL-375`) is constructed with its downed
-/// pilot's own `PadDevices`/`UseKeyboard`, so two seats watching at once move independently;
-/// mouse look has no such split (one physical mouse) and stays shared.
-/// </summary>
+/// <summary>Free-flying observation camera (`--freecam`, docs/architecture.md). Drives the session
+/// camera directly with no aircraft in the world: WASD/arrows move, Q/E (or Z/U) down/up, RMB-held
+/// mouse look, wheel sets speed; gamepad mirrors it. Deliberately has NO collision, and pitch is
+/// clamped short of vertical with roll never applied, so the view cannot tumble into an
+/// unrecoverable attitude.</summary>
 public sealed partial class SpectatorCamera : Node
 {
     /// <summary>Base movement speed in m/s, before the boost/slow modifiers. TUNE.</summary>
@@ -44,7 +28,7 @@ public sealed partial class SpectatorCamera : Node
     private const float OrbitPitchLimit = 1.396f; // ~80°
 
     private readonly Camera3D _camera;
-    // The device filter (`BL-375`): null/true (the default) reads every connected pad plus
+    // The device filter: null/true (the default) reads every connected pad plus
     // the keyboard, matching every pre-E44 call site (--freecam, the anim lab, the weapon lab —
     // all single-seat). A downed splitscreen pilot's spectator gets its rig's own PadDevices/
     // UseKeyboard instead, so two pilots watching at once no longer move together.
@@ -66,10 +50,8 @@ public sealed partial class SpectatorCamera : Node
         _useKeyboard = useKeyboard;
         _camera.Position = position;
         var to = lookAt - position;
-        // Derive the starting yaw/pitch from the requested look direction so --pos/--direction
-        // (and the mission spawn default) frame exactly what they asked for. Only the DIRECTION
-        // survives — the distance to the point is discarded, which is why the host may hand this
-        // camera either a --lookat point or a --direction projected one unit ahead.
+        // Only the direction survives, not the distance — a --lookat point or a --direction
+        // projected one unit ahead both frame the same way.
         if (to.LengthSquared() > 1e-6f)
         {
             _yaw = Mathf.Atan2(-to.X, -to.Z);
@@ -329,12 +311,8 @@ public sealed partial class SpectatorCamera : Node
         // Forward is the camera's -Z (the project's convention everywhere); strafe its +X.
         var move = basis.Z * -(kb * (Axis(Key.S, Key.W) + Axis(Key.Down, Key.Up)) - PadAxis(JoyAxis.LeftY))
                  + basis.X * (kb * (Axis(Key.A, Key.D) + Axis(Key.Left, Key.Right)) + PadAxis(JoyAxis.LeftX));
-        // Vertical stays WORLD up regardless of where the camera looks — climbing while
-        // pitched down is what you want when repositioning over a target. Q/E is the documented
-        // pair; Z/U is the alternate — neither collides with another raw-polled toggle (C is the
-        // collider overlay, X the class overlay) nor with the gun trigger (Space — binding
-        // vertical to Space would nudge the camera up on every shot in the weapon lab's free
-        // camera).
+        // Vertical stays WORLD up regardless of camera pitch. Q/E and Z/U are chosen to avoid the
+        // other raw-polled toggles and the gun trigger.
         move += Vector3.Up * (kb * (Axis(Key.Q, Key.E) + Axis(Key.Z, Key.U)) + PadButtonAxis());
         if (move.LengthSquared() < 1e-8f)
             return;

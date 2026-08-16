@@ -6,21 +6,15 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The static viewer's livery lab (<c>--viewer</c>): an interactive editor for
-/// one aircraft's <see cref="PaintScheme"/> — pattern, the three paint colours as RGB
-/// sliders, and the three decal slots — repainting the parked plane live.
-///
-/// It exists because the paint region table is hand-authored rather than extracted (see
-/// <c>docs/formats/paint.md</c>): checking a colour against the original means seeing it on
-/// the model, and dialling one in through <c>--paint-color=</c> restarts the viewer for every
-/// guess. Every edit calls <see cref="PlaneBuilder.Repaint"/>, which re-resolves the built
-/// materials in place — a few ms for an aircraft's ~8 small skins, so slider drags stay
-/// interactive where a full model rebuild would not.
-///
-/// "copy CLI args" writes the current livery to the clipboard as the exact
-/// <c>--paint…</c> arguments that reproduce it, which is how a livery found here becomes a
-/// scripted screenshot. L toggles the panel (DamageLab owns H), so the two labs can be open
-/// together and either can be hidden for a clean F12 shot.
+/// The static viewer's livery lab (<c>--viewer</c>, key L): an interactive editor for one
+/// aircraft's <see cref="PaintScheme"/>, pattern, the three paint colours as RGB sliders, and
+/// the three decal slots, repainting the parked plane live. Exists because the paint region
+/// table is hand-authored rather than extracted (<c>docs/formats/paint.md</c>): checking a
+/// colour against the original means seeing it on the model. "copy CLI args" writes the exact
+/// <c>--paint…</c> arguments that reproduce the current livery. Full behaviour: this module's
+/// entry in docs/architecture.md.
+/// ⚠ Every edit funnels through <see cref="Apply"/> as the single write path; do not repaint any
+/// other way.
 /// </summary>
 public sealed partial class LiveryLab : Node
 {
@@ -74,10 +68,7 @@ public sealed partial class LiveryLab : Node
     {
         BuildUi();
         // The lab is the single owner of the livery in --viewer: GameSession builds the model
-        // bare and the initial scheme is applied HERE, through the same Repaint every slider
-        // uses. So `--viewer --paint=X --screenshot` exercises the repaint path end to end —
-        // if Repaint broke, that shot would show an unpainted plane. An unpainted viewer
-        // (Repaint(null)) hands back the archive's own textures, so it stays byte-identical.
+        // bare, and the initial scheme applies here through the same Repaint every slider uses.
         Apply();
 
         if (DebugPatternSteps != 0)
@@ -118,8 +109,8 @@ public sealed partial class LiveryLab : Node
         return label;
     }
 
-    /// <summary>Position of a scheme's pattern in this aircraft's pattern list. Matches on
-    /// either spelling — vehicle.json says `player_fortune`, the archive folder is `FORTUNE`.</summary>
+    // Position of a scheme's pattern in this aircraft's pattern list. Matches on
+    // either spelling — vehicle.json says `player_fortune`, the archive folder is `FORTUNE`.
     private int IndexOfPattern(PaintScheme scheme)
     {
         for (int i = 0; i < _patterns.Count; i++)
@@ -129,8 +120,8 @@ public sealed partial class LiveryLab : Node
         return -1;
     }
 
-    /// <summary>The catalog's canonical colours for a pattern folder name, or null when
-    /// vehicle.json names no such pattern (BROADWAY and ITSTAXI ship masks but no def).</summary>
+    // The catalog's canonical colours for a pattern folder name, or null when
+    // vehicle.json names no such pattern (BROADWAY and ITSTAXI ship masks but no def).
     private PaintScheme? CatalogFor(string folder)
     {
         foreach (var s in _catalog)
@@ -141,12 +132,12 @@ public sealed partial class LiveryLab : Node
 
     // ---- edits -------------------------------------------------------------------------
 
-    /// <summary>Steps to the next/previous pattern this aircraft carries and puts on that
-    /// squadron's whole livery — colours and decals, not just the mask layout. Switching
-    /// squadron means switching to their colours; stepping the Bloodhawk's three gives you
-    /// Fortune Hunters red, Blake blue-gray and Hughes yellow, each with its own logos.
-    /// A pattern vehicle.json names no colours for (BROADWAY, ITSTAXI) keeps the current
-    /// ones, since there is nothing canonical to load.</summary>
+    // Steps to the next/previous pattern this aircraft carries and puts on that
+    // squadron's whole livery — colours and decals, not just the mask layout. Switching
+    // squadron means switching to their colours; stepping the Bloodhawk's three gives you
+    // Fortune Hunters red, Blake blue-gray and Hughes yellow, each with its own logos.
+    // A pattern vehicle.json names no colours for (BROADWAY, ITSTAXI) keeps the current
+    // ones, since there is nothing canonical to load.
     private void SelectPattern(int delta)
     {
         if (_patterns.Count == 0)
@@ -155,9 +146,9 @@ public sealed partial class LiveryLab : Node
         LoadSquadronLivery();
     }
 
-    /// <summary>(Re)loads the current pattern's shipped squadron colours and decals — the
-    /// livery as the game's own defs define it. Also the panel's "squadron colours" button,
-    /// which is how you get back to canonical after dragging the RGB sliders.</summary>
+    // (Re)loads the current pattern's shipped squadron colours and decals — the
+    // livery as the game's own defs define it. Also the panel's "squadron colours" button,
+    // which is how you get back to canonical after dragging the RGB sliders.
     private void LoadSquadronLivery()
     {
         if (_patternIndex < 0 || _patternIndex >= _patterns.Count)
@@ -228,7 +219,7 @@ public sealed partial class LiveryLab : Node
         Apply();
     }
 
-    /// <summary>Repaints the model and refreshes the panel. The single write path.</summary>
+    // Repaints the model and refreshes the panel. The single write path.
     private void Apply()
     {
         _builder.Repaint(_scheme);
@@ -266,9 +257,9 @@ public sealed partial class LiveryLab : Node
         return name != null ? $"{index:00}  {name}" : $"{index:00}  (absent)";
     }
 
-    /// <summary>The exact CLI arguments that reproduce the current livery — the lab's output.
-    /// A pattern is emitted only when the colours and decals still match it verbatim;
-    /// otherwise the explicit colour/decal overrides carry the whole scheme.</summary>
+    // The exact CLI arguments that reproduce the current livery — the lab's output.
+    // A pattern is emitted only when the colours and decals still match it verbatim;
+    // otherwise the explicit colour/decal overrides carry the whole scheme.
     private string CliArgs()
     {
         if (_scheme == null)

@@ -16,10 +16,10 @@ namespace CSVM.Tests;
 /// </summary>
 public class EffectCatalogueTests
 {
-    /// <summary>Every player airframe's node name (the same 11 <see cref="ExtractedGoldenTests
-    /// .ShippedChaseDistances"/> lists), so <see cref="PlaneStats.Load"/> can walk every plane's
-    /// data rather than just the one (the Devastator) that happens to carry a 0.99 entry today —
-    /// a future plane picking one up must be caught here too.</summary>
+    // Every player airframe's node name (the same 11 ExtractedGoldenTests
+    // .ShippedChaseDistances lists), so PlaneStats.Load can walk every plane's
+    // data rather than just the one (the Devastator) that happens to carry a 0.99 entry today —
+    // a future plane picking one up must be caught here too.
     private static readonly string[] AllPlaneNodeNames =
     {
         "player_bhawk", "player_fury", "player_peacemaker", "player_kestrel", "player_fbrand",
@@ -163,7 +163,7 @@ public class EffectCatalogueTests
         }
     }
 
-    /// <summary>What the collider overlay colours by (<c>BL-345</c>): against the three defs per
+    /// <summary>What the collider overlay colours by: against the three defs per
     /// family this install ships, only <c>default</c>(0), <c>water</c>(1) and <c>dirt</c>(13)
     /// resolve to themselves — every other id resolves slot 0, because that is the def a touch
     /// there plays. Pinned as a list rather than as "the ids we ship", since which ids resolve is
@@ -249,13 +249,11 @@ public class EffectCatalogueTests
         Assert.True(found > 0, "no plane's data carried a *_damage_effects entry — the check ran on nothing");
     }
 
-    /// <summary>The authored damage-stage menu: across every player airframe's
-    /// injure_anims — per-part AND the vehicle-level list — every entry
-    /// <see cref="DamageVisuals.RigAnimFor"/> maps to a rig anim must be a name the crash rig
-    /// binds (<see cref="EffectCatalogue.PlayerDamageStageAnims"/> or
-    /// <see cref="EffectCatalogue.PlaneDamageEffectAnims"/>), or the threshold crossing would
-    /// play nothing, silently. Also pins the one deliberate mapping: the data's 0.10
-    /// player_smoketrail entry plays player_damage_trail.</summary>
+    /// <summary>Every airframe's injure_anims entry that <see cref="DamageVisuals.RigAnimFor"/>
+    /// maps to a rig anim must be a name the crash rig binds
+    /// (<see cref="EffectCatalogue.PlayerDamageStageAnims"/> or
+    /// <see cref="EffectCatalogue.PlaneDamageEffectAnims"/>), else the crossing plays nothing.
+    /// Also pins the 0.10 player_smoketrail -> player_damage_trail mapping.</summary>
     [ExtractedDataFact]
     public void EveryInjureStageAnimIsBoundOnTheRig()
     {

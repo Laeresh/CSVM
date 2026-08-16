@@ -6,35 +6,16 @@ using Godot;
 namespace CSVM.Session;
 
 /// <summary>
-/// The world's AA emplacements: the 26 standalone <c>ai.zrd</c> entries resolved
-/// against the built chapter world (one entry instantiates as many turrets as its
-/// <c>NODES</c> patterns match — the count is a property of the world model, not of the file),
-/// each driven by the same <see cref="TurretController"/> loop as the carried gunners. Built
-/// with the flight rigs whenever a chapter world and the shared projectile pool exist, and
-/// registered with the pool so every player's aim assist sees the emplacements
-/// (<c>ProjectilePool.CollectTurrets</c>).
-///
-/// <para><b>A Node, and it has to be.</b> It ticks itself from <see cref="_PhysicsProcess"/> on a
-/// realtime clock and lets <c>GameSession.DriveSimSteps</c> drive <see cref="SimStep"/> on a
-/// fixed or halted one — the <see cref="ZeppelinRuntime"/> contract, and for the same reason:
-/// <c>DriveSimSteps</c> runs ONLY when the clock is parent-driven. ⚠ As a plain class stepped
-/// from there alone, every emplacement in the install was inert in ordinary play and awake only
-/// under <c>--det</c>, which is every suite and every golden — so nothing caught it. Ordering
-/// against the zeppelins (a slung mount must read its ride's moved pose) is the tree order here,
-/// exactly as it is in <c>DriveSimSteps</c>: this node is added after the zeppelin runtime.</para>
-///
-/// <para>Shipped <c>ACTIVATED</c> values are honoured by default: 22 of the 26 entries are
-/// dormant and stay dormant, because the real wake mechanism is the mission script's
-/// <c>WAKEUP_TURRETS</c> and objectives scripting is out of M4's scope. <see cref="WakeAll"/>
-/// is the documented stand-in behind <c>--wake-turrets</c> — explicit, logged per emplacement,
-/// never a silent default.</para>
-///
-/// <para>The one non-script activation the binary itself performs is
-/// <see cref="SetActivatedUnder"/>: the Instant Action mission builder walks the subtree of each
-/// <c>*_zeppelin</c> node and writes <c>ACTIVATED</c> on every turret standing in it: 0 for the
-/// zeppelins it switches off, 1 for the <c>zeppelin_run</c> objective. That is what puts guns on
-/// the Instant Action zeppelin, whose four <c>ai.zrd</c> entries all ship dormant
-/// (docs/formats/turrets.md "Waking a whole subtree").</para>
+/// The world's AA emplacements: the standalone <c>ai.zrd</c> entries resolved against the built
+/// chapter world, each driven by the same <see cref="TurretController"/> loop as the carried
+/// gunners. Registered with the shared pool so every player's aim assist sees them. Detail on
+/// the wake mechanisms (<see cref="WakeAll"/>, <see cref="SetActivatedUnder"/>) and the tree
+/// order this depends on: this module's docs/architecture.md entry.
+/// ⚠ Must step from both <see cref="_PhysicsProcess"/> and <c>GameSession.DriveSimSteps</c>, and
+/// must be added to the tree after the zeppelin runtime. A plain class stepped from
+/// <c>DriveSimSteps</c> alone left every emplacement inert in ordinary play.
+/// ⚠ Shipped `ACTIVATED` is the default; <see cref="WakeAll"/> and <see cref="SetActivatedUnder"/>
+/// are the only two wake paths, both logged. Never wake a turret silently.
 /// </summary>
 public sealed partial class TurretEmplacementRuntime : Node
 {

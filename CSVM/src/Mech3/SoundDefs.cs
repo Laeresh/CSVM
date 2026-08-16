@@ -58,12 +58,9 @@ public static class SoundDefs
 
     /// <summary>
     /// Loads the <c>SOUND_GROUPS</c> block: the weighted random sound groups a one-shot SOUND event
-    /// resolves through. Entry shape is <c>[groupName, ("MUSIC"?), ("DYNAMIC_WEIGHTS", factor)?,
-    /// member, member, …]</c> where a member is <c>[snd_name]</c> (weight 1) or
-    /// <c>[snd_name, "WEIGHT", w]</c>. A dialogue-chain member (<c>snd_assignments</c>,
-    /// <c>snd_HI1*</c>; 222 groups in retail) is <c>[firstLine, [line], [line], …]</c>: an ordered
-    /// sequence of snd names, kept as <see cref="SoundGroup.Chains"/> for the mission/comms layer
-    /// rather than as a weighted member. A group with neither members nor chains is not registered.
+    /// resolves through. See <c>docs/formats/sounds.md</c> for the entry shape. A dialogue-chain
+    /// member is kept as <see cref="SoundGroup.Chains"/> rather than a weighted member. A group
+    /// with neither members nor chains is not registered.
     /// </summary>
     public static Dictionary<string, SoundGroup> LoadGroups(string zrdrPath)
     {

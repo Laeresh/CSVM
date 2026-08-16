@@ -7,25 +7,12 @@ namespace CSVM.Mech3;
 /// <summary>
 /// Runs the original's texture flipbooks: a material whose gamez <c>cycle</c> block lists frame
 /// textures and a rate, advanced by swapping the shader's <c>albedo_tex</c>.
-///
-/// Two sources feed it, and they are the same mechanism seen from different sides:
-/// <list type="bullet">
-/// <item>the per-material <c>cycle</c> block in the gamez (animated water, surf, boat wakes,
-/// turbulence, splashes, the walking/running crowd sprites), and</item>
-/// <item>the <c>EFFECTS</c> reader (<c>effects.zrd.json</c>), which names a proxy node and lands
-/// on that node's material the same way: the fire flipbooks, applied by
-/// <see cref="EffectCycles"/> before the build.</item>
-/// </list>
-///
-/// Both are material-keyed in the original too: the cycle block hangs off the material record and
-/// the draw loop tests the material's own cycled bit per polygon, so a flipbook reaches every
-/// polygon using that material rather than the node that named it.
-///
-/// Swapping a texture from C# rather than indexing a <c>sampler2DArray</c> in the shader is
-/// deliberate: a chapter has at most a handful of cycling materials (1 in C1, 5 in C1B), so the
-/// per-frame cost is a few <c>SetShaderParameter</c> calls, and it needs no new shader variant,
-/// no atlas build, and no assumption that every frame shares one size. Frames are resolved once
-/// at build time, while the session's <see cref="TextureArchive"/> is still open.
+/// Two sources feed it: the gamez <c>cycle</c> block itself (water, surf, wakes, crowds), and
+/// <see cref="EffectCycles"/>, which writes the fire flipbooks onto their target material before
+/// the build. Both are material-keyed in the original, so a flipbook reaches every polygon on
+/// that material, not just the node that named it.
+/// Swapped via <c>SetShaderParameter</c> rather than a shader-side frame array: cheap, and needs
+/// no new variant or atlas. Frames resolve at build time while <see cref="TextureArchive"/> is open.
 /// </summary>
 public sealed partial class TextureCycler : Node
 {

@@ -7,42 +7,18 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The original's cockpit gauges as a screen-space HUD (a user request):
-/// altimeter (two needles + blinking LOW ALT), speedometer (needle + blinking
-/// STALL) and the per-plane damage display (part fills + border bars in
-/// green/yellow/red, blinking for a few seconds after a hit).
-///
-/// Everything is rebuilt from the game's own data. Each player plane carries a
-/// 'gauges' subtree under its (otherwise skipped) cockpit in planes.zbd whose
-/// meshes ARE the 2D dials — flat polygons in dial-local coords (x right, y up,
-/// bezel radius 1): the face is a 12-gon mapping the whole dial texture
-/// (altimeter/speedometer/&lt;plane&gt;_damage), each needle is a single textured quad
-/// (needle.tif, pivot at the origin, tip +y — the tapered pointer silhouette is the
-/// texture's alpha channel, which only the rtexture-tier archives carry; the
-/// weapon-gauge arrows are instead shaped by their 5-vertex mesh), the
-/// lowalt_on/stallwarning_on overlays are
-/// the lit warning window plus two red bezel slashes (redhilite), and each
-/// damage zone (nosedamage/taildamage/leftwingdamage/rightwingdamage) is a
-/// border bar (greenhilite) plus a part-shaped hatch fill (grn_hatchptrn, tiled
-/// UVs) matching that plane's silhouette texture. The interp cockpit.gw script
-/// recolors zones by swapping green/yellow/orange/red texture variants — we do
-/// the same (orange unused: the reference shots show three states).
-///
-/// Only screen placement (measured in OriginalScreenshots/HUD.png, 2556×1440,
-/// like CompassTape) and the value→angle scales are ours: altimeter 360° per
-/// 1,000 ft (long) / 10,000 ft (short), speedometer ~0.72°/mph (measured off the
-/// face texture's 0/100/200/300 label angles).
+/// The original's cockpit gauges as a screen-space HUD: altimeter (two needles + blinking LOW
+/// ALT), speedometer (needle + blinking STALL), and the per-plane damage display (part fills +
+/// border bars, blinking after a hit). Everything is rebuilt from each plane's own 'gauges'
+/// subtree in planes.zbd — see docs/formats/hud.md for the dial geometry, texture cycles and
+/// scales. Only screen placement and the value→angle scales are ours, measured in
+/// OriginalScreenshots/HUD.png like CompassTape.
 /// </summary>
 public sealed partial class GaugeCluster : Control
 {
-    // A gun belt indicator's colour by remaining fraction: green healthy, yellow low, red empty.
-    // Gun-only: hardpoints/pylons never show this intermediate tier. TUNE: judged via a
-    // screenshot sweep (`--ammo=200 --gun-select=0 --fire`, a scaled-down stand-in for the
-    // 30-cal's real 2800-round CLUSTER_SIZE) draining the belt from full to empty — 0.15 is
-    // ~420 rounds / ~53 sim s of sustained fire at real capacity, so yellow reads as genuinely
-    // low. Do not raise it toward 1/3 (the 3-round rocket-pylon coincidence): that lights the
-    // cue while the belt is still nearly two-thirds full. Still pending an eyes-on playtest
-    // against the original (no capture exists to trace this to).
+    // Gun belt indicator colour by remaining fraction: green/yellow/red. Gun-only; hardpoints/
+    // pylons never show this tier. TUNE — see docs/formats/hud.md for the calibration and the
+    // still-owed playtest. ⚠ Do not raise it toward 1/3; that lights the cue at nearly two-thirds full.
     public const float IndicatorLowFrac = 0.15f;
     // Weapon-gauge arrow sweep rate, shared by both gauges (measured off original-game footage:
     // 168.7 ± 1.6 °/sim-s, linear — the ~2-frame ease at each end is within noise and NOT a smoothstep).
@@ -74,17 +50,9 @@ public sealed partial class GaugeCluster : Control
     // never derive it from the bound Hardpoints count. Indicator i is pylon i+1: the belt
     // light and arrow-target math both index by PYLON NUMBER, not by position in a compacted list.
     internal const int HardpointRingSize = 8;
-    // The STALL lamp is a blink-RATE ramp (measured off the original's stall clips): brightness
-    // is BINARY at every speed and the duty cycle 0.50, while the half-period shortens in proportion
-    // to airspeed — 643 ms sim at the 0.30 fd threshold down to 296 ms at 0.15 fd. Fitted through
-    // the origin over the five measured speed bins; the affine `5.9·V(mph) − 62` ms wall form fits
-    // the same data just as well (the residual is one game frame either way, so the capture cannot
-    // separate them) and was declined because it goes negative at low speed. Keyed to the fd
-    // FRACTION rather than to mph so a slower airframe blinks at the same rate at its own threshold;
-    // only the Bloodhawk (fd_speed 135 m/s) was filmed, so that generalisation is a judgement.
+    // The STALL lamp's blink-RATE ramp: half-period proportional to the fd fraction, held flat
+    // below StallBlinkFracFloor. See docs/formats/hud.md for the measurement and its fit.
     // ⚠ SIM seconds — the wall figures are 1/1.390 of these and would blink 39% fast.
-    // Not reproduced: the original toggles on integer 33.37 ms game frames, which is its frame rate
-    // showing through the underlying continuous law, not part of the law.
     internal const float StallBlinkHalfPeriodPerFrac = 2.10f;  // sim s of half-period per unit fd fraction
     // The measurement spans 0.143–0.30 fd and neither fitted form extrapolates below ~43 mph, so the
     // law HOLDS at its deepest measured value rather than ramping on toward a strobe at zero speed.
@@ -243,14 +211,10 @@ public sealed partial class GaugeCluster : Control
         i >= slots.Count ? 2
         : isGun ? GunIndicatorColor(slots[i]) : HardpointIndicatorColor(slots[i]);
 
-    // Damage zones: green > yellow > orange > red, over the zone's COMBINED armor+health fraction
-    // (PartState.Fraction) against thresholds MINED per-part from the data's own
-    // *_damage_green/yellow/red injure_anims — never hand-authored, and do not re-shape this as
-    // an armor-fraction/health-fraction ring split (refuted); the manual's four bands fall out of
-    // the shipped combined-scale numbers instead (docs/formats/hud.md "Thresholds"). Crosses to the next
-    // (worse) colour once frac drops TO OR BELOW its threshold, the same convention
-    // DamageVisuals/DamageLab use for injure_anims thresholds. Public so CSVM.Tests can assert the
-    // sequence directly.
+    // Damage zones: green > yellow > orange > red over the zone's combined armor+health fraction,
+    // thresholds mined per-part from the data's own injure_anims — see docs/formats/hud.md
+    // "Thresholds". ⚠ Do not re-shape this as a per-pool ring split; that reading is refuted.
+    // Crosses to the next colour at or below threshold. Public for CSVM.Tests.
     public static int DamageZoneColor(float frac, float yellowAt, float orangeAt, float redAt) =>
         frac > yellowAt ? 0 : frac > orangeAt ? 1 : frac > redAt ? 2 : 3;
 
@@ -261,7 +225,9 @@ public sealed partial class GaugeCluster : Control
     /// <summary>Advances a weapon-gauge arrow angle at most <see cref="ArrowSweepDegPerSimS"/> ×
     /// simDt toward target, routed the shortest way round. NaN snaps instead of sweeping
     /// in from an undefined pose (gauge just appeared, or a respawn cleared it via Reset). Public
-    /// so CSVM.Tests (GaugeArrowTweenTests) can assert the sweep directly.</summary>
+    /// so CSVM.Tests (GaugeArrowTweenTests) can assert the sweep directly.
+    /// ⚠ Only the arrow sweeps — the readout digits/type name still snap on the sweep's first
+    /// frame. Do not tween those too.</summary>
     public static float TweenArrow(float current, float target, float simDt)
     {
         if (float.IsNaN(current))
@@ -301,6 +267,8 @@ public sealed partial class GaugeCluster : Control
     public override void _Process(double delta)
     {
         _time += delta;
+        // ⚠ Both animated cues advance on SIM dt, never the raw frame delta: their rates are
+        // video-decoded in sim seconds, and the wall figures would run them 39% fast.
         float simDt = GameClock.Current?.FrameDt ?? (float)delta;
         if (GunGauge is { } gg)
             _gunArrow.Advance(TargetArrowAngle(_gunGaugeGeom.Positions, gg.Selected), simDt);
@@ -392,9 +360,9 @@ public sealed partial class GaugeCluster : Control
         return null;
     }
 
-    /// <summary>All flat polys of a node's mesh in dial-local coords. Node Local
-    /// transforms are ignored on purpose: needles carry an arbitrary modeled rest
-    /// rotation (we set the angle from the value), everything else is identity.</summary>
+    // All flat polys of a node's mesh in dial-local coords. Node Local
+    // transforms are ignored on purpose: needles carry an arbitrary modeled rest
+    // rotation (we set the angle from the value), everything else is identity.
     private static List<GaugePoly> MeshPolys(GameZ gz, TextureArchive textures, GameZNode node)
     {
         var result = new List<GaugePoly>();
@@ -439,7 +407,7 @@ public sealed partial class GaugeCluster : Control
         return p.Points.Length > 0 ? sum / p.Points.Length : 0f;
     }
 
-    /// <summary>The trailing integer of a name like "ggindicator3" (→ 3); 0 if it ends in no digits.</summary>
+    // The trailing integer of a name like "ggindicator3" (→ 3); 0 if it ends in no digits.
     private static int TrailingInt(string name)
     {
         int i = name.Length;
@@ -450,16 +418,16 @@ public sealed partial class GaugeCluster : Control
         return i < name.Length && int.TryParse(name[i..], out var n) ? n : 0;
     }
 
-    /// <summary>The dials are measured off HUD.png as absolute 1440p-reference y coordinates, but
-    /// they are really anchored to the BOTTOM of the screen (they sit 331 / 141 px up from it).
-    /// Measuring from the bottom is identical to <c>refY · s</c> whenever s is the plain
-    /// height ratio (single player), and is what keeps them on screen when a splitscreen pane
-    /// draws them at a damped, larger-than-proportional scale (see <see cref="HudMetrics"/>).</summary>
+    // The dials are measured off HUD.png as absolute 1440p-reference y coordinates, but
+    // they are really anchored to the BOTTOM of the screen (they sit 331 / 141 px up from it).
+    // Measuring from the bottom is identical to `refY · s` whenever s is the plain
+    // height ratio (single player), and is what keeps them on screen when a splitscreen pane
+    // draws them at a damped, larger-than-proportional scale (see HudMetrics).
     private static float FromBottom(float refY, float s, float viewportH) =>
         viewportH - (HudMetrics.ReferenceHeight - refY) * s;
 
-    /// <summary>A count right-aligned into <paramref name="width"/> digit cells, space-padded
-    /// (clamped 0..9999, the 4-cell readout's range).</summary>
+    // A count right-aligned into `width` digit cells, space-padded
+    // (clamped 0..9999, the 4-cell readout's range).
     private static string FormatCount(int count, int width)
     {
         string s = Mathf.Clamp(count, 0, 9999).ToString();
@@ -468,8 +436,8 @@ public sealed partial class GaugeCluster : Control
         return s.PadLeft(width);
     }
 
-    /// <summary>A weapon name upper-cased, left-aligned and padded/truncated to the type readout's
-    /// <paramref name="width"/> cells (the atlas is uppercase-only).</summary>
+    // A weapon name upper-cased, left-aligned and padded/truncated to the type readout's
+    // `width` cells (the atlas is uppercase-only).
     private static string FormatType(string type, int width)
     {
         string s = type.ToUpperInvariant();
@@ -478,8 +446,8 @@ public sealed partial class GaugeCluster : Control
         return s.PadRight(width);
     }
 
-    /// <summary>An altimeter/speedometer node: face polys from any unnamed child mesh
-    /// (g784 …), warning overlays from *_on children, needles by exact child name.</summary>
+    // An altimeter/speedometer node: face polys from any unnamed child mesh
+    // (g784 …), warning overlays from *_on children, needles by exact child name.
     private void ExtractInstrument(GameZ gz, TextureArchive textures, GameZNode dial,
         List<GaugePoly> face, List<GaugePoly> warn,
         params (string Name, Action<GaugePoly> Set)[] needles)
@@ -505,18 +473,10 @@ public sealed partial class GaugeCluster : Control
         face.Sort((a, b) => a.Priority.CompareTo(b.Priority));
     }
 
-    /// <summary>The damage dial: each *damage child is one zone — border bar ("hilite" texture) +
-    /// hatch fill — and everything else is the silhouette face. Color thresholds come from the
-    /// matching destroyable part's injure anims.
-    ///
-    /// <para><b>Where the face lives differs per plane</b> (user-reported via a 4P
-    /// screenshot): the Bloodhawk carries the dial's dark backing disc on the `damageindicator`
-    /// node itself, but every other plane leaves that node mesh-less (`mesh_index` −1) and hangs
-    /// the disc off an extra generically-named child (`g951`, `g927`, `g1156`, `g843`, …) — the
-    /// same untextured 12-gon either way. Reading only the dial node's own mesh therefore drew a
-    /// backing disc for the Bloodhawk and bare wireframe zones for all ten other aircraft. So any
-    /// non-zone child counts toward the face, which is exactly the rule
-    /// <see cref="ExtractInstrument"/> already uses for the other two dials.</para></summary>
+    // The damage dial: each *damage child is one zone (border bar + hatch fill); everything else
+    // is the silhouette face. Thresholds come from the matching part's injure anims.
+    // ⚠ Face parenting differs per plane — see docs/formats/hud.md. Any non-zone child counts as
+    // face, the same rule ExtractInstrument uses for the other two dials.
     private void ExtractDamageDial(GameZ gz, TextureArchive textures, GameZNode dial,
         IReadOnlyList<DestroyablePart> parts)
     {
@@ -563,13 +523,10 @@ public sealed partial class GaugeCluster : Control
         }
     }
 
-    /// <summary>A weapon gauge (gungauge/missilegauge): the same circular-dial layout on all 11
-    /// planes. Its named children are the 4-digit ammo readout (<c>4char_ammo</c>), the 6-char type
-    /// name (<c>6char_type</c>), the belt lights (<c>{prefix}indicator0..</c>) and the pointer
-    /// (<c>{prefix}arrow</c>); anything else (the generically-named face child <c>g815</c>/<c>g819</c>)
-    /// is dial face — the same "unrecognised child = face" rule the damage dial needs. The digit/type
-    /// glyphs and the indicator colours are texture cycles the FlightController drives via
-    /// <see cref="WeaponGauge"/>; here we only extract the fixed geometry and the belt order.</summary>
+    // A weapon gauge (gungauge/missilegauge): identical layout on all 11 planes — see
+    // docs/formats/hud.md. Named children are the ammo/type readouts, belt lights and pointer;
+    // anything else is dial face, the same rule the damage dial uses. Extracts geometry and belt
+    // order only; the glyph/colour cycles are driven live by FlightController via WeaponGauge.
     private void ExtractWeaponGauge(GameZ gz, TextureArchive textures, GameZNode dial, GaugeGeom geom, string prefix)
     {
         geom.Face.AddRange(MeshPolys(gz, textures, dial)); // -1 on every plane, but follows the face rule
@@ -618,9 +575,9 @@ public sealed partial class GaugeCluster : Control
         geom.Face.Sort((a, b) => a.Priority.CompareTo(b.Priority));
     }
 
-    /// <summary>Loads the shared digit/letter atlas (the <c>zero.tif</c>…<c>nine.tif</c> + <c>A.tif</c>…
-    /// <c>Z.tif</c> cycle both readouts index) and the belt-indicator colour variants
-    /// (green/yellow/red). Space and unrepresented chars stay absent → drawn as a blank cell.</summary>
+    // Loads the shared digit/letter atlas (the `zero.tif`…`nine.tif` + `A.tif`…
+    // `Z.tif` cycle both readouts index) and the belt-indicator colour variants
+    // (green/yellow/red). Space and unrepresented chars stay absent → drawn as a blank cell.
     private void LoadGaugeTextures(TextureArchive textures)
     {
         string[] digits = { "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine" };
@@ -641,12 +598,12 @@ public sealed partial class GaugeCluster : Control
         }
     }
 
-    /// <summary>Draws one weapon gauge: the labelled face, every belt light — guns step
-    /// green/yellow/red by remaining fraction, hardpoints step green/red with no intermediate
-    /// colour, and a position this airframe does not fit at all reads red like a spent one — the
-    /// right-aligned digit count, the left-aligned type name, then the pointer at its animated
-    /// sweep angle (tweened toward the selected belt slot in <see cref="_Process"/>; the readout
-    /// above still snaps).</summary>
+    // Draws one weapon gauge: the labelled face, every belt light — guns step
+    // green/yellow/red by remaining fraction, hardpoints step green/red with no intermediate
+    // colour, and a position this airframe does not fit at all reads red like a spent one — the
+    // right-aligned digit count, the left-aligned type name, then the pointer at its animated
+    // sweep angle (tweened toward the selected belt slot in _Process; the readout
+    // above still snaps).
     private void DrawWeaponGauge(GaugeGeom geom, WeaponGauge state, Vector2 center, float radius, bool isGun,
         float arrowAngle)
     {
@@ -667,8 +624,8 @@ public sealed partial class GaugeCluster : Control
             DrawGaugePoly(geom.Arrow, center, radius, arrowAngle);
     }
 
-    /// <summary>Draws each fixed glyph quad with the atlas texture for its character; a space or an
-    /// unrepresented char leaves that cell blank (the atlas has no space glyph — that IS the space).</summary>
+    // Draws each fixed glyph quad with the atlas texture for its character; a space or an
+    // unrepresented char leaves that cell blank (the atlas has no space glyph — that IS the space).
     private void DrawGlyphs(List<GaugePoly> quads, string text, Vector2 center, float radius)
     {
         for (int i = 0; i < quads.Count && i < text.Length; i++)
@@ -678,10 +635,10 @@ public sealed partial class GaugeCluster : Control
         }
     }
 
-    /// <summary>Draws one extracted poly at a dial's screen center/radius, rotated
-    /// clockwise by rotDeg about the dial center (needles). Dial-local y-up flips to
-    /// screen y-down; an override texture substitutes the zone color variants (with
-    /// a flat tint standing in when the variant png is missing).</summary>
+    // Draws one extracted poly at a dial's screen center/radius, rotated
+    // clockwise by rotDeg about the dial center (needles). Dial-local y-up flips to
+    // screen y-down; an override texture substitutes the zone color variants (with
+    // a flat tint standing in when the variant png is missing).
     private void DrawGaugePoly(GaugePoly p, Vector2 center, float radius, float rotDeg = 0f,
         Texture2D? overrideTex = null, Color? missingTint = null)
     {
@@ -813,8 +770,8 @@ public sealed partial class GaugeCluster : Control
         public IReadOnlyList<float> Slots = Array.Empty<float>(); // per-indicator ammo fraction 0..1
     }
 
-    /// <summary>One flat gauge polygon extracted from the mesh: dial-local points
-    /// (x right, y up, radius 1), normalized UVs, source texture, draw priority.</summary>
+    // One flat gauge polygon extracted from the mesh: dial-local points
+    // (x right, y up, radius 1), normalized UVs, source texture, draw priority.
     private sealed class GaugePoly
     {
         public Vector2[] Points = Array.Empty<Vector2>();
@@ -833,10 +790,10 @@ public sealed partial class GaugeCluster : Control
         public float BlinkLeft;                // s of post-hit blinking remaining
     }
 
-    /// <summary>One weapon gauge's extracted geometry (gungauge or missilegauge). All flat, dial-local
-    /// like the other dials. The digit / type quads are ordered left→right; each indicator's polys sit
-    /// at its parsed index (ggindicator3 → <see cref="Indicators"/>[3]); the arrow rotates about the
-    /// centre to point at a belt position.</summary>
+    // One weapon gauge's extracted geometry (gungauge or missilegauge). All flat, dial-local
+    // like the other dials. The digit / type quads are ordered left→right; each indicator's polys sit
+    // at its parsed index (ggindicator3 → Indicators[3]); the arrow rotates about the
+    // centre to point at a belt position.
     private sealed class GaugeGeom
     {
         public readonly List<GaugePoly> Face = new();          // the labelled dial face (gungauge/missilegauge.tif + ring)

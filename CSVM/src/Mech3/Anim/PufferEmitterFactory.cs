@@ -6,18 +6,7 @@ namespace CSVM.Mech3.Anim;
 
 /// <summary>Builds real <see cref="Puffer"/> emitters from a session's textures and parents them.
 /// One shared factory for the world, world-effects and per-player crash runtimes, whose needs are
-/// byte-identical.
-///
-/// <para>⚠ <paramref name="parent"/> is the WORLD root, never a per-player crash root: a
-/// PUFFER_STATE emitter goes TopLevel (world space) the moment it emits, and parenting it under the
-/// controller subtree leaves it drawn-but-unrendered — every particle correctly positioned,
-/// <c>IsVisibleInTree</c> true, and nothing on screen. Owning the parent here is what keeps that
-/// rule structural instead of prose repeated per role factory.</para>
-///
-/// <para>⚠ Valid only while <paramref name="textures"/> is open — an emitter bakes its atlas at
-/// construction. A caller whose archive dies with its build retires the director's factory rather
-/// than leaving this one holding a closed zip handle (see
-/// <see cref="EmitterDirector.RetireFactory"/>).</para></summary>
+/// byte-identical.</summary>
 public sealed class PufferEmitterFactory : IEmitterFactory
 {
     private readonly TextureArchive _textures;
@@ -26,6 +15,11 @@ public sealed class PufferEmitterFactory : IEmitterFactory
     // session to take it from (the suites' fake runtimes).
     private readonly EffectAmbience _ambience;
 
+    /// <param name="parent">⚠ The world root, never a per-player crash root. A PUFFER_STATE
+    /// emitter goes TopLevel the moment it emits, so parenting under a controller subtree leaves
+    /// it drawn-but-unrendered.</param>
+    /// <param name="textures">⚠ Must stay open for this factory's life; an emitter bakes its
+    /// atlas at construction. See <see cref="EmitterDirector.RetireFactory"/>.</param>
     public PufferEmitterFactory(TextureArchive textures, Node parent, EffectAmbience? ambience = null)
     {
         _textures = textures;
@@ -35,10 +29,8 @@ public sealed class PufferEmitterFactory : IEmitterFactory
 
     public IEmitter? Create(PufferState state, out string? miss)
     {
-        // A PUFFER_STATE carrying no textures is an adjust/stop stub that re-asserts a puffer some
-        // other event defines — the readers have the same idiom, which is why
-        // PufferState.FindInReader tests for a "fully defined" state. There is nothing to build
-        // from it; C1's truck1dust_puffer and black_exhaust_puffer are the two here.
+        // A PUFFER_STATE with no textures is an adjust/stop stub re-asserting a puffer some other
+        // event defines; there is nothing to build from it.
         if (state.Textures.Count == 0 && state.TextureSequence.Count == 0)
         {
             miss = $"PufferState(stub, no textures: {state.Name})";

@@ -7,44 +7,21 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The flying aircraft's collision silhouette: a handful of
-/// plane-frame boxes — fuselage, wing slab(s), tail — that FlightController sweeps
-/// along each physics frame's motion (PhysicsDirectSpaceState3D.CastMotion), so a
-/// wingtip or tail fin clips a building corner like the original. A single
-/// center-line ray alone would let everything but the nose pass through obstacles.
-/// The same boxes are mounted as the plane's <see cref="AircraftBody"/> collision
-/// shapes, so the sweep silhouette and the projectile target stay single-sourced.
-///
-/// Built once from the plane model's actual mesh triangles (PropAnimator-style tree
-/// walk), transformed into the FlightController's frame. Hidden subtrees (the wing
-/// flares) are not part of the airframe; the nose propeller blur discs (PropParts
-/// PropMain/PropGhost) are excluded too — they are translucent air, and their disc
-/// height would sink the axis-aligned fuselage box's belly line for the whole
-/// airframe length. The autogyro's overhead rotor discs (RotorMain/RotorGhost) stay
-/// in: the rotor is that plane's wing.
-///
-/// Classification is geometric, not name-based, so it needs no per-plane data:
-/// global extents give half-span and length; triangles outboard of WingBandFrac ×
-/// half-span are wing (split at the widest chord gap into separate slabs, should a
-/// plane's outboard geometry cluster fore/aft); the aft part of the plane is tail
-/// (fins, stabilizers, twin booms); a narrow central band ahead of the tail is the
-/// fuselage. Each region's box is then refined by greedy volume-guided splitting:
-/// cut at the axis plane that most shrinks the summed enclosed
-/// volume, while a cut still removes a real share of bridged air — so the
-/// Bloodhawk's full-span tail slab (the thin wing trailing edge AABB'd together
-/// with the tall center fins = an 11.6 × 2.4 m barn door of mostly air) becomes
-/// slim fin boxes plus flat outboard strips that hug the geometry, and a biplane's
-/// stacked wings separate at a horizontal cut instead of bridging the interplane
-/// gap. A well-filled conventional region finds no worthwhile cut and stays one
-/// box. Everything is partitioned by whole triangles (a cut assigns each triangle
-/// by centroid but the boxes enclose all its corners), so large sparse panels —
-/// wings whose vertices sit only at the ribs — never lose surface coverage between
-/// boxes. Overlap between the boxes is harmless. All thresholds are TUNE.
+/// The flying aircraft's collision silhouette: plane-frame boxes FlightController sweeps
+/// each physics frame (a lone center-line ray would let everything but the nose pass through
+/// obstacles). The same boxes mount as <see cref="AircraftBody"/>'s hit shapes — single-sourced,
+/// never a second derivation. Built once from the model's mesh triangles (PropAnimator-style
+/// tree walk), transformed into FlightController's frame; hidden subtrees and the nose prop's
+/// blur discs are excluded, but the autogyro's overhead rotor discs stay in — that plane's wing.
+/// ⚠ Boxes deliberately overlap; the earliest in <see cref="Parts"/> order is what a caller
+/// reports. Known limit: the Bloodhawk's canard tips stay uncovered.
+/// All threshold consts below are TUNE — see <c>CONTEXT.md</c>.
 /// </summary>
 public sealed class PlaneCollider
 {
+    // ⚠ Do not lower WingBandFrac to close the Bloodhawk canard gap: it pulls the
+    // inboard wing-root chord into the wing slab (the class doc's known limit).
     private const float WingBandFrac = 0.35f;        // |x| beyond this × half-span = wing verts
-                                                     // (not lower — see the canard note below)
     private const float TailStartFrac = 0.7f;        // z beyond this × length (nose −Z → tail +Z) = tail verts
     private const float FuselageBandFrac = 0.15f;    // |x| within this × half-span = fuselage verts
     private const float FuselageMinHalfWidth = 0.7f; // m — band floor for narrow-span planes
@@ -54,12 +31,6 @@ public sealed class PlaneCollider
     private const int MaxBoxes = 8;                  // total box budget per plane
     private const float MinCutWidth = 0.35f;         // m — cut planes keep this far from the cluster rim
     private const int Bins = 64;                     // cut-plane candidates per axis (bin edges)
-
-    // Accepted limit (measured on the Bloodhawk): its nose canards span only 1.63 m
-    // while the wing band starts at 2.03 m, so an ~0.8 m canard-tip sliver per side is
-    // uncovered. Lowering the band far enough to catch it would pull the long inboard
-    // wing-root chord into the full-span wing slab, giving the wingtips ~2.4 m of
-    // phantom chord — false crashes are worse than a rare missed canard graze.
 
     private PlaneCollider(List<Part> parts) => Parts = parts;
 
@@ -71,8 +42,9 @@ public sealed class PlaneCollider
     public string Summary => string.Join(", ",
         Parts.Select(p => $"{p.Name} {p.Shape.Size.X:0.0}×{p.Shape.Size.Y:0.0}×{p.Shape.Size.Z:0.0} m"));
 
-    /// <summary>Derives the collision boxes from the built plane model; null if it
-    /// has no usable geometry.</summary>
+    /// <summary>Derives the collision boxes from the built plane model; null if it has no usable
+    /// geometry. Classification is geometric (extents only, no per-plane data): wing/tail/fuselage
+    /// come from thresholds against the model's own half-span and length.</summary>
     public static PlaneCollider? Build(Node3D planeRoot)
     {
         var tris = new List<Tri>();
@@ -90,15 +62,9 @@ public sealed class PlaneCollider
         float wingBand = WingBandFrac * halfSpan;
         float fuselageHalf = Mathf.Max(FuselageBandFrac * halfSpan, FuselageMinHalfWidth);
 
-        // Regions are CLIPPED geometry, not vertex picks: each triangle is cut at
-        // the region's boundary planes and only the inside pieces join, so region
-        // boxes end exactly at their boundaries — a giant wing-root triangle can't
-        // drag the wing box to the centerline just because one corner pokes across.
-        // tail = everything aft of tailStartZ (full width: fins, stabilizers, twin
-        // booms — outboard pieces sit in both tail and wing, and the refined pieces
-        // that land outboard are RELABELLED wing afterwards, see Relabel); wing =
-        // everything outboard of the wing band; fuselage = the narrow central band
-        // ahead of the tail.
+        // Clipped geometry, not vertex picks: a triangle is cut at each boundary so
+        // a giant wing-root triangle can't drag the wing box past the split. Outboard
+        // tail pieces are RELABELLED wing afterwards (see Relabel).
         var tail = ClipAxis(tris, 2, tailStartZ, keepGreater: true);
         var wing = ClipAxis(tris, 0, wingBand, keepGreater: true);
         wing.AddRange(ClipAxis(tris, 0, -wingBand, keepGreater: false));
@@ -119,33 +85,12 @@ public sealed class PlaneCollider
         return parts.Count > 0 ? new PlaneCollider(parts) : null;
     }
 
-    /// <summary>Corrects the label of a refined <c>tail</c> piece that is really wing
-    /// geometry. The tail region is clipped on z ALONE, at full span,
-    /// so on a swept or trailing-edge-heavy plane its outboard slabs are the wing's
-    /// trailing edge rather than the empennage — the Bloodhawk's two flat 4.9 × 0.4
-    /// strips are literally its <c>leftwing</c> / <c>rightwing</c> nodes. Refinement
-    /// splits that slab but propagates the region name verbatim, and
-    /// <see cref="PlaneDamage.MapStruckPart"/>'s <c>"tail"</c> arm is the only one
-    /// that ignores the impact point, so a wingtip strike 4 m off-centre subtracted
-    /// HP from the tail. Renaming here rather than side-splitting in PlaneDamage is
-    /// the right seam: the half-span is known here, and MapStruckPart would otherwise
-    /// need a widened signature.
-    ///
-    /// A piece is wing when its box lies wholly on one side of the centerline (so
-    /// every impact inside it maps to the correct side) AND its center is outboard of
-    /// the same WingBandFrac threshold that defines wing geometry in the first place.
-    /// Applied AFTER refinement, so each final box is judged on its own extent — a
-    /// piece renamed mid-refinement could be cut again into an inboard remainder.
-    ///
-    /// Twin-boom / twin-fin designs are the risk case, since their booms genuinely
-    /// ARE tail at outboard |x|. Measured across all 11 player aircraft: every
-    /// <c>*_rudder*</c> node in the fleet sits inside a box this rule leaves alone —
-    /// the Devastator's and Firebrand's fins at |x| 3.03 fall in their planes' centre
-    /// tail box, and the Kestrel's twin fins sit at |x| 1.98 against a 2.58 m band.
-    /// What moves is only aileron and wing-panel geometry (Devastator
-    /// <c>l/r_aileron2</c>, Bloodhawk <c>leftwing</c>/<c>rightwing</c>, Firebrand
-    /// <c>l/r_aileron1</c>, Fury's wingtip damage panels, and the autogyro's overhead
-    /// rotor — which the class doc already calls that plane's wing).</summary>
+    // Corrects a refined `tail` piece that is really wing geometry (tail is
+    // clipped on z alone, so a swept plane's outboard trailing edge lands there): a box wholly
+    // one side of the centerline, centred outboard of WingBandFrac, is relabelled wing so
+    // PlaneDamage's localImpact-blind "tail" arm never sees a wingtip strike. The half-span is
+    // known here — do not side-split in PlaneDamage instead. Applied AFTER refinement so each
+    // final box is judged on its own extent.
     private static string Relabel(string name, List<Tri> tris, float wingBand)
     {
         if (name != "tail" || tris.Count == 0)
@@ -155,10 +100,10 @@ public sealed class PlaneCollider
         return oneSide && Mathf.Abs(box.GetCenter().X) > wingBand ? "wing" : name;
     }
 
-    /// <summary>Splits the wing triangles at the widest chord (z) gap: a canard
-    /// plane's outboard geometry forms two clusters (nose canards, aft main wing)
-    /// that would otherwise merge into one nose-to-tail slab. The forward cluster is
-    /// the canard.</summary>
+    // Splits the wing triangles at the widest chord (z) gap: a canard
+    // plane's outboard geometry forms two clusters (nose canards, aft main wing)
+    // that would otherwise merge into one nose-to-tail slab. The forward cluster is
+    // the canard.
     private static IEnumerable<(string Name, List<Tri> Tris)> WingClusters(List<Tri> wing)
     {
         if (wing.Count == 0)
@@ -187,11 +132,11 @@ public sealed class PlaneCollider
         yield return ("wing", wing.GetRange(splitAt, wing.Count - splitAt));
     }
 
-    /// <summary>Greedy volume-guided refinement: repeatedly cut the cluster whose
-    /// best cut removes the most enclosed volume (bridged air), until no cut removes
-    /// at least VolumeSplitFrac of its box or the MaxBoxes budget is reached.
-    /// Cutting the biggest offender first spends the budget where the misfit is
-    /// worst.</summary>
+    // Greedy volume-guided refinement: repeatedly cut the cluster whose
+    // best cut removes the most enclosed volume (bridged air), until no cut removes
+    // at least VolumeSplitFrac of its box or the MaxBoxes budget is reached.
+    // Cutting the biggest offender first spends the budget where the misfit is
+    // worst.
     private static List<(string Name, List<Tri> Tris)> Refine(
         List<(string Name, List<Tri> Tris)> clusters)
     {
@@ -221,20 +166,11 @@ public sealed class PlaneCollider
         return result;
     }
 
-    /// <summary>Finds the axis cut of this cluster that most reduces the summed
-    /// volume of the resulting boxes vs the whole box (dimensions clamped to
-    /// MinThickness so flat slabs still count area; x = twin fins/booms, y = biplane
-    /// wing stacks, z = fin vs boom). Considers one OR two parallel cut planes per
-    /// axis — the double cut is what separates bilateral pairs: slicing one Kestrel
-    /// tail fin off alone gains nothing because the remainder still holds the other
-    /// fin's height, but two cuts drop the middle to the thin stabilizer in a single
-    /// decision. Candidate planes are Bins bin edges; triangles bin by centroid while
-    /// bins enclose all their corners, so surfaces crossing a cut stay covered (the
-    /// pieces overlap a little instead of leaking). An empty middle range (twin booms
-    /// bridged over air) yields no piece at all. True when the best cut removes at
-    /// least VolumeSplitFrac of the whole and every cut plane is at least MinCutWidth
-    /// from the cluster's rim; gain is the removed volume (m³) for cross-cluster
-    /// ranking.</summary>
+    // Best single or double axis cut by volume removed (dims clamped to MinThickness
+    // so flat slabs still count); a double cut exists to separate bilateral pairs like twin fins
+    // in one pass. Bins enclose full triangle corners so a surface crossing a cut
+    // stays covered on both sides (overlap, not a leak) — do not bin by centroid alone.
+    // Returns false below VolumeSplitFrac gain or inside MinCutWidth of the rim.
     private static bool BestCut(List<Tri> tris, out List<List<Tri>> pieces, out float gain)
     {
         pieces = null!;
@@ -354,9 +290,9 @@ public sealed class PlaneCollider
             new Transform3D(Basis.Identity, box.GetCenter())));
     }
 
-    /// <summary>Clips every triangle against an axis-aligned plane (axis 0=x, 2=z),
-    /// keeping the pieces on the requested side — Sutherland–Hodgman against one
-    /// plane, re-fanned into triangles. Degenerate slivers are dropped.</summary>
+    // Clips every triangle against an axis-aligned plane (axis 0=x, 2=z),
+    // keeping the pieces on the requested side — Sutherland–Hodgman against one
+    // plane, re-fanned into triangles. Degenerate slivers are dropped.
     private static List<Tri> ClipAxis(List<Tri> tris, int axis, float plane, bool keepGreater)
     {
         var result = new List<Tri>();
@@ -397,8 +333,8 @@ public sealed class PlaneCollider
         return box;
     }
 
-    /// <summary>Gathers every visible mesh triangle, transformed by the accumulated
-    /// node transforms (xf already includes node's own).</summary>
+    // Gathers every visible mesh triangle, transformed by the accumulated
+    // node transforms (xf already includes node's own).
     private static void Collect(Node node, Transform3D xf, List<Tri> tris)
     {
         if (node is Node3D n3d)
@@ -407,7 +343,7 @@ public sealed class PlaneCollider
                 return; // hidden subtrees (wing flares) are not part of the airframe
             var kind = PropParts.Classify(n3d.Name);
             if (kind is PropParts.Kind.PropMain or PropParts.Kind.PropGhost)
-                return; // translucent nose blur discs (see class doc)
+                return; // translucent discs would sink the fuselage box's belly line
             if (n3d is MeshInstance3D mi)
             {
                 // GetFaces yields triangle surfaces only (3 verts per face), so the

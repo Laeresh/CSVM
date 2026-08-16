@@ -4,23 +4,15 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// Instant Action's wrap-up board: the shipped screen's four rows —
-/// Time to Complete Mission, Enemies Shot Down, Danger Zones Completed, Shot % — the ones
-/// <c>IA_WRAPUP.SCRIPT</c> and <c>LAYOUT.CSV</c> actually wire (docs/formats/instant-action.md,
-/// "The wrap-up screen"; a fifth title, "Total Kills", is decoded but never wired to a row and is
-/// not rendered here). Shares <see cref="VersusBoard"/>'s construction — the WHOLE window on its
-/// own <c>CanvasLayer</c>, not a per-pane overlay, since the mission ends for every human at once
-/// (decisions 10/14) — rather than <see cref="StuntScoreboard"/>'s per-pane shape, which is for an
-/// individual pilot's own solo run.
-///
-/// <para>Every value is handed in by the caller at <see cref="Present"/> time rather than read
-/// live off any of the sources: <c>Session.GameSession</c> owns the mission clock, the
-/// kill count and the two shot counters, and this board only draws what it is given — the same
-/// division <see cref="VersusBoard"/> draws with <see cref="VersusMatch.Standings"/>' snapshot.
-/// Danger Zones Completed and Shot % are both a decoded "the local player" counter generalised to
-/// every human for splitscreen (summed pilots' own <c>StuntMission.CompletedCount</c>; every
-/// human's shooter id folded into <see cref="ProjectilePool.ScoredShooters"/>) — an extension
-/// named as one, in the shape decisions 8/8a/10 already take.</para>
+/// Instant Action's wrap-up board: the shipped screen's four rows — Time to Complete Mission,
+/// Enemies Shot Down, Danger Zones Completed, Shot % — the ones <c>IA_WRAPUP.SCRIPT</c> and
+/// <c>LAYOUT.CSV</c> actually wire. Decode: docs/formats/instant-action/wrap-up.md. Shares
+/// <see cref="VersusBoard"/>'s construction, the whole window on its own <c>CanvasLayer</c>, since
+/// the mission ends for every human at once, rather than <see cref="StuntScoreboard"/>'s per-pane
+/// shape for an individual pilot's own solo run.
+/// Every value is handed in by the caller at <see cref="Present"/> time rather than read live off
+/// any source; <see cref="VersusBoard"/> draws the same way, off <see cref="VersusMatch.Standings"/>'s
+/// snapshot.
 /// </summary>
 public sealed partial class IaWrapupBoard : Control
 {
@@ -165,10 +157,8 @@ public sealed partial class IaWrapupBoard : Control
         body.AddThemeConstantOverride("separation", Mathf.RoundToInt(7f * s));
         _panel.AddChild(body);
 
-        // langui 1133 IDS_IAWU_TITLE "Instant Action" is the screen's own heading; the outcome
-        // ("MISSION COMPLETE"/"MISSION FAILED") is not on the shipped screen at all — the original
-        // never lost a mission with lives to run out (decision 14/15) — so it stands in as this
-        // board's headline, in the shape VersusBoard's winner-name headline already takes.
+        // The shipped screen has no outcome text; the original never lost a mission with lives
+        // to run out. This stands in as the headline, in VersusBoard's shape.
         string title = won ? "MISSION COMPLETE" : "MISSION FAILED";
         var titleColor = won ? WonColor : LostColor;
         body.AddChild(Centered(Label(title, (int)(TitleFont * s), titleColor)));

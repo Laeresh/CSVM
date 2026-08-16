@@ -8,7 +8,7 @@ file first — `CLAUDE.md` and `AGENTS.md` are thin, tool-specific pointers into
 **This file is the compact, authoritative index of project context; deep detail lives in
 `docs/`.** Update documentation in the same turn as the change it describes:
 
-- Module purpose + still-binding constraints, as `⚠` one-liners → the module's `## src/...` entry in `docs/architecture.md` (body ≤ ~8 lines, ~12 for the heaviest; **max 3 `⚠` per module** — a 4th means an existing one merges, moves to a code comment, or dies). **Read a module's entry there before modifying that module.** Diagnosis narratives do NOT go there — they go in the landing commit's message body; what survives of one is a `⚠` line or a verification.md rule.
+- Module purpose → the module's `## src/...` entry in `docs/architecture.md`. **That file orients a reader: what each module is for, what it owns, and which other module to look at next. Nothing else.** Body ≤ ~8 lines, ~12 for the heaviest. **`⚠` traps do not belong there.** A trap that constrains a future edit goes in the code, at the member it binds, under the comment caps below; a trap that is really format or decode knowledge goes in `docs/formats/` or `docs/org/`; a way a measurement misleads goes in `docs/verification.md`. **Read a module's entry there before modifying that module**, then read the code. Diagnosis narratives go in the landing commit's message body.
 - A new, renamed or deleted module → **`docs/architecture.md` only**, updating its index line and its `##` entry in the same edit. This file carries the namespace map, never a per-module list; keeping both was 13 KB of duplication and had already drifted.
 - Format / reverse-engineering knowledge → `docs/formats/`.
 - The extraction pipeline, the launch scripts, or the mech3ax fork → `docs/tooling.md`.
@@ -63,6 +63,29 @@ previews, debug dumps, golden-test captures, etc. — always write them into
 
 ## Coding conventions
 - Comments state what and why, briefly — never provenance (dates, plan/milestone/item references), never history, never instructions to a reviewer. If a comment's only content is where a change came from, it should not exist.
+- **Use the terms in [`CONTEXT.md`](CONTEXT.md)**, and never a word that file lists under `_Avoid_`.
+- **Comment length is capped, in `CSVM/src` and `CSVM.Tests`.** A comment block over its cap fails the commit; [`CheckCommentCaps.ps1`](CheckCommentCaps.ps1) is what the hook runs, and what you run yourself while editing.
+
+  | comment | cap |
+  |---|---|
+  | `///` on a type | 12 lines |
+  | `///` on a member | 6 lines |
+  | `//` above a declaration | 6 lines |
+  | `//` above a statement | 3 lines |
+
+  Sentences are ≤ 25 words; a block is ≤ 6 sentences and covers one topic. A warning states the
+  prohibition first and the reason second: `⚠ Do not remove the seen dedup; C1 and C4 still need it.`
+- **What a comment holds depends on what it is attached to.** Above a statement, the code says the
+  what, so the comment says only why. Above a `const`, field or member, the value itself is
+  unrecoverable from the code, so the comment holds the binding rule and a pointer to the decode:
+  `docs/org/<module>.md` or `docs/formats/<format>.md`.
+- **Evidence lives in `docs/`, not in a comment.** Measurement tables, refuted hypotheses and how a
+  value was arrived at go on the module's docs page. Before cutting a block, check that page
+  actually covers the claim, and write it there in the same commit if it does not. The removed
+  prose goes in the commit message body, as diagnosis narratives already do.
+- **No XML doc on private members**, and no `<para>`, `<b>`, `<i>`, `<list>` or `<item>` anywhere:
+  the build generates no documentation file (`.editorconfig` silences SA0001 for that reason), so
+  they render for nobody. `<see cref>` and `<c>` stay; the IDE reads them.
 
 ## Repo layout
 
@@ -82,6 +105,7 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `RunProbe.ps1` — **every ad-hoc scripted Godot launch goes through this** (`--screenshot=`, `--dump-*`, one-off `--run-tests=`): hidden desktop + streams redirected to files, so nothing flashes on screen or prints over the calling terminal. Never invoke the Godot exe directly for a probe. Details: `docs/tooling.md`.
 - `HiddenDesktop.ps1` — dot-sourced by `RunTests.ps1`: runs every launch on a separate Windows desktop so no test window ever appears on screen. Details: `docs/tooling.md`.
 - `CleanScratch.ps1` — sweeps `.scratch/` artifacts **and finished `.claude/worktrees/` agent worktrees** (`-?` lists its switches). Spares backups and dirty worktrees; leaves branches alone by default.
+- `CheckCommentCaps.ps1` — the comment-length caps above, over `CSVM/src` and `CSVM.Tests`. Bare for the file:line list, `-Summary` for one line per file worst-first, or with paths for just those files. A pre-commit hook runs it; run it yourself while editing.
 - `New-ItemId.ps1` — mints the next `BL-`/`CAP-`/`PT-` item ID (`-Kind BL`, optional `-Count n` to reserve a block). The counter sits in `.git/item-id-counters.json` — shared by all worktrees, incremented under an exclusive lock — so concurrent sessions can't mint the same number. **Never assign an item ID any other way.** A pre-commit hook fails the commit if `backlog.md`/`playtest.md` define an ID twice.
 - `tools/` — downloaded binaries (git-ignored): pinned mech3ax v0.6.1, the mech3ax fork, the Godot 4.7 .NET editor.
 - `analysis/` — **committed** read-only analysis scripts + their `FINDINGS.md`, one dir per question. For instruments whose result `docs/` cites, because `.scratch/` is swept. No game data in them, ever.

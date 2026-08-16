@@ -6,29 +6,12 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The full-screen colour wash an <c>FBFX_COLOR_FROM_TO</c> event authors: a close HE, AP or flak
-/// burst ramping the whole picture from one RGBA to another over the event's run time. One ramp per
-/// pane, painted into the pane(s) whose camera the burst was actually near.
-///
-/// <para><b>One state per pane, because the routing is the def's own gate.</b> The original keeps a
-/// single frame-buffer-effect object (<c>crimson.exe</c> 0x9c8a98) whose colour and alpha the
-/// handler simply overwrites, so a second burst landing mid-wash replaces the first outright rather
-/// than compositing with it — that is still the composition rule here, held WITHIN each pane (<see
-/// cref="Play"/> replaces whatever that pane was running). The original is single-view, so one
-/// global state and "the whole picture" mean the same thing there; in splitscreen each pane IS a
-/// rendered picture, and two bursts 2 km apart are two different pictures. That keeps the 2 px
-/// gutters and the empty 3P quadrant — which are not part of any picture — out of it, and it is the
-/// same shape the cloud whiteout already uses.</para>
-///
-/// <para><b>Which panes.</b> <paramref name="radiusSquared"/> on <see cref="Play"/> is the wash
-/// def's OWN <c>If PlayerRange</c> gate (<see cref="Mech3.AnimRuntime.ScreenWashSink"/>), so the
-/// routing rule is the authored one re-asked per pane instead of once for player 1. A pane whose
-/// camera is inside that radius of the burst washes; the rest do not. Ungated (radius 0, the intro
-/// cutscene's `gi_scene1`) paints every pane, which is what an ungated wash means.</para>
-///
-/// <para><b>Under the HUD.</b> <see cref="HudLayers.WorldOverlay"/>, beside the whiteout: this is a
-/// world-picture effect, and unlike the lens flare's sun wash there is no footage saying it whitens
-/// the instruments. The launchscreen and the scoreboards sit at <see cref="HudLayers.Board"/> and
-/// are unreachable by it.</para>
+/// burst ramping the whole picture from one RGBA to another over the event's run time. One ramp
+/// per pane, painted into the pane(s) whose camera the burst was actually near. Composition rule,
+/// the per-pane routing gate and HUD layering: this module's entry in docs/architecture.md.
+/// ⚠ One state per pane, not one global state: in splitscreen each pane is its own picture, and
+/// painting the window instead would wash the gutters and the empty 3P quadrant, which are not
+/// part of any picture.
 /// </summary>
 public sealed partial class ScreenFlash : Node
 {
@@ -145,16 +128,15 @@ public sealed partial class ScreenFlash : Node
         }
     }
 
-    /// <summary>The panes a burst at <paramref name="origin"/> washes, into <see cref="_selected"/>:
-    /// every pane whose own camera is within the def's authored gate of it.</summary>
+    // The panes a burst at `origin` washes, into _selected: every pane whose own camera is within
+    // the def's authored gate of it — never "the hit player". Two of the three carriers are ground
+    // effects that play on terrain/water impacts, where no aircraft was struck at all.
     private void SelectPanes(Vector3 origin, float radiusSquared)
     {
         _selected.Clear();
         var cameras = _viewers?.Cameras;
-        // An ungated wash, or no viewer set to ask (the labs, a bench build): every pane, which is
-        // what this did for every wash before the routing existed. The count test is the
-        // index-alignment contract — panes and cameras are both the rig list, and a set that does
-        // not match it is not one this can index into.
+        // Ungated, or no viewer set to ask: every pane. The count check is the index-alignment
+        // contract between panes and cameras; a mismatched set is not one this can index into.
         if (radiusSquared <= 0f || cameras == null || cameras.Count != _rects.Count)
         {
             for (int i = 0; i < _rects.Count; i++)
@@ -177,10 +159,8 @@ public sealed partial class ScreenFlash : Node
                 nearest = i;
             }
         }
-        // The def's gate already fired, so a player WAS near this burst; the gate measures rig 0's
-        // camera while this measures each pane's own, so the two can disagree at the margin. The
-        // nearest pane still gets the wash rather than the burst washing nobody — a floor, not a
-        // second rule (in single player the two measure the same camera, so it never engages).
+        // The gate already fired against rig 0's camera, which can disagree with a pane's own at
+        // the margin; fall back to the nearest pane rather than washing nobody.
         if (_selected.Count == 0 && nearest >= 0)
             _selected.Add(nearest);
     }
@@ -195,8 +175,8 @@ public sealed partial class ScreenFlash : Node
         _layers[pane].Visible = c.A > 0f;
     }
 
-    /// <summary>One pane's ramp. A class rather than a struct because these are held in a list and
-    /// advanced in place every frame.</summary>
+    // One pane's ramp. A class rather than a struct because these are held in a list and
+    // advanced in place every frame.
     private sealed class Ramp
     {
         public Color From;

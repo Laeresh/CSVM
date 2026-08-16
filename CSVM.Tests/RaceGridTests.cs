@@ -11,26 +11,19 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The abreast starting grid (<see cref="RaceGrid"/>): where each pilot's slot lands, which way it
-/// faces, and how far the field is raised to clear the ground.
-///
-/// <para>These tests are the primary instrument for the lift rule, deliberately. A grid that raises
-/// each plane by its own ground instead of the whole field by the worst slot still starts the race,
-/// still lines up correctly in every screenshot, and is quietly unfair — there is no capture and no
-/// log line that would show it. <see cref="TheFieldIsLiftedByTheWorstSlotNeverPerPlane"/> is the
-/// only thing that can, so it uses a heightfield on which the two rules give different answers.</para>
-///
-/// <para>Terrain is a synthetic function of the slot position rather than a physics space: the
-/// injected sampler is what makes the geometry testable at all off-engine.</para>
+/// faces, and how far the field is raised to clear the ground. See <c>docs/architecture.md</c>
+/// for why lift-by-worst-slot has no visible symptom otherwise. Terrain is a synthetic function
+/// of slot position, which is what makes the geometry testable off-engine.
 /// </summary>
 public class RaceGridTests
 {
-    /// <summary>The grid's own spacing and clearance, restated so a change to either fails here
-    /// rather than passing silently. Both are config fallbacks now; these tests run with no
-    /// config.json, which is the state a scripted run and a fresh checkout are also in.</summary>
+    // The grid's own spacing and clearance, restated so a change to either fails here
+    // rather than passing silently. Both are config fallbacks now; these tests run with no
+    // config.json, which is the state a scripted run and a fresh checkout are also in.
     private const float Spacing = 60f;
     private const float Clearance = 100f;
 
-    /// <summary>An anchor high above everything, so the ground never asks for lift.</summary>
+    // An anchor high above everything, so the ground never asks for lift.
     private static readonly Vector3 HighAnchor = new(1000f, 5000f, -2000f);
 
     // ---- The fan -------------------------------------------------------------------------------
@@ -114,11 +107,8 @@ public class RaceGridTests
     // ---- The lift ------------------------------------------------------------------------------
 
     /// <summary>
-    /// ⚠ The assertion this file exists for. Three slots over three different ground heights, each
-    /// picked so the two candidate rules disagree: raising the field by the single worst slot puts
-    /// all three planes at 550 m, while raising each plane by its own ground would put them at
-    /// 500 / 550 / 500 — a race that looks identical in every screenshot and starts one pilot 50 m
-    /// above the others.
+    /// Three slots over three ground heights picked so the two candidate rules disagree: lift by
+    /// worst slot puts all three at 550 m; lift per plane would put them at 500 / 550 / 500.
     /// </summary>
     [Fact]
     public void TheFieldIsLiftedByTheWorstSlotNeverPerPlane()
@@ -357,19 +347,19 @@ public class RaceGridTests
 
     // ---- Helpers -------------------------------------------------------------------------------
 
-    /// <summary>A grid over a picker with no <c>--pos</c> override, so the anchor comes from the
-    /// spawn list handed to <c>ChooseStarts</c>.</summary>
+    // A grid over a picker with no `--pos` override, so the anchor comes from the
+    // spawn list handed to `ChooseStarts`.
     private static RaceGrid Grid(Func<Vector3, float?> ground) =>
         new(new SpawnPicker(SessionSpec.Parse(new[] { "--stunt" })), ground);
 
     private static IReadOnlyList<SpawnPoint> Spawns(Vector3 pos, float headingDeg) =>
         new[] { new SpawnPoint(pos, headingDeg) };
 
-    /// <summary>Ground at one height everywhere.</summary>
+    // Ground at one height everywhere.
     private static Func<Vector3, float?> Flat(float y) => _ => y;
 
-    /// <summary>A synthetic heightfield keyed on the slot's X offset from the origin — the axis the
-    /// fan runs along at heading 0°. An unlisted column is at sea level.</summary>
+    // A synthetic heightfield keyed on the slot's X offset from the origin — the axis the
+    // fan runs along at heading 0°. An unlisted column is at sea level.
     private static Func<Vector3, float?> Heights(Dictionary<float, float> byX) => p =>
     {
         foreach (var (x, h) in byX)
@@ -382,8 +372,8 @@ public class RaceGridTests
         return 0f;
     };
 
-    /// <summary>The nose direction a spawn heading means, built the way <c>SpawnPicker</c> builds
-    /// it, so a change to that convention fails these tests rather than sliding past them.</summary>
+    // The nose direction a spawn heading means, built the way `SpawnPicker` builds
+    // it, so a change to that convention fails these tests rather than sliding past them.
     private static Vector3 Forward(float headingDeg) =>
         (new Basis(Vector3.Up, Mathf.DegToRad(headingDeg)) * Vector3.Forward).Normalized();
 }

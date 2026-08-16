@@ -10,37 +10,16 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The animation debugger (<c>--anim-lab</c>): the chapter world as a <b>quiet stage</b> — reset
-/// states and mission setup applied, nothing playing — with def playback under a deterministic
-/// fixed-dt clock, a filterable def <b>picker</b>, an authored-vs-fired <b>timeline</b>
-/// (<see cref="AnimTimeline"/>), and a <b>transport button panel</b>.
-///
-/// <para>The camera is the <see cref="SpectatorCamera"/> freecam (RMB look, WASD/QE move, Shift
-/// boost, wheel speed) — the same one <c>--freecam</c> uses — so transport is on <b>buttons</b>
-/// (plus a few non-clashing key shortcuts: P pause · <c>.</c> step · R restart · F picker),
-/// because WASD/QE now drive the camera. Clicking any object hands it to the shared
-/// <see cref="SelectionService"/>, and the camera frames and <b>follows</b> whatever rung of that
-/// selection's ancestor ladder is current (PgUp/PgDn walk it); WASD/QE cancels the follow,
-/// mouse-look and the wheel keep it.</para>
-///
-/// <para>The clock is the session's <see cref="GameClock"/>, which the lab only drives: pause =
-/// halt it, step = queue one step, and the speed selector (0.1×–4×) is its scale. The mode is the
-/// session's choice — an accumulator emitting whole 1/60 s steps when interactive, exactly one
-/// fixed step per rendered frame in a scripted <c>--screenshot</c> run, so a
-/// <c>--frames</c>/<c>--shots</c> capture lands on exact step counts. The render rate never
-/// changes simulation results. The RNG is re-pinned on every Play/Restart, so a seeded replay
-/// rolls the same dice. Ambient playback (ON_STARTUP defs + startanims) toggles on <i>and</i> off
-/// (off returns to the quiet stage, keeping the played def running).</para>
-///
-/// <para>The picker/timeline/transport are fed from the runtime's UI hooks and are the
-/// whole interactive UI, hidden in a scripted <c>--screenshot</c> so those shots stay
-/// byte-identical; <c>--debug-anim-ui</c> forces them visible. The hooks are attached only when
-/// the UI is shown, so a plain scripted run pays nothing.</para>
-///
-/// <para>Accepted limits: pausing freezes everything the CPU drives (the runtime, texture cycles,
-/// puffer particles) but not the GPU — shader-driven UV scroll keeps flowing, and audio already
-/// playing plays out; the timeline tracks one instance of the played def plus its CALL_ANIMATION
-/// children.</para>
+/// The animation debugger (<c>--anim-lab</c>): the chapter world as a quiet stage, reset states
+/// and mission setup applied but nothing playing, with def playback under a deterministic
+/// fixed-dt clock, a filterable def picker, an authored-vs-fired timeline
+/// (<see cref="AnimTimeline"/>), and a transport button panel. The camera is the
+/// <see cref="SpectatorCamera"/> freecam, so transport is on buttons; clicking an object hands
+/// it to the shared <see cref="SelectionService"/> and the camera follows its ancestor ladder.
+/// The clock is the session's <see cref="GameClock"/>, which the lab only drives: pause halts
+/// it, step queues one, the speed selector scales it. Picker/timeline/transport hide in a
+/// scripted <c>--screenshot</c>; <c>--debug-anim-ui</c> forces them visible. Bindings:
+/// docs/controls.md. Ordering rules and determinism boundaries: docs/architecture.md.
 /// </summary>
 public sealed partial class AnimLab : Node
 {
@@ -61,9 +40,9 @@ public sealed partial class AnimLab : Node
     // metres across; this frames it without clipping the near plane. TUNE.
     private const float StageAnchorDist = 55f;
 
-    /// <summary>The transport time scales, slowest to fastest (buttons + the current-speed
-    /// readout use these). 1× is the real-time default; below it is slow-mo, above it is
-    /// fast-forward for skimming a long loop.</summary>
+    // The transport time scales, slowest to fastest (buttons + the current-speed
+    // readout use these). 1× is the real-time default; below it is slow-mo, above it is
+    // fast-forward for skimming a long loop.
     private static readonly float[] Speeds = { 0.1f, 0.25f, 1f, 2f, 4f };
 
     private readonly AnimRuntime _runtime;
@@ -86,14 +65,10 @@ public sealed partial class AnimLab : Node
     // ItemList row → index into _program.Defs (the filtered view).
     private readonly List<int> _rows = new();
 
-    // Render-pose smoothing for the interactive FixedAccum clock: the sim advances in whole
-    // 1/60 s steps while the lab renders faster, so an unsmoothed moving target's transform
-    // freezes on the rendered frames between steps — the same cadence stutter the flown plane's
-    // own _renderPose smoothing prevents, visible as ghosted/jittery cars on any FromTo drive. Each
-    // live transform-motion target keeps its last two SIM poses; every rendered frame draws it
-    // at the clock's sub-step fraction between them. Sim purity is kept by restoring the true
-    // sim pose before any step runs, so event held-pose seeding never reads a render pose; in
-    // FixedStep (scripted) the fraction is pinned to 1, an identity rewrite of the sim pose.
+    // Render-pose smoothing for the interactive FixedAccum clock: each live transform-motion
+    // target keeps its last two SIM poses, drawn at the clock's sub-step fraction between them.
+    // The true sim pose is restored before any step runs, so held-pose seeding never reads a
+    // render pose. See docs/architecture.md.
     private readonly Dictionary<Node3D, (Transform3D Prev, Transform3D Curr)> _renderPoses = new();
 
     private Label? _status;
@@ -142,8 +117,8 @@ public sealed partial class AnimLab : Node
     /// still tracks what it picked.</summary>
     public SelectionService? Selection { get; init; }
 
-    /// <summary>The session clock the transport drives. The lab never owns it — the session picks
-    /// the mode (accumulator when interactive, one fixed step per frame when scripted).</summary>
+    // The session clock the transport drives. The lab never owns it — the session picks
+    // the mode (accumulator when interactive, one fixed step per frame when scripted).
     private static GameClock? Clock => GameClock.Current;
 
     private float PlayheadTime => _playhead;
@@ -214,9 +189,7 @@ public sealed partial class AnimLab : Node
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        // Clicking (and PgUp/PgDn) belongs to the shared SelectionService, which the lab follows
-        // through OnSelectionChanged.
-        // Only a few keys — the camera owns WASD/QE/arrows/Space/Z/IJKL/Shift/Ctrl/RMB/wheel, and
+        // Only a few keys: the camera owns WASD/QE/arrows/Space/Z/IJKL/Shift/Ctrl/RMB/wheel, and
         // M/C belong to the mesh lab and the collider overlay.
         if (@event is not InputEventKey { Pressed: true, Echo: false } key)
         {
@@ -266,9 +239,9 @@ public sealed partial class AnimLab : Node
 
     // ---- render-pose smoothing (see the _renderPoses field note) -----------------------------
 
-    /// <summary>Puts every smoothed target back on its exact sim pose, so the steps about to run
-    /// — and any event they fire that seeds a held pose from the live transform — never see an
-    /// interpolated render pose. Sim state stays a function of the step count alone.</summary>
+    // Puts every smoothed target back on its exact sim pose, so the steps about to run
+    // — and any event they fire that seeds a held pose from the live transform — never see an
+    // interpolated render pose. Sim state stays a function of the step count alone.
     private void RestoreSimPoses()
     {
         foreach (var (target, pair) in _renderPoses)
@@ -280,9 +253,9 @@ public sealed partial class AnimLab : Node
         }
     }
 
-    /// <summary>Rolls the pose pairs after this frame's steps: each live transform-motion
-    /// target's Curr becomes Prev and its fresh sim pose becomes Curr. A target whose motion
-    /// ended leaves the set at its final sim pose (just restored, never re-interpolated).</summary>
+    // Rolls the pose pairs after this frame's steps: each live transform-motion
+    // target's Curr becomes Prev and its fresh sim pose becomes Curr. A target whose motion
+    // ended leaves the set at its final sim pose (just restored, never re-interpolated).
     private void SnapshotSimPoses()
     {
         var live = new Dictionary<Node3D, (Transform3D, Transform3D)>();
@@ -302,10 +275,10 @@ public sealed partial class AnimLab : Node
         }
     }
 
-    /// <summary>Draws each smoothed target between its last two sim poses at the clock's
-    /// sub-step fraction. FixedStep pins the fraction to 1 — an identity rewrite — so scripted
-    /// captures stay byte-identical; while halted the fraction holds still, so a paused frame
-    /// cannot wobble between stale poses.</summary>
+    // Draws each smoothed target between its last two sim poses at the clock's
+    // sub-step fraction. FixedStep pins the fraction to 1 — an identity rewrite — so scripted
+    // captures stay byte-identical; while halted the fraction holds still, so a paused frame
+    // cannot wobble between stale poses.
     private void ApplyRenderPoses(float fraction)
     {
         foreach (var (target, pair) in _renderPoses)
@@ -319,10 +292,8 @@ public sealed partial class AnimLab : Node
 
     private void Step(float dt)
     {
-        // The playhead is advanced BEFORE Advance so that during the runtime's dispatch hooks it
-        // equals the runner's clock — incremented at the top of Advance — and a fired mark lands
-        // at the time it actually fired. The t=0 events fired by AnimRuntime.Play use dt=0 and see
-        // a zero playhead, so they stamp at t=0, matching.
+        // Advanced BEFORE Advance so a fired mark lands at the time it actually fired; t=0
+        // events (AnimRuntime.Play) use dt=0 and see a zero playhead, so they stamp at t=0.
         _steps++;
         _playhead += dt;
         _runtime.Advance(dt);
@@ -409,10 +380,8 @@ public sealed partial class AnimLab : Node
         _anchorCaptured = false;
         _trackChildren = !_ambient;
         _timeline?.SetDef(_program, _timelineDef, "");
-        // The staging anchor for a PLACELESS on-call def (an effect template whose NAME resolves
-        // nothing, e.g. the crash def): a dummy a fixed offset in front of the camera, so the
-        // effect — and any template it relocates onto the call site — plays where you are looking
-        // instead of at the world origin. A real-anchored def (train, door) ignores it.
+        // Staging anchor for a placeless on-call def: a dummy at a fixed offset in front of the
+        // camera, so it plays where you are looking instead of at the world origin.
         var anchor = StageAnchor(freshAnchor);
         var started = _runtime.Play(name, anchor);
         if (started.Count == 0)
@@ -443,10 +412,10 @@ public sealed partial class AnimLab : Node
         }
     }
 
-    /// <summary>Repositions the effect/crash stage a fixed offset in front of the camera on a
-    /// <paramref name="fresh"/> Play (so the effect sits where you are looking), and leaves it put on
-    /// Restart — so a seeded replay lands in exactly the same spot. Returns it as the fallback anchor
-    /// for a still-placeless def.</summary>
+    // Repositions the effect/crash stage a fixed offset in front of the camera on a
+    // `fresh` Play (so the effect sits where you are looking), and leaves it put on
+    // Restart — so a seeded replay lands in exactly the same spot. Returns it as the fallback anchor
+    // for a still-placeless def.
     private Node3D StageAnchor(bool fresh)
     {
         if (fresh)
@@ -458,9 +427,9 @@ public sealed partial class AnimLab : Node
         return _stageAnchor;
     }
 
-    /// <summary>Restart = <see cref="AnimRuntime.Stop"/> (tear down the def's live
-    /// motions/puffers/lights/sounds) → re-pin the RNG → re-apply RESET_STATE → Start, playhead
-    /// back at step 0 — the visually-identical replay the fixed clock + seed exist for.</summary>
+    // Restart = AnimRuntime.Stop (tear down the def's live
+    // motions/puffers/lights/sounds) → re-pin the RNG → re-apply RESET_STATE → Start, playhead
+    // back at step 0 — the visually-identical replay the fixed clock + seed exist for.
     private void Restart()
     {
         if (_defName == null)
@@ -586,9 +555,9 @@ public sealed partial class AnimLab : Node
         }
     }
 
-    /// <summary>Frames the camera on the played def and follows its anchor (or first resolved
-    /// target node — <see cref="AnimRuntime.FrameTarget"/>), so a moving def (the train) stays in
-    /// view until the user takes the camera somewhere with WASD/QE.</summary>
+    // Frames the camera on the played def and follows its anchor (or first resolved
+    // target node — AnimRuntime.FrameTarget), so a moving def (the train) stays in
+    // view until the user takes the camera somewhere with WASD/QE.
     private void FrameOn(List<(AnimDefinition Def, Node3D? Anchor)> started)
     {
         foreach (var (def, anchor) in started)
@@ -811,11 +780,8 @@ public sealed partial class AnimLab : Node
 
     private Button TBtn(string text, Action pressed)
     {
-        // FocusMode None keeps a clicked button from holding keyboard focus and swallowing the
-        // transport keys — a focused button turns Space into "press me again" instead of a
-        // transport key.
-        // Every press also releases the picker's text field, so clicking any transport control
-        // hands the keyboard (camera + shortcuts) back after typing a filter (user-reported).
+        // FocusMode None keeps a clicked button from swallowing the transport keys. Every press
+        // also releases the picker's text field, so it hands the keyboard back after a filter.
         var b = new Button { Text = text, FocusMode = Control.FocusModeEnum.None };
         b.Pressed += () => { GetViewport().GuiReleaseFocus(); pressed(); };
         return b;

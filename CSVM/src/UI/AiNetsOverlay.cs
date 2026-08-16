@@ -7,37 +7,21 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>One AI aircraft's live link to the net node it is flying at: where the plane is,
-/// where that node is, and which net owns it (for the overlay's per-net colour and filter). A
-/// plain value so the overlay stays ignorant of aircraft: the session fills these in from each
-/// pilot's own follower state, never from a guess about which node looks nearest.
-///
-/// <para><paramref name="Steering"/> separates the two cases that look identical on screen and
-/// are not: the pilot is flying at that node right now, or it merely still HOLDS it while
-/// pursuing/evading and will resume there. A held leash draws dimmed.</para></summary>
+/// where that node is, and which net owns it. A plain value so the overlay stays ignorant of
+/// aircraft: the session fills these in from each pilot's own follower state.
+/// <paramref name="Steering"/> separates flying at that node right now from merely holding it
+/// while pursuing or evading; a held leash draws dimmed.</summary>
 public readonly record struct AiNetLeash(Vector3 From, Vector3 To, int NetId, bool Steering);
 
 /// <summary>
 /// The AI patrol-net overlay (key F13, flag <c>--debug-ainets</c>): draws the chapter's
-/// <c>ne0NNNNN</c> waypoint graphs (docs/formats/ai-nets.md) — data the original never
-/// renders. Every net gets one stable id-derived colour; edges are drawn as individual
-/// segments from the explicit edge list, <b>never</b> as a closed polygon or a node-order
-/// polyline — the graph branches, and assuming a loop draws fiction (the mistake the dzpath
-/// "polygon" already invited). Nodes get markers (tagged nodes bigger — the raw
-/// undecoded stop/valve candidates), each net a fixed-size name label with its trailer
-/// (<c>M4ReinfAce → player</c>). Depth-tested on purpose: an x-ray view lies about where a
-/// route threads terrain. While the overlay is up, a HUD text field narrows the drawn set
-/// live to nets whose name starts with the typed prefix (case-insensitive).
-///
-/// <para><b>Leashes.</b> While the overlay is up it also draws, live, one line per AI aircraft
-/// from the plane to the node it is currently flying at (<see cref="CollectLeashes"/>, filled by
-/// the session from each pilot's own <c>AiNetFollower.CurrentTarget</c>) with a short vertical
-/// tick at the plane end so the two ends are never confused. That is the follower's actual state
-/// rather than an inference from the geometry, so a plane that has silently stopped advancing is
-/// visible as a leash that stops changing. A leash whose net is filtered out of the drawn set is
-/// filtered out too.</para>
-///
-/// <para>F13 is the first tenant of the F13–F24 range reserved for debug overlays
-/// (docs/controls.md); the older overlay keys (C/X/T/…) migrate there later.</para>
+/// <c>ne0NNNNN</c> waypoint graphs (docs/formats/ai-nets.md), data the original never renders.
+/// Every net gets one stable id-derived colour; nodes get markers; a HUD text field narrows the
+/// drawn set live by name prefix. While up it also draws live leashes: one line per AI aircraft
+/// from the plane to the node its follower is flying at. Leash sourcing and the anchored-net
+/// offset: this module's entry in docs/architecture.md.
+/// ⚠ Draw edges as individual segments off the explicit edge list, never as a closed polygon or
+/// a node-order polyline: the graph branches, and assuming a loop draws fiction.
 /// </summary>
 public sealed partial class AiNetsOverlay : Node
 {
@@ -87,7 +71,7 @@ public sealed partial class AiNetsOverlay : Node
     public Action<List<AiNetLeash>>? CollectLeashes { get; init; }
 
     /// <summary>How far this net's nodes sit from their authored coordinates right now: the
-    /// trailer offset an anchored net rides its target by (`BL-377`, supplied by the session from
+    /// trailer offset an anchored net rides its target by (supplied by the session from
     /// <c>NetTrailerTargets</c>). The drawn graph is moved by it every frame, so the ring on screen
     /// is the ring the AI is flying rather than the one in the file. Null draws every net at its
     /// authored coordinates, which is also what an unanchored or unresolved net gets.</summary>

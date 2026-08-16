@@ -73,7 +73,7 @@ public sealed class PlaneStats
     /// <summary>The AI def the damage trio came from ("bloodhawk"), or null on a player load
     /// (<see cref="Load"/>). Set only by <see cref="LoadForAi"/>, and deliberately NOT used as
     /// <see cref="DefName"/>: that name keys the stock-loadout table, which holds the eleven
-    /// player defs alone, so swapping it would leave every AI plane unarmed (BL-386).</summary>
+    /// player defs alone, so swapping it would leave every AI plane unarmed.</summary>
     public string? AiDefName;
 
     // dynamics block
@@ -96,18 +96,12 @@ public sealed class PlaneStats
     public float AiAttackRange = 2000f;
     public float AiReturnRange = 1200f;
 
-    // The AI control law's per-axis output stage (docs/org/aiControlLaw.md): the law's roll,
-    // pitch and yaw commands are multiplied by these three scales and then clamped to these three
-    // limits. Fallbacks are the def initialiser's own compiled defaults, which is what every
-    // airframe in this install actually flies on — no roster block authors them (all twelve slots
-    // are -1.0, the fall-through marker) and the shipped defs author only ai_input_limit_pitch, on
-    // eleven of them, at 0.79-0.91.
-    // ⚠ A scale of 3.5 against a limit of 1.0 saturates for any body-frame aim error over ~0.29, so
-    // this stage is NEAR-BANG-BANG, not proportional. That is the decoded behaviour, not a bug.
-    // ⚠ The original's ai_emerg_input_* set is deliberately NOT mirrored: its compiled defaults are
-    // identical to these and nothing in this install authors a single emergency slot, so crash
-    // recovery would read the same six numbers. Add the six fields only if a data edit makes them
-    // differ.
+    // The AI control law's per-axis output stage (docs/org/aiControlLaw.md): roll, pitch and yaw
+    // commands are multiplied by these scales, then clamped to these limits. Fallbacks are the
+    // def initialiser's own compiled defaults, which is what every airframe in this install flies on.
+    // ⚠ A scale of 3.5 against a limit of 1.0 saturates near a 0.29 aim error, so this stage is
+    // near-bang-bang, not proportional; that is decoded behaviour, not a bug.
+    // ⚠ Do not mirror ai_emerg_input_*: its compiled defaults equal these and no roster authors it.
     public float AiInputScaleRoll = 3.5f;
     public float AiInputScalePitch = 3.5f;
     public float AiInputScaleYaw = 3.5f;
@@ -127,20 +121,12 @@ public sealed class PlaneStats
     public float Gravity = PhysicsConstants.NomGravity; // nom_gravity — the game's arcade gravity, m/s²
     public float StallMag = 1.25f;
 
-    // player.json flight globals, plumbed here so the flight model reads authored data instead of
-    // hardcoding it: LiftAccelRate/LiftAoaCosLo/Hi feed the lift demand, Yaw* the rudder-authority
-    // curve, TurnFadeIn/Out the roll-and-pitch base ramp.
-    // Unread ON PURPOSE, not pending: MaxAoaCos and HighG/LowG* are the control limiters' authored
-    // thresholds and this install puts them out of reach (peak demand 2.13-5.01 G against 9, peak
-    // alpha 8.9-25.6 deg against 46, all eleven airframes — ControlLimiterTests pins it), and
-    // HighSpeedPitchFadeLo/Hi is the same story at 1000 mph. DragFadeSpeed's key is dead in the
-    // executable. Do not implement any of them from the field names — see
-    // docs/org/flightModel.md's corrections table.
-    // Mirrors docs/org/flightModel.md's load-time conversions exactly: speeds × 0.44704 (MPH → m/s),
-    // angles cosined at load where the original cosines them (liftAOAs, maxAOA), raw where it does
-    // not (highGs/lowGs are plain G, yaw_low_speed/yaw_high_speed are dimensionless authority).
-    // Fallbacks below are the executable's own compiled defaults (docs/org/flightModel.md); this
-    // install's authored values differ in several places — see the corrections table there.
+    // player.json flight globals, plumbed here instead of hardcoded (docs/org/flightModel.md).
+    // Converted exactly as the original does: speeds × 0.44704, angles cosined where the
+    // original cosines them, raw G otherwise. Fallbacks are the executable's compiled defaults;
+    // this install's authored values differ — see the corrections table there.
+    // ⚠ MaxAoaCos/HighG*/LowG*/HighSpeedPitchFade* are unread on purpose: this install authors
+    // them out of the control limiters' reach. Do not implement any from the field names.
     public float LiftAccelRate = 1.2f;      // lift_accel_rate, 1/s — NOT converted (a rate, not a speed)
     public float LiftAoaCosLo = 0.98f;      // cos(liftAOAs[0]) — liftAOAs is degrees, cosined at load
     public float LiftAoaCosHi = 0.96f;      // cos(liftAOAs[1])
@@ -170,15 +156,11 @@ public sealed class PlaneStats
     // this install authors 400 and 10.
     public float GroundBlowElev = 100f;     // groundblow_elev, m — ray length and falloff denominator
     public float GroundBlowMag = 1.5f;      // groundblow_mag, dimensionless
-    // C23: the AI path is a DIFFERENT law, not the player term scaled by this — a fixed push
-    // independent of what the AI commanded, linear in proximity rather than quadratic, and not
-    // dt-scaled. FlightModel.GroundBlowTerm reads AiGroundBlow · GroundBlowMag as that fixed factor
-    // (5.0 authored, not 0.15 — see that method's own note). The compiled AI branch cuts both the
-    // factor and S to ×0.15 for 2.5 s after a carrier drop (a zeppelin fighter-drop launch is this
-    // engine's carrier drop and IS reachable, but this port tracks no spawn timestamp, so the cut is
-    // an unmodelled gap — backlog.md BL-382) and suppresses the whole term while the AI is stunned
-    // (ported, but at FlightController.ProbeGroundBlow's gate, not here — GroundBlowTerm itself sees
-    // only what the probe already decided to feed it).
+    // ⚠ C23: the AI path is a DIFFERENT law from the player term, not that term scaled by this —
+    // a fixed push, linear in proximity, not dt-scaled (docs/org/flightModel.md "Ground blow").
+    // FlightModel.GroundBlowTerm reads AiGroundBlow · GroundBlowMag as that factor (5.0 authored).
+    // The compiled AI branch also cuts it ×0.15 for 2.5 s after a carrier drop and while stunned;
+    // neither cut is modelled here (backlog.md BL-382).
     public float AiGroundBlow = 0.9f;       // ai_groundblow, dimensionless
 
     // The collision restitution ceiling (player.json's `crash` block, docs/org/flightModel.md's
@@ -244,14 +226,11 @@ public sealed class PlaneStats
 
     public float? VehicleHealth;
 
-    /// <summary>The def-level 'injure_anims' (distinct from each part's): descending
-    /// HP-fraction thresholds → whole-plane effect anims. An AI load resolves the AI def's own
-    /// seven-entry ladder (eight on the balmoral) instead of the player's two below.
-    /// [0.10 player_smoketrail]
-    /// (the dying plane's dense_firetrail smoke) and [0.85 player_fuelleak]. Read as
-    /// "any part's fraction crosses the threshold" (assumption — the exact original
-    /// trigger is undecoded; a total-HP reading could never fire 0.10 before a
-    /// critical part died at 75% total).</summary>
+    /// <summary>The def-level 'injure_anims': descending HP-fraction thresholds → whole-plane
+    /// effect anims (docs/formats/vehicle.md). An AI load resolves the AI def's own ladder
+    /// instead of the player's two-entry one below.
+    /// ⚠ Read as "any part's fraction crosses the threshold" — the exact original trigger is
+    /// undecoded.</summary>
     public List<(float Frac, string Anim)> VehicleInjureAnims = new();
 
     /// <summary>The def's <c>turrets</c> block — the host→gunner link the carried half of
@@ -265,50 +244,20 @@ public sealed class PlaneStats
         LoadCore(zrdrPath, planeNodeName, forAi: false);
 
     /// <summary>The same airframe as flown by the AI. Everything except the damage model still
-    /// resolves down the player chain — the dynamics blocks are byte-identical between a
-    /// <c>p&lt;name&gt;</c> and its <c>&lt;name&gt;</c> pair, and <see cref="DefName"/>,
-    /// <see cref="TurretMounts"/> and the built model must stay on the player def because the
-    /// loadout table, the display name and the rig all key off them.
-    ///
-    /// <para>The damage model instead resolves down the AI def's own chain, which is what the
-    /// original spawns: <b>an authored <c>armor</c>/<c>health</c> pair and no
-    /// <c>destroyable_parts</c> at all</b>. Every one of the 414 shipped <c>aiv</c> roster blocks
-    /// names either a bare AI def (<c>devastator</c>) or a militia variant of one
-    /// (<c>secfury</c> → <c>fury</c>), and not one of those chains resolves a part — so an AI
-    /// aircraft is zone-less and its whole pair is authoritative rather than a sum over zones
-    /// (BL-386; the militia variants override no damage key, so the base def is the whole
-    /// answer). ⚠ The <c>r*</c> family is the only AI-side family carrying parts, and no roster
-    /// spawns one — it is the remote-player family, not the AI one.</para></summary>
+    /// resolves down the player chain (<see cref="DefName"/>, <see cref="TurretMounts"/> and the
+    /// built model must stay there — the loadout table and the rig key off them). The damage
+    /// model instead resolves down the AI def's own chain: an authored <c>armor</c>/<c>health</c>
+    /// pair and no <c>destroyable_parts</c>, so an AI aircraft is zone-less.
+    /// ⚠ The <c>r*</c> family carries parts but is the remote-player family; no roster spawns one.</summary>
     public static PlaneStats LoadForAi(string zrdrPath, string planeNodeName) =>
         LoadCore(zrdrPath, planeNodeName, forAi: true);
 
-    /// <summary>The original's per-spawn dynamics jitter, applied to a non-human-piloted aircraft
-    /// (docs/org/flightModel.md "The per-spawn jitter"; the block at the tail of
-    /// <c>FUN_00476250</c>, <c>0x477340</c>–<c>0x4773f0</c>). Eleven runtime slots are each drawn
-    /// independently and multiplied in place by <c>(2r − 1) · 0.05 + 1</c>, a uniform 1 ± 5 %.
-    /// Returns a jittered COPY: the caller's object is the session's shared per-airframe cache and
-    /// two aircraft off the same airframe must not share a spread.
-    ///
-    /// <para>Seven of the eleven have a field here, in the original's own draw order: the
-    /// whole-vehicle health and armour maxima (<c>+0x2cc</c>/<c>+0x2c4</c>, each mirrored into its
-    /// "current" slot), then <c>fd_speed</c>, <c>ThrustFactor</c> (<see cref="EnginePower"/>),
-    /// <c>drag_factor</c>, <c>pitch_torque</c> and <c>roll_torque</c>. The other four are
-    /// vehicle.json's <c>rates</c> and <c>turns</c> pairs (def <c>+0xe8</c>/<c>+0xec</c> and
-    /// <c>+0xf8</c>/<c>+0xfc</c> → runtime <c>+0x680</c>…<c>+0x68c</c>), the surface-driving
-    /// integrator's acceleration and steering rates with their clamps: <c>basic_airplane</c> authors
-    /// them (10/42 and 4.6/6.5) and so an aeroplane carries them, but the aeroplane arm of the
-    /// original's own class dispatch never reads them, so there is nothing here for them to move.</para>
-    ///
-    /// <para>⚠ The whole-vehicle pair is what the original scales, NOT the per-part pools — a jittered
-    /// aircraft's zones stay at their authored maxima and only the hull pool moves. An AI load
-    /// (<see cref="LoadForAi"/>) carries the authored pair and no zones at all, so the scale lands
-    /// on the real pool; where the chain authors no pair (a player airframe) the resolved sum over
-    /// parts is written out explicitly, so <see cref="PlaneDamage"/> sees the scaled hull rather
-    /// than re-deriving the unscaled one.</para>
-    ///
-    /// <para>⚠ <c>veh_weight</c> and <c>ref_area</c> are NOT among the eleven, which is why
-    /// <c>FlightModel.StallSpeed</c> (computed once from that pair) cannot go stale behind this —
-    /// construct the plant from the jittered stats anyway, since <c>fd_speed</c> is.</para></summary>
+    /// <summary>The original's per-spawn dynamics jitter (docs/org/flightModel.md "The per-spawn
+    /// jitter"). Returns a jittered COPY: the caller's object is the shared per-airframe cache.
+    /// ⚠ Only the whole-vehicle pair scales, never per-part pools — <see cref="LoadForAi"/>'s
+    /// zone-less pair takes the full effect; a player airframe's resolved sum is written out
+    /// explicitly so <see cref="PlaneDamage"/> sees the scaled hull. <c>veh_weight</c>/<c>ref_area</c>
+    /// are not among the jittered slots.</summary>
     public PlaneStats WithAiSpawnJitter(Random rng)
     {
         // Shallow: DestroyableParts / TurretMounts / VehicleInjureAnims are read-only after Load and
@@ -351,10 +300,8 @@ public sealed class PlaneStats
             return chain; // derived first, base last
         }
 
-        // Find the player def whose nodename matches (pbloodhawk for player_bhawk); requiring
-        // player_airplane in the chain is what makes the match unique, since the AI and wingman
-        // variants share the model nodename. This runs on BOTH flavours — an AI load starts from
-        // the player def too and hops to the AI chain below for the damage model alone.
+        // Requiring player_airplane in the chain is what makes the nodename match unique — the
+        // AI and wingman variants share it. Runs for both flavours.
         string? found = null;
         List<ZrdrDict>? chain = null;
         foreach (var name in order)
@@ -378,11 +325,8 @@ public sealed class PlaneStats
         if (found == null || chain == null)
             throw new ArgumentException($"no player vehicle def with nodename '{planeNodeName}' in vehicle.json");
 
-        // The AI def for the same airframe is the player def's name without its leading 'p'
-        // (pfury -> fury), which lands on all eleven. It cannot be found by nodename the way the
-        // player def above is: the bare AI defs author none of their own and would all resolve
-        // basic_airplane's inherited `firebrand`. Fails loud rather than silently falling back to
-        // the player chain, since a silent fallback is the bug this whole path exists to fix.
+        // pfury -> fury; cannot be found by nodename since bare AI defs author none of their own.
+        // Fails loud rather than silently falling back to the player chain.
         string? aiName = null;
         List<ZrdrDict>? aiChain = null;
         if (forAi)
@@ -519,12 +463,8 @@ public sealed class PlaneStats
             break;
         }
 
-        // destroyable_parts: nearest def in the chain that has the block. Each part
-        // is [name, hp, armor, flags…, "got_hit_anim", [anim, root], "injure_anims",
-        // [[frac, anim, root], …]] — the pair is (hit points, armor); the two values
-        // are equal for the stock player defs (AI variants and the armory diverge
-        // them), and a def carrying only one float has no armor. An AI load resolves none: no
-        // roster-named def chain authors the block, so an AI aircraft is zone-less (BL-386).
+        // destroyable_parts schema: docs/formats/vehicle.md. An AI load resolves none — no
+        // roster-named chain authors the block, so an AI aircraft is zone-less.
         foreach (var d in damageChain)
         {
             if (d.List("destroyable_parts") is not { } partsList)

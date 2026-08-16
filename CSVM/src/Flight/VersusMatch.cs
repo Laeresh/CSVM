@@ -11,20 +11,14 @@ public readonly record struct VersusStanding(int PlayerIndex, int Kills, int Dea
 
 /// <summary>
 /// Deathmatch scorekeeping for splitscreen "Dogfight": per-player kills and deaths plus the match
-/// clock, host-fed exactly like <see cref="StuntRace"/> — a plain class, not a Godot
-/// <c>Node</c>, freed with the session. No engine dependency of any kind (no <c>GD.*</c>, no
-/// <c>Godot.</c> type, no logging): a caller reports facts (<see cref="RegisterKill"/>,
-/// <see cref="RegisterDeath"/>, <see cref="Advance"/>) and this class turns them into standings and
-/// one completion event.
-///
-/// <para>A kill scores only the shooter; a death always scores, killer or not — terrain and
-/// mid-air deaths call <see cref="RegisterDeath"/> alone, so they cost nothing but a death tally
-/// (no −1, no last-damager credit). The match completes once, on whichever comes first: a
-/// player reaching <see cref="KillTarget"/>, or the clock reaching <see cref="TimeLimit"/> (the
-/// leader wins the time-out; equal top kills draw). With both disabled (0) the match runs
-/// untimed and unlimited and never completes on its own — a caller would have to end it some other
-/// way.</para>
-/// </summary>
+/// clock, host-fed exactly like <see cref="StuntRace"/>. A caller reports facts
+/// (<see cref="RegisterKill"/>, <see cref="RegisterDeath"/>, <see cref="Advance"/>) and this class
+/// turns them into standings and one completion event. The match completes once, on whichever
+/// comes first: a player reaching <see cref="KillTarget"/>, or the clock reaching
+/// <see cref="TimeLimit"/>; with both disabled (0) it never completes on its own. Deliberately
+/// not a Node — freed with the session, host-fed exactly like <see cref="StuntRace"/>'s timekeeping.
+/// ⚠ Zero engine dependency of any kind, not even <c>Log</c> — a <c>GD.Print</c> in this family
+/// once crashed the xUnit host. Keep it engine-free by construction.</summary>
 public sealed class VersusMatch
 {
     private readonly Score[] _scores;

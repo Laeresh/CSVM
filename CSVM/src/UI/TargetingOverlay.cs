@@ -8,33 +8,26 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The targeting overlay (key F15, flag <c>--debug-targets</c>): who is aiming at whom, drawn as
-/// a line from each shooter to the target it has actually acquired, rebuilt every frame. Two
-/// families answer the same question, so both are drawn from their own live state and never from
-/// a re-derivation: a turret gunner's <see cref="TurretController.TargetPosition"/> with its
+/// a line from each shooter to the target it has actually acquired, rebuilt every frame. A
+/// turret gunner's <see cref="TurretController.TargetPosition"/> with its
 /// <see cref="TurretController.Gate"/>, and an AI pilot's <see cref="AiGunner.Target"/> with its
-/// <see cref="AiGunner.WantsFire"/>.
-///
-/// <para>The line's colour is the ANSWER, not decoration: red = firing, amber = tracking but a
-/// gate is holding the trigger, grey = acquired and out of its own arc. The HUD names each held
-/// shooter's gate, which is the part a screenshot has to carry — "the zeppelin is not shooting"
-/// and "the zeppelin is shooting at your wingman" look identical from the cockpit, and so do
-/// "blocked by geometry" and "still slewing".</para>
-///
-/// <para>Depth test OFF, unlike <c>AiNetsOverlay</c>: this overlay's whole job is to show lines
-/// that pass through a hull, and a depth-tested line into a zeppelin would be invisible exactly
-/// when it matters most.</para>
+/// <see cref="AiGunner.WantsFire"/>, both drawn from their own live state, never re-derived. The
+/// line's colour is the answer: red firing, amber tracking, grey held; the HUD names each held
+/// shooter's gate. One instance sits under the shared world root, so every splitscreen pane draws
+/// the same lines with no per-pane copy.
+/// ⚠ Depth test off, unlike <c>AiNetsOverlay</c>: a line into a hull is the one worth seeing.
 /// </summary>
 public sealed partial class TargetingOverlay : Node
 {
-    /// <summary>Firing this tick: every gate passed.</summary>
+    // Firing this tick: every gate passed.
     private static readonly Color FiringColor = new(1f, 0.25f, 0.2f);
 
-    /// <summary>Acquired, tracking, trigger held by a gate that will pass on its own (the shot
-    /// clock, a bored window, a barrel still slewing).</summary>
+    // Acquired, tracking, trigger held by a gate that will pass on its own (the shot
+    // clock, a bored window, a barrel still slewing).
     private static readonly Color TrackingColor = new(1f, 0.8f, 0.2f);
 
-    /// <summary>Acquired and held by a gate that will NOT pass where it stands: no intercept
-    /// solution, or the line of sight is blocked.</summary>
+    // Acquired and held by a gate that will NOT pass where it stands: no intercept
+    // solution, or the line of sight is blocked.
     private static readonly Color HeldColor = new(0.55f, 0.6f, 0.7f);
 
     private readonly Func<IReadOnlyList<TurretController>> _turrets;

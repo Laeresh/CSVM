@@ -8,17 +8,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The <c>templates.zrd</c> reader (<see cref="ClutterTemplateSpec"/>) — the per-decoration
-/// properties the original's clutter stamper reads (docs/formats/templates.md).
-///
-/// <para>The grammar half runs on hand-authored lists, because the interesting cases (a nested
-/// pair, an unnormalised substitute list, a bare flag, a damage block) have to be readable
-/// independently of whether any chapter ships them. The data half pins all eight chapters, because
-/// the load-bearing fact about this format is a NEGATIVE: five of its eleven keys are authored by
-/// no chapter at all, which is what makes the original's placement free of any random input
-/// affecting position or orientation. A reader that quietly filled those in — or a later edit that
-/// made one of them look authored — would break that claim silently, and only a whole-install
-/// census can see it.</para>
+/// The <c>templates.zrd</c> reader (<see cref="ClutterTemplateSpec"/>): the per-decoration
+/// properties the original's clutter stamper reads. Decode: docs/formats/templates.md,
+/// docs/org/clutter.md. The grammar half runs on hand-authored lists for cases no chapter may
+/// ship; the data half pins all eight chapters, since five of eleven keys being authored by
+/// nobody (docs/org/clutter.md) is a fact only a whole-install census can see.
 /// </summary>
 public class ClutterTemplatesTests
 {
@@ -235,11 +229,8 @@ public class ClutterTemplatesTests
     [MemberData(nameof(EveryChapter))]
     public void NoChapterAuthorsJitterRotationAlignmentOrASlopeCull(string chapter)
     {
-        // The load-bearing negative, asserted per chapter rather than as a total: these five
-        // keys are what the stamper's step 5 and half of step 10 read, so an install that authors
-        // none of them has NO random input affecting a decoration's position or orientation. That is
-        // the structural reason the remake's unseeded lattice reproduces C1's tree positions
-        // exactly rather than approximately — see docs/formats/templates.md.
+        // The load-bearing negative, asserted per chapter: with none of these five authored, the
+        // install has no random input affecting position or orientation (docs/formats/templates.md).
         var spec = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter));
 
         Assert.NotNull(spec);
@@ -252,10 +243,8 @@ public class ClutterTemplatesTests
     [ExtractedDataFact]
     public void TheInstallsAuthoredRangesAreMultipliersAndMetresRatherThanRadians()
     {
-        // Range-test every decoded field. A scale_range of 0.9-1.5 is plausible; 0.9-1.5
-        // RADIANS would not be, and a fade band in the tens of thousands would mean the pairs were
-        // grouped wrong. Bounds are the whole install's measured span, asserted as a band rather
-        // than as exact values so this stays a units check and not a second census.
+        // Bounds are the whole install's measured span, asserted as a band so this stays a units
+        // check rather than a second census (e.g. scale_range 0.9-1.5 is plausible, radians is not).
         int kinds = 0, ordered = 0;
         float scaleLo = float.MaxValue, scaleHi = float.MinValue;
         float fadeLo = float.MaxValue, fadeHi = float.MinValue;

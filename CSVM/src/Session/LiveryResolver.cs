@@ -63,13 +63,11 @@ public sealed class LiveryResolver
         return prefix != null ? Patterns.PatternsFor(prefix) : new List<string>();
     }
 
-    /// <summary>The livery player <paramref name="index"/> flies, or null to build the
-    /// shipped unpainted skins. With no --paint= this is <see cref="DefaultPattern"/>
-    /// everywhere — flight, AI spawns and static views alike; --paint=none is how a caller
-    /// asks for the bare shipped skins. <paramref name="useDefaultPattern"/> false drops that
-    /// implicit default for an aircraft that must NOT wear the player militia's colours: an
-    /// Instant Action wave enemy flies for another militia whose pattern ia.json never carries,
-    /// so it keeps the shipped skins unless --paint= names one.</summary>
+    /// <summary>The livery player <paramref name="index"/> flies, or null to build the shipped
+    /// unpainted skins. With no --paint= this is <see cref="DefaultPattern"/> everywhere;
+    /// --paint=none asks for the bare shipped skins. <paramref name="useDefaultPattern"/> false
+    /// drops that default for an enemy that must not wear the player militia's colours
+    /// (docs/formats/instant-action.md "CSVM does not model the wave militia livery").</summary>
     public PaintScheme? SchemeFor(int index, string zrdrPath, RandomNumberGenerator rng,
         IReadOnlyList<string>? available = null, bool useDefaultPattern = true)
     {
@@ -131,7 +129,9 @@ public sealed class LiveryResolver
 
     /// <summary>The RNG the session's random liveries draw from: the master seed's paint stream,
     /// so an unpinned launch repaints the field and a pinned one repeats it. --paint-seed=N
-    /// overrides the derived seed, pinning liveries alone in an otherwise random run.</summary>
+    /// overrides the derived seed, pinning liveries alone in an otherwise random run.
+    /// ⚠ Construct/advance it the same number of times, same order relative to the other
+    /// per-session RNGs, every launch — reordering reshuffles pinned liveries under --det.</summary>
     public RandomNumberGenerator NewPaintRng() => new()
     {
         Seed = _spec.PaintSeedExplicit ? _spec.PaintSeed : Rng.SeedFor(Rng.Paint),
@@ -145,8 +145,8 @@ public sealed class LiveryResolver
         return false;
     }
 
-    /// <summary>An explicit --paint-color=/--paint-decal= list overrides whatever the scheme
-    /// brought, so a single colour can be dialled in against a chosen pattern.</summary>
+    // An explicit --paint-color=/--paint-decal= list overrides whatever the scheme
+    // brought, so a single colour can be dialled in against a chosen pattern.
     private PaintScheme WithOverrides(PaintScheme scheme)
     {
         if (_spec.PaintColorOverride == null && _spec.PaintDecalOverride == null)

@@ -8,13 +8,10 @@ public static class ScriptedWindow
 {
     private const int SwHide = 0;
 
-    /// <summary>Takes a scripted run's window off the screen entirely. `no_focus` only stops the
-    /// window taking the KEYBOARD — it still opens in front of whatever the user is working in, and
-    /// a full RunTests.ps1 does that about twenty times. Godot has no lever for this: there is no
-    /// always-on-bottom window flag, and --position is clamped so roughly a third of the window
-    /// stays on the desktop whatever you ask for (measured: 5184 and 10000 both land at 4686 on a
-    /// 5120-wide desktop). Hiding is not minimizing — a minimized window stops rendering, which
-    /// turns the captures blank.</summary>
+    /// <summary>Takes a scripted run's window off the screen entirely. Godot has no lever for
+    /// this: <c>no_focus</c> only stops the window taking keyboard focus, and <c>--position</c>
+    /// is clamped to keep part of the window on the desktop. Decode: docs/verification.md SHOT-16.
+    /// ⚠ Hide, never minimize. A minimized window stops rendering and turns captures blank.</summary>
     public static void Hide()
     {
         if (!OperatingSystem.IsWindows())

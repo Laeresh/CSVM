@@ -21,21 +21,12 @@ public enum TargetClass
 
 /// <summary>One thing the player can select, whatever it actually is: an enemy Fury, a zeppelin
 /// engine, a turret emplacement. Every consumer (the pool, the cycles, the label formatter, the
-/// marker) reads this and never the underlying C# type, which is the whole point. Without it the
-/// <c>c.Source is not FlightController fc</c> test in <see cref="TargetHud.NearestHostile"/> and
-/// <see cref="TargetHud.CollectMarks"/> multiplies across four modules.
-///
-/// <para><b>It WRAPS an <see cref="AimCandidate"/> rather than restating it.</b> Position, velocity,
-/// team, liveness and the source object are the same five facts the
-/// aim assist already needs, read off the same four pools by the same collectors
-/// (<c>ProjectilePool.CollectAircraft</c>/<c>CollectTurrets</c>, <c>AimCandidateSet.AddStructures</c>),
-/// so a second copy of them could only drift. What this adds is everything the assist has no use
-/// for: which pool it came from, which cycle it sits in, what to print, and how hurt it is. The
-/// assist's own <see cref="AimCandidate.ConeOverride"/> rides along unused, since it is the same
-/// entity's data rather than a duplicated field.</para>
-///
-/// <para>Pure data with no Godot node dependency, so the cycles and the label formatter unit-test
-/// with no tree, the way <see cref="TargetHud.NearestHostile"/> already does.</para></summary>
+/// marker) reads this and never the underlying C# type, which is the whole point. Pure data with no
+/// Godot node dependency, so all of them unit-test with no tree.
+/// ⚠ It WRAPS an <see cref="AimCandidate"/> rather than restating it. Position, velocity, team,
+/// liveness and the source are the same five facts the aim assist reads off the same pools through
+/// the same collectors, so a second copy could only drift. What this adds is what the assist has no
+/// use for: which pool, which cycle, what to print, how hurt it is.</summary>
 public readonly struct TargetRef
 {
     private TargetRef(AimCandidate candidate, AimTargetKind kind, TargetClass cls, bool objective,
@@ -80,13 +71,9 @@ public readonly struct TargetRef
     /// <summary>What the MARKER prints (the original's entity <c>+0x14</c>, its line 2):
     /// <c>Kestrel</c> for an aircraft, <c>Promised Land</c> for a named zeppelin, <c>gasbag1</c> for
     /// a sub-part. Never null; defaults to <see cref="Name"/>.
-    ///
-    /// <para>⚠ Split from <see cref="Name"/> for CSVM's sake, not the original's: there one string
-    /// is both, but our aircraft carry a node name that is identity rather than a label, and the two
-    /// consumers want opposite things. The marker wants <c>Fury</c> (plane type alone, ambiguity
-    /// accepted); <c>--target=</c> wants <c>ai2_player_fury</c>, because a golden
-    /// that pinned "Fury" could not say WHICH of three Furies it meant. Every other source's own
-    /// name IS its label, so they carry one string in both.</para></summary>
+    /// ⚠ Split from <see cref="Name"/> for CSVM's sake, not the original's, where one string is
+    /// both. The marker wants <c>Fury</c>; <c>--target=</c> wants <c>ai2_player_fury</c>, because a
+    /// golden pinned on "Fury" could not say which of three Furies it meant.</summary>
     public string DisplayName { get; }
 
     /// <summary>The label half of the marker's line 1 (entity <c>+0x28</c>), e.g. <c>Zeppelin</c>.
@@ -173,17 +160,9 @@ public readonly struct TargetRef
         max > 0f ? Mathf.Clamp(current / max, 0f, 1f) : null;
 
     /// <summary>Which cycle a candidate belongs to, or null when it is not selectable at all.
-    /// <c>FUN_004b5cd0</c>'s order verbatim: the liveness predicate, then <c>objectiveTarget</c>,
-    /// then <c>otherTarget</c>, then the vehicle/ordnance restriction, then the team split.
-    ///
-    /// <para>An objective returns <see cref="TargetClass.Enemy"/> because that is the cycle
-    /// objectives ride in normal play (the <c>-too</c> switch, which moves them onto the
-    /// Non-Aircraft cycle, is not ported); the caller records the flag itself through
-    /// <see cref="TargetRef.Objective"/>.</para></summary>
-    /// <param name="kind">Which pool the candidate came from.</param>
-    /// <param name="live">The candidate's own liveness.</param>
-    /// <param name="targetTeam">The candidate's team.</param>
-    /// <param name="ownTeam">The selecting player's team.</param>
+    /// <c>FUN_004b5cd0</c>'s order verbatim: liveness, <c>objectiveTarget</c>, <c>otherTarget</c>,
+    /// the vehicle/ordnance restriction, the team split. An objective returns
+    /// <see cref="TargetClass.Enemy"/>, the cycle objectives ride in normal play.</summary>
     /// <param name="otherTarget">The mission's <c>otherTarget</c> flag (entity <c>+0x4c</c>).</param>
     /// <param name="objectiveTarget">The mission's <c>objectiveTarget</c> flag (<c>+0x4d</c>).</param>
     public static TargetClass? Classify(AimTargetKind kind, bool live, int targetTeam, int ownTeam,

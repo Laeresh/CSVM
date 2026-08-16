@@ -25,7 +25,11 @@ public enum AnchorPlacement
 
 /// <summary>The record of which authored anims are playable effects, and what their defs need
 /// staged. Owns the name tables every effect producer must stay inside — <see cref="WorldEffectsFactory"/>
-/// consumes these names to build and stage the runtime; the naming lives here, never there.</summary>
+/// consumes these names to build and stage the runtime; the naming lives here, never there.
+/// ⚠ Names cross every play seam (<c>GrazeEffectSink</c>, <c>ExternalEffect</c>,
+/// <c>ProjectilePool.EffectSink</c>) as bare strings, never a typed entry — a typed entry would
+/// thread this module's types through the deliberately engine-free <c>ImpactOutcome</c>. The
+/// producer-range tripwires in <c>CSVM.Tests</c> close the drift a typo would otherwise open.</summary>
 public static class EffectCatalogue
 {
     // The crash def vector's prefix: slot i is "player_crash_" + SurfaceRegistry.Names[i], the
@@ -41,15 +45,9 @@ public static class EffectCatalogue
     public const string CrashAnimRoot = "player";
 
     // The AI aircraft family's vector prefix: slot i is "ai_crash_" + SurfaceRegistry.Names[i].
-    // The original builds it in the AI vehicle-params constructor FUN_00478a00 (string 0x00627d40,
-    // registry walk FUN_00559650/FUN_00559660, interned via FUN_00523820) into the params object at
-    // +0x160/+0x164; the params parser FUN_00479240 sets the bare last resort at +0x158 to the
-    // interned VEHICLE NAME (0x0047b110-0x0047b11b, intern of params+0x4); and the params→vehicle
-    // bind FUN_00475820 copies both onto the live vehicle (+0x158→+0x6d0, vector→+0x6e0/+0x6e4) —
-    // the very fields the ONE crash selector FUN_0048b920 indexes with the struck material's
-    // surface id. The player setup FUN_00476250 then REPLACES that vector with player_crash_* (and
-    // +0x6d0 with "player") only on the vehicle named "player", so every AI aircraft crashes
-    // through this family and the cascade is shared, not duplicated.
+    // Same cascade as the player family (decode: analysis/surface-classification/FINDINGS.md),
+    // swapped for player_crash_* only on the vehicle named "player" — every AI aircraft
+    // crashes through this one shared cascade.
     public const string AiCrashDefPrefix = "ai_crash_";
 
     // The ai_crash_* defs' authored NAME/anim-root: `kestrel`, the AI airframe they were written
@@ -59,25 +57,15 @@ public static class EffectCatalogue
     // itself, which is why it is also in CrashScaffoldAnchors (never placed like a template).
     public const string AiCrashScaffoldName = "kestrel";
 
-    // The graze family's vector prefix: slot i is "touchdown_" + SurfaceRegistry.Names[i], built by
-    // FUN_004735b0 exactly as the crash vector is (prepend the literal 0x006274ec to each registry
-    // name, intern it via FUN_00523820, push THAT handle) and indexed by FUN_0048d2c0 with the same
-    // cascade. Unlike the crash family it has NO bare last-resort anim: when the vector cannot
-    // answer at all the handler skips its play call entirely, which is why TouchdownDefTable passes
-    // a null lastResort. The vector is a GLOBAL built once at level init where the crash vector is
-    // per-plane, mirrored here by building this one against the world program.
+    // The graze family's vector prefix: slot i is "touchdown_" + SurfaceRegistry.Names[i].
+    // ⚠ Unlike the crash family it has no bare last-resort anim: an unanswerable slot plays
+    // nothing, so TouchdownDefTable passes a null lastResort. Built once per level (a global),
+    // where the crash vector is per-plane — mirrored here against the world program.
     public const string TouchdownDefPrefix = "touchdown_";
 
-    // The impact/destruction effect ANIMATION names the world-effects runtime is bound to —
-    // the closure of these is staged and playable via PlayEffectAt. IMPACT names come from
-    // weapons.json (the non-model `default`/`buildings` effects of rockets/ordnance, plus the gun
-    // `*_gunhit` family, which a gun hit plays throttled and time-bounded);
-    // destruction roots are closed against all 2,360 install-wide destruction-slot calls
-    // (analysis/death-effect-closure/): Subset handles 8/30 targets. The other 22 names are
-    // fail-closed as LOCAL_CHOREOGRAPHY there: their definitions move/toggle live object subtrees
-    // or wrap handled calls, so relocation would detach the work from the destroyed object.
-    // `random_gun_impact` (root `player`) is excluded too — nothing reaches it, and its generic
-    // root would mis-anchor. Every handled name resolves in all 8 chapters.
+    // The impact/destruction/graze effect animation names the world-effects runtime binds; the
+    // closure of these is staged and playable via PlayEffectAt.
+    // ⚠ `random_gun_impact` is excluded: its root is the generic `player` and would mis-anchor.
     public static readonly string[] EffectAnimNames =
     {
         // rocket / ordnance IMPACT (default + buildings), puffer-bearing and otherwise
@@ -91,35 +79,25 @@ public static class EffectCatalogue
         // destruction effects death sequences call
         "large_30sec_fire", "great_balls_of_fire", "large_black_smokeball", "biggun_flying_parts",
         "big_splash",
-        // progressive damage-stage effects DAMAGE_SEQUENCEs call (the smoke/fire sputter at the
-        // 0.60/0.30 HP stages). The install-wide DAMAGE_SEQUENCE call set is exactly these two
-        // plus C4's one-off `b_steamtrail`, which is excluded: its anim root is the live train
-        // subtree, not a relocatable effect template.
+        // Progressive damage-stage effects the DAMAGE_SEQUENCE stage pair calls (smoke/fire
+        // sputter at 0.60/0.30 HP). C4's `b_steamtrail` is excluded: its anim root is the live
+        // train subtree, not a relocatable template.
         "sputter_black_smoke_obj", "sputter_fire_smoke_obj",
         // The graze reaction's touchdown_* defs are NOT listed here. They are a surface-indexed
         // vector, so WorldEffectAnimNames appends whichever slots the bound program can play.
     };
 
-    // The belly-slide ground splash (`flydirt_plane`, called AT_NODE `healthy` by
-    // `player_crash_dirt`): its own `ObjectMotion` translation is authored as a near-zero-horizontal
-    // sink (a planted decal fading into the ground), not a launch — but the data shape is
-    // indistinguishable from a wreck piece's own translation (also vertical-only, relying entirely on
-    // `AnimRuntime.InheritedWorldVelocity` for horizontal spread), so only the name tells them apart.
-    // Wired into `InheritedVelocityExempt` so the crash's momentum nudge, which correctly scatters
-    // `piece1..4`, does not also drag this splash off with the sliding wreck.
+    // The belly-slide ground splash (`flydirt_plane`): authored as a near-zero-horizontal sink,
+    // indistinguishable in data shape from a wreck piece's own translation.
+    // ⚠ Wired into `InheritedVelocityExempt` so the crash's momentum nudge does not also drag
+    // this splash off with the sliding wreck.
     public static readonly string[] GroundSplashAnimNames = { "flydirt_plane" };
 
-    // The crash def's own sub-effects that are meant to lie flat on the struck surface, not co-rotate
-    // with the plane's impact attitude — the ONLY crash-rig templates `AnimRuntime
-    // .LevelPlacedTemplateNames` levels to world axes. `plane_big_splash` (the water splash's
-    // spray column + flat rings, `huge_splash_model`) and its two own CALL_ANIMATION children
-    // `plane_big_ripple` (the fading ripple rings, `ripple`) and `hg_splasher` (the water-squirt
-    // puffer, no owned mesh — leveling only turns its local_velocity upright); `flydirt_plane` (the
-    // dirt burst's ground-scorch dust plane, `flydirt`) is the direct ground analogue. Deliberately
-    // excludes the fireball/smoke/debris family (`large_fireball`, `large_10sec_fire`,
-    // `large_black_smokeball`, `call_crash_trails`) and `large_steam_spray` — see
-    // `AnimRuntime.LevelPlacedTemplateNames`'s own ⚠ for why those must keep inheriting the crash
-    // attitude.
+    // The crash def's sub-effects meant to lie flat on the struck surface rather than co-rotate
+    // with the plane's impact attitude — the only crash-rig templates
+    // `AnimRuntime.LevelPlacedTemplateNames` levels to world axes.
+    // ⚠ The fireball/smoke/debris family and `large_steam_spray` are deliberately excluded — see
+    // `AnimRuntime.LevelPlacedTemplateNames`'s own ⚠ for why those keep the crash attitude.
     public static readonly string[] CrashSurfaceLevelAnimNames =
         { "plane_big_splash", "plane_big_ripple", "hg_splasher", "flydirt_plane" };
 
@@ -137,61 +115,36 @@ public static class EffectCatalogue
     // above, FlightController plays these directly (spawn/engine-death), never through a CALL.
     public static readonly string[] PropChoreographyAnims = { "startprops", "stopprops" };
 
-    // The authored player damage-stage menu (player-1.zrd.json): the per-panel burn
-    // (torn pdpN shown + gimmeflakes debris + the staged short_firetrail / loop_short_firetrail
-    // burn-down), the partial-damage fuel vapor leak, and the heavy prop1 trail with the fire_lt
-    // nose light. DamageVisuals plays these through the rig runtime as the vehicle.zrd.json
-    // injure_anims thresholds cross — the tier table is authored, nothing here invents one.
-    // `player_damage_trail` (short_firetrail at prop1) is played for the data's 0.10
-    // `player_smoketrail` entry — see DamageVisuals.RigAnimFor for that one deliberate mapping.
+    // The authored player damage-stage menu: the per-panel burn, the fuel-vapor leak, and the
+    // heavy prop1 trail. DamageVisuals plays these as the vehicle.zrd.json injure_anims thresholds
+    // cross — the tier table is authored, nothing here invents one.
+    // `player_damage_trail` maps to the data's 0.10 `player_smoketrail` entry — see
+    // DamageVisuals.RigAnimFor.
     public static readonly string[] PlayerDamageStageAnims =
     {
         "pdpanel1", "pdpanel2", "pdpanel3", "pdpanel4", "pdpanel5", "pdpanel6", "pdpanel7",
         "pdpanel8", "player_fuelleak", "player_damage_trail",
     };
 
-    // Anchors the mechanical closure below reports that no bind stages, because the CALL that
-    // reaches the definition supplies its anchor instead of its own NAME. Curation, not derivation:
-    // the closure walks NAMEs and cannot see either of these, so they are dropped before the
-    // resolver is asked. This list is where a future "the derivation asks for a root the game
-    // supplies another way" goes — never the mechanical walk itself.
-    //
-    // `zep_can_dstry1.flt` is `dblcannon_flying_parts`' NAME, and every call reaching it carries an
-    // AT_NODE — `zep_ng_dstry1.flt` (from `biggun_flying_parts`), `zep_main_dstry1.flt`,
-    // `doublecannon*` — each a zeppelin wreck whose own subtree carries the `part1`..`part8` the def
-    // flings, and a seeded `--effects-test --debug-anim` reports that retarget resolving with no
-    // UNRESOLVED tag. C2's gamez has no node of the name at all, so treating it as a needed root
-    // would fail that one chapter for an effect that has always played.
-    //
-    // `warhawk` is `startprops`/`stopprops`' own NAME (plane_props.zrd.json) — a shared authoring
-    // label, not a per-plane node, so it never resolves on any of the 11 airframes. That is fine:
-    // FlightController's own `Play` calls always supply the plane model as the fallback anchor
-    // directly (not a CALL_ANIMATION), so nothing needs `warhawk` staged anywhere.
+    // Anchors the closure below reports that no bind stages, because the CALL reaching the
+    // definition supplies its anchor instead of its own NAME: `zep_can_dstry1.flt` (absent from
+    // C2's gamez entirely) and `warhawk` (startprops/stopprops' own NAME, a shared authoring
+    // label no real airframe carries). Curation, not derivation.
+    // ⚠ Extend this list, never the mechanical closure walk itself.
     public static readonly string[] CallSuppliedAnchors = { "zep_can_dstry1.flt", "warhawk" };
 
-    // The crash defs' authored airframe anchor. `plane_reset` (and `pdpanel5`) are written against
-    // the Devastator's own model root, so on that airframe the rig's scope has it and on the other
-    // ten it has nothing of the name and the def is simply inert. Not a staging gap: no chapter's
-    // gamez carries a `player_pfighter` node at all (0 occurrences in all 8), so there is no
-    // template to stage either way.
-    //
-    // ⚠ Also the crash stage's PLACE-EXEMPT set (WorldEffectsFactory.NewCrashTemplateStage): on
-    // the Devastator these names resolve to the AIRCRAFT, and a relocating CALL treating that as
-    // an effect template TopLevel-pins the whole plane at the call site — the model stays at
-    // spawn while the FlightController flies away with only the crash rig's debris. The defs'
-    // node ops still resolve and run on the model; only placement is refused
-    // (`crash-rig-anchors` suite, TemplateStageTests.PlaceAtNeverMovesAPlaceExemptCallee).
+    // The crash defs' authored airframe anchor: `plane_reset`/`pdpanel5` are written against the
+    // Devastator's own model root, inert on the other ten airframes. No gamez ships a
+    // `player_pfighter` node, so there is no template to stage either way.
+    // ⚠ Also the crash stage's place-exempt set (WorldEffectsFactory.NewCrashTemplateStage): on
+    // the Devastator this name resolves to the aircraft itself, and a relocating CALL would
+    // TopLevel-pin the whole plane at the call site.
     public static readonly string[] AirframeScopedAnchors = { "player_pfighter" };
 
-    // The crash rigs' own anim-root scaffold NAMEs. The `player_crash_*` defs,
-    // `player_destruction_reset`, `cpejectstop` and `random_gun_impact` are all authored
-    // NAME=`player` — the crash root the rig builds — and a relocating CALL reaching any of them
-    // (the dirt crash CALLs `cpejectstop` live) must never place that scaffold like a template:
-    // TopLevel-pinning it at the first crash site takes the wreck and every pooled template copy
-    // with it, so every later crash's destroyed plane and dirt burst replay at the FIRST crash's
-    // position (`crash-rig-anchors`' crash→respawn→move→crash leg is the regression test).
-    // `kestrel` is the ai_crash_* family's scaffold NAME (see AiCrashScaffoldName) — on the actual
-    // Kestrel airframe it resolves to the aircraft model, the player_pfighter shape exactly.
+    // The crash rigs' own anim-root scaffold names: `player` (the `player_crash_*` family's crash
+    // root) and `kestrel` (the ai_crash_* family's scaffold, see AiCrashScaffoldName).
+    // ⚠ A relocating CALL must never place either scaffold like a template: TopLevel-pinning it
+    // drags the wreck and every pooled template copy to the first crash's site.
     public static readonly string[] CrashScaffoldAnchors = { "player", AiCrashScaffoldName };
 
     /// <summary>The crash-def vector this program can play, built over the whole surface registry
@@ -202,13 +155,12 @@ public static class EffectCatalogue
     public static SurfaceDefTable CrashDefTable(AnimProgram program) =>
         new(CrashDefPrefix, CrashAnimRoot, DefExistsIn(program));
 
-    /// <summary>The AI aircraft counterpart of <see cref="CrashDefTable"/> — the
-    /// <c>ai_crash_*</c> vector <c>FUN_00478a00</c> builds per AI vehicle-params object, selected
-    /// by the SAME cascade (<c>FUN_0048b920</c>, via the <c>FUN_00475820</c> copy onto the
-    /// vehicle). Same fallback arms as the player family, including the bare last resort — which
-    /// the original sets to the interned VEHICLE NAME (<c>FUN_00479240</c> at <c>0x0047b11b</c>),
-    /// so the caller passes the plane's own name. Unreachable in this install: all eight chapters
-    /// ship <c>ai_crash_default</c>, so slot 0 always resolves.</summary>
+    /// <summary>The AI aircraft counterpart of <see cref="CrashDefTable"/>: the
+    /// <c>ai_crash_*</c> vector, selected by the same cascade as the player family (decode:
+    /// analysis/surface-classification/FINDINGS.md). Same fallback arms, including the bare last
+    /// resort, which the original sets to the vehicle's own name — so the caller passes the
+    /// plane's own name. Unreachable in this install: all eight chapters ship
+    /// <c>ai_crash_default</c>, so slot 0 always resolves.</summary>
     public static SurfaceDefTable AiCrashDefTable(AnimProgram program, string planeName) =>
         new(AiCrashDefPrefix, planeName, DefExistsIn(program));
 
@@ -234,30 +186,20 @@ public static class EffectCatalogue
         return names;
     }
 
-    /// <summary>The graze family's def vector — the original's <c>touchdown_</c> global
-    /// (<c>FUN_004735b0</c> into <c>DAT_0071c2e8</c>), which <c>FlightController.GrazeReaction</c>
-    /// indexes with the scraped material's surface id exactly as the crash does. Built against the
-    /// WORLD program, because that vector is built once at level init rather than per plane.
-    /// <b>No last resort:</b> where the crash cascade ends at a bare anim name, this one ends at
+    /// <summary>The graze family's def vector, which <c>FlightController.GrazeReaction</c> indexes
+    /// with the scraped material's surface id exactly as the crash does. Built against the world
+    /// program, because that vector is built once at level init rather than per plane.
+    /// ⚠ No last resort: where the crash cascade ends at a bare anim name, this one ends at
     /// "play nothing". <see cref="SurfaceDefTable"/>'s remarks carry the address.</summary>
     public static SurfaceDefTable TouchdownDefTable(AnimProgram program) =>
         new(TouchdownDefPrefix, lastResort: null, DefExistsIn(program));
 
-    /// <summary>The surface id a struck body of each registry id actually <b>resolves</b> to on
-    /// contact: itself where a touch cascade ships a def of its own for it, else slot 0, which is
-    /// the empty-slot arm <see cref="SurfaceDefTable"/> implements (<c>FUN_0048b920</c>
-    /// <c>0x0048bac5</c>–<c>0x0048bb00</c>). Index == surface id, length
-    /// <see cref="SurfaceRegistry.Names"/>; an id outside that range is the cascade's own
-    /// out-of-range arm and resolves slot 0 too, which is the caller's bounds test to make.
-    ///
-    /// <para>Both touch families are asked, because either one shipping a def for an id is enough
-    /// to make that id behave as itself; this install ships <c>default</c>/<c>dirt</c>/<c>water</c>
-    /// in each, so they agree. The weapon IMPACT table is deliberately NOT asked: an id it authors
-    /// no row for plays nothing rather than falling back to row 0 (<c>FUN_005ad100</c> gates on the
-    /// row's own variant count), so it has no resolved id to contribute.</para>
-    ///
-    /// <para>Written for the collider overlay's colour key (<c>BL-345</c>), which draws what a
-    /// touch will select rather than the raw stamp.</para></summary>
+    /// <summary>The surface id a struck body of each registry id actually resolves to on contact:
+    /// itself where a touch cascade ships a def of its own, else slot 0 (see
+    /// <see cref="SurfaceDefTable"/>). Both crash and touchdown families are asked, because either
+    /// shipping a def for an id makes it resolve as itself; the weapon impact table is not asked,
+    /// since an id it authors no row for plays nothing rather than falling back to row 0.
+    /// Written for the collider overlay's colour key.</summary>
     public static IReadOnlyList<int> ResolvedSurfaceIds(Func<string, bool> defExists)
     {
         var crash = new SurfaceDefTable(CrashDefPrefix, CrashAnimRoot, defExists);
@@ -313,21 +255,12 @@ public static class EffectCatalogue
         Func<string, AnchorPlacement> resolveRoot) =>
         CrashStageRoots(program, resolveRoot, CrashDefTable(program));
 
-    /// <summary>The anchor-root closure of <paramref name="names"/> against a bound program — what a
-    /// bind must stage for every definition those names can reach to have something to anchor on.
-    /// The mechanical half of <c>analysis/effect-anchor-roots/</c>, run at build instead of offline:
-    /// walk the transitive CALL_ANIMATION closure (<see cref="AnimProgram.Subset(IEnumerable{string})"/>),
-    /// take each reached definition's NAME — the gamez node its instance anchors on — and ask
-    /// <paramref name="resolveRoot"/> where that node lives.
-    ///
-    /// <para><paramref name="resolveRoot"/> is the caller's lookup, so the world-effects bind and the
-    /// per-player crash bind share this one function with different scopes. Anchors listed in
-    /// <see cref="CallSuppliedAnchors"/>/<see cref="AirframeScopedAnchors"/> are dropped before it is
-    /// asked — see their own remarks for why the closure over-reports them.</para>
-    ///
-    /// <para>Sorted, so no caller's staging order can depend on definition load order.</para></summary>
-    /// <exception cref="EffectAnchorException">an anchor resolves nowhere: the definition would
-    /// anchor on nothing and play nothing at all, silently.</exception>
+    /// <summary>The anchor-root closure of <paramref name="names"/>: walks the transitive
+    /// CALL_ANIMATION closure, takes each definition's NAME, and asks
+    /// <paramref name="resolveRoot"/> where it lives — shared by the world-effects and crash
+    /// binds with different scopes. Anchors in <see cref="CallSuppliedAnchors"/>/
+    /// <see cref="AirframeScopedAnchors"/> are dropped first. Sorted, so staging order is stable.</summary>
+    /// <exception cref="EffectAnchorException">an anchor resolves nowhere.</exception>
     public static IReadOnlyList<string> StageRootsFor(AnimProgram program, IEnumerable<string> names,
         Func<string, AnchorPlacement> resolveRoot)
     {

@@ -4,7 +4,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// Splitscreen pause ownership (<see cref="PauseState"/>, E43 `BL-373`), off-engine: any player
+/// Splitscreen pause ownership (<see cref="PauseState"/>, E43), off-engine: any player
 /// pauses, only the pauser resumes, a rejected unpause is a silent no-op that fires no event.
 /// </summary>
 public class PauseStateTests

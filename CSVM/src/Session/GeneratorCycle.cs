@@ -4,29 +4,11 @@ namespace CSVM.Session;
 
 /// <summary>
 /// The decoded egen launch cycle for ONE generator: pure state over <c>Step</c> calls, no
-/// clocks, no randomness, no node reads, so the timing law is unit-testable off-engine. The law
-/// (docs/formats/mission-entities.md "The generator cycle"): the timer always advances; a blocked
-/// generator is HELD, never cancelled (timer and wave counter untouched), so a held spawn fires
-/// the moment the block clears. <c>ind_period</c> is the gap between individuals inside a wave;
-/// the gap between waves is <c>ind_period + wave_period</c> (they compose, they do not alternate).
-///
-/// <para>⚠ The capacity check is a STAND-IN. The decoded rule
-/// (<c>wave_size − spawnedThisWave &gt; capacityRemaining</c>) with the shipped <c>capacity 0</c>
-/// would hold every generator in the install forever, yet zeppelins launch in the original: an
-/// unresolved discrepancy (the capacity puzzle, docs/formats/mission-entities.md). This class
-/// applies the decoded rule only when <c>capacity &gt; 0</c> and disables the check at
-/// <c>capacity ≤ 0</c>, pending the egen.zbd raw-byte read. That is NOT a decode of "0 means
-/// unlimited"; it is the only reading that lets shipped data fire at all.
-/// <see cref="UseWaveCredits"/> is the one path that switches the stand-in back off: on an
-/// Instant Action <c>zeppelin_run</c> the decoded rule IS the mechanism (F12), because the wave
-/// sequencer credits the budget itself.</para>
-///
-/// <para>The hangar door (F20) runs on the decoded HARDCODED timings below, inside the same
-/// <c>Step</c>: open <see cref="DoorLeadSeconds"/> before a due spawn, hold at least
-/// <see cref="DoorMinOpenSeconds"/>, close early only when the next spawn is more than
-/// <see cref="DoorEarlyCloseGapSeconds"/> away — and while blocked ONLY the door closes (the
-/// hold-not-cancel decode's blocked branch). <see cref="DoorOpen"/> is the state; playing the
-/// authored door animations on it is the runtime's job.</para>
+/// clocks, no randomness, no node reads, so the timing law is unit-testable off-engine.
+/// Decode, the hangar door timings and the capacity-stand-in rationale:
+/// docs/formats/mission-entities/enemy-generators.md.
+/// ⚠ The capacity check is a stand-in, off at authored <c>capacity ≤ 0</c> except after
+/// <see cref="UseWaveCredits"/>. Do not read that as "0 means unlimited".
 /// </summary>
 public sealed class GeneratorCycle
 {
@@ -99,14 +81,10 @@ public sealed class GeneratorCycle
     /// <summary>The host died: disable permanently (decoded rule, never re-enabled).</summary>
     public void HostDied() => Disabled = true;
 
-    /// <summary>Puts this cycle on Instant Action's wave-credit budget: the DECODED capacity rule
-    /// is enforced from here on regardless of the authored <c>capacity</c> — the stand-in above
-    /// does not apply — starting from zero remaining, so the generator launches nothing at all
-    /// until <see cref="GrantCapacity"/> credits it. This is the resolution of the capacity puzzle
-    /// for this one mode (docs/formats/mission-entities.md "The capacity puzzle"): on a
-    /// <c>zeppelin_run</c> the wave sequencer is the generator's only source of budget, which is
-    /// exactly what <c>capacity 0</c> plus a live top-up produces. Idempotent enough to call once at
-    /// wire time; calling it again re-zeroes the budget.</summary>
+    /// <summary>Puts this cycle on Instant Action's wave-credit budget: the decoded capacity rule
+    /// applies from here on regardless of the authored <c>capacity</c>, starting from zero
+    /// remaining until <see cref="GrantCapacity"/> credits it. See "Capacity rule and limit" in
+    /// docs/formats/mission-entities/enemy-generators.md.</summary>
     public void UseWaveCredits()
     {
         _waveCredited = true;

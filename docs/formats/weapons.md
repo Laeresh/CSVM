@@ -69,6 +69,11 @@ See [CLUSTER_SIZE vs AMMO_LIMIT](#cluster-size-and-ammo-limit) for which entries
 | `FIRING_HEAT` | 4 | 5.0 | nominally heat added per shot; only the base guns `wep_00`–`03`. **Parsed but never consumed by the original** : `FUN_004ba6f0` stores it at `+0x14` of the game-side weapon-extension struct (0x38 bytes, hung off the ZWEP record at `+0x210`), defaulting to 0 when the key is absent, and no consumer of that struct reads the field. Its partner `cannon_jam` is dead data too, see [vehicle.md](vehicle.md) |
 | `TURN_RATE` | 14 | 0.001–1.25 | guidance turn rate; 0.001 is effectively straight-flying — only the Seeker's 1.25 actually homes |
 
+Of the 16 `ACCELERATION` carriers, only `wep_04`/`25`/`26`/`27` are non-zero, and no gun group can
+resolve any of the four (a gun is caliber + ammo → `wep_30`–`73`). With `GRAVITY` zero throughout,
+every round the gun aim assist's reticle marches (`Ballistics.March`) travels a straight line, so
+its fixed `1/120 s` step cannot move the endpoint — `BallisticsTests` guards the census.
+
 ### Damage
 
 | Key | n | Range | Meaning |

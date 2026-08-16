@@ -6,36 +6,20 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The colour-by-class overlay (key X): every drawn mesh in the live world tinted a flat colour by
-/// what it IS — destructible / facade / clutter / plain scenery — so a target named in a report
-/// ("the C2 water tower", "the storefront facades") can actually be found at the controls instead
-/// of shot-in-the-dark by flying at whatever looks right.
-///
-/// <para><b>Classification reuses the exact mechanisms a hit already uses, never a guess.</b>
-/// Destructible is <see cref="DestructibleRegistry.Resolve"/> — the SAME climb a weapon hit takes —
-/// so an object that only LOOKS breakable (the C2 SeaHangar doors: no HEALTH &gt; 0 anywhere)
-/// reads as scenery here too, which is the correct finding, not a bug in the overlay. Facade is
-/// <see cref="SceneBuilder.ClassifyBillboard"/> off the source <c>GameZMesh</c>, resolved back
-/// through the built node's <see cref="AnimRuntime.IndexMeta"/> — the same gamez-node-index stamp
-/// <c>AnimRuntime</c> uses to bind animations, never a texture-name or polygon-count guess.
-/// Clutter is structural: every <see cref="MultiMeshInstance3D"/> under the world root is
-/// <c>ClutterBuilder</c>'s output (trees, bushes, and C2/C5's instanced city blocks) — nothing else
-/// in this codebase parents one there.</para>
-///
-/// <para><b>Deliberately NOT keyed on <see cref="SceneBuilder.SurfaceMeta"/>.</b> That tag answers
-/// "what does a bullet do here" (water/buildings/default for impact-effect selection), not "what is
-/// this object" — a wooden dock and a skyscraper can share a `buildings` surface tag while being
-/// nothing alike as targets.</para>
+/// The colour-by-class overlay (key X): every drawn mesh in the live world tinted a flat colour
+/// by what it is (destructible / facade / clutter / plain scenery), so a target named in a
+/// report can actually be found at the controls. Classification reuses the exact mechanisms a
+/// hit already uses, never a guess: this module's entry in docs/architecture.md.
+/// ⚠ Never key classification on <see cref="SceneBuilder.SurfaceMeta"/>. That tag answers what a
+/// bullet does here, not what the object is, and a dock and a skyscraper can share a surface tag.
 /// </summary>
 public sealed partial class ClassOverlay : Node
 {
-    /// <summary>How much of the class colour is mixed over the object's real appearance. At 0.5 a
-    /// target reads as its class AND stays recognisable as itself — which is the point of the
-    /// overlay: a report names "the C2 water tower", and a flat red silhouette hides the tower.
-    /// <para>The mix happens inside the world's own shaders, per instance
-    /// (<see cref="SceneBuilder.TintParam"/>) — never through a <c>MaterialOverride</c>. See
-    /// <see cref="SceneBuilder.TintLine"/> for the three ways an overlay material got this
-    /// wrong.</para></summary>
+    // How much of the class colour is mixed over the object's real appearance. At 0.5 a target
+    // reads as its class and stays recognisable as itself. Applied via SceneBuilder.TintParam,
+    // never a MaterialOverride: an installed material is a different shader from the world's
+    // (opposite cull default, no depth bias, no clutter billboard spin), so it renders wrong and
+    // cannot blend with the texture the way a parameter into the real shader can.
     private const float TintStrength = 0.5f;
 
     private static readonly Color DestructibleColor = new(0.95f, 0.15f, 0.15f);
@@ -143,10 +127,10 @@ public sealed partial class ClassOverlay : Node
         return string.Join("   ", parts);
     }
 
-    /// <summary>Which class a built world node's own mesh belongs to. <paramref name="owner"/> is
-    /// the structural node SceneBuilder built for it (the "mesh" MeshInstance3D's parent) — the
-    /// same node <see cref="DestructibleRegistry.Resolve"/> and <see cref="AnimRuntime.IndexMeta"/>
-    /// are keyed on.</summary>
+    // Which class a built world node's own mesh belongs to. `owner` is
+    // the structural node SceneBuilder built for it (the "mesh" MeshInstance3D's parent) — the
+    // same node DestructibleRegistry.Resolve and AnimRuntime.IndexMeta
+    // are keyed on.
     private string ClassOf(Node3D owner)
     {
         if (_runtime != null && _runtime.Destructibles.Resolve(owner) != null)
@@ -189,10 +173,8 @@ public sealed partial class ClassOverlay : Node
             }
             switch (n)
             {
-                // Every MultiMeshInstance3D under the world root is ClutterBuilder's output —
-                // trees/bushes as sprites, C2/C5 city blocks as instanced 3D decoration — nothing
-                // else in this codebase parents one under the world scene (weather/particle
-                // multimeshes live under the session root, not here).
+                // Every MultiMeshInstance3D under the world root is ClutterBuilder's output;
+                // weather/particle multimeshes live under the session root, not here.
                 case MultiMeshInstance3D mmi:
                     Tint(mmi, "clutter");
                     break;

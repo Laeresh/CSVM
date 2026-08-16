@@ -4,26 +4,18 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// Classifies an aircraft's propeller/rotor subnodes by name and supplies the spin
-/// axis + rate the original engine drives them at. A plane model carries several
-/// propeller representations under <c>dontmove</c>: a still disc (<c>staticpropN</c>),
-/// the in-flight blur disc (<c>propN</c>) plus a slower counter-rotating ghost layer
-/// (<c>propNb</c>), and a boost visual (<c>nitropropN</c>); the autogyro adds an
-/// overhead rotor (<c>rotor1</c>/<c>rotor1b</c>, still <c>staticrotor1</c>).
-///
-/// The exterior viewer shows the static disc; free flight hides it and spins the
-/// blur layers. The rates are the <c>XYZ_ROTATION</c> values from the original's
-/// prop animations — <c>plane_props.json</c> ("warhawk" <c>spinprops</c>, shared by
-/// every plane) and <c>autogyro.json</c> (<c>agyro_rotors</c>): propeller discs turn
-/// about local Z (the nose axis), the autogyro's overhead rotor about local Y. Each
-/// engine layers a fast disc (propN/rotorN) and a slower counter-rotating ghost
-/// (propNb/rotorNb). Units are settled — degrees/second, the same reader convention
-/// <c>docs/formats/anim-definitions.md</c>'s <c>XYZ_ROTATION</c> decode documents and
-/// <c>PropAnimator</c> converts through <c>Mathf.DegToRad</c> exactly as
-/// <c>AnimDefs.Spin</c> does for the ambient world's own steady spins.
+/// Classifies an aircraft's propeller/rotor subnodes by name and supplies each spinning kind's
+/// local axis and rate: propeller discs turn about local Z, rotors about local Y. See
+/// <c>docs/architecture.md</c> for the node-name scheme and <c>docs/formats/anim-definitions.md</c>
+/// for the <c>XYZ_ROTATION</c> decode these rates come from.
+/// ⚠ <c>nitropropN</c> is classified but never spun; no nitro system yet.
 /// </summary>
 public static class PropParts
 {
+    // Settled fact, not a TUNE: the authored spin_rotorN/spin_rotorNb rates from
+    // plane_props.json (spinprops) and autogyro.json (agyro_rotors). PropAnimator converts
+    // them the same way AnimDefs.Spin converts the ambient world's XYZ_ROTATION spins
+    // (docs/formats/anim-definitions.md) — do not re-measure or treat these as tunable.
     private const float PropMainDegPerSec = -220f; // propN   : XYZ_ROTATION [0,0,-220]
     private const float PropGhostDegPerSec = 60f;  // propNb  : XYZ_ROTATION [0,0, 60]
     private const float RotorMainDegPerSec = 165f; // rotor1  : XYZ_ROTATION [0,165,0]

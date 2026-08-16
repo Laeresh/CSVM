@@ -5,31 +5,11 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>The kinematic zeppelin motion law (M4 F17): flies a <see cref="ZeppelinDef"/> along
-/// its net through the shared <see cref="AiNetFollower"/> (B5's graph walk, consumed unchanged)
-/// under the record's own limits — <c>max_speed</c>/<c>max_accel</c>, the
-/// <c>accel_yaw</c>/<c>accel_pitch</c> rate accelerations, the <c>max_rate_yaw</c>/
-/// <c>max_rate_pitch</c> turn rates and the <c>min_pitch</c>/<c>max_pitch</c> flight band.
-/// Zeppelins have no flight model and get none: motion is always forward along the facing (the
-/// design's "require forward motion to turn, never bank"), so this class is pure state — the
-/// consumer writes <see cref="Position"/>/<see cref="YawRad"/>/<see cref="PitchRad"/> onto the
-/// world node.
-///
-/// <para><b>Units.</b> The reader reports authored degrees; this class converts each once in
-/// the constructor. <c>min_pitch</c>/<c>max_pitch</c> are converted too and clamp the COMMANDED
-/// flight pitch — our reading of the design's per-class climb/descent limit. The original's
-/// load-time initial-pitch clamp compares radians against raw degrees and never fires (the unit
-/// bug, docs/formats/mission-entities.md); it is deliberately not reproduced: the authored
-/// initial <c>pitch</c> is taken verbatim.</para>
-///
-/// <para><b>Engine loss is the decoded square root, not the design's bands.</b>
-/// <see cref="AliveEngines"/> is the seam F18's damage aggregator drives: it starts at the
-/// record's engine count and every value change re-scales the live limits through
-/// <see cref="EngineFactor"/>. Today nothing kills an engine, so the curve is exercised by
-/// tests, not gameplay.</para>
-///
-/// <para>The per-node tags ride along raw on the follower's net and are acted on by NOTHING
-/// here — stop-point vs segment id is still undecoded (F17's open item; the discriminating
-/// instrument is locating the runtime net loader).</para></summary>
+/// its net through the shared <see cref="AiNetFollower"/>, forward-only along the facing, under
+/// the record's own yaw/pitch/speed limits (docs/architecture.md). Pure state — no Node, no
+/// flight model; the consumer writes <see cref="Position"/>/<see cref="YawRad"/>/
+/// <see cref="PitchRad"/> onto the world node. <see cref="AliveEngines"/> is the seam F18's damage
+/// aggregator drives, re-scaling the live limits through <see cref="EngineFactor"/>.</summary>
 public sealed class ZeppelinMotion
 {
     private readonly float _maxRateYaw;      // rad/s
@@ -47,7 +27,8 @@ public sealed class ZeppelinMotion
         Follower = follower;
         Position = def.Position;
         YawRad = Mathf.DegToRad(def.YawDeg);
-        // Verbatim, per the load-clamp decision above — shipped data authors 0 throughout.
+        // Verbatim: the original's own initial-pitch clamp never fires (unit bug — it compares
+        // the already-radian pitch against still-degree bounds, docs/formats/mission-entities.md).
         PitchRad = Mathf.DegToRad(def.PitchDeg);
         _maxRateYaw = Mathf.DegToRad(def.MaxRateYawDeg);
         _maxRatePitch = Mathf.DegToRad(def.MaxRatePitchDeg);

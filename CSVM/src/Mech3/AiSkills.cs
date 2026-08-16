@@ -45,8 +45,8 @@ public sealed class AiRatingBias
     /// <summary>The candidate-node-name pattern; <c>*</c> matches any run of characters.</summary>
     public string Pattern { get; }
 
-    /// <summary>The authored bias (shipped values are −1.0); how it scales into the ranking is
-    /// <c>AiTargetRanking.BiasScale</c>'s documented assumption.</summary>
+    /// <summary>The authored bias; −1.0 dominates the shipped data and means NEVER target. How it
+    /// resolves into a rank is <c>AiTargetRanking.ObjectiveBiasFor</c>.</summary>
     public float Bias { get; }
 
     /// <summary>The undecoded third element, raw. Preserved, never interpreted.</summary>
@@ -92,16 +92,9 @@ public sealed class AiRatingBias
 /// <c>player.json</c>'s <c>ai_skill_parameters</c> block, one <c>[value@1, value@9]</c> endpoint
 /// pair per stat, indexed by the roster's 1–9 skill ratings — plus the accessor that reads a
 /// roster block's nine-slot skill vector (slots 22–30) by stat name.
-///
-/// <para>⚠ Ratings between the endpoints interpolate LINEARLY, and — decoded, not assumed, as of
-/// E42 — the engine's own origin is rating <b>0</b>, not rating 1: <c>value = lo + (hi-lo) ·
-/// rating/9</c> (<c>FUN_0047c210</c>, docs/org/aiControlLaw.md "The skill scalar"). A rating of 9
-/// gives <c>hi</c> exactly; a rating of 1 gives <c>lo + (hi-lo)/9</c>, not <c>lo</c>. Two stats
-/// improve downward (<c>dead_eye_angle</c>, <c>steady_hand_chance</c>) — do not normalise the
-/// direction away.</para>
-///
-/// <para><c>natural_touch</c> has no entry BY DESIGN: it compares directly against a maneuver's
-/// own 1–9 difficulty, so asking this table for it throws rather than inventing a curve.</para>
+/// ⚠ Interpolate linearly from rating 0, not rating 1; see <c>docs/org/aiControlLaw.md</c>
+/// "The skill scalar" for the formula. <c>natural_touch</c> has no entry by design: it compares
+/// directly against a maneuver's own 1–9 difficulty.
 /// </summary>
 public sealed class AiSkills
 {

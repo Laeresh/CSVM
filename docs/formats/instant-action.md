@@ -309,6 +309,13 @@ nine colour components, set by the setup screen rather than by the file) and the
 `enemy_accentID`, ⚠ except that an `accentID` of exactly **12** is re-rolled as `12 + rand() % 5`,
 the wingman accent range.
 
+**CSVM does not model the wave militia livery.** Nothing in the shipped data recovers it: unlike
+the wingmen (always Fortune Hunter), a wave's militia varies per chapter, and `enemy_name`'s
+`MSG_*` key is not a reliable militia abbreviation (`MSG_VEH_<ABBREV>_<PLANE>` in five of the eight
+chapters, `MSG_OBJ_*`/`MSG_DH_*` mission names in the other three). A wave member spawns with its
+own shipped textures instead — the same `shippedSkins` flag that keeps it out of the player
+militia's Fortune Hunter colours, which an enemy wearing would read as friendly.
+
 ⚠ **A wave enemy's nine pilot stats are drawn at random from a table of five, not from its skill.**
 `FUN_0045a280(row, k)` reads `0x00607a3c + row·36 + k·4`, and the caller picks `row = rand() % 5`
 per aircraft. The five rows, on the same 1-to-9 scale as `ace_stats`:

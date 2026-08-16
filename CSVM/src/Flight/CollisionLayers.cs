@@ -7,7 +7,9 @@ namespace CSVM.Flight;
 /// (<see cref="AircraftBody"/>) carry <see cref="Aircraft"/>, so each query chooses whether
 /// planes are solid to it: the airframe sweep and the projectile hit test read
 /// <see cref="WorldAndAircraft"/>; world-only probes (placement picks, blast spheres,
-/// proximity fuses) read <see cref="World"/> and stay blind to planes on purpose.</summary>
+/// proximity fuses) read <see cref="World"/> and stay blind to planes on purpose.
+/// ⚠ Godot's default query mask is ALL layers: a query that must not see planes has to say
+/// <see cref="World"/> explicitly.</summary>
 public static class CollisionLayers
 {
     /// <summary>Layer 1 — every static world collider (the engine default; nothing assigns

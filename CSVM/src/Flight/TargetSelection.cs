@@ -4,20 +4,14 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>One pilot's target selection: the sticky choice, the three cycles, the nearest queries
-/// and the lifecycle (decoded in docs/org/targeting.md). One instance
-/// per pane; it OWNS its <see cref="TargetPool"/>, since the pool is per-selector state and nothing
-/// else needs one.
-///
-/// <para>The shape follows the original's exactly: an action handler only mutates state (the class
-/// flags and the selection identity) and steps the list that ALREADY exists, while
-/// <see cref="Resolve"/> is the per-frame pass that re-sorts and re-finds. Nothing here is
-/// re-picked per frame beyond that re-find, which is what makes the selection sticky, and nothing
-/// but death, an explicit clear and the pilot's own input ever changes it: there is no range,
-/// line-of-sight or field-of-view gate anywhere in the decoded path, and inventing one would be a
-/// port invention.</para>
-///
-/// <para>No Godot node dependency: <see cref="Resolve"/> takes the pose it needs. The suite drives
-/// the whole lifecycle with no tree.</para></summary>
+/// and the lifecycle (decoded in docs/org/targeting.md). One instance per pane; it OWNS its
+/// <see cref="TargetPool"/>. The shape follows the original's exactly: an action handler only
+/// mutates state and steps the list that ALREADY exists, while <see cref="Resolve"/> is the
+/// per-frame pass that re-sorts and re-finds. No Godot node dependency, so the suite drives the
+/// whole lifecycle with no tree.
+/// ⚠ Nothing but death, an explicit clear and the pilot's own input ever changes the selection.
+/// There is no range, line-of-sight or field-of-view gate in the decoded path; adding one would be
+/// a port invention.</summary>
 public sealed class TargetSelection
 {
     /// <summary>The nearest-crosshairs cone, <c>cos(15°)</c> (<c>FUN_00488ce0</c>'s
@@ -62,13 +56,10 @@ public sealed class TargetSelection
     public IReadOnlyList<object> Attackers => _attackers;
 
     /// <summary>The cycle's sort key for one candidate (<c>FUN_004bbd60</c>): −1 for an objective,
-    /// otherwise the 90° sector the target sits in, measured against the plane's own basis.
-    ///
-    /// <para><paramref name="basis"/>'s X column is the engine's <c>row0</c> (the RIGHT axis) and its
-    /// Z column is <c>row2</c> (the NEGATED forward axis) — Godot's own convention makes those the
-    /// same two vectors, so no sign fixing is needed. The quadrant is taken after a π/4 rotation and
-    /// then has its 0 and 3 swapped, which is what puts <b>ahead</b> first and <b>right</b>
-    /// last.</para></summary>
+    /// otherwise the 90° sector the target sits in, measured against the plane's own basis. Godot's
+    /// convention makes this a direct port (the X column IS the engine's <c>row0</c>, the Z column
+    /// its <c>row2</c>), so no sign fixing is needed. The quadrant is taken after a π/4 rotation and
+    /// has its 0 and 3 swapped, which puts <b>ahead</b> first and <b>right</b> last.</summary>
     /// <returns>−1 objective, 0 ahead, 1 behind, 2 left, 3 right.</returns>
     public static int SectorKey(Vector3 toTarget, Basis basis, bool objective)
     {
@@ -98,16 +89,9 @@ public sealed class TargetSelection
 
         Pool.Rebuild(scan, subParts, ownTeam, self);
         Resolve(position, basis);
-        // Verification breadcrumb, once per selector: WHICH cycles this session actually has
-        // anything in. The gun assist prints the same shape for its own four lists
-        // (FlightController.ApplyFireOutcome) and for the same reason — a pool that silently
-        // collected nothing looks identical to one nobody built.
-        //
-        // It waits for the first NON-EMPTY pool rather than firing on frame one, because the things
-        // that fill it (AI spawns, the zeppelins, a generator drop) are built after the rigs are:
-        // a frame-one line would report zeroes in every session and say nothing. The empty case is
-        // still reported, once, after EmptyPoolReport rebuilds, so "nothing was ever selectable" is
-        // a line you can read rather than a line you have to notice is missing.
+        // Verification breadcrumb, once per selector: which cycles this session has anything in.
+        // It waits for the first NON-EMPTY pool because the things that fill it (AI spawns, the
+        // zeppelins, a generator drop) are built after the rigs are.
         if (!_countsLogged && (Pool.Count > 0 || ++_emptyRebuilds >= EmptyPoolReport))
         {
             _countsLogged = true;
@@ -149,12 +133,11 @@ public sealed class TargetSelection
         _selected = Current?.Source;
     }
 
-    /// <summary>Next Enemy/Objective (<c>0x24</c>) — the one action that consults the attacker queue
-    /// before the ordinary cycle, walking it BACKWARDS from the end so the most recent shooter comes
-    /// first: not in the queue selects the last entry, in the queue selects the one before it, and
-    /// the queue's first entry falls through to an ordinary <c>+1</c> step. An empty queue falls
-    /// through too. (The original plays its switch sound only on the fall-through; CSVM ships this
-    /// silent — no resolvable asset, see the input wiring's own notes.)</summary>
+    /// <summary>Next Enemy/Objective (<c>0x24</c>) — the one action that consults the attacker
+    /// queue first, walking it BACKWARDS from the end so the most recent shooter comes first. The
+    /// queue's first entry, and an empty queue, fall through to an ordinary <c>+1</c> step.
+    /// ⚠ CSVM ships every class action SILENT. <c>sg_switchtarget</c> is in the executable but in no
+    /// shipped asset, so wiring <c>snd_select</c> to it would be an invention.</summary>
     public void NextEnemy()
     {
         if (ActiveClass != TargetClass.Enemy)
@@ -191,13 +174,11 @@ public sealed class TargetSelection
     /// <summary>Previous in <paramref name="cls"/> (<c>0x25</c>/<c>0x28</c>/<c>0x2b</c>).</summary>
     public void Previous(TargetClass cls) => StepIn(cls, -1);
 
-    /// <summary>Nearest in <paramref name="cls"/> (<c>0x26</c>/<c>0x29</c>/<c>0x2c</c>).
-    ///
-    /// <para>⚠ "Nearest" is the <b>head of the cycle</b>, not the nearest thing in space: the head is
-    /// the nearest objective if any exists, otherwise the nearest candidate in the forward quadrant,
-    /// otherwise behind, otherwise left, otherwise right. A target 200 m off the left wing loses to
-    /// one 900 m ahead. Unlike Next/Previous it ALWAYS re-asserts its class and restarts the
-    /// cycle.</para></summary>
+    /// <summary>Nearest in <paramref name="cls"/> (<c>0x26</c>/<c>0x29</c>/<c>0x2c</c>). Unlike
+    /// Next/Previous it ALWAYS re-asserts its class and restarts the cycle.
+    /// ⚠ "Nearest" is the HEAD OF THE CYCLE, not the nearest thing in space: nearest objective, else
+    /// nearest ahead, else behind, else left, else right. A target 200 m off the left wing loses to
+    /// one 900 m ahead.</summary>
     public void Nearest(TargetClass cls)
     {
         ActiveClass = cls;
@@ -206,12 +187,10 @@ public sealed class TargetSelection
     }
 
     /// <summary>Select Target Nearest Crosshairs (<c>0x2d</c>, <c>FUN_00488db0</c>): its own scan
-    /// over every class, ignoring the cycle entirely. Scores by plain slant range inside a 15°
-    /// half-angle cone about the <b>NOSE</b> — not the gun pipper, which is a separate
-    /// velocity-derived point nothing in this path reads — capped at
-    /// <see cref="CrosshairMaxRange"/>. Friendlies are included, which is how one keypress reaches an
-    /// ally. Having chosen, it writes the class back from what it found, so a following Next/Previous
-    /// continues in that target's own cycle.</summary>
+    /// over every class, ignoring the cycle entirely, capped at <see cref="CrosshairMaxRange"/>.
+    /// Friendlies are included, which is how one keypress reaches an ally; the class is written back
+    /// from what it found. ⚠ It scores against the NOSE, not the gun pipper, which is a separate
+    /// velocity-derived point nothing in this path reads.</summary>
     /// <returns>False when nothing is in the cone, in which case the selection is left alone.</returns>
     public bool NearestCrosshairs(Vector3 position, Basis basis)
     {
@@ -257,14 +236,10 @@ public sealed class TargetSelection
     }
 
     /// <summary>Point the selection at a named pool entry, matching <see cref="TargetRef.Name"/>
-    /// case-insensitively across all three cycles and writing the class back from what it found
-    /// (the same rule <see cref="NearestCrosshairs"/> uses, and the reason a sub-part pin is not
-    /// dropped by the next <see cref="Resolve"/>). This is <c>--target=&lt;name&gt;</c>'s seam;
-    /// nothing in the original has an equivalent, since the original has no scripted input at all.
-    ///
-    /// <para>Cycles are searched Enemy, Ally, Non-Aircraft, and within a cycle in the pool's own
-    /// collector order — so a name carried by two entities (two zeppelins with identically named
-    /// zones) resolves to the same one on every run, which is the whole point of the flag.</para></summary>
+    /// case-insensitively and writing the class back from what it found (without that write-back the
+    /// next <see cref="Resolve"/> drops a cross-class pin). This is <c>--target=&lt;name&gt;</c>'s
+    /// seam; the original has no scripted input at all. Cycles are searched Enemy, Ally,
+    /// Non-Aircraft, in collector order, so a duplicated name resolves the same way every run.</summary>
     /// <returns>False when no entry carries that name, in which case the selection is left alone.</returns>
     public bool Select(string name)
     {
@@ -293,16 +268,9 @@ public sealed class TargetSelection
 
     /// <summary>Apply one <c>--target=</c> spec: <c>nearest</c>, <c>crosshair</c>, <c>next</c>,
     /// <c>none</c>, or a target's name for <see cref="Select"/>. The four words run the ordinary
-    /// actions rather than a scripted path of their own, so the flag can only reach a state the pilot
-    /// could have reached by hand.
-    ///
-    /// <para>⚠ This sets the INITIAL selection and nothing more. It mutates the same two pieces of
-    /// state a keypress does and then returns; the caller is responsible for calling it once, and
-    /// from that point the selection cycles and re-resolves normally. A flag that held the selection
-    /// against later input would freeze targeting in an interactive session started with it.</para>
-    ///
-    /// <para>⚠ <c>nearest</c> is the original's Nearest action, so it means the HEAD of the cycle,
-    /// not the nearest thing in space — see <see cref="Nearest"/>.</para></summary>
+    /// actions, so <c>nearest</c> means the HEAD of the cycle (see <see cref="Nearest"/>).
+    /// ⚠ This sets the INITIAL selection and nothing more; calling it once is the caller's job. A
+    /// flag that re-asserted itself per frame would freeze targeting in an interactive session.</summary>
     /// <returns>False when the spec selected nothing (an empty crosshair cone, an unknown name).</returns>
     public bool ApplyInitial(string spec, Vector3 position, Basis basis)
     {
@@ -341,15 +309,10 @@ public sealed class TargetSelection
     }
 
     /// <summary>Records a shooter that just hit this pilot, for <see cref="NextEnemy"/>'s queue
-    /// (<c>FUN_004b9770</c>: an end insert, made only for a shooter on a different, non-zero team).
-    /// The queue survives for the whole mission and is pruned only by death
-    /// (<see cref="ForgetTarget"/>).
-    ///
-    /// <para>⚠ The de-duplication is an INFERENCE. The original calls <c>FUN_004bc1e0</c> on the
-    /// wrapper immediately before the insert, which is probably a remove-if-present and would move a
-    /// repeat attacker to the end rather than listing it twice; that was not traced. Deduping is the
-    /// reading that makes the backwards walk useful, so it is what ships, marked as inference rather
-    /// than as decode.</para></summary>
+    /// (<c>FUN_004b9770</c>: an end insert, only for a shooter on a different, non-zero team). The
+    /// queue survives the whole mission and is pruned only by death (<see cref="ForgetTarget"/>).
+    /// ⚠ The de-duplication is an INFERENCE, not decode. <c>FUN_004bc1e0</c> before the insert is
+    /// probably a remove-if-present, but that was not traced.</summary>
     public void RecordAttacker(object shooter)
     {
         _attackers.Remove(shooter);
@@ -375,11 +338,9 @@ public sealed class TargetSelection
     {
         if (ActiveClass != cls)
         {
-            // The class handlers clear the target when the class actually changes, so the step lands
-            // on a head rather than continuing from an entry in the cycle just left. ⚠ The list this
-            // steps is still LAST frame's, built under the old class — that one-frame lag is the
-            // original's (a synchronous rebuild inside the handler does not reproduce it), and it
-            // self-heals on the next Resolve, which drops to the head of the new cycle.
+            // Clearing on a real class change makes the step land on a head. ⚠ The list this steps
+            // is still LAST frame's, built under the old class; that one-frame lag is the original's
+            // and self-heals on the next Resolve. Do not "fix" it with a synchronous rebuild.
             ActiveClass = cls;
             _selected = null;
         }
@@ -453,10 +414,9 @@ public sealed class TargetSelection
             byKey[i] = _ordered[i];
         }
 
-        // Sector first, then nearest inside the sector. The third key is the pre-sort index: the
-        // engine's own sort makes no promise about exact ties, and a total order here keeps a tie
-        // (two parts of one zeppelin at the same range) from reordering between frames and walking
-        // the cycle under the pilot.
+        // Sector first, then nearest inside it. The third key is the pre-sort index: a total order
+        // keeps a tie (two parts of one zeppelin at the same range) from reordering between frames
+        // and walking the cycle under the pilot.
         System.Array.Sort(keys, byKey, Comparer<(int Sector, float DistSq, int Index)>.Create(
             (x, y) => x.Sector != y.Sector ? x.Sector.CompareTo(y.Sector)
                 : x.DistSq != y.DistSq ? x.DistSq.CompareTo(y.DistSq)

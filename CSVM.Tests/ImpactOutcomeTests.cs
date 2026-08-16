@@ -20,14 +20,9 @@ namespace CSVM.Tests;
 /// </summary>
 public class ImpactOutcomeTests
 {
-    /// <summary>The surface ids a round can actually strike in M3, which is a measurement rather
-    /// than a choice: the seven ids some shipped material carries somewhere in the eight chapters
-    /// (<c>analysis/surface-classification/FINDINGS.md</c>, 2026-08-11 per-chapter area table:
-    /// <c>default</c>(0), <c>water</c>(1), <c>fire</c>(5), <c>airstrip</c>(8),
-    /// <c>buildings</c>(11), <c>dzone</c>(12), <c>dirt</c>(13)) plus <c>player</c>(6), which
-    /// <c>ProjectilePool.SurfaceIdOf</c> answers for a struck <c>AircraftBody</c>. The remaining
-    /// six ids are carried by no material and by no body, so a case for them would be invented
-    /// coverage — <c>quicksand</c>(3) included, even though three weapons author a row for it.</summary>
+    // The surface ids a round can actually strike in M3, a measurement rather than a choice:
+    // analysis/surface-classification/FINDINGS.md's per-chapter area table plus `player`, which
+    // `ProjectilePool.SurfaceIdOf` answers. A case for any other id would be invented coverage.
     private static readonly int[] ReachableSurfaceIds =
     {
         SurfaceRegistry.Default, SurfaceRegistry.Water, 5, 8, SurfaceRegistry.Player,
@@ -53,7 +48,7 @@ public class ImpactOutcomeTests
     }
 
     /// <summary>Ground gets the single spark, gun or rocket alike, at every terrain id — it has no
-    /// arm of its own since BL-313 deleted the chip burst. The assertion that matters is that the
+    /// arm of its own since the chip burst was removed. The assertion that matters is that the
     /// answer is not <c>None</c>: <c>ProjectilePool</c> gates the world-effects sink (the
     /// <c>blacksmokepuffer</c>) on <c>StandIn != None</c>, so a terrain hit resolving to nothing
     /// would silently take the gunhit smoke with it.</summary>
@@ -253,19 +248,12 @@ public class ImpactOutcomeTests
 
     // ---- the 48 weapons x the reachable surfaces ---------------------------------------------
 
-    /// <summary>The rule, not a snapshot: every one of the 48 shipped weapons, at every reachable
-    /// surface id, resolves an outcome that is coherent by three checks that hold regardless of which
-    /// weapon or surface it is — never a table of expected per-row values, which is the form that
+    /// <summary>The rule, not a snapshot: every shipped weapon at every reachable surface id
+    /// resolves an outcome coherent by three checks, never a table of expected per-row values that
     /// breaks on the next weapon-polish change without catching anything.
-    ///
-    /// <para>This loop is also the producer-range guard for the gun IMPACT family: whichever
-    /// outcome names a <c>*_gunhit</c> effect (caliber × ammo, e.g. <c>3040slug_gunhit</c>) must
-    /// resolve inside <see cref="EffectCatalogue.EffectAnimNames"/>, so a caliber/ammo combination
-    /// the catalogue does not know breaks here instead of silently playing nothing. Not every
-    /// <see cref="ImpactOutcome.EffectName"/> qualifies: several resolve to a gamez MESH name
-    /// instead (e.g. the slug's own <c>splash1.flt</c>/<c>bld_damage.flt</c>), which is a model to
-    /// instance, never a catalogue entry — the gunhit family is the one whose name is always
-    /// handed to the effects runtime.</para></summary>
+    /// ⚠ Also the producer-range guard for the <c>*_gunhit</c> family (docs/formats/weapon-effects.md):
+    /// every such name must resolve inside <see cref="EffectCatalogue.EffectAnimNames"/>, unlike an
+    /// <see cref="ImpactOutcome.EffectName"/> that names a gamez mesh instead.</summary>
     [ExtractedDataFact]
     public void Every48WeaponsResolvesACoherentOutcomeAtEveryReachableSurfaceId()
     {
@@ -291,10 +279,8 @@ public class ImpactOutcomeTests
                 if (outcome.EffectName == null && outcome.StandIn == ImpactStandIn.None)
                     violations.Add($"{where}: neither an effect name nor a stand-in");
 
-                // A SOUND token in the IMPACT table names either a plain SETS def (snd_*) or a
-                // SOUND_GROUPS entry (e.g. bullet_hit_sg) resolved through the group table at play
-                // time (ImpactOutcome's own doc comment) — a real key can be absent from SoundDefs
-                // and still be valid, so the coherent check is the union of both tables.
+                // A SOUND token names either a SETS def or a SOUND_GROUPS entry; the coherent
+                // check is the union of both tables.
                 if (outcome.Sound != null && !sounds.ContainsKey(outcome.Sound) && !groups.ContainsKey(outcome.Sound))
                     violations.Add($"{where}: sound '{outcome.Sound}' is neither a SoundDefs entry nor a SOUND_GROUPS name");
 

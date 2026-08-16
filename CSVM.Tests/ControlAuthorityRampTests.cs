@@ -6,21 +6,12 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The original's low-speed control-authority ramp (closing BL-330): roll and
-/// pitch authority is 0 at <c>turn_fade_in</c> (10 mph), rises linearly to 1 at
-/// <c>turn_fade_out</c> (authored 50 mph) and holds there. Yaw keeps its own, different curve.
-///
-/// <para><b>Why these assertions and not a "the aircraft feels mushy" probe.</b> The ramp is
-/// saturated at 1 across the whole speed band the flight-envelope suite measures, so every pinned
-/// number in that suite is blind to it (<c>verification.md</c> METHOD-10: a green suite here says
-/// nothing). What follows is the able-to-fail part — the curve's shape read off the model, and the
-/// rotation it produces at a speed where it actually bites.</para>
-///
-/// <para>The reverse-authority factor rides along because it comes out of the same function
-/// (<c>FUN_0048bdd0</c>'s fifth output). It is asserted as a CURVE only: its one consumer in the
-/// original is the visible rudder angle, so a test that looked for it in the force path would be
-/// testing the misattribution rather than the mechanism — see
-/// <see cref="FlightModel.ReverseAuthorityAt"/>.</para>
+/// The original's low-speed control-authority ramp. Decode:
+/// docs/org/flightModel.md, "The low-speed ramp". Saturated at 1 across the whole speed band the
+/// flight-envelope suite measures, so a green suite there says nothing here (verification.md
+/// METHOD-10); this asserts the curve's shape and the rotation it produces where it bites.
+/// The reverse-authority factor is asserted as a curve only, per
+/// <see cref="FlightModel.ReverseAuthorityAt"/>'s own note.
 /// </summary>
 public class ControlAuthorityRampTests
 {
@@ -91,7 +82,7 @@ public class ControlAuthorityRampTests
     }
 
     /// <summary>At <c>turn_fade_in</c> and below there is no roll or pitch left at all — the end of
-    /// the ramp that BL-330 describes as "at 10 mph roll and pitch are gone entirely", and the one a
+    /// the ramp described as "at 10 mph roll and pitch are gone entirely", and the one a
     /// clamped-to-a-floor implementation would quietly miss. The rudder still works there: its own
     /// curve bottoms out at <c>yaw_low_speed</c>, not at zero.</summary>
     [Fact]
@@ -178,18 +169,18 @@ public class ControlAuthorityRampTests
         Assert.Equal(expected, fast.BodyRates.Y / slow.BodyRates.Y, 4);
     }
 
-    /// <summary>The authored globals, as the shipped player.json carries them (verified against
-    /// <c>extracted/zrdr/player.zrd.json</c> and pinned by <see cref="PlaneStatsFlightGlobalsTests"/>).
-    /// Written out here so the curve tests do not need the extracted tree.</summary>
+    // The authored globals, as the shipped player.json carries them (verified against
+    // `extracted/zrdr/player.zrd.json` and pinned by PlaneStatsFlightGlobalsTests).
+    // Written out here so the curve tests do not need the extracted tree.
     private static PlaneStats Authored() => new()
     {
         TurnFadeIn = 10f * Mph,
         TurnFadeOut = 50f * Mph,
     };
 
-    /// <summary>A plant that can be flown slowly without the stall block or the weathervane taking
-    /// the nose: <c>return_rate</c> zero, and a weight/area pair whose computed stall speed is below
-    /// the whole ramp, so nothing but the stick moves the body rates.</summary>
+    // A plant that can be flown slowly without the stall block or the weathervane taking
+    // the nose: `return_rate` zero, and a weight/area pair whose computed stall speed is below
+    // the whole ramp, so nothing but the stick moves the body rates.
     private static FlightModel Hover() => new(new PlaneStats
     {
         PitchTorque = 3.3f,

@@ -5,26 +5,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The force-path seam: a <see cref="FlightModel"/> flows either the original's
-/// player force path or its AI one, chosen once at construction.
-///
-/// <para><b>Why a test for a flag nothing reads yet.</b> C21 lands the seam alone so wave C's diff is
-/// readable, which means the whole regression suite passes whether the flag is wired correctly, wired
-/// backwards, or not wired at all — a green run here verifies nothing about the change on its own
-/// (<c>verification.md</c> METHOD-10). These assertions are what make the wiring falsifiable before
-/// anything downstream depends on it.</para>
-///
-/// <para><b>C22 turned this class around.</b> C21's <c>BothPathsStillIntegrateIdentically</c> pinned
-/// the claim that the seam changed no arithmetic, and was written to fail the moment the first
-/// divergence landed. It has become <see cref="TheTwoPathsNoLongerIntegrateIdentically"/> over the
-/// same 60-step probe, and the three divergences C22 hung off the flag are asserted one at a time
-/// below — each isolated so that a mis-wired flag cannot show up as "no change" in an aggregate
-/// (<c>verification.md</c> METHOD-10: three of the three are SKIPS on the AI side, and an unchanged
-/// number proves nothing unless it was able to fail).</para>
-///
-/// <para>There is deliberately no density assertion. A1 disproved the AI density band — the
-/// atmosphere call is shared and unbranched — so both paths fly the dense band and the "near-zero
-/// AI aerodynamic forces" outcome C22 was originally written around is not what happens.</para>
+/// The force-path seam: a <see cref="FlightModel"/> flows either the original's player force path
+/// or its AI one, chosen once at construction. Decode: docs/org/flightModel.md.
+/// Each of the three divergences is asserted in isolation, per <c>verification.md</c> METHOD-10:
+/// an aggregate diff cannot tell "no change" from a mis-wired flag.
+/// ⚠ No density assertion here: A1 disproved the AI density band, so both paths fly the same band.
 /// </summary>
 public class ForcePathSeamTests
 {
@@ -92,20 +77,11 @@ public class ForcePathSeamTests
         Assert.NotEqual(player.Alpha, ai.Alpha, 2);
     }
 
-    /// <summary>Divergence 1, the airflow blend, stated as an IDENTITY rather than as an inequality:
-    /// the AI is exactly the player would be with the <c>liftAOAs</c> window forced fully open. A
-    /// third plant with the window collapsed to nothing is flown on the PLAYER path and must land on
-    /// the AI's lift demand to five places at every incidence — which "they differ" would not say,
-    /// and which pins the direction too. The sign of the difference against the real window is not
-    /// fixed: at a climbing flight path the fully-nose-aligned swing OPPOSES weight and the AI's
-    /// demand comes out smaller, so an assertion written as "the AI pulls harder" would be reading a
-    /// geometry, not the mechanism.
-    /// <para>Isolated by <c>return_rate = 0</c> hands-off at 135 m/s: the weathervane term is
-    /// identically zero on every path here and the speed floor is nowhere near, so the lift demand
-    /// is the only thing that can move. The 0° and 30° rows are the controls — inside neither is the
-    /// window open (on the nose there is nothing to blend; past <c>liftAOAs[1]</c> the player is
-    /// fully nose-aligned as well), so the real window is the only place the two paths separate at
-    /// all.</para></summary>
+    /// <summary>Divergence 1, the airflow blend, stated as an identity: the AI is exactly the player
+    /// would be with the <c>liftAOAs</c> window forced fully open, to five places at every incidence.
+    /// Isolated by <c>return_rate = 0</c> hands-off at 135 m/s, so the lift demand is the only thing
+    /// that can move; the 0° and 30° rows are controls where the window is not open either
+    /// way.</summary>
     [Theory]
     [InlineData(0f, false)]     // control: on the nose, nothing to blend, both paths agree
     [InlineData(8f, true)]      // below liftAOAs[0] (11.5°): the player uses the TRUE airflow
@@ -245,7 +221,7 @@ public class ForcePathSeamTests
         Assert.True(player.Speed > 4.4704f);
     }
 
-    /// <summary>The Bloodhawk's real dynamics, the same fixture <c>AttitudeThrustTests</c> flies.</summary>
+    // The Bloodhawk's real dynamics, the same fixture `AttitudeThrustTests` flies.
     private static PlaneStats Bhawk() => new()
     {
         PitchTorque = 3.3f,

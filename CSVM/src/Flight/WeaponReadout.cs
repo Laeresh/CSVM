@@ -5,18 +5,11 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// The selected-weapon HUD text readout: two lines in the game's own <c>5pointhud</c> bitmap
-/// font at the bottom centre of the pane — the currently-selected gun group and rocket type
-/// with their live ammo. The text comes from the game's own message templates, resolved through
-/// <see cref="Messages"/> and NOT hardcoded: <c>MSG_HUD_GUNGAUGE</c> (<c>"GUNS: %1: %2!d!"</c>) and
-/// <c>MSG_HUD_MISSLES</c> (<c>"MISSILES: %1: %2!d!"</c>, the data's spelling). <c>%1</c> names the
-/// gun group / rocket type — which is why the strings exist: the counters are per group / per pylon —
-/// and <c>%2</c> is the count.
-///
-/// <para>The <see cref="FlightController"/> pushes the state each frame (the gun count is the
-/// selected group's own rounds, the rocket count the next-to-fire pylon's — per-pylon, matching the
-/// missile gauge). A null name hides that line: a plane with no guns / no hardpoints, or a lab build
-/// with no loadout draws nothing.</para>
-/// </summary>
+/// font at the bottom centre of the pane, the currently-selected gun group and rocket type with
+/// their live ammo. Text comes from the game's own message templates, resolved through
+/// <see cref="Messages"/> and never hardcoded: <c>MSG_HUD_GUNGAUGE</c> / <c>MSG_HUD_MISSLES</c>.
+/// <see cref="FlightController"/> pushes the state each frame.
+/// ⚠ A null name hides that line (no guns / no hardpoints / no loadout).</summary>
 public sealed partial class WeaponReadout : Control
 {
     // Per-frame state set by the FlightController. Null name ⇒ that line is hidden.

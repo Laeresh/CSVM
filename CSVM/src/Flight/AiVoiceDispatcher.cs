@@ -4,27 +4,17 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>The combat-voice trigger dispatch: events in, (speaker, clip, outcome)
-/// decisions out, over the decoded rules of <c>docs/formats/combat-voice.md</c> — the talker roll
-/// against the pilot's <c>talker_chance</c>, the 15 s per-slot cooldown ⚠ armed by a FAILED roll
-/// exactly as by a successful one (a quiet pilot does not retry; losing the roll silences that
-/// trigger for 15 s), the hardcoded halving on the bearing call-outs (ids 1–12), the speaker
-/// election for broadcasts (one line per event, a failed roll passes it to the NEXT candidate,
-/// wrapping — never N independent rolls), the DI damage tiers at 70/50/30 % tested
-/// most-severe-first, the computed bearing index (<c>id = 1 + 3·bearing + altitudeBand</c>), and
-/// the force flag, which bypasses ONLY the aliveness check (the death cries, ids 20/21, come from
-/// a speaker just marked dead) — never the cooldown or the roll.
-///
-/// <para>Engine-free in the <see cref="AiModeMachine"/> sense: no nodes, no clocks, all
-/// randomness from the injected seeded stream, playback delegated to the resolver the caller
-/// supplies (the runtime wires <c>CombatVoice.PlayableFor</c> + <c>WorldSounds.HasStream</c>).
-/// A null slot (the pilot owns no clip for the trigger) is tested BEFORE anything rolls, per the
-/// decode, so it never arms a cooldown.</para>
-///
-/// <para>Invented, named as such: the <c>Bail</c>/<c>NoBail</c> pick below the death-cry family
-/// root is a constitution roll (the format page's natural-candidate reading, unconfirmed), and
-/// the bearing quantisation constants (<see cref="LevelBandM"/>; the 12/3/6/9 quadrants split at
-/// ±45°) — only the index FORMULA is decoded.</para></summary>
+/// <summary>The combat-voice trigger dispatch: events in, (speaker, clip, outcome) decisions out.
+/// Decode: <c>docs/formats/combat-voice.md</c> — the talker roll, the cooldown, the DI damage
+/// tiers and the broadcast election. Engine-free in the <see cref="AiModeMachine"/> sense: no
+/// nodes, no clocks, all randomness from the injected seeded stream, playback delegated to the
+/// resolver the caller supplies.
+/// ⚠ The broadcast election is one line per event: a failed roll passes to the NEXT candidate,
+/// wrapping, never N independent rolls.
+/// Invented, named as such: the <c>Bail</c>/<c>NoBail</c> pick below the death-cry family root is
+/// a constitution roll (unconfirmed), and the bearing quantisation constants
+/// (<see cref="LevelBandM"/>; the 12/3/6/9 quadrants split at ±45°) — only the index formula is
+/// decoded.</summary>
 public sealed class AiVoiceDispatcher
 {
     /// <summary>Decoded: the per-slot cooldown, stamped on BOTH roll outcomes.</summary>

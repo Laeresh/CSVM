@@ -23,34 +23,15 @@ public enum TurretGate
     Firing,
 }
 
-/// <summary>
-/// One <c>ai.zrd</c> turret gunner (docs/formats/turrets.md) — the same tracking loop for both
-/// families: a carried turret riding an aircraft (<see cref="BuildCarried"/>) and a world
-/// emplacement placed at the entry's <c>NODES</c> patterns (
-/// <see cref="BuildEmplacements"/>). Per sim tick it acquires the nearest hostile aircraft
-/// inside <c>DETECTION_RANGE</c>, solves a constant-velocity intercept
-/// (<see cref="AimAssist.TryIntercept"/>), clamps the solution to the authored arcs (the yaw arc
-/// is a DIRECTED interval on the circle; an absent or min==max arc is unrestricted), slews the
-/// barrel toward it at a bounded rate, writes the pose onto the <c>PARTS</c> nodes, and fires
-/// real rounds through the shared <see cref="ProjectilePool"/> — hit resolution is therefore
-/// geometric (the round either strikes or misses), with <c>INACCURACY</c> as a scatter cone on
-/// the shot, never a probability roll.
-///
-/// <para>What splits the families at runtime: a carried gunner lives and dies, aims and shoots
-/// under its HOST (team, velocity, shooter id, crash = death); an emplacement carries its own
-/// authored team, measures its platform velocity by differencing its own position (the decoded
-/// moving-host fold-in, with the same ~447 m/s sanity cut), spawns unowned rounds, dies with
-/// its <c>HEALTHY_NODE</c> (default <c>healthy</c>) and honours <c>ACTIVATED</c> — 22 of the 26
-/// shipped emplacement entries are dormant until <see cref="Wake"/> (the mission script's
-/// <c>WAKEUP_TURRETS</c>, which is out of M4's scope; <c>--wake-turrets</c> is the documented
-/// stand-in).</para>
-///
-/// <para>The attack/bored keys are a duty cycle, not two moods: bored suppresses FIRING only,
-/// the aim solution keeps running, so a holding turret still tracks. A plain class, not a Node —
-/// a carried gunner is ticked by its host <see cref="FlightController"/>'s <c>SimStep</c> (so a
-/// crashed host's early return silences it for free), an emplacement by
-/// <c>Session.TurretEmplacementRuntime</c>.</para>
-/// </summary>
+/// <summary>One <c>ai.zrd</c> turret gunner (docs/formats/turrets.md): the same tracking loop for
+/// a carried turret riding an aircraft (<see cref="BuildCarried"/>) and a world emplacement placed
+/// at the entry's <c>NODES</c> patterns (<see cref="BuildEmplacements"/>). Per sim tick it acquires
+/// the nearest hostile aircraft inside <c>DETECTION_RANGE</c>, solves a constant-velocity intercept
+/// (<see cref="AimAssist.TryIntercept"/>), clamps the solution to the authored arcs, slews the
+/// barrel, writes the pose onto the <c>PARTS</c> nodes, and fires through the shared
+/// <see cref="ProjectilePool"/> — hit resolution is geometric, with <c>INACCURACY</c> as a scatter
+/// cone, never a probability roll. A plain class, not a Node: a carried gunner is ticked by its
+/// host's <c>SimStep</c>, an emplacement by <c>Session.TurretEmplacementRuntime</c>.</summary>
 public sealed class TurretController
 {
     /// <summary>The barrel's catch-up rate toward the clamped aim direction, per second — the
@@ -125,6 +106,10 @@ public sealed class TurretController
 
     public TurretDef Def { get; }
 
+    /// <summary>The gunner's own weapon, from its <c>ai.zrd</c> row (docs/formats/turrets.md).
+    /// ⚠ Never take it from the stock loadout's turret slot. Those slots stay bound but inert
+    /// (<see cref="GunGroup.IsTurret"/>), and reading one arms the gunner with the wrong
+    /// calibre.</summary>
     public WeaponDef Weapon { get; }
 
     /// <summary>The traverse ring (<c>PARTS[0]</c> of the 3-element form) — null on the
@@ -141,7 +126,8 @@ public sealed class TurretController
 
     public int ShotsFired { get; private set; }
 
-    /// <summary>True in a firing spell, false in the bored pause between spells. The windows are
+    /// <summary>True in a firing spell, false in the bored pause between spells (a duty cycle, not
+    /// two moods: bored suppresses firing only, the aim solution keeps running). The windows are
     /// redrawn uniform(min,max) at every transition, so no two turrets stay in phase.</summary>
     public bool Attacking { get; private set; }
 
@@ -182,14 +168,11 @@ public sealed class TurretController
     /// solution — the overlay draws the line to the TARGET and the barrel shows the lead.</summary>
     public Vector3 TargetPosition { get; private set; }
 
-    /// <summary>Carried: alive while the host is in play (the carried family's <c>HEALTHY_NODE</c>
-    /// is a model node the plane damage model does not track individually, so host death is the
-    /// kill condition CSVM can express today). ⚠ <see cref="FlightController.InPlay"/>, not
-    /// <c>Crashed</c>: a gunner carried by an INERT airframe must not fire, be fired at, or
-    /// join the aim assist's turret candidate list either. Emplacement: alive while its healthy node is —
-    /// the destroy sequence's healthy→destroyed swap hides it, which is the decoded permanent
-    /// kill switch (the retail loaders read no HEALTH key; the emplacement's real hit points are
-    /// its own gamez destroy def's).</summary>
+    /// <summary>Carried: alive while the host is <see cref="FlightController.InPlay"/>. Emplacement:
+    /// alive while its <c>HEALTHY_NODE</c> (default <c>healthy</c>) is visible (docs/formats/turrets.md
+    /// "Being alive, and being awake").
+    /// ⚠ Not <c>Crashed</c>: a gunner carried by an inert airframe must not fire, be fired at, or
+    /// join the aim assist's turret candidate list.</summary>
     public bool Alive => _host != null
         ? _host.InPlay
         : _healthyNode == null || (GodotObject.IsInstanceValid(_healthyNode) && _healthyNode.Visible);
@@ -274,14 +257,10 @@ public sealed class TurretController
         return built.ToArray();
     }
 
-    /// <summary>The engine-space team an emplacement fights on. The original's team ids are
-    /// 0 = neutral, 1 = ally (the player's side — the four authored <c>TEAM 1</c> entries are
-    /// the piratezep's own defensive turrets), 2+ = enemy teams, and the loader defaults an
-    /// absent TEAM to enemy team 2. CSVM's team model (<see cref="FlightController.Team"/>)
-    /// maps this directly: neutral stays <see cref="AimAssist.NeutralTeam"/> (never a target,
-    /// never acquires), ally maps to <see cref="AimAssist.PlayerTeam"/> — the fixed id, never a
-    /// particular pilot's own — and an enemy id lands in a band clear of every pilot team, hostile
-    /// to all of them.</summary>
+    /// <summary>The engine-space team an emplacement fights on: neutral and ally map to
+    /// <see cref="AimAssist.NeutralTeam"/>/<see cref="AimAssist.PlayerTeam"/>, an enemy id lands
+    /// in a band clear of every pilot team (docs/formats/turrets.md "Teams"). An absent
+    /// <c>TEAM</c> is enemy id 2, the original loader's own default.</summary>
     public static int EngineTeamFor(int originalTeamId) => originalTeamId switch
     {
         0 => AimAssist.NeutralTeam,
@@ -289,17 +268,11 @@ public sealed class TurretController
         _ => EmplacementEnemyBand + originalTeamId,
     };
 
-    /// <summary>Builds the chapter's world emplacements — every standalone <c>ai.zrd</c> entry's
-    /// <c>NODES</c> patterns resolved against the built world (<paramref name="findNodes"/> is
-    /// <c>AnimRuntime.FindNodes</c>: pattern, then optional subtree scope). A multi-segment path
-    /// (<c>["piratezep","ctur*"]</c>) scopes each further segment to the previous match's
-    /// subtree; one entry instantiates as many turrets as there are matching nodes. The
-    /// <c>PARTS</c> names (<c>turret</c>/<c>gun</c>/<c>firepoint</c> throughout the standalone
-    /// family) resolve INSIDE each matched node's subtree; the kill switch is the
-    /// <c>HEALTHY_NODE</c> (default <c>healthy</c>) child, falling back to the matched node
-    /// itself — the decoded loader order. A matched node whose parts do not resolve is skipped
-    /// with a warning (the world carries grouping nodes like C5's <c>thugs</c> beside
-    /// <c>thug1..3</c> that the patterns also match).</summary>
+    /// <summary>Builds the chapter's world emplacements: every standalone <c>ai.zrd</c> entry's
+    /// <c>NODES</c> patterns resolved against the built world (docs/formats/turrets.md "Field table";
+    /// <paramref name="findNodes"/> is <c>AnimRuntime.FindNodes</c>). One entry instantiates as many
+    /// turrets as there are matching nodes. A matched node whose <c>PARTS</c> do not resolve is
+    /// skipped with a warning.</summary>
     public static TurretController[] BuildEmplacements(TurretDefs defs, WeaponDefs weapons,
         Func<string, Node3D?, IReadOnlyList<Node3D>> findNodes, ProjectilePool pool,
         Node3D? worldRoot = null)
@@ -376,18 +349,12 @@ public sealed class TurretController
         return built.ToArray();
     }
 
-    /// <summary>The structure an emplacement is mounted ON: the node its site hangs off, which in
-    /// the shipped models is the hull section carrying it (a zeppelin ring's own gasbag group, a
-    /// balloon's canopy) — or the gun's own node, for a gun that stands on the ground and whose
-    /// site is already a top-level world child. That section is what its line-of-sight test must
-    /// not treat as cover, and the reason the test needs the world root at all: to know when to
-    /// stop climbing.
-    ///
-    /// <para>⚠ Deliberately the SECTION and not the whole vehicle. Excluding a zeppelin entire
-    /// let its rings shoot through their own hull; excluding only the gun's own rig blocked all
-    /// 14 of C1/IA1's rings, because the panel colliders engulf the ring they carry. The section
-    /// is the unit that separates a gun's own clutter from the far side of the same
-    /// hull.</para></summary>
+    /// <summary>The structure an emplacement is mounted on: the node its site hangs off (a
+    /// zeppelin ring's own gasbag group, a balloon's canopy), or the gun's own node when the site is
+    /// already a top-level world child. Its line-of-sight test must not treat this as cover
+    /// (docs/formats/turrets.md "Acquiring").
+    /// ⚠ Deliberately the section, not the whole vehicle. Excluding the whole vehicle lets a
+    /// zeppelin's rings shoot through their own hull.</summary>
     public static Node3D? PlatformOf(Node3D? site, Node3D? worldRoot)
     {
         if (site == null || worldRoot == null || site.GetParent() is not Node3D parent
@@ -543,6 +510,8 @@ public sealed class TurretController
         // INACCURACY perturbs the SHOT after the pose is written: the turret aims true and the
         // rounds spread. Same uniform-polar cone as the player assist's launch scatter.
         var dir = AimAssist.Scatter(aimWorld, Mathf.DegToRad(Def.InaccuracyDeg), _rng);
+        // ⚠ Pass team explicitly. A world emplacement has no shooter id, so the shooter-id default
+        // reads its rounds as neutral in the aim assist's ordnance candidate list.
         _pool.Spawn(Weapon, fp.GlobalTransform, PlatformVelocity,
             _host?.PlayerIndex ?? ProjectilePool.NoShooter, fp, dir, team: _team);
         if (_host == null && !_firstShotLogged)

@@ -48,44 +48,21 @@ public enum MenuMode
 }
 
 /// <summary>
-/// One immutable value for everything the command line settles about a session: parsed once, then
-/// resolved once, so a consumer reads an answer instead of re-deriving one.
-///
-/// <para><b><see cref="Parse"/> returns a RESOLVED spec.</b> The raw stage exists only inside it:
-/// the mode flags arrive as private fields, arbitration turns them into <see cref="Mode"/>, and the
-/// public <see cref="Fly"/>/<see cref="Viewer"/>/<see cref="Freecam"/>/<see cref="AnimLab"/> are
-/// computed from it, so there is exactly one definition of each. The properties resolution
-/// overwrites say so on themselves; everything else is what the command line said.</para>
-///
-/// <para><b>Pure.</b> Nothing here touches engine state or globals: it does not set
-/// <c>Pads.Disabled</c> (see <see cref="PadsDisabled"/>), does not call <c>TextureDropIn</c>, does
-/// not <c>Log.Configure</c>, does not draw a clock seed (see <see cref="PinnedSeed"/>) and does not
-/// log — complaints land in <see cref="Warnings"/> for the caller to emit. That is what makes the
-/// whole surface reachable from <c>CSVM.Tests</c>, which has no Godot runtime to print into.</para>
-///
-/// <para><b>Resolution reproduces today's behaviour, warts included</b>, because the equivalence
-/// gate compares against it: <see cref="ModeName"/> still omits <c>--dump-flight</c> from its
-/// "dump" chain and <see cref="ShowsMenu"/> is still true under <c>--run-tests</c>. Both are marked
-/// where they live. Fixing either is a behaviour change and belongs in its own item.</para>
-///
-/// <para>Godot's <c>Vector3</c>/<c>Color</c> are plain managed structs, so they cost nothing here;
-/// <see cref="SessionPaths"/> is the precedent for lifting pure logic out of
-/// <see cref="CSVM.Session.GameSession"/> this way.</para>
+/// One immutable value for everything the command line settles about a session: parsed once,
+/// then resolved once, so a consumer reads an answer instead of re-deriving one.
+/// <see cref="Parse"/> returns a RESOLVED spec; the mode flags arrive as private fields and
+/// arbitration turns them into <see cref="Mode"/> — see <see cref="Resolve"/> for the step order.
+/// ⚠ Pure — no engine state, no globals, no logging, no clock. Complaints go to
+/// <see cref="Warnings"/>, never a print.
 /// </summary>
 public sealed record SessionSpec
 {
-    /// <summary>The sim frame a bare <c>--crash</c> (no <c>=frame</c>) fires at — early enough that
-    /// the default <c>--frames=</c> screenshot lands mid-break-up rather than pre-impact.</summary>
+    // The sim frame a bare `--crash` (no `=frame`) fires at — early enough that
+    // the default `--frames=` screenshot lands mid-break-up rather than pre-impact.
     private const int DefaultCrashFrame = 5;
 
-    /// <summary>The frame a bare <c>--hitch-inject=</c> (no <c>@frame</c>) fires at, in
-    /// <see cref="Utils.HitchMonitor.FrameCount"/>'s own space. The grace window is wall-clock ms,
-    /// not a frame count, so how many frames it takes to clear depends on how fast this MACHINE
-    /// renders a frame — 120 frames is NOT "2 seconds" the way the 60 Hz-cap assumption elsewhere in
-    /// this plan implies: measured on the dev box, both vsync on (its actual refresh is 120 Hz, not
-    /// 60) and <c>--no-vsync</c> pace the empty stage at ~8.3 ms/frame, so the default 2000 ms grace
-    /// window does not clear until ~frame 240. 300 leaves a margin verified on that box; a slower
-    /// machine or a heavier stage still needs its own <c>@frame</c>, explicit.</summary>
+    // The frame a bare `--hitch-inject=` (no `@frame`) fires at, in FrameCount's own space.
+    // The wall-time margin this gives on the dev box is measured in docs/cli.md.
     private const int DefaultHitchInjectFrame = 300;
 
     private List<Note> _notes = new();
@@ -216,14 +193,10 @@ public sealed record SessionSpec
     /// the path; loading it is the runtime's job, which keeps this
     /// type free of file I/O.</summary>
     public string? IaPath { get; private set; }
-    /// <summary><b>Set only by <see cref="FromMenu"/>.</b> The launchscreen's Instant Action
-    /// wizard's own built <c>InstantActionDef</c> — null on every CLI
-    /// launch, since <c>--ia=</c> carries a path instead. Already resolved: building it is the
-    /// menu's job, not this type's, the same purity contract <see cref="IaPath"/> keeps (no file
-    /// I/O here). When set, <c>GameSession</c> builds its <c>InstantActionRuntime</c> straight from
-    /// this value rather than loading <see cref="IaPath"/> — the wizard and <c>--ia=</c> converge
-    /// on that one build path from here on, which is what "one build path from wizard and CLI"
-    /// (H16's own goal) means in code.</summary>
+    /// <summary>Set only by <see cref="FromMenu"/>: the launchscreen wizard's own built
+    /// <c>InstantActionDef</c>, null on every CLI launch since <c>--ia=</c> carries a path
+    /// instead. Only ever carried onto the record here, never loaded or built — the same
+    /// purity contract <see cref="IaPath"/> (a path, not a load) already keeps.</summary>
     public InstantActionDef? IaDef { get; private set; }
     /// <summary>The <c>--stage=</c> value as given, unvalidated — only "empty" names a stage.
     /// Whether it survived is <see cref="EmptyStage"/>.</summary>
@@ -315,12 +288,7 @@ public sealed record SessionSpec
     /// <summary>Which weapon <c>--incoming</c> fires; null takes the target's own first gun.</summary>
     public string? IncomingWeapon { get; private set; }
     /// <summary><c>--ai=&lt;plane&gt;[:&lt;net&gt;][:accent=&lt;id&gt;][,…]</c>: AI-piloted aircraft
-    /// spawned into the flight session through the runtime spawn seam
-    /// (<c>GameSession.SpawnAiAircraft</c>). Without a net the plane is placed ahead of player 1
-    /// holding its course; with one (a chapter neindex id or name after <c>:</c>) it spawns on
-    /// that net and patrols it. <c>accent=</c> gives the pilot a voice: the roster
-    /// slot-65 <c>accentID</c> chain resolves it to a pilot VO clip set; without it a CLI spawn
-    /// is voiceless (a roster spawn carries its own). Null when the flag was absent.</summary>
+    /// spawned into the flight session (docs/cli.md). Null when the flag was absent.</summary>
     public IReadOnlyList<(string Plane, string? Net, int? Accent)>? AiPlanes { get; private set; }
     /// <summary><c>--ai-attack[=&lt;1-9&gt;]</c>: arm every AI plane this session spawns with the
     /// D14 forward-gun gunnery at the given skill rating (dead-eye/quick-draw interpolated from
@@ -1036,34 +1004,12 @@ public sealed record SessionSpec
         return s;
     }
 
-    /// <summary>The spec for a launchscreen launch: the picked chapter, one plane per player, and
-    /// which of the three modes was picked. The menu always launches flight over a chapter world,
-    /// whatever mode the command line asked for — one plane each, the player count stated by the
-    /// list. Match rules (<see cref="VsKills"/>/<see cref="VsTimeMinutes"/>) are never menu-set —
-    /// they carry over from <paramref name="cli"/> unchanged, defaults unless the tester pinned
-    /// them on the command line the menu was launched with.
-    ///
-    /// <para><b>Derived from <paramref name="cli"/>, the PRISTINE command line, never from the spec
-    /// the last session ran with.</b> Nothing a previous launch settled can reach this one, so
-    /// "clear the state the last run left" stops being a patch somebody has to remember and becomes
-    /// the shape of the thing. The base is a parameter rather than <c>this</c> precisely so it
-    /// cannot quietly become the live spec again.</para>
-    ///
-    /// <para>⚠ <b>It does not re-resolve.</b> No mode arbitration re-runs (a <c>--viewer</c> vote
-    /// would win a second time and the menu would stop launching flight) and placement is not
-    /// re-routed (<c>--pos</c> was routed to the camera at parse time under a non-flight mode, and
-    /// re-routing it here would start moving the menu's plane). Both match what the launchscreen has
-    /// always done: it overwrites an answer, it does not ask the question again.</para>
-    ///
-    /// <para>⚠ <b>The &gt;= 2-player Dogfight lock is the caller's job, not this one's</b> — the
-    /// launchscreen's Plane screen withholds the launch gesture until enough pilots have joined
-    /// (see <c>LaunchMenu</c>); this factory trusts whatever roster it is handed.</para>
-    ///
-    /// <para><paramref name="iaDef"/> is the Instant Action wizard's own built def, null for
-    /// every other launch. When given, it — not <paramref name="mode"/>'s own Free/Stunt/Versus
-    /// guess — decides <see cref="Scenario"/> and <see cref="Stunt"/>: the wizard already knows
-    /// exactly which of the four mission types was picked, so this stops approximating it the way
-    /// H15 had to before the wizard could build a def at all.</para></summary>
+    /// <summary>The spec for a launchscreen launch, one plane per player, derived from
+    /// <paramref name="cli"/> — the pristine command line — never the last session's spec.
+    /// ⚠ Does not re-resolve: every menu-settable field must be written here, or the pristine
+    /// base re-opens the carry-over bug. <paramref name="mode"/> is Free/Stunt/Versus, not a bool
+    /// — the &gt;= 2-player Dogfight lock is <see cref="UI.LaunchMenu"/>'s job. <paramref
+    /// name="iaDef"/>, when given, decides <see cref="Scenario"/>/<see cref="Stunt"/> instead.</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
         MenuMode mode, InstantActionDef? iaDef = null)
     {
@@ -1221,16 +1167,11 @@ public sealed record SessionSpec
 
     private static float Flt(string s) => float.Parse(s, CultureInfo.InvariantCulture);
 
-    /// <summary>Turns the parsed votes into the one answer each: the mode, its modifiers, the world
-    /// selection, the player count, the <c>--det</c> bundle's pinned values and the placement
-    /// routing. Runs once, from <see cref="Parse"/>, on a spec that has not escaped yet.
-    ///
-    /// <para>The step ORDER is the behaviour, and it is the order <c>_Ready</c> ran these in. Two
-    /// places depend on it in a way that is easy to undo by tidying: <c>--stunt</c> moves
-    /// <see cref="Scenario"/> BEFORE arbitration can clear <see cref="Stunt"/>, so
-    /// <c>--anim-lab --stunt</c> still ends up on the stunt spawn list; and the <c>--freecam</c>/
-    /// <c>--anim-lab</c>-only debug tools are dropped AFTER <c>--node=</c> has forced the viewer,
-    /// so <c>--node= --debug-select=</c> loses the tool.</para></summary>
+    // Turns the parsed votes into the one answer each: the mode, its modifiers, the world
+    // selection, the player count, the `--det` bundle and the placement routing. Runs once.
+    // ⚠ The step ORDER below is the behaviour; do not reorder it while tidying. `--stunt` moves
+    // Scenario BEFORE arbitration can clear Stunt; the freecam/anim-lab-only debug tools are
+    // dropped AFTER `--node=` has forced the viewer. Each step below carries its own reason.
     private void Resolve()
     {
         // Every flag that votes for a mode, gathered before anything is arbitrated. The probes vote
@@ -1334,18 +1275,16 @@ public sealed record SessionSpec
             Warn("core", $"--view={View} is a flight camera; ignoring it outside --fly/--stunt");
             View = 0;
         }
-        // The weapon lab is a flight-mode affair (it fires through a real FlightController) —
-        // anything that forced a non-flight mode wins the arbitration above, but that would
-        // silently leave the lab half-built, so it is reported instead.
         // An unknown surface name would otherwise search for an id no collider can carry and
-        // report "this chapter has none", which reads as a map fact rather than a typo. The names
-        // are the surface registry's fourteen since B12, not the three texture classes.
+        // report it missing, which reads as a map fact rather than a typo.
         if (WeaponSurface is { } wantSurface && Mech3.SurfaceRegistry.IdForName(wantSurface) == null)
         {
             Warn("ui", $"--weapon-surface={wantSurface} is not a surface-registry name "
                        + $"({string.Join('/', Mech3.SurfaceRegistry.Names)}) — ignoring it");
             WeaponSurface = null;
         }
+        // A non-flight mode that won the arbitration above would silently leave the weapon lab
+        // half-built, so this is reported instead.
         if ((WeaponLab || WeaponMount != null || WeaponFire || WeaponCycle > 0 || WeaponClick
              || WeaponTarget != null || WeaponSurface != null || WeaponStandoff > 0f
              || WeaponFreeCamera || WeaponCameraToggle > 0) && !Fly)
@@ -1441,16 +1380,9 @@ public sealed record SessionSpec
         ResolvePlacement();
     }
 
-    /// <summary>Routes <c>--pos</c>/<c>--direction</c> — the one placement pair — onto the per-mode
-    /// plumbing that already carries placement: the plane's spawn override in flight, the camera's
-    /// placement everywhere else. Routing happens HERE, in one place, so no consumer downstream has
-    /// to ask what mode it is in or whether it holds a point or a vector.
-    ///
-    /// <para>The superseded spellings keep their old per-mode reach, so <c>--campos</c> still places
-    /// only a camera (never the plane) and <c>--spawn-at</c> still moves the anim lab's parked stage
-    /// prop. <c>--lookat</c> names a POINT and <c>--direction</c> a VECTOR; the conversion is
-    /// one-way and flight-only, because the orbit view PIVOTS on the point and no direction can
-    /// express that.</para></summary>
+    // Routes `--pos`/`--direction` onto the per-mode plumbing (docs/cli.md "the placement pair"):
+    // the plane's spawn override in flight, the camera's placement everywhere else. Routed here,
+    // in one place, so no downstream consumer asks what mode it is in.
     private void ResolvePlacement()
     {
         if (Fly && Direction == null && LookAt is { } aimPoint && (Pos ?? SpawnAt) is { } eye)
@@ -1504,7 +1436,7 @@ public sealed record SessionSpec
         }
     }
 
-    /// <summary>Runs a lab's own token filter over a spec value without letting it log.</summary>
+    // Runs a lab's own token filter over a spec value without letting it log.
     private string? FilterSpec(string? spec, Func<string, List<string>?, string> filter,
         string what, string wanted)
     {
@@ -1521,9 +1453,9 @@ public sealed record SessionSpec
         return kept;
     }
 
-    /// <summary>Reads <c>--mips=</c>. An unreadable value keeps the current policy rather than
-    /// quietly falling back to one of them — a run whose mip source is not what was asked for is a
-    /// run whose pixel evidence means nothing.</summary>
+    // Reads `--mips=`. An unreadable value keeps the current policy rather than
+    // quietly falling back to one of them — a run whose mip source is not what was asked for is a
+    // run whose pixel evidence means nothing.
     private void SetMips(string value)
     {
         if (Enum.TryParse<TextureArchive.MipSource>(value, ignoreCase: true, out var source))
@@ -1539,7 +1471,7 @@ public sealed record SessionSpec
 
     private void Warn(string category, string message) => _notes.Add(new Note(category, message));
 
-    /// <summary>A complaint that is a bare console line today, with no log category.</summary>
+    // A complaint that is a bare console line today, with no log category.
     private void Print(string message) => _notes.Add(new Note("", message));
 
     /// <summary>A parse- or resolve-time complaint, held rather than logged so the spec stays

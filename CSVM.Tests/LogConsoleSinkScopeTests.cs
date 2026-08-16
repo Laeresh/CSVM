@@ -7,19 +7,12 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// <see cref="Log.PushConsoleSink"/> is per-flow, not process-global.
-///
-/// <para>The bug this exists to keep dead: a single mutable static <c>Log.ConsoleSink</c> that
-/// every test swaps by hand, while xunit runs distinct test CLASSES in parallel. A concurrent class
-/// can then replace a capturing sink between its install and its assertions — which is how
-/// <c>StuntRaceTests.FinishOrderAssignsPlacingsInFinishOrderNotEntryOrder</c> read
-/// <c>lines.Count</c> as 0 on a change that touched only comments.</para>
-///
-/// <para>The interleaving is FORCED with a barrier rather than hunted for by hammering: the failure
-/// is vanishingly rare in the wild, so a green run proves nothing and only a deliberate schedule
-/// discriminates. Both directions are asserted — a capture that loses its own line (replacement)
-/// and one that gains another flow's (contamination). Against a global static this test fails 100%
-/// of the time, not intermittently.</para>
+/// <see cref="Log.PushConsoleSink"/> is per-flow, not process-global. Keeps dead the bug where a
+/// single mutable static sink let a concurrent xunit test class swap it between another class's
+/// install and its assertions.
+/// The interleaving is forced with a barrier rather than hunted for by hammering, since the
+/// failure is rare enough that a green run proves nothing. Both replacement and contamination
+/// are asserted; against a global static this fails every run, not intermittently.
 /// </summary>
 public class LogConsoleSinkScopeTests
 {

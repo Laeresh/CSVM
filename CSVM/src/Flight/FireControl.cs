@@ -180,9 +180,9 @@ public sealed class FireControl
         _rocketDryWarned = false;
     }
 
-    /// <summary>Advances each weapon selector on the rising edge of its button to the next armed
-    /// slot (one active at a time, skipping empties). Both cursors also auto-advance on their own
-    /// when the selected slot empties (in the gun/rocket steps).</summary>
+    // Advances each weapon selector on the rising edge of its button to the next armed
+    // slot (one active at a time, skipping empties). Both cursors also auto-advance on their own
+    // when the selected slot empties (in the gun/rocket steps).
     private void StepSelectors(in FireInputs input)
     {
         bool gunSel = input.GunSelectHeld;
@@ -202,11 +202,11 @@ public sealed class FireControl
         _rocketSelPrev = rocketSel;
     }
 
-    /// <summary>Advances every gun slot's fire clock: while the trigger is held, the selected slot
-    /// emits shots at its <c>FIRE_RATE</c> (alternating muzzles so the slot's total rate equals it),
-    /// drawing from its own ammo counter. When the selected slot runs dry the selection
-    /// auto-advances to the next slot with ammo (the moment it empties); the empty-clip cue sounds
-    /// only once every slot is spent.</summary>
+    // Advances every gun slot's fire clock: while the trigger is held, the selected slot
+    // emits shots at its `FIRE_RATE` (alternating muzzles so the slot's total rate equals it),
+    // drawing from its own ammo counter. When the selected slot runs dry the selection
+    // auto-advances to the next slot with ammo (the moment it empties); the empty-clip cue sounds
+    // only once every slot is spent.
     private void StepGuns(float dt, bool fire)
     {
         bool wantLoop = false;
@@ -272,11 +272,11 @@ public sealed class FireControl
         _firePrev = fire;
     }
 
-    /// <summary>The rocket gate: one launch per discrete trigger pull, drawn from the selected
-    /// pylon (it drains fully, then the cursor auto-advances to the next armed pylon the instant it
-    /// empties), gated by the weapon's <c>FIRE_RATE</c> cooldown. A pull with every pylon empty
-    /// sounds the dry cue once — the cue check runs BEFORE the cooldown gate, so a dry pull is
-    /// never swallowed by a hot cooldown.</summary>
+    // The rocket gate: one launch per discrete trigger pull, drawn from the selected
+    // pylon (it drains fully, then the cursor auto-advances to the next armed pylon the instant it
+    // empties), gated by the weapon's `FIRE_RATE` cooldown. A pull with every pylon empty
+    // sounds the dry cue once — the cue check runs BEFORE the cooldown gate, so a dry pull is
+    // never swallowed by a hot cooldown.
     private void StepRockets(float dt, bool held)
     {
         if (_pylons.Count == 0)

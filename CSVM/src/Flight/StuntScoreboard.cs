@@ -4,18 +4,12 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The end-of-run results overlay for Stunt Flying. When the run's last
-/// Danger Zone is cleared (<see cref="StuntMission.RunCompleted"/>) this shows a centred panel:
-/// the zones in the order they were flown with per-zone split + cumulative times, the total, the
-/// plane + chapter, and a best-time comparison (NEW BEST when the total beats the stored record).
-/// Best times persist per <c>chapter/mission/plane</c> in <see cref="ScoreStore"/>.
-///
-/// It is a plain Godot-UI overlay (panel + containers + labels), distinct from the in-flight
-/// HUD's hand-drawn marker/dials — a modal results screen, not a flight instrument. R starts a
-/// fresh run (FlightController resets the mission + respawns), Esc quits (Launcher's global
-/// handler; a menu-launched flight returns to the launchscreen instead). The panel hides itself the moment
-/// the run is no longer complete (i.e. after a restart), so the next run's board is clean.
-/// </summary>
+/// The end-of-run results overlay for Stunt Flying. When the run's last Danger Zone is cleared
+/// (<see cref="StuntMission.RunCompleted"/>) this shows a centred panel: per-zone splits, the
+/// total, plane + chapter, and a best-time comparison against <see cref="ScoreStore"/>. A plain
+/// Godot-UI overlay, distinct from the in-flight HUD's hand-drawn marker/dials.
+/// R starts a fresh run; Esc quits. Construction detail: this module's entry in
+/// docs/architecture.md.</summary>
 public sealed partial class StuntScoreboard : Control
 {
     // Base metrics at 720p (the default window); scaled up on taller viewports so the board reads
@@ -100,7 +94,7 @@ public sealed partial class StuntScoreboard : Control
         return l;
     }
 
-    /// <summary>Wraps a label in a CenterContainer so it centres in the VBox's full width.</summary>
+    // Wraps a label in a CenterContainer so it centres in the VBox's full width.
     private static CenterContainer Centered(Control c)
     {
         var cc = new CenterContainer();

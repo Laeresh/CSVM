@@ -243,19 +243,12 @@ public sealed class Loadout
         return new Loadout(def, guns, hardpoints);
     }
 
-    /// <summary>Synthesizes a lab loadout covering the airframe's <b>whole</b> marker rig — the
-    /// four gun-group slots the reverse-index rule names (W1→firepoint(9−2n),(10−2n) for
-    /// n=1..4 — <see href="../../docs/formats/markers.md">markers.md</see>, "Slot → firepoint
-    /// binding"), each populated with whichever of its pair the airframe actually has (the
-    /// Kestrel's W1 resolves to the lone centreline <c>firepoint7</c>), and one hardpoint per
-    /// <c>pylonN</c> the rig carries — regardless of how few of either the stock fit binds. A slot
-    /// the stock fit does name keeps its weapon, mount name and caliber; a slot it does not
-    /// defaults to the stock's first gun weapon (<c>wep_30</c> when the plane has no stock guns at
-    /// all) under a generic mount label. Every synthesized group is fireable (<c>IsTurret</c> is
-    /// always false here, even for a slot stock marks as a turret) — a deliberate lab-only
-    /// difference from stock, where the turret slot stays inert. Runs the synthesized def
-    /// through the same <see cref="Bind"/> every other loadout uses, so there stays exactly one
-    /// bind path (and a marker the rig lacks still throws, never a silent skip).</summary>
+    /// <summary>Synthesizes a lab loadout covering the airframe's whole marker rig: all four
+    /// gun-group slots (docs/formats/markers.md, "Slot to firepoint binding") and one hardpoint
+    /// per <c>pylonN</c>, regardless of how few the stock fit binds. A slot the stock fit names
+    /// keeps its weapon; one it does not defaults to the stock's first gun weapon.
+    /// ⚠ Every synthesized group is fireable, even a stock turret slot, a deliberate lab-only
+    /// difference. Binds through the same <see cref="Bind"/> every other loadout uses.</summary>
     public static Loadout ForRig(Node3D plane, WeaponDefs weapons, LoadoutDef? stock)
     {
         var markerNodes = CollectMarkers(plane);
@@ -348,8 +341,8 @@ public sealed class Loadout
             $"loadout {def.Def} ({def.Model}) {where}: marker '{name}' not found on the built plane");
     }
 
-    /// <summary>Builds a <c>cs_name → Node3D</c> map of the plane's marker nodes (firepoints,
-    /// pylons, target) from the built tree — the same <c>cs_name</c> meta SceneBuilder stamps.</summary>
+    // Builds a `cs_name → Node3D` map of the plane's marker nodes (firepoints,
+    // pylons, target) from the built tree — the same `cs_name` meta SceneBuilder stamps.
     private static Dictionary<string, Node3D> CollectMarkers(Node3D plane)
     {
         var map = new Dictionary<string, Node3D>(StringComparer.OrdinalIgnoreCase);

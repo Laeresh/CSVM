@@ -9,18 +9,12 @@ namespace CSVM.Flight;
 public readonly record struct SpawnPoint(Vector3 Position, float HeadingDeg);
 
 /// <summary>
-/// Reads the player spawn from a mission's zrdr. Two schemas, keyed by mission type:
-/// <list type="bullet">
-/// <item><b>Instant action</b> (IA1 folders) — <c>ia.json</c> <c>spawn_points</c>: a dict
-///   scenario ("zeppelin_run", "dogfight_ace", "dogfight_squadron", "stunt_flying", …) →
-///   list of <c>[x, y, z, heading°]</c>; the original picks one at random per launch.</item>
-/// <item><b>Story missions</b> (M0x folders — no ia.json) — <c>objectives.json</c>
-///   <c>PLAYER_INIT</c> = <c>[1, [x,y,z], [pitch,yaw,roll]°, throttle, speed]</c>; we take
-///   position + yaw.</item>
-/// </list>
-/// Both yield a <see cref="SpawnPoint"/> (position + heading). The throttle/speed fields
-/// are ignored — the remake uses a fixed start (see <see cref="FlightController"/>).
-/// </summary>
+/// Reads the player spawn from a mission's own zrdr. Two schemas, both yielding a
+/// <see cref="SpawnPoint"/>: <c>LoadIa</c> (instant-action <c>ia.json</c> <c>spawn_points</c>
+/// per scenario, one picked at random per launch) and <c>LoadPlayerInit</c> (story
+/// <c>objectives.json</c> <c>PLAYER_INIT</c>, position + yaw). Schema: docs/formats/spawns.md.
+/// ⚠ Throttle/speed from the data are deliberately ignored; the remake uses
+/// <see cref="FlightController"/>'s fixed start.</summary>
 public static class SpawnPoints
 {
     /// <summary>Loads the spawn list for <paramref name="scenario"/> from the mission's

@@ -6,22 +6,13 @@ using Godot;
 namespace CSVM.Session;
 
 /// <summary>
-/// Turns a patrol net's TRAILER name into a live position supplier, which is the half of `BL-377`
-/// that belongs to the session rather than to <see cref="Flight.AiNetFollower"/>: the follower
-/// does the offset arithmetic and knows nothing about players or world nodes.
-///
-/// <para>The original resolves the name ONCE, when the net is built (<c>FUN_004314e0</c> calls
-/// <c>FUN_004d0280(7, name)</c> into net <c>+0x1c</c>), and every later node read reuses that
-/// object. Here the resolve is lazy-once instead: nets are read and AI armed before the zeppelin
-/// runtime has placed its hosts, so a resolve at construction would miss targets that exist a few
-/// hundred lines later. The result (hit or miss) is then cached per name, so a target that never
-/// resolves costs one search, not one per frame.</para>
-///
-/// <para><b>⚠ <c>player</c> is one object in the binary and 2–4 rigs here.</b> The original has no
-/// splitscreen, so there is no behaviour to copy; the decision (2026-08-15) is that split play
-/// matches single player, which is the FIRST rig for every anchored net, and no rule (nearest
-/// player, host player, per-plane pick) is invented. A session with no player rig at all resolves
-/// nothing and the net is flown at its authored coordinates.</para>
+/// Turns a patrol net's TRAILER name into a live position supplier, so
+/// <see cref="Flight.AiNetFollower"/> can do the offset arithmetic knowing nothing
+/// about players or world nodes. Detail on the lazy-once resolve: see the private
+/// <c>Position</c> method's own comment.
+/// ⚠ An anchored net resolves to the FIRST rig in split play, so it matches single player. Do not
+/// invent a nearest-player, host-player or per-plane pick; the original has no splitscreen and
+/// there is no behaviour to copy.
 /// </summary>
 public sealed class NetTrailerTargets
 {
@@ -60,13 +51,16 @@ public sealed class NetTrailerTargets
     }
 
     /// <summary>Where this net's nodes sit right now, relative to their authored coordinates: the
-    /// overlay's read of the same offset the followers fly (`BL-377`). Zero for an unanchored net
+    /// overlay's read of the same offset the followers fly. Zero for an unanchored net
     /// or an unresolved target.</summary>
     public Vector3 OffsetOf(AiNet net) =>
         Flight.AiNetFollower.TrailerOffset(net, For(net)?.Invoke());
 
     private Vector3? Position(string name)
     {
+        // Lazy-once, cached hit or miss: the original resolves at net build, but here the nets
+        // are read and armed before ZeppelinRuntime places its hosts, so resolving at
+        // construction would miss targets that exist a few hundred lines later.
         if (!_resolved.TryGetValue(name, out var node))
         {
             node = _worldNode!(name);

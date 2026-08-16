@@ -5,17 +5,12 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The two input sources these tests use, and the rule for finding them.
-///
-/// <para><b>Fixtures</b> are hand-authored bytes and JSON committed under <c>fixtures/</c> and
-/// copied next to the test assembly. They are written from <c>docs/formats/</c>, never copied
-/// from an extraction — a trimmed piece of real game data is still game data.</para>
-///
-/// <para><b>Extracted data</b> is the player's own install, which is git-ignored and therefore
-/// absent from a fresh checkout and from every agent worktree. <see cref="ExtractedRoot"/> is
-/// null when it cannot be found, and the tests that need it carry
-/// <see cref="ExtractedDataFactAttribute"/> so they report as <i>skipped</i> rather than passing
-/// on no evidence.</para>
+/// The two input sources these tests use. Fixtures are hand-authored bytes and JSON under
+/// <c>fixtures/</c>, written from <c>docs/formats/</c>, never copied from an extraction — a
+/// trimmed piece of real game data is still game data.
+/// Extracted data is the player's own install, git-ignored and absent from a fresh checkout.
+/// <see cref="ExtractedRoot"/> is null when it cannot be found, and tests that need it carry
+/// <see cref="ExtractedDataFactAttribute"/> so they report skipped rather than passing on nothing.
 /// </summary>
 public static class TestData
 {

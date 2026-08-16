@@ -136,8 +136,8 @@ public class SoundDefsTests
         return weights;
     }
 
-    /// <summary>A die that always shows the same face, so a pick is a statement about the
-    /// weights rather than about the RNG.</summary>
+    // A die that always shows the same face, so a pick is a statement about the
+    // weights rather than about the RNG.
     private sealed class ConstantRandom : Random
     {
         private readonly double _value;

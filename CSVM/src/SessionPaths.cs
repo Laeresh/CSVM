@@ -3,17 +3,12 @@ using System.IO;
 namespace CSVM;
 
 /// <summary>
-/// Where the extracted game data lives on disk: resolves the per-chapter and per-mission
-/// extraction paths (gamez / texture / zrdr) under a data root, preferring an unpacked sibling
-/// folder over its <c>.zip</c>. Extracted from <see cref="CSVM.Session.GameSession"/> so
-/// <c>--anim-lab</c> resolves the same paths a normal session
-/// does. Path arithmetic plus two directory probes: <see cref="PreferUnzipped"/>'s
-/// directory-exists check and <see cref="ChapterTextures"/>'s scan for the top
-/// <c>rtextureN</c> tier.
-///
-/// <para>The <c>--gamez=</c>/<c>--textures=</c>/<c>--zrdr=</c>/<c>--sounds=</c> CLI overrides are
-/// the caller's policy and stay in <see cref="CSVM.Session.GameSession"/>; this class only builds the default
-/// extraction-tree paths.</para>
+/// Resolves the per-chapter and per-mission extraction paths (gamez / texture / zrdr) under a
+/// data root, preferring an unpacked sibling folder over its <c>.zip</c>. Extracted from
+/// <see cref="CSVM.Session.GameSession"/> so <c>--anim-lab</c> resolves the same paths a normal
+/// session does.
+/// ⚠ The <c>--gamez=</c>/<c>--textures=</c>/<c>--zrdr=</c>/<c>--sounds=</c> overrides are the
+/// caller's policy and stay in <see cref="CSVM.Session.GameSession"/>.
 /// </summary>
 public static class SessionPaths
 {

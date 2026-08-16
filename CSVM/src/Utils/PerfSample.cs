@@ -4,12 +4,10 @@ using System.Diagnostics;
 namespace CSVM.Utils;
 
 /// <summary>The work a scope can declare itself as. A fixed enum, never a string built per call:
-/// the whole point is that opening a scope costs two QPC reads and an array index, with nothing
-/// allocated and nothing to look up.
-/// <para>The vocabulary is deliberately COARSE — a debris burst, not one chunk; a spawn, not one
-/// node. See <see cref="PerfSample"/> for why a fine-grained site is worse than no site at all.
-/// A site nothing calls simply never appears in a record; adding one is this enum plus its name in
-/// <c>PerfSample.Names</c>, in the same order.</para></summary>
+/// opening a scope costs two QPC reads and an array index, with nothing allocated or looked up.
+/// The vocabulary is deliberately coarse — a debris burst, not one chunk; a spawn, not one node.
+/// A site nothing calls never appears in a record; adding one is this enum plus its name in
+/// <c>PerfSample.Names</c>, in the same order.</summary>
 public enum PerfSite
 {
     /// <summary>A debris burst coming into existence — the damage lab's reproducible case.</summary>
@@ -58,44 +56,15 @@ public readonly ref struct PerfScope
 }
 
 /// <summary>
-/// ambient timed leaf scopes. Any code path can declare that it ran and how
-/// long it took — <c>using (PerfSample.Scope(PerfSite.DebrisSpawn)) { … }</c> — without knowing
-/// anything about the hitch monitor, the readout, or whether anything is listening. The totals
-/// accumulate per site into a preallocated array, are frozen once per frame by
-/// <see cref="EndFrame"/>, and are copied into a <see cref="HitchRecord"/> when one fires, so a
-/// record says what the frame was DOING rather than only what it cost.
-///
-/// <para><b>Flat leaves only, and every record carries the remainder.</b> A scope opened inside
-/// another is counted as a violation and recorded as nothing, so
-/// <c>Σ(sites) + unattributed = frame_ms</c> holds on every frame. This repo has paid for the
-/// alternative once already: <see cref="StartupProfile"/>'s standing warning is that a phase must
-/// stay a LEAF or the sum silently double-counts. The per-frame version of that failure is worse,
-/// because a partially instrumented TREE attributes un-instrumented time to whatever parent
-/// encloses it, and it is never fully instrumented — the next feature to land will not add its
-/// scope. A flat set of leaves plus a visible remainder cannot lie that way: work with no scope on
-/// it shows up as remainder, which is a question, rather than as somebody else's cost, which is an
-/// answer that happens to be wrong.</para>
-///
-/// <para><b>Scopes are coarse-grained only.</b> A debris burst, not one chunk; a spawn, not one
-/// node; a pool checkout, not one particle. A scope inside a per-projectile or per-particle loop
-/// turns tens of nanoseconds into a real cost and produces an instrument that changes what it
-/// measures.</para>
-///
-/// <para><b>Cost.</b> Two <see cref="Stopwatch.GetTimestamp"/> reads, an array add and a branch:
-/// <b>about 60 ns</b> per open+close, measured on the dev machine at 58.8/59.3/62.7 ns over three
-/// runs of <c>PerfSampleTests.AScopeCostsFarLessThanTheFrameItMeasures</c> (200 000 iterations
-/// each), allocating exactly zero bytes. Six coarse scopes a frame is a third of a microsecond, on
-/// a frame that is 16 700 of them. That is what makes it safe to leave on rather than flag-gate,
-/// the same reasoning <see cref="StartupProfile"/> runs unconditionally on — and it is also the
-/// budget a per-particle scope would blow, since the same 60 ns times a thousand particles is
-/// 60 µs of instrument on a frame it was meant to explain.</para>
-///
-/// <para><b>Ambient statics, main thread only.</b> There is one set of counters for the process,
-/// like <see cref="StartupProfile.Current"/>, because the shared code that records has no way to be
-/// handed a per-frame accumulator down a call chain that does not know about it. The counters are
-/// not synchronised: a scope opened off the main thread races the frame's totals. Nothing here does
-/// that today (the loads C9 seeds are synchronous by definition — that is why they are worth
-/// timing), and a lock on the frame path would cost more than the measurement.</para>
+/// Ambient timed leaf scopes: any code path can declare that it ran and how long it took, without
+/// knowing about the hitch monitor, the readout, or whether anything is listening. Totals
+/// accumulate per site into a preallocated array, freeze once per frame in <see cref="EndFrame"/>,
+/// and copy into a <see cref="HitchRecord"/> when one fires. Decode and the seeded call sites:
+/// this module's entry in docs/architecture.md. Instrument cost: docs/verification.md PERF-15.
+/// ⚠ Flat leaves only. A scope opened inside another is suppressed and counted as a violation, so
+/// <c>Σ(sites) + unattributed = frame_ms</c> holds on every frame; see <see cref="Scope"/>.
+/// ⚠ Ambient statics are main-thread only. There is one set of counters for the process, and a
+/// scope opened off the main thread races the frame's totals; nothing here does that today.
 /// </summary>
 public static class PerfSample
 {
@@ -130,10 +99,9 @@ public static class PerfSample
 
     /// <summary>Opens a leaf scope on <paramref name="site"/>. Hand the result to a <c>using</c>;
     /// the time is recorded when it is disposed.
-    /// <para>A scope opened while another is open is SUPPRESSED — it measures nothing and is
-    /// counted as a violation on the frame's record — because its time is already inside the
-    /// enclosing scope's, and adding both would break the frame's sum. Nesting is a defect to be
-    /// found and removed, not a shape this supports.</para></summary>
+    /// ⚠ A scope opened while another is open is suppressed and counted as a violation, not
+    /// summed in, since its time is already inside the enclosing scope's. Nesting is a defect to
+    /// find and remove, not a shape this supports.</summary>
     public static PerfScope Scope(PerfSite site)
     {
         int i = (int)site;
@@ -149,9 +117,8 @@ public static class PerfSample
     /// <summary>Closes the frame in progress: its totals become the ones a record snapshots, and
     /// the accumulators start again from zero. Called from <c>Launcher._Process</c> at the same
     /// instant the frame's wall cost is stamped, so the two describe the same window.
-    /// <para>A scope still open here has escaped its frame, which is counted as a violation; the
-    /// open flag is cleared regardless, so a leak costs one frame's attribution rather than every
-    /// frame after it.</para></summary>
+    /// ⚠ A scope still open here has escaped its frame and counts as a violation; the open flag
+    /// clears regardless, so a leak costs one frame's attribution, not every frame after it.</summary>
     public static void EndFrame()
     {
         Array.Copy(CurrentMs, LastMs, Names.Length);
@@ -179,9 +146,8 @@ public static class PerfSample
 
     /// <summary>Copies the last closed frame's totals into <paramref name="dst"/> and works out
     /// what <paramref name="frameMs"/> did NOT account for.
-    /// <para>The remainder is not clamped. Negative means a scope spanned the
-    /// <see cref="EndFrame"/> boundary and its time landed on a frame that did not spend it, which
-    /// is a defect worth seeing rather than a number worth hiding.</para></summary>
+    /// ⚠ The remainder is not clamped. Negative means a scope spanned the <see cref="EndFrame"/>
+    /// boundary, a defect worth seeing rather than a number worth hiding.</summary>
     public static void SnapshotInto(PerfSampleFrame dst, double frameMs)
     {
         Array.Copy(LastMs, dst.Ms, Names.Length);
@@ -211,10 +177,9 @@ public static class PerfSample
 }
 
 /// <summary>One frame's attribution: how long each site took, how many times it ran, and the
-/// remainder that no site claimed.
-/// <para>Mutable fields over an immutable value for the same reason <see cref="HitchRecord"/> has
-/// them — one instance per record, refilled in place, so a hitching frame allocates nothing.</para>
-/// </summary>
+/// remainder that no site claimed. Mutable fields over an immutable value for the same reason
+/// <see cref="HitchRecord"/> has them: one instance per record, refilled in place, so a hitching
+/// frame allocates nothing.</summary>
 public sealed class PerfSampleFrame
 {
     /// <summary>Arrays are <see cref="PerfSample.SiteCount"/> long and indexed by

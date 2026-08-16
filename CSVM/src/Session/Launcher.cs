@@ -10,52 +10,48 @@ using Godot;
 namespace CSVM.Session;
 
 /// <summary>
-/// Main.tscn's root: the once-per-process bootstrap and everything that persists across
+/// Main.tscn's root: the once-per-process bootstrap, and everything that persists across
 /// in-process relaunches. <c>_Ready</c> parses the command line into a <see cref="SessionSpec"/>,
-/// settles the data root and base paths, applies the process-wide side effects a pure value
-/// cannot (log, master seed, window focus/hide, gamepad policy, texture drop-ins), registers the
-/// global shader parameters exactly once, runs the early-quit probes (<c>--dump-*</c>,
-/// <c>--run-tests</c>), and builds the persistent camera / orbit rig / sun / WorldEnvironment.
-///
-/// Each launch then instantiates a <see cref="GameSession"/> session node, constructed with the
-/// launch's spec and a <see cref="LauncherContext"/> carrying the persistent references; Esc from
-/// a menu-launched flight frees that node (<see cref="ReturnToMenu"/> QueueFrees it) and shows the
-/// launchscreen again. The full user-arg reference lives on <see cref="GameSession"/> and in
-/// docs/cli.md.
+/// settles paths, applies process-wide side effects a pure value cannot, registers the global
+/// shader parameters once, runs the early-quit probes, and builds the persistent camera / orbit
+/// rig / sun / WorldEnvironment.
+/// Each launch instantiates a <see cref="GameSession"/> with the launch's spec and a
+/// <see cref="LauncherContext"/>; Esc from a menu-launched flight frees it
+/// (<see cref="ReturnToMenu"/>) and shows the launchscreen again. Full arg reference:
+/// docs/cli.md. Module notes: this file's docs/architecture.md entry.
 /// </summary>
 public partial class Launcher : Node3D
 {
-    /// <summary>Rendered frames per <c>--perf</c> report. A frame count rather than a wall second
-    /// because under the fixed clock one rendered frame is exactly one sim step, so a window is a
-    /// fixed amount of <i>simulation</i> and two runs of the same scenario yield the same number
-    /// of samples — which is what makes a paired A/B comparable. At the vsync cap it is also
-    /// still one report a second, so an interactive run reads as it always did.</summary>
+    // Rendered frames per `--perf` report. A frame count rather than a wall second
+    // because under the fixed clock one rendered frame is exactly one sim step, so a window is a
+    // fixed amount of simulation and two runs of the same scenario yield the same number
+    // of samples — which is what makes a paired A/B comparable. At the vsync cap it is also
+    // still one report a second, so an interactive run reads as it always did.
     private const int PerfWindowFrames = 60;
 
-    /// <summary>Nearest-rank p95 index into the sorted window (0-based): <c>ceil(0.95 x
-    /// PerfWindowFrames) - 1</c>. At 60 samples this is index 56, leaving 3 samples above it. p99
-    /// is deliberately not reported — nearest-rank p99 over 60 samples resolves to index 59, the
-    /// same slot as max, so it would just be max under another name (see <see cref="ReportPerf"/>).
-    /// </summary>
+    // Nearest-rank p95 index into the sorted window (0-based): `ceil(0.95 x
+    // PerfWindowFrames) - 1`. At 60 samples this is index 56, leaving 3 samples above it. p99
+    // is deliberately not reported — nearest-rank p99 over 60 samples resolves to index 59, the
+    // same slot as max, so it would just be max under another name (see ReportPerf).
     private const int Perf95Index = (PerfWindowFrames * 95 + 99) / 100 - 1;
 
-    /// <summary>Master-bus index. This project ships no bus layout, so Master is the only bus
-    /// and everything (both audio paths) is on it by default.</summary>
+    // Master-bus index. This project ships no bus layout, so Master is the only bus
+    // and everything (both audio paths) is on it by default.
     private const int MasterBus = 0;
 
-    /// <summary>Master output gain, linear, when neither <c>--volume=</c> nor the
-    /// <c>audio.volume</c> config key says otherwise. 0: launches are silent
-    /// unless someone asks for sound (the Run scripts pass <c>--volume=1.0</c>), so a scripted
-    /// or agent run never sounds by accident — see <see cref="ApplyMasterVolume"/>.</summary>
+    // Master output gain, linear, when neither `--volume=` nor the
+    // `audio.volume` config key says otherwise. 0: launches are silent
+    // unless someone asks for sound (the Run scripts pass `--volume=1.0`), so a scripted
+    // or agent run never sounds by accident — see ApplyMasterVolume.
     private const float MasterVolumeDefault = 0f;
 
-    /// <summary>The bus's own resting gain (0 dB). A launch resolving to this leaves the bus
-    /// untouched, keeping it byte-identical in output and console log to a launch that never
-    /// had a volume path at all.</summary>
+    // The bus's own resting gain (0 dB). A launch resolving to this leaves the bus
+    // untouched, keeping it byte-identical in output and console log to a launch that never
+    // had a volume path at all.
     private const float MasterVolumeUnattenuated = 1f;
 
-    /// <summary>Gain floor for the dB conversion, since <c>LinearToDb(0)</c> is negative infinity.
-    /// -80 dB is inaudible, which is the whole point of <c>--volume=0</c>.</summary>
+    // Gain floor for the dB conversion, since `LinearToDb(0)` is negative infinity.
+    // -80 dB is inaudible, which is the whole point of `--volume=0`.
     private const float MasterVolumeFloor = 0.0001f;
 
     // What F11's placement print receives at the launchscreen, where no session (and no rigs)
@@ -164,46 +160,23 @@ public partial class Launcher : Node3D
     // --destroy= probe wrapper delegates to it (see src/Testing/ProbeRunner.cs).
     private Testing.ProbeRunner _probeRunner = null!;
 
-    // ---- Focus mute --------------------------------------------------------------------------
-    //
-    // Alt-tabbing away silences the game; alt-tabbing back restores it. The mute is an
-    // AudioServer *master-bus* mute rather than a factor threaded through the audio code,
-    // because there are two entirely independent audio paths and only one of them has any
-    // gain plumbing at all:
-    //   - Flight.FlightAudio  — own-plane engine/whine/rattle loops (has MixGain) plus the
-    //     crash and prop one-shots, which deliberately bypass MixGain ("one-shots stay global").
-    //   - Mech3.WorldSounds   — the ambient SOUND_NODE 3D emitters, whose VolumeDb comes
-    //     straight from the sound def. No MixGain, no shared gate, nothing to multiply.
-    // A `MixGain = 0` mute would therefore leave the whole animated world audible, and would
-    // also have to be un-set to exactly the right per-player value on the way back.
-    //
-    // The bus mute has a second property we specifically want: it does not touch
-    // FlightAudio's state at all. The engine loop keeps Playing, `_engineRamp` stays at 1, and
-    // FlightAudio.Update keeps writing the throttle curve into VolumeDb every frame while
-    // muted — so on focus-in the loop is already at its correct level and does NOT re-ramp
-    // from the -60f a fresh AudioStreamPlayer is constructed with (FlightAudio.cs:79), which
-    // is what stopping/restarting the players would have caused.
-    //
-    // `--mute` is unrelated and cannot be reused for this: it is a load-time switch that
-    // simply never constructs FlightAudio/WorldSounds, so there is nothing to toggle.
-    //
-    // --volume= (ApplyMasterVolume) rides the same bus for the same reasons, but writes its
-    // VOLUME rather than its mute flag. The two are separate bus properties, so neither has to
-    // know about the other: alt-tabbing in and out of a --volume=0 run restores the mute flag
-    // and leaves the gain where it was.
+    // Alt-tabbing away silences the game; alt-tabbing back restores it, via an AudioServer
+    // master-bus mute rather than a factor threaded through the audio code. See this file's
+    // docs/architecture.md entry for why (FlightAudio vs WorldSounds gain plumbing).
+    // ⚠ `--mute` cannot be reused for this: it is load-time and never constructs the audio
+    // players, so there is nothing here to toggle.
     private bool _focusMuted;
 
-    /// <summary>The session clock as this frame sees it: the suites' own under
-    /// <c>--run-tests</c>, the live session's (published as <see cref="GameClock.Current"/> by its
-    /// build, nulled by its teardown) otherwise, null at the launchscreen.</summary>
+    // The session clock as this frame sees it: the suites' own under
+    // `--run-tests`, the live session's (published as GameClock.Current by its
+    // build, nulled by its teardown) otherwise, null at the launchscreen.
     private GameClock? ClockNow => _clock ?? GameClock.Current;
 
     public override void _Ready()
     {
-        // The session node ticks first (its ProcessPriority is -1000: it advances the sim clock
-        // every consumer reads during the same frame); this node comes right behind it and ahead
-        // of everything else, so the shader clock and the capture pipeline run at the same point
-        // in the frame they did when both lived on one root. Godot runs the lowest priority first.
+        // One notch behind the session node (ProcessPriority -1000), so the shader clock and
+        // capture pipeline run at the same point in the frame they did on one root. Godot runs
+        // the lowest priority first.
         ProcessPriority = -999;
 
         // Load the optional tuning-override file first, before any module reads a Config value.
@@ -224,11 +197,9 @@ public partial class Launcher : Node3D
             _repoRoot = Path.GetFullPath(Path.GetDirectoryName(OS.GetExecutablePath())!);
         }
 
-        // Everything the command line settles, parsed AND resolved in one place (see SessionSpec):
-        // the mode arbitration, the --det bundle's membership and the placement routing are all
-        // answered by the time this returns. What is left here is the part a pure value cannot do —
-        // the globals it deliberately does not touch, and the complaints it holds instead of
-        // logging, emitted before anything configures the log so they read in launch order.
+        // Everything the command line settles is parsed and resolved in one place; see
+        // SessionSpec. What's left here is what a pure value cannot do: process-wide side
+        // effects, and the warnings below, emitted before the log so they read in launch order.
         _cli = SessionSpec.Parse(OS.GetCmdlineUserArgs());
         _spec = _cli;
         foreach (var note in _spec.Warnings)
@@ -290,11 +261,9 @@ public partial class Launcher : Node3D
         _pendingJoin = _spec.DebugJoin;
         _pendingWaves = _spec.DebugWaves;
         _pendingWingmen = _spec.DebugWingmen;
-        // The frame-hitch instrument, live from here on in every mode. Built
-        // alongside the other process-scoped services, which is ahead of every probe's early quit
-        // (a quit takes effect at the end of the iteration, so _Process can still run once) and
-        // ahead of --dump-config: its constructor is what reads, and therefore registers, the five
-        // hitchMonitor.* keys.
+        // Built alongside the other process-scoped services, ahead of every probe's early quit
+        // and of --dump-config: its constructor is what registers the five hitchMonitor.* keys.
+        // See this file's docs/architecture.md entry.
         _hitchMonitor = new HitchMonitor();
         // Measured render time is opt-in per viewport and reads 0 until it is, so it is enabled once
         // here rather than per frame from ReportPerf (which used to own the call): the hitch record
@@ -303,17 +272,9 @@ public partial class Launcher : Node3D
         RenderingServer.ViewportSetMeasureRenderTime(_viewportRid, true);
 
 
-        // The window is CREATED without focus (`display/window/size/no_focus` in project.godot), so
-        // a scripted run never takes the desktop from whoever is using the machine — a full
-        // RunTests.ps1 launches the engine about twenty times. Setting the flag here instead was
-        // measured not to work: by the time any script runs the window exists and has already
-        // activated, and clearing that after the fact does not hand focus back.
-        //
-        // So the default is inverted, and an INTERACTIVE session asks for focus explicitly. A
-        // session is scripted when a flag will drive and end it by itself, or when --no-focus says
-        // so outright; everything else is somebody sitting down to play or to look at something,
-        // and wants the window it just launched.
-        //
+        // The window is created without focus (no_focus in project.godot); an interactive
+        // session asks for it explicitly instead, since setting the flag at runtime measured
+        // not to hand focus back. See docs/verification.md's SHELL-13.
         if (!_spec.IsScripted)
         {
             DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, false);
@@ -325,16 +286,9 @@ public partial class Launcher : Node3D
             ScriptedWindow.Hide();
         }
 
-        // display.vsync / --no-vsync: let the loop run as fast as it can. With the presentation
-        // wait gone, `frame`, `fps` and `script` stop being floors pinned at the refresh rate and
-        // start reporting the work actually done. Safe to combine with the fixed clock precisely
-        // because that clock advances one sim step per RENDERED frame: the simulation is identical
-        // frame for frame, only the wall time it takes changes.
-        //
-        // The config read is unconditional even when --no-vsync already decided the outcome,
-        // because the read is what registers the key — skipping it would drop display.vsync from
-        // --dump-config on exactly the runs that pass the flag. --no-vsync always beats the config
-        // key (it is the measurement flag; the config key is the ordinary-play one).
+        // --no-vsync uncaps the frame loop so frame/fps/script report work done rather than a
+        // refresh cap, safe with the fixed clock since it steps one sim frame per rendered one.
+        // The config read stays unconditional so it self-registers — see Utils/Config.cs's entry.
         bool vsyncOnByConfig = Config.GetBool("display.vsync", true);
         bool vsyncOff = _spec.NoVsync || !vsyncOnByConfig;
         if (vsyncOff)
@@ -368,32 +322,24 @@ public partial class Launcher : Node3D
         {
             Log.Warn("core", $"deprecated flag={old} use={replacement}");
         }
-        // Ahead of --dump-config, same reason as _hitchMonitor above — this
-        // constructor is what registers the two hitchSidecar.* keys. Log.SinkPath is set by the
-        // Open() call just above; the synthetic fallback only matters on the rare run where that
-        // open itself failed (Log.Open already degrades gracefully rather than crashing the launch).
+        // Ahead of --dump-config, same reason as _hitchMonitor: registers the two
+        // hitchSidecar.* keys. The fallback path only matters if Log.Open itself failed.
         string hitchLogPath = Log.SinkPath
             ?? Path.Combine(_repoRoot, ".scratch", "logs", $"{_spec.ModeName}-nolog.hitches.jsonl");
         _hitchSidecar = new HitchSidecar(hitchLogPath, _hitchMonitor.Last.Ring.Length);
 
         // --headless + --screenshot can never produce a frame: the dummy renderer's GetImage()
-        // comes back null forever, so the capture loop never counts down and the process never
-        // quits — an orphan that still holds the log handle.
-        // Reject the combo here, before any session builds, rather than let it hang.
+        // never returns, so the capture loop never counts down. Reject the combo here, before
+        // any session builds, rather than let it hang as an orphan holding the log handle.
         if (_spec.ScreenshotPath != null && DisplayServer.GetName() == "headless")
         {
             Log.Error("core", $"--screenshot needs a real GPU context; --headless never renders a capturable frame — drop one of the two flags");
             GetTree().Quit(1);
             return;
         }
-        // The --det bundle is settled on the spec; what is left here is the two things a pure value
-        // cannot do — draw an unpinned seed from the clock, and announce the resolved set.
-        //
-        // The master seed. A deterministic run and the animation debugger (deterministic by nature
-        // — its whole point is an identical replay) pin it. Everything else draws from the clock, so
-        // the shipped game keeps its variety. Applied here as well as per session so the dump tools
-        // — which quit before any session is built — still draw from the resolved master rather
-        // than a zero one.
+        // What a pure value cannot do: draw an unpinned seed from the clock. A deterministic run
+        // (and the anim debugger) pins it; applied here too so the dump tools, which quit before
+        // any session builds, draw the resolved master rather than a zero one.
         _processSeed = _spec.PinnedSeed ?? Rng.TimeSeed();
         _masterSeed = _processSeed;
         Rng.Reset(_masterSeed, _spec.SeedPinned);
@@ -403,10 +349,9 @@ public partial class Launcher : Node3D
         // implies. Every constituent is named with its value, including the ones a flag overrode.
         if (_spec.Det)
         {
-            // The dev tuning file is git-ignored, so honouring it would make a deterministic capture
-            // a function of one machine's uncommitted state: the same command gives different pixels
-            // in a checkout and in a worktree, and a golden hash quietly records whatever was being
-            // tuned that day. Pass --no-det to capture with your overrides applied.
+            // The git-ignored dev tuning file would otherwise make a deterministic capture a
+            // function of one machine's uncommitted state — see docs/verification.md's DET-8.
+            // Pass --no-det to capture with your overrides applied.
             int dropped = Config.OverrideCount;
             Config.ClearOverrides();
             ulong liverySeed = _spec.PaintSeedExplicit ? _spec.PaintSeed : Rng.SeedFor(Rng.Paint);
@@ -431,9 +376,9 @@ public partial class Launcher : Node3D
         _probeRunner = new Testing.ProbeRunner(_repoRoot, _dataRoot, _zrdrPath, _soundsPath,
             _interpPath, _messagesPath, _planesGamezPath);
 
-        // Register the distance-fog global shader parameters SceneBuilder's world/aircraft
-        // shader references, before any material using it is built. Defaults are a no-op
-        // (nothing fades) — only --fly overrides them from the mission's weather.json below.
+        // Registers the distance-fog params SceneBuilder's shaders reference; defaults are a
+        // no-op until --fly's weather.json overrides them.
+        // ⚠ Runs once here — GlobalShaderParameterAdd errors on a second call; a rebuild must Set.
         RenderingServer.GlobalShaderParameterAdd("csky_fog_color",
             RenderingServer.GlobalShaderParameterType.Vec3, new Vector3(0.69f, 0.69f, 0.69f));
         RenderingServer.GlobalShaderParameterAdd("csky_fog_range",
@@ -448,22 +393,13 @@ public partial class Launcher : Node3D
         // The animated world's LIGHT_STATE point lights. Defaults to an empty set, so a session
         // with no lit animations renders exactly as it did before they existed.
         WorldLights.RegisterGlobals();
-        // The shader clock every animated shader reads instead of Godot's TIME. Written each
-        // frame from _Process below; registered here because Godot refuses to compile a shader
-        // that references an unregistered global.
-        //
-        // All of these are registered before the dump branches below, which build materials of
-        // their own and then quit: registering after them left every --dump-* run emitting a
-        // missing-global error that poisons an error census.
+        // Registered before the --dump-* branches below, which build materials of their own:
+        // registering after them left every dump run emitting a missing-global error.
         ShaderTime.RegisterGlobal();
 
-        // --dump-markers: a pure-data report (no world, no camera) — print the marker rig table(s)
-        // and quit. Placed here, once planes.zbd's path is known, so it runs whether or not any
-        // content arg was given; --headless makes it windowless.
-        //
-        // Each dump quits with its probe's verdict, like --run-tests: a report that could not be
-        // produced must not look to a caller like one that came out clean.
-        //
+        // --dump-markers: a pure-data report — print the marker rig tables and quit. Runs
+        // whether or not a content arg was given; --headless makes it windowless. Each dump
+        // quits with its own verdict, like --run-tests, never a false-clean exit code.
         if (_spec.DumpMarkers)
         {
             GetTree().Quit(_probeRunner.DumpMarkers(_spec) ? 0 : 1);
@@ -506,10 +442,8 @@ public partial class Launcher : Node3D
             return;
         }
 
-        // Populate Config's tuning registry by exercising the wired modules once (WarmTuningRegistry),
-        // then flag any config.json key that matched no tunable. Both run on every launch, are
-        // data-free, and print before flight — so a typo'd or misplaced override is caught loudly at
-        // startup rather than silently doing nothing.
+        // Exercises the wired modules once so Config's tuning registry is complete, then flags
+        // any config.json key no tunable matched — data-free, so a typo is caught before flight.
         Config.WarmTuningRegistry();
         Config.ReportOrphans();
         // --dump-config: write a fully-populated tuning template (every registered key + its default,
@@ -561,10 +495,9 @@ public partial class Launcher : Node3D
             return;
         }
 
-        // The F14 / --debug-fps readout, a child of this node rather than
-        // of any GameSession — process-wide like the camera above it, so it works at the
-        // launchscreen too. Built after the --run-tests/--dump-* early exits, since none of them
-        // renders a frame it would have anything to show.
+        // The F14 / --debug-fps readout, process-wide like the camera so it works at the
+        // launchscreen too. Built after the --run-tests/--dump-* early exits, which render no
+        // frame it would have anything to show.
         _perfHud = new UI.PerfHud
         {
             InitialMode = _spec.DebugFps == null ? UI.PerfHud.Mode.Off : UI.PerfHud.ParseMode(_spec.DebugFps),
@@ -572,10 +505,9 @@ public partial class Launcher : Node3D
         };
         AddChild(_perfHud);
 
-        // No content-selecting arg (or an explicit --menu): show the in-game launchscreen
-        // (Mode → Chapter → Plane). Its selection derives the session's spec and calls
-        // LaunchSession, so there is exactly one downstream build path. Esc from a menu-launched
-        // flight returns here (see ReturnToMenu).
+        // No content-selecting arg (or explicit --menu): show the launchscreen. Its selection
+        // derives the session spec and calls LaunchSession, so there is one downstream build
+        // path; Esc from a menu-launched flight returns here (ReturnToMenu).
         if (_spec.ShowsMenu)
         {
             _menuDriven = true;
@@ -587,13 +519,9 @@ public partial class Launcher : Node3D
 
     public override void _Notification(int what)
     {
-        // The APPLICATION_* pair, not the WM_WINDOW_* pair: the application-level notifications
-        // are what a real focus change delivers here. Measured on Windows 11 / Godot 4.7 while
-        // implementing this: another app taking the foreground sends 1005
-        // (WM_WINDOW_FOCUS_OUT) then 2017 (APPLICATION_FOCUS_OUT), and coming back sends 2016
-        // then 1004. Note that *minimising* the window from another process delivers neither —
-        // only the mouse enter/exit pair — so a manual test must alt-tab, not minimise.
-        // Godot 4's constants are longs; _Notification hands us an int.
+        // The APPLICATION_* pair, not WM_WINDOW_*: that's what a real focus change delivers
+        // here. See docs/verification.md's SHELL-14 for the alt-tab-vs-minimise gotcha this was
+        // measured against. Godot 4's constants are longs; _Notification hands us an int.
         if (what == (int)NotificationApplicationFocusOut)
         {
             SetFocusMuted(true);
@@ -665,40 +593,33 @@ public partial class Launcher : Node3D
         {
             clock.BeginFrame(delta);
         }
-        // Publish the frame's instant to the shaders, so the animated surfaces (UV scroll,
-        // precipitation) and the CPU sim never disagree within a frame. Written unconditionally:
-        // with no session clock — the launchscreen, or the frame after a teardown — it keeps
-        // running on wall time so nothing on screen stalls behind the menu.
+        // Publishes the frame's instant to the shaders so animated surfaces and the CPU sim
+        // never disagree. Written unconditionally: with no session clock it runs on wall time,
+        // so nothing stalls behind the menu.
         ShaderTime.Advance(ClockNow, delta);
         // Both instruments stay on wall time: an instrument that freezes with the thing it measures
         // reports nothing. One counter read per frame feeds both: the hitch monitor wants them
         // unaveraged and the --perf window wants them summed, but they are the same eight numbers.
         var counters = ReadFrameCounters();
-        // --hitch-inject= fires here, one QPC read before the stamp below, so
-        // the stall inflates THIS frame's wall cost rather than leaking into the next one. The
-        // frame ordinal it matches is HitchMonitor's own counter (FrameCount + 1 — the value this
-        // Tick call is about to stamp its record with), never the sim frame: the injector has to
-        // work with no session built at all, the same as the monitor it is testing.
+        // Fires one QPC read before the stamp below, so the stall inflates THIS frame's wall
+        // cost. Matched against HitchMonitor's own frame counter, never the sim frame: the
+        // injector has to work with no session built at all.
         if (_spec.HitchInjectMs is float injectMs
             && _hitchMonitor.FrameCount + 1 == _spec.HitchInjectFrame)
         {
             InjectHitch(injectMs, _spec.HitchInjectAlloc);
         }
-        // Detection is unconditional, logging is not: a hitch nobody was watching for is the
-        // case this exists to catch, so it cannot sit behind --perf. The frame cost it is fed is
-        // our OWN QPC pair rather than Godot's `delta`, which is post-processed (OS.delta_smoothing,
-        // on by default) and measures here as a quantised constant: an --no-vsync --det empty-stage
-        // run reports 8.33 ms for every frame and exactly 500.00 ms per 60-frame window, which no
-        // real frame sequence does. The same primitive StartupProfile times its phases with.
+        // Detection is unconditional; logging is not — a hitch nobody watched for is what this
+        // catches. Fed our own QPC pair, never Godot's post-processed `delta`, which measures
+        // as a quantised constant.
         long stamp = System.Diagnostics.Stopwatch.GetTimestamp();
         double frameMs = _lastFrameStamp == 0
             ? 0
             : (stamp - _lastFrameStamp) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
         _lastFrameStamp = stamp;
-        // C8: close the attribution window at the same instant the wall cost is stamped, so the
-        // scopes that ran and the frame_ms they ran inside describe the same span. The session node
-        // processes at ProcessPriority -1000, one notch ahead of this one, so the work it declared
-        // this frame is already in — and lands on the record whose frameMs covers it.
+        // Closes the attribution window at the same instant the wall cost is stamped, so the
+        // scopes that ran and the frame_ms they ran inside describe the same span. The session
+        // node processes one notch ahead (-1000), so its declared work is already in.
         PerfSample.EndFrame();
         // B6: a trip queues its record (a cheap, preallocated copy) rather than writing anything
         // here — the sidecar's own Tick below drains the queue a few quiet frames later.
@@ -719,10 +640,10 @@ public partial class Launcher : Node3D
         _gltfExporter.Tick(_session?.Plane, GetTree(), _spec);
     }
 
-    /// <summary>Instantiates this launch's session node from the current <see cref="_spec"/> and
-    /// the persistent references, and runs its build. Returns the build's verdict; on false the
-    /// partial session node is left for the caller (the menu flow returns to the launchscreen, a
-    /// CLI launch leaves the log to tell the story, exactly as the single-root class did).</summary>
+    // Instantiates this launch's session node from the current _spec and
+    // the persistent references, and runs its build. Returns the build's verdict; on false the
+    // partial session node is left for the caller (the menu flow returns to the launchscreen, a
+    // CLI launch leaves the log to tell the story, exactly as the single-root class did).
     private bool LaunchSession()
     {
         _session = new GameSession(_spec, new LauncherContext
@@ -747,11 +668,9 @@ public partial class Launcher : Node3D
         });
         AddChild(_session);
         bool built = _session.StartSession();
-        // A build stalls the frame loop for as long as it takes, and the frames either side of it
-        // are not each other's neighbours, so the hitch monitor starts its grace window and drops
-        // its baseline here rather than reporting the build as the session's first hitch. Flush
-        // first: whatever B6 still had queued from before the build is one B4 does not want held
-        // through it.
+        // A build stalls the frame loop, and the frames either side of it are not neighbours, so
+        // the hitch monitor drops its baseline here rather than reporting the build as a hitch.
+        // Flushed first so nothing queued from before the build is held through it.
         _hitchSidecar.Flush();
         _hitchMonitor.Rearm();
         // C8: the build's own scopes (loads, material creation) belong to no frame, and the frame
@@ -767,18 +686,14 @@ public partial class Launcher : Node3D
     {
         _sun = new DirectionalLight3D
         {
-            // The DEFAULT bearing only — hand-picked to shine onto the -Z (nose) side so the plane
-            // model reads, and kept for --viewer, the menu, and any mission with no weather.json.
-            // A flight WITH weather overwrites this every zone-apply from the zone's authored
-            // SUNLIGHT_ORIENTATION (WeatherRig.ApplyZone).
+            // The default bearing only, hand-picked so the plane model reads in the viewer, the
+            // menu, and any mission with no weather.json. A flight with weather overwrites this
+            // per zone-apply (WeatherRig.ApplyZone).
             RotationDegrees = new Vector3(-45, 150, 0),
             LightEnergy = 1.6f,
-            // OFF. The world is built fullbright (unshaded), and an unshaded Godot material
-            // receives neither light nor shadow — so the only thing this shadow pass reaches is one
-            // aircraft shadowing another, which the original does not do either (it has no shadow
-            // mapping at all, only a projected blob). Leaving it on would let the zone's bearing
-            // swing a non-original effect, hardest in C1B/C1C/C2/C2B where pitch -65 is nearly
-            // overhead.
+            // Off: the world is built fullbright and unshaded, so the only thing a shadow pass
+            // reaches is one aircraft shadowing another — a non-original effect the original's
+            // own projected-blob shadow does not have either.
             ShadowEnabled = false,
         };
         AddChild(_sun);
@@ -793,8 +708,8 @@ public partial class Launcher : Node3D
         AddChild(new WorldEnvironment { Environment = _env });
     }
 
-    /// <summary>Shows the launchscreen (building it on first use) and wiring its Launch/Quit
-    /// callbacks. Re-shown by <see cref="ReturnToMenu"/> after Esc-from-flight.</summary>
+    // Shows the launchscreen (building it on first use) and wiring its Launch/Quit
+    // callbacks. Re-shown by ReturnToMenu after Esc-from-flight.
     private void ShowLaunchMenu()
     {
         if (_menu == null)
@@ -827,14 +742,12 @@ public partial class Launcher : Node3D
         }
     }
 
-    /// <summary>The launchscreen's players locked their picks: derive this session's spec from the
-    /// pristine command line, bind each player's pad, and start the session. On a build failure,
-    /// return to the menu with a note rather than leave a blank screen.
-    ///
-    /// <para>The spec is derived from <see cref="_cli"/>, never from the outgoing
-    /// <see cref="_spec"/>, so nothing the last session settled can leak into this one. The pads are
-    /// the exception on purpose: they come from the join flow rather than from args, so they stay
-    /// session state here instead of becoming a spec field.</para></summary>
+    // The launchscreen's players locked their picks: derive this session's spec, bind pads,
+    // start the session. A build failure returns to the menu with a note instead of a blank
+    // screen.
+    // ⚠ Derive the spec from _cli, never the outgoing _spec, so nothing the last session
+    // settled leaks into this one. Pads are the deliberate exception: they come from the join
+    // flow, not args, so they stay session state rather than a spec field.
     private void StartSessionFromMenu(string chapter, IReadOnlyList<LaunchMenu.PlayerChoice> players,
         MenuMode mode, InstantActionDef? iaDef)
     {
@@ -844,10 +757,9 @@ public partial class Launcher : Node3D
             planes.Add(p.PlaneNode);
         }
         _spec = SessionSpec.FromMenu(_cli, chapter, planes, mode, iaDef);
-        // Step the master so flying again is a new mission rather than a replay of the last one:
-        // without this every launchscreen relaunch re-derives the same spawn, opposition and
-        // liveries from the one process draw. A pinned run (--seed=, --det, --scripted-by, the anim
-        // lab) holds still, which is what keeps the goldens and the perf harnesses reproducible.
+        // Step the master so flying again is a new mission rather than a replay: without this every
+        // relaunch re-derives the same spawn, opposition and liveries. ⚠ A pinned run must hold
+        // still, which is what keeps the goldens and the perf harnesses reproducible.
         if (!_spec.SeedPinned)
         {
             _sortie++;
@@ -874,21 +786,21 @@ public partial class Launcher : Node3D
         }
     }
 
-    /// <summary>Prints the master the next session will draw from. Per session rather than per
-    /// process because an unpinned run advances it: the seed a mission actually flew on is the one
-    /// worth having in the log, so an interesting one can be pinned with <c>--seed=</c>.</summary>
+    // Prints the master the next session will draw from. Per session rather than per process
+    // because an unpinned run advances it: the seed a mission actually flew on is the one worth
+    // having in the log, so an interesting one can be pinned with `--seed=`.
     private void LogMasterSeed()
     {
         string how = _spec.SeedPinned ? "pinned" : $"sortie {_sortie}, --seed=N to pin";
         GD.Print($"rng: master seed {_masterSeed} ({how})");
     }
 
-    /// <summary>Frees the current session node and shows the launchscreen again — the in-process
-    /// rebuild path for Esc-from-flight and failed builds. The whole session subtree hangs under the
-    /// node, so <c>QueueFree</c> tears it down; the non-child duties (the published clock, the world
-    /// lights, the session texture archive, the main-camera restore) run in the node's
-    /// <c>_Notification</c> on <c>NotificationExitTree</c>. The camera / lights / shader globals
-    /// persist on <c>this</c>.</summary>
+    // Frees the current session node and shows the launchscreen again — the in-process
+    // rebuild path for Esc-from-flight and failed builds. The whole session subtree hangs under the
+    // node, so `QueueFree` tears it down; the non-child duties (the published clock, the world
+    // lights, the session texture archive, the main-camera restore) run in the node's
+    // `_Notification` on `NotificationExitTree`. The camera / lights / shader globals
+    // persist on `this`.
     private void ReturnToMenu()
     {
         if (_session != null)
@@ -904,19 +816,11 @@ public partial class Launcher : Node3D
         ShowLaunchMenu();
     }
 
-    /// <summary>Settles the master output gain for the launch: <c>--volume=</c> if it was given,
-    /// else the <c>audio.volume</c> config key, else silent.
-    ///
-    /// <para>This is the knob for running the game next to something else, and it is deliberately
-    /// NOT <c>--mute</c>: at volume 0 both audio paths still load and play, so every sound counter
-    /// and every <c>sound</c> log line reads exactly as it does at full volume — the run is silent
-    /// but not blind. It is a bus write for the reason the focus mute above is: only FlightAudio
-    /// has a gain to scale, and WorldSounds would go on sounding through any factor threaded
-    /// through the other path.</para>
-    ///
-    /// <para>The config read is unconditional even when the flag wins, because the read is what
-    /// registers the key — skipping it would drop <c>audio.volume</c> from
-    /// <c>--dump-config</c> on exactly the runs that set a volume.</para></summary>
+    // Settles the master output gain: --volume= if given, else audio.volume, else silent.
+    // Deliberately not --mute: at volume 0 both audio paths still load, play, count and log, so
+    // the run is silent but not blind. A bus write for the same reason SetFocusMuted is one —
+    // see this file's docs/architecture.md entry, which also covers why the config read stays
+    // unconditional so it self-registers for --dump-config.
     private void ApplyMasterVolume()
     {
         float volume = Config.GetFloat("audio.volume", MasterVolumeDefault);
@@ -937,9 +841,9 @@ public partial class Launcher : Node3D
         Log.Info("sound", $"master volume={volume:0.###} via={source}{note}");
     }
 
-    /// <summary>Mutes/unmutes the master bus and gates pad reads, on window focus. Idempotent —
-    /// the notification can arrive more than once — and it only ever clears a mute it set itself,
-    /// so it cannot stomp on a mute from anywhere else.</summary>
+    // Mutes/unmutes the master bus and gates pad reads, on window focus. Idempotent —
+    // the notification can arrive more than once — and it only ever clears a mute it set itself,
+    // so it cannot stomp on a mute from anywhere else.
     private void SetFocusMuted(bool muted)
     {
         if (_focusMuted == muted)
@@ -948,23 +852,20 @@ public partial class Launcher : Node3D
         }
         _focusMuted = muted;
         AudioServer.SetBusMute(MasterBus, muted);
-        // Pad *reads* follow focus too (Pads.For / Pads.InputBlocked): a stick held or drifting
-        // while the player is alt-tabbed must not fly the plane, steer the free camera or scroll
-        // the launchscreen. The pad *roster* (Pads.Connected) deliberately does not follow focus
-        // — an unfocused pad has not disconnected; see the Pads class remarks. The keyboard needs
-        // no gate: Godot releases held keys on focus loss, while joypads are polled from SDL
-        // regardless of focus, which is the whole reason this exists.
+        // Pad reads follow focus (Pads.For), so a stick drifting while alt-tabbed cannot fly
+        // the plane. The roster deliberately does not — see Pads.cs's docs/architecture.md
+        // entry. Keyboard needs no gate: Godot releases held keys on focus loss.
         Pads.Focused = !muted;
         GD.Print(muted
             ? "focus: lost — audio muted, pad reads gated"
             : "focus: regained — audio restored, pad reads live");
     }
 
-    /// <summary>Samples the engine's eight per-frame counters once, for both instruments. The two
-    /// <c>TIME_*</c> monitors are seconds and are converted here, so everything downstream of this
-    /// is in milliseconds. Read at priority -999, so (like <c>delta</c> itself) these describe the
-    /// frame that just ended rather than the one being built; the two agree with each other, which
-    /// is what a hitch record needs.</summary>
+    // Samples the engine's eight per-frame counters once, for both instruments. The two
+    // `TIME_*` monitors are seconds and are converted here, so everything downstream of this
+    // is in milliseconds. Read at priority -999, so (like `delta` itself) these describe the
+    // frame that just ended rather than the one being built; the two agree with each other, which
+    // is what a hitch record needs.
     private FrameCounters ReadFrameCounters() => new(
         ScriptMs: 1000 * Performance.GetMonitor(Performance.Monitor.TimeProcess),
         RenderCpuMs: RenderingServer.ViewportGetMeasuredRenderTimeCpu(_viewportRid),
@@ -975,15 +876,12 @@ public partial class Launcher : Node3D
         Nodes: (long)Performance.GetMonitor(Performance.Monitor.ObjectNodeCount),
         MemBytes: (long)Performance.GetMonitor(Performance.Monitor.MemoryStatic));
 
-    /// <summary><c>--hitch-inject=</c>: burns wall time synchronously for
-    /// about <paramref name="ms"/> milliseconds, so every later item in the plan has a stall of
-    /// known magnitude to verify against instead of an incidental one. The busy-wait form (default)
-    /// proves the timing path; <paramref name="alloc"/> burns the same wall time allocating and
-    /// discarding 4 KB buffers instead of spinning, which is the only way to move the GC/
-    /// allocated-bytes columns on demand. Never wrapped in a <see cref="PerfSample"/> scope: an
-    /// injected fault must show as unattributed time, not as a breadcrumb that could be mistaken
-    /// for the thing under test. What the hitch stage checks instead is C8's identity — the
-    /// record's attributed and unattributed terms closing over its own frame cost.</summary>
+    // --hitch-inject=: burns wall time synchronously for about `ms`, so a stall of known
+    // magnitude exists to verify against. The busy-wait form proves the timing path; `alloc`
+    // burns the same time allocating 4 KB buffers instead, the only way to move the GC columns
+    // on demand.
+    // ⚠ Never wrap this in a PerfSample scope. An injected fault must show as unattributed
+    // time, not a breadcrumb mistaken for the thing under test.
     private void InjectHitch(float ms, bool alloc)
     {
         long start = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -999,31 +897,12 @@ public partial class Launcher : Node3D
         Log.Info("perf", $"hitch-inject fired ms={ms:0.0} alloc={alloc} bytes={sink}");
     }
 
-    /// <summary>
-    /// --perf: the headless stand-in for the editor's profiler. Godot's visual profiler needs
-    /// the editor GUI, but the same numbers are available at runtime — and the one that settles
-    /// most questions is the per-viewport measured GPU time, which separates "our shader got
-    /// more expensive" from "our C# got more expensive". Every term is a mean over the window,
-    /// so a single hitch doesn't read as a regression; A/B two builds by comparing the same line.
-    ///
-    /// <para><c>physics</c> is Godot's <c>TIME_PHYSICS_PROCESS</c> monitor —
-    /// the physics tick, which is where broadphase and narrowphase cost lands. It exists because
-    /// `frame`/`fps` sit pinned at the vsync cap in nearly every run here, so they are floors
-    /// and cannot show a collision change getting cheaper or dearer; the physics term can move
-    /// while the frame time does not. Same caveat as `script`: it is Godot's own monitor, so
-    /// trust it as an A/B ratio rather than as an absolute.</para>
-    ///
-    /// <para>The line carries <c>sim_frame=</c> so a parser can pin each window to the run's
-    /// simulation state instead of to a wall moment, and its grammar is flat
-    /// <c>key=value</c> — <c>RunTests.ps1 -Perf</c> reads it.</para>
-    ///
-    /// <para><c>max_ms</c>/<c>p95_ms</c> sit beside the means: a mean over 60 frames buries a
-    /// single hitch (one 47 ms frame among fifty-nine 16.7 ms ones moves it by about 0.5 ms), so
-    /// these two answer "how bad did it get" rather than "how bad on average". Both come from the
-    /// same unaveraged per-frame wall cost the means are built from — nothing new is measured.
-    /// No <c>p99_ms</c>: nearest-rank p99 over a 60-sample window is the single worst sample, so it
-    /// would be identical to <c>max_ms</c> by construction (see <see cref="Perf95Index"/>).</para>
-    /// </summary>
+    // --perf: the headless stand-in for the editor's profiler, meaned over the window so a
+    // single hitch doesn't read as a regression — A/B two builds by comparing the same line.
+    // `physics` moves independently of `frame`/`fps`, which sit pinned at the vsync cap; trust
+    // it as an A/B ratio, not an absolute, same caveat as `script` (docs/verification.md's
+    // PERF-1). `max_ms`/`p95_ms` answer "how bad did it get", not "how bad on average"; no
+    // `p99_ms` since a 60-sample window's nearest-rank p99 is just `max_ms` (Perf95Index).
     private void ReportPerf(double delta, in FrameCounters counters)
     {
         _perfFrames++;
@@ -1033,11 +912,8 @@ public partial class Launcher : Node3D
         _perfPhysics += counters.PhysicsMs;
         _perfCpuRender += counters.RenderCpuMs;
         _perfGpu += counters.GpuMs;
-        // Counts, and averaged like every other term: a single frame's draw-call count is whatever
-        // was in view at the instant the window closed, which moves under a flying camera. These
-        // four are the sharp end of the report — a count has no timing noise in it, so a scene that
-        // starts drawing (or holding) more says so exactly, while every ms term has to clear a
-        // noise band first.
+        // Counts, averaged like every ms term, but with no timing noise in them: a scene that
+        // starts drawing more says so exactly, where an ms term has to clear a noise band first.
         _perfDraws += counters.Draws;
         _perfPrims += counters.Prims;
         _perfNodes += counters.Nodes;

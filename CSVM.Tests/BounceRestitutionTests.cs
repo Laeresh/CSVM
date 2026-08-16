@@ -6,20 +6,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The decoded collision restitution (closing BL-172): <c>FUN_0048d7f0</c>'s
-/// normal-only impulse, scaled by <c>f_lin · bounce_factor</c>, ported as
-/// <see cref="FlightModel.BounceNormalSpeed"/>.
-///
-/// <para><b>Why the arithmetic and not a "does it feel bouncy" probe.</b> The impulse has three
-/// parts that are separately easy to get wrong and that no aggregate reading separates: the
-/// restitution proper, the DOUBLED contact-point rotation term, and the rebound/spin partition. Each
-/// is asserted on its own here; the engine's <c>graze-bounce</c> suite carries the player-only gate
-/// and the two surface orientations, which need a real contact.</para>
-///
-/// <para>Every case sinks at <see cref="Sink"/> m/s along the normal. An arm ALONG the normal
-/// (a contact directly under the centre of mass) is the geometry where <c>r × J</c> vanishes, so
-/// <c>f_lin</c> is exactly 1 and the rebound is <c>bounce_factor</c> unmixed — that is the
-/// isolating case, not "the aircraft is not rotating".</para>
+/// The decoded collision restitution: <c>FUN_0048d7f0</c>'s normal-only impulse,
+/// scaled by <c>f_lin · bounce_factor</c>, ported as <see cref="FlightModel.BounceNormalSpeed"/>.
+/// Decode: docs/org/flightModel.md, "Collision response and bounce_factor".
+/// Its three separately-wrong-able parts (restitution, the doubled rotation term, the rebound/spin
+/// partition) are asserted individually here rather than through an aggregate "feels bouncy" probe.
 /// </summary>
 public class BounceRestitutionTests
 {
@@ -30,7 +21,7 @@ public class BounceRestitutionTests
 
     /// <summary>The restitution proper, isolated: a non-rotating contact on an arm along the normal
     /// rebounds at exactly <c>bounce_factor</c>. That is the decode's [0, 0.6] ceiling touched, and
-    /// the number CAP-14 measured on flat ground (0.62 ± 0.19 against a shipped 0.60).</summary>
+    /// the number measured on flat ground (0.62 ± 0.19 against a shipped 0.60).</summary>
     [Fact]
     public void AnAxialNonRotatingContactReboundsAtExactlyBounceFactor()
     {
@@ -59,16 +50,11 @@ public class BounceRestitutionTests
             fallback.BounceNormalSpeed(Vector3.Down * Sink, Vector3.Up, arm), 3);
     }
 
-    /// <summary>The contact-point velocity's rotational term is DOUBLED and the impulse is then
-    /// applied in full to the centre of mass with no reaction term, so a rotating contact leaves the
-    /// surface faster than <c>bounce_factor</c> permits. That excess is the decode's answer to
-    /// CAP-14's above-0.6 flat-ground readings, and it is what someone "fixing" the model by raising
-    /// the constant instead would delete.
-    ///
-    /// <para>A 2 m arm on body X against a +Z wall with 1 rad/s of yaw: <c>n·(ω × r) = −2</c>, so
-    /// the impulse sees 34 m/s of closing speed against the centre's 30. The partition here is
-    /// <c>f_lin = 76.5/93.5</c>, so the result is 20.7 m/s outward — ABOVE the 18 m/s the same
-    /// contact would give at rest, even though <c>f_lin</c> is well under 1.</para></summary>
+    /// <summary>The contact-point velocity's rotational term is doubled, so a rotating contact
+    /// leaves the surface faster than <c>bounce_factor</c> permits — the decode's answer to the
+    /// above-0.6 flat-ground readings (docs/org/flightModel.md), which raising the constant instead
+    /// would delete. A 2 m arm with 1 rad/s yaw gives 20.7 m/s outward, above the 18 m/s the same
+    /// contact gives at rest.</summary>
     [Fact]
     public void TheContactPointRotationTermIsDoubledAndUnbounded()
     {
@@ -84,14 +70,10 @@ public class BounceRestitutionTests
             $"the doubled term must be able to exceed bounce_factor outward={outward:0.00}");
     }
 
-    /// <summary>The rebound/spin partition, and the direction it actually runs in. <c>|Δω|</c> is
-    /// <c>|I⁻¹|·|J|·sinθ/|r|</c> — the <c>/|r|²</c> in the decode is a point-mass moment of inertia,
-    /// not a lever — so a LONG arm partitions more of the impact into rebound and a short one less.
-    /// That is the reverse of the summary sentence carried with this decode ("a wingtip throws most
-    /// of the impact into rotation"), and the reverse is what the formula that sentence cites gives.
-    ///
-    /// <para>Asserted as a monotone sequence first, so it fails on the direction rather than on a
-    /// rounding, then on two values that show the partition biting at aircraft scale.</para></summary>
+    /// <summary>The rebound/spin partition runs the opposite direction from the summary sentence
+    /// carried with this decode ("a wingtip throws most of the impact into rotation"): a long arm
+    /// partitions more into rebound. See docs/org/flightModel.md's withdrawal note.
+    /// Asserted as a monotone sequence first, so it fails on direction rather than rounding.</summary>
     [Fact]
     public void ALongerContactArmPartitionsMoreIntoReboundNotLess()
     {
@@ -114,7 +96,7 @@ public class BounceRestitutionTests
 
     /// <summary>No surface dependence anywhere: the identical contact geometry rotated from a floor
     /// onto a vertical face rebounds identically. The original has no verticality test and no
-    /// material lookup, so CAP-14's flat-versus-vertical split must NOT arrive here as a per-surface
+    /// material lookup, so the flat-versus-vertical split must NOT arrive here as a per-surface
     /// coefficient.</summary>
     [Fact]
     public void TheImpulseHasNoSurfaceDependence()
@@ -159,15 +141,15 @@ public class BounceRestitutionTests
             m.BounceNormalSpeed(Vector3.Down * Sink, Vector3.Up, new Vector3(0f, 2f, 0f)), 3);
     }
 
-    /// <summary>Level, unrotating, at the sink speed — the state every case above varies from.</summary>
+    // Level, unrotating, at the sink speed — the state every case above varies from.
     private static void Rest(FlightModel m)
     {
         m.Reset(Vector3.Zero, Basis.Identity, Sink, 0f);
         m.BodyRates = Vector3.Zero;
     }
 
-    /// <summary>The Bloodhawk's reciprocal moments with an explicit <c>bounce_factor</c> — the
-    /// partition reads <c>I⁻¹</c>, so it is the one airframe number that matters here.</summary>
+    // The Bloodhawk's reciprocal moments with an explicit `bounce_factor` — the
+    // partition reads `I⁻¹`, so it is the one airframe number that matters here.
     private static FlightModel Plant(float bounceFactor) => new(new PlaneStats
     {
         RecInertia = new Vector3(1.18f, 1f, 1.1f),

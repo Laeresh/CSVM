@@ -340,9 +340,9 @@ public class PlaneDamageTests
         Assert.Equal("hull a50% h75% · nose a0% h50%", damage.Summary());
     }
 
-    /// <summary>Kills a zone with exact spends (armor stripped, then its health spent with no
-    /// armor damage on the bare zone) so no leftover reaches the whole pair — the suites'
-    /// scaffolding pattern.</summary>
+    // Kills a zone with exact spends (armor stripped, then its health spent with no
+    // armor damage on the bare zone) so no leftover reaches the whole pair — the suites'
+    // scaffolding pattern.
     private static void KillZoneExactly(PlaneDamage damage, string name)
     {
         var part = damage.Parts[name];

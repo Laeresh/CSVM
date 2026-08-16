@@ -5,18 +5,14 @@ using Godot;
 
 namespace CSVM.Session;
 
-/// <summary>
-/// The decoded wave sequencer's own selection and trigger logic (<c>FUN_0045b9d0</c>, traced whole
-/// by A4 over M4 B7's main-path read): pure state over
-/// <see cref="Start"/>/<see cref="Step"/> calls, no <c>GD.*</c>, no <c>Godot.</c> node, no clock,
-/// so <c>CSVM.Tests</c> pins it off-engine. <c>GameSession</c> feeds it the caller's own
-/// "still alive" counts and takes back which wave to activate and where.
-///
-/// <para>⚠ Does NOT run on <c>zeppelin_run</c>: A4 traced the type-2 branch as an EXCLUSIVE
-/// alternative to the teleport (<c>JMP</c> past the whole block), not a caller of it — that
-/// mode's wave arrival is F12's generator arm. A caller must gate this class out for
-/// <c>zeppelin_run</c> itself; nothing here checks the mission type.</para>
-/// </summary>
+/// <summary>The decoded wave sequencer's own selection and trigger logic (<c>FUN_0045b9d0</c>):
+/// pure state over <see cref="Start"/>/<see cref="Step"/> calls, no <c>GD.*</c>, no <c>Godot.</c>
+/// node, no clock, so <c>CSVM.Tests</c> pins it off-engine. The caller feeds it its own "still
+/// alive" counts and takes back which wave to activate and where.
+/// ⚠ Only <see cref="ChooseWaveSpawn"/>/<see cref="FanOffset"/> skip <c>zeppelin_run</c> — that
+/// mode's teleport is a JMP-past-the-block exclusive alternative, its wave arrival the generator
+/// arm instead. <see cref="Start"/>/<see cref="Step"/> run on every mode including this one;
+/// nothing here checks the mission type, so the caller routes what they hand back.</summary>
 public sealed class InstantActionWaves
 {
     /// <summary>500 m, squared (the decoded float at <c>0x006036c0</c>) — the teleport's own
@@ -50,14 +46,10 @@ public sealed class InstantActionWaves
     /// <see cref="Start"/> and once <see cref="Finished"/>.</summary>
     public int CurrentWaveSize => CurrentWave is >= 1 and <= 4 ? _waveSizes[CurrentWave - 1] : 0;
 
-    /// <summary>The teleport arm's own two-step draw: every entry of
-    /// <paramref name="spawns"/> at or beyond <see cref="MinSpawnDistanceSquared"/> from the
-    /// NEAREST of <paramref name="humanPositions"/> (Decision 8's splitscreen reading of "the
-    /// player") is collected, then one of THOSE is taken as <c>draw % n</c> — not a rejection
-    /// loop. ⚠ Falls back to the LITERAL first entry, index 0, not a random one, when the
-    /// collection is empty. <paramref name="spawns"/> must be non-empty; <paramref name="draw"/>
-    /// is the caller's own <c>rand()</c> pull, so this stays pure and <c>--det</c> reproduces it
-    /// off whichever named stream the caller drew from.</summary>
+    /// <summary>The teleport arm's own two-step draw (detail: this module's docs/architecture.md
+    /// entry): collect every entry at or beyond <see cref="MinSpawnDistanceSquared"/> from the
+    /// nearest human, then take <c>draw % n</c> over that collection.
+    /// ⚠ Falls back to the literal first entry, index 0, when the collection is empty.</summary>
     public static (int Index, SpawnPoint Point) ChooseWaveSpawn(
         IReadOnlyList<SpawnPoint> spawns, IReadOnlyList<Vector3> humanPositions, uint draw)
     {
@@ -117,12 +109,11 @@ public sealed class InstantActionWaves
         return Finished ? 0 : CurrentWave;
     }
 
-    /// <summary>One sequencer tick. <paramref name="aliveInCurrentWave"/> is the caller's own
-    /// count of <see cref="CurrentWave"/>'s built aircraft still <c>FlightController.InPlay</c> —
-    /// above 0 means nothing to do (returns 0). At 0 the counter advances, cascading past any
-    /// further empty waves in the same call, and the newly-current wave number is returned so the
-    /// caller activates it. Also returns 0, and does nothing, once <see cref="Finished"/> — no
-    /// advance past wave 4.</summary>
+    /// <summary>One sequencer tick: 0 while <paramref name="aliveInCurrentWave"/> is positive,
+    /// else the counter advances (cascading past empty waves) and the caller activates the
+    /// returned wave. 0 and a no-op once <see cref="Finished"/> — no advance past wave 4.
+    /// ⚠ On zeppelin_run "alive" means NOT crashed, not <c>FlightController.InPlay</c> — a
+    /// member still parked in the bay counts as present, the original's own decoded rule.</summary>
     public int Step(int aliveInCurrentWave)
     {
         if (Finished || aliveInCurrentWave > 0)

@@ -145,10 +145,10 @@ public class EffectPoolsTests
 
     private static EffectPools Load() => EffectPools.Parse(File.ReadAllBytes(ConfigPath));
 
-    /// <summary>The stage-root set the shipped config is sized against — derived from C1's bound
-    /// program and gamez by exactly the call the world-effects build makes: the answer is chapter
-    /// data, not a hand table, so these two checks need the player's extraction. No Godot node is built: the resolver is
-    /// asked with no scope, and the closure walk is engine-free.</summary>
+    // The stage-root set the shipped config is sized against — derived from C1's bound
+    // program and gamez by exactly the call the world-effects build makes: the answer is chapter
+    // data, not a hand table, so these two checks need the player's extraction. No Godot node is built: the resolver is
+    // asked with no scope, and the closure walk is engine-free.
     private static IReadOnlyList<string> StageRoots()
     {
         const string chapter = "C1";

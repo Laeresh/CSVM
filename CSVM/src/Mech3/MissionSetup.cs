@@ -9,31 +9,14 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// The engine's per-mission world setup script — <c>support\&lt;chapter&gt;\&lt;mission&gt;.gw</c>
-/// inside the interp extraction, one per mission folder (53 in this install).
-///
-/// This is the mechanism that decides <b>which world entities a mission shows</b>, and it is a
-/// different one from the animation program: a chapter's gamez holds every mission's content,
-/// the engine loads all of it, and then this script switches off what this mission does not
-/// want. C1/IA1's script deactivates 29 nodes — the Hollywood Knights zeppelin
-/// <c>hk_zep</c>, both multiplayer zeppelins, the CTF gate posts and flags, the nine
-/// <c>lifesaver*</c> props, the AA guns, the rearm bay. C1/M04's does not deactivate
-/// <c>hk_zep</c>, which is exactly why it is on the field in that mission (user reference
-/// screenshot) and nowhere else. The CTF props are switched off by every mission except
-/// <c>mp2.gw</c>, the Capture the Flag map — the gate the user described, stated outright by
-/// the data.
-///
-/// This corrects the hypothesis this work was scheduled on. <c>aiv.zrd.json</c> is <b>not</b> a
-/// spawn roster: it is the AI vehicle table, and its only mention of <c>hk_zep</c> anywhere is
-/// inside a wingman's target-priority list in C1/M02. <c>zeppelins.zrd.json</c> is the flyable-
-/// zeppelin gameplay config, and it never names <c>hk_zep</c> in the one mission that shows it.
-/// Neither could have gated anything. Entities are present by default and switched off here —
-/// the same polarity as <c>zepstate</c>, not the mirror image of it. See
-/// <c>docs/formats/interp.md</c>.
-///
-/// <para>Ordering: this runs as bootstrap pass 0, before the animation passes, which is the
-/// engine's own load order (world → .gw → anims) and lets an animation state override a script
-/// state rather than the other way round.</para>
+/// The engine's per-mission world setup script: <c>support\&lt;chapter&gt;\&lt;mission&gt;.gw</c>
+/// from the interp extraction, one per mission (53 in this install). Decides which world
+/// entities a mission shows: a chapter's gamez holds every mission's content, and this switches
+/// off what the current mission does not want. Full decode: <c>docs/formats/interp.md</c>.
+/// ⚠ Entities are present by default and switched off here, the same polarity as <c>zepstate</c>;
+/// <c>aiv.zrd.json</c> and <c>zeppelins.zrd.json</c> are not spawn rosters and gate nothing.
+/// Runs as bootstrap pass 0, before the animation passes, so an animation state can override a
+/// script state.
 /// </summary>
 public sealed class MissionSetup
 {
@@ -73,27 +56,12 @@ public sealed class MissionSetup
         return null;
     }
 
-    /// <summary>
-    /// The script's <c>Object3DSetScroll</c> statements, resolved to gamez <b>model</b> indices →
-    /// UV scroll rate in units/second. Handed to the world build (see
-    /// <see cref="SceneBuilder"/>'s <c>scrollOverrides</c>) rather than applied in
-    /// <see cref="Apply"/>, because a scroll rate has to be known while the material is created:
-    /// a scrolling model can share its material with static geometry, so the rate is part of the
-    /// material cache key.
-    ///
-    /// <para>Per <b>model</b>, not per node, because that is where the engine keeps it: the same
-    /// rates the chapter-level <c>tex_fx.gw</c> sets are already baked into the shipped gamez
-    /// models' own <c>texture_scroll</c> field (C1's <c>h_zone1scroll</c> 0.07, C1B's wakefronts
-    /// 0.7/1.0, its <c>con_scroll</c> −1.0 — all identical in both places), while the per-mission
-    /// ones are not, which is exactly what a verb that writes the model's field would produce.
-    /// Every scroll target in this install is a model used by exactly one node, so the two
-    /// granularities cannot disagree here.</para>
-    ///
-    /// <para>Only the plain <c>FindNode</c> form is resolved. A modelless group selection
-    /// (C4's <c>tex_fx.gw</c> names <c>waterfall01</c>, which has no model of its own) matches
-    /// nothing and is counted — unobservable either way, since every C4 mission script then sets
-    /// that waterfall's two leaves directly.</para>
-    /// </summary>
+    /// <summary>The script's <c>Object3DSetScroll</c> statements, resolved to gamez model index →
+    /// UV scroll rate. Handed to the world build rather than applied in <see cref="Apply"/>,
+    /// because the rate must be known while the material is created. Decode:
+    /// <c>docs/formats/interp.md</c>.
+    /// ⚠ Only the plain <c>FindNode</c> form resolves; a modelless group selection matches
+    /// nothing, which this install never observes.</summary>
     public IReadOnlyDictionary<int, Vector2> ScrollByModel(GameZ gamez)
     {
         var map = new Dictionary<int, Vector2>();
@@ -124,15 +92,10 @@ public sealed class MissionSetup
         return map;
     }
 
-    /// <summary>
-    /// Applies the script to a built world. <paramref name="resolve"/> maps a gamez name (plus an
-    /// optional scope node for the FindSubNode form) to the built nodes; <paramref name="setActive"/>
-    /// switches a subtree on or off; <paramref name="translate"/> sets the selection's position
-    /// (absolute, parent frame — the same convention <c>OBJECT_TRANSLATE_STATE</c> uses); <paramref
-    /// name="rotate"/> sets its orientation from a radians Euler triple, already unit-converted (see
-    /// <see cref="RotateAsRadians"/>). All four are supplied by <see cref="AnimRuntime"/> so this
-    /// reuses the one proven name resolver rather than growing a second one.
-    /// </summary>
+    /// <summary>Applies the script to a built world. <paramref name="resolve"/> maps a gamez name
+    /// (plus an optional <c>FindSubNode</c> scope) to built nodes; <paramref name="setActive"/>,
+    /// <paramref name="translate"/> and <paramref name="rotate"/> act on the selection. All four
+    /// come from <see cref="AnimRuntime"/>, reusing its one name resolver.</summary>
     public void Apply(
         Func<string, Node3D?, IReadOnlyList<Node3D>> resolve,
         Action<Node3D, bool> setActive,
@@ -210,12 +173,8 @@ public sealed class MissionSetup
             var hosts = resolve(op.Target, null);
             if (hosts.Count == 0)
             {
-                // A FindNode that matches nothing is expected and never a warning. Two causes,
-                // both benign: the shipped script names a node this chapter's gamez does not
-                // have (C3's blackhatzep/blackswanzep), or the node exists but WorldBuilder
-                // never built it because it is a parentless root no partition references
-                // (C2B's limo, C3's britbalmoral_1..3 and cpilot_shadow — the same pool the
-                // effect templates live in). Either way there is nothing here to act on.
+                // Expected, not a warning: the name may be absent from this chapter's gamez, or
+                // present but never built (docs/formats/interp.md).
                 _unresolved.Add(op.Sub == null ? op.Target : $"{op.Target}/{op.Sub}");
                 return new List<Node3D>();
             }
@@ -273,13 +232,9 @@ public sealed class MissionSetup
     private static string Strip(string s) =>
         s.EndsWith(".flt", StringComparison.OrdinalIgnoreCase) ? s[..^4] : s;
 
-    // The shipped data does not use one unit consistently — C1/M05's boat rotations are
-    // small integers that only make sense as degrees (0 45 0, 0 172 0), C3/MP1-2's cargozep1 is a
-    // high-precision radians triple (-0.000010 -3.144009 -0.000000, i.e. pi on Y) — and the two
-    // families are cleanly separable by magnitude, so the decision is made once per script rather
-    // than guessed globally (docs/formats/interp.md's "Object3DRotate's angle unit is ambiguous").
-    // ⚠ The same ambiguity exists over OBJECT_3D_ROTATE data elsewhere; it must be resolved the
-    // same way there.
+    // Per-script by magnitude: any component beyond 2pi marks the whole script as degrees.
+    // Docs: docs/formats/interp.md ("Object3DRotate's angle unit is ambiguous").
+    // ⚠ OBJECT_3D_ROTATE elsewhere has the same ambiguity; resolve it the same way there.
     private Vector3 RotateAsRadians(Vector3 euler)
     {
         _rotateDegrees ??= _ops.Any(o => o.Verb == "Object3DRotate"

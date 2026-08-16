@@ -7,22 +7,12 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// A player aircraft's weapon marker rig, read straight from planes.zbd GameZ: the
-/// <c>firepoint1..8</c> gun muzzle points, the <c>pylon1..8</c> ordnance hardpoints and the
-/// single <c>target</c> aim point that hang under the model's <c>markers</c> group (see
-/// <c>docs/formats/markers.md</c>). Each marker is a mesh-less <c>Object3d</c> whose translate
-/// carries a plane-frame position; this walks the subtree, accumulates the local transforms
-/// down to each marker, and reports the resolved positions plus which markers are co-located
-/// (two gun groups sharing one physical mount — the Balmoral/Brigand duplicate-coordinate case).
-///
-/// <para>This is the committed instrument the <c>markers.md</c> tables regenerate from: the
-/// <c>--dump-markers</c> tool formats one <see cref="Format"/> block per plane, and the viewer's
-/// <see cref="UI.MarkerOverlay"/> reuses <see cref="Classify"/> and <see cref="GroupCoLocated"/>
-/// so the on-model gizmos and the dumped table agree by construction.</para>
-///
-/// <para>Positions are plane frame — nose −Z, right +X, up +Y (<c>docs/formats/gotchas.md</c>).
-/// The accumulation starts at identity below the plane root, so the values are relative to the
-/// airframe origin regardless of where the model is placed in a scene.</para>
+/// A player aircraft's weapon marker rig, read from planes.zbd GameZ: walks a
+/// <c>player_*</c> root, accumulating locals down to each <c>firepoint*</c>/<c>pylon*</c>/
+/// <c>target</c>, and reports plane-frame positions plus co-located groups. See
+/// <c>docs/architecture.md</c> and <c>docs/formats/markers.md</c> for the full decode.
+/// This is the committed instrument <c>markers.md</c> regenerates from; <c>--dump-markers</c>
+/// and <see cref="UI.MarkerOverlay"/> share it so the gizmos and the dumped table agree.
 /// </summary>
 public sealed class MarkerRig
 {
@@ -250,9 +240,9 @@ public sealed class MarkerRig
             CultureInfo.InvariantCulture, out ordinal) && ordinal > 0;
     }
 
-    /// <summary>The mirror partner ordinal of a firepoint: gun pairs are consecutive
-    /// (fp1,fp2)(fp3,fp4)…, so odd n pairs with n+1 and even n with n−1. The Kestrel's fp7 is the
-    /// one centreline mount with no fp8 — its partner simply isn't in the rig.</summary>
+    // The mirror partner ordinal of a firepoint: gun pairs are consecutive
+    // (fp1,fp2)(fp3,fp4)…, so odd n pairs with n+1 and even n with n−1. The Kestrel's fp7 is the
+    // one centreline mount with no fp8 — its partner simply isn't in the rig.
     private static int MirrorPartner(int ordinal) => (ordinal % 2 == 1) ? ordinal + 1 : ordinal - 1;
 
     private static string Vec(Vector3 v) => string.Format(CultureInfo.InvariantCulture,

@@ -1062,6 +1062,41 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-395`, `docs/formats/ai-rosters.md` ("ai_skill_parameters"),
   `docs/architecture.md` `src/Flight/AiGunner.cs`.
 
+- `BL-401` `[Bug]` **The node names we spawn do not match the names the rosters author, so
+  `rating_biases` matches nothing.** *Evidence:* `ObjectiveBiasFor(fc.Name, gunner.RatingBiases)`
+  (`FlightController.cs:2427`) matches an authored pattern against the candidate's Godot node name.
+  Those names are ours, not the mission's: `AiAircraftSpawner.cs:140` names an AI plane
+  `ai{n}_{plane}` (`ai1_player_fury`) and `FlightRigAssembler.cs:421` names a human rig
+  `player{n}` (`player1`). The shipped patterns are mission node names — a census of all 53
+  `aiv.zrd.json` (414 blocks, 697 entries) gives `hafury*`, `bswingman_1`, `devastator_1`,
+  `medkestrel_5`, `piratezep`, `fuel_truck*`, `aagun*` and the bare `player`. `AiRatingBias.Matches`
+  treats `*` as the only wildcard, so `player` does not match `player1`, and `hafury*` does not
+  match `ai1_player_fury`. The term is therefore decoded correctly and firing on almost nothing.
+  The `player` case is the sharpest: it is authored 157 times and never negative (40 of them at
+  exactly `1.0`, the always-target saturation), so the pilots most explicitly told to come after
+  the player get no bias at all.
+  *Fix shape:* decide what identity the bias is supposed to match, then make one side produce it.
+  Either resolve the authored pattern to a spawned plane the way `PrimaryTargetName` already does,
+  or carry the roster's own block name onto the spawned `FlightController` beside its Godot name
+  and match on that. Prefer the second: it makes `--target=`, the breadcrumbs and the biases agree
+  on one identity string instead of three.
+  ⚠ *Traps.* (a) **`PrimaryTargetName` already special-cases this and the bias path does not** —
+  `FlightController.cs:2395` matches the name exactly, then `:2399` falls back to
+  `IsHumanPiloted` for `"player"` (`AiGunner.cs:34`). That asymmetry is the bug, so do not "fix"
+  it by copying the human-piloted fallback into `ObjectiveBiasFor`: it would paper over the
+  general naming problem while leaving every non-`player` pattern broken. (b) Renaming the spawned
+  nodes is not the fix. `player` is `EffectCatalogue.CrashAnimRoot` and the crash-scaffold anchor,
+  and the `ai{n}_` prefix is what `TargetHud.HostileTag` reads for the marker tag. (c) Only
+  aircraft are candidates today (`BL-363`), so the ground and zeppelin patterns cannot match
+  regardless of naming; fixing names alone will not make `fuel_truck*` reachable. (d) First match
+  wins per block, so a pattern's position matters once names do resolve — do not sort them.
+  *Playtest after fix:* an Instant Action wave whose roster authors `["player", 1.0]`; the pilot
+  carrying it should come for the player over a nearer AI, and the `target rank` breadcrumb should
+  show the `-100000` saturation rather than `0`.
+  *Cross-refs:* `BL-363` (the candidate pool is aircraft-only, the other half of why the biases do
+  nothing), [`docs/formats/ai-rosters.md`](docs/formats/ai-rosters.md) (slot 33 and the
+  `bias × −750` decode), `AiTargetRanking.ObjectiveBiasFor`, `AiSkills.RosterRatingBiases`.
+
 ## Flight model & collision physics
 
 - `BL-089` `[Feature]` **Nitro booster — scoped, low priority (the user's standing call).** Recorded because the data is

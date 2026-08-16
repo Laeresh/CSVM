@@ -5,25 +5,18 @@ namespace CSVM.Flight;
 /// <summary>
 /// The shipped near-miss accumulator (player.json <c>warning_shot_max</c> /
 /// <c>_dissipation</c> / <c>_interval</c>), lifted out of <see cref="FlightController"/> so it
-/// unit-tests without a live node — the same split <see cref="WeaponCursor"/> uses.
-///
-/// <para>What the data says: the three values and the sound name (<c>bullet_warning_sg</c>) ship
-/// complete, but their UNITS do not. The reading modelled here is one round passing close accruing
-/// 1.0 of intensity, saturating at <c>max</c>, draining at <c>dissipation</c> per second, with the
-/// cue re-triggering no faster than <c>interval</c>. With the shipped values (2.0 / 2.0 / 1.0) the
-/// interval is what a pilot actually hears — a single pass drains in half a second, so the meter
-/// only ever holds two passes. Its wider purpose is likely the battle state the neighbouring
-/// <c>pre_battle_sound</c>/<c>in_battle_sound</c> keys drive; that half is not modelled.</para>
-///
-/// <para><b><see cref="PassRadius"/> is not in the data</b> — no shipped value states how close a
-/// round must come. The sound def's <c>RANGE [20,200]</c> is the 3D falloff window, NOT a trigger
-/// radius. It is a TUNE (backlog.md), overridable as <c>weapons.warningShotRadius</c>.</para>
-/// </summary>
+/// unit-tests without a live node — the same split <see cref="WeaponCursor"/> uses. One round
+/// passing close accrues 1.0, saturating at <c>max</c>, draining at <c>dissipation</c> per
+/// second, cue re-triggering no faster than <c>interval</c>.
+/// ⚠ The three values ship but their units do not; this reading is chosen. The
+/// <see cref="PassRadius"/> tune is explained at its own declaration.</summary>
 public sealed class WarningShotCue
 {
     /// <summary>How close a round's swept segment must pass to the aircraft to count, in metres.
     /// TUNE — chosen, not read: roughly one wingspan out, so a pass that reads as frightening
-    /// sounds and a round crossing the sky two hundred metres off does not.</summary>
+    /// sounds and a round crossing the sky two hundred metres off does not (<c>BL-230</c>).
+    /// The sound def's <c>RANGE [20,200]</c> is a 3D falloff window, NOT a trigger radius — never
+    /// read one as the other.</summary>
     public const float PassRadius = 15f;
 
     private readonly float _max;

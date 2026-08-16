@@ -5,7 +5,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// <see cref="Pads.AssignPads(int, IReadOnlyList{int})"/> — the pure half of BL-374's fix, engine-
+/// <see cref="Pads.AssignPads(int, IReadOnlyList{int})"/> — the pure half of the fix, engine-
 /// free so a phantom-device scenario can be asserted without real hardware. The IDs below are
 /// arbitrary; what matters is which slot in the roster they occupy.
 /// </summary>
@@ -36,10 +36,8 @@ public class PadsTests
     [Fact]
     public void APhantomAtSlotZeroNoLongerStrandsP1()
     {
-        // BL-374's repro: the roster's first slot (10) is a phantom device (the 8BitDo dongle
-        // enumerating asleep) that never produces input; a real extra pad (30) is also
-        // connected but unclaimed. The old pads[0]-only rule bound P1 to just the phantom;
-        // this rule hands P1 the whole leftover set, so the real pad still reaches P1.
+        // Slot 0 is a phantom device that never produces input; a pads[0]-only rule would
+        // strand P1 on it, so P1 gets the whole leftover set instead.
         var a = Pads.AssignPads(2, new List<int> { 10, 20, 30 });
         Assert.Equal(new[] { 20 }, a![1]);
         Assert.Equal(new[] { 10, 30 }, a[0]);

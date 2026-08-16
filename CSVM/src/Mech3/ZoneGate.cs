@@ -1,37 +1,13 @@
 namespace CSVM.Mech3;
 
-/// <summary>The original's per-node visibility gate — the one rule every gamez <c>zone_id</c>
-/// obeys (docs/org/weather.md, docs/formats/gamez.md).
-///
-/// <para><b>The rule.</b> The engine arms the camera each frame with the zone set
-/// <c>{0, camera weather state}</c> (the state machine's 1 = below the cloud deck / 2 = above it /
-/// 3 = inside a <c>fog_zone</c> volume — <c>WeatherState.CameraWeatherState</c>); the walk then
-/// draws a node iff its <c>zone_id</c> is <b>−1</b> (always), or is <b>in that set</b>. So −1 and
-/// 0 are ungated, and 1/2/3 are three buckets of which exactly one is live at a time. Nothing else
-/// is gated: the engine's geometric point-in-zone fallback runs only when no explicit
-/// state was armed, which the remake never does.</para>
-///
-/// <para><b>How the remake applies it: a visual layer per zone, and a cull-mask bit per
-/// camera.</b> <see cref="LayerFor"/> hands each gated zone one of Godot's visual layers, which
-/// <c>SceneBuilder.BuildSubtree</c> stamps onto every mesh instance it builds for a zoned node
-/// (per NODE, never inherited down a subtree — the data has parents and children on different
-/// zones, e.g. C1's <c>flaglite1</c>/<c>flaglite2</c> are −1 under a zone-1 parent, and only a
-/// per-node stamp reproduces that). <c>Session.WeatherRig.Tick</c> then keeps exactly one of those
-/// bits in each camera's cull mask.
-///
-/// <para>⚠ A cull mask, never <c>Node3D.Visible</c>, and that is a requirement rather than a
-/// style: splitscreen panes can sit in different states at the same instant (visibility is a
-/// property of the shared node, a cull mask a property of the pane's camera), AND several
-/// subsystems read or write <c>Visible</c> on this very world content — the animation runtime's
-/// <c>NodeActive</c> condition and its uncovered-<c>destroyed</c> sweep, <c>WorldBuilder</c>'s
-/// unplaced-entity hide/restore pair, <c>DamageVisuals</c>' healthy/torn swap. A visibility-based
-/// gate would silently answer all of their questions with "the camera is above the deck".</para>
-///
-/// <para>The two camera-anchored per-rig singletons — the cloud deck and the skydome — are the
-/// exception, and they take <see cref="Draws"/> against <c>Node3D.Visible</c> on the rig's OWN
-/// copy instead: a per-player copy is already private to one camera, and it carries that player's
-/// visual layer (<c>SplitScreen.SetVisualLayer</c>), which a zone layer cannot share — a cull mask
-/// ORs its bits, so it cannot express "this pane AND this zone".</para></summary>
+/// <summary>The original's per-node visibility gate: a node draws iff its <c>zone_id</c> is −1
+/// (always), or is in the set the camera arms each frame from its weather state
+/// (<c>{0, cameraState}</c>). Decode: docs/formats/gamez.md, docs/formats/world-structure.md.
+/// ⚠ Gate with a cull mask, never <c>Node3D.Visible</c>. Splitscreen panes sit in different states
+/// at once, and the anim runtime, the unplaced-entity hide and the damage visuals all read and
+/// write <c>Visible</c> on that same shared content.
+/// ⚠ Apply it per node, never inherited down a subtree: the data puts parents and children on
+/// different zones. Camera-anchored singletons are the one exception, in docs/architecture.md.</summary>
 public static class ZoneGate
 {
     /// <summary>The highest <c>zone_id</c> the band carries. Every chapter in this install
@@ -46,7 +22,9 @@ public static class ZoneGate
     // Bits 13-15 (layers 14-16) of Godot's 20, immediately below UI.SplitScreen's reserved
     // per-player band at 16-19. The world builds everything else on the default layer 1 (bit 0).
     // The altitude gate over the two ambient cloud populations is a special case of this band,
-    // not a separate mechanism.
+    // not a separate mechanism. Every cull mask the engine builds starts with all three bits
+    // set, so CullMask only ever narrows: a mode, chapter or camera that never calls it renders
+    // every zone.
     private const int LayerBit0 = 13;
 
     /// <summary>The shared visual layer carrying every mesh built for a node of

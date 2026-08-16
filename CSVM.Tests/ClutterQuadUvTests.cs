@@ -8,22 +8,10 @@ namespace CSVM.Tests;
 /// <summary>
 /// Where a clutter decoration is stored: the template ground quad's own interpolated texture UV,
 /// read the way the binary reads it (<c>ClutterBuilder.GroundInfo</c> + <c>GroundQuad.TryUv</c>).
-///
-/// <para>Two cases, chosen to distinguish the UV rule from the scalar-period rule it discriminates
-/// against. C1's <c>terpat02</c> is the hand-computed worked example and one of the 28
-/// templates on which the two rules agree exactly — it pins the arithmetic. C2's
-/// <c>parklot1</c> is one of the four on which they do not: a 16 × 32 m quad whose UVs are
-/// MIRRORED, so the scalar-period rule <c>(x − minX) / max(extentX, extentZ)</c> comes out both
-/// half-scaled and back to front. That second case is the one that fails if a sign or a transpose
-/// is wrong, which is the whole risk here.</para>
-///
-/// <para>The last four cases cover the other half of the journey: the per-triangle UV lattice the
-/// decoration is stamped on — the binary's steps 4, 6 and 7 against the worked example end to end,
-/// C1 node 2911 <c>g777</c> model 953 poly 3 tri 5 — plus the two degeneracies that must be refused
-/// for different reasons.</para>
-///
-/// <para>Numbers from <c>analysis/bl-305-clutter-uv/FINDINGS-A2.md</c>, which derived them from
-/// the extraction independently of this code.</para>
+/// C1's <c>terpat02</c> pins the arithmetic; C2's mirrored, non-square <c>parklot1</c> is where a
+/// sign or transpose error would show. The lattice-stamp cases replay the binary's steps 4, 6 and
+/// 7 against C1 node 2911's worked example. Evidence: docs/org/clutter.md,
+/// analysis/bl-305-clutter-uv/FINDINGS-A2.md.
 /// </summary>
 public class ClutterQuadUvTests
 {
@@ -116,13 +104,8 @@ public class ClutterQuadUvTests
     /// <summary>
     /// The lattice stamp itself (the binary's steps 4, 6 and 7), against the worked example
     /// computed by hand in <c>analysis/bl-305-clutter-uv/FINDINGS-A2.md</c>: C1 node 2911
-    /// <c>g777</c>, model 953, polygon 3, triangle 5. Every number here was derived from the
-    /// extraction by a Python script and re-derived on paper, independently of this code.
-    ///
-    /// <para>Note the frame: this triangle's +U runs toward world <b>+Z</b> and its +V toward
-    /// <b>−X</b>, a 90° rotation from the template quad's own axes. It is C1's dominant frame
-    /// (69.6 % of <c>terpat02</c>'s triangles) and it is why the stamp cannot be done in world
-    /// space — there is no world axis to align to.</para>
+    /// <c>g777</c>, model 953, polygon 3, triangle 5. This triangle's frame is rotated 90° from
+    /// the template quad's own axes, which is why the stamp cannot be done in world space.
     /// </summary>
     [Fact]
     public void LatticeStampReproducesA2sWorkedExample()
@@ -174,12 +157,9 @@ public class ClutterQuadUvTests
     }
 
     /// <summary>
-    /// A zero-area WORLD triangle carrying a healthy UV area — the trap, and the reason a UV
-    /// degeneracy guard alone is not enough. Two of this triangle's corners are the same point,
-    /// which is what a fan or strip triangulation of an n-gon with a repeated corner produces:
-    /// 1,655 of them on C1's <c>terpat02</c> alone. Its affine map would be finite and
-    /// meaningless — both world axes collapsed onto one line — so it must be refused, and
-    /// refused for the RIGHT reason, since the two counts are reported separately.
+    /// A zero-area world triangle with a healthy UV area, and the mirror case. A UV degeneracy
+    /// guard alone would miss the first: 1,655 such triangles exist on C1's <c>terpat02</c> alone
+    /// (docs/org/clutter.md), and both must be refused for the right, separately-counted reason.
     /// </summary>
     [Fact]
     public void ZeroAreaWorldTriangleIsRefusedEvenWithAHealthyUvArea()
@@ -201,12 +181,9 @@ public class ClutterQuadUvTests
     }
 
     /// <summary>
-    /// The extraction side of the same worked example: C1 model 953's polygon 3 really is a
-    /// triangle STRIP whose triangle 5 carries the worked example's three corners, and its UVs really are indexed
-    /// by CORNER POSITION rather than by vertex id — corners 3 and 4 of this very polygon share
-    /// vertex 5 and carry different UVs. Reading the UV through the vertex id would silently
-    /// stamp one corner's lattice in another corner's texture frame, and this polygon is the
-    /// proof that the shipped data exercises the distinction.
+    /// The extraction side of the worked example: C1 model 953's polygon 3 is a triangle strip
+    /// whose UVs are indexed by corner position, not vertex id — corners 3 and 4 share vertex 5
+    /// but carry different UVs, proving the shipped data exercises the distinction.
     /// </summary>
     [ExtractedDataFact]
     public void C1Model953Polygon3IsAStripWhoseUvsAreIndexedByCorner()

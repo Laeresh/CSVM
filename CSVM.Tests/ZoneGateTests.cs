@@ -7,17 +7,11 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The original's <c>zone_id</c> visibility gate (<see cref="ZoneGate"/>): a node draws iff its
-/// gamez <c>zone_id</c> is −1, or is in the camera's armed set
-/// <c>{0, camera weather state}</c>.
-///
-/// <para>Two halves are pinned here. The RULE — which is four lines and would be trivial if it
-/// were not the thing that decides whether a mission's targets exist on screen — and the DATA the
-/// rule is pointed at, per chapter, from the real extraction: which zone each chapter's
-/// <c>fvol</c> volumes and horizon subtrees author. The second half is the one that catches a
-/// regression, because the gate reads correct against any census; it is the census that varies,
-/// and <b>C2B's is the one that breaks the pattern</b> (its fog volumes are <c>zone_id −1</c>
-/// while the other three deck chapters ship 2), which is exactly the case an implementation that
-/// assumed "the fvol field is zone 2" would get wrong in the one chapter nobody looks at.</para>
+/// gamez <c>zone_id</c> is −1, or is in the camera's armed set <c>{0, camera weather state}</c>.
+/// Pins both the rule and the per-chapter census it is pointed at; the census is what catches a
+/// regression, since the gate itself reads correct against any of them.
+/// ⚠ C2B breaks the pattern (its fog volumes are <c>zone_id −1</c>, not 2 like the other deck
+/// chapters); see docs/formats/weather.md's C2B divergence note.
 /// </summary>
 public class ZoneGateTests
 {
@@ -63,10 +57,8 @@ public class ZoneGateTests
     [Fact]
     public void AStateFlipTogglesExactlyTheTwoZonesInvolved()
     {
-        // The deck chapters' whole behaviour in one assertion: below the deck (state 1) the ground
-        // world draws and the deck/cloud population does not; above it (state 2) the inverse. C1's
-        // census is 1343 zone-1 and 626 zone-2 mesh instances, so this flip moves both, and the
-        // ungated majority (zone_id −1 terrain, the dome, the aircraft) never moves at all.
+        // The deck chapters' whole behaviour in one assertion: below the deck (state 1) the
+        // ground world draws and the cloud population does not; above it (state 2), the inverse.
         Assert.True(ZoneGate.Draws(1, 1));
         Assert.False(ZoneGate.Draws(2, 1));
         Assert.False(ZoneGate.Draws(1, 2));
@@ -165,13 +157,8 @@ public class ZoneGateTests
     [ExtractedDataFact]
     public void C2BIsTheChapterWhoseFogVolumesAreNeverCulled()
     {
-        // ⚠ The census finding, pinned on its own because an implementation that reads "deck
-        // chapter ⇒ fvol zone 2" passes every other assertion in this file. C2B ships nine fvol*
-        // volumes like C1 and C4 do, and authors them −1 — so its ambient cloud field renders
-        // below its deck, where an altitude-keyed rule would hide it. Measured at
-        // (-7325, 192, -3829): 123,989 green sprite px with the gate on against 0 with
-        // --no-zone-cull, because the ungated field is only revealed once the zone-2 deck stops
-        // occluding it.
+        // ⚠ Pinned separately: an implementation that reads "deck chapter => fvol zone 2" passes
+        // every other assertion here. See docs/formats/weather.md's C2B divergence note.
         var c2b = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, "C2B"));
         int volumes = 0;
         foreach (var n in c2b.Nodes)
@@ -199,11 +186,8 @@ public class ZoneGateTests
     [ExtractedDataFact]
     public void TheGateIsPerNodeAndNotInheritedDownASubtree()
     {
-        // C1's flaglite1/flaglite2 are zone_id −1 children of a zone-1 parent — the data's own
-        // counter-example to "stamp the subtree". SceneBuilder therefore reads each node's own
-        // zone_id and moves only that node's mesh instances, which is also what the original does
-        // (the gate is applied per node during the walk, with that node's id). A subtree-inherited gate
-        // would hide these two above the deck and pass every other test here.
+        // C1's flaglite1/flaglite2 are zone_id −1 children of a zone-1 parent, the data's own
+        // counter-example to "stamp the subtree"; a subtree-inherited gate would hide them.
         var c1 = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, "C1"));
         int found = 0;
         for (int i = 0; i < c1.Nodes.Count; i++)

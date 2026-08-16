@@ -1926,6 +1926,9 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
 12. **The throttle lever slews at 0.5/s with no idle floor** (2 s full-to-idle); the remake applies
     it instantly. Decoded, unimplemented — a feel/transient gap, not a steady-state one, and the
     one mechanism that could contaminate the first seconds of any throttle-step footage.
+13. **Spawn speed is a fixed 53.6 m/s (≈120 mph) for every airframe.** The original's is
+    plane-dependent; this is a remake placeholder (`FlightController.SpawnSpeed`), kept fixed for
+    now per user decision, not a decode.
 
 ## Confidence
 

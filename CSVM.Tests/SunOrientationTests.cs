@@ -7,18 +7,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The sun's bearing is the flown zone's authored <c>SUNLIGHT_ORIENTATION</c>.
-///
-/// <para>Two halves, tested apart because they fail apart. The <b>parse</b> can go wrong quietly —
-/// degrees left unconverted, or a zone's block missed — and would show only as a light pointing
-/// somewhere plausible. The <b>mapping</b> is the claim the whole item rests on: that gamez euler
-/// → Godot <c>Rotation</c> needs no conversion at all. That looks too good to be true and is the
-/// first thing a reader will doubt, so it is pinned against the original's own euler→direction
-/// helper rather than asserted in a comment.</para>
-///
-/// <para>What is deliberately NOT here: any assertion that a particular bearing looks right. The
-/// authored value IS the correct value — it is adopted with no TUNE — so a test with an
-/// opinion about the look would be a fudge factor wearing a test's clothes.</para>
+/// The sun's bearing is the flown zone's authored <c>SUNLIGHT_ORIENTATION</c>. Full decode:
+/// <c>docs/org/weather.md</c>. Tests the parse and the gamez-euler-to-Godot-Rotation mapping
+/// apart, since they fail apart, pinning the mapping against the original's own helper.
+/// Deliberately asserts no opinion about the bearing "looking right" — the authored value is
+/// adopted with no TUNE, so that would be a tuned expectation wearing a test's clothes.
 /// </summary>
 public class SunOrientationTests
 {
@@ -99,10 +92,8 @@ public class SunOrientationTests
     [Fact]
     public void AMissionWithNoWeatherKeepsTheLaunchersDefaultBearing()
     {
-        // The fixture authors ZONE1 only, so a zone2 request misses and lands on NoFog — the same
-        // record --viewer and the menu wear. That default is deliberately the launcher's
-        // hand-picked (-45, 150), not the binary's straight-down: with no mission there is no
-        // authored answer, and the angle's only job is to make the plane model read.
+        // A missing zone lands on the launcher's hand-picked (-45, 150), not the binary's
+        // straight-down; with no mission there is no authored answer.
         var weather = WeatherState.Load(TestData.Fixture("zrdr"));
         Assert.NotNull(weather);
         var absent = weather!.Zone("zone9");

@@ -3,25 +3,12 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>
-/// The original's Stunt Flying objective marker, rebuilt as a HUD Control
-/// over the flight view. It guides the player to the active Danger Zone:
-///  • on screen → the zone's text block floats at its projected position (name + live distance),
-///    a small reticle marking the point;
-///  • off screen / behind → the block clamps to the screen edge with an arrow pointing the
-///    shortest way toward it, plus the "N o'clock" relative bearing — matching
-///    OriginalScreenshots/C1 IA1 Cloudcoverage 1.png ("Danger Zone [Fly Through] - Train Tunnel
-///    Mid / 7 o'clock").
-/// Plus the run-status line (elapsed m:ss.t + zones done), the one-shot intro banner, an
-/// all-complete banner, and a brief zone-cleared flash. The displayed target follows
-/// StuntMission's auto-advance and the pilot's manual cycling (Tab / gamepad, in FlightController).
-///
-/// Follows the CompassTape/GaugeCluster pattern: a viewport-filling Control fed the plane pose
-/// each frame, projecting through the live camera at _Draw time (no cached projection, so the
-/// marker never lags the chase camera). Screen metrics scale by viewport height off the 1440p
-/// reference; colours + sizes are TUNE. The circular live-camera objective inset next to the
-/// original's marker is out of scope (backlog) — this draws the arrow + text only.
-/// </summary>
+/// <summary>The original's Stunt Flying objective marker, rebuilt as a HUD Control
+/// (docs/architecture.md): on screen, the zone's text block floats at its projected position with
+/// a reticle; off screen, it clamps to the edge with an arrow and clock-hour bearing. Plus the
+/// run-status line, intro banner, all-complete banner and zone-cleared flash. A viewport-filling
+/// Control fed the plane pose each frame, projecting through the live camera at <c>_Draw</c> time
+/// so the marker never lags the chase camera.</summary>
 public sealed partial class MarkerHud : Control
 {
     /// <summary>The splitscreen race this pilot is flying in, or null in a solo run.
@@ -91,11 +78,7 @@ public sealed partial class MarkerHud : Control
 
     public override void _Draw()
     {
-        // A draw can land before _Process has sized us to the viewport (and, in splitscreen,
-        // before a pane has been laid out): every derived metric would be 0 and Godot's font
-        // cache errors out on a zero size. Nothing to draw at zero height anyway.
-        // The marker scales like the rest of the HUD: window height against the 1440p reference,
-        // damped by this pane's share of it so a 4P quarter-pane marker stays readable (HudMetrics).
+        // A draw can land before _Process has sized us; Godot's font cache errors on zero size.
         float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
         if (s <= 0f)
             return;
@@ -170,16 +153,16 @@ public sealed partial class MarkerHud : Control
         }
     }
 
-    /// <summary>"Danger Zone [Fly Through] -" — the category/action prefix (the description goes on
-    /// the next line), degrading gracefully if a part is absent.</summary>
+    // "Danger Zone [Fly Through] -" — the category/action prefix (the description goes on
+    // the next line), degrading gracefully if a part is absent.
     private static string MarkerHead(StuntZone z) =>
         z.Category.Length > 0 && z.Help.Length > 0 ? $"{z.Category} [{z.Help}] -"
         : z.Help.Length > 0 ? $"[{z.Help}] -"
         : z.Category.Length > 0 ? $"{z.Category} -"
         : "";
 
-    /// <summary>Distance in the HUD's imperial units (feet under a mile, miles above — matching the
-    /// altimeter/speedometer; TUNE — the original's marker-distance unit is unverified).</summary>
+    // Distance in the HUD's imperial units (feet under a mile, miles above — matching the
+    // altimeter/speedometer; TUNE — the original's marker-distance unit is unverified).
     private static string FormatDistance(float meters)
     {
         float ft = meters * 3.28084f;
@@ -192,10 +175,10 @@ public sealed partial class MarkerHud : Control
         _flashText = z.Description.Length > 0 ? $"{z.Description} — CLEARED" : "DANGER ZONE CLEARED";
     }
 
-    /// <summary>The banner shown in this player's pane once they have cleared every zone. Solo: the
-    /// run is simply over (the results board is coming up in the same pane). In a race:
-    /// their placing + finish time, held while the rest of the field still flies — the shared
-    /// ranked board only appears when the last pilot is in.</summary>
+    // The banner shown in this player's pane once they have cleared every zone. Solo: the
+    // run is simply over (the results board is coming up in the same pane). In a race:
+    // their placing + finish time, held while the rest of the field still flies — the shared
+    // ranked board only appears when the last pilot is in.
     private string[] CompleteBanner()
     {
         if (Race?.Of(PlayerIndex) is not { } me)
@@ -213,8 +196,8 @@ public sealed partial class MarkerHud : Control
         return lines.ToArray();
     }
 
-    /// <summary>Relative bearing of the zone from the plane's heading in clock hours (12 = ahead,
-    /// 3 = right, 6 = behind, 9 = left) — the original's "N o'clock" suffix.</summary>
+    // Relative bearing of the zone from the plane's heading in clock hours (12 = ahead,
+    // 3 = right, 6 = behind, 9 = left) — the original's "N o'clock" suffix.
     private int ClockHour(StuntZone z)
     {
         var d = z.Position - PlanePos;
@@ -224,7 +207,7 @@ public sealed partial class MarkerHud : Control
         return h == 0 ? 12 : h;
     }
 
-    /// <summary>Screen-edge point along <paramref name="dir"/> from centre, inset by the margin.</summary>
+    // Screen-edge point along `dir` from centre, inset by the margin.
     private Vector2 EdgePoint(Vector2 center, Vector2 dir, float margin)
     {
         float hx = Size.X / 2f - margin, hy = Size.Y / 2f - margin;
@@ -250,9 +233,9 @@ public sealed partial class MarkerHud : Control
         DrawArc(p, r, 0f, Mathf.Tau, 20, HudBlue, 1.5f);
     }
 
-    /// <summary>Draws centred lines (each horizontally centred at <paramref name="anchor"/>.X),
-    /// with a 1 px drop shadow. Vertically the block is centred on <paramref name="anchor"/>.Y
-    /// unless <paramref name="topAnchored"/>, in which case anchor.Y is its top.</summary>
+    // Draws centred lines (each horizontally centred at `anchor`.X),
+    // with a 1 px drop shadow. Vertically the block is centred on `anchor`.Y
+    // unless `topAnchored`, in which case anchor.Y is its top.
     private void DrawLines(Font font, Vector2 anchor, string[] lines, int fontSize, Color color,
         bool topAnchored = false)
     {
@@ -269,8 +252,8 @@ public sealed partial class MarkerHud : Control
         }
     }
 
-    /// <summary>Like <see cref="DrawLines"/> (vertically centred) but keeps the whole block within
-    /// the screen margins — the off-screen edge marker never spills off a corner.</summary>
+    // Like DrawLines (vertically centred) but keeps the whole block within
+    // the screen margins — the off-screen edge marker never spills off a corner.
     private void DrawLinesClamped(Font font, Vector2 center, string[] lines, int fontSize, Color color)
     {
         float lineH = font.GetHeight(fontSize);

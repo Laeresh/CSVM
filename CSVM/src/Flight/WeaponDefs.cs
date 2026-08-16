@@ -73,7 +73,7 @@ public sealed class WeaponDef
     public float? Range;              // max effective / despawn range, m
     public float? RangeMinimum;       // minimum arming range (torpedo)
     public float? Gravity;            // projectile-gravity scale (0 throughout this install)
-    public float? CannonSpread;       // aim-assist acceptance cone half-angle, degrees — NOT a dispersion cone (BL-342)
+    public float? CannonSpread;       // aim-assist acceptance cone half-angle, degrees — NOT a dispersion cone
     public float? FiringHeat;         // heat per shot (base guns only); dead data, the original parses it and never reads it
     public float? TurnRate;           // guidance turn rate
 
@@ -126,23 +126,16 @@ public sealed class WeaponDef
     /// <c>stock_loadouts.json</c>; here, <c>IsGun</c> is just "has a caliber and fires hitscan".</summary>
     public bool IsGun => IsCannon || Caliber.HasValue;
 
-    /// <summary>Whether this rocket physically homes. There is no dedicated <c>GUIDED</c> flag in the
-    /// data — guidance is encoded in <see cref="TurnRate"/>: 13 of the 14 rockets carry the sentinel
-    /// 0.001 (fly straight = dumbfire, e.g. the HE "BOOM" rocket), and only the Seeker's 1.25 steers.
-    /// <see cref="LockOn"/> is present even on dumbfire rockets (it is the universal auto-aim / lead
-    /// convergence time, not a steering promise), so it is NOT the discriminator. The 0.01 threshold
-    /// is well above the 0.001 sentinel and far below the Seeker's 1.25. Homing is not yet modelled —
-    /// every rocket currently flies dumbfire — so this describes the data rather than driving flight.</summary>
+    /// <summary>Whether this rocket physically homes: no dedicated <c>GUIDED</c> flag, guidance is
+    /// encoded in <see cref="TurnRate"/>, and <see cref="LockOn"/> is not the discriminator
+    /// (docs/formats/weapons.md). Homing is not yet modelled; this describes the data rather than
+    /// driving flight.</summary>
     public bool IsGuided => TurnRate is > 0.01f;
 
     /// <summary>This weapon's <c>IMPACT</c> row for a struck surface id, or null when the row binds
-    /// nothing. Rows an id inherits from <c>default</c> were filled at parse time, so this is a
-    /// plain index — the original's fallback is in how the table was built, never in how it is
-    /// read (<c>FUN_005ad100</c> only gates on the row it is handed).
-    ///
-    /// <para>The bounds test is ours: <c>FUN_005ad100</c> indexes <c>weapon + 0x15c + id*100</c>
-    /// unchecked, and no id out of the registry's range reaches it, since every id comes from a
-    /// material's own <c>soil</c> field or from <c>SurfaceIdOf</c>.</para></summary>
+    /// nothing. Rows an id inherits from <c>default</c> are filled at parse time, so this is a plain
+    /// index (docs/org/weaponImpact.md). The bounds test is ours: the original's own lookup is
+    /// unchecked.</summary>
     public WeaponEffect? ImpactFor(int surfaceId) =>
         surfaceId >= 0 && (uint)surfaceId < (uint)Impact.Length ? Impact[surfaceId] : null;
 }
@@ -329,13 +322,10 @@ public sealed class WeaponDefs
         return e.IsEmpty ? null : e;
     }
 
-    // IMPACT is walked as raw name/value pairs rather than through ZrdrDict, so a row whose value
-    // is null (no effect on that surface, e.g. "enemy" on 28 of the 48) is skipped explicitly
-    // rather than read back as an empty binding. The name is matched against the surface registry
-    // and written at that id, which is what FUN_005ad630 does — a name the registry does not carry
-    // is parsed into nothing, exactly as the original discards it. Which names were NAMED is
-    // tracked separately from which parsed to a binding, because the two decide different things:
-    // see InheritDefaultRow.
+    // IMPACT is walked as raw name/value pairs, not through ZrdrDict, so a null row (no effect on
+    // that surface) is skipped rather than read back as empty. Which names were NAMED is tracked
+    // apart from which parsed to a binding — the two decide different things; see
+    // InheritDefaultRow (docs/org/weaponImpact.md).
     private static void ParseImpact(List<object?>? impact, WeaponEffect?[] into)
     {
         if (impact == null)
@@ -359,21 +349,10 @@ public sealed class WeaponDefs
         InheritDefaultRow(into, authored);
     }
 
-    /// <summary>Give every id the weapon names no block for the <c>default</c> row, verbatim —
-    /// <c>FUN_005ad630</c>'s per-id loop, whose miss arm copies row 0 over row <c>i</c> whole
-    /// (<c>0x005ae268</c>: <c>ECX = 0x19</c>, <c>REP MOVSD</c>, i.e. all 100 bytes of the row, both
-    /// its effect names and its sound list). The table is built by walking the registry, so "this
-    /// weapon said nothing about that surface" means "inherit", not "stay silent".
-    ///
-    /// <para><b>Naming an id and binding nothing on it is the opposite case, and stays empty</b> —
-    /// the original finds the block, parses it, and gets a row with no variants. That is the
-    /// difference between <c>dirt</c>(13), which no weapon names at all, and the 30 cal slug's
-    /// <c>player</c>(6), whose slots are all authored empty. Only the miss arm copies, which is why
-    /// presence is tracked apart from what parsed.</para>
-    ///
-    /// <para>The row is shared rather than cloned. The original copies bytes, but nothing mutates a
-    /// parsed row, so one instance per weapon reads the same and says what it means: this id
-    /// resolves the weapon's <c>default</c> row.</para></summary>
+    // Gives every id the weapon names no block for the `default` row, verbatim: the original's
+    // per-id loop copies row 0 whole on a miss (docs/org/weaponImpact.md). Naming an id and binding
+    // nothing on it is the opposite case and stays empty. The row is shared, not cloned — nothing
+    // mutates a parsed row, so one instance per weapon means this id resolves to `default`.
     private static void InheritDefaultRow(WeaponEffect?[] into, bool[] authored)
     {
         // Row 0 has nothing to inherit from: a weapon authoring no `default` row supplies no

@@ -66,21 +66,10 @@ public readonly struct AiLawParams
 /// velocity in, one <see cref="FlightInput"/> out: desired speed from the aim point's own speed
 /// plus range-weighted lead terms, an intercept solve for the direction, bank-to-turn with an
 /// elevator pull once the bank is nearly satisfied, and a per-axis scale/limit output stage.
-///
-/// <para>Engine-free and pure over its arguments (no clocks, no node reads, no randomness), so a
-/// fixed-dt run is deterministic. <see cref="AiPilot"/> is the only caller; the mode machine
-/// decides WHICH aim point and table each step uses, exactly as the original's two drivers do
-/// around this same function.</para>
-///
-/// <para>⚠ Two pieces of <c>FUN_0041b560</c> are deliberately not ported, both recorded in the
-/// decode page. The emergency arm's climb assist WRITES the aircraft's altitude and velocity
-/// directly; this seam returns stick only and is documented as pure over model state, so the
-/// assist would break that contract, and the arm's speed target and branch behaviour are ported
-/// without it. And the second intercept root, which the original prefers when it is better aligned
-/// with the nose, is unavailable from <see cref="AimAssist.TryIntercept"/>; that selection is
-/// reachable only while disengaged against a MOVING aim point (a still patrol node yields one
-/// positive root, and the engaged path suppresses the selection anyway), so it costs nothing on
-/// patrol and differs only while breaking off.</para></summary>
+/// Engine-free and pure over its arguments, so a fixed-dt run is deterministic. Two pieces of the
+/// original are deliberately unported: the emergency arm's altitude/velocity assist (it writes
+/// model state, which this seam must not) and the intercept solver's second-root preference
+/// (unexposed by <see cref="AimAssist.TryIntercept"/>, and unreachable on patrol).</summary>
 public static class AiControlLaw
 {
     /// <summary>The desired speed's floor, 50 mph.</summary>
@@ -149,12 +138,9 @@ public static class AiControlLaw
         : LeadNear + (targetSpeed - LeadSpeedLo) * LeadSlope;
 
     /// <summary>One step's stick and throttle for an aim point. <paramref name="emergency"/> is the
-    /// original's crash-recovery arm (a fixed slow speed target, the mirrored lateral term, and no
-    /// wings-level rule or skill factor); <paramref name="engaged"/> is the combat driver's
-    /// authority bonus; <paramref name="gunLead"/> is the original's <c>leadFlag</c>, which swaps
-    /// the fly-to solve for a firing solution (see <see cref="AiPilot.IsOnGunAxis"/>).
-    /// <paramref name="playerPosition"/>, when known, arms the far-field open-loop throttle;
-    /// leaving it null keeps the closed loop, which is the near-player behaviour.</summary>
+    /// crash-recovery arm; <paramref name="engaged"/> is the combat driver's authority bonus;
+    /// <paramref name="gunLead"/> swaps the fly-to solve for a firing solution. <paramref
+    /// name="playerPosition"/>, when known, arms the far-field open-loop throttle.</summary>
     public static FlightInput Steer(FlightModel model, Vector3 aimPoint, Vector3 aimVelocity,
         in AiLawParams p, float throttle, float dt, bool emergency = false, bool engaged = false,
         bool gunLead = false, float skillFactor = 1f, Vector3? playerPosition = null)
@@ -236,10 +222,8 @@ public static class AiControlLaw
                 yaw = -bx;
         }
 
-        // ⚠ This is the DEAD-ASTERN case, not the straight-ahead one: the renormalisation above
-        // puts at least one of |bx|/|by| at 0.707 whenever the aim point is ahead, so both being
-        // tiny forces bz < -0.996. "What I want is directly behind me, so stop steering and level
-        // the wings" — off the right-wing vector's own vertical component, saturating when inverted.
+        // ⚠ The DEAD-ASTERN case, not the straight-ahead one — reads backwards at a glance;
+        // AiControlLawTests exists to keep it honest.
         if (!emergency && absBx < p.CrossDeadband && Mathf.Abs(by) < p.LevelDeadband
             && Mathf.Abs(noseY) < NearVerticalNoseY)
         {
@@ -254,6 +238,9 @@ public static class AiControlLaw
             lever = p.SpeedCap;
         }
 
+        // ⚠ NEAR-BANG-BANG, not proportional: the shipped scale (3.5) against a limit of 1 means
+        // anything past ~0.29 of body-frame error saturates. Limits above 1 are the original's own
+        // range; FlightModel.Step clamps to ±1, so do not clamp here too.
         float scaleBonus = engaged ? EngagedScaleBonus : 0f;
         float limitBonus = engaged ? EngagedLimitBonus : 0f;
         roll = Limit(roll * (stats.AiInputScaleRoll + scaleBonus), stats.AiInputLimitRoll + limitBonus);
@@ -309,10 +296,8 @@ public static class AiControlLaw
     private static Vector3 AimDirection(FlightModel model, Vector3 pos, Vector3 aimPoint,
         Vector3 aimVelocity, Vector3 delta, float want, bool gunLead)
     {
-        // Fly-to solves at the desired speed against the aim point's own velocity; a pursuer on
-        // its victim's own axis solves the gun problem instead, at a fixed round speed against the
-        // RELATIVE velocity. Either way a geometry with no forward-time root falls back to the
-        // straight line.
+        // gunLead solves the gun problem at a fixed round speed against RELATIVE velocity
+        // (docs/org/aiControlLaw.md); a no-root geometry falls back to the straight line.
         var relative = gunLead ? aimVelocity - (model.VelocityDir * model.Speed) : aimVelocity;
         float speed = gunLead ? GunSolutionSpeed : want;
         return AimAssist.TryIntercept(pos, speed, aimPoint, relative, out var dir, out _)

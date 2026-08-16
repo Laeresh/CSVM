@@ -5,21 +5,11 @@ namespace CSVM.Flight;
 /// <summary>The non-player <see cref="FlightModel"/> driver: standing orders in, one
 /// <see cref="FlightInput"/> per sim step out. A <see cref="FlightController"/> with
 /// <see cref="FlightController.Pilot"/> set reads this instead of the keyboard/pad, so an AI
-/// aircraft flies the exact same flight model, collision sweep and damage path a player does —
-/// no new flight code, only a different input source.
-///
-/// <para><b>Orders are plain mutable fields, deliberately.</b> The original's mission script
-/// retargets and re-nets an AI at runtime (<c>SET_AI_NET</c>, <c>ADD_OTHER_TARGET</c>,
-/// <c>SET_AI_ATTACK_RADIUS</c>…), so nothing here is read-once at spawn: any owner may rewrite
-/// the orders between sim steps and the next <see cref="Next"/> flies them.</para>
-///
-/// <para>The control law is the original's, <see cref="AiControlLaw"/> (decoded as plan D31 in
-/// docs/org/aiControlLaw.md, ported as E41). This class is the DRIVER around it, standing in for
-/// the original's own two: each mode picks an aim point, that point's velocity and one of the four
-/// decoded parameter tables, and the law turns those into stick and throttle. The placeholder
-/// bank-to-turn law it replaced, and the altitude leash that law needed, are both gone — the leash
-/// existed because a sustained placeholder turn ratcheted altitude without bound, which the real
-/// law's own wings-level rule and elevator deadband handle instead.</para></summary>
+/// aircraft flies the exact same flight model, collision sweep and damage path a player does.
+/// Orders are plain mutable fields by design: the mission script retargets an AI at runtime
+/// (<c>SET_AI_NET</c>, <c>ADD_OTHER_TARGET</c>, …), so nothing here is read once at spawn.
+/// The steering law is the original's own,
+/// <see cref="AiControlLaw"/> (docs/org/aiControlLaw.md); this class only drives it.</summary>
 public sealed class AiPilot
 {
     /// <summary>Invented: how fast lay off walks the throttle toward the ease-off speed, per
@@ -34,21 +24,19 @@ public sealed class AiPilot
     /// (<c>SpawnPoint.HeadingDeg</c>): the nose (−Z) yawed about world up by this angle.</summary>
     public float TargetHeadingDeg;
 
-    /// <summary>The patrol net being flown, or null for bare heading/altitude orders. When set,
-    /// each <see cref="Next"/> re-derives the heading and altitude orders from the follower's
-    /// current target node, so a net assignment IS the standing order, and it stays mutable
-    /// like the rest (assigning a different follower is <c>SET_AI_NET</c>'s seam; null returns
-    /// to the last derived course). Branch choices draw from the follower's own seeded rng, so a
-    /// fixed-dt, fixed-seed run is still deterministic.</summary>
+    /// <summary>The patrol net being flown, or null for bare heading/altitude orders (assigning a
+    /// different follower is <c>SET_AI_NET</c>'s seam; null returns to the last derived course).
+    /// Each <see cref="Next"/> re-derives heading/altitude from the follower's current target node
+    /// when set; branch choices draw from its own seeded rng, so a fixed-dt run stays deterministic.
+    /// ⚠ Null (netless) is a configuration the original never reaches — it hunts in roll and does
+    /// not settle through <see cref="AiControlLaw"/>, including AvoidCrash (`BL-387`).</summary>
     public AiNetFollower? Patrol;
 
-    /// <summary>The forward-gun gunnery, or null for an unarmed pilot. When its target is
-    /// live and there is no <see cref="Machine"/>, each <see cref="Next"/> re-derives the
-    /// heading/altitude orders from the target's position — a plain pursuit through
-    /// <see cref="AiControlLaw"/>, taking precedence over <see cref="Patrol"/> — so the plane
-    /// turns onto its victim and the gunner's cones get geometry to pass. The host
-    /// <see cref="FlightController"/> drives the gunner's fire decision itself; this class only
-    /// steers. Mutable like every other order.</summary>
+    /// <summary>The forward-gun gunnery, or null for an unarmed pilot. When its target is live and
+    /// there is no <see cref="Machine"/>, each <see cref="Next"/> re-derives orders from the
+    /// target's position, a plain pursuit through <see cref="AiControlLaw"/> that takes precedence
+    /// over <see cref="Patrol"/>. The host <see cref="FlightController"/> decides fire; this only
+    /// steers.</summary>
     public AiGunner? Gunner;
 
     /// <summary>The nine-mode state machine, or null for the bare-orders pilot above.
@@ -62,11 +50,12 @@ public sealed class AiPilot
     /// <summary>Ordered altitude, metres (world Y).</summary>
     public float TargetAltitude = 400f;
 
-    /// <summary>The commanded throttle lever, 0–1. ⚠ Since E41 this is the lever's CURRENT state,
-    /// which <see cref="AiControlLaw"/> walks toward its own desired speed each step, not a
-    /// standing order the pilot holds — the original's lever (<c>obj+0x124</c>) works the same way.
-    /// Presetting it still seeds the walk, and <see cref="AiMode.LayOff"/> is the one mode that
-    /// overrides the law's answer (see <see cref="SteerLayOff"/>).</summary>
+    /// <summary>The commanded throttle lever, 0–1 — the lever's CURRENT state, walked toward
+    /// <see cref="AiControlLaw"/>'s own desired speed each step, not a standing order the pilot
+    /// holds (the original's lever, <c>obj+0x124</c>, works the same way). ⚠ Do not reintroduce an
+    /// altitude-leash throttle rule here: the real law's wings-level rule and elevator deadband
+    /// replaced that placeholder. Presetting still seeds the walk; <see cref="AiMode.LayOff"/> is
+    /// the one mode that overrides the law's answer (<see cref="FlyLayOff"/>).</summary>
     public float Throttle = 0.85f;
 
     /// <summary>The player's world position, when the owner knows it, or null. The law's far-field
@@ -102,8 +91,8 @@ public sealed class AiPilot
     /// <summary>Whether the LAST <see cref="Next"/> actually steered to <see cref="Patrol"/>'s
     /// node, as opposed to pursuing, evading or holding the bare orders. Reported rather than
     /// re-derived from the mode: the dispatch in <see cref="Next"/> is the only thing that
-    /// decides it, so an observer (F13's leashes) that asked the mode machine instead could
-    /// drift from it.</summary>
+    /// decides it, so an observer (the debug overlay's leashes) that asked the mode machine
+    /// instead could drift from it.</summary>
     public bool SteeringPatrol { get; private set; }
 
     /// <summary>Aims the standing orders at holding the given spawn pose: heading from the
@@ -125,15 +114,10 @@ public sealed class AiPilot
         Mathf.RadToDeg(Mathf.Atan2(-dir.X, -dir.Z));
 
     /// <summary>The decoded aspect test (<c>FUN_0041d9f0</c> at <c>0x0041dd49</c>): whether the
-    /// pursuer sits on its victim's own axis, within the pilot's <c>quick_draw_angle</c> (vehicle
-    /// <c>+0x960</c>, a cosine) of it. BOTH cones count — the original compares the magnitude of
-    /// the dot against the victim's backward axis, so a victim coming at us and a victim we are
-    /// sitting behind read alike, and each aims the law at the victim itself rather than at the
-    /// lead point ahead of it. Only the reversed arm this port omits ever tells the two apart.
-    ///
-    /// <para>The original also sets the flag outright for a victim that is not an aircraft;
-    /// every quarry reaching <see cref="FlyPursuit"/> is one, so that arm has nothing to
-    /// port.</para></summary>
+    /// pursuer sits on its victim's own axis, within the pilot's <c>quick_draw_angle</c> of it.
+    /// Both cones count, since the original compares the magnitude of the dot against the victim's
+    /// backward axis (docs/org/aiPilot.md); only the reversed arm this port omits ever tells the
+    /// two apart.</summary>
     public static bool IsOnGunAxis(Vector3 toQuarry, Vector3 quarryNose, float quickDrawAngleDeg)
     {
         if (toQuarry.LengthSquared() < 1f || quarryNose.LengthSquared() < 1e-6f)
@@ -142,15 +126,11 @@ public sealed class AiPilot
         return Mathf.Abs(cos) > Mathf.Cos(Mathf.DegToRad(quickDrawAngleDeg));
     }
 
-    /// <summary>Avoid crash's aim point. ⚠ INVENTED in one respect: the original climbs out at its
-    /// own position plus 1000 m of altitude and nothing else, which is why two aeroplanes that both
-    /// detect each other both pull straight up along converging tracks and merge anyway (measured,
-    /// docs/org/aiPilot.md). This adds a <see cref="ClimbOutBreakM"/> displacement to the RIGHT of
-    /// the aeroplane's own ground track, which is the aviation right-of-way convention and the
-    /// point of it: two aircraft meeting head-on that each break right diverge, where two picking a
-    /// side at random still merge half the time. The right is taken off the TRACK rather than the
-    /// airframe's right axis, so a rolled or inverted aeroplane breaks the same way as a level
-    /// one.</summary>
+    /// <summary>Avoid crash's aim point. ⚠ Invented: the original climbs out at its own position
+    /// plus 1000 m of altitude and nothing else. This adds a <see cref="ClimbOutBreakM"/>
+    /// displacement to the RIGHT of the aeroplane's own ground track, the aviation right-of-way
+    /// convention, measured to cut merges (docs/org/aiPilot.md). Off the track, not the airframe's
+    /// right axis, so a rolled or inverted aeroplane breaks the same way as a level one.</summary>
     public static Vector3 ClimbOutAim(Vector3 pos, Vector3 velocity)
     {
         var track = new Vector3(velocity.X, 0f, velocity.Z);
@@ -178,13 +158,11 @@ public sealed class AiPilot
             && quarryVelocity.Dot(u) < -MergeClosureFraction * quarrySpeed;
     }
 
-    /// <summary>The merge's vertical aim bias per unit of the line of sight's HORIZONTAL
-    /// magnitude, metres: a dive below <see cref="MergeDiveSpeedMps"/> (50 mph), a climb above
-    /// <see cref="MergeClimbSpeedMps"/> (90 mph), linear between. ⚠ The line of sight is a unit
-    /// vector where the original applies this, so the bias it can produce is at most
-    /// <see cref="MergeVerticalBiasM"/>, 0.3 m. That is the decode and not a port artifact: the
-    /// original's merge is a speed collapse, and this term does effectively nothing. It is ported
-    /// because a decoded term left out invites re-deriving it later as a bug.</summary>
+    /// <summary>The merge's vertical aim bias per unit of the line of sight's horizontal
+    /// magnitude, metres: a dive below <see cref="MergeDiveSpeedMps"/>, a climb above
+    /// <see cref="MergeClimbSpeedMps"/>, linear between. ⚠ Worth at most <see
+    /// cref="MergeVerticalBiasM"/>, 0.3 m (docs/org/aiPilot.md); ported anyway so a decoded term
+    /// left out does not get re-derived later as a bug.</summary>
     public static float MergeVerticalBias(float ownSpeed) => ownSpeed switch
     {
         <= MergeDiveSpeedMps => -MergeVerticalBiasM,
@@ -201,7 +179,7 @@ public sealed class AiPilot
         SteeringPatrol = false;   // SteerPatrol sets it when it actually flies the net
 
         // The mode machine, when present, decides which input source flies this step;
-        // without one the pre-D11 priority stands (gunner target, then patrol, then orders).
+        // without one the bare priority stands (gunner target, then patrol, then orders).
         if (Machine is { } machine)
         {
             var mode = machine.Update(model.Position, model.VelocityDir * model.Speed,
@@ -224,10 +202,8 @@ public sealed class AiPilot
                     return Fly(model, dt, OrderAim(model), Vector3.Zero, AiLawParams.Cruise);
 
                 case AiMode.AvoidCrash:
-                    // The original's own avoid-crash aim point is straight up from the aircraft,
-                    // flown on its own table with the emergency arm; ClimbOutAim adds the invented
-                    // break to the right. The machine's climb-out altitude stays the ORDER so its
-                    // release test and callers still read it.
+                    // The machine's climb-out altitude stays the order so its release test still
+                    // reads it; ClimbOutAim only adds the invented break to the right.
                     var climbOut = ClimbOutAim(model.Position, model.VelocityDir * model.Speed);
                     TargetHeadingDeg = HeadingDegOf(climbOut - model.Position);
                     TargetAltitude = machine.ClimbOutAltitude;
@@ -248,9 +224,9 @@ public sealed class AiPilot
         return quarry != null ? FlyPursuit(model, dt, quarry) : FlyPatrol(model, dt);
     }
 
-    /// <summary>Runs the original's law for this step's aim point and keeps the lever it walked.
-    /// The skill factor is the machine's <c>sixth_sense_factor</c>, which the decode shows
-    /// multiplies all three channels every step; a pilot with no machine gets a neutral 1.</summary>
+    // Runs the original's law for this step's aim point and keeps the lever it walked.
+    // The skill factor is the machine's `sixth_sense_factor`, which the decode shows
+    // multiplies all three channels every step; a pilot with no machine gets a neutral 1.
     private FlightInput Fly(FlightModel model, float dt, Vector3 aimPoint, Vector3 aimVelocity,
         in AiLawParams p, bool emergency = false, bool engaged = false, bool gunLead = false)
     {
@@ -260,16 +236,10 @@ public sealed class AiPilot
         return input;
     }
 
-    /// <summary>Pursuit: the aim point is the decoded lead offset ahead of the victim along the
-    /// victim's own facing, flown on the engaged table with its authority bonus. Sitting on the
-    /// victim's own axis (<see cref="IsOnGunAxis"/>) aims at the victim itself instead and lets
-    /// the law solve the firing problem rather than a fly-to.
-    ///
-    /// <para>On top of that, a merge (<see cref="IsMerging"/>) replaces the aim VELOCITY the law
-    /// is handed: the victim's own velocity gives way to a flat <see cref="MergeSpeedMps"/>
-    /// (70 mph) along the line of sight, which collapses the law's speed demand into the pass —
-    /// the law then walks the lever down against its own ±26.82 m/s clamp. This is the original's
-    /// entire answer to two aircraft closing nose to nose; it does not break off.</para></summary>
+    // Pursuit: aim at the decoded lead offset ahead of the victim's facing, flown on the engaged
+    // table; on the victim's own axis (IsOnGunAxis) aim at it directly and let the law solve the
+    // firing problem. A merge (IsMerging) replaces the aim velocity with a flat MergeSpeedMps
+    // along the line of sight (docs/org/aiPilot.md) — the original's whole answer to a head-on.
     private FlightInput FlyPursuit(FlightModel model, float dt, FlightController quarry)
     {
         var toQuarry = quarry.WorldPosition - model.Position;
@@ -293,14 +263,10 @@ public sealed class AiPilot
         return Fly(model, dt, aim, aimVelocity, AiLawParams.Engaged, engaged: true, gunLead: onAxis);
     }
 
-    /// <summary>Lay off (the rubber-band assist): let the pursuer catch up. Steers the course
-    /// captured at mode entry on the cruise table, staying ahead of the pursuer rather than
-    /// turning back into a head-on, and then OVERRIDES the law's lever with D15's own walk toward
-    /// <see cref="AiModeMachine.SixthSenseFactor"/> × the pursuer's speed.
-    /// ⚠ That override is this engine's assist, not the original's lay-off: the decode has the
-    /// break-off arm flying the same cruise table with a 0.8 lever floor and no speed match, and
-    /// reading the factor as a pursuer-speed match is D15's invention. It is kept because D15 is a
-    /// landed, playtested feature with its own suite; revisit it at F52, not here.</summary>
+    // Lay off (the rubber-band assist): steers the course captured at mode entry on the cruise
+    // table, then OVERRIDES the law's lever with a walk toward SixthSenseFactor × the pursuer's
+    // speed. ⚠ That override is a remake-only assist, not the original's lay-off, which flies the
+    // same table with a flat 0.8 lever floor and no speed match — keep it, landed and playtested.
     private FlightInput FlyLayOff(FlightModel model, float dt, AiModeMachine machine,
         FlightController pursuer)
     {
@@ -316,9 +282,9 @@ public sealed class AiPilot
         return input;
     }
 
-    /// <summary>Patrol: a net node is already the point-with-no-velocity shape the law wants, so it
-    /// is flown directly; without a net the standing heading/altitude orders are projected into
-    /// one. Both on the cruise table, which is what the original's patrol arm uses.</summary>
+    // Patrol: a net node is already the point-with-no-velocity shape the law wants, so it
+    // is flown directly; without a net the standing heading/altitude orders are projected into
+    // one. Both on the cruise table, which is what the original's patrol arm uses.
     private FlightInput FlyPatrol(FlightModel model, float dt)
     {
         if (Patrol is not { } patrol)
@@ -333,8 +299,8 @@ public sealed class AiPilot
         return Fly(model, dt, patrol.CurrentTarget, Vector3.Zero, AiLawParams.Cruise);
     }
 
-    /// <summary>The aim point a bare heading/altitude order becomes (see
-    /// <see cref="OrderAimRangeM"/> for why the distance is a port artifact).</summary>
+    // The aim point a bare heading/altitude order becomes (see
+    // OrderAimRangeM for why the distance is a port artifact).
     private Vector3 OrderAim(FlightModel model)
     {
         var dir = new Basis(Vector3.Up, Mathf.DegToRad(TargetHeadingDeg)) * Vector3.Forward;

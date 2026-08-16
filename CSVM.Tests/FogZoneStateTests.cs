@@ -120,13 +120,10 @@ public class FogZoneStateTests
         Assert.Equal(2, trigger.Applications);
     }
 
-    // The ⚠ trap restated as a layering pin: the state machine already keeps state 3 from
-    // arming outside an armed fog_zone chapter (CameraWeatherState only tests volumes when
-    // fogZoneArmed), so no shipped non-C5 mission can ever hand the trigger a literal 3. This
-    // test bypasses that gate on purpose — feeding the trigger state 3 directly against a
-    // fog_zone-0 chapter's weather (C1, no ZONE3 at all) — to show the SECOND layer holds too:
-    // ZoneForState's file fallback lands state 3 back on the chapter's first zone, never on a
-    // zone3 that does not exist, so even a hypothetical bypass could not paint ZONE3's fog here.
+    // Bypasses the arming gate on purpose, feeding state 3 straight to a fog_zone-0 chapter's
+    // weather (C1, no ZONE3 at all), to show ZoneForState's file fallback holds as a second
+    // layer: it lands state 3 back on the chapter's first zone, never on a zone3 that does not
+    // exist.
     [ExtractedDataFact]
     public void AFogZoneZeroChapterNeverAppliesZone3EvenIfStateThreeWereRequested()
     {
@@ -168,10 +165,8 @@ public class FogZoneStateTests
     [Fact]
     public void AStateChangeThatResolvesToTheLiveZoneWritesNothing()
     {
-        // The one-zone fixture climbing through its band: state 1 → 2 is a real edge, but both
-        // states resolve to zone1, so the globals must not be touched — the non-deck chapters'
-        // "costs nothing, changes nothing" guarantee, asserted on the rule rather than inferred
-        // from a golden. The fallback is still REPORTED, once, so a silent no-op is explained.
+        // State 1 -> 2 is a real edge, but both resolve to zone1, so globals must stay untouched
+        // even though the fallback is still reported once.
         var weather = OneZoneFixture();
         var trigger = new WeatherRig.FogStateTrigger(stateDriven: true, buildZone: "zone1");
 
@@ -206,10 +201,8 @@ public class FogZoneStateTests
     [ExtractedDataFact]
     public void TheDeckChaptersSwitchBothFogAndWorldLightWhileTheOtherChaptersCannot()
     {
-        // The SUNLIGHT_* survey's finding, pinned: the pair is NOT uniformly identical across the
-        // deck chapters (6 of 24 deck-chapter missions differ), so WorldLight rides the state too
-        // — but C1/IA1, the mission every golden and every A/B pose flies, is one of the identical
-        // ones, which is why the below-deck difference is fog-only in practice.
+        // C1/IA1 is one of the 18 of 24 deck-chapter missions where fog and world light agree,
+        // so the below-deck difference is fog-only in practice for the mission every golden flies.
         var ia1 = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "IA1"));
         Assert.NotNull(ia1);
         Assert.Equal(

@@ -50,7 +50,7 @@ public class WeaponBlastTests
         Assert.False(ProjectilePool.FuseDotAllows(0.3f, Vector3.Forward, Vector3.Back));
     }
 
-    // D31 (BL-370): the one-shot pool's distance term — linear between a sound's own RANGE,
+    // D31: the one-shot pool's distance term — linear between a sound's own RANGE,
     // full inside the near edge, silent past the far edge, 1 (skip the term) with no nearest
     // human to measure against.
     [Fact]

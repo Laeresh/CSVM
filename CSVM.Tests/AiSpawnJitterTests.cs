@@ -7,20 +7,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The original's per-spawn dynamics jitter: the block at the tail of
-/// <c>FUN_00476250</c> that multiplies eleven runtime slots of a non-player aircraft by an
-/// independent uniform 1 ± 5 %, ported as <see cref="PlaneStats.WithAiSpawnJitter"/>.
-///
-/// <para><b>What needs pinning here.</b> Which slots move and which do not (the decode names seven
-/// this engine models and four it does not), that the shared per-airframe cache the session hands
-/// out is not itself perturbed, that the draws are independent per slot rather than one factor
-/// applied across the board, and that the whole-vehicle damage pair is scaled while the per-part
-/// pools are left alone — the one place the port's shape differs from a literal reading, since a
-/// player airframe authors no whole pair and this engine derives it from the parts.</para>
-///
-/// <para>The seeding policy (a pure function of the master seed and the aircraft's spawn ordinal)
-/// lives at the spawn site, not here; its determinism is <see cref="Rng"/>'s own, pinned in
-/// <c>RngTests</c>, and its end-to-end half is the engine's <c>ai-spawn-jitter</c> suite.</para>
+/// The original's per-spawn dynamics jitter, ported as <see cref="PlaneStats.WithAiSpawnJitter"/>.
+/// Full decode: <c>docs/org/flightModel.md</c> "The per-spawn jitter". Pins which slots move,
+/// that the shared per-airframe cache is not itself perturbed, that draws are independent per
+/// slot, and that the whole-vehicle damage pair is scaled while per-part pools are not.
+/// The seeding policy lives at the spawn site; its determinism is pinned in <c>RngTests</c>.
 /// </summary>
 public class AiSpawnJitterTests
 {
@@ -184,8 +175,8 @@ public class AiSpawnJitterTests
         InBand(stock.RollTorque, ai.RollTorque, "roll_torque");
     }
 
-    /// <summary>A stats object with nothing loaded: enough to watch the arithmetic on, and the two
-    /// destroyable parts give the hull pair a sum to be derived from.</summary>
+    // A stats object with nothing loaded: enough to watch the arithmetic on, and the two
+    // destroyable parts give the hull pair a sum to be derived from.
     private static PlaneStats Authored()
     {
         var stats = new PlaneStats

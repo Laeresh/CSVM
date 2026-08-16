@@ -7,40 +7,18 @@ using Godot;
 
 namespace CSVM.Session;
 
-/// <summary>
-/// Runs a mission's zeppelins (M4 F17 motion + F18 damage, behind <c>--zeppelins</c>): each
-/// <see cref="ZeppelinDef"/> whose world node and net resolve gets a
-/// <see cref="ZeppelinMotion"/> on B5's <see cref="AiNetFollower"/>, is placed at its authored
-/// position/yaw/pitch, and the NODE is flown along the net under the record's limits — an
-/// anim/world node moved kinematically, not a FlightController (zeppelins have no flight
-/// model). Every place/skip/hold and every node capture prints a <c>zep:</c> line, which is
-/// the flag's observability; <c>--debug-ainets=&lt;net&gt;</c> draws the route it flies.
-///
-/// <para><b>Damage (F18, wired by <see cref="WireDamage"/>):</b> per-part scalar pools in the
-/// world's <see cref="DestructibleRegistry"/> — gasbags and <c>cannon_health</c> cannons seeded
-/// from the mission record where authored (the record beats a def pool via
-/// <c>Instance.Reseed</c>), everything else keeping its compiled def's own <c>HEALTH</c>
-/// (engines 30–40, turrets 10, cannons 60 in this install). A healthy zone with neither an
-/// authored hp nor a destructible def is NOT damageable and says so in a <c>zep:</c> line —
-/// never an invented default. The per-zeppelin <see cref="ZeppelinDamage"/> aggregator owns the
-/// kill (<c>survivors &lt; num_healthy_required</c>, the decoded polarity), engine deaths drive
-/// <see cref="ZeppelinMotion.AliveEngines"/> (F17's sqrt curve) and, once the last one is gone,
-/// <see cref="ZeppelinEnginesDisabled"/> — Instant Action's own win on <c>zeppelin_run</c>, which
-/// the hull kill is only the second route to. The kill plays the
-/// authored hull death — the def anchored on the zeppelin node whose ACTIVATION_PREREQUISITE
-/// counts the gasbag finish anims (<c>all_pzep_gasbags</c>, which itself calls
-/// <c>killpzep</c>). <see cref="GateWeaponDamage"/> is the <c>DAMAGES_ZEPPELIN</c> routing
-/// gate the projectile pool consults: gasbag zones only.</para>
-///
-/// <para>⚠ Deliberately unwired, each named at its site: a <c>deactivated</c> record is placed
-/// but HELD (mission script would activate it; out of M4's scope); stop nodes are NOT
-/// implemented — the per-node tags ride along raw because their encoding is still undecoded
-/// (F17's open item); a <c>cannon_health</c> record's gasbag binding (a hatch hit taking out
-/// its section) is parsed and kept, but no damage transfer is decoded, so none is invented.
-/// Effect templates snap to absolute world points and do not track a moving host, so a hit
-/// effect on a flying zeppelin stays where the hit happened — the death choreography plays
-/// where the hull died for the same reason; nothing here fights it.</para>
-/// </summary>
+/// <summary>Runs a mission's zeppelins (M4 F17 motion + F18 damage, behind <c>--zeppelins</c>):
+/// each <see cref="ZeppelinDef"/> whose world node and net resolve gets a
+/// <see cref="ZeppelinMotion"/> on B5's <see cref="AiNetFollower"/>, placed at its authored pose,
+/// and the node is flown kinematically — no <c>FlightController</c>. Every place/skip/hold and
+/// node capture prints a <c>zep:</c> line.
+/// <see cref="WireDamage"/> builds F18's per-part scalar pools from the record where authored,
+/// else the compiled def; a zone with neither is not damageable and says so.
+/// <see cref="ZeppelinDamage"/> owns the kill and drives <see cref="ZeppelinEnginesDisabled"/>,
+/// Instant Action's own <c>zeppelin_run</c> win; <see cref="GateWeaponDamage"/> gates
+/// <c>DAMAGES_ZEPPELIN</c> on gasbag zones only.
+/// ⚠ Deliberately unwired knowledge is named at its own site — see this module's entry in
+/// docs/architecture.md.</summary>
 public sealed partial class ZeppelinRuntime : Node
 {
     private readonly List<LiveZeppelin> _live = new();
@@ -48,13 +26,10 @@ public sealed partial class ZeppelinRuntime : Node
     private float _sinceLog;
     private int _gateLogged;
 
-    /// <param name="trailerTarget">Where an anchored net's trailer target is (`BL-377`), per net;
-    /// null flies every route at its authored coordinates. ⚠ Exactly two of the 222 nets are both
-    /// zeppelin-flown and anchored, and neither is self-referential: C1C's <c>SwanZep1</c>
-    /// (<c>blackswanzep</c>) rides <c>workersvoyagezep</c> and C2B's <c>Gemini2</c>
-    /// (<c>geminizep</c>) rides <c>piratezep</c>, one zeppelin escorting another. Both records are
-    /// <c>deactivated</c>, so this is unobservable until a script layer wakes them; it is wired
-    /// because it is the decoded behaviour, not because anything flies it today.</param>
+    /// <param name="trailerTarget">Where an anchored net's trailer target is, per
+    /// net; null flies every route at its authored coordinates.
+    /// ⚠ Wired because it is the decoded behaviour; unobservable in this install's shipped data —
+    /// see this module's entry in docs/architecture.md.</param>
     public ZeppelinRuntime(IReadOnlyList<ZeppelinDef> defs, Func<string, Node3D?> resolveNode,
         IReadOnlyList<AiNet> chapterNets, Func<AiNet, Func<Vector3?>?>? trailerTarget = null)
     {
@@ -97,17 +72,11 @@ public sealed partial class ZeppelinRuntime : Node
     /// generator runtime disables the dead host's generator off this (decoded rule).</summary>
     public event Action<string>? ZeppelinKilled;
 
-    /// <summary>Raised once when a zeppelin's last live engine dies. This is Instant Action's own
-    /// win signal on <c>zeppelin_run</c> (<c>FUN_0045b9d0</c> at <c>0x0045be0a</c> tests the live
-    /// engine vector for empty BEFORE it tests the hull's death byte), which is why the mode's
-    /// briefing says "Destroy the zeppelin's engines to win!" and its target panel reads "Disable
-    /// Engines". The original has no separate flag for it: <c>FUN_004bf150</c> erases each dead
-    /// nacelle from the vector the speed curve already reads, so an empty vector IS the signal.
-    /// Here the same recount raises this, so nothing polls a second list.
-    ///
-    /// <para>A record authoring NO engines fires this on the first step, matching the original's
-    /// empty-from-load vector. That is unobservable in the shipped data (all 58 records author 12
-    /// or 14) but it is the decoded behaviour, not an accident.</para></summary>
+    /// <summary>Raised once when a zeppelin's last live engine dies — Instant Action's own win
+    /// signal on <c>zeppelin_run</c>, matching the original's empty-engine-vector test
+    /// (<c>FUN_0045b9d0</c>; addresses in docs/formats/instant-action.md's "two winning paths").
+    /// ⚠ A record authoring no engines fires this on the first step, matching the original;
+    /// unobservable in this install (all 58 records author 12 or 14).</summary>
     public event Action<string>? ZeppelinEnginesDisabled;
 
     /// <summary>Zeppelins placed on a resolved net (a held <c>deactivated</c> one counts — it
@@ -121,16 +90,11 @@ public sealed partial class ZeppelinRuntime : Node
     /// <summary>Whether this zeppelin's kill has fired (false for an unknown node).</summary>
     public bool IsDead(string node) => Find(node)?.Dead ?? false;
 
-    /// <summary>Instant Action's builder holds a zeppelin it has switched off
-    /// (<c>FUN_0045a390</c>'s tail): the record stays placed at its
-    /// authored pose, but its motion, broadside and damage poll stop from here on. That is the
-    /// CSVM stand-in for the builder's own <c>FUN_0045a2a0</c>, which tears down the vehicle/AI
-    /// objects under the deactivated node — CSVM has no equivalent object graph to delete, and a
-    /// merely hidden zeppelin would keep flying its net and firing invisible broadsides.
-    /// Switching the NODE off is the caller's own act (the decoded <c>gwNodeSetActive</c>),
-    /// because the builder's three <c>*_zeppelin</c> names need not be zeppelin records at all.
-    /// Returns whether the name is a zeppelin of this mission; one-way, like the original's
-    /// (nothing re-activates a held zeppelin).</summary>
+    /// <summary>Instant Action's builder holds a zeppelin it has switched off (F12): the record
+    /// stays placed, but motion/broadside/damage poll stop here. CSVM's stand-in for the
+    /// original's object-graph teardown, which has no equivalent here — see this module's entry
+    /// in docs/architecture.md. Switching the node off is the caller's own act.
+    /// Returns whether the name is a zeppelin of this mission; one-way, like the original.</summary>
     public bool Hold(string node)
     {
         if (Find(node) is not { } zep)
@@ -146,24 +110,11 @@ public sealed partial class ZeppelinRuntime : Node
         Find(node) is { Damage: { } damage } zep ? damage.Survivors(zep.ZoneAlive) : -1;
 
     /// <summary>Appends every live zeppelin's damage zones (gasbags, engines, cannons) to
-    /// <paramref name="into"/>, one candidate per part, for the player-target pool.
-    /// Each part rides its hull, so it carries the zeppelin's own
-    /// velocity (<c>Forward * Speed</c>) rather than zero; a destroyed zone is offered but not live,
-    /// and a part whose anchor has left the tree is skipped rather than read (its global transform
-    /// is meaningless there, the same rule <see cref="AimCandidateSet.AddStructures"/> follows).
-    ///
-    /// <para>A plain list, deliberately NOT an <see cref="AimCandidateSet"/>'s <c>Structures</c>:
-    /// <see cref="TargetPool"/> never reads that list, so the world's destructible registry cannot
-    /// reach the player's cycles even if a future caller feeds a shared scan. This is the only
-    /// channel by which a structure becomes selectable.</para>
-    ///
-    /// <para>⚠ <b>This is a deliberate divergence from the original, not a port of it.</b> The
-    /// decode found NO sub-part enumeration anywhere in the targeting path
-    /// (<c>docs/org/targeting.md</c> "The class model"): a gasbag is selectable there only because
-    /// the mission authored it as its own <c>MStruct</c> carrying <c>otherTarget</c> /
-    /// <c>objectiveTarget</c>. CSVM has no mission flag data to read, so it enumerates the parts it
-    /// already models as damageable instead. Decision 8 asked for this; do not "correct" it back by
-    /// citing the decode.</para></summary>
+    /// <paramref name="into"/>, one candidate per part, for the player-target pool. Each part rides
+    /// its hull, so it carries the zeppelin's own velocity rather than zero. A plain list and NOT
+    /// <see cref="AimCandidateSet"/>'s <c>Structures</c>: this is the only channel by which a
+    /// structure becomes selectable. ⚠ A deliberate divergence, not a port. The decode found no
+    /// sub-part enumeration anywhere; do not "correct" it back by citing the decode.</summary>
     public void CollectTargetParts(List<AimCandidate> into, int team = AimAssist.WorldTeam)
     {
         foreach (var zep in _live)
@@ -489,12 +440,9 @@ public sealed partial class ZeppelinRuntime : Node
                      $"max speed now {zep.Motion.EffectiveMaxSpeed:0.#} m/s");
         }
 
-        // The engines gone, once: Instant Action's own win on zeppelin_run (see the event). The
-        // denominator here is the RECORD's engine count, not ZeppelinMotion.TotalEngines, which
-        // floors at 1 so a record with no engines still moves — that floor must not suppress the
-        // decoded empty-vector win.
-        // Gated on the hull, because the original's compaction only runs while alive: a death
-        // sequence that takes the nacelles with it must not raise this after the fact.
+        // ⚠ Gated on the hull, and on the record's own engine count, not
+        // ZeppelinMotion.TotalEngines (floors at 1). A death sequence that empties the nacelles
+        // must not raise this after the fact — see docs/architecture.md.
         if (!zep.Dead && !zep.EnginesDisabled && engines == 0)
         {
             zep.EnginesDisabled = true;
@@ -549,6 +497,8 @@ public sealed partial class ZeppelinRuntime : Node
     // The authored hull death: the def anchored on the zeppelin node whose activation
     // prerequisite counts anims (all_pzep_gasbags — pops the remaining bags and calls
     // killpzep). Data-selected, never a hardcoded name; a zeppelin shipping none logs so.
+    // ⚠ Effect templates snap to absolute world points and never track a moving host — this
+    // plays where the hull died at that instant, not where it drifts to afterward.
     private void PlayHullDeath(LiveZeppelin zep)
     {
         if (_runtime == null)

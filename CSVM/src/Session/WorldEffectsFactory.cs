@@ -25,28 +25,16 @@ public sealed class WorldEffectsFactory
     // fire, so it completes), then tears its puffers down.
     private const float EffectRuntimeTtl = 32f;
 
-    // How many copies of each effect template the stage holds, one per pool slot, so overlapping
-    // calls to one effect each keep their own (with a single copy, the one template would be
-    // relocated and the first blast's trails would jump to the second's site). A call takes the
-    // next slot and the cursor wraps, so this is the concurrency the pool covers before two calls
-    // share a copy again.
-    // ⚠ INVENTED, not decoded — the original copies its templates per call and has no such
-    // number. Which is exactly why the sizes live in `CSVM/data/effect_pools.json` (EffectPools)
-    // rather than in a const here: per ROOT, scaled by the session's player count, editable
-    // without a rebuild. TUNE values; the runtime counts (and names once)
-    // every call that wraps onto a live slot — AnimRuntime.PoolRecycles is what to size against.
+    // ⚠ TUNE, not decoded — the original copies templates per call and has no such number.
+    // Sizes live in `CSVM/data/effect_pools.json` (EffectPools), not here: per root, scaled by
+    // player count. AnimRuntime.PoolRecycles counts wraps onto a live slot.
 
-    // The player crash-anchor set: meshless nodes named exactly the crash def's targets (its
-    // anim_root 'player' plus healthy/destroyed/pieces). Built into the lab stage so a played crash
-    // def anchors to this 'player' and resolves 'healthy'/'destroyed' HERE — locally, in front of
-    // the camera — rather than falling through to one of the world's 217 generic 'healthy' nodes.
-    // The effects (relocated templates) attach to these; the plane/wreck geometry does not.
-    // ⚠ The four airframe parts are here because the lab stands in for the PLANE: the damage shims
-    // (EffectCatalogue.PlaneDamageEffectAnims) are authored NAME=`nose`/`tail`/`leftwing`/`rightwing`,
-    // which the real rig resolves on the bound controller's model (all 22 plane models carry them).
-    // Without them the lab's closure resolves `nose` nowhere and --anim-lab fails to start on every
-    // chapter whose world gamez has no node of that name — C1/C1B/C1C/C2/C2B. The other three only
-    // ever "resolved" on C3-C5 by matching a stray scenery node, which is not the plane either.
+    // Meshless nodes named for the crash def's local anchors ('player' plus healthy/destroyed/
+    // pieces), so a played crash def resolves locally in front of the camera instead of one of
+    // the world's generic 'healthy' nodes.
+    // ⚠ The four airframe parts are here because the lab stands in for the plane: the damage
+    // shims (EffectCatalogue.PlaneDamageEffectAnims) are authored against `nose`/`tail`/
+    // `leftwing`/`rightwing`, which every real plane model carries but no world gamez does.
     private static readonly string[] CrashAnchorNodes =
     {
         "healthy", "destroyed", "dontmove", "markers", "piece1", "piece2", "piece3", "piece4",
@@ -56,7 +44,7 @@ public sealed class WorldEffectsFactory
     private readonly SessionSpec _spec;
     private readonly Node3D _worldRoot;
     private readonly Func<Vector3> _playerPosition;
-    // Every human's position (`BL-365`) — the world-effects runtime's own PLAYER_RANGE
+    // Every human's position — the world-effects runtime's own PLAYER_RANGE
     // gates (the ordnance washes' `If PlayerRange`) answer to the nearest of these, not the
     // single _playerPosition above. Null (a caller with no seam, e.g. AiCrashDefs' test rig)
     // leaves the runtime on _playerPosition alone, same as before C21.
@@ -81,21 +69,17 @@ public sealed class WorldEffectsFactory
     }
 
     /// <summary>The session's <see cref="UI.ScreenFlash"/> sink, handed to every runtime this
-    /// factory builds — an <c>FBFX_COLOR_FROM_TO</c> wash is screen-space and session-owned, and
-    /// the runtimes built here are the ones that play the defs carrying one (<c>he_ground_effect</c>,
-    /// <c>ap_ground_effect</c>, <c>flak_effect</c>). Set once, before the first build; null leaves
-    /// the event undrawn. The signature is <see cref="Mech3.AnimRuntime.ScreenFlash"/>'s: the ramp,
-    /// plus the burst's world point and its def's own gate radius squared, which is what routes the
-    /// wash to the panes it reached.</summary>
+    /// factory builds — the three defs carrying an <c>FBFX_COLOR_FROM_TO</c> wash play here. Set
+    /// once, before the first build; null leaves the event undrawn. Signature matches
+    /// <see cref="Mech3.AnimRuntime.ScreenFlash"/>: the ramp, the burst's world point, and the
+    /// def's own gate-radius squared.</summary>
     public Action<Color, Color, float, Vector3, float>? ScreenFlash { get; set; }
 
-    /// <summary>The world-effects template stage — the subtree
-    /// <see cref="EffectCatalogue.WorldStageRoots"/>' roots are built into, one
-    /// <c>pool&lt;N&gt;</c> container per slot. Null until
-    /// <see cref="EnsureWorldEffects"/> has built the runtime. Exposed so the <c>--effects-test</c>
-    /// census can report the MESH half: a puffer count says nothing about whether the
-    /// template's meshes are visible, and they are half of what an effect looks like. Observation
-    /// only — the stage is owned here and hangs under the world root.</summary>
+    /// <summary>The world-effects template stage — <see cref="EffectCatalogue.WorldStageRoots"/>'
+    /// roots, one <c>pool&lt;N&gt;</c> container per slot. Null until
+    /// <see cref="EnsureWorldEffects"/> has built the runtime. Exposed so <c>--effects-test</c> can
+    /// report the mesh half: a puffer count says nothing about whether a template's meshes are
+    /// visible. Observation only; the stage stays owned here.</summary>
     public Node3D? EffectStage { get; private set; }
 
     /// <summary>The session's one <c>touchdown_*</c> def vector, built against the same program the
@@ -114,23 +98,21 @@ public sealed class WorldEffectsFactory
     public static IReadOnlyList<string> EffectStageRootNames(AnimProgram program, GameZ gamez) =>
         EffectCatalogue.WorldStageRoots(program, StageRootResolver(gamez));
 
-    /// <summary>Builds the named template ROOTS from the world gamez as children of
-    /// <paramref name="parent"/> (a pool slot, the crash root, the lab stage), each reset to sit at
-    /// the stage origin — a CALL_ANIMATION relocates them onto the call site. Returns how many
-    /// built. The roots are always a derivation's output
-    /// (<see cref="EffectCatalogue.WorldStageRoots"/>/<see cref="EffectCatalogue.CrashStageRoots"/>),
-    /// never a hand list, so a def anchored on a root nobody stages fails the build instead of
-    /// playing nothing.</summary>
+    /// <summary>Builds the named template roots from the world gamez as children of
+    /// <paramref name="parent"/>, each reset to sit at the stage origin; a CALL_ANIMATION
+    /// relocates them onto the call site. Returns how many built. Roots always come from
+    /// <see cref="EffectCatalogue.WorldStageRoots"/>/<see cref="EffectCatalogue.CrashStageRoots"/>,
+    /// never a hand list, so an anchor nobody stages fails the build instead of playing
+    /// nothing.</summary>
     public static int BuildEffectStage(GameZ gamez, SceneBuilder scene, Node3D parent,
         IEnumerable<string> roots)
     {
         int n = 0;
         foreach (var rootName in roots)
         {
-            // An effect template is pure presentation and gets NO colliders: several carry
-            // intersect_surface (he_ringer, the splash models), and the authored ring scales to
-            // 7-20x, so a collidable copy relocated onto an impact point would leave an invisible
-            // plate up to ~170 m across floating at the blast site.
+            // Effect templates are pure presentation with no collider: several carry
+            // intersect_surface, and a collidable copy relocated onto an impact point would
+            // leave an invisible plate floating at the blast site.
             if (gamez.FindByName(rootName) is { } node
                 && scene.BuildSubtree(node, collisionSkip: _ => true) is { } built)
             {
@@ -142,13 +124,12 @@ public sealed class WorldEffectsFactory
         return n;
     }
 
-    /// <summary>The anchor lookup both binds hand <see cref="EffectCatalogue.StageRootsFor"/>
-    /// (one resolver, two scopes): a parentless gamez node is a template ROOT the bind
-    /// must build; any other gamez node of that name rides inside one already staged above it
-    /// (<c>ap_cracks</c> under <c>ap_effect</c>); a name the bind's own <paramref name="scope"/>
-    /// already carries — the crash rig's <c>player</c> scaffold, its wreck, the plane's own parts —
-    /// is satisfied without a template; anything else resolves nowhere. Gamez roots are tested FIRST,
-    /// so a template the scope has already staged still reads as a root it needs.</summary>
+    /// <summary>The anchor lookup <see cref="EffectCatalogue.StageRootsFor"/> binds (one resolver,
+    /// two scopes): a parentless gamez node is a template root the bind must build; a name already
+    /// under one is satisfied by it; a name the bind's own <paramref name="scope"/> already carries
+    /// resolves without a template; anything else resolves nowhere.
+    /// ⚠ Gamez roots are tested first, so a template the scope already staged still reads as a
+    /// root it needs.</summary>
     public static Func<string, AnchorPlacement> StageRootResolver(GameZ gamez, Node3D? scope = null)
     {
         var parented = new HashSet<int>();
@@ -184,12 +165,11 @@ public sealed class WorldEffectsFactory
             crashDefs ?? EffectCatalogue.CrashDefTable(program));
 
     /// <summary>Stages the crash rig's pooled effect-template copies under
-    /// <paramref name="crashRoot"/> — one <c>poolN</c> slot container per depth level, every copy
-    /// hidden, exactly as the world-effects stage stages its templates: the flake/gunhit
-    /// family carries meshes its own defs never deactivate, so an unhidden copy draws stacked at
-    /// the plane's centre for the whole session. The stage's reveal ritual (<c>Shown</c>) lights
-    /// the CALL's own copy while its effect plays. One staging for the production rig and the
-    /// <c>crash-rig-anchors</c> suite. Returns (copies staged, of which in slot 0).</summary>
+    /// <paramref name="crashRoot"/>, one <c>poolN</c> container per depth level, every copy hidden.
+    /// ⚠ The flake/gunhit family's meshes have no authored deactivation, so an unhidden copy draws
+    /// stacked at the plane's centre for the whole session; the stage's reveal ritual lights only
+    /// the call's own copy. Shared by the production rig and the <c>crash-rig-anchors</c> suite.
+    /// Returns (copies staged, of which in slot 0).</summary>
     public static (int Roots, int Slot0) StageCrashTemplates(GameZ gamez, SceneBuilder worldScene,
         Node3D crashRoot, IReadOnlyList<string> rootNames, Utils.EffectPools pools)
     {
@@ -217,14 +197,11 @@ public sealed class WorldEffectsFactory
     }
 
     /// <summary>The crash rig's sealed template stage — pooled, relocating called templates,
-    /// staged hidden like the world-effects stage (the flake/gunhit family carries meshes its own
-    /// defs never deactivate, so an unhidden copy would draw for the whole session), and
-    /// place-exempt for the
-    /// airframe-scoped anchor NAMEs (<see cref="EffectCatalogue.AirframeScopedAnchors"/>): the
-    /// player damage/reset defs are authored NAME=<c>player_pfighter</c>, which on the Devastator
-    /// is the aircraft's own model root, and a placing call must resolve it (the defs' node ops run
-    /// on the plane) without ever relocating it. One factory for the production rig and the
-    /// <c>crash-rig-anchors</c> suite, so the two cannot drift apart on this policy.</summary>
+    /// staged hidden, and place-exempt for the airframe-scoped anchor names
+    /// (<see cref="EffectCatalogue.AirframeScopedAnchors"/>).
+    /// ⚠ Those names are authored against the aircraft's own model root on some airframes (the
+    /// Devastator's <c>player_pfighter</c>), and a placing call must resolve without relocating
+    /// it. Shared by the production rig and the <c>crash-rig-anchors</c> suite.</summary>
     public static TemplateStage<Node3D> NewCrashTemplateStage(bool debugMotions = false) =>
         AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true,
             debugMotions: debugMotions,
@@ -246,15 +223,12 @@ public sealed class WorldEffectsFactory
         return set;
     }
 
-    /// <summary>The session's one world-effects runtime (the only way to reach
-    /// <see cref="BuildWorldEffectsRuntime"/> — see its own doc for the two-runtimes bug a second
-    /// entry point caused), built on first demand and wired into the world runtime's
-    /// <see cref="AnimRuntime.ExternalEffect"/> and, when <paramref name="projectiles"/> is given,
-    /// the pool's <c>EffectSink</c> — both gated on "unset" so a caller that already wired one (or
-    /// calls again on a later demand) leaves it alone. A plane-less <c>--freecam</c>/<c>--anim-lab</c>
-    /// passes no <paramref name="projectiles"/> and gets none wired, which is why a kill there draws
-    /// nothing until something asks. Returns null when the build fails — the HP/kill/swap/reset
-    /// mechanics do not depend on it.</summary>
+    /// <summary>The session's one world-effects runtime — the only way to reach
+    /// <see cref="BuildWorldEffectsRuntime"/>; a second entry point recreates the two-runtimes bug.
+    /// Wired into <see cref="AnimRuntime.ExternalEffect"/> and (when <paramref name="projectiles"/>
+    /// is given) the pool's <c>EffectSink</c>, both gated on unset. Returns null on a failed build.
+    /// ⚠ Keep the world params here rather than on the factory: it is constructed before the world
+    /// exists, so folding them was examined and declined.</summary>
     public AnimRuntime? EnsureWorldEffects(GameZ gamez, SceneBuilder worldScene,
         TextureArchive textures, AnimProgram worldProgram, AnimRuntime worldRuntime,
         ProjectilePool? projectiles = null)
@@ -286,28 +260,19 @@ public sealed class WorldEffectsFactory
         return effects;
     }
 
-    /// <summary>Builds the per-plane crash runtime — the <c>player_crash_*</c> family for a human
-    /// rig, the <c>ai_crash_*</c> family for an AI plane (<c>IsHumanPiloted</c> false), which is
-    /// the original's own vehicle split (see <see cref="EffectCatalogue.CrashDefTableFor"/>).
-    /// Under a <c>player</c> crash root parented to the controller it builds the
-    /// effect-template roots (from the world gamez) and the plane's real <c>destroyed</c> wreck
-    /// subtree, then binds a NON-auto-start <see cref="AnimRuntime"/> to the <b>controller</b> — so
-    /// the crash def resolves <c>healthy</c> (in the plane model), <c>destroyed</c>/<c>pieceN</c>
-    /// (the wreck) and the effect hosts, all scoped to this one plane where every name is unique.
-    /// <see cref="AnimRuntime.NameResolveFallback"/> handles the crash def's non-portable node
-    /// ptrs (they index planes.zbd at slots this build never uses); reset states (run at bind) hide
-    /// the wreck + templates until <see cref="FlightController.Crash"/> plays the def. The same
-    /// runtime also carries <c>startprops</c>/<c>stopprops</c> (<see cref="EffectCatalogue.PropChoreographyAnims"/>)
-    /// — their own NAME never resolves on any airframe, so <c>FlightController</c>'s direct
-    /// <c>Play</c> calls pass the plane model itself as the fallback anchor.</summary>
+    /// <summary>Builds the per-plane crash runtime: <c>player_crash_*</c> for a human rig,
+    /// <c>ai_crash_*</c> for an AI plane (<see cref="EffectCatalogue.CrashDefTableFor"/>). Builds
+    /// the effect-template roots and the plane's wreck under a <c>player</c> crash root, then binds
+    /// a non-auto-start <see cref="AnimRuntime"/> to the controller, scoped so every anchor is unique.
+    /// ⚠ <c>startprops</c>/<c>stopprops</c> never resolve on any airframe, so callers pass the plane
+    /// model as fallback anchor.</summary>
     public void BuildFlightCrashRuntime(FlightController controller, PlaneBuilder planeBuilder,
         string planeName, GameZ gamez, SceneBuilder worldScene, TextureArchive textures,
         AnimProgram crashProgram, bool verbose)
     {
-        // The crash root: the def's "player" anim-root anchor. Sits in the plane model's frame so
-        // the wreck subtree (built relative to the plane root) lands where the plane is (the wreck's
-        // planePose × chain). The effect templates position by AT_NODE global, so the crash root's
-        // own transform is irrelevant to them.
+        // The crash root: the def's `player` anim-root anchor, in the plane model's frame so the
+        // wreck (built relative to the plane root) lands at the plane. Effect templates position
+        // by AT_NODE global, so this transform doesn't affect them.
         var crashRoot = new Node3D { Name = "player" };
         crashRoot.SetMeta(AnimRuntime.NameMeta, "player");
         if (controller.PlaneModel != null)
@@ -328,27 +293,14 @@ public sealed class WorldEffectsFactory
             crashRoot.AddChild(aiScaffold);
         }
 
-        // Effect-template roots (world gamez nodes WorldBuilder skips) — one instance per player, so
-        // splitscreen crashes do not collide. Staged hidden below, revealed per call. Derived from
-        // the defs this rig is about to bind, against this aircraft's own scope: an anchor that
-        // resolves nowhere throws EffectAnchorException naming the def and the node, which is the
-        // whole point — the failure it replaces was a def silently anchored on nothing. Asked
-        // BEFORE the templates and the wreck go in, so the answer cannot depend on what a previous
-        // step of this same build happened to add. ⚠ The crash root is parented FIRST for exactly
-        // this: `player` is the crash defs' own anchor and lives nowhere in a chapter's gamez, so a
-        // scope without it reports the whole rig unanchorable. Parenting it here rather than after
-        // the wreck leaves both subtrees' child order untouched — the templates still go in before
-        // the wreck, and the crash root still sits between the plane model and the runtime.
+        // Effect-template roots, one instance per player; an unresolved anchor throws, naming
+        // the def instead of silently playing nothing.
+        // ⚠ Parent the crash root first: `player` is the defs' own anchor, and an unparented scope reports the whole rig unanchorable.
         controller.AddChild(crashRoot);
         var rootNames = CrashStageRootNames(crashProgram, gamez, controller, crashDefs);
-        // Staged in pool slots like the world-effects stage: the
-        // damage-stage menu CALLs one template from up to eight distinct anchors (each pdpanelN
-        // onto its own pdpN, the crash defs onto their four pieceN), and a single shared copy
-        // would be relocated-and-restarted onto every new tear, discarding the previous panel's
-        // burst mid-flight. Sizes per root from effect_pools.json's crash section — most crash
-        // templates stay single-copy in slot 0; the per-panel family gets one copy per authored
-        // call anchor. The runtime's caller-slot assignment (AnimRuntime.AssignCallerSlot) pins
-        // each call anchor to its own slot on the first tear.
+        // Staged in pool slots: a single shared copy would be relocated onto every new tear,
+        // discarding the previous panel's burst mid-flight. Sizes come from effect_pools.json's
+        // crash section; AnimRuntime.AssignCallerSlot pins each call anchor to its own slot.
         var (effectRoots, slot0Roots) = StageCrashTemplates(gamez, worldScene, crashRoot,
             rootNames, _pools);
 
@@ -364,26 +316,9 @@ public sealed class WorldEffectsFactory
             CollectRestPoses(destroyed, restPoses);
         }
 
-        // The scoped crash runtime: no ambient start (nothing runs until the crash Plays the def),
-        // puffers baked lazily via the session textures (kept open above), effect templates
-        // relocated onto the call site, and the crash def's non-portable node ptrs resolved by name.
-        // ⚠ The emitter factory parents at the WORLD root, NOT the crash root (its own doc carries
-        // the measurement). Each crash runtime still makes its own emitter instances at
-        // its own crash site, so splitscreen crashes stay independent. The SOUND either variant
-        // reaches (snd_exp_ground_a on the dirt def itself, snd_exp_water_a inside the sea dive's
-        // plane_big_splash) is already played by FlightAudio from Crash(); this runtime has no audio
-        // session, so dispatching it here would only emit the "silent for the session" warning —
-        // render effects, not sound. The seed drives wreckage scatter and the
-        // crash def's RANDOM_WEIGHT verdicts: one draw per player off the advancing crash stream, so
-        // splitscreen crashes differ from each other but repeat run to run.
-        // The template stage, sealed before the runtime exists: pooled,
-        // because the slot containers above are what the caller-slot assignment picks a copy out of
-        // (a template staged single-copy, which is most of the crash set, behaves identically);
-        // relocating its called templates onto the call site; staged hidden with the reveal
-        // ritual on, because the flake/gunhit family's meshes have no authored deactivation (see
-        // NewCrashTemplateStage); and place-exempt for the airframe-scoped anchor NAMEs, so the
-        // Devastator's own model — the one airframe those defs' NAME resolves on — is never
-        // relocated like a template.
+        // Scoped crash runtime: no ambient start, puffers via the session textures, non-portable
+        // crash-def node ptrs resolved by name. No audio here; FlightAudio.Crash() already plays it.
+        // ⚠ The emitter factory parents at the world root, not the crash root — see its own doc.
         var crashRuntime = AnimRuntime.ForCrashRig(
             NewCrashTemplateStage(_spec.DebugAnim),
             Rng.NewIntSeed(Rng.Crash),
@@ -393,37 +328,24 @@ public sealed class WorldEffectsFactory
         // per-crash), because which defs are exempt never changes across a session.
         crashRuntime.InheritedVelocityExempt =
             new HashSet<string>(EffectCatalogue.GroundSplashAnimNames, StringComparer.OrdinalIgnoreCase);
-        // The crash def's own surface-hugging sub-effects (the water splash's flat rings/spray
-        // column, the dirt burst's dust plane) level to world axes instead of inheriting the plane's
-        // impact attitude — set once here, like the exempt set above, since the named
-        // defs only ever play from within a crash sequence; never reached by the in-flight
-        // damage-stage effects this same runtime also plays, so no per-crash toggle is needed.
+        // Surface-hugging sub-effects (water-splash rings/spray, dirt-burst dust) level to world
+        // axes instead of inheriting impact attitude. Set once; these defs only ever play from a
+        // crash sequence, so no per-crash toggle is needed.
         crashRuntime.LevelPlacedTemplateNames =
             new HashSet<string>(EffectCatalogue.CrashSurfaceLevelAnimNames, StringComparer.OrdinalIgnoreCase);
-        // The wreck pieces are `do_intersections: true` — `player_crash_dirt`'s `piece1`-`4` are 4
-        // of the 16 (def, node) pairs in all 8 chapters that ask for the original's collider test
-        // AND stay in the world. Handing the mask over is what turns their sweep on; a session that
-        // builds no colliders hands nothing and they keep flying their authored clock out. Only the
-        // 4 Fly-mode goldens hand it over at all, and `c1-crash`'s own sweep IS armed by this branch
-        // — but its 20-frame capture window closes 0.333 s into piece1-4's 6 s run, long before
-        // contact, so no golden today actually shows a completed landing (
-        // analysis/object-motion-goldens/FINDINGS.md).
+        // Wreck pieces with `do_intersections: true` stay in the world; handing the mask over arms
+        // their collider sweep. Only Fly-mode goldens exercise it, and none captures a completed
+        // landing — analysis/object-motion-goldens/FINDINGS.md.
         if (_spec.BuildsCollision)
         {
             crashRuntime.ContactMask = CollisionLayers.World;
-            // The ground defs' own pieces author no `water` branch — the wet crash is a
-            // separate def — so this changes nothing for them today. Bound anyway: the rig plays
-            // every playable crash variant, and the hook is what keeps a piece's own BOUNCE branch
-            // reading a real struck surface rather than a guess.
+            // Ground-def pieces author no `water` branch of their own; bound anyway so a piece's
+            // BOUNCE reads a real struck surface rather than a guess.
             crashRuntime.SurfaceIsWater = body => ProjectilePool.SurfaceIsWater(body as Node);
         }
-        // Bind only the named defs' transitive CALL_ANIMATION closures (Subset), never the whole
-        // world program: the full 800+ defs include ~150 generic-named world defs that would
-        // mis-anchor onto this plane's parts and run their reset states on the aircraft. The set
-        // (EffectCatalogue.CrashRigAnimNames) is the crash defs, the damage-effect shims, the prop
-        // choreography and the authored damage-stage menu — every def that plays ON this aircraft.
-        // EVERY playable slot of the crash vector is bound because the struck surface is only known
-        // at the moment of impact; FlightController.Crash then indexes the table below with it.
+        // Bind only the closure of names that play ON this aircraft (CrashRigAnimNames), never the
+        // full ~800-def world program — its ~150 generic-named defs would mis-anchor onto this
+        // plane's parts and run their reset states on it.
         crashRuntime.Bind(controller, crashProgram.Subset(EffectCatalogue.CrashRigAnimNames(crashDefs)));
         controller.AddChild(crashRuntime);
         controller.CrashRuntime = crashRuntime;
@@ -445,8 +367,8 @@ public sealed class WorldEffectsFactory
                      + $"+ {restPoses.Count} wreck node(s) — crash runtime bound (scoped, no auto-start)");
     }
 
-    /// <summary>Every name a bind's own scope answers — the Godot node name and the gamez
-    /// <see cref="AnimRuntime.NameMeta"/> both, since name resolution reads the meta.</summary>
+    // Every name a bind's own scope answers — the Godot node name and the gamez
+    // AnimRuntime.NameMeta both, since name resolution reads the meta.
     private static HashSet<string> NamesUnder(Node root)
     {
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -484,46 +406,21 @@ public sealed class WorldEffectsFactory
             }
     }
 
-    /// <summary>Builds the one world-effects runtime — the world-scoped generalization of the
-    /// per-player crash runtime. It stages the impact/destruction effect templates under a
-    /// dedicated subtree so their names resolve locally without colliding with the world or the crash
-    /// roots, keeps a live <c>IEmitterFactory</c> over the session textures, and binds the closure of
-    /// <see cref="EffectCatalogue.EffectAnimNames"/>. <see cref="AnimRuntime.PlayEffectAt"/> then stages any of those
-    /// effects at a hit or death point: <c>ProjectilePool.EffectSink</c> calls it on a weapon impact,
-    /// and the world runtime's <see cref="AnimRuntime.ExternalEffect"/> routes a death's
-    /// CALL_ANIMATION here. Puffers parent at world level (the crash lesson) so the stage does
-    /// not suppress them.
-    ///
-    /// <para>The stage itself is visible and each template ROOT starts hidden
-    /// (<see cref="Mech3.Anim.TemplateStage{TNode}.Shown"/> reveals one for as long as an effect
-    /// plays on it): a template's meshes are half the effect — the rocket's authored per-type rings, the
-    /// fireball facades, the splash models — and hiding the whole stage would render none of
-    /// them. Inside a revealed root the data still decides what shows: every ring is reset
-    /// INACTIVE or opacity-OFF at bootstrap and its own def turns it on.</para>
-    ///
-    /// <para>⚠ Private — <see cref="EnsureWorldEffects"/> is the only way in. A caller that builds its
-    /// own copy alongside the cached one recreates the two-runtimes bug: a <c>--fly --destroy=</c> session's
-    /// direct call here, followed by the damage lab's own <see cref="EnsureWorldEffects"/> lookup
-    /// finding the cache empty, built two runtimes, each carrying <c>EffectPoolSlots</c> × ~38
-    /// template subtrees.</para></summary>
+    // The world-scoped generalization of the per-player crash runtime: stages effect templates
+    // under a dedicated subtree, keeps a live `IEmitterFactory`, and binds
+    // EffectCatalogue.EffectAnimNames so AnimRuntime.PlayEffectAt can stage any of them at a hit
+    // or death point. Puffers parent at world level so the stage does not suppress them.
+    // ⚠ Private — EnsureWorldEffects is the only way in. A second entry point recreates the
+    // two-runtimes bug.
     private AnimRuntime BuildWorldEffectsRuntime(GameZ gamez, SceneBuilder worldScene,
         TextureArchive textures, AnimProgram worldProgram)
     {
         var stage = new Node3D { Name = "world_effects" };
         _worldRoot.AddChild(stage);
         EffectStage = stage;
-        // The pool: each root staged in as many copies as effect_pools.json sizes it for
-        // THIS session's player count, one copy per slot container, and AnimRuntime hands the next
-        // slot to each call. The containers carry only the slot meta and no cs_name, so they are
-        // invisible to name resolution — what keeps the copies apart is the slot, read off the
-        // anchor a call runs on. Sizes differ per root, so the deeper slots hold only the roots
-        // sized that deep (the shared gun family lives in slot 0 alone); a def whose root has no
-        // copy in its slot falls back to one that exists.
-        // What to stage is DERIVED from the names about to be bound:
-        // every definition their call closure reaches, anchored on the gamez root its NAME names.
-        // An anchor that resolves nowhere throws here, naming the def and the node, instead of
-        // leaving that def anchored on nothing and playing nothing at all — EnsureWorldEffects
-        // turns the throw into its "runtime could not be built" warning, carrying the anchor list.
+        // Each root is staged in as many copies as effect_pools.json sizes it for this session.
+        // ⚠ An unresolved anchor throws here; EnsureWorldEffects turns that into its "runtime
+        // could not be built" warning rather than a def playing nothing silently.
         var roots = EffectCatalogue.WorldStageRoots(worldProgram, StageRootResolver(gamez));
         int players = Math.Max(1, _spec.Players);
         int depth = _pools.DepthFor(roots, players);
@@ -540,18 +437,9 @@ public sealed class WorldEffectsFactory
                 if (child is Node3D root)
                     root.Visible = false;
         }
-        // The impact/death SOUND an effect def carries is already played by the projectile pool
-        // or the world runtime; this runtime only renders the puffers. Several gun
-        // effects gate their puffer behind RANDOM_WEIGHT, so this runtime's dice — its own stream
-        // off the master seed — decide which effects render at all.
-        // Puffer.Create pairs the depth fade with the blend it derives — off for MIX, whose dark
-        // sprites emit at these ground-level sites and measured near-invisible with it on (the
-        // damage-stage black smoke), on for additive fire, which leaks through the fade anyway.
-        // The template stage, sealed before the runtime exists:
-        // pooled over the slot containers built above, staged hidden so the reveal ritual lights the
-        // one root a call lands on (the ⚠ above), and relocating a called template onto the call
-        // site. Do not write stage options onto the runtime after this factory call returns — that
-        // is a sealing leak that only works when the option happens to be read after Bind.
+        // This runtime only renders the puffers; the impact/death sound already plays elsewhere.
+        // ⚠ Do not write stage options onto the returned runtime — that only works when the
+        // option happens to be read after Bind, and is a sealing leak.
         var effects = AnimRuntime.ForEffects(
             AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true,
                 debugMotions: _spec.DebugAnim),

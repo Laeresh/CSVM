@@ -28,7 +28,10 @@ public enum ArchiveIntent
 /// <summary>The five archives one chapter world needs, opened together because every caller
 /// (`GameSession`, the anim lab, the test harness) opens the same five — plus the
 /// <see cref="WorldSession.Options"/> lifetime flags <see cref="ArchiveIntent"/> implies, so a
-/// caller sets them by naming its intent, not by hand.</summary>
+/// caller sets them by naming its intent, not by hand.
+/// ⚠ <see cref="OpenFor"/> only opens the archives and states the two flags; it does not dispose
+/// anything. Ownership past its return is each caller's own (session fields, lab fields, the
+/// harness's own <c>using</c> locals).</summary>
 public sealed class SessionArchives
 {
     public required GameZ Gamez { get; init; }
@@ -45,11 +48,9 @@ public sealed class SessionArchives
 
     /// <summary>Opens gamez, textures, sounds, sound defs and sound groups for one chapter build,
     /// timing each into <see cref="StartupProfile"/> exactly as <c>WorldSession.Build</c>'s own
-    /// phases do — <c>Record</c> is a no-op with no session under measurement (the test harness),
-    /// so the calls are unconditional here too.
-    /// <para>⚠ The sound archive is scoped to the build and the texture archive is not — that
-    /// asymmetry is deliberate (see <see cref="ArchiveIntent"/>'s members) and is reproduced per
-    /// intent, never normalised.</para></summary>
+    /// phases do, unconditionally even under the test harness's no-op <c>Record</c>.
+    /// ⚠ The sound archive is scoped to the build and the texture archive is not; deliberate,
+    /// see <see cref="ArchiveIntent"/>. Never normalise the two to match.</summary>
     public static SessionArchives OpenFor(ArchiveIntent intent, string gamezPath, string texturesPath,
         string soundsPath, string zrdrPath, bool mute)
     {

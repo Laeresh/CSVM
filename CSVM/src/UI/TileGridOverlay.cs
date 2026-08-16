@@ -7,45 +7,16 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The map-edge tile-grid overlay (flag <c>--debug-tilegrid</c>): tints every ground tile
-/// — the map's own and <see cref="MapEdgeExtender"/>'s continuation cells alike — by which cell it
-/// is and how it was folded, so the shape of the continuation can be read at the controls instead
-/// of only out of a spatio-temporal strip.
-///
-/// <para><b>What the colours say.</b> Hue is the repetition band's parity
-/// (<see cref="MapEdgeExtender.FoldBandIndex"/>), so a run of one hue is exactly
-/// <see cref="MapEdgeExtender.BlockCells"/> cells wide and <b>the width of a band reads off the
-/// block depth directly</b>. The two axes band independently, so a corner region is its own colour
-/// rather than an ambiguous blend. Value alternates cell by cell inside a band, which is what turns
-/// "wide-ish" into a countable number. In-map cells take a neutral tint, so the map boundary is
-/// unmistakable.
-/// <para>⚠ Keyed on the band, not on whether the copy is reflected. Under <c>repeat</c> — the
-/// default, and what the original does — nothing is ever reflected, so a flip-keyed hue painted the
-/// entire continuation one colour and made the block unreadable in the one mode that matters.</para></para>
-///
-/// <para><b>Why the strength is 0.2 and not <c>ClassOverlay</c>'s 0.5.</b> This overlay is read
-/// while flying, over terrain that has to stay legible as terrain; the information is in where the
-/// bands change, not in the colours themselves.</para>
-///
-/// <para><b>Two tinting paths, one appearance.</b> The map's own tiles are built once, so they are
-/// walked once and cached like <c>ClassOverlay</c> does. Extension cells cannot be: they are
-/// created and freed on every cell-boundary crossing, and a full window rebuild happens whenever
-/// F15/F16 change the fold — a walk-once cache would go stale within seconds of flying. So the
-/// extender tints its own cells as they are born and this overlay only flips the flag. Both paths
-/// stamp <see cref="SceneBuilder.TintParam"/>, the world shaders' per-instance mix — never a
-/// <c>MaterialOverride</c>/<c>MaterialOverlay</c>, which is a different shader entirely (see
-/// <see cref="SceneBuilder.TintLine"/>).</para>
-///
-/// <para><b>What it settled.</b> F15/F16 answered the map-edge fold: A/B against the original at
-/// the controls found that the continuation <b>repeats</b> — it does not mirror — over a block of
-/// 2 cells on C1/C2/C4 and 1 on C5, with no seam gaps. Both are the defaults, and `mirror` is
-/// the mode kept only to look at. <c>--map-edge-block=</c>/<c>--map-edge-mode=</c> stay because that
-/// question is re-checkable in minutes by relaunching with a different value, where measuring it off
-/// footage is neither fast nor reliable.</para>
-///
-/// <para>Flag-only: <c>--debug-tilegrid</c> opens it, <c>--map-edge-block=</c>/
-/// <c>--map-edge-mode=</c> set the fold, all resolved once at launch. No key is bound to any of the
-/// three.</para>
+/// The map-edge tile-grid overlay (flag <c>--debug-tilegrid</c>, no key bound): tints every
+/// ground tile, the map's own and <see cref="MapEdgeExtender"/>'s continuation cells alike, by
+/// which cell it is and how it was folded, so the continuation's shape reads at the controls.
+/// Hue is the repetition band's parity (<see cref="MapEdgeExtender.FoldBandIndex"/>), so a run of
+/// one hue is exactly <see cref="MapEdgeExtender.BlockCells"/> cells wide; value alternates cell
+/// by cell within a band. Strength is 0.2, lower than <c>ClassOverlay</c>'s 0.5, since this is
+/// read while flying over terrain that must stay legible. The map's own tiles are cached once
+/// like <c>ClassOverlay</c>; extension cells tint themselves as they are born instead, since they
+/// are created and freed on every cell crossing. Both stamp <see cref="SceneBuilder.TintParam"/>.
+/// The map-edge fold decode this overlay settled: docs/architecture.md's MapEdgeExtender.cs entry.
 /// </summary>
 public sealed partial class TileGridOverlay : Node
 {
@@ -101,9 +72,8 @@ public sealed partial class TileGridOverlay : Node
     {
         if (_extender == null)
         {
-            // No continuation means no grid to colour — every mode that reaches this overlay
-            // without one builds no partitioned world (--stage=empty, or a world with no
-            // area/partition record). Say which, rather than showing an overlay that tints
+            // No continuation means no grid to colour: --stage=empty, or a world with no
+            // area/partition record. Say which, rather than showing an overlay that tints
             // nothing: that reads as "the grid is uniform" instead of "there is no grid".
             Log.Warn("world", $"tile-grid overlay: this world has no map-edge continuation to colour (no area/partition grid).");
             ShowNotice("NO MAP-EDGE GRID IN THIS WORLD\nThe chapter builds no area/partition grid, so there are no tiles to colour.");
@@ -203,16 +173,11 @@ public sealed partial class TileGridOverlay : Node
         return $"map edge: block {ext.BlockCells} cell(s) · {mode} · {ext.LiveCellCount} ext cells{cost}";
     }
 
-    // The map's own ground tiles. Identified through AnimRuntime.IndexMeta — the gamez-node-index
-    // stamp the built scene already carries, the same one ClassOverlay resolves through — and
-    // binned by MapEdgeExtender, so the map's tiles and the extension's go through one piece of
-    // grid maths rather than two that can disagree at the split half-tiles.
-    //
-    // ⚠ The extender's own subtree is skipped, and must be. Extension cells are built from the
-    // SAME gamez nodes as the tiles they mirror, so they carry the same IndexMeta and would
-    // resolve here to their SOURCE cell's in-map colour — quietly overwriting the parity tint the
-    // extender just gave them and painting the whole continuation neutral, which is precisely the
-    // thing the overlay exists to distinguish.
+    // The map's own ground tiles, identified through AnimRuntime.IndexMeta and binned by
+    // MapEdgeExtender, so map tiles and extension cells share one piece of grid maths.
+    // ⚠ Skip the extender's own subtree. Its cells share IndexMeta with their source tile and
+    // would resolve here to the source's in-map colour, overwriting the parity tint the
+    // extender just gave them and painting the whole continuation neutral.
     private void TintInMapTiles()
     {
         void Walk(Node n)

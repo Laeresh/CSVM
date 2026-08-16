@@ -6,23 +6,15 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// <c>--incoming[=metres[,wep_id]]</c> — the near-miss test rig: a phantom shooter sitting on each
-/// player's six, walking a burst past the canopy at a chosen pass distance. It exists so the
-/// incoming-fire cue is reachable deterministically, without spawning an AI gunner (D14's
-/// `--ai-attack` is a real shooter but aims to hit) or a second pilot in splitscreen.
-///
-/// <para>It fires the target's OWN gun (or the named weapon) into the shared pool under a shooter
-/// identity no player holds, so the rounds are real — same ballistics, tracers, muzzle flash and
-/// impacts as a fired round — and the target's self-exclusion is not what makes them audible.
-/// The muzzle is placed <see cref="Standoff"/> behind the aircraft, offset laterally by the pass
-/// distance and aimed along the target's own nose, so the round overtakes it on a parallel track
-/// and the geometry holds without lead maths. Sides alternate. A round leaves the muzzle exactly
-/// along that aim (A1 — the original applies no dispersion at the fire call), so the achieved pass
-/// distance equals the requested one, modulo the swept-segment sampling.</para>
-///
-/// <para><b>Near misses by construction.</b> The offset parallel track keeps rounds clear of the
-/// airframe. The aircraft is a real projectile target (<see cref="AircraftBody"/>), so a round
-/// aimed at it would strike — this rig deliberately never aims at the plane; hit feedback needs a
-/// real shooter (another pilot today, AI once M4 lands one).</para>
+/// player's six, walking a burst past the canopy at a chosen pass distance. Reaches the
+/// incoming-fire cue deterministically, without an AI gunner (docs/cli.md's <c>--ai-attack</c>
+/// aims to hit) or a second pilot in splitscreen.
+/// Fires the target's own gun (or the named weapon) into the shared pool under a shooter identity
+/// no player holds, so the rounds are real. The muzzle sits <see cref="Standoff"/> behind the
+/// aircraft, aimed along the target's own nose, so the round overtakes on a parallel track.
+/// ⚠ Never aim this rig at the plane: an aircraft IS a projectile target (<see
+/// cref="AircraftBody"/>). Hit feedback comes from a real shooter — another pilot, or an AI
+/// gunner (<c>BL-226</c>).
 /// </summary>
 public sealed partial class IncomingFire : Node
 {

@@ -12,6 +12,8 @@
 // number of texture repeats, so the wrap lands on an identical frame. A different period puts a
 // visible jump on every scrolling surface — see ShaderTime.RolloverSecs.
 
+// Declared here ONLY — a global uniform's type must agree across every shader that declares
+// it, so a second declaration elsewhere risks a mismatch the compiler will not catch for you.
 global uniform float csky_time;
 
 #endif

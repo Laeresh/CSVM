@@ -126,26 +126,16 @@ public partial class FlightAudio : Node
             AddChild(_crash);
         }
 
-        // The ground/dirt crash choreography layers snd_exp_ground_a — the
-        // heavy earth-impact boom — over the plane_destroy_sg explosion above; the dirt anim
-        // def fires it as its Sound event. The sea dive's counterpart is snd_exp_water_a, which
-        // the water def does not carry directly: it sits in the plane_big_splash that
-        // player_crash_water's destroy_crash calls. Both stay gated on the surface in
-        // FlightController, not folded into OnCrash.
+        // The ground/water crash booms, layered over plane_destroy_sg (docs/architecture.md).
         _groundExp = MakeOneShot(archive, defs, "snd_exp_ground_a", out _groundExpVol);
         _waterExp = MakeOneShot(archive, defs, "snd_exp_water_a", out _waterExpVol);
 
-        // The graze reaction's authored sounds (touchdown.zrd): the touchdown_default/_dirt
-        // sequences Sound snd_exp_ground_b, touchdown_water snd_exp_water_b — the lighter `_b`
-        // pair, not the crash's `_a`.
+        // The graze reaction's authored sounds (touchdown.zrd), the lighter `_b` pair.
         _grazeGround = MakeOneShot(archive, defs, "snd_exp_ground_b", out _grazeGroundVol);
         _grazeWater = MakeOneShot(archive, defs, "snd_exp_water_b", out _grazeWaterVol);
 
-        // The near-miss cue's group (player.json warning_shot_sound). Own-ship and non-positional
-        // like everything else here: the def is 3D with RANGE [20,200], but a pass close enough to
-        // trigger is well inside that inner radius, i.e. full volume — and in splitscreen only the
-        // pilot who was nearly hit may hear it, which a world emitter on one shared listener cannot
-        // do. A silent group (no such name, or no WAVs) simply leaves the cue unbuilt.
+        // The near-miss cue's group (player.json warning_shot_sound), own-ship and non-positional
+        // so splitscreen only the nearly-hit pilot hears it.
         if (groups != null && groups.TryGetValue(stats.WarningShotSound, out var warningGroup))
         {
             _warningShotGroup = warningGroup;
@@ -270,15 +260,12 @@ public partial class FlightAudio : Node
         var (name, stream, volume) = _crashSounds[
             (int)(Rng.Stream(Rng.FlightAudio).Randi() % (uint)_crashSounds.Count)];
         _crash.Stream = stream;
-        // D32 (BL-371), re-judging M2.5's "crash one-shots global": a splitscreen pile-up
-        // (a mutual shootdown) fires this boom once per downed rig in the same instant, so it
-        // takes MixGain now — 1 in 1P, unchanged; 1/√N in splitscreen so N simultaneous booms
-        // don't sum into a clipped wall of noise. No distance term (D31's): this is own-ship,
-        // non-positional cockpit audio, always heard at "distance 0" from whichever pilot it is.
+        // Takes MixGain (D32, docs/architecture.md): a splitscreen pile-up fires this
+        // once per downed rig in the same instant, so N booms must not sum into a clipped wall.
         float gain = volume * MixGain;
         _crash.VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold, gain));
         _crash.Play();
-        // Which of the four explosions played, plus D32's (BL-371) computed gain — the only
+        // Which of the four explosions played, plus D32's computed gain — the only
         // trace this pick leaves outside the speakers.
         GD.Print($"crash sound: {name} MixGain={MixGain:0.00} vol={gain:0.000}");
     }
@@ -288,7 +275,7 @@ public partial class FlightAudio : Node
     /// is the resolved def (FlightController.PlayCrashBoom), so it does not sound on a sea dive,
     /// the `player_crash_default` fallback, or a future mid-air destruct (which plays no
     /// `player_crash_*` def at all).</summary>
-    // D32 (BL-371): layers over OnCrash's boom in the same instant, so it takes MixGain for the
+    // D32: layers over OnCrash's boom in the same instant, so it takes MixGain for the
     // same reason — a pile-up stacks this once per downed rig too.
     public void OnGroundExplosion()
     {
@@ -301,7 +288,7 @@ public partial class FlightAudio : Node
     /// lighter `_b`), layered over the plane explosion the same way. Authored one level down, in
     /// the plane_big_splash player_crash_water calls; the crash runtime renders effects only, so
     /// the sound comes from here.</summary>
-    // D32 (BL-371): same crash-instant stacking as OnGroundExplosion; MixGain for the same reason.
+    // D32: same crash-instant stacking as OnGroundExplosion; MixGain for the same reason.
     public void OnWaterExplosion()
     {
         float gain = _waterExpVol * MixGain;
@@ -347,7 +334,7 @@ public partial class FlightAudio : Node
         _whine?.Stop();
         _rattle?.Stop();
         _damagedEngine?.Stop();
-        // D32 (BL-371): fires right after OnCrash's boom, the same crash instant — MixGain for
+        // D32: fires right after OnCrash's boom, the same crash instant — MixGain for
         // the same pile-up reason, not the "your prop" respawn cue StartEngine plays below.
         float gain = _propStopVol * MixGain;
         PlayOneShot(_propStop, gain);
@@ -390,17 +377,14 @@ public partial class FlightAudio : Node
         var stream = archive.Find(def.WavName, def.Looped);
         if (stream == null)
             return null;
-        // sounds.json's authored VOLUME plays unscaled here, same as WorldSounds' 3D
-        // emitters and OnCrash's plane-explosion pick — the only other own-ship path that ever
-        // read this field, and it never carried a blanket factor. MixGain/WhineMixGain/
-        // DamagedEngineMixGain are the deliberate, named attenuations layered on top per loop.
+        // Unscaled, same convention as WorldSounds' 3D emitters.
         baseVolume = def.Volume;
         var player = new AudioStreamPlayer { Stream = stream, VolumeDb = -60f };
         AddChild(player);
         return player;
     }
 
-    /// <summary>Loads a non-looped one-shot (crash/prop start/stop) from a sounds.json def.</summary>
+    // Loads a non-looped one-shot (crash/prop start/stop) from a sounds.json def.
     private AudioStreamPlayer? MakeOneShot(SoundArchive archive,
         IReadOnlyDictionary<string, SoundDef> defs, string sndName, out float baseVolume)
     {
@@ -419,17 +403,15 @@ public partial class FlightAudio : Node
         return player;
     }
 
-    /// <summary>Spin the engine loop up from silence behind snd_propstart. Used for the
-    /// initial spawn (here) and every respawn (via the loop-restart hook in Update).</summary>
+    // Spin the engine loop up from silence behind snd_propstart. Used for the
+    // initial spawn (here) and every respawn (via the loop-restart hook in Update).
     private void StartEngine()
     {
         _engineRamp = 0f;
         _engine?.Play();
         _engine2?.Play();
-        // D32 (BL-371): the "your prop" respawn cue — deliberately stays at raw volume. Unlike
-        // the crash-boom family above, a spawn/respawn is this pilot's own moment, not one that
-        // naturally coincides with N other rigs' at the same instant (spawns/respawns stagger by
-        // mission timing and skill, not physics frame), so there is no pile-up to guard against.
+        // Stays at raw volume, deliberately unlike the crash-boom family — a respawn does not
+        // pile up with other rigs' at one instant.
         PlayOneShot(_propStart, _propStartVol);
     }
 }

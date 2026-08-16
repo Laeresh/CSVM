@@ -30,7 +30,8 @@ public sealed class CaptureDirector
     }
 
     /// <summary>A capture is still owed — every other `--screenshot`-conditioned display choice
-    /// (HUD/panel visibility, exit-on-build-failure) reads this instead of the raw field.</summary>
+    /// (HUD/panel visibility, exit-on-build-failure) reads this instead of the raw field. Never
+    /// re-derive it from the spec: a burst clears it mid-session.</summary>
     public bool Pending => _pendingShot != null;
 
     /// <summary>Format a vector as the "x,y,z" argument value ParseVec3 reads back (invariant
@@ -80,16 +81,14 @@ public sealed class CaptureDirector
         {
             return;
         }
-        if (--_shotDelay > 0)             // still counting down the warm-up delay
+        // --frames=N is a SIM coordinate, not a wall-clock delay: this decrement must run exactly
+        // once per _Process call, here and nowhere else, or a golden lands on a different sim frame.
+        if (--_shotDelay > 0)
         {
             return;
         }
-        // Delay elapsed: grab one frame per _Process call for spec.ScreenshotShots frames,
-        // then quit. A single shot keeps the original path verbatim; a burst (for z-fight
-        // debugging, where flicker only shows across frames) writes indexed files. The
-        // captured image is the PREVIOUS frame's render, so file _00 is the un-jittered
-        // baseline and _01.. carry the dither applied below — all distinct, which is all
-        // the flip-through needs.
+        // A burst (z-fight debugging) writes indexed files; a single shot keeps the plain path.
+        // The image is the PREVIOUS frame's render, so _00 is un-jittered and _01+ carries the dither.
         var img = viewport.GetTexture().GetImage();
         if (img == null)
         {
@@ -155,8 +154,8 @@ public sealed class CaptureDirector
         Log.Info("core", $"placement: --pos=\"{Vec3Arg(pos)}\" --lookat=\"{Vec3Arg(orbit.OrbitCenter)}\"");
     }
 
-    /// <summary>Insert a zero-padded frame index before the extension:
-    /// foo.png -> foo_00.png. Used for --shots=N burst capture.</summary>
+    // Insert a zero-padded frame index before the extension:
+    // foo.png -> foo_00.png. Used for --shots=N burst capture.
     private static string IndexedShotPath(string path, int index)
     {
         var dir = Path.GetDirectoryName(path) ?? "";
@@ -165,12 +164,12 @@ public sealed class CaptureDirector
         return Path.Combine(dir, $"{stem}_{index:D2}{ext}");
     }
 
-    /// <summary>Rotate the burst camera a hair around the framed point each --shots frame so
-    /// coplanar surfaces re-decide the depth test and z-fighting flicker surfaces across the
-    /// sequence (a dead-still camera can render bit-identical frames). The eye micro-orbits
-    /// the pivot — depths change, but the camera keeps looking at the pivot so the subject
-    /// stays centred. Static mode only: in --fly the FlightController owns the camera each
-    /// frame (and the plane's own motion already surfaces the fight).</summary>
+    // Rotate the burst camera a hair around the framed point each --shots frame so
+    // coplanar surfaces re-decide the depth test and z-fighting flicker surfaces across the
+    // sequence (a dead-still camera can render bit-identical frames). The eye micro-orbits
+    // the pivot — depths change, but the camera keeps looking at the pivot so the subject
+    // stays centred. Static mode only: in --fly the FlightController owns the camera each
+    // frame (and the plane's own motion already surfaces the fight).
     private void ApplyShotJitter(OrbitCamera orbit, Camera3D camera, SessionSpec spec)
     {
         if (_shotBaseXform is not { } baseX)

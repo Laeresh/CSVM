@@ -6,23 +6,12 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// The zrdr front-end of the animation system: reads ANIMATION_DEFINITIONS reader files
-/// (zepstate.json, hangar3.json, small_building.json, …) and normalizes them into the SAME
-/// <see cref="AnimDefinition"/> model the compiled <see cref="AnimArchive"/> produces, so
-/// <see cref="AnimRuntime"/> has exactly one thing to execute.
-///
-/// Both sources are needed and neither subsumes the other (measured): the
-/// compiled cam_anim/mis_anim archives are richer (typed events, resolved node refs, the SI
-/// scripts — which exist nowhere else), but a mission's <c>mis_anim.zbd</c> compiles only
-/// the defs its <c>mis_anim.json</c> lists. <c>zepstate</c> (the per-mission roster that
-/// hides the zeppelins/trains a mission doesn't use) and <c>startanims</c> are never
-/// compiled into any archive — they stay reader-only. See docs/formats/anim-definitions.md.
-///
-/// The normalization is mechanical: a reader op key converted SNAKE_CASE → PascalCase is
-/// exactly the compiled event tag (<c>OBJECT_ACTIVE_STATE</c> → <c>ObjectActiveState</c>,
-/// <c>OBJECT_MOTION_SI_SCRIPT</c> → <c>ObjectMotionSiScript</c>), verified across the whole
-/// event vocabulary. Only the payload *fields* need per-kind attention, and only for the
-/// kinds a handler actually reads; everything else keeps its raw body so no data is lost.
+/// The zrdr front-end of the animation system: reads reader ANIMATION_DEFINITIONS and normalizes
+/// them into the same <see cref="AnimDefinition"/> model <see cref="AnimArchive"/> produces, so
+/// <see cref="AnimRuntime"/> executes one shape. Decode and reader/compiled unit table: docs/
+/// formats/anim-definitions.md.
+/// ⚠ Both sources are needed; neither subsumes the other. A mission's compiled archive carries
+/// only the defs it lists, and <c>zepstate</c>/<c>startanims</c> are never compiled at all.
 /// </summary>
 public static class AnimDefs
 {
@@ -180,12 +169,8 @@ public static class AnimDefs
                     if (value != null)
                         def.Sequences.Add(ParseSequence(value));
                     break;
-                // The progressive-damage script of a destructible: a bare IF/ELSEIF ANIM_HEALTH
-                // cascade with no NAME of its own. The compiled archives deliver it as an
-                // ordinary sequence literally named DAMAGE_SEQUENCE, so mirror that — a sequence
-                // by that magic name, which AnimRuntime.ApplyDamageStages invokes on damage
-                // (docs/formats/destructibles.md). Without this case a reader-only destructible's
-                // damage stages were silently dropped.
+                // ⚠ Mirror the compiled DAMAGE_SEQUENCE name so AnimRuntime.ApplyDamageStages finds
+                // it; without this a reader-only destructible's damage stages are silently dropped.
                 case "DAMAGE_SEQUENCE":
                     if (value != null)
                     {
@@ -196,18 +181,9 @@ public static class AnimDefs
                     break;
             }
         }
-        // The compiled archives always set anim_name (verified: never null in this install,
-        // even where it just repeats NAME — see the waterfall01 dump in
-        // docs/formats/anim-definitions.md). Mirroring that here is what lets a reader-only
-        // def COLLIDE with its compiled counterpart in AnimProgram's (Name, AnimName) dedupe
-        // key instead of instantiating a second, independently-running copy alongside it.
-        // ⚠ Without the collision, a reader duplicate whose PUFFER_STATE events parse as OFF
-        // (see below) tears down the compiled instance's puffers moments after they spawn —
-        // silently, every frame; that is what kills C1's waterfall splash.
-        // A NAME1 def has no NAME/ANIMATION_NAME of its own; keying it on its first pair's
-        // pattern gives every such def a distinct dedupe identity in AnimProgram (a shared
-        // ("", "") key silently dropped all but the first NAME1 def program-wide) without
-        // colliding with the compiler's per-instance expansions ("pzctur*" vs "pzctur1").
+        // ⚠ Mirror anim_name so a reader-only def collides with its compiled twin in AnimProgram's
+        // dedupe key instead of double-running; a NAME1 def keys on its first pattern instead,
+        // since it has no NAME/ANIMATION_NAME of its own.
         if (def.AnimName == null && def.MultiTargets.Count > 0)
             def.AnimName = def.MultiTargets[0].AnimName;
         def.AnimName ??= def.Name;
@@ -238,9 +214,9 @@ public static class AnimDefs
                 yield return ev;
     }
 
-    /// <summary>One reader op → one normalized event. The kind is the mechanical
-    /// SNAKE_CASE→PascalCase conversion; the payload is normalized per kind for the fields
-    /// handlers read, and always keeps the raw body under "raw".</summary>
+    // One reader op → one normalized event. The kind is the mechanical
+    // SNAKE_CASE→PascalCase conversion; the payload is normalized per kind for the fields
+    // handlers read, and always keeps the raw body under "raw".
     private static AnimEvent? ToEvent(string key, List<object?>? body)
     {
         var kind = PascalCase(key);
@@ -277,10 +253,8 @@ public static class AnimDefs
                     data["state"] = pose;
                 break;
             case "ObjectRotateState":
-                // Reader rotations are DEGREES against the compiled form's radians — the same
-                // reader↔compiled unit divergence OBJECT_MOTION's XYZ_ROTATION documents below.
-                // Unconverted, C2's police_blockade OBJECT_ROTATE_STATE [0,135,0] reached
-                // PoseRotate as 135 rad ≈ 21.5 turns.
+                // Reader rotations are degrees; compiled is radians (docs/formats/
+                // anim-definitions.md). Unconverted, C2's roadblock spun ~21 turns.
                 if (Vec(fields, "STATE", degToRad: true) is { } rotPose)
                     data["state"] = rotPose;
                 break;
@@ -295,28 +269,18 @@ public static class AnimDefs
                 AddFromTo(data, fields, "scale", "SCALE_FROM", "SCALE_TO");
                 break;
             case "ObjectMotion":
-                // The reader writes one flat six-number XYZ_ROTATION in DEGREES per second
-                // ([0,0,-40,0,0,0] = the zeppelin prop's -40°/s about local Z); the compiled
-                // form splits it into {initial,delta} sub-objects in RADIANS. Same
-                // reader↔compiled unit divergence as PLAYER_RANGE (m vs m²) and ANIMATION_LOD
-                // (HIGH vs 2) — converted once, here, so handlers never see two conventions.
-                // Measured inert today: removing this case leaves every chapter's live-motion
-                // count identical, because every reachable OBJECT_MOTION is compiled. It is
-                // kept because a reader-only def silently carrying none of its own fields is
-                // exactly how PUFFER_STATE kills C1's waterfall and how SOUND_NODE would mute
-                // every emitter — a missing case here fails silently, never loudly.
+                // XYZ_ROTATION: degrees/s in the reader, radians/s compiled (docs/formats/
+                // anim-definitions.md). Inert today but kept: a missing case here fails silently,
+                // the same shape that kills C1's waterfall via PUFFER_STATE.
                 if (Spin(fields, "XYZ_ROTATION") is { } spin)
                     data["xyz_rotation"] = spin;
                 if (Num(fields, "RUN_TIME") is { } motionRun)
                     data["run_time"] = motionRun;
                 break;
             case "ObjectOpacityState":
-                // STATE is a token plus an optional value, IN EITHER ORDER — the install ships
-                // ["ON",0.6], [0.4,"ON"], ["OFF",1], [1,"OFF"] and a bare ["OFF"]. So scan for
-                // the two by type rather than by position, and default a missing value to 1.
-                // Unlike ObjectMotion's normalizer this one is load-bearing: C1's `cloudparent`
-                // (the cloud deck at 0.6, and the single largest use in the game) is reader-only
-                // with no compiled twin, so without this case it arrives carrying neither field.
+                // STATE is a token + value in either order; scan by type, default value to 1.
+                // Load-bearing: C1's cloudparent cloud deck is reader-only (docs/formats/
+                // anim-definitions.md).
                 if (fields.TryGetValue("STATE", out var op) && op is { Count: > 0 })
                 {
                     float value = 1f;
@@ -355,12 +319,8 @@ public static class AnimDefs
                 AddCallTarget(data, fields);
                 break;
             case "CallSequence":
-                // The reader carries the bare WAIT_FOR_COMPLETION token on 33 CALL_SEQUENCE
-                // bodies as well as on its 147 CALL_ANIMATION ones. Deliberately NOT honoured:
-                // the compiled form carries the field on CallAnimation and nothing else
-                // (56,750/56,750 — analysis/wait-for-completion/), so a same-instance sequence
-                // wait has no compiled counterpart to decode its semantics from. Recorded here
-                // rather than silently dropped.
+                // ⚠ Deliberately not honoured: CALL_SEQUENCE's bare WAIT_FOR_COMPLETION has no
+                // compiled counterpart to decode from (docs/formats/anim-definitions.md).
                 break;
             case "ObjectAddChild":
             case "ObjectDeleteChild":
@@ -374,17 +334,13 @@ public static class AnimDefs
                 }
                 break;
             case "SoundNode":
-                // Deliberately no active_state default. The reader's SOUND_NODE only declares the
-                // emitter; its ACTIVE arrives as the next event in the triple. Defaulting the
-                // absent field to 0 here would spell "declare it, then immediately switch it off"
-                // — the exact shape of the bug that silently killed the waterfall's puffers.
+                // ⚠ No active_state default: SOUND_NODE only declares the emitter, ACTIVE follows
+                // as the next event (docs/formats/anim-definitions.md's waterfall bug).
                 break;
             case "Sound":
-                // The one-shot SOUND: NAME (set above) is the sound — a sounds.json definition or a
-                // SOUND_GROUPS name, NOT a gamez node. AT_NODE is the world node that positions it,
-                // [nodeName, dx?, dy?, dz?] exactly like a puffer's. The compiled form nests AT_NODE
-                // as {name, pos}; flatten the reader's to an at_node name plus a translate offset,
-                // the shape HandleSound reads.
+                // NAME is the sound (sounds.json or SOUND_GROUPS), not a gamez node; AT_NODE
+                // positions it. Flattened to at_node+translate, the shape HandleSound reads
+                // (docs/formats/anim-definitions.md).
                 if (fields.TryGetValue("AT_NODE", out var soundAt) && soundAt is { Count: > 0 }
                     && soundAt[0] is string soundAtName)
                 {
@@ -404,24 +360,16 @@ public static class AnimDefs
         {
             Kind = kind,
             Data = new AnimData(data),
-            // The reader spells the wait as a BARE token, so its presence is the whole state —
-            // the compiled form's anim_refs index has no reader counterpart and needs none, since
-            // every one of the 3,731 flagged indices names the call's own callee anyway. Pairs()
-            // yields a bare flag as (key, null), so ContainsKey is the test.
+            // The reader's WAIT_FOR_COMPLETION is a bare token; presence is the whole state
+            // (docs/formats/anim-definitions.md).
             WaitsForCompletion = kind == "CallAnimation" && fields.ContainsKey("WAIT_FOR_COMPLETION"),
         };
     }
 
-    /// <summary>
-    /// Normalizes a reader PUFFER_STATE body into the same field shape
-    /// <see cref="Effects.PufferState.FromAnimEvent"/> reads from the compiled archives —
-    /// the two forms agree field-for-field except ACTIVE_STATE's token spelling and
-    /// AT_NODE's optional trailing offset. Without this, a reader-only puffer event carried
-    /// none of its own fields (no case existed here at all): <c>active_state</c> came back
-    /// null, which <c>HandlePufferState</c>'s <c>?? 0f</c> default reads as "stop" — the C1
-    /// waterfall bug, where a reader-scope duplicate of the (correctly compiled) waterfall
-    /// def re-asserted its puffers as OFF every frame.
-    /// </summary>
+    // Normalizes a reader PUFFER_STATE body into the compiled shape FromAnimEvent reads.
+    // ⚠ Without this, a reader-only puffer event carries none of its own fields, which
+    // HandlePufferState's default reads as "stop" — the C1 waterfall bug (docs/formats/
+    // anim-definitions.md).
     private static void AddPufferState(Dictionary<string, object?> data, Dictionary<string, List<object?>?> fields)
     {
         data["active_state"] = string.Equals(First(fields, "ACTIVE_STATE") as string, "ACTIVE",
@@ -451,22 +399,13 @@ public static class AnimDefs
         if (RangeObj(fields, "LIFETIME_RANGE") is { } lr) data["lifetime_range"] = lr;
         if (RangeObj(fields, "START_AGE_RANGE") is { } sa) data["start_age_range"] = sa;
         if (Num(fields, "WIND_FACTOR") is { } wf) data["wind_factor"] = wf;
-        // The camera-distance fade bands. The compiled surface spells NEAR_FADE `unk_range` and
-        // FADE_RANGE/FAR_FADE `fade_range`; the two reader spellings of the far band are one
-        // block (see PufferState.Parse). ⚠ START_AGE_RANGE and WIND_FACTOR above must stay
-        // normalized here too — a key this normalizer misses is silently lost on a reader-scope
-        // puffer event's way to FromAnimEvent (see docs/org/puffer.md).
+        // ⚠ A key this normalizer misses is silently lost on a reader-scope puffer event's way to
+        // FromAnimEvent. NEAR_FADE→unk_range, FADE_RANGE/FAR_FADE→fade_range (docs/org/puffer.md).
         if (RangeObj(fields, "NEAR_FADE") is { } nf) data["unk_range"] = nf;
         if ((RangeObj(fields, "FADE_RANGE") ?? RangeObj(fields, "FAR_FADE")) is { } ff)
             data["fade_range"] = ff;
-        // GROWTH_FACTOR is one scalar in the reader. Compiled, it is not a growth parameter at
-        // all: `growth_factors` is the SCALE_SEQUENCE age->scale ramp, entry i = (age_i, scale_i)
-        // under the `min`/`max` field labels, and the original's parser synthesises exactly
-        // the two-stop ramp (0, 1), (1, G) when SCALE_SEQUENCE
-        // is absent — which it is, in every reader in this install. Mirror those two stops, so the
-        // normalized reader shape is byte-for-byte the compiled one; PufferState.FromAnimEvent's
-        // `growth[1].max` then reads G from either source. See
-        // docs/formats/anim-definitions.md ("growth_factors[i] is (age_i, scale_i)").
+        // GROWTH_FACTOR is the reader's two-stop spelling of compiled `growth_factors`
+        // ((age_i, scale_i) pairs, docs/formats/anim-definitions.md): mirror (0,1),(1,G).
         if (Num(fields, "GROWTH_FACTOR") is { } gf)
             data["growth_factors"] = new List<object?>
             {
@@ -508,18 +447,10 @@ public static class AnimDefs
         }
     }
 
-    /// <summary>
-    /// Normalizes a reader LIGHT_STATE body into the compiled shape
-    /// <see cref="AnimRuntime"/>'s handler reads. 66 of this install's reader files carry
-    /// LIGHT_STATE, so skipping this front-end would repeat the PUFFER_STATE bug in a subtler
-    /// form: a reader-only fire would define a light with no range or colour.
-    ///
-    /// The one semantic that must survive the trip is **partiality** — a flicker event is
-    /// <c>["NAME", […], "RANGE", […]]</c> and nothing else, and it must not reset the light's
-    /// position, colour or active state. So each field is written only when the reader body
-    /// actually carries it, and ACTIVE_STATE's key is left absent rather than defaulted (the
-    /// handler tests <c>Has</c>, not the value).
-    /// </summary>
+    // Normalizes a reader LIGHT_STATE body into the compiled shape AnimRuntime reads.
+    // ⚠ Must preserve partiality: a flicker event names only RANGE, so write each field only
+    // when the body carries it, and leave ACTIVE_STATE absent rather than defaulted
+    // (docs/formats/anim-definitions.md).
     private static void AddLightState(Dictionary<string, object?> data, Dictionary<string, List<object?>?> fields)
     {
         if (First(fields, "ACTIVE_STATE") is string active)
@@ -554,17 +485,10 @@ public static class AnimDefs
         { ["r"] = r, ["g"] = g, ["b"] = b };
     }
 
-    /// <summary>
-    /// A reader IF/ELSEIF body → the compiled <c>condition</c> payload
-    /// <see cref="AnimRuntime"/> evaluates: a one-key union, e.g.
-    /// <c>{"RandomWeight": 0.15}</c>. The reader spells the same ten conditions with its own
-    /// vocabulary, and two of them change units on the way through the compiler — this is
-    /// where that is undone so the runtime has exactly one convention:
-    /// <c>PLAYER_RANGE</c> is metres in the reader and metres SQUARED compiled (reader 270 ↔
-    /// compiled 72900, measured across the install), and <c>ANIMATION_LOD</c> is the token
-    /// <c>HIGH</c> in the reader and the number 2 compiled. <c>NODE_NEAR_GROUND</c> is the
-    /// reader's name for the condition upstream calls <c>NodeUndercover</c>.
-    /// </summary>
+    // A reader IF/ELSEIF body -> the compiled `condition` payload's one-key union.
+    // PLAYER_RANGE (m) and ANIMATION_LOD (HIGH) change units on the way through the compiler;
+    // undone here so the runtime has one convention (docs/formats/anim-definitions.md).
+    // NODE_NEAR_GROUND is the reader's name for NodeUndercover.
     private static Dictionary<string, object?>? ReaderCondition(Dictionary<string, List<object?>?> fields)
     {
         Dictionary<string, object?> Union(string tag, object? value) =>
@@ -619,14 +543,9 @@ public static class AnimDefs
         return new Dictionary<string, object?>(StringComparer.Ordinal) { ["min"] = min, ["max"] = max };
     }
 
-    // CALL_ANIMATION's optional target node — the node the CALLEE is re-anchored onto, which
-    // is how one authored template serves many sites (`CALL_ANIMATION [NAME [huge_30sec_fire],
-    // WITH_NODE [rc*_dbase1]]` puts a fire on one ship section). The reader spells it three
-    // ways; the compiled form nests the first two under `parameters` as a one-key union, so
-    // normalize to that and AnimRuntime keeps a single path.
-    //
-    // NOTE this must not touch data["node"]/data["name"] — for this event kind those already
-    // hold the name of the ANIMATION being called, which is a different thing entirely.
+    // CALL_ANIMATION's optional target node, normalized to the compiled `parameters` union
+    // (docs/formats/anim-definitions.md). One authored template can then serve many call sites.
+    // ⚠ Must not touch data["node"]/["name"]: those already hold the callee's own name.
     private static void AddCallTarget(Dictionary<string, object?> data,
         Dictionary<string, List<object?>?> fields)
     {

@@ -21,14 +21,9 @@ namespace CSVM.Tests;
 public class SkyZoneTests
 {
     /// <summary>The horizon zone census of every chapter, and the zone the default <c>zone2</c>
-    /// request resolves to against it alone (the mission's weather.json has its say separately —
-    /// see <see cref="WeatherState.ResolveZone(string)"/>, which is what turns C5's untouched
-    /// <c>zone2</c> into <c>zone1</c>).
-    ///
-    /// <para>Rows are gamez child order, which is not zone-number order and differs per chapter:
-    /// C1/C1B list zone1 first, the rest list zone2 (C5: zone3) first. Meshed counts are nodes
-    /// carrying a model, the zone node itself included — which is why C5's <c>zone3</c> reads 1
-    /// with no children at all: it is the only zone node that carries its own model.</para></summary>
+    /// request resolves to against it alone (<see cref="WeatherState.ResolveZone(string)"/> has
+    /// the mission's weather.json say separately). Rows are gamez child order, not zone-number
+    /// order; see <c>docs/formats/weather.md</c>.</summary>
     public static TheoryData<string, string, string> ChapterHorizonZones => new()
     {
         { "C1", "zone1:2 zone2:4", "zone2" },

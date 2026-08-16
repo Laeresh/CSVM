@@ -59,16 +59,11 @@ public static class AiNets
         return names;
     }
 
-    /// <summary>The chapter's id → name pairs from <c>neindex.zrd.json</c>
-    /// (<c>[[first, id0, "Name0", id1, "Name1", …]]</c>), in FILE ORDER. The first element is
-    /// NOT the pair count. It is an allocation figure ≥ the count (C1: 46 against 29 pairs) and
-    /// is skipped.
-    ///
-    /// <para>⚠ File order is not ascending id, and the difference is load-bearing: the engine
-    /// builds its net table by walking this record forward (<c>FUN_004311c0</c>), and every
-    /// consumer that says "the first net" means entry 0 of that table. C1B opens on id 29 and
-    /// C1C on id 25, both against a lowest id of 11, so reading <see cref="Load"/>'s
-    /// sorted-by-id list instead picks the wrong graph on two of the eight chapters.</para></summary>
+    /// <summary>The chapter's id → name pairs from <c>neindex.zrd.json</c>, in file order — the
+    /// engine's own net-table order. See <c>docs/formats/ai-nets.md</c> for the skipped
+    /// allocation-figure first element.
+    /// ⚠ Do not sort by id: "the first net" means entry 0 of this order, not the lowest id.
+    /// <see cref="Load"/>'s sorted list picks the wrong graph on two of the eight chapters.</summary>
     public static List<(int Id, string Name)> LoadIndexPairs(string chapterZrdrPath)
     {
         var pairs = new List<(int, string)>();

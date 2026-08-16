@@ -21,6 +21,8 @@ public static class PanelFocus
     {
         int controls = 0, stripped = 0;
         Walk(root, ref controls, ref stripped);
+        // Re-walked rather than assumed 0 from what the first walk changed: the log line reports
+        // what the tree actually holds now, not the caller's intent.
         int left = 0, ignored = 0;
         Walk(root, ref ignored, ref left, countOnly: true);
         Log.Debug("ui", $"{who}: {controls} control(s), {stripped} made unfocusable, focusable_left={left}");

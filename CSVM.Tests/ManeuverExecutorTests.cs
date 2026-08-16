@@ -128,10 +128,8 @@ public class ManeuverExecutorTests
 
         FlyUntil(model, exec, () => exec.Done, maxSeconds: 40f);
 
-        // Entry heading 0. A split-S resolves reversed and lower. Placeholder-law honesty:
-        // the Euler waypoints pass through the vertical, where the tracking law leans on the
-        // zero-duration timeout, so the tolerance here is wide — the claim is "recognisably a
-        // split-S", not "flies it like the original".
+        // Tolerance is wide: the waypoints pass through the vertical, where the tracking law
+        // leans on the zero-duration timeout. The claim is "recognisably a split-S".
         float headingDeg = AiPilot.HeadingDegOf(-model.Attitude.Z);
         float turned = Mathf.Abs(Mathf.Wrap(headingDeg - 0f, -180f, 180f));
         Assert.True(turned > 120f, $"split_s ended only {turned:0.0}° off the entry heading");
