@@ -13,10 +13,12 @@ namespace CSVM.Tests;
 /// <summary>
 /// The square-wave pitch-cadence sweep, run against our own flight model, drives the same input
 /// the original was filmed at into a throwaway <see cref="FlightModel"/> and measures the ripple
-/// the same way. Decode and the BL-147 result: docs/org/flightModel.md.
+/// the same way. Each cadence runs twice: through <see cref="StickRamp"/>, the deflection the
+/// original's aircraft saw, and raw. Decode and the BL-147 result: docs/org/flightModel.md.
 /// ⚠ Fit the trend and the sinusoid simultaneously; see docs/verification.md METHOD-24.
-/// ⚠ Cadences are quoted in the original's wall milliseconds; both the sim and wall readings are
-/// reported (docs/verification.md), since the roll-off ratio is invariant to the choice.
+/// ⚠ Quote the WALL reading: the macro drove the keys in wall milliseconds, so the period the
+/// game saw is that × 1.390 (docs/verification.md DET-11). The sim reading is kept only because
+/// earlier results were quoted from it; the ratio is NOT invariant once a rate limit is in play.
 /// ⚠ This does not fit a τ: the cadences are not at a common operating point, which is why mean
 /// airspeed is reported beside every row.
 /// </summary>
@@ -66,33 +68,40 @@ public class ZzCadenceSweep
         sb.AppendLine("# 'original' = the measured ripple from the original's own clips, feet");
         sb.AppendLine();
 
-        foreach (bool simIsWall in new[] { true, false })
+        foreach (bool ramped in new[] { true, false })
         {
-            double k = simIsWall ? 1.0 : SimPerWall;
-            sb.AppendLine(simIsWall
-                ? "## cadence read as SIM seconds (period_sim = period_wall)"
-                : $"## cadence read as WALL seconds (period_sim = period_wall x {SimPerWall:0.000}, DET-11)");
-            sb.AppendLine("wall ms   period_sim   f0_sim      ripple ft   mean mph   original ft");
-            var amps = new List<double>();
-            foreach (var (wallMs, originalFt, atFloor) in Cadences)
+            sb.AppendLine(ramped
+                ? "# STICK RAMPED — the key command through StickRamp, which is what the original's"
+                  + " aircraft saw"
+                : "# STICK RAW — full deflection the instant the key goes down; no original flies this");
+            foreach (bool simIsWall in new[] { false, true })
             {
-                double period = wallMs / 1000.0 * k;
-                var (amp, meanMph) = Ripple(stats, (float)period);
-                amps.Add(amp);
-                sb.AppendLine($"{wallMs,7}   {period,10:0.0000}   {1.0 / period,7:0.000}   "
-                              + $"{amp,9:0.0000}   {meanMph,8:0.0}   "
-                              + (atFloor ? $"<= {originalFt:0.000}" : $"{originalFt,8:0.000}"));
-            }
+                double k = simIsWall ? 1.0 : SimPerWall;
+                sb.AppendLine(simIsWall
+                    ? "## cadence read as SIM seconds (period_sim = period_wall) — SUPERSEDED, kept for continuity"
+                    : $"## cadence read as WALL seconds (period_sim = period_wall x {SimPerWall:0.000}, DET-11) — QUOTE THIS ONE");
+                sb.AppendLine("wall ms   period_sim   f0_sim      ripple ft   mean mph   original ft");
+                var amps = new List<double>();
+                foreach (var (wallMs, originalFt, atFloor) in Cadences)
+                {
+                    double period = wallMs / 1000.0 * k;
+                    var (amp, meanMph) = Ripple(stats, (float)period, ramped);
+                    amps.Add(amp);
+                    sb.AppendLine($"{wallMs,7}   {period,10:0.0000}   {1.0 / period,7:0.000}   "
+                                  + $"{amp,9:0.0000}   {meanMph,8:0.0}   "
+                                  + (atFloor ? $"<= {originalFt:0.000}" : $"{originalFt,8:0.000}"));
+                }
 
-            // The discriminating span, 1300 -> 570 ms; see docs/org/flightModel.md's C23 landing
-            // note for the single-lag ceiling this compares against and its own correction.
-            double fRatio = 1300.0 / 570.0;
-            double model = amps[0] / amps[3];
-            double lagCeiling = fRatio * fRatio * fRatio;
-            sb.AppendLine($"roll-off 1300 -> 570 ms: model {model:0.0}x   original 42x   "
-                          + $"single-lag ceiling {lagCeiling:0.0}x   "
-                          + $"model excess {model / lagCeiling:0.00}x   original excess 3.5x");
-            sb.AppendLine();
+                // The discriminating span, 1300 -> 570 ms; see docs/org/flightModel.md's C23 landing
+                // note for the single-lag ceiling this compares against and its own correction.
+                double fRatio = 1300.0 / 570.0;
+                double model = amps[0] / amps[3];
+                double lagCeiling = fRatio * fRatio * fRatio;
+                sb.AppendLine($"roll-off 1300 -> 570 ms: model {model:0.0}x   original 42x   "
+                              + $"single-lag ceiling {lagCeiling:0.0}x   "
+                              + $"model excess {model / lagCeiling:0.00}x   original excess 3.5x");
+                sb.AppendLine();
+            }
         }
 
         File.WriteAllText(outPath, sb.ToString(), new UTF8Encoding(false));
@@ -101,7 +110,8 @@ public class ZzCadenceSweep
 
     // Flies one cadence and returns (ripple amplitude in feet, mean airspeed in mph over
     // the fit window).
-    private static (double AmplitudeFt, double MeanMph) Ripple(PlaneStats stats, float period)
+    private static (double AmplitudeFt, double MeanMph) Ripple(
+        PlaneStats stats, float period, bool ramped)
     {
         var m = new FlightModel(stats);
         m.Reset(Vector3.Zero, Basis.Identity, 300f * Mph, 1f);
@@ -112,13 +122,15 @@ public class ZzCadenceSweep
         var t = new List<double>();
         var y = new List<double>();
         double speedSum = 0;
+        float stick = 0f;
         for (double now = 0; now < total; now += Dt)
         {
             // The square wave: full up for the first half of each period, full down for the second.
             // Alternating (rather than one key) keeps the mean rate at zero, so the aircraft
             // porpoises about level and the operating point stays put.
-            float pitch = (now % period) < (period * 0.5) ? 1f : -1f;
-            m.Step(new FlightInput { Pitch = pitch, Throttle = 1f }, Dt);
+            float key = (now % period) < (period * 0.5) ? 1f : -1f;
+            stick = ramped ? StickRamp.Step(stick, key, Dt) : key;
+            m.Step(new FlightInput { Pitch = stick, Throttle = 1f }, Dt);
             if (now < settle)
                 continue;
             t.Add(now - settle);

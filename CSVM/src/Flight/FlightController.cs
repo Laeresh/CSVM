@@ -445,6 +445,9 @@ public partial class FlightController : Node3D
     private Vector3 _spawnPos;
     private Basis _spawnAttitude;
     private float _throttle;
+    private float _keyPitch;                     // the three keyboard axes' own deflection, ramped
+    private float _keyRoll;                      // by StickRamp; a gamepad's analogue axis adds on
+    private float _keyYaw;                       // top and is never ramped
     private double _sinceTelemetry;
     private bool _crashed;                       // frozen at the impact point, waiting for respawn
     private WarningShotCue? _warningShots;       // the near-miss cue's shipped accumulator
@@ -842,6 +845,7 @@ public partial class FlightController : Node3D
         // Setup() calls Respawn before _Ready builds the body, so this is also that first assertion.
         ApplyPresence();
         _throttle = SpawnThrottle;
+        _keyPitch = _keyRoll = _keyYaw = 0f;  // a fresh airframe spawns with the stick centred
         // The start choreography (snd_propstart already re-fires from FlightAudio's own
         // Null on the very first spawn (Setup runs before FlightRigAssembler builds this); that
         // assembler plays "startprops" once more there for that one case.
@@ -2584,12 +2588,18 @@ public partial class FlightController : Node3D
         _throttle = Mathf.Clamp(
             _throttle + (KeyAxis(Key.Shift, Key.Ctrl) + padThrottle) * ThrottleRate * dt, 0f, 1f);
 
+        // pull = S/Down, push = W/Up; bank/yaw left = A/Left/Q
+        _keyPitch = StickRamp.Step(
+            _keyPitch, Mathf.Sign(KeyAxis(Key.S, Key.W) + KeyAxis(Key.Down, Key.Up)), dt);
+        _keyRoll = StickRamp.Step(
+            _keyRoll, Mathf.Sign(KeyAxis(Key.A, Key.D) + KeyAxis(Key.Left, Key.Right)), dt);
+        _keyYaw = StickRamp.Step(_keyYaw, KeyAxis(Key.Q, Key.E), dt);
+
         return new FlightInput
         {
-            // pull = S/Down, push = W/Up; bank/yaw left = A/Left/Q
-            Pitch = Mathf.Clamp(KeyAxis(Key.S, Key.W) + KeyAxis(Key.Down, Key.Up) + padPitch, -1f, 1f),
-            Roll = Mathf.Clamp(KeyAxis(Key.A, Key.D) + KeyAxis(Key.Left, Key.Right) + padRoll, -1f, 1f),
-            Yaw = Mathf.Clamp(KeyAxis(Key.Q, Key.E) + padYaw, -1f, 1f),
+            Pitch = Mathf.Clamp(_keyPitch + padPitch, -1f, 1f),
+            Roll = Mathf.Clamp(_keyRoll + padRoll, -1f, 1f),
+            Yaw = Mathf.Clamp(_keyYaw + padYaw, -1f, 1f),
             Throttle = _throttle,
         };
     }

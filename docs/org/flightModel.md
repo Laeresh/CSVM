@@ -533,6 +533,51 @@ rate exceeds full-elevator authority (~0.58 rad/s steady) and the drop is decisi
 recovers; while stalled the nose additionally cannot be raised over the horizon at any bank
 (user-observed behaviour of the original). Nothing in the executable has been traced to either.
 
+## The keyboard stick is an accumulator, not a switch (`FUN_00487460`)
+
+The player input handler runs once per frame from the tick function `FUN_004897c0`, which sets the
+flight model's `dt` (`DAT_0071c56c`) from the same frame delta (`DAT_009ad744`) the handler ramps
+with — input and flight share one clock. Each of the three stick axes is a stored deflection the
+keys move, not a flag the keys set:
+
+```
+axis = 0                                     ; if the key is released, or the command opposes
+                                             ;   the current sign — pitch: 0x48786a
+axis += dt · dir · 2.5                       ; while a key is held — pitch: 0x487880-0x48788f,
+                                             ;   the 2.5 at 0x006040a8
+axis = clamp(axis, -1, +1)
+```
+
+Pitch is `obj+0x108`, roll `obj+0x100`, yaw `obj+0x10c`, all three the identical block (roll at
+`0x48794c`, yaw at `0x487a18`); the throttle follows at `0x487a54`/`0x487a7d` with the same shape
+and its own `±0.5·dt`. The three are then copied to the slots the force path reads — `obj+0x114`
+roll, `obj+0x11c` pitch, `obj+0x120` yaw — through `FUN_00460890`, **which is an identity stub**:
+its `0.5`/`1.0` arguments are dead, so no expo curve exists on the way out.
+
+**The rule, and its asymmetry.** A held key takes **0.4 sim s** to reach full deflection; a released
+or reversed key drops the axis to centre in a single frame. Gradual on, instant off. An analogue
+axis bypasses the ramp entirely — the joystick path assigns its scaled value to the same slot and
+suppresses that frame's zero-snap, so a stick's deflection is absolute where a key's is accumulated.
+
+**What it settles.** A tap never reaches the deflection its key nominally commands: 115 ms of press
+is `2.5 × 0.115` = **0.29** of full travel. The original's fast pitch cadences therefore fly a
+much smaller stick than its slow ones, which is roll-off produced in the input stage before any
+aerodynamics are involved — see the landing note below.
+
+**Landing note — it closes about a third of the residual roll-off, and does not close the item.**
+Ported as `StickRamp`, applied to the keyboard axes in `FlightController.ReadKeyboard` (the
+gamepad's analogue axes add on top, unramped, matching the joystick path). Driving `ZzCadenceSweep`
+through the ramp moves the 1300 → 570 ms roll-off from **20.5× to 26.8×** against the original's
+**42×**, so the deficit falls from 2.05× to **1.57×**.
+⚠ **Quote the sweep's WALL reading, not its sim reading.** The macro drove the keys in wall
+milliseconds, so the period the game saw is that × 1.390 (`docs/verification.md` DET-11); the sim
+column answers a question nobody flew. It used to be defensible to quote either, because with a
+square wave on both sides the ratio barely moved between them — a rate limit destroys that, since
+2.5/s is an absolute timescale that does not rescale with the cadence. The sim column reads 36.4×
+for the same run.
+⚠ **The 23.3× the C23 note above quotes is neither today's baseline nor the right column** — the
+unramped model reads 20.5× on the current build, and ratios are comparable only within one run.
+
 ## Control authority vs speed
 
 `FUN_0048bdd0` derives three independent scalars from airspeed alone, reading nine globals at
@@ -2016,6 +2061,12 @@ the tests, not the prose, are what stops a mechanism being quietly re-derived.
   timestep cannot separate them; the case that can is `dt · damp = 5`, past the linear form's
   stability edge at **`dt · damp = 2`**, where `(1 − dt·damp) = −4` flips the rate's sign and grows
   it every tick while `exp(−dt·damp)` stays in `(0, 1)` and only decays.
+- **`StickRampTests`** — `FUN_00487460`, the three per-axis blocks. Pins the RATE (0.4 s of held key
+  is full deflection, and half that time is half deflected, so a linear ramp cannot be swapped for an
+  exponential approach) and, twice over, the ASYMMETRY: release centres the axis in one frame, and a
+  reversal ramps from centre rather than counting down from the old deflection. ⚠ A symmetric ramp
+  agrees on a held key and differs on every release and every reversal — which is the whole of the
+  cadence roll-off, so the held-key case alone would pin nothing that matters.
 - **`WeathervaneTests`** — `FUN_00490f70`, `0x4916fe`–`0x4917f0`. Reads the torque directly, or the
   body rates after ONE step from rest where the arithmetic is closed form, so a sign flip, a missing
   halving or a leak into roll fails exactly instead of being absorbed a hundred frames later. Pins:

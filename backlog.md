@@ -1201,18 +1201,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-120` `[Tuning]` `[Owed-playtest]` **Collision feel** — behaviour against building corners.
 
-- `BL-147` `[Research]` **Pitch's transient shape. NARROWED to a ≈1.8× residual, and the named
-  mechanism is now landed and measured rather than pending. Measured 2026-08-03 from `CAP-04`; the
-  capture is discharged and retired. The A/B against our own build is DONE (`C23`): the original's
-  1300 → 570 ms cadence roll-off is 42× against our 23.3× (was 19.6× before the weathervane), and
-  the "3.5× steeper than one first-order lag permits" framing this entry was written on is
-  superseded — see the landed-mechanism paragraph.**
+- `BL-147` `[Research]` **Pitch's transient shape. NARROWED to a 1.57× residual, and the two
+  mechanisms that got it there are landed and measured rather than pending. Measured 2026-08-03 from
+  `CAP-04`; the capture is discharged and retired. The A/B against our own build is DONE: the
+  original's 1300 → 570 ms cadence roll-off is 42× against our 26.8×, the weathervane torque (`C23`)
+  and the original's own 2.5/s stick ramp having taken it there. The "3.5× steeper than one
+  first-order lag permits" framing this entry was written on is superseded — see the
+  landed-mechanism paragraphs.**
   The item was written asking for a *moderate-deflection* pitch trace, on the assumption that a
-  sub-full-deflection input exists to spin up. **It does not — the user flies the original's pitch on
-  the keyboard, so every pitch command is full deflection gated on/off by the key** (confirmed by the
-  user, 2026-08-03; note the numpad in the original is the *camera*, `CAP-07`/`CAP-08`, not the stick).
-  A "~45° pull" is therefore a **tap cadence**, not a deflection, and there is no partial-deflection
-  spin-up curve to fit.
+  sub-full-deflection input exists to spin up. **No ANALOGUE such input exists — the user flies the
+  original's pitch on the keyboard** (confirmed by the user, 2026-08-03; note the numpad in the
+  original is the *camera*, `CAP-07`/`CAP-08`, not the stick). A "~45° pull" is therefore a **tap
+  cadence**, not a deflection, and there is no partial-deflection curve to fit from a stick.
+  ⚠ **But "every pitch command is full deflection gated on/off by the key" is WRONG, and the
+  keyboard does produce partial deflections.** The original's stick axes are accumulators: a held key
+  ramps toward full at **2.5/s** (0.4 sim s to full travel) and a released or reversed key drops the
+  axis to centre in one frame (`FUN_00487460`; pitch `obj+0x108`, the zero-snap at `0x48786a`, the
+  ramp at `0x487880`-`0x48788f`, the 2.5 at `0x006040a8`). Decode:
+  [`docs/org/flightModel.md`](docs/org/flightModel.md), "The keyboard stick is an accumulator".
+  This also supplies the tapped-pull numbers below mechanically: a 115 ms press reaches
+  `2.5 × 0.115` = **0.29** of full travel, which is the 26–30% those pulls measured.
   **What `CAP-04` actually measured** (both takes, `checkclip` `OK`, heading flat to 0.2° so the
   manoeuvre is genuinely wings-level pitch; decode noise 1.3–1.8 ft second-difference; altimeter band
   resolved 11.2× / 8.2×). Entry 299.4 / 300.4 mph level, then a tapped pull. Smoothed peak
@@ -1234,11 +1242,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   is not — so a τ derived from it describes a model the original does not obey. What survives from the
   loop clip is the asymptote R = 26–31 °/sim-s and the 0.66 s sim rise, both model-free.
   `PitchTune` 0.75 is still not implicated: it sets the steady rate, which continues to match.
-  **The sluggishness is most likely the tap cadence, not the airframe.** At matched smoothing the held
-  key reaches its rate in 0.66 s sim while `CAP-04`'s tapped pulls take 0.99 / 1.25 / 1.50 / 5.28 s —
-  1.5× to 8× slower, and *not reproducible between takes*, which is the signature of a human hand
-  rather than a flight model. Before touching any constant, check whether our key-to-input path
-  ramps/filters where the original's is a bare on/off.
+  **The sluggishness is the tap cadence and the stick ramp, not the airframe.** At matched smoothing
+  the held key reaches its rate in 0.66 s sim while `CAP-04`'s tapped pulls take 0.99 / 1.25 / 1.50 /
+  5.28 s — 1.5× to 8× slower, and *not reproducible between takes*. Part of that is a human hand;
+  the rest is the ramp, which never lets a tapped stick past 0.29 of full travel. The key-to-input
+  check this line used to ask for is DONE and came out the other way round: the original ramps and
+  the remake did not.
   **What remains open:** τ itself — but there is now a **named candidate mechanism**, which there was
   not before.
 
@@ -1263,13 +1272,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   **second** first-order lag (`lift_accel_rate`, τ = 1.33 s), so the pre-C23 build already rolled off
   19.6× — 1.65× past that ceiling — while `return_rate` was still pure damping. The amplitude
   comparison above is the statement of record.
-  **What remains open:** the residual ≈1.8× of roll-off, with no named mechanism. Candidates not yet
-  examined: the original's 0.5/s throttle slew (decoded, unimplemented — it contaminates the first
-  seconds of any manoeuvre), the `liftAOAs` airflow blend's behaviour under a rapidly reversing
-  demand, and the possibility that the original's 570 ms point (a 4.9× drop from 700 ms over a 1.23
-  frequency ratio) is a resonance rather than a point on a smooth roll-off, which no monotone
-  transfer function can produce and which the corpus cannot presently distinguish from noise at
-  0.63 ± 0.13 ft.
+  **A THIRD of the residual is the input stage rather than the airframe.** The 2.5/s stick ramp
+  above is a rate limit with an instant reset, so the original's fast cadences fly a much smaller
+  stick than its slow ones: at 1300 ms the deflection saturates, at 570 ms it barely reaches full,
+  below that it never gets there. Ported as `StickRamp` and driven through `ZzCadenceSweep`, the
+  1300 → 570 ms roll-off goes **20.5× → 26.8×** against the original's **42×**, dropping the deficit
+  from 2.05× to **1.57×**.
+  ⚠ **Quote the sweep's WALL reading.** The macro drove the keys in wall milliseconds, so the period
+  the game saw is that × 1.390 (`docs/verification.md` DET-11) — the sim column (36.4× for the same
+  run) answers a question nobody flew. Quoting either was defensible while both sides ran square
+  waves and the ratio barely moved between the columns; a rate limit ends that, because 2.5/s is an
+  absolute timescale that does not rescale with the cadence.
+  ⚠ **The 23.3× the C23 paragraph above quotes is neither today's unramped baseline (20.5×) nor the
+  right column** — only ratios taken within one run of the sweep are comparable.
+  **What remains open:** the residual **1.57×**, which is outside the ±20% amplitude systematics and
+  the ±12% spread in mean airspeed, so it is a real gap rather than measurement slack. The
+  candidates named before the ramp landed and still unexamined: the original's 0.5/s throttle slew
+  (decoded, unimplemented — it contaminates the first seconds of any manoeuvre), the `liftAOAs`
+  airflow blend's behaviour under a rapidly reversing demand, and the possibility that the original's
+  570 ms point (a 4.9× drop from 700 ms over a 1.23 frequency ratio) is a resonance rather than a
+  point on a smooth roll-off, which no monotone transfer function can produce and which the corpus
+  cannot presently distinguish from noise at 0.63 ± 0.13 ft.
   ⚠ `PitchTune` **did** move here, 0.75 → 0.89, and so did `YawTune`, 1.33 → 1.57 — *not* to chase
   this transient. A sustained full-stick manoeuvre holds a real misalignment (α ≈ 18° pulling), so
   the weathervane opposes the stick and dropped the **steady** rate to 28.35 °/s; the refit re-pins
