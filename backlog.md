@@ -694,14 +694,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   encode a falloff curve or impulse. D10 uses linear falloff to zero at the edge and
   `BlastImpulsePerDamage = 1 N·s` on a directly struck rigid body. Judge clustered-object damage
   and physical push against the original before changing either.
-  ✅ **The falloff half is decoded, and D10's invented curve is right.** `FUN_005acac0` applies
-  `damage × (1 − distance / weapon[+0x40])` to **both** pools, so the original's splash is exactly
-  linear to zero at the radius, which is what D10 assumed
-  ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md), "Half two, the splash"). Do not retune
-  the shape. Three details we do not model: the gather radius (`+0x3c`) is a **different field** from
-  the falloff denominator (`+0x40`); a per-round factor at round `+0x678` scales the radius and both
-  damage figures together; and a weapon with `+0x74` bit `0x4000` skips the falloff entirely and
-  deals full damage everywhere inside the radius.
+  ✅ **The falloff half is decoded, and D10's linear curve is WRONG.** `FUN_005acac0` applies
+  `damage × (1 − d² / IMPACT_PROXIMITY²)` to **both** pools
+  ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md), "Half two, the splash"): the engine
+  stores `IMPACT_PROXIMITY` squared at `+0x40` and every distance it compares comes from
+  `FUN_00538880`, which returns a squared distance. So the original's splash is **quadratic in
+  distance**, reaching zero at the radius but holding up far better close in, 0.75 at half the radius
+  where our linear curve gives 0.5. Change the shape.
+  Four more details we do not model: `d` is the distance to the target's **bounding-sphere surface**,
+  clamped to zero for anything the burst engulfs; the blast is **occlusion-tested**, so cover works
+  against splash; the gather is capped at **32 objects**; and a per-round factor at `+0x678` scales
+  the radius and both damage figures together. A weapon carrying `MINE` skips the falloff entirely,
+  though no shipped weapon authors it.
   ⚠ **The impulse half is no longer a TUNE.** `FUN_004b9bc0` applies a per-hit impulse
   (`FUN_0048f5e0`) whose two magnitudes are `damage × vehicle_def[+0xa0]` scaled by **0.005** and
   **0.0333**, gated on the larger damage figure exceeding **5.0**
@@ -1207,8 +1211,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   documents the per-surface `IMPACT` table and nothing about what a burst does. `FUN_005ac3a0` is now
   decoded through both halves, the direct impact (`FUN_005ac7a0`, including the per-weapon impact
   hook at weapon `+0x20c` that `TANGLER` installs) and the splash (`FUN_005aca30` gathers,
-  `FUN_005acac0` applies). The splash falloff is exactly linear to zero at `weapon[+0x40]`, which
-  confirms `BL-227`'s invented curve, and `BL-227`/`BL-293` are amended with what it settles.
+  `FUN_005acac0` applies); `BL-293` is amended with the `SURFACE_ANIMATION` normal rule.
+  Ninth pass traces the last four offsets to their parse sites and **overturns the eighth pass's
+  falloff claim**: `+0x3c` is `IMPACT_PROXIMITY` raw but `+0x40` is `IMPACT_PROXIMITY` **squared**,
+  `+0x44` is `DETONATION_DISTANCE` squared, and `FUN_00538880` returns a squared distance, so the
+  splash falloff is **quadratic**, not linear. `BL-227` is corrected accordingly. Same pass names the
+  last two flag bits (`MINE`, `RANDOM_DEVIATION`), decodes the sphere query (bounding-sphere surface
+  distance, occlusion test, 32-object cap) and `FUN_005b03f0` (precomputed hit list or live swept
+  query, nearer wins). **Ten keys the parser accepts are authored by nothing**, so the engine
+  supports mines, wandering rounds, wire-guided rounds with a ceiling, remote detonation and
+  multi-target seeking that the shipped table never uses. *This item is answered.*
 
 ## Flight model & collision physics
 

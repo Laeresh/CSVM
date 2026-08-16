@@ -26,10 +26,12 @@ the extension struct means `TORPEDO`, while `0x08` at `+0x74` means the weapon a
 |---|---|
 | `0x08` | `FLYOUT_HEALTH` is present |
 | `0x800` | `INSTANT` |
+| `0x4000` | `MINE` |
 | `0x8000` | `LOCK_ON` is present |
 | `0x10000` | `LOCK_ON_LEAD` is present |
 | `0x100000` | `REMOTE_DETONATE` |
 | `0x200000` | `TETHER_GUIDED` |
+| `0x8000000` | `RANDOM_DEVIATION` |
 
 And the scalar slots the guidance path uses:
 
@@ -43,13 +45,19 @@ And the scalar slots the guidance path uses:
 | `+0x84` | derived from the two above |
 | `+0x8c`, `+0x90` | the flyout's damage accumulator (initialised to 0) and `FLYOUT_HEALTH` |
 
-⚠ **Five of those keys are parsed and authored by nothing.** `PITCH_RATE`, `TURN_SUSPEND_TIME`,
-`TETHER_GUIDED`, `REMOTE_DETONATE` and `INSTANT` appear in no entry of this install's
-`weapons.zrd.json`, so they are absent from [`formats/weapons.md`](../formats/weapons.md)'s field
-census, which enumerates what the data carries. They still shape the shipped behaviour by their
-**defaults**: a `TURN_SUSPEND_TIME` of zero is what gives every guided round its turn authority from
-the first frame, and `INSTANT` being unset is what makes every round in this install a travelling
-projectile rather than a one-step hitscan.
+⚠ **Ten of the keys this parser accepts are authored by nothing.** `PITCH_RATE`,
+`TURN_SUSPEND_TIME`, `TETHER_GUIDED`, `REMOTE_DETONATE`, `INSTANT`, `MINE`, `RANDOM_DEVIATION`,
+`MULTI_TARGET`, `EXPIRES` and `IMPACT_TYPE` appear in no entry of this install's `weapons.zrd.json`,
+so they are absent from [`formats/weapons.md`](../formats/weapons.md)'s field census, which
+enumerates what the data carries. They still shape the shipped behaviour by their **defaults**: a
+`TURN_SUSPEND_TIME` of zero gives every guided round its turn authority from the first frame,
+`INSTANT` being unset makes every round a travelling projectile rather than a one-step hitscan,
+`MINE` being unset is why every blast has a falloff, and `RANDOM_DEVIATION` being unset is why no
+shipped round wanders.
+
+That last group is the more interesting half of this decode: the engine supports mines, wandering
+rounds, wire-guided rounds with a ceiling, remote detonation and multi-target seeking, and **the
+shipped weapon table uses none of it**.
 
 ## The weapon-extension struct
 
@@ -252,7 +260,7 @@ ballistics keys. In order:
   0.0, which is why the shipped rounds fly flat.
 - **First-frame guard.** On the frame a round is spawned, the integration delta uses `1e-6` instead
   of the real frame time, so a round never jumps a full step on its birth frame.
-- **Wander.** Under `+0x74` bit `0x8000000`, and only when the round has no target or its target is
+- **Wander.** Under `RANDOM_DEVIATION`, and only when the round has no target or its target is
   farther than `max(4 * DETONATION_DISTANCE, 400 m)`, three `rand()` draws build an angular
   acceleration of magnitude `5 * dt`, sign-flipped to keep pushing outward, integrated into an offset
   bounded at ±1.0, ±0.75, ±1.0 with a restoring `10 * dt`. An unguided or far-from-target round
@@ -265,8 +273,8 @@ ballistics keys. In order:
 **Three independent ways a round ends**, all resolved here by calling `FUN_005ac3a0`:
 
 1. **Range.** Distance travelled accumulates in `+0x664`; once it reaches `RANGE` (weapon `+0x1c`)
-   the round is done. A weapon with `+0x74` bit `0x4000` accumulates only **half** of each step, so
-   it flies twice its nominal range.
+   the round is done. A `MINE` accumulates only **half** of each step, so it flies twice its nominal
+   range before expiring.
 2. **Timed fuse.** If the weapon authors `DETONATION_TIME` (weapon `+0x48`) and the round's age
    exceeds it, the round detonates. This is the rear-arc flare's 2.0 s.
 3. **Target proximity.** A round with a target that comes within `DETONATION_DISTANCE` of it
@@ -410,26 +418,49 @@ and sound a row binds and how rows are filled. It does not cover what a detonati
 ### Half two, the splash (`FUN_005aca30` then `FUN_005acac0`)
 
 Gated on `weapon +0x3c > 0`. `FUN_005aca30` runs a sphere query (`FUN_004cb420`) of radius
-`round[+0x678] * weapon[+0x3c]` and fills a hit buffer: a count, then entries of 0x2c bytes each
-carrying the struck object and its **distance** from the burst. `FUN_005acac0` then walks that buffer
-and, per entry:
+`round[+0x678] * IMPACT_PROXIMITY` and fills a hit buffer. `FUN_005acac0` then walks it and, per
+entry:
 
-    t      = 1 - distance / weapon[+0x40]
+    t      = 1 - dSurface² / IMPACT_PROXIMITY²
     armour = t * ARMOR_DAMAGE  * round[+0x678]
     health = t * HEALTH_DAMAGE * round[+0x678]
 
-**The falloff is exactly linear, reaching zero at the radius, and it scales both pools by the same
-factor.** A weapon carrying `+0x74` bit `0x4000` skips the falloff entirely and applies full damage
-to everything inside the radius.
+**The falloff is quadratic in distance, not linear**, because both terms of that ratio are squared
+quantities (see [the squared-radius convention](#the-engine-stores-radii-squared)). It reaches zero
+at the radius and scales both pools by the same factor. At half the radius a linear curve would give
+0.5 and this gives **0.75**, so the original is markedly more generous close in and falls away faster
+near the edge.
 
-Two things worth keeping straight. The **gather radius (`+0x3c`) and the falloff denominator
-(`+0x40`) are different fields**, so the sphere searched and the distance the falloff normalises by
-need not be the same number. And `round[+0x678]` is a per-round yield multiplier that scales the
-radius and both damage figures together, so it is one knob over the whole burst.
+Three further details:
 
-⚠ Which authored key writes `+0x3c` and which writes `+0x40` was **not** traced to the parse site.
-`+0x40` is the same field the `SHAKES_CAMERA` shake falls off over, which is consistent with it being
-`IMPACT_PROXIMITY`, but that is an inference from two uses, not a decode.
+- **The distance is to the object's bounding-sphere surface, not its centre**, and is clamped to zero
+  when the object overlaps the burst. Anything the burst engulfs takes full damage.
+- **The blast is occlusion-tested.** `FUN_005aca30` passes both the distance flag and the occlusion
+  flag, so for each candidate `FUN_004cb420` casts from the burst centre to the object and drops it
+  if something blocks the way. Cover works against splash in the original.
+- **At most 32 objects** are collected; past that the query logs "Database intersections array is
+  full" and silently stops adding.
+
+A weapon carrying `MINE` (`+0x74` bit `0x4000`) skips the falloff entirely and applies full damage to
+everything inside the radius. `round[+0x678]` is a per-round yield multiplier scaling the radius and
+both damage figures together, so it is one knob over the whole burst.
+
+### The engine stores radii squared
+
+`FUN_005ad630` keeps two forms of `IMPACT_PROXIMITY` and a squared `DETONATION_DISTANCE`, and every
+distance it compares them against comes from `FUN_00538880`, which returns a **squared** distance
+with no square root:
+
+| Offset | Holds |
+|---|---|
+| `+0x3c` | `IMPACT_PROXIMITY`, raw, used as the sphere-query radius |
+| `+0x40` | `IMPACT_PROXIMITY²`, the falloff denominator |
+| `+0x44` | `DETONATION_DISTANCE²`, the fuse trigger |
+| `+0x48` | `DETONATION_TIME`, raw seconds |
+
+So any reading of this engine that treats a `FUN_00538880` result as a plain distance, or `+0x40` and
+`+0x44` as plain radii, gets the curve shape and the trigger range wrong. Both squarings are the same
+`FLD v; FLD ST0; FMUL ST1; FSTP` idiom at `0x005adbb5` and `0x005add73`.
 
 ## The hit-side dispatch
 
@@ -471,14 +502,19 @@ carry a real damage pair, **the data is misleading and the engine discards it**.
 
 The engine-dead duration is not the authored pair read straight off. `FUN_004b9bc0` computes
 
-    duration = ENGINE_DEAD_max * (1 - distance / TANGLER_RADIUS),  floored at ENGINE_DEAD_min
+    duration = ENGINE_DEAD_max * (1 - dSquared / TANGLER_RADIUS),  floored at ENGINE_DEAD_min
 
 and passes it to `FUN_004b1690`, which sets bit `2` of the victim's disabled-systems mask at `+0x2dc`
 and raises the timer at `+0x2e0` to that duration if it is longer than what is already running. The
 mask's rising edge calls `FUN_004b15c0` and its falling edge `FUN_004b1630`, the engine stop and
-restart. With this install's authored `TANGLER` (`wep_12`: `RADIUS [35]`, `ENGINE_DEAD [5,13]`) a
-dead-centre hit kills the engine for 13 s, decaying to the 5 s floor at 21.5 m and holding there out
-to the 35 m catch radius.
+restart.
+
+⚠ **The units here do not match, and that is what the code does.** The numerator is a squared
+distance from `FUN_00538880`, while `TANGLER`'s `RADIUS` is stored raw by `FUN_004ba6f0` (unlike
+`IMPACT_PROXIMITY`, which the other parser squares). So with `wep_12`'s `RADIUS [35]` and
+`ENGINE_DEAD [5,13]`, a dead-centre hit kills the engine for 13 s and the term reaches the 5 s floor
+at **√21.5 ≈ 4.6 m**, not at 21.5 m. Whether that is a bug in the original or intended, the effective
+full-strength zone is a few metres wide.
 
 **`ENGINE_DEAD` is a pair of globals, not a per-weapon field.** `FUN_004ba6f0` writes the two values
 into `DAT_0062b120` and `DAT_0062b124` rather than into the weapon's own struct, so the last-parsed
@@ -550,15 +586,22 @@ So it leaves the rail at launcher speed plus 60 m/s, flies straight with no grav
 the inherited component over 2.5 s down to a 60 m/s cruise. An aircraft at 120 m/s launches one that
 **halves its speed** across those 2.5 s, which is the slowdown `BL-290` recorded from the controls.
 
+## What a round collides with
+
+`FUN_005b03f0` advances a round to its next hit and has two modes. If the spawn built a **precomputed
+hit list** along the flight path (`+0x608`, the sorted list `FUN_005aef40` fills for a round whose
+weapon takes that path), the step just consumes entries in order, comparing each entry's stored
+squared distance against the distance travelled so far. Otherwise it runs a live swept query
+(`FUN_004c8ec0`) from the round's current position. Either way the result goes to `FUN_005ad330`,
+which is the hit resolve already documented in [`weaponImpact.md`](weaponImpact.md), including its
+water special case. When both a list entry and a live hit are available, the **nearer** of the two
+wins, compared by squared distance.
+
 ## Still open
 
-- Which authored keys write weapon `+0x3c` (the splash gather radius) and `+0x40` (the falloff
-  denominator). Both are named by use here, not traced to their parse sites.
-- `FUN_004cb420`, the sphere query the splash gathers with: what it admits, and whether it can return
-  world geometry as well as vehicles.
-- `FUN_005b03f0`, the swept-step collision query that decides what a round hits in the first place.
-- The keys behind `+0x74` bits `0x8000000` (gates the wander) and `0x4000` (halves the range
-  accumulator, skips the splash falloff, and reroutes the tick).
+Nothing bearing on ordnance behaviour. `FUN_004c8ec0` and `FUN_004c8f70` (the swept and segment
+queries themselves) are geometry-layer routines shared with the collision system rather than weapon
+code, and were not opened.
 - `FUN_004881e0` is the player's fire-input tick. It routes by `CANNON` (`0x40`) and `ROCKET`
   (`0x10`) only, feeding `CALIBER` to `FUN_004810d0` for guns and the whole weapon to `FUN_00480f50`
   for ordnance.
@@ -575,10 +618,13 @@ the inherited component over 2.5 s down to a 60 m/s cruise. An aircraft at 120 m
   `FUN_005ac690`, `FUN_005ac580`, `FUN_005aca30` and `FUN_005acac0` were read in full.
   `FUN_004b8b50`'s selection rule was taken from its disassembly rather than its decompilation,
   because the decompiler's rendering of the branch order there is misleading.
-- Weapon-record offsets named by their use in `FUN_005afd50`: `+0x1c` `RANGE`, `+0x38`
-  `ACCELERATION`, `+0x44` `DETONATION_DISTANCE`, `+0x48` `DETONATION_TIME`, `+0x54` `GRAVITY`. Each
-  is inferred from the arithmetic it appears in rather than traced to its parse site, though all five
-  agree with the value ranges [`formats/weapons.md`](../formats/weapons.md) reports for those keys.
+- `+0x3c`, `+0x40`, `+0x44` and `+0x48` were traced to their parse sites in `FUN_005ad630` and are
+  confirmed, squarings included. `+0x1c` `RANGE`, `+0x38` `ACCELERATION` and `+0x54` `GRAVITY` are
+  still named by their use in `FUN_005afd50` rather than traced, though all three agree with the
+  value ranges [`formats/weapons.md`](../formats/weapons.md) reports.
+- `FUN_00538880` returns a **squared** distance. Every comparison in this page that reads as a
+  distance test is a squared-distance test, which is what makes the splash falloff quadratic and the
+  `TANGLER` radius mismatch visible.
 - The `+0x74` bit assignments and the guidance scalar offsets were read from `FUN_005ad630`'s parse
   sites one key at a time, each confirmed against the key string it is stored beside. `+0x84` is
   computed from `LOCK_ON_LEAD`'s two elements by an expression that was not read.
