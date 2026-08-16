@@ -177,7 +177,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — The destroy anim and the falling wreck
 
-18. ☐ Handle `Callback` events, 16 (velocity into the instance) and 15 (stop the stage anims)
+18. ☑ Handle `Callback` events, 16 (velocity into the instance) and 15 (stop the stage anims)
 19. ☐ Play the self-named destroy anim on death, and move `*_crash_*` to ground impact
 20. ☐ The parachute: `chuteman` at 3.0 s, and the wreck's own landing sequences
 21. ☐ Evidence for the fall, against the two reference recordings
@@ -197,8 +197,12 @@ and Waves A to C collapsed them into one:
 
 | Slot | Started by | When | The def | `has_callbacks` |
 |---|---|---|---|---|
-| `+0x6d0` | `FUN_004b82d0` | health reaches zero | the **self-named** def: `fury-fury`, `kestrel-kestrel`, `player-player` | **true** |
-| `[+0x6e0 … +0x6e4]` | `FUN_0048b920` | the wreck lands, indexed by struck material | `ai_crash_*` / `player_crash_*` | false |
+| `+0x6d0` | `FUN_004b82d0` | health reaches zero | the **self-named** def: `fury-fury`, `kestrel-kestrel`, `player-player` | true |
+| `[+0x6e0 … +0x6e4]` | `FUN_0048b920` | the wreck lands, indexed by struck material | `ai_crash_*` / `player_crash_*` | false on the `ai_crash_*` trio, **true** on `player-player_crash_*` |
+
+⚠ `has_callbacks` is **not** a reliable tell for which family a def belongs to: the three `ai_crash_*`
+defs carry false, but each `player-player_crash_*` carries true for a `Callback 12` in its
+`RESET_STATE` (D18's census). Read the authored value, never the def family.
 
 `docs/org/vehicleDamage.md` said as much for the player ("an anim named `player` **plus** a set of
 `player_crash_*` variants"); A3 read the second as the death anim and wired it to the kill, which is
@@ -663,9 +667,9 @@ instance, and one authoring `Callback 15` stops a running stage anim. Then the c
 install authors code 0 (the plan's own claim, re-checked mechanically).
 
 **⚠ Traps.** Do not implement code 0. It is the free/delete arm, it is unreachable in the shipped
-data, and a "helpful" implementation would start deleting live wrecks. `has_callbacks` is false on
-every `*_crash_*` def and true on the self-named destroy defs, so that flag is the tell for which
-family you are looking at.
+data, and a "helpful" implementation would start deleting live wrecks. Do not treat `has_callbacks`
+as the tell for a def family either: it is true on `player-player_crash_*` as well as on the
+self-named destroy defs.
 
 ## D19 ☐ Play the self-named destroy anim on death, and move `*_crash_*` to ground impact
 
@@ -675,8 +679,8 @@ wreck reaches the ground, indexed by the struck material as it already is.
 
 **Evidence (confidence: traced).** The two-slot table in "⚠ Wave D — what Waves A to C got wrong"
 above. Every airframe ships a self-named def (`fury-fury`, `bloodhawk-bloodhawk`,
-`piratefighter-piratefighter`, `player-player`, one per airframe per chapter), and they are the only
-defs whose `has_callbacks` is true. Our `SurfaceDefTable` (`EffectCatalogue.cs:168-188`) binds
+`piratefighter-piratefighter`, `player-player`, one per airframe per chapter). Our
+`SurfaceDefTable` (`EffectCatalogue.cs:168-188`) binds
 `CrashDefPrefix`/`AiCrashDefPrefix` alone, and `FlightController.Crash` plays the selected slot on
 the death event (`FlightController.cs:2103`), so the ground-impact def IS our death def today.
 
@@ -699,6 +703,11 @@ the ground, against `Enemy AI Shotdown.mp4` beat for beat. Then the same for the
 self-named defs resolve the same way and must not bring the scaffold back. The wreck must not be
 hidden on the death frame, which is exactly the bug. Do not delete the wreck afterwards either: the
 decode is firm that nothing frees a destroyed vehicle, and the ground-impact def hides it.
+⚠ **Two writers of one field.** `FlightController.Crash` already assigns
+`CrashRuntime.InheritedWorldVelocity` directly (`_model.VelocityDir * _model.Speed * WreckMomentum`,
+where `WreckMomentum` is a TUNE and not a decode). D18's `Callback 16` writes the same field from the
+def's own event, so once the destroy anim plays on death there are two writers and the def's event
+ordering decides which wins. Pick one owner; the runtime applies no scaling of its own.
 
 ## D20 ☐ The parachute, and the wreck's own landing
 

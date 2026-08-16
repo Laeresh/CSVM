@@ -428,7 +428,10 @@ pilot's parachute), eight `ObjectActiveState` events swapping healthy for destro
 `Callback 15`, then `CallSequence randomdestseq` — a second `large_fireball`/`plane_destroy_sg` pass
 with `call_trailburst` and the `ObjectMotion` that actually flies the hull down. Its own
 `destroyed_dirt`, `destroyed_water` and `bounce_effects` sequences carry the landing.
-`has_callbacks` is **true** here and false on every `*_crash_*` def, which is the tell.
+`has_callbacks` is **true** here and false on the three `ai_crash_*` defs. ⚠ It is not the tell for
+which family a def belongs to: the player's three `player_crash_*` defs also carry it true, and each
+authors a `Callback` of 12, a code the vehicle-death handler does not take. The authored VALUE is
+what decides what a callback means, never the def it sits in.
 
 **Nothing removes a destroyed vehicle.** There is no timeout, no distance cull, no count cap and no
 recycling on the death path. The wreck stops being visible when the GROUND-IMPACT anim switches its
@@ -454,7 +457,8 @@ otherwise only sets flag `0x10000000` and returns.
 
 Code 0 is never authored. The authored `Callback` handler is `FUN_004ec5e0` and passes the event's
 own value; code 0 is emitted only by `FUN_004ebbb0`, which tears an anim instance down, and no
-compiled anim def in the install authors a `Callback` of 0. Flag `0x8000000` likewise has exactly
+compiled anim def in the install authors a `Callback` of 0. The extraction holds 736 `Callback`
+events over 28 distinct values, and 0 is not among them. Flag `0x8000000` likewise has exactly
 one writer, `FUN_0047bab0` at `0x0047bc93`. So the free is a handshake between the callback and
 `FUN_0047bab0`, the removal function, which frees immediately when `0x10000000` is set (no death
 anim outstanding) and otherwise defers by setting `0x8000000`. **The trigger is always a call to

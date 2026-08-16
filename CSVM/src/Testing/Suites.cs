@@ -336,6 +336,8 @@ public static class Suites
             "an effect's template meshes show at the call site — including a CALLED template's — and go dark when it ends (BL-061)", EffectTemplateMesh));
         into.Add(new TestHarness.Suite("fbfx-flash",
             "he_ground_effect's six-step full-screen wash reports its authored run times, so the 1.2 s ramp does not collapse into one instant", FbfxFlash));
+        into.Add(new TestHarness.Suite("callback-events",
+            "a destroy def's CALLBACK 16 hands the instance the rig's wreck velocity and its 15 stops the damage stages, on player-player and fury-fury; an authored code the runtime does not act on is counted, and no def in the chapter authors the free arm, code 0 (D18)", CallbackEvents));
         into.Add(new TestHarness.Suite("ordnance-burst-timeline",
             "the HE, flash and sonic bursts play end to end and every sequence's whole event timeline matches the authored JSON — in order, at the authored time (D31)", OrdnanceBurstTimeline));
         into.Add(new TestHarness.Suite("effects-census",
@@ -9103,6 +9105,128 @@ public static class Suites
             runtime.Free();
             stage.Free();
         }
+    }
+
+    // ---- CALLBACK: the two vehicle-death codes ---------------------------------------------------
+
+    // A destroy def's CALLBACK events reach the seams the rig supplies: 16 hands the instance the
+    // wreck's velocity, 15 stops the damage stages. Both are asserted on shipped defs — player-player
+    // (which authors 3, then 16 and 15 through destroy_craft) and the AI's fury-fury.
+    // ⚠ Assert the unknown code and the unwired control too. A handler that acted on every code
+    // would pass the two arms and still be inventing behaviour, and one wired to nothing at all
+    // leaves the wreck motionless exactly as it did before this existed.
+    private static void CallbackEvents(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            CallbackSeamsReceiveTheirCodes(ctx, world);
+            CallbackCodeZeroIsNeverAuthored(ctx, world);
+        });
+    }
+
+    private static void CallbackSeamsReceiveTheirCodes(TestContext ctx, TestWorld world)
+    {
+        // 3.0 s past chuteman's authored start, which is what fury-fury's own callbacks follow.
+        const int Steps = 360;
+        var handed = new Vector3(11f, -23f, 37f);
+        // The nodes player-player and fury-fury name, flat, so a call that misses one is visible
+        // rather than absorbed by a shared ancestor.
+        var destroyDefNodes = new[]
+        {
+            "healthy", "destroyed", "dontmove", "markers", "shadow", "cockpit1",
+            "piece1", "piece2", "piece3", "piece4",
+            "prop1", "prop1b", "wing_flare1", "wing_flare2", "staticprop1", "nitroprop1",
+        };
+        foreach (var animName in new[] { "player", "fury" })
+        {
+            var program = world.Session.Program.Subset(animName);
+            var defs = program.ByAnimName(animName);
+            ctx.Check(defs.Count > 0, $"chapter program has the self-named destroy def {animName} defs={defs.Count}");
+            if (defs.Count == 0)
+            {
+                continue;
+            }
+
+            WithEmitterStage(ctx, program, $"Callback_{animName}", destroyDefNodes, (stage, runtime, fake) =>
+            {
+                int stops = 0;
+                runtime.WreckVelocity = () => handed;
+                runtime.StopDamageStages = () => stops++;
+                runtime.Start(defs[0], stage);
+                for (int i = 0; i < Steps; i++)
+                {
+                    runtime.Advance(1f / 60f);
+                }
+
+                ctx.Check(runtime.InheritedWorldVelocity.IsEqualApprox(handed),
+                    $"{animName}: CALLBACK 16 handed the instance the rig's velocity inherited={runtime.InheritedWorldVelocity} handed={handed}");
+                ctx.Same(1, stops, $"{animName}: CALLBACK 15 stopped the damage stages exactly once");
+                foreach (var (key, n) in runtime.UnhandledEventCounts)
+                {
+                    ctx.Check(!key.Contains("no seam wired"),
+                        $"{animName}: no acted-on code went unwired ({key}×{n})");
+                }
+            },
+                asCrashRig: true);
+
+            // THE CONTROL, and the unknown-code arm: the same def with no seams. Nothing moves, and
+            // player-player's authored 3 is counted rather than guessed at either way.
+            WithEmitterStage(ctx, program, $"CallbackBare_{animName}", destroyDefNodes, (stage, runtime, fake) =>
+            {
+                runtime.Start(defs[0], stage);
+                for (int i = 0; i < Steps; i++)
+                {
+                    runtime.Advance(1f / 60f);
+                }
+
+                ctx.Check(runtime.InheritedWorldVelocity == Vector3.Zero,
+                    $"ABLE-TO-FAIL CONTROL {animName}: with no seam wired the wreck inherits nothing inherited={runtime.InheritedWorldVelocity}");
+                ctx.Check(runtime.UnhandledEventCounts.ContainsKey("Callback(16, no seam wired)")
+                          && runtime.UnhandledEventCounts.ContainsKey("Callback(15, no seam wired)"),
+                    $"...and both codes are reported as unwired rather than silently skipped keys=[{string.Join(",", runtime.UnhandledEventCounts.Keys)}]");
+                if (animName == "player")
+                {
+                    ctx.Check(runtime.UnhandledEventCounts.TryGetValue("Callback(3)", out int unknown) && unknown > 0,
+                        $"player: the authored code 3 is counted and ignored, never invented (×{(runtime.UnhandledEventCounts.TryGetValue("Callback(3)", out int u) ? u : 0)})");
+                }
+            },
+                asCrashRig: true);
+        }
+    }
+
+    // The census behind the prohibition on implementing code 0, the free/delete arm: no def in the
+    // loaded program authors it, in a sequence or in a RESET_STATE.
+    private static void CallbackCodeZeroIsNeverAuthored(TestContext ctx, TestWorld world)
+    {
+        var codes = new SortedDictionary<int, int>();
+        foreach (var def in world.Session.Program.Defs)
+        {
+            var blocks = new List<AnimSequence>(def.Sequences);
+            if (def.ResetState is { } reset)
+            {
+                blocks.Add(reset);
+            }
+
+            foreach (var block in blocks)
+            {
+                foreach (var ev in block.Events)
+                {
+                    if (ev.Kind != "Callback")
+                    {
+                        continue;
+                    }
+
+                    int code = (int)(ev.Data.Num("value") ?? -1f);
+                    codes[code] = codes.TryGetValue(code, out int n) ? n + 1 : 1;
+                }
+            }
+        }
+
+        ctx.Note($"chapter {ctx.Chapter} authors callback codes {string.Join(", ", codes.Select(kv => $"{kv.Key}×{kv.Value}"))}");
+        ctx.Same(0, codes.TryGetValue(0, out int zeroes) ? zeroes : 0,
+            $"no def authors the free/delete arm, code 0");
+        ctx.Check(codes.ContainsKey(16) && codes.ContainsKey(15),
+            $"and the two codes this runtime acts on ARE authored here 16×{(codes.TryGetValue(16, out int c16) ? c16 : 0)} 15×{(codes.TryGetValue(15, out int c15) ? c15 : 0)}");
     }
 
     // ---- the template MESH half renders at the call site ----------------------------------------

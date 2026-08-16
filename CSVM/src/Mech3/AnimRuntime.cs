@@ -50,15 +50,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         "ObjectMotionSiScript", "Loop", "If", "Elseif", "Else", "Endif", "CallSequence",
         "StopSequence", "CallAnimation", "StopAnimation", "InvalidateAnimation", "ResetAnimation",
         "PufferState",
-        "LightState", "LightAnimation", "SoundNode", "Sound", "ObjectAddChild",
+        "LightState", "LightAnimation", "SoundNode", "Sound", "ObjectAddChild", "Callback",
     };
 
     /// <summary>Kinds with a handler that covers only part of what the event does — reported
     /// apart from the unhandled ones, since "acted on" and "acted on fully" are different answers.
-    /// <c>ObjectAddChild</c> handles its sound-emitter form and counts the rest as unhandled.</summary>
+    /// <c>ObjectAddChild</c> handles its sound-emitter form and counts the rest as unhandled, and
+    /// <c>Callback</c> acts on the two vehicle-death codes and counts every other one.</summary>
     public static readonly IReadOnlyCollection<string> PartialEventKinds = new HashSet<string>(StringComparer.Ordinal)
     {
-        "ObjectAddChild",
+        "ObjectAddChild", "Callback",
     };
 
     /// <summary>Collect a per-definition census of how the bind RESOLVED, and log it through
@@ -233,6 +234,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// Which panes the wash reaches is the sink's decision, not this runtime's.</summary>
     public Action<Color, Color, float, Vector3, float>? ScreenFlash;
 
+    /// <summary>The world velocity a <c>Callback 16</c> hands the running instance, which is how a
+    /// wreck inherits the aircraft's motion (docs/org/vehicleDamage.md). Supplied by the rig,
+    /// because only the rig knows which vehicle is dying and how fast; null leaves the code
+    /// counted and <see cref="InheritedWorldVelocity"/> untouched. ⚠ The rig owns any scaling —
+    /// the runtime writes exactly what this returns.</summary>
+    public Func<Vector3>? WreckVelocity;
+
+    /// <summary>What a <c>Callback 15</c> stops: the damage-stage anims and start_anims, which is
+    /// where an injure-ladder smoke trail ends (docs/org/vehicleDamage.md). Bind it to the rig's
+    /// <c>DamageVisuals.DamageEffectStop</c>; null leaves the code counted and stops nothing.</summary>
+    public Action? StopDamageStages;
+
     /// <summary>This runtime does not own audio — its SOUND / SOUND_NODE events are no-ops, not
     /// late-failure reports. Set on the world-effects runtime: it renders an effect def's
     /// puffers, but the same effect's impact/death SOUND is already played by the projectile pool
@@ -310,6 +323,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // approach by up to one cell diagonal, and the C3 spiderweb's 0.7 s fade needs the trigger to
     // land close to its authored range at cruise speed.
     private const float RangeCheckCellSize = 8f;
+
+    // The two CALLBACK codes the vehicle-death handler acts on, decoded from LAB_00480710
+    // (docs/org/vehicleDamage.md's "What happens to the wreck"). 16 hands the instance the dying
+    // vehicle's velocity; 15 ends the damage stages.
+    // ⚠ Never add code 0. It is the free/delete arm, no compiled def in the install authors it,
+    // and acting on it would delete a live wreck.
+    private const int CallbackWreckVelocity = 16;
+    private const int CallbackStopStages = 15;
 
     // Smallest magnitude a pose-scale component may reach. ⚠ Never let a pose scale reach exactly
     // 0, however the data authors it: a singular basis makes Godot's physics server spam
@@ -2397,6 +2418,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     return true;
                 }
 
+            case "Callback":
+                // A callback is a thing that happens, not a pose, so a RESET_STATE raises none.
+                // The two codes acted on are authored in sequences alone, never in a reset block.
+                if (!instant)
+                    HandleCallback(ev);
+                return true;
+
             case "ObjectAddChild":
                 // Only the sound-emitter three-quarters of this event is acted on — see
                 // HandleAddChild. Everything else it does still counts as unhandled.
@@ -2410,6 +2438,38 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 // a case above and nothing else.
                 Count(ev.Kind);
                 return true;
+        }
+    }
+
+    // The authored code decides what a CALLBACK means, never the def it sits in: the player's
+    // crash defs carry `has_callbacks: true` and a code this runtime does not act on, so no family
+    // test can stand in for reading the value.
+    // ⚠ An unrecognised code is counted under its own key and nothing else. Codes outside the two
+    // below belong to the original's mission-script handler, and guessing at one invents behaviour.
+    private void HandleCallback(AnimEvent ev)
+    {
+        int code = (int)(ev.Data.Num("value") ?? -1f);
+        switch (code)
+        {
+            case CallbackWreckVelocity when WreckVelocity != null:
+                // Runtime-wide because the crash runtime is per aircraft, so its one wreck is the
+                // only thing this can reach.
+                InheritedWorldVelocity = WreckVelocity();
+                _opsApplied++;
+                return;
+            case CallbackStopStages when StopDamageStages != null:
+                StopDamageStages();
+                _opsApplied++;
+                return;
+            case CallbackWreckVelocity:
+            case CallbackStopStages:
+                // Named apart from an unknown code: this one IS understood, and only the caller's
+                // seam is missing — which is the whole answer to "why did the wreck not inherit".
+                Count($"Callback({code}, no seam wired)");
+                return;
+            default:
+                Count($"Callback({code})");
+                return;
         }
     }
 

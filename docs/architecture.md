@@ -684,7 +684,9 @@ e.g. C1's three `hangerdoors`). Every construction site hands over a sealed `Tem
 sequence interpreter is `SequenceRunner.cs`, live motions are `Anim/MotionSet.cs`, name resolution
 is `Anim/NameResolver.cs` (this class forwards through `Resolve`/`ResolveScoped`/`Anchors`), puffer
 emitters are `Anim/EmitterDirector.cs`, and the effect-template pool/placement is
-`Anim/TemplateStage.cs`. `FBFX_COLOR_FROM_TO`/`LIGHT_ANIMATION` report their `run_time` as the
+`Anim/TemplateStage.cs`. `CALLBACK` raises the two vehicle-death codes through caller-supplied seams (`WreckVelocity`,
+`StopDamageStages`) and counts every other code; decode in `docs/org/vehicleDamage.md`.
+`FBFX_COLOR_FROM_TO`/`LIGHT_ANIMATION` report their `run_time` as the
 event's duration, spacing a chain instead of firing it in one instant; decode in
 `docs/formats/anim-definitions.md`.
 
