@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using CSVM.Effects;
 using CSVM.Mech3;
 using CSVM.Session;
@@ -974,18 +975,17 @@ public partial class FlightController : Node3D
         if (_projectileHitsLogged < 6)
         {
             _projectileHitsLogged++;
-            GD.Print($"shot hit P{PlayerIndex + 1} ({colliderPart}→{struckPart}): {weapon.Id} "
-                + (state != null
-                    ? $"armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0} "
-                    : string.Empty)
-                + $"hull={Damage.WholeHealth:0.0}/{Damage.WholeHealthMax:0}");
+            string zone = state != null
+                ? Log.Format($"armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0} ")
+                : string.Empty;
+            Log.Info("weapons", $"shot hit P{PlayerIndex + 1} ({colliderPart}→{struckPart}): {weapon.Id} {zone}hull={Damage.WholeHealth:0.0}/{Damage.WholeHealthMax:0}");
         }
 
         // The decoded kill rule: whole-vehicle health current at or below zero (never a part
         // flag) — reachable through the zone-less overflow, so it is tested on every hit.
         if (Damage.IsDestroyed)
         {
-            GD.Print($"vehicle health exhausted ({struckPart} last) — shot down by {weapon.Id}");
+            Log.Info("weapons", $"vehicle health exhausted ({struckPart} last) — shot down by {weapon.Id}");
             Crash(impact, $"gunfire ({weapon.Id})", colliderPart, null,
                 killer: shooter != ProjectilePool.NoShooter ? shooter : null);
             return;
@@ -1807,8 +1807,7 @@ public partial class FlightController : Node3D
         if (found.Found && !_aimLoggedFirst)
         {
             _aimLoggedFirst = true; // verification breadcrumb: the assist found something, once
-            GD.Print($"gun aim assist: P{PlayerIndex + 1} snapped onto {found.Kind} " +
-                     $"(score {found.Score:0.000}, {found.TimeOfFlight * (weapon.Velocity ?? ProjectilePool.DefaultVelocity):0} m out)");
+            Log.Info("weapons", $"gun aim assist: P{PlayerIndex + 1} snapped onto {found.Kind} (score {found.Score:0.000}, {found.TimeOfFlight * (weapon.Velocity ?? ProjectilePool.DefaultVelocity):0} m out)");
         }
         return dir;
     }
@@ -1844,10 +1843,10 @@ public partial class FlightController : Node3D
                 {
                     nearest = Mathf.Min(nearest, s.Position.DistanceTo(_model.Position));
                 }
-                GD.Print($"gun aim assist: candidates vehicles={_aimCandidates.Vehicles.Count} " +
-                         $"turrets={_aimCandidates.Turrets.Count} " +
-                         $"structures={_aimCandidates.Structures.Count} ordnance={_aimCandidates.Ordnance.Count}" +
-                         (_aimCandidates.Structures.Count > 0 ? $", nearest structure {nearest:0} m" : ""));
+                string nearestPart = _aimCandidates.Structures.Count > 0
+                    ? Log.Format($", nearest structure {nearest:0} m")
+                    : string.Empty;
+                Log.Info("weapons", $"gun aim assist: candidates vehicles={_aimCandidates.Vehicles.Count} turrets={_aimCandidates.Turrets.Count} structures={_aimCandidates.Structures.Count} ordnance={_aimCandidates.Ordnance.Count}{nearestPart}");
             }
         }
         var planeBasis = GlobalTransform.Basis.Orthonormalized();
@@ -1862,8 +1861,7 @@ public partial class FlightController : Node3D
             if (!_gunLoggedFirst[gi])
             {
                 _gunLoggedFirst[gi] = true;   // verification breadcrumb: which groups actually fire
-                GD.Print($"gun group {gi + 1} ({g.Mount}, {g.Weapon.Caliber ?? 0}-cal " +
-                         $"{g.Weapon.Id}) firing");
+                Log.Info("weapons", $"gun group {gi + 1} ({g.Mount}, {g.Weapon.Caliber ?? 0}-cal {g.Weapon.Id}) firing");
             }
         }
         if (outcome.RocketPylon >= 0)
@@ -1880,8 +1878,7 @@ public partial class FlightController : Node3D
             if (_rocketsLaunched < 12)
             {
                 _rocketsLaunched++;
-                GD.Print($"rocket: {hp.Weapon.Id} ({hp.Weapon.Name}) from pylon{hp.Index}, " +
-                         $"{(InfiniteAmmo ? "∞" : hp.Ammo.ToString())} left on that pylon");
+                Log.Info("weapons", $"rocket: {hp.Weapon.Id} ({hp.Weapon.Name}) from pylon{hp.Index}, {(InfiniteAmmo ? "∞" : hp.Ammo.ToString(CultureInfo.InvariantCulture))} left on that pylon");
             }
         }
         if (outcome.GunLoopWanted)
@@ -1901,7 +1898,7 @@ public partial class FlightController : Node3D
         if (outcome.RocketDryCue)
         {
             Audio?.PlayEmptyClip();
-            GD.Print("rocket: dry pull, all pylons empty — empty-clip cue");
+            Log.Info("weapons", $"rocket: dry pull, all pylons empty — empty-clip cue");
         }
     }
 
