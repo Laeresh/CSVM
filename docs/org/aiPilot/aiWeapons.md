@@ -25,7 +25,9 @@ layout, not from reading the turret update end to end.
 - [The `weapons` 5-tuple, decoded](#the-weapons-5-tuple-decoded)
 - [The trigger routine](#the-trigger-routine)
 - [The fire routine, and the aim gate](#the-fire-routine-and-the-aim-gate)
+- [`gun_pitch`/`gun_yaw` clamp the mount, they do not gate the shot](#gun_pitchgun_yaw-clamp-the-mount-they-do-not-gate-the-shot)
 - [The specials](#the-specials)
+- [Our gun gates against this path](#our-gun-gates-against-this-path)
 - [What the shipped data amounts to](#what-the-shipped-data-amounts-to)
 - [Function map](#function-map)
 - [Open](#open)
@@ -121,7 +123,7 @@ routine: it cannot select, and it cannot suppress the gun's selection.
 
 `FUN_004b6820` walks the same list, acts on set trigger bytes, and is where the shot actually leaves.
 For anything that is not the player it applies an **aim-quality gate** against the mount's own
-solution quality (per-mount field `+0xa4`, written by the lead solver `FUN_0041afe0`):
+aim quality (per-mount field `+0xa4`, written by the mount aim update `FUN_004b7670`, below):
 
 | Weapon class | Required aim | Half-angle |
 |---|---|---|
@@ -145,7 +147,40 @@ Then, still before the shot:
 
 The lead solution both classes consume is `FUN_0041afe0`, per mount, using the weapon def's speed
 (`+0x2c`) and drop (`+0x38`): a weapon authoring a non-zero drop gets a ballistic solve with the
-travel-time drop added, everything else a straight-line intercept.
+travel-time drop added, everything else a straight-line intercept. It writes the desired direction
+to mount `+0x78` and a has-solution flag to `+0x84`; with no solution the mount is pointed at the
+vehicle's own reversed forward axis instead.
+
+## `gun_pitch`/`gun_yaw` clamp the mount, they do not gate the shot
+
+The aim quality the gate reads is produced by `FUN_004b7670`, the per-mount aim update run from the
+world tick over the vehicle list (`FUN_004897c0`), and it is where the airframe's authored gun
+limits are spent.
+
+`gun_pitch` and `gun_yaw` are parsed as min/max pairs by `FUN_00479240` (`0x004798c0`, `0x004798fa`),
+each multiplied by the degrees-to-radians double at `0x006040e8` and stored to vehicle def `+0x20`,
+`+0x24` (pitch) and `+0x28`, `+0x2c` (yaw). `FUN_00476250` copies the four values onto the gun
+mount's `+0x94`, `+0x98`, `+0x9c`, `+0xa0` at spawn. Nothing else reads them.
+
+`FUN_004b7670` rotates the desired lead direction into the vehicle frame and then, **for each axis
+whose min differs from its max**, decomposes to pitch `atan2(y, sqrt(x^2 + z^2))` and yaw
+`atan2(-x, -z)`, clamps the angle into its band and rebuilds a direction from the clamped pair. That
+becomes the mount's actual aim (`+0x48`–`+0x50`). An axis authoring min equal to max is not clamped
+at all. Then, at `0x004b78c9`:
+
+```
+mount +0xa4 = dot(actual mount aim, desired lead direction)
+```
+
+So a lead outside the limits does not forbid the shot; it lowers `+0xa4` by the angle the clamp had
+to give away, and the shot survives while that residual stays inside the class threshold above. With
+the `[-11, 11]` every AI aircraft authors, a lead 20 degrees off the nose clamps to 11, leaves a
+9-degree residual, and `cos 9 = 0.9877` clears the gun's `0.9848`. The employable cone is therefore
+about the authored limit plus 10 degrees per axis, not the authored limit.
+
+An animated mount (a node in `+0x34`/`+0x38`) slews toward the clamped direction through
+`FUN_00460840` rather than snapping to it, so its `+0xa4` also carries however far the mount still
+has to travel. A fixed forward gun has no node and reaches the clamped direction the same frame.
 
 ## The specials
 
@@ -162,6 +197,21 @@ the same two routines:
 - **`TORPEDO`/`TARGETABLE` (`wep_14`).** It carries `DAMAGES_ZEPPELIN`, so by the zeppelin match it
   is fired **only** at a gasbag, never at an aircraft, despite the Black Hat Warhawk carrying eight
   of them with the shortest refire in the game.
+
+## Our gun gates against this path
+
+`AiGunner.Solve` applies three gates. Read against `FUN_0041f420` and `FUN_004b6820` they stand as
+follows; `BL-396` carries the fixes.
+
+| Our gate | The original | Verdict |
+|---|---|---|
+| the round must reach the intercept inside the weapon's `RANGE` | squared separation inside the slot's `[+0x18, +0x1c]` window, 1 to 900 m on every AI gun | wrong quantity, and we have no minimum-range floor |
+| `[-11, 11]` degrees of yaw/pitch off the airframe's nose, a hard fire gate | the same numbers clamp the mount's aim; the gate is the 10-degree residual that survives the clamp | wrong mechanism, and our cone is about half the employable one |
+| the quick-draw cone, applied every tick against any target | the same test and the same `cos(quick_draw_angle)`, but only when the shooter's mode is jet or wingman **and** the target is a vehicle of those same classes | formula right, scope wrong |
+
+Two conditions on the aim gate have no counterpart in `AiGunner` at all: it is skipped for the
+player and for any vehicle carrying the `+0xf8` byte, and a `REAR` weapon negates the mount's aim
+value and additionally requires the being-pursued byte `+0xba`.
 
 ## What the shipped data amounts to
 
@@ -194,7 +244,10 @@ rarer still for the 89 mook blocks whose only authored skill is `dead_eye 1`.
 | `FUN_00444300` | builds one slot with hardcoded ranges/intervals, player and `wingman_1` only |
 | `FUN_00443de0` | the campaign loadout build that calls it |
 | `FUN_004b20d0` | selects the current weapon (`+0x950`); refreshes the HUD when it is the player |
-| `FUN_0041afe0` | the per-mount lead solver that writes the aim quality the gate reads |
+| `FUN_0041afe0` | the per-mount lead solver: writes the desired direction `+0x78` and the has-solution flag `+0x84` |
+| `FUN_004b7670` | the per-mount aim update: clamps to `gun_pitch`/`gun_yaw` and writes the aim quality `+0xa4` |
+| `FUN_00476250` | the spawn that copies the def's gun limits onto each mount |
+| `FUN_004897c0` | the world tick over the vehicle list that drives the mount update |
 | `FUN_004b2080` | weapon-slot lookup by numeric id |
 | `FUN_004442a0` | clears a vehicle's weapon list |
 | `FUN_004ba6f0` | the weapon-def flag parser: `CANNON` `0x40`, `DAMAGES_ZEPPELIN` `0x1000`, `REAR` `0x20000` |

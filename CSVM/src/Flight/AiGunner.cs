@@ -15,7 +15,10 @@ namespace CSVM.Flight;
 public sealed class AiGunner
 {
     /// <summary>The shipped forward-gun cone half-angle: <c>gun_pitch</c>/<c>gun_yaw</c> are
-    /// <c>[-11, 11]</c> degrees on every AI aircraft def (docs/formats/vehicle.md).</summary>
+    /// <c>[-11, 11]</c> degrees on every AI aircraft def (docs/formats/vehicle.md).
+    /// ⚠ In the original those limits clamp the mount's aim, they do not veto the shot, so the
+    /// hard gate below fires in a cone roughly half the original's
+    /// (<c>BL-396</c>, docs/org/aiPilot/aiWeapons.md).</summary>
     public const float GunConeHalfAngleDeg = 11f;
 
     /// <summary>The standing target — mutable at any time (the mission-script seam). Null with
@@ -48,8 +51,10 @@ public sealed class AiGunner
 
     /// <summary>Quick-draw shot-acceptance cone half-angle off the target's nose/tail axis,
     /// degrees — <c>quick_draw_angle</c> at the pilot's rating (50° at 1, 89° at 9). The
-    /// marginal-shot roll <c>quick_draw_chance</c> is not modelled yet; this angle is the only
-    /// quick-draw term wired.</summary>
+    /// same-named <c>quick_draw_chance</c> is not a gun term at all: it is the per-launch
+    /// ordnance roll (docs/org/aiPilot/aiWeapons.md), so nothing here consumes it. The
+    /// original applies this cone only jet-or-wingman against jet-or-wingman (<c>BL-396</c>).
+    /// </summary>
     public float QuickDrawAngleDeg = 50f;
 
     /// <summary>Forward-cone yaw half-limit, degrees (<c>gun_yaw</c>).</summary>
