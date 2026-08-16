@@ -1491,7 +1491,11 @@ public partial class FlightController : Node3D
         if (!halted && !_crashed)
         {
             float speedFrac = _model.Speed / _model.Stats.FdSpeed;
-            float damageFrac = 1f - (Damage?.WorstFraction ?? 1f);
+            // Zones OR the hull pair, whichever is worse: an AI airframe resolves no zones, so
+            // WorstFraction alone reads 1 however hurt it is and its engine would never take the
+            // damaged swap. A player's two track each other, so this cannot move its own timing.
+            float damageFrac = 1f - Mathf.Min(Damage?.WorstFraction ?? 1f,
+                Damage?.SummaryHealthFraction ?? 1f);
             Audio?.Update(simDt, _model.Throttle, speedFrac, damageFrac);
             EngineAudio?.Update(simDt, _model.Throttle, speedFrac, damageFrac);
             // The throttle-slam gate needs the live value every frame, not just while its plume

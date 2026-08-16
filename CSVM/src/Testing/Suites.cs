@@ -374,6 +374,8 @@ public static class Suites
             "the injure staging reads health only: a zone stripped of armour tears no panel though its combined fraction has crossed the threshold, and the panel appears once health itself crosses (BL-384)", DamageStagingPool));
         into.Add(new TestHarness.Suite("damage-stage-slots",
             "the injure ladder stages per ENTRY: fury's six random_remote_damage thresholds each fire, a repair retracts what it lifted back over, and one entry on four zones fires four times (BL-385/BL-384)", DamageStageSlots));
+        into.Add(new TestHarness.Suite("ai-damage-stages",
+            "an AI plane spawned through AiAircraftSpawner stages end to end: its hull falls through the take-hit path and the rig runtime starts six random_remote_damage instances plus one pfsmoketrail, all anchored inside that aircraft, a repair tears each stage down once, and the Bloodhawk's missing elevator pair is named (BL-385)", AiDamageStages));
         into.Add(new TestHarness.Suite("crash-rig-anchors",
             "binding the crash rig leaves the airframe model under the controller — even the Devastator, whose model root shares the crash defs' authored NAME — and stages every pooled copy in the same reset pose", CrashRigAnchors));
         into.Add(new TestHarness.Suite("ai-crash-defs",
@@ -10024,6 +10026,164 @@ public static class Suites
         {
             playerRoot.Free();
         }
+    }
+
+    // ---- an AI plane's ladder reaching the rig runtime, through the real spawner ----------------
+
+    // The seam the tree-free slot tests cannot reach: AiAircraftSpawner building an aircraft whose
+    // hull then falls, with the stages counted off the RUNTIME's own instance hook rather than off
+    // the sink the wiring under test installs. Phase 1 (the DamageVisuals) and phase 2 (the sink and
+    // stops, wired inside BuildFlightCrashRuntime) live in different files, so "the object exists"
+    // and "it plays into a runtime" are separate failures and asserted separately.
+    private static void AiDamageStages(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            ProjectilePool? pool = null;
+            FlightController? ai = null;
+            FlightController? bhawk = null;
+            try
+            {
+                var live = new ProjectilePool(textures, null, null);
+                pool = live;
+                ctx.Host.AddChild(live);
+                var spec = SessionSpec.Parse(System.Array.Empty<string>());
+                var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+                var factory = new Session.WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero);
+                var inputs = new FlightRigAssembler.Inputs
+                {
+                    PlanesGamez = planesGamez,
+                    StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                    AiStatsFor = plane => PlaneStats.LoadForAi(ctx.ZrdrPath, plane),
+                    RigCount = 0,
+                    PaintRng = new RandomNumberGenerator(),
+                    ZrdrPath = ctx.ZrdrPath,
+                    StockLoadouts = StockLoadouts.Load(),
+                    WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                    Textures = textures,
+                    Projectiles = live,
+                    Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                    Gamez = world.Gamez,
+                    WorldScene = world.Session.Builder.Scene,
+                    CrashProgram = world.Session.Program,
+                };
+                var spawner = new AiAircraftSpawner(spec, liveries, factory, ctx.Host, inputs);
+                var start = new Vector3(0f, 500f, 0f);
+                ai = spawner.Spawn("player_fury", start, start + Vector3.Forward,
+                    AiPilot.HoldingCourse(start, start + Vector3.Forward));
+
+                ctx.Check(ai.Visuals != null,
+                    $"the spawner built the AI Fury's DamageVisuals (phase 1)");
+                ctx.Check(ai.Visuals?.DamageEffectSink != null && ai.Visuals?.DamageEffectStop != null
+                          && ai.Visuals?.DamageEffectStopOne != null,
+                    $"…and the crash-runtime build wired its sink and both stops (phase 2)");
+                if (ai.Visuals is not { } visuals || ai.CrashRuntime is not { } rig
+                    || ai.Damage is not { } damage)
+                {
+                    return;
+                }
+
+                var starts = new Dictionary<string, int>(System.StringComparer.OrdinalIgnoreCase);
+                var stops = new Dictionary<string, int>(System.StringComparer.OrdinalIgnoreCase);
+                var anchors = new List<Node3D?>();
+                rig.OnInstanceStarted += (def, anchor) =>
+                {
+                    string n = def.AnimName ?? def.Name ?? "";
+                    starts[n] = starts.TryGetValue(n, out var c) ? c + 1 : 1;
+                    if (Session.EffectCatalogue.AiDamageStageAnims.Contains(n, System.StringComparer.OrdinalIgnoreCase))
+                        anchors.Add(anchor);
+                };
+                rig.OnInstanceFinished += (def, _) =>
+                {
+                    string n = def.AnimName ?? def.Name ?? "";
+                    stops[n] = stops.TryGetValue(n, out var c) ? c + 1 : 1;
+                };
+
+                // Armour off first, in one spend, then the ladder walked down one band at a time
+                // through TakeCollisionHit — the production take-hit entry, not the visuals API.
+                ai.TakeCollisionHit(damage.WholeArmor, 0f, ai.GlobalPosition, 0);
+                foreach (float frac in new[] { 0.9f, 0.7f, 0.55f, 0.47f, 0.42f, 0.3f, 0.2f })
+                    SpendHullTo(ai, damage, frac);
+                ctx.Check(damage.SummaryHealthFraction is > 0.19f and < 0.21f,
+                    $"the AI Fury's hull walked down to {damage.SummaryHealthFraction * 100f:0}% through the take-hit path");
+                ctx.Check(Count(starts, "random_remote_damage") == 6 && Count(starts, "pfsmoketrail") == 1,
+                    $"the rig runtime STARTED {Count(starts, "random_remote_damage")} random_remote_damage and {Count(starts, "pfsmoketrail")} pfsmoketrail instance(s) (want 6 and 1)");
+                ctx.Check(visuals.StagedEntryCount("random_remote_damage") == 6
+                          && visuals.StagedEntryCount("pfsmoketrail") == 1,
+                    $"…and the ladder holds one slot per start: {visuals.StagedEntryCount("random_remote_damage")} and {visuals.StagedEntryCount("pfsmoketrail")}");
+                int offPlane = anchors.Count(a => a == null || (a != ai && !ai.IsAncestorOf(a)));
+                ctx.Check(anchors.Count == 7 && offPlane == 0,
+                    $"every one of the {anchors.Count} stage instances anchored inside THIS aircraft ({offPlane} elsewhere)");
+
+                // The repair: the whole ladder retracts, and each stage is stopped exactly once —
+                // once per ANIM, not once per entry, or five of fury's six would stop nothing.
+                stops.Clear();
+                visuals.OnHullDamage(1f);
+                ctx.Check(Count(stops, "random_remote_damage") == 1 && Count(stops, "pfsmoketrail") == 1,
+                    $"a full repair tore down {Count(stops, "random_remote_damage")} random_remote_damage and {Count(stops, "pfsmoketrail")} pfsmoketrail instance(s) (want 1 and 1)");
+                ctx.Check(visuals.StagedEntryCount("random_remote_damage") == 0,
+                    $"…leaving no entry staged");
+                foreach (float frac in new[] { 0.9f, 0.7f, 0.55f, 0.47f, 0.42f, 0.3f, 0.2f })
+                    visuals.OnHullDamage(frac);
+                ctx.Check(Count(starts, "random_remote_damage") == 12 && Count(starts, "pfsmoketrail") == 2,
+                    $"…and the next descent fires all seven again ({Count(starts, "random_remote_damage")} and {Count(starts, "pfsmoketrail")} starts in total)");
+
+                // C16's anchor census as a live A/B: the stage defs are authored against the
+                // Devastator, and the Bloodhawk spells its elevators l_elev/r_elev. Same rig, same
+                // pinned dice, one airframe apart — so the warned set is about the airframe alone.
+                ctx.Check(rig.AnchorWarnLabel == "player_fury" && rig.AnchorWarnAnimNames != null
+                          && rig.AnchorWarnAnimNames.Contains("random_remote_damage"),
+                    $"the AI rig is armed to name an unresolved stage anchor (label={rig.AnchorWarnLabel ?? "-"})");
+                CascadeUntilExhausted(rig, ai.PlaneModel);
+                ctx.Check(rig.UnresolvedStageAnchors.Count == 0,
+                    $"the Fury carries all five stage anchors: {rig.UnresolvedStageAnchors.Count} unresolved [{string.Join(", ", rig.UnresolvedStageAnchors)}]");
+
+                bhawk = spawner.Spawn("player_bhawk", start + new Vector3(3000f, 0f, 0f),
+                    start + new Vector3(3000f, 0f, -1f),
+                    AiPilot.HoldingCourse(start + new Vector3(3000f, 0f, 0f), start + new Vector3(3000f, 0f, -1f)));
+                if (bhawk.CrashRuntime is { } bhawkRig)
+                {
+                    CascadeUntilExhausted(bhawkRig, bhawk.PlaneModel);
+                    ctx.Check(bhawkRig.UnresolvedStageAnchors.SequenceEqual(new[]
+                        {
+                            "random_remote_damage|lft_elev", "random_remote_damage|rt_elev",
+                        }),
+                        $"the Bloodhawk misses exactly the elevator pair: [{string.Join(", ", bhawkRig.UnresolvedStageAnchors)}]");
+                }
+            }
+            finally
+            {
+                bhawk?.Free();
+                ai?.Free();
+                pool?.Free();
+                textures.Dispose();
+            }
+        });
+    }
+
+    private static int Count(IReadOnlyDictionary<string, int> counts, string key) =>
+        counts.TryGetValue(key, out var n) ? n : 0;
+
+    // One exact health spend, so a band is entered by crossing it rather than by an approximate
+    // hit: the armour pool is already empty, so the whole amount reaches the hull pair.
+    private static void SpendHullTo(FlightController ai, PlaneDamage damage, float fraction)
+    {
+        float spend = damage.WholeHealth - (fraction * damage.WholeHealthMax);
+        if (spend > 0f)
+            ai.TakeCollisionHit(0f, spend, ai.GlobalPosition, 0);
+    }
+
+    // random_remote_damage is a RandomWeight 0.33 chain: one start reaches at most one of its four
+    // anchors, so the census below needs the whole cascade walked. 200 starts puts the deepest step
+    // (0.67³ × 0.33 ≈ 10 %) beyond any doubt while the seed keeps it identical run to run.
+    private static void CascadeUntilExhausted(AnimRuntime rig, Node3D? planeModel)
+    {
+        for (int i = 0; i < 200; i++)
+            rig.Play("random_remote_damage", planeModel, applyReset: false);
     }
 
     // ---- binding the crash rig must leave the airframe under the controller --------------------

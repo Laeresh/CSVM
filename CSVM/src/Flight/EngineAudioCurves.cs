@@ -13,10 +13,14 @@ namespace CSVM.Flight;
 /// </summary>
 internal static class EngineAudioCurves
 {
-    /// <summary>Squared distance from the listener past which an AI aircraft's engine and whine are
-    /// both stopped, and inside which they start again: 2000 world units. Own-ship audio is never
-    /// culled, so only <see cref="AiEngineAudio"/> reads it.</summary>
-    internal const float CullDistanceSq = 4000000f;
+    /// <summary>Distance from the listener past which an AI aircraft's engine and whine are both
+    /// stopped, and inside which they start again: 2000 world units, the square root of the
+    /// executable's own `4000000.0`. Own-ship audio is never culled, so only
+    /// <see cref="AiEngineAudio"/> reads this and the squared form below.</summary>
+    internal const float CullDistance = 2000f;
+
+    /// <summary>The comparison form: the cull test is on squared distance, as the original's is.</summary>
+    internal const float CullDistanceSq = CullDistance * CullDistance;
 
     // The mixer clamps the played frequency rather than letting a multiplier reach zero; Godot has
     // no such floor, and a PitchScale of 0 stalls the stream instead of bottoming out.

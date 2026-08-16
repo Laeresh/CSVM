@@ -1682,8 +1682,11 @@ The positional twin of `FlightAudio` that an AI-flown aircraft carries instead o
 engine slots on `AudioStreamPlayer3D`s, plus the cull that stops them past `CullDistanceSq` from
 the nearest listener and starts them again inside it. `Attach` is the whole spawner-side surface.
 Deliberately carries no own-ship concept — no `MixGain`, no start ramp, no prop-start cue, no crash
-one-shots: an AI kill is audible from its crash animation's own authored `Sound` events. Every cull
-transition and slot swap writes one `sound` log line, since audio cannot be screenshot-verified.
+one-shots: an AI kill is audible from its crash animation's own authored `Sound` events. Audio
+cannot be screenshot-verified, so the `sound` log carries the whole observable: one line per
+aircraft at build naming what each slot resolved to (or that there was no archive at all), then one
+per cull transition and one per damaged-engine swap. The pair is what separates "silent past the
+cull" from "silent because the definition never resolved".
 
 ## src/Effects/Puffer.cs
 The original engine's billboard-particle emitter, data-driven from `PUFFER_STATE` blocks
@@ -2551,7 +2554,8 @@ build path from wizard and CLI" (H16's own goal) is this one line, not two simil
 `SpawnAiAircraft` has a second overload
 (`string, Vector3, Vector3, AiPilot, PaintScheme?, int?, int?, bool inert = false,
 bool shippedSkins = false`) for this; the four-parameter one is the `--ai=` route, for an aircraft
-with no authored identity. `AiGeneratorRuntime`'s constructor takes a LAMBDA over the authoring
+with no authored identity, and `ApplyAiHullPreset` is `--ai-damage=`'s spend on whatever it returns
+— hull-pool only, since an AI airframe resolves no zones, and never down to zero. `AiGeneratorRuntime`'s constructor takes a LAMBDA over the authoring
 overload rather than that method group (a generated enemy needs `shippedSkins: true`), so the
 four-parameter one no longer has to stay free of optional parameters — C# does not extend a
 method-group-to-delegate conversion over trailing optional ones, which is why the lambda is
@@ -3061,6 +3065,9 @@ outside every player index and `IncomingFire.ShooterId`. The crash runtime it bu
 `ai_crash_*` family, not `player_crash_*` — `BuildFlightCrashRuntime` keys the family on
 `IsHumanPiloted` (the original's own vehicle split); `--crash` forces spawned AI planes
 too, so the split is readable off the `CRASH … def=` line headlessly.
+Visible damage is built here in two phases: `FlightRigAssembler.BuildDamageVisuals` unconditionally,
+then the sink and stops inside `BuildFlightCrashRuntime`, which is the seam the `ai-damage-stages`
+suite drives end to end (`--ai-damage=` is its CLI probe).
 `Spawn`'s `inert:` sets `FlightController.Inert` in the object initializer — before `Setup`,
 before the node joins the tree — so an aircraft built inert never has one live frame; the spawn
 log says `INERT`, and the caller puts it in play with `FlightController.Activate`. Everything else
@@ -3265,7 +3272,11 @@ for the regression shape. `LevelPlacedTemplateNames` is set beside
 `InheritedVelocityExempt`, once, from `EffectCatalogue.CrashSurfaceLevelAnimNames` (`BL-292`) — the
 named defs only ever play from within a crash sequence, so unlike `InheritedWorldVelocity` (set
 per-crash in `FlightController.Crash`, since it depends on the live impact speed/direction) this
-needs no per-crash toggle. The
+needs no per-crash toggle. `AnchorWarnAnimNames`/`AnchorWarnLabel` are injected the same way, from
+`EffectCatalogue.DamageStageAnims` and the plane's own name: the stage defs are authored against one
+airframe and retarget onto whichever plane stages them, so an anchor they name may be absent, which
+is a soft failure (the call lands on the airframe root and still draws) that nothing else reports.
+The
 prop choreography's own defs resolve their `staticpropN`/`propN`/`propNb` node names against the
 plane model directly (`LOCAL_NODES_ONLY`) — `FlightController.Respawn`/`Crash` call
 `CrashRuntime.Play("startprops"/"stopprops", PlaneModel, applyReset: false)` themselves, since

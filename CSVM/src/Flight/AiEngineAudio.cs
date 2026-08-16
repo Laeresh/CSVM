@@ -41,6 +41,10 @@ public sealed partial class AiEngineAudio : Node3D
     {
         if (archive == null || defs == null)
         {
+            // Said out loud, because the alternative reading of a silent aircraft is a slot that
+            // failed to resolve: no archive means no line from Setup below, and no line at all is
+            // the one case that would otherwise be indistinguishable from never having tried.
+            Log.Info("sound", $"ai engine {controller.Name}: no sound archive — this aircraft carries no engine loop");
             return null;
         }
         var audio = new AiEngineAudio { Name = "EngineAudio", Listeners = listeners };
@@ -64,6 +68,10 @@ public sealed partial class AiEngineAudio : Node3D
         {
             _whine = MakeLoop(archive, defs, whineName, out _whineVol);
         }
+        // The build half of the headless observable (WorldSounds.Debug's precedent), which with the
+        // cull transitions below separates the two silences: a slot logged `unresolved` here never
+        // had a stream, one logged `ok` and later `culled` is silent by distance alone.
+        Log.Info("sound", $"ai engine {Aircraft()}: engine={SlotState(stats.EngineSound, _engineStream != null)} damaged={SlotState(stats.DamagedEngineSound, _damagedStream != null)} whine={SlotState(stats.WhineSound, _whine != null)} cull={EngineAudioCurves.CullDistance:0} m");
     }
 
     /// <summary>Per-frame drive, same arguments as <see cref="FlightAudio.Update"/> and called from
@@ -81,7 +89,7 @@ public sealed partial class AiEngineAudio : Node3D
             // Transitions only, and always logged: audio cannot be screenshot-verified, and this
             // line is what separates "silent because it is past the cull" from "silent because its
             // definition never resolved".
-            Log.Debug("sound", $"ai engine {GetParent()?.Name} {(culled ? "culled" : "audible")} at {Mathf.Sqrt(distSq):0} m");
+            Log.Debug("sound", $"ai engine {Aircraft()} {(culled ? "culled" : "audible")} at {Mathf.Sqrt(distSq):0} m (cull {EngineAudioCurves.CullDistance:0} m)");
         }
         if (culled)
         {
@@ -109,6 +117,12 @@ public sealed partial class AiEngineAudio : Node3D
         _whine?.Stop();
     }
 
+    // One slot's line in the build log: the definition this airframe names, and whether a stream
+    // came back for it. "none" is the airframe naming no definition at all, which is what every
+    // shipped whine slot reads.
+    private static string SlotState(string? sndName, bool resolved) =>
+        sndName == null ? "none" : $"{sndName}({(resolved ? "ok" : "unresolved")})";
+
     private static void UpdateLoop(AudioStreamPlayer3D player, float volume, float pitch)
     {
         if (volume <= 0.002f)
@@ -135,6 +149,11 @@ public sealed partial class AiEngineAudio : Node3D
         baseVolume = def.Volume;
         return archive.Find(def.WavName, def.Looped);
     }
+
+    // Which aircraft every line here is about: the controller this component hangs under, whose
+    // name the spawner already logged. Never this node's own name, which is "EngineAudio" on all
+    // of them.
+    private string Aircraft() => GetParent()?.Name.ToString() ?? Name.ToString();
 
     // Squared range to the nearest listener, or 0 when there is none to measure from: an aircraft
     // with no listener is not evidence that it should be silent, and culling it would hide a
@@ -180,7 +199,7 @@ public sealed partial class AiEngineAudio : Node3D
         _engine.Stream = stream;
         if (wasPlaying)
             _engine.Play();
-        Log.Debug("sound", $"ai engine {GetParent()?.Name} slot 0 ->{name} pitchMul={_enginePitchMul:0.000}");
+        Log.Debug("sound", $"ai engine {Aircraft()} slot 0 -> {name} pitchMul={_enginePitchMul:0.000}");
     }
 
     // RANGE is [full-volume distance, audible distance], mapped onto Godot's inverse-distance curve

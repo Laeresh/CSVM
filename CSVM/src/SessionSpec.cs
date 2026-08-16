@@ -290,6 +290,11 @@ public sealed record SessionSpec
     /// <summary><c>--ai=&lt;plane&gt;[:&lt;net&gt;][:accent=&lt;id&gt;][,…]</c>: AI-piloted aircraft
     /// spawned into the flight session (docs/cli.md). Null when the flag was absent.</summary>
     public IReadOnlyList<(string Plane, string? Net, int? Accent)>? AiPlanes { get; private set; }
+    /// <summary><c>--ai-damage=&lt;fraction&gt;</c>: the hull health fraction every <c>--ai=</c> plane
+    /// is spent down to as it spawns, so its authored injure_anims stages are already up in a
+    /// scripted shot. Null when the flag was absent. <c>--damage=</c> is the player's counterpart
+    /// and writes per-part HP, which an AI airframe resolves none of.</summary>
+    public float? AiHullDamage { get; private set; }
     /// <summary><c>--ai-attack[=&lt;1-9&gt;]</c>: arm every AI plane this session spawns with the
     /// D14 forward-gun gunnery at the given skill rating (dead-eye/quick-draw interpolated from
     /// <c>ai_skill_parameters</c>; default 5), auto-targeting the nearest hostile aircraft.
@@ -844,6 +849,7 @@ public sealed record SessionSpec
                 if (entries.Count > 0)
                     s.AiPlanes = entries;
             }
+            else if (arg.StartsWith("--ai-damage=")) { s.AiHullDamage = Math.Clamp(Flt(arg["--ai-damage=".Length..]), 0f, 1f); }
             else if (arg == "--ai-attack") { s.AiAttackSkill = 5; }
             else if (arg.StartsWith("--ai-attack=")) { s.AiAttackSkill = Math.Clamp(int.Parse(arg["--ai-attack=".Length..]), 1, 9); }
             else if (arg == "--no-assist") { s.NoAssist = true; }
@@ -1306,6 +1312,13 @@ public sealed record SessionSpec
         {
             Warn("ui", "--debug-damage is a --freecam/--anim-lab tool; ignoring it here (--damage-test is the headless twin)");
             DebugDamage = null;
+        }
+        // A preset with nothing to apply to would otherwise be a silent no-op, and a run that shows
+        // no damage would read as the staging being broken rather than as the flag being unused.
+        if (AiHullDamage != null && AiPlanes == null)
+        {
+            Warn("ui", "--ai-damage needs --ai=<plane> to spend on; no AI aircraft were asked for");
+            AiHullDamage = null;
         }
         // The two lab spec grammars live in their labs; the reject list keeps them from logging,
         // which is what lets this run with no engine under it.

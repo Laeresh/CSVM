@@ -145,6 +145,17 @@ and leave gaps when retiring old ones.
   of them reassuring, one of them right. The nadir pose was the founding evidence of the bug, which
   is exactly why it was trusted alone.
 
+- **SHOT-29** — **Before pinning a golden, measure how much of the frame the subject actually
+  owns; a subject no scripted camera can approach does not earn one.** A shot is named for its
+  subject but hashed over the whole frame, so a small subject makes a tripwire for everything
+  else. Measured on an AI aircraft's damage stages: `--ai=` places the plane 250 m ahead of the
+  chase camera and it outruns the player from there, so the same C1 pose with the AI staging its
+  whole ladder (five `random_remote_damage` bursts and the `pfsmoketrail` heavy trail, visibly
+  burning under 4× magnification) differs from the pristine control by **396 of 921,600 pixels,
+  0.043 %**. A hash there would move on any render change and hold still through a total staging
+  regression. The A/B against the undamaged control is the cheap check, and it answers both ways:
+  it is also how a shot that IS worth pinning proves it.
+
 ## GOLD — golden images
 
 - **GOLD-1** — **Update moved hashes with the visual change, and explain each moved shot in the

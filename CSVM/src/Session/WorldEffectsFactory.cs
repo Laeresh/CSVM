@@ -331,6 +331,11 @@ public sealed class WorldEffectsFactory
         // crash sequence, so no per-crash toggle is needed.
         crashRuntime.LevelPlacedTemplateNames =
             new HashSet<string>(EffectCatalogue.CrashSurfaceLevelAnimNames, StringComparer.OrdinalIgnoreCase);
+        // A stage anchor this airframe lacks is a SOFT failure: the call lands on the airframe root
+        // and still draws, so nothing else reports it (docs/org/vehicleDamage.md's anchor census).
+        crashRuntime.AnchorWarnAnimNames =
+            new HashSet<string>(EffectCatalogue.DamageStageAnims, StringComparer.OrdinalIgnoreCase);
+        crashRuntime.AnchorWarnLabel = planeName;
         // Wreck pieces with `do_intersections: true` stay in the world; handing the mask over arms
         // their collider sweep. Only Fly-mode goldens exercise it, and none captures a completed
         // landing — analysis/object-motion-goldens/FINDINGS.md.

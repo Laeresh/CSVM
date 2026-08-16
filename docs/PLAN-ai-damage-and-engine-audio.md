@@ -172,7 +172,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Evidence
 
 16. ☑ Anchor census: do the AI stage defs' nodes exist on every AI airframe?
-17. ☐ Tests, golden and audio debug line
+17. ☑ Tests, golden and audio debug line (the golden is disproven as an instrument, measured; see
+    `docs/verification.md` SHOT-29)
 
 ## Dependency and parallelism notes
 
@@ -535,14 +536,54 @@ which loops started per plane, the distance, and cull transitions.
 **Model recommendation.** medium — mechanical once the behaviour is settled, but the test assertions
 are the item's whole value and must assert counts, not "something happened".
 
-**Verify.** The suite passes; the golden re-pins cleanly; the debug line distinguishes the two silent
-cases on a real chapter run.
+**Verify.** The suite passes; the debug line distinguishes the two silent cases on a real chapter run.
 
 **⚠ Traps.** The golden manifest's `exercises` field is hook-checked: under 250 chars, no item id, no
 date, no "also exercises" clause, and it is **rewritten** on a re-pin, never appended to.
 
-**Playtest (owed, covers the whole plan).** Shoot down a wingman and an enemy in C1. Smoke should
-start at 40% on an enemy and 50% on a campaign wingman, `random_remote_damage` bursts should show on
-the way down, the airframe should vanish into its crash effects rather than lying there intact, the
-fireball should be audible and positional, and AI aircraft should be audible as they pass and silent
-when far off.
+**Result.** Three deliverables, one of them a disproof.
+
+*Tests.* `damage-stage-slots` (A1) already covered the ladder tree-free, so this item adds the seam
+it cannot reach: `ai-damage-stages` spawns an aircraft through `AiAircraftSpawner`, walks its hull
+down through `TakeCollisionHit`, and counts what the RIG RUNTIME started off its own
+`OnInstanceStarted` hook rather than off the sink under test — six `random_remote_damage` instances
+and one `pfsmoketrail`, all seven anchored inside that aircraft, a full repair tearing each stage
+down exactly once, and the next descent firing all seven again. It also carries `C16`'s census as a
+live A/B: the Fury reports no unresolved stage anchor and the Bloodhawk reports exactly
+`random_remote_damage|lft_elev` and `|rt_elev`.
+
+*The golden: not pinned, deliberately.* `--ai-damage=<fraction>` was built first, because there was
+no way to damage an AI plane from the CLI at all and the owed playtest needs one. It works, and the
+aircraft is visibly burning. What it also showed is that a frame hash cannot be the evidence here:
+`--ai=` places the plane 250 m ahead of the chase camera and it outruns the player from there, and
+no flag frames another aircraft. The same C1 pose with the whole ladder staged differs from the
+pristine control by **396 of 921,600 pixels (0.043 %)** — a hash that would move on any render
+change and hold still through a total staging regression (`GOLD-2`). Pinned as a transferable rule
+instead: `docs/verification.md` `SHOT-29`. The counts above are the evidence; the flag is how a
+person sees it.
+
+*Audio.* `AiEngineAudio` already logged cull transitions and the damaged-engine swap (`B15`), which
+covers "silent because it is past the cull" but not "silent because the loop never resolved". Added:
+one `sound` line per aircraft at build naming each slot's definition and whether a stream came back
+(`ai engine ai1_player_fury: engine=snd_furyengine(ok) damaged=snd_damagedengine(ok) whine=none
+cull=2000 m`), and one when there is no sound archive at all, so no line is never ambiguous.
+
+*`C16`'s owed warning.* Landed where `B12` argued it belonged: `AnimRuntime.AnchorWarnAnimNames` /
+`AnchorWarnLabel`, injected from `WorldEffectsFactory.BuildFlightCrashRuntime` the way
+`LevelPlacedTemplateNames` already is, warning once per (stage anim, node) at the retarget site that
+already knows the call failed. `UnresolvedStageAnchors` reads the same set back, which is what makes
+the census assertable.
+
+**Playtest (owed, covers the whole plan).** Fly C1 with `--volume=1.0 --no-det`; the default master
+volume is 0, so a run without it is silent for reasons that have nothing to do with this work. Shoot
+down a wingman and an enemy. Smoke should start at 40% on an enemy and 50% on a campaign wingman,
+`random_remote_damage` bursts should show on the way down, the airframe should vanish into its crash
+effects rather than lying there intact, the fireball should be audible and positional (distinct over
+dirt and over water), and AI aircraft should be audible as they pass and silent when far off.
+`--ai-damage=0.4` puts an `--ai=` plane in the damaged state at spawn, so the visuals can be judged
+by flying up to one rather than by first shooting it down; the aircraft is small at the range the
+chase camera holds, so close on it deliberately.
+Two more, both owed by items inside this plan rather than by its goal: `B14`'s own A/B at the
+controls (the dual engine voice gone, no whine layer in a dive, the damaged engine replaced outright
+rather than joined), and `A1`'s inherited `BL-384` line — repair in the F5 damage lab and watch the
+stage retract, which is faithful rather than a regression.

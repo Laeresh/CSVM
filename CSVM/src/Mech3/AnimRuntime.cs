@@ -178,6 +178,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// list is <c>EffectCatalogue.CrashSurfaceLevelAnimNames</c>; see docs/architecture.md.</summary>
     public HashSet<string>? LevelPlacedTemplateNames;
 
+    /// <summary>Callers whose unresolvable CALL_ANIMATION target is worth one warning each, keyed by
+    /// <c>AnimName ?? Name</c>, and the airframe that warning names. Injected like
+    /// <see cref="LevelPlacedTemplateNames"/> above: the per-plane crash rig sets both to the damage
+    /// stages and its own plane, and every other runtime leaves them null and stays quiet. The
+    /// shipped case is the Bloodhawk's elevators (docs/org/vehicleDamage.md); a stage that misses
+    /// its anchor still plays, at the airframe root, which no screenshot distinguishes.</summary>
+    public HashSet<string>? AnchorWarnAnimNames;
+
+    /// <summary>The airframe <see cref="AnchorWarnAnimNames"/>'s warnings name.</summary>
+    public string? AnchorWarnLabel;
+
     /// <summary>Key puffer emitters by owning def as well as (name, host) — see
     /// <see cref="EmitterDirector"/>'s keying remark, which carries the measurement behind each
     /// case. Set on the world-effects runtime, where distinct effect defs declaring same-named
@@ -402,6 +413,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private readonly HashSet<string> _retargetsLogged = new(StringComparer.Ordinal);
 
+    // The (caller anim, target node) pairs AnchorWarnAnimNames has already warned about, which is
+    // also where a census reads back the anchors this airframe lacks. Sorted, so that read is
+    // order-stable.
+    private readonly SortedSet<string> _anchorWarned = new(StringComparer.OrdinalIgnoreCase);
+
     // Last opacity pushed to each subtree root. These events sit in `Loop{-1}` sequences —
     // C1's `cloudparent#` re-asserts its 0.6 every frame — so without this the whole subtree
     // would be re-walked and re-written ~31 times a frame to set values it already holds. Same
@@ -540,6 +556,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     /// <summary>Live animation instances currently running (diagnostics).</summary>
     public int ActiveInstances => _instances.Count;
+
+    /// <summary>Every <c>&lt;caller anim&gt;|&lt;target node&gt;</c> pair
+    /// <see cref="AnchorWarnAnimNames"/> has warned about on this rig, i.e. the anchors this
+    /// airframe does not carry. Empty on an airframe the stages fit, and empty on every runtime
+    /// that set no warn list.</summary>
+    public IReadOnlyCollection<string> UnresolvedStageAnchors => _anchorWarned;
 
     /// <summary>Per-kind counts of events (and puffer/sound sub-reasons) this runtime processed but
     /// could not act on — the same tally <c>ReportUnhandled</c> prints at bootstrap, exposed so a
@@ -2769,6 +2791,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             _retargeted++;
         else
             _retargetUnresolved++;
+        if (resolved == null && AnchorWarnAnimNames != null && (def.AnimName ?? def.Name) is { } caller
+            && AnchorWarnAnimNames.Contains(caller) && _anchorWarned.Add($"{caller}|{targetName}"))
+        {
+            Log.Warn("anim", $"{AnchorWarnLabel ?? "rig"}: '{caller}' calls '{ev.Data.Str("name")}' onto '{targetName}', which this airframe has no node for — it lands on the airframe root instead");
+        }
         // Once per distinct (callee, target, caller) triple: the poll idiom re-issues its calls
         // every frame, so an unconditional line here would bury the log.
         if (DebugMotions && _retargetsLogged.Add($"{ev.Data.Str("name")}|{targetName}|{def.AnimName}"))
