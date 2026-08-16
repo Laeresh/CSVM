@@ -69,6 +69,15 @@ public class PlaneStatsFlightGlobalsTests
         Assert.Equal(0.6f, s.BounceFactor, 3);
         Assert.NotEqual(0.8f, s.BounceFactor, 3);
 
+        // The collision damage pair's ranges sit in that same `crash` block, authored [50, 300]
+        // for both against compiled fallbacks of [15, 200]. Element 0 is the FLOOR and element 1
+        // the SCALE; reading them in the other order would silently swap a 50 HP floor for a
+        // 300 HP one and break every contact (`BL-302`).
+        Assert.Equal(50f, s.CollideArmorFloor, 3);
+        Assert.Equal(300f, s.CollideArmorScale, 3);
+        Assert.Equal(50f, s.CollideHealthFloor, 3);
+        Assert.Equal(300f, s.CollideHealthScale, 3);
+
         // drag_fade_speed: authored 40 mph — happens to equal this field's
         // documented-as-unconfirmed fallback, so this only proves the read did not error,
         // not that the read (versus the fallback) took effect; see the field's comment.

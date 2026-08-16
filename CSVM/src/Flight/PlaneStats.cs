@@ -171,6 +171,15 @@ public sealed class PlaneStats
     // block is looked up, so an absent `crash` block leaves it standing; this install authors 0.6.
     public float BounceFactor = 0.8f;       // bounce_factor, dimensionless
 
+    // The collision damage pair's authored ranges (player.json's `crash` block, decode in
+    // docs/org/flightModel.md's "Collision damage"): element 0 is the FLOOR and element 1 the
+    // SCALE of max(scale · s³, floor), with s the impact cosine. Fallbacks are the executable's
+    // compiled defaults, which this install's authored [50, 300] always replaces.
+    public float CollideArmorFloor = 15f;
+    public float CollideArmorScale = 200f;
+    public float CollideHealthFloor = 15f;
+    public float CollideHealthScale = 200f;
+
     // The near-miss cue's shipped accumulator (warning_shot_*) — see WarningShotCue for the units
     // question. The sound is a SOUND_GROUPS name (bullet_warning_sg → snd_bulletpass1-3), not a
     // sounds.json def, so it resolves through the group table like every other one.
@@ -567,7 +576,14 @@ public sealed class PlaneStats
             // bounce_factor sits inside the `crash` block, beside the two damage ranges; a missing
             // block keeps the compiled fallback, which is the original's own parse order.
             if (player.Dict("crash") is { } crash)
+            {
                 stats.BounceFactor = crash.Float("bounce_factor", stats.BounceFactor);
+                // Both ranges are [floor, scale] in that order, the original's own element order.
+                stats.CollideArmorFloor = crash.Float("armor_damage_range", stats.CollideArmorFloor);
+                stats.CollideArmorScale = crash.Float("armor_damage_range", stats.CollideArmorScale, 1);
+                stats.CollideHealthFloor = crash.Float("health_damage_range", stats.CollideHealthFloor);
+                stats.CollideHealthScale = crash.Float("health_damage_range", stats.CollideHealthScale, 1);
+            }
 
             // curve blocks hold (x, y) pairs: min_* = ramp start, max_* = ramp end
             static SoundCurve Curve(ZrdrDict d, string minKey, string maxKey, SoundCurve fb) =>

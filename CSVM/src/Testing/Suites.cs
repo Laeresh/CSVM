@@ -237,9 +237,10 @@ public static class Suites
         into.Add(new TestHarness.Suite("graze-bounce",
             "the decoded graze restitution (C25) on real contacts: a player rig flown into a floor " +
             "rebounds along the contact normal off the shipped bounce_factor, an AI rig on the " +
-            "identical trajectory gets the position correction and nothing else (the original's " +
-            "player-only impulse gate), and the same impulse on a vertical face is entirely " +
-            "horizontal — one coefficient, no surface test anywhere in it", GrazeBounce));
+            "identical trajectory never gains normal speed (the original's player-only impulse " +
+            "gate) and is destroyed outright by that same contact (the decoded local_11 rule), " +
+            "and the same impulse on a vertical face is entirely horizontal — one coefficient, " +
+            "no surface test anywhere in it", GrazeBounce));
         into.Add(new TestHarness.Suite("ai-spawn-jitter",
             "the decoded per-spawn dynamics spread (C26) through the real spawner: two AI aircraft " +
             "off ONE airframe cache, given the same pose and the same orders, fly measurably apart " +
@@ -2727,18 +2728,20 @@ public static class Suites
 
             ctx.Check(player.Contacted && !player.Crashed,
                 $"the player rig grazed the floor and survived it vn={-player.NormalIn:0.0} m/s");
-            ctx.Check(ai.Contacted && !ai.Crashed,
-                $"the AI rig grazed the same floor on the same trajectory vn={-ai.NormalIn:0.0} m/s");
-            if (player.Contacted && ai.Contacted)
+            // ⚠ The AI does NOT survive this, and that is the decoded local_11 rule (0x0048d79e),
+            // not a regression: a non-player striker that resolved anything other than an
+            // aeroplane is destroyed whatever health it has left (`BL-402`).
+            ctx.Check(ai.Crashed,
+                $"an AI aircraft is destroyed outright by the same terrain contact the player grazes (crashed={ai.Crashed})");
+            if (player.Contacted)
             {
                 ctx.Check(player.NormalOut > 0.3f * -player.NormalIn,
                     $"the player rebounds along the contact normal in={player.NormalIn:0.00} out={player.NormalOut:0.00} m/s (bounce_factor {stats.BounceFactor:0.##} × the lever partition)");
                 ctx.Check(player.VerticalOut > 0f,
                     $"…and on flat ground that rebound is what the altimeter reads vy {player.VerticalIn:0.00} → {player.VerticalOut:0.00} m/s");
-                // The divergence: same trajectory, same geometry, no impulse at all.
-                ctx.Check(Mathf.Abs(ai.NormalOut) < 0.05f * -ai.NormalIn,
-                    $"an AI aircraft gets the position correction ALONE — no impulse (0x0048d7f0's player gate) in={ai.NormalIn:0.00} out={ai.NormalOut:0.00} m/s");
-                ctx.Note($"floor graze: player {player.NormalIn:0.00} → {player.NormalOut:0.00} m/s on the normal (e={player.NormalOut / -player.NormalIn:0.00}), AI {ai.NormalIn:0.00} → {ai.NormalOut:0.00}");
+                ctx.Check(!ai.Contacted || Mathf.Abs(ai.NormalOut) < 0.05f * -ai.NormalIn,
+                    $"an AI aircraft never gains normal speed from a contact — no impulse (0x0048d7f0's player gate) in={ai.NormalIn:0.00} out={ai.NormalOut:0.00} m/s");
+                ctx.Note($"floor graze: player {player.NormalIn:0.00} → {player.NormalOut:0.00} m/s on the normal (e={player.NormalOut / -player.NormalIn:0.00}), AI crashed={ai.Crashed}");
             }
 
             // --- a vertical face, same approach angle, so the only thing that changes is which way

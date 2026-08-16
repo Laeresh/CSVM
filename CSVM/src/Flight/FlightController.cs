@@ -108,11 +108,14 @@ public partial class FlightController : Node3D
     /// part and the plane flies on; null means any hit crashes.</summary>
     public PlaneDamage? Damage;
 
-    /// <summary>Applies a plane collision to the struck world node, returning true iff it was a
-    /// <c>WeaponOrCollideHit</c> destructible (the 44 facades/windows/agyrobus) — in which case the
-    /// object breaks and the plane flies THROUGH it. Wired to <c>AnimRuntime.CollideDamageAt</c>; null
-    /// (a viewer/static build with no world runtime) makes every collision solid.</summary>
+    /// <summary>Applies a plane collision's health damage to the struck world node, returning true
+    /// iff it was a <c>WeaponOrCollideHit</c> destructible (the 44 facades/windows/agyrobus), in
+    /// which case the object breaks and the plane flies THROUGH it. EVERY destructible takes the
+    /// damage (`BL-302`); the return value is the plane's fate alone. Wired to
+    /// <c>AnimRuntime.CollideDamageAt</c>; null (a viewer/static build with no world runtime)
+    /// makes every collision solid and harmless.</summary>
     public System.Func<Node?, float, bool>? CollideDamageSink;
+
 
     /// <summary>Plays a named effect def at a world point through the session's world-effects
     /// runtime — the survivable graze's authored <c>touchdown_*</c> reaction. Same sink shape
@@ -381,11 +384,10 @@ public partial class FlightController : Node3D
     // normal decides between a survivable graze and a crash. A graze damages the
     // struck part (quadratic in severity), slides the velocity along the surface
     // with some tangential loss, and kicks the attitude.
-    private const float CrashSpeed = 25f;        // m/s along the normal ⇒ outright crash
-    private const float CollideDamagePerVn = 8f;  // HEALTH_DAMAGE a collision deals to a WeaponOrCollideHit
-                                                  // object, per m/s of impact severity — a real flight-speed
-                                                  // hit (vn≥~9) breaks even agyrobus (health 70); the 43
-                                                  // 0.01-health facades/windows shatter at any motion.
+    private const float CrashSpeed = 25f;        // m/s along the normal ⇒ outright crash, and ONLY
+                                                 // for a plane with no destroyable_parts data; a
+                                                 // plane with a ledger uses the decoded rule instead
+                                                 // (health remaining), which carries no speed term.
     private const float WreckMomentum = 0.4f;    // TUNE: fraction of impact velocity the crash wreck pieces inherit
     private const float GrazeMaxDamage = 18f;    // HP at a just-under-crash graze (parts have 20–25)
     private const float GrazeFriction = 0.35f;   // tangential speed kill at full severity
@@ -412,6 +414,9 @@ public partial class FlightController : Node3D
     private const float PropIdleSpin = 0.4f;    // blur discs still turn at zero throttle (windmilling)
 
     private static readonly Vector2 HudMargin = new(16, 10);
+
+    // The compiled fallback collision ranges, for a bare suite rig with no flight model bound.
+    private static readonly PlaneStats DefaultCollideRanges = new();
 
     private readonly List<float> _gunGaugeSlots = new();
     private readonly List<float> _missileGaugeSlots = new();
@@ -451,6 +456,10 @@ public partial class FlightController : Node3D
     private ImmediateMesh? _probe;               // debug collision-probe line
     private float _damageCooldown;               // s left before the next HP subtraction
     private float _grazeReactionCooldown;        // s left before the next touchdown_* reaction
+    private float _collisionGrace;               // s left with no collision at all (obj+0xAC)
+    private float _collideArmorDamage;           // this contact's decoded pair, spent in SurviveHit
+    private float _collideHealthDamage;
+    private bool _collideDooms;                  // this contact kills the striker whatever its HP
     private float _damageFlash;                  // s left on the HUD impact line
     private string _damageFlashText = "";
     private int _projectileHitsLogged;           // verification breadcrumb: the first few hits log
@@ -1003,6 +1012,35 @@ public partial class FlightController : Node3D
         _damageFlash = DamageFlashTime;
     }
 
+    /// <summary>The receiving half of a plane-versus-plane ram (`BL-402`): the striker's decoded
+    /// pair spent through this plane's own ledger, the flow a projectile hit uses.
+    /// ⚠ Do not suppress the struck plane hitting back. Each aircraft sweeps itself, so both
+    /// resolve the contact; that is the original's behaviour, not a double-count.</summary>
+    public void TakeCollisionHit(float armorDamage, float healthDamage, Vector3 impact, int striker)
+    {
+        if (!InPlay || Damage == null)
+            return;
+        var pose = new Transform3D(_model.Attitude, _model.Position);
+        string dataPart = PlaneDamage.MapStruckPart("center", pose.AffineInverse() * impact);
+        var state = Damage.Apply(dataPart, healthDamage, armorDamage);
+        string struckPart = state?.Def.Name ?? dataPart;
+        if (state != null)
+        {
+            Visuals?.OnPartDamage(struckPart, state.HealthFraction);
+            Gauges?.OnPartDamage(struckPart);
+        }
+
+        Visuals?.OnHullDamage(Damage.SummaryHealthFraction);
+        GD.Print($"rammed P{PlayerIndex + 1} by P{striker + 1} ({struckPart}): " +
+                 $"a={armorDamage:0.0} h={healthDamage:0.0} " +
+                 $"hull={Damage.WholeHealth:0.0}/{Damage.WholeHealthMax:0}");
+        if (Damage.IsDestroyed)
+        {
+            GD.Print($"vehicle health exhausted ({struckPart} last) — rammed by P{striker + 1}");
+            Crash(impact, "collision", "center", null);
+        }
+    }
+
     public override void _PhysicsProcess(double delta)
     {
         float dt = GameClock.Current?.PhysicsDt(delta) ?? (float)delta;
@@ -1106,6 +1144,7 @@ public partial class FlightController : Node3D
             _lastInput = input;
             _damageCooldown -= dt;
             _grazeReactionCooldown -= dt;
+            _collisionGrace -= dt;
             _model.Step(input, dt);
 
             // The airframe boxes sweep along the frame's motion; the center ray stays as an
@@ -1115,9 +1154,18 @@ public partial class FlightController : Node3D
             float len = step.Length();
             float margin = Collider == null ? CollisionMargin : 0f;
             var probeEnd = len > 1e-4f ? to + step / len * margin : to;
-            bool hit = SweepAirframe(prev, step, out var impact, out var hitName, out var part,
-                out var normal, out float stopFrac, out var hitBody);
-            if (!hit && HitWorld(prev, probeEnd, out impact, out hitName, out hitBody))
+            // ⚠ The grace window suppresses the SWEEP, not just the damage: while it is live this
+            // plane has no collision at all (obj+0xAC, docs/org/flightModel.md).
+            var impact = _model.Position;
+            string hitName = "";
+            string part = "";
+            var normal = Vector3.Up;
+            float stopFrac = 1f;
+            Node? hitBody = null;
+            bool sweeping = _collisionGrace <= 0f;
+            bool hit = sweeping && SweepAirframe(prev, step, out impact, out hitName, out part,
+                out normal, out stopFrac, out hitBody);
+            if (!hit && sweeping && HitWorld(prev, probeEnd, out impact, out hitName, out hitBody))
             {
                 hit = true;
                 part = "center";
@@ -1126,13 +1174,13 @@ public partial class FlightController : Node3D
             }
             if (_probe != null)
                 DrawProbe(prev, probeEnd, prev + step * stopFrac, hit);
-            // A WeaponOrCollideHit destructible breaks and the plane flies through instead of
-            // crashing; everything else stays solid and falls through to the crash/graze below.
-            if (hit && CollideDamageSink != null)
+            // The decoded contact (FUN_0048d2c0): damage BOTH parties off one severity cosine,
+            // then decide this plane's fate. A WeaponOrCollideHit destructible breaks and the
+            // plane flies through; everything else stays solid and falls to the crash/graze below.
+            if (hit)
             {
-                var cv = _model.VelocityDir * _model.Speed;
-                float cvn = Mathf.Abs(cv.Dot(normal));
-                if (CollideDamageSink(hitBody, cvn * CollideDamagePerVn))
+                float severity = CollisionDamage.Severity(_model.VelocityDir, normal);
+                if (ResolveContact(severity, hitBody, impact))
                 {
                     hit = false;   // set-dressing shattered; the plane keeps its full-motion pose
                 }
@@ -2475,22 +2523,69 @@ public partial class FlightController : Node3D
         };
     }
 
+    /// <summary>The decoded contact (<c>FUN_0048d2c0</c>): damage whatever was struck, arm the
+    /// grace window, and record whether the striker is doomed. True when the struck object breaks
+    /// and this plane flies THROUGH it; the striker's own share is spent in
+    /// <see cref="SurviveHit"/>.
+    /// ⚠ Keep the player asymmetric. It skips entity detection, so it never takes the 0.2 cut,
+    /// never arms a grace window, and is never doomed (docs/org/flightModel.md).</summary>
+    private bool ResolveContact(float severity, Node? hitBody, Vector3 impact)
+    {
+        var struckRig = (hitBody as AircraftBody)?.Rig;
+        // A bare suite rig has no flight model bound, so no authored ranges; the compiled
+        // fallbacks in PlaneStats are what the original would stand on there too.
+        var ranges = Stats ?? DefaultCollideRanges;
+        // Entity detection is the non-player branch only, and only against another aeroplane.
+        bool entityImpact = !IsHumanPiloted && struckRig != null;
+        float cut = entityImpact ? CollisionDamage.EntityCut : 1f;
+        float armorDmg =
+            CollisionDamage.Term(severity, ranges.CollideArmorFloor, ranges.CollideArmorScale) * cut;
+        float healthDmg =
+            CollisionDamage.Term(severity, ranges.CollideHealthFloor, ranges.CollideHealthScale) * cut;
+        _collideArmorDamage = armorDmg;
+        _collideHealthDamage = healthDmg;
+        // local_11 (0x0048d79e): an AI that rammed anything OTHER than an aeroplane dies outright,
+        // whatever health it has left. An AI that rammed an aeroplane survives on health as usual.
+        _collideDooms = !IsHumanPiloted && struckRig == null;
+        if (severity <= 0f)
+            return false;
+
+        if (struckRig != null)
+        {
+            struckRig.TakeCollisionHit(armorDmg, healthDmg, impact, PlayerIndex);
+            // Both parties go collision-free, so neither re-resolves the overlap they are still in.
+            _collisionGrace = CollisionDamage.EntityGrace;
+            struckRig._collisionGrace = CollisionDamage.EntityGrace;
+            return false;   // another aircraft is solid; this plane still crashes or grazes on it
+        }
+
+        return CollideDamageSink != null && CollideDamageSink(hitBody, healthDmg);
+    }
+
     // Decides a confirmed collision's outcome: false = crash, true = survivable graze —
-    // the struck part takes severity-scaled damage, the plane slides along the surface, a
-    // human-piloted aircraft additionally rebounds along the contact normal
-    // (FlightModel.BounceNormalSpeed, the decoded `bounce_factor` impulse; AI
-    // gets the position correction alone), and the attitude takes a lever-arm kick.
+    // the plane slides along the surface, a human-piloted aircraft additionally rebounds along
+    // the contact normal (FlightModel.BounceNormalSpeed, the decoded `bounce_factor` impulse;
+    // AI gets the position correction alone), and the attitude takes a lever-arm kick.
     private bool SurviveHit(Vector3 prev, Vector3 step, float stopFrac, Vector3 impact,
         string hitName, string part, Vector3 normal, Node? hitBody)
     {
-        if (Damage == null)
-            return false; // no destroyable_parts data — every hit crashes (old behavior)
         var vel = _model.VelocityDir * _model.Speed;
         float vn = Mathf.Abs(vel.Dot(normal));
-        if (vn >= CrashSpeed)
+        if (Damage == null)
         {
-            GD.Print($"impact severity: vn={vn:0.0} m/s (spd {_model.Speed:0.0}, " +
-                     $"n=({normal.X:0.00},{normal.Y:0.00},{normal.Z:0.00})) ≥ {CrashSpeed} — crash");
+            // No destroyable_parts data, so there is no health pool to survive on: fall back to
+            // the old speed threshold rather than inventing a ledger.
+            if (vn >= CrashSpeed)
+                GD.Print($"impact severity: vn={vn:0.0} m/s ≥ {CrashSpeed} — crash (no damage data)");
+            return false;
+        }
+
+        // The decoded doom rule (local_11): an AI that rammed something that is not an aeroplane
+        // dies regardless of health remaining. Checked before the pair is spent, as the original
+        // checks it after spending but independently of the result.
+        if (_collideDooms)
+        {
+            GD.Print($"AI ram into {hitName} — destroyed outright (the decoded local_11 rule)");
             return false;
         }
 
@@ -2501,8 +2596,11 @@ public partial class FlightController : Node3D
         if (_damageCooldown <= 0f)
         {
             _damageCooldown = DamageCooldown;
-            float dmg = GrazeMaxDamage * (vn / CrashSpeed) * (vn / CrashSpeed);
-            var state = Damage.Apply(dataPart, dmg);
+            // The striker's own share is the SAME decoded pair the struck party took, spent
+            // armour-first through the ledger's take-hit flow (FUN_004b7f80's split), so a
+            // fully-armoured contact costs no health at all.
+            float dmg = _collideHealthDamage;
+            var state = Damage.Apply(dataPart, _collideHealthDamage, _collideArmorDamage);
             string struckPart = state?.Def.Name ?? dataPart; // the resolver may redirect
             if (state != null)
             {

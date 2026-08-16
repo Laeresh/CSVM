@@ -94,6 +94,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// so a bootstrap-time miss corrects on the next frame.</summary>
     public Func<Vector3>? PlayerPosition;
 
+    /// <summary>Refuses a COLLISION's damage on a struck destructible while the contact itself
+    /// stands. Wired to <c>ZeppelinRuntime.GateCollisionDamage</c> so a rammed gasbag takes
+    /// nothing; null gates nothing. It sits on the sink every rig shares, so AI aircraft need no
+    /// second wiring.
+    /// ⚠ The original needs no equivalent: it delivers a ram as a <c>wep_24</c> weapon hit, so its
+    /// one gasbag gate catches a ram for free (`BL-402`).</summary>
+    public Func<DestructibleRegistry.Instance, bool>? CollideDamageGate;
+
     /// <summary>Every player's position, for the EXECUTION_BY_RANGE proximity gate and
     /// every <c>PLAYER_RANGE</c> condition — both measure from the nearest human, not
     /// one camera. In flight this is the aircraft themselves — the chase camera trails far
@@ -1207,21 +1215,27 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return true;
     }
 
-    /// <summary>A plane collision with a world node. ⚠ Only a <c>WeaponOrCollideHit</c>
-    /// destructible takes collision damage; a <c>WeaponHit</c> object must stand and kill the
-    /// plane that rams it. Returns true for the former, so the caller flies the plane through it,
-    /// and false for everything else, which the caller treats as a solid crash. The damage runs
-    /// through <see cref="DamageAt"/>, so the death is identical to a weapon kill.</summary>
+    /// <summary>A plane collision with a world node. EVERY destructible takes the damage, through
+    /// <see cref="DamageAt"/>, so the death is identical to a weapon kill; the return value says
+    /// only what happens to the PLANE, true for a <c>WeaponOrCollideHit</c> object it flies
+    /// THROUGH and false for a solid one it grazes or crashes on.
+    /// ⚠ <c>ACTIVATION</c> gates the plane's fate, never the object's. Re-adding a damage-side
+    /// gate here restores the reading `BL-302` refuted (docs/formats/destructibles.md).</summary>
     public bool CollideDamageAt(Node? struck, float healthDamage)
     {
         var inst = _destructibles.Resolve(struck);
-        if (inst == null
-            || !inst.Def.Activation.Equals("WeaponOrCollideHit", StringComparison.OrdinalIgnoreCase))
+        if (inst == null)
         {
             return false;
         }
+        bool flyThrough =
+            inst.Def.Activation.Equals("WeaponOrCollideHit", StringComparison.OrdinalIgnoreCase);
+        if (CollideDamageGate != null && !CollideDamageGate(inst))
+        {
+            return flyThrough;   // refused the damage, not the contact
+        }
         DamageAt(struck, healthDamage);
-        return true;
+        return flyThrough;
     }
 
     /// <summary>Returns a destroyed destructible to healthy, for the debug tools and respawn: stop
