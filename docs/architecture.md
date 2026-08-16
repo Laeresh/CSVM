@@ -4,14 +4,16 @@
 module there, then read only its entry: `Grep "## src/Mech3/SceneBuilder.cs" -A 12` returns the
 whole thing, because the entry shape guarantees it. **Never read this file whole** — it is ~110 KB.
 
-One `## src/...` entry per module in `CSVM/src`. Entry shape: 1–2 sentences of purpose beyond the
-index line, then every still-binding constraint or deliberate-design marker as a `⚠` one-liner.
-Body ≤ ~8 lines (~12 for the heaviest modules). Entry order is historical, not grouped — the index
-is the map, grep is the lookup.
+One `## src/...` entry per module in `CSVM/src`. **This file orients a reader and nothing else:**
+what the module is for, what it owns, and which module to look at next. Entry shape: 1–2 sentences
+of purpose beyond the index line, plus the pointers a reader needs. Body ≤ ~8 lines (~12 for the
+heaviest modules). Entry order is historical, not grouped — the index is the map, grep is the lookup.
 
-Narratives, diagnoses, and landed-work stories do not live here: they go in the commit message,
-and git history keeps the rest (pre-2026-08-06 narratives: `docs/HISTORY.md`). Knowledge about the
-game's data formats belongs in `docs/formats/`, not here.
+⚠ **Traps do not live here.** A constraint that would stop a wrong edit belongs in the code, on the
+member it binds, under `PROJECT_CONTEXT.md`'s comment caps — that is where somebody about to make
+the edit is actually looking. Format and decode knowledge belongs in `docs/formats/` and
+`docs/org/`; a way a measurement misleads belongs in `docs/verification.md`. Narratives, diagnoses
+and landed-work stories go in the commit message (pre-2026-08-06: `docs/HISTORY.md`).
 
 ⚠ **A new or renamed module updates the index and its entry in the same edit.** Both are in this
   file precisely so they cannot drift apart; `PROJECT_CONTEXT.md` carries only the namespace-level
@@ -1450,7 +1452,9 @@ tiers and how they pick a surface, the landing response, the termination model, 
 readings (the spherical elevation, the ÷`run_time` tumble, `DebrisTune`, `no_altitude` as a second
 terrain test). Read it before changing a mechanism here; only what this engine adds is below.
 `MotionRuntime`'s launch seeds from the node's authored rest pose, since a shared effect template's
-children are re-homed by nothing between calls. `RangeLaunchDirection` is the launch decode's ONE
+children are re-homed by nothing between calls.
+Three nodes are exempt: see org/objectMotion.md, "The re-home rule".
+`RangeLaunchDirection` is the launch decode's ONE
 expression and `TumbleAxis` the tumble's; `ProjectilePool`'s gun-casing ejection reads the same
 `gunshell` event through both (INSTR-3), because two spellings of the maths is how they disagree.
 ⚠ Do not normalise the launch direction — its length is `1 − |elev|/90` on the horizontal with

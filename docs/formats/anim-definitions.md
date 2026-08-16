@@ -618,6 +618,24 @@ starts it where the original's done state would refuse. 123 definitions name one
 a call and a stop (mostly `flame_light_seq`), but whether any of them reaches the stop *before*
 the call at run time is a control-flow question the static census cannot answer.
 
+### `INVALIDATE_ANIMATION` is a one-shot latch, not a stop
+
+The original keeps a state byte on each animation record (`+0xa0`): 2 = running,
+6 = running-and-invalidated, 3 = `ANIM_STATE_EXECUTED`, 4 = `ANIM_STATE_INVALID` (both names are
+the exe's own log strings, `zeff_anim.c:0x215`/`0x235`). The start (`FUN_004ed8c0`) refuses states
+4 and 6 outright, the stop (`FUN_004ebbb0`) carries the invalidated mark into the terminal state
+(2→3, 6→4), and only `RESET_ANIMATION` clears it (`FUN_004ed480`: 6→2, 4→3).
+
+So the event never stops a running animation; it latches the definition off so no later start takes
+it. The latch is keyed by **definition**, not by (definition, anchor): the event resolves one
+animation record through `FUN_004ebc80`'s `ANIM_REFS`/world-list lookup and never walks the
+per-node copies chained off it.
+
+⚠ A definition's own sequence may invalidate itself early in the burst it is starting (the
+"consume the trigger" idiom). Tearing the instance down there orphans the calls that burst has
+already scheduled, so CSVM protects the top-of-stack instance on the death path only; the ambient
+world boot needs the tolerant behaviour for its self-invalidating startup animations.
+
 ## Fire animations
 
 Decoded while chasing the user's "there is a fire flipbook at the refinery" report;
