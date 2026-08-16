@@ -630,7 +630,7 @@ inside the ramp and stalls at roughly **21 %** of roll and pitch authority.
 speed-independent" it becomes the misreading that had `turn_fade_in`/`turn_fade_out` filed as a
 candidate *bank* effect through four consecutive items — see the CORRECTION at the end of
 "Bank-independent lift vs the measured knife-edge sag". The ramp is keyed on airspeed alone and is
-saturated across the whole regime in which that 1.6× gap appears.
+saturated across the whole regime in which the footage reads a 1.6×-slower banked rotation.
 
 ## Torques and the limiters
 
@@ -727,20 +727,20 @@ wings-level scenario is unmoved to the last printed digit across all eleven airf
 (`level-top-speed`, `terminal-dive`, `roll-360`, `pitch-rate`, `yaw-360`, `altitude-cap`,
 `accel`/`decel`, `eighth-throttle`) — the coupling cannot reach them, which is the cleanest
 possible confirmation of the "vanishes at zero bank" property.
-⚠ **It does NOT close the sustained-turn-rate gap, and it moves it the wrong way**: 32.35 →
-34.71 °/s against the original's 18.95, and up on ten of eleven airframes. Both terms *add*
-heading rate in the direction of bank, so the plan's expectation that this item would explain the
-original's 1.6×-slower banked turn is disproved at the mechanism. Whatever makes the original
-turn slowly when banked is still missing — and as of 2026-08-09 **no authored field is a candidate
-for it**: `highGs` is measured inert, and `turn_fade_*` is this document's own base ramp,
-keyed on airspeed alone and saturated at 1 above 50 mph (see "Control authority vs speed" and the
-correction note at the end of this section).
+⚠ **It does NOT close the sustained-turn-rate difference, and it moves it the wrong way**: 32.35 →
+34.71 °/s against the 18.95 measured off `CAP-01`, and up on ten of eleven airframes. Both terms
+*add* heading rate in the direction of bank, so the plan's expectation that this item would explain
+the footage's slower banked turn is disproved at the mechanism. **No authored field is a candidate
+for the remaining difference either**: `highGs` is measured inert, and `turn_fade_*` is this
+document's own base ramp, keyed on airspeed alone and saturated at 1 above 50 mph (see "Control
+authority vs speed" and the correction note at the end of this section). The rotation path is
+decoded; what disagrees with it is a frame measurement, which does not outrank one.
 The one place it clearly improves fidelity is the **knife-edge**: a neutral-stick 90° bank held
 for 35 s used to pin the nose at the bounded −4.01° sag and settle (−316 m); it now drifts
 linearly at ≈1.08 °/s to −41.8° with no equilibrium (−1993 m), which is the *shape*
 `BL-247` measured on the original (0.69–0.89 °/s to −27° over 36 s) and could not previously be
-produced at all. Recorded for `D31`, not acted on — the drift is now ≈1.2–1.6× too fast, which is
-a magnitude question where it used to be a mechanism question.
+produced at all. Recorded for `D31`, not acted on — the drift is ≈1.2–1.6× the frame-measured rate,
+which is a magnitude difference against video where it used to be a missing mechanism.
 
 ## Weathervane centring — resolved, and the summary line above was wrong
 
@@ -851,6 +851,27 @@ take, with the throttle trimmed for level flight at the entry speed:
 | nose drift 3→36 s (°/s) | 0.69 | 1.05 | 1.09 |
 | altitude lost in 36 s (m) | 540 (in 38.9 s) | 1187 | **1087** |
 
+The whole measured trajectory, from both takes at 143 and 300 mph — they agree to ~13%, so the
+knife-edge is driven by time-since-roll-in rather than by airspeed:
+
+| time since roll-in | nose | path | sink |
+|---|---|---|---|
+| 0–3 s | −4° step, then drifting | ≈0° | **0.5 ft/sim-s — genuinely holds altitude** |
+| +12 s | −12.0° | −6.0° | 24 ft/sim-s |
+| +24 s | −20.0° | −12.8° | 60 ft/sim-s |
+| +36 s | −27.0° | −18.7° | 93 ft/sim-s, still steepening |
+
+The sag is an immediate ≈4° step followed by an unbounded drift of 0.69–0.89 °/sim-s, which is why
+the bounded pair is retired rather than retuned: a bounded term cannot produce a drift that never
+settles.
+
+⚠ **Do not back an absolute align rate out of this table.** `KnifeAlignFloor`'s observable here is
+the path lagging the nose (4.8° at +3 s, 7.2° at +24 s, 8.3° at +36 s), and `CAP-05` cannot separate
+that lag from gravity pulling the path down over the same interval. What the A/B above uses is only
+the *direction* each row moves under a change on one build, which the confound cannot reverse:
+gravity pulling the path down can only shrink the gap, so the inferred chase is an upper bound
+either way.
+
 It was also never really a knife-edge term: it keyed on `1 − |bodyUp·up|`, which is 0.29 at a 45°
 nose-up attitude with the wings dead level, so it fought every pull at up to 11.5 °/s. Removing it
 moves `zoom-climb` toward its measured 936 ft on **all eleven** airframes (Bloodhawk 1396 → 1338 ft,
@@ -868,25 +889,29 @@ row toward the footage (at 0.10: gap 3.5° → 2.1°, drift 0.96 °/s, 874 m) an
 — and it walks the knife-edge α up to 5.36°, past `liftAOAs[0] = 5°`, where the airflow blend
 starts engaging in a knife-edge. Left at 0.35; `KnifeEdgeTests` pins the α margin on all eleven.
 
-**What is still open, and it is one number, not four.** The whole banked rotation runs ≈1.6× fast:
-nose drift 1.09 °/s against a measured 0.69–0.89, heading 1.7 °/s against 0.68–1.13 — the same
-≈1.6× by which `sustained-turn-rate` exceeds the original's banked pull (32.8 against 18.95). Two
-independent manoeuvres, two different body axes, one ratio. Nothing was tuned to close it here.
+**The banked rotation runs ≈1.6× the footage rate, and that is a note, not a gap.** Nose drift
+1.09 °/s against a frame-measured 0.69–0.89, heading 1.7 °/s against 0.68–1.13, and
+`sustained-turn-rate` 32.8 against `CAP-01`'s 18.95 — two independent manoeuvres, two different
+body axes, one ratio. Every number on the original's side of that comparison is frame-measured off
+video; the rotation that produces our side is decoded from the force path (the torques, the
+limiters, the bank coupling, the weathervane and the airspeed authority ramp all sit in this
+document). A decode is not corrected by a footage measurement, and a single ratio across two
+manoeuvres and two axes is the signature of a common factor in how the footage was read rather than
+of a force term that would have to reach both. Nothing is tuned to close it.
 
 ⚠ **Do not reintroduce a nose-sag term to deepen the knife-edge.** The decoded bank→yaw coupling
 already drops the nose there, and the weathervane then pulls it onto the falling path; a second
 nose-down term double-counts what is already present and re-creates the wings-level leak above (the
 retired term rotated the nose down at up to 11.5 °/s in a plain 45° pull).
-⚠ **Do not lower `KnifeAlignFloor` to close the remaining gap either.** Lowering it moves every row
-toward the footage and still cannot reach it, because the remaining error is in the ROTATION rate —
-the ≈1.6× above — and retuning the chase constant would hide a rotation error inside it. It also
+⚠ **Do not lower `KnifeAlignFloor` to close the footage difference either.** Lowering it moves every
+row toward the footage and still cannot reach it, because what separates the two is the ROTATION
+rate — the ≈1.6× above — and retuning the chase constant would hide a rotation rate inside it. It also
 runs into a real boundary at 0.10, where the knife-edge α reaches 5.36° and crosses
 `liftAOAs[0] = 5°`.
 
 ⚠ **CORRECTION (2026-08-09): the authored candidates are exhausted, and this document said
 otherwise for four items running.** C22, C23, D31 and D33 each parked this gap on "the unconsumed
-`turn_fade_in`/`turn_fade_out`/`highGs` are the only authored fields shaped like it" (then
-`backlog.md`'s `BL-095`, retired 2026-08-15; the gap itself is now `BL-383`).
+`turn_fade_in`/`turn_fade_out`/`highGs` are the only authored fields shaped like it".
 Both halves are now false. `highGs` is measured inert on every airframe. And `turn_fade_*` is
 **already decoded in this very document** — "Control authority vs speed" above: `FUN_00490e10`'s
 base ramp is a function of **airspeed alone**, 0 at `turn_fade_in` (10) rising to 1 at
@@ -894,9 +919,11 @@ base ramp is a function of **airspeed alone**, 0 at `turn_fade_in` (10) rising t
 bank or load-factor term anywhere in it. The banked turn settles at 222–260 mph and the knife-edge
 takes are at 143 and 300, so the ramp is saturated across the whole regime where the 1.6× appears
 and cannot be its cause. The ramp is a real low-speed behaviour (`BL-330`, implemented 2026-08-15 by
-C24) — it is simply not this, and landing it moved no row of the envelope suite. **What remains is not a decode question.** Recorded rather than quietly
-re-pointed: a gap that has been attributed to the same three fields four times is exactly the kind
-of inherited claim that stops being re-checked.
+C24) — it is simply not this, and landing it moved no row of the envelope suite. **What is left over
+is not a decode question**: the rotation path is decoded, and the only thing on the other side of the
+comparison is frame-measured video. Recorded rather than quietly re-pointed: a difference that was
+attributed to the same three fields four times is exactly the kind of inherited claim that stops
+being re-checked.
 
 ⚠ **UPDATE (2026-08-15): the "not internally consistent with a coordinated level turn" half of that
 paragraph was itself wrong, and `CAP-33` is what corrected it.** The apparent inconsistency was
@@ -2002,7 +2029,7 @@ the tests, not the prose, are what stops a mechanism being quietly re-derived.
   45° up, path on the nose, stick centred, every torque in the model is identically zero, so one
   step must not rotate the attitude at all. The bounded term keyed on `1 − |bodyUp·up|`, which is
   0.29 in exactly that attitude, so it rotated the nose down at up to **11.5 °/s** — a nose-down
-  bias in every pull at any bank, filed as `BL-115`'s "knife-at-zero-bank leak". Also pinned: the
+  bias in every pull at any bank — the "knife-at-zero-bank leak". Also pinned: the
   knife-edge never settles on any of the eleven (a bounded sag puts almost none of its total in the
   last third of a 36 s hold, a genuine drift about a third), the nose stays well below the path
   (retiring `wingVert` makes the chase faster and fails it), and α stays inside `liftAOAs[0]` on
@@ -2030,8 +2057,8 @@ the tests, not the prose, are what stops a mechanism being quietly re-derived.
   scenarios is **pinned at 7** so that silently demoting one to informational cannot read as a green
   run. Three informational rows are recorded CONFLICTS rather than open questions —
   `accel-150-290` (footage vs the byte-verified force path), `sustained-turn-speed` and
-  `sustained-turn-sink` (both riding the unattributed turn-rate gap C22 was expected to close and
-  demonstrably does not). `terminal-dive` came BACK from that list when the attitude-thrust terms
+  `sustained-turn-sink` (both riding the banked turn-rate difference against the footage, which C22
+  was expected to close and demonstrably does not). `terminal-dive` came BACK from that list when the attitude-thrust terms
   landed: the count went 7 → 6 → 7, and a demotion is never the quiet way to make a run green.
 
 ## What this changes for the remake
@@ -2051,7 +2078,7 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
 3. **The two hardcoded bank constants (0.205, 0.165).** These are in no data file — they are
    developer-console variables — so no amount of data extraction would have surfaced them. Landed
    in `C22`; see "Bank coupling — resolved". ⚠ They make the banked turn **faster**, not slower,
-   so they are not the explanation of the original's 1.6×-slower banked turn.
+   so they do not account for the footage reading a slower banked turn than ours.
 4. **The attitude-dependent thrust (0.24 / 0.13).** A video fit would absorb these into gravity
    or drag and then fail in the opposite manoeuvre.
 5. **Rudder at 10 % authority in flight**, full only between 22.5 and 45 mph.
