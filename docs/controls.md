@@ -36,6 +36,7 @@ Flags are specified in [`cli.md`](cli.md).
 | | click right stick | hold to look back — the pad twin of `numpad 0` (E42, `BL-372`) |
 | `C` | | show the built colliders, coloured by the surface id they resolve to (see `--collision`) — `--debug-colliders` |
 | `X` | | colour world objects by class (destructible/facade/clutter/scenery) — `--debug-classoverlay` |
+| `L` | | **reserved** for Track Target (the original's `Views 1 → Track Target`) — bound to nothing yet; the camera behaviour is its own item (`BL-395`), not shipped by `PLAN-targeting` |
 
 ## Any mode
 

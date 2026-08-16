@@ -789,7 +789,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   can be stepped clockwise *and* counter-clockwise. Ours has exactly one selector input per weapon,
   `H` / D-pad Right for pylons and `G` / D-pad Left for gun groups
   (`FlightController.cs:1456`, `docs/controls.md`), and `WeaponCursor.NextSelectable`
-  (`WeaponCursor.cs:34`) only ever scans forward. *Fix shape:* a `PrevSelectable` backward scan
+  (`WeaponCursor.cs:34`) only ever scans forward. **Direct corroboration, `PLAN-targeting.md` A1
+  (2026-08-16):** the original's own Weapons keybind page carries `Cycle guns clockwise` (`F3`) and
+  `Cycle guns counterclockwise` (`F4`) as two separate actions, same for rockets (`F5`/`F6`) — the
+  original has two selectors per weapon class where we have one, confirmed from the keybind page
+  itself rather than from watching a play session. *Fix shape:* a `PrevSelectable` backward scan
   with the same empty-slot skipping, plus a second binding per selector, which is where this stops
   being a two-line change: the flight keymap has no spare paired keys and the pad's D-pad is
   already spent on the two forward steps. `BL-296`'s per-player ActionMap is the natural home for
@@ -959,6 +963,58 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   [`docs/org/aiPilot.md`](docs/org/aiPilot.md) "The trailer" (the anchored-net ride that carries a
   net over any terrain and so made this visible; closed as `BL-377`,
   `git log --grep=BL-377`).
+
+- `BL-394` `[Feature]` **A rebindable keymap — the real answer to targeting's key placement, not a
+  targeting-specific fix.** *Evidence:* `PLAN-targeting.md`'s own out-of-scope call (a), 2026-08-15:
+  every one of the original's eleven targeting keys collides with our WASD + `Shift`/`Ctrl`-throttle
+  flight scheme — the full collision audit is in `docs/org/targeting.md` / the plan's "What the data
+  actually ships" — so the plan ships a curated default set on free keys (`T` `Y` `U` `I` `O` + `L`,
+  `D-pad Up` tap/hold) instead of mirroring the original's letter-per-class layout (`E`/`W`/`R` plain/
+  `Shift`/`Ctrl`). A rebind layer is what actually resolves key placement; targeting is only the
+  feature that hit the wall hardest, because it is eleven keys deep into an already-full keymap.
+  *Fix shape:* `BL-296`'s per-player `ActionMap` seam, if it lands first.
+  *Cross-refs:* `BL-296`, `PLAN-targeting.md` decision 14, `docs/org/targeting.md`,
+  `docs/controls.md`.
+
+- `BL-395` `[Feature]` **Track Target's camera behaviour — `L` is reserved, the camera itself is
+  undecided.** *Evidence:* `PLAN-targeting.md`'s out-of-scope call (b), 2026-08-15: the original's
+  `Views 1 → Track Target` binds `L` (free in our flight keymap; our `L` is the viewer-only livery
+  lab), decoded in `docs/org/targeting.md`, but "keep the target framed" hides a pile of camera
+  decisions this plan deliberately deferred: snap vs smooth follow, override vs blend with the chase
+  camera, behaviour with no target selected or a target behind the pilot, and interaction with E42's
+  right-stick free look (`BL-372`). `L` is reserved in `docs/controls.md` (D31) but bound to nothing.
+  *Fix shape:* a camera-focused item once the questions above are settled — not a change to the
+  targeting module itself, which already exposes `TargetSelection.Current` cleanly for a camera to
+  read (B13 decision 13).
+  *Cross-refs:* `BL-372` (E42 right-stick free look), `docs/org/targeting.md` "Track Target",
+  `docs/controls.md`.
+
+- `BL-396` `[Feature]` **`Structures` as a selectable Non-Aircraft target — needs a curated
+  `targets.zrd`-equivalent list.** *Evidence:* `PLAN-targeting.md`'s out-of-scope call (c),
+  2026-08-15: the original's Non-Aircraft cycle walks a curated mission `targets.zrd` list
+  (decoded in `docs/org/targeting.md`), which our `DestructibleRegistry` has no equivalent of —
+  `docs/architecture.md`'s own `DestructibleRegistry` entry calls it an **approximation** of that
+  list, and walking it directly would put every crate and fence in the world on the cycle.
+  `TargetPool.Rebuild` deliberately never reads `AimCandidateSet.Structures` for exactly this reason
+  (B12), so `Structures` staying out of the cycle is a property of the pool, not a gap that leaked in.
+  *Fix shape:* a curated per-mission target list (mirroring `targets.zrd`'s authored entries) feeding
+  `TargetPool` the same way zeppelin sub-parts do today (`subParts` in `Rebuild`).
+  *Cross-refs:* `TargetPool.cs`, `docs/architecture.md`'s `DestructibleRegistry` entry,
+  `docs/org/targeting.md`.
+
+- `BL-397` `[Feature]` **A modernized target marker: brackets only PAST range, not under it — the
+  deliberate INVERSE of the original's own rule.** *Evidence:* the user's preferred rule (brackets
+  only past 500 m) was this plan's original premise and was disproven in the 2026-08-15 grilling
+  (`PLAN-targeting.md`'s ⚠ table row 3): the original draws brackets only UNDER the selected gun's
+  reach (`TargetHud.GunReaches`, C22) — distant enemies get none, and near ones get brackets the
+  silhouette often swallows. The user's ask is the exact inverse of that, not a memory of it. C22
+  ships the original's rule as fidelity; this item is the later, separate call to add the
+  modernization as an opt-in or a replacement.
+  ⚠ *Trap:* do not "fix" `GunReaches`'/`TargetHud`'s gate to match this without re-reading the trap
+  table first — the two rules are opposites BY DESIGN, not by an oversight C22 left behind.
+  *Fix shape:* a flag or setting flipping the gate's sense once the product call is made (past range
+  = bracketed, inside = not), reusing the same hysteresis machinery C22 already built.
+  *Cross-refs:* `TargetHud.GunReaches`, `PLAN-targeting.md` ⚠ table row 3, decision 11.
 
 ## Flight model & collision physics
 

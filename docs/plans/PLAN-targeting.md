@@ -1,8 +1,7 @@
 # Player target selection — decode, then a selectable target marker
 
-**ACTIVE PLAN** (written 2026-08-15). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE 2026-08-16** (written 2026-08-15; executed 2026-08-16). All 11 checklist items are
+☑, Waves A–D. Indexed in [`plans.md`](plans.md); read as history.
 
 This plan replaces the shipped auto-nearest hostile marker with the original's **player-selected**
 target: a sticky selection the pilot chooses, over three target classes (Enemy/Objective, Ally,
@@ -15,23 +14,28 @@ number we have no substitute for, the bracket range threshold.
 **Out of scope, deliberately.** (a) The **rebindable keymap** — every one of the original's eleven
 targeting keys collides with our WASD + `Shift`/`Ctrl`-throttle scheme, which makes a rebind layer
 the real answer to key placement; it is its own feature and this plan ships a curated default set
-instead (`BL-<TODO: mint>`). (b) **Track Target's camera behaviour** — the `L` binding is reserved
+instead (`BL-394`). (b) **Track Target's camera behaviour** — the `L` binding is reserved
 and documented here, but "keep the target framed" hides a pile of camera decisions (snap vs smooth,
 override vs blend with chase, behaviour with no target or a target behind you, interaction with the
-E42 right-stick free look) that are camera work, not targeting work (`BL-<TODO: mint>`).
+E42 right-stick free look) that are camera work, not targeting work (`BL-395`).
 (c) **`Structures` / `DestructibleRegistry` as a selectable class** — the original's Non-Aircraft
 cycle walks a curated `targets.zrd` mission-structure list; ours would walk every crate and fence in
 the world, producing a cycle nobody would use. Held until a curated list exists
-(`BL-<TODO: mint>`). (d) **The modernized marker** — the user's own preferred rule (brackets only
+(`BL-396`). (d) **The modernized marker** — the user's own preferred rule (brackets only
 *past* 500 m, the inverse of the original's) is deliberately not built; the original's behaviour
-ships first and the improvement is a later, separate call (`BL-<TODO: mint>`).
+ships first and the improvement is a later, separate call (`BL-397`).
 
 **Backlog provenance.** No item here is drawn from `backlog.md`, so no re-verification pass is owed.
 Two adjacent existing entries are *touched* rather than closed: `BL-357` (the original steps weapon
 selectors both ways) gains direct corroboration from the Weapons keybind page, and `BL-363` (the AI
 candidate pool is aircraft-only) shares the pool-widening work but is not closed by this plan.
-<TODO: re-verify BL-357 and BL-363 still-open against `git log --grep` + the code before citing them
-in a landing commit.>
+**Re-verified 2026-08-16 (D31):** `git log --grep=BL-357` and `--grep=BL-363` each return only the
+commit that *wrote* the entry (`b5f6e68d` for `BL-357`, one entry point of this plan itself; `3d94d7d9`
+"Decode BL-363's candidate pool…" for `BL-363`) — no closing commit for either, and both are still
+present, open, in `backlog.md`. `BL-357` gained its corroboration in this item; `BL-396` (new, D31)
+is what actually closes the door on `BL-363`'s pool-widening half by scoping the equivalent
+Non-Aircraft gap in the player's own targeting to "needs a curated list", the same shape `BL-363`
+itself already argues for on the AI side.
 
 ## Milestone goal
 
@@ -245,7 +249,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Close out
 
-31. ☐ Docs, backlog spin-offs, and the reserved `L` binding
+31. ☑ Docs, backlog spin-offs, and the reserved `L` binding
 
 ## Dependency and parallelism notes
 
@@ -1148,7 +1152,7 @@ in-frame jitter never moved a pixel by frame 90.
 
 # Wave D — Close out
 
-## D31 ☐ Docs, backlog spin-offs, and the reserved `L` binding
+## D31 ☑ Docs, backlog spin-offs, and the reserved `L` binding
 
 **Goal.** The documentation matches what landed, the four deferred features exist as backlog items,
 and `L` is reserved for Track Target so nothing else claims it.
@@ -1178,3 +1182,46 @@ hook checks this); `PROJECT_CONTEXT.md`'s "Current status" points at this plan.
 **⚠ Traps.** The commit hooks bite here: duplicate `BL-` ids fail the commit, and any double-encoded
 UTF-8 in a changed text file fails it too. Write docs with the Read/Edit/Write tools, never a
 PowerShell `Get-Content`/`Set-Content` round-trip.
+
+**Landed 2026-08-16.** Most of the Approach's doc updates turned out already done: `docs/controls.md`
+already carried the curated `T`/`Y`/`U`/`I`/`O` binds, the `D-pad Up` tap/hold row, the `T` → `F16`
+move and `A` dropped from respawn (`R`/pad `Y` only) — all landed in their own items (A2, A3, B14)
+per the plan's own "docs update in the same turn" ground rule, so there was nothing stale left to
+sweep up. `docs/cli.md`'s `--target=` and `--debug-markers` entries were current for the same reason
+(B15, C23). `docs/architecture.md`'s new-module entries (`TargetRef.cs`, `TargetPool.cs`,
+`TargetSelection.cs`, `TapHoldButton.cs`, `TargetHud.cs`) and the `VersusHud` split — including the
+"no reference to copy" correction (⚠ table row 1) — were likewise already in from C21/C22. What
+D31 actually added:
+
+- **`L` reserved** in `docs/controls.md`'s Flight table: bound to nothing, documented as reserved
+  for Track Target, pointing at the new `BL-395` for the camera work itself (decision 15).
+- **`BL-357` gained its corroboration**: the original's Weapons keybind page names `Cycle guns
+  clockwise`/`counterclockwise` (`F3`/`F4`) and the rocket pair (`F5`/`F6`) as distinct actions —
+  direct evidence the original has two selectors per weapon class where CSVM has one, cited from the
+  keybind page itself rather than from watching a play session.
+- **`BL-357`/`BL-363` re-verified still-open** (the plan's own owed TODO): `git log --grep` for each
+  returns only the commit that *wrote* the entry, no closing commit for either, and both are still
+  present in `backlog.md`.
+- **Four backlog items minted** for the plan's four deliberate deferrals: `BL-394` (rebindable
+  keymap — the real fix for targeting's key placement), `BL-395` (Track Target's camera, naming the
+  open questions snap/smooth, override/blend, no-target/behind-target, and E42 interaction),
+  `BL-396` (curated mission-target list to unblock `Structures` as Non-Aircraft), `BL-397` (the
+  modernized brackets-past-range marker, recorded as the deliberate INVERSE of the original's own
+  rule so nobody "fixes" C22's gate back toward it by mistake).
+- **`AimCandidateSet.Turrets`' doc comment checked and confirmed already fixed** by B12 — no second
+  pass needed. `AimTargetKind.Turret`'s own separate, similarly-stale "Empty until M4 builds them"
+  comment was noticed in passing but is **not** touched here: it is a different declaration than the
+  one this item names, and is M4/M3-era drift outside this plan's scope, not a targeting leftover.
+
+**Model recommendation.** medium — documentation and backlog authoring, judgement in the framing.
+
+**Verify.** `docs/controls.md` matches the shipped binds exactly (checked directly against
+`FlightController.cs`'s `DispatchTargetKey`/`_targetHold` reads — `T`/`Y`/`U`/`I`/`O` and
+`D-pad Up` tap/hold match verbatim, and `RespawnPressed()` reads only `Key.R`/pad `Y`). Each new
+`BL-` id (`394`–`397`) is unique — confirmed by grep before writing, and the commit hook would have
+caught a collision regardless. `PROJECT_CONTEXT.md`'s "Current status" points at this plan through
+the landing commit, then is swapped to name whatever plan (or none) follows once this one moves to
+`docs/plans/`.
+
+This closes the plan. All 11 checklist items are ☑ across Waves A–D; moved to `docs/plans/` with a
+`COMPLETE` banner and indexed in `plans.md` in the same commit.
