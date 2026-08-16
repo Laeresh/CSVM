@@ -75,21 +75,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Damage & destruction
 
-- `BL-346` `[Tuning]` `[Owed-playtest]` **Re-judge the debris arc at the controls now that
-    `OBJECT_MOTION` is a decode, not a tuned look.** `BL-022`'s retired `DebrisTune.LaunchScale =
-    0.65` was a footage fit laid over the wrong spherical `translation_range` reading; the constant
-    and the whole class are deleted (`PLAN-object-motion-decode` D10), and the launch direction,
-    speed and `RUN_TIME` ceiling the executable actually authors now drive the arc unscaled. `PT-46`
-    (d)'s observation that some original pieces pass through terrain or vanish stands — only its
-    mechanism attribution was wrong, and `PT-46` is re-opened against the corrected one (the default
-    ground-column tier, `NO_ALTITUDE`'s opt-out, `DO_INTERSECTIONS`'s sweep upgrade).
-    *To settle:* fly the C1 `m_build03` destruction and compare the arc and landings against
-    `OriginalScreenshots/Videos/m_build03 destruction.mp4`.
-    ⚠ **Traps.** Do not reintroduce a compensating scalar to chase the old look — a mismatch is a
-    further decode or a newly filed item, per this plan's milestone boundary. Distinguish an
-    unflagged pass-through (faithful — `do_intersections: false` bodies keep sinking through terrain
-    the original also sinks them through) from a flagged body that should now land.
-
 - `BL-348` `[Bug]` **C3's balloon-battery kill chain (`bontN`/`tbaseN`/`b_turretN`, M02) doesn't
     match the authored data on any of its four death paths — over-triggers, drags the wrong node,
     and drops calls silently.** Each of the six balloons is three independently-`WeaponHit`
@@ -189,8 +174,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   horizontal `1 − |elevation|/90` (an L1 direction, not spherical), `initial` the launch speed,
   `delta` an acceleration. The retired `DebrisTune.LaunchScale` of 0.65 was a footage fit laid over
   the earlier, wrong spherical reading and is deleted along with the whole tune class — a blend
-  here starts from the authored arc, with no compensating scalar; `BL-346` / `PT-46` re-judges the
-  resulting look at the controls. What stays TUNE is the `fly_trailN` anchor being invisible so that
+  here starts from the authored arc, with no compensating scalar. The unscaled arc reads like the
+  original at the controls, so nothing is owed on it and there is no scalar to put back. What stays
+  TUNE is the `fly_trailN` anchor being invisible so that
   only the trail shows; and the DISTANCE interval hides behind an inverted flag
   (`has_interval_value` false, key off `interval_type`).
 
@@ -229,9 +215,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   up); the **debris-arc trajectory** (the executable decode is settled — `translation_range` gives
   `dirY = elevation/90` and horizontal `1 − |elevation|/90`, `initial` the launch speed, `delta` an
   acceleration, `PLAN-object-motion-decode`, 2026-08-13; the former `DebrisTune.LaunchScale` footage
-  fit is deleted with no replacement scalar, and only the arc's judged *look* stays open, under
-  `BL-346` / `PT-46`; the `fly_trailN` anchor being invisible means only the trail's rough scale
-  reads); the **overall crash intensity** (the fireball, the cluster, the debris
+  fit is deleted with no replacement scalar, and the arc's *look* is settled too: the unscaled arc
+  reads like the original at the controls; the `fly_trailN` anchor being invisible means only the
+  trail's rough scale reads); the **overall crash intensity** (the fireball, the cluster, the debris
   fire and the wreck fire are all additive, so a dirt crash can read as one big fireball — judge the
   whole against the original); and `snd_exp_ground_a` mix level + whether it should layer over
   `plane_destroy_sg` (the dirt def's only Sound is `snd_exp_ground_a`; we keep both). The retired

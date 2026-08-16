@@ -419,6 +419,8 @@ is **measured off footage** — a frame comparison of that same kill — and by 
 rule a footage-derived measurement never contests a decode. The knob is gone in full: the class, the
 `--debris-launch`/`--debris-gravity` flags, the `debris.*` config keys and the lab panel. **If an arc
 reads wrong from here on, the answer is a further decode or a filed item, never a scalar.**
+The unscaled arc reads like the original against that same video, so nothing is owed on the
+deletion.
 
 ### ⚠ `forward_rotation.Time.initial` as a total angle over `RUN_TIME`, about local X — RETIRED (2026-08-13)
 
