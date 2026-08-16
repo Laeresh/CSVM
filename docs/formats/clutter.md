@@ -128,16 +128,17 @@ times). The boot script and the gamez disagree, C2B has always placed no clutter
 from 11 distinct models; each is stamped once per integer UV repeat of `cblock1.tif` across
 every triangle painted with it.
 
-**C5's `cblock4/5/6` are placed like every other district**, and the map-wide
-`BuriedClutterDistricts` does not remove them. It
-because the remake stamped both members of every coplanar overlay/base pair — matching a template
+**C5's `cblock4/5/6` are placed like every other district**, with no map-wide exemption removing
+them. An exemption once stood there because the remake stamped both members of every coplanar
+overlay/base pair — matching a template
 to a polygon by texture name only, never reading the polygon's flag — which doubled the city's
 buildings (`analysis/bl-058-clutter-doubling/FINDINGS.md`). The real mechanism is the `no_clutter`
 flag: flagged ground is dressed by `cblock4/5/6` (low-rise) and clear ground by `cblock1/2/3/7`
 (towers), measured at odds ratio 1,037× and confirmed at the controls
 (`analysis/bl-305-clutter-uv/FINDINGS-layer-pairing.md`). ⚠ Neither half works alone — the flag
-gate *with* the exemption still in force empties C5's downtown, because the ground there IS the
-flagged layer and its replacement was the exempted one. ⚠ The building sets are **not** disjoint by
+gate with a district exemption still in force empties C5's downtown, because the ground there IS
+the flagged layer and its replacement is the district such an exemption removes. ⚠ The building
+sets are **not** disjoint by
 name range: `cblock5/6`
 also place `cb06a`/`cb11a`, and the *visible* `cblock7` places `cb12a`/`13a`/`14a` — census by
 template root, never by `cbNNa` name range.

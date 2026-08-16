@@ -1703,31 +1703,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Needs an original-game A/B:* a matched night/day pose showing aircraft brightness, in the spirit
   of `CAP-11`'s `WorldLight` calibration (which pinned the world half of the same pair).
 
-- `BL-305` `[Bug]` **C5's city blocks are packed edge to edge where the original shows pavement
-  between buildings — within-block clutter density/alignment is wrong.** Found by `CAP-22`
-  (2026-08-07) while closing `BL-250` (the doubled-district bug, landed the same day — evidence
-  in that closing commit, `git log --grep=BL-250`, and `playtest/CAP-22/` while it lives): at
-  scale-matched nadir (`playtest/CAP-22/ours-nadir-230-scale-matched.png` vs
-  `orig-c-t4-nadir-crossroads.png`, matched by eye on avenue width, ±20 %) the original's blocks
-  show pavement between neighbouring buildings, while ours have whole regions of no visible
-  ground — and that persisted with the buried `cblock4/5/6` district already suppressed, so it is
-  **not** the doubling: it is the placement of the surviving `cblock1/2/3`+`cblock7` districts
-  themselves. Prime suspect: `ClutterBuilder` tiles each template on a fixed world-space X/Z grid
-  of its authored period rather than reproducing the original's (undecoded) alignment
-  (`Clutter.cs`'s class comment records the decision and why), which can double-stamp a
-  template's cell pattern relative to the painted street layout the ground texture shows.
-  A footprint-vs-texture matching attempt was already made and was inconclusive without the
-  ground quad's UV-to-world orientation verified first —
-  `analysis/bl-058-clutter-doubling/FINDINGS.md` (the `match_footprints.py` paragraph) has the
-  dead end so it is not re-walked.
-  ⚠ **Traps.** (a) Do not re-open the district question: the original's downtown is the
-  `cblock1/2/3` city and `cblock4/5/6` stays exempted (`Clutter.cs`
-  `BuriedClutterDistricts`, closing commit of `BL-250`). (b) The scale match behind the founding
-  observation is by eye, ±20 % — re-shoot with a decoded altitude before tuning to it.
-  (c) `cblock7` places `cb12a`/`13a`/`14a` (models in the exempted district's name range) — a
-  density census that lumps by name range will mis-attribute exactly the way `BL-250`'s first
-  census did; count per template root.
-
 - `BL-272` `[Tuning]` **Precipitation: every unit mapping from `weather.json` to a look is invented, and
   one deviation is deliberately held back** (`Precipitation.cs:29-62` — type/tint/rate/density
   are authored; fall speed, box size, particle counts, streak length/width, sway are 16 TUNE
@@ -1978,14 +1953,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   that ground the gate now has nothing left to fall back on and leaves it undecorated. *Fix
   shape:* find what the original actually draws on that 7.6% — either a third layering mechanism
   this plan didn't decode, or the original genuinely leaves it bare too (which would close this
-  outright). Start from a located landmark pose the way `BL-305` was finally confirmed (the user's
-  own flyover, not a nadir — `SHOT-28`, `docs/verification.md`), not from `CAP-22`'s pose, which
+  outright). Start from a located landmark pose — the gate itself was confirmed by the user's own
+  flyover 1 km north of C5's `brooklynbridge` node, not by a nadir (`SHOT-28`,
+  `docs/verification.md`) — and not from `CAP-22`'s pose, which
   cannot resolve this question (it already reads correctly). *⚠ Traps:* (a) do not re-curate a
   list as a stopgap — that is exactly the mistake this item exists to not repeat. (b) A nadir
   shot cannot distinguish a painted rooftop from bare ground any better than it could distinguish
-  a rooftop from a building (`SHOT-28`); use a low oblique. *Cross-refs:* `BL-305` (the fix that
-  surfaced this), `BL-250` (the closed item this supersedes — do not reopen that ID; IDs are never
-  reused, per this file's own rule).
+  a rooftop from a building (`SHOT-28`); use a low oblique. *Cross-refs:* `BL-250` and `BL-305`
+  (both closed — the doubled-district curation and the C5 packing bug the gate that surfaced this
+  replaced; `git log --grep=BL-305`. Do not reopen either ID; IDs are never reused, per this
+  file's own rule).
 
 ## Effects & animation runtime
 

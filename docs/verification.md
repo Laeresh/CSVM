@@ -136,7 +136,7 @@ and leave gaps when retiring old ones.
   same pixels, so "the streets are clear" reads identically whether the placement improved or the
   buildings vanished. A per-kind census fails the same way from the other side: placement changes
   **relocate** a population as well as thin it, so the totals can barely move while a whole
-  viewpoint empties. Measured (`BL-305` + the `no_clutter` decode):
+  viewpoint empties. Measured on C5's clutter placement, against the `no_clutter` decode:
   gating clutter on polygon bit `0x800` made C5's crossroads look markedly closer to `CAP-22`'s
   original at nadir, moved the pinned frame hash, and passed the interpenetration check; the
   per-kind counts said the city was *intact*, with `cb00a` at 79 % and `cb12a` at 96 % of baseline
