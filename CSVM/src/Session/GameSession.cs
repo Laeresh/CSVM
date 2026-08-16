@@ -2528,6 +2528,17 @@ public partial class GameSession : Node3D
             {
                 _zeppelins.WireCannons(_projectiles, weaponDefs);
             }
+            // B14: the zeppelin sub-parts are the one thing that makes a structure selectable, and
+            // the zeppelins are built AFTER the rigs — so the feed is bound here rather than in the
+            // assembler. Every pane shares the one runtime; each fills its own list from it.
+            var zepTargets = _zeppelins;
+            foreach (var zepRig in _rigs)
+            {
+                if (zepRig.Controller is { } zepPlane)
+                {
+                    zepPlane.TargetSubParts = into => zepTargets.CollectTargetParts(into);
+                }
+            }
             GD.Print($"zep: {_zeppelins.LiveCount} of {zepDefs.Count} zeppelin(s) placed for " +
                      $"{_spec.Chapter}/{_spec.Mission}");
             state.What += $" + {_zeppelins.LiveCount} zeppelin(s)";

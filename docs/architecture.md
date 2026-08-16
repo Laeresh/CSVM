@@ -86,6 +86,10 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/WeaponBench.cs` — the world-less 48-weapon mount-and-fire pass check behind `--weapon-test` and `weapons-fire`; fires the whole `ForRig` rig, no lab node involved.
 - `src/Flight/FireControl.cs` — the engine-free fire-control state machine (BL-295): trigger edges, fire clocks, ammo draw-down, both selectors, dry cues; `FlightController` performs its `FireOutcome`.
 - `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the forget + catch-up pass, the intercept solver, the four-list candidate scan, and the fire call's step order + 1° launch scatter.
+- `src/Flight/TargetRef.cs` — the player-targeting abstraction: one value over every selectable thing (aircraft, mission structure, turret), wrapping an `AimCandidate` for the pose/team/liveness/source half and adding class, label, optional health/armor, plus `Classify` (the decoded class model) and source-identity matching.
+- `src/Flight/TargetPool.cs` — the player's classed candidate pool: the three cycles (Enemy/Objective, Ally, Non-Aircraft) of `TargetRef`, rebuilt from scratch off the aim assist's `Vehicles`/`Turrets` lists plus an explicit sub-part list; the one place a concrete source type is read.
+- `src/Utils/TapHoldButton.cs` — one button carrying two actions, split by hold duration: edge-detects a level read, times it over `HoldToRepeat`, and answers tap / hold / nothing. The tap resolves on RELEASE; a press whose hold fired is spent. Pure, so the decoding unit-tests even though a gamepad does not.
+- `src/Flight/TargetSelection.cs` — the sticky player selection: owns a `TargetPool`, sorts it into the decoded cycle order, re-finds the selection by entity each frame, and carries every action (next/previous/nearest per class, nearest-crosshairs, target-nothing) plus the attacker queue and the lifecycle. `ApplyInitial` is `--target=`'s seam.
 - `src/Flight/TurretDefs.cs` — typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
 - `src/Flight/TurretController.cs` — one carried turret gunner: acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
 - `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver: mutable standing orders (heading/altitude/throttle, optional patrol net, optional gunner whose live target is pursued, optional mode machine that dispatches all of it) → one `FlightInput` per sim step; each mode picks the aim point and table `AiControlLaw` steers on. `SteeringPatrol` reports whether the last step actually flew the net (F13's leashes read it).
@@ -167,7 +171,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/TileGridOverlay.cs` — the map-edge tile-grid overlay, **flag-only** (`--debug-tilegrid`; no key is bound): every ground tile tinted 20 % by repetition band, so one colour band is one block; `--map-edge-block=`/`--map-edge-mode=` set the depth/fold once at launch. The instrument that settled the map-edge fold.
 - `src/UI/WeaponLab.cs` — the weapon lab panel (B): steppers that arm the held plane's live loadout, click-to-place on a real world surface. Fires nothing itself.
 - `src/UI/PanelFocus.cs` — the one-line rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
-- `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
+- `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (F16): Off/Meshes/All, anchored on mesh centres, de-cluttered.
 - `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels.
 - `src/UI/PerfHud.cs` — the frame-cost readout (F14, `--debug-fps=`): fps/current-frame-cost/worst-recent-frame, once for the window, drawn above the launchscreen too.
 - `src/UI/TargetingOverlay.cs` — the targeting overlay (F15, `--debug-targets`): a per-frame line from every turret gunner (`TurretController.TargetPosition`) and AI gunner (`AiGunner.Target`) to its acquired target, coloured by the gate holding the trigger (`TurretController.Gate`), with the gate named per shooter in the HUD. Depth test off, since the line into a hull is the one worth seeing. Splitscreen (F51, `BL-376`): the world-space lines draw in every pane on their own (default render layer, in every camera's `CullMask`); the HUD roll-call is once for the window, like `PerfHud`, since it is process-wide combat state.
@@ -1993,6 +1997,196 @@ about the aim axis, then a polar angle **uniform in `[0, inaccuracy]`**.
   so it piles shots near the rim) and treats its argument as a FULL angle. Both are wrong here, and
   the suite's able-to-fail control is exactly that sampling scored alongside.
 
+## src/Flight/TargetRef.cs
+The one abstraction over everything the player can select, decoded in
+[org/targeting.md](org/targeting.md). An enemy Fury, a zeppelin engine and a turret emplacement are
+three unrelated C# types (`FlightController`, `DestructibleRegistry.Instance`, `TurretController`),
+and every consumer downstream of this (the classed pool, the cycles, the label formatter and
+the marker) reads `TargetRef` and never the underlying type. `TargetHud`'s
+`c.Source is not FlightController fc` test in both `NearestHostile` and `CollectMarks` is the shape
+that would otherwise have multiplied across four modules.
+**It WRAPS an `AimCandidate` rather than restating it.** Position,
+velocity, team, liveness and the source object are the same five facts the aim assist already needs,
+filled by the same collectors off the same four pools (`ProjectilePool.CollectAircraft`/
+`CollectTurrets`, `AimCandidateSet.AddStructures`), so a second copy could only drift; the forwarding
+properties (`Position`/`Velocity`/`Team`/`Live`/`Source`) make that invisible at the call site. What
+`TargetRef` adds is what the assist has no use for: `Kind` (which pool, reusing `AimTargetKind` rather
+than minting a second enum), `Class` + `Objective`, `Name`/`TypeLabel`/`Category`, and optional
+`Health`/`Armor`. The assist's `AimCandidate.ConeOverride` rides along unused, since it is the same
+entity's data rather than a duplicate. Pure data, no Godot node, so the pool and the cycles unit-test
+with no tree the way `NearestHostile` already does.
+⚠ **`Name` and `DisplayName` are two strings for CSVM's sake, not the original's.** There one
+  entity string is both; here the aircraft's node name (`ai1_player_fury`) is IDENTITY — what
+  `--target=` matches and what the breadcrumbs print — while the marker prints the airframe's common
+  name (`Fury`, `PlaneRoster.PlaneDisplayName`, decision 10). A golden pinned on "Fury" could not
+  say which of three Furies it meant, which is why the split exists. Every other source's own name
+  is its label, so it carries one string in both.
+`Classify` is the decoded class model (`FUN_004b5cd0`) in its own order: the liveness predicate, then
+`objectiveTarget` (`+0x4d`), then `otherTarget` (`+0x4c`), then the vehicle/ordnance restriction, then
+the team split (different and both non-zero = Enemy, else Ally). It returns null for "not selectable
+at all", which is what an **unflagged** turret or structure is. The mission decides what may be locked
+onto, not the world, and that is why `DestructibleRegistry` never feeds this pool.
+`CategoryLine` composes the marker's line 1 through the original's four format strings
+(`%s [%s] -` / `%s -` / `[%s] -` / blank), which is why an ordinary aircraft shows line 2 alone
+(`Targeting HUD Kestrel.png`) and a named objective shows both (`C1 M04 Zeppelin.png`).
+⚠ `Health`/`Armor` are **genuinely optional and never defaulted** (decision 12). The three shipped
+  sources differ: an aircraft has both (`PlaneDamage.WholeHealth`/`WholeArmor` against their maxima),
+  a structure has health alone (`DestructibleRegistry.Instance` carries no armor pool), and a turret
+  emplacement has **neither**, since the retail loaders read no HEALTH key and its aliveness is its
+  healthy node's visibility. Omitting the figure is the shipped behaviour; a defaulted `100%` would be
+  a number the game does not have. `TargetRef.Fraction` is the single place that decides this.
+⚠ **Objective is not a fourth class.** The engine carries it as a companion flag on whichever cycle
+  objectives currently ride, and with the `-too` switch off (normal play) that is Enemy, hence
+  "Next Enemy/Objective". `Classify` returns `Enemy` for an objective and the caller records the flag
+  separately; `-too` is not ported.
+⚠ **Identity is the SOURCE object, never the ref.** `IsSameTarget` matches by reference because the
+  original rebuilds its candidate list from scratch every frame and `FUN_004b6490` re-finds the
+  selection by underlying entity for exactly that reason. A sticky selection compared by wrapper would
+  drop on the next frame. A null source matches nothing, including another null.
+⚠ Not ported, and recorded so it is not re-derived as a bug: the extra `+0x67c in {0, 4}` gate the
+  original applies to an own-team aircraft before it will call it an Ally. The field is unidentified
+  in the decode, so there is nothing to port it to.
+Pinned by the `target-ref` suite (`Suites.cs`), which is deliberately tree-free and data-free.
+
+## src/Flight/TargetPool.cs
+The player's classed candidate pool, decoded in
+[org/targeting.md](org/targeting.md) "The candidate list". Three lists of `TargetRef` (`Enemy`,
+`Ally`, `NonAircraft`, reachable by name through `Of(TargetClass)`), rebuilt from scratch on every
+`Rebuild` call. That is the original's own contract: `FUN_004b5fb0` releases the previous frame's
+list before walking the pools again and nothing about it persists, which is why a runtime spawn
+appears and a death disappears with no extra plumbing. `Rebuild` takes the selecting plane's
+`FlightController.Team`, classes each candidate through `TargetRef.Classify`, and drops `self` by
+reference.
+**Two of the assist's four lists are read and two are not.** `Vehicles` and `Turrets` are walked;
+`Structures` is **never touched** (it is `DestructibleRegistry`, an approximation of the original's
+curated `targets.zrd` list, and walking it would put every crate and fence in the world on the
+Non-Aircraft cycle, decision 8) and `Ordnance` is not either (the original offers a live fused round
+only when its `+0x6c` tracking byte is set, and CSVM has no such per-round flag). Selectable
+structures arrive through `Rebuild`'s separate `subParts` argument, filled only by
+`ZeppelinRuntime.CollectTargetParts`. That separation is deliberate and testable: feeding a scan
+`AddStructures(registry)` cannot leak a crate into the cycles, and the suite proves it by doing
+exactly that.
+CSVM carries no mission `otherTarget`/`objectiveTarget` data, so the per-entity flag the original
+reads is stood in for by what the candidate IS: a world turret **emplacement** is selectable, a
+**carried** gunner is not (its host is already a target in its own right, and offering both would put
+two entries on one silhouette; the discriminator is `TurretController.Site`), and a sub-part is
+selectable by construction. `Describe` is the ONLY place in the targeting path that reads a concrete
+source type — the kind picks the shape, the source supplies only the name and the health figures.
+⚠ **Read `FlightController.Team`, never `AimAssist.TeamOfPilot(PlayerIndex)`.** Deriving the side
+  from the pilot index is right for P1 by coincidence (`TeamOfPilot(0)` == `PlayerTeam`) and wrong
+  for P2–P4 in any session that sets teams explicitly. That is the wingman-in-the-marker bug: see
+  the `TargetHud.OwnTeam` entry. The suite carries the derivation as a named
+  able-to-fail CONTROL so the wrong read cannot quietly come back.
+⚠ `NameOf` is the plain **node** name — identity, not a label. The marker's own
+  `TargetRef.DisplayName` sits beside it, `PlaneRoster.PlaneDisplayName(plane.Stats)` for an aircraft
+  (through the `FlightController.Stats` accessor) and the node name for everything
+  else. A rig with no flight model bound has no airframe to name and falls back to the node name.
+⚠ **Zeppelin sub-part enumeration is a deliberate divergence, not a port.** The decode found no
+  sub-part enumeration anywhere in the original's targeting path: a gasbag is selectable there only
+  because the mission authored it as its own `MStruct` carrying the flag. Decision 8 asked for the
+  parts, so CSVM enumerates what it already models as damageable. Do not "correct" it back by citing
+  the decode.
+⚠ `TargetSelection` owns the instance and prints the per-session `target pool:` count
+  breadcrumb; `FlightRigAssembler` wires one per human pane and feeds it every frame from
+  `FlightController.StepTargeting`.
+Pinned by the `target-pool` suite (a synthetic half with no world, plus C1's real emplacement census
+through the same pool); the carried-gunner exclusion rides the `turret-gunner` suite, where a real
+carried turret already exists.
+
+## src/Flight/TargetSelection.cs
+One pilot's target selection, decoded in
+[org/targeting.md](org/targeting.md). One instance per pane; it OWNS its `TargetPool`, since the pool
+is per-selector state and nothing else needs one. No Godot node dependency — `Resolve` takes the pose
+it needs — so the whole lifecycle drives from the suite with no tree.
+**The split between the handlers and the per-frame pass is the original's, and it matters.** An action
+handler (`Next`/`Previous`/`Nearest`/`NextEnemy`/`NearestCrosshairs`/`Clear`) only mutates state — the
+class and the selection identity — and steps the list that ALREADY exists. `Resolve` is the per-frame
+pass (`FUN_004b5fb0`) that re-sorts and re-finds the selection **by entity** (`FUN_004b6490`),
+returning the matching entry or the list HEAD when it is gone. That one fallback is the entire
+lifecycle: the auto-acquire at mission start, the switch on target death, and the drop when a target
+leaves the class are all the same failed re-find. Nothing is re-picked beyond it, which is what makes
+the selection sticky.
+`SectorKey` is the cycle comparator (`FUN_004bbd60`): −1 for an objective, else the 90° sector after a
+π/4 rotation with the 0 and 3 quadrants swapped, giving **ahead, behind, left, right**, nearest-first
+inside each. Godot's basis makes this a direct port — the X column IS the engine's `row0` (right) and
+the Z column IS `row2` (the negated forward axis), so no sign fixing is needed.
+⚠ **"Nearest" means head-of-cycle, not nearest-in-space.** `Nearest(cls)` re-asserts the class and
+  restarts the cycle at its head: the nearest objective if any exists, else the nearest candidate
+  ahead, else behind, else left, else right. A target 200 m off the left wing loses to one 900 m
+  ahead. Unlike Next/Previous, which only reset when the class actually changes, Nearest always
+  restarts.
+⚠ **Nearest-crosshairs scores the NOSE, not the pipper** (`FUN_00488db0`/`FUN_00488ce0`): a hard 15°
+  half-angle cone about the plane's forward axis, plain slant range as the score, and a **2 km hard
+  cap** because the running best starts at 2000.0. It ignores the cycle entirely, runs its own scan
+  over all three classes, **includes friendlies** (which is how one keypress reaches an ally), and
+  writes the class back from what it found. Not the `ImpactReticle` pipper — that guess predates the
+  decode and is wrong; the pipper is a separate velocity-derived point nothing in this path reads.
+⚠ **`Target Nothing` must STAY cleared.** `Clear` nulls the class as well as the target, and `Rebuild`
+  short-circuits on a null class so the pool is left empty rather than built and discarded. That is
+  the original's mechanism, not a convenience: with the class flags zero its collection pass is
+  skipped, so the auto-acquire cannot fire again until a class action presses. Auto-acquire at start
+  and drop-to-head on death are the ONLY two automatic transitions — a third ("nothing selected, so
+  pick one") silently breaks this action.
+⚠ **Nothing else drops a selection.** There is no range, line-of-sight or field-of-view gate anywhere
+  in the decoded path; the suite flies 7 km away and swings the nose onto a new bearing to prove it.
+  Adding one would be a port invention.
+⚠ The **attacker queue** is `NextEnemy`'s alone (action `0x24`, `FUN_004b9770`): shooters that have hit
+  this pilot, walked BACKWARDS from the end, so not-in-the-queue takes the most recent, in-the-queue
+  takes the one before it, and the queue's first entry falls through to an ordinary `+1`. Its
+  de-duplication is an **inference** — `FUN_004bc1e0` before the insert is probably a
+  remove-if-present but was not traced. `RecordAttacker` and `ForgetTarget` are the hooks; wiring them
+  to the damage and death paths is owed and does not exist yet.
+⚠ The class handlers step LAST frame's list, built under the old class. That one-frame lag is the
+  original's (`docs/org/targeting.md` "The eleven actions") and self-heals on the next `Resolve`; a
+  port that rebuilt synchronously inside the handler would not reproduce it. Do not "fix" it.
+⚠ The sort's third key is the pre-sort index. The engine's own sort makes no promise about exact
+  ties, and a total order keeps two candidates at the same range in the same sector (two parts of one
+  zeppelin) from reordering between frames and walking the cycle under the pilot.
+⚠ Nothing sets `TargetRef.Objective` yet, so the −1 key never fires in a real session — no mission
+  `objectiveTarget` data is plumbed. The suite files one by hand to exercise the rule.
+⚠ The count breadcrumb waits for the first NON-EMPTY pool (or reports the empty case once, after
+  `EmptyPoolReport` rebuilds). Firing it on frame one would print zeroes in every session and say
+  nothing, because the AI spawner, the zeppelins and the generators all build after the rigs do.
+⚠ `sg_switchtarget`, the sound the original plays on the nine class actions, **is not shipped and
+  cannot be**: the string is in the executable, but neither `extracted/zrdr/sounds.zrd.json` (whose
+  entries are all `snd_*`) nor the 2521 assets under `extracted/soundsh/` carry it. `snd_select`
+  exists and is a plausible candidate, but no resolution from `sg_switchtarget` to it has been
+  traced, so picking it would be an invention. CSVM ships silent; the original is silent for
+  nearest-crosshairs, Target Nothing and Next Enemy's attacker-queue branch anyway.
+⚠ The player's own death/respawn was **not traced** (`FUN_00421500` and `FUN_00469e20` both zero the
+  field; neither was tied to the respawn path). Doing nothing on own respawn already gives the
+  required behaviour — a live selection survives the rebuild, a dead one drops to the head — so no
+  rule is invented here.
+`Select(name)` and `ApplyInitial(spec, pose)` are `--target=`'s seam and the only things here with
+no counterpart in the original, which has no scripted input at all. `Select` matches
+`TargetRef.Name` case-insensitively across the three cycles (Enemy, then Ally, then Non-Aircraft, in
+the pool's own collector order, so a duplicated name resolves the same way on every run) and writes
+the class back from what it found — without that write-back the next `Resolve` would drop a
+cross-class pin. `ApplyInitial` maps `nearest`/`crosshair`/`next`/`none` onto the ordinary actions and
+anything else onto `Select`, then re-resolves in the same frame so the caller can log what was picked.
+⚠ `ApplyInitial` sets the INITIAL selection and does not hold it. It mutates the same two pieces of
+  state a keypress does and returns; calling it once is the caller's job (`FlightController`
+  `ApplyInitialTarget`). A flag that re-asserted itself per frame would freeze targeting in an
+  interactive session started with it — a known trap, guarded against on purpose.
+Pinned by the `target-selection` suite, which is tree-free and data-free; its geometry deliberately
+makes the sector order and a plain range order DISAGREE, so an implementation that quietly sorted by
+distance fails it. The `--target=` grammar is pinned by `target-flag`, whose pool is built from real
+sources rather than hand-filed refs because the claim is about the names `TargetPool` produces.
+
+## src/Utils/TapHoldButton.cs
+One button carrying two actions, split by how long it is held (decision 7).
+Feed it the button's LEVEL each frame; it edge-detects, times over `HoldToRepeat` (zero repeat
+interval, so no second timer), and answers `TapHold.Tap` / `Hold` / `None`. Engine-free: the input
+read stays with the caller, which is what makes the *decoding* unit-testable when the device is not.
+⚠ **The tap resolves on RELEASE, and a press whose hold already fired is spent.** Firing the tap on
+  press instead means every long press begins by performing the wrong action and visibly flickers a
+  wrong selection before correcting itself. `Hold` fires exactly once, on the frame the threshold is
+  crossed, and never repeats however long the button is held — this is a tap/hold split, not a
+  key-repeat.
+⚠ A release with no press reports nothing, so a button already down when the caller starts reading
+  (or held through a state change) cannot produce a phantom tap.
+Pinned by the `target-input` suite.
+
 ## src/Flight/TurretDefs.cs
 Typed reader over the shared `ai.zrd`'s `TURRET` section — 42 `TurretDef`s (docs/formats/turrets.md):
 the carried/standalone split (`CREATE_STANDALONE` present-and-zero = carried, looked up by `TITLE`
@@ -2861,9 +3055,9 @@ time-out win, draw, post-completion no-op, rematch re-arm, each limit disabled o
   `Advance` timekeeping.
 
 ## src/Flight/VersusHud.cs
-Per-pane Dogfight HUD: a compact status line — remaining time
-(omitted once `VersusMatch.TimeLimit` is disabled), this pane's own K/D, and the current leader's
-tag — drawn in MarkerHud's run-status slot (`RefStatusY` — Stunt and Versus are mutually
+Per-pane Dogfight HUD, `--vs` only: a compact status line — remaining
+time (omitted once `VersusMatch.TimeLimit` is disabled), this pane's own K/D, and the current
+leader's tag — drawn in MarkerHud's run-status slot (`RefStatusY` — Stunt and Versus are mutually
 exclusive, so the two never compete for it); a transient "P2 DOWNED P3" kill banner ("P3 DOWN"
 with no killer); and one opponent marker per living rig (`Rigs`, excluding `PlayerIndex` and any
 `Controller.Crashed` seat) — an on-screen tag at the projected point, or MarkerHud's edge-arrow +
@@ -2882,30 +3076,112 @@ happened to.
 ⚠ Opponent positions come off `PlayerRig.Controller.GlobalPosition` directly, never
   `AnimRuntime.PlayerPosition` (a P1-only singleton) — the same rule MarkerHud/FlightController
   already follow.
-H22 extends the same marker to AI hostiles in EVERY flight session: `BuildHostileTracker(pi,
-camera, pool)` is the matchless build (no status line, no banner, no `Rigs`) the rig assembler
-hangs on every human pane outside `--vs`, and in `--vs` the normal build additionally gets
-`HostilePool`. `UpdateHostile` (every `_Process`) rescans the pool's one live aircraft roster
+⚠ **The edge-arrow + two-line-off-screen-tag SHAPE this draws is not invented** — the module doc
+  used to claim "no reference to copy"; that claim is false. `OriginalScreenshots/HUD.png` shows the
+  original's own targeting marker doing exactly this, decoded in
+  [`org/targeting.md`](org/targeting.md). What IS this class's own invention is applying that shape
+  to draw one marker per *human opponent* — the original has no such per-opponent marker at all;
+  that use is CSVM's own splitscreen answer to its radar.
+The nearest-AI-hostile tracker and `--debug-markers` used to live here too; both split out to
+`TargetHud` (below), because that marker draws in EVERY flight session, not only `--vs`, which this
+class never did.
+
+## src/Flight/TargetHud.cs
+The per-pane targeting HUD: the pilot's own selected-target marker,
+the nearest-AI-hostile fallback and `--debug-markers`, split out of `VersusHud` because all
+three draw in EVERY flight session, not only `--vs` — a Versus-only class was the wrong home for a
+feature every pane gets. `Build(playerIndex, camera, pool)` is unconditional, one per human pane,
+built by `FlightRigAssembler` whether or not the session has a `VersusMatch`; a `--vs` pane gets
+BOTH this and a `VersusHud`, so an AI hostile spawned into a dogfight is still marked alongside the
+human opponents.
+**The shipped marker is `Selected`** (`Own.Targeting.Current`), drawn in the original's own
+shape and decoded in [`org/targeting.md`](org/targeting.md): the fixed 20 x 16 bracket box with
+4-pixel arms (`FUN_004574d0`'s three absolute constants, taken at the 1440p reference and scaled by
+`HudMetrics` — the deliberate divergence, since the original never scales its box and 20 px is
+invisible on a modern display), the label block BELOW it, and off screen an edge arrow with the name
+and clock bearing stacked. `MarkerColor` is `Target::GetColor` (`FUN_004a5f40`) verbatim — an
+objective is red for the four destructive categories (`Destroy`/`Disable`/`Disable Engines`/
+`Damage`) and blue for any other, and anything categoryless is red when the teams differ and both
+are non-zero, green otherwise.
+⚠ **A friendly is GREEN, not blue.** Blue is the non-destructive objective (protect, escort).
+⚠ **The bracket gate is the SELECTED GUN's reach, not a distance constant**
+  (`FlightController.GunReachesTarget` → `TargetHud.GunReaches`): the aim assist's own lead solve,
+  accepted when the round is still inside the weapon's authored `RANGE` at the intercept. So the
+  marker is weapon-dependent, a target outrunning the round is never bracketed at any range, and a
+  rocket-only loadout falls to the original's own `distance <= 1e6`, which never rejects. The reach
+  is measured along the muzzle velocity WITH the plane's own velocity added (the assist's range gate
+  uses the round speed alone), which is why flying away from a target extends its bracket range and
+  closing on it shortens it. `BracketHysteresis` (50 m, TUNE and ours) is the only addition: the
+  original re-answers with no memory and strobes at the boundary. `UpdateBrackets` runs in
+  `_Process`, never `_Draw`, so the hysteresis cannot advance per repaint, and logs its transitions.
+⚠ **A blank category line still holds its slot under a box.** The original's three text lines sit at
+  fixed 15-pixel offsets from the anchor and a blank one draws nothing, so an aircraft's name is the
+  SECOND line's distance below the box — compacting it puts the name inside the silhouette (seen and
+  fixed by eye against `Targeting HUD Kestrel.png`). At the screen edge there is no box to measure
+  from, so `LabelLines(keepSlots: false)` compacts instead.
+⚠ **The clock line is the off-screen case only.** `FUN_004579e0` draws its third line
+  unconditionally, but the string comes out of `FUN_0049d940`'s off-screen pass, and the Kestrel
+  shot shows an on-screen target with its name alone.
+The label anchor is `FUN_004574d0`'s: 3 px under the box, flipping to 30 px above when the box sits
+within 33 px of the viewport's bottom edge — computed from the box whether or not the box is drawn,
+so an out-of-range target's label does not move.
+`UpdateHostile` (every `_Process`) rescans `HostilePool`'s one live aircraft roster
 (`ProjectilePool.CollectAircraft`, the same list the AI gunners read) and `NearestHostile` picks
 the nearest LIVE AI-piloted `FlightController` past the engine's team gate; the winner draws
-through `DrawOpponent` unchanged, in the HUD red, tagged `HostileTag(name)` ("ai1_player_fury"
-reads "AI1"). Humans carry no `AiGunner`, so there is no D12 "the target" to mirror;
-nearest-hostile re-selected per frame is the shipped rule, which also picks up generator spawns
-and drops a crashed hostile (listed but not live) with no extra plumbing. Acquire/lose
-transitions log one `targeting hud:` breadcrumb each. Pinned by the `hostile-marker-hud` suite +
-`HostileTagTests`; a hud built without a pool never tracks, which keeps the golden VS path
-byte-identical.
+through `DrawOpponent`, in the HUD red, tagged `HostileTag(name)` ("ai1_player_fury" reads "AI1").
+That marker is now a FALLBACK: it draws only where there is no selection at all — a pane with
+no `TargetSelection` bound (a spectator, a suite rig) or a pilot who pressed Target Nothing —
+because a pane that HAS a selection marks that one target and nothing else (decision 11).
+Humans carry no `AiGunner`, so there is no ranked "the target" to mirror; nearest-hostile re-selected
+per frame is the shipped rule, which also picks up generator spawns and drops a crashed hostile
+(listed but not live) with no extra plumbing. Acquire/lose transitions log one `targeting hud:`
+breadcrumb each. Pinned by the `hostile-marker-hud` suite + `HostileTagTests`; a hud built without
+a pool never tracks.
 `--debug-markers` (`MarkAll`, set by the rig assembler alongside `Own`) widens that to EVERY live
-aircraft in the same scan: `CollectMarks` is the pure selection (live, a `FlightController`, not
-`Own`), each drawn through the same `DrawOpponent` in HUD blue on the pane's own team and HUD red
-otherwise, tagged with its slant range and its current AI mode (`ModeSuffix`, the mode machine's
-own `NameOf` vocabulary; empty for a pilot without a machine), and off-screen tags stepped along
-the screen edge (`RefStaggerStep`) so a flight sharing one bearing does not stack into one string. It REPLACES the
-single-hostile draw rather than adding to it, so the tracked plane is never drawn twice in two
-colours.
+aircraft in the same scan: `CollectMarks` wraps each candidate as a `TargetRef` — the same
+aircraft construction `TargetPool`'s Vehicle branch uses, reading `FlightController.Damage`/
+`Stats` — paired with whether it is on the pane's own team, each drawn through the same
+`DrawOpponent` in HUD blue on the pane's own team and HUD red otherwise, tagged with
+`DebugTag`'s FULL identity string: `AI1 Fury 640 m H78 A91 pursue` — the hostile tag kept whole
+(the one marker that does NOT collapse to the shipped marker's plane-type-alone label), the
+airframe type, slant range, health then armor as whole percentages with NO percent sign (decision
+12: two figures, health first, never a blended one), and the AI mode (`ModeSuffix`, the mode
+machine's own `NameOf` vocabulary; empty for a pilot without a machine). Off-screen tags step along
+the screen edge (`RefStaggerStep`) so a flight sharing one bearing does not stack into one string.
+It REPLACES the hostile-tracker draw rather than adding to it, so the tracked plane is never drawn
+twice in two colours — but NOT the selected target's marker, which keeps drawing under the flag
+(different shape, and the golden shot pins brackets, label and debug string together in one
+frame — `analysis/goldens/manifest.json`'s `c1-targeting-hud`).
+⚠ **Health and armor are omitted, not defaulted, when the `TargetRef` carries no figure**
+  (`Health`/`Armor` null — a bare rig with no `Damage` ledger bound): `H100 A100` for a source with
+  no health model would be a number the game does not have. Wrapping the aircraft as a `TargetRef`
+  here (rather than reading `FlightController.Damage` directly in the draw loop) is what makes that
+  the correct default the moment this scan widens past aircraft to a turret or sub-part, whose
+  `TargetRef.Health` is already the right shape.
 ⚠ A neutral-team aircraft marks HOSTILE here, unlike `NearestHostile`'s engine gate which rejects
   the pair. A debugging overlay that silently omitted a plane would be worse than one that
   mis-colours it.
+⚠ **`OwnTeam` is `Own?.Team`, not `AimAssist.TeamOfPilot(PlayerIndex)`** — the fix for the
+  wingman-in-the-marker bug. Both team tests here (`UpdateHostile`
+  and `--debug-markers`' `CollectMarks`) used to derive the pane's side from its pilot index, which
+  is right for P1 by coincidence (`TeamOfPilot(0)` == `AimAssist.PlayerTeam`) and wrong for everyone
+  else the moment a mission sets teams: in Instant Action and under `--coop` every human is team 1
+  (`FlightRigAssembler.cs`), so P2 derived team 2, marked its own wingmen hostile and skipped the
+  real enemies as own-team. `FlightRigAssembler` now binds `Own` on **every** pane, not only under
+  `--debug-markers`; with no aircraft bound (a spectator, a suite rig) `OwnTeam` still falls back to
+  the derivation. The `hostile-marker-hud` suite carries both the fix and the old derivation as a
+  named CONTROL. The gate itself was always right — it was being handed the wrong own-team.
+`DrawOpponent`/`EdgePoint`/`ClockHour`/`DrawArrow`/`DrawTag` are copied verbatim from `VersusHud`'s
+own copy of them — the same relationship `VersusHud` already has with `MarkerHud` (a private
+per-HUD copy documented as verbatim, not a shared base class for two `Control`s); `TargetHud`'s
+copy additionally carries the `stagger` step `--debug-markers` needs when several planes share one
+bearing, which `VersusHud`'s opponent loop never does.
+Pinned by the `hostile-marker-hud` suite, which carries the shipped marker's three pure rules as
+well: the colour table (three colours, the Destroy override, the neutral-own-side case), the
+gun-reach gate (inside `RANGE` brackets, past it does not, an outrunning target never does, and the
+hysteresis holds the boundary case) and the label lines. `DebugTag` is pinned there too — the full
+format string, health/armor omitted with no source, and `CollectMarks`' `TargetRef` wrapping
+reading a live `Damage` ledger. The drawn geometry itself is the `c1-targeting-hud` golden.
 
 ## src/Flight/VersusBoard.cs
 The dogfight's shared results overlay — `StuntRaceBoard`'s construction
@@ -3773,9 +4049,9 @@ as state, by the private `ApplyPresence()` — the model's `Visible` and `Body.S
 runs from `Respawn` AND `_Ready`, because `Setup` calls `Respawn` before `_Ready` has built the
 body. Everything else consults the flag: `TakeProjectileHit`/`DebugForceCrash` refuse,
 `DriveAiGunner` drops a standing target that leaves play, and outside this class
-`ProjectilePool.CollectAircraft` (which carries the aim assist, `SelectRankedTarget` and the H22
-tracker with it), the pool's fuse/blast passes, `TurretController.Alive`, `AiPilot.Next`'s quarry
-test and `VersusHud`'s hostile draw all read `InPlay`. `InertChanged` is the event a session-level
+`ProjectilePool.CollectAircraft` (which carries the aim assist, `SelectRankedTarget` and the
+hostile tracker with it), the pool's fuse/blast passes, `TurretController.Alive`, `AiPilot.Next`'s quarry
+test and `TargetHud`'s hostile draw all read `InPlay`. `InertChanged` is the event a session-level
 roster mirrors it into (`AiVoiceRuntime` → `Speaker.Alive`). `Activate(pos, lookAt)` is the
 inverse — re-home, clear the flag, `Respawn` — the original's teleport-then-reactivate in one call.
 ⚠ Inert is NOT "parked far away", a shape considered and rejected: a parked plane still ticks,
@@ -3808,6 +4084,44 @@ free camera left the eye.
   that still differs between them (`dt`). `UpdateReticle` marches it exactly the decoded distance
   (0.5 s of flight; see `ImpactReticle.cs`), so the two agree for every gun and the reticle does not
   grow a second integration.
+`SelectedGun`/`MuzzleMidpoint` are the shared "which gun is selected, and where does its fire leave
+from" answer: the pipper reads them, and so does `GunReachesTarget`, the targeting marker's bracket
+gate (`FUN_004574d0` — the decoded range threshold is this weapon's authored `RANGE` through a lead
+solve, not a HUD constant; see `TargetHud.cs`). `Stats` exposes the flight model's own `PlaneStats`,
+needed for the airframe's display name and unreachable while `_model` was
+private; it is null on a rig `Setup` has not run on.
+
+`StepTargeting` is the player-targeting frame, run for every human pane
+whose `Targeting` is set: rebuild the pool and re-resolve, prune the attacker queue, then dispatch
+input. That order is the original's — its candidate pass runs in the sim step and a handler steps the
+list it just built, which is why a class change reads one frame late and self-heals. The scan is
+**its own** `AimCandidateSet`, not `ApplyFireOutcome`'s: the gun assist's is built only on a frame
+that fires, and targeting needs one every frame. `TargetSubParts` is the delegate that adds the
+zeppelin sub-parts (bound by `GameSession`, not the assembler — the zeppelins are built after the
+rigs are). D-pad Up runs through `TapHoldButton` (tap = next enemy, hold = nearest-crosshair);
+`T`/`Y`/`U`/`I`/`O` are the curated keyboard set, each edge-detected in its own `_targetKeyPrev` slot.
+⚠ **The team comes off the `Team` FIELD**, not `AimAssist.TeamOfPilot(PlayerIndex)`. That derivation
+  is the wingman-in-the-marker bug (see `TargetHud.OwnTeam`), and it is right for P1 by coincidence,
+  which is exactly why it survived.
+⚠ **Input is gated on `InPlay`, the rebuild is not.** A downed pilot watches from the freecam
+  controls (E44), which bind WASD/QE including `U` — reading targeting keys from a spectator would
+  both re-target a plane that is not there and fight the camera. The selection itself keeps
+  re-resolving, so it survives the pilot's own respawn and a dead target has already dropped to the
+  head of the cycle.
+⚠ The collection pass is skipped entirely while `ActiveClass` is null. That is the original's own
+  short-circuit and the mechanism that keeps `Target Nothing` cleared, not a saving.
+`ApplyInitialTarget` spends `--target=`'s one application (`cli.md`), before the input dispatch
+and before the `InPlay` gate so a `--det` run with no pilot pressing anything still gets it. It waits
+for a non-empty pool first — the things a name can reach are all built after the rigs are — except
+for `none`, which needs no pool.
+⚠ It is spent whether or not it MATCHED. A retry loop would re-assert the flag against later input;
+  a miss logs `WARN [core]` naming what was selectable instead, which is why the flag needs no
+  listing mode of its own.
+`TakeProjectileHit` also feeds the attacker queue: a hit whose shooter resolves through
+`ProjectilePool.RigOfShooter` to a plane on a **different, non-zero team** is recorded, so
+`Next Enemy/Objective` reaches whoever just shot you before it touches the ordinary cycle. Friendly
+fire and unowned rounds (a turret's, a zeppelin broadside) record nothing, which is the engine's own
+gate.
 
 `ApplyFireOutcome` is where the gun aim assist meets the world (`BL-342`/B5): it rebuilds
 `AimAssist`'s candidate set ONCE per tick (aircraft + fused ordnance off the pool, the world's
@@ -4183,7 +4497,7 @@ The `--viewer` livery editor (key L): squadron stepper (loads the squadron's who
   `CliArgs()` resolves the canonical entry by NAME and emits bare `--paint=` only on a verbatim match.
 
 ## src/UI/NodeLabels.cs
-Floating node-name labels (key T) in both the static viewer and flight, cycling Off → Meshes → All;
+Floating node-name labels (key F16) in both the static viewer and flight, cycling Off → Meshes → All;
 `--debug-names[=meshes|all]` presets the mode at launch.
 ⚠ Labels anchor at the mesh-AABB centre in node-local space, not the node origin — origins sit far
   from the geometry and are shared, which collapsed all labels into a single screen cell.
@@ -5729,6 +6043,18 @@ aimed at a rand()-picked in-arc gasbag), gates on `cannon_fire_range` + the arc,
 authored deploy/retract anims scoped to the hull, and spawns unowned rounds
 (`ProjectilePool.NoShooter`, C9b's convention) scattered by `cannon_inaccuracy`. Pinned by
 `zeppelin-motion` + `zeppelin-damage` + `zeppelin-broadside` suites.
+`CollectTargetParts(List<AimCandidate>)` offers those same F18 zones —
+gasbags, engines, cannons — to the player's `TargetPool`, one candidate per part, each carrying the
+hull's own velocity (`Motion.Forward * Motion.Speed`) rather than zero so the bracket gate has
+something to lead; a destroyed zone is offered but not live, and a part whose anchor has left the
+tree is skipped rather than read. It fills a plain list, deliberately not an
+`AimCandidateSet.Structures`, because `TargetPool` never reads that list — this is the only channel
+by which a structure becomes selectable.
+⚠ Sub-part enumeration is a **deliberate divergence**. `docs/org/targeting.md` found none anywhere in
+  the original's targeting path: a gasbag is selectable there only because the mission authored it as
+  its own `MStruct` carrying `otherTarget`/`objectiveTarget`. Decision 8 asked for the parts and CSVM
+  has no mission flag data, so it enumerates what it already models as damageable. Do not "correct"
+  this back by citing the decode.
 ⚠ A `deactivated` record (value 1) is PLACED but held — mission-script wake-up is out of M4's
   scope. A record whose net misses neindex is also placed-not-flown (the pose is real data and
   B6's altitude gate reads the node's Y). Stop nodes are NOT implemented (F17's open item).
@@ -5806,17 +6132,16 @@ on it — loadout/ordnance (and, with them, the aim assist's structure candidate
 readout/reticle, damage visuals,
 audio, the throttle-slam exhaust smoke and chapter-authored `SpeedCue` (private visual layer per
 rig), this player's stunt run + marker/scoreboard/race entry
-(or, in `--vs`, its `VersusHud` bound to `Inputs.VersusMatch` + `Inputs.Rigs` for the opponent
-markers — C23/C24; outside `--vs` the matchless `VersusHud.BuildHostileTracker` over
-`Inputs.Projectiles` instead, so every human pane tracks its nearest AI hostile in any flight
-session, H22; and the `--vs` build gets `HostilePool` too), the spawn placement, and the crash
-runtime built after the controller joins the tree. An active Instant Action mission overrides two
-things here: `Inputs.InstantActionPlayerPlaneNode`, when set, replaces `PlaneRoster.PlaneFor` for
-every human alike (the def carries one `player_plane`, not a per-player list), and
-`Inputs.InstantActionActive` puts every human on `AimAssist.PlayerTeam` (Decision 8) regardless of
-pilot index. Plain flight's `--coop` gives every human the same team the same way — the two flags
-are independent inputs to one `if`, since Instant Action always implies its own co-op regardless of
-`--coop`. Constructed once per session build from
+(in `--vs`, its `VersusHud` bound to `Inputs.VersusMatch` + `Inputs.Rigs` for the opponent markers;
+and, unconditionally in EVERY flight session, its `TargetHud` over `Inputs.Projectiles`, so every
+human pane tracks its nearest AI hostile whether or not the session has a match), the spawn
+placement, and the crash runtime built after the controller joins the tree. An active Instant
+Action mission overrides two things here: `Inputs.InstantActionPlayerPlaneNode`, when set, replaces
+`PlaneRoster.PlaneFor` for every human alike (the def carries one `player_plane`, not a per-player
+list), and `Inputs.InstantActionActive` puts every human on `AimAssist.PlayerTeam` (Decision 8)
+regardless of pilot index. Plain flight's `--coop` gives every human the same team the same way —
+the two flags are independent inputs to one `if`, since Instant Action always implies its own
+co-op regardless of `--coop`. Constructed once per session build from
 `(SessionSpec, LiveryResolver, SpawnPicker, WorldEffectsFactory, worldRoot, Inputs)`, then
 `Assemble(pi, rig)` once per rig; `MeshInstances`/`WhatSuffix` accumulate across the rigs for the
 caller's build summary. `--weapon-lab` sets `FlightController.Held` on every rig right after `Setup`

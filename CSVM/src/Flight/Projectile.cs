@@ -525,6 +525,30 @@ public sealed partial class ProjectilePool : Node3D
     /// <see cref="AircraftBody.PlayerIndex"/> is matched against each round's shooter id).</summary>
     public void RegisterAircraft(AircraftBody body) => _aircraft.Add(body);
 
+    /// <summary>The registered aircraft that fired a round carrying <paramref name="shooterId"/>, or
+    /// null for an unowned round (<see cref="NoShooter"/>) or a plane no longer registered. Shooter
+    /// ids ARE unique across a session — a human's is its pane index and an AI's is
+    /// <c>AiAircraftSpawner.ShooterIdBase + n</c>, well clear of it — so this resolves one plane, not
+    /// a class of them. Used by the player's attacker queue, which needs
+    /// the shooter as an object rather than as an id.</summary>
+    public FlightController? RigOfShooter(int shooterId)
+    {
+        if (shooterId < 0)
+        {
+            return null;
+        }
+
+        foreach (var body in _aircraft)
+        {
+            if (body.Rig.PlayerIndex == shooterId)
+            {
+                return body.Rig;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Appends this pool's live proximity-fused rounds to the gun assist's candidate set
     /// (`BL-342` B4) — the original's fourth candidate list, which is a FILTER over the rounds in
     /// flight rather than a structure of its own: the engine registers a tracking record after every

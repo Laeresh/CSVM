@@ -293,6 +293,13 @@ public sealed record SessionSpec
     public string? LoadoutOverride { get; private set; }
     public string? RocketOverride { get; private set; }
     public int GunSelect { get; private set; }
+
+    /// <summary><c>--target=</c>: the scripted twin of the targeting keys.
+    /// <c>nearest</c> / <c>crosshair</c> / <c>next</c> / <c>none</c>, or the name of a target to pin
+    /// (<c>ai1_player_fury</c>). Applied ONCE per human pane, on the first frame its pool has
+    /// anything in it; the selection cycles normally afterwards. Null when the flag was absent, which
+    /// is not the same as <c>none</c> (absent leaves the ordinary auto-acquire alone).</summary>
+    public string? TargetSelect { get; private set; }
     public bool InfiniteAmmo { get; private set; }
     /// <summary>The <c>--ammo=</c> low-ammo start knob: caps both gun groups and pylons to this many
     /// rounds at rig build, bypassing config.json — which <c>--det</c> drops, so the cap survives it.
@@ -879,6 +886,7 @@ public sealed record SessionSpec
             else if (arg == "--fire") { s.AutoFire = true; }
             else if (arg == "--fire-rockets") { s.AutoFireRockets = true; }
             else if (arg.StartsWith("--gun-select=")) { s.GunSelect = int.Parse(arg["--gun-select=".Length..]); }
+            else if (arg.StartsWith("--target=")) { s.TargetSelect = arg["--target=".Length..].Trim(); }
             else if (arg.StartsWith("--rocket=")) { s.RocketOverride = arg["--rocket=".Length..]; }
             else if (arg == "--hud-font-test") { s.HudFontTest = true; }
             else if (arg.StartsWith("--hud-font-test=")) { s.HudFontTest = true; s.HudFontTestText = arg["--hud-font-test=".Length..]; }

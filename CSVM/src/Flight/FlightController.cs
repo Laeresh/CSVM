@@ -239,12 +239,17 @@ public partial class FlightController : Node3D
     /// the run's RunCompleted. Null in free flight.</summary>
     public StuntScoreboard? Scoreboard;
 
-    /// <summary>The Dogfight per-pane HUD: the match timer/K-D/leader line and
-    /// the kill banner. Added to the HUD canvas; fed nothing per frame (it pulls VersusMatch's own
-    /// live state) beyond the kill facts GameSession pushes through its OnKill. Outside
-    /// <c>--vs</c> it is the matchless hostile tracker: the same marker on this pane's
-    /// nearest AI hostile, built for every human pane by the rig assembler.</summary>
+    /// <summary>The Dogfight per-pane HUD, <c>--vs</c> only: the match timer/K-D/leader line, the
+    /// kill banner, and the opponent markers. Added to the HUD canvas; fed nothing per frame (it
+    /// pulls VersusMatch's own live state) beyond the kill facts GameSession pushes through its
+    /// OnKill.</summary>
     public VersusHud? VersusHud;
+
+    /// <summary>The targeting HUD: the pilot's own sticky target selection, the tracked-AI-hostile
+    /// fallback marker and <c>--debug-markers</c>, built for every human pane by the rig assembler
+    /// in EVERY flight session, <c>--vs</c> included. Added to the HUD canvas; fed this pane's pose
+    /// every frame, same site as <see cref="Marker"/>'s.</summary>
+    public TargetHud? TargetHud;
 
     /// <summary>The splitscreen stunt race this plane is one seat of, or null when
     /// flying solo. Set, clearing every zone parks this player at the finish while the others fly
@@ -280,6 +285,26 @@ public partial class FlightController : Node3D
     /// identity a round it fired carries (<c>ProjectilePool.Spawn</c>'s shooter id).</summary>
     public int PlayerIndex;
 
+    /// <summary>This pilot's target selection, or null for a seat that
+    /// does no targeting (every AI rig, and the suites' bare rigs). Set by
+    /// <c>FlightRigAssembler</c> on each human pane; <see cref="StepTargeting"/> feeds it every
+    /// frame. Read <c>Targeting.Current</c> for the selected target — that is the property the
+    /// marker, Track Target's camera and any later AI-order consumer are meant to read.</summary>
+    public TargetSelection? Targeting;
+
+    /// <summary>Appends the mission's selectable structures (the zeppelin sub-parts) to the
+    /// targeting pool each frame — <c>ZeppelinRuntime.CollectTargetParts</c>, bound by
+    /// <c>GameSession</c> once the zeppelins exist. Null in a session with none. A delegate because
+    /// the zeppelins are BUILT AFTER the rigs, so there is no runtime to hand the assembler; the
+    /// same sink shape <see cref="CollideDamageSink"/> already uses.</summary>
+    public System.Action<List<AimCandidate>>? TargetSubParts;
+
+    /// <summary><c>--target=</c>'s spec, or null for an unscripted session. Applied ONCE, on
+    /// the first frame <see cref="Targeting"/>'s pool has anything in it, and never consulted again —
+    /// it sets the initial selection, it does not hold it, so an interactive session started with the
+    /// flag still cycles normally.</summary>
+    public string? InitialTarget;
+
     /// <summary>Whether a person is flying this plane. Gates the gun aim assist
     /// (<c>BL-342</c>/B6): true runs <see cref="AimAssist"/> as normal, false takes the muzzle axis
     /// unassisted, the same fallback a barrel with no slot already uses. Defaults true; the AI
@@ -296,7 +321,7 @@ public partial class FlightController : Node3D
     /// <summary>The non-player input source: set (with <see cref="IsHumanPiloted"/> false), it
     /// replaces the keyboard/pad read each sim step, the way <see cref="HoldSegments"/> does for
     /// scripted runs — collision, weapons, damage and crash downstream of it are byte-for-byte the
-    /// player's path. The FLIGHT MODEL is the one exception, and only since C21: the plant selects
+    /// player's path. The FLIGHT MODEL is the one exception: the plant selects
     /// the original's AI force path off this same human/AI split, once at construction
     /// (<see cref="FlightModel.UsesAiForcePath"/>). Its orders are mutable between steps;
     /// see <see cref="AiPilot"/>.</summary>
@@ -399,6 +424,11 @@ public partial class FlightController : Node3D
                                                       // ANIMATION_OFFSET 1.5, so this is one whole authored
                                                       // reaction per scrape rather than a restart per frame
     private const float DamageFlashTime = 2.5f;  // s the HUD shows the impact line
+    private const int InitialTargetGrace = 300;    // frames --target= waits for the pool to fill
+    private const float TargetHoldSeconds = 0.25f; // decision 7: D-pad Up past this is a HOLD,
+                                                   // not a tap. ⚠ TUNE — ours, not the original's,
+                                                   // which needs no threshold because it has a key
+                                                   // per action
     private const float GrazeStopSpeed = 12f;    // m/s — grinding to (near) standstill on the
                                                  // ground explodes the plane (user-reported:
                                                  // a stopped plane sat there collecting 0-dmg kisses)
@@ -417,7 +447,13 @@ public partial class FlightController : Node3D
     private readonly List<RankedTargetCandidate> _rankCandidates = new(); // the D12 ranking snapshots
     private readonly List<FlightController> _rankSources = new();         // …and their controllers, by index
     private readonly RandomNumberGenerator _aimRng = Rng.Stream(Rng.Weapons); // the assist's 1° launch scatter
+    private readonly AimCandidateSet _targetScan = new();   // the targeting pass's own scan, rebuilt per frame
+    private readonly List<AimCandidate> _targetParts = new(); // this frame's selectable sub-parts
+    private readonly bool[] _targetKeyPrev = new bool[5];   // T/Y/U/I/O edge detection
+    private readonly TapHoldButton _targetHold = new(TargetHoldSeconds); // D-pad Up tap vs hold
 
+    private bool _initialTargetDone;             // --target= has had its one chance
+    private int _initialTargetWaits;             // …frames it has waited for a non-empty pool
     private FlightModel _model = null!;
     private CameraController? _cam;              // null on an AI rig — no view rides this plane
     private Camera3D? _viewCamera;
@@ -547,6 +583,15 @@ public partial class FlightController : Node3D
     /// already placed the plane at its spawn throttle.</summary>
     public float Throttle => _model.Throttle;
 
+    /// <summary>This airframe's stats, the flight model's own copy (jittered for an AI spawn, so it
+    /// is the plane's data and not the cached def's). Read for the airframe's DISPLAY NAME
+    /// (<c>PlaneRoster.PlaneDisplayName</c> → <c>Fury</c>) by the targeting pool's label pass,
+    /// which had no way to reach it while the model was private.
+    ///
+    /// <para>Null before <see cref="Setup"/> has bound a flight model — a bare rig the suites
+    /// construct to exercise one seam. A caller that wants a name falls back to the node's.</para></summary>
+    public PlaneStats? Stats => _model?.Stats;
+
     /// <summary>Whether this plane is crashed — frozen at the impact, airframe hidden, waiting
     /// for respawn. The fact the session (and the in-engine suites) read; only Respawn clears it.</summary>
     public bool Crashed => _crashed;
@@ -672,7 +717,9 @@ public partial class FlightController : Node3D
             if (Marker != null)
                 canvas.AddChild(Marker); // stunt objective marker, drawn on top of the dials
             if (VersusHud != null)
-                canvas.AddChild(VersusHud); // dogfight HUD, or the matchless hostile tracker (H22)
+                canvas.AddChild(VersusHud); // dogfight HUD: status line, kill banner, opponent markers
+            if (TargetHud != null)
+                canvas.AddChild(TargetHud); // targeting HUD: selected target / --debug-markers
             if (Scoreboard != null)
                 canvas.AddChild(Scoreboard); // end-of-run results, drawn over everything
             if (FontTest != null)
@@ -914,6 +961,33 @@ public partial class FlightController : Node3D
     /// the trigger is pulled.</summary>
     public void SelectPylon(int index) => _fire?.SelectPylon(index);
 
+    /// <summary>The decoded bracket gate for the targeting marker (<c>FUN_004574d0</c>,
+    /// docs/org/targeting.md "The range gate is the selected gun's RANGE"): whether the SELECTED
+    /// gun group could reach an intercept on this target inside the weapon's authored
+    /// <c>RANGE</c>. That, not a HUD distance constant, is the original's "brackets only under a
+    /// range threshold" — so the marker is weapon-dependent, and a target outrunning the round is
+    /// never bracketed at any range because the solver returns no intercept.
+    ///
+    /// <para>With no gun group resolvable (a rocket-only loadout, a rig with no weapons) the
+    /// original falls back to a plain <c>distance &lt;= 1e6</c>, which never rejects — so this
+    /// answers TRUE there rather than hiding the brackets.</para></summary>
+    /// <param name="targetPos">The target's world position.</param>
+    /// <param name="targetVel">The target's world velocity, m/s.</param>
+    /// <param name="margin">Extra metres of authored range, the bracket gate's hysteresis. Zero to
+    /// turn the brackets on, <see cref="TargetHud.BracketHysteresis"/> to keep them on.</param>
+    public bool GunReachesTarget(Vector3 targetPos, Vector3 targetVel, float margin = 0f)
+    {
+        if (SelectedGun() is not { } sel)
+        {
+            return true;
+        }
+
+        float speed = sel.Weapon.Velocity ?? ProjectilePool.DefaultVelocity;
+        float range = sel.Weapon.Range ?? 0f;
+        return TargetHud.GunReaches(MuzzleMidpoint(sel), _model.VelocityDir * _model.Speed, speed,
+            range + margin, targetPos, targetVel);
+    }
+
     /// <summary>--crash[=frame]: forces this player's crash outside any live collision — the only
     /// headless trigger for the per-player crash rig. <c>hitName</c>/<c>part</c> are nominal and
     /// there is no struck body, so the selection cascade takes its null-material arm and resolves
@@ -956,6 +1030,16 @@ public partial class FlightController : Node3D
     {
         if (!InPlay)
             return;
+        // The attacker queue (FUN_004b9770): whoever just shot this pilot goes to the END of the
+        // queue `Next Enemy/Objective` walks backwards, so the key reaches the most recent shooter
+        // before it touches the ordinary cycle. The engine's own gate is a shooter on a DIFFERENT,
+        // non-zero team — a friendly-fire round records nothing.
+        if (Targeting != null && Projectiles?.RigOfShooter(shooter) is { } attacker
+            && attacker.Team != Team && attacker.Team != AimAssist.NeutralTeam
+            && Team != AimAssist.NeutralTeam)
+        {
+            Targeting.RecordAttacker(attacker);
+        }
         // The being-hit rock: a gun round reuses the measured caliber law; a rocket's armor
         // damage stands in for the unauthored quantity (he_factor doubles HE); a splash hit
         // (damageScale < 1 — the pool's blast pass) plays the explosion source instead. Runs
@@ -1108,7 +1192,7 @@ public partial class FlightController : Node3D
             // _Process through this crash freeze (motions, the played def, every puffer) — but not
             // through a clock halt, which stops that runtime with everything else, so P during a
             // crash catches the wreck mid-break-up. The airframe stays frozen at the impact point
-            // until the pilot respawns (R / gamepad Y or A); unattended HoldSegments runs and
+            // until the pilot respawns (R / gamepad Y); unattended HoldSegments runs and
             // AutoRespawnAfter sessions (Versus) respawn on the timer armed at Crash instead
             //
             // Out of lives: neither trigger applies — the wreck stays and the pane watches,
@@ -1433,17 +1517,26 @@ public partial class FlightController : Node3D
                 Stunt.CycleTarget();
             _cyclePrev = cycle;
         }
+        // Player target selection: rebuild-then-input, the original's own order — the
+        // per-frame candidate pass runs first and a handler then steps the list it just built.
+        if (Targeting != null && IsHumanPiloted)
+            StepTargeting(simDt);
         if (Marker != null)
         {
             Marker.PlanePos = _model.Position;
             Marker.HeadingDeg = headingDeg;
         }
-        // Dogfight opponent / AI hostile markers: this pane's own pose, so the HUD can compute
-        // each target's clock bearing off it (the same feed Marker gets, for the same reason).
+        // Dogfight opponent / AI hostile markers: this pane's own pose, so each HUD can compute
+        // its own target's clock bearing off it (the same feed Marker gets, for the same reason).
         if (VersusHud != null)
         {
             VersusHud.PlanePos = _model.Position;
             VersusHud.HeadingDeg = headingDeg;
+        }
+        if (TargetHud != null)
+        {
+            TargetHud.PlanePos = _model.Position;
+            TargetHud.HeadingDeg = headingDeg;
         }
         if (Gauges != null)
         {
@@ -1630,8 +1723,11 @@ public partial class FlightController : Node3D
 
     /// <summary>F / gamepad A — the rocket trigger. One discrete pull launches one rocket (holding
     /// does NOT auto-repeat; only the 1.0 s cooldown gates it), and <c>--fire-rockets</c> auto-repeats
-    /// for unattended runs. Gamepad A also respawns, but only from the crashed / run-complete screens
-    /// — states this live-flight firing path never shares — so the two never collide.</summary>
+    /// for unattended runs. Gamepad A no longer respawns (<see cref="RespawnPressed"/>), because
+    /// <c>PadPressed</c> is a level read: the button stays held on the frame respawn/rematch goes
+    /// live, and that frame is inside this method's own live-flight state, so A firing a rocket the
+    /// instant the plane spawns was not a state collision to design around — it was this trigger
+    /// reading a button respawn had no business sharing.</summary>
     private bool RocketFirePressed() => KeyDown(Key.F) || PadPressed(JoyButton.A);
 
     /// <summary>G / gamepad D-pad Left — cycles the gun selector through the firable groups (1 → 2 →
@@ -1772,30 +1868,13 @@ public partial class FlightController : Node3D
         }
         // The selected firable gun group — the one the trigger fires. Its muzzles' averaged world
         // pose is where THAT group's fire converges.
-        GunGroup? sel = null;
-        int gi = 0;
-        foreach (var g in Loadout.FirableGuns)
-        {
-            if (gi == _fire.GunSel)
-            {
-                sel = g;
-                break;
-            }
-            gi++;
-        }
-        if (sel == null || sel.Muzzles.Count == 0)
+        var sel = SelectedGun();
+        if (sel == null)
         {
             Reticle.Active = false;
             return;
         }
-        // The muzzle MIDPOINT of the selected group — the original averages that group's live
-        // barrel attachments (and falls back to the plane's own position when it has none).
-        var origin = Vector3.Zero;
-        foreach (var m in sel.Muzzles)
-        {
-            origin += m.GlobalPosition;
-        }
-        origin /= sel.Muzzles.Count;
+        var origin = MuzzleMidpoint(sel);
 
         // Where a round fired now would be after ReticleFlightTime: nose × VELOCITY + the plane's
         // own velocity. No ballistic march — no weapon a gun group can resolve carries ACCELERATION
@@ -1836,6 +1915,50 @@ public partial class FlightController : Node3D
         Reticle.Active = true;
     }
 
+    /// <summary>The selected firable gun group — the one the trigger fires — or null when there is
+    /// no loadout, no fire control, no group at the selected index, or the group has no muzzle to
+    /// fire from. Shared by the pipper and the targeting marker's bracket gate so both read the
+    /// same "which gun is selected" answer.</summary>
+    private GunGroup? SelectedGun()
+    {
+        if (Loadout == null || _fire == null)
+        {
+            return null;
+        }
+        int gi = 0;
+        foreach (var g in Loadout.FirableGuns)
+        {
+            if (gi == _fire.GunSel)
+            {
+                return g.Muzzles.Count > 0 ? g : null;
+            }
+            gi++;
+        }
+        return null;
+    }
+
+    /// <summary>A gun group's muzzle MIDPOINT: the original averages that group's live barrel
+    /// attachments, which is where that group's fire converges.</summary>
+    private Vector3 MuzzleMidpoint(GunGroup group)
+    {
+        var origin = Vector3.Zero;
+        foreach (var m in group.Muzzles)
+        {
+            origin += m.GlobalPosition;
+        }
+        return origin / group.Muzzles.Count;
+    }
+
+    /// <summary>The decoded bracket gate for the targeting marker (<c>FUN_004574d0</c>,
+    /// docs/org/targeting.md "The range gate is the selected gun's RANGE"): whether the SELECTED
+    /// gun group could reach an intercept on this target inside the weapon's authored
+    /// <c>RANGE</c>. That, not a HUD distance constant, is the original's "brackets only under a
+    /// range threshold" — so the marker is weapon-dependent, and a target outrunning the round is
+    /// never bracketed at any range because the solver returns no intercept.
+    ///
+    /// <para>With no gun group resolvable (a rocket-only loadout, a crashed plane, a rig with no
+    /// weapons) the original falls back to a plain <c>distance &lt;= 1e6</c>, which never rejects —
+    /// so this answers TRUE there rather than hiding the brackets.</para></summary>
     /// <summary>One gun round's launch direction: the per-muzzle aim assist (`BL-342`/B5,
     /// <c>FUN_004b6530</c>) — scan, lead, plane-local smoothing, 1° scatter — through
     /// <see cref="AimAssist.FireDirection"/>, which also restamps this barrel's slot so the forget
@@ -2255,7 +2378,7 @@ public partial class FlightController : Node3D
         (KeyDown(positive) ? 1f : 0f) - (KeyDown(negative) ? 1f : 0f);
 
     private bool RespawnPressed() =>
-        KeyDown(Key.R) || PadPressed(JoyButton.Y) || PadPressed(JoyButton.A);
+        KeyDown(Key.R) || PadPressed(JoyButton.Y);
 
     /// <summary>P (or gamepad Start), edge-detected so one press toggles once, gated on
     /// <see cref="AllowPause"/> (false for AI rigs and the suites' bare test rigs).</summary>
@@ -2266,6 +2389,137 @@ public partial class FlightController : Node3D
     /// Gamepad Y would clash with the respawn button, so X (a free face button) instead.</summary>
     private bool CycleTargetPressed() =>
         KeyDown(Key.Tab) || PadPressed(JoyButton.X);
+
+    /// <summary>One frame of player targeting: rebuild the pool and re-resolve, prune the
+    /// attacker queue, then dispatch this frame's input. That order is the original's — its
+    /// per-frame candidate pass runs in the sim step and a handler steps the list it just built,
+    /// which is why a class change reads one frame late and self-heals.</summary>
+    private void StepTargeting(float dt)
+    {
+        var sel = Targeting!;
+        if (Projectiles != null && sel.ActiveClass != null)
+        {
+            // Skipped entirely with the selection cleared: `Target Nothing` zeroes the class flags
+            // and the original then skips its whole collection pass, which is the mechanism that
+            // keeps the clear cleared rather than an optimisation.
+            _targetScan.Clear();
+            Projectiles.CollectAircraft(_targetScan);
+            Projectiles.CollectTurrets(_targetScan);
+            _targetParts.Clear();
+            TargetSubParts?.Invoke(_targetParts);
+        }
+        // The team is read off the FIELD. Deriving it from PlayerIndex is right for P1 by
+        // coincidence and wrong for every other pane the moment a mission sets teams — the
+        // wingman-in-the-marker bug (see TargetHud.OwnTeam).
+        sel.Rebuild(_targetScan, _targetParts, Team, this, _model.Position, _model.Attitude);
+
+        // The death prune (FUN_004a64e0). There is no session-wide Downed broadcast outside --vs,
+        // so this pane prunes its own queue: a shot-down attacker must not be offered again.
+        for (int i = sel.Attackers.Count - 1; i >= 0; i--)
+        {
+            if (sel.Attackers[i] is FlightController { InPlay: false } dead)
+                sel.ForgetTarget(dead);
+        }
+
+        // --target=, before the input dispatch and before the InPlay gate: a --det run pins its
+        // selection without a pilot who can press anything, and a real keypress on the same frame
+        // should win over the scripted one rather than be overwritten by it.
+        if (InitialTarget != null && !_initialTargetDone)
+        {
+            ApplyInitialTarget(sel);
+        }
+
+        // Input only while this pilot is actually flying. A downed pilot watches from the freecam
+        // controls (E44), which bind WASD/QE — and `U` among them — so reading targeting keys from a
+        // spectator would both re-target a plane that is not there and fight the camera. The
+        // SELECTION still stands: the rebuild above keeps re-resolving it, so a live target survives
+        // the pilot's own respawn and a dead one has already dropped to the head.
+        if (!InPlay)
+        {
+            _targetHold.Step(false, dt);   // let a button held through the crash resolve as nothing
+            return;
+        }
+
+        // D-pad Up, the pad's one targeting button (decision 6/7): tap steps the enemy cycle, hold
+        // selects the target nearest the crosshair. TapHoldButton owns the timing and the
+        // resolve-on-release rule; this reads the pad and acts on the verdict.
+        switch (_targetHold.Step(PadPressed(JoyButton.DpadUp), dt))
+        {
+            case TapHold.Hold:
+                sel.NearestCrosshairs(_model.Position, _model.Attitude);
+                break;
+            case TapHold.Tap:
+                sel.NextEnemy();
+                break;
+        }
+
+        // The curated keyboard set (decision 14): every one of the original's eleven targeting keys
+        // collides with our flight scheme, so these five free keys carry one action per class plus
+        // the two class-less ones. They are defaults, not a scheme — the rebind layer is its own item.
+        DispatchTargetKey(0, Key.T, () => sel.NextEnemy());
+        DispatchTargetKey(1, Key.Y, () => sel.Next(TargetClass.Ally));
+        DispatchTargetKey(2, Key.U, () => sel.Next(TargetClass.NonAircraft));
+        DispatchTargetKey(3, Key.I, () => sel.NearestCrosshairs(_model.Position, _model.Attitude));
+        DispatchTargetKey(4, Key.O, () => sel.Clear());
+    }
+
+    /// <summary>Spends <c>--target=</c>'s one application. Waits for a non-empty pool first:
+    /// the things it can name (AI spawns, the zeppelins, a generator's first drop) are all built
+    /// after the rigs are, so applying on frame one would match nothing in every session.
+    /// <c>none</c> needs no pool and does not wait.</summary>
+    private void ApplyInitialTarget(TargetSelection sel)
+    {
+        bool needsPool = !string.Equals(InitialTarget, "none", System.StringComparison.OrdinalIgnoreCase);
+        if (needsPool && sel.Pool.Count == 0 && ++_initialTargetWaits < InitialTargetGrace)
+        {
+            return;
+        }
+
+        _initialTargetDone = true;      // spent whether or not it matched: one chance, then hands off
+        if (sel.ApplyInitial(InitialTarget!, _model.Position, _model.Attitude))
+        {
+            string picked = sel.Current is { } t && t.Name.Length > 0 ? t.Name : "nothing";
+            GD.Print($"--target={InitialTarget}: {picked} (class={sel.ActiveClass?.ToString() ?? "cleared"})");
+            return;
+        }
+
+        // Naming what IS selectable is the whole diagnosis for a mistyped node name, and it is why
+        // the flag needs no separate listing mode.
+        var names = new List<string>();
+        foreach (var cls in new[] { TargetClass.Enemy, TargetClass.Ally, TargetClass.NonAircraft })
+        {
+            foreach (var t in sel.Pool.Of(cls))
+            {
+                if (t.Name.Length > 0 && !names.Contains(t.Name))
+                {
+                    names.Add(t.Name);
+                }
+            }
+        }
+
+        names.Sort(System.StringComparer.OrdinalIgnoreCase);
+        const int MaxNamed = 24;    // a C1 session offers ~100; enough to recognise a typo, not a wall
+        int extra = names.Count - MaxNamed;
+        if (extra > 0)
+        {
+            names.RemoveRange(MaxNamed, extra);
+        }
+
+        string listed = names.Count == 0 ? "(nothing)"
+            : string.Join(", ", names) + (extra > 0 ? $", +{extra} more" : "");
+        Log.Warn("core", $"--target={InitialTarget}: no match — selectable now: {listed}");
+    }
+
+    /// <summary>Edge-detects one targeting key against its own slot and runs its action once per
+    /// press. Splitscreen-safe by construction: <see cref="KeyDown"/> is gated on
+    /// <see cref="UseKeyboard"/>, so P2–P4 (pad-only) never see these.</summary>
+    private void DispatchTargetKey(int slot, Key key, System.Action act)
+    {
+        bool down = KeyDown(key);
+        if (down && !_targetKeyPrev[slot])
+            act();
+        _targetKeyPrev[slot] = down;
+    }
 
     /// <summary>Advance the scripted hold sequence by this frame and return the active
     /// segment's input. Segments run for their duration in order; the last one (or a
