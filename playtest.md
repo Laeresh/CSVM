@@ -136,6 +136,70 @@ and every eighth is reachable from the keyboard, which is how `CAP-31` flew 1/8 
 
 ## 1 · Actionable now (`PT-nn`)
 
+### C1 · Fury — ramming, the decoded collision law
+
+```powershell
+./RunGame.ps1 --plane=player_fury --chapter=C1 --mission=M02
+```
+
+One sortie confirms both halves of the collision port. The law is
+`max(300 · s³, 50)` on both the armour and health terms, with `s` the cosine between the flight
+direction and the surface, so **the angle you hit at decides everything and your speed decides
+nothing**. That is the single most counter-intuitive thing to have in mind while flying it: a fast
+shallow scrape and a slow shallow scrape should do the same damage.
+
+- `PT-59` `[A/B: the original, C1]` **A rammed building takes severity-scaled damage, and the
+  numbers are predicted rather than tuned (`BL-302`).** C1's airfield buildings (`m_build01`–`07`)
+  carry `health 60` with `DAMAGE_SEQUENCE` thresholds at 36 and 18, so the ported law makes two
+  falsifiable predictions. This flight is a confirmation, not a calibration: nothing here gets
+  retuned if it passes.
+  *Look for:*
+  - (a) **a shallow graze along a building's flank** (roughly 20° off its face, any speed) leaves it
+    **standing and burning** — it should reach its deepest smoke-and-burn stage and survive, because
+    the flat floor of 50 takes 60 HP down to 10. It must NOT shatter;
+  - (b) **a steeper ram into the same building** (about 45°) **destroys it outright**, and your
+    crash plays at the same time. Both, not one or the other;
+  - (c) **speed does not change (a)**. Fly the same shallow graze fast and slow: the damage stage
+    reached should be identical. If a fast graze kills the building and a slow one does not, the
+    cosine has not landed and something is still scaling by speed;
+  - (d) **crashing on bare ground beside a building damages the building not at all** — the old
+    no-blast-radius finding, re-checked now that contact damage exists.
+  *Blocks:* `BL-302`. A fail on (a) or (b) most likely means the object's own damage reduction
+  (`+0xbc`, unmodelled, no field in our data) is non-zero for these defs — that is the one gap the
+  port knowingly left, and this flight is what would expose it.
+
+- `PT-60` `[Own]` **Two aircraft that ram each other both take damage, and neither re-collides
+  (`BL-402`).** Nothing in the original is filmed for this, so it is a judgement on our own build
+  against the decoded rules.
+  *Look for:*
+  - (a) **ram an AI fighter head-on**: both aircraft take damage, and a hard enough ram leaves
+    **two** wrecks, not one;
+  - (b) **after the contact you fly through each other cleanly for about a second** rather than
+    grinding or re-colliding frame after frame — that is the 1.0 s grace, and it is armed on both
+    parties;
+  - (c) **your own ram is not scaled down.** An AI ramming another AI deals a fifth of what you
+    deal; you should notice that ramming is a genuinely effective (if suicidal) weapon in your
+    hands, and not for them;
+  - (d) ⚠ **AI aircraft now die on any terrain contact**, by the decoded `local_11` rule. Watch a
+    dogfight and judge whether AI losses to terrain look right or look like a bug. This is the one
+    change here that alters how missions play, and the call is yours.
+  *Blocks:* `BL-402`'s aircraft half. A fail on (d) specifically is a decision, not a defect: the
+  rule is decoded and verified, and backing it out is one line in `ResolveContact`.
+
+- `PT-61` `[Own]` **A zeppelin's parts are rammable and its gasbags are not (`BL-402`).**
+  Reachability is settled in the binary, and our zeppelin parts are ordinary world colliders, so
+  this may already work with no further code. Flying it is how we find out.
+  ```powershell
+  ./RunGame.ps1 --plane=player_fury --chapter=C1 --mission=M04 --zeppelins
+  ```
+  *Look for:*
+  - (a) **ram a cannon mount or turret**: it takes damage and can be destroyed by contact;
+  - (b) **ram a gasbag**: it takes **nothing at all** while you still die on it. A ram carries no
+    `DAMAGES_ZEPPELIN` ordnance, so the exemption must hold;
+  - (c) the zeppelin does not visibly shove, snag or teleport you on contact.
+  *Blocks:* `BL-402`'s zeppelin half. If (a) does nothing, the leg needs building and that is a new
+  `BL`; if (b) damages the gasbag, the collision gate is not reaching it.
+
 ### C1 · Bloodhawk — the overcast sky, ground to above the deck
 
 ```powershell

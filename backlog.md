@@ -517,8 +517,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   non-`WeaponOrCollideHit` defs — lift that gate for the damage half), keeping the fly-through-on-break
   behaviour gated on `WeaponOrCollideHit` exactly as now, and dealing the damage on the crash branch
   too, not only the graze/fly-through one.
-  *Playtest after fix:* ram + graze a C1 hangar in our build and A/B the damage stages against the
-  original.
+  *Playtest after fix:* `PT-59` — ram + graze a C1 `m_build` in our build and A/B the damage stages
+  against the original. Landed and awaiting that flight; the predictions it checks are in the ✅
+  note above.
   ⚠ **Traps.** (a) Do **not** add a crash blast radius — test 3 refuted it directly. (b)
   `CollideDamagePerVn` 8 (`FlightController.cs:385`) has the wrong INDEPENDENT VARIABLE, not merely
   the wrong value: it scales by `|v · n|`, which grows with airspeed, where the decoded law above has
@@ -606,13 +607,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   take collision damage, un-cut by the 0.2 factor (a zeppelin part is not class 0 or 4), and a
   non-player rammer is destroyed outright by the `local_11` rule. This confirms the reading that
   every zeppelin part except the gasbags is rammable.
-  ⚠ **Reachability of the zeppelin half is NOT settled, and it is the one thing to check first.**
-  The damage path is class-agnostic once the sweep resolves a node, but the sweep's candidate set is
-  the scene nodes carrying bit `0x4` of `node+0x24` (`gwNodeSetActive`, `FUN_004cca30`), queried
-  through `FUN_004ca320` (or `FUN_004c8f70` for a single probe). Whether the zeppelin construction
-  path sets that bit on gasbag and turret nodes is unread, so `FUN_004c0880` accepting a ram may be
-  unreachable in the shipped game. Settle that before building the zeppelin leg; the aircraft leg
-  does not depend on it.
+  ✅ **Reachability is settled: zeppelin sub-parts ARE in the sweep's candidate set.** The sweep's
+  set is not a static level index. `FUN_004ca320` walks the terrain grid and then loops the world
+  root's DIRECT CHILD list (`root+0x5c`, count `root+0x56`) with **no spatial test and no class
+  test** on it, admitting a node on bits `0x4` and `0x10` of `node+0x24` plus the layer filter
+  `FUN_0056c430`, then recursing through `FUN_004cad00` into that node's children. A multi-cell
+  object (which a zeppelin is) is registered into exactly that root child list by `FUN_004dae80`.
+  Gasbag and turret nodes are ordinary descendants of the zeppelin root in the same hierarchy the
+  recursion walks, `gwNodeNew` stamps every node `node+0x24 = 0x0108001C` (both bits set) and
+  `node+0x30 = 0xFF` at birth, and nothing in the zeppelin parser or its two registration helpers
+  clears either on a sub-part. So `FUN_004c0880` accepting a ram is reachable in the shipped game,
+  and the cannon-mount leg is real work rather than a dead branch.
+  ⚠ **Our side probably already reaches it, which makes this a verification job, not a build job.**
+  A zeppelin part is an ordinary world collider on `CollisionLayers.World`, which is what
+  `SweepAirframe` already queries, so a ram should resolve `hitBody`, reach `CollideDamageAt`,
+  resolve the part's destructible instance and damage it, with the gasbag exemption already refusing
+  the gasbag case. Fly it before writing any code: the cheapest outcome is that the leg is done.
   ⚠ **Our gasbag gate is on the PROJECTILE path only, and a collision will walk straight past it.**
   This is the one place our architecture and the original's diverge in a way that bites here.
   `0x1000` is read in exactly two places in the image: `0x0042008c` (`FUN_00420070`, the AI ordnance
@@ -630,9 +640,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   zeppelin sub-part, deal the decoded pair to the striker through an armour-then-health split
   (`Damage` has no armour pool today, so that pool is the real work), and thread the 1.0 s
   both-parties grace through the same per-aircraft clock `BL-382` needs for its 2.5 s drop window.
-  *How you'd know it worked:* ram an AI fighter head-on and both aircraft take damage, neither
-  re-collides for a second, and the wreck count is two. Ram a zeppelin's cannon mount and it damages;
-  ram its gasbag and only you die.
+  *How you'd know it worked:* `PT-60` (ram an AI fighter head-on and both aircraft take damage,
+  neither re-collides for a second, and the wreck count is two) and `PT-61` (ram a zeppelin's cannon
+  mount and it damages; ram its gasbag and only you die). The aircraft half is landed and awaiting
+  `PT-60`; the zeppelin half is unbuilt and `PT-61` decides whether it needs building at all.
   *Cross-refs:* `BL-302` (the same handler, the struck-destructible half), `BL-382` (the `obj+0xAC`
   clock family), `BL-291` / `BL-239` (zeppelin damage harness), `docs/org/flightModel.md` (collision
   response timers).

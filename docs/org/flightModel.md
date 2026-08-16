@@ -1923,14 +1923,25 @@ severity law above), but its `IMPACT` block still fires: ramming a building play
 ramming water plays `bsplsh.flt`. A remake that models the damage without the effect will look
 wrong on contact.
 
-**Open:** whether zeppelin sub-part geometry is in the sweep's candidate set at all. The sweep
-removes the object's own node and then queries the world through `FUN_004ca320` (or `FUN_004c8f70`
-for a single probe), which enumerates scene nodes carrying bit `0x4` of `node+0x24`
-(`gwNodeSetActive`, `FUN_004cca30`). Whether the zeppelin construction path sets that bit on gasbag
-and turret nodes is unread, so the decoded fact that `FUN_004c0880` would accept a ram is not yet
-known to be reachable. Also unread: what writes dispatch class 1 to `entity+0x67c`. Class 1 runs
-`FUN_0048ffe0`, which sweeps at `0x00490441` but never calls `FUN_0048d2c0`, so class-1 objects take
-position correction and no collision damage at all; every write to that field found so far stores 0.
+**What the sweep can hit.** The sweep removes the object's own node (`gwNodeSetActive`,
+`FUN_004cca30`, bit `0x4` of `node+0x24`) and then queries the world through `FUN_004ca320`, or
+`FUN_004c8f70` for a single probe. That query has two halves: a terrain-grid walk over the cells the
+swept AABB covers, and then an unconditional loop over the world root's DIRECT CHILD list
+(`root+0x5c`, count `root+0x56`) carrying **no spatial test and no class test**, admitting a node on
+bits `0x4` and `0x10` plus the layer filter `FUN_0056c430` and recursing into its children through
+`FUN_004cad00`. `FUN_004dae80` decides which of those two lists an object registers into by whether
+its cell range spans more than one cell, so a large moving object lives in the root child list and is
+descended into on every sweep.
+
+This is why a zeppelin's sub-parts are rammable. They are ordinary descendants of the zeppelin root
+in the hierarchy the recursion walks; `gwNodeNew` stamps every node `node+0x24 = 0x0108001C` and
+`node+0x30 = 0xFF` at birth, so both predicate bits and the layer filter pass by default, and neither
+the zeppelin parser nor its two part-registration helpers clears them on a part. There is no
+"static world geometry only" filter anywhere on the path.
+
+**Open:** what writes dispatch class 1 to `entity+0x67c`. Class 1 runs `FUN_0048ffe0`, which sweeps
+at `0x00490441` but never calls `FUN_0048d2c0`, so class-1 objects take position correction and no
+collision damage at all; every write to that field found so far stores 0.
 
 ## The three `*Tune` rates — what they are pinned to
 
