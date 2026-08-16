@@ -1,3 +1,4 @@
+using CSVM.UI;
 using CSVM.Utils;
 using Godot;
 
@@ -9,8 +10,9 @@ namespace CSVM.Flight;
 /// ranks the whole field and covers the entire window on its own CanvasLayer over the splitscreen
 /// panes, because the race ends for everybody at once.
 /// One row per player in finishing order: placing, colour-coded tag, aircraft, zones cleared and
-/// total time. R is a rematch; Esc leaves. Construction detail: this module's entry in
-/// docs/architecture.md.
+/// total time. The world halts underneath it, and the board's own menu offers the rematch and the
+/// way out; R and pad Y still reach the rematch directly. Construction detail: this module's entry
+/// in docs/architecture.md.
 /// ⚠ Best times are deliberately not recorded here (<see cref="ScoreStore"/> is single-player
 /// only): race totals aren't comparable across player counts.</summary>
 public sealed partial class StuntRaceBoard : Control
@@ -21,31 +23,41 @@ public sealed partial class StuntRaceBoard : Control
     private const int ContextFont = 15;
     private const int HeaderFont = 14;
     private const int RowFont = 18;
-    private const int FooterFont = 15;
 
     private static readonly Color TitleColor = new(0.93f, 0.96f, 1f);
     private static readonly Color ContextColor = new(0.60f, 0.75f, 0.95f);
     private static readonly Color HeaderColor = new(0.50f, 0.62f, 0.80f);
     private static readonly Color RowColor = new(0.86f, 0.89f, 0.94f);
-    private static readonly Color FooterColor = new(0.68f, 0.74f, 0.82f);
 
     private StuntRace _race = null!;
     private string _context = "";
-    private string _exitHint = "";
+    private string _exitLabel = "";
+    private PauseState _state = null!;
+    private System.Func<int, MenuInput> _inputFor = null!;
 
     private CenterContainer _center = null!;
     private PanelContainer? _panel;
+    private BoardMenuHost? _host;
+
+    /// <summary>Rerun the race in place, chosen from the menu.</summary>
+    public System.Action? Restart { get; set; }
+
+    /// <summary>Leave the session, chosen from the menu.</summary>
+    public System.Action? Exit { get; set; }
 
     /// <summary>Builds the (hidden) board and subscribes to the race's completion. Add it to a
     /// CanvasLayer above the splitscreen panes; it wakes itself on
     /// <see cref="StuntRace.RaceCompleted"/> and retires on a rematch.</summary>
-    public static StuntRaceBoard Build(StuntRace race, string context, bool exitsToMenu)
+    public static StuntRaceBoard Build(StuntRace race, string context, bool exitsToMenu,
+        PauseState state, System.Func<int, MenuInput> inputFor)
     {
         var board = new StuntRaceBoard
         {
             _race = race,
             _context = context,
-            _exitHint = exitsToMenu ? "Esc — Menu" : "Esc — Quit",
+            _exitLabel = exitsToMenu ? "Exit to Menu" : "Quit Game",
+            _state = state,
+            _inputFor = inputFor,
             MouseFilter = MouseFilterEnum.Ignore,
             FocusMode = FocusModeEnum.None,
             Visible = false,
@@ -71,9 +83,18 @@ public sealed partial class StuntRaceBoard : Control
         // Track the window (resizable) so the backdrop always covers it.
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
-        // A rematch clears the placings — retire the board until the next race ends.
+        // A rematch clears the placings — retire the board and release the clock until the next
+        // race ends. R and pad Y reach the rematch without the menu, so the release belongs here
+        // rather than only on the menu's own Restart.
         if (Visible && !_race.AllFinished)
+        {
             Visible = false;
+            _host = null;
+            _state.Clear(HaltReason.Ended);
+            return;
+        }
+        if (Visible)
+            _host?.Poll((float)delta);
     }
 
     private static Label Label(string text, int fontSize, Color color)
@@ -111,6 +132,17 @@ public sealed partial class StuntRaceBoard : Control
         return sep;
     }
 
+    private void OnActivated(BoardMenuItem item)
+    {
+        if (item == BoardMenuItem.Exit)
+        {
+            Exit?.Invoke();
+            return;
+        }
+        // The rematch clears AllFinished, which _Process turns into the hide and the release.
+        Restart?.Invoke();
+    }
+
     private void OnRaceCompleted()
     {
         // Log the final order too, so a race is reviewable from a headless run's log.
@@ -120,6 +152,9 @@ public sealed partial class StuntRaceBoard : Control
                 $"  {StuntRace.Ordinal(r.Rank)}  {r.Tag}  {r.PlaneDisplay}  {StuntMission.FormatTime(r.FinishTime)}");
         Populate();
         Visible = true;
+        // The race stops the world now, rather than leaving the finished pilots to fly on under a
+        // board that has already ranked them.
+        _state.Raise(HaltReason.Ended);
     }
 
     private void Populate()
@@ -198,6 +233,13 @@ public sealed partial class StuntRaceBoard : Control
         }
 
         body.AddChild(Separator(s));
-        body.AddChild(Centered(Label($"R — Rematch        {_exitHint}", (int)(FooterFont * s), FooterColor)));
+
+        var menu = new BoardMenu(
+            dismissable: false,
+            (BoardMenuItem.Restart, "Restart"),
+            (BoardMenuItem.Exit, _exitLabel));
+        menu.Activated += OnActivated;
+        _host = BoardMenuHost.Build(menu, _inputFor(0), s);
+        body.AddChild(_host.View);
     }
 }

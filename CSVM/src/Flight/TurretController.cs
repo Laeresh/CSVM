@@ -46,19 +46,13 @@ public sealed class TurretController
     /// platform speed past this discards the estimate for the frame.</summary>
     public const float MaxPlatformSpeed = 447f;
 
-    /// <summary>The engine-side team an emplacement's authored TEAM id maps to when the entry
-    /// authors none: the original's loader defaults an absent TEAM to its FIRST ENEMY team
-    /// (id 2 in its 0=neutral / 1=ally / 2+=enemy space), which is why the 22 no-TEAM world
-    /// emplacements all engage the player. See <see cref="EngineTeamFor"/>.</summary>
-    public const int EmplacementEnemyBand = 200;
-
     private readonly FlightController? _host;
     private readonly ProjectilePool _pool;
     private readonly RandomNumberGenerator _rng;
     private readonly AimCandidateSet _scan = new(); // reused per tick, aircraft list only
     private readonly Transform3D _yawRest;
     private readonly Transform3D _pitchRest;
-    private readonly int _team;            // engine-space team (AimAssist convention)
+    private readonly int _team;            // team id: the authored TEAM, or the host's
     private readonly Node3D? _healthyNode; // emplacement kill switch; null on a carried turret
     private readonly Node3D? _site;        // emplacement placement node; null on a carried turret
     private readonly Node3D? _platform;    // the hull section the emplacement is mounted on
@@ -145,10 +139,10 @@ public sealed class TurretController
     /// (docs/formats/turrets.md "Waking a whole subtree").</summary>
     public Node3D? Site => _site;
 
-    /// <summary>The engine-space team the acquisition gate and the aim-assist candidate list
-    /// run on (<see cref="EngineTeamFor"/> for an emplacement, the host's pilot team for a
-    /// carried turret).</summary>
-    public int EngineTeam => _team;
+    /// <summary>The team the acquisition gate and the aim-assist candidate list run on: the
+    /// authored <see cref="TurretDef.TeamId"/> for an emplacement, the host's team for a
+    /// carried turret.</summary>
+    public int Team => _team;
 
     /// <summary>The platform's velocity: the host's for a carried turret, the differenced own
     /// position (the decoded moving-host estimate, <see cref="MaxPlatformSpeed"/> cut) for an
@@ -257,17 +251,6 @@ public sealed class TurretController
         return built.ToArray();
     }
 
-    /// <summary>The engine-space team an emplacement fights on: neutral and ally map to
-    /// <see cref="AimAssist.NeutralTeam"/>/<see cref="AimAssist.PlayerTeam"/>, an enemy id lands
-    /// in a band clear of every pilot team (docs/formats/turrets.md "Teams"). An absent
-    /// <c>TEAM</c> is enemy id 2, the original loader's own default.</summary>
-    public static int EngineTeamFor(int originalTeamId) => originalTeamId switch
-    {
-        0 => AimAssist.NeutralTeam,
-        1 => AimAssist.PlayerTeam,
-        _ => EmplacementEnemyBand + originalTeamId,
-    };
-
     /// <summary>Builds the chapter's world emplacements: every standalone <c>ai.zrd</c> entry's
     /// <c>NODES</c> patterns resolved against the built world (docs/formats/turrets.md "Field table";
     /// <paramref name="findNodes"/> is <c>AnimRuntime.FindNodes</c>). One entry instantiates as many
@@ -341,7 +324,7 @@ public sealed class TurretController
                     healthy ??= site;
                     var rng = new RandomNumberGenerator { Seed = (ulong)(uint)Utils.Rng.NewIntSeed(Utils.Rng.Weapons) };
                     built.Add(new TurretController(def, weapon, host: null, pool, yaw, pitch,
-                        fps.ToArray(), rng, EngineTeamFor(def.TeamId),
+                        fps.ToArray(), rng, def.TeamId,
                         def.Activated, healthy, site, PlatformOf(site, worldRoot), label));
                 }
             }
@@ -614,7 +597,7 @@ public sealed class TurretController
             {
                 continue;
             }
-            if (c.Team == AimAssist.NeutralTeam || _team == AimAssist.NeutralTeam || c.Team == _team)
+            if (!AimAssist.Hostile(_team, c.Team))
             {
                 continue;
             }

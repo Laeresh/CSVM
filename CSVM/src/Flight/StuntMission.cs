@@ -274,7 +274,7 @@ public sealed class StuntMission
         }
     }
 
-    /// <summary>Start a fresh run (the scoreboard's "R — New Run"): every zone incomplete,
+    /// <summary>Start a fresh run (a results board's Restart item, or R): every zone incomplete,
     /// the clock back to zero, the active target back to the first zone. Unlike a mid-run respawn
     /// this DOES clear progress and the clock — it is the deliberate opposite of the
     /// crash-keeps-everything rule.</summary>

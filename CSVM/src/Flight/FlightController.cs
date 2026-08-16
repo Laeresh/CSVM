@@ -794,6 +794,15 @@ public partial class FlightController : Node3D
         }
     }
 
+    /// <summary>Rerun this plane's own run: fresh clock and every zone incomplete, then the
+    /// respawn below. A plane with no stunt run is simply respawned, which is all a free flight's
+    /// rerun amounts to.</summary>
+    public void Rerun()
+    {
+        Stunt?.Reset();
+        Respawn();
+    }
+
     /// <summary>Back to the spawn pose at half throttle with a healthy, repaired airframe: the
     /// crash respawn (R), and the session's per-plane reset for a race rematch. Leaves the
     /// stunt run alone — a mid-run crash deliberately keeps its zones and clock.</summary>
@@ -1079,33 +1088,17 @@ public partial class FlightController : Node3D
             && (Race == null || Stunt.Elapsed >= PlayerIndex * DebugFinishStagger))
             Stunt.DebugCompleteAll(Race != null ? PlayerIndex * 2f : 0f);
 
-        // Dogfight: once decided, any player's R here means rematch, not respawn. Checked before
-        // the crash branch, but unlike stunt/race below this does NOT freeze the sim.
-        if (Match is { Completed: true } && RespawnPressed())
-        {
-            RestartMatch?.Invoke();
+        // ⚠ The rematch shortcuts are NOT read here; a results board halts the clock, so this step
+        // never runs while one is up. PollResultsShortcuts reads them off the rendered frame.
+        if (Match is { Completed: true })
             return;
-        }
 
-        // In a race, a finished pilot keeps flying under the shared board until the last pilot
-        // finishes; ahead of crash handling so a finish transition is always clean.
         if (Race is { AllFinished: true } && Stunt is { AllComplete: true })
-        {
-            bool autoRematch = HoldSegments != null && PlayerIndex == 0
-                && (_autoRestartIn -= dt) <= 0f;
-            if (RespawnPressed() || autoRematch)
-            {
-                RestartRace?.Invoke();
-                return;
-            }
-        }
+            return;
 
         if (Stunt is { AllComplete: true } && Race == null)
         {
             _simPrev = _simCurr;   // hold the finish pose — no stale pair left to interpolate
-            // The solo scoreboard accepts R as a fresh run, distinct from a mid-run respawn.
-            if (RespawnPressed())
-                RestartStuntRun();
             return;
         }
         _autoRestartIn = AutoRespawnDelay; // re-armed while the run is live
@@ -1311,6 +1304,7 @@ public partial class FlightController : Node3D
             return;
 
         var clock = GameClock.Current;
+        PollResultsShortcuts((float)delta);
         // Polled here, not in the sim step: a halted sim takes no steps and could never resume
         // itself. With a shared PauseState only the player who paused can resume it.
         bool pausePressed = PauseTogglePressed();
@@ -1322,7 +1316,7 @@ public partial class FlightController : Node3D
                 clock.Halted = !clock.Halted;
         }
         _pausePrev = pausePressed;
-        bool halted = PauseState?.Paused ?? (clock?.Halted ?? false);
+        bool halted = PauseState?.Halted ?? (clock?.Halted ?? false);
         if (clock != null)
             clock.Halted = halted;
         if (halted != _haltPrev)
@@ -1980,11 +1974,6 @@ public partial class FlightController : Node3D
     // Full stunt restart from the results scoreboard (R): fresh clock + every
     // zone incomplete, then the normal respawn (spawn pose / throttle / cleared damage). The
     // scoreboard hides itself once AllComplete clears; the marker HUD replays its intro line.
-    private void RestartStuntRun()
-    {
-        Stunt?.Reset();
-        Respawn();
-    }
 
     // True if the segment crosses any solid collider — the static world, or another
     // aircraft's body (never this plane's own, excluded by RID); on a hit,
@@ -2189,13 +2178,37 @@ public partial class FlightController : Node3D
     private float KeyAxis(Key positive, Key negative) =>
         (KeyDown(positive) ? 1f : 0f) - (KeyDown(negative) ? 1f : 0f);
 
+    // R and pad Y while a results board is up: the direct route to the board's Restart item, and
+    // the hold harness's automatic one. Read off the rendered frame on wall time, since the board
+    // halts the clock and a sim-dt timer under a halt would never fire.
+    private void PollResultsShortcuts(float delta)
+    {
+        if (Match is { Completed: true })
+        {
+            if (RespawnPressed())
+                RestartMatch?.Invoke();
+            return;
+        }
+        if (Race is { AllFinished: true } && Stunt is { AllComplete: true })
+        {
+            bool autoRematch = HoldSegments != null && PlayerIndex == 0
+                && (_autoRestartIn -= delta) <= 0f;
+            if (RespawnPressed() || autoRematch)
+                RestartRace?.Invoke();
+            return;
+        }
+        if (Stunt is { AllComplete: true } && Race == null && RespawnPressed())
+            Rerun();   // the solo board takes R as a fresh run, distinct from a mid-run respawn
+    }
+
     private bool RespawnPressed() =>
         KeyDown(Key.R) || PadPressed(JoyButton.Y);
 
-    // P (or gamepad Start), edge-detected so one press toggles once, gated on
-    // AllowPause (false for AI rigs and the suites' bare test rigs).
+    // P, Esc or gamepad Start, edge-detected so one press toggles once, gated on AllowPause
+    // (false for AI rigs and the suites' bare test rigs). Esc opens the pause board rather than
+    // leaving the flight; the board's Exit item is what leaves, and a pad can reach it.
     private bool PauseTogglePressed() =>
-        AllowPause && (KeyDown(Key.P) || PadPressed(JoyButton.Start));
+        AllowPause && (KeyDown(Key.P) || KeyDown(Key.Escape) || PadPressed(JoyButton.Start));
 
     // Tab / gamepad X — cycles the stunt marker's displayed target (caller edge-detects).
     // Gamepad Y would clash with the respawn button, so X (a free face button) instead.

@@ -16,8 +16,9 @@ namespace CSVM.Session;
 /// shader parameters once, runs the early-quit probes, and builds the persistent camera / orbit
 /// rig / sun / WorldEnvironment.
 /// Each launch instantiates a <see cref="GameSession"/> with the launch's spec and a
-/// <see cref="LauncherContext"/>; Esc from a menu-launched flight frees it
-/// (<see cref="ReturnToMenu"/>) and shows the launchscreen again. Full arg reference:
+/// <see cref="LauncherContext"/>; the boards' Exit frees it (<see cref="ReturnToMenu"/>) and their
+/// Restart on an Instant Action mission frees and rebuilds it (<see cref="RestartSession"/>). Both
+/// interactive paths in draw the load screen and build a frame later. Full arg reference:
 /// docs/cli.md. Module notes: this file's docs/architecture.md entry.
 /// </summary>
 public partial class Launcher : Node3D
@@ -112,11 +113,18 @@ public partial class Launcher : Node3D
     private OrbitCamera _orbit = null!;
 
     // Session lifecycle (the launchscreen's in-process world rebuild): each launch instantiates a
-    // GameSession node, freed again by ReturnToMenu. The camera, lights and global shader
-    // params live on `this` and persist across sessions.
+    // GameSession node, freed again by ReturnToMenu or RestartSession. The camera, lights and
+    // global shader params live on `this` and persist across sessions.
     private GameSession? _session; // the current session node (null at the launchscreen)
     private LaunchMenu? _menu;     // the in-game launchscreen (shown on a no-content-arg launch)
     private bool _menuDriven;      // launched into the menu → Esc from flight returns here, not quit
+
+    // The load screen and the deferred build behind it (BeginLaunch → _Process). A build is one
+    // synchronous block, so the screen has to be DRAWN before it starts: _launchFramesWaited counts
+    // the frames since the request and the build runs on the first one that proves a frame rendered.
+    // ⚠ Null/-1 means no launch is owed; a CLI launch does not come through here at all.
+    private CanvasLayer? _loadLayer;
+    private int _launchFramesWaited = -1;
 
     private double _perfClock;
     private int _perfFrames;
@@ -547,13 +555,10 @@ public partial class Launcher : Node3D
             // While the launchscreen is up it owns Esc (back / quit from the Mode screen).
             if (_menu is { Visible: true })
                 return;
-            // Esc out of a menu-launched flight tears the world down and returns to the
-            // launchscreen; a CLI-launched run just quits, as before.
-            if (_menuDriven && _session is { InSession: true })
-            {
-                ReturnToMenu();
+            // ⚠ Esc no longer leaves a live flight; it opens the pause board, whose Exit item does.
+            // FlightController polls it as a pause toggle, so nothing is done here.
+            if (_session is { InSession: true })
                 return;
-            }
             GetTree().Quit();
             return;
         }
@@ -638,6 +643,66 @@ public partial class Launcher : Node3D
         _captureDirector.Tick(GetViewport(), GetTree(), _spec, ClockNow, _orbit, _camera,
             _session?.Plane, _menu is { Visible: true });
         _gltfExporter.Tick(_session?.Plane, GetTree(), _spec);
+
+        // Last in the frame, where the build used to happen anyway: the launchscreen and the boards
+        // are children, so they process AFTER this node, and a build they asked for landed here.
+        RunOwedLaunch();
+    }
+
+    // The deferred half of BeginLaunch: builds once the load screen has had a frame to render.
+    // A QueueFree'd session is gone by now too, so the outgoing world's exit-tree duties (the
+    // published clock, the world lights, the camera restore) cannot land on top of the new one.
+    private void RunOwedLaunch()
+    {
+        if (_launchFramesWaited < 0 || _launchFramesWaited++ < 1)
+        {
+            return;
+        }
+        _launchFramesWaited = -1;
+        bool built = LaunchSession();
+        // In the same tick the build returned, before anything renders: a load screen left up for
+        // a frame would draw over the first frame of the world, and over a --screenshot capture.
+        HideLoadScreen();
+        if (built || !_menuDriven)
+        {
+            return; // a CLI launch leaves the log to tell the story, as it always did
+        }
+        ReturnToMenu();
+        _menu!.ShowError($"Could not load {_spec.Chapter} / {string.Join(", ", _spec.PlaneNames)} — see the log.");
+    }
+
+    // Shows the load screen and owes a build from the next frame. Every interactive path in (the
+    // launchscreen's Fly, the boards' Restart) comes through here; the CLI launch in _Ready does
+    // not, so no scripted or golden run gains a frame it did not have before.
+    private void BeginLaunch()
+    {
+        _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.HudLayers.Board };
+        _loadLayer.AddChild(UI.LoadBoard.Build($"{_spec.Chapter}   ·   {LaunchSubject()}"));
+        AddChild(_loadLayer);
+        _launchFramesWaited = 0;
+    }
+
+    // What the load screen calls this flight: an Instant Action mission by the wizard's own name
+    // for it ("Attacking a Zeppelin"), anything else by its mode. ⚠ Not ModeName — that is the log
+    // file's and the startup line's internal tag ("fly", "stunt"), which is not a player's word.
+    private string LaunchSubject()
+    {
+        if (_spec.IaDef is { } def)
+        {
+            return Mech3.InstantAction.MissionTypeLabel(def.MissionType);
+        }
+        return _spec.Versus ? "Dogfight" : "Free Flight";
+    }
+
+    private void HideLoadScreen()
+    {
+        if (_loadLayer == null)
+        {
+            return;
+        }
+        RemoveChild(_loadLayer);
+        _loadLayer.QueueFree();
+        _loadLayer = null;
     }
 
     // Instantiates this launch's session node from the current _spec and
@@ -665,6 +730,8 @@ public partial class Launcher : Node3D
             Env = _env,
             MenuDriven = _menuDriven,
             MenuPads = _menuPads,
+            ExitSession = ExitSession,
+            RestartSession = RestartSession,
         });
         AddChild(_session);
         bool built = _session.StartSession();
@@ -779,11 +846,30 @@ public partial class Launcher : Node3D
             }
         }
         _menu!.HideMenu();
-        if (!LaunchSession())
+        BeginLaunch();
+    }
+
+    // The Instant Action boards' Restart: free this session and build a fresh one from the same
+    // spec, behind the load screen. A rerun in place cannot put the mission's opposition back —
+    // waves, the ace and a killed zeppelin all live in the world — so the world is rebuilt instead.
+    // ⚠ Steps the seed exactly as flying again from the menu does, so an unpinned restart is a new
+    // mission and a pinned one (--seed=/--det) still repeats.
+    private void RestartSession()
+    {
+        if (_session != null)
         {
-            ReturnToMenu();
-            _menu.ShowError($"Could not load {chapter} / {string.Join(", ", _spec.PlaneNames)} — see the log.");
+            // Freed at the end of THIS frame, so the build owed for the next one finds it gone.
+            _session.QueueFree();
+            _session = null;
         }
+        if (!_spec.SeedPinned)
+        {
+            _sortie++;
+            _masterSeed = Rng.SortieSeed(_processSeed, _sortie);
+        }
+        LogMasterSeed();
+        GD.Print($"restart: rebuilding {_spec.Chapter} / {_spec.ModeName} from the same settings");
+        BeginLaunch();
     }
 
     // Prints the master the next session will draw from. Per session rather than per process
@@ -795,12 +881,24 @@ public partial class Launcher : Node3D
         GD.Print($"rng: master seed {_masterSeed} ({how})");
     }
 
-    // Frees the current session node and shows the launchscreen again — the in-process
-    // rebuild path for Esc-from-flight and failed builds. The whole session subtree hangs under the
-    // node, so `QueueFree` tears it down; the non-child duties (the published clock, the world
+    // The boards' Exit item: back to the launchscreen when this process launched into it, out of
+    // the game otherwise. The routing Esc used to do, now reachable from a pad.
+    private void ExitSession()
+    {
+        if (_menuDriven && _session is { InSession: true })
+        {
+            ReturnToMenu();
+            return;
+        }
+        GetTree().Quit();
+    }
+
+    // Frees the current session node and shows the launchscreen again — the in-process rebuild
+    // path for the boards' Exit item and for failed builds. The whole session subtree hangs under
+    // the node, so `QueueFree` tears it down; the non-child duties (the published clock, the world
     // lights, the session texture archive, the main-camera restore) run in the node's
-    // `_Notification` on `NotificationExitTree`. The camera / lights / shader globals
-    // persist on `this`.
+    // `_Notification` on `NotificationExitTree`. The camera, lights and shader globals persist
+    // on `this`.
     private void ReturnToMenu()
     {
         if (_session != null)
@@ -978,4 +1076,14 @@ public sealed class LauncherContext
     /// <summary>Per-player pad binding from the launchscreen's join flow (null = derive from the
     /// connected roster, which is what every CLI launch does).</summary>
     public required int[][]? MenuPads { get; init; }
+
+    /// <summary>Leaves the session the way <see cref="MenuDriven"/> says: back to the launchscreen,
+    /// or out of the game. The boards' Exit item calls it, so the one routing rule lives on the
+    /// Launcher rather than being restated per board.</summary>
+    public required System.Action ExitSession { get; init; }
+
+    /// <summary>Frees this session and builds a fresh one from the same settings, behind the load
+    /// screen — the Instant Action boards' Restart item. The mission's opposition lives in the
+    /// world, so putting it back means rebuilding the world, which only the Launcher can do.</summary>
+    public required System.Action RestartSession { get; init; }
 }

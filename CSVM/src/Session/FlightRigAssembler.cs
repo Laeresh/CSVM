@@ -324,15 +324,23 @@ public sealed class FlightRigAssembler
                 controller.Marker.Race = race;
                 controller.Marker.PlayerIndex = pi;
             }
+            else if (_in.InstantActionActive)
+            {
+                // Instant Action carries the splits on its own wrap-up board instead, so the two
+                // results boards cannot wake on the same event and stack (BL-358).
+            }
             else
             {
                 // Solo: the end-of-run scoreboard — per-zone splits + total +
                 // persisted best time, keyed chapter/mission/plane in
                 // user://stunt_scores.json (race totals are deliberately not recorded).
                 var scoreKey = $"{_spec.Chapter}/{_spec.Mission}/{planeName}";
-                controller.Scoreboard = StuntScoreboard.Build(controller.Stunt,
+                var scoreboard = StuntScoreboard.Build(controller.Stunt,
                     PlaneRoster.PlaneDisplayName(stats), $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
-                    ScoreStore.Load(), scoreKey);
+                    ScoreStore.Load(), scoreKey, _in.ExitsToMenu, _in.PauseState, _in.MenuInputFor);
+                scoreboard.Restart = controller.Rerun;
+                scoreboard.Exit = _in.ExitSession;
+                controller.Scoreboard = scoreboard;
                 GD.Print($"stunt scoreboard: splits + best time (key '{scoreKey}')");
             }
             if (verbose)
@@ -495,6 +503,14 @@ public sealed class FlightRigAssembler
         public float MixGain = 1f;
         /// Per-player pad binding: the join flow's, or the connected roster's.
         public int[][]? PadAssignment;
+        /// Who is holding the sim clock — the per-pane stunt board raises its own halt reason.
+        public Flight.PauseState PauseState = null!;
+        /// A player's own menu reader, for the board menu that player owns.
+        public Func<int, UI.MenuInput> MenuInputFor = null!;
+        /// Whether the boards' Exit item returns to the launchscreen rather than quitting.
+        public bool ExitsToMenu;
+        /// Leaves the session, routed by the Launcher.
+        public Action ExitSession = null!;
         /// One livery stream for the session, so P1..P4 draw distinct colours from it.
         public RandomNumberGenerator PaintRng = null!;
         /// The session's spawn list and the index P1 takes (each player wraps on from there).

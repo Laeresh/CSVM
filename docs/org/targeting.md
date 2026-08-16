@@ -148,6 +148,123 @@ selectable when, and only when, its mission structure carries `otherTarget` or `
 entry in one of the four global pools. Engines and cannons appear only if the mission authors them
 as their own `MStruct` entries; the decode does not show the engine walking a zeppelin's parts.
 
+## The team space
+
+The engine has **one** team space, one field, and one hostility predicate. Aircraft, turrets and
+world objects all store the same integer in the same place, and nothing anywhere remaps it per
+entity kind.
+
+**The vocabulary is three one-line constructors**, and they are the only things that mint a team id:
+
+| Address | Meaning | Body |
+|---|---|---|
+| `FUN_004a3f80` | neutral | `*out = 0` |
+| `FUN_004830c0` | ally (the player's side) | `*out = 1` |
+| `FUN_0045c260` | **enemy from index** | `*out = index + 2` |
+| `FUN_00453740` | raw / identity | `*out = value` |
+
+So the space is `0` neutral, `1` ally, and enemy team *index* `N` becomes id `N + 2`.
+
+**The field is combat-object `+0x8`**, written by the virtual setter at vtable slot 2 (base
+implementation `FUN_00441b80`, the write at `0x00441b86`). Every kind reaches it:
+
+| Entity | Where its team is written | Value |
+|---|---|---|
+| Aircraft and generic combat objects | `FUN_004a2570`, 4th argument, write at `0x004a259f` | from the caller |
+| Vehicles | `FUN_004aff80`, write at `0x004affba` | neutral by default (`FUN_004a3f80` at `0x004affa7`) |
+| Turrets | `FUN_004a9a60`, write at `0x004a9a99` | `FUN_0045c260(_, 0)` = **2** |
+| Instant Action enemy aircraft | `FUN_0045a390`: enemy index 0 pushed at `0x0045b2ba`, `FUN_0045c260` at `0x0045b2bc`, passed to `FUN_004a2570` at `0x0045b2db` | **2** |
+| Authored mission aircraft | `aiv.zrd` tuple slot 3, read verbatim by `FUN_00437620` at `0x00437723` | the authored integer, unmodified |
+| Zeppelins and their parts | `FUN_004bd8d0` parses the record, `FUN_004bf030` → `FUN_004bee80` fans one value onto `+0x8` of every component and child | see below |
+| World / scene objects | `FUN_004a3360` builds them through the same `FUN_004a2570`; the team comes from `FUN_004a32f0` at `0x004a3493` | see below |
+
+⚠ **A turret's own default is exactly the id an Instant Action enemy fighter carries.** Both are
+`2`, minted by the same `FUN_0045c260` at enemy index 0. That is the whole reason the original's
+zeppelin turrets do not shoot the fighters that zeppelin launched: the two ids compare equal and
+the predicate rejects the candidate.
+
+The mission-script verb `SET_AI_TEAM` (`FUN_00469e20`) confirms the same identity handling. It
+takes the script's raw integer and hands it straight to the virtual setter on a vehicle, or to a
+zeppelin's `+0xE0` (`0x00469efe`), with no conversion on the way.
+
+### The hostility predicate
+
+Virtual slot `+0x34` on the target wrapper hierarchy. The base vtable at `0x006035f4` has
+`__purecall` there; four concrete overrides exist and all four share one team core.
+
+> A candidate is hostile if and only if its `+0x8` differs from the shooter's team **and** neither
+> team is `0`.
+
+The canonical implementation is `FUN_004a5b90` (the aircraft/vehicle wrapper, vtable `0x0060364c`),
+which first requires the candidate's per-class targetable flags at `+0x8c` and `+0x90`, then makes
+the three comparisons at `0x004a5bb0` (equality), `0x004a5bb4` (candidate is 0) and `0x004a5bb8`
+(shooter is 0). The siblings are `FUN_004a5b20` (zeppelins and large craft, comparisons at
+`0x004a5b40`/`44`/`48`), `FUN_004a5bd0` (`0x004a5bea`/`ee`/`f2`) and `FUN_004a5c10` (emplacement
+hosts, `0x004a5c1e`/`22`/`26`). `FUN_004a5c10`'s codegen inverts polarity through
+`XOR EAX,EAX / SETZ DL` and resolves to the same truth table.
+
+Two properties matter for a port:
+
+- **Neutral is symmetric and total.** A team-0 object is never anyone's target, and a team-0
+  shooter never acquires one. It is excluded from both sides of the test.
+- **There are no bands and no magic values.** No override contains a `>=` test, a range check, or a
+  special case for any id but `0`. The comparison is raw integer against raw integer.
+
+This is the same rule the class model above applies when it splits Enemy from Ally.
+
+### The turret gunner runs the same predicate
+
+The range-gated picker is `FUN_0041f9c0`, a minimise-cost-over-candidates loop (best seeded to
+`1e+20`, rejects scored `1e+21`) walking the four global pools. Its query object is built by
+`FUN_00422850`, which stores the shooter's position at `query+4`…`+0xc` and **the shooter's team,
+copied from `*(shooter+8)`, at `query+0x10`**; the picker passes `query+0x10` to the predicate.
+The turret gun update `FUN_004aabb0` calls `FUN_00422850` at `0x004aaf5c` with its own `*(this+8)`,
+calls the picker at `0x004aaf9b`, and stores the result to `turret+0x210` at `0x004aafd7`.
+Predicate call sites inside the picker are `0x0041fb9e` (devirtualised straight to `FUN_004a5b90`),
+`0x0041fc68` and `0x004228a0`.
+
+So a turret compares its own raw `+0x8` against an aircraft's raw `+0x8`, with no remap on either
+side, through the same predicate the player HUD's scan uses.
+
+A turret's `SetTeam` override (`FUN_004acb70`) clears its current target pointer `+0x210` whenever
+the team actually changes (`0x004acb90`), so a retargeted turret drops a now-friendly lock rather
+than keeping it.
+
+### Zeppelins carry a record override, not a second space
+
+A zeppelin's `+0xE0` (with flag byte `+0xDC`) is the mission record's team override, parsed by
+`FUN_004bd8d0` from the strings `enemy` (`0x0062b6c4`), `ally` (`0x0062b6cc`) and `neutral`
+(`0x0062b6d4`), or from a raw integer (writes at `0x004bd977`, `0x004bda02`, `0x004bda35`,
+`0x004bda5e`). Note which constructor each string picks: `enemy` takes `FUN_0045c260(_, 0)` and is
+therefore **2**, `ally` is `1`, `neutral` is `0`, and a raw integer is stored raw. `FUN_004bee80`
+then fans that one value out onto `+0x8` across the whole airship, its turrets included.
+
+### World objects are in the same space, and are normally neutral
+
+Destructibles are not a separate class and are not excluded by list membership. A named scene node
+becomes a combat object through the find-or-create factory `FUN_004a3360`, which tries the vehicle
+registry (`0x004a3385`), the turret registry (`0x004a33cc`) and the combat-object vector registry
+(`0x004a3415`), then falls back to resolving a type-7 scene node through `FUN_004d0280(7, name)` at
+`0x004a3459`, allocating `0x94` bytes at `0x004a346b` and constructing it with the same
+`FUN_004a2570` at `0x004a34a3`. The new object is pushed into the shared candidate registry
+`DAT_0071d338` by `FUN_0045c590` at `0x004a34d1`, wrapped in the same `0x14`-byte node
+(vtable `0x0060364c`) the Instant Action aircraft path uses at `0x0045b30c`.
+
+Its team comes from `FUN_004a32f0` (called at `0x004a3493`): walk the node, then its ancestors via
+`**(node+0x58)`, and at each one extract a **two-bit field** from `node+0x28` at bit offset
+`(2 * DAT_0071c0a0 - 2) & 0x1f`. The first non-zero value found is the team id directly. If every
+ancestor yields zero, it falls through to `FUN_004a3f80` and the object is **neutral**. Two writers
+of that packed field are `OR [EAX+0x28],0x40000000` at `0x0048490c` and `OR [EDI+0x28],0x10000000`
+at `0x004807ef`, both setting a slot to value 1 (ally).
+
+So hostility toward a world object is decided by team number like everything else, and an
+unauthored one is untargetable because it is neutral, not because it sits outside the pools.
+
+⚠ **The ownership field is two bits wide**, so a scene node can only ever author `0`–`3`. That is a
+bound on *this* field, not on the space: the stored id at `+0x8` is a full integer, and an
+`aiv.zrd` team is a raw integer read verbatim. What it corroborates is that the ids in play are
+small and that no banding scheme exists anywhere.
+
 ## The candidate list
 
 `FUN_004b5fb0`, once per frame:
@@ -440,6 +557,10 @@ element draws the triangle, and how it is rotated, is unresolved.
 | Selection state | sticky in plane `+0x948`, survives everything except death and an explicit clear | none; there is no selection |
 | Candidate pool | four typed pools, rebuilt and re-sorted every frame | `AimCandidateSet`'s same four lists exist for the gun assist, but the marker walks `ProjectilePool.CollectAircraft` alone |
 | Classes | Enemy / Ally / Non-Aircraft, plus an Objective companion flag | none; a single team gate |
+| Team space | one space for everything: `0` neutral, `1` ally, enemy index `N` = `N + 2`, stored at `+0x8` on every combat object | the same space; an authored id is the runtime id |
+| Hostility test | one predicate over raw ids: differ, and neither is `0` | `AimAssist.Hostile`, asked by both the gun assist and the turret gunner rather than restated at each gate |
+| Splitscreen pilots | no per-pilot ladder exists | a remake-only rule: pilot 0 is the player's side, further pilots land in `AimAssist.VersusTeamBand` so a `--vs` player cannot inherit the id the no-`TEAM` emplacements default to |
+| World objects | neutral until a scene node authors two-bit ownership, and untargetable while neutral | `AimAssist.WorldTeam` (100), hostile to every pilot; the port is `BL-407` |
 | Turrets and structures | selectable **only** when the mission flags them `otherTarget` / `objectiveTarget` | not selectable |
 | Cycle order | objectives first, then ahead / behind / left / right, nearest inside each sector | not applicable |
 | "Nearest" | head of that order, not a global nearest | not applicable |
@@ -472,3 +593,19 @@ element is the right port and is a deliberate divergence, not a fidelity loss.
 - Whether the box's absolute pixel constants interact with the resolution-doubling branch in
   `FUN_00457400` (`FUN_00440bb0`). Both measured screenshots render at about 2560 px wide, so they
   do not test a second resolution.
+- Whether an Instant Action **wingman** reaches the ally constructor. That `1` is the ally id is
+  certain, but `FUN_0045a390` never calls `FUN_004830c0`; its other three `FUN_004a2570` sites go
+  through `FUN_004a3360` (`0x0045a9ba`, `0x0045b522`, `0x0045b962`) and derive the team from the
+  scene node instead of a literal.
+- Where an authored mission aircraft's loaded record field `+0x34` is transferred onto the runtime
+  object's `+0x8`. The instantiation loop `FUN_004735b0` walks the record list
+  (`0x00474cba`…`0x0047535d`), `__RTDynamicCast`s to the vehicle record at `0x00474cfb` and ends at
+  `FUN_004a3360`, but reads no `+0x34` and calls no setter. That the authored integer is the engine
+  id is confirmed at the file-format level (`0x00437723`, and the writer `FUN_00438010` printing
+  `+0x34` straight through `%d`) and at the script level (`SET_AI_TEAM`), not end to end. No `+2`
+  remap exists on that path.
+- Whether the AI's own target selection uses a range-gated scan at all. `FUN_0041f9c0` has three
+  callers: the turret update, and two reached from a draw callback registered at `0x004739e8`, that
+  is the player HUD. The AI's standing target appears to come from mission data
+  (`primary_target` / `otherTarget` / `objectiveTarget`) rather than a proximity picker, but that
+  was not traced.

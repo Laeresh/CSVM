@@ -619,43 +619,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Weapons & combat
 
-- `BL-403` `[Bug]` **A zeppelin's turrets shoot the fighters that zeppelin just launched: emplacement
-  teams and aircraft teams are two different numbering spaces that can never agree.** *Evidence:* the
-  user at the controls, C2 IA1 `zeppelin_run`, watching the bay-launched wave die to its own airship.
-  The log shows both halves of the mismatch in plain numbers: `ia: 24 wave enemies across 4 wave(s),
-  built inert, team=2` and `ia: zeppelin 'multiplayer1zep' turrets: 14 emplacement(s) ACTIVATED with
-  the objective`, then every one of those turrets reporting
-  `turret MSG_TUR_BELLY@ctur3: engaging (first shot, team 202)`.
-  **The mechanism.** `TurretController.EngineTeamFor` (`TurretController.cs:264-269`) maps an
-  emplacement's authored `TEAM` id into a band clear of the pilot teams: 0 stays neutral, 1 becomes
-  `PlayerTeam`, and **anything else becomes `EmplacementEnemyBand + id`**, with the band at 200
-  (`:53`). An aircraft's team is not banded: `InstantActionRuntime.EnemyTeam` is literally
-  `PlayerTeam + 1` = 2 (`InstantActionRuntime.cs:51`). So a turret authored `TEAM 2` and a fighter on
-  enemy team 2 are engine teams **202 and 2**, and the hostility test
-  (`TurretController.cs:617`, same-team-or-either-neutral rejects) can never match them. The turret
-  therefore treats every aircraft in the sky as hostile, its own side included.
-  ⚠ **The band is not a mistake to delete.** It exists so the 22 no-`TEAM` world emplacements
-  default to the original loader's "first enemy team" and engage the player (`:49-52`,
-  `docs/formats/turrets.md` "Teams"). Collapsing 200+id onto the raw id would make every one of those
-  emplacements share a team with the Instant Action wave and stop them shooting at anyone. The fix is
-  to make the two spaces meet, not to remove one.
-  ⚠ **The zeppelin case is the one that shows it, not the only one.** Any mission that puts an
-  emplacement and an AI aircraft on the same authored side has this, so a fix wants checking against
-  the `world-turrets` census (C1: 5 `aagun`, 9 `bbtur`, 9 `ctur`, 14 `ltur`/`rtur`, 2 zep
-  `doublecannon`, 12 `locklear_*`) rather than against the zeppelin alone.
-  *Fix shape:* one team space for both. Either band the aircraft teams the same way at the point an
-  authored side becomes an engine team, or (cleaner) drop the band and give the no-`TEAM` default its
-  own explicit enemy id, so an authored `TEAM 2` means team 2 whether it is bolted to a hull or
-  flying. `TurretController.EngineTeamFor` is the single seam; `AimAssist.WorldTeam` (100, for
-  destructibles) is a third space and should be looked at in the same pass.
-  ⚠ **Do not fix this by exempting the launching zeppelin's own turrets.** That hides the mismatch
-  for one mission type and leaves it live everywhere else.
-  *How you'd know it worked:* fly `--chapter=C2 --mission=IA1 --zeppelins`; the bay-launched wave
-  forms up and attacks the player, and the zeppelin's 14 emplacements engage the player and its
-  wingmen while never firing on their own wave.
-  *Cross-refs:* `docs/formats/turrets.md` ("Teams"), `InstantActionRuntime.cs` (`EnemyTeam`),
-  `TurretController.cs` (`EngineTeamFor`, `EmplacementEnemyBand`), `BL-350` (the drop is not gated on
-  the doors opening, open in the same mission).
+- `BL-407` `[Bug]` **World objects are hostile to everyone; the original leaves an unauthored one
+  neutral.** *Evidence:* the team-space decode ([`docs/org/targeting.md`](docs/org/targeting.md)
+  "The team space"), taken while unifying the emplacement and aircraft team spaces
+  (`git log --grep=BL-403`). CSVM stamps every destructible with
+  `AimAssist.WorldTeam` (100) through `AddStructures`'s default, which `FlightController.cs:1873`
+  takes on every frame of every session, so a crate is hostile to every pilot alike. The original
+  builds a world object through the same constructor as an aircraft (`FUN_004a3360` →
+  `FUN_004a2570`) and takes its team from a **two-bit ownership field** on the scene node, walking
+  the node then its ancestors (`FUN_004a32f0`, called at `0x004a3493`); when no ancestor carries
+  one it falls through to **neutral**, and the hostility predicate's neutral clause is what makes
+  it untargetable.
+  ⚠ **Do not just change the constant to 0.** CSVM reads no ownership field, so every world object
+  would go neutral at once and the gun assist would fall silent over every ground target and every
+  zeppelin gasbag. The work is to find whether any CSVM world node carries authored ownership
+  first, and only then to decide whether hostile-to-all stays as a remake-only rule.
+  *How you'd know it worked:* ground targets and gasbags still take assisted fire, and whatever the
+  ownership field turns out to select still does.
+  *Cross-refs:* `BL-400` (the other half: structures on the Non-Aircraft SELECTION cycle need a
+  curated `targets.zrd`-equivalent list — this item is the gun assist's team, they fail in
+  different subsystems), `AimAssist.WorldTeam`, [`docs/org/targeting.md`](docs/org/targeting.md)
+  ("The team space", where the decode this splits off from is written up).
 
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
   (`messages.json` 126–129), implying world pickups that restore ammo. **Carries research
@@ -2974,6 +2958,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   tracks its own pick. Depends on H22's target-tracking plumbing; `docs/controls.md` gains the
   bindings when it lands.
 
+- `BL-409` `[Feature]` **The load screen shows a plain panel, not the original's artwork.** A
+  session build stalls the frame loop for several seconds, so both interactive paths into one (the
+  launchscreen's Fly and an Instant Action Restart) draw `UI/LoadBoard` first: the shared board
+  style, the chapter and mode named, no progress. The original showed real load screens, and that
+  artwork ships in `crimson.rof` — decode which screen it picks per environment or mission type and
+  draw that instead.
+  ⚠ *Traps:* (a) Do NOT add a progress bar to the existing board on the way: the build is one
+  synchronous block and `StartupProfile` reports its phases only after the fact, so any bar is a
+  fiction. Real progress needs an incremental build first, which is a much larger item. (b) The
+  board must stay cheap to construct — it is built on the frame BEFORE the build, and anything slow
+  there just moves the stall earlier. (c) Whatever it draws, the Launcher frees it in the same tick
+  the build returns, so it can never draw over the world's first frame or a `--screenshot` capture.
+  *Cross-refs:* `UI/LoadBoard.cs`, `Launcher.BeginLaunch`/`RunOwedLaunch`, `docs/architecture.md`.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -2986,7 +2984,7 @@ viewer set behind `ProjectilePool.Viewers` / `ScreenSize.NearestFloor` for draw 
 (`Session/WeatherRig.Tick`, stepped once per frame outside the per-rig loop on purpose). Splitscreen-scoped items that live with
 their own system: `BL-231` (per-player pool term), `BL-296` (per-player ActionMap), `BL-299`
 (MP spawn maps), `BL-301` (Dogfight tuning), `BL-314` (race countdown), `BL-351` (per-pane target
-cycling), `BL-358` (board stacking).
+cycling).
 
 The theme's first batch (`BL-126`, `BL-365`–`BL-376`) landed via
 [`docs/plans/PLAN-splitscreen-polish.md`](docs/plans/PLAN-splitscreen-polish.md) (2026-08-15,
@@ -3113,20 +3111,6 @@ usual.
   "Saved custom planes"). Importing a player's existing planes needs that finished; creating our own
   does not, and the two should not be conflated. (b) `PURCHASE` implies an economy, which belongs to
   the campaign and not to Instant Action.
-
-- `BL-358` `[Polish]` **The Instant Action wrap-up board stacks on top of the stunt scoreboard on a
-  `stunt_flying` mission.** Landed alongside `PLAN-instant-action.md` G14 (2026-08-14), screenshot-
-  observed (`--ia=` a `stunt_flying` file, `--debug-scoreboard`): `FlightRigAssembler` already builds
-  a per-pane `Flight/StuntScoreboard` unconditionally for any completed stunt run, and G14's own
-  `Flight/IaWrapupBoard` wakes on the SAME event, so both render at once — the wrap-up board correctly
-  drawn on top (`CanvasLayer` 10 over the pane's own HUD canvas), but the stunt board's zone-split
-  table shows through behind it. Cosmetic only: every number both boards show is correct. Whether the
-  fix is hiding `StuntScoreboard` for the duration of an Instant Action mission, sequencing the two
-  (splits first, then the wrap-up), or leaving both (the original may have shown an analogous
-  sequence of screens) is a design call this item did not make, since G14's own scope was the four
-  rows, not the interaction between two already-separate boards — `docs/plans/PLAN-instant-action.md`'s own
-  trap (b) on this item says not to change either board's persistence rule while adding one that
-  shows both, which this leaves untouched.
 
 - `BL-350` `[Bug]` `[Blocked: mission animations]` **Generator-spawned planes crash inside closed hangars
   (C1/M04 `--generators`, user-reported 2026-08-13).** The spawn position is decoded-correct: the
