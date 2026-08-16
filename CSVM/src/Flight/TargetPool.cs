@@ -5,22 +5,14 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>The player's classed candidate pool: everything
-/// selectable right now, split into the original's three cycles. Rebuilt from scratch on every
-/// <see cref="Rebuild"/> call, which is the original's own contract (<c>FUN_004b5fb0</c> releases
-/// the previous frame's list before walking the pools again, and nothing about it persists), so a
-/// runtime spawn appears and a death disappears with no extra plumbing.
-///
-/// <para>It reads an <see cref="AimCandidateSet"/> rather than growing a parallel structure. The
-/// aim assist's four typed lists ARE the original's four pools, and the collectors that fill them
-/// (<see cref="ProjectilePool.CollectAircraft"/>, <see cref="ProjectilePool.CollectTurrets"/>,
-/// <c>ZeppelinRuntime.CollectTargetParts</c>) are already written; what this adds is the class
-/// split and the per-source identity that <see cref="TargetRef"/> carries.</para>
-///
-/// <para>Ordering is deliberately NOT done here. The cycle order (objectives first, then the
-/// ahead/behind/left/right sector sort with distance inside a sector) belongs to
-/// <see cref="TargetSelection"/>, because it needs the selecting plane's own basis, which a pool
-/// has no business holding.</para></summary>
+/// <summary>The player's classed candidate pool: everything selectable right now, split into the
+/// original's three cycles. Rebuilt from scratch on every <see cref="Rebuild"/> call, which is the
+/// original's own contract, so a runtime spawn appears and a death disappears with no extra
+/// plumbing. It reads an <see cref="AimCandidateSet"/> rather than growing a parallel structure:
+/// the assist's four typed lists ARE the original's four pools and their collectors are already
+/// written, so what this adds is the class split and <see cref="TargetRef"/>'s identity.
+/// ⚠ Ordering does not belong here. The cycle order needs the selecting plane's own basis, which a
+/// pool has no business holding; it is <see cref="TargetSelection"/>'s.</summary>
 public sealed class TargetPool
 {
     private readonly List<TargetRef> _enemy = new();
@@ -55,29 +47,12 @@ public sealed class TargetPool
         _nonAircraft.Clear();
     }
 
-    /// <summary>Rebuilds all three cycles, classing each candidate through
-    /// <see cref="TargetRef.Classify"/> against <paramref name="ownTeam"/> and dropping
-    /// <paramref name="self"/> (matched by reference, the same self-rejection
-    /// <see cref="AimAssist.Scan"/> uses; the original excludes the player's own plane inside the
-    /// class function itself).
-    ///
-    /// <para>Two of the assist's four lists are read and two are NOT.
-    /// <see cref="AimCandidateSet.Structures"/> is never touched: it is the destructible registry,
-    /// an approximation of the original's curated <c>targets.zrd</c> list, and walking it would put
-    /// every crate and fence in the world on the Non-Aircraft cycle (decision 8). Selectable
-    /// structures arrive through <paramref name="subParts"/> alone.
-    /// <see cref="AimCandidateSet.Ordnance"/> is not walked either: the original offers a live fused
-    /// round only when its <c>+0x6c</c> tracking byte is set, CSVM has no such per-round flag, and
-    /// decision 8 scopes the pool to aircraft, sub-parts and emplacements. Adding it later is one
-    /// loop here, not a redesign.</para></summary>
-    /// <param name="scan">The assist's typed lists, already filled by their collectors. Only
-    /// <see cref="AimCandidateSet.Vehicles"/> and <see cref="AimCandidateSet.Turrets"/> are read.</param>
-    /// <param name="subParts">The selectable mission structures, from
-    /// <c>ZeppelinRuntime.CollectTargetParts</c>. Null for a session with no zeppelins.</param>
-    /// <param name="ownTeam">The selecting plane's <see cref="FlightController.Team"/>. Read the
-    /// FIELD, never <see cref="AimAssist.TeamOfPilot"/> — deriving a team from a pilot index is what
-    /// put a wingman in the marker (see <see cref="TargetHud.OwnTeam"/>).</param>
-    /// <param name="self">The selecting plane, excluded from its own pool.</param>
+    /// <summary>Rebuilds all three cycles through <see cref="TargetRef.Classify"/>, dropping
+    /// <paramref name="self"/> by reference. ⚠ Walk <see cref="AimCandidateSet.Vehicles"/> and
+    /// <c>Turrets</c> only: <c>Structures</c> is the destructible registry, so walking it puts every
+    /// crate on the cycle, and the selectable ones come through <paramref name="subParts"/>.
+    /// ⚠ <paramref name="ownTeam"/> is the <see cref="FlightController.Team"/> FIELD, never
+    /// <see cref="AimAssist.TeamOfPilot"/> (see <see cref="TargetHud.OwnTeam"/>).</summary>
     public void Rebuild(AimCandidateSet scan, IReadOnlyList<AimCandidate>? subParts, int ownTeam,
         object? self)
     {
@@ -177,10 +152,9 @@ public sealed class TargetPool
             return;
         }
 
-        // CSVM carries no mission otherTarget/objectiveTarget data, so the flag the original reads
-        // per entity is stood in for by what the candidate IS: a world emplacement and a sub-part
-        // are selectable, a carried gunner is not. Everything reaching the Structure branch came
-        // through subParts, so it is selectable by construction.
+        // CSVM carries no mission otherTarget/objectiveTarget data, so the per-entity flag is stood
+        // in for by what the candidate IS: a world emplacement and a sub-part are selectable, a
+        // carried gunner is not. Everything reaching the Structure branch came through subParts.
         bool otherTarget = kind switch
         {
             AimTargetKind.Turret => IsEmplacement(c.Source),

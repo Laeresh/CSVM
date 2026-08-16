@@ -5491,17 +5491,10 @@ public static class Suites
         }
     }
 
-    /// <summary><see cref="TargetRef"/>. Entirely tree-free — no plane is built, no pool is
-    /// registered, no data root is required — because that is the seam's whole claim: the cycles,
-    /// the label formatter and the marker read this and never the underlying C# type, so they all
-    /// unit-test without a Godot tree.
-    ///
-    /// <para>One ref per source kind, built from synthetic data the way the three real collectors
-    /// will: an aircraft with both health pools, a zeppelin sub-part with health alone
-    /// (<c>DestructibleRegistry.Instance</c> has no armor), and a turret emplacement with neither
-    /// (the retail loaders read no HEALTH key at all). That spread is the point — decision 12 says
-    /// omit the figure where there is no source, so the turret's nulls are the case that must not
-    /// silently become 1.0.</para></summary>
+    // TargetRef, entirely tree-free, which is the seam's whole claim. One ref per source kind: an
+    // aircraft with both health pools, a sub-part with health alone, a turret emplacement with
+    // neither. That spread is the point, since the turret's nulls are the case that must not
+    // silently become 1.0.
     private static void TargetRefModel(TestContext ctx)
     {
         int ownTeam = AimAssist.PlayerTeam;
@@ -5745,14 +5738,10 @@ public static class Suites
         }
     }
 
-    /// <summary><see cref="TargetSelection"/>, entirely tree-free and data-free: plain
-    /// <c>object</c> sources through the real <see cref="TargetPool"/>, a plane at the origin on the
-    /// identity basis (nose down −Z, right +X), and no world at all.
-    ///
-    /// <para>The geometry is chosen so the decoded sector order and a plain nearest-in-space order
-    /// DISAGREE: the nearest candidate sits 100 m off the right wing and the head of the cycle is
-    /// 400 m ahead. An implementation that quietly sorted by range would pass a weaker suite and fail
-    /// this one.</para></summary>
+    // TargetSelection, tree-free and data-free: plain object sources through the real TargetPool,
+    // a plane at the origin on the identity basis, no world. The geometry is chosen so the decoded
+    // sector order and a plain nearest-in-space order DISAGREE (nearest is 100 m off the right
+    // wing, the cycle head is 400 m ahead), so an implementation that sorted by range fails.
     private static void TargetSelectionModel(TestContext ctx)
     {
         var ahead1 = new object();      // 900 m ahead   -> sector 0
@@ -5792,12 +5781,9 @@ public static class Suites
                   && TargetSelection.SectorKey(Vector3.Right * 5f, basis, true) == -1,
             $"FUN_004bbd60's sectors: ahead 0, behind 1, left 2, right 3, and an objective overrides to -1");
 
-        // An objective can only be hand-filed today: nothing in CSVM sets TargetRef.Objective,
-        // because no mission objectiveTarget data is plumbed. The -1 key is still the cycle's first
-        // rule, so it is exercised here rather than left until that data exists. The pool is driven
-        // directly rather than through TargetSelection.Rebuild so the objective is present on the
-        // FIRST resolve — the auto-acquire below is a claim about a selector that has never
-        // resolved, and pre-resolving would make it vacuous.
+        // An objective is hand-filed: nothing sets TargetRef.Objective yet, but the -1 key is the
+        // cycle's first rule. The pool is driven directly, not through Rebuild, so the objective is
+        // there on the FIRST resolve; pre-resolving would make the auto-acquire claim vacuous.
         var objective = new object();
         var sel = new TargetSelection();
         sel.Pool.Rebuild(full, null, own, null);
@@ -5936,15 +5922,10 @@ public static class Suites
             $"the death hook prunes the queue, so a dead shooter is never offered again");
     }
 
-    /// <summary><c>--target=</c>. Everything the flag means lives in
-    /// <see cref="TargetSelection.ApplyInitial"/> and <see cref="TargetSelection.Select"/>, which take
-    /// a pose and no tree, so the whole grammar is pinned here rather than only by the two screenshot
-    /// runs — those cover the wiring and the pixels, this covers what each word does.
-    ///
-    /// <para>The pool is built from REAL sources (bare <see cref="FlightController"/>s and a
-    /// <see cref="DestructibleRegistry.Instance"/> on its own anchor) rather than hand-filed refs,
-    /// because the claim being made is about the names <see cref="TargetPool"/> actually
-    /// produces.</para></summary>
+    // --target=. Everything the flag means lives in ApplyInitial and Select, which take a pose and
+    // no tree, so the whole grammar is pinned here rather than only by the two screenshot runs. The
+    // pool is built from REAL sources rather than hand-filed refs, because the claim is about the
+    // names TargetPool actually produces.
     private static void TargetFlagModel(TestContext ctx)
     {
         int own = AimAssist.PlayerTeam;
@@ -6074,16 +6055,10 @@ public static class Suites
         }
     }
 
-    /// <summary><see cref="TargetPool"/>. The pure half runs over a hand-built
-    /// <see cref="AimCandidateSet"/> with no world at all: bare <see cref="FlightController"/>s and
-    /// <see cref="DestructibleRegistry.Instance"/>s on plain <see cref="Node3D"/> anchors, which is
-    /// enough to pin every membership and exclusion rule the plan asks for. The world half then runs
-    /// C1's REAL emplacement census through the same pool, because "a turret emplacement is
-    /// selectable" is a claim about the objects the session actually builds, not about a stand-in.
-    ///
-    /// <para>⚠ The carried-gunner exclusion (a turret with no placement <c>Site</c>) is pinned in the
-    /// <c>turret-gunner</c> suite instead, where a real carried turret already exists — building one
-    /// here would mean a whole plane rig for one boolean.</para></summary>
+    // TargetPool. The pure half runs over a hand-built AimCandidateSet with no world, which pins
+    // every membership and exclusion rule; the world half runs C1's REAL emplacement census through
+    // the same pool, because "an emplacement is selectable" is a claim about objects the session
+    // builds. The carried-gunner exclusion rides the turret-gunner suite, where one already exists.
     private static void TargetPoolModel(TestContext ctx)
     {
         var self = new FlightController { PlayerIndex = 1, Team = AimAssist.PlayerTeam };
@@ -6264,10 +6239,9 @@ public static class Suites
                 && TargetHud.HostileTag("bandit") == "BANDIT" && TargetHud.HostileTag("") == "AI",
                 $"the marker tag is the name's first segment uppercased, 'AI' as the fallback");
 
-            // The wingman-in-the-marker bug: OwnTeam must read the pane's own Team
-            // FIELD. Deriving it from the pilot index is right for P1 by coincidence
-            // (TeamOfPilot(0) == PlayerTeam) and wrong for P2-P4 the moment a mission sets teams,
-            // which is every Instant Action and every --coop session.
+            // The wingman-in-the-marker bug: OwnTeam must read the pane's own Team FIELD. The pilot
+            // index derivation is right for P1 by coincidence and wrong for P2-P4 the moment a
+            // mission sets teams, which every Instant Action and --coop session does.
             var p2 = new TargetHud { PlayerIndex = 1 };
             ctx.Check(p2.OwnTeam == AimAssist.TeamOfPilot(1),
                 $"with no aircraft bound the HUD still falls back to the pilot-index derivation own={p2.OwnTeam}");

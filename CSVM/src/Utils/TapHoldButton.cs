@@ -14,19 +14,13 @@ public enum TapHold
     Tap,
 }
 
-/// <summary>One button carrying two actions, split by how long it is held (decision 7). Feed it
-/// the button's LEVEL each frame and it edge-detects, times and classifies; the caller only
-/// switches on the answer.
-///
-/// <para><b>The tap resolves on RELEASE, not on press.</b> That is the whole point: firing the tap
-/// action on press and the hold action later means every long press starts by performing the wrong
-/// action and visibly flickers a wrong selection before correcting itself. So a press commits to
-/// nothing, crossing the threshold fires <see cref="TapHold.Hold"/> exactly once and disarms the
-/// release, and a release before the threshold fires <see cref="TapHold.Tap"/>.</para>
-///
-/// <para>Wraps <see cref="HoldToRepeat"/> with a zero repeat interval rather than hand-rolling a
-/// second timer. Pure and engine-free — the input read stays with the caller, so the decoding is
-/// unit-testable even though a gamepad is not.</para></summary>
+/// <summary>One button carrying two actions, split by how long it is held. Feed it the button's
+/// LEVEL each frame and it edge-detects, times and classifies; the caller only switches on the
+/// answer. Wraps <see cref="HoldToRepeat"/> with a zero repeat interval rather than hand-rolling a
+/// second timer. Pure and engine-free, so the decoding unit-tests even though a gamepad does not.
+/// ⚠ The tap resolves on RELEASE, never on press. Firing the tap on press and the hold later means
+/// every long press begins by performing the wrong action and visibly flickers a wrong selection
+/// before correcting itself.</summary>
 public sealed class TapHoldButton(float holdSeconds)
 {
     private readonly HoldToRepeat _hold = new(holdSeconds, 0f);

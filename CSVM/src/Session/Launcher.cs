@@ -757,10 +757,9 @@ public partial class Launcher : Node3D
             planes.Add(p.PlaneNode);
         }
         _spec = SessionSpec.FromMenu(_cli, chapter, planes, mode, iaDef);
-        // Step the master so flying again is a new mission rather than a replay of the last one:
-        // without this every launchscreen relaunch re-derives the same spawn, opposition and
-        // liveries from the one process draw. A pinned run (--seed=, --det, --scripted-by, the anim
-        // lab) holds still, which is what keeps the goldens and the perf harnesses reproducible.
+        // Step the master so flying again is a new mission rather than a replay: without this every
+        // relaunch re-derives the same spawn, opposition and liveries. ⚠ A pinned run must hold
+        // still, which is what keeps the goldens and the perf harnesses reproducible.
         if (!_spec.SeedPinned)
         {
             _sortie++;

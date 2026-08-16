@@ -355,12 +355,8 @@ public sealed class FlightRigAssembler
                 GD.Print("dogfight HUD: match timer/K-D/leader line + kill banner + opponent markers");
         }
 
-        // The targeting HUD: one per human pane, in EVERY flight session — not only --vs, which
-        // VersusHud is. Draws this pilot's own selected target (below), falling back to the
-        // nearest AI hostile on a pane with no selection; built unconditionally because
-        // generators spawn hostiles mid-session, and with nothing selected and none in the pool it
-        // draws nothing. A --vs pane gets one alongside VersusHud, so an AI hostile spawned into a
-        // dogfight is still marked.
+        // One per human pane, in EVERY flight session unlike VersusHud: built unconditionally
+        // because generators spawn hostiles mid-session, and it draws nothing with an empty pool.
         controller.TargetHud = TargetHud.Build(pi, rig.Camera, _in.Projectiles);
         if (verbose)
             GD.Print("targeting HUD: selected-target marker (brackets + label, edge arrow off screen)");
@@ -371,10 +367,9 @@ public sealed class FlightRigAssembler
         controller.Targeting = new TargetSelection();
         controller.InitialTarget = _spec.TargetSelect;   // --target=, the scripted twin
 
-        // Bound on EVERY pane, not just under --debug-markers: it is what the HUD's team tests read
-        // this pane's side off (TargetHud.OwnTeam). Deriving the side from the pilot index instead
-        // is right for P1 by coincidence and wrong for P2-P4 in any session that sets teams
-        // explicitly, which is what put a wingman in the marker.
+        // ⚠ Bind on EVERY pane, not only under --debug-markers: it is what TargetHud.OwnTeam reads
+        // this pane's side off, and the pilot-index derivation it falls back to is the
+        // wingman-in-the-marker bug.
         controller.TargetHud.Own = controller;
 
         // --debug-markers: the same HUD marks every live aircraft instead of one hostile. Own also

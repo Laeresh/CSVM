@@ -7,45 +7,16 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The per-pane targeting HUD: the tracked-hostile marker, split
-/// out of <see cref="VersusHud"/> because it draws in EVERY flight session, not only
-/// <c>--vs</c> — a Versus-only class was the wrong home for a feature every pane gets.
-/// <see cref="Build"/> is unconditional, one per human pane, whether or not the session has a
-/// <see cref="VersusMatch"/>; a <c>--vs</c> pane gets BOTH this and a <see cref="VersusHud"/>, so
-/// an AI hostile spawned into a dogfight is still marked alongside the human opponents.
-///
-/// <para><b>The shipped marker is the pilot's own sticky selection</b> (<see cref="Selected"/>),
-/// drawn in the original's shape: a fixed-size bracket box gated on the SELECTED GUN's reach
-/// (<see cref="GunReaches"/>), the label always BELOW it, and off screen an edge arrow with the name
-/// and clock bearing stacked beside it. Colour is the decoded <c>Target::GetColor</c>
-/// (<see cref="MarkerColor"/>): red hostile, green friendly, blue non-destructive objective.</para>
-///
-/// <para><see cref="HostilePool"/> is scanned each frame through the pool's one live aircraft
-/// roster (<c>ProjectilePool.CollectAircraft</c>, the same list the AI gunners read) and the
-/// NEAREST live AI aircraft becomes <see cref="TrackedHostile"/>. That marker is now a
-/// FALLBACK: it draws only on a pane with no selection at all (no <see cref="TargetSelection"/>
-/// bound, or the pilot pressed Target Nothing), because a pane that HAS a selection marks that one
-/// target and nothing else (decision 11).</para>
-///
-/// <para><c>--debug-markers</c> (<see cref="MarkAll"/>) widens the one marker to EVERY live
-/// aircraft the pool lists, red for a hostile team and blue for this pane's own side
-/// (<see cref="Own"/>), each tagged with the FULL identity string (<see cref="DebugTag"/>):
-/// the hostile tag, the airframe type, slant range, health/armor as whole percentages with no
-/// percent sign (omitted, not defaulted, where the source carries no figure), and the AI mode. It
-/// is a watching aid for AI work, not a gameplay feature: the shipped HUD marks exactly one
-/// hostile and the flag is off unless asked for.</para>
-///
-/// <para>The edge-arrow + clock-bearing drawing (<see cref="DrawOpponent"/>,
-/// <see cref="EdgePoint"/>, <see cref="ClockHour"/>, <see cref="DrawArrow"/>, <see cref="DrawTag"/>)
-/// is copied verbatim from <see cref="VersusHud"/>'s own copy of it — the same relationship
-/// <c>VersusHud</c> already has with <c>MarkerHud</c>, not a shared base class for the two
-/// <see cref="Control"/>s. This is CSVM's own drawing shape for a tracked hostile, but the shape
-/// is not invented: <c>OriginalScreenshots/HUD.png</c> shows the original's own targeting marker
-/// doing exactly this off screen — a red arrow with the name and clock bearing on two lines below
-/// it — decoded in <see href="../../docs/org/targeting.md">org/targeting.md</see>. The selected
-/// target's own edge tag (<see cref="DrawSelected"/>) draws those lines stacked, as the original
-/// does; the hostile tracker and <c>--debug-markers</c> keep the one-line tag, which is where the
-/// <see cref="RefStaggerStep"/> spacing still applies.</para>
+/// The per-pane targeting HUD, built on every human pane in every flight session (a <c>--vs</c>
+/// pane gets one alongside <see cref="VersusHud"/>). It draws the pilot's own sticky selection
+/// (<see cref="Selected"/>) in the original's shape: a bracket box gated on the SELECTED GUN's
+/// reach (<see cref="GunReaches"/>), the label below it, and off screen an edge arrow with the name
+/// and clock bearing. Colour is the decoded <c>Target::GetColor</c> (<see cref="MarkerColor"/>).
+/// <see cref="TrackedHostile"/> is the fallback where no selection exists at all, and
+/// <c>--debug-markers</c> (<see cref="MarkAll"/>) widens the marker to every live aircraft with a
+/// full identity string (<see cref="DebugTag"/>). The arrow/bearing drawing is copied verbatim from
+/// <see cref="VersusHud"/>'s own copy of <c>MarkerHud</c>'s, the same relationship those two
+/// already have. Decode: <see href="../../docs/org/targeting.md">org/targeting.md</see>.
 /// </summary>
 public sealed partial class TargetHud : Control
 {
@@ -146,16 +117,11 @@ public sealed partial class TargetHud : Control
     /// suite.</summary>
     public bool Bracketed => _bracketed;
 
-    /// <summary>The side this pane is on: <see cref="Own"/>'s own <see cref="FlightController.Team"/>
-    /// field, falling back to the pilot-index derivation only when no aircraft is bound (a
-    /// spectator, or a suite rig built without one).
-    ///
-    /// <para>⚠ Reading the FIELD is the whole point. This HUD used to derive
-    /// <c>AimAssist.TeamOfPilot(PlayerIndex)</c> per call, which is right for P1 by coincidence
-    /// (<c>TeamOfPilot(0)</c> == <see cref="AimAssist.PlayerTeam"/>) and wrong for everyone else the
-    /// moment a mission sets teams explicitly: in Instant Action or <c>--coop</c> every human is
-    /// team 1, so P2 derived team 2, marked its own wingmen hostile and skipped the real enemies as
-    /// "own team". That is the wingman-in-the-marker bug.</para></summary>
+    /// <summary>The side this pane is on: <see cref="Own"/>'s <see cref="FlightController.Team"/>
+    /// field, falling back to the pilot-index derivation only with no aircraft bound.
+    /// ⚠ Read the FIELD. Deriving <c>AimAssist.TeamOfPilot(PlayerIndex)</c> is right for P1 by
+    /// coincidence and wrong once a mission sets teams (under Instant Action and <c>--coop</c> every
+    /// human is team 1), which is the wingman-in-the-marker bug.</summary>
     public int OwnTeam => Own?.Team ?? AimAssist.TeamOfPilot(PlayerIndex);
 
     /// <summary>Binds this pane's own camera (the marker projects through it) and, when
@@ -205,14 +171,9 @@ public sealed partial class TargetHud : Control
     /// <summary>Every live aircraft in <paramref name="scan"/>, wrapped as a <see cref="TargetRef"/>
     /// and paired with whether it is on <paramref name="ownTeam"/> (<c>--debug-markers</c>),
     /// skipping <paramref name="own"/>. The team test is the plain identity one, not the assist's: a
-    /// neutral aircraft is nobody's friend, so it marks hostile rather than vanishing, which is what
-    /// a debugging overlay wants.
-    ///
-    /// <para>Wrapping as a <see cref="TargetRef"/> — the same aircraft construction
-    /// <see cref="TargetPool"/>'s Vehicle branch uses — is what lets <see cref="DebugTag"/> read
-    /// health/armor as optional fields rather than a plane-specific read of its own: the moment this
-    /// scan widens past aircraft, a turret or sub-part's <see cref="TargetRef.Health"/> is already
-    /// the right shape (null, correctly).</para></summary>
+    /// neutral aircraft is nobody's friend, so a debugging overlay marks it hostile rather than
+    /// letting it vanish. The <see cref="TargetRef"/> wrapping is what lets <see cref="DebugTag"/>
+    /// read health/armor as optional fields.</summary>
     public static void CollectMarks(int ownTeam, object? own, AimCandidateSet scan,
         List<(TargetRef Target, bool Friendly)> into)
     {
@@ -250,17 +211,12 @@ public sealed partial class TargetHud : Control
         return head.Length > 0 ? head.ToUpperInvariant() : "AI";
     }
 
-    /// <summary><c>--debug-markers</c>' own tag: <c>AI1 Fury 640 m H78 A91 pursue</c>. This is
-    /// the one marker that keeps the FULL identity string — <paramref name="identity"/>
-    /// (<see cref="HostileTag"/>), never collapsed to <paramref name="target"/>'s plane-type-alone
-    /// label the way the shipped marker is (decision 10) — plus the plane type, the slant range,
-    /// health then armor as whole percentages with NO percent sign (decision 12: two figures, health
-    /// first, never a blended one), and finally <paramref name="modeSuffix"/>.
-    ///
-    /// <para>Health and armor are each omitted, not defaulted, when <paramref name="target"/> carries
-    /// no figure for it (<see cref="TargetRef.Health"/>/<see cref="TargetRef.Armor"/> null) — a
-    /// turret emplacement or a bare rig with no damage ledger has no such number to print, and
-    /// <c>H100 A100</c> would be a number the game does not have.</para></summary>
+    /// <summary><c>--debug-markers</c>' own tag: <c>AI1 Fury 640 m H78 A91 pursue</c>. The one
+    /// marker that keeps the FULL identity string rather than the shipped marker's plane-type-alone
+    /// label, plus the plane type, the slant range, health then armor as whole percentages with no
+    /// percent sign, and <paramref name="modeSuffix"/>.
+    /// ⚠ Omit health or armor where the source carries no figure; never default it. <c>H100</c> for
+    /// a turret with no health model is a number the game does not have.</summary>
     public static string DebugTag(string identity, in TargetRef target, float rangeM, string modeSuffix)
     {
         var tag = new StringBuilder(identity);
@@ -288,9 +244,7 @@ public sealed partial class TargetHud : Control
     /// objective is red for the four destructive categories and blue for every other one, and
     /// anything without a category is red when the teams differ and both are non-zero, green
     /// otherwise.
-    ///
-    /// <para>⚠ A friendly is GREEN. Blue is the non-destructive objective (protect, escort), never
-    /// the friendly.</para></summary>
+    /// ⚠ A friendly is GREEN. Blue is the non-destructive objective (protect, escort).</summary>
     public static Color MarkerColor(in TargetRef target, int ownTeam)
     {
         if (target.Category is { Length: > 0 } category)
@@ -312,15 +266,11 @@ public sealed partial class TargetHud : Control
             : HudGreen;
     }
 
-    /// <summary>The bracket gate's arithmetic (<c>FUN_004574d0</c>): solve the lead intercept the aim
-    /// assist's own solver gives, then accept only when the round could still be travelling at that
-    /// intercept inside the weapon's authored <paramref name="range"/>. No intercept (a target
-    /// outrunning the round) is no brackets, at any distance.
-    ///
-    /// <para>⚠ The reach is measured along the MUZZLE VELOCITY — the round's own speed along the
-    /// intercept direction PLUS the plane's velocity — where
-    /// <see cref="AimAssist"/>'s own range gate uses the round speed alone. That difference is the
-    /// original's: the HUD composes the vector, the assist does not.</para></summary>
+    /// <summary>The bracket gate's arithmetic (<c>FUN_004574d0</c>): solve the aim assist's lead
+    /// intercept, accept only inside the weapon's authored <paramref name="range"/>. No intercept
+    /// (a target outrunning the round) is no brackets, at any distance.
+    /// ⚠ Measure the reach along the MUZZLE VELOCITY: the round's speed along the intercept
+    /// direction PLUS the plane's. The assist's own range gate uses the round speed alone.</summary>
     public static bool GunReaches(Vector3 muzzle, Vector3 shooterVel, float speed, float range,
         Vector3 targetPos, Vector3 targetVel)
     {
@@ -335,19 +285,11 @@ public sealed partial class TargetHud : Control
     }
 
     /// <summary>The marker's label lines, top to bottom — the original's three text elements
-    /// (<c>FUN_004579e0</c>): the category line, the name, and the clock bearing. Empty-tolerant by
-    /// construction, which is why an ordinary aircraft shows its name alone
-    /// (<c>Targeting HUD Kestrel.png</c>) and a named objective shows both lines
-    /// (<c>C1 M04 Zeppelin.png</c>) with no format of its own.
-    ///
-    /// <para>⚠ The category SLOT is kept, empty, under a box. The original's three lines sit at
-    /// fixed offsets from the anchor and a blank one simply draws nothing, so an aircraft's name is
-    /// the SECOND line's distance below the box, not the first's — closing that gap puts the name
-    /// into the silhouette. There is no box to measure from at the screen edge, so the block is
-    /// compacted there instead.</para></summary>
-    /// <param name="bearing">The <c>N o'clock</c> line, or null on screen — see
-    /// <see cref="DrawSelected"/> for why that line is the off-screen case only.</param>
-    /// <param name="keepSlots">Whether an empty category line still occupies its slot.</param>
+    /// (<c>FUN_004579e0</c>): the category line, the name, and <paramref name="bearing"/> (null on
+    /// screen, since the clock line is the off-screen case only).
+    /// ⚠ <paramref name="keepSlots"/> holds an empty category SLOT under a box: the original's lines
+    /// sit at fixed offsets, so an aircraft's name is the SECOND line's distance down and closing
+    /// that gap puts the name into the silhouette. At the screen edge there is no box.</summary>
     public static void LabelLines(in TargetRef target, string? bearing, List<string> into,
         bool keepSlots = true)
     {
@@ -440,10 +382,9 @@ public sealed partial class TargetHud : Control
         var font = GetThemeDefaultFont();
         int markerFont = Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s));
 
-        // The shipped marker: the pilot's own sticky selection, in the original's shape.
-        // Drawn in BOTH modes, unlike the hostile tracker below — --debug-markers replaces that
-        // tracker (same shape, two colours) but not this, so the brackets, the label and the debug
-        // string can all draw together in one frame (the c1-targeting-hud golden).
+        // The shipped marker, drawn in BOTH modes unlike the hostile tracker below: --debug-markers
+        // replaces that tracker but not this, so brackets, label and debug string draw in one frame
+        // (the c1-targeting-hud golden).
         bool selected = Selected is { } target && DrawSelected(font, target, s, markerFont);
 
         // --debug-markers: every live aircraft at once, red hostile / blue own side, each with
@@ -469,12 +410,9 @@ public sealed partial class TargetHud : Control
             return;
         }
 
-        // The tracked AI hostile, now a FALLBACK: a pane whose pilot has a selection marks
-        // that one target and nothing else (decision 11), so this draws only where no selection
-        // exists at all — a pane with no TargetSelection bound (a spectator, a suite rig) or one
-        // whose pilot pressed Target Nothing.
-        // UpdateHostile ran this frame, so the reference is at most one scan old; the validity
-        // guard covers a hostile freed between the scan and this draw.
+        // The tracked AI hostile, a FALLBACK: a pilot who has a selection marks that one target and
+        // nothing else, so this draws only where no selection exists at all. The validity guard
+        // covers a hostile freed between UpdateHostile's scan and this draw.
         if (!selected && GodotObject.IsInstanceValid(_hostile) && _hostile is { InPlay: true } hostile
             && hostile.IsInsideTree())
             DrawOpponent(font, hostile.GlobalPosition, HudRed, _hostileTag, s, markerFont);
@@ -490,22 +428,12 @@ public sealed partial class TargetHud : Control
         return center + dir * Mathf.Min(tx, ty);
     }
 
-    /// <summary>The selected target's marker, in the original's own shape: on screen, the fixed-size
-    /// bracket box (when the gun reaches it) with the label block BELOW it; off screen, the edge
-    /// arrow with the same label block plus the clock bearing, and no box — the original's box hides
-    /// off screen because its near-plane test fails.
-    ///
-    /// <para>⚠ The clock line is the OFF-SCREEN case only. <c>FUN_004579e0</c> draws its third line
-    /// unconditionally, but the string it prints comes out of <c>FUN_0049d940</c>'s off-screen pass,
-    /// and <c>Targeting HUD Kestrel.png</c> shows a on-screen target with its name alone under it —
-    /// so a bearing under every marker would be a line the original does not show.</para>
-    ///
-    /// <para>The label block's anchor is <c>FUN_004574d0</c>'s: three pixels under the box, flipping
-    /// to thirty above it when the box sits within 33 pixels of the viewport's bottom edge. The
-    /// anchor is computed from the box whether or not the box is drawn, so a target out of gun range
-    /// keeps its label exactly where a bracketed one has it.</para></summary>
-    /// <returns>False when the target has no source to draw (nothing was drawn), so the caller can
-    /// fall back to the hostile tracker.</returns>
+    // The selected target's marker: on screen, the bracket box (when the gun reaches it) over the
+    // label block; off screen, the edge arrow with that block plus the clock bearing and no box.
+    // The FUN_004574d0 label anchor is computed from the box whether or not the box is drawn, so an
+    // out-of-range target's label does not move. False = nothing drawn, so the caller falls back.
+    // ⚠ The clock line is the OFF-SCREEN case only: the Kestrel shot shows an on-screen target
+    // with its name alone.
     private bool DrawSelected(Font font, in TargetRef target, float s, int fontSize)
     {
         if (target.Source == null)

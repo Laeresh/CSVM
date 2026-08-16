@@ -545,11 +545,9 @@ public partial class FlightController : Node3D
 
     /// <summary>This airframe's stats, the flight model's own copy (jittered for an AI spawn, so it
     /// is the plane's data and not the cached def's). Read for the airframe's DISPLAY NAME
-    /// (<c>PlaneRoster.PlaneDisplayName</c> → <c>Fury</c>) by the targeting pool's label pass,
-    /// which had no way to reach it while the model was private.
-    ///
-    /// <para>Null before <see cref="Setup"/> has bound a flight model — a bare rig the suites
-    /// construct to exercise one seam. A caller that wants a name falls back to the node's.</para></summary>
+    /// (<c>PlaneRoster.PlaneDisplayName</c> → <c>Fury</c>) by the targeting pool's label pass. Null
+    /// before <see cref="Setup"/> has bound a flight model, which is a bare suite rig; a caller
+    /// that wants a name falls back to the node's.</summary>
     public PlaneStats? Stats => _model?.Stats;
 
     /// <summary>Whether this plane is crashed — frozen at the impact, airframe hidden, waiting
@@ -893,20 +891,12 @@ public partial class FlightController : Node3D
     /// the trigger is pulled.</summary>
     public void SelectPylon(int index) => _fire?.SelectPylon(index);
 
-    /// <summary>The decoded bracket gate for the targeting marker (<c>FUN_004574d0</c>,
-    /// docs/org/targeting.md "The range gate is the selected gun's RANGE"): whether the SELECTED
-    /// gun group could reach an intercept on this target inside the weapon's authored
-    /// <c>RANGE</c>. That, not a HUD distance constant, is the original's "brackets only under a
-    /// range threshold" — so the marker is weapon-dependent, and a target outrunning the round is
-    /// never bracketed at any range because the solver returns no intercept.
-    ///
-    /// <para>With no gun group resolvable (a rocket-only loadout, a rig with no weapons) the
-    /// original falls back to a plain <c>distance &lt;= 1e6</c>, which never rejects — so this
-    /// answers TRUE there rather than hiding the brackets.</para></summary>
-    /// <param name="targetPos">The target's world position.</param>
-    /// <param name="targetVel">The target's world velocity, m/s.</param>
-    /// <param name="margin">Extra metres of authored range, the bracket gate's hysteresis. Zero to
-    /// turn the brackets on, <see cref="TargetHud.BracketHysteresis"/> to keep them on.</param>
+    /// <summary>The decoded bracket gate for the targeting marker (<c>FUN_004574d0</c>): whether the
+    /// SELECTED gun group could reach an intercept inside the weapon's authored <c>RANGE</c>. That,
+    /// not a HUD distance constant, is the original's threshold, so the marker is weapon-dependent.
+    /// With no gun group resolvable the original never rejects, and neither does this.
+    /// <paramref name="margin"/> is the hysteresis: zero to turn the brackets on,
+    /// <see cref="TargetHud.BracketHysteresis"/> to keep them on.</summary>
     public bool GunReachesTarget(Vector3 targetPos, Vector3 targetVel, float margin = 0f)
     {
         if (SelectedGun() is not { } sel)
@@ -2192,11 +2182,9 @@ public partial class FlightController : Node3D
             ApplyInitialTarget(sel);
         }
 
-        // Input only while this pilot is actually flying. A downed pilot watches from the freecam
-        // controls (E44), which bind WASD/QE — and `U` among them — so reading targeting keys from a
-        // spectator would both re-target a plane that is not there and fight the camera. The
-        // SELECTION still stands: the rebuild above keeps re-resolving it, so a live target survives
-        // the pilot's own respawn and a dead one has already dropped to the head.
+        // ⚠ Gate the INPUT on InPlay, not the rebuild. The freecam a downed pilot watches from binds
+        // `U` among its own keys, so reading targeting from a spectator both re-targets a plane that
+        // is not there and fights the camera. The selection keeps re-resolving regardless.
         if (!InPlay)
         {
             _targetHold.Step(false, dt);   // let a button held through the crash resolve as nothing

@@ -110,24 +110,11 @@ public sealed partial class ZeppelinRuntime : Node
         Find(node) is { Damage: { } damage } zep ? damage.Survivors(zep.ZoneAlive) : -1;
 
     /// <summary>Appends every live zeppelin's damage zones (gasbags, engines, cannons) to
-    /// <paramref name="into"/>, one candidate per part, for the player-target pool.
-    /// Each part rides its hull, so it carries the zeppelin's own
-    /// velocity (<c>Forward * Speed</c>) rather than zero; a destroyed zone is offered but not live,
-    /// and a part whose anchor has left the tree is skipped rather than read (its global transform
-    /// is meaningless there, the same rule <see cref="AimCandidateSet.AddStructures"/> follows).
-    ///
-    /// <para>A plain list, deliberately NOT an <see cref="AimCandidateSet"/>'s <c>Structures</c>:
-    /// <see cref="TargetPool"/> never reads that list, so the world's destructible registry cannot
-    /// reach the player's cycles even if a future caller feeds a shared scan. This is the only
-    /// channel by which a structure becomes selectable.</para>
-    ///
-    /// <para>⚠ <b>This is a deliberate divergence from the original, not a port of it.</b> The
-    /// decode found NO sub-part enumeration anywhere in the targeting path
-    /// (<c>docs/org/targeting.md</c> "The class model"): a gasbag is selectable there only because
-    /// the mission authored it as its own <c>MStruct</c> carrying <c>otherTarget</c> /
-    /// <c>objectiveTarget</c>. CSVM has no mission flag data to read, so it enumerates the parts it
-    /// already models as damageable instead. Decision 8 asked for this; do not "correct" it back by
-    /// citing the decode.</para></summary>
+    /// <paramref name="into"/>, one candidate per part, for the player-target pool. Each part rides
+    /// its hull, so it carries the zeppelin's own velocity rather than zero. A plain list and NOT
+    /// <see cref="AimCandidateSet"/>'s <c>Structures</c>: this is the only channel by which a
+    /// structure becomes selectable. ⚠ A deliberate divergence, not a port. The decode found no
+    /// sub-part enumeration anywhere; do not "correct" it back by citing the decode.</summary>
     public void CollectTargetParts(List<AimCandidate> into, int team = AimAssist.WorldTeam)
     {
         foreach (var zep in _live)

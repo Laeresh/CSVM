@@ -407,10 +407,9 @@ public partial class GameSession : Node3D
         _worldEffectsFactory = new WorldEffectsFactory(_spec, _worldRoot,
             () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam ? cam.GlobalPosition : Vector3.Zero,
             _ambience, PlayerPositionsSnapshot);
-        // Re-derive every subsystem RNG from the master before anything in the session draws, so
-        // this session's content is a function of its master alone rather than of how long the
-        // previous one ran. The launcher decides what that master is: held for a pinned run (the
-        // rebuild replays), stepped per sortie otherwise (the rebuild is a new mission).
+        // Re-derive every subsystem RNG from the master before anything draws, so this session's
+        // content is a function of its master alone rather than of how long the previous one ran.
+        // The launcher decides that master: held for a pinned run, stepped per sortie otherwise.
         Rng.Reset(_masterSeed, _spec.SeedPinned);
         // One simulation clock per session. --det pins a fixed step, the animation lab is fixed-dt
         // by nature, everything else runs at the wall delta.
