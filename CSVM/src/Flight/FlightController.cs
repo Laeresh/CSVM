@@ -377,10 +377,6 @@ public partial class FlightController : Node3D
     private const float ReticleFarRate = 1788.1599f;   // m/s that flat ceiling
     private const float UnderMapY = 0f;        // C1 terrain sits at y≈100+; below this we're lost
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
-    private const float ProbeHullRadiusM = 10f; // INVENTED: the avoid-crash probe's swept sphere —
-                                                // roughly a fighter's half-span, so the lookahead
-                                                // asks whether an aeroplane fits rather than
-                                                // whether a zero-width line is clear
     private const float AutoRespawnDelay = 1.5f; // s a HoldInput run stays crashed before auto-respawn
     private const float DebugFinishStagger = 1.5f; // s between players' forced finishes (--debug-scoreboard in a race)
 
@@ -445,7 +441,6 @@ public partial class FlightController : Node3D
     private bool _haltPrev;                      // previous frame's clock-halt state (orbit seeding)
     private bool _cyclePrev;                     // previous frame's stunt cycle-target key state (edge detection)
     private ImmediateMesh? _probe;               // debug collision-probe line
-    private SphereShape3D? _probeShape;          // the avoid-crash sweep's hull, built once
     private float _damageCooldown;               // s left before the next HP subtraction
     private float _grazeReactionCooldown;        // s left before the next touchdown_* reaction
     private float _damageFlash;                  // s left on the HUD impact line
@@ -1557,40 +1552,23 @@ public partial class FlightController : Node3D
     /// is deactivated around the cast; see docs/org/aiPilot.md, "What the ray can hit"), so this is
     /// not <see cref="WorldBlocksLine"/>.
     ///
-    /// <para>⚠ The SWEPT SPHERE is invented; the original casts a bare line. A fighter is a very
-    /// thin target for a zero-width ray, which the decode itself flags, so the probe asks "does a
-    /// body of my size fit along this path" instead of "is this line clear". A sweep that starts
-    /// already overlapping answers nothing about the lookahead and reads as clear — the aeroplane
-    /// is evidently still flying, and latching avoid crash on it would never release.</para></summary>
+    /// <para>⚠ Widening this to a swept sphere was tried and REVERTED (2026-08-16). It works as a
+    /// detector — arms on another aeroplane went from 13.8 to 66.7 per run — and changes nothing
+    /// that matters: mid-airs held at 3.5 per run against the ray's 3.6, over six and eight runs
+    /// of the same 5-versus-5. Detection was never the bottleneck, so the decoded zero-width ray
+    /// stays and the two extra physics queries per probe do not.</para></summary>
     internal string? AvoidCrashBlocksLine(Vector3 from, Vector3 to)
     {
         var space = GetWorld3D()?.DirectSpaceState;
-        var motion = to - from;
-        if (space == null || motion.LengthSquared() < 1e-6f)
+        if (space == null)
             return null;
-        _probeShape ??= new SphereShape3D { Radius = ProbeHullRadiusM };
-        var query = new PhysicsShapeQueryParameters3D
-        {
-            Shape = _probeShape,
-            Transform = new Transform3D(Basis.Identity, from),
-            Motion = motion,
-            CollisionMask = CollisionLayers.WorldAndAircraft,
-        };
-        if (Body != null)
-            query.Exclude = Body.ExcludeSelf;
-        var cast = space.CastMotion(query); // [safe, unsafe] fractions; [1,1] = clear
-        if (cast[0] >= 1f)
-            return null;
-
-        // Name the blocker (and settle the already-overlapping case) by parking the sphere at the
-        // first-contact pose: no overlap there means the sweep started inside something.
-        query.Transform = new Transform3D(Basis.Identity, from + (motion * (float)cast[1]));
-        var hits = space.IntersectShape(query, 1);
-        if (hits.Count == 0)
+        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+            from, to, CollisionLayers.WorldAndAircraft, Body?.ExcludeSelf));
+        if (hit.Count == 0)
             return null;
         // The name is the diagnostic: a block on "a5/col" is terrain, one on
-        // "ai6_player_bhawk/airframe" is the aircraft case the decode says this probe also covers.
-        return hits[0]["collider"].Obj is Node body
+        // "ai6_player_bhawk/airframe" is the aircraft case the decode says this ray also covers.
+        return hit["collider"].Obj is Node body
             ? $"{body.GetParent()?.Name}/{body.Name}"
             : "unnamed";
     }
