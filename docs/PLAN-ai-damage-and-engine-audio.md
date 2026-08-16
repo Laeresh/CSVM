@@ -187,8 +187,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 23. ☑ Decode `start: null` after a timed event (❌ disproven as the cause; the real mechanism is the
     dead vehicle flying itself until `Callback 15`), and convert the anim family off `GD.Print`
 24. ☐ A dead hull glides instead of dropping: no lift and high drag once the engine is out
-25. ☐ `player-player` authors `Callback 15` untimed, so a dead player's hull freezes on the kill
-    frame and never reaches its ground-impact def — judge at the controls, against the two reference recordings
+25. ☐ Play the player's own destroy choreography: four flying pieces, the cockpit eject, `Callback 3`, against the two reference recordings
 
 ## ⚠ Wave D — what Waves A to C got wrong
 
@@ -818,6 +817,45 @@ The recordings confirm the gate rather than contradicting it: airburst to parach
 "second explosion after the parachute", is authored *simultaneous* with it and reads as sequential
 only because by then the wreck is about 175 m downrange. Our wreck never moved, so the two landed on
 top of each other, which is exactly the symptom reported at the controls.
+
+## D25 ☐ Play the player's own destroy choreography
+
+**Goal.** A shot-down player's aircraft does to every other pilot watching it what the original's
+does: it comes apart, rather than vanishing or hanging in the air.
+
+**Evidence (confidence: traced).** `player-player` is far richer than any AI airframe's destroy def
+and **does not fall as an intact hull by design**. `destroy` branches on an `If` into either the
+autogyro arm (`Callback 3`, `rem_pas`, `autogyro_stoprotor`, `autogyro_loserotor` at `Event 0.15`,
+`cpeject1`, `sputter_firetrail`) or `random_destroy` (`rem_pas`, `Callback 3`, `dense_firetrail`,
+then an `If`/`Else` choosing `cpeject1` or `cpeject2`); both converge on `destroy_craft`, which calls
+`call_pd_trails`, `chuteman`, `Callback 16`, `Callback 15`, four `ObjectActiveState` swaps, then
+`piece1seq` through `piece4seq` and `air_mixed_exp_sg`. Each `pieceNseq` shows its piece, hangs a
+`large_firetrail` on it and flies it with its own `ObjectMotion`; each `pNgrndhit` lands it with a
+`large_fireball` and `ground_mixed_exp_sg` at `Event 0.5`. So a dead player breaks into four burning
+pieces that fly and explode where each lands, with a cockpit ejection and a parachutist.
+
+**This settles the untimed `Callback 15`.** It is not an oversight: the player's hull is not meant to
+keep flying, so the vehicle is released on the kill frame and the four pieces take over in the same
+instant. The AI's three-second glide and the player's instant disintegration are two deliberate
+designs, not an inconsistency, and **no separate networked-multiplayer path is needed** — playing the
+self-named destroy def whole gives each its own authored death off one code path.
+
+**Approach.** Confirm the piece sequences actually play and that `BuildDestroyed`'s `pieceN` meshes
+are what they move. Then the two gaps: `cpeject1` / `cpeject2` / `cpejectstop` are shipped defs we
+have never played, and the `If`/`Else` that chooses between them needs its condition read rather than
+guessed; and `Callback 3`, which fires immediately before `rem_pas` in both arms, is unimplemented
+(D18 handled 15 and 16 only and counts 3 as unknown). Decode 3 rather than inventing a meaning.
+
+**Model recommendation.** high — it is the player-visible half of the death path, and the `If`
+branches mean a wrong reading silently picks the wrong choreography.
+
+**Verify.** Get shot down in a session with another pilot watching, and confirm four burning pieces
+with their own impacts rather than a vanished or frozen aircraft. The `ai-crash-defs` suite already
+builds a human rig off the production factory and is the headless half.
+
+**⚠ Traps.** Do not reach for a special multiplayer branch: the asymmetry this plan keeps being
+bitten by is exactly what one code path playing authored data avoids. `rem_pas` (remove passenger)
+is unread and may matter for the multi-crew airframes.
 
 **Playtest (owed, Wave D).** Shoot down an enemy and watch the whole sequence against
 `Enemy AI Shotdown.mp4`: airburst, burning wreck falling on its old heading, parachute, second
