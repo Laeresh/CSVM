@@ -110,6 +110,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/ManeuverExecutor.cs` — plays one maneuver's attitude-step program as `FlightInput` per sim step: the input source D11's state machine runs during `evasive maneuver`.
 - `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
+- `src/Flight/DisablingIntensity.cs` — the decoded `SONIC`/`FLASH` intensity plateau and `FLASH`'s facing test, on squared distances; feeds the player's wash weight and the AI stun's duration.
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
 - `src/Flight/CameraController.cs` — the flown plane's camera: roll-following chase, numpad fixed views, paused orbit. Steers a `Camera3D` it does not own.
 - `src/Flight/ImpactOutcome.cs` — what a weapon×surface hit should do (effect, sound, stand-in, damage) as a value; `Resolve` is pure and engine-free.
@@ -1066,6 +1067,17 @@ walk — range cap and 4096-iteration bound included — called once per frame b
 rule asks for). Extracted so the two callers cannot
 silently diverge; each still owns its own step size. The weapon census behind why a fixed `dt` is
 safe for `March`: [formats/weapons.md](formats/weapons.md).
+
+## src/Flight/DisablingIntensity.cs
+The shared `SONIC`/`FLASH` intensity (`FUN_0042e840`, decoded in
+[org/ordnanceTypes.md](org/ordnanceTypes.md)): a static, Godot-`Node`-free `TryResolve` returning the
+wash weight and the stun duration (five times it), plus `FacingDot` for the `FLASH` direction
+convention. The curve is a plateau, full strength to a squared ratio of 0.6 (77% of the radius) and
+fading over the last quarter, so **both distance inputs are squares** — the engine's distance routine
+returns a square and this path never takes a root. `FLASH` adds the facing test (nothing behind the
+victim, scaled by twice the dot below 0.5); `SONIC` does not, and that is the only behavioural
+difference between the flags. The consumers are the player's screen wash, the AI stun and the smoke
+screen; the module itself knows about none of them.
 
 ## src/Flight/CamParams.cs
 One aircraft's camera tuning out of `camparam.json` ([formats/camparam.md](formats/camparam.md)):

@@ -550,7 +550,9 @@ quarter. It is a plateau, not a falloff.
 
 **`FLASH` additionally requires the victim to be facing it**, and `SONIC` does not. For a `FLASH`,
 the routine dots the unit vector toward the burst against the victim's forward axis and returns zero
-if that dot is negative, halving in below 0.5. A flash going off behind you does nothing; a sonic
+if that dot is negative. Below 0.5 it scales the intensity by **twice the dot**, which meets the
+unscaled value exactly at 0.5 and ramps to nothing at 0, so a burst 60° off the nose is untouched and
+one at 66° keeps 80% of its strength. A flash going off behind you does nothing; a sonic
 burst behind you works at full strength. That is the one place the two flags differ beyond the
 screen colour.
 

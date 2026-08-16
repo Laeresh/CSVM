@@ -171,7 +171,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — Disabling effects
 
 13. ☐ `ScreenFlash`: the victim-routed blend channel
-14. ☐ `SONIC`/`FLASH`: the shared intensity model
+14. ☑ `SONIC`/`FLASH`: the shared intensity model
 15. ☐ The player's screen wash: colour, weight, duration, blending
 16. ☐ The AI stun
 17. ☐ `TANGLER`: the engine-dead timer
@@ -537,7 +537,12 @@ untouched, and an HE burst still washes by proximity exactly as it did. Take the
 **⚠ Traps.** Do not reproduce the original's single global. It is the one place in this plan where
 matching the original would produce a worse game, and Decision 2 records that as deliberate.
 
-## D14 ☐ `SONIC`/`FLASH`: the shared intensity model
+## D14 ☑ `SONIC`/`FLASH`: the shared intensity model
+
+**Verdict.** Landed as `Flight/DisablingIntensity.cs`, a pure `TryResolve` on squared distances
+returning the intensity and five times it, with `FLASH`'s facing test behind a flag. One correction
+to this item's own text: the facing scale below a dot of 0.5 is **twice the dot**, not a halving, so
+it ramps continuously to nothing at 0 and meets the unscaled value exactly at 0.5.
 
 **Goal.** One intensity number, correct for both weapons, driving both the human and the AI effect.
 
