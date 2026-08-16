@@ -256,7 +256,8 @@ public static class Suites
             "as mutable state (0.7 player weight, primary_target override, a 'player' assignment " +
             "resolving to the NEAREST human of several, 1e21 activation " +
             "cutoff, all live in the engine), refuses the shot " +
-            "outside the ±11° forward gun cone and outside its quick-draw cone off the target's " +
+            "when the residual after the ±11° traverse clamp exceeds the gun's 10° aim gate, and " +
+            "outside its quick-draw cone off the target's " +
             "nose/tail, fires real rounds through the fire-control path under its own shooter id " +
             "with dead-eye scatter (skill 1 hits measurably less than skill 9), downs the target " +
             "with the kill attributed, and NEVER gets the human aim assist (the IsHumanPiloted " +
@@ -6617,14 +6618,14 @@ public static class Suites
             ctx.Check(gun.Ammo < ammoAtBeam,
                 $"the same bearing is taken at rating 9 (89°) rounds={ammoAtBeam - gun.Ammo}");
 
-            // --- the forward gun cone is a hard gate: nose 30° off the bearing, quick draw
-            // willing — no fire.
+            // --- the aim gate: nose 30° off the bearing clamps to the airframe's 11° and leaves
+            // a 19° residual, past the gun's 10°, so the shot is refused with quick draw willing.
             ai.PlaceHeld(beamPos, beamPos + (targetPos - beamPos).Normalized()
                 .Rotated(Vector3.Up, Mathf.DegToRad(30f)) * 100f);
             int ammoAtOffBore = gun.Ammo;
             Step(60);
             ctx.Check(!gunner.WantsFire && gun.Ammo == ammoAtOffBore,
-                $"outside the ±11° forward cone the AI holds fire (nose 30° off)");
+                $"a 19° residual after the traverse clamp holds fire (nose 30° off)");
 
             // Dead-eye scatter, skill 1 against 9 on fixed geometry: the high rear quarter at ~212 m, where the
             // planform presents real area. Dead astern the airframe is edge-on and both cones mostly miss,

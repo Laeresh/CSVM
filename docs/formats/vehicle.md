@@ -383,7 +383,7 @@ gunner's whole behaviour, arcs included, lives in the `ai.zrd` row the title nam
 ([turrets.md](turrets.md)). **Consumed since M4 C9a**: `PlaneStats` parses the block and
 `TurretController` drives the `thirdp` rig as a live gunner.
 
-**`gun_pitch` / `gun_yaw` are the AI's forward-gun aiming cone, not a turret arc.** Both keys
+**`gun_pitch` / `gun_yaw` are the AI's forward-gun traverse limits, not a turret arc.** Both keys
 appear exactly 12 times, always together, always `[-11, 11]` (degrees), and always on an AI
 airframe def — a census settles which:
 
@@ -396,8 +396,11 @@ airframe def — a census settles which:
   (`pavenger`, `pbalmoral`, `pbrigand`, `pfirebrand`, `pkestrel`). A turret arc would have to be
   on the plane that mounts the turret; this is on the plane that has an AI pilot.
 
-±11° is the AI's fixed-gun firing tolerance. The design's gunnery model backs the reading — an
-NPC's Dead Eye statistic sets the radius of a lead sphere it will shoot into.
+±11° is how far the AI's gun mount may be brought off the nose. It bounds the aim rather than
+vetoing the shot: the engine clamps the lead into the band and gates on the residual the clamp
+leaves, so the angle an AI will actually fire across is wider than the band
+([`../org/aiPilot/aiWeapons.md`](../org/aiPilot/aiWeapons.md)). The design's gunnery model backs
+the reading — an NPC's Dead Eye statistic sets the radius of a lead sphere it will shoot into.
 
 **`bullethole_anims`** — per player plane, the ON_CALL cockpit-glass hit-decal anims
 `bullet1`…`bullet5` (see [anim-definitions.md](anim-definitions.md)).

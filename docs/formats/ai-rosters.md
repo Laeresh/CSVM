@@ -193,7 +193,7 @@ pair per stat**, the endpoints the rating interpolates between.
 | `sixth_sense_factor` | 0.994 | 1.07 | ~~the ease-off factor applied while being pursued~~ **decoded: a flat multiplier on the AI's three stick channels, applied every frame on the non-emergency path** ([aiControlLaw.md](../org/aiControlLaw.md#the-skill-scalar-and-how-a-1-to-9-rating-interpolates)). Not conditional on being pursued |
 | `dead_eye_angle` | 4.0° | 1.45° | half-angle of the aiming-error cone around the lead point |
 | `quick_draw_angle` | 50° | 89° | half-angle of the cones off the target's nose/tail within which a shot is taken |
-| `quick_draw_chance` | 0.05 | 0.44 | probability of taking a marginal shot |
+| `quick_draw_chance` | 0.05 | 0.44 | the per-launch ordnance roll, and nothing else: guns are not subject to it ([aiWeapons.md](../org/aiPilot/aiWeapons.md#the-fire-routine-and-the-aim-gate)) |
 | `steady_hand_chance` | 0.5 | 0.08 | probability of breaking off into Evade after absorbing damage |
 | `stun_recovery_interval` | 4.8 s | 0.6 s | how long the pilot flies straight after being stunned |
 | `talker_chance` | 0.25 | 0.95 | probability of actually playing a triggered voice line |

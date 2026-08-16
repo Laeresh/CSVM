@@ -1115,31 +1115,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   fraction, so a regression shows up as a count.
   *Playtest after fix:* fly against a Black Hat flight and confirm rockets are aimed at you and
   read as a threat rather than noise.
-  *Cross-refs:* `BL-394` (what an AI carries; this item is only the trigger), `BL-396` (the gun
-  gates the same decode calls into question), `BL-227` (blast falloff),
-  `analysis/ai-ordnance-census/`.
-
-- `BL-396` `[Research]` **Verify our AI gun gates against the decoded fire path.** `AiGunner`'s
-  three gates were assembled from authored data, not read out of the executable: the RANGE-reach
-  test, the ±11° `gun_pitch`/`gun_yaw` airframe cone as a hard fire gate, and the quick-draw cone
-  off the target's nose/tail axis. The `BL-395` decode reached the routine that actually fires
-  (`FUN_0041f420` + `FUN_004b6820`) and it does not obviously agree. It applies a **10° aim-quality
-  gate on the mount's lead solution**, a per-weapon **squared** `[min, max]` range window from the
-  def (1–900 m for every AI gun), and the quick-draw cosine as an early all-or-nothing return
-  rather than a per-shot filter. Whether `gun_pitch`/`gun_yaw` gate firing at all, or only the
-  mount's traverse, is the open question.
-  *Do:* read `FUN_0041f420`'s gun path and `FUN_004b6820`'s aim gate against
-  `AiGunner.Solve`/`ShotDirection` gate by gate, and record the verdict as a line in
-  [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md). Confirmation closes this item;
-  a contradiction re-tags it `[Bug]` and it carries its own fix.
-  ⚠ *Traps.* (a) `AiGunner` is landed, unit-tested (`AiGunnerTests`) and covered by the
-  `ai-gunnery` suite, and a gate change is a regression risk with its own verification burden, which
-  is why this is separate from `BL-395`. (b) The dead-eye scatter is a different mechanism from the
-  aim gate; do not conflate the cone the AI *shoots inside* with the quality threshold it *waits
-  for*. (c) The min-range floor of 1 m is authored, not a sentinel. It is the same field that
-  carries 200 m on ordnance.
-  *Cross-refs:* `BL-395`, `docs/formats/ai-rosters.md` ("ai_skill_parameters"),
-  `docs/architecture.md` `src/Flight/AiGunner.cs`.
+  *Cross-refs:* `BL-394` (what an AI carries; this item is only the trigger), `BL-227` (blast
+  falloff), `analysis/ai-ordnance-census/`. The gun half of the same decode is settled: `AiGunner`
+  runs the squared engagement window and the clamp-then-residual aim gate, so an `AiRocketeer`
+  copies that shape with the ordnance thresholds (5°, the vehicle-wide lockout, the roll).
 
 - `BL-401` `[Bug]` **The node names we spawn do not match the names the rosters author, so
   `rating_biases` matches nothing.** *Evidence:* `ObjectiveBiasFor(fc.Name, gunner.RatingBiases)`
