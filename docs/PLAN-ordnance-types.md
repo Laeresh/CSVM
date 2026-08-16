@@ -159,8 +159,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 6. ☐ The steering step: both gates, the turn clamp, the speed penalty
 7. ☐ `LOCK_ON_LEAD`: blend from bearing to intercept
-8. ☐ The beeper tag: world list, countdown, expiry tail
-9. ☐ `BEEPER_SEEKER`: the per-frame retarget and its selection rule
+8. ◐ The beeper tag: world list, countdown, expiry tail
+9. ◐ `BEEPER_SEEKER`: the per-frame retarget and its selection rule
 
 ### Wave C — The blast
 
@@ -441,7 +441,22 @@ must lead the target progressively rather than stepping to full lead at the onse
 doing three of them (guidance ramp denominator, velocity-decay window, and the inherit-at-all flag).
 Do not collapse them.
 
-## B8 ☐ The beeper tag: world list, countdown, expiry tail
+## B8 ◐ The beeper tag: world list, countdown, expiry tail
+
+**Verdict.** The list landed as `Flight/BeeperTags.cs`: `BeeperTags<FlightController>` is built
+per session beside the smoke screens, stepped after every aircraft in both step paths, and handed
+to the pool as `ProjectilePool.BeeperTags`; the hit-side call (`TryTag(shooterTeam, victim,
+BeeperTime)` on a `BEEPER` hit against an aircraft, dealing zero damage) is pending in the
+Projectile lane, so nothing paints yet. Three things this item's own text left open, settled from
+the code and recorded on the decode page: the countdown does not stop at zero, it keeps running to
+the −5 deletion (four seconds after a slam, five after a plain expiry), and the slam fires only
+while the tag still paints, so a death in the tail does not restart it; a second beeper hit on a
+live-tagged aircraft makes no tag and does not refresh the first (`FUN_004b8ca0` inside the gate
+`FUN_004b8ce0`), while an aircraft in its tail takes a fresh one; and the gate also refuses a
+non-hostile shooter (same team or either neutral, `AimAssist.Hostile`) and any second tag in the
+same frame (the original stamps its clock on each creation), which here is one tag per sim step.
+This item's trap is moot in this install: `wep_10` authors `ARMOR_DAMAGE 0.0` /
+`HEALTH_DAMAGE 0.0`, so there is no real pair to spend. Pinned by `BeeperTagsTests`.
 
 **Goal.** A beeper hit paints its target for the authored time, and the paint expires cleanly.
 
@@ -460,7 +475,22 @@ lifetime matches `TIME` with the aircraft alive and collapses immediately when i
 
 **⚠ Traps.** `wep_10` authors a real damage pair that the engine discards. Do not spend it.
 
-## B9 ☐ `BEEPER_SEEKER`: the per-frame retarget and its selection rule
+## B9 ◐ `BEEPER_SEEKER`: the per-frame retarget and its selection rule
+
+**Verdict.** The selection rule landed as `BeeperTags<FlightController>.PickTarget(roundPos,
+roundHeading)` over `BeeperTagRule.AlignmentDot` and `BeeperTagRule.Prefers`, with the four
+literals as named constants; the per-frame retarget itself (a `BEEPER_SEEKER` round calling
+`PickTarget` each frame and writing the result into `Proj.Target` for B6's steering step) is
+pending in the Projectile lane. Two corrections to this item's own text, re-read off
+`0x004b8b50`–`0x004b8c91` and recorded on the decode page: both ratios are of SQUARED distances
+(`FUN_00538880`, and the routine keeps `1 / bestDistanceSq`), so "up to 20% farther" is about 9.5%
+as a length; and the net effect is not "alignment leads". With the inverted dot, `candDot <= 0.7`
+is any tag less than about 134° off the round's nose, so a nearer tag steals outright unless it
+sits well behind the round, and only then must it give up under 0.1 of alignment; a
+better-aligned tag that is farther steals only inside the 1.2 squared window. The pick is a
+running best in tag order, so a near-worse and a far-better pair inside that window resolves to
+whichever was tagged later, which the tests pin as decoded behaviour rather than a total order.
+Pinned by `BeeperTagsTests` at every threshold from both sides.
 
 **Goal.** A seeker follows whatever a beeper has painted, choosing sensibly among several.
 

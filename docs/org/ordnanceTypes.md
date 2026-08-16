@@ -409,13 +409,24 @@ walks exactly the set that could fuse, and a plain round is invisible to it.
 
 ### The full beeper loop
 
-1. A `BEEPER` round reaches an aircraft. `FUN_004b9bc0` zeroes its damage and calls `FUN_004b88a0`,
-   which builds a tag object carrying the weapon's shared `TIME` and pushes it onto the tag list
-   `DAT_0071dbac` (count `DAT_0071dbb0`).
-2. `FUN_004b8ad0` counts every tag down by the frame delta through `FUN_004b89c0`. If the tagged
-   aircraft dies or is removed (`+0x91d`/`+0x91f`), the countdown is slammed to **-1.0**. Crossing
-   zero calls `FUN_004b8970`, which is where the tag stops being usable; the entry is only deleted
-   once it passes **-5.0**, so there is a five-second tail after expiry.
+1. A `BEEPER` round reaches an aircraft. `FUN_004b9bc0` zeroes its damage and, if the gate
+   `FUN_004b8ce0` passes, calls `FUN_004b88a0`, which builds a tag object carrying the weapon's
+   shared `TIME`, appends it to the tail of the tag list `DAT_0071dbac` (count `DAT_0071dbb0`) and
+   stamps the original's clock `DAT_0071c470` into `DAT_0071dcc0+8` (`FUN_004b8d40`). The gate refuses
+   three things, in this order: shooter and victim on the same team or either on team 0 (`+0x8`,
+   the same test the aim assist runs); a victim that already carries a tag with a countdown above
+   zero (`FUN_004b8ca0`), so a second beeper hit on a painted aircraft makes no tag and does **not**
+   refresh the first, while an aircraft whose tag is in its tail takes a fresh one; and a clock
+   equal to the stamp, so at most one tag is created per frame however many rounds of a
+   `CLUSTER_SIZE [4]` salvo land in it. A hit on a dead victim never reaches the branch: the
+   routine returns on `+0x91d` before the type dispatch.
+2. `FUN_004b8ad0` counts every tag down by the frame delta through `FUN_004b89c0`. While the tag's
+   effect object (`+0x4`) still exists, a tagged aircraft that dies or is removed
+   (`+0x91d`/`+0x91f`) has the countdown slammed to **-1.0** before that frame's decrement. The frame
+   that takes it to or below zero calls `FUN_004b8970`, which releases the effect and is where the
+   tag stops being usable; the slam never fires again after that, so a death during the tail does
+   not restart it. The countdown does not stop at zero: it keeps running, and the entry is deleted
+   only once it sits at or below **-5.0**, a five-second tail after expiry (four after a slam).
 3. A `BEEPER_SEEKER` round's callback `FUN_00441780` queries the tag list every frame through
    `FUN_004b8b50`, passing the round's **position** (`+0x48`) and **heading** (`+0x3c`). Tags with a
    countdown at or below zero are skipped.
@@ -428,20 +439,26 @@ walks exactly the set that could fuse, and a plain round is invisible to it.
 
 Read from the branch structure at `0x004b8c03`–`0x004b8c72`, with all four constants read out of the
 image. **The dot's sign is inverted from the intuitive one**: the vector is taken from the tag toward
-the round and dotted with the round's heading, so a tag **directly ahead scores near -1** and a lower
-dot is a better-aligned candidate. With that convention, and writing `ratio` for
-`candidateDistance / bestDistance`:
+the round (`+0x48` minus the aircraft's position, normalised by `FUN_00422690`) and dotted with the
+round's heading `+0x3c` (the unit direction the steering step multiplies by speed to make the
+velocity, so it is the forward axis), so a tag **directly ahead scores near -1** and a lower dot is a
+better-aligned candidate. **The distances are squared**: `FUN_00538880` returns a squared distance
+and the routine keeps `1 / bestDistanceSq` (`FDIVR` at `0x004b8c67`) to form the ratio, so writing
+`ratio` for `candidateDistanceSq / bestDistanceSq`:
 
 - **No current best** → take the candidate.
 - **Candidate better aligned** (`candDot < bestDot`) → take it if `ratio < 1.2`. A better-aligned tag
-  is allowed to be up to 20% farther away.
+  is allowed to be up to 20% farther away in squared distance, which is about 9.5% as a length.
 - **Candidate worse or equally aligned** (`candDot >= bestDot`) → take it only if it is strictly
-  nearer (`ratio < 1.0`) **and** its alignment is not much worse, meaning
-  `candDot <= 0.7` or `candDot < bestDot + 0.1`.
+  nearer (`ratio < 1.0`) **and** either `candDot <= 0.7` or `candDot < bestDot + 0.1`.
 
 The four constants are `1.2` (`0x006040ac`), `1.0` (`0x006032dc`), `0.7` (`0x006035b0`) and `0.1`
-(`0x006034a8`). Net effect: alignment leads, range breaks near-ties, and a nearer tag can only steal
-the pick if it gives up less than 0.1 of alignment.
+(`0x006034a8`). Net effect: **range leads**. With the inverted dot, `candDot <= 0.7` is any tag less
+than about 134° off the round's nose, so a nearer tag steals the pick outright unless it sits well
+behind the round, and only then must it give up less than 0.1 of alignment. A better-aligned tag
+that is farther steals only inside the 20% squared-distance window. The pick is a running best in
+list order (creation order), not a total order: a near-worse tag and a far-better one inside that
+window each replace the other, so that pair resolves to whichever was tagged later.
 
 So the two weapons are one system: `wep_10` paints a target for its `TIME`, and `wep_11`, the sole
 `BEEPER_SEEKER` and the sole weapon with a real `TURN_RATE` (1.25), homes on whatever is painted.
@@ -585,9 +602,11 @@ and the branch order is what decides which types can ever deal damage:
 **Four of the twelve types cannot damage anything.** `SONIC`, `FLASH`, `BEEPER` and `TANGLER` each
 zero the damage pair before returning, so their authored `ARMOR_DAMAGE`/`HEALTH_DAMAGE` figures are
 never spent. For `FLASH` (`wep_09`) and the flare (`wep_15`) that matches the authored `DAMAGE 0`;
-for `SONIC` (`wep_08`), the `BEEPER` (`wep_10`) and the choker (`wep_12`), which all carry a real
-damage pair, **the data is misleading and the engine discards it**. Dealing no damage is not the same
-as doing nothing, though: three of the four disable the victim instead, which is the section below.
+`SONIC` (`wep_08`), the `BEEPER` (`wep_10`) and the choker (`wep_12`) author the pair itself, as
+`ARMOR_DAMAGE 0.0` / `HEALTH_DAMAGE 0.0` in this install's `weapons.zrd.json`, so the zeroing changes
+nothing here and would only bite an entry authoring a non-zero pair on one of these types. Dealing
+no damage is not the same as doing nothing, though: three of the four disable the victim instead,
+which is the section below.
 
 ## What the no-damage types do, to the player and to an AI
 

@@ -55,6 +55,11 @@ public sealed partial class ProjectilePool : Node3D
     /// <see cref="GunEffectTtl"/>, rockets/ordnance take the default.</summary>
     public System.Action<string, Vector3, float>? EffectSink;
 
+    /// <summary>The world's beeper tags: a <c>BEEPER</c> hit on an aircraft calls its
+    /// <c>TryTag</c>, a <c>BEEPER_SEEKER</c> round asks its <c>PickTarget</c> each frame. Assigned by
+    /// the session beside the sinks above; null (a lab, a headless view) tags and seeks nothing.</summary>
+    public BeeperTags<FlightController>? BeeperTags;
+
     internal const float WorldGravity = PhysicsConstants.NomGravity; // the sprite debris (casings,
                                                                      // sparks) falls at it; a round
                                                                      // does not — a weapon's own

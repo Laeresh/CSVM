@@ -169,6 +169,9 @@ public partial class GameSession : Node3D
     // The active smoke screens (D18): laid by the SMOKE_SCREEN fire path, walked over every rig
     // and AI plane each sim step, washing humans through _screenFlash and stunning AI pilots.
     private SmokeScreens? _smokeScreens;
+    // The beeper tags (B8/B9): the projectile pool tags on a BEEPER hit and asks for a seeker's
+    // target; the list itself counts down here, after every aircraft, in both step paths.
+    private BeeperTags<FlightController>? _beeperTags;
     private Node3D? _plane;
     // The session's simulation clock (see GameClock). Also published as GameClock.Current, which
     // is how the sim consumers scattered through the tree reach it; dropped by ReturnToMenu.
@@ -485,6 +488,8 @@ public partial class GameSession : Node3D
         var screenFlashSink = _screenFlash;
         _smokeScreens = new SmokeScreens(smokeTunables, AllAircraft,
             (playerIndex, colour, weight, duration) => screenFlashSink.PlayBlend(playerIndex, colour, weight, duration));
+        // A fresh list per build: a tag never outlives the session that painted it.
+        _beeperTags = new BeeperTags<FlightController>();
 
         // The chapter-dependent paths are recomputed here so a new launchscreen chapter selection
         // takes effect on rebuild, and ride BuildState so no phase method re-derives them.
@@ -736,6 +741,7 @@ public partial class GameSession : Node3D
         // On a realtime clock the walk reads whatever pose each aircraft holds at this node's
         // tick; a step's stale pose is at most one 60 Hz frame of a 600 m cone.
         _smokeScreens?.SimStep(dt);
+        _beeperTags?.SimStep(dt);
     }
 
     private static void CopyInstanceShaderParams(Node source, Node copy)
@@ -1707,6 +1713,7 @@ public partial class GameSession : Node3D
             // nearest-human snapshot shared with WorldSession and the world-effects runtime.
             MixGain = mixGain,
             PlayerPositions = PlayerPositionsSnapshot,
+            BeeperTags = _beeperTags,
         };
         // ⚠ Bind EVERY pane's camera, never player 1's alone. The tracer pixel floor is a
         // screen-space rule over one shared world mesh, so a single viewer sizes every round
@@ -3374,6 +3381,10 @@ public partial class GameSession : Node3D
             // The smoke screens after every aircraft has moved this step: the walk reads the
             // layer's and the victims' poses as they stand now, as the original's does.
             _smokeScreens?.SimStep(dt);
+            // The tags after the pool has hit and the aircraft have died this step: a tag on a
+            // crashed aircraft collapses on the same step's tick, and the per-step tag gate re-arms
+            // only once the pool's hits are in.
+            _beeperTags?.SimStep(dt);
             // The voice dispatch's mission clock: the 2 s mute window and every 15 s
             // slot cooldown run on sim time, so a halted clock halts the chatter too.
             _aiVoice?.Step(dt);

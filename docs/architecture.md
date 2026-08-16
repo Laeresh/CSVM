@@ -114,6 +114,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/DisablingIntensity.cs` — the decoded `SONIC`/`FLASH` intensity plateau and `FLASH`'s facing test, on squared distances; feeds the player's wash weight and the AI stun's duration.
 - `src/Flight/TanglerChoke.cs` — the choker's engine-dead duration and the `ENGINE_DEAD` globals it reads; the original's squared-distance-over-raw-radius mismatch, reproduced.
 - `src/Flight/SmokeScreens.cs` — the smoke screen's stun trap: the world's active screens, walked over the roster every sim step to stun AI and wash humans behind the layer; the cone rule, the wash cadence and the three `player.json` tunables beside it.
+- `src/Flight/BeeperTags.cs` — the beeper's paint and the seeker's pick: the world's tag list with its countdown, dead-aircraft slam and five-second tail, the tagging gate, and the per-frame query with the original's inverted-dot, squared-distance selection rule.
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
 - `src/Flight/CameraController.cs` — the flown plane's camera: roll-following chase, numpad fixed views, paused orbit. Steers a `Camera3D` it does not own.
 - `src/Flight/ImpactOutcome.cs` — what a weapon×surface hit should do (effect, sound, stand-in, damage) as a value; `Resolve` is pure and engine-free.
@@ -1130,6 +1131,38 @@ live five-aircraft roster: the AI astern stunned throughout and recovering after
 beyond 85° untouched, the human astern washed on its own pane while the layer's and a third human's
 stay clear, a downed layer's screen ending at once). Not a `Node`; the session owns and steps it.
 
+## src/Flight/BeeperTags.cs
+The `BEEPER` / `BEEPER_SEEKER` pair (`FUN_004b88a0`, `FUN_004b8ad0`, `FUN_004b8ce0`, `FUN_004b8b50`,
+decoded in [org/ordnanceTypes.md](org/ordnanceTypes.md) "The beeper and the seeker, which are one
+weapon in two halves"), three types in one file. `IBeeperSubject` is the three facts a tag reads off
+its aircraft (`WorldPosition`, `InPlay`, `Team`); `FlightController` implements it through a partial
+declaration in this file, so the registry and its tests run without an engine. `BeeperTagRule` is
+static and Godot-`Node`-free: `Step` (the countdown: an aircraft out of play slams a still-painting
+tag to −1 before the frame's decrement, the frame that reaches or crosses zero ends the paint, and
+the original never slams again after that), `AlignmentDot` (the unit vector FROM the tag TOWARD the
+round, dotted with the round's heading, so a tag dead ahead scores −1 and LOWER is better aligned)
+and `Prefers`, the running-best comparison with the four literals: a better-aligned candidate
+replaces the best under a SQUARED-distance ratio of 1.2 (about 9.5% farther as a length); a
+worse-or-equally-aligned one must be strictly nearer (ratio under 1.0) AND either sit at or under a
+dot of 0.7 (anything less than about 134° off the round's nose) or give up under 0.1 of alignment.
+Net effect: the nearest painted aircraft, unless it is well behind the round, with a
+better-aligned one stealing only within the 20% squared window; and because it is a running best
+in tag order, a near-worse and a far-better pair inside that window resolves to whichever was
+tagged LATER. `BeeperTags<TAircraft>` is the world registry: `TryTag(shooterTeam, victim, seconds)`
+is the hit path's entry and holds every creation gate the original has (`AimAssist.Hostile` on the
+teams, the victim in play, no live tag on it already, and one tag per sim step, which is the
+original's clock stamp compared on the next creation); a second beeper hit on a live-tagged aircraft
+makes no tag and does NOT refresh the first, while an aircraft in its tail takes a fresh one.
+`SimStep(dt)` runs every tag through `Step` and deletes it once its countdown sits at or below −5,
+five seconds of tail after expiry (four after a slam) so nothing holding a reference sees it vanish.
+`PickTarget(roundPos, roundHeading)` is the seeker's per-frame query over tags with a countdown
+strictly above zero and returns the aircraft or null; an untagged aircraft is never returned, and
+in-play is not tested there because a dead aircraft's tag collapses on the next step. Pinned by
+`BeeperTagsTests` (every threshold from both sides, the slam, the tail, the gates, the order
+dependence, and `wep_10`'s `TIME 20` read off the extracted file). Not a `Node`; the session owns
+and steps it after every aircraft, in both step paths, and hands it to `ProjectilePool.BeeperTags`
+for the hit-side tagging and the seeker's retarget, which are the projectile integrator's.
+
 ## src/Flight/CamParams.cs
 One aircraft's camera tuning out of `camparam.json` ([formats/camparam.md](formats/camparam.md)):
 the `default` block, then the plane's own block layered on top. Seven of the eleven airframes carry
@@ -1362,6 +1395,9 @@ play;
 runtime's own bound, gun hits under `GunEffectTtl` 0.3 s (the `*_gunhit` family's longest authored
 stop, and the only bound the stop-less slug defs have) and one play per `GunEffectInterval` 0.1 s
 per effect name = per firing group (`GunEffectDue`, on the sim clock);
+`BeeperTags` (→ the session's `BeeperTags<FlightController>`) is the world's tag list, assigned
+beside the sinks and read by nothing in this file yet: the `BEEPER` hit's `TryTag` and the
+`BEEPER_SEEKER` round's per-frame `PickTarget` are pending here (null tags and seeks nothing);
 `SurfaceIdOf` is `public static` — the struck body's numeric surface id off `SceneBuilder
 .SurfaceIdMeta`, the SAME index space the crash and graze cascades use, with `default`(0) for an
 untagged collider (`FUN_005acf60`'s null-material arm) and `player`(6) for a struck `AircraftBody`;
@@ -2837,7 +2873,13 @@ both the targeting overlay and `_smokeScreens` (`SmokeScreens`, built beside `_s
 `SmokeScreenTunables.Load` off `player.json`, image defaults with a warning if that fails, washing
 through `_screenFlash.PlayBlend`); the screens step after every aircraft in `DriveSimSteps` and at
 the end of `_PhysicsProcess` on a realtime clock. Nothing lays a screen yet: the `SMOKE_SCREEN`
-fire path's call to `SmokeScreens.Lay` is the spawn lane's. `_instantAction`
+fire path's call to `SmokeScreens.Lay` is the spawn lane's. `_beeperTags`
+(`BeeperTags<FlightController>`, a fresh list per build beside `_smokeScreens`) is handed to the
+projectile pool as `ProjectilePool.BeeperTags` and stepped at the same two points, after the smoke
+screens: after the pool has hit and the aircraft have died this step, so a tag on a crashed
+aircraft collapses on the same step's tick and the one-tag-per-step gate re-arms only once the
+step's hits are in. Nothing tags or seeks yet: the `BEEPER` hit's `TryTag` and the
+`BEEPER_SEEKER` round's per-frame `PickTarget` are the projectile lane's. `_instantAction`
 (`InstantActionRuntime?`) builds at the very top of `StartSession` —
 before any archive, since loading its source is a bare value read — from whichever of two
 producers the spec carries: `SessionSpec.IaDef` (the Instant Action wizard's own already-built def,
