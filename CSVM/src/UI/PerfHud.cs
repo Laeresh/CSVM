@@ -10,8 +10,8 @@ namespace CSVM.UI;
 /// The always-available frame-cost readout (key <b>F14</b>): frames per second, the current
 /// frame's wall cost, and the worst frame in the last few seconds — a peak that spikes and
 /// decays, so a hitch you felt leaves readable evidence on screen a moment later rather than
-/// only an instantaneous number nobody was watching at the right instant
-/// (PLAN-perf-hitches D10). The Full tier (D11) adds the per-frame cost split, count and memory
+/// only an instantaneous number nobody was watching at the right instant.
+/// The Full tier adds the per-frame cost split, count and memory
 /// terms, GC counts by generation, the last few named breadcrumbs, and a rolling bar graph of
 /// recent frame times.
 ///
@@ -90,7 +90,7 @@ public sealed partial class PerfHud : Node
     public Mode InitialMode { get; init; } = Mode.Off;
 
     /// <summary>The hitch detector Full's per-frame terms and the strip read from directly — never
-    /// a history of its own, per this class's own Trap (PLAN-perf-hitches D11). Set once, before
+    /// a history of its own, per this class's own Trap. Set once, before
     /// the first <see cref="SetMode"/> that could need it.</summary>
     public HitchMonitor Monitor { get; init; } = null!;
 
@@ -162,7 +162,7 @@ public sealed partial class PerfHud : Node
             return;
         // D11: the strip redraws every frame, unthrottled — a "rolling" strip that only advanced
         // a few times a second would not look rolling. Only while Full is actually shown, so
-        // Compact costs nothing extra (PLAN-perf-hitches D11's own Trap about redraw cost).
+        // Compact costs nothing extra.
         if (_mode == Mode.Full)
             _strip?.QueueRedraw();
         _sinceRefreshMs += frameMs;
@@ -307,7 +307,7 @@ public sealed partial class PerfHud : Node
 
     // HudMetrics.Scale damps by PaneFactor (sqrt of the pane's share of the window), which is
     // exactly wrong here: this readout draws once for the whole window regardless of splitscreen,
-    // so it takes the plain window-height ratio instead (PLAN-perf-hitches D10's Approach).
+    // so it takes the plain window-height ratio instead.
     private float WindowScale()
     {
         float windowH = GetTree()?.Root?.Size.Y ?? Flight.HudMetrics.ReferenceHeight;

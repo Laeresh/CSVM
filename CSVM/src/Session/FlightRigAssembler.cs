@@ -58,16 +58,16 @@ public sealed class FlightRigAssembler
         string tag = _in.RigCount > 1 ? $"P{pi + 1} " : "";
         // Each player flies their own pick (the launchscreen's join flow / a --plane= list);
         // with one name given, that is the same plane for everyone as before. An active Instant
-        // Action mission (PLAN-instant-action.md C8) overrides this for every human alike — the
+        // Action mission overrides this for every human alike — the
         // def carries one player_plane, not a per-player list.
         string planeName = _in.InstantActionPlayerPlaneNode ?? PlaneRoster.PlaneFor(_spec, pi);
         var stats = _in.StatsFor(planeName);
 
-        // Flight repaints the field on every map load: each player draws their
-        // own random livery (colours + decals) unless --paint pins one.
+        // Every player flies the Fortune Hunters livery unless --paint says otherwise,
+        // as the original's stock planes do.
         long mark = StartupProfile.Mark();
         var planeBuilder = new PlaneBuilder(_in.PlanesGamez, _in.Textures, spinningProps: true,
-            scheme: _liveries.SchemeFor(pi, _in.ZrdrPath, randomByDefault: false, _in.PaintRng,
+            scheme: _liveries.SchemeFor(pi, _in.ZrdrPath, _in.PaintRng,
                 _liveries.PatternsForPlane(_in.PlanesGamez, planeName)),
             patterns: _liveries.Patterns);
         var planeModel = planeBuilder.Build(planeName);
@@ -100,7 +100,7 @@ public sealed class FlightRigAssembler
             // The level's one touchdown vector (the original's global), not one per plane.
             TouchdownDefs = _in.TouchdownDefs,
             // splitscreen: this player's own device(s), own pane for the HUD.
-            // Start/P reads on every rig, splitscreen included (E43, `BL-373`) — GameSession wires
+            // Start/P reads on every rig, splitscreen included (`BL-373`) — GameSession wires
             // every rig's PauseState to the same shared instance, so any human can pause the
             // world but only the pauser can resume it.
             PadDevices = _in.PadAssignment?[pi],
@@ -109,12 +109,11 @@ public sealed class FlightRigAssembler
             HudParent = rig.Viewport,
             AllowPause = true,
         };
-        // Every human joins team 1 in an Instant Action mission (PLAN-instant-action.md Decision
-        // 8), splitscreen included — humans 2-4 would otherwise default to their own team
-        // (Team's fallback is AimAssist.TeamOfPilot(PlayerIndex), one team per pilot index) and
-        // collide with an enemy's. --coop asks for the same thing in plain flight
-        // (PLAN-splitscreen-polish A1); --vs never reaches here with Coop set (SessionSpec.Resolve
-        // drops it), so its FFA stays untouched.
+        // Every human joins team 1 in an Instant Action mission, splitscreen included — humans 2-4
+        // would otherwise default to their own team (Team's fallback is
+        // AimAssist.TeamOfPilot(PlayerIndex), one team per pilot index) and collide with an
+        // enemy's. --coop asks for the same thing in plain flight; --vs never reaches here with
+        // Coop set (SessionSpec.Resolve drops it), so its FFA stays untouched.
         if (_in.InstantActionActive || _in.Coop)
             controller.Team = AimAssist.PlayerTeam;
         // The wobble pivot: the plane model and everything resolved inside it — muzzle nodes,
@@ -188,7 +187,7 @@ public sealed class FlightRigAssembler
             GD.Print($"weapons: no stock loadout for '{loadoutDefName}' — unarmed");
         }
 
-        // The carried turret gunners (C9a): the vehicle def's thirdp turrets block resolved
+        // The carried turret gunners: the vehicle def's thirdp turrets block resolved
         // by TITLE against ai.zrd and by node against this built model. Independent of the
         // stock loadout — the gunner's weapon comes from its ai.zrd row, not from a gun slot.
         if (_in.TurretDefs is { } turretDefs && stats.TurretMounts.Count > 0)
@@ -369,21 +368,21 @@ public sealed class FlightRigAssembler
                 GD.Print("dogfight HUD: match timer/K-D/leader line + kill banner + opponent markers");
         }
 
-        // The targeting HUD (PLAN-targeting.md C21/C22): one per human pane, in EVERY flight
-        // session — not only --vs, which VersusHud is. Draws this pilot's own selected target
-        // (below), falling back to the nearest AI hostile (H22) on a pane with no selection; built
-        // unconditionally because generators spawn hostiles mid-session, and with nothing selected
-        // and none in the pool it draws nothing. A --vs pane gets one alongside VersusHud, so an AI
-        // hostile spawned into a dogfight is still marked.
+        // The targeting HUD: one per human pane, in EVERY flight session — not only --vs, which
+        // VersusHud is. Draws this pilot's own selected target (below), falling back to the
+        // nearest AI hostile on a pane with no selection; built unconditionally because
+        // generators spawn hostiles mid-session, and with nothing selected and none in the pool it
+        // draws nothing. A --vs pane gets one alongside VersusHud, so an AI hostile spawned into a
+        // dogfight is still marked.
         controller.TargetHud = TargetHud.Build(pi, rig.Camera, _in.Projectiles);
         if (verbose)
             GD.Print("targeting HUD: selected-target marker (brackets + label, edge arrow off screen)");
 
-        // The player's target selection (PLAN-targeting.md B13/B14): one per human pane, each with
-        // its own pool — the cycles are sorted against THIS plane's pose, so they cannot be shared.
-        // GameSession binds TargetSubParts later, once the zeppelins exist.
+        // The player's target selection: one per human pane, each with its own pool — the cycles
+        // are sorted against THIS plane's pose, so they cannot be shared. GameSession binds
+        // TargetSubParts later, once the zeppelins exist.
         controller.Targeting = new TargetSelection();
-        controller.InitialTarget = _spec.TargetSelect;   // --target=, the scripted twin (B15)
+        controller.InitialTarget = _spec.TargetSelect;   // --target=, the scripted twin
 
         // Bound on EVERY pane, not just under --debug-markers: it is what the HUD's team tests read
         // this pane's side off (TargetHud.OwnTeam). Deriving the side from the pilot index instead
@@ -407,7 +406,7 @@ public sealed class FlightRigAssembler
         // and so the caller keeps constructing the assembler before the rigs are known.
         var (spawnPos, spawnLookAt) = (_starts ??= _spawns.ChooseStarts(
             _in.SpawnList, _in.MissionZrdrPath, _in.SpawnBase, _in.RigCount))[pi];
-        // The plant's force path is chosen once, here, off who is flying (C21) — a person, so the
+        // The plant's force path is chosen once, here, off who is flying — a person, so the
         // player path. FlightModel.UsesAiForcePath carries why this is a construction argument
         // rather than the original's own pointer-compare-against-the-player test.
         controller.Setup(new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
@@ -511,6 +510,11 @@ public sealed class FlightRigAssembler
         public GameZ PlanesGamez = null!;
         /// This plane's stats, loaded once per distinct aircraft (splitscreen players differ).
         public Func<string, PlaneStats> StatsFor = null!;
+        /// The same aircraft as the AI flies it: the player chain for everything except the damage
+        /// model, which comes from the AI def (PlaneStats.LoadForAi, BL-386). Cached separately
+        /// from <see cref="StatsFor"/> — the two flavours of one airframe are different objects,
+        /// so a single name-keyed cache would hand whichever loaded first to both.
+        public Func<string, PlaneStats> AiStatsFor = null!;
         /// This plane's camera tuning, cached the same way and for the same reason.
         public Func<string, CamParams> CamParamsFor = null!;
         /// How many rigs this session flies — drives the log tags, the verbose-once lines and the
@@ -529,7 +533,7 @@ public sealed class FlightRigAssembler
         public WeaponDefs WeaponDefs = null!;
         public Messages WeaponMessages = null!;
         public StockLoadouts StockLoadouts = null!;
-        /// The ai.zrd turret table (C9a) — null when the archive lacks ai.zrd, which builds
+        /// The ai.zrd turret table — null when the archive lacks ai.zrd, which builds
         /// every plane turretless rather than failing the session.
         public TurretDefs? TurretDefs;
         /// The shake-oscillator sources (shakes.json) — one load, one PlaneShake per rig.
@@ -549,13 +553,13 @@ public sealed class FlightRigAssembler
         /// Every rig in the session (--vs opponent markers) — the same list GameSession
         /// keeps live for the whole session, not a snapshot; see the Assemble call site.
         public IReadOnlyList<PlayerRig>? Rigs;
-        /// The active Instant Action mission's player_plane node (PLAN-instant-action.md C8),
+        /// The active Instant Action mission's player_plane node,
         /// overriding --plane= for every human alike; null outside one.
         public string? InstantActionPlayerPlaneNode;
         /// Whether an Instant Action mission is active — every human takes team 1 (Decision 8)
         /// regardless of pilot index when this is set.
         public bool InstantActionActive;
-        /// <c>--coop</c> (PLAN-splitscreen-polish A1): every human takes <see cref="AimAssist.PlayerTeam"/>
+        /// <c>--coop</c>: every human takes <see cref="AimAssist.PlayerTeam"/>
         /// in a plain flight session, same as Instant Action. <see cref="SessionSpec.Resolve"/>
         /// already drops this when <c>--vs</c> is also given, so the two never race here.
         public bool Coop;

@@ -2,7 +2,7 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>The AI's forward-gun gunnery (M4 D14): the lead-sphere accuracy model and the
+/// <summary>The AI's forward-gun gunnery: the lead-sphere accuracy model and the
 /// shot-angle cones, decoded in docs/formats/ai-rosters.md ("ai_skill_parameters") and
 /// docs/formats/vehicle.md (gun_pitch/gun_yaw). Per sim tick the host
 /// <see cref="FlightController"/> hands it the fire geometry (<see cref="Solve"/>); the gunner

@@ -4,7 +4,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The Instant Action wizard's own pure static surface (PLAN-instant-action.md H16): the wave
+/// The Instant Action wizard's own pure static surface: the wave
 /// editor's Militia/Aircraft/Skill rosters and its own build step. LaunchMenu itself is
 /// engine-bound and untestable directly, so these are the facts standing behind its wave editor —
 /// the same role SessionSpecMenuTests plays for the Mode/Environment/MissionType screens.

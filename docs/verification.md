@@ -27,9 +27,9 @@ and leave gaps when retiring old ones.
 - **METHOD-17** — **Use `git diff` to prove temporary edits are restored.**
 - **METHOD-19** — **Disable later mechanisms that would repair a deliberately restored fault.**
 - **METHOD-20** — **Reproduce a published measurement's pose *and* its statistic, not just its subject.** A number is only comparable under the conditions it was taken in: `CAP-13`'s ring brightnesses were read off frames that already carried the sun wash, which composites toward white and scales every difference by (1−α), and its script reports the *brightest pixel* in a window where a median around the annulus reads systematically lower. Matching the subject but not the pose or the estimator produces a confident calibration that is wrong in a direction nothing reveals (BL-165, `analysis/bl-165-lens-flare/`).
-- **METHOD-21** — **A scenario entered at a speed it cannot hold is not a measurement at that speed.** The original's 143 mph knife-edge take, replayed at full throttle, accelerates past 290 mph inside three seconds and reports the 300 mph take's numbers under the 143 mph label — the instrument manufactures its own operating point. `Probes.KnifeEdge` bisects a level-flight trim throttle for the entry speed instead; hold the *condition* the capture was flown in, not just its initial value (`D31`).
-- **METHOD-22** — **Re-measure a fitted constant ALONE once the mechanisms it was fitted on top of have been replaced — it may now push the wrong way.** `ClimbGravityScale = 0.6` was fitted to make a climb hold speed, on drag and thrust shapes that `B12`/`B13` later replaced. Removing it *by itself*, with nothing else changed, moved the sustained climb from 276.7 to 257.7 mph **toward** the original's 163.1: by then it was making the manoeuvre it existed for worse. A constant that survives a rewrite because it was never re-tested is indistinguishable from one that is still doing its job, and only its own single-variable ablation separates them (`D32`).
-- **METHOD-23** — **"Unreachable" is a measurement, not an inference from the constants around it.** The original's G limiter starts where the lift clamp ends (9 G against a ±5/9 clamp), so the structural argument proves only that the reduction is zero *at the boundary* — it says nothing about the margin. Flying it says: peak demand is 2.13–5.01 G across the eleven airframes, and the Bloodhawk's 5.01 sits 0.2 % **past** the executable's own fallback threshold of 5. Two constants that look far apart can be one hundredth of a unit apart in the quantity that matters, so pin the margin with an instrument and assert it against the loaded value, never against the literal (`D33`, `ControlLimiterTests`).
+- **METHOD-21** — **A scenario entered at a speed it cannot hold is not a measurement at that speed.** The original's 143 mph knife-edge take, replayed at full throttle, accelerates past 290 mph inside three seconds and reports the 300 mph take's numbers under the 143 mph label — the instrument manufactures its own operating point. `Probes.KnifeEdge` bisects a level-flight trim throttle for the entry speed instead; hold the *condition* the capture was flown in, not just its initial value.
+- **METHOD-22** — **Re-measure a fitted constant ALONE once the mechanisms it was fitted on top of have been replaced — it may now push the wrong way.** `ClimbGravityScale = 0.6` was fitted to make a climb hold speed, on drag and thrust shapes that `B12`/`B13` later replaced. Removing it *by itself*, with nothing else changed, moved the sustained climb from 276.7 to 257.7 mph **toward** the original's 163.1: by then it was making the manoeuvre it existed for worse. A constant that survives a rewrite because it was never re-tested is indistinguishable from one that is still doing its job, and only its own single-variable ablation separates them.
+- **METHOD-23** — **"Unreachable" is a measurement, not an inference from the constants around it.** The original's G limiter starts where the lift clamp ends (9 G against a ±5/9 clamp), so the structural argument proves only that the reduction is zero *at the boundary* — it says nothing about the margin. Flying it says: peak demand is 2.13–5.01 G across the eleven airframes, and the Bloodhawk's 5.01 sits 0.2 % **past** the executable's own fallback threshold of 5. Two constants that look far apart can be one hundredth of a unit apart in the quantity that matters, so pin the margin with an instrument and assert it against the loaded value, never against the literal (`ControlLimiterTests`).
 
 ## DIAG — chasing a symptom
 
@@ -81,7 +81,7 @@ and leave gaps when retiring old ones.
 - **SHOT-22** — **A full-screen effect needs an off switch before it contaminates unrelated captures.** The lens flare's wash reaches α ≈ 0.66, survives terrain occlusion and whitens the HUD, so in C2/C3 every screenshot with the sun near centre becomes useless for judging terrain colour, fog gradient, deck brightness or clutter density. `--no-flare` exists for the same reason `--no-fog` does (BL-165).
 - **SHOT-23** — **Measure how far fog lets a texture survive as a PLATEAU-RELATIVE high-pass, and
   compare it in ELEVATION ABOVE THE TRUE HORIZON — never in rows from the top of frame.** Both
-  halves bit at C1's river pose (`PLAN-overcast-match` B15). (a) Fog scales a surface's texture
+  halves bit at C1's river pose. (a) Fog scales a surface's texture
   contrast by `1 − φ` while leaving a smooth gradient behind, so a per-row sd measures the gradient
   and an *absolute* contrast threshold measures the texture's own contrast rather than the fog: the
   original's overcast mottling runs at high-pass RMS ≈ 0.59 and ours at ≈ 0.26, so only a threshold
@@ -95,28 +95,28 @@ and leave gaps when retiring old ones.
   column-autocorrelation or crest-spacing.** Perspective makes a fixed world-space placement
   period aperiodic in screen space, so a row/column ACF over the sheet found no peak above 0.33
   on either side of the A/B — including a 0.69 peak in the original's own underside that turned
-  out to be capture noise at sd 0.91–2.58 (`PLAN-overcast-match` A2, METHOD-14). *(Minted as
+  out to be capture noise at sd 0.91–2.58 (METHOD-14). *(Minted as
   SHOT-20 on the plan's branch; renumbered at the 2026-08-09 merge — BL-165's session minted
   SHOT-20/21/22 first.)*
 - **SHOT-25** — **`--tex-override` cannot separate the `fvol` cloud-sprite field from
   `cloudparent` clusters — they share their textures.** All 626 of C1's `cloudparent` facades are
   skinned `cloud1.tif`/`cloud2.tif`, the same two textures the `cloudsprite1`/`cloudsprite2`
   templates use, so a green override paints both populations at once; separate them by altitude
-  or cluster position instead (`PLAN-overcast-match` A6). *(Branch-minted as SHOT-21; renumbered
+  or cluster position instead. *(Branch-minted as SHOT-21; renumbered
   at the merge.)*
 - **SHOT-26** — **A horizon-band artifact is a full-width, DEAD-FLAT run of rows (per-row sd ≈ 0)
   bounded by a hard jump — measure it as the largest jump whose rows are BOTH flat, never as the
   largest jump.** Unrestricted, terrain silhouettes and cloud edges dominate the statistic and a
-  55-luminance flat-band edge reads as ordinary scene contrast (`PLAN-overcast-match` B18).
+  55-luminance flat-band edge reads as ordinary scene contrast.
   *(Branch-minted as SHOT-22; renumbered at the merge.)*
 
 - **SHOT-27** — **The true horizon is a CALIBRATED row, not the sky/terrain boundary — shoot the
   same position LEVEL and check the shift is `f·tan(pitch)`.** `SHOT-23`(b) says to convert a row
   into an elevation above the true horizon; this is how that row is obtained without guessing.
-  Measured (`PLAN-weather-decompile-match` D31): the C1 river pose pitches 5.712° down at
+  Measured: the C1 river pose pitches 5.712° down at
   `f` = 599.1 px (fov_y 62° over 720 rows), so its horizon is row **419.9** — and the same
   position shot level puts every feature exactly **60 px** higher, against the predicted 59.9.
-  `PLAN-overcast-match` B15 instead read the `--no-fog` control's sky/terrain boundary (row 299)
+  An earlier reading took the `--no-fog` control's sky/terrain boundary (row 299)
   as "17 px above the horizon" and worked from ~316, ~104 px off, which silently scaled every
   elevation and every `f·h` distance derived from one. The boundary is the terrain SILHOUETTE, and
   a silhouette can sit either side of the horizon: ours rises 115 px above it at that pose while
@@ -128,7 +128,7 @@ and leave gaps when retiring old ones.
   same pixels, so "the streets are clear" reads identically whether the placement improved or the
   buildings vanished. A per-kind census fails the same way from the other side: placement changes
   **relocate** a population as well as thin it, so the totals can barely move while a whole
-  viewpoint empties. Measured (`BL-305`, `PLAN-clutter-uv-placement` B13 + the `no_clutter` decode):
+  viewpoint empties. Measured (`BL-305` + the `no_clutter` decode):
   gating clutter on polygon bit `0x800` made C5's crossroads look markedly closer to `CAP-22`'s
   original at nadir, moved the pinned frame hash, and passed the interpenetration check; the
   per-kind counts said the city was *intact*, with `cb00a` at 79 % and `cb12a` at 96 % of baseline
@@ -163,14 +163,14 @@ and leave gaps when retiring old ones.
   is harmless.
 - **GOLD-8** — **When an earlier item deliberately left goldens un-repinned, a later item's "moved"
   list is about BOTH changes — recover the current item's own movers by A/B-ing hashes against a
-  temporarily reverted build.** Measured (`PLAN-overcast-match` B18): the run reported the same 9
+  temporarily reverted build.** Measured: the run reported the same 9
   movers the previous item had, yet only 8 moved for this one — `c5-city-night` was byte-identical
   across it, and the census predicting exactly that would have been credited to the wrong change.
 - **GOLD-9** — **"13/13 hash-identical" proves nothing until you have checked `manifest.json` is
   unmodified in the working tree.** The stage compares against the file on disk, not against HEAD,
   so a `-RegenGoldens` left behind by an earlier agent (or an earlier attempt at the same item)
   silently re-baselines the tripwire onto the very build under test — the run then reports a clean
-  PASS for a change that moved six shots. Measured (`PLAN-puffer-engine-deltas` B5): a prior
+  PASS for a change that moved six shots. Measured: a prior
   session's regeneration was already in the tree, three separate full runs reported 13/13 identical,
   and `git diff -- analysis/goldens/manifest.json` showed six hashes had in fact moved. **Run that
   `git diff` before believing a golden PASS**, and when you need genuine before-images, reproduce
@@ -211,7 +211,7 @@ and leave gaps when retiring old ones.
 - **DET-12** — **An angle measured off footage cannot confirm a decode; at best it ranks two
   readings, and it will happily rank a third one you have not thought of.** `CAP-16`'s wing-panel
   strip measured 20–30 °/s and was recorded as confirming `forward_rotation` as a total angle over
-  `RUN_TIME`. The binary says the crash pieces do not turn at all (`PLAN-object-motion-decode` C10),
+  `RUN_TIME`. The binary says the crash pieces do not turn at all,
   which that same 10–15° of apparent motion under a moving camera fits at least as well. One piece,
   near edge-on, is one axis of one sample.
 
@@ -243,8 +243,8 @@ and leave gaps when retiring old ones.
 - **PERF-14** — **A build-time CLI preset can never trip `HitchMonitor`; verify with a live,
   post-grace event instead.** `--damage=`/`--destroy=`-style presets apply inside
   `Launcher.LaunchSession`'s build, always finished before `Rearm()` starts the grace window
-  (`HitchMonitor.cs`, `PLAN-perf-hitches` E13, disproven). `--crash=<frame>` picked past grace
-  (PERF-12) is a live, scriptable event that does trip it — measured (G15): `--crash=300` under
+  (`HitchMonitor.cs`, disproven). `--crash=<frame>` picked past grace
+  (PERF-12) is a live, scriptable event that does trip it — measured: `--crash=300` under
   `--no-vsync` produced two real sidecar records, `part_detach` 48.4 ms and `effect_pool_miss`
   62.1 ms, both ~500 ms clear of the 2000 ms grace.
 
@@ -346,8 +346,7 @@ and leave gaps when retiring old ones.
 - **INSTR-12** — **A straight-up billboard probe reads edge-on and reports nothing about
   altitude.** A `cloudsprite` card is a `Facade`/`SphericalY` billboard, so a zero-green-pixels
   result looking straight up is a fact about billboard orientation, not proof the field is absent
-  below that altitude — a compound-thing narrowness in INSTR-11's shape (`PLAN-overcast-match` A6,
-  the A3 probe it corrects).
+  below that altitude — a compound-thing narrowness in INSTR-11's shape (the A3 probe it corrects).
 
 - **INSTR-14** — **Every automated check here runs on a PARENT-DRIVEN clock, so a consumer stepped
   only from `GameSession.DriveSimSteps` is invisible to all of them.** `--det` — implied by
@@ -355,7 +354,7 @@ and leave gaps when retiring old ones.
   `GameClock.ParentDriven` true, and a realtime (interactive) session never enters that method at
   all: it paces each consumer from its own `_PhysicsProcess`. Measured: E11's wave sequencer was
   stepped only there, so waves 2 to 4 could never arrive at the controls, while its suite and its
-  scripted probes were both green (`PLAN-instant-action` G13). A per-step consumer belongs in one
+  scripted probes were both green. A per-step consumer belongs in one
   method called from both paths, the way the match clock already was.
 
 ## SRC — sources and documents
@@ -374,14 +373,14 @@ and leave gaps when retiring old ones.
   `FUN_004b9bc0` computes "shooter and victim are on the same team, or either is neutral" into a
   stack byte at `0x004b9d5e`, and its only read passes it to `FUN_0042e840` as an argument that
   function never touches, so the one place the damage path asks about teams decides nothing and the
-  original applies friendly damage (`PLAN-instant-action` A2, `org/vehicleDamage.md`).
+  original applies friendly damage (`org/vehicleDamage.md`).
 - **SRC-7** — **A key the data authors is not a feature until you find the parser that reads it;
   grep the executable for the key string before modelling it.** The dual of SRC-6, and the cheapest
   check in this project: the key name is a literal in the binary or it is not. Measured: `ia.json`
   authors `enemy_skill` in all 8 chapters and no such string exists in `crimson.exe`. The wave
   parser reads four keys and that is not one of them, so every file-launched wave takes the
   built-in default instead. Second instance of the same shape as `formats/turrets.md`'s unread
-  `HEALTH` (`PLAN-instant-action` A3).
+  `HEALTH`.
 - **SRC-8** — **A branch's effect is only half its meaning; the other half is what it is an
   alternative to.** Recording what an arm *does* without recording which arm it excludes reads as
   an addition when it may be a replacement, and the two produce opposite implementations. Measured:
@@ -389,7 +388,7 @@ and leave gaps when retiring old ones.
   a plan was written around that being one contribution among several. Reading the function whole
   showed the discriminator at `0x0045ba9b` is an `if`/`else` whose other arm is the entire wave
   teleport, so on `zeppelin_run` the generator is not a supplement but the only route into the air
-  (`PLAN-instant-action` A4, `formats/instant-action.md`). When you record a branch, record the
+  (`formats/instant-action.md`). When you record a branch, record the
   jump it skips.
 - **SRC-9** — **Searching a function for a flag's bitmask does not prove the flag is not tested
   there; compilers hoist a bit test into a shifted boolean.** Measured: `_DAT_0071d2fc` (the
@@ -399,7 +398,7 @@ and leave gaps when retiring old ones.
   `(weaponFlags >> 6) & 1` once at the top of each station loop and keeps it in a register, and the
   increment sits inside that arm, so both halves of the ratio are `CANNON`-only after all. Confirm a
   negative by reading the control flow around the site, not by failing to find the constant
-  (`PLAN-instant-action` A5, `formats/instant-action.md`).
+  (`formats/instant-action.md`).
 
 ## What this project cannot verify itself
 

@@ -6,8 +6,8 @@ using Godot;
 namespace CSVM.Session;
 
 /// <summary>
-/// The decoded wave sequencer's own selection and trigger logic (PLAN-instant-action.md E11,
-/// <c>FUN_0045b9d0</c>, traced whole by A4 over M4 B7's main-path read): pure state over
+/// The decoded wave sequencer's own selection and trigger logic (<c>FUN_0045b9d0</c>, traced whole
+/// by A4 over M4 B7's main-path read): pure state over
 /// <see cref="Start"/>/<see cref="Step"/> calls, no <c>GD.*</c>, no <c>Godot.</c> node, no clock,
 /// so <c>CSVM.Tests</c> pins it off-engine. <c>GameSession</c> feeds it the caller's own
 /// "still alive" counts and takes back which wave to activate and where.
@@ -50,7 +50,7 @@ public sealed class InstantActionWaves
     /// <see cref="Start"/> and once <see cref="Finished"/>.</summary>
     public int CurrentWaveSize => CurrentWave is >= 1 and <= 4 ? _waveSizes[CurrentWave - 1] : 0;
 
-    /// <summary>The teleport arm's own two-step draw (A4): every entry of
+    /// <summary>The teleport arm's own two-step draw: every entry of
     /// <paramref name="spawns"/> at or beyond <see cref="MinSpawnDistanceSquared"/> from the
     /// NEAREST of <paramref name="humanPositions"/> (Decision 8's splitscreen reading of "the
     /// player") is collected, then one of THOSE is taken as <c>draw % n</c> — not a rejection
@@ -86,7 +86,7 @@ public sealed class InstantActionWaves
         return (idx, spawns[idx]);
     }
 
-    /// <summary>The teleport's own fan (A4 — the same 100 m / 45° pattern the wingmen use, D9):
+    /// <summary>The teleport's own fan (A4 — the same 100 m / 45° pattern the wingmen use):
     /// the wave's FIRST member (<paramref name="memberIndex"/> 0) sits exactly on the spawn
     /// point; member <c>k</c> after it (<c>k</c> = <paramref name="memberIndex"/> − 1) sits
     /// <c>100 · ((k &gt;&gt; 1) + 1)</c> m out at ±45° off the spawn heading, sign <c>+</c> when

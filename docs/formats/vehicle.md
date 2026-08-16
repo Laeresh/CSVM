@@ -1,11 +1,20 @@
-# vehicle.json — aircraft definitions
+# Aircraft definitions - `vehicle.json`
 
-Part of the [format documentation](README.md). Validated against this install's zrdr
-extraction (mech3ax v0.6.1), decoded across Milestone-2 flight work and Run-2 item 10
-(2026-07-19). One reader file, shared by every mission scope; the root list alternates
-`defName, [properties…]`.
+Part of the [format documentation](README.md). `vehicle.json` is the shared zrdr reader for
+aircraft definitions. Its root alternates `defName, [properties...]`; definitions inherit through
+`kind_of` and resolve properties nearest-first.
 
-## Def structure & inheritance
+## Contents
+
+- [Definition structure and inheritance](#definition-structure-and-inheritance)
+- [Units, dynamics, and engines](#units-dynamics-and-engines)
+- [Player global blocks](vehicle/player-globals.md)
+- [Destroyable parts](#destroyable-parts)
+- [Definition injury animations](#definition-injury-animations)
+- [Collision probes](#collision-probes)
+- [Effect emitters](#effect-emitters)
+- [Weapons, damage, and AI keys](#weapons-damage-and-ai-keys)
+## Definition structure and inheritance
 
 Each def's property list is an alternating key/value-list dict. `kind_of` names the parent
 def; properties resolve **nearest-first** through the chain (e.g. `pbloodhawk` →
@@ -28,9 +37,9 @@ Keys the remake consumes (see `src/Flight/PlaneStats.cs`):
 | `injure_anims` | def-level damage thresholds (below) |
 | `destroyable_parts` | the damage model (below) |
 | `collision` | 6 collision probe points (below) |
-| `bullethole_anims`, `weapons`, `turrets`, `cannon_jam`, `armor`/`health`, AI tuning | only `turrets` consumed (M4 C9a) — [Weapons, damage & AI keys](#weapons-damage--ai-keys) below |
+| `bullethole_anims`, `weapons`, `turrets`, `cannon_jam`, `armor`/`health`, AI tuning | only `turrets` consumed — [Weapons, damage & AI keys](#weapons-damage-and-ai-keys) below |
 
-## Units, dynamics & engines
+## Units, dynamics, and engines
 
 Units are meters/seconds: `fd_speed` 135 m/s ≈ 302 mph matches the Bloodhawk's published
 top speed; `flight_ceiling` 2500 m. `player.json` holds player-global values —
@@ -68,50 +77,11 @@ solving a constant from a Lvl-1 row inflates it by ~30 %. `power` is the plane's
 and the original applies it as `Thrust = power · ref_area · thrustAvailable(Mach) · throttle` —
 scaled by **reference area**, not divided by weight.
 
-## `player.json` — the player-global blocks
+## Player global blocks
 
-One shared reader, flat alternating `KEY, [values…]`, ~45 top-level keys. Flight globals
-(`nom_gravity`, `maxAOA`, `liftAOAs`, `highGs`/`lowGs`, the `yaw_*`/`turn_*` fade curves,
-`stall_mag`, `drag_factor`) feed `PlaneStats`; the sound curve blocks (`engine_sound`,
-`prop_sound`, `rattle`) are in [sounds.md](sounds.md). Three whole subsystems in it are
-**undocumented elsewhere**, and they stand on different evidence: the aim assist is **decoded from
-the executable** ([`org/aim-assist.md`](../org/aim-assist.md), 2026-08-10); the other two have
-data-confirmed key names and values with meanings **inferred** from those names, one of which (the
-near-miss counter) is implemented on that inferred reading. None appears in the original design
-document, so they are shipped-only features.
+See [player global blocks](vehicle/player-globals.md) for the player-global reader reference.
 
-| Keys | Values | Reading |
-|---|---|---|
-| `sticky_bullet_catchup_rate` `_inaccuracy` `_forget_interval` `_dist_factor` | 5.0 / 1.0 / 1.5 / 0.0 | **The player's gun aim assist — decoded from `crimson.exe`, [`org/aim-assist.md`](../org/aim-assist.md).** ⚠ **Nothing steers a round in flight**; the assist rotates the *firing vector* at spawn. Per muzzle, the engine picks the most gun-axis-aligned enemy whose constant-velocity intercept is inside `RANGE` and inside an assist cone, slerps a plane-local gun line toward that intercept at `catchup_rate` per second, and scatters the result inside a cone of `inaccuracy` **degrees** (× π/180 at parse). `forget_interval` unwinds the gun line to centre that many seconds after the barrel **last fired** (not after a lock is lost). `dist_factor` is a per-metre penalty in target *selection*, not range scaling, and 0 disables it — the executable's own default is `2.5e-4`. AI gunnery does **not** use this path. |
-| `warning_shot_max` `_dissipation` `_interval` `_sound` | 2.0 / 2.0 / 1.0 / `bullet_warning_sg` | **Near-miss feedback — implemented** (`WarningShotCue`, 2026-08-02). A counter of rounds passing close by, capped at `max`, decaying at `dissipation` per second, with the sound group re-triggering no faster than `interval`. **The units are not in the data**: the remake accrues 1.0 per pass, which makes `interval` the term a pilot hears. **Nor is the trigger distance** — nothing here says how close is close, and the sound def's `RANGE [20,200]` is the 3D falloff window, not a radius. Pairs with `bullet_hit_sound`, still unbuildable (nothing can strike an aircraft). |
-| `smokescreen_stun_range` `_angle` `_interval` | 600 m / 170° / 5.0 s | **The smokescreen weapon's blind effect** — who it stuns: within 600 m, inside a 170° arc, re-evaluated every 5 s. Matches the design's stun-recovery pilot skill and the flare/sonic-rocket stun. |
-
-Also worth naming, all data-confirmed: `crash` (`armor_damage_range`, `health_damage_range`,
-`bounce_factor` — see [the hp pair](#the-hp-pair-armor--hit-points); `bounce_factor 0.6` is a raw
-scalar and the CEILING on collision restitution rather than the restitution itself, decoded and
-implemented, see [`org/flightModel.md`](../org/flightModel.md)'s "Collision response". ⚠ It is
-player-only in the original, and what a contact actually rebounds at is `f_lin × bounce_factor`);
-`groundblow_elev 400` / `groundblow_mag 10` / `ai_groundblow 0.5` (ground blow — the design's
-§4.1.7 proximity repulsion from large objects, decoded and implemented, see
-[`org/flightModel.md`](../org/flightModel.md)'s "Ground blow". ⚠ `groundblow_elev` is a ray LENGTH
-in **metres**, not a trigger range, and the design's named emitter list — ground, cliff walls,
-zeppelins — is the outcome of a rule that never tests vehicle type, not the rule itself.
-`ai_groundblow` scales a *different* law on the AI path, so it is not the player term's magnitude);
-`autohead_turn_time`/`_max`/`_min_pitch` (the padlock/look camera's head-turn rate limits — see
-the [command inventory](strings.md#the-bindable-command-table-messagesjson)); `rogue` (three
-`[fameThreshold, soundName]` steps warning a player who is shooting allies);
-`respawn_rad`/`respawn_el` (multiplayer respawn ring); `score_kill`/`_zep`/`_suicide`/
-`_return_flag`/`_enemy_flag` (multiplayer scoring); `min_ai_active_dist` 2000 m — the AI
-activation radius, and the fallback for every roster whose own volume fields are unauthored (all of
-them).
-
-**`ai_skill_parameters` is now decoded** — one `[value@skill1, value@skill9]` pair per pilot stat,
-the endpoints a 1–9 rating interpolates between, covering aiming cone, shot-angle cone, break-off
-chance, stun duration, bail-out chance and more. Full table, and the roster slots that index it, in
-[ai-rosters.md](ai-rosters.md#ai_skill_parameters--what-a-19-rating-actually-means). It settles
-that the pilot-skill scale is **1–9 and nothing else**.
-
-## destroyable_parts (Run-2 item 10)
+## Destroyable parts
 
 A list of part entries:
 
@@ -123,18 +93,16 @@ A list of part entries:
 
 - `name`: `nose` / `tail` / `leftwing` / `rightwing` for every player plane.
 - **The pair is (hit points, armor)** — `[1]` is the zone's hit points, `[2]` its **armor pool**,
-  spent first. Settled against the original's armory; see [below](#the-hp-pair-armor--hit-points).
+  spent first. Settled against the original's armory; see [below](#armor-and-hit-points).
 - **The two values are equal in every entry** — all 88 parts across the 22 defs that carry
   `destroyable_parts` (11 player `p*` + 11 AI `r*`), measured; values 15/20/25/30/35/40. Equal
   because armor is **purchasable** and these are the *stock* allocations, not because the number is
   duplicated. `PlaneStats` reads both values (`DestroyablePart.MaxHp`/`MaxArmor`); the two-pool
-  `PlaneDamage.Apply(part, healthDamage, armorDamage)` — armour first, 1:1 overflow — landed
-  2026-08-04 (`PLAN-armour-layer`).
-  *(An earlier version of this page said AI variants differ 25/20 — that is wrong; nothing in
+  `PlaneDamage.Apply(part, healthDamage, armorDamage)` — armour first, 1:1 overflow — landed.
   this install has an unequal pair.)*
 - Flags: `critical` — the plane is destroyed when this part reaches 0 HP (all four player
   parts carry it); `engine` — engine damage/power loss on that part.
-  ⚠ **The `critical` reading is from the flag's name and the 2026-08-13 executable decode does not
+  ⚠ **The `critical` reading is from the flag's name and the executable decode does not
   support it** ([`org/vehicleDamage.md`](../org/vehicleDamage.md)): the death path tests only
   whole-vehicle health, no code on it reads a part flag, and one zone at zero leaves the
   whole-vehicle summary at 75 %. Either the flag is consumed somewhere not yet found, or the
@@ -176,7 +144,7 @@ A list of part entries:
     At 0.99 it fires on the *first scratch*, which is authored, not a threshold to retune.
 
     ⚠ **`random_gun_impact`'s real home is `weapons.json`, not here — read this entry as a probable
-    authoring leftover (hypothesis, 2026-08-01).** It is the `player` **IMPACT surface animation**
+    authoring leftover (hypothesis).** It is the `player` **IMPACT surface animation**
     for `wep_03` (60slug) — "what a bullet does when it hits the player's aircraft"
     ([weapons.md](weapons.md)), the counterpart of the `enemy` and `default`/`buildings` classes.
     That is a general mechanism gated on being shot at, which nothing can do in M3. One plane of
@@ -202,23 +170,22 @@ engine must hide the healthy skins at damage time by an engine-side rule. Beware
 `pdpN`↔`pdpN_h` numbering is crossed on three plane models — pair torn↔healthy by mesh
 position, not by name (measurements in `gamez.md`, "Player-plane damage states").
 
-### The hp pair: armor + hit points
+### Armor and hit points
 
 **The two numbers on a `destroyable_parts` entry are that zone's hit points `[1]` and its armor
-pool `[2]`, armor spent first.** Settled 2026-08-03.
+pool `[2]`, armor spent first.** Settled.
 
 **How it was settled.** Every pair in this install is *equal*, so no measurement over the shipped
 data can separate (armor, hp) from (hp, hp) or (max, current) — the reading stood as a hypothesis
 for that reason. The original's **armory breaks the tie, because it varies armor independently of
 health**: its per-zone allocation is in units that are armor points 1:1, and a **stock** airframe
 reads the same per-zone numbers the zrdr def carries (a stock Bloodhawk shows ~20 units on each of
-its four zones; `pbloodhawk`'s parts are 20/20/20/20). Observed at the controls, 2026-08-03.
+its four zones; `pbloodhawk`'s parts are 20/20/20/20). Observed at the controls,.
 
-**Confirmed end-to-end by `CAP-19`** (observed at the controls, 2026-08-03). Three results:
+**Confirmed end-to-end by `CAP-19`** (observed at the controls). Three results:
 
-1. **Armor depletes before health.** The ordering retail string 3372 states and
-   [`PLAN-M3-weapons.md`](../plans/PLAN-M3-weapons.md) C23 derives from a dominance argument is now
-   *directly observed*, not inferred.
+1. **Armor depletes before health.** The ordering retail string 3372 states, and that a dominance
+   argument derives, is now *directly observed*, not inferred.
 2. **The armory's per-zone cap is 60 units**, uniform across a plane's four zones. (Whether the cap
    varies by airframe is untested — one airframe was read.)
 3. **A stripped zone falls far faster** than an armored one — green→red in visibly less time, more
@@ -251,15 +218,15 @@ Corroborating evidence, all data-confirmed:
    warns "Left and right wings must be balanced!" (and indeed `leftwing == rightwing` in all 22
    defs); id 1170 `IDS_PX_ARMORUNITS` = "%1!d! units"; id 206 `IDS_PX_SWITCHAIRFRAMES` speaks of
    "the **default** armor, engine, and guns for this new airframe" — a stock allocation exists.
-   *(This replaces an earlier appeal to the pre-release design spec, which
+   *(This replaces an appeal to the pre-release design spec, which
    [`playtest.md`](../../playtest.md) flags as unreliable as a class for HUD/damage material.)*
 5. **Retail states armour-first depletion outright** — `ui_strings.json` id 3372 (AP: "hardened
    tip designed for shredding and destroying armor. WARNING: AP rounds tend to punch clean through
    unarmored surfaces, inflicting very little damage"), id 3371 (dum-dum: "very useful for
    finishing off aircraft that have already been damaged"), id 3410 (AP rocket: "remove most, if
    not all, of the armor from an aircraft but has no noticeable effect on unarmored surfaces").
-   A gate, not a damage reducer. [`PLAN-M3-weapons.md`](../plans/PLAN-M3-weapons.md) C23 derives
-   the same ordering from a dominance argument; this is the direct statement.
+   A gate, not a damage reducer. A dominance argument derives the same ordering; this is the
+   direct statement.
 
 **Still open: what `ARMOR: Standard (N/T/W)` is — and it is now known *not* to be the cap.** Five of
 the eleven airframe blurbs carry a per-zone armor triple (`ui_strings.json` ids 40115 Balmoral
@@ -276,14 +243,13 @@ already one of the two arguments against blurb-as-cap; the measured 60 replaces 
 weight model can carry. The armory's own constants — per-unit cost and weight, per-zone caps — are
 **executable-resident**; `ui_strings.json` ships only the printf templates.
 
-## Def-level injure_anims
+## Definition injury animations
 
 ```
 "injure_anims", [[0.10, "player_smoketrail"], [0.85, "player_fuelleak"]]
 ```
 
 Whole-plane effects. **The fractions are the whole-vehicle health fraction**, decoded from the
-executable 2026-08-13 ([`org/vehicleDamage.md`](../org/vehicleDamage.md)); an earlier reading here
 had them as any single part's fraction, on the argument that a total-HP reading could never reach
 0.10 if a critical part killed the plane at 75 % total. The decode removes that argument: the
 whole-vehicle fraction is itself the parts-weighted total, and nothing on the death path reads the
@@ -295,7 +261,7 @@ following `prop1`: a black-smoke trail (COLORS ramp: born orange 255,164,90 → 
 node's motion — 1.0 m smoke / 0.25 m fire). `player_fuelleak` runs a `fuel_trail` at a
 random pdp panel (unwired).
 
-## collision — 6 probe points
+## Collision probes
 
 Each player def carries a `collision` list of six xyz points in the plane's local frame
 (nose −Z, right +X, meters) — the original's own collision representation, apparently
@@ -317,26 +283,35 @@ The effect emitters these anims call (`short_firetrail`, `dense_firetrail`,
 `large_fireball`, …) are `PUFFER_STATE` definitions — full schema in
 [effects.md](effects.md).
 
-## Weapons, damage & AI keys
+## Weapons, damage, and AI keys
 
 The airframe half of the combat data — of which only `turrets` is consumed by the remake so
-far (M4 C9a). Player defs carry `weapons` (as a catalogue), `cannon_jam`, `turrets` and
+far. Player defs carry `weapons` (as a catalogue), `cannon_jam`, `turrets` and
 `bullethole_anims`; the `armor`/`health` pair and the AI-tuning keys live only on the AI
 variant defs.
 
-**`weapons`** — a list of 5-tuples `[weapon_id, count, ?, ?, range]`, ids into
+**`weapons`** is a list of 5-tuples
+`[weapon_id, rounds_carried, refire_interval_s, min_range_m, max_range_m]`, ids into
 [weapons.md](weapons.md). On `player_airplane` it is a **capability catalogue, not a
 loadout**: all 39 buyable ids at once (`wep_00`–`15`, `25`/`27`/`28`, and the full
 `wep_30`–`73` player matrix), each with position-5 range `10000` — a UI sentinel, since the
 real per-plane loadout is executable-resident. On an AI def it is the actual armament:
-`bloodhawk` = `[["wep_04",4,…,800],["wep_07",2,…,800],["wep_00",9000,…,900]]` — a carried
-count, two undecoded factors, then an **engagement range** in metres (800–900 for AI
-fighters, 500 for the boat/truck). Positions 3–4 are inferred, not confirmed.
+`bloodhawk` = `[["wep_04",4,200,30,800],["wep_07",2,200,30,800],["wep_00",9000,0.05,1,900]]`, so
+one gun at 8000–9000 rounds over 1–900 m, plus one or two ordnance entries of 2–8 rounds over a
+200–800 m **band** (the boat and truck carry a gun alone, 1–500 m). **All five fields are
+decoded** from the builder `FUN_004b59b0`, which squares the last two into the vehicle's weapon
+slot ([org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md)); the per-def census is
+`analysis/ai-ordnance-census/`.
+
+⚠ **Five base defs author positions 3 and 4 transposed** against all 25 militia variants:
+`firebrand`, `bloodhawk`, `brigand`, `fury` and `autogyro` say `200, 30` where the variants say
+`30, 200`, so the engine gives them a 200-second ordnance refire at a 30 m floor. Shipped data,
+not a reader bug.
 
 **`cannon_jam`** (`player_airplane`) — `heat_safe_limit 1000`, `heat_dissipation_rate 50`,
 `jam_chance 0.1`; reads as a gun-overheating model paired with `FIRING_HEAT` in
 [weapons.md](weapons.md). ⚠ **Dead data: the original executable has no reader for it**
-(decoded 2026-08-14). None of `cannon_jam`, `heat_safe_limit`, `heat_dissipation_rate` or
+(decoded). None of `cannon_jam`, `heat_safe_limit`, `heat_dissipation_rate` or
 `jam_chance` exists as a string in `crimson.exe`, and the zrdr readers look keys up by string
 (`FUN_0057a090(dict, "KEY")`), so no lookup is possible. Sibling keys `bullethole_anims`
 (`0x00627ec4`) and `destroyable_parts` (`0x00627d7c`) are present, which is the calibration
@@ -354,8 +329,14 @@ inherits `armor 64` *and* carries its own 4×20/20 `destroyable_parts`. No **pla
 a whole-vehicle pair at all (`pbloodhawk → player_airplane → basic_airplane` carries none in the
 chain), so for player planes the per-part pools are the whole model.
 
+⚠ **Those 11 both-resolvers are the `r*` remote-player family, and no roster spawns one** — so no
+AI aircraft in the shipped campaign resolves both. Every def named by the 414 `aiv` blocks is a
+bare AI def or a militia variant of one, and none of those chains authors `destroyable_parts`: an
+AI aircraft is **zone-less**, carrying its authored pair alone. Census and consequences in
+[`org/vehicleDamage.md`](../org/vehicleDamage.md).
+
 **A vehicle spends both, in a fixed relationship: the per-part pools are the ledger and the
-whole-vehicle pair is a running summary of them.** Decoded from the executable 2026-08-13, full
+whole-vehicle pair is a running summary of them.** Decoded from the executable, full
 write-up in [`org/vehicleDamage.md`](../org/vehicleDamage.md). A weapon hit carries two damage
 numbers (armour and health, not one figure) and, sometimes, a zone id. When it names a zone, the
 damage is spent against that zone's pools, armour first with 1:1 overflow into health, and the
@@ -365,7 +346,7 @@ directly, through the same armour-first helper. So the `armor 64 / health 64` on
 not a second, competing pool; it is the scale its four 20/20 zones are expressed in.
 
 Everything downstream reads the summary rather than the parts. **Death is one test: whole-vehicle
-health at or below zero.** (Corrected 2026-08-14: the take-hit wrapper loops the unabsorbed
+health at or below zero.** (the take-hit wrapper loops the unabsorbed
 leftover back into the whole pair zone-less, and a dead zone redirects to a surviving one, so the
 kill can arrive with zones still healthy — every zone exhausted is sufficient, not necessary;
 [`org/vehicleDamage.md`](../org/vehicleDamage.md)'s correction section has the full contract.) The
@@ -383,7 +364,7 @@ the same type are never quite identical. Ships and ground vehicles are excluded 
 a patrol boat is exactly its authored 40 times the difficulty factor: 35, 40 or 50.
 
 **The patrol boat has two sets of hit points because it is authored as two things, and both are
-live** (settled 2026-08-13; the decode is [`org/vehicleDamage.md`](../org/vehicleDamage.md)). A boat
+live** (settled; the decode is [`org/vehicleDamage.md`](../org/vehicleDamage.md)). A boat
 spawned from an `aiv` roster is a **vehicle** and reads the 40 on this page, with the 0.60/0.30
 `injure_anims` above it; a boat *placed* in the world is a **destructible** and reads the `HEALTH 20`
 of the anim def whose wildcard `NAME` catches it, with that def's own `ANIM_HEALTH` stages. C1 ships
@@ -485,3 +466,6 @@ vehicles not named `player`, outside a network game (docs/org/flightModel.md, "T
 jitter"; implemented C26). `rates` and `turns` are the surface-driving integrator's acceleration
 and steering rates with their clamps: `basic_airplane` authors them (10/42 and 4.6/6.5) and every
 aircraft therefore carries them, but the aeroplane arm never reads them.
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

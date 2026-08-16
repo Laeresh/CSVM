@@ -79,8 +79,8 @@ public sealed class WeatherRig
     // has to hand it to the emitter factories long before this rig exists), written here because
     // this is the class that holds the mission's weather and already ticks once per frame.
     private readonly EffectAmbience _ambience;
-    // The session's viewer set (A3), whose poses Tick publishes onto the ambience each frame for
-    // the puffer distance fade (B11). Constructor-injected beside _ambience because it is the same
+    // The session's viewer set, whose poses Tick publishes onto the ambience each frame for
+    // the puffer distance fade. Constructor-injected beside _ambience because it is the same
     // shape of thing: a session-owned seam this class only WRITES THROUGH. An unbound set (no
     // GameSession, i.e. the suites' own rigs) publishes no camera, which is the no-fade path.
     private readonly ViewerSet _viewers;
@@ -298,9 +298,9 @@ public sealed class WeatherRig
 
         // The camera poses the puffer distance fade measures against, published on the same seam
         // and in the same place as the wind, for the same reason: it is world state an emitter
-        // READS. EVERY pane, from the session's viewer set (A3) rather than rigs[0] — the fade is a
+        // READS. EVERY pane, from the session's viewer set rather than rigs[0] — the fade is a
         // DRAW rule, so a trail near player 2 has to draw in player 2's pane whatever player 1 is
-        // pointing at (B11, `BL-339`). Unlike the wind this is not a per-camera step of shared sim
+        // pointing at (`BL-339`). Unlike the wind this is not a per-camera step of shared sim
         // state, so publishing N poses walks nothing twice.
         _ambience.SetViewers(_viewers);
 

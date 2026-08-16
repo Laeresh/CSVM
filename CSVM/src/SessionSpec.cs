@@ -131,7 +131,7 @@ public sealed record SessionSpec
     public bool Versus { get; private set; }
     /// <summary><c>--coop</c>: plain splitscreen free flight (no <see cref="Versus"/>, no Instant
     /// Action) puts every human on <see cref="AimAssist.PlayerTeam"/> instead of the per-pilot
-    /// default (PLAN-splitscreen-polish A1 — plain flight's default stays FFA, this is the opt-in
+    /// default (plain flight's default stays FFA, this is the opt-in
     /// to co-op). Dropped with a warning when combined with <c>--vs</c>, whose FFA is explicit and
     /// outranks it.</summary>
     public bool Coop { get; private set; }
@@ -213,11 +213,11 @@ public sealed record SessionSpec
     /// <summary><c>--ia=&lt;path&gt;</c>: fly a mission described by a hand-authored
     /// <c>InstantActionDef</c> JSON file (<c>Mech3.InstantAction.LoadFromJson</c>) instead of the
     /// chapter's own shipped <c>ia.zrd.json</c>. Null when the flag was absent — the value is only
-    /// the path; loading it is the runtime's job (PLAN-instant-action.md B6/C8), which keeps this
+    /// the path; loading it is the runtime's job, which keeps this
     /// type free of file I/O.</summary>
     public string? IaPath { get; private set; }
     /// <summary><b>Set only by <see cref="FromMenu"/>.</b> The launchscreen's Instant Action
-    /// wizard's own built <c>InstantActionDef</c> (PLAN-instant-action.md H16) — null on every CLI
+    /// wizard's own built <c>InstantActionDef</c> — null on every CLI
     /// launch, since <c>--ia=</c> carries a path instead. Already resolved: building it is the
     /// menu's job, not this type's, the same purity contract <see cref="IaPath"/> keeps (no file
     /// I/O here). When set, <c>GameSession</c> builds its <c>InstantActionRuntime</c> straight from
@@ -318,7 +318,7 @@ public sealed record SessionSpec
     /// spawned into the flight session through the runtime spawn seam
     /// (<c>GameSession.SpawnAiAircraft</c>). Without a net the plane is placed ahead of player 1
     /// holding its course; with one (a chapter neindex id or name after <c>:</c>) it spawns on
-    /// that net and patrols it (B5). <c>accent=</c> gives the pilot a voice (E16): the roster
+    /// that net and patrols it. <c>accent=</c> gives the pilot a voice: the roster
     /// slot-65 <c>accentID</c> chain resolves it to a pilot VO clip set; without it a CLI spawn
     /// is voiceless (a roster spawn carries its own). Null when the flag was absent.</summary>
     public IReadOnlyList<(string Plane, string? Net, int? Accent)>? AiPlanes { get; private set; }
@@ -331,7 +331,7 @@ public sealed record SessionSpec
     /// machine gets <c>AssistEnabled</c> false, so the lay-off mode is never entered (pursue
     /// only). Default off: the assist is the original's shipped behaviour.</summary>
     public bool NoAssist { get; private set; }
-    /// <summary><c>--generators[=plane]</c>: run the mission's egen enemy generators (M4 B6);
+    /// <summary><c>--generators[=plane]</c>: run the mission's egen enemy generators;
     /// each surviving generator spawns AI aircraft on its decoded wave/period cycle through the
     /// same runtime spawn seam <c>--ai=</c> uses. The optional value picks the spawned airframe
     /// (a stand-in until the roster's <c>vehicle.params</c> chain resolves one).</summary>
@@ -530,7 +530,7 @@ public sealed record SessionSpec
     public int? DebugLivery { get; private set; }
     public string? DebugMesh { get; private set; }
     public string? DebugNames { get; private set; }
-    /// <summary><c>--debug-fps[=compact|full]</c> (PLAN-perf-hitches D10): start the frame-cost
+    /// <summary><c>--debug-fps[=compact|full]</c>: start the frame-cost
     /// readout (<c>F14</c>) at launch, the scripted twin for a deterministic screenshot of it.
     /// Null = flag absent (off); no value = compact.</summary>
     public string? DebugFps { get; private set; }
@@ -546,12 +546,12 @@ public sealed record SessionSpec
     /// <c>UI.WorldDamageLab.ParseDebugSpec</c>.</summary>
     public string? DebugDamage { get; private set; }
     public int DebugJoin { get; private set; }
-    /// <summary><c>--debug-waves=N</c> (launchscreen only, H16): pre-configure the first N
+    /// <summary><c>--debug-waves=N</c> (launchscreen only): pre-configure the first N
     /// (clamped 0-4) Instant Action wizard wave slots with a representative load, so the wave
     /// editor's "N waves configured" states are screenshot-able with nobody at the controls. Same
     /// role <see cref="DebugJoin"/> plays for the plane screen's join strip.</summary>
     public int DebugWaves { get; private set; }
-    /// <summary><c>--debug-wingmen=N</c> (launchscreen only, H16): pre-configure the Instant
+    /// <summary><c>--debug-wingmen=N</c> (launchscreen only): pre-configure the Instant
     /// Action wizard's wingman count (clamped 0-5), so the plane screen's flown-wingmen re-clamp
     /// (decision 8a) is screenshot-able alongside <c>--debug-join=</c>.</summary>
     public int DebugWingmen { get; private set; }
@@ -648,7 +648,7 @@ public sealed record SessionSpec
     public bool Perf { get; private set; }
     public bool NoFocus { get; private set; }
 
-    /// <summary><c>--hitch-inject=</c> (PLAN-perf-hitches B5): a synthetic stall of known
+    /// <summary><c>--hitch-inject=</c>: a synthetic stall of known
     /// magnitude, in milliseconds, so every later item in the plan has something deterministic to
     /// verify against instead of an incidental hitch. Null when the flag was absent.</summary>
     public float? HitchInjectMs { get; private set; }
@@ -1059,7 +1059,7 @@ public sealed record SessionSpec
     /// launchscreen's Plane screen withholds the launch gesture until enough pilots have joined
     /// (see <c>LaunchMenu</c>); this factory trusts whatever roster it is handed.</para>
     ///
-    /// <para><paramref name="iaDef"/> is the Instant Action wizard's own built def (H16), null for
+    /// <para><paramref name="iaDef"/> is the Instant Action wizard's own built def, null for
     /// every other launch. When given, it — not <paramref name="mode"/>'s own Free/Stunt/Versus
     /// guess — decides <see cref="Scenario"/> and <see cref="Stunt"/>: the wizard already knows
     /// exactly which of the four mission types was picked, so this stops approximating it the way

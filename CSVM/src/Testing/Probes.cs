@@ -408,7 +408,7 @@ public static class Probes
     // ---- AI data -------------------------------------------------------------------------------
 
     /// <summary>--dump-ai[=chapter]: a pure-data report over the five AI data families the plan
-    /// (docs/PLAN-M4-ai.md, "What the data actually ships") measured and none of the engine reads
+    /// ("What the data actually ships") measured and none of the engine reads
     /// yet — patrol nets (the one family <see cref="AiNets"/> already reads), <c>aiv</c> rosters,
     /// <c>ai.zrd</c> turrets, zeppelins, generators. Reads every mission dir under the data root
     /// (no optional value) or one chapter's dirs (with one), so the unfiltered totals are the
@@ -2075,7 +2075,7 @@ public static class Probes
     /// <summary>The five AI data families' install-wide census: nets, <c>aiv</c> vehicle blocks
     /// (plus their field-count histogram — never assume 81-wide), turret entries, zeppelin
     /// records and generators. Unfiltered, these should read 222/414/42/58/23 against the retail
-    /// extraction (docs/PLAN-M4-ai.md, "What the data actually ships").</summary>
+    /// extraction ("What the data actually ships").</summary>
     public sealed class AiDumpResult
     {
         public readonly List<string> Errors = new();

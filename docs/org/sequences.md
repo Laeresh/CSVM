@@ -336,9 +336,8 @@ anim-system init with 200 calls to `rand() * 3.051851e-05` (1/32767, MSVC's `RAN
 stream it draws from is reseeded `srand(time(NULL))` on ordinary startup and level-load paths, so
 two runs of the original produce two different tables. There is no fixed sequence to match, and
 CSVM's session-seeded `_rng` is the correct-shape answer rather than a divergence. Disproven in
-full, with the two `srand` call sites, in `analysis/anim-interpreter-decode/FINDINGS.md`
-(`PLAN-anim-original-match` B16); the comparison sense that came out of it, `draw <= weight`
-inclusive at both ends, is what CSVM runs.
+full, with the two `srand` call sites, in `analysis/anim-interpreter-decode/FINDINGS.md`; the
+comparison sense that came out of it, `draw <= weight` inclusive at both ends, is what CSVM runs.
 
 ## CALL_SEQUENCE and STOP_SEQUENCE: a sequence is a single instance
 
@@ -413,7 +412,7 @@ only a set flag holds.
 
 ## Timed events, and what a handler reports back
 
-The stepper needs each dispatched event's run time to place the next one. Two handlers traced (D31)
+The stepper needs each dispatched event's run time to place the next one. Two handlers traced
 establish the pattern:
 
 - `LIGHT_ANIMATION` (`004e82b0`, dispatch slot 5) advances the light by one tick's worth of the
@@ -515,13 +514,13 @@ them.
   reparent, no visibility or transform change of its own. Every shipped use is one of two shapes:
   - `camera1-generic_intro.json`'s `check_warhawk`/`start_script` sequences detach `camera1` and
     `player` from `world1` — cutscene camera rigging, `OnCall` and never reached by anything CSVM
-    plays (`docs/plans/PLAN-anim-rendering-followups.md` already logs `camera1`/`player`/`cpilot` as
-    cutscene machinery for cutscenes this project does not have), and `apassengers-rem_pas.json`'s
+    plays (`camera1`/`player`/`cpilot` are cutscene machinery for cutscenes this project does not
+    have), and `apassengers-rem_pas.json`'s
     `remove_passenger` detaches `apassengers` from `pass_st` — `pass_st` is not a gamez node in any
     chapter (confirmed earlier, `docs/HISTORY.md`), so the parent can never resolve even if a handler
     were written.
   - `player-cpeject1/2/cpejectstop.json` detach `cpilot` from `pilot_pos`. These ARE reached — they
-    are called from the player's own `destroy_it` crash sequence (`docs/plans/PLAN-M2-polish-4.md`)
+    are called from the player's own `destroy_it` crash sequence
     — but in all three files the delete is the first of exactly two events, and the second is
     `ObjectActiveState(cpilot, false)`: `cpilot` is hidden immediately after, whether or not it was
     ever detached. Reached, and still a no-op to build: CSVM already renders the correct (invisible)

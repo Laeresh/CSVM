@@ -80,7 +80,7 @@ public partial class Launcher : Node3D
     // consumed there: a later return to the menu keeps whoever really joined.
     private int _pendingJoin;
     // --debug-waves=/--debug-wingmen=, the same one-shot hold as _pendingJoin above but for the
-    // Instant Action wizard's own screenshot aids (H16).
+    // Instant Action wizard's own screenshot aids.
     private int _pendingWaves, _pendingWingmen;
     // The --screenshot=/--shots=/--frames= state machine and F11/F12's placement print and
     // ad-hoc save — see src/Testing/CaptureDirector.cs's entry. Process-scoped: constructed once
@@ -94,6 +94,12 @@ public partial class Launcher : Node3D
     // spec's value; everything else draws from the clock, which is why it is resolved here and not
     // in the spec.
     private ulong _masterSeed;
+    // The once-per-process draw _masterSeed starts at, kept so an unpinned relaunch can step to the
+    // next sortie's master from it rather than from whatever the last session used.
+    private ulong _processSeed;
+    // How many times the launchscreen has started a flight this process — the step count applied to
+    // _processSeed for an unpinned run, and the label the seed is logged under.
+    private int _sortie;
 
     // The clock the --run-tests suites hand back (RunTestSuites' out param), ticked below so a
     // suite's teardown frame behaves as it always did. Every other clock is the session node's.
@@ -126,7 +132,7 @@ public partial class Launcher : Node3D
     // and measured render time is opt-in per viewport, so both have to happen before the first
     // frame rather than lazily on one.
     private HitchMonitor _hitchMonitor = null!;
-    // PLAN-perf-hitches D10: the F14 / --debug-fps frame-cost readout, ticked every frame like
+    // The F14 / --debug-fps frame-cost readout, ticked every frame like
     // the instrument above it, but drawing (if switched on) is its own concern, not this class's.
     private UI.PerfHud _perfHud = null!;
     private Rid _viewportRid;
@@ -284,7 +290,7 @@ public partial class Launcher : Node3D
         _pendingJoin = _spec.DebugJoin;
         _pendingWaves = _spec.DebugWaves;
         _pendingWingmen = _spec.DebugWingmen;
-        // The frame-hitch instrument, live from here on in every mode (PLAN-perf-hitches B4). Built
+        // The frame-hitch instrument, live from here on in every mode. Built
         // alongside the other process-scoped services, which is ahead of every probe's early quit
         // (a quit takes effect at the end of the iteration, so _Process can still run once) and
         // ahead of --dump-config: its constructor is what reads, and therefore registers, the five
@@ -362,7 +368,7 @@ public partial class Launcher : Node3D
         {
             Log.Warn("core", $"deprecated flag={old} use={replacement}");
         }
-        // PLAN-perf-hitches B6: ahead of --dump-config, same reason as _hitchMonitor above — this
+        // Ahead of --dump-config, same reason as _hitchMonitor above — this
         // constructor is what registers the two hitchSidecar.* keys. Log.SinkPath is set by the
         // Open() call just above; the synthetic fallback only matters on the rare run where that
         // open itself failed (Log.Open already degrades gracefully rather than crashing the launch).
@@ -388,9 +394,10 @@ public partial class Launcher : Node3D
         // the shipped game keeps its variety. Applied here as well as per session so the dump tools
         // — which quit before any session is built — still draw from the resolved master rather
         // than a zero one.
-        _masterSeed = _spec.PinnedSeed ?? Rng.TimeSeed();
+        _processSeed = _spec.PinnedSeed ?? Rng.TimeSeed();
+        _masterSeed = _processSeed;
         Rng.Reset(_masterSeed, _spec.SeedPinned);
-        GD.Print($"rng: master seed {_masterSeed}" + (_spec.SeedPinned ? " (pinned)" : " (--seed=N to pin)"));
+        LogMasterSeed();
         // Announce the whole resolved bundle on one line, so any capture or log carries the exact
         // conditions it was taken under instead of relying on the reader remembering what --det
         // implies. Every constituent is named with its value, including the ones a flag overrode.
@@ -554,7 +561,7 @@ public partial class Launcher : Node3D
             return;
         }
 
-        // PLAN-perf-hitches D10: the F14 / --debug-fps readout, a child of this node rather than
+        // The F14 / --debug-fps readout, a child of this node rather than
         // of any GameSession — process-wide like the camera above it, so it works at the
         // launchscreen too. Built after the --run-tests/--dump-* early exits, since none of them
         // renders a frame it would have anything to show.
@@ -597,7 +604,7 @@ public partial class Launcher : Node3D
         }
     }
 
-    // PLAN-perf-hitches B6: the root node's own teardown, reached on an ordinary quit
+    // The root node's own teardown, reached on an ordinary quit
     // (GetTree().Quit() or the window's close button) — never on a kill/crash, which is what the
     // sidecar's flush-interval loss bound (HitchSidecar's own doc) covers instead.
     public override void _ExitTree()
@@ -667,7 +674,7 @@ public partial class Launcher : Node3D
         // reports nothing. One counter read per frame feeds both: the hitch monitor wants them
         // unaveraged and the --perf window wants them summed, but they are the same eight numbers.
         var counters = ReadFrameCounters();
-        // PLAN-perf-hitches B5: --hitch-inject= fires here, one QPC read before the stamp below, so
+        // --hitch-inject= fires here, one QPC read before the stamp below, so
         // the stall inflates THIS frame's wall cost rather than leaking into the next one. The
         // frame ordinal it matches is HitchMonitor's own counter (FrameCount + 1 — the value this
         // Tick call is about to stamp its record with), never the sim frame: the injector has to
@@ -677,7 +684,7 @@ public partial class Launcher : Node3D
         {
             InjectHitch(injectMs, _spec.HitchInjectAlloc);
         }
-        // Detection is unconditional, logging (B6) is not: a hitch nobody was watching for is the
+        // Detection is unconditional, logging is not: a hitch nobody was watching for is the
         // case this exists to catch, so it cannot sit behind --perf. The frame cost it is fed is
         // our OWN QPC pair rather than Godot's `delta`, which is post-processed (OS.delta_smoothing,
         // on by default) and measures here as a quantised constant: an --no-vsync --det empty-stage
@@ -700,7 +707,7 @@ public partial class Launcher : Node3D
             _hitchSidecar.Enqueue(_hitchMonitor.Last);
         }
         _hitchSidecar.Tick(frameMs);
-        // PLAN-perf-hitches D10/D11: same raw frameMs and the same counters read HitchMonitor
+        // Same raw frameMs and the same counters read HitchMonitor
         // just judged, fed to the readout regardless of whether it is currently drawn — see
         // PerfHud.Tick's own doc comment.
         _perfHud.Tick(frameMs, counters);
@@ -807,7 +814,7 @@ public partial class Launcher : Node3D
             _pendingJoin = 0; // one-shot: a return to the menu keeps whoever really joined
         }
         // --debug-waves=/--debug-wingmen=: the same screenshot aid for the Instant Action wizard's
-        // own screens (H16).
+        // own screens.
         if (_pendingWaves > 0)
         {
             _menu.DebugWaves(_pendingWaves);
@@ -837,6 +844,16 @@ public partial class Launcher : Node3D
             planes.Add(p.PlaneNode);
         }
         _spec = SessionSpec.FromMenu(_cli, chapter, planes, mode, iaDef);
+        // Step the master so flying again is a new mission rather than a replay of the last one:
+        // without this every launchscreen relaunch re-derives the same spawn, opposition and
+        // liveries from the one process draw. A pinned run (--seed=, --det, --scripted-by, the anim
+        // lab) holds still, which is what keeps the goldens and the perf harnesses reproducible.
+        if (!_spec.SeedPinned)
+        {
+            _sortie++;
+            _masterSeed = Rng.SortieSeed(_processSeed, _sortie);
+        }
+        LogMasterSeed();
         // Honour the join flow's device binding rather than re-deriving it from the roster: the
         // pad that joined as P2 in the menu must be the pad that flies P2. Single player keeps the
         // any-pad policy (null), so every connected pad flies the one plane, as before.
@@ -855,6 +872,15 @@ public partial class Launcher : Node3D
             ReturnToMenu();
             _menu.ShowError($"Could not load {chapter} / {string.Join(", ", _spec.PlaneNames)} — see the log.");
         }
+    }
+
+    /// <summary>Prints the master the next session will draw from. Per session rather than per
+    /// process because an unpinned run advances it: the seed a mission actually flew on is the one
+    /// worth having in the log, so an interesting one can be pinned with <c>--seed=</c>.</summary>
+    private void LogMasterSeed()
+    {
+        string how = _spec.SeedPinned ? "pinned" : $"sortie {_sortie}, --seed=N to pin";
+        GD.Print($"rng: master seed {_masterSeed} ({how})");
     }
 
     /// <summary>Frees the current session node and shows the launchscreen again — the in-process
@@ -949,7 +975,7 @@ public partial class Launcher : Node3D
         Nodes: (long)Performance.GetMonitor(Performance.Monitor.ObjectNodeCount),
         MemBytes: (long)Performance.GetMonitor(Performance.Monitor.MemoryStatic));
 
-    /// <summary><c>--hitch-inject=</c> (PLAN-perf-hitches B5): burns wall time synchronously for
+    /// <summary><c>--hitch-inject=</c>: burns wall time synchronously for
     /// about <paramref name="ms"/> milliseconds, so every later item in the plan has a stall of
     /// known magnitude to verify against instead of an incidental one. The busy-wait form (default)
     /// proves the timing path; <paramref name="alloc"/> burns the same wall time allocating and

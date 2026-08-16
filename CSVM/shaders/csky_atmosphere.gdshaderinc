@@ -13,7 +13,7 @@
 // The altitude term fades by FRAGMENT altitude, not the camera's — settled at the controls of
 // the original in C2, the only chapter whose flown FOG_ALTITUDE band (256-1024 m) is inside the
 // flight envelope: climbing well above 1024 m the distant city still dissolves into haze, where a
-// camera fade would have switched the fog off outright (PLAN-overcast-match B13; weather.md).
+// camera fade would have switched the fog off outright (weather.md).
 // ⚠ The old corroboration here — "zone1's altitudes 970 -> 1047 = cloud-band bottom -> whiteout
 // centre" — was RETIRED by B12: C1 flies zone2, whose band is 4000-5000 m, so that identity lives
 // in a zone C1 never flies. It is real and unexplained, not evidence; do not re-cite it.
@@ -37,7 +37,7 @@ global uniform float csky_world_light = 1.0; // per-mission SUNLIGHT dimming (M2
 // mech3ax ASSERTS it (`nodes/src/cs/world/data.rs`), so the value is present and identical in all
 // eight chapters. 0 in that field would be OFF — the rest of the struct being zeroed is what
 // makes a written 1 significant, not what makes it doubtful. It replaced a `smoothstep`, which
-// was ours and rested on nothing (PLAN-overcast-match B15, 2026-08-08).
+// was ours and rested on nothing (2026-08-08).
 // ⚠ The ALTITUDE term keeps its smoothstep deliberately. `fog_state` is D3D's distance-fog mode
 // and says nothing about a vertical fade; the cylinder's altitude fade is the remake's own model,
 // and exactly one flown band in the install (C2 ZONE1, 256-1024 m) is inside the flight envelope,

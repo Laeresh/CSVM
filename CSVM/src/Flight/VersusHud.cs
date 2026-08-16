@@ -19,9 +19,9 @@ namespace CSVM.Flight;
 /// <para>The edge-arrow + two-line-off-screen-tag SHAPE this draws is not invented, though:
 /// <c>OriginalScreenshots/HUD.png</c> shows the original's own targeting marker doing exactly
 /// this — decoded in <see href="../../docs/org/targeting.md">org/targeting.md</see>. That marker,
-/// and the H22 nearest-AI-hostile tracker + <c>--debug-markers</c> that used to live here too, are
-/// <see cref="TargetHud"/>'s now (<c>PLAN-targeting.md</c> C21) — it draws in every flight
-/// session, not only <c>--vs</c>, which this class never did.</para>
+/// and the nearest-AI-hostile tracker + <c>--debug-markers</c> that used to live here too, are
+/// <see cref="TargetHud"/>'s now — it draws in every flight session, not only <c>--vs</c>, which
+/// this class never did.</para>
 ///
 /// <para>The status line pulls <see cref="VersusMatch"/> live each frame: its own bookkeeping is
 /// already current by the time the HUD draws. The banner is pushed once per fact via

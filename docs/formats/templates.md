@@ -13,9 +13,9 @@ worth writing down, not a reason to stop parsing; but nothing in the install can
 them. The consequence is structural: the original's placement has **no random input that
 affects a decoration's position or orientation at all**, which is why an unseeded
 reimplementation of the lattice walk reproduces C1's tree positions *exactly* rather than
-approximately (confirmed at the controls, 2026-08-10).
+approximately.
 
-## Where it sits
+## Archive location
 
 | | |
 |---|---|
@@ -28,7 +28,7 @@ approximately (confirmed at the controls, 2026-08-10).
 
 ## Shape
 
-A reader list of blocks, each an alternating key/value list. Decoded 2026-08-10 from the
+A reader list of blocks, each an alternating key/value list. The retail data establishes the
 parser, key by key.
 
 ```
@@ -106,7 +106,7 @@ the thing they bound.
 The defaults are ±1.0 — **no cull** — and no chapter authors either key, so no clutter in
 the install is ever slope-culled. The remake's old `MinSlopeCos = 0.25f` had no counterpart
 here and never fired anyway (the steepest clutter-eligible triangle in the install is C1's
-at 0.4598); it was deleted in 2026-08-10's B13.
+at 0.4598).
 
 ### ⚠ `substitute` weights are relative, and the file never normalises them
 
@@ -114,7 +114,7 @@ at 0.4598); it was deleted in 2026-08-10's B13.
 that list subtracting from one uniform draw. So C1's `firtree1` at `[[9, firtree1], [1,
 firtree2]]` is **90 % / 10 %**, not "nine of something". Weight sums in the shipped data run
 8.5 to 20, and the extreme case is C5's `hotelsign0`, which weights *itself* 0.1 against two
-alternatives at 5.0: it is replaced 99 % of the time.
+alternatives at 5.0: it is selected 99 % of the time.
 
 Every shipped list names its own model as one of the alternatives — that is how "usually
 stays itself" is expressed. ⚠ **The roll rewrites the model and nothing else: properties
@@ -127,9 +127,9 @@ and **places nothing** when drawn. Two C5 targets (`cb05det02.flt`, `cb06det03.f
 block of their own, which is legal — a missing block means all defaults, never "do not
 place".
 
-## What the eight shipped files actually author
+## Authored data
 
-Every number below is measured off the retail install (2026-08-10), and pinned per chapter
+Every number below is measured off the retail install and pinned per chapter
 in `CSVM.Tests/ClutterTemplatesTests.cs`.
 
 | chapter | bytes | blocks | distinct models | `scale_range` | `far_fade_range` | `substitute` | the other eight keys |
@@ -195,16 +195,16 @@ the second carries only `scale_range` and `far_fade_range`. The engine's lookup
 and the loader appends, so **the first block is the one that is used** — the substitute
 survives, and the second block is unreachable. It is the only duplicate in the install.
 
-## What the remake reads, and what it does with it
+## Reader behavior
 
 `ClutterTemplateSpec.Load` / `.Parse` read every key on this page, including the eight no
 chapter authors — the negative is only a measurement if the reader would have seen them.
 `ClutterKindProps` holds one block; `Find` resolves a model name the way the engine does
 (first block wins); `Census()` prints the per-key counts the table above pins.
 
-`ClutterBuilder` consumes `substitute` and `scale_range` (C22): a stamp rolls its model against
+`ClutterBuilder` consumes `substitute` and `scale_range`: a stamp rolls its model against
 the kind's table and takes a uniform scale from its range. `far_fade_range` is read and **not
-applied** — deferred to `BL-337` (C23, 2026-08-10). It is a rendering-side feature, not a
+applied** — deferred to `BL-337`. It is a rendering-side feature, not a
 placement one: the runtime's `CameraSetClutterFadeScaleSq` (`0x0063f5bc`) writes one global that
 scales *every* type-5 scene node's LOD/distance fade, defaulted by the graphics detail level
 (×1/×2/×3, `FUN_00440750`) and overridable per mission — so the authored metres in this file are a
@@ -231,3 +231,7 @@ One nuance for whoever implements step 10's rotation: the engine draws three `ra
 it **even when `rotation_range` is absent**, so the key is inert in its effect, not skipped in the
 stream. That only matters to somebody trying to match the original's draw order, which the
 paragraph above says not to attempt.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

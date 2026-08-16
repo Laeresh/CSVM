@@ -350,7 +350,7 @@ public sealed partial class ProjectilePool : Node3D
     private readonly PhysicsShapeQueryParameters3D _proximityQuery = new() { CollisionMask = CollisionLayers.World };
     private readonly List<AudioStreamPlayer> _sfxPool = new();
     // The stand-in fireball's sprite scatter, muzzle-flash roll, and debris/ricochet spread
-    // (ApplySpread — gun dispersion itself was removed, A1). Held rather than resolved per draw.
+    // (ApplySpread — gun dispersion itself was removed). Held rather than resolved per draw.
     private readonly RandomNumberGenerator _rng = Rng.Stream(Rng.Weapons);
     private readonly HashSet<string> _flyoutLogged = new();
     // One MultiMesh per muzzle-flash ammo texture (MuzzleAmmoTextures) — built in _Ready.
@@ -403,7 +403,7 @@ public sealed partial class ProjectilePool : Node3D
     }
 
     /// <summary>Every camera that can see this pool's tracers — one per player pane in splitscreen,
-    /// GameSession's own <see cref="ViewerSet"/> (A3) by default so binding it once, right after the
+    /// GameSession's own <see cref="ViewerSet"/> by default so binding it once, right after the
     /// rigs are built, is the whole wiring. Used only by the <see cref="TracerMinPixels"/> distance
     /// floor, which is a SCREEN-space rule applied to ONE shared world-space mesh, so it can only
     /// ever be satisfied exactly for one viewer. ⚠ Bind them ALL. Binding player 1's alone (as this
@@ -419,12 +419,12 @@ public sealed partial class ProjectilePool : Node3D
     /// <summary>Splitscreen's overall gain for this pool's one-shots, the same equal-power figure
     /// (1 for 1P, 1/√N for N — <c>GameSession.mixGain</c>) <see cref="FlightAudio.MixGain"/> already
     /// applies to a plane's own-ship loops, so N simultaneous firefights don't sum to a wall of
-    /// noise either (D31, `BL-370`).</summary>
+    /// noise either (`BL-370`).</summary>
     public float MixGain { get; set; } = 1f;
 
     /// <summary>The nearest-human seam (<c>GameSession.PlayerPositionsSnapshot</c>, C21's
     /// <c>PLAYER_RANGE</c>/`BL-365` seam) — read here so a gun/rocket one-shot's distance term
-    /// (D31, `BL-370`) answers "how far is this from the nearest pilot", not player 1's alone. Null
+    /// (`BL-370`) answers "how far is this from the nearest pilot", not player 1's alone. Null
     /// outside a real session (the weapon bench, `Suites.cs` labs), where the distance term is
     /// skipped entirely rather than guessing a listener.</summary>
     public Func<IReadOnlyList<Vector3>>? PlayerPositions { get; set; }
@@ -434,8 +434,8 @@ public sealed partial class ProjectilePool : Node3D
     /// lab, the dump probes), which costs the scan nothing.</summary>
     public List<NearMissTarget> NearMissTargets { get; } = new();
 
-    /// <summary>Instant Action's wrap-up "Shot %" (PLAN-instant-action.md G14,
-    /// docs/formats/instant-action.md "What the four numbers count"): the decode counts a cannon
+    /// <summary>Instant Action's wrap-up "Shot %" (docs/formats/instant-action.md "What the four
+    /// numbers count"): the decode counts a cannon
     /// round fired/hit only when the shooter is <c>the local player</c>; a shooter id in this set
     /// is that filter generalised to every human pilot for splitscreen (empty — nothing scored —
     /// outside Instant Action). <see cref="CannonRoundsFired"/>/<see cref="CannonHits"/> below are
@@ -554,7 +554,7 @@ public sealed partial class ProjectilePool : Node3D
     /// flight rather than a structure of its own: the engine registers a tracking record after every
     /// spawn whose def carries a fuse longer than <see cref="AimAssist.MinFuseDistance"/>. Reads the
     /// round's own <c>Team</c>, stamped once at <see cref="Spawn"/> from the shooter's
-    /// <c>FlightController.Team</c> (B7) rather than re-derived from the shooter id here; a round
+    /// <c>FlightController.Team</c> rather than re-derived from the shooter id here; a round
     /// nobody owns lands on <see cref="AimAssist.NeutralTeam"/> and is therefore rejected by the
     /// scorer's team gate, same as the engine's own "either side is 0" rule.</summary>
     public void CollectFusedOrdnance(AimCandidateSet into)
@@ -574,9 +574,9 @@ public sealed partial class ProjectilePool : Node3D
     /// original's `VehicleList` pass, which is aircraft plus the AI ground/sea vehicles M4 will add.
     /// The registered bodies are the one live roster of flying planes this pool already keeps (for
     /// the hit ray and the fuse), so the assist reads the same list rather than a second one that
-    /// could drift. Reads each rig's own <see cref="FlightController.Team"/> (B7), never re-derives
+    /// could drift. Reads each rig's own <see cref="FlightController.Team"/>, never re-derives
     /// one from its <c>PlayerIndex</c>. A pilot that is not in play — crashed, or INERT
-    /// (<see cref="FlightController.InPlay"/>, E10) — is present but not live, which is the engine's
+    /// (<see cref="FlightController.InPlay"/>) — is present but not live, which is the engine's
     /// own dead-candidate rejection; the shooter excludes itself through
     /// <see cref="AimScan.Self"/>.</summary>
     public void CollectAircraft(AimCandidateSet into)
@@ -588,10 +588,10 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>Appends every registered aircraft's carried turrets (C9a) and every world
-    /// emplacement (C9b) to the assist's candidate set — the original's `TurretList` pass. A
+    /// <summary>Appends every registered aircraft's carried turrets and every world
+    /// emplacement to the assist's candidate set — the original's `TurretList` pass. A
     /// carried turret rides its host, so it moves with the host's velocity and sits on the
-    /// host's <see cref="FlightController.Team"/> (B7); the host's own scan rejects it through that
+    /// host's <see cref="FlightController.Team"/>; the host's own scan rejects it through that
     /// same team gate, never through Self (the turret is its own Source). An emplacement carries its
     /// own team and platform velocity, and stays listed while dormant — a sleeping AA gun is still a
     /// lockable object; only its death delists it as live.</summary>
@@ -612,7 +612,7 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>Registers the session's world emplacements (C9b) for
+    /// <summary>Registers the session's world emplacements for
     /// <see cref="CollectTurrets"/> — the same one-live-roster rule as the aircraft list.</summary>
     public void RegisterWorldTurrets(IReadOnlyList<TurretController> turrets) =>
         _worldTurrets.AddRange(turrets);
@@ -620,7 +620,7 @@ public sealed partial class ProjectilePool : Node3D
     /// <summary>A non-player fire source's launch bark (the turret gunners' <c>SOUNDS.CANNON</c>)
     /// through the pool's own one-shot pool — the same resolve-through-groups path a weapon's
     /// FIRE sound takes. <paramref name="worldPos"/> is the firing muzzle's position, feeding the
-    /// same distance term (D31) a player's own shots get.</summary>
+    /// same distance term a player's own shots get.</summary>
     public void PlayShotSound(string sndName, Vector3 worldPos) => PlaySound(sndName, worldPos);
 
     public override void _Ready()
@@ -680,7 +680,7 @@ public sealed partial class ProjectilePool : Node3D
     /// re-run scan that would diverge (`BL-342`/B6).</para>
     ///
     /// <para><paramref name="team"/> is the round's team for <see cref="CollectFusedOrdnance"/>'s
-    /// candidate stamp (PLAN-instant-action B7) — stamped ONCE at spawn, not re-derived from
+    /// candidate stamp — stamped ONCE at spawn, not re-derived from
     /// <paramref name="shooterId"/> on every scan, so a caller with a real
     /// <c>FlightController.Team</c> (a mission override, not the pilot-index default) is
     /// answered faithfully for the round's whole flight. Omitted, it falls back to
@@ -1657,7 +1657,7 @@ public sealed partial class ProjectilePool : Node3D
     /// and no rocket could ever hurt a plane. While the round is still closing at the step's end
     /// the fuse holds (<see cref="StillClosingFraction"/>). The shooter's own plane is never a
     /// candidate — a rocket leaves the muzzle INSIDE its own boxes — and neither is one out of
-    /// play: a wreck, or an INERT airframe (E10). ⚠ This walk is the pool's OWN roster, not a
+    /// play: a wreck, or an INERT airframe. ⚠ This walk is the pool's OWN roster, not a
     /// physics query, so the collision layer that hides an inert plane from the hit ray never
     /// reaches it — <see cref="FlightController.InPlay"/> does.</summary>
     private bool ProximityFuseTriggered(WeaponDef weapon, int shooter, Vector3 from, Vector3 to,
@@ -2193,7 +2193,7 @@ public sealed partial class ProjectilePool : Node3D
         float gain = def.Volume * 0.2f * MixGain * distanceGain;
         player.VolumeDb = Mathf.LinearToDb(Mathf.Max(0.002f, gain));
         player.Play();
-        // Verification breadcrumb (D31, BL-370): the first few one-shots confirm the computed
+        // Verification breadcrumb (BL-370): the first few one-shots confirm the computed
         // gain without needing a lucky --volume=0 listen, same convention as the impact fx/snd
         // breadcrumb above.
         if (_soundGainsLogged < 8)

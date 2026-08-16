@@ -220,9 +220,9 @@ public class SessionSpecMenuTests
         Assert.Equal(8, UI.LaunchMenu.ChapterCodesFor(MenuMode.Versus).Length);
     }
 
-    // ---- Instant Action wizard steps 1-2 (PLAN-instant-action.md H15) --------------------------
+    // ---- Instant Action wizard steps 1-2 --------------------------
 
-    /// <summary>The Environment screen's roster, in the decoded dropdown order (A5) — seven rows,
+    /// <summary>The Environment screen's roster, in the decoded dropdown order — seven rows,
     /// C1C never among them (the chapter Instant Action omits). Matches
     /// docs/formats/instant-action.md's "Environment → chapter" table exactly.</summary>
     [Fact]
@@ -263,7 +263,7 @@ public class SessionSpecMenuTests
         }
     }
 
-    // ---- Instant Action wizard steps 3-5, one build path (PLAN-instant-action.md H16) -----------
+    // ---- Instant Action wizard steps 3-5, one build path -----------
 
     /// <summary>When the wizard hands over a built <c>InstantActionDef</c>, IT — not the picked
     /// <see cref="MenuMode"/> — decides <see cref="SessionSpec.Scenario"/>/<see cref="SessionSpec.Stunt"/>:

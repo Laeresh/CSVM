@@ -1,24 +1,24 @@
-# Instant Action — the configurable mission surface
+# Instant Action
 
-Part of the [format documentation](README.md). The description of record for what an Instant
-Action mission can be configured to: the seven environments and the chapter each names, the four
-mission types the UI offers (of five the data defines), the thirteen militias and their aircraft
-lists, the wingman/wave/skill ranges, and the ace and wrap-up records. Anyone implementing
-`PLAN-instant-action.md`'s waves B onward reads this page instead of re-deriving it.
+Part of the [format documentation](README.md). This page describes the Instant Action mission
+configuration surface: environments, mission types, militias and aircraft, wingman/wave/skill
+ranges, the ace, and mission setup. Its sources are the Instant Action and wrap-up scripts,
+layout data, UI strings, and each chapter's `IA1` reader data. [Spawns](spawns.md) holds the full
+`ia.json` field census; [Instant Action wrap-up](instant-action/wrap-up.md) covers scoring and
+friendly-fire rules.
 
-Sourced from `ASSETS/SCRIPTS/INSTANTACTION.SCRIPT`, `ASSETS/SCRIPTS/IA_WRAPUP.SCRIPT` and
-`ASSETS/LAYOUT.CSV` inside `crimson.rof` (see [rof.md](rof.md)), `ui_strings.json`'s `langui`
-table (see [strings.md](strings.md)), and the per-chapter `<chapter>/IA1/zrdr/ia.zrd.json`. The
-latter's full key census — every field an `ia.json` carries, including the ace's livery keys —
-already lives in [spawns.md](spawns.md); this page does not restate it, only what feeds the
-**setup UI** and the **wrap-up UI** around that data. Decoded 2026-08-14.
+## Contents
 
-The "setup path" and "built-in defaults" sections below are what `Mech3.InstantActionDef` and
-its two readers (`Mech3/InstantAction.cs`, PLAN-instant-action.md B6) implement — every optional
-key resolves to the defaults recorded here rather than to a null, matching the original's own
-reset-then-overlay parse.
-
-## The screen's controls
+- [Screen controls](#screen-controls)
+- [Option strings](#option-strings)
+- [Environment mapping](#environment-mapping)
+- [Militias and aircraft](#militias-and-aircraft)
+- [Ace](#ace)
+- [Mission setup](#mission-setup)
+- [Wave sequencer and mission end](#wave-sequencer-and-mission-end)
+- [Wrap-up and scoring](instant-action/wrap-up.md)
+- [Known UI limit](#known-ui-limit)
+## Screen controls
 
 `INSTANTACTION.SCRIPT` declares every widget and the engine callback that fills and reads it.
 `LAYOUT.CSV`'s last column on a `D` (dropdown) row is the **visible-row count**, which for these
@@ -51,7 +51,7 @@ same count each frame to decide whether the default selection is index 0 (no cus
 index 11 (the first custom plane). 20 is `LAYOUT.CSV`'s visible-row window for that variable-length
 list, not an item count — the only row in this table where the two differ.
 
-## The option strings
+## Option strings
 
 From the `langui` table, read out of `extracted/rof/ui_strings.json`.
 
@@ -74,7 +74,7 @@ would make the plane list look like it has twelve entries.
 `ground_target` is a fifth mission type every chapter's `ia.json` disallows (see the table below),
 which is why the UI offers only four.
 
-## Environment → chapter
+## Environment mapping
 
 Seven strings, eight chapters. **The mapping is decoded, and so is the dropdown's order**: the
 launcher `FUN_004174d0` switches on the environment dropdown index and writes a chapter id, so the
@@ -109,7 +109,7 @@ reintroduce either claim.
 `num_wingmen` is `3` in all seven chapters that carry it (the eighth, C2B, carries neither
 `player_plane` nor `num_wingmen`); the wingman range is 0 to 5 per `ia_d_nwing`'s row count above.
 
-## The thirteen militias and their aircraft
+## Militias and aircraft
 
 Inverted from [paint.md](paint.md)'s "Patterns are per aircraft" table (measured over the `.BM`
 skins each pattern ships in `crimson.rof`), matched to the militia strings above by their pattern
@@ -142,17 +142,17 @@ reading Fortune Hunter covers all eleven, which is what `ia_d_planeeN`'s eleven-
 requires (`LAYOUT.CSV`, above). The two readings also disagree on Sacred Trust (defs give
 Hellhound alone, coverage gives Warhawk and Hellhound).
 
-## The ace
+## Ace
 
 Every chapter's `ia.zrd.json` names one ace in full, not a random draw: `ace_name`, `ace_plane`,
 `ace_skill` (always `"ace"`), `ace_stats` (always `[9,9,9,9,9,9,9,9,9]`), `ace_accentID`, and a
 complete `ace_pattern`/`ace_colorN`/`ace_decalN` livery — authored in all 8 of 8 chapters, censused
-2026-08-14. The full field table, the `PaintScheme` mapping and the `ace_stats` order inference are
+The full field table, the `PaintScheme` mapping and the `ace_stats` order inference are
 already on [spawns.md](spawns.md); this page does not repeat them.
 
-## The setup path: what the engine builds from all this
+## Mission setup
 
-Decoded 2026-08-14 out of `crimson.exe`. The file half is loaded by `FUN_0045a150` (opens `ia.zrd`,
+`crimson.exe` establishes this. The file half is loaded by `FUN_0045a150` (opens `ia.zrd`,
 fills the per-mission-type spawn table, then calls the key parser `FUN_00459390` on the setup
 record) and the mission is built by `FUN_0045a390`. The setup record is the global at
 **`0x00718cd8`**; the per-mission-type table is `0x00718fe0`, five entries of 20 bytes, holding an
@@ -217,7 +217,6 @@ The offsets confirm M4 B7's decode from the other direction: team at `+0x34`, gr
 band of **±10000 m** for every Instant Action actor, which is the engine's own way of saying they
 are always awake, always willing to engage, and never return.
 
-⚠ **Every actor is also given a patrol net** (corrected 2026-08-15; this page previously said
 `netids` kept its `-1`). All three branches of `FUN_0045a390` write a one-entry `netids` list
 holding the **first id in the chapter's net table** (`0x0045a8b4` for the wingmen, `0x0045ab18` for
 the ace, `0x0045ae85` for the waves), so every Instant Action aircraft walks the chapter's first
@@ -233,7 +232,7 @@ as a target assignment only. [`org/aiPilot.md`](../org/aiPilot.md) has the demot
 formation law it suppresses.
 
 ⚠ **That first net is a CAMPAIGN MISSION's asset, not a generic patrol area** (censused
-2026-08-15). Net names are mission-scoped, the prefix naming the mission that uses them
+Net names are mission-scoped, the prefix naming the mission that uses them
 ([`ai-nets.md`](ai-nets.md), "Net names are mission-scoped"), and each chapter's first net is
 referenced by exactly one mission, or by nothing at all:
 
@@ -273,7 +272,7 @@ Wingman `i` (0-based) is built as:
 `<plane>` is `wingman_plane`'s index through the two name columns above; the roster name format is
 `%s_ia%d` over the def and the index. **So the flight is not five aircraft on the player: 0, 1 and
 3 escort the player, while 2 and 4 escort 1 and 3.** That is `primary_target` doing the work M4 B7
-said it does, and it is the shipped Instant Action wingman mechanism. ⚠ **Corrected 2026-08-15: a
+said it does, and it is the shipped Instant Action wingman mechanism. ⚠ **a
 patrol net IS assigned** (see above), and the net demotes the `w<plane>` def's `wingman` mode to
 `jet`, so on this path the chain is a target assignment rather than a flown formation. **The
 nine-value skill vector is left unset**, so wingmen fly on the airframe's own AI defaults.
@@ -346,11 +345,11 @@ and health maxima multiplied by **0.875 / 1.0 / 1.25** on difficulty 0 / 1 / 2
 ([`org/vehicleDamage.md`](../org/vehicleDamage.md)). So the skill names are a **hit-point** scale in
 Instant Action, and nothing else. Nothing on this path converts them to a 1-to-9 rating.
 
-## The wave sequencer and the mission end: `FUN_0045b9d0`
+## Wave sequencer and mission end
 
 One function, ticked every frame, does two jobs. It advances the wave counter when the current wave
 is gone, and it decides whether the mission is over. M4 B7 traced its main path
-(`analysis/m4-b7-group-slot/FINDINGS.md`); it was read whole on 2026-08-14 (A4), which is what
+(`analysis/m4-b7-group-slot/FINDINGS.md`); the full read establishes
 settled the three questions that pass left open.
 
 Two globals drive it. `DAT_00718cd8` is the setup record's first dword, the **`mission_type` id**,
@@ -461,7 +460,7 @@ blocks call the same three functions with inverted arguments:
 | `FUN_0045a2a0(zep->node)` — recursive teardown of the vehicle/AI objects under that node | called | **not called** |
 
 The objective then also gets byte `+0x4d` set on the object `FUN_004a3360` finds by its name — the
-same "this is the mission's target" byte the stunt zones and the ground target get earlier in this
+same "this is the mission's target" byte the stunt zones and the ground target get in this
 function — and a `FUN_004edc50(…, 0, 0, 0)` motion reset on a third per-type slot
 (`0x00718fc4 + type·4`) which the record reset zeroes (`param_1[0xbb..0xbd] = 0`) and nothing on the
 `ia.json` path writes, so that last call does not fire in a file-driven launch.
@@ -556,7 +555,7 @@ record authors a threshold: the count is "all of them", because the test is on a
 load, and nothing distinguishes that from having emptied it. Unobservable in the shipped data (all
 58 records author 12 or 14 engines) but it is the behaviour, not an accident.
 
-⚠ **This was decoded 2026-08-15, after G13 had already shipped the hull kill as the only path.**
+⚠ **This was decoded, after G13 had already shipped the hull kill as the only path.**
 The tell was in play: every engine on the objective zeppelin destroyed and the mission ran on.
 The reason the error survived review is that the gasbags are behind the `DAMAGES_ZEPPELIN` gate
 ([weapons.md](weapons.md)) while engines are ordinary destructibles, so the hull-only reading made
@@ -577,160 +576,14 @@ the wingman aircraft, `ia_d_egroupN` the wave's militia livery, `ia_d_difficulty
 It shows on any path that skips the screen: then the wingmen fly the **Devastator**, every wave
 enemy has `accentID` -1 and skill `veteran`, and the wave livery is whatever the record last held.
 
-## The wrap-up screen
+## Wrap-up and scoring
 
-`IA_WRAPUP.SCRIPT` and `LAYOUT.CSV` wire the post-mission board. The `langui` table carries **six**
-consecutive title strings:
+See [Instant Action wrap-up](instant-action/wrap-up.md) for the wrap-up UI, scoring, and friendly-fire rules.
 
-| Id | Symbol | Text |
-|---|---|---|
-| 1133 | `IDS_IAWU_TITLE` | Instant Action |
-| 1134 | `IDS_IAWU_TIME_TITLE` | Time to Complete Mission |
-| 1135 | `IDS_IAWU_DESTROYED_TITLE` | Enemies Shot Down |
-| 1136 | `IDS_IAWU_ZONES_TITLE` | Danger Zones Completed |
-| 1137 | `IDS_IAWU_SHOTS_TITLE` | Shot % |
-| 1138 | `IDS_IAWU_KILLS_TITLE` | Total Kills |
+## Known UI limit
 
-**⚠ Only four of those six are actually wired to a row — "Total Kills" is not.** `LAYOUT.CSV`
-declares exactly four `IAWU_LINE*` brushstroke panes and four value texts (`IAWU_T_TIME`,
-`IAWU_T_DESTROYED`, `IAWU_T_ZONES`, `IAWU_T_SHOTS`), plus the screen's own title
-(`IAWU_T_TITLE=T,IDS_IAWU_TITLE,…`); there is no fifth data line, no fifth value text, and no
-`IAWU_T_KILLS`-shaped row anywhere in the CSV. `IA_WRAPUP.SCRIPT` matches: `gui_init` fills exactly
-four strings from one callback (`callback($$E$$, 2352, GT, HT, IT, JT)`) and assigns them to the
-four value texts; no fifth variable or object exists. `RESOURCE.H` confirms the format-string side:
-there are only four `IDS_IAWU_*` **format** ids (1185 `TIME`, 1186 `KILLED`, 1187 `DANGERZONES`,
-1188 `PERCENTAGE`) feeding those four rows — no `IDS_IAWU_KILLS` format id exists at all. Of the six
-title strings, `IDS_IAWU_KILLS_TITLE` alone has no reference anywhere outside `RESOURCE.H`'s own
-`#define` — every other title, including the screen heading `IDS_IAWU_TITLE`, is referenced by a
-`LAYOUT.CSV` row.
+**"Total Kills" is defined but unwired** in the shipped UI. Do not add a fifth wrap-up row for it.
 
-So the shipped wrap-up screen shows **four** rows — Time to Complete Mission, Enemies Shot Down,
-Danger Zones Completed, Shot % — not five. "Total Kills" is a defined-but-unwired string, the same
-class of finding as `strings.md`'s spyglass/padlock case: present in the table, absent from the
-screen that would have used it. **This corrects the milestone goal's and A5/G14's "five rows"
-framing** — G14 should render four rows, and A5's counter decode only needs to answer for those
-four (Shot %'s numerator/denominator remains the open question).
+## Evidence & limits
 
-| Row | Format id | Format |
-|---|---|---|
-| Time to Complete Mission | `IDS_IAWU_TIME` (1185) | `%02d:%02d` |
-| Enemies Shot Down | `IDS_IAWU_KILLED` (1186) | `%d` |
-| Danger Zones Completed | `IDS_IAWU_DANGERZONES` (1187) | `%d` |
-| Shot % | `IDS_IAWU_PERCENTAGE` (1188) | `%d%%` |
-
-### What the four numbers count
-
-Decoded 2026-08-14 (A5). `gui_init` makes exactly one engine call, `callback($$E$$, 2352, GT, HT,
-IT, JT)`, and its arm in `crimson.exe` is `0x0040c644`-`0x0040c749`. That arm formats all four
-strings and writes them back through the four out-pointers, so the whole board is one function
-reading one record.
-
-**The wrap-up reads a frozen snapshot, not the live counters.** `FUN_00443090` is the mission-end
-handler: when the mode global `DAT_0071bb80` is **3** (Instant Action, set by the launcher
-`FUN_004174d0`) it calls `FUN_00419700`, which calls `FUN_00419630(&DAT_0064ad8c)` to copy the live
-counters into the snapshot block at `0x0064ad8c`. Every other mode takes `FUN_004194e0` and a
-different layout, which is why the snapshot has two shapes and only the mode-3 one is a set of four
-scalars.
-
-The live counters are all fields of **one object at `0x0071d2a0`**, zeroed together by
-`FUN_004a22a0` off the mission-load path:
-
-| Object offset | Snapshot offset | Field |
-|---|---|---|
-| `+0x00`…`+0x2b` | `+0x08` (summed) | kill table A, one dword per aircraft type 0 to 10 |
-| `+0x2c` | not read | kills of anything that is not one of the eleven aircraft |
-| `+0x30`…`+0x5b` | `+0x08` (summed) | kill table B, same indexing |
-| `+0x5c` | `+0x20` | cannon rounds the local player fired |
-| `+0x60` | `+0x22` | cannon rounds the local player hit with |
-| `+0x88` | `+0x14` | danger zones completed |
-
-**Time to Complete Mission** is snapshot `+4`, `ftol(clock × 1000.0)` over the mission clock at
-`0x0071b468`, so it is a straight elapsed time in milliseconds. The row renders
-`minutes = ms / 60000` and `seconds = (ms / 1000) % 60` (reciprocal multiplies `0x10624dd3 >> 6`
-and `0x45e7b273 >> 14`), both truncating rather than rounding.
-
-**Enemies Shot Down** is the sum of **both** per-aircraft kill tables over types 0 to 10. A kill is
-recorded in `FUN_004b9bc0` only when the victim's team (`+0x08`) is **greater than 1**, which is the
-decoded team space again, so a friendly or neutral kill never counts. Since the original applies
-friendly damage (below), a wingman you shoot down is a kill that this row will not show.
-
-⚠ **Two things are silently excluded.** The victim's category field `+0x67c` must be 0 or 4 to reach
-the per-aircraft tables at all; everything else lands in the object's `+0x2c` bucket, and the
-wrap-up never reads `+0x2c`. And `FUN_00426e30`, which turns the victim's def name into an aircraft
-index, returns **11** for a name it does not recognise, which is one past the summed range. So
-ground targets, zeppelins and anything off the eleven-aircraft list do not appear in "Enemies Shot
-Down". Which of the two tables a kill lands in is decided by a byte on the victim (`+0x988`, copied
-at spawn from roster-block byte `+0xa4`); because this row sums both, that split does not change it
-and was not chased.
-
-**Danger Zones Completed** is the object's `+0x88`, incremented by `FUN_00446990`. A zone completes
-when **more than one** of its gates has been flown (gate records from `+0x34` to `+0x38`, stride
-`0x14`, with a passed byte at `+0x10`), and the increment then happens only if the zone's own latch
-byte `+0x40` is still clear. The latch is set immediately afterwards.
-
-⚠ **So this counts distinct zones completed, once each. Flying the same zone a second time does not
-increment it.** The row is also present on every mission type; on a mission with no zones nothing
-completes one, so it renders `0` rather than being hidden.
-
-**Shot %** is `ftol(100.0 × snapshot+0x22 / snapshot+0x20)`, that is **hits over rounds fired**, and
-both halves carry the **same** filter:
-
-- The denominator increments in `FUN_004b6820`, the per-station fire loop, once per round that is
-  actually created (`FUN_005aef40` returned non-zero) and only when the firing vehicle is the local
-  player (`DAT_0071c298`).
-- The numerator increments at three sites (`0x004ba04e` in `FUN_004b9bc0`, `0x004bad0c` in
-  `FUN_004bab50`, `0x004c08c1` in `FUN_004c0880`, covering three kinds of thing hit), each guarded
-  by the shooter being the local player and by `TEST byte ptr [weaponDef], 0x40`.
-- Bit `0x40` is the **`CANNON`** flag. `FUN_004ba6f0` is the weapon-flags parser and its
-  `OR dword ptr [ESI], 0x40` at `0x004ba9ba` follows the `CANNON` key string at `0x0062b320`
-  ([weapons.md](weapons.md) lists `CANNON` on 31 entries).
-- The fire side carries the same filter even though no `0x40` immediate appears in `FUN_004b6820`:
-  the function hoists the bit to `(weaponFlags >> 6) & 1` at the top of each station and the
-  increment sits inside that arm. The ordnance arms of the same function create their rounds
-  through `FUN_005aef40` without ever touching the counter.
-
-⚠ **So Shot % is cannon hits over cannon rounds fired, both by the local player, and ordnance is
-excluded from both halves.** Of the two readings this could have had, it is the one that excludes
-ordnance, and it is symmetric. Corroboration that the pair belongs together: `FUN_00499490` packs
-exactly these two globals into one network message.
-
-Two edges G14 has to decide about rather than inherit. **Nothing guards a zero denominator**: fire
-no cannon round and the x87 divide yields infinity, which `ftol` turns into `0x80000000`, so the row
-would print a large negative number. That is read from the instructions, not observed in the
-original, and it should be handled deliberately. And **both counters are incremented as 32-bit
-dwords but snapshotted as 16-bit words**, so past 65535 the row wraps.
-
-### What the launcher maps
-
-`FUN_004174d0` is the Instant Action launcher and carries two dropdown-to-internal maps worth
-having. The mission-type dropdown index becomes the internal id **0 → 0, 1 → 1, 2 → 4, 3 → 2**,
-which reproduces the ace / squadron / stunt / zeppelin ordering settled from the parser side above,
-now confirmed from the launcher as well. The environment dropdown index becomes a chapter id
-**0 → 1, 1 → 5, 2 → 6, 3 → 8, 4 → 2, 5 → 7, 6 → 4**, and the chapter is then loaded as mission **1**
-(`FUN_004638f0(chapterId, 1)`), matching `<chapter>/IA1/`.
-
-No chapter folder name exists anywhere in `crimson.exe` (searched: no `c1b`, `c1c` or `c2b`
-string), so the executable never spells out which folder an id names. The ids are the eight chapter
-folders in alphabetical order, C1 = 1 through C5 = 8, which resolves the map to **C1, C2B, C3, C5,
-C1B, C4, C2** and leaves id 3 (C1C) unreferenced. That is the mapping `CSVM/src/UI/LaunchMenu.cs`
-has carried all along, decoded before this plan and restated in its `Chapters` comment, so this
-read is a second source for it rather than a new finding. It corrects the "Environment → chapter"
-table above, which A5 had wrong on two rows.
-
-## Friendly fire
-
-**The original applies friendly damage.** A round from one aircraft damages another whatever the
-two teams are: the path from impact to the drained pool carries no team test, and the team ids gate
-the target scan and the radio lines instead. A wingman on the player's side can therefore be shot
-down by the player or by another wingman, and an Instant Action flight needs no damage gate of its
-own. The decode is [`org/vehicleDamage.md`](../org/vehicleDamage.md)'s "Teams and friendly fire"
-section (2026-08-14); the team space it reads (0 neutral, 1 the player's side, 2 and up enemy) is
-on [turrets.md](turrets.md).
-
-## Open
-
-- *(The environment dropdown's order and its chapter mapping were open here until A5 decoded the
-  launcher's own index-to-chapter-id switch; both are now settled in "Environment → chapter" above,
-  with C1C as the omitted chapter.)*
-- **"Total Kills" is defined but unwired** in the shipped UI (see "The wrap-up screen" above); G14
-  should not build a fifth row for it.
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

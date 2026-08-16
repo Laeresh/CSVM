@@ -4,8 +4,8 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The Instant Action wrap-up board's two pure formulas (PLAN-instant-action.md G14,
-/// docs/formats/instant-action.md "What the four numbers count"): the decoded
+/// The Instant Action wrap-up board's two pure formulas (docs/formats/instant-action.md "What the
+/// four numbers count"): the decoded
 /// <c>IDS_IAWU_TIME</c>/<c>IDS_IAWU_PERCENTAGE</c> formats. Both are static and engine-free, the
 /// same reason <see cref="InstantActionEndTests"/> covers the rest of <see cref="InstantActionRuntime"/>
 /// off-engine — the board itself (a Godot <c>Control</c>) is exercised in-engine instead

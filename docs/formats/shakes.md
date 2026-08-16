@@ -1,12 +1,9 @@
-# shakes.json / damage_shakes.json — the plane-wobble / camera-shake laws
+# Screen-shake readers - `shakes.json` and `damage_shakes.json`
 
-Two of the shared-scope zrdr readers ([zrdr.md](zrdr.md)); in an extraction they land as
-`extracted/zrdr/shakes.zrd.json` and `extracted/zrdr/damage_shakes.zrd.json`. First read
-2026-08-05, decoded and wired 2026-08-07 (`BL-266`): the engine reads `shakes.json` through
-`ShakeDefs` and plays five of the six sources through `PlaneShake` as visual-only roll on the
-plane node; `damage_shakes.json` stays unconsumed (unknown caller, below).
-
-## `shakes.json` — six oscillator sources
+Part of the [format documentation](README.md). These shared zrdr readers define aircraft wobble
+and camera-shake laws. `ShakeDefs` reads `shakes.json`; `PlaneShake` applies five of its six
+sources as visual-only roll. The caller for `damage_shakes.json` remains unknown.
+## Oscillator sources
 
 A plain alternating `name, properties` list. Each block is one shake *source* with an oscillator
 law — frequency, damping, waveform — and a magnitude term:
@@ -27,7 +24,7 @@ self-evidently airspeed — it carries a `min_speed` gate). `nitro` is the only 
 **absolute** magnitude, 0.05.
 
 **`fire_bullet`'s magnitude is `magnitude_factor × CALIBER`, in radians of roll — measured, not
-inferred** (2026-08-07, `analysis/gun-wobble-shake/`). A dead-astern chase clip of the original
+inferred** (`analysis/gun-wobble-shake/`). A dead-astern chase clip of the original
 firing 40-cal slugs shows a roll-dominated wobble (left/right wing vertical motion
 anti-correlated at −0.86) of 2.8e-3 rad RMS / ~4.0e-3 rad peak; the dead-astern view makes the
 screen angle the world roll angle with no projection model. Candidates: caliber 40 × 7e-5 =
@@ -51,7 +48,7 @@ firing clip shows a motionless idle floor (~0.01 px/frame), which an absolute-sp
 a gate at 1.0 m/s could not produce. Unverified against a calibrated dive measurement; the
 overspeed audio layer (`prop_sound`) engages in the same regime.
 
-## `damage_shakes.json` — ON_CALL shake animation defs
+## Damage-shake animations
 
 Standard `ANIMATION_DEFINITIONS` ([anim-definitions.md](anim-definitions.md)), all `ON_CALL`:
 `large`/`medium`/`small_camshake` on `NAME player`, and `large`/`medium`/`small_aishake` on
@@ -66,7 +63,7 @@ need them: the `bullet_impact`/`missile_impact`/`explosion` oscillator sources a
 continuously per hit, so the ON_CALL defs read as script/set-piece calls. Wiring them waits for
 footage of whatever actually invokes them.
 
-## The `SHAKES_CAMERA` weapon flag
+## Weapon camera-shake flag
 
 Exactly **one** of the 48 weapons carries it: `wep_26` "FW" (`MSG_WEAP_FAKE_WEAPON`) — a
 zero-damage scripted rocket with `IMPACT_PROXIMITY` 100 ([weapons.md](weapons.md)). No player
@@ -74,3 +71,7 @@ loadout mounts it. So the flag is **not** the player-gunfire shake mechanism (th
 `fire_bullet` source above, which no flag gates) — it reads as "this scripted weapon's
 detonation shakes the camera", presumably through the `explosion`/`missile_impact` source, for
 missions that rattle the player without hurting them.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

@@ -66,7 +66,7 @@ moored at the tether tower), `multiplayer1zep`/`multiplayer2zep`, `piratezep`,
 and all four CTF props. C1/M04's script does **not** name `hk_zep` — which is exactly why
 that zeppelin is on the field in M04 and nowhere else.
 
-Polygons removed from each chapter's Instant Action by its own script:
+Polygons omitted from each chapter's Instant Action by its own script:
 
 | Chapter | Nodes off | Polygons | Largest items |
 |---|---:|---:|---|
@@ -139,7 +139,7 @@ Semantics worth knowing:
   and toggles every node the partition grid indexes inside it. It is the *same* toggle
   `NodeSetActive` performs, reached by area instead of by name — see below.
 - **`Object3DTranslate`/`Object3DRotate` place the selection** (`MissionSetup`, BL-249, consumed
-  since 2026-08-06): translate is a plain absolute position, applied through the same
+  translate is a plain absolute position, applied through the same
   parent-frame convention `OBJECT_TRANSLATE_STATE` uses. **`Object3DRotate`'s angle unit is
   ambiguous per script, not globally**, and is decided once per script by magnitude
   (`MissionSetup.RotateAsRadians`): any component whose absolute value exceeds 2π marks that
@@ -187,7 +187,7 @@ redundant, C4/`tex_fx.gw`'s `waterfall01 0.0 -0.5`, names a group node with no m
 own, and every C4 mission script then sets that waterfall's two leaves to −0.4 directly. So
 it is unobservable whether the verb also recurses into a subtree.
 
-Consumed since 2026-07-22: `MissionSetup.ScrollByModel` resolves each statement to a gamez
+`MissionSetup.ScrollByModel` resolves each statement to a gamez
 model index and hands the table to the world build, because the rate has to be known while
 the material is created (a scrolling model can share its material with static geometry — see
 `SceneBuilder`'s cache key in `docs/architecture.md`). Every scroll target in this install is
@@ -195,7 +195,7 @@ a model used by exactly one node, so per-model and per-node granularity cannot d
 
 ## `WorldPartitionSetActive` — `NodeSetActive`, selected by area
 
-Decompiled from `crimson.exe` in Ghidra, 2026-08-09 (`BL-037`). Reproducible at the addresses
+The `crimson.exe` control flow establishes this behavior. Reproducible at the addresses
 named: verb dispatch `FUN_005b80a0` (the interpreter — all ten verbs are matched there by
 `strncmp`), rectangle walk `FUN_004db790`, and the shared toggle `FUN_004cca30`.
 
@@ -211,7 +211,7 @@ returns error 3.
 
 ⚠ **This is not the ground-LOD mechanism**, a claim [`docs/HISTORY.md`](../HISTORY.md)'s M2
 polish-4 entry still makes ("we draw both because the original selects between them via
-partition visibility") and which `BL-037` retracted on 2026-07-23. The verb appears in no C5
+partition visibility"). The verb appears in no C5
 script at all; C5's coarse/fine ground selection is the **subface flag**
 (`analysis/item9-depth-bias/CBLOCK-LOD.md`, and `BL-250` for the clutter side).
 
@@ -259,10 +259,13 @@ They overlap deliberately: C1/M02 hides `hk_zep` in *both* its `.gw` and its `ze
 Load order is world → `.gw` → animation bootstrap, so an animation state can override a
 script state.
 
-**Corrects an earlier reading.** This project previously hypothesised that entities were
 absent-unless-a-roster-spawned-them, with `aiv.zrd.json` and `zeppelins.zrd.json` as the
 rosters. Both are wrong: `aiv.zrd.json` is the AI vehicle table (its only mention of
 `hk_zep` anywhere is inside a wingman's target-priority list in C1/M02), and
 `zeppelins.zrd.json` is the flyable-zeppelin gameplay config, which never names `hk_zep` in
 the one mission that shows it. Entities are present by default and switched off by the boot
 script — the same polarity as `zepstate`, not the mirror image of it.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

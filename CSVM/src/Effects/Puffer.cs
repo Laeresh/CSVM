@@ -845,7 +845,7 @@ public sealed partial class Puffer : Node3D
         return sum / (w * h);
     }
 
-    /// <summary>The distance alpha across EVERY pane (B11, `BL-339`): <see cref="DistanceAlpha"/>
+    /// <summary>The distance alpha across EVERY pane (`BL-339`): <see cref="DistanceAlpha"/>
     /// evaluated against each viewer, keeping the most favourable answer — the particle is drawn if
     /// any pane should see it, with the alpha of the pane that sees it best. Returns <c>false</c>
     /// only when every pane discards it.
@@ -865,8 +865,8 @@ public sealed partial class Puffer : Node3D
     ///
     /// <para>⚠ One alpha per particle, not one per pane: the emitter is one <c>MultiMesh</c> every
     /// pane draws, so a pane can see a puff its own camera would have faded further. Per-pane alpha
-    /// takes N MultiMeshes (the plan's nearest/union boundary rule: only if the nearest rule
-    /// visibly fails, <c>PLAN-splitscreen-polish.md</c>'s Milestone goal).</para></summary>
+    /// takes N MultiMeshes (the nearest/union boundary rule: only if the nearest rule visibly
+    /// fails).</para></summary>
     private bool NearestViewerAlpha(Vector3 worldPos,
         IReadOnlyList<ViewerSet.ViewerPose> viewers, out float alpha)
     {

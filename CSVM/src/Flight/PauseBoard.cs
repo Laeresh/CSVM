@@ -4,7 +4,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The shared pause overlay (PLAN-splitscreen-polish E43, `BL-373`) — the same WHOLE-window
+/// The shared pause overlay (`BL-373`) — the same WHOLE-window
 /// CanvasLayer shape as <see cref="VersusBoard"/>/<see cref="StuntRaceBoard"/>: pausing stops the
 /// game for everybody at once, so this is one overlay above every pane, not a per-pane HUD
 /// element. Names the pausing player (their own <see cref="SplitScreen.PlayerColor"/>) and, since

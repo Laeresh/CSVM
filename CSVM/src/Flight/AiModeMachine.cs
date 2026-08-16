@@ -6,18 +6,18 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>The decoded AI mode vocabulary (M4 D11): the nine states the original engine's debug
+/// <summary>The decoded AI mode vocabulary: the nine states the original engine's debug
 /// readout dispatches on, in its own naming (docs/formats/ai-rosters.md "AI modes, engine-side").
 /// There is no flee and no inactive mode in that dispatch.</summary>
 public enum AiMode
 {
-    /// <summary>Flying the assigned net (B5) or holding course.</summary>
+    /// <summary>Flying the assigned net or holding course.</summary>
     Patrol,
 
-    /// <summary>Chasing the target; the gunner (D14) fires in this mode.</summary>
+    /// <summary>Chasing the target; the gunner fires in this mode.</summary>
     Pursue,
 
-    /// <summary>The rubber-band assist (D15): a pursued AI lets its human pursuer catch up —
+    /// <summary>The rubber-band assist: a pursued AI lets its human pursuer catch up —
     /// course held, throttle eased by the decoded <c>sixth_sense_factor</c>, fire held.
     /// Disabled session-wide by <c>--no-assist</c> (<see cref="AiModeMachine.AssistEnabled"/>).</summary>
     LayOff,
@@ -42,7 +42,7 @@ public enum AiMode
     NavigatingDangerZone,
 }
 
-/// <summary>The nine-mode AI state machine (M4 D11), owned by an <see cref="AiPilot"/> and stepped
+/// <summary>The nine-mode AI state machine, owned by an <see cref="AiPilot"/> and stepped
 /// once per sim tick from <see cref="AiPilot.Next"/>. The mode list is decoded (the engine's debug
 /// readout dispatches on exactly these states); the transitions below are decoded where the plan
 /// says so and NAMED AS INVENTED where they are not:
@@ -64,8 +64,10 @@ public enum AiMode
 /// seeded heading scrambles away from the threat — the decode is thin past "Evading."); the
 /// steady-hand roll is the flat shipped chance, the design's "damage weighted by accumulated
 /// damage" arithmetic being undecoded; <c>return_range</c> read as a chase leash from the point
-/// where pursuit began (which anchor the original uses is undecoded); the avoid-crash probe
-/// geometry, cadence and climb-out; the ×3 signature-maneuver selection weight; lay off's
+/// where pursuit began (which anchor the original uses is undecoded); the avoid-crash probe's
+/// cadence, second ray and minimum length (its LOOKAHEAD is decoded, see
+/// <see cref="ProbeLookaheadS"/>) and the <see cref="ClimbOutM"/> release altitude; the ×3
+/// signature-maneuver selection weight; lay off's
 /// entry/exit geometry (the pursued test's cones, the fallen-behind / caught-up distances and
 /// the anti-chatter hold — only the mode, the ease-off constant and the intent are decoded;
 /// no condition on the player's health exists anywhere in the decode, so none is modelled).</para>
@@ -91,8 +93,10 @@ public sealed class AiModeMachine
     /// <summary>Invented: obstacle-probe cadence, seconds.</summary>
     public const float ProbeIntervalS = 0.25f;
 
-    /// <summary>Invented: obstacle-probe lookahead, seconds of current velocity.</summary>
-    public const float ProbeLookaheadS = 2.5f;
+    /// <summary>Obstacle-probe lookahead, seconds of current velocity — decoded: the original's
+    /// ray is the vehicle's own velocity scaled by 4.5 (<c>FUN_0041f810</c>), so 4.5 seconds of
+    /// travel. Was an invented 2.5 until the reach was read out of the image.</summary>
+    public const float ProbeLookaheadS = 4.5f;
 
     /// <summary>Invented: minimum probe length, metres (a slow plane still looks ahead).</summary>
     public const float ProbeMinLookaheadM = 120f;
@@ -185,7 +189,7 @@ public sealed class AiModeMachine
     /// difficulty (no interpolation table, by design).</summary>
     public int NaturalTouch = 1;
 
-    /// <summary>The maneuver library (D13), or null for a maneuver-less pilot (a failed
+    /// <summary>The maneuver library, or null for a maneuver-less pilot (a failed
     /// steady-hand test then evades plainly instead).</summary>
     public IReadOnlyList<Maneuver>? Library;
 
@@ -195,10 +199,12 @@ public sealed class AiModeMachine
 
     /// <summary>Line-of-sight probe for the avoid-crash test: static world plus other aircraft,
     /// never the caster's own body — the original's ray has no vehicle filter and excludes only
-    /// itself (docs/org/aiPilot.md, "What the ray can hit"). The host wires
-    /// <c>FlightController.AvoidCrashBlocksLine</c>; tests inject a fake. Null = no world data,
-    /// the mode is never entered.</summary>
-    public Func<Vector3, Vector3, bool>? ProbeBlocked;
+    /// itself (docs/org/aiPilot.md, "What the ray can hit"). Returns the struck body's name, or
+    /// null for a clear line: the NAME is what makes the transition log say whether the override
+    /// fired on terrain or on another aeroplane, which is not answerable from a bool. The host
+    /// wires <c>FlightController.AvoidCrashBlocksLine</c>; tests inject a fake. A null delegate
+    /// means no world data and the mode is never entered.</summary>
+    public Func<Vector3, Vector3, string?>? ProbeBlocked;
 
     private readonly Random _rng;
 
@@ -281,7 +287,7 @@ public sealed class AiModeMachine
     /// state. A human target reports null: detecting a human player's maneuver is undecoded, so
     /// the sixth-sense roll fires only against AI targets today.
     /// <paramref name="targetVelocity"/>/<paramref name="targetIsHuman"/> feed the lay-off
-    /// pursued test (D15): the assist is only ever extended to a human-piloted pursuer — in
+    /// pursued test: the assist is only ever extended to a human-piloted pursuer — in
     /// splitscreen that is whichever human the AI is currently engaging, an extension decision
     /// (the original is single-player and its "the player" needs no choosing).</summary>
     public AiMode Update(Vector3 pos, Vector3 velocity, Vector3? targetPos, AiMode? targetMode,
@@ -450,7 +456,7 @@ public sealed class AiModeMachine
         Transition(back, "reaction complete");
     }
 
-    /// <summary>The rubber-band assist's transitions (D15). Decoded: the mode, its "let the
+    /// <summary>The rubber-band assist's transitions. Decoded: the mode, its "let the
     /// player catch up" intent (the design's Sixth Sense pursued-side role) and the
     /// <c>sixth_sense_factor</c> ease-off constant. Invented, named on the constants above: the
     /// pursued-test cones, the fallen-behind / caught-up distances and the anti-chatter hold.
@@ -529,22 +535,22 @@ public sealed class AiModeMachine
         var dir = speed > 1e-3f ? velocity / speed : Vector3.Forward;
         float reach = Mathf.Max(speed * ProbeLookaheadS, ProbeMinLookaheadM);
         var ahead = pos + dir * reach;
-        bool blocked = probe(pos, ahead) || probe(pos, ahead + Vector3.Down * ProbeDeckM);
+        string? struck = probe(pos, ahead) ?? probe(pos, ahead + Vector3.Down * ProbeDeckM);
 
         if (Mode == AiMode.AvoidCrash)
         {
-            _clearProbes = blocked ? 0 : _clearProbes + 1;
+            _clearProbes = struck is null ? _clearProbes + 1 : 0;
             if (_clearProbes >= ClearProbesToExit)
                 Transition(_returnMode, "clear of obstacles");
         }
-        else if (blocked && Mode != AiMode.Stunned)
+        else if (struck is not null && Mode != AiMode.Stunned)
         {
             if (Mode is AiMode.Pursue or AiMode.LayOff or AiMode.Patrol)
                 _returnMode = Mode;
             Executor = null; // a running maneuver is abandoned to the override
             _clearProbes = 0;
             ClimbOutAltitude = pos.Y + ClimbOutM;
-            Transition(AiMode.AvoidCrash, $"obstacle inside {reach:0} m");
+            Transition(AiMode.AvoidCrash, $"obstacle inside {reach:0} m ({struck})");
         }
     }
 

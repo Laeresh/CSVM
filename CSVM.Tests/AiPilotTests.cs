@@ -6,7 +6,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The AI actor seam's input driver (M4 A2), engine-free: <see cref="AiPilot"/> over a real
+/// The AI actor seam's input driver, engine-free: <see cref="AiPilot"/> over a real
 /// <see cref="FlightModel"/> on the shipped Bloodhawk stats, on the fixed sim dt. Pins that the
 /// control law holds a level course, converges onto an ordered heading, and — the seam's design
 /// requirement — that its orders are mutable mid-flight: a retarget and a new altitude issued
@@ -104,5 +104,116 @@ public class AiPilotTests
         pilot.Patrol = null;
         pilot.Next(model, Dt);
         Assert.False(pilot.SteeringPatrol);
+    }
+
+    /// <summary>The climb-out breaks to the right of the aeroplane's own GROUND TRACK, which is
+    /// what makes two aircraft that both detect each other diverge instead of both pulling
+    /// straight up along converging paths. Taken off the track and not the airframe, so roll and
+    /// pitch never flip which way a pilot breaks.</summary>
+    [Fact]
+    public void TheClimbOutBreaksRightOfItsOwnGroundTrack()
+    {
+        var pos = new Vector3(0f, 400f, 0f);
+
+        // Flying north (nose −Z): right is +X. Flying east (+X): right is +Z.
+        var north = AiPilot.ClimbOutAim(pos, new Vector3(0f, 0f, -100f));
+        Assert.True(north.X > 0f, $"a northbound break went to X={north.X:0}");
+        Assert.Equal(0f, north.Z, 3);
+        var east = AiPilot.ClimbOutAim(pos, new Vector3(100f, 0f, 0f));
+        Assert.True(east.Z > 0f, $"an eastbound break went to Z={east.Z:0}");
+
+        // It is still a climb, and the vertical part is the original's own 1000 m.
+        Assert.Equal(1400f, north.Y, 3);
+
+        // A steep climb or dive keeps its horizontal track, so the break does not flip.
+        var climbing = AiPilot.ClimbOutAim(pos, new Vector3(0f, 90f, -40f));
+        Assert.True(climbing.X > 0f, "a climbing aeroplane broke the wrong way");
+        var diving = AiPilot.ClimbOutAim(pos, new Vector3(0f, -90f, -40f));
+        Assert.True(diving.X > 0f, "a diving aeroplane broke the wrong way");
+
+        // Two aircraft meeting head-on break to OPPOSITE sides of the shared line, which is the
+        // whole point: the same rule applied by both parties separates them.
+        var a = AiPilot.ClimbOutAim(pos, new Vector3(0f, 0f, -100f));
+        var b = AiPilot.ClimbOutAim(pos, new Vector3(0f, 0f, 100f));
+        Assert.True(a.X > 0f && b.X < 0f, $"both broke to X={a.X:0} and X={b.X:0}");
+
+        // A hover with no horizontal track still yields a usable aim point rather than a NaN.
+        var still = AiPilot.ClimbOutAim(pos, Vector3.Zero);
+        Assert.True(still.IsFinite() && still.Y > pos.Y);
+    }
+
+    /// <summary>The aspect test (<c>FUN_0041d9f0</c> at <c>0x0041dd49</c>) takes BOTH of the
+    /// victim's cones: a victim coming at us and a victim we sit behind read alike, and only a
+    /// beam aspect leaves the pursuer flying to the lead point. The cone is the pilot's own
+    /// <c>quick_draw_angle</c>, so a better pilot goes to a firing solution from further off the
+    /// axis.</summary>
+    [Fact]
+    public void TheAspectTestTakesBothOfTheVictimsCones()
+    {
+        var toQuarry = new Vector3(0f, 0f, -300f);   // the victim is dead ahead of us
+        var comingAtUs = new Vector3(0f, 0f, 1f);    // its nose points back down the line
+        var flyingAway = new Vector3(0f, 0f, -1f);
+        var beam = new Vector3(1f, 0f, 0f);
+
+        Assert.True(AiPilot.IsOnGunAxis(toQuarry, comingAtUs, 50f));
+        Assert.True(AiPilot.IsOnGunAxis(toQuarry, flyingAway, 50f));   // the tail chase, decoded
+        Assert.False(AiPilot.IsOnGunAxis(toQuarry, beam, 50f));
+
+        // The cone is the pilot's: 60° off the axis is beam to a rating-1 pilot (50°) and on-axis
+        // to a rating-9 one (89°).
+        var off60 = new Vector3(Mathf.Sin(Mathf.DegToRad(60f)), 0f, -Mathf.Cos(Mathf.DegToRad(60f)));
+        Assert.False(AiPilot.IsOnGunAxis(toQuarry, off60, 50f));
+        Assert.True(AiPilot.IsOnGunAxis(toQuarry, off60, 89f));
+
+        // Degenerate inputs never claim an axis.
+        Assert.False(AiPilot.IsOnGunAxis(Vector3.Zero, comingAtUs, 50f));
+        Assert.False(AiPilot.IsOnGunAxis(toQuarry, Vector3.Zero, 50f));
+    }
+
+    /// <summary>The merge test's four decoded gates (<c>FUN_0041d9f0</c> at <c>0x0041e130</c>):
+    /// inside 400 m, we fly at the victim, the victim flies at us, and either party more than
+    /// ~37° off the line of sight disarms it. Pure geometry, so it is pinned directly rather
+    /// than through a flown pursuit (which would need a scene tree for the quarry).</summary>
+    [Fact]
+    public void TheMergeTestArmsOnlyOnATrueHeadOnInsideItsRange()
+    {
+        var closing = new Vector3(0f, 0f, -100f);    // us, flying at a victim dead ahead
+        var oncoming = new Vector3(0f, 0f, 100f);    // the victim, flying back at us
+
+        Assert.True(AiPilot.IsMerging(new Vector3(0f, 0f, -300f), closing, oncoming));
+        Assert.False(AiPilot.IsMerging(new Vector3(0f, 0f, -500f), closing, oncoming));
+        Assert.False(AiPilot.IsMerging(new Vector3(0f, 0f, -400f), closing, oncoming));  // exclusive
+
+        // A tail chase and a beam pass are both merge-free however close they get.
+        Assert.False(AiPilot.IsMerging(new Vector3(0f, 0f, -100f), closing, closing));
+        Assert.False(AiPilot.IsMerging(new Vector3(0f, 0f, -100f), closing, new Vector3(100f, 0f, 0f)));
+        Assert.False(AiPilot.IsMerging(new Vector3(0f, 0f, -100f), new Vector3(100f, 0f, 0f), oncoming));
+
+        // The closure cone: 30° off the line of sight still merges, 40° does not (cos 37° ≈ 0.8).
+        Vector3 Off(float deg, float sign) => new(
+            sign * 100f * Mathf.Sin(Mathf.DegToRad(deg)), 0f, sign * 100f * Mathf.Cos(Mathf.DegToRad(deg)));
+        Assert.True(AiPilot.IsMerging(new Vector3(0f, 0f, -300f), Off(30f, -1f), Off(30f, 1f)));
+        Assert.False(AiPilot.IsMerging(new Vector3(0f, 0f, -300f), Off(40f, -1f), oncoming));
+        Assert.False(AiPilot.IsMerging(new Vector3(0f, 0f, -300f), closing, Off(40f, 1f)));
+
+        // A stationary party has no closure to measure and never merges.
+        Assert.False(AiPilot.IsMerging(new Vector3(0f, 0f, -300f), Vector3.Zero, oncoming));
+        Assert.False(AiPilot.IsMerging(new Vector3(0f, 0f, -300f), closing, Vector3.Zero));
+    }
+
+    /// <summary>The merge's vertical bias ramp: dive at or below 50 mph, climb at or above
+    /// 90 mph, linear between and zero at the 70 mph the aim velocity collapses to. ⚠ These are
+    /// metres per unit of a UNIT vector's horizontal magnitude, so the whole term is worth 0.3 m
+    /// at most — see <see cref="AiPilot.MergeVerticalBias"/>.</summary>
+    [Fact]
+    public void TheMergeVerticalBiasRampsFromDiveToClimbAcrossItsTwoSpeeds()
+    {
+        Assert.Equal(-0.3f, AiPilot.MergeVerticalBias(10f), 4);
+        Assert.Equal(-0.3f, AiPilot.MergeVerticalBias(22.352f), 4);
+        Assert.Equal(0f, AiPilot.MergeVerticalBias(31.292799f), 4);
+        Assert.Equal(0.3f, AiPilot.MergeVerticalBias(40.2336f), 4);
+        Assert.Equal(0.3f, AiPilot.MergeVerticalBias(120f), 4);
+        Assert.True(AiPilot.MergeVerticalBias(26f) < 0f);   // still diving below 70 mph
+        Assert.True(AiPilot.MergeVerticalBias(36f) > 0f);   // climbing above it
     }
 }

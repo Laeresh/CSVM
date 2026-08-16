@@ -5,7 +5,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The Instant Action reader (docs/formats/instant-action.md, PLAN-instant-action.md B6/D9/E11):
+/// The Instant Action reader (docs/formats/instant-action.md):
 /// fixture units for the full record (including D9's <c>WingmanPlane</c> and E11's
 /// <c>InstantActionWave.EnemyAccentId</c>), the built-in defaults every optional key falls back
 /// to (matching the original's own <c>FUN_00458ff0</c>/<c>FUN_00459390</c> reset-then-overlay),
@@ -153,7 +153,7 @@ public class InstantActionTests
         Assert.Throws<System.IO.InvalidDataException>(() => InstantAction.LoadFromJson(file));
     }
 
-    // ---- The wizard's own build path (H16) --------------------------------------------------------
+    // ---- The wizard's own build path --------------------------------------------------------
 
     /// <summary>H16's own "one build path" check: a wizard-built def and the equivalent hand-authored
     /// <c>--ia=</c> JSON — same mission type/player plane/wingmen/waves/lives, same environment

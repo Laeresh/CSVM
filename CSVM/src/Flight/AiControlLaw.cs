@@ -62,7 +62,7 @@ public readonly struct AiLawParams
 }
 
 /// <summary>The original's AI steering law (<c>FUN_0041b560</c>), decoded in
-/// <c>docs/org/aiControlLaw.md</c> (plan D31) and ported here (E41). An aim point and that point's
+/// <c>docs/org/aiControlLaw.md</c> (plan D31) and ported here. An aim point and that point's
 /// velocity in, one <see cref="FlightInput"/> out: desired speed from the aim point's own speed
 /// plus range-weighted lead terms, an intercept solve for the direction, bank-to-turn with an
 /// elevator pull once the bank is nearly satisfied, and a per-axis scale/limit output stage.
@@ -151,7 +151,8 @@ public static class AiControlLaw
     /// <summary>One step's stick and throttle for an aim point. <paramref name="emergency"/> is the
     /// original's crash-recovery arm (a fixed slow speed target, the mirrored lateral term, and no
     /// wings-level rule or skill factor); <paramref name="engaged"/> is the combat driver's
-    /// authority bonus; <paramref name="gunLead"/> swaps the fly-to solve for a firing solution.
+    /// authority bonus; <paramref name="gunLead"/> is the original's <c>leadFlag</c>, which swaps
+    /// the fly-to solve for a firing solution (see <see cref="AiPilot.IsOnGunAxis"/>).
     /// <paramref name="playerPosition"/>, when known, arms the far-field open-loop throttle;
     /// leaving it null keeps the closed loop, which is the near-player behaviour.</summary>
     public static FlightInput Steer(FlightModel model, Vector3 aimPoint, Vector3 aimVelocity,
@@ -308,9 +309,10 @@ public static class AiControlLaw
     private static Vector3 AimDirection(FlightModel model, Vector3 pos, Vector3 aimPoint,
         Vector3 aimVelocity, Vector3 delta, float want, bool gunLead)
     {
-        // Fly-to solves at the desired speed against the aim point's own velocity; the head-on
-        // case solves the gun problem instead, at a fixed round speed against the RELATIVE
-        // velocity. Either way a geometry with no forward-time root falls back to the straight line.
+        // Fly-to solves at the desired speed against the aim point's own velocity; a pursuer on
+        // its victim's own axis solves the gun problem instead, at a fixed round speed against the
+        // RELATIVE velocity. Either way a geometry with no forward-time root falls back to the
+        // straight line.
         var relative = gunLead ? aimVelocity - (model.VelocityDir * model.Speed) : aimVelocity;
         float speed = gunLead ? GunSolutionSpeed : want;
         return AimAssist.TryIntercept(pos, speed, aimPoint, relative, out var dir, out _)

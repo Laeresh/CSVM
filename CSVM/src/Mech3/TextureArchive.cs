@@ -830,7 +830,7 @@ public sealed class TextureArchive : IDisposable
     /// its images already carry generated mipmaps. Each call returns a new Image.</summary>
     public Image? FindImage(string materialTextureName)
     {
-        // PLAN-perf-hitches C9: a synchronous decode on the frame path — PlanePainter calls this
+        // a synchronous decode on the frame path — PlanePainter calls this
         // per decal slot at AI spawn (players draw at build) and at livery repaint.
         using var _ = PerfSample.Scope(PerfSite.ResourceLoad);
         var name = Resolve(Path.GetFileNameWithoutExtension(materialTextureName));

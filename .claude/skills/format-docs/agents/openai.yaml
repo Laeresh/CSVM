@@ -1,0 +1,4 @@
+interface:
+  display_name: "Format Docs"
+  short_description: "Maintain CSVM format-reference pages"
+  default_prompt: "Use $format-docs to audit or restructure CSVM format-reference pages."

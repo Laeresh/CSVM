@@ -11,15 +11,15 @@ namespace CSVM.UI;
 /// The in-game launchscreen: a keyboard/controller-driven menu shown
 /// when the viewer is launched with no content-selecting CLI arg (a bare launch, e.g.
 /// RunGame.ps1). <b>Mode</b> (Free Flight / Instant Action / Dogfight) branches two ways
-/// (PLAN-instant-action.md decision 17). Free Flight and Dogfight go straight to <b>Chapter</b>
+/// two ways. Free Flight and Dogfight go straight to <b>Chapter</b>
 /// (the eight chapter worlds, unchanged) → <b>Plane</b>. Instant Action instead opens its own
-/// five-step wizard (H15/H16): <b>Environment</b> (the seven decoded Instant Action environments,
+/// five-step wizard: <b>Environment</b> (the seven decoded Instant Action environments,
 /// each naming one chapter) → <b>MissionType</b> (the four mission types that environment's
 /// `disallow_missions` allows, with the lives stepper beside them) → <b>Waves</b> (up to four,
 /// starting empty — a deliberate presentation divergence from the original's always-four
 /// dropdowns, decision 1) → <b>Wingmen</b> (0-5, aircraft hidden at 0) → <b>Plane</b>, shared with
 /// the other two modes. Dogfighting an Ace skips straight from MissionType to Plane — the ace duel
-/// takes no wave or wingman configuration, matching the original's own screen (A1: "dogfighting an
+/// takes no wave or wingman configuration, matching the original's own screen ("dogfighting an
 /// ace takes no wave configuration"). <see cref="Launch"/> fires with the chosen chapter, the
 /// per-player plane + pad, the picked <see cref="MenuMode"/>, and — Instant Action only — the
 /// wizard's own built <c>InstantActionDef</c> (<see cref="FireLaunch"/>,
@@ -68,7 +68,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 {
     /// <summary>Fired when every joined player has locked a plane: (chapter code, one choice per
     /// player in player order, the picked mode, and — Instant Action only, else null — the
-    /// wizard's own built <c>InstantActionDef</c>, H16). The host hides the menu and builds the
+    /// wizard's own built <c>InstantActionDef</c>). The host hides the menu and builds the
     /// session.</summary>
     public Action<string, IReadOnlyList<PlayerChoice>, MenuMode, InstantActionDef?>? Launch;
 
@@ -95,8 +95,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     private const int MaxLives = 9;
 
     // The three top-level modes, in MenuMode's ordinal order (Free/Stunt/Versus) so the row index
-    // doubles as the enum value with no separate lookup. Row 1 reads "Instant Action" (decision 17,
-    // PLAN-instant-action.md): Stunt Flying is no longer offered here on its own — it is one of the
+    // doubles as the enum value with no separate lookup. Row 1 reads "Instant Action":
+    // Stunt Flying is no longer offered here on its own — it is one of the
     // four Instant Action mission types (Screen.MissionType, below), reachable only where the
     // picked environment's chapter carries dzones. The MenuMode enum value stays named Stunt
     // (SessionSpec.cs, out of this item's file-contention scope) — only the label changes; picking
@@ -108,7 +108,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         new("Dogfight", "Splitscreen free-for-all — first to the kill target wins."),
     };
 
-    // The seven Instant Action environments, in the decoded dropdown order (A5, `FUN_004174d0`;
+    // The seven Instant Action environments, in the decoded dropdown order (`FUN_004174d0`;
     // docs/formats/instant-action.md "Environment → chapter") — NOT the alphabetic order `Chapters`
     // below uses for Free Flight/Dogfight's plain Chapter screen. C1C is not offered here (the
     // chapter Instant Action omits); its DangerZones flag is looked up from `Chapters` by code
@@ -178,7 +178,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     };
 
     // The thirteen Instant Action militias (`IDS_IA_MILITIAS`, 3670) and the aircraft each one
-    // actually flies — the wave editor's own Militia/Aircraft fields (H16). Aircraft coverage is
+    // actually flies — the wave editor's own Militia/Aircraft fields. Aircraft coverage is
     // the `.BM` pattern reading decision 7 settles on (docs/formats/instant-action.md "The
     // thirteen militias and their aircraft"), NOT vehicle.json's paint_pattern defs — under that
     // reading Fortune Hunter would cover three planes instead of all eleven, and Sacred Trust would
@@ -222,7 +222,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // Previous-frame Start state of every connected pad, for edge-detecting the join gesture on
     // pads that have no player (and therefore no MenuInput) yet.
     private readonly Dictionary<int, bool> _joinPrev = new();
-    // Steps 3-4's wizard wave slots (H16): 0 enemies = unconfigured — the wizard's own "starts
+    // Steps 3-4's wizard wave slots: 0 enemies = unconfigured — the wizard's own "starts
     // empty" divergence from the original's always-four dropdowns, decision 1.
     private readonly WaveSlot[] _waves = new WaveSlot[4];
 
@@ -230,16 +230,16 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string _dataRoot = "";
     private Screen _screen = Screen.Mode;
     private int _modeIndex, _chapterIndex;
-    // Instant Action wizard state, steps 1-2 (PLAN-instant-action.md H15): the picked environment
+    // Instant Action wizard state, steps 1-2: the picked environment
     // row, the picked mission type row within CurrentMissionTypes, and the lives stepper beside it
     // (decision 18).
     private int _environmentIndex, _missionTypeIndex;
     private int _lives = 1;
-    // Steps 3-4 (H16): the wingman count + aircraft, and the cursors WaveEdit/Waves/Wingmen each
+    // Steps 3-4: the wingman count + aircraft, and the cursors WaveEdit/Waves/Wingmen each
     // read (_waves itself is above, with the other readonly fields).
     private int _waveListIndex, _waveEditIndex, _waveFieldIndex;
     private int _numWingmen, _wingmanPlaneIndex, _wingmenFieldIndex;
-    // The chosen environment's own shipped ia.zrd.json (H16), loaded once when Environment is
+    // The chosen environment's own shipped ia.zrd.json, loaded once when Environment is
     // confirmed and reused as FireLaunch's base: the ace, the zeppelin node names and
     // disallow_missions are chapter-level facts the wizard has no control to edit, so they carry
     // over from here unedited rather than defaulting to the built-in generic ace/zeppelin. Null
@@ -292,7 +292,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <summary>Builds the (hidden) launchscreen. <paramref name="zrdrPath"/> is the shared zrdr
     /// extraction the plane stats come from; <paramref name="dataRoot"/> is where <c>extracted/</c>
     /// lives, needed to load an Instant Action environment's own <c>ia.zrd.json</c> once one is
-    /// confirmed (H16). Add it to the tree, wire <see cref="Launch"/> / <see cref="Quit"/>, then
+    /// confirmed. Add it to the tree, wire <see cref="Launch"/> / <see cref="Quit"/>, then
     /// <see cref="ShowMenu"/>.</summary>
     public static LaunchMenu Build(string zrdrPath, string dataRoot)
     {
@@ -343,7 +343,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     /// <summary>The Instant Action Environment screen's roster, as chapter codes, in the decoded
-    /// dropdown order (A5) — C1, C2B, C3, C5, C1B, C4, C2, C1C never among them. Static + public so
+    /// dropdown order — C1, C2B, C3, C5, C1B, C4, C2, C1C never among them. Static + public so
     /// the decoded order is testable without a menu instance.</summary>
     public static string[] EnvironmentCodes()
     {
@@ -852,8 +852,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <summary>The horizontal axis's effect, screen by screen — always a live-editing stepper on
     /// whichever field the vertical cursor is focused on, never a "select and lock" gesture (that
     /// is what Accept is for). Split out of <see cref="HandleInput"/> because it now has one branch
-    /// per wizard screen that carries a stepper: the mission choice's lives (H15), and the wave
-    /// editor's four fields plus the wingman count/aircraft (H16).</summary>
+    /// per wizard screen that carries a stepper: the mission choice's lives, and the wave
+    /// editor's four fields plus the wingman count/aircraft.</summary>
     private bool HandleMoveX(int dir)
     {
         switch (_screen)
@@ -934,7 +934,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 if (CurrentMissionTypes[_missionTypeIndex].Key == "dogfight_ace")
                 {
                     // Dogfighting an Ace takes no wave or wingman configuration — the decoded
-                    // setup screen's own behaviour (A1: mission type 0 hides every enemy control).
+                    // setup screen's own behaviour (mission type 0 hides every enemy control).
                     _screen = Screen.Plane;
                     PrimeJoins();
                 }

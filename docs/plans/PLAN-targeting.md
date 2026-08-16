@@ -14,14 +14,14 @@ number we have no substitute for, the bracket range threshold.
 **Out of scope, deliberately.** (a) The **rebindable keymap** — every one of the original's eleven
 targeting keys collides with our WASD + `Shift`/`Ctrl`-throttle scheme, which makes a rebind layer
 the real answer to key placement; it is its own feature and this plan ships a curated default set
-instead (`BL-394`). (b) **Track Target's camera behaviour** — the `L` binding is reserved
+instead (`BL-398`). (b) **Track Target's camera behaviour** — the `L` binding is reserved
 and documented here, but "keep the target framed" hides a pile of camera decisions (snap vs smooth,
 override vs blend with chase, behaviour with no target or a target behind you, interaction with the
-E42 right-stick free look) that are camera work, not targeting work (`BL-395`).
+E42 right-stick free look) that are camera work, not targeting work (`BL-399`).
 (c) **`Structures` / `DestructibleRegistry` as a selectable class** — the original's Non-Aircraft
 cycle walks a curated `targets.zrd` mission-structure list; ours would walk every crate and fence in
 the world, producing a cycle nobody would use. Held until a curated list exists
-(`BL-396`). (d) **The modernized marker** — the user's own preferred rule (brackets only
+(`BL-400`). (d) **The modernized marker** — the user's own preferred rule (brackets only
 *past* 500 m, the inverse of the original's) is deliberately not built; the original's behaviour
 ships first and the improvement is a later, separate call (`BL-397`).
 
@@ -32,7 +32,7 @@ candidate pool is aircraft-only) shares the pool-widening work but is not closed
 **Re-verified 2026-08-16 (D31):** `git log --grep=BL-357` and `--grep=BL-363` each return only the
 commit that *wrote* the entry (`b5f6e68d` for `BL-357`, one entry point of this plan itself; `3d94d7d9`
 "Decode BL-363's candidate pool…" for `BL-363`) — no closing commit for either, and both are still
-present, open, in `backlog.md`. `BL-357` gained its corroboration in this item; `BL-396` (new, D31)
+present, open, in `backlog.md`. `BL-357` gained its corroboration in this item; `BL-400` (new, D31)
 is what actually closes the door on `BL-363`'s pool-widening half by scoping the equivalent
 Non-Aircraft gap in the player's own targeting to "needs a curated list", the same shape `BL-363`
 itself already argues for on the AI side.
@@ -1194,7 +1194,7 @@ sweep up. `docs/cli.md`'s `--target=` and `--debug-markers` entries were current
 D31 actually added:
 
 - **`L` reserved** in `docs/controls.md`'s Flight table: bound to nothing, documented as reserved
-  for Track Target, pointing at the new `BL-395` for the camera work itself (decision 15).
+  for Track Target, pointing at the new `BL-399` for the camera work itself (decision 15).
 - **`BL-357` gained its corroboration**: the original's Weapons keybind page names `Cycle guns
   clockwise`/`counterclockwise` (`F3`/`F4`) and the rocket pair (`F5`/`F6`) as distinct actions —
   direct evidence the original has two selectors per weapon class where CSVM has one, cited from the
@@ -1202,12 +1202,16 @@ D31 actually added:
 - **`BL-357`/`BL-363` re-verified still-open** (the plan's own owed TODO): `git log --grep` for each
   returns only the commit that *wrote* the entry, no closing commit for either, and both are still
   present in `backlog.md`.
-- **Four backlog items minted** for the plan's four deliberate deferrals: `BL-394` (rebindable
-  keymap — the real fix for targeting's key placement), `BL-395` (Track Target's camera, naming the
+- **Four backlog items minted** for the plan's four deliberate deferrals: `BL-398` (rebindable
+  keymap — the real fix for targeting's key placement), `BL-399` (Track Target's camera, naming the
   open questions snap/smooth, override/blend, no-target/behind-target, and E42 interaction),
-  `BL-396` (curated mission-target list to unblock `Structures` as Non-Aircraft), `BL-397` (the
+  `BL-400` (curated mission-target list to unblock `Structures` as Non-Aircraft), `BL-397` (the
   modernized brackets-past-range marker, recorded as the deliberate INVERSE of the original's own
-  rule so nobody "fixes" C22's gate back toward it by mistake).
+  rule so nobody "fixes" C22's gate back toward it by mistake). **Renumbered from the plan's own
+  original mint (394–396) after this merge**: main independently minted its own `BL-394`–`BL-396`
+  for unrelated AI-ordnance work while this branch was still open, a genuine ID collision from two
+  concurrent branches rather than a mistake in either — resolved by bumping this plan's three
+  colliding items to `398`–`400` (`BL-397` had no collision and kept its number).
 - **`AimCandidateSet.Turrets`' doc comment checked and confirmed already fixed** by B12 — no second
   pass needed. `AimTargetKind.Turret`'s own separate, similarly-stale "Empty until M4 builds them"
   comment was noticed in passing but is **not** touched here: it is a different declaration than the

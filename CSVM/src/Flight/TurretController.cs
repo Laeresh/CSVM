@@ -25,8 +25,8 @@ public enum TurretGate
 
 /// <summary>
 /// One <c>ai.zrd</c> turret gunner (docs/formats/turrets.md) — the same tracking loop for both
-/// families: a carried turret riding an aircraft (C9a, <see cref="BuildCarried"/>) and a world
-/// emplacement placed at the entry's <c>NODES</c> patterns (C9b,
+/// families: a carried turret riding an aircraft (<see cref="BuildCarried"/>) and a world
+/// emplacement placed at the entry's <c>NODES</c> patterns (
 /// <see cref="BuildEmplacements"/>). Per sim tick it acquires the nearest hostile aircraft
 /// inside <c>DETECTION_RANGE</c>, solves a constant-velocity intercept
 /// (<see cref="AimAssist.TryIntercept"/>), clamps the solution to the authored arcs (the yaw arc
@@ -185,7 +185,7 @@ public sealed class TurretController
     /// <summary>Carried: alive while the host is in play (the carried family's <c>HEALTHY_NODE</c>
     /// is a model node the plane damage model does not track individually, so host death is the
     /// kill condition CSVM can express today). ⚠ <see cref="FlightController.InPlay"/>, not
-    /// <c>Crashed</c>: a gunner carried by an INERT airframe (E10) must not fire, be fired at, or
+    /// <c>Crashed</c>: a gunner carried by an INERT airframe must not fire, be fired at, or
     /// join the aim assist's turret candidate list either. Emplacement: alive while its healthy node is —
     /// the destroy sequence's healthy→destroyed swap hides it, which is the decoded permanent
     /// kill switch (the retail loaders read no HEALTH key; the emplacement's real hit points are
@@ -277,7 +277,7 @@ public sealed class TurretController
     /// <summary>The engine-space team an emplacement fights on. The original's team ids are
     /// 0 = neutral, 1 = ally (the player's side — the four authored <c>TEAM 1</c> entries are
     /// the piratezep's own defensive turrets), 2+ = enemy teams, and the loader defaults an
-    /// absent TEAM to enemy team 2. CSVM's team model (<see cref="FlightController.Team"/>, B7)
+    /// absent TEAM to enemy team 2. CSVM's team model (<see cref="FlightController.Team"/>)
     /// maps this directly: neutral stays <see cref="AimAssist.NeutralTeam"/> (never a target,
     /// never acquires), ally maps to <see cref="AimAssist.PlayerTeam"/> — the fixed id, never a
     /// particular pilot's own — and an enemy id lands in a band clear of every pilot team, hostile

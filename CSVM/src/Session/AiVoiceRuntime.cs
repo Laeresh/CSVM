@@ -17,7 +17,7 @@ namespace CSVM.Session;
 /// <see cref="FlightController.DamageApplied"/> (the projectile hit path's whole-vehicle summary,
 /// 70/50/30 % most-severe-first); the death cry off <see cref="FlightController.Downed"/> — id 20
 /// <c>DA</c> when the dying aircraft's <see cref="FlightController.Team"/> is
-/// <see cref="AimAssist.PlayerTeam"/>, id 21 <c>DE</c> otherwise (PLAN-instant-action B7: every
+/// <see cref="AimAssist.PlayerTeam"/>, id 21 <c>DE</c> otherwise (every
 /// free-flight/<c>--vs</c> AI still lands on its own default team, so <c>DA</c> stays dormant
 /// there; a mission wingman on the player's team makes it reachable) — dispatched with force;
 /// <c>WA-Attack</c> + the computed <c>WA-Enemy</c> bearing broadcast on the mode machine's
@@ -95,7 +95,7 @@ public sealed partial class AiVoiceRuntime : Node
         var speaker = _dispatcher.Register(ai.PlayerIndex, vo, ai.Team,
             isPlayer: false, talkerChance, constitutionChance);
         _bySpeaker[ai.PlayerIndex] = ai;
-        // An INERT aircraft (E10) is not in the session yet, so it neither speaks nor is elected
+        // An INERT aircraft is not in the session yet, so it neither speaks nor is elected
         // for a broadcast: the dispatcher's own aliveness gate carries it, mirrored here because
         // nothing in the dispatcher can see a FlightController. Registration order is unchanged —
         // the speaker is listed from the start, just not eligible until its wave launches.

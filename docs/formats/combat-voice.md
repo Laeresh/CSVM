@@ -2,7 +2,7 @@
 
 Part of the [format documentation](README.md). The AI's radio chatter: which events make a pilot
 speak, which pilot's voice they speak in, and the rules that decide whether the line plays at all.
-The clip inventory and its naming are surveyed in `docs/plans/PLAN-M4-ai.md` § 6; this page covers the
+This page covers the
 dispatch, read from `crimson.exe`. Claims name the evidence at the point of use; no code is
 reproduced.
 
@@ -42,14 +42,13 @@ Two entries in the table settle questions the clip survey could only guess at:
 
 - **`DA` is the ally counterpart of `DE`, and the split is by team, not by outcome.** Both are the
   dying pilot's own death cry; id 20 fires if the dying aircraft is on the player's team and id 21
-  if it is not. `docs/plans/PLAN-M4-ai.md`'s open question 6 recorded this as inference — it is now
-  read from the dispatch, along with its polarity.
+  if it is not. Both the split and its polarity are read from the dispatch.
 - **`TA-FailTail` is a real engine trigger with a real dispatch site**, not an orphan clip family.
   The survey noted the design's taunt table omits it; the engine does not.
 
-### The gloat triggers and trigger 28, read from the take-hit path (2026-08-14)
+### The gloat triggers and trigger 28
 
-Both were traced out of the vehicle damage path while settling `PLAN-instant-action` A2
+Both were traced out of the vehicle damage path
 ([`org/vehicleDamage.md`](../org/vehicleDamage.md), "Teams and friendly fire"), which is where the
 team predicate used below (*the two teams are equal, or either one is 0*) is written down.
 
@@ -59,13 +58,13 @@ the victim's health has just crossed zero). The dispatch runs the predicate twic
 shooter and victim: friendly, and **no gloat is chosen at all**, so a friendly kill is silent.
 Otherwise over victim and the local player: friendly picks 22, hostile picks 23, and either way the
 call is made with the **shooter** as the speaker. The one exception is a kill by the local player,
-which takes 24 instead and broadcasts. This closes the polarity question the page previously left
+which takes 24 instead and broadcasts. This closes the polarity question the page left
 open.
 
 **Trigger 28 has two dispatch arms**, both in `FUN_004b9770` and both on a hit rather than a death.
 The first (`0x004b98e0`) fires when the local player's round damages an aircraft the predicate calls
 friendly: the **struck** aircraft speaks, if it owns a line for the trigger. The second
-(`0x004b98fc`) is the previously-recorded one, and it fires when exactly one of three globally
+(`0x004b98fc`) is the recorded one, and it fires when exactly one of three globally
 tracked planes (`DAT_0071c4e4`/`e8`/`ec`) is still alive; it also installs a default sound set
 (`DAT_0071c4f4`) into the speaker's slot 28 first. ⚠ **The second arm sits on the *hostile* side of
 the same predicate**, so the three tracked planes are not on the player's team and the
@@ -113,7 +112,7 @@ single-player path is the one that needs `accentID`.
 
 ### The clips are sounds.json entries, and the data picks the variants itself
 
-Measured against the extraction while building the B8 runtime (2026-08-13):
+The extraction shows:
 
 - **Every combat clip has an ordinary `SETS` entry**: sounds.json carries one set per pilot id
   (`id1` … `id48`, 35 sets), whose entries are `snd_id<N>_<TYPE>` → `VO_id<N>_<TYPE>.wav` with
@@ -130,7 +129,7 @@ Measured against the extraction while building the B8 runtime (2026-08-13):
   nor WAVs. Id 47 (the multiplayer announcer) is the inverse: 51 WAVs with no `id47` set.
   Availability is only answerable after decode, per pilot, per clip.
 
-**Runtime (B8, `CSVM/src/Mech3/CombatVoice.cs`).** The chain above is a queryable service:
+**Runtime (`CSVM/src/Mech3/CombatVoice.cs`).** The chain above is a queryable service:
 `accentID` → pool → `PilotFor` (random pick, clipless ids skipped) → `PlayableFor(voId, family)`,
 which returns the `_random` group when authored, else the bare def; both feed
 `WorldSounds.PlayOneShot`, whose `Node3D` overload follows a moving speaker. Because a clip that
@@ -186,9 +185,9 @@ So the flight speaks with one voice per event, and a quiet pilot passes the line
 swallowing it. Triggers 0, 13, 15, 24 and the bearing call-outs dispatch this way; the distress,
 death and taunt triggers address a specific aircraft.
 
-## The remake's dispatch sites (E16, 2026-08-13)
+## The remake's dispatch sites
 
-The rules above are implemented in `CSVM/src/Flight/AiVoiceDispatcher.cs` (the gate, cooldowns,
+The rules above are represented in `CSVM/src/Flight/AiVoiceDispatcher.cs` (the gate, cooldowns,
 halving, election, DI tiers, bearing index — engine-free, seeded) and wired by
 `CSVM/src/Session/AiVoiceRuntime.cs` over the B8 seam. Where the original's dispatch site is
 decoded, the remake uses it; where only the trigger's meaning is decoded, the chosen stand-in
@@ -199,23 +198,22 @@ site is recorded here:
 | 1–12, 14 | wired | our chosen site: the mode machine's patrol→pursue transition against a human target ("committing to an attack") — the attacker speaks `WA-Attack`, and the flight broadcasts the bearing call-out computed in the warned player's frame. The original's exact "enemy spotted" event is undecoded; this is the closest transition the machine has |
 | 13 | wired | a human rig's summary health crossing 30 % on the projectile hit path (decoded threshold) — broadcast |
 | 17–19 | wired | the speaker's own summary health on the projectile hit path, 70/50/30 % most-severe-first (decoded) |
-| 20–21 | wired | `FlightController.Downed`, with force: id 20 (`DA`) when the dying aircraft's `Team` is `AimAssist.PlayerTeam`, id 21 (`DE`) otherwise (`AiVoiceRuntime.RegisterAi`, PLAN-instant-action B7). Free flight and `--vs` still give every AI its own default team, so `DA` stays dormant there in practice — it fires once a mission places an AI on the player's team |
+| 20–21 | wired | `FlightController.Downed`, with force: id 20 (`DA`) when the dying aircraft's `Team` is `AimAssist.PlayerTeam`, id 21 (`DE`) otherwise (`AiVoiceRuntime.RegisterAi`). Free flight and `--vs` still give every AI its own default team, so `DA` stays dormant there in practice — it fires once a mission places an AI on the player's team |
 | 25 | wired | a pursuer's failed sixth-sense (tail) check stunning it — its evading AI target speaks; a human evader stays silent (the player speaks no AI lines) |
 | 27 | wired | the speaker's own evade/evasive-maneuver reaction completing ("fires as the reaction flag clears", decoded) |
 | 0 | unwired | turret acquisition is `TurretController`'s event; owned by C9's thread, not wired from here |
 | 15 | unwired | the danger-zone modes are never entered (their gate data is undecoded — F17) |
 | 16 | unwired | no dispatch site located in the binary (above) |
-| 22–24 | unwired | the polarity is decoded (above) and the 22/23 split is answerable now that a team model exists (`PLAN-instant-action` B7, 2026-08-14) — no dispatch site chosen yet, left for a future item |
+| 22–24 | unwired | the polarity is decoded (above) and the 22/23 split is answerable now that a team model exists — no dispatch site chosen yet, left for a future item |
 | 26 | unwired | the original's shake-attempt check is undecoded; no machine transition maps to it without force-fitting |
-| 28 | unwired | both arms (above) are answerable now that a team model exists (B7) — no dispatch site chosen yet, left for a future item |
+| 28 | unwired | both arms (above) are answerable now that a team model exists — no dispatch site chosen yet, left for a future item |
 
 Stand-ins and inventions, named:
 
-- **Speakers register on their real `FlightController.Team`** (`PLAN-instant-action` B7,
-  2026-08-14) — the earlier teamless stand-in is retired. Free flight and
-  `--vs` still give every pilot its own default team (`AimAssist.TeamOfPilot`, pilot N = team
-  N+1), so a broadcast only ever elects a "teamless" match there in practice; it goes live the
-  moment a mission puts two AI, or an AI and the player, on the same explicit team.
+- **Speakers register on their real `FlightController.Team`** — the teamless stand-in is retired.
+  Free flight and `--vs` still give every pilot its own default team (`AimAssist.TeamOfPilot`, pilot
+  N = team N+1), so a broadcast only ever elects a "teamless" match there in practice; it goes live
+  the moment a mission puts two AI, or an AI and the player, on the same explicit team.
 - **`Bail`/`NoBail` is a constitution roll** (`constitution_chance`, 0.35→0.95) — the open
   item's natural-candidate reading, implemented and marked unconfirmed.
 - **Bearing quantisation**: the four clock quadrants split at ±45° (the natural reading of a
@@ -235,18 +233,22 @@ Stand-ins and inventions, named:
 - **What the three globals `DAT_0071c4e4`/`e8`/`ec` are.** Trigger 28's second arm counts their
   survivors, and they are on the hostile side of the team predicate, so the "the player's wingmen"
   reading of them does not hold (see the gloat/28 section above). *(Trigger 22–24's polarity, which
-  this list previously carried as open, was settled there.)*
+  this list carried as open, was settled there.)*
 - **Trigger 16 (`PR-EnemyDwn`) has no located dispatch site.** It may be reached through a path not
   covered, or be unused.
 - **How `Bail`/`NoBail` is chosen** below the family root (the natural candidate is the
-  constitution roll, unconfirmed). The `-A`/`-B`/`-C` half closed 2026-08-13: the shipped
+  constitution roll, unconfirmed). The `-A`/`-B`/`-C` half closed : the shipped
   `snd_<FAMILY>-A_id<N>_random` groups pick the take, weighted-random with recency 0.5 (see
   "The clips are sounds.json entries" above).
 
 ## What this is not
 
 - The **clip inventory** — 2,520 files, 31 pilot ids, the 11 `TYPE` families and their counts — is
-  `docs/plans/PLAN-M4-ai.md` § 6. This page covers only what the engine does with them.
+  not repeated here. This page covers only what the engine does with them.
 - **Mission-scripted dialogue** (`VO_<chapter>-<faction>-<mission>_<Character>_<n>.wav`, 990 clips)
   is a different system, driven by objectives scripting, and does not go through the trigger table.
 - The **sound format and the SETS table** are [sounds.md](sounds.md).
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

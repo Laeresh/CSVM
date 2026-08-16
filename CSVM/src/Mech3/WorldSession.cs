@@ -262,7 +262,7 @@ public sealed class WorldSession
                     Debug = o.DebugAnim,
                 }
                 : null,
-            // PLAYER_RANGE conditions measure from the nearest player (PlayerPositions, C21);
+            // PLAYER_RANGE conditions measure from the nearest player (PlayerPositions);
             // PlayerPosition is only the fallback for a runtime with no PlayerPositions wired.
             // Both resolved per call because no camera exists yet here.
             PlayerPosition = o.PlayerPosition,
@@ -453,7 +453,7 @@ public sealed class WorldSession
         public required Node3D EffectsParent { get; init; }
 
         /// <summary>The PLAYER_RANGE fallback for a runtime with no <see cref="PlayerPositions"/>
-        /// wired (C21, `BL-365`: a real session always wires both). Resolved per call because no
+        /// wired (`BL-365`: a real session always wires both). Resolved per call because no
         /// camera exists yet at build time; player 1's camera is the honest single-camera answer
         /// in every mode (chase cam, free camera, or the orbit eye).</summary>
         public required Func<Vector3> PlayerPosition { get; init; }
@@ -464,13 +464,13 @@ public sealed class WorldSession
         public Func<IReadOnlyList<Vector3>>? ListenerPositions { get; init; }
 
         /// <summary>Every player's position, for the EXECUTION_BY_RANGE proximity gate and every
-        /// PLAYER_RANGE condition (C21, `BL-365`) — the aircraft themselves in flight, not the
+        /// PLAYER_RANGE condition (`BL-365`) — the aircraft themselves in flight, not the
         /// chase cameras (a chase camera trails ~25 m behind, which is most of the spiderweb's
         /// 50 m radius). Null → both fall back to <see cref="PlayerPosition"/>.</summary>
         public Func<IReadOnlyList<Vector3>>? PlayerPositions { get; init; }
 
         /// <summary>Every pane's camera, for budgeting the world's <c>LIGHT_STATE</c> spill
-        /// against the nearest one (B13, `BL-366`) — the draw-rule seam (`ViewerSet.Positions`),
+        /// against the nearest one (`BL-366`) — the draw-rule seam (`ViewerSet.Positions`),
         /// not <see cref="PlayerPositions"/>. Null → the runtime falls back to
         /// <see cref="PlayerPosition"/> alone.</summary>
         public Func<IReadOnlyList<Vector3>>? LightViewerPositions { get; init; }

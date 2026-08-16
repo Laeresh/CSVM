@@ -1,9 +1,8 @@
 # Crimson Skies format documentation
 
 Reverse-engineered format reference for **Crimson Skies** (2000, Zipper Interactive /
-Microsoft), validated against a retail install with [mech3ax](https://github.com/TerranMechworks/mech3ax)
-(`unzbd cs <mode>` — originally v0.6.1, and since 2026-07-21 this project's fork; see
-[extraction.md](extraction.md)). This is the project's public deliverable under the XWVM legal
+Microsoft), validated against a retail install with this project's [mech3ax](https://github.com/TerranMechworks/mech3ax)
+fork (`unzbd cs <mode>`; see [extraction.md](extraction.md)). This is the project's public deliverable under the XWVM legal
 model: **format documentation and code only — no game asset data.** Pages carry field
 tables and tiny excerpt values, never bulk extracted content.
 
@@ -30,44 +29,38 @@ patrol-net follower and the formation escort, behind [ai-rosters.md](ai-rosters.
 [textures.md](../org/textures.md) (the texture header layout and the additive-vs-mix blend rule
 behind [effects.md](effects.md)'s sprites).
 
-## Pages
+## Reader map
 
-| Page | Covers |
-|---|---|
-| [extraction.md](extraction.md) | **Start here for tooling:** which archive types extract, how far each round-trips, the two extraction JSON shapes, where the output lands |
-| [gotchas.md](gotchas.md) | **The cross-cutting gotchas that bite constantly:** node indexing, transforms/handedness, winding + culling, vertex-color lighting, UV tiling, draw priority + subfaces — read before writing any reader or renderer |
-| [gamez.md](gamez.md) | The GameZ container (`gamez.zbd`, `planes.zbd`): nodes/meshes/materials JSON, transforms, draw priority, backface flags, aircraft trees, damage-panel states |
-| [world-structure.md](world-structure.md) | Chapter worlds: partition grid, terrain tiling, skydome zones, point-sprite lights, flare billboards, map-edge behavior |
-| [zrdr.md](zrdr.md) | The zrdr reader archives: what they are, the three scopes (shared / chapter / mission), which reader file is documented where |
-| [vehicle.md](vehicle.md) | `vehicle.json` aircraft defs: `kind_of` inheritance, dynamics, engines, `destroyable_parts` damage model, collision points, and the weapon/turret/AI keys |
-| [markers.md](markers.md) | Aircraft weapon rig (`planes.zbd` `markers`): firepoints + pylons + `target`, the `IDS_AIRFRAMEGUNGROUPNAMES` gun-group enum, the per-airframe W1–W4 gun-mount table, and the slot→firepoint binding rule |
-| [spawns.md](spawns.md) | Player spawns + the Instant Action config: `ia.json` (`spawn_points`, mission/enemy/ace setup), `objectives.json` `PLAYER_INIT`, the campaign mission ↔ folder map |
-| [instant-action.md](instant-action.md) | The Instant Action **setup and wrap-up UI**: the screen's dropdowns and their option strings, environment ↔ chapter, the thirteen militias' aircraft lists, and which wrap-up rows are actually wired |
-| [missions.md](missions.md) | Mission objectives: the stunt `dzones` Danger Zones + their entry/exit gate geometry, per-mission `dzones.json` overrides, `targets.json` node→string keys, the `messages.json` string table |
-| [mission-entities.md](mission-entities.md) | `zeppelins.json` (motion, gasbags, broadside cannons, critical-zone threshold) and `egen.json` (enemy generators, the zeppelin fighter-launch altitude gate) |
-| [ai-nets.md](ai-nets.md) | The chapter AI patrol graphs: `ne0NNNNN.zrd` waypoint nets (nodes + explicit branching edge list + attach-target trailer) and the `neindex.zrd` id→name table every AI reader references |
-| [ai-rosters.md](ai-rosters.md) | The per-mission AI roster `aiv.zrd` (all 81 fields named from the binary), the nine-slot pilot skill vector and the `ai_skill_parameters` curves it indexes, and `maneuvers.zrd` — the 17-entry maneuver library as timed control programs |
-| [turrets.md](turrets.md) | `ai.zrd` turrets and AA emplacements: the `CREATE_STANDALONE` split, the `PARTS` kinematic chain, the wrap-aware yaw arc, the attack/bored duty cycle, and the geometric hit resolution |
-| [combat-voice.md](combat-voice.md) | AI radio chatter: the 29-entry trigger table, the `accentID` → `voice.zrd` → pilot-voice chain, the talker roll and its 15 s cooldown, and how broadcasts elect a speaker |
-| [sounds.md](sounds.md) | `sounds.json` SETS, the `player.json` volume/pitch curves, the game's MS-ADPCM WAV format |
-| [weather.md](weather.md) | `weather.json`: per-zone fog, `SUNLIGHT_*` world lighting, cloud cover, wind, precipitation, the dual colour encoding |
-| [anim-definitions.md](anim-definitions.md) | `ANIMATION_DEFINITION` readers (zepstate/startanims/building anims) + the compiled `cam_anim.zbd`/`mis_anim.zbd` survey |
-| [destructibles.md](destructibles.md) | World destructibles: how an `ANIMATION_DEFINITION` becomes a destructible object — `HEALTH`, `WeaponHit`/`WeaponOrCollideHit` activation, the `ANIM_HEALTH` `DAMAGE_SEQUENCE`, the death sequence, the 44 collide-destructibles |
-| [effects.md](effects.md) | `PUFFER_STATE` billboard-particle emitters, the effect reader files, flipbook textures, anchor nodes |
-| [weapons.md](weapons.md) | `weapons.json` `BALLISTICS`: the 48-entry weapon catalogue (guns/rockets/ordnance), damage & allotment fields, the player caliber×ammo matrix + AI detune, the `FIRE`/`FLYOUT`/`IMPACT` surface-class bindings |
-| [loadouts.md](loadouts.md) | **Our** `CSVM/data/stock_loadouts.json` (not an extracted format): the 11 aircraft's stock weapon fit — gun groups (mount/caliber/ammo/markers), turret slots, pylons — plus the gun→`wep_*` and slot→firepoint resolution rules |
-| [weapon-effects.md](weapon-effects.md) | The muzzle/flyout/impact effect readers (`muzzle_burst`, `gunhit`, the `*_control` ordnance bursts) and the gamez projectile prototype roots the weapon bindings resolve to |
-| [interp.md](interp.md) | `interp.zbd` boot scripts (`.gw`): the command format, and the **per-mission world setup** that decides which entities a mission shows (zeppelins, CTF props) |
-| [clutter.md](clutter.md) | The clutter system: `interp.json` boot scripts, `AddClutterTemplates`, template subtree shape |
-| [templates.md](templates.md) | `templates.zrd`: the clutter decorations' per-model properties — substitution, scale, fade, and the five keys no chapter authors |
-| [fogvol.md](fogvol.md) | Fog volumes: `fogvol.zrd`'s clutter table + the gamez `fvol*` boxes — the authored ambient cloud field, and the three chapters that render none |
-| [hud.md](hud.md) | HUD: the compass tape textures + drum projection, the cockpit gauge dials (altimeter/speedometer/damage display) |
-| [camparam.md](camparam.md) | `camparam.json`: the chase/third-person camera tuning — per-plane chase distance (keyed by DISPLAY name), catch-up rates, and the look-behind/death/crash/flyby geometry |
-| [shakes.md](shakes.md) | `shakes.json` (six plane-wobble oscillator sources: frequency/damp/waveform + a magnitude term; fire_bullet's decoded as caliber → radians of roll, measured) and `damage_shakes.json` (ON_CALL small/medium/large shake defs, callers exe-side, unconsumed) |
-| [paint.md](paint.md) | Aircraft paint: `paint_pattern`/`paint_color`/`paint_decal` schemes, the numbered 00–49 decal set, why shipped skins are unpainted key textures |
-| [rof.md](rof.md) | `.rof` UI resource archives: the container, the GUI scripts + `LAYOUT.CSV`, and the `.BM` texture format carrying the **paint region masks** |
-| [strings.md](strings.md) | UI text: the `langui.dll` Win32 string table, `RESOURCE.H` symbols, the `[FONTID]` convention, the aircraft name/description blocks — plus the **bindable-command inventory** (`MSG_CMD_*`/`MSG_CAM*`), the authoritative list of what the retail game let a player do |
+### Start here
 
+- [extraction.md](extraction.md) — extraction modes, output, and round-trip support.
+- [gotchas.md](gotchas.md) — cross-cutting reader and renderer rules.
+- [zrdr.md](zrdr.md) — reader archives and their family index.
+
+### World and scene
+
+- [gamez.md](gamez.md), [world-structure.md](world-structure.md), [interp.md](interp.md), [clutter.md](clutter.md), [templates.md](templates.md), and [fogvol.md](fogvol.md).
+- [weather.md](weather.md), [anim-definitions.md](anim-definitions.md), [destructibles.md](destructibles.md), and [effects.md](effects.md).
+  - [Weather atmosphere controls](weather/atmosphere.md) — cloud cover, wind, and precipitation.
+  - [Compiled animation archives](anim-definitions/compiled-archives.md) — the compiled archive and SI-script reference.
+
+### Aircraft and combat
+
+- [vehicle.md](vehicle.md), [markers.md](markers.md), [loadouts.md](loadouts.md), [paint.md](paint.md), and [camparam.md](camparam.md).
+  - [Player global blocks](vehicle/player-globals.md) — `player.json` globals.
+- [weapons.md](weapons.md), [weapon-effects.md](weapon-effects.md), [turrets.md](turrets.md), [shakes.md](shakes.md), and [sounds.md](sounds.md).
+  - [Ordnance effects and projectile prototypes](weapon-effects/ordnance.md).
+
+### Missions and AI
+
+- [spawns.md](spawns.md), [missions.md](missions.md), [mission-entities.md](mission-entities.md), and [instant-action.md](instant-action.md).
+  - [Enemy generators](mission-entities/enemy-generators.md) — host, launch cycle, and capacity rules.
+  - [Instant Action wrap-up](instant-action/wrap-up.md) — scoring and friendly-fire rules.
+- [ai-nets.md](ai-nets.md), [ai-rosters.md](ai-rosters.md), and [combat-voice.md](combat-voice.md).
+
+### Presentation and UI
+
+- [hud.md](hud.md), [rof.md](rof.md), and [strings.md](strings.md).
 ## Shared conventions (zrdr readers)
 
 The zrdr "reader" files are the engine's config/script lists; mech3ax extracts each to a

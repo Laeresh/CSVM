@@ -4,11 +4,11 @@ Part of the [format documentation](README.md). Covers where a mission places the
 an instant-action mission is configured:
 `ia.json` (instant action) and `objectives.json` (story missions), both in the **mission's
 own zrdr archive** (`<chapter>/<mission>/zrdr.zbd` — a different archive than the shared
-top-level zrdr). Decoded + wired 2026-07-15; spawn positions/headings verified byte-exact
+top-level zrdr). Spawn positions and headings are verified byte-exact
 against the data for C1/IA1 `zeppelin_run` and side-by-side in-game for C3/M01. Consumed
 by `CSVM/src/Flight/SpawnPoints.cs`.
 
-## Instant action — `ia.json` `spawn_points`
+## Instant Action spawns
 
 `spawn_points` is a dict mapping scenario name → list of spawn entries
 `[x, y, z, heading°]`. The original picks one entry at **random** per launch (e.g.
@@ -23,7 +23,7 @@ identical across scenarios (analysis in [anim-definitions.md](anim-definitions.m
 `ia.json` also carries the stunt-mode `dzones` (fly-through Danger Zone) list — see
 [missions.md](missions.md).
 
-## `ia.json` is the whole Instant Action configuration
+## Instant Action configuration
 
 The setup and wrap-up **UI** built around this data — the screen's dropdowns and their option
 strings, environment ↔ chapter, the thirteen militias' aircraft lists, and which wrap-up rows are
@@ -73,7 +73,7 @@ corroborate the count and the scale and leave the order where it was.
 [instant-action.md](instant-action.md): the setup record, the mission-type ids, the synthetic roster
 block every actor is spawned from, and which of these keys the engine never reads.
 
-## Story missions — `objectives.json` `PLAYER_INIT`
+## Story mission spawns
 
 ```
 PLAYER_INIT  [1, [x, y, z], [pitch, yaw, roll]°, throttle, speed]
@@ -83,7 +83,7 @@ Five elements; field[0] is `1` across all 50 missions; only the yaw of the rotat
 varies; `throttle` ∈ {0.5, 0.8, 1.0}; `speed` ∈ {150, 180, 580}.
 
 **Fields [3]/[4] are NOT the player's spawn throttle/speed.** Confirmed in-game
-(2026-07-15): the original always spawns at **throttle 0.5** regardless of mission
+the original always spawns at **throttle 0.5** regardless of mission
 (while PLAYER_INIT[3] varies), and the start *speed* is **plane-dependent** (while
 PLAYER_INIT[4] varies per mission). Their real meaning is unidentified. Position + yaw
 ([1]/[2]) are confirmed correct — C3/M01's spawn matched the original side-by-side.
@@ -92,7 +92,7 @@ The remake spawns at throttle 0.5 (correct) and a fixed 53.6 m/s ≈ 120 mph pla
 the plane-dependent start speed is an open question (candidate: a fixed fraction of
 `fd_speed` — 53.6/135 ≈ 0.4 for the Bloodhawk — needs multi-plane measurements).
 
-## Campaign mission ↔ folder map
+## Campaign mission map
 
 Each `objectives.json` carries `BRF_<REGION>M<n>` objective codes — the campaign's own
 mission addressing. (The prose titles are `MSG_` keys resolved from a string table not
@@ -128,3 +128,7 @@ Seven of eight chapters name the same `map_c1m04` minimap. C1, C1C and C2B ship 
 four plus a `Race Start` — Sea Haven airport bookmarks on two Hollywood maps. (C1B reuses C3's
 list.) They are dev bookmarks left un-updated; use gamez node names or danger zones to identify
 a world.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

@@ -154,6 +154,12 @@ public static class Suites
             "plane, blasting with falloff and attributing the kill, concentrated fire on ONE " +
             "bearing kills through the decoded redirect + whole-pool overflow (the 2026-08-14 " +
             "correction), and a Fury dies to a few HE rockets", AirToAir));
+        into.Add(new TestHarness.Suite("ai-plane-defs",
+            "an AI aircraft resolves its OWN vehicle def for the damage model (BL-386): all eleven " +
+            "airframes seed the authored whole armor/health pair with no destroyable_parts at all " +
+            "and the AI seven-entry injure ladder, while the player def still supplies the loadout " +
+            "key and the rig — and a real spawn comes out damageable, zone-less and armed",
+            AiPlaneDefs));
         into.Add(new TestHarness.Suite("team-model",
             "the B7 team model: two distinct pilot indices (real PlayerIndex values, not synthetic " +
             "ints) share one explicit FlightController.Team and a third sits on another — " +
@@ -829,7 +835,7 @@ public static class Suites
             $"and one inside the near cull draws too");
     }
 
-    /// <summary>The splitscreen rule (B11, <c>BL-339</c>): the bands are evaluated against EVERY
+    /// <summary>The splitscreen rule (<c>BL-339</c>): the bands are evaluated against EVERY
     /// pane's camera and the particle takes the most favourable answer, so a trail 20 m in front of
     /// player 2 draws even while player 1's own camera near-culls it. Driven through the real
     /// <see cref="ViewerSet"/> over real <c>Camera3D</c> nodes, which is the seam
@@ -2037,7 +2043,7 @@ public static class Suites
     /// B4's candidate scan, the first three in isolation — no plane, no pool,
     /// <see cref="AimAssist"/> is engine-free by design — plus a golden check that the player.json
     /// and weapons.json values the assist consumes parse at their documented shipped figures
-    /// (docs/PLAN-sticky-bullets.md "What the data actually ships"). B4's ordnance list is the one
+    /// at their shipped figures. The ordnance list is the one
     /// case that needs a live pool, since the list IS a filter over the rounds in flight.</summary>
     private static void AimAssistSuite(TestContext ctx)
     {
@@ -2840,7 +2846,7 @@ public static class Suites
 
             // --- flat ground. A 15° descent at 60 m/s puts 15.5 m/s on the normal, under the 25 m/s
             // crash threshold, so this is the survivable graze the impulse belongs to. Started a few
-            // metres out on purpose: the AI plant's own ground blow (C23) is a fixed push away from
+            // metres out on purpose: the AI plant's own ground blow is a fixed push away from
             // terrain, and given a long approach it flies the AI rig off this trajectory entirely.
             surface = Plate("graze-floor", new Vector3(600f, 4f, 600f), new Vector3(0f, -2f, 0f));
             ctx.Host.AddChild(surface);
@@ -2901,12 +2907,147 @@ public static class Suites
         }
     }
 
-    /// <summary>The per-spawn jitter (C26) where only a real spawn can show it: through
+    /// <summary>The per-spawn jitter where only a real spawn can show it: through
     /// <see cref="AiAircraftSpawner"/>, over the session's shared per-airframe stats cache, read out
     /// as flown trajectory rather than as a field. Two aircraft off one airframe, given the same
     /// pose and the same orders, must fly apart; the same ordinal drawn again must fly the same
     /// line; and the cache they were all built from must come out untouched, since every later
     /// spawn and every human rig reads it.</summary>
+    /// <summary>BL-386: the AI flavour of an airframe. The original spawns its AI aircraft from
+    /// the AI def chain, never the player one — every one of the 414 shipped <c>aiv</c> roster
+    /// blocks names a bare AI def or a militia variant of one, and not one of those chains
+    /// authors <c>destroyable_parts</c>. So an AI plane is ZONE-LESS: an authored whole
+    /// armor/health pair and no per-part ledger, against the player's four zones summing to a
+    /// derived pair.
+    ///
+    /// <para>Two halves, because the two regressions live in different places. The data half
+    /// pins the resolver over all eleven airframes — the <c>p</c>-strip mapping breaking on an
+    /// airframe nobody spot-checks is exactly the failure this catches. The spawn half pins the
+    /// glue: an AI aircraft that comes out with a null <see cref="PlaneDamage"/> is invulnerable,
+    /// and one whose <c>DefName</c> drifted off the player def misses the eleven-key stock-loadout
+    /// table and flies unarmed. Both would ship green without this.</para></summary>
+    private static void AiPlaneDefs(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+
+        // node name, AI def, authored pair, def-level injure entries. The pools are vehicle.json's
+        // own (docs/formats/vehicle.md); the ladder is seven everywhere but the balmoral's eight.
+        var airframes = new (string Node, string AiDef, float Pool, int Injure)[]
+        {
+            ("player_autogyro", "autogyro", 60f, 7),
+            ("player_bhawk", "bloodhawk", 64f, 7),
+            ("player_peacemaker", "peacemaker", 68f, 7),
+            ("player_fury", "fury", 72f, 7),
+            ("player_avenger", "avenger", 76f, 7),
+            ("player_pfighter", "devastator", 80f, 7),
+            ("player_brigand", "brigand", 84f, 7),
+            ("player_kestrel", "kestrel", 84f, 7),
+            ("player_fbrand", "firebrand", 88f, 7),
+            ("player_warhawk", "warhawk", 96f, 7),
+            ("player_balmoral", "balmoral", 100f, 8),
+        };
+
+        foreach (var (node, aiDef, pool, injure) in airframes)
+        {
+            var ai = PlaneStats.LoadForAi(ctx.ZrdrPath, node);
+            ctx.Check(ai.AiDefName == aiDef, $"{node} resolves the AI def '{ai.AiDefName}' (want '{aiDef}')");
+            ctx.Check(ai.VehicleHealth is { } h && Mathf.IsEqualApprox(h, pool)
+                      && ai.VehicleArmor is { } a && Mathf.IsEqualApprox(a, pool),
+                $"{aiDef} seeds its authored pair armor={ai.VehicleArmor:0.#} health={ai.VehicleHealth:0.#} (want {pool:0.#}/{pool:0.#})");
+            ctx.Check(ai.DestroyableParts.Count == 0,
+                $"{aiDef} is zone-less — destroyable_parts={ai.DestroyableParts.Count}");
+            ctx.Check(ai.VehicleInjureAnims.Count == injure,
+                $"{aiDef} carries the AI injure ladder: {ai.VehicleInjureAnims.Count} entries (want {injure})");
+
+            // The identity split: the damage model moved, nothing else did. DefName still keys the
+            // stock-loadout table (eleven player defs) and still feeds PlaneRoster's display name.
+            var player = PlaneStats.Load(ctx.ZrdrPath, node);
+            ctx.Check(ai.DefName == player.DefName && ai.AiDefName != ai.DefName,
+                $"{node} keeps the player def '{ai.DefName}' as its identity while damage reads '{ai.AiDefName}'");
+            ctx.Check(Mathf.IsEqualApprox(ai.FdSpeed, player.FdSpeed)
+                      && Mathf.IsEqualApprox(ai.EnginePower, player.EnginePower)
+                      && ai.TurretMounts.Count == player.TurretMounts.Count,
+                $"{node} flies the same plant and carries the same turrets on both loads");
+            ctx.Check(player.DestroyableParts.Count == 4 && player.VehicleHealth == null,
+                $"…and the player load is untouched: {player.DestroyableParts.Count} zones, no authored pair");
+        }
+
+        // The Fury worked through: 90/90 summed over the player's four zones against the AI def's
+        // authored 72/72 — the ~20 % the original's enemies were missing.
+        var furyAi = PlaneStats.LoadForAi(ctx.ZrdrPath, "player_fury");
+        var furyPlayer = PlaneStats.Load(ctx.ZrdrPath, "player_fury");
+        float summed = 0f;
+        foreach (var p in furyPlayer.DestroyableParts)
+            summed += p.MaxHp;
+        ctx.Note($"fury hull: AI {furyAi.VehicleHealth:0.#} authored against {summed:0.#} summed over the player zones");
+
+        // --- the spawn half: through the real spawner, the glue that can silently drop either the
+        // damage ledger or the loadout.
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        FlightController? spawned = null;
+        ProjectilePool? projectiles = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            projectiles = live;
+            ctx.Host.AddChild(live);
+
+            var spec = SessionSpec.Parse(System.Array.Empty<string>());
+            var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+            var inputs = new FlightRigAssembler.Inputs
+            {
+                PlanesGamez = planesGamez,
+                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                AiStatsFor = plane => PlaneStats.LoadForAi(ctx.ZrdrPath, plane),
+                RigCount = 0,
+                PaintRng = new RandomNumberGenerator(),
+                ZrdrPath = ctx.ZrdrPath,
+                StockLoadouts = StockLoadouts.Load(),
+                WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                Textures = textures,
+                Projectiles = live,
+                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            };
+
+            var start = new Vector3(0f, 500f, 0f);
+            var spawner = new AiAircraftSpawner(spec, liveries, null!, ctx.Host, inputs);
+            spawned = spawner.Spawn("player_fury", start, start + Vector3.Forward,
+                AiPilot.HoldingCourse(start, start + Vector3.Forward));
+
+            // The regression that would otherwise arrive as "enemies are invulnerable": a zone-less
+            // airframe passing a parts-only guard leaves Damage null and nothing can hurt it.
+            ctx.Check(spawned.Damage != null,
+                $"a zone-less AI Fury still carries a damage ledger");
+            if (spawned.Damage is { } dmg)
+            {
+                ctx.Check(dmg.Parts.Count == 0, $"…with no zones: parts={dmg.Parts.Count}");
+                // The per-spawn ±5 % lands on the authored pair, so this is a band, not an equality.
+                float lo = 72f * (1f - PlaneStats.AiSpawnJitterSpread);
+                float hi = 72f * (1f + PlaneStats.AiSpawnJitterSpread);
+                ctx.Check(dmg.WholeHealthMax >= lo && dmg.WholeHealthMax <= hi,
+                    $"…seeded off the authored 72 inside the jitter band: {dmg.WholeHealthMax:0.##} in [{lo:0.##}, {hi:0.##}]");
+                ctx.Check(dmg.WholeHealthMax < summed * (1f - PlaneStats.AiSpawnJitterSpread),
+                    $"…and strictly below the old summed-over-player-zones {summed:0.#}");
+            }
+
+            // The other silent one: DefName keys stock_loadouts.json, which holds the eleven player
+            // defs alone. An AI def name there binds nothing and the plane flies with no guns.
+            ctx.Check(spawned.Loadout != null,
+                $"the AI Fury is armed — its stock loadout still binds off the player def name");
+        }
+        finally
+        {
+            spawned?.Free();
+            projectiles?.Free();
+            textures.Dispose();
+        }
+    }
+
     private static void AiSpawnJitter(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2932,6 +3073,9 @@ public static class Suites
             {
                 PlanesGamez = planesGamez,
                 StatsFor = _ => shared,
+                // The same one object on both seams: this suite measures the jitter's spread over
+                // a SHARED cache entry, so the AI flavour must not quietly become a second object.
+                AiStatsFor = _ => shared,
                 RigCount = 0,
                 PaintRng = new RandomNumberGenerator(),
                 ZrdrPath = ctx.ZrdrPath,
@@ -3275,7 +3419,7 @@ public static class Suites
                     p => p.Def == nose || (p.Hp >= p.Def.MaxHp && p.Armor >= p.Def.MaxArmor)),
                 $"no part but the nose moved");
 
-            // --- the kill, under the decoded rule (A4/D14): whole-vehicle health exhausted, not
+            // --- the kill, under the decoded rule: whole-vehicle health exhausted, not
             // one dead critical part. Fire each zone's own bearing until its health empties —
             // nose from ahead, tail from astern, each wing from its own side (a dead part keeps
             // its collider, so its box shields the far side; per-zone budgets are derived from
@@ -3808,6 +3952,7 @@ public static class Suites
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                AiStatsFor = plane => PlaneStats.LoadForAi(ctx.ZrdrPath, plane),
                 RigCount = 0,
                 PaintRng = new RandomNumberGenerator(),
                 ZrdrPath = ctx.ZrdrPath,
@@ -4037,6 +4182,7 @@ public static class Suites
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                AiStatsFor = plane => PlaneStats.LoadForAi(ctx.ZrdrPath, plane),
                 RigCount = 0,
                 PaintRng = new RandomNumberGenerator(),
                 ZrdrPath = ctx.ZrdrPath,
@@ -4298,6 +4444,7 @@ public static class Suites
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                AiStatsFor = plane => PlaneStats.LoadForAi(ctx.ZrdrPath, plane),
                 RigCount = 0,
                 PaintRng = new RandomNumberGenerator(),
                 ZrdrPath = ctx.ZrdrPath,
@@ -4382,7 +4529,7 @@ public static class Suites
 
             // ---- lives: the two ends of the ledger, on a real aircraft -----------------------
             // The mechanism is FlightController's own crash/respawn path, which an AI-piloted
-            // aircraft takes byte-for-byte (M4 A2), so the probe is a spawned plane rather than a
+            // aircraft takes byte-for-byte, so the probe is a spawned plane rather than a
             // rig: what is under test is the arming and the Spectating pin, not who is at the
             // controls.
             var lifeLedger = new InstantActionRuntime(EndDef(ctx, "lives3", "dogfight_squadron", lives: 3));
@@ -4602,8 +4749,8 @@ public static class Suites
         return InstantAction.LoadFromJson(Path.Combine(ctx.ScratchDir, name));
     }
 
-    /// <summary>The G14 wrap-up board's two shot counters (PLAN-instant-action.md,
-    /// docs/formats/instant-action.md "What the four numbers count"): <c>ProjectilePool</c> is the
+    /// <summary>The G14 wrap-up board's two shot counters (docs/formats/instant-action.md "What the
+    /// four numbers count"): <c>ProjectilePool</c> is the
     /// single choke point for both, so this fires real rounds through the real pool at a real
     /// target rather than asserting on the arithmetic in isolation. The board's other two rows —
     /// Danger Zones Completed (a live read of <c>StuntMission.CompletedCount</c>) and Enemies Shot
@@ -4640,6 +4787,7 @@ public static class Suites
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                AiStatsFor = plane => PlaneStats.LoadForAi(ctx.ZrdrPath, plane),
                 RigCount = 0,
                 PaintRng = new RandomNumberGenerator(),
                 ZrdrPath = ctx.ZrdrPath,
@@ -4659,7 +4807,7 @@ public static class Suites
             if (target?.Body == null)
                 return;
 
-            // ScoredShooters (G14): shooter 0 stands in for a registered human seat, 999 for an
+            // ScoredShooters: shooter 0 stands in for a registered human seat, 999 for an
             // AI's shooter id, which a mission never adds to the set.
             live.ScoredShooters.Add(0);
 
@@ -4693,7 +4841,7 @@ public static class Suites
         }
     }
 
-    /// <summary>The E10 inert state (PLAN-instant-action.md): an aircraft built complete and then
+    /// <summary>The E10 inert state: an aircraft built complete and then
     /// held out of the session until it is activated. Every claim is measured by ONE instrument run
     /// over three subjects — a live control, the inert aircraft, and that same aircraft after
     /// <c>Activate</c> — because "did not appear in the list" is precisely the check that passes for
@@ -4732,6 +4880,7 @@ public static class Suites
             {
                 PlanesGamez = planesGamez,
                 StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                AiStatsFor = plane => PlaneStats.LoadForAi(ctx.ZrdrPath, plane),
                 RigCount = 0,
                 PaintRng = new RandomNumberGenerator(),
                 ZrdrPath = ctx.ZrdrPath,
@@ -4795,7 +4944,12 @@ public static class Suites
                        && ReferenceEquals(result.Source, rig);
             }
 
-            float Combined(FlightController rig) => rig.Damage!.Parts.Values.Sum(p => p.Hp + p.Armor);
+            // The whole-vehicle pair, not a sum over zones: these aircraft come off
+            // AiAircraftSpawner, and an AI airframe is zone-less (BL-386), so a parts sum reads a
+            // flat zero and no round could ever "bite". The pair is the right instrument either
+            // way — it is what the decoded death test reads, and a zoned plane's part spend
+            // recomputes it in step.
+            float Combined(FlightController rig) => rig.Damage!.WholeArmor + rig.Damage.WholeHealth;
             bool RoundBites(FlightController rig)
             {
                 float before = Combined(rig);
@@ -4873,7 +5027,7 @@ public static class Suites
             subject.Activate(elsewhere, elsewhere + Vector3.Forward);
             ctx.Check(subject.WorldPosition.DistanceTo(elsewhere) < 1f,
                 $"Activate re-homes the aircraft at the pose it is given pos={subject.WorldPosition}");
-            float pristine = subject.Damage.Parts.Values.Sum(p => p.Def.MaxHp + p.Def.MaxArmor);
+            float pristine = subject.Damage.WholeArmorMax + subject.Damage.WholeHealthMax;
             ctx.Check(Mathf.IsEqualApprox(Combined(subject), pristine),
                 $"…with a repaired airframe, the respawn it rides on top of: {Combined(subject):0.##}/{pristine:0.##}");
         }
@@ -5068,7 +5222,7 @@ public static class Suites
         }
     }
 
-    /// <summary>The world AA emplacements (M4 C9b) against the real C1 chapter world: the NODES
+    /// <summary>The world AA emplacements against the real C1 chapter world: the NODES
     /// placement census, the shipped-ACTIVATED default, the --wake-turrets stand-in, the
     /// enemy-default/ally team split, the aim-assist candidate list, and the healthy-node kill
     /// switch. Zeppelin-slung entries are placed (they are world nodes) and their one gameplay
@@ -5384,7 +5538,7 @@ public static class Suites
         });
     }
 
-    /// <summary>The AI actor seam (M4 A2), against real engine state on manual sim steps. A human
+    /// <summary>The AI actor seam, against real engine state on manual sim steps. A human
     /// rig is built and stepped first, so the AI plane demonstrably joins a RUNNING sim — the
     /// runtime-spawn half of the seam — with an <see cref="AiPilot"/> for input, no camera
     /// (<c>Setup(null)</c>), no HUD, no input devices, and <c>IsHumanPiloted</c> false. Pins:
@@ -5392,7 +5546,7 @@ public static class Suites
     /// <c>player</c> surface id); it TICKS — displacement along its ordered course, altitude
     /// held; its orders are mutable mid-flight (a 90° retarget between steps is flown to);
     /// a round moves its part pools by the weapon's own ARMOR_DAMAGE; and sustained fire downs
-    /// it — under the whole-vehicle kill rule (D14), the other zones pre-emptied as scaffolding —
+    /// it — under the whole-vehicle kill rule, the other zones pre-emptied as scaffolding —
     /// with the kill attributed to the human shooter's id through <c>Downed</c>.</summary>
     private static void AiActor(TestContext ctx)
     {
@@ -7005,7 +7159,7 @@ public static class Suites
                 StunRecoveryIntervalS = skills.At("stun_recovery_interval", 5),
                 NaturalTouch = 1,
                 Library = library,
-                ProbeBlocked = (_, _) => terrainBlocked,
+                ProbeBlocked = (_, _) => terrainBlocked ? "suite/terrain" : null,
             };
             var transitions = new List<string>();
             machine.ModeChanged += (from, to, _) =>
@@ -7124,7 +7278,7 @@ public static class Suites
             ctx.Check(machine.Mode != AiMode.AvoidCrash,
                 $"a cleared probe releases the override mode={AiModeMachine.NameOf(machine.Mode)}");
 
-            // --- lay off (D15, the rubber-band assist). Entry A/B on fixed geometry through
+            // --- lay off (the rubber-band assist). Entry A/B on fixed geometry through
             // the machine's own tick: a chasing human 600 m dead astern enters lay off with
             // the assist on, and never with --no-assist's switch off.
             machine.Enter(AiMode.Pursue, "test: rejoin for lay off");
@@ -9401,11 +9555,11 @@ public static class Suites
     /// ramps arrive in order with their authored run times and colours, and that the chain
     /// actually spans its authored 1.1 s from the first fire to the last.
     ///
-    /// <para>Then the routing half (B12): each step must also report WHERE the burst was and the
+    /// <para>Then the routing half: each step must also report WHERE the burst was and the
     /// def's own <c>PlayerRange</c> gate, and <see cref="ScreenFlash"/> must paint only the panes
     /// that gate admits.</para>
     ///
-    /// <para>Then the gate's own source (C21, `BL-365`): the <c>If PlayerRange</c> that decides
+    /// <para>Then the gate's own source (`BL-365`): the <c>If PlayerRange</c> that decides
     /// whether the wash fires AT ALL must answer to the nearest human, not one camera — otherwise
     /// B12's routing has nothing to route for a burst near player 4 while player 1 is
     /// kilometres away.</para></summary>
@@ -9481,7 +9635,7 @@ public static class Suites
     }
 
     /// <summary>
-    /// The wash reaches the panes the burst reached and no others (B12, `BL-340`). Two panes 120 m
+    /// The wash reaches the panes the burst reached and no others (`BL-340`). Two panes 120 m
     /// apart under the authored 100 m gate, so each of the three cases — one pane, the other pane,
     /// both — is reachable by moving the burst alone.
     ///
@@ -9566,7 +9720,7 @@ public static class Suites
     }
 
     /// <summary>The wash's own gate — `If PlayerRange 10000` — answers to the NEAREST human, not
-    /// one camera (C21, `BL-365`): a burst still fires while the camera this stage was built
+    /// one camera (`BL-365`): a burst still fires while the camera this stage was built
     /// against sits 5 km off, as long as SOME entry in `PlayerPositions` is inside the 100 m
     /// gate. This is upstream of B12's routing (which panes a fired wash reaches) — here nothing
     /// has fired yet, so no pane would have anything to route.</summary>
@@ -10424,7 +10578,7 @@ public static class Suites
         return n;
     }
 
-    // ---- an AI plane's crash picks from the ai_crash_* vector (G21) ----------------------------
+    // ---- an AI plane's crash picks from the ai_crash_* vector ----------------------------
 
     /// <summary>The AI arm of the crash-family split, through the REAL factory call
     /// (<c>WorldEffectsFactory.BuildFlightCrashRuntime</c> keys the family on

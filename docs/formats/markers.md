@@ -4,7 +4,7 @@ Part of the [format documentation](README.md). Where a player aircraft's gun muz
 ordnance hardpoints live in the model (`planes.zbd`, the `markers` group), the airframe
 gun-group name enum, and the rule binding a plane's named gun groups to its firepoints.
 
-## The markers group
+## Marker group
 
 Each player aircraft's model tree (`player_<plane>` → `geometry` → …, see [gamez.md](gamez.md))
 carries a **`markers`** group directly under `geometry`, a sibling of `healthy` / `shadow`
@@ -83,7 +83,7 @@ sequentially — a fit with fewer than 8 pylons takes `Loadout.PylonFillOrder`'s
 are the ordnance hardpoints (rockets, bombs, mines); their positions are omitted here. (AI-plane
 models instead name their pylons `lpylon*`/`rpylon*` — not the player rig.)
 
-## The target marker and gun nodes
+## Target marker and gun nodes
 
 `target` — one per plane, mesh-less. It is the aim / lock-on point, **not** a firing muzzle and
 not part of the gun geometry — out of scope for gun firing. It sits **at or near the plane
@@ -97,7 +97,7 @@ mesh-less (`model_index -1`). They hang inside the turret subtrees (`hturret`/`h
 `bturret0`…`bturret3`, `fire_turret1`, …) and mark turret barrels, not wing-gun muzzles. They
 appear **only on the five turret airframes**.
 
-## The gun-group name enum
+## Gun-group name enum
 
 The `langui.dll` string block **`IDS_AIRFRAMEGUNGROUPNAMES`**, IDs **3060–3079** — contiguous,
 no gaps (see [strings.md](strings.md)). Verbatim:
@@ -128,7 +128,7 @@ no gaps (see [strings.md](strings.md)). Verbatim:
 The block header symbol sits on the first entry (3060). `Center Guns` (3065) and `Center Guns 2`
 (3078) are ordinary members — the enum is not gapped around them.
 
-## The airframe gun-mount table
+## Airframe gun-mount table
 
 Each airframe assigns up to four gun groups, **W1–W4**, named verbatim from the enum:
 
@@ -156,7 +156,7 @@ firepoint pair:
 > **slot _n_ → `firepoint(9 − 2n)`, `firepoint(10 − 2n)`** — W1 → fp7,8; W2 → fp5,6;
 > W3 → fp3,4; W4 → fp1,2.
 
-This is **confirmed in-engine (M3 A10, 2026-07-24)** — the single binding documented here.
+This is **confirmed in-engine** — the single binding documented here.
 Cross-referencing `--dump-loadout` (each slot's bound firepoints) against `--dump-markers` (their
 plane-frame positions) for all 11 aircraft: every **firing** gun group lands on the mount its name
 says — the Devastator 3/3 on both axes, the Peacemaker 2/2 with sides correct, the Bloodhawk (40 inner
@@ -221,7 +221,7 @@ turret (`MSG_TUR_PFRONT_*` + `MSG_TUR_PREAR_*`; barrel nodes `fgun`, `rgun`, plu
 `bgun3`) — and the only airframe whose W3 *and* W4 are both turrets (Nose Turret + Rear Turret).
 The other four turret airframes have a single turret (their W4).
 
-## Duplicated firepoint coordinates
+## Shared firepoint coordinates
 
 Some airframes place two gun groups at one physical point — the two firepoints have **identical
 coordinates**:
@@ -236,3 +236,7 @@ coordinates**:
 Duplicated coordinates are the geometry behind a same-region `… 2` group. The converse does
 **not** hold: a `… 2` name is not always coincident — Fury, Hoplite and Warhawk place their
 `… 2` group at a distinct, nearby firepoint.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

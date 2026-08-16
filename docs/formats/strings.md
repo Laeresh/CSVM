@@ -1,21 +1,21 @@
-# UI text — the `langui.dll` string table
+# UI text - `langui.dll` string table
 
-Every piece of text the game's shell UI displays — aircraft names and descriptions, engine and
-gun names, menu labels, purchase prompts, multiplayer chat notices — is a **Win32 STRINGTABLE
-resource** in `GOSDATA\ASSETS\BINARIES\langui.dll`, addressed by numeric ID. The `.rof` archive
-holds the *layout* that references those IDs, not the text itself (see [rof.md](rof.md)).
+Part of the [format documentation](README.md). `langui.dll` holds numeric Win32 STRINGTABLE
+resources for shell UI text. Mission `messages.json` uses symbolic `MSG_*` keys instead; this page
+covers its bindable-command table because that data is player-facing UI text.
 
-This is a different mechanism from the in-mission string table: `messages.json` resolves
-symbolic `MSG_*` keys for briefings and objective text and is documented in
-[missions.md](missions.md). The two do not overlap — shell UI is numeric here, mission text is
-keyed there. **One `messages.json` block is documented on this page rather than there** — the
-[bindable-command table](#the-bindable-command-table-messagesjson), because it is UI text and
-because it is the definitive inventory of the retail game's player-facing commands.
+## Contents
 
-Decoded 2026-07-20, alongside `.rof`. It is where the plane customisation screens get their
-aircraft description panels, which exist nowhere in the ZBD data.
-
-## The two DLLs
+- [DLLs](#dlls)
+- [Resource format](#resource-format)
+- [Font prefix](#font-prefix)
+- [Placeholders](#placeholders)
+- [Symbol names](#symbol-names)
+- [ID map](#id-map)
+- [Bindable commands](#bindable-commands)
+- [Known limit](#known-limit)
+- [Extraction](#extraction)
+## DLLs
 
 | File | Strings | What it is |
 |---|---|---|
@@ -35,7 +35,7 @@ Standard Win32, no game-specific quirks — the work is just walking the PE reso
 - Within a block, each of the 16 slots is a `u16` length followed by that many **UTF-16LE**
   code units. A length of 0 marks an unused slot — blocks are not required to be full.
 
-## The `[FONTID]` prefix
+## Font prefix
 
 Most strings begin with a bracketed font tag naming the font to render them in —
 `[COUR9]Ford Hoplite`, `[CSB9I]The Hughes Bloodhawk is …`. It is markup, not content: strip it
@@ -59,7 +59,7 @@ Substitutions use the positional `FormatMessage` form — `%1!s!`, `%2!d!` — n
 Positional indices mean a translation can reorder the arguments, which is the point of the
 form.
 
-## Symbol names — `RESOURCE.H`
+## Symbol names
 
 `ASSETS/SCRIPTS/RESOURCE.H`, inside the `.rof`, is the Visual Studio-generated header for
 `LangUI.rc` and maps symbolic names to IDs:
@@ -109,7 +109,7 @@ aircraft `i` — eleven entries, matching the eleven `player_*` aircraft in `pla
 Devastator, Firebrand, Fury, Kestrel, Peacemaker, Warhawk — the Hoplite and Hellhound first,
 then the remaining nine alphabetically.
 
-## The bindable-command table (`messages.json`)
+## Bindable commands
 
 **This section is about the *other* string table** — `messages.json`, the `MSG_*` key table
 documented in [missions.md](missions.md) — because that is where the game keeps the labels for
@@ -181,7 +181,7 @@ Zones.
 
 All three design-document padlock modes are present, and the nine `MSG_PADLOCK_*` directions are
 the hat-switch grid the design describes. `player.json`'s `autohead_turn_time` / `_max` /
-`_min_pitch` are this camera's rate limits (see [vehicle.md](vehicle.md#playerjson--the-player-global-blocks)).
+`_min_pitch` are this camera's rate limits (see [vehicle.md](vehicle.md#player-global-blocks)).
 
 ### Other
 
@@ -205,7 +205,7 @@ the hat-switch grid the design describes. `player.json`'s `autohead_turn_time` /
 buttons, and a `MSG_KEY_*` block (ids 15004–15128) names every keyboard key, Japanese IME keys
 included.
 
-## Open
+## Known limit
 
 - **The leading `]` marker.** A few strings start with `]` (`]Nathan Zachary`, `]0`) — some
   in-band flag the shell strips, not yet identified. It appears on pilot names and on the
@@ -220,3 +220,7 @@ included.
 `id`, `symbol` (from `RESOURCE.H`, or null), `font` (the parsed `[FONTID]`), `text` (tag
 stripped) and `dll`. It needs the `.rof` extracted first for `RESOURCE.H`, which the same run
 does. `-Raw` skips the string table entirely.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

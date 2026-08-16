@@ -1,10 +1,8 @@
 # The clutter/decoration system, decoded from `crimson.exe`
 
 Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
-`crimson.exe`, `language x86:LE:32:default`), 2026-08-09/10, over the course of
-[`PLAN-clutter-uv-placement.md`](../plans/PLAN-clutter-uv-placement.md) — waves A (measurement), B
-(the lattice rewrite) and C (the per-kind properties). The decompile names its own source file,
-`D:\zipper\gamez\zclass\cls_clutter.cpp`. Every claim below names the function it came from.
+`crimson.exe`, `language x86:LE:32:default`), 2026-08-09/10. The decompile names its own source
+file, `D:\zipper\gamez\zclass\cls_clutter.cpp`. Every claim below names the function it came from.
 
 Everything here is a description of *behaviour and constants*. No decompiler output is reproduced;
 the addresses are given so any claim can be re-checked at source.

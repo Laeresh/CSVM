@@ -4,7 +4,7 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>The combat-voice trigger dispatch (M4 E16): events in, (speaker, clip, outcome)
+/// <summary>The combat-voice trigger dispatch: events in, (speaker, clip, outcome)
 /// decisions out, over the decoded rules of <c>docs/formats/combat-voice.md</c> — the talker roll
 /// against the pilot's <c>talker_chance</c>, the 15 s per-slot cooldown ⚠ armed by a FAILED roll
 /// exactly as by a successful one (a quiet pilot does not retry; losing the roll silences that

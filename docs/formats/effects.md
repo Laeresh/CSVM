@@ -1,7 +1,7 @@
 # Effects: `PUFFER_STATE` emitters, effect readers, flipbook textures
 
 Part of the [format documentation](README.md). Covers the original's fully data-driven
-effect system (surveyed 2026-07-14 for the crash sequence + damage trails; no binary anim
+effect system (the crash sequence and damage trails; no binary anim
 format needed for any of it). Consumed by `CSVM/src/Effects/Puffer.cs`.
 
 **This page is the authored side** — the keys, the files, the textures. What the original's
@@ -29,7 +29,16 @@ The gamez effect-prototype nodes (`ball_of_fire`, `flak_explosion`, `dense_firet
 `explode_here1–9`, …) are mostly empty parentless Object3d anchors the emitters attach
 to at runtime — they are not world scenery (see [world-structure.md](world-structure.md)).
 
-## `PUFFER_STATE` schema
+
+## Contents
+
+- [Emitter schema](#emitter-schema)
+- [Emission accumulator](#emission-accumulator)
+- [Camera-distance fade](#camera-distance-fade)
+- [Aircraft speed-cue wisps](#aircraft-speed-cue-wisps)
+- [Aircraft throttle-rise exhaust](#aircraft-throttle-rise-exhaust)
+- [Texture flipbooks](#texture-flipbooks)
+## Emitter schema
 
 A state is a **fully-defined emitter iff it has `NUMBER` (burst) or `DISTANCE_INTERVAL`
 (trail)**; the readers also hold *stop stubs* sharing the same `NAME` but carrying only
@@ -38,7 +47,7 @@ A state is a **fully-defined emitter iff it has `NUMBER` (burst) or `DISTANCE_IN
 | Key | Value | Meaning |
 |---|---|---|
 | `NAME` | string | referenced by anims' `PUFFER_STATE` calls |
-| `AT_NODE` | `[nodeName, dx?, dy?, dz?]` | attach point; the optional trailing offset is in the host node's own frame, same convention as `LOCAL_VELOCITY` — what spreads C1's three waterfall splash puffers ±11 m either side of the shared anchor `waterfall01` instead of stacking them on one point (2026-07-21 fix: the offset was parsed nowhere and silently dropped, in both the compiled-event and reader-event front-ends — 862 of 4387 PUFFER_STATE events in this install carry a non-zero one) |
+| `AT_NODE` | `[nodeName, dx?, dy?, dz?]` | attach point; the optional trailing offset is in the host node's own frame, same convention as `LOCAL_VELOCITY` — what spreads C1's three waterfall splash puffers ±11 m either side of the shared anchor `waterfall01` instead of stacking them on one point (fix: the offset was parsed nowhere and silently dropped, in both the compiled-event and reader-event front-ends — 862 of 4387 PUFFER_STATE events in this install carry a non-zero one) |
 | `NUMBER` | int | burst mode: sprites spawned per `TIME_INTERVAL` |
 | `TIME_INTERVAL` | s | burst/sustained spawn period. ⚠ The **engine's** unauthored default is **1.0** (the puffer ctor `FUN_00550100` writes `0x3f800000` to `+0x40` and to its reciprocal at `+0x44`); ours is an invented 0.1 — `BL-336`. The smallest authored value in the install is 0.001 s (`torpufferblast`, the torpedo trail) |
 | `DISTANCE_INTERVAL` | m | trail mode: one sprite per N meters of the followed node's motion (`dense_firetrail`: smoke 1.0 m / fire 0.25 m). ⚠ Only accumulated when the frame's motion is **under 200 m** — the teleport guard, see the emission-accumulator section below |
@@ -53,20 +62,20 @@ A state is a **fully-defined emitter iff it has `NUMBER` (burst) or `DISTANCE_IN
 | `TEXTURE_SEQUENCE` | [(name, t)…] | **flipbook**: frames keyed by **fraction of the sprite's own lifetime**, 0–1 — *not* seconds (see below) |
 | `TEXTURES` | [name…] | **static pool**: each sprite picks one at random (smoke101/102/103) |
 | `COLORS` | [[lifeFrac, r, g, b, a]…] | colour-over-age ramp; rgb dual-encoded (the [weather.md](weather.md) rule: any component > 1 ⇒ ÷255), alpha 0–1. `dense_firetrail`'s smoke is born orange (255,164,90) → near-black |
-| `FADE_RANGE` (= `FAR_FADE`) | [rampStart, cutoff] m | camera-distance fade: full alpha up to `[0]`, linear to zero at `[1]`, discarded beyond (`fire_n_smoke`: 1500–1700). Two spellings of one block — 574 readers say `FADE_RANGE`, exactly one (C3's `volcanosmoke`) says `FAR_FADE`. **Implemented** (`PufferState.FarFadeStart`/`FarFadeEnd`, C7); the install's widest authored key at 2,508 compiled events over 238 puffers |
-| `NEAR_FADE` | [cutoff, fullAlpha] m | near-camera band, compiled name `unk_range`. `[0]` is the **hard discard cutoff** and `[1]` the distance alpha would reach 1 — ⚠ **do not read that order off the values**, five of the six authored pairs are descending (`70,20` almost everywhere). **Implemented** (`PufferState.NearFadeStart`/`NearFadeEnd`, C7). With the shipped data it is a **cull, never a partial alpha** — see the distance-fade section below |
-| `START_AGE_RANGE` | [min, max] s | random birth age — a particle is born at `Rand(min, max)` instead of age 0, negative values included (`fire_at_zepskin3`: −1.0 to 0.1). **Implemented** (`PufferState.StartAgeMin`/`StartAgeMax`); authored by only 4 puffers in the install, 80 compiled events total (`PLAN-puffer-engine-deltas` B4). ⚠ The key is not the whole birth age: the engine's `age0` is this draw **plus** `(1 - frac)·dt`, the sub-frame term of the time-cadence spawn (B5), and it discards the particle outright when `age0 >= life` — so that skip fires on a long frame for **any** puffer, authored key or not |
-| `WIND_FACTOR` | float | how strongly the world's wind carries this puffer's particles; **defaults to 1, not 0**, and is inert unless `FRICTION` is non-zero. **Implemented** (B6) — see [architecture.md](../architecture.md)'s `Effects/WorldWind.cs` entry |
-| `PRIORITY` | float | a per-puffer sprite-size nudge, `1 + K·PRIORITY` with `K = 0.02` (the hardware-path constant — this project has no software path), folded into `BaseSize` at spawn. **Implemented** (`PufferState.Priority`, `Puffer.PriorityScaleDefault`, `PLAN-puffer-engine-deltas` C8) — 192 compiled events over 47 puffers; default 0, so an unauthored puffer's factor is exactly 1. Almost certainly a depth-priority constant reused for size — this trace found only the size use |
+| `FADE_RANGE` (= `FAR_FADE`) | [rampStart, cutoff] m | camera-distance fade: full alpha up to `[0]`, linear to zero at `[1]`, discarded beyond (`fire_n_smoke`: 1500–1700). Two spellings of one block — 574 readers say `FADE_RANGE`, exactly one (C3's `volcanosmoke`) says `FAR_FADE`. **Implemented** (`PufferState.FarFadeStart`/`FarFadeEnd`); the install's widest authored key at 2,508 compiled events over 238 puffers |
+| `NEAR_FADE` | [cutoff, fullAlpha] m | near-camera band, compiled name `unk_range`. `[0]` is the **hard discard cutoff** and `[1]` the distance alpha would reach 1 — ⚠ **do not read that order off the values**, five of the six authored pairs are descending (`70,20` almost everywhere). **Implemented** (`PufferState.NearFadeStart`/`NearFadeEnd`). With the shipped data it is a **cull, never a partial alpha** — see the distance-fade section below |
+| `START_AGE_RANGE` | [min, max] s | random birth age — a particle is born at `Rand(min, max)` instead of age 0, negative values included (`fire_at_zepskin3`: −1.0 to 0.1). **Implemented** (`PufferState.StartAgeMin`/`StartAgeMax`); authored by only 4 puffers in the install, 80 compiled events total. ⚠ The key is not the whole birth age: the engine's `age0` is this draw **plus** `(1 - frac)·dt`, the sub-frame term of the time-cadence spawn, and it discards the particle outright when `age0 >= life` — so that skip fires on a long frame for **any** puffer, authored key or not |
+| `WIND_FACTOR` | float | how strongly the world's wind carries this puffer's particles; **defaults to 1, not 0**, and is inert unless `FRICTION` is non-zero. **Implemented** — see [architecture.md](../architecture.md)'s `Effects/WorldWind.cs` entry |
+| `PRIORITY` | float | a per-puffer sprite-size nudge, `1 + K·PRIORITY` with `K = 0.02` (the hardware-path constant — this project has no software path), folded into `BaseSize` at spawn. **Implemented** (`PufferState.Priority`, `Puffer.PriorityScaleDefault`) — 192 compiled events over 47 puffers; default 0, so an unauthored puffer's factor is exactly 1. Almost certainly a depth-priority constant reused for size — this trace found only the size use |
 
-## The emission accumulator (`FUN_0054f8b0`)
+## Emission accumulator
 
 Both continuous modes run one accumulator on the emitter object, and the branch that feeds it is
 where they differ: a **distance** emitter adds the frame's motion length, but only when that length
 is under 200 m; a **time** emitter adds `dt`. Emission is then the whole
 `floor(accumulator / interval)` with the remainder carried. The decoded form, offsets and
 addresses are in [`../org/puffer.md`](../org/puffer.md#the-emission-accumulator-fun_0054f8b0)
-(decoded 2026-08-10, `PLAN-puffer-engine-deltas` C9).
+.
 
 Three things this settles for a reader of the authored keys:
 
@@ -88,10 +97,10 @@ Distance mode is 1,523 of the install's 4,535 compiled `PufferState` events (33.
 debris trails `spurtpuffer1..5` are among them, which is the pooled-and-teleported case the guard
 was written for.
 
-## The camera-distance fade (`FADE_RANGE` + `NEAR_FADE`)
+## Camera-distance fade
 
 Decoded from the head of `FUN_0054e6e0`, the original's per-particle draw, and implemented in
-`Puffer.DistanceAlpha` (C7). The distance `d` is the **view-space DEPTH** along the camera's forward
+`Puffer.DistanceAlpha`. The distance `d` is the **view-space DEPTH** along the camera's forward
 axis, in metres — not the euclidean range. (`FUN_0054ed10` pre-scales the view matrix's third column
 by `_DAT_009fd5d0`, the draw multiplies by `_DAT_009fd5c0`, and on the hardware path `FUN_0053c110`
 makes those exact reciprocals; on the software path they do not cancel and the distances come out
@@ -170,7 +179,7 @@ with airspeed. This effect is separate from both chapter cloud-card populations 
 hard-coded throttle-rise exhaust below. CSVM implements it in `Flight.SpeedCue`, loading the
 chapter reader verbatim and assigning one private renderer set to each player rig.
 
-## Hard-coded aircraft throttle-rise exhaust
+## Aircraft throttle-rise exhaust
 
 `crimson.exe` also constructs one puffer outside the authored `PUFFER_STATE` readers. Aircraft
 initialization (`FUN_00476250`) resolves `exhaust%d` model nodes (`exhaust1`, `exhaust2`, …)
@@ -191,7 +200,7 @@ This is the executable counterpart of the throttle-rise smoke described in
 `analysis/bl-317-plane-wisps/FINDINGS.md`.
 
 
-## Texture flipbooks, layer by layer (2026-07-21)
+## Texture flipbooks
 
 The install animates textures through **three** distinct mechanisms. They are easy to confuse
 because they share the same frame sets (`fire101-112` etc.), so:
@@ -199,13 +208,12 @@ because they share the same frame sets (`fire101-112` etc.), so:
 1. **Puffer flipbooks** - `PUFFER_STATE`'s `TEXTURES`/`TEXTURE_SEQUENCE`, played per *particle*.
    Implemented (`src/Effects/Puffer.cs`); this is what animates crash fireballs and damage trails.
 2. **Material cycles** - a gamez material's own `cycle` block: `texture_indices` (the frame
-   list), `speed` (fps), `looping`. Played on the *surface*. Implemented 2026-07-21
-   (`src/Mech3/TextureCycler.cs`). Only 1-7 materials per chapter carry one, but they cover the
-   animated sea: C1B has `wtr00000` x16 @10 fps over 695 polygons and `srf0001` x16 @9 over 375,
-   plus `wakefront1` x5 @12 (boat wakes) and `turb01` x6 @12 (turbulence); C1 has `splash01` x3
-   @4 and the `bmanwalk`/`bmanrun` x6 @9 crowd sprites. `ObjectCycleTexture{name, reset}` (144
-   events, carrying no frame list of its own) is the anim-side trigger for these - still
-   unimplemented, so cycles currently run free rather than being started/reset by animation.
+   list), `speed` (fps), `looping`. Played on the *surface*.`r`n (`src/Mech3/TextureCycler.cs`).
+   Only 1-7 materials per chapter carry one, but they cover the animated sea: C1B has `wtr00000` x16
+   @10 fps over 695 polygons and `srf0001` x16 @9 over 375, plus `wakefront1` x5 @12 (boat wakes)
+   and `turb01` x6 @12 (turbulence); C1 has `splash01` x3 @4 and the `bmanwalk`/`bmanrun` x6 @9
+   crowd sprites. `ObjectCycleTexture{name, reset}` (144 events, carrying no frame list of its own)
+   is the anim-side trigger for these - still unimplemented, so cycles currently run free rather than being started/reset by animation.
 3. **The `EFFECTS` reader** - `extracted/zrdr/effects.zrd.json`, the same idea reached through a
    proxy NODE:
 
@@ -222,12 +230,12 @@ because they share the same frame sets (`fire101-112` etc.), so:
    `common\effects\models\` by `support\load.gw`.
 
    **The entry names a node, but what it animates is that node's MATERIAL** (decoded out of
-   `crimson.exe` 2026-08-13, see [`anim-definitions.md`](anim-definitions.md#fire-a-texture-cycle-on-a-material-and-behaviours-nothing-calls)).
+   `crimson.exe`, see [`anim-definitions.md`](anim-definitions.md#fire-animations)).
    The engine resolves the node, walks to the first mesh under it, and installs the frame list on
    surface 0's material record, which is the same per-material cycle block as (2); the draw loop
    then tests the material's own cycled bit per polygon. Materials are one record per texture, so
    `fire1.flt` is a **proxy** exactly like the interp's `watersetup`/`surfsetup`, and the cycle
-   reaches every polygon on that material. Implemented 2026-08-13 (`src/Mech3/EffectCycles.cs`),
+   reaches every polygon on that material. `src/Mech3/EffectCycles.cs` implements this,
    which applies both entries to their gamez materials before the world build so the existing
    `TextureCycler` picks them up. It needs no `OBJECT_ADD_CHILD` and no burn site.
 
@@ -236,6 +244,10 @@ because they share the same frame sets (`fire101-112` etc.), so:
 looping, from load, with no trigger. `mb1` and `mb_spinflame` are on the same material and flip in
 lockstep with it. Its `LIGHT_STATE` flicker is real and separate - `refinery_fire.zrd.json` cycles
 `orange_light`'s range 2->11, 3->15, 1.5->10, 2.5->14 in a tight loop - so the flare both animates
-its texture and pulses its spill. ⚠ This entry previously claimed `flame01` was a static billboard
+its texture and pulses its spill. ⚠ This entry claimed `flame01` was a static billboard
 whose apparent motion was only the light; that was wrong, and the muzzle-flash observation behind it
 did not survive the draw-loop decode.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

@@ -6,7 +6,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>Walks an <see cref="AiNet"/> patrol graph as a stream of waypoints: positions in,
-/// the current target node out (M4 B5). Deliberately aircraft-agnostic: nothing here knows
+/// the current target node out. Deliberately aircraft-agnostic: nothing here knows
 /// about flight models, controllers or speeds, so the zeppelin motion item (F17) reuses this
 /// class unchanged and only the thing consuming <see cref="CurrentTarget"/> differs
 /// (<see cref="AiPilot.Patrol"/> is the aircraft consumer).
@@ -22,7 +22,7 @@ namespace CSVM.Flight;
 /// <para><b>Arrival is a capture radius, and it is invented.</b>
 /// <see cref="DefaultArrivalRadius"/> is not an original value: the node counts as reached when
 /// the follower is horizontally (XZ) within the radius. Horizontal, because neither the deleted
-/// placeholder law nor the ported <see cref="AiControlLaw"/> (E41) converges on altitude quickly
+/// placeholder law nor the ported <see cref="AiControlLaw"/> converges on altitude quickly
 /// through a level patrol turn. E42 re-measured the radius against the ported law rather than
 /// assume it would shrink: it does not — on C1's M4ReinfAce the real law's own turning circle
 /// misses a stationary aim point on roughly this same scale, and halving the radius to 100 m

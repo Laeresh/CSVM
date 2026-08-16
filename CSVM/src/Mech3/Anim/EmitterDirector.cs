@@ -135,7 +135,7 @@ public sealed class EmitterDirector
             return;
         }
 
-        // PLAN-perf-hitches C9: no pre-built emitter for this key — something had to be made.
+        // No pre-built emitter for this key — something had to be made.
         // MaterialCreate (EmitterRenderer.Attach, reached through _factory.Create below) is
         // nested inside this scope and is suppressed by it — its cost is folded into this one.
         using var _ = PerfSample.Scope(PerfSite.EffectPoolMiss);

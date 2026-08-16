@@ -6,7 +6,7 @@ namespace CSVM.Tests;
 /// <summary>
 /// The id→name table <c>SurfaceRegistry</c> exists to reproduce: six names compiled into
 /// <c>crimson.exe</c> plus eight recovered from <c>ZBD/zrdr.zbd</c>'s soils list
-/// (<c>analysis/surface-classification/soils_list.py</c>, `docs/PLAN-crash-surface-id.md` A3).
+/// (<c>analysis/surface-classification/soils_list.py</c>).
 /// Asserted against the full 14-entry table so a future edit cannot quietly renumber a slot.
 /// </summary>
 public class SurfaceRegistryTests

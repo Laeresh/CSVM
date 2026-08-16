@@ -604,8 +604,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* shoot down a wingman and an enemy in C1 — smoke should start around half
   health and the fireball should be audible.
   *Cross-refs:* `BL-384` (the fraction correction this depends on), `BL-246` (the decode),
-  `BL-343` (wreck momentum — the other AI-wreck item), `BL-386` (which def the AI list is READ
-  from — wiring the visuals before that fix would stage the player ladder on AI planes).
+  `BL-343` (wreck momentum — the other AI-wreck item). Which def the AI list is read from was
+  `BL-386`, closed 2026-08-16 (`git log --grep=BL-386`) — see the update below.
   *Correction 2026-08-15 (found minting `BL-386`):* the `[[0.5, pfsmoketrail]]` cited above is NOT
   on `basic_airplane` — `vehicle.zrd.json:4108-4114` sits inside the `bswingman` def (line 3993),
   and `basic_airplane` (lines 3–224) authors no `injure_anims` at all. Each AI airframe authors its
@@ -614,63 +614,50 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   variant. So the original's smoke starts at 40% on an enemy and 50% on a campaign wingman, and the
   `random_remote_damage` stages are part of the same list — the "one stage, not two" reading holds
   only for the trail itself.
+  *Update 2026-08-16 — the `BL-386` blocker is cleared.* An AI spawn now resolves its own def, so
+  `stats.VehicleInjureAnims` on an AI plane IS the seven-entry AI ladder (`pfsmoketrail` at 0.40 on
+  an enemy) rather than the player's two. ⚠ And the threshold input is settled with it: an AI
+  airframe is **zone-less**, so there is no "worst part fraction" to read — `WorstFraction` returns
+  a constant 1f with no parts. Stage this ladder off `PlaneDamage.SummaryHealthFraction`, the
+  whole-vehicle pool, which is what `FUN_004b3800` walks and what `BL-384`'s correction settles.
 
-- `BL-386` `[Bug]` **Every AI aircraft is built from the player def — `PlaneStats.Load` refuses
-  the AI defs in `vehicle.zrd.json`, so AI planes carry the player damage model instead of their
-  own authored one.** An AI Fury flies with `pfury`'s four pdpanel-wired parts summing 90/90 where
-  the original seeds `armor 72 / health 72` with bare zones — AI planes are ~15–25% too tough and
-  stage the wrong anims.
-  *Evidence (code, 2026-08-15).* `PlaneStats.Load` (`Flight/PlaneStats.cs:235-258`) accepts only a
-  def whose `kind_of` chain contains `player_airplane` — deliberate, "skip the AI wingman
-  variants". It is the sole stats loader (`GameSession.cs:1673` `StatsFor`), and
-  `AiAircraftSpawner.Spawn` (`Session/AiAircraftSpawner.cs:71`) resolves through it with the
-  player node names (`InstantAction.PlaneNodeFor` maps to the eleven `player_*` nodes;
-  `GameSession.cs:2163/2203/2323/2416`). Since no player def authors `armor`/`health`,
-  `PlaneStats.VehicleArmor`/`VehicleHealth` stay null and `PlaneDamage` seeds the whole pair as
-  the sum over the player parts.
-  *Evidence (data, 2026-08-15) — the def families per airframe, Fury as the worked example.*
-  `pfury` (`extracted/zrdr/vehicle.zrd.json:1801`): no whole pair, parts 25/25 nose (+`engine`),
-  25/25 tail, 20/20 wings, each with the green/yellow/red + `pdpanelN` injure lists and
-  `got_hit_anim`s. `fury` (`:4613`): `armor 72 / health 72`, NO parts, the 7-entry AI injure
-  ladder (see `BL-385`'s correction), own AI `weapons`/`gun_pitch`/`gun_yaw`/`activation`.
-  `rfury` (`:9271`): `kind_of fury`, `nodename fury`, own BARE parts — same pool numbers but
-  `critical` flags only, no injure lists, no `got_hit_anim`, and the `engine` flag on the TAIL
-  where `pfury` puts it on the nose. `wfury` (`:9949`): `kind_of fury`, `mode wingman`, no parts
-  of its own. `bswingman` (`:3993`): `nodename fury`, 90/90. The decoded seeding rule
-  (`docs/org/vehicleDamage.md` "Where the numbers come from at spawn" and the A4 section's A2
-  bullet): a spawned AI aircraft seeds from **the `r*` def chain's `destroyable_parts` plus its
-  inherited `armor`/`health`** — parts as the ledger, the authored pair as the summary scale.
-  ⚠ That page's correction section has one wrong parenthetical: it calls 90/90 "the AI `fury`
-  def's authored" pair; `fury` authors 72/72, and 90/90 is `bswingman`'s (and the parts sum).
-  Fix the doc line when this lands.
-  *The concrete deltas:* (1) whole pair 90/90 vs authored 72/72 Fury, 80/80 vs 64/64 Bloodhawk —
-  the summary the death test, radio lines and def-level staging all read; (2) AI parts carry the
-  player's cockpit-indicator/pdpanel injure lists and got-hit sparks the original never gives
-  them; (3) the def-level ladder is the player's two stages instead of the AI seven; (4) the
-  `engine` flag sits on the wrong part (nose vs tail, Fury pair; other airframes unchecked).
-  *What is coincidentally fine:* the `dynamics` blocks are byte-identical between `p<name>` and
-  `<name>` (checked fury and bloodhawk pairs in full), `engine` ids match, and both chains bottom
-  out at `basic_airplane` so `flight_ceiling`/`attack`/`return_range` resolve the same — flight
-  behaviour is unaffected today, but by authoring discipline, not by code.
-  *Fix shape:* give `PlaneStats` an AI resolution path — resolve the `r*` def whose chain's
-  `nodename` matches the AI model (or by def name), keep the player path for rigs and the launch
-  menu — and have `AiAircraftSpawner` request it; `PlaneDamage` already prefers an authored
-  `VehicleArmor`/`VehicleHealth` pair by design, so the seeding largely follows. Decide per spawn
-  context which flavour applies: the decode names the `r*` chain for roster spawns; whether IA
-  wingmen should read `w*` (no parts — whole-pair-only, zone-less spends) is open.
-  *⚠ Traps:* (a) the `air-to-air` suite's pinned kill counts (5 head-on `wep_06` rockets, 80
-  `wep_00` rounds) were measured against the 90/90 seeding — original-correct 72/72 re-pins them;
-  that is the re-measure, not a regression. (b) Turret planes: the `turrets` block ships on the
-  player defs (both viewpoints) AND the six AI/five `r*` variants (`thirdp` only,
-  `docs/formats/vehicle.md`) — after the switch `TurretMounts` must still find the `thirdp`
-  entries. (c) `PlaneRoster.PlaneDisplayName` strips a leading `p`; an `r*`/bare def name breaks
-  that heuristic if it ever reaches the scoreboard. (d) The difficulty scale (0.875/1.0/1.25) and
-  the ±5% aircraft jitter are adjacent decoded spawn steps, deliberately NOT this item.
-  *Playtest after fix:* IA waves — an enemy Fury should fall noticeably faster (whole pair 72,
-  not 90), and with `BL-385`'s visuals landed its smoke trail should start near 40%.
-  *Cross-refs:* `BL-385` (the visuals half — it stages whatever list this item resolves),
-  `BL-384` (fraction semantics), `docs/org/vehicleDamage.md` (the decoded seeding, incl. the
-  parenthetical to correct), `docs/formats/vehicle.md` (the def-family census).
+- `BL-394` `[Bug]` **AI aircraft still fly the player's guns, livery and pilot — only the damage
+  model reads their own def.** `BL-386` landed the identity split deliberately narrow: `PlaneStats`
+  resolves the AI def for `armor`/`health`/`injure_anims` and nothing else, so `DefName` (and with
+  it the stock loadout, the display name and the built model) is still `pfury` on an enemy Fury.
+  *What the AI defs actually author (data, 2026-08-16).* A `weapons` block of 5-tuples —
+  `fury`: `[wep_04, 4, 200, 30, 800]`, `[wep_07, 2, 200, 30, 800]`, `[wep_130, 9000, 0.05, 1, 900]`
+  — overridden per militia variant (`secfury` swaps to `[wep_12, 6, 30, 200, 800]`,
+  `bhatwarhawk` to `[wep_14, 8, 5, 350, 800]`). Plus `paint_pattern`/`paint_color1..3`/
+  `paint_decal1..3` (the militia livery), the nine-slot pilot skill vector (`dare_devil`,
+  `dead_eye`, `quick_draw`, `steady_hand`, `sixth_sense`, `natural_touch`, `stun_recovery`,
+  `talker`, `constitution`), `accentID`, and `gun_pitch`/`gun_yaw` (the AI's forward-gun cone,
+  `[-11, 11]` on every AI aircraft).
+  *The militia mapping is already in the tree, undecoded as such.* `UI/LaunchMenu.cs`'s `Militias`
+  table (13 militias × their aircraft) reproduces the militia def names exactly: `bhat*` = Black
+  Hat {Warhawk, Brigand, Autogyro}, `bs*` = Black Swan {Fury}, `blake*` = Blake Aviation, `brit*` =
+  British, `ha*` = Hughes Aviation, `hk*` = Hollywood Knight, `med*` = Medusa, `rus*` = Russian,
+  `sec*` = Studio Security, `sti*`/`german*` = the two Hellhound militias. Two table entries have
+  no def (Sacred Trust's Warhawk, Broadway Bomber's Peacemaker) — expected, since that table comes
+  from `.BM` paint coverage, not from `vehicle.json`.
+  *The 5-tuple is decoded, so that risk is gone (2026-08-16, `BL-395`):*
+  `[weapon_id, rounds_carried, refire_interval_s, min_range_m, max_range_m]`, read out of the
+  builder `FUN_004b59b0` ([`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md),
+  census in `analysis/ai-ordnance-census/`).
+  ⚠ Five base defs (`firebrand`, `bloodhawk`, `brigand`, `fury`,
+  `autogyro`) author fields 3 and 4 transposed against all 25 militia variants, `200, 30` against
+  `30, 200`, so they run a 200-second ordnance refire. That is shipped data; carry it, do not
+  "fix" it.
+  *⚠ Trap:* `stock_loadouts.json` holds the eleven `p*` defs alone. Moving `DefName` to an AI def
+  without giving `Loadout.Bind` an AI path disarms every AI plane **silently** —
+  `AiAircraftSpawner` has no "unarmed" warning branch the way `FlightRigAssembler` does.
+  *Size:* LARGER, and better split — weapons, livery and pilot skills are three independent halves
+  over one resolution change.
+  *Cross-refs:* `BL-386` (the damage half — landed and closed 2026-08-16,
+  `git log --grep=BL-386`; this builds on the `PlaneStats.AiDefName` seam it left),
+  `docs/formats/vehicle.md` (the def-family census), `docs/formats/instant-action.md` (the militia
+  table's provenance), `BL-395` (the AI rocket trigger, which lands on the player loadout and wants
+  this item's armament afterwards).
 
 ## Weapons & combat
 
@@ -964,39 +951,40 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   net over any terrain and so made this visible; closed as `BL-377`,
   `git log --grep=BL-377`).
 
-- `BL-394` `[Feature]` **A rebindable keymap — the real answer to targeting's key placement, not a
-  targeting-specific fix.** *Evidence:* `PLAN-targeting.md`'s own out-of-scope call (a), 2026-08-15:
-  every one of the original's eleven targeting keys collides with our WASD + `Shift`/`Ctrl`-throttle
-  flight scheme — the full collision audit is in `docs/org/targeting.md` / the plan's "What the data
-  actually ships" — so the plan ships a curated default set on free keys (`T` `Y` `U` `I` `O` + `L`,
-  `D-pad Up` tap/hold) instead of mirroring the original's letter-per-class layout (`E`/`W`/`R` plain/
+- `BL-398` `[Feature]` **A rebindable keymap — the real answer to targeting's key placement, not a
+  targeting-specific fix.** *Evidence:* the player-targeting plan's own out-of-scope call (a),
+  2026-08-15: every one of the original's eleven targeting keys collides with our WASD +
+  `Shift`/`Ctrl`-throttle flight scheme — the full collision audit is in `docs/org/targeting.md` —
+  so that plan ships a curated default set on free keys (`T` `Y` `U` `I` `O` + `L`, `D-pad Up`
+  tap/hold) instead of mirroring the original's letter-per-class layout (`E`/`W`/`R` plain/
   `Shift`/`Ctrl`). A rebind layer is what actually resolves key placement; targeting is only the
   feature that hit the wall hardest, because it is eleven keys deep into an already-full keymap.
   *Fix shape:* `BL-296`'s per-player `ActionMap` seam, if it lands first.
-  *Cross-refs:* `BL-296`, `PLAN-targeting.md` decision 14, `docs/org/targeting.md`,
-  `docs/controls.md`.
+  *Cross-refs:* `BL-296`, `docs/org/targeting.md`, `docs/controls.md`.
 
-- `BL-395` `[Feature]` **Track Target's camera behaviour — `L` is reserved, the camera itself is
-  undecided.** *Evidence:* `PLAN-targeting.md`'s out-of-scope call (b), 2026-08-15: the original's
-  `Views 1 → Track Target` binds `L` (free in our flight keymap; our `L` is the viewer-only livery
-  lab), decoded in `docs/org/targeting.md`, but "keep the target framed" hides a pile of camera
-  decisions this plan deliberately deferred: snap vs smooth follow, override vs blend with the chase
-  camera, behaviour with no target selected or a target behind the pilot, and interaction with E42's
-  right-stick free look (`BL-372`). `L` is reserved in `docs/controls.md` (D31) but bound to nothing.
+- `BL-399` `[Feature]` **Track Target's camera behaviour — `L` is reserved, the camera itself is
+  undecided.** *Evidence:* the player-targeting plan's out-of-scope call (b), 2026-08-15: the
+  original's `Views 1 → Track Target` binds `L` (free in our flight keymap; our `L` is the
+  viewer-only livery lab), decoded in `docs/org/targeting.md`, but "keep the target framed" hides a
+  pile of camera decisions that plan deliberately deferred: snap vs smooth follow, override vs
+  blend with the chase camera, behaviour with no target selected or a target behind the pilot, and
+  interaction with the right-stick free look (`BL-372`). `L` is reserved in `docs/controls.md` but
+  bound to nothing.
   *Fix shape:* a camera-focused item once the questions above are settled — not a change to the
   targeting module itself, which already exposes `TargetSelection.Current` cleanly for a camera to
-  read (B13 decision 13).
-  *Cross-refs:* `BL-372` (E42 right-stick free look), `docs/org/targeting.md` "Track Target",
+  read.
+  *Cross-refs:* `BL-372` (right-stick free look), `docs/org/targeting.md` "Track Target",
   `docs/controls.md`.
 
-- `BL-396` `[Feature]` **`Structures` as a selectable Non-Aircraft target — needs a curated
-  `targets.zrd`-equivalent list.** *Evidence:* `PLAN-targeting.md`'s out-of-scope call (c),
+- `BL-400` `[Feature]` **`Structures` as a selectable Non-Aircraft target — needs a curated
+  `targets.zrd`-equivalent list.** *Evidence:* the player-targeting plan's out-of-scope call (c),
   2026-08-15: the original's Non-Aircraft cycle walks a curated mission `targets.zrd` list
   (decoded in `docs/org/targeting.md`), which our `DestructibleRegistry` has no equivalent of —
   `docs/architecture.md`'s own `DestructibleRegistry` entry calls it an **approximation** of that
   list, and walking it directly would put every crate and fence in the world on the cycle.
-  `TargetPool.Rebuild` deliberately never reads `AimCandidateSet.Structures` for exactly this reason
-  (B12), so `Structures` staying out of the cycle is a property of the pool, not a gap that leaked in.
+  `TargetPool.Rebuild` deliberately never reads `AimCandidateSet.Structures` for exactly this
+  reason, so `Structures` staying out of the cycle is a property of the pool, not a gap that leaked
+  in.
   *Fix shape:* a curated per-mission target list (mirroring `targets.zrd`'s authored entries) feeding
   `TargetPool` the same way zeppelin sub-parts do today (`subParts` in `Rebuild`).
   *Cross-refs:* `TargetPool.cs`, `docs/architecture.md`'s `DestructibleRegistry` entry,
@@ -1004,17 +992,75 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-397` `[Feature]` **A modernized target marker: brackets only PAST range, not under it — the
   deliberate INVERSE of the original's own rule.** *Evidence:* the user's preferred rule (brackets
-  only past 500 m) was this plan's original premise and was disproven in the 2026-08-15 grilling
-  (`PLAN-targeting.md`'s ⚠ table row 3): the original draws brackets only UNDER the selected gun's
-  reach (`TargetHud.GunReaches`, C22) — distant enemies get none, and near ones get brackets the
-  silhouette often swallows. The user's ask is the exact inverse of that, not a memory of it. C22
-  ships the original's rule as fidelity; this item is the later, separate call to add the
+  only past 500 m) was the player-targeting plan's original premise and was disproven in the
+  2026-08-15 grilling: the original draws brackets only UNDER the selected gun's reach
+  (`TargetHud.GunReaches`) — distant enemies get none, and near ones get brackets the silhouette
+  often swallows. The user's ask is the exact inverse of that, not a memory of it. The shipped
+  marker uses the original's rule as fidelity; this item is the later, separate call to add the
   modernization as an opt-in or a replacement.
-  ⚠ *Trap:* do not "fix" `GunReaches`'/`TargetHud`'s gate to match this without re-reading the trap
-  table first — the two rules are opposites BY DESIGN, not by an oversight C22 left behind.
+  ⚠ *Trap:* do not "fix" `GunReaches`'/`TargetHud`'s gate to match this without checking this
+  entry first — the two rules are opposites BY DESIGN, not an oversight left behind.
   *Fix shape:* a flag or setting flipping the gate's sense once the product call is made (past range
-  = bracketed, inside = not), reusing the same hysteresis machinery C22 already built.
-  *Cross-refs:* `TargetHud.GunReaches`, `PLAN-targeting.md` ⚠ table row 3, decision 11.
+  = bracketed, inside = not), reusing the same hysteresis machinery already built.
+  *Cross-refs:* `TargetHud.GunReaches`.
+
+- `BL-395` `[Bug]` **Enemy AI never fires ordnance: the rocket trigger is human-input only.**
+  `AiGunner` is forward-gun only, and `FlightController.cs:1229` derives `RocketHeld` from
+  `RocketFirePressed()` (keyboard/pad), so a non-human pilot cannot pull the rocket trigger at
+  all. AI planes nonetheless carry live pylons: `AiAircraftSpawner.cs:150-156` binds the stock
+  loadout and builds `PylonOrdnance`, so enemy rockets are modelled, visible on the rail, and
+  never leave it.
+  *The original's employment model is decoded* (2026-08-16,
+  [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md)): the fire decision
+  `FUN_0041f420` walks one weapon list holding guns and ordnance together, and an ordnance entry
+  passes when its slot cooldown has expired, the target's gasbag class matches the weapon's
+  `DAMAGES_ZEPPELIN` bit, and the squared separation sits inside the authored `[min, max]` band.
+  The shot itself (`FUN_004b6820`) then needs the mount's aim inside **5°** (the gun's gate is
+  10°), a vehicle-wide ordnance lockout to have expired, and a **`quick_draw_chance` roll** to
+  pass (0.05 at pilot rating 1, 0.44 at 9), and that roll is the parameter's only consumer.
+  *Fix shape:* a new `AiRocketeer` beside `AiGunner` holding those gates, whose `WantsFire`
+  replaces `RocketFirePressed()` for a non-human pilot, exactly as `AiGunner.WantsFire` already
+  replaces `FirePressed()` one line above. Feed the existing `FireControl` rocket input, never a
+  direct projectile spawn, so ammo, pylon selection, the dry cue, `PylonOrdnance` visibility and
+  the self-blast exemption stay in the one place that implements them.
+  ⚠ *Traps.* (a) **Scope is damaging ordnance.** Five militias fly the `wep_12` choker, two the
+  `wep_15` flare, one the rear-firing `wep_13` smoke (fired only while being pursued, aimed
+  backwards). Those need their own triggers and are a separate item, not a widening of this one.
+  (b) **A `DAMAGES_ZEPPELIN` weapon is fired ONLY at gasbags**, so the Black Hat Warhawk's eight
+  torpedoes must never be launched at an aircraft. (c) The engagement window is a **band**, 200 m
+  to 800 m on the shipped defs; a max-range-only gate is wrong. (d) **Do not tune launch rates
+  yet.** An AI still flies the *player's* loadout (`BL-394`), so counts and refire are wrong at
+  the source; wire the trigger, land it, tune after `BL-394`.
+  *How you'd know it worked:* engine-free assertions on the decoded gates mirroring
+  `AiGunnerTests`, plus a scripted `--ai` engagement reporting launches per engagement and hit
+  fraction, so a regression shows up as a count.
+  *Playtest after fix:* fly against a Black Hat flight and confirm rockets are aimed at you and
+  read as a threat rather than noise.
+  *Cross-refs:* `BL-394` (what an AI carries; this item is only the trigger), `BL-396` (the gun
+  gates the same decode calls into question), `BL-227` (blast falloff),
+  `analysis/ai-ordnance-census/`.
+
+- `BL-396` `[Research]` **Verify our AI gun gates against the decoded fire path.** `AiGunner`'s
+  three gates were assembled from authored data, not read out of the executable: the RANGE-reach
+  test, the ±11° `gun_pitch`/`gun_yaw` airframe cone as a hard fire gate, and the quick-draw cone
+  off the target's nose/tail axis. The `BL-395` decode reached the routine that actually fires
+  (`FUN_0041f420` + `FUN_004b6820`) and it does not obviously agree. It applies a **10° aim-quality
+  gate on the mount's lead solution**, a per-weapon **squared** `[min, max]` range window from the
+  def (1–900 m for every AI gun), and the quick-draw cosine as an early all-or-nothing return
+  rather than a per-shot filter. Whether `gun_pitch`/`gun_yaw` gate firing at all, or only the
+  mount's traverse, is the open question.
+  *Do:* read `FUN_0041f420`'s gun path and `FUN_004b6820`'s aim gate against
+  `AiGunner.Solve`/`ShotDirection` gate by gate, and record the verdict as a line in
+  [`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md). Confirmation closes this item;
+  a contradiction re-tags it `[Bug]` and it carries its own fix.
+  ⚠ *Traps.* (a) `AiGunner` is landed, unit-tested (`AiGunnerTests`) and covered by the
+  `ai-gunnery` suite, and a gate change is a regression risk with its own verification burden, which
+  is why this is separate from `BL-395`. (b) The dead-eye scatter is a different mechanism from the
+  aim gate; do not conflate the cone the AI *shoots inside* with the quality threshold it *waits
+  for*. (c) The min-range floor of 1 m is authored, not a sentinel. It is the same field that
+  carries 200 m on ordnance.
+  *Cross-refs:* `BL-395`, `docs/formats/ai-rosters.md` ("ai_skill_parameters"),
+  `docs/architecture.md` `src/Flight/AiGunner.cs`.
 
 ## Flight model & collision physics
 

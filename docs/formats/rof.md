@@ -8,12 +8,12 @@ the scrapbook. Two archives ship in `GOSDATA\ASSETS\`:
 | `crimson.rof` | ~57 MB | 846 files in 21 directories — the whole UI resource set |
 | `crimptch.rof` | 797 bytes | 1 file — a patch overlay that overrides the base archive at the same path |
 
-mech3ax does not handle `.rof`; it is unrelated to the ZBD family. Decoded 2026-07-20 with
+mech3ax does not handle `.rof`; it is unrelated to the ZBD family. This project decodes it with
 `crimptch.rof` as the Rosetta Stone — one file, one directory chain, small enough to read by
 hand. The reader it belongs to ships as `GOSDATA\ASSETS\BINARIES\roffile.dll`, which is where
 the format's name comes from.
 
-**Consumed by the remake since 2026-07-20**: `src/Mech3/PatternLibrary.cs` reads the `.BM`
+**Consumed by the remake**: `src/Mech3/PatternLibrary.cs` reads the `.BM`
 masks straight out of this extraction and `src/Mech3/PlanePainter.cs` composites them, which
 is how aircraft get their liveries (see [paint.md](paint.md)).
 
@@ -68,7 +68,7 @@ length, so the layout is fully accounted for with no slack.
 the base one, so the patched script wins. `ExtractRof.ps1` unpacks it to `_crimptch/` rather
 than over the base extraction, so both versions are available to diff.
 
-## What is inside
+## Archive contents
 
 | Count | Type | Notes |
 |---|---|---|
@@ -100,7 +100,7 @@ rows (`af_t_title`, `af_s_airframedesc`). The customisation flow is `PLANESELECT
 where `ResID` is the `IDS_*` string ID. Its header comments document the column meanings,
 which is how the widget types (`B`utton, `T`ext, `S`crolltext, `D`ropdown) were identified.
 
-## `.BM` textures
+## Bitmap textures
 
 The 184 `.BM` files are the per-pattern aircraft skins, in `ASSETS/GRAPHICS/<PATTERN>/`.
 Fourteen pattern folders exist — the twelve `paint_pattern` names from [paint.md](paint.md)
@@ -119,7 +119,7 @@ plus `BROADWAY` and `ITSTAXI`. Filenames are the aircraft skin names (`BLO_WING.
 The order was settled by comparing against the game's own textures of the same name in
 `texture.zbd`: **170 of 173 same-named skins match on `(width, height)` = `(second, first)`**.
 
-**Row order is BOTTOM-UP** (corrected 2026-07-20). Rows are stored last-to-first relative to
+**Row order is BOTTOM-UP.** Rows are stored last-to-first relative to
 the ZBD textures and to PNG, so a consumer must read source row `height-1-y` when writing row
 `y`. Rendering the masks without this mirrors every livery along the texture's V axis — found
 by the user in-game ("the stripes are on the wrong sides of the wings and tail", with the
@@ -188,12 +188,12 @@ overlay, so a pattern can leave a part plain.
 Channel order within the overlay is unconfirmed: the content inspected so far is greyscale, so
 RGBA and BGRA are indistinguishable on it.
 
-## Open
+## Known limits
 
 - **Overlay channel order and blend mode.** Greyscale content leaves RGBA vs BGRA
   undetermined. The remake composites it as straight alpha-over-RGB and renders correctly on
   everything inspected, which is consistent with but does not prove that reading.
-- **Slot order.** *Confirmed 2026-07-20* — file order **is** `paint_color1..3`. Rendering the
+- **Slot order.** *Confirmed * — file order **is** `paint_color1..3`. Rendering the
   Fortune Hunters Bloodhawk with all three plausible assignments against
   `OriginalScreenshots/CustomPlane Paint1 Bloodhawk.png` singled one out: only
   *(red, black, white)* puts black on the outer wing panels with the white swoosh between
@@ -217,3 +217,7 @@ at its archive path, and additionally decodes each `.BM` to `<name>.png` (shadin
 `<name>_mask.png` (R/G/B = slots 1/2/3). It also emits the string table — see
 [strings.md](strings.md). Run `.\ExtractRof.ps1`; `-Raw` skips the decoding, `-Force` re-runs
 an up-to-date extraction.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

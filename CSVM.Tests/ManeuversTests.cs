@@ -15,7 +15,7 @@ namespace CSVM.Tests;
 public class ManeuversTests
 {
     /// <summary>The 14 design-shared difficulties plus the two shipped-only entries — the
-    /// plan's table (docs/PLAN-M4-ai.md, "The maneuver library" + the 2026-08-10 delta).</summary>
+    /// plan's table ("The maneuver library" + the 2026-08-10 delta).</summary>
     public static TheoryData<string, int> ShippedDifficulties => new()
     {
         { "nitro_evade", 0 },

@@ -8,10 +8,13 @@ colour encoding, `kind_of` inheritance, wildcards, everything-is-float) are in t
 [README](README.md#shared-conventions-zrdr-readers).
 
 This page maps the archives and their reader families to the pages documenting them.
-(Until 2026-07-19 it was a single coarse flight-stats/spawns/sounds/effects page — that
-content now lives in the per-family pages below.)
 
-## The three scopes
+## Contents
+
+- [The three scopes](#archive-scopes)
+- [Reader family index](#reader-family-map)
+
+## Archive scopes
 
 A mission sees three zrdr archives; readers with mission relevance (anims, states) must
 be scanned across all three:
@@ -22,7 +25,7 @@ be scanned across all three:
 | chapter | `<Cx>/zrdr.zbd` | chapter scenery anims (`hangar3`, `train`, `fuel_tanks`, `st_light`, `dock_light`, `ap_*`), `cars_moving`/`trucks_moving`, the `ne0NNNNN.zrd` patrol nets + `neindex.zrd` |
 | mission | `<Cx>/<mission>/zrdr.zbd` | `ia.json`, `objectives.json`, `weather.json`, `zepstate.json`, `startanims.json`, `mis_anim.json`, `zeppelins.json`, `egen.json`, `dzones.json`, `aiv.json`, `location.json`, `map.json`, `Briefing` |
 
-## Reader family index
+## Reader family map
 
 | Reader file(s) | Documented in |
 |---|---|
@@ -45,3 +48,7 @@ be scanned across all three:
 | `shakes.json`, `damage_shakes.json` (plane-wobble oscillator sources + ON_CALL shake defs) | [shakes.md](shakes.md) |
 | `templates.zrd` (the clutter decorations' per-model substitution/scale/fade properties) | [templates.md](templates.md) |
 | `interp.json` boot scripts (not zrdr, but the same config ecosystem) | [clutter.md](clutter.md) |
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

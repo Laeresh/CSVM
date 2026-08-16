@@ -1,22 +1,17 @@
-# Stock loadouts — `CSVM/data/stock_loadouts.json`
+# Stock loadouts - `CSVM/data/stock_loadouts.json`
 
-Part of the [format documentation](README.md). **Unlike every other page here, this documents a
-file *we* author, not an extracted original format.** `CSVM/data/stock_loadouts.json` is
-hand-authored config describing the original game's default weapon fit for the 11 player
-aircraft — the same category as this reference, **not a game asset** (so the no-assets rule does
-not apply; it is committed). It synthesises facts already decoded in [markers.md](markers.md)
-(mounts + the slot→firepoint binding rule) and [weapons.md](weapons.md) (the `wep_*` catalogue),
-and is the seed the flight engine's loadout reader (`src/Flight/Loadout.cs`, M3 wave B item B12)
-consumes: it resolves each slot's `markers` against a built plane and each `caliber`+`ammo` /
-`stock` id against `weapons.json`, exposing live gun groups (independent ammo counters) and
-hardpoints. Inspect the binding for any plane with `--dump-loadout`.
+Part of the [format documentation](README.md). This hand-authored engine configuration records
+the original game's default weapon fit for the 11 player aircraft. It combines the aircraft mount
+rules in [markers.md](markers.md) with the weapon catalog in [weapons.md](weapons.md); it contains
+no extracted game asset data.
 
-The data is the user's stock table read off the original's Ammo Selection / configurator UI
-(delivered 2026-07-22), corroborated by `OriginalScreenshots/Ammo Selector Hoplite.png` /
-`… Balmoral.png`. There is **no player loadout in the extraction** — all 12 `p*` vehicle defs
-inherit a capability *catalogue* (every gun + 1,000 of each rocket), and the per-plane fit is
-executable-resident — so this file supplies what the data cannot.
+## Contents
 
+- [Schema](#schema)
+- [Resolution rules](#resolution-rules)
+- [Turrets](#turrets)
+- [Stock table](#stock-table)
+- [Schema limit](#schema-limit)
 ## Schema
 
 ```json
@@ -49,9 +44,9 @@ Keyed by **vehicle def name** (`vehicle.json`), matching `PlaneStats`. Per plane
 | `guns[].markers` | the firepoint node(s) this group fires from (see binding rule) |
 | `guns[].turret` | present + `true` on turret slots — parsed but **inert in M3** (see below) |
 | `hardpoints.count` | number of underwing pylons carried; **which** physical `pylonN` markers get used is `Loadout.PylonFillOrder`, not `1..count` (below) |
-| `hardpoints.stock` | the `wep_*` id every pylon carries in stock fit (`wep_06`, HE) — one id for all pylons, see the [schema limitation](#the-uniform-he-stock-load-is-an-observation-and-a-schema-limit) |
+| `hardpoints.stock` | the `wep_*` id every pylon carries in stock fit (`wep_06`, HE) — one id for all pylons, see the [schema limitation](#schema-limit) |
 
-## Two resolution rules baked into the file
+## Resolution rules
 
 **Gun → weapon id.** A gun group's weapon is `caliber N` + `ammo k` → **`wep_{N+k}`**, where `k`
 is the ammo index (`slug` 0, `dumdum` 1, `ap` 2, `magnesium` 3) — the `wep_30`…`wep_73` player
@@ -76,12 +71,12 @@ the dial's fixed 8-position ring — an unfitted physical position reads red, th
 predicts (`hud.md`'s belt-light rule). A full 8-pylon loadout (Balmoral, Warhawk) is unaffected: the
 fill order is a permutation covering all eight positions either way.
 
-## Turrets are represented but inert
+## Turrets
 
 W4 (and the Balmoral's W3) is a **turret** on the five turret airframes (`pavenger`, `pbalmoral`,
 `pbrigand`, `pfirebrand`, `pkestrel` — the Balmoral is the only two-turret airframe: Nose + Rear).
 Those slots carry `"turret": true` and the loader parses them but constructs them inert — and
-**they stay inert even now that the gunner is live (M4 C9a)**: the running turret is built from
+**they stay inert even now that the gunner is live**: the running turret is built from
 the vehicle def's `turrets` block against `ai.zrd` (`TurretController`,
 [turrets.md](turrets.md)), so its weapon is the `ai.zrd` row's `WEAPON.NAME` (`wep_140` on every
 carried entry), **not** this file's caliber. The slot rows here remain the configurator-facing
@@ -90,7 +85,7 @@ plane) differs from the `wep_140` the gunner actually fires, an unreconciled ori
 tension. A turret's binding-rule firepoints are nominal (fp1,2 is a forward/wing point, not a
 rear one); its real barrels are the `fgun`/`rgun`/`bgun*` gun nodes.
 
-## The stock table
+## Stock table
 
 11 planes, 22 stock guns + 6 turret slots. Verified: every plane parses, every `markers` entry
 exists on that plane's model, every gun matches the binding rule, and every derived `wep_*`
@@ -113,10 +108,10 @@ exists on that plane's model, every gun matches the binding rule, and every deri
 ᵀ = turret slot — inert as a gun group; the live gunner reads `ai.zrd` instead (above). Every
 pylon carries `wep_06` (HE) in stock fit.
 
-## The uniform-HE stock load is an observation, and a schema limit
+## Schema limit
 
 **`hardpoints.stock` being a single HE id per plane is what the retail Ammo Selection UI shows**
-(user-read 2026-07-22, corroborated by `OriginalScreenshots/Ammo Selector Hoplite.png` /
+corroborated by `OriginalScreenshots/Ammo Selector Hoplite.png` /
 `… Balmoral.png`) — it is an observation of the shipped default, not a statement that a plane
 *can only* carry one ordnance type. It cannot be checked against the extraction, because there
 is no player loadout in the data at all (above).
@@ -137,3 +132,7 @@ Expressing a mixed fit means widening that to a per-pylon list (e.g. `"pylons": 
 "wep_06", "wep_08"]`), with `{count, stock}` kept as the shorthand. **Record this as a schema
 limitation of our own config file, not a bug** — nothing is wrong with the stock table as it
 stands, and the widening is only worth doing when the configurator lands.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

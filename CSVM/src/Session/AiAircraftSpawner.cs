@@ -56,16 +56,20 @@ public sealed class AiAircraftSpawner
     /// Callable at any point in the session's life; the returned controller is live (ticking,
     /// hittable, damageable) as soon as its <c>_Ready</c> has run. <paramref name="scheme"/>,
     /// given, is worn AS-IS instead of a resolver draw — no RNG consumed, so an authored livery
-    /// (PLAN-instant-action.md C8's ace) never shifts another spawn's pinned paint under
+    /// (an Instant Action ace's) never shifts another spawn's pinned paint under
     /// <c>--det</c>. <paramref name="team"/>, given, overrides
-    /// <see cref="FlightController.Team"/>'s pilot-index-derived default (PLAN-instant-action.md
-    /// B7/C8: an Instant Action actor's side is authored, not derived from its shooter id).
+    /// <see cref="FlightController.Team"/>'s pilot-index-derived default (an Instant Action
+    /// actor's side is authored, not derived from its shooter id).
     /// <paramref name="inert"/> builds the aircraft straight into
-    /// <see cref="FlightController.Inert"/> (PLAN-instant-action.md E10) — complete but held out of
+    /// <see cref="FlightController.Inert"/> — complete but held out of
     /// the session, so it never has a live frame between construction and its own activation; the
-    /// caller puts it in play with <see cref="FlightController.Activate"/>.</summary>
+    /// caller puts it in play with <see cref="FlightController.Activate"/>.
+    /// <paramref name="shippedSkins"/> builds the aircraft in its own shipped textures instead of
+    /// the Fortune Hunters default an unauthored livery otherwise resolves to — for an actor that
+    /// flies for another militia (an Instant Action wave enemy) whose pattern is not decidable
+    /// from the mission data; --paint= still overrides it.</summary>
     public FlightController Spawn(string planeName, Vector3 pos, Vector3 lookAt, AiPilot pilot,
-        PaintScheme? scheme = null, int? team = null, bool inert = false)
+        PaintScheme? scheme = null, int? team = null, bool inert = false, bool shippedSkins = false)
     {
         int index = _spawned++;
         // C26: the original's per-spawn ±5 % spread (PlaneStats.WithAiSpawnJitter), on a copy of the
@@ -76,7 +80,10 @@ public sealed class AiAircraftSpawner
         // Instant Action wingman flies a player airframe. Divergence recorded in org/flightModel.md.
         // Keyed by spawn ordinal rather than drawn off the shared spawn stream, so a --det replay
         // reproduces it and no other subsystem's sequence moves.
-        var stats = _in.StatsFor(planeName).WithAiSpawnJitter(Rng.NewSystemRandom(Rng.Spawn, index, 0));
+        // BL-386: the AI flavour of the airframe — the player chain for dynamics, loadout key,
+        // turrets and model, the AI def's own chain for the damage model (an authored whole pair,
+        // no zones). Nobody is at these controls, so every aircraft this spawner builds gets it.
+        var stats = _in.AiStatsFor(planeName).WithAiSpawnJitter(Rng.NewSystemRandom(Rng.Spawn, index, 0));
         if (pilot.Machine is { } machine)
         {
             // The airframe's shipped range gates (vehicle.json attack / return_range).
@@ -85,15 +92,16 @@ public sealed class AiAircraftSpawner
         }
         FlightController controller;
         Node3D planeModel;
-        // PLAN-perf-hitches C9: the whole build — model, controller, loadout, crash runtime and
+        // The whole build — model, controller, loadout, crash runtime and
         // adding it to the tree. Includes the plane's own decal paint (ResourceLoad), reached
         // deeper in PlaneBuilder.Build — a nested scope there is suppressed and folded into this
         // one, per PerfSample's flat-leaves rule.
         using (PerfSample.Scope(PerfSite.AiSpawn))
         {
             var planeBuilder = new PlaneBuilder(_in.PlanesGamez, _in.Textures, spinningProps: true,
-                scheme: scheme ?? _liveries.SchemeFor(_in.RigCount + index, _in.ZrdrPath, randomByDefault: false,
-                    _in.PaintRng, _liveries.PatternsForPlane(_in.PlanesGamez, planeName)),
+                scheme: scheme ?? _liveries.SchemeFor(_in.RigCount + index, _in.ZrdrPath,
+                    _in.PaintRng, _liveries.PatternsForPlane(_in.PlanesGamez, planeName),
+                    useDefaultPattern: !shippedSkins),
                 patterns: _liveries.Patterns);
             planeModel = planeBuilder.Build(planeName);
 
@@ -107,7 +115,12 @@ public sealed class AiAircraftSpawner
                 WingLights = WingLightBlinker.Build(planeBuilder.WingFlares, _spec.AnimLod),
                 Surfaces = ControlSurfaceAnimator.Build(planeModel),
                 Collider = PlaneCollider.Build(planeModel),
-                Damage = stats.DestroyableParts.Count > 0 ? PlaneDamage.For(stats) : null,
+                // Zones OR an authored whole pair: an AI airframe resolves the pair and no zones
+                // at all, and a parts-only test would leave it undamageable (BL-386). PlaneDamage
+                // handles the zone-less case natively — the resolver returns no part and the hit
+                // spends against the whole pair, which is the decoded zone-less route.
+                Damage = stats.DestroyableParts.Count > 0 || stats.VehicleHealth is > 0f
+                    ? PlaneDamage.For(stats) : null,
                 CollideDamageSink = _in.WorldRuntime != null ? _in.WorldRuntime.CollideDamageAt : null,
                 GrazeEffectSink = _in.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
                 TouchdownDefs = _in.TouchdownDefs,
@@ -120,7 +133,7 @@ public sealed class AiAircraftSpawner
                 PadDevices = Array.Empty<int>(),
                 AllowPause = false,
                 // Set here, before Setup and before the node joins the tree, so an inert airframe is
-                // never stepped, drawn or hittable for even one frame (E10): both Setup's Respawn and
+                // never stepped, drawn or hittable for even one frame: both Setup's Respawn and
                 // _Ready re-assert the state as the pieces that carry it come into existence.
                 Inert = inert,
             };
@@ -150,7 +163,7 @@ public sealed class AiAircraftSpawner
 
             // No camera rides an AI plane — Setup(null) skips the whole camera half — and CamParams
             // is camera tuning, so the default is passed rather than loading the plane's block.
-            // The plant's force path is chosen once, here, off who is flying (C21): nobody, so the
+            // The plant's force path is chosen once, here, off who is flying: nobody, so the
             // AI path. See FlightModel.UsesAiForcePath.
             controller.Setup(
                 new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),

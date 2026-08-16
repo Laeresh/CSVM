@@ -12,7 +12,7 @@ namespace CSVM.Session;
 /// answer: every pilot simply takes the next entry in the list.</summary>
 public sealed class SpawnPicker : IFlightStarts
 {
-    /// <summary>An active Instant Action mission's own scenario (PLAN-instant-action.md C8),
+    /// <summary>An active Instant Action mission's own scenario,
     /// which <c>BuildFlightRigs</c> already draws <see cref="ChooseSpawn"/>'s spawn LIST from —
     /// this only keeps <see cref="LogSpawn"/>'s printed tag truthful about which list that was,
     /// rather than the stale <c>_spec.Scenario</c>. Null outside one.</summary>

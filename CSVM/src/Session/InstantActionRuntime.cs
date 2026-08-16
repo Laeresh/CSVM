@@ -5,7 +5,7 @@ using CSVM.Mech3;
 
 namespace CSVM.Session;
 
-/// <summary>How an Instant Action mission finished (PLAN-instant-action.md G13). One-way: the
+/// <summary>How an Instant Action mission finished. One-way: the
 /// first outcome reached stands, so a win and the last human's death landing in the same sim step
 /// cannot overwrite each other.</summary>
 public enum InstantActionOutcome
@@ -15,8 +15,8 @@ public enum InstantActionOutcome
     Lost,
 }
 
-/// <summary>The one thing that has to happen for a mission to be WON — one per mission type
-/// (PLAN-instant-action.md G13). Every signal source reports the objective it has just satisfied
+/// <summary>The one thing that has to happen for a mission to be WON — one per mission type.
+/// Every signal source reports the objective it has just satisfied
 /// and <see cref="InstantActionRuntime.ReportObjective"/> drops the ones this mission does not run
 /// on, which is what lets a zeppelin run clear all four of its waves (F12 credits them either way)
 /// without that counting as the win.</summary>
@@ -33,7 +33,7 @@ public enum InstantActionObjective
 }
 
 /// <summary>Owns one Instant Action mission's actor set, as it grows across the plan's later
-/// waves (PLAN-instant-action.md: E11 the wave sequencer, F12 the zeppelin arm). C8 wired
+/// waves (E11 the wave sequencer, F12 the zeppelin arm). C8 wired
 /// <c>dogfight_ace</c>'s authored ace; D9 added the wingmen; E11 adds the two per-wave-member
 /// draws (<see cref="RandomPilotStats"/>, <see cref="ResolveWaveAccentId"/>) that the actual
 /// selection/trigger/geometry logic (<see cref="InstantActionWaves"/>, a separate engine-free
@@ -43,7 +43,7 @@ public enum InstantActionObjective
 /// <c>GameSession.BuildFlightRigs</c> reads <see cref="Def"/> directly to
 /// steer the player's own aircraft and spawn scenario, and calls the helpers below to place the
 /// ace, the wingmen and (with <see cref="InstantActionWaves"/>) each wave. Environment→chapter
-/// resolution is the launch MENU's job (H15), not this class's — a <c>--ia=&lt;path&gt;</c> CLI
+/// resolution is the launch MENU's job, not this class's — a <c>--ia=&lt;path&gt;</c> CLI
 /// launch already names its chapter via <c>--chapter=</c>.
 ///
 /// <para>The end half holds no engine type and calls no <c>GD.*</c>, the same construction rule
@@ -51,8 +51,8 @@ public enum InstantActionObjective
 /// dt) and reads the verdict back, and every log line about it is the session's.</para></summary>
 public sealed class InstantActionRuntime
 {
-    /// <summary>Every Instant Action enemy's team (PLAN-instant-action.md Decision 4: "the
-    /// decoded turret convention... every Instant Action enemy is team 2"). Waves (E11) are
+    /// <summary>Every Instant Action enemy's team ("the
+    /// decoded turret convention... every Instant Action enemy is team 2"). Waves are
     /// cohorts inside this one team, not teams of their own.</summary>
     public const int EnemyTeam = AimAssist.PlayerTeam + 1;
 
@@ -84,7 +84,7 @@ public sealed class InstantActionRuntime
         new[] { 4, 4, 4, 4, 4, 4, 4, 4, 4 },
     };
 
-    // The lives ledger (G13, decision 15 — INVENTED, no ia.json key carries one): one counter per
+    // The lives ledger (decision 15 — INVENTED, no ia.json key carries one): one counter per
     // human seat, plus the seats that have run out and are watching. Both keyed by the pilot's own
     // FlightController.PlayerIndex, never by a synthetic index.
     private readonly Dictionary<int, int> _lives = new();
@@ -96,7 +96,7 @@ public sealed class InstantActionRuntime
     }
 
     /// <summary>Raised once, with the outcome, the instant the mission ends. The wrap-up board
-    /// (G14) is the subscriber this exists for; G13's own subscriber is the session's log line.
+    /// is the subscriber this exists for; G13's own subscriber is the session's log line.
     /// </summary>
     public event Action<InstantActionOutcome>? MissionEnded;
 
@@ -118,7 +118,7 @@ public sealed class InstantActionRuntime
     /// <summary>Mission time in seconds, advanced by <see cref="Advance"/> on SIM dt alone (never
     /// wall time — a halt freezes it with the simulation, the rule the match clock already
     /// follows) and frozen the moment the mission ends. It is the value the wrap-up's "Time to
-    /// Complete Mission" row renders (G14); its stopping point is this item's, because the end is
+    /// Complete Mission" row renders; its stopping point is this item's, because the end is
     /// the only place it can be stopped.</summary>
     public float Elapsed { get; private set; }
 
@@ -140,7 +140,7 @@ public sealed class InstantActionRuntime
     public bool IsZeppelinRun =>
         string.Equals(Def.MissionType, ZeppelinRunMissionType, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>The mission type's own win condition (PLAN-instant-action.md G13's goal): the ace
+    /// <summary>The mission type's own win condition: the ace
     /// down, every configured wave cleared, every player's zone set flown, or the zeppelin
     /// disabled. Null for a type with no end condition here — see <see cref="Objective"/>.
     ///
@@ -274,7 +274,7 @@ public sealed class InstantActionRuntime
         System.Math.Max(0, System.Math.Min(configured, 6 - humans));
 
     /// <summary>One wave member's nine pilot stats — the wave sequencer's own per-aircraft roll
-    /// (A3/A4): <c>row = draw % 5</c> over <see cref="PilotPersonalities"/>. Pure over the
+    ///: <c>row = draw % 5</c> over <see cref="PilotPersonalities"/>. Pure over the
     /// caller's own <c>rand()</c> pull, same shape as <see cref="ChooseAceSpawn"/>; feed the
     /// result to <see cref="RepresentativeRating"/> for the one flat rating
     /// <c>AiAircraftSpawner.Spawn</c>'s <c>attackRating</c> takes, CSVM's AI tuning having no
@@ -330,7 +330,7 @@ public sealed class InstantActionRuntime
         return anyFlying;
     }
 
-    /// <summary>The wrap-up's "Time to Complete Mission" row (G14, docs/formats/instant-action.md
+    /// <summary>The wrap-up's "Time to Complete Mission" row (docs/formats/instant-action.md
     /// "What the four numbers count"): <c>minutes = ms / 60000</c>, <c>seconds = (ms / 1000) % 60</c>,
     /// both truncating — the decoded <c>IDS_IAWU_TIME</c> format <c>%02d:%02d</c>. Takes
     /// <see cref="Elapsed"/>'s own unit, seconds, and converts to milliseconds itself.</summary>
@@ -425,7 +425,7 @@ public sealed class InstantActionRuntime
     }
 
     /// <summary>One wingman's standing order (docs/formats/instant-action.md "The player and the
-    /// wingmen", PLAN-instant-action.md D9): its fan placement off the player's spawn heading —
+    /// wingmen"): its fan placement off the player's spawn heading —
     /// <c>100 · ((i &gt;&gt; 1) + 1)</c> metres out, at ±45°, the same 100 m/45° pattern the wave
     /// sequencer uses — its <see cref="PrimaryTargetIsWingman"/> escort chain (0, 1 and 3 escort
     /// the player; 2 and 4 escort wingmen 1 and 3), and its authored accent id.</summary>

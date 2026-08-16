@@ -340,7 +340,7 @@ public sealed class FlightModel
     // ⚠ It vanishes identically when the nose is on the velocity vector, which is what keeps level
     // cruise untouched — by construction, not by scale.
     // ⚠ The original applies this to the PLAYER aircraft only, and Step gates it on
-    // UsesAiForcePath (C22). The live guard is `cmp esi, [0x71c298]` at 0x48cd3e inside
+    // UsesAiForcePath. The live guard is `cmp esi, [0x71c298]` at 0x48cd3e inside
     // FUN_0048c470, jumping the whole block (0x48cd3e–0x48ce45) for anything that is not the single
     // global player object. WeathervaneTorque() itself is UNGATED — it is the law, and an
     // instrument or a test may sample it on either path; the gate is on whether Step sums it in.
@@ -395,7 +395,7 @@ public sealed class FlightModel
     /// own live address: the airflow blend is skipped so the wind always comes straight down
     /// the nose, the weathervane torque is not summed in, the post-integration velocity carries
     /// the <see cref="AiNoseSpeedFloor"/> (all C22), and <see cref="GroundBlowTerm"/> applies a
-    /// fixed, command-independent push instead of the player's command-proportional one (C23).
+    /// fixed, command-independent push instead of the player's command-proportional one.
     /// There is no density branch — A1 disproved it, the atmosphere call is shared and unbranched,
     /// so both paths fly the dense band.</para></summary>
     public bool UsesAiForcePath { get; }
@@ -526,7 +526,7 @@ public sealed class FlightModel
     /// normal flight, tracking the declining yaw curve down to the 0.2 floor (reached at ≈345 mph,
     /// ≈0.40 at the Bloodhawk's 302 mph cruise).
     /// <para>⚠ NOTHING IN THE FORCE PATH READS IT, and that is a trace rather than an omission
-    /// (C24). <c>FUN_0048c470</c> takes it as an out-parameter and writes it straight through to its
+    ///. <c>FUN_0048c470</c> takes it as an out-parameter and writes it straight through to its
     /// only caller, <c>FUN_0048e580</c>, where its single use is <c>0x48ec0b</c>-<c>0x48ec1d</c>:
     /// <c>rudderAngle = factor · yawInput · −0.61086524 rad</c> (−35°, the immediate at
     /// <c>0x608120</c>), smoothed toward that target at 2/s (<c>FUN_00460490</c>) into the angle

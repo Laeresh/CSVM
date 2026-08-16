@@ -6,7 +6,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The original's low-speed control-authority ramp (PLAN-ai-flight C24, closing BL-330): roll and
+/// The original's low-speed control-authority ramp (closing BL-330): roll and
 /// pitch authority is 0 at <c>turn_fade_in</c> (10 mph), rises linearly to 1 at
 /// <c>turn_fade_out</c> (authored 50 mph) and holds there. Yaw keeps its own, different curve.
 ///

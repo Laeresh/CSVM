@@ -1,10 +1,16 @@
-# Sounds: `sounds.json` SETS, player curves, WAV format
+# Sound readers and WAV format
 
-Part of the [format documentation](README.md). Covers the shared zrdr archive's sound
-definitions and curve blocks, and the audio container format. Consumed by
-`CSVM/src/Mech3/SoundDefs.cs`, `WavFile.cs`, `src/Flight/FlightAudio.cs`.
+Part of the [format documentation](README.md). This page covers shared sound definitions, player
+volume and pitch curves, and the WAV container. The readers are `SoundDefs.cs`, `WavFile.cs`, and
+`FlightAudio.cs`.
 
-## `sounds.json` — the SETS block
+## Contents
+
+- [Sound sets](#sound-sets)
+- [Sound groups](#sound-groups)
+- [Player curves](#player-curves)
+- [WAV format](#wav-format)
+## Sound sets
 
 `SETS` alternates set-name → list of entries. Entry shape:
 
@@ -28,7 +34,7 @@ Each plane def names its own engine loop via `engine_sound` / `cockpit_engine_so
 `damaged_engine_sound` is a second, vehicle.json-only loop (`snd_damagedengine`) blended in as
 damage accumulates — its own two-float shape, not a `player.json` curve block; see vehicle.md.
 
-## `sounds.json` — the SOUND_GROUPS block
+## Sound groups
 
 A sibling of `SETS`: the weighted random sound groups a one-shot `SOUND` animation event resolves
 through when it names a group instead of a plain `snd_*` definition. The combat/destruction
@@ -65,18 +71,18 @@ picks one of `snd_exp_hit1/2/3/3a/5`, each of which is an ordinary `SETS` entry
 (`snd_exp_hit1` → `explosion_1.wav`). See [anim-definitions.md](anim-definitions.md) for the
 `SOUND` vs `SOUND_NODE` distinction (only the latter is ambient looping world audio).
 
-## `player.json` — volume/pitch curve blocks
+## Player curves
 
 All are clamped two-point ramps `(inStart→inEnd maps outStart→outEnd)`:
 
 | Block | Meaning |
 |---|---|
 | `engine_sound` | pitch 0.6→1.0 over throttle 0.1→1.0; volume flat 1.0 |
-| `prop_sound` | the **overspeed dive whine**: volume 0→0.5 over speed 1.0→1.1× `fd_speed`, pitch 0.65→1.25 over 1.0→1.2×. The WAV is not named anywhere in the readers (the remake uses `snd_enginewhine`, the only pitch-shiftable candidate — re-confirmed by an all-archive comb sweep against a reference recording, 2026-07-19) |
+| `prop_sound` | the **overspeed dive whine**: volume 0→0.5 over speed 1.0→1.1× `fd_speed`, pitch 0.65→1.25 over 1.0→1.2×. The WAV is not named anywhere in the readers (the remake uses `snd_enginewhine`, the only pitch-shiftable candidate — identified by an all-archive comb sweep against a reference recording) |
 | `rattle` | `snd_planeshake`: volume 0→1 over speed 1.0→1.2× `fd_speed` |
 
 **Caveat — the curve volume is not a linear mix amplitude.** Spectral analysis of a
-reference dive recording (2026-07-19) shows the original plays the whine 12–18 dB below
+reference dive recording shows the original plays the whine 12–18 dB below
 what `prop_sound`'s 0.5 volume cap would give as a linear gain against the engine loop —
 the engine applies scaling of its own between the curve value and the mixer. Treat these
 volume numbers as relative shapes, not absolute amplitudes.
@@ -86,3 +92,7 @@ volume numbers as relative shapes, not absolute amplitudes.
 All game WAVs (`soundsh.zbd` high-quality / `soundsl.zbd` low) are **MS ADPCM**
 (fmt tag 2, 4-bit, 22050 Hz, mono or stereo). Godot only loads PCM/IMA-ADPCM/QOA, hence
 the pure-C# decoder in `WavFile.cs`.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

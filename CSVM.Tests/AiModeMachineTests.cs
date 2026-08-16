@@ -224,7 +224,7 @@ public class AiModeMachineTests
     {
         var m = Machine();
         bool blocked = false;
-        m.ProbeBlocked = (_, _) => blocked;
+        m.ProbeBlocked = (_, _) => blocked ? "test/obstacle" : null;
 
         // Clear probes: patrol undisturbed.
         Assert.Equal(AiMode.Patrol, m.Update(Home, Level, null, null, AiModeMachine.ProbeIntervalS));
@@ -241,7 +241,7 @@ public class AiModeMachineTests
         Assert.Equal(AiMode.Patrol, m.Mode);
     }
 
-    // ---- Lay off (D15): the rubber-band assist ----------------------------------------------
+    // ---- Lay off: the rubber-band assist ----------------------------------------------
     // Decoded: the mode and the sixth_sense_factor ease-off constant. Invented (named on the
     // machine's constants): the pursued-test cones, the enter/caught-up distances, the hold.
 

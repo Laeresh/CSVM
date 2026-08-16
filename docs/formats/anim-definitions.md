@@ -1,15 +1,25 @@
-# ANIMATION_DEFINITION readers (zepstate, startanims, building/vehicle anims)
+# Animation definition readers
 
-Part of the [format documentation](README.md). Validated against this install's zrdr
-extraction (mech3ax v0.6.1), 2026-07-18, while implementing the anim-state engine part 1
-(mission start states). Field tables + tiny excerpt values only — no bulk game data.
+Part of the [format documentation](README.md). The zrdr sources define mission start states and
+animation behavior; the project fork also decodes their compiled per-mission `mis_anim.zbd`
+archives. This page contains field tables and small illustrative values only.
 
-The original compiles these reader sources into per-mission `mis_anim.zbd` archives
-(a binary format upstream mech3ax does not support; the project's mech3ax **fork decodes
-it** — see the compiled-archives section below); the zrdr JSON sources carry the same
-definitions, so scanning them is a full substitute for state purposes.
+## Contents
 
-## Where definitions live
+- [Definition locations](#definition-locations)
+- [File shape](#file-shape)
+- [Definition fields](#definition-fields)
+- [State operations](#state-operations)
+- [Animation calls](#animation-calls)
+- [Sequence stopping](#sequence-stopping)
+- [Fire animations](#fire-animations)
+- [Point lights](#point-lights)
+- [Ambient audio](#ambient-audio)
+- [Mission library scope](#mission-library-scope)
+- [Start animations](#start-animations)
+- [Zeppelin states](#zeppelin-states)
+- [Compiled animation archives](anim-definitions/compiled-archives.md)
+## Definition locations
 
 Three zrdr scopes are visible to a mission (the remake scans all reader files in each
 whose content mentions `ANIMATION_DEFINITIONS`):
@@ -41,7 +51,7 @@ Alternating key/value-list pairs **with meaningful duplicate keys** (multiple
 view loses data; walk the raw list. A key followed by `null` (or by another key) is a
 bare flag (`LOCAL_NODES_ONLY`).
 
-## ANIMATION_DEFINITION fields
+## Definition fields
 
 | Key | Value | Meaning |
 |---|---|---|
@@ -60,7 +70,7 @@ bare flag (`LOCAL_NODES_ONLY`).
 | `PERSIST_LOG` | `ON` | The def's state **additionally crosses mission boundaries**: a later mission in the same chapter loads with it applied. A strict subset of `SAVE_LOG ON` (62 defs, all of them fixed world scenery). Same section. |
 | `EXECUTION_PRIORITY`, `AUTO_RESET_NODE_STATES`, `AUTO_ADD_TO_WORLD` | | Engine bookkeeping, undecoded detail. |
 
-## State ops (the part-1 subset)
+## State operations
 
 | Op | Body | Meaning |
 |---|---|---|
@@ -85,7 +95,7 @@ five spellings occur: `["ON", 0.6]`, `[0.4, "ON"]`, `["OFF", 1]`, `[1, "OFF"]` a
 `OBJECT_OPACITY_FROM_TO` tweens the same pair with a `RUN_TIME`; a fade-out is
 `(true,1.0) → (false,0.0)` ×5073 and a fade-in `(true,0.0) → (false,1.0)` ×4609, i.e. the end
 state disables translucency once the object is fully opaque again (or is deactivated outright).
-**Implemented 2026-07-23** (`AnimRuntime.OpacityFade`, the biggest un-handled kind at 9,917
+**`AnimRuntime.OpacityFade`** handles the largest kind (9,917
 events): a linear lerp of the two `opacity` numbers over `RUN_TIME`, driven through the same
 per-instance `csky_opacity` parameter `OBJECT_OPACITY_STATE` writes. ⚠ **The endpoint `state`
 flag does NOT invert the value** — surveyed across all 9,917, `(state=false, opacity=0)` fades to
@@ -115,7 +125,7 @@ obvious — 74,129 px change, the clouds going from hard opaque white to translu
 The compiled archives carry a `FogState` event kind: mid-mission weather change is a real engine
 capability. **The data uses it exactly once install-wide** —
 `extracted/C1/M04/mis_anim/camera1-mission_intro_animation.json`, `reset_state/events[4]`
-(surveyed across all 12,746 `mis_anim` + 3,368 `cam_anim` files, 2026-07-22):
+(across all 12,746 `mis_anim` + 3,368 `cam_anim` files):
 
 ```json
 {"FogState": {"name": "drop_fog", "type_": null,
@@ -128,7 +138,7 @@ Note what it is *not*: it carries its fog parameters **inline** and matches neit
 weather.json zones (zone1 1000–1750 alt 970–1047, zone2 1000–4000 alt 4000–5000). So it is an
 ad-hoc third fog state applied to a cutscene camera, **not a zone selector** — it does not answer
 "which zone does a mission fly", which remains engine-side (see
-[weather.md](weather.md#which-zone-a-mission-flies-is-not-in-any-file-searched-exhaustively-2026-07-22)).
+[weather.md](weather.md#mission-zone-selection)).
 `AnimRuntime` therefore does not implement it: one occurrence, on the one cutscene camera the
 remake does not run, and implementing it would mean a second write path onto the `csky_fog_*`
 globals that `Session.WeatherRig.Build` owns. If the user ever observes fog visibly changing
@@ -138,7 +148,7 @@ should be revisited.
 ### `OBJECT_MOTION` is two ops sharing one event
 
 `OBJECT_MOTION` is the original's rigid-body descriptor, and its 7,442 uses split cleanly into
-two jobs that have nothing to do with each other. Surveyed across all 8 chapters, 2026-07-22:
+two jobs that have nothing to do with each other. Across all 8 chapters:
 
 | Shape | Count | What it is |
 |---|---:|---|
@@ -150,21 +160,21 @@ two jobs that have nothing to do with each other. Surveyed across all 8 chapters
 rotation-only; every ballistic use is `ON_CALL`/`WEAPON_HIT`, fired by a crash or (in M3) a kill.
 So the rotation half runs through the lightweight `AnimRuntime.SpinMotion` (unchanged — the
 ambient world boots byte-for-byte the same), and the ballistic/scale/tumble half is **implemented
-2026-07-23** through `AnimRuntime.MotionRuntime`, a full rigid body in the node's parent frame,
-seeded from its **authored rest** pose for a launch and from its live pose otherwise (2026-08-01: a
+** through `AnimRuntime.MotionRuntime`, a full rigid body in the node's parent frame,
+seeded from its **authored rest** pose for a launch and from its live pose otherwise (: a
 shared effect template's children are never re-homed between calls, so seeding a launch from the
 live pose walked every repeat explosion's debris further from the blast than the one before):
 
 - `TRANSLATION.initial` is the launch **velocity** (a crash piece leaves at y=10 m/s); `rnd_xz` a
   per-axis random spread added to it (through the runtime's **seedable** `_rng`, so a lab replay
   is deterministic); `delta` a constant **acceleration** along the launch, in m/s² — **not** a ramp
-  divided by `RUN_TIME`, which is how it was read until 2026-08-11 (non-zero on 92 of the 757
+  divided by `RUN_TIME`, which is how it was once read (non-zero on 92 of the 757
   vector-form events).
 - `TRANSLATION_RANGE` is a ballistic launch in **polar form** — **`xz` is an AZIMUTH and `y` an
   ELEVATION, both in DEGREES, and `initial` is the launch SPEED in m/s** (`delta` the same constant
-  acceleration, non-zero on 233 of 1,226). **Decoded 2026-08-01**, replacing a distance reading that
+  acceleration, non-zero on 233 of 1,226). This is an acceleration, not a distance reading:
   threw debris hundreds of metres; census + evidence in `analysis/object-motion-range/`.
-  ⚠ **The elevation is LINEAR, not spherical**, and that was corrected on 2026-08-13: the direction
+  ⚠ **The elevation is LINEAR, not spherical**, and that was corrected: the direction
   is `dirY = elevation/90` with the horizontal taking the remainder `1 − |elevation|/90`, so it is
   deliberately **not unit length** (0.707 at 45°) and only the azimuth goes through trigonometry. Do
   not normalise it — the unit-sphere reading launches 60–70° debris 20–25 % too fast. The mechanism
@@ -185,13 +195,13 @@ live pose walked every repeat explosion's debris further from the blast than the
   vertical column under the body to a full geometry sweep, which is what lands a piece on a rooftop
   or stops it against a wall. `NO_ALTITUDE` is the opt-out and `gunshell` alone authors it. This was
   read the other way round — the test gated on `DO_INTERSECTIONS`, `NO_ALTITUDE` as something about
-  spawn altitude — until 2026-08-13; the corrected mechanism is in
+  spawn altitude; the mechanism is in
   [`../org/objectMotion.md`](../org/objectMotion.md). Every gravity-bearing body therefore lands,
   including the free-falling shapes (zeppelin gasbags, lifeboats, `chuteman` descents) that had been
   deferred as `BL-245` on the older reading.
   A third launch shape is worth knowing: **neither `RUN_TIME` nor `BOUNCE_SEQUENCE`**, where the
   event's duration is what the sequence's NEXT (null-start) event waits on — in 159 of 167 cases
-  install-wide, the flying piece's own `ACTIVE_STATE 0`. Censused 2026-08-06 (`BL-257`,
+  install-wide, the flying piece's own `ACTIVE_STATE 0`. Censused (`BL-257`,
   `analysis/bl-257-nulled-launch/`): a body with no `RUN_TIME` reports the parabola's return to
   launch height as its duration, so these are hidden when they land rather than on the launch tick.
   `dblcannon_flying_parts` is the reachable case — eight parts at elevation 10–70°, 17–25 m/s, each
@@ -211,7 +221,7 @@ live pose walked every repeat explosion's debris further from the blast than the
   [`../org/objectMotion.md`](../org/objectMotion.md).
 - `SCALE.initial`/`delta` a linear scale ramp that is an **OFFSET from unit scale, not an absolute
   size**: `scale = 1 + initial + delta·u`. Unlike `OBJECT_SCALE_STATE`/`OBJECT_SCALE_FROM_TO`, which
-  are absolute. **Settled 2026-08-01** by the install's commonest value — a bare `(-0.1, -0.1, -0.1)`
+  are absolute. **Settled** by the install's commonest value — a bare `(-0.1, -0.1, -0.1)`
   with zero delta on **30 of the 45 distinct SCALE events** (every `h2twr`/`radiotwr`/`transmitter`
   collapse, every `gullfly`): as an absolute that is a *negative* scale, i.e. the piece inside-out at
   a tenth of its size and effectively invisible; as an offset it is a clean 10 % shrink. Confirmed
@@ -221,12 +231,12 @@ live pose walked every repeat explosion's debris further from the blast than the
   the node's own authored scale is **undecided**: every node carrying this channel is authored at
   exactly unit scale in this install, so the two readings coincide and nothing can separate them.
 
-Verified 2026-07-23 in `--anim-lab --play-anim=player_crash_dirt` (seeded, fixed-dt): the five
+Verified in `--anim-lab --play-anim=player_crash_dirt` (seeded, fixed-dt): the five
 `fly_trail*` debris anchors integrate outward and the two carrying `FORWARD_ROTATION` tumble while
 the others do not (those two are `TRANSLATION_RANGE` launches; the crash's own `pieceN`, which fly
-the vector form, stopped tumbling on 2026-08-13), `dust` runs a scale ramp and an `OpacityFade` at once, `flydirt` sinks on its
-`TRANSLATION`. An 8-chapter ambient regression is byte-identical bar C3's one reachable opacity
-fade — because nothing ambient fires the ballistic half (see the reachability boundary above).
+the vector form, stopped tumbling), `dust` runs a scale ramp and an `OpacityFade` at once, `flydirt`
+sinks on its `TRANSLATION`. An 8-chapter ambient regression is byte-identical bar C3's one reachable
+opacity fade — because nothing ambient fires the ballistic half (see the reachability boundary above).
 
 What the reachable spins are: 576 of 590 are zeppelin nacelle propellers — `spin` at −40°/s and
 `counterspin` at +30°/s about local Z, counter-rotating — plus rotating signage (`ammosign`,
@@ -261,7 +271,7 @@ ambiguous angle unit got in `interp.md`.
 from its authored rest pose.** Nothing in this data is relative: the `*_delta` channels that
 look like they would be are the same tween's rate — see the `*_delta` section just below.
 
-Evidence, surveyed over all 8 chapters (2026-07-21):
+Evidence, surveyed over all 8 chapters :
 
 - C1's `mafia` car moves `from (-6796, 128, -5958) to (-6521, 128, -5958)`; its gamez node's
   authored translate is `(-6795.828, 128.0, -5956.72)` and its parent is the `world1` root.
@@ -277,7 +287,7 @@ Evidence, surveyed over all 8 chapters (2026-07-21):
   places them (C2's `sailboat2`, C1's `car_go_home`) rest at their parent's origin and
   legitimately don't match. Absolute-in-parent-frame is the rule that covers both families.
 
-Rotation units differ between the two spellings (2026-08-04, the C2 roadblock spin):
+Rotation units differ between the two spellings (the C2 roadblock spin):
 
 - **Compiled** archives are **radians**: the maximum magnitude in that data is `15.708 = 5π`,
   99.93% of values are ≤ 2π, and 228 sit on exact π/2 multiples. Converting them with
@@ -301,7 +311,7 @@ route exactly sideways.
 
 ### `*_delta` is the same channel's RATE, not a second motion
 
-Decoded 2026-08-04 from an install-wide census of all 16,114 compiled anim files
+Decoded from an install-wide census of all 16,114 compiled anim files
 (`analysis/bl-050-fromto-delta/`). The compiled `*_delta` channels arrive as a bare `{x,y,z}`
 vector, **not** a `{from,to}` pair, on **51** events (15 `translate_delta`, 17 `rotate_delta`,
 19 `scale_delta`; 29 in `cam_anim`, 22 in `mis_anim`; 33 distinct authored signatures). The
@@ -320,19 +330,18 @@ of `(0.5485, −3.9395, 0)`; C5's `litemast_dest`/`wire2` scales `(1,1,1) → (0
 ⚠ **So a consumer must NOT read it.** It carries no information the tween does not already
 have, and composing it as an extra offset — the reading a bare vector invites, "the `to` with
 an implied zero `from`" — runs every one of these 51 motions at double speed. CSVM reads the
-three absolute channels only (`FromToMotion`); the delta plumbing was removed 2026-08-04 so a
+three absolute channels only (`FromToMotion`); the delta plumbing was removed so a
 later reader who notices a `{from,to}` parser returning `(null, null)` on a bare vector does
 not "fix" it back.
 
 ### `IF`/`ELSEIF` conditions are all evaluable
 
 Ten condition kinds appear across the install. None of them is opaque gameplay state that a
-world build has no value for — an earlier reading, which led the runtime to skip every
-branch. **All ten are evaluated as of 2026-07-21** (`AnimRuntime.EvaluateCondition`).
+branch. **All ten are evaluated** (`AnimRuntime.EvaluateCondition`).
 
 ⚠ **The engine has fourteen, and the missing four are unused data, not unimplemented code.**
 `PLAYER_UNDERCOVER`, `PLAYER_BELOW_ALT`, `PLAYER_LINED_UP` and `PLAYER_SPEED` have parser branches
-and evaluator branches in `crimson.exe` and are authored nowhere in the install (swept 2026-08-13,
+and evaluator branches in `crimson.exe` and are authored nowhere in the install (swept:
 0 occurrences against 1,097 for `PLAYER_RANGE`). The full bit-to-token table is in
 [`org/sequences.md`](../org/sequences.md); this table is the census of what ships, and the two do
 not disagree.
@@ -415,21 +424,21 @@ Playback ops seen and deferred: `OBJECT_DELETE_CHILD`,
 `CALLBACK`, `DETONATE_WEAPON`.
 (`FBFX_COLOR_FROM_TO` landed — see [`org/sequences.md`](../org/sequences.md)'s
 "FBFX_COLOR_FROM_TO is a full-screen wash";
-`LIGHT_STATE`/`LIGHT_ANIMATION` landed 2026-07-21 — see below;
-`SOUND_NODE` + the sound half of `OBJECT_ADD_CHILD` landed 2026-07-22 — see "SOUND_NODE is a
-three-event triple"; `OBJECT_MOTION`'s rotation half landed 2026-07-22 and its
-ballistic/scale/tumble half 2026-07-23 — see "OBJECT_MOTION is two ops in one";
-`OBJECT_OPACITY_STATE` landed 2026-07-22 and `OBJECT_OPACITY_FROM_TO` 2026-07-23 — see
+`LIGHT_STATE`/`LIGHT_ANIMATION` landed — see below;
+`SOUND_NODE` + the sound half of `OBJECT_ADD_CHILD` landed — see "SOUND_NODE is a
+three-event triple"; `OBJECT_MOTION`'s rotation half landed and its
+ballistic/scale/tumble half — see "OBJECT_MOTION is two ops in one";
+`OBJECT_OPACITY_STATE` landed and `OBJECT_OPACITY_FROM_TO` — see
 "OBJECT_OPACITY_STATE is translucency".)
 
-`CALL_ANIMATION` dispatched from the start but **ignored its target node** until 2026-07-21 —
+`CALL_ANIMATION` dispatched from the start but **ignored its target node** until —
 see "CALL_ANIMATION carries a target node" below; that is the data's template-instancing
 mechanism and `OBJECT_ADD_CHILD` is **not** (surveyed: the fire templates are never its
 children, and 75% of its 1,152 uses attach sound *definitions* rather than nodes).
 
-## `CALL_ANIMATION` carries a target node — this is the template-instancing mechanism
+## Animation calls
 
-Surveyed and implemented 2026-07-21. A call may name **another node to run the callee on**,
+Surveyed and implemented. A call may name **another node to run the callee on**,
 and that is how one authored definition serves many sites. Three spellings, two shapes:
 
 | Reader | Compiled | Uses |
@@ -479,7 +488,7 @@ must not treat them as waits. Census and the 92-row dump instrument:
 `analysis/wait-for-completion/`.
 
 **The hold gates the caller's NEXT event — it is not a lifetime hold on the sequence.** Implemented
-2026-08-05 (`BL-228`), and the scope is the data's, not a decision: censusing what each flagged call
+ (`BL-228`), and the scope is the data's, not a decision: censusing what each flagged call
 is asked to wait FOR (`analysis/wait-for-completion/`, `callee_shapes.py`) splits the 2,852 flagged
 calls in the blocks the runtime executes into a cross-tab with an empty cell.
 
@@ -513,7 +522,7 @@ All flagged compiled owners are `OnCall` (2,844) or `WeaponHit` (8 in these bloc
 `OnStartup`, so no ambient world boot arms one — measured: an 8-chapter `--freecam` regression arms
 zero holds and leaves every bootstrap count identical. The clearest timing case is
 `player_crash_water`, where flagged `plane_big_splash` precedes `large_steam_spray`. **That case is
-reachable as of 2026-08-02** (surface-aware crash selection), and a captured sea dive showed the
+reachable as of** (surface-aware crash selection), and a captured sea dive showed the
 divergence directly: the two retargeted on the *same tick*, so the steam spray started with the
 splash instead of after it. The splash's own choreography runs 3.0 s (`plane_sp_polys`' scale +
 `plane_sp_polyfade`' opacity ramp); the landed hold measures **3.050 s** on real gamez data
@@ -523,7 +532,7 @@ chapters' `player_crash_default`/`player_crash_dirt` are all `null`.
 One spelling is counted and deliberately NOT honoured: 33 reader `CALL_SEQUENCE` bodies carry the
 bare token, which the compiled form never does (56,750/56,750 of the field's occurrences are on
 `CallAnimation`) and so has no decoded semantics. The 879 flagged calls in the `unknown_seq`
-destruction slot dispatch since `BL-276` (2026-08-05) — the slot is loaded as
+destruction slot dispatch since `BL-276` — the slot is loaded as
 `AnimDefinition.DeathSlot` and runs at death (see [destructibles.md](destructibles.md)), so its
 flags behave like any dispatched call's (a routed effect call's hold is counted, not honoured).
 
@@ -567,7 +576,7 @@ component tracks up/down. `he_ground_effect` lifts its fireball 12 m over a ring
 seven explosions over 165 m of a 231 m hull at constant height. **A reading that is 8 m too high is
 therefore authored, not mis-parsed** — look at where the def's host was staged, not at the axes.
 
-## `STOP_SEQUENCE` halts the named sequence, and does nothing else
+## Sequence stopping
 
 The wire format is identical to `CALL_SEQUENCE` — a 36-byte struct carrying only the name — and so
 is the name resolution. `004eb610` resolves the name to an index in the definition's own sequence
@@ -585,13 +594,13 @@ third — the "stopper" — turns out to author a teardown that never runs:
   taken pass so the remaining branches never evaluate. Requires the halt reading on self.
 - **Halt a running sibling** (`large_30sec_fire`'s `fire_n_smoke`, `zepskinfire`×5,
   `flame_light_seq`): the target is genuinely running — a `LOOP -1` poll or a sequence started
-  earlier by `CALL_SEQUENCE`. The halt is load-bearing beyond bookkeeping: a `PUFFER_STATE`
+  by `CALL_SEQUENCE`. The halt is load-bearing beyond bookkeeping: a `PUFFER_STATE`
   re-assert *revives* a stopped emitter (the damage-stage sputter contract), so the
   `PUFFER_STATE INACTIVE` these stops pair with cannot end the fire alone — the un-halted poll
   would re-light it one frame later.
 - **Stopper** (`flame_ball.zrd`'s `stop_p1trail`): the target is `ACTIVATION ON_CALL`, not
   running at fire time, and its body is pure teardown (`PUFFER_STATE … INACTIVE`,
-  `OBJECT_ACTIVE_STATE … INACTIVE`). The 2026-08-01 survey read this as a fall-through to a call,
+  `OBJECT_ACTIVE_STATE … INACTIVE`). The survey read this as a fall-through to a call,
   on the strength of the same file reaching the same sequence by a literal
   `CALL_SEQUENCE [stop_p1trail]` elsewhere (`moving_fire_ball_01`'s `fly_flare`). The exe says
   otherwise: the stop marks it done and the teardown never dispatches. The two events are *not*
@@ -609,10 +618,9 @@ starts it where the original's done state would refuse. 123 definitions name one
 a call and a stop (mostly `flame_light_seq`), but whether any of them reaches the stop *before*
 the call at run time is a control-flow question the static census cannot answer.
 
-## Fire: a texture cycle on a material, and behaviours nothing calls
+## Fire animations
 
-Decoded 2026-07-21 while chasing the user's "there is a fire flipbook at the refinery" report;
-**the mechanism was re-decoded out of `crimson.exe` on 2026-08-13 and the earlier reading of it
+Decoded while chasing the user's "there is a fire flipbook at the refinery" report;
 was wrong** (see "What changed" below). Three separate layers, none of which is
 `OBJECT_ADD_CHILD`:
 
@@ -672,9 +680,9 @@ has `CreateUniqueMaterials` for the case where sharing is *not* wanted; `support
 the only caller, de-sharing the gauge materials so each instrument indexes its own frame set
 (those run at `SPEED 0`, i.e. a frame set the game indexes explicitly rather than a flipbook).
 
-### What changed, 2026-08-13
+### Effect-cycle mechanism
 
-The 2026-07-21 reading said "EFFECTS binds to the NODE, not the texture or material", concluded
+The reading said "EFFECTS binds to the NODE, not the texture or material", concluded
 that `flame01` is a static base flame, and that the animated fire the user saw was a placed
 `fire2` instance. The draw loop settles it the other way: **`flame01` plays `fire101` to `fire112`
 at 10 fps from load, with no trigger and no placement**, and `mb1`/`mb_spinflame` play the same
@@ -695,9 +703,9 @@ the missing trigger either. The original invokes them engine-side, so reproducin
 object catching fire* still requires choosing our own trigger. The always-on refinery flame does
 not: it is the material cycle above, and CSVM installs it in `EffectCycles`.
 
-## `LIGHT_STATE` / `LIGHT_ANIMATION` — the world's point lights
+## Point lights
 
-Surveyed across the whole install 2026-07-21: **1,468 `LIGHT_STATE` events, every one of them
+Surveyed across the whole install : **1,468 `LIGHT_STATE` events, every one of them
 `type_: "PointSource"`** — no directional or spot lights exist in this data. A definition's
 `lights` array is its symbol table for them, exactly as `objects`/`nodes` are for geometry, so
 a light name is scoped to the definition instance (two refineries each own an `orange_light`).
@@ -726,7 +734,7 @@ then `{min −50, max −160}` over 0.05 s, and a negative range is not a value 
 The reader's `RANGE` carries four numbers (`[min, max, altMin, altMax]`) where the compiled
 form splits the trailing pair into `range_alt` (null throughout this install).
 
-**The ramp is the event's DURATION — it holds its sequence** (decoded 2026-08-10, D31). The
+**The ramp is the event's DURATION — it holds its sequence** (decoded). The
 handler is dispatch slot 5, `004e82b0`. On its first dispatch (`seq+0x20 == 0`, i.e. state
 *starting*) it copies the authored per-second deltas into the event's working slots
 (`+0x30/0x34 → +0x40/0x44` for the range pair, `+0x48/0x4c/0x50 → +0x60/0x64/0x68` for the
@@ -773,9 +781,9 @@ nodes against a regex matcher, ~12M comparisons/second) and cost ~7 ms/frame on 
 name is what identifies the target, so the resolution is cached per light and only redone when
 the name changes.
 
-## `SOUND_NODE` is a three-event triple — the world's ambient audio
+## Ambient audio
 
-Implemented 2026-07-22 (`src/Mech3/WorldSounds.cs`). This is the waterfall roar, the train, the
+Implemented (`src/Mech3/WorldSounds.cs`). This is the waterfall roar, the train, the
 firetruck and police sirens, the zeppelin nacelle engines, the fire crackle and the cockpit
 warning beeper.
 
@@ -798,10 +806,9 @@ sequences M3 now produces, and 21 of its names are not plain `sounds.json` entri
 their own decode. The ambient half landed first; the one-shot half **landed in M3 D31** —
 `AnimRuntime.HandleSound` fires a fire-and-forget `WorldSounds.PlayOneShot` at the event's
 AT_NODE, resolving a `SOUND_GROUPS` name through the decode now in
-[sounds.md](sounds.md#soundsjson--the-sound_groups-block). The event's NAME is a sound
+[sounds.md](sounds.md#sound-groups). The event's NAME is a sound
 *definition* or a group, never a gamez node (the lone reader-scope one-shot names
-`snd_waterfall`, a definition, and resolves zero node targets — see the C3 note in
-`PLAN-anim-rendering-followups.md`).
+`snd_waterfall`, a definition, and resolves zero node targets.
 
 **The reader spells one emitter as three consecutive events**, which is the whole shape of the
 feature:
@@ -847,7 +854,7 @@ use: C1/IA1 deactivates both multiplayer zeppelins, so 36 of its 38 emitters are
 stopped, and only the waterfall and the train sound. That is also what makes the counts safe —
 C5 builds 108 emitters and plays none.
 
-## The mission zrdr scope is a LIBRARY, not a manifest
+## Mission library scope
 
 A mission folder ships reader files it never uses. **A mission-scope reader definition applies
 only if the mission's compiled `mis_anim` archive contains it** (matched on the compiled
@@ -872,11 +879,10 @@ shows the field zeppelin with an empty hangar and no parked train (what compilin
 produces), and C1/M02 is the only mission where the tether tower disappears — the only
 mission that compiles `tethertower`.
 
-⚠ This **supersedes** the earlier note that `zepstate` "is never compiled into any archive",
 which was generalised from C1/IA1. It is compiled into the missions that use it; being
 uncompiled is exactly the signal that the mission does not instantiate it.
 
-### Mission-spawned entities — SOLVED 2026-07-22, and not by a roster
+### Mission-spawned entities
 
 Scenery props are hidden by compiled `zepstate` defs as above. *Entities* — the zeppelins,
 the CTF props, the vehicles and guns — are governed by a different system entirely: the
@@ -890,7 +896,7 @@ has no def in IA1 scope at all, and needs none: `support\c1\ia1.gw` contains
 exactly why it is on the field in M04 and nowhere else. The CTF props are switched off by
 every mission script except `mp2.gw`.
 
-⚠ **This corrects the roster hypothesis previously recorded here.** Neither candidate could
+⚠ **This corrects the roster hypothesis recorded here.** Neither candidate could
 have gated anything, and both were checked before implementing:
 
 - **`aiv.zrd.json`** is the AI *vehicle* table, not a spawn roster. Its only mention of
@@ -903,7 +909,7 @@ have gated anything, and both were checked before implementing:
 The `dliner1` caveat that motivated the roster idea also dissolves: no name pattern is
 involved, the script names its nodes outright.
 
-## startanims.json
+## Start animations
 
 ```
 [["NEW_GAME_START", [["player_setup"], ["train_on_track"], …],
@@ -916,7 +922,7 @@ order matters: C1/IA1 runs `hangar3_doors` (doors to ±50) then `mp_hangar3_open
 visible scopes (C1/IA1 lists `pure_panic`, defined only in C1/M02's folder) — the
 engine evidently tolerates the miss; skip and log.
 
-## zepstate.json
+## Zeppelin states
 
 Ordinary ANIMATION_DEFINITIONs, `ACTIVATION ON_STARTUP`, whose sequences hold only
 `OBJECT_ACTIVE_STATE`s — the per-mission roster of world objects present: C1/IA1
@@ -924,7 +930,7 @@ deactivates `dliner1` (the passenger zeppelin in the shed) and `cargotrain`. The
 chapter gamez contains *every* mission's objects; without applying these states,
 phantom zeppelins/trains render in every mission.
 
-## `SAVE_LOG` / `PERSIST_LOG` are the cross-mission state log (decoded 2026-08-02)
+## `SAVE_LOG` / `PERSIST_LOG` are the cross-mission state log
 
 A mission does not always start from `RESET_STATE`. The engine keeps a **state log** of
 flagged definitions, and a mission load applies it on top of the bootstrap — which is how the
@@ -988,7 +994,7 @@ abort without completing, restart, load the next mission), and a direct A/B sepa
 flags (destroy a `PERSIST_LOG` object and a save-only one in the same campaign mission, then load
 an IA — the first should carry, the second should not).
 
-## Scenario dimension (analyzed 2026-07-18 — negative)
+## Scenario dimension limit
 
 Instant-action scenario names (`zeppelin_run`, `dogfight_ace`, …) appear **only** in
 `ia.json` spawn lists (plus `disallow_missions`). No reader carries scenario-conditional
@@ -997,209 +1003,14 @@ across scenarios; `zeppelins.json` is the gameplay config of the always-present 
 zeppelin (`multiplayer1zep`), not a state selector. Scenario selection evidently drives
 spawns/objectives/AI at engine level, not the world build.
 
-## Compiled anim archives — `cam_anim.zbd` / `mis_anim.zbd` (fork support COMPLETE, CLI wired)
+## Compiled animation archives
 
-The binary archives upstream mech3ax does not support for CS. Surveyed 2026-07-18 while
-scoping the anim-playback engine (Run-2 item 9); since then the project's mech3ax fork
-(`tools/mech3ax`, plan `docs/plans/PLAN-mech3ax-cs-revival.md`) has implemented them in
-`crates/anim/src/cs/`: the container (item 3, 2026-07-20), the full semantic
-`AnimDef` + event decode (item 4, 2026-07-21), and the SI-script frame decode (item 5,
-2026-07-21) round-trip **byte-identically on all 61 archives of this install** with no
-raw regions left except the per-axis spline coefficient blocks (kept as bytes by
-upstream's own MW/PM convention; their semantics are decoded below). The CLI landed with
-item 6 (2026-07-21): `unzbd cs anim <archive> <zip>` / `rezbd cs anim <zip> <archive>`
-extract to the same zip-of-JSON shape as MW/PM/RC (per-def JSONs + per-script `*.zan.json`
-+ `metadata.json`; the CS-only container data — the two base-file entries and the raw
-runtime pointers `defs_ptr`/`scripts_ptr`/`world_ptr`/`unk40`/`zero_def_flags`, which vary
-per archive and fit no PM-style mission table — ride in optional metadata fields).
-Everything below is byte-verified against this install.
+See [Compiled animation archives](anim-definitions/compiled-archives.md) for the container, record, event, and SI-script reference.
 
-**Why they matter:** the vehicle motion (`OBJECT_MOTION_SI_SCRIPT`) references `.zan`
-spline scripts that exist **nowhere as loose files** — they are compiled only into these
-archives. Everything else about the anims (schema, sequences, timing, puffers) is already
-in the zrdr readers; the `.zan` frame data is the *only* missing piece for the train.
-
-- **Scope split (verified by strings):** a mission's `mis_anim.zbd` compiles only the defs
-  its `mis_anim.json` lists (C1/IA1: the 8 zeppelin `ANIMATION_DEFINITION_FILE`s + its own
-  file — no train, no vehicles). The **chapter's `cam_anim.zbd`** is not camera-only: it is
-  the chapter-scope compiled anim archive, holding chapter + shared defs **including all
-  vehicle SI scripts** (C1: the 4 train cars, 2 fueltrucks, mission-intro cameras,
-  `cpilot_eject` body parts — 48 scripts total).
-- **Container** (same family as MW3/PM `anim.zbd`, which mech3ax fully supports — **PM is
-  the closest sibling**, verified 2026-07-20 against mech3ax's own structs): 16-byte header
-  `{signature u32 = 0x08170616` (identical to MW3), `version u32 = 53` (RC 28 / MW 39 /
-  PM 50), `nBase u32 = 2, nAnimFiles u32}` (byte order confirmed: C1 = `16 06 17 08 | 35 |
-  02 | AA`); then nBase × `{path char[128], mtime u32}` (the gamez.zbd + planes.zbd the
-  archive was built against — a CS-only list), then nAnimFiles × `{path char[80], mtime u32}`
-  (the `.zrd`/`.zan` sources; mtimes are year-2000 Unix timestamps; entry shape = mech3ax's
-  common `AnimDefFileC` exactly, though CS keeps the count in the header rather than before
-  the entries). Then the anim-info block — **PM's 108-byte (0x6c) `AnimInfoC` layout
-  verbatim**, decoded field-for-field on C1 cam_anim @0x38E0: `def_count u16` @10 (476),
-  `defs_ptr` @12, `script_count u32` @16 (48 — the SI-script pool count), `scripts_ptr` @20,
-  `msg_count/msgs_ptr` @24/28 (0), `world_ptr` @32, `gravity f32` @36 (−9.8), `unk40` @40
-  (1), `one60` @60 (1), zeros elsewhere; the three pointers are per-archive runtime garbage
-  (C1 cam_anim: defs 0x048F631C / scripts 0x048BB5DC / world 0x03B8000C — mech3ax's
-  per-game `Mission` tables preserve these for byte-identical round-trip). Then `def_count`
-  AnimDef records, then the SI-script pool, which runs byte-exactly to EOF.
-- **AnimDef records (semantic decode COMPLETE 2026-07-21, fork plan item 4** — every field,
-  support array and sequence event is decoded into mech3ax's API types in
-  `crates/anim/src/cs/`; round-trip **byte-identical on all 61 archives**, and the decoded
-  `hangar3_doors` matches its reader-JSON source field-for-field — activation, SAVE_LOG,
-  all five RESET_STATE ops, all four sequences with their door motions**)**: each record is
-  a **272-byte** C struct — PM's 268-byte `AnimDefC` layout with one extra dword — with the
-  same field offsets as PM (`anim_name`[32]@0, `name`[32]@40, `anim_root_name`[32]@76,
-  flags@156, status/activation/priority/`2`@160–163, exec range@164, `reset_time`@172,
-  health@180, `seq_defs_ptr`@204, `reset_state_ptr`@208, `unknown_seq_ptr`@212, eight u8
-  counts@216 (seq/object/node/light/puffer/dynamic-sound/static-sound/effect), prereq
-  count/min@224, anim-ref count@226, then the support-array pointers). First record is the
-  `reserved_anim_0` placeholder (carries its name, ON_CALL activation, INVALID anim ptrs,
-  and a per-archive flags dword — C1/M05 has bit 21). After each record its support arrays
-  follow inline **in this order**: NAME1 node path, objects, nodes, lights, puffers,
-  dynamic sounds, static sounds, activation prereqs, anim refs, SI-script-id list; then an
-  optional RESET_SEQUENCE, the counted sequences (64-byte PM `SeqDefInfoC` headers + `size`
-  bytes of events), and an optional extra unnamed sequence when `unknown_seq_ptr`@212 ≠ 0.
-  **CS deltas from PM** (all byte-verified): `execution_priority` ∈ {1,4,5,6} (PM always
-  4); `anim_ptr`/`anim_root_ptr` @72/@108 hold real hash-like values (PM: 0xFFFFFFFF);
-  `anim_name`/`anim_root_name` can carry truncation garbage past the terminator (preserved
-  as pads); the **"unknowns" array is the compiled `NAME1` node path** — one 36-byte
-  `{name[32], node ptr/index u32}` record per path component, e.g. `mp1zrprop11` carries
-  {multiplayer1zep, reng11}, exactly `NAME1 ["mp1zrprop1*", ["multiplayer1zep","reng1*"]]`
-  resolved for the instance; the **u32 index list** (count in PM's `zero227`@227, pointer
-  in PM's `zero264`@264) is the def's **SI-script pool indices** — `freightercruise` → [0],
-  `hooked_to_klondike` → [5..10], `cpeject1` → [14..28] — and the def's
-  OBJECT_MOTION_SI_SCRIPT events index into it. Object refs are PM's 92-byte shape (node
-  *indices* where PM stores pointers, and live `root_idx`); node refs PM's 44-byte shape
-  with live `flags`/`root_idx`/`ptr`; a def's node list can contain **duplicate names**
-  (same name, different pointers — the mech3ax fork disambiguates with a reversible `~N`
-  suffix since events reference nodes by index); light/puffer/dynamic-sound 44 bytes;
-  static-sound refs **40 bytes** = one garbage-padded name field (the garbage runs past
-  byte 32); **activation prereqs (48 B) ARE used** (contra the earlier survey note): object
-  prereqs carry `active` ∈ {0,1,2} and real pointers, `min_to_satisfy` up to the count;
-  anim refs 72 B — `ref_ty` **1 = CALL_ANIMATION with LOCAL_NAME** (name + local_name
-  halves, both garbage-padded), 0 = plain CALL_ANIMATION. Object/node name fields use MW/PM's
-  `Default_node_name` padding convention, with zero-padded and garbage exceptions.
-- **Events (all decoded):** the standard 12-byte header `{type u8, start_offset u8 ∈
-  {1,2,3}, pad u16 = 0, size u32 incl. header, start_time f32}`. 35 event types occur in
-  this install; **every type shared with PM has PM's exact payload layout** (e01 16 B, e02
-  60, e04 140, e05 100, e06 8, e07 20, e08 16, e09 20, e10 320, e11 132, e13 12, e14 24,
-  e15/e16 4, e17 8, e20 36, e22/e23 36, e24 68, e25 36, e26/e27 36, e28 68, e30 8,
-  e31/e33 16, e32/e34 0, e35 4, e36 52, e41 24, e42 584). Three are CS-specific:
-  **e12 OBJECT_MOTION_SI_SCRIPT is 64 bytes** `{0, node_index, script_index, 52 zero
-  bytes}` where `script_index` indexes the def's script-id list; **e46 = SOUND_ADJUST**
-  (176 B, the volume/frequency/pan fade-series op — `hdplayer*` defs; payload not yet
-  field-decoded); **e47 = OBJECT_MOTION_SI_SCRIPT in its `ROOT`/`ALL_NAMES` form** (multi-
-  node skeletal person animations — `caboosewave`, ladder climbs; payload = count u32 +
-  count × 76-byte records, not yet field-decoded). **CS event quirks** (all preserved by
-  the fork): `IF`/`ELSEIF` conditions add **NODE_BELOW_ALT 0x100** (node + altitude),
-  **ANIM_HEALTH 0x800** (float), **ANIM_HEALTH two-value form 0x1000** (min/max — uses the
-  dword PM asserts zero; `locklear_zep_nacelles` `ANIM_HEALTH [20, 32]`), and
-  **NODE_ACTIVE 0x2000** (node index); `NODE_NEAR_GROUND` compiles to NODE_UNDERCOVER
-  (0x10) **with the value negated**; node references know two sentinels — **INPUT_NODE =
-  −200** (also in SOUND AT_NODE and PUFFER_STATE AT_NODE) and **MAIN_ROOT_NODE = −100**
-  (both resolve to the def's anchor — `AnimRuntime.IsSelfNodeRef`; a `PUFFER_STATE` with
-  `AT_NODE INPUT_NODE`, e.g. `large_30sec_fire`'s `fire_n_smoke`, thus emits on the effect's own
-  relocated root, which is what puts a called destruction fire at the D32 call/hit site)
-  (`OPERAND_NODE ["MAIN_ROOT_NODE"]`, and plain node refs); e27 INVALIDATE_ANIMATION
-  carries index 0 or −100; e24 CALL_ANIMATION has stale small `wait_for` values without
-  the flag; e10 OBJECT_MOTION adds flag bit 15 = **`GRAVITY [..., DO_INTERSECTIONS]`** and
-  ranges compiled with only the MIN flag bit; e28 FOG_STATE carries real fog names
-  (`drop_fog`); e04 light ranges can be negative/reversed; e42 puffer data has
-  `START_AGE_RANGE` min −1, zero deviation distance with the flag set, size ranges with
-  max == min, and the never-in-MW/PM `UNKNOWN_RANGE` flag live (incl. reversed values).
-- **AnimDef flags (partially named):** bit 1 = EXECUTION_BY_RANGE (exact iff with the range
-  fields); bit 4 = HAS_CALLBACKS; **bit 5 = "RESET_TIME key present in the reader source"**
-  (oracle-confirmed: `hangar3_doors` has `RESET_TIME [-1.0]` and bit 5 set with value −1 —
-  in CS the flag does NOT mean the value is ≠ −1); bits 10/11 = NETWORK_LOG SET/ON, bits
-  12/13 = SAVE_LOG SET/ON (oracle-confirmed via `SAVE_LOG ON`); unknown CS-only bits: 2
-  (prop/rotor spin defs), 14+15 (always together; `m_build`/`s_build` building templates),
-  17 (rare; firetrucks/flak), 18 (nearly all defs), 21, 22 (nearly all defs), 23
-  (camera/intro defs). The fork stores the raw dword (`flags_raw`) since the unknown bits
-  make reconstruction impossible.
-- **SI-script pool (fully decoded, fork plan item 5, 2026-07-21):** all 28-byte
-  `SiScriptC` headers first (name pointers/lengths, `spline_interp`, `frame_count`,
-  `script_data_len` — PM's format verbatim), then per script `{source path\0, object
-  name\0, frames…}` with names exactly `strlen+1` (single nul, no garbage) and sizes
-  declared exactly. `spline_interp` is a **real per-script bool** in CS (usually true;
-  15 of the install's 1090 scripts carry false; PM: always false). Which scripts belong
-  to which def is declared too: the def's u32 list (above) holds its pool indices, and
-  each e12 event names its slot in that list. Frame = `{flags u32: 1=translate, 2=rotate,
-  4=scale; start f32, end f32}` + one **76-byte block per set flag** (`flags=0` frames
-  exist — 8,596 of 76,845 frames — and carry no blocks; this is what broke the 2026-07-18
-  sentinel-guessing walker). Translate block (verified): `base Vec3` + 4 floats
-  `(0, avgVel x,y,z)` + per-axis `{value, c1, c2, c3}` where `component(t) = value + c1·t
-  + c2·t² + c3·t³`, `t` seconds since frame start, constant term = the base component
-  (absolute) — verified exact against each next frame's base value and C1-continuous;
-  the u32 at offset 12 is usually 0 but carries garbage in places (preserved). **Rotate
-  block (decoded 2026-07-21):** `base quaternion (w,x,y,z)` + `delta Vec3` + the same
-  three per-axis `{value, c1, c2, c3}` cubic blocks, but **relative and in half-angle
-  radians**: the constant term is 0 (the cubics give each axis's half-angle offset from
-  the frame's base), `delta` = the cubic's average rate over the frame
-  (`f(dt)/dt`), and the rotation at time `t` composes **in the parent frame** as
-  `q(t) = exp((fx,fy,fz)(t)) ⊗ base` (quaternion exponential of the half-angle vector,
-  left-multiplied). Discriminated against right-multiplication and all Euler orders on
-  every consecutive rotate-frame pair of the install: 53,515/60,411 pairs close the next
-  frame's base to <1e-5 under L-exp (57,675 <1e-3); no competing hypothesis comes close.
-  Residuals are compiler fit error on fast rotations (the M01/M02 ladder-climb scripts,
-  ~1° over 60 ms frames) plus scripts with **uninitialized spline memory**
-  (`pfighter11.zan`, C1/M04 — coefficients like 1.7e+27; its base quaternions still march
-  smoothly, so bases are authoritative and splines only interpolate within a frame — and
-  the reason spline blocks must stay raw bytes for round-trip, which is also upstream's
-  own MW/PM choice). Scale block: translate's shape (rare — 477 frames set scale).
-- **`spline_interp: false` means the spline blocks are GARBAGE, not merely unused
-  (2026-07-22).** The uninitialized-memory quirk above is not a one-off: `pfighter11.zan`
-  is simply one of the **15** `spline_interp: false` scripts, and *every* one of them
-  carries junk in its coefficient blocks — leftover pointers, frame times, whatever the
-  compiler's stack held. `piratezep.zan` (C1/M04) is the worst: its scale block's constant
-  terms are `(0.0, 4.259e27, 4.611e27)`, i.e. a **singular** basis with one zero axis and
-  two astronomical ones. Reading those bytes is not a slightly-wrong interpolation, it is a
-  destroyed transform, and it propagates to every descendant's world pose.
-  **A reader must branch on the flag**, and the non-spline form is plain linear motion from
-  the fields that *are* initialised:
-
-  | channel | `spline_interp: true` | `spline_interp: false` |
-  |---|---|---|
-  | translate / scale | cubic, constant term = `base` | `base + delta·dt` |
-  | rotate | `exp(cubic(dt)) ⊗ base`, constant term 0 | `exp(delta·dt) ⊗ base` |
-
-  Both rules were verified against the next frame's `base` over the whole non-spline set:
-  translate/scale worst relative error **1.8e-4** (float32 rounding), rotate worst angular
-  error **0.022°** over all 576 rotate frame pairs — versus **21.6°** if `delta` is ignored
-  and the base simply held. So `delta` is a per-second rate in both, and the non-spline
-  frame is *exactly the degenerate cubic* `(base, delta, 0, 0)` — which is how CSVM
-  implements it, keeping one branch-free evaluator (`SiVectorChannel.Parse`).
-
-  **The 15 are all one content family**, which is why this hid so long: the C1 `hkzep`
-  zeppelin set (`hk_zep`, `lkgasbag01`–`05`, `lkztailgasbag`, `noserotate`, `zfronthalf`,
-  `zbackhalf`), C1/M04's intro `piratezep` + `piratefighter`, and three C4 hookup cameras
-  (`bhmhookup_cam1`/`cam2`, `cghookupcam1`). Nothing else in the install sets the flag
-  false, so seven of eight chapters are completely unaffected by getting it wrong.
-- **Validation state:** the fork's semantic decode round-trips **all 61 archives
-  byte-identically** with every one of the install's **1090 scripts frame-decoded**
-  (76,845 frames) — since item 6 also through the real CLI zip pipeline (test.py
-  `--- ALL OK ---`, which additionally exercises the JSON layer). The 2026-07-18 survey's
-  "24 of 48 C1 scripts fail to parse" was an artifact of not knowing the record delimiting
-  (resolved by the headers + flags=0 frames); no camera/`cpilot_eject` frame-data variant
-  exists. A second uninitialized-data quirk besides `pfighter11.zan` surfaced at the JSON
-  layer (item 6): `carneypkup_cam.zan;camera1` (C5/M02) carries one degenerate frame
-  (start=end=0) whose translate+rotate `delta` vectors are six `0xFFC00000` NaNs — the
-  only non-finite decoded floats in the whole install (measured field-by-field). JSON
-  cannot represent NaN, so the fork preserves the bits in an optional `delta_raw` field. Train data: 4 scripts
-  (`tr_passengine1/tankercar1/boxcar1/caboose1.zan`) × 90 frames × ~3.64 s (= 40 ticks at
-  `SCRIPT_FRAME_RATE` 11), total ~327 s per loop, starting at the parked consist position
-  `(−6943…−6961, 128, −5456…−5412)` and covering a ~3.9 × 2.2 km track loop — all
-  consistent with the C1 gamez node positions and the reader's frame rate.
-- **What playback could already use without the binaries:** the C1 road vehicles
-  (`cars_moving.json` `mafia_move1`/`police_chase`/`car_go_home_start`/`car_loop1_start`,
-  `trucks_moving.json` `truck1_start` — all `ON_STARTUP`) move via `OBJECT_MOTION_FROM_TO`
-  chains (`TRANSLATE_FROM/TO` + `ROTATE_FROM/TO` + `RUN_TIME` + `START_TIME` + `LOOP` +
-  `CALL_SEQUENCE`/`STOP_SEQUENCE`) fully present in the extracted readers, as are the
-  hangar-door motions; the train's steam `PUFFER_STATE` is fully inline in `train.json`
-  (all emitter params + `smokestack` attach node). Firetrucks / fueltrucks / patrol boat
-  are `ON_CALL` only (mission-event driven — nothing calls them in free flight).
-## Consuming the extraction (playback, 2026-07-21)
+## Consuming the extraction
 
 Everything above is about *decoding* the archives. This section is what the Godot side needed
-in order to **run** them (`docs/plans/PLAN-anim-playback.md`, revival-plan item 7) — four facts that
+in order to **run** them - four facts that
 are not visible from the byte format alone, each measured against this install.
 
 - **The two sources are complementary; neither is sufficient.** The compiled archives are the
@@ -1283,10 +1094,9 @@ are not visible from the byte format alone, each measured against this install.
   must terminate uses it: no door, gate, one-shot, hangar, bomb or explosion def carries `Count: 0`.
   Reading `0` as "stop" makes every car in the game drive its route once and freeze.
   **The reader (`zrdr`) scope never uses it** — 703 `LOOP` events there, `LOOP_COUNT` ∈ {`-1`
-  (575), positive N}, zero zeros. (An earlier note claimed the reader scope has *no* `LOOP` events
   at all; it has 703. The usable fact is the absence of `0`, not the absence of `LOOP`.)
 - **A positive `LOOP` count over an instantaneous body is a timer denominated in ANIMATION
-  FRAMES, and the frame is 1/60 s — measured against the original 2026-08-02.** The
+  FRAMES, and the frame is 1/60 s — measured against the original .** The
   *denomination* is forced: a loop whose body schedules no time can only advance one pass per
   engine update, so `LOOP n` spends n updates and the counts are durations, not iteration budgets.
   The update RATE was the open half until `CAP-19` closed it.
@@ -1327,7 +1137,7 @@ are not visible from the byte format alone, each measured against this install.
   quantise to 48 Hz (3 render frames per 1/60 s pass). CSVM pins the pass rate to
   `SequenceRunner.AnimFrame`.
   ⚠ **A loop that carries its own period is NOT automatically safe** — this doc said so until
-  `BL-237` (2026-08-02) measured otherwise. A period is only honoured if the rollover carries its
+  `BL-237` measured otherwise. A period is only honoured if the rollover carries its
   overshoot instead of resetting the clock, and if "did this iteration schedule time?" is asked of
   the DATA rather than of `_due > _clock`, which becomes a question about the step as soon as the
   step is coarser than the period. Missing either, a 0.02 s period costs 2 steps at 60 Hz instead of
@@ -1342,7 +1152,7 @@ are not visible from the byte format alone, each measured against this install.
   every base quaternion is unit-norm and the yaw tracks the frame-to-frame chord heading to ~1°
   (frame 1 quat-yaw −33.11° against a chord of −43.12°, spanned by the frame's own −0.0505 rad/s
   rate); read literally the values are not even normalised. Undo the shift at the parse boundary.
-- **Compiled `PUFFER_STATE` payloads** (consumed 2026-07-21): the event carries the emitter's
+- **Compiled `PUFFER_STATE` payloads** (consumed): the event carries the emitter's
   full parameter set inline, so no reader lookup is needed — cross-checked field-for-field
   against `train.json`'s own `steampuffer` (interval 0.03, LOCAL_VELOCITY 0/15/0, SIZE_RANGE
   0.8–1.5, LIFETIME_RANGE 0.5–4.5, friction 3, the five texture names, the three-stop colour
@@ -1359,11 +1169,11 @@ are not visible from the byte format alone, each measured against this install.
   (C1's `truck1dust_puffer` and `black_exhaust_puffer`). A `textures[]` entry's `run_time` is a
   **fraction of the sprite's lifetime**, not a second count — the survey that settles it, and what
   reading it as seconds did to `large_30sec_fire`, are in
-  [effects.md](effects.md#puffer_state-schema). `at_node` is the attach point, and is
+  [effects.md](effects.md#emitter-schema). `at_node` is the attach point, and is
   NOT the event's `name` (that is the puffer's own name, a separate namespace). `ACTIVE_STATE`
   1 starts a continuous emitter and 0 stops it; definitions re-assert their puffers on every
   loop iteration, so a consumer must treat re-assertion as idempotent.
-- **`unk_range` is `NEAR_FADE`** — identified 2026-08-10 (`PLAN-puffer-engine-deltas.md` item C7).
+- **`unk_range` is `NEAR_FADE`.**
   The compiled `PufferState` payload carries the near camera-distance band under that placeholder
   name, immediately before `fade_range` (which is the reader's `FADE_RANGE`/`FAR_FADE`). Proven by
   matching both surfaces on one effect: C1's `black_smoke_ball_01-large_black_smokeball.json` has
@@ -1371,11 +1181,10 @@ are not visible from the byte format alone, each measured against this install.
   `max` labels are the mech3ax field names, not a range: `min` is the hard discard cutoff and `max`
   the distance alpha would reach 1, so almost every event in the install has `max < min`. The
   semantics live in [effects.md](effects.md).
-- **`growth_factors[i]` is `(age_i, scale_i)`, not `(min, max)`** — corrected 2026-08-09
-  (`PLAN-puffer-engine-deltas.md` item B3, which closed as a disproof). This bullet previously
-  read the entry as a size *range* and cited a "matches 172 of 177 puffers" survey; **both
-  statements are withdrawn** — the reading was wrong and the survey does not reproduce (see the
-  wildcard bullet below for what it was actually seeing).
+- **`growth_factors[i]` is `(age_i, scale_i)`, not `(min, max)`.**
+  This bullet read the entry as a size *range* and cited a "matches 172 of 177 puffers" survey;
+  **both statements are withdrawn** — the reading was wrong and the survey does not reproduce (see
+  the wildcard bullet below for what it was actually seeing).
   **The data alone proves the reading**, independent of the disassembly: **216 compiled events
   author a second entry whose "max" is *less* than its "min"** — `(1, 0.25)` ×71, `(1, −0.2)`
   ×39, `(1, 0.5)` ×26, `(1, 0.45)`/`(1, 0.2)`/`(1, 0.15)`/`(1, 0.0)` ×16 each, `(1, 0.1)`/
@@ -1399,7 +1208,7 @@ are not visible from the byte format alone, each measured against this install.
   Read the array as stops anyway — a single-entry synthesis of the form `[(0, G)]` encodes the
   *wrong* reading even where it happens to yield the right number.
 - **A reader `PUFFER_STATE` `NAME` may itself carry a `*` wildcard, and it expands at compile
-  time** (found 2026-08-09). The [name-wildcard convention](README.md#shared-conventions-zrdr-readers)
+  time** (found). The [name-wildcard convention](README.md#shared-conventions-zrdr-readers)
   is documented for scene-*node* references; the puffer name is a separate namespace (it is not
   `AT_NODE`), and it takes wildcards too. Three definitions in this install use one:
   `rc_smokn_stacks*` (`C1/M05/zrdr/redcross_ship.zrd.json`), `stack_puffer*`
@@ -1436,8 +1245,8 @@ are not visible from the byte format alone, each measured against this install.
 Everything above this point in the section was inferred from the shipped data. The original's
 interpreter has since been located and read directly out of `crimson.exe` with Ghidra, and each
 paragraph above now states the mechanism the exe actually uses rather than the census that stood in
-for it. Where the decode corrected a stated mechanism (the null-`start` encoding, `LOOP 0`), the
-paragraph asserts the corrected one directly and keeps the census as corroborating measurement,
+for it. Where the decode a stated mechanism (the null-`start` encoding, `LOOP 0`), the
+paragraph asserts the one directly and keeps the census as corroborating measurement,
 never as the sole justification.
 
 **The decode itself is not repeated here.** It is one page,
@@ -1447,3 +1256,7 @@ carry, the depth-free IF scan, the condition flag word (fourteen kinds, of which
 authors ten), `CALL_SEQUENCE`/`STOP_SEQUENCE`, `WAIT_FOR_COMPLETION`, `FBFX_COLOR_FROM_TO`, the four
 shipped event kinds with no handler, and the list of places CSVM deliberately differs. This file
 keeps the authored side: what the bytes mean and how the reader and compiled forms diverge.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

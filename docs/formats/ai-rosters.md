@@ -1,19 +1,20 @@
-# aiv.zrd, maneuvers.zrd — AI rosters, pilot skills & the maneuver library
+# AI rosters, pilot skills, and maneuver library
 
-Part of the [format documentation](README.md). The per-mission AI roster (`aiv.json`), the shared
-maneuver library (`maneuvers.json`), and the `ai_skill_parameters` block in `player.json` that turns
-a pilot's 1–9 skill ratings into engine constants. Companion pages: [ai-nets.md](ai-nets.md) (the
-patrol graphs a roster entry references by id), [mission-entities.md](mission-entities.md)
-(zeppelins, generators), [vehicle.md](vehicle.md) (the per-airframe AI tuning keys).
+Part of the [format documentation](README.md). `aiv.json` is the per-mission AI roster;
+`maneuvers.json` is the shared maneuver library; `player.json` supplies the
+`ai_skill_parameters` that turn a pilot's 1-9 ratings into engine constants. See
+[AI nets](ai-nets.md) for patrol graphs, [mission entities](mission-entities.md) for zeppelins and
+generators, and [vehicle definitions](vehicle.md) for airframe AI tuning.
 
-**Provenance.** Unlike most pages here, the field *names* on this page are not inferred — they are
-read from `crimson.exe`, which embeds its editor's own text-format comment for the roster file at
-`.rdata:0x00622508` (an unused writer header retained in the retail build). Every name below is that
-comment's, verbatim. Field *positions* and *values* are then confirmed against the shipped
-extraction; where the two disagree this page says so. See
-[the field-list gap](#the-three-unnamed-slots) for the one place they do.
+The roster field names come from the retail executable's embedded editor-format comment. Field
+positions and values are checked against the shipped extraction; this page notes any mismatch.
 
-## `<Cx>/<mission>/zrdr/aiv.zrd` — the AI vehicle roster
+## Contents
+
+- [AI vehicle roster](#ai-vehicle-roster)
+- [Maneuver library](#maneuver-library)
+- [AI runtime modes](#ai-runtime-modes)
+## AI vehicle roster
 
 One file per mission directory (53 in this install), **414 vehicle blocks** total. The root list is:
 
@@ -41,15 +42,15 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 3 | `team` | |
 | 4 | `group` | **mission-logic cohort id, not a formation** (see [below](#group-is-a-cohort-id-not-a-formation)). Values 0-8; `0` (the default) is the at-mission-start population |
 | 5 | `enabled` | |
-| 6 | `primary_target` | an assigned target node name. 6 distinct: `""` (346), `player` (27), `devastator_1/2/3`, `piratezep`. The engine's own debug readout prints it as "Primary target: %s". ⚠ **Its meaning depends on `mode`:** on a `jet` it is a targeting assignment, but on a netless `wingman` it is the **formation leader**, and the escort law flies a fixed offset from it ([`org/aiPilot.md`](../org/aiPilot.md)). Corrects the earlier "not a formation leader" reading, which was right about `jet`s and wrong about wingmen |
+| 6 | `primary_target` | an assigned target node name. 6 distinct: `""` (346), `player` (27), `devastator_1/2/3`, `piratezep`. The engine's own debug readout prints it as "Primary target: %s". ⚠ **Its meaning depends on `mode`:** on a `jet` it is a targeting assignment, but on a netless `wingman` it is the **formation leader**, and the escort law flies a fixed offset from it ([`org/aiPilot.md`](../org/aiPilot.md)). Corrects the "not a formation leader" reading, which was right about `jet`s and wrong about wingmen |
 | 7 | `init_health` | starting health override; `0.0` = use the airframe default. Real values do occur (e.g. `216.0`) |
 | 8–19 | the activation/attack/return volumes | 12 slots for the 9 named `{active,attack,return}_{rad,u,l}` — see [below](#the-three-unnamed-slots). `rad` is a radius, `u`/`l` an upper/lower altitude band |
 | 20 | `title` | `MSG_*_NAME` display key, resolving in `messages.json` ([missions.md](missions.md)) |
 | 21 | `deactivated` | |
 | 22–30 | **the skill vector** | `dare_devil natural_touch sixth_sense dead_eye quick_draw steady_hand stun_recovery talker constitution` — see [below](#the-skill-vector) |
 | 31 | `pref_engage_alt` | **preferred engagement altitude in metres**, not a radius; `-1.0` on 384, else 350 / 1100 / 1500 / 1550 / 1600. Spelled `preferred_engagement_altitude` in `vehicle.json`, which is also the fallback when this slot is `-1.0` (`basic_airplane` authors 300.0). ⚠ **It is a maneuver-selection weight, not an altitude order:** its one reader (`FUN_004201a0`, `0x004204da`) adds 1.0 to a candidate evasive maneuver's weight when the aircraft is on the wrong side of it. Nothing steers toward it ([`org/aiPilot.md`](../org/aiPilot.md)) |
-| 32 | `signature_maneuvers` | **bitmask over the maneuver library** — see [below](#signature_maneuvers-is-a-bitmask) |
-| 33 | `rating_biases` | target-selection weights: a list of `[nodeNamePattern, bias]` pairs, wildcards allowed (`["fuel_truck*", -1.0]`). List on 321 blocks, null on 93; 1–9 entries (697 total); biases run `-1.0`…`1.0`, both signs, `-1.0` on 389. ⚠ The exe's comment admits a third element per entry, but this install authors none (0 across all 414 blocks, measured 2026-08-13) — read defensively, preserve a third raw if one ever appears |
+| 32 | `signature_maneuvers` | **bitmask over the maneuver library** — see [below](#signature-maneuvers-bitmask) |
+| 33 | `rating_biases` | target-selection weights: a list of `[nodeNamePattern, bias]` pairs, wildcards allowed (`["fuel_truck*", -1.0]`). List on 321 blocks, null on 93; 1–9 entries (697 total); biases run `-1.0`…`1.0`, both signs, `-1.0` on 389. ⚠ The exe's comment admits a third element per entry, but this install authors none (0 across all 414 blocks) — read defensively, preserve a third raw if one ever appears |
 | 34 | `nitro` | |
 | 35 | `engine` | engines.json row id ([vehicle.md](vehicle.md)) |
 | 36 | `otherTarget` | |
@@ -62,7 +63,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 43 | `pilot` | pilot def name (`P_Wingman` and friends; see `pilots.zrd`) |
 | 44–55 | `sclp sclr scly limp limr limy` + `esclp esclr escly elimp elimr elimy` | per-axis **scale** and **limit** factors on the AI's control output — pitch/roll/yaw, then the `e`-prefixed *emergency* set. These are `vehicle.json`'s `ai_input_*` / `ai_emerg_input_*` at roster scope. `-1.0` (which is what all 414 blocks author) means "fall through to the def". ⚠ **The def and the runtime hold these in roll/pitch/yaw order, not this file's pitch/roll/yaw** — the spawner transposes, slot by slot. Both orders are real; see [aiControlLaw.md](../org/aiControlLaw.md#where-the-gains-come-from) for the slot-to-offset table and the exact fallback |
 | 56 | `attack_time_factor` | |
-| 57–64 | `anose hnose atail htail aleft hleft aright hright` | **per-zone armour + health**, in `(armor, health)` pairs over the four damage zones nose / tail / left / right — the same zone set and the same armour-first two-pool model as the player's `destroyable_parts` ([vehicle.md](vehicle.md#the-hp-pair-armor--hit-points)) |
+| 57–64 | `anose hnose atail htail aleft hleft aright hright` | **per-zone armour + health**, in `(armor, health)` pairs over the four damage zones nose / tail / left / right — the same zone set and the same armour-first two-pool model as the player's `destroyable_parts` ([vehicle.md](vehicle.md#armor-and-hit-points)) |
 | 65 | `accentID` | **the voice id** → row in `voice.zrd` → `soundsh/VO_id<N>_*` clips |
 | 66 | `armor` | |
 | 67 | `ace` | |
@@ -74,7 +75,7 @@ authored defaults, not signal.
 
 ### Who is netless: the player and the wingmen, nobody else
 
-Census of all 53 `aiv.zrd.json` files, 414 blocks, 2026-08-15. `netids` is `-1` on exactly 106 of
+Across all 53 `aiv.zrd.json` files (414 blocks), `netids` is `-1` on exactly 106 of
 them and every one is the player or a wingman:
 
 | node name | blocks | `netids` |
@@ -93,7 +94,7 @@ constants.
 
 ### `group` is a cohort id, not a formation
 
-Decoded 2026-08-13 (plan item B7; instrument and function addresses in
+The format is established; instrument and function addresses are in
 `analysis/m4-b7-group-slot/`). Slot 4 tags a block with a small integer so that mission logic can
 address a set of vehicles at once. The executable has exactly four consumers of the value, and
 none of them is flight behaviour:
@@ -130,8 +131,8 @@ one of the 414 blocks — the volumes are never authored, so every AI falls back
 `activation` / `attack` / `return_range` in `vehicle.json` and to `player.json`'s
 `min_ai_active_dist` (2000 m). Do not spend time on it; do not invent values for it.
 
-**Closed 2026-08-10 — treat them as inherited padding.** The likeliest explanation is that they are
-a remnant: this engine is a descendant of Zipper's earlier `mech3` lineage (the same lineage the
+**Closed — treat them as inherited padding.** The likeliest explanation is that they are
+a remnant: this engine is a descendant of Zipper's `mech3` lineage (the same lineage the
 extraction toolchain targets — [extraction.md](extraction.md)), and a record layout that outlived
 the fields it was written for is exactly what a carried-over roster format looks like. That is a
 hypothesis and this page does not assert it. What *is* established is enough to act on:
@@ -180,7 +181,7 @@ order** — the chapter directories are not story order.
 ⚠ **Three of the design's twelve pilot stats are not in this vector**: preferred engagement altitude
 is slot 31, signature maneuvers is slot 32, and there is no signature-*approach* field at all.
 
-### `ai_skill_parameters` — what a 1–9 rating actually means
+### AI skill parameters
 
 `extracted/zrdr/player.zrd.json` carries an `ai_skill_parameters` block: **one `[value@1, value@9]`
 pair per stat**, the endpoints the rating interpolates between.
@@ -189,7 +190,7 @@ pair per stat**, the endpoints the rating interpolates between.
 |---|---|---|---|
 | `daredevil_chance` | 0.35 | 0.99 | probability of taking an available Danger Zone run |
 | `sixth_sense_chance` | 0.45 | 0.71 | passing the test to follow a target's maneuver (a failure leaves the AI stunned) |
-| `sixth_sense_factor` | 0.994 | 1.07 | ~~the ease-off factor applied while being pursued~~ **decoded 2026-08-15 (`D31`): a flat multiplier on the AI's three stick channels, applied every frame on the non-emergency path** ([aiControlLaw.md](../org/aiControlLaw.md#the-skill-scalar-and-how-a-1-to-9-rating-interpolates)). Not conditional on being pursued |
+| `sixth_sense_factor` | 0.994 | 1.07 | ~~the ease-off factor applied while being pursued~~ **decoded: a flat multiplier on the AI's three stick channels, applied every frame on the non-emergency path** ([aiControlLaw.md](../org/aiControlLaw.md#the-skill-scalar-and-how-a-1-to-9-rating-interpolates)). Not conditional on being pursued |
 | `dead_eye_angle` | 4.0° | 1.45° | half-angle of the aiming-error cone around the lead point |
 | `quick_draw_angle` | 50° | 89° | half-angle of the cones off the target's nose/tail within which a shot is taken |
 | `quick_draw_chance` | 0.05 | 0.44 | probability of taking a marginal shot |
@@ -200,14 +201,14 @@ pair per stat**, the endpoints the rating interpolates between.
 
 Notes that matter to anyone implementing this:
 
-- ~~**Only the two endpoints are decoded.**~~ **Traced 2026-08-15 (`D31`), and the working assumption
+- ~~**Only the two endpoints are decoded.**~~ **Traced, and the working assumption
   was the right shape with the wrong origin.** The engine computes
   `value = lo + (hi − lo) · rating · 1/9` (`FUN_0047c210` at `0x47d0c1`–`0x47d101`, the constant at
   `0x608028` being exactly `0.11111112`). The endpoints therefore sit at rating **0 and 9**, not 1
   and 9: a 9 yields `hi` exactly, but a 1 yields `lo + (hi − lo)/9`, not `lo`. Two of the ten pairs
   are confirmed on this path by name (`sixth_sense_chance` → `obj+0x970`, `sixth_sense_factor` →
   `obj+0x974`); the other eight are assumed to share it, since one interpolation site serves the
-  block. **Corrected 2026-08-15 (`E42`): `AiSkills.At` now computes `rating/9` directly** rather
+  block. **`AiSkills.At` now computes `rating/9` directly** rather
   than `(rating-1)/8`, matching the engine at every rating rather than only at 9.
 - **The scale is 1–9 and nothing else.** Ratings are an index into this table; there is no 0–100
   scale anywhere in the shipped data. (The original *design document* gives a Danger-Zone poll
@@ -226,7 +227,7 @@ vocabulary, which the design document contradicts itself on: *"Absorbed %f damag
 **failed**. Evading."* / *"…test **passed**. Not evading."*, and *"AI has been evaded. Sixth sense test
 failed; AI now stunned."*
 
-## `zrdr/maneuvers.zrd` — the maneuver library
+## Maneuver library
 
 One shared reader; a flat alternating `name, [properties…]` list of **17 maneuvers**. Each is a
 timed control program plus a difficulty gate — the library is *data*, not code.
@@ -274,7 +275,7 @@ The difficulty column matches the original design document's own 1–9 table exa
 maneuvers the two have in common. `nitro_evade` and `high_yo_yo` are shipped-only additions the
 design text does not list.
 
-### `signature_maneuvers` is a bitmask
+### Signature maneuvers bitmask
 
 `aiv` slot 32 is a bitmask over the maneuver library, weighting the marked maneuvers up during
 selection. ⚠ **The bit order is the exe's internal table order, which is NOT the order the JSON file
@@ -292,7 +293,7 @@ lists them in**:
 `32896` = bits 7+15 = `rolling_scissors` + `barrel_roll`, `2048` = `split_s` alone (the Black Swan's
 signature). `0` on 174 blocks = no signature maneuver.
 
-## AI modes, engine-side
+## AI runtime modes
 
 Not a format, but decoded from the same binary and load-bearing for anyone reading this data. The
 engine's debug readout dispatches on a single mode field with these states:
@@ -343,3 +344,7 @@ exclusion, not a penalty.
 ⚠ **The ±0.2 terms are aircraft-only.** There are two scorers, chosen on the *scoring* vehicle's
 `mode`: `jet` and `wingman` take all three, and every other mode scores on base weight and the two
 class terms alone.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

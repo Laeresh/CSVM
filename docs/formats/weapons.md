@@ -53,7 +53,7 @@ that carry the key. A gun-only key is absent on rockets and vice-versa.
 | `CLUSTER_SIZE` | 46 | 1–2800 | rounds carried **per slot** — per gun group for guns, per pylon for ordnance |
 | `AMMO_LIMIT` | 37 | 100–9999 | a **purchase cap**, not a carried count |
 
-See [CLUSTER_SIZE vs AMMO_LIMIT](#cluster_size-vs-ammo_limit) for which entries carry which.
+See [CLUSTER_SIZE vs AMMO_LIMIT](#cluster-size-and-ammo-limit) for which entries carry which.
 
 ### Ballistics
 
@@ -65,8 +65,8 @@ See [CLUSTER_SIZE vs AMMO_LIMIT](#cluster_size-vs-ammo_limit) for which entries 
 | `RANGE` | 46 | 900–10000 | max effective / despawn range, m (Seeker 10000) |
 | `RANGE_MINIMUM` | 1 | `[300, 0]` | minimum arming range (torpedo) |
 | `GRAVITY` | 5 | 0.0 | projectile-gravity scale (0 throughout this install) |
-| `CANNON_SPREAD` | 31 | 6.0 | **not a dispersion cone** — the gun aim assist's acceptance-cone half-angle, degrees (constant). Consumer decoded 2026-08-12, see [`org/aim-assist.md`](../org/aim-assist.md) |
-| `FIRING_HEAT` | 4 | 5.0 | nominally heat added per shot; only the base guns `wep_00`–`03`. **Parsed but never consumed by the original** (decoded 2026-08-14): `FUN_004ba6f0` stores it at `+0x14` of the game-side weapon-extension struct (0x38 bytes, hung off the ZWEP record at `+0x210`), defaulting to 0 when the key is absent, and no consumer of that struct reads the field. Its partner `cannon_jam` is dead data too, see [vehicle.md](vehicle.md) |
+| `CANNON_SPREAD` | 31 | 6.0 | **not a dispersion cone** — the gun aim assist's acceptance-cone half-angle, degrees (constant). See [`org/aim-assist.md`](../org/aim-assist.md) |
+| `FIRING_HEAT` | 4 | 5.0 | nominally heat added per shot; only the base guns `wep_00`–`03`. **Parsed but never consumed by the original** : `FUN_004ba6f0` stores it at `+0x14` of the game-side weapon-extension struct (0x38 bytes, hung off the ZWEP record at `+0x210`), defaulting to 0 when the key is absent, and no consumer of that struct reads the field. Its partner `cannon_jam` is dead data too, see [vehicle.md](vehicle.md) |
 | `TURN_RATE` | 14 | 0.001–1.25 | guidance turn rate; 0.001 is effectively straight-flying — only the Seeker's 1.25 actually homes |
 
 ### Damage
@@ -78,7 +78,7 @@ See [CLUSTER_SIZE vs AMMO_LIMIT](#cluster_size-vs-ammo_limit) for which entries 
 | `DAMAGE` | 2 | 0.0 | a single combined value used *instead of* the armor/health split on the two non-damaging specials (`FLASH` `wep_09`, `FLARE` `wep_15`) |
 
 `ARMOR_DAMAGE`/`HEALTH_DAMAGE` feed the `destroyable_parts` armor+health model in
-[vehicle.md](vehicle.md#the-hp-pair-armor--hit-points) — two sequential pools per damage zone,
+[vehicle.md](vehicle.md#armor-and-hit-points) — two sequential pools per damage zone,
 armor spent first. **Both figures are absolute per-hit damage, not multipliers**: there is no
 multiplier field anywhere in `BALLISTICS`, and the 0.5×/1.5× ammo pattern below is a derived ratio
 against each caliber's slug, not something the engine computes.
@@ -125,7 +125,7 @@ Each selects a special behaviour; most are one bare flag or a tiny struct.
 | `DAMAGES_ZEPPELIN` | `wep_14`, `wep_28` | flag | may damage a zeppelin hull. The remake consumes it as the gasbag routing gate (M4 F18): a weapon without it cannot damage a zeppelin's critical `healthy` zones, while engines/turrets/cannons stay ordinary destructibles any weapon hurts |
 | `SHAKES_CAMERA` | `wep_26` | flag | the detonation shakes the camera. Sole carrier is the zero-damage scripted fake weapon, so it is NOT the player-gunfire shake mechanism — see [shakes.md](shakes.md) |
 
-**`TANGLER` — what it feels like in the original** (user recollection, 2026-08-02; **not decoded** —
+**`TANGLER` — what it feels like in the original** (user recollection; **not decoded** —
 wants an original A/B before anything is built on it): *the choker stalls the hit plane
 essentially instantly — it drops the airframe to stall speed.* That is consistent with the struct
 rather than extra to it: `ENGINE_DEAD [5,13]` cuts thrust for 5-13 s, and with no thrust our
@@ -147,7 +147,7 @@ reading is wrong. `TanglerData` is parsed and unused — nothing is choked in M3
 | `FLYOUT` | 48 | projectile model / anim / sound (below) |
 | `IMPACT` | 47 | per-surface hit effect (below) |
 
-## `CLUSTER_SIZE` vs `AMMO_LIMIT`
+## Cluster size and ammo limit
 
 Two allotment numbers with different meaning, long indistinguishable because on guns they
 are equal:
@@ -198,7 +198,7 @@ or any other type — another secondary-source claim the data refutes. The in-ga
 `ui_strings.json` ids 3370 (slug), 3371 (dum-dum), 3372 (AP), 3373 (magnesium/"EX"); 3372's
 "AP rounds tend to punch clean through unarmored surfaces, inflicting very little damage" is retail
 confirmation that armor is a **gate**, not a damage reducer — see
-[vehicle.md](vehicle.md#the-hp-pair-armor--hit-points).
+[vehicle.md](vehicle.md#armor-and-hit-points).
 
 ## The AI detune (`wep_130`–`170`)
 
@@ -222,7 +222,7 @@ slot values may be `null`.
 
 **`FLYOUT`** — the projectile itself, over slots `MODEL` (the `.flt` handle), `MODEL_ANIMATION`
 (spin/trail while in flight — decoded per type in
-[weapon-effects.md](weapon-effects.md#flyout-model_animation--the-in-flight-smoke-trails)), and
+[weapon-effects.md](weapon-effects.md#bullet-impacts)), and
 `SOUND` (looped in-flight sound, e.g. the torpedo). Present on all 48 entries.
 
 **`IMPACT`** — keyed by **surface name**, one value per name. The names are the game's global
@@ -247,7 +247,7 @@ how 28 entries author `enemy`). `SURFACE_ANIMATION` is the surface-oriented vari
 A row is only reachable if some material carries its id: `quicksand`(3), `player`(6) and `enemy`(7)
 are carried by no chapter material at all. A block named something outside the registry would be
 parsed into nothing; the shipped data contains no such name. Counted per weapon and per id in
-`analysis/surface-classification/FINDINGS.md` (2026-08-13).
+`analysis/surface-classification/FINDINGS.md`.
 
 ### An id the weapon never names inherits the `default` row
 
@@ -306,3 +306,7 @@ impact effect readers), [effects.md](effects.md) (the `PUFFER_STATE` particle sy
 | `SEEKER` | `MSG_WEAP_SEEKER_ROCKET` | Seeker rocket |
 | `TORPDO` | `MSG_WEAP_AERIAL_TORPEDO` | Aerial torpedo |
 | `CB` | `MSG_WEAP_CANNONBALL` | Cannonball |
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

@@ -443,7 +443,7 @@ public sealed partial class ColliderOverlay : Node
 
     /// <summary>The id a stamped body actually resolves to — its own when a touch cascade ships a
     /// def for it, else slot 0, including for an id outside the registry (the cascade's own
-    /// out-of-range arm). Decision 4 of PLAN-surface-id-weapons: the overlay shows what will be
+    /// out-of-range arm): the overlay shows what will be
     /// selected, never the raw stamp, or it hides the empty-slot arm it exists to expose.</summary>
     private int ResolveId(int id)
     {

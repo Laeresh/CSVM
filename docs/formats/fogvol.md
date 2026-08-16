@@ -12,17 +12,28 @@ scatter and *how densely*; the gamez says *where*. Neither alone tells you a cha
 three chapters ship a reader file and no volumes, and their reader file names a template their
 gamez does not carry.
 
-## Half 1 — `extracted/<chapter>/zrdr/fogvol.zrd.json`
+
+## Contents
+
+- [Reader data](#reader-data)
+- [GameZ volume nodes](#gamez-volume-nodes)
+- [What the engine does with the volumes](#what-the-engine-does-with-the-volumes)
+- [Map-edge continuation](#map-edge-continuation)
+- [The sprite templates](#the-sprite-templates)
+- [What is decoded and what is inferred](#what-is-decoded-and-what-is-inferred)
+- [Consumed by the remake](#consumed-by-the-remake)
+- [Visible consequences to know about](#visible-consequences-to-know-about)
+## Reader data
 
 One chapter-scope reader file, root = an [alternating key/list dict](README.md#shared-conventions-zrdr-readers).
 
 | Key | Value | Meaning |
 |---|---|---|
-| `fog_zone` | `[int]` | **A bool, decoded 2026-08-09**: non-zero arms the engine's in-volume whiteout + `ZONE3` camera state — see [the decompile section](#what-the-engine-does-with-the-volumes-crimsonexe-decompile-2026-08-09). Consumed (`A2`, `C21`) |
+| `fog_zone` | `[int]` | **A bool**: non-zero arms the engine's in-volume whiteout + `ZONE3` camera state — see [the decompile section](#what-the-engine-does-with-the-volumes). Consumed by the reader and weather runtime |
 | `distance` | `[float]` | The scatter's mean spacing, metres — an areal density, not a lattice phase. Engine default **206.25** |
-| `fog_fade_dist` | `[float]` | *(C5 only, **16**)* whiteout approach ramp, metres before the volume wall. Engine default **400**. Consumed (`C21`) |
-| `interior_fog_fade_dist` | `[float]` | *(C5 only, **16**)* whiteout decay depth inside the volume. Engine default **20**. Consumed (`C21`) |
-| `fog_color` | `[r,g,b]` | *(C5 only, **[16,16,16]** — near black)* the whiteout's colour, integer 0–255. Engine default: the mission's `CLOUD_COVER` `TOP_COLOR`. Consumed (`C21`) |
+| `fog_fade_dist` | `[float]` | *(C5 only, **16**)* whiteout approach ramp, metres before the volume wall. Engine default **400**. Consumed |
+| `interior_fog_fade_dist` | `[float]` | *(C5 only, **16**)* whiteout decay depth inside the volume. Engine default **20**. Consumed |
+| `fog_color` | `[r,g,b]` | *(C5 only, **[16,16,16]** — near black)* the whiteout's colour, integer 0–255. Engine default: the mission's `CLOUD_COVER` `TOP_COLOR`. Consumed |
 | `clutter` | `[block, …]` | The scatter table — one or more blocks, each an alternating dict |
 
 A `clutter` block:
@@ -44,7 +55,7 @@ lets "this chapter renders no clouds" be a proven lookup failure rather than a p
 Their ranges are degenerate too (`perp_dist_range [151.25, 151.25]`), which is the second sign
 the file is vestigial.
 
-## Half 2 — the gamez `fvol*` nodes
+## GameZ volume nodes
 
 Every chapter that scatters anything carries `fvol1`…`fvol34`: parentless-in-effect volumes
 directly under the `World` node, each with its own model of 8–56 vertices, invisible (the world
@@ -69,7 +80,7 @@ C1/C1C/C2B/C4's `fvol1`–`fvol9` tile the whole 12,288 m map as a single flat s
 and they are an **exact 3 × 3 partition of the `World` node's own `area`** (x and z each split at
 −10240 and −2048 over [−12288, 0]), so the field's footprint *is* the base map, to the metre, with
 no interior seam. The authored field DOES end at the base map's outer rim — "The map-edge
-continuation (`A5`)" below continues it past there, engine-side, for these four chapters only.
+continuation" below continues it past there, engine-side, for these four chapters only.
 **C1C additionally stacks twelve smaller volumes on top of that footprint**, reaching 1,688 m —
 authored build-ups over particular places, and the reason the scatter fills *each* volume rather
 than taking the first one that contains a cell. C5's are not a slab at all: seventeen
@@ -86,7 +97,7 @@ what makes the density authored rather than an artifact of measuring a rotated s
 1060–1181) and C5 (9950–10150 vs −463–183) all disagree. The volumes are their own authored
 geometry; do not re-derive them from the weather file.
 
-## What the engine does with the volumes (crimson.exe decompile, 2026-08-09)
+## What the engine does with the volumes
 
 Decompiled from `crimson.exe` (Ghidra; loader `FUN_0044e010`, volume evaluator `FUN_0044e6f0`,
 per-frame consumer `FUN_0042ee40` — the same frame update that runs the `CLOUD_COVER` whiteout,
@@ -114,7 +125,7 @@ per-frame consumer `FUN_0042ee40` — the same frame update that runs the `CLOUD
   `perp_dist_range` [151.25, 151.25], `scale_range` [0.85, 1.15] — the degenerate copies simply
   restate the hardcoded defaults, a third sign those files are boilerplate rather than authored.
 
-## The map-edge continuation (`A5`) — engine-side, NOT authored data
+## Map-edge continuation
 
 ⚠ **Everything above this section is what `fogvol.zrd` + the gamez author. This section is not
 that.** The original's field reads as everywhere, past the map the way `cloudparent` does NOT
@@ -122,7 +133,7 @@ that.** The original's field reads as everywhere, past the map the way `cloudpar
 the two populations' vocabulary is `BL-325`'s note). Neither
 `fogvol.zrd` nor the gamez says anything about content past `World.area` — there is nothing to
 decode here, only a deliberate engine-side match to the terrain's own continuation
-(`MapEdgeExtender.cs`, docs/architecture.md), landed as `A5` (user playtest, 2026-08-08: "it is
+(`MapEdgeExtender.cs`, docs/architecture.md), landed as `A5` (user playtest, : "it is
 only over the basemap. in the original its everywhere").
 
 **What extends, decided from data (`FogVolumeSpec.FindMapSpanningSlab`):** only the volumes that
@@ -194,7 +205,7 @@ one child carrying the card. The card is a single 4-vertex, 1-polygon tri-strip 
 own quad centre to within 3 mm.
 
 ⚠ **We render those cards at vertex colour 225, not the authored 240** — a marked TUNE
-(`FogVolumeClutter.CardVertexColorTune`, `PLAN-overcast-match` C23, user's verdict 2026-08-09),
+(`FogVolumeClutter.CardVertexColorTune`, the user's verdict at the controls),
 applied to RGB only and never to alpha. The authored value is what this page says it is and is
 unchanged as a decode; what the TUNE fixes is a rendered-brightness gap with **no decoded
 mechanism**. `236.65 × 240/255 = 222.7` is what the naive reading gives and it is what we shipped;
@@ -221,13 +232,12 @@ placed `cloudparent` facades keep vertex colour 255 and their range-gated `0.6` 
 carry `far_fade_range` instead. That is a deliberate reversal of what `CloudPuffs` did (it fogged
 its puffs); the fade band replaces the fog wall.
 
-⚠ **The exemption is the CARDS' alone — do not extend it to the rest of the overcast**
-(`PLAN-weather-decompile-match` `D31`, 2026-08-09). The 144 cloud-deck tiles author `fog: true` in
-all four deck chapters (144/144, C1/C1C/C2B `cloudlayer.tif` @ 960, C4 `Sky1.tif` @ 1050), and so
-do all 626/1056/1453 `cloudparent` facades in C1/C1C/C4. The surface that genuinely never fogs
-below the deck is the horizon **dome** — every horizon model in every chapter is `fog: false` —
-which is what actually explains the original's ceiling texture surviving to the horizon line
-(census and consequences in [`weather.md`](weather.md)'s deck-census section).
+⚠ **The exemption is the CARDS' alone — do not extend it to the rest of the overcast**. The 144
+cloud-deck tiles author `fog: true` in all four deck chapters (144/144, C1/C1C/C2B `cloudlayer.tif`
+@ 960, C4 `Sky1.tif` @ 1050), and so do all 626/1056/1453 `cloudparent` facades in C1/C1C/C4. The
+surface that genuinely never fogs below the deck is the horizon **dome** — every horizon model in
+every chapter is `fog: false` — which is what actually explains the original's ceiling texture
+surviving to the horizon line (census and consequences in [`weather.md`](weather.md)'s deck-census section).
 
 ## What is decoded and what is inferred
 
@@ -253,7 +263,7 @@ degenerate ranges).
   132.3² × E[scale²] gives **1.6 sprite-areas of cover** per unit of layer — an overcast one sprite
   deep. Cells rather than N uniform draws over the whole footprint, because a Poisson field at this
   density opens holes and an overcast has to read as continuous.
-  ☑ **Landed `A2`, 2026-08-08, and confirmed at the render.** The previous reading — that the
+  ☑ **Landed `A2`,, and confirmed at the render.** The previous reading — that the
   number was a *grid phase*, with `perturb_dist_range` as jitter on it — was contradicted by
   `PT-42` + `CAP-12` (ours combed on the 130 m lattice at grazing angles; the original shows none
   at any angle) and is now gone from the code. Mean spacing is invariant under the randomisation,
@@ -274,8 +284,7 @@ degenerate ranges).
   ⚠ `PT-42`(b)'s "world-locked and tiled, no volume edge anywhere over the base map" is **not**
   evidence against the bounded reading — the nine slab volumes ARE the map (see half 2), so the
   two readings can only differ within `far_fade_range.y` (3500 m) of the map boundary and the
-  footage never samples that. Full reasoning and the per-still evidence:
-  `docs/plans/PLAN-overcast-match.md` § `A1`/`A2`.
+  footage never samples that.
 - **`perp_dist_range` is vertical.** "Perpendicular" to the volume's horizontal plane. The
   asymmetry supports it: `cloudsprite1` gets `[-5, 5]` and `cloudsprite2` `[-5, 10]`, so one kind
   floats slightly higher — which is a reading a horizontal offset makes no sense of.
@@ -283,8 +292,8 @@ degenerate ranges).
   authors it the same way, e.g. `firtree1` `[[500,1000],[1000,2000]]`); the remake has no
   reduced-detail mode, so it takes the farther band. Both are read and kept.
 - **The vertical spread is TOP-ANCHORED for sheet-thin volumes, UNIFORM for tall ones — the anchor
-  IS per-volume-shape, settled `A3` 2026-08-08 and verified at the render.** C4's clear air at
-  1135 m (`CAP-12` C4 take, 2026-08-07) falsified a uniform fill: 132.3 m cards
+  IS per-volume-shape, settled `A3` and verified at the render.** C4's clear air at
+  1135 m (`CAP-12` C4 take) falsified a uniform fill: 132.3 m cards
   drawn uniformly across the 1060–1180.5 volume would hang to ~956 m, leaving no gap, but the clip
   shows *clear sky*, puff bases well above the 1050 m deck sheet. `A1` decided the shape (centre
   Y = volume top + `perp_dist_range`) and `A3` decided WHICH volumes it applies to, since a
@@ -303,7 +312,7 @@ degenerate ranges).
   39 % under the tallest slab, 51 % under the shortest build-up — so no shipped volume is a close
   call.
   - **Why sampling AT the top (not inventing a band) still respects a sloped or tapered top:**
-    `Contains` already runs the exact face test (`A2`), so for a volume whose top isn't a simple
+    `Contains` already runs the exact face test, so for a volume whose top isn't a simple
     flat plane the (x, box.End.Y, z) point drawn in a cell is rejected exactly when that XZ falls
     outside the true top footprint at that height. No separate per-column top lookup was needed;
     the geometry the containment test already reads does the work.
@@ -312,7 +321,7 @@ degenerate ranges).
     measurement is 1003–1085 m and both fit) — **C4's 1135 m clear-air frame remains the clean
     discriminator**, and the render now reproduces it (below).
   - ⚠ **The deck mesh is the slab's floor, authored: every deck chapter puts its `CloudDeck`
-    tiles ~10 m BELOW its `fvol1`–`fvol9` slab floor** (`A6`, 2026-08-08, from each gamez's
+    tiles ~10 m BELOW its `fvol1`–`fvol9` slab floor** (from each gamez's
     `model_bbox`). The invariant, all four:
 
     | chapter | deck tiles | `fvol1`–`fvol9` floor | gap | `CLOUD_COVER` centre |
@@ -328,7 +337,7 @@ degenerate ranges).
     the `A6` defect.
 
     ⚠ **The authored altitude is where the data puts the sheet; it is NOT where the deck mesh is
-    rendered** (`A7`, 2026-08-08). The original's deck is engine trickery — below the
+    rendered**. The original's deck is engine trickery — below the
     `CLOUD_COVER` centre a ceiling carried 400 m above the camera, above it a world-fixed floor at
     the centre — so `WeatherRig.Tick` places it at neither chapter's authored 960/1050. What the
     table above still decides is the **relationship** the scatter is read against (mesh 10 m under
@@ -337,14 +346,13 @@ degenerate ranges).
     what the original does, and A7 restores it there.
   - **Verified at the render, `--pos`/`--tex-override` probes in `.scratch/a3/`:**
     - **C1 river pose** (`x -7325 y 934 z -3829` — ⚠ **not** the twin's altitude: `A7` re-read
-      `Screenshots/C1 IA1 Fog river.png`'s overlay in 2026-08-08 and it says **`y 192`**, which the
+      `Screenshots/C1 IA1 Fog river.png`'s overlay in and it says **`y 192`**, which the
       original's ALT gauge corroborates at ~700–750 ft. This probe is a self-consistent
       before/after pair at 934 m and its conclusion stands; a matched-pose A/B against the
       original needs 192): before, discrete cauliflower lumps hang below the deck sheet with a
       hard lower boundary (`before-river-pose.png`); after, the sheet's underside reads clean with
       the cloud band sitting well above it (`after-river-pose.png`).
-      ⚠ **`A3`'s `--tex-override` numbers at this pose were misread, and `A6` (2026-08-08) corrected
-      them — do not re-cite them as written.** ~~looking straight up shows **zero** sprite pixels
+      ⚠ **`A3`'s `--tex-override` numbers at this pose were misread, and `A6` them — do not re-cite them as written.** ~~looking straight up shows **zero** sprite pixels
       (`after-river-override-up.png`); levelled and tilted up, the coloured field's lower edge sits
       well clear of a flat gray band (the deck mesh at y=960) with no green intrusion at all
       (`after-river-override-level.png`)~~. Both readings measured something else. (a) A
@@ -387,7 +395,7 @@ degenerate ranges).
     (unchanged-logic) containment draws land on different random numbers than before — an
     expected consequence of one shared seeded stream, not a second correction to the build-up
     rule itself.
-- ~~**The volume is its axis-aligned bounding box.**~~ — **corrected `A1`/`A2`, 2026-08-08. The
+- ~~**The volume is its axis-aligned bounding box.**~~ — **`A1`/`A2`,. The
   volume is the authored mesh**, and the two agree only for C1/C2B/C4.
   `FogVolumeSpec.VolumesOf` now carries each volume's face planes beside its bounds, and
   `FogVolumeBox.Contains` is a half-space test over them — which is **exact, not an approximation,
@@ -414,12 +422,12 @@ degenerate ranges).
 **Undecoded / not implemented:**
 
 - ~~**`fog_zone`, and C5's `fog_color` / `fog_fade_dist` / `interior_fog_fade_dist`** are read and
-  reported and nothing in the remake consumes them yet.~~ **Struck 2026-08-09 (`C21`): all four keys
+  reported and nothing in the remake consumes them yet.~~ **Struck: all four keys
   are now CONSUMED — see [Consumed by the remake](#consumed-by-the-remake) below.**
-- ⚠ **`fog_zone` is not the sky/fog zone selector** — and as of 2026-08-09 it is no longer
+- ⚠ **`fog_zone` is not the sky/fog zone selector** — and as of it is no longer
   unidentified: the decompile (section above) shows it is a **bool** arming the in-volume
   whiteout and the `ZONE3` camera state. The old record stands as history: `docs/HISTORY.md`
-  (2026-08-05) claimed "no chapter's copy has a `fog_zone` key" — wrong, five do — and the
+  claimed "no chapter's copy has a `fog_zone` key" — wrong, five do — and the
   `zone_id` mismatches that blocked the "selector" reading (C1's 0 against `zone_id: 2`) were
   never a contradiction, because the value was never an index. `BL-277`'s geometry rule stands
   as landed.
@@ -438,10 +446,10 @@ degenerate ranges).
 |---|---|---|
 | `distance`, `clutter` (all sub-keys) | `Effects/FogVolumeClutter` — the scatter | `A1`–`A5` |
 | the gamez `fvol*` shapes | `FogVolumeSpec.VolumesOf` → the scatter, `MapEdgeExtender`, the camera-state test | `A1`/`A2` |
-| **`fog_zone`** | `FogVolumeSpec.FogZoneArmed` → `WeatherState.CameraWeatherState`'s state-3 gate | `PLAN-weather-decompile-match` `A2` |
-| **`fog_fade_dist`, `interior_fog_fade_dist`, `fog_color`** | `Mech3.FogVolumeWhiteout` → `Session/WeatherRig.Tick`'s whiteout overlay | `PLAN-weather-decompile-match` `C21` |
+| **`fog_zone`** | `FogVolumeSpec.FogZoneArmed` → `WeatherState.CameraWeatherState`'s state-3 gate | |
+| **`fog_fade_dist`, `interior_fog_fade_dist`, `fog_color`** | `Mech3.FogVolumeWhiteout` → `Session/WeatherRig.Tick`'s whiteout overlay | |
 
-**`C21` (2026-08-09) landed the in-volume whiteout exactly as the section above decodes it.** Per
+**`C21` landed the in-volume whiteout exactly as the section above decodes it.** Per
 frame, per rig, when the chapter arms `fog_zone` (C5 alone), every volume's own density is taken
 from one signed distance (`FogVolumeBox.SignedDistance` — outside-positive, inside-negative) through
 the two decompiled ramps, and the volumes union as `a + b − a·b`:
@@ -492,8 +500,8 @@ volume, 112× the 16 m ramp (predicted before the run, pinned in
   ±15 % jitter, and it combed at grazing angles where the original (`CAP-12` t=44/59/97/124,
   t=29.2) shows soft continuous mottling at every angle. The grid is gone; do not re-derive one
   from `distance`.
-- **The sky→tops transition-depth gap survived BOTH the horizontal fix (`A2`) and the vertical
-  one (`A3`) — it is evidence for neither scatter axis.** `A2` measured 0–0.5 px of movement from
+- **The sky→tops transition-depth gap survived BOTH the horizontal fix and the vertical
+  one — it is evidence for neither scatter axis.** `A2` measured 0–0.5 px of movement from
   randomising the horizontal placement (13 → 13.5 px at the pinned above-deck pose); `A3`'s
   top-anchoring moved the same four poses by 0–5 px, still nowhere near the original's 91–103 px
   (see the vertical-spread entry above for the per-pose numbers). A 132.3 m card is nearly as tall
@@ -512,3 +520,7 @@ volume, 112× the 16 m ramp (predicted before the run, pinned in
   describe as "no edge anywhere a player can reach it" — that phrase described the ABSENCE of
   interior seams between the nine slab pieces, which still holds; the map's OUTER rim used to be a
   real edge, and now is not, for C1/C1C/C2B/C4 only.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

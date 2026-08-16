@@ -2,8 +2,8 @@
 
 Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
 `crimson.exe`, `language x86:LE:32:default`), 2026-08-15, settling `BL-364` and the decode half of
-`BL-362`. Every claim below names the function or address it came from, and the two data censuses
-name the files they counted.
+`BL-362`, and extended 2026-08-16 with the merge rule. Every claim below names the function or
+address it came from, and the two data censuses name the files they counted.
 
 Everything here is a description of *behaviour*. No decompiler output is reproduced; the addresses
 are given so any claim can be re-checked at source.
@@ -13,8 +13,11 @@ are given so any claim can be re-checked at source.
 the authored airframe side is [`formats/vehicle.md`](../formats/vehicle.md) (`mode`, `attack`,
 `return_range`, `preferred_engagement_altitude`); the patrol graphs themselves are
 [`formats/ai-nets.md`](../formats/ai-nets.md). The flight physics an AI shares with the player is
-[`flightModel.md`](flightModel.md). CSVM's implementation seam is `src/Flight/AiPilot.cs`, whose
-steering law is a placeholder and is **not** what this page describes.
+[`flightModel.md`](flightModel.md); the firing half (when an AI pulls the trigger, and the
+`weapons` 5-tuple that governs it) is [`aiPilot/aiWeapons.md`](aiPilot/aiWeapons.md). CSVM's
+implementation seam is `src/Flight/AiPilot.cs`, the driver that picks each mode's aim point and
+parameter block; the steering law it hands them to is
+`src/Flight/AiControlLaw.cs`, decoded in [`aiControlLaw.md`](aiControlLaw.md).
 
 ## The headline: there is no netless patrol
 
@@ -78,6 +81,10 @@ this order:
    value returns without steering.
 6. After the net follower, a live selected target promotes the task to pursue (`FUN_0041f040` sets
    `+0x2f0 = 1`).
+
+Firing is not one of those branches. All three behaviours call the fire decision `FUN_0041f420`
+themselves, each with both weapon classes enabled, and it is decoded in
+[`aiPilot/aiWeapons.md`](aiPilot/aiWeapons.md).
 
 The AI mode enum lives at `+0x358` and is a different thing from the task: 1 evasive maneuver,
 2 approaching danger zone, 3 avoid crash, 4 stunned, 5 navigating danger zone, 0 otherwise.
@@ -421,23 +428,128 @@ cast per 0.5…1.0 s per plane, and head-on closure at fighter speeds spends the
 lookahead in roughly two seconds; and both parties answer with the same straight-ahead climb, so a
 mutual detection can still merge. Head-ons in the original are rare, not impossible.
 
-⚠ **This is a remake gap, not an original one.** CSVM's probe (`FlightController.WorldBlocksLine`)
-masks to `CollisionLayers.World`, so our avoid-crash ray cannot see aircraft at all.
+CSVM's probe is `FlightController.AvoidCrashBlocksLine`, masking `CollisionLayers.WorldAndAircraft`
+with the caster's own body excluded, which is this rule. Its reach is `AiModeMachine`'s
+`ProbeLookaheadS`, set to the decoded 4.5 s; the cadence (0.25 s, flat) and the second, deck-slanted
+ray are inventions and remain marked as such.
+
+### Measured: the third bound is the binding one
+
+A spectated 5-versus-5 Bloodhawk dogfight in C1 (a hand-authored `--ia` file, `--debug-spectate
+--ai-attack=5 --det --frames=9000`, about 150 s of sim per run) was run to settle which of the
+three bounds above actually produces the mid-air collisions CSVM sees. ⚠ `--det` does not pin this
+scenario across processes, so each run is a sample; the figures below are per-run averages.
+
+| probe | runs | mid-airs / run | of which head-on | arms / run | arms on an aircraft / run |
+|---|---|---|---|---|---|
+| the decoded zero-width ray | 8 | 3.63 | ~5 in 6 | 31.0 | 13.8 |
+| a swept 10 m sphere | 6 | 3.50 | ~3 in 4 | 79.7 | 66.7 |
+
+Two results. **The ray does see aeroplanes in flight**: 13.8 arms per run on another Bloodhawk's
+airframe, against 17 on terrain. And **widening it changes nothing that matters**: the sweep
+detects an aeroplane 4.8× as often and the collision rate does not move (3.50 against 3.63, inside
+a run-to-run spread of 3 to 4). Detection is not the bottleneck, so the sweep was reverted.
+
+What remains is the third bound, which the decode already names: **both parties answer a detection
+with the same straight-ahead 1000 m climb**, so two aeroplanes that both see each other both pull
+up along converging tracks and merge anyway. The collisions are overwhelmingly head-on — measured
+at impact as the angle between the two velocity vectors, 175°–178° apart on most of them.
+
+### Measured: breaking the climb-out's symmetry is what helps
+
+Same rig, and this time the two arms differ in ONE constant, `AiPilot.ClimbOutBreakM`, so
+everything else about the build is identical:
+
+| climb-out | runs | mid-airs / run | of which head-on / run |
+|---|---|---|---|
+| straight up, the original's | 8 | 3.75 | 3.00 |
+| 1000 m up **and 1000 m right of own track** | 14 | **2.21** | 2.14 |
+
+A 41 % cut, Welch t = 2.8 on 13 degrees of freedom, p ≈ 0.014. Right rather than a coin flip is
+the point: two aeroplanes meeting head-on that each break right diverge every time, where a random
+side still puts them on the same one half the time. It is taken off the ground track and not the
+airframe's own right axis, so a rolled or inverted pilot breaks the same way as a level one.
+
+⚠ This is INVENTED and marked so in the code. The original displaces nothing; its climb-out aim
+point is the aeroplane's own position with Y + 1000 and no lateral term at all.
+
+⚠ And it is not a cure: 2.2 mid-airs per 150 s of a ten-plane furball is still a lot. It is the
+symmetry that was costing the most, not the detection.
+
+⚠ The whole scenario is one the original never produces. Ten netted aircraft all pursuing each
+other in one volume is Instant Action as CSVM builds it; the shipped game's actors fly the
+chapter's first net (above) and converge rarely.
+
+## The merge rule: what pursue does when two aircraft close nose to nose
+
+Decoded 2026-08-16 to answer "is there a proximity check against other planes?". There is no
+separate one. Beyond the ray above, the ONLY aircraft-aware term in the whole AI is a block inside
+pursue, `FUN_0041d9f0` at `0x0041e130`–`0x0041e297`. The net follower `FUN_0041d1f0` has none at
+all (its only correction is a cross-track nudge, the perpendicular error × 0.9 clamped to 200 m),
+and `FUN_0041afe0`, which pursue calls every frame, is the gunnery lead solve.
+
+The block arms on four conditions, all of which must hold. Let `u` be the unit vector from the
+pursuer to its victim:
+
+- the victim casts to `TargetVehicle` and its `+0x67c` is 0 or 4, i.e. it is a `jet` or a
+  `wingman`. A ground or sea target never arms this;
+- range under **400 m**;
+- `dot(ownVelocity, u) > 0.8 × ownSpeed` — the pursuer is flying at the victim, within about 37°;
+- `dot(victimVelocity, u) < −0.8 × victimSpeed` — the victim is flying back at the pursuer, within
+  the same cone.
+
+What it then does is **not** a break-off:
+
+- the `desiredVelocity` argument handed to the steering law, which is otherwise the victim's own
+  velocity, becomes `u × 31.292799` (70 mph). Since the law clamps its speed demand to ±26.8224 m/s
+  around the current speed and floors it at 22.352 m/s, this collapses the demand into the pass;
+- the aim point's Y gains `sqrt(u.x² + u.z²) × f`, where `f` is `−0.3` at or below 22.352 m/s
+  (50 mph), `+0.3` at or above 40.2336 m/s (90 mph), and `(ownSpeed − 31.292799) × 0.033554047`
+  between them. ⚠ `u` is already normalised here, so the whole term is worth **0.3 m at most**. It
+  is a real branch and it does effectively nothing.
+
+So the engine's answer to a head-on is to throttle back and hold the line. The aim point itself is
+unchanged, and it is the victim's own position whenever the aspect test at `0x0041dd49` reads
+head-on or tail-chase (`|dot(u, victimBackwardAxis)|` over the pilot's `quick_draw_angle` cosine at
+vehicle `+0x960`, default `0.70697`, cos 45°).
+
+⚠ **A second arm exists and is a player-only special case**, the **reversed arm**: pursue's aim
+direction is negated, so the pilot steers away from its victim rather than at it, and the block it
+passes the steering law is `DAT_0061fb68` instead of `DAT_0061fb08` (see the parameter table below).
+It is gated by the global `DAT_0064ee4d`, so at most one aircraft per frame may take it, plus the
+roster byte at vehicle `+0x989` (written by `FUN_0047c210` at `0x0047ca5a`, defaulted to 1 by the
+vehicle constructor `FUN_004aff80`) and the per-vehicle flag `+0xba`. Inside 400 m the merge block
+gives this arm its own response instead of the two above: aim 500 m along the victim's own forward
+axis, past it, and demand `−31.292799 ×` that axis. A jousting pass at the player, not avoidance.
+CSVM does not port it.
+
+⚠ The aspect test takes **both** of the victim's cones, since it compares a magnitude. A pursuer
+sitting on its victim's tail reads the same as one merging with it, and both aim the law at the
+victim itself; only a beam aspect flies to the lead point. Nothing downstream tells the two apart
+except the reversed arm's own gate.
+
+Ported 2026-08-16: `AiPilot.IsOnGunAxis` (the aspect test, both cones), `AiPilot.IsMerging` and
+`AiPilot.MergeVerticalBias`, all applied in `FlyPursuit`.
 
 ## The steering law both behaviours call
 
 `FUN_0041b560(this, stationPoint, desiredVelocity, params, emergencyFlag, leadFlag)` turns a target
-point into stick and throttle. It is the original's AI control law and CSVM has no implementation of
-it; a full decode is separate work, not attempted here. What is settled is its parameter table:
-three 8-float blocks that differ only in their first two entries.
+point into stick and throttle. It is the original's AI control law; the law itself is decoded in
+[`aiControlLaw.md`](aiControlLaw.md) and ported as `AiControlLaw`. What this page settles is which
+of its **four** 8-float parameter blocks each behaviour passes.
 
 | block | first two | used by |
 |---|---|---|
+| `DAT_0061fb08` | 0.3, 1.3 | pursue, `FUN_0041d9f0`'s normal arm |
 | `DAT_0061fb28` | 0.4, 1.5 | the escort law, and its avoid-crash climb-out |
 | `DAT_0061fb48` | 0.6, 1.3 | the net follower's avoid-crash climb-out |
-| `DAT_0061fb68` | 0.8, 1.1 | the net follower's normal patrol |
+| `DAT_0061fb68` | 0.8, 1.1 | the net follower's normal patrol, and pursue's reversed arm (above) |
 
-Shared tail on all three: `0.06, 0.06, 0.15, 0.025, 0.35, 0.0`. Entries 0 and 1 are the throttle
+⚠ `DAT_0061fb08` is the one block that does not share the others' tail: it carries
+`0.08, 0.01, 0.2, 0.025, 0.9, 0.0`. Pursue also scales its own desired-velocity vector by **0.9**
+whenever it passes this block.
+
+Shared tail on the other three: `0.06, 0.06, 0.15, 0.025, 0.35, 0.0`. Entries 0 and 1 are the throttle
 floor and ceiling, which the law walks toward at **0.35 per second** and then clamps; entries 2 and
 3 are the stick thresholds below which the second control axis is
 added; entries 4 and 5 weight the along-track and across-track components of the intercept; entry 6
@@ -534,7 +646,7 @@ is where to start.
 | `FUN_0041c270` | the per-frame AI update and its behaviour fork |
 | `FUN_0041fe10` | target selection, writes `+0x948` |
 | `FUN_0041d1f0` | the patrol-net follower |
-| `FUN_0041d9f0` | pursue |
+| `FUN_0041d9f0` | pursue, including the 400 m merge rule at `0x0041e130` |
 | `FUN_0041e760` | the formation escort law |
 | `FUN_0041b560` | the shared steering law: point in, stick and throttle out |
 | `FUN_004311c0` | builds the chapter net table from `neindex`, in file order (`FUN_00431300` frees it) |
@@ -559,6 +671,7 @@ is where to start.
 | `FUN_00421950` | the scorer for every other `mode`, base weight and the two class terms only |
 | `FUN_0041ae40` | the `rating_biases` lookup, returning rank units |
 | `FUN_00420070` | the `DAMAGES_ZEPPELIN` ordnance check that admits gasbag candidates |
+| `FUN_0041f420` | the fire decision every behaviour calls, [`aiPilot/aiWeapons.md`](aiPilot/aiWeapons.md) |
 
 ## Open
 

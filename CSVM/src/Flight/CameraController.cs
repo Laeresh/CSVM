@@ -33,7 +33,7 @@ public sealed class CameraController
     /// <summary>LogView's marker for the look-behind view (the numpad views log their digit).</summary>
     public const int BackViewLog = -2;
 
-    /// <summary>LogView's marker for the pad look-around (E42, BL-372) — a continuously variable
+    /// <summary>LogView's marker for the pad look-around (BL-372) — a continuously variable
     /// twin of the numbered views rather than one of their digits.</summary>
     public const int PadLookLog = -3;
 
@@ -145,7 +145,7 @@ public sealed class CameraController
     }
 
     /// <summary>The look-behind view is on: numpad 0 held, the run pinned it with
-    /// <c>--view=back</c>, or (E42, BL-372) <paramref name="padClick"/> — this player's right-stick
+    /// <c>--view=back</c>, or (BL-372) <paramref name="padClick"/> — this player's right-stick
     /// click, read by the host the same way it reads every other pad button. A held numpad 1–9 key
     /// still wins (the host checks <see cref="ActiveView"/> first), same rule as the pinned numpad
     /// views.</summary>
@@ -215,7 +215,7 @@ public sealed class CameraController
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
     }
 
-    /// <summary>Analog look-around for the flying pane (E42, BL-372): the right stick swings the
+    /// <summary>Analog look-around for the flying pane (BL-372): the right stick swings the
     /// external view around the plane at the SAME dynamic radius the chase camera and the numpad
     /// views share — a continuous version of those fixed perspectives rather than one more digit.
     /// <paramref name="stickX"/>/<paramref name="stickY"/> arrive already curved and dead-zoned

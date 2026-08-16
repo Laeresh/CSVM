@@ -1,16 +1,18 @@
-# Turrets and AA emplacements — `zrdr/ai.zrd`
+# Turrets and AA emplacements - `ai.zrd`
 
-Part of the [format documentation](README.md). One shared file, one `TURRET` section, **42
-entries**, covering both the world's fixed anti-aircraft emplacements and the turrets carried by
-aircraft and zeppelins. The file is self-describing; what it does *not* say is what the engine does
-with each key. The behaviour below is read from `crimson.exe`
-(`D:\zipper\Crimson\turret.cpp` — the retail binary retains the source path), and every claim names
-the field it decodes. No code is reproduced.
+Part of the [format documentation](README.md). The shared `ai.zrd` reader defines 42 `TURRET`
+entries for fixed anti-aircraft emplacements and turrets carried by aircraft or zeppelins. This
+page pairs its field schema with the engine behavior that reads each key.
 
-The file is **install-global**: there is exactly one `ai.zrd`, in the shared `zrdr` scope. There is
-no per-chapter or per-mission override ([zrdr.md](zrdr.md)).
+## Contents
 
-## The two families, and what actually splits them
+- [Turret families](#turret-families)
+- [Field table](#field-table)
+- [Runtime behavior](#runtime-behavior)
+- [Weapons](#weapons)
+- [Value census](#value-census)
+- [Scope limit](#scope-limit)
+## Turret families
 
 The 42 entries divide 16 / 26, and the discriminator is `CREATE_STANDALONE`:
 
@@ -57,7 +59,6 @@ mounts **`firstp`** / **`thirdp`**, and the `firstp` entries name the `_G1` titl
 `kestrel_turret2` with `hturret2`/`hgun2`/`hfirepoint2` beside `kestrel_turret1` with
 `hturret`/`hgun`/`hfirepoint`), one drawn in the cockpit view and one externally. The AI and
 remote-player models carry only the `thirdp` rig, which is why only the player defs reference a
-`_G1` row. (An earlier draft of this page read the suffix as an `IDS_AIRFRAMEGUNGROUPNAMES`
 gun-group slot; the `firstp`/`thirdp` keys refute that.) Reading `G3` as "grade 3" and scaling
 accuracy off it invents a difficulty system the data does not have.
 
@@ -110,7 +111,7 @@ times are seconds; distances metres.
 | `DEACTIVATE` | **0** | a second node whose destruction *disables* the turret |
 | `EFFECT` | **0** | `[node, duration]` — an effect node shown while firing |
 | `FIRE_LIMITS` | **0** | `[burst, cooldown]` duty cycle on the gun itself |
-| `STICKINESS` | **0** | an angle, degrees: this turret's own gun-aim-assist cone, overriding the firing weapon's. Consumer decoded 2026-08-12, see [`org/aim-assist.md`](../org/aim-assist.md); a value not greater than 0 is stored as "no override" |
+| `STICKINESS` | **0** | an angle, degrees: this turret's own gun-aim-assist cone, overriding the firing weapon's. See [`org/aim-assist.md`](../org/aim-assist.md); a value not greater than 0 is stored as "no override" |
 | `SHOOT_UP_ONLY` | **0** | reject targets below the turret's own altitude |
 | `CATEGORY_LABEL` | **0** | a raw (unlocalised) label string |
 | `HELP_LABEL` | **0** | a string-table id, localised at load |
@@ -127,7 +128,7 @@ teams**, and the turret loader's default for an **absent `TEAM` key is the first
 id 2** — which is why the 22 no-TEAM world emplacements all engage the player. Every authored
 value install-wide is `1`: the 16 carried entries (whose team the host overrides anyway) and the
 four `piratezep` entries — the player's own zeppelin's defensive rings are allied on purpose,
-three of them also the only standalone entries shipped awake. Decoded 2026-08-14 from the
+three of them also the only standalone entries shipped awake. The retail data establishes
 loader's TEAM arm (an absent key takes the enemy-from-index constructor at index 0; a present
 integer is stored raw) and the zeppelin parser's `enemy`/`ally`/`neutral` string mapping.
 
@@ -135,7 +136,7 @@ integer is stored raw) and the zeppelin parser's `enemy`/`ally`/`neutral` string
 
 ⚠ **Neither turret loader reads the `HEALTH` key** — the world placement pass and the by-`TITLE`
 carried pass parse the same 20-key entry routine, and `HEALTH` is not among its lookups
-(measured 2026-08-14; no `HEALTH` string exists in the turret module's key cluster). A
+(no `HEALTH` string exists in the turret module's key cluster). A
 standalone emplacement's real hit points are its **own node's gamez destroy definition** —
 `aagun32` authors `HEALTH 8.0` in `ai.zrd` while its `destroy_aagun32` anim def carries
 `health: 30`, and the 30 is what kills it. The turret dies through gate 1 above: the destroy
@@ -183,7 +184,7 @@ as "fixed" points that turret permanently down its rest bearing and it will neve
 At load the turret is posed at the **centre of its arc** — `min + (max-min)/2` on each axis — and an
 axis whose limits are equal is left unrotated.
 
-## What the engine does each tick
+## Runtime behavior
 
 ### Being alive, and being awake
 
@@ -215,7 +216,7 @@ no objectives script, that builder call is the only reason the zeppelin you atta
 
 Separately, **both loaders bail out entirely if a global world-state flag is clear** — the same
 flag that gates the `capacity` read in the generator loader
-([mission-entities.md](mission-entities.md#the-capacity-puzzle)). In retail it must be set, or no
+([mission-entities.md](mission-entities/enemy-generators.md#capacity-rule-and-limit)). In retail it must be set, or no
 turret would exist at all; it is noted because the two subsystems share it.
 
 An entry with no resolvable `WEAPON` ticks no further.
@@ -335,14 +336,14 @@ of a ballistics record and is a different thing.
 `WEAPON.AMMO` is only ever `9999` or `12000` — effectively unlimited, but it is real state: it
 persists across save/restore.
 
-## Values across the 42
+## Value census
 
 `INACCURACY` 2.5–15.0 (8 distinct) · `PITCH` −60…85 · `YAW` −180…269 · `ATTACK_INTERVAL` 2.0–30.0 ·
 `BORED_INTERVAL` 2.0–10.0 · `DETECTION_RANGE` 350–1000 · `FIRE_RATE` 0.15–12.0 · `AMMO` 9999 or
 12000 · `TEAM` always 1 · `HEALTH` 2 / 8 / 10 / 30 · `SOUNDS.CANNON` always `snd_chaingun` ·
 `TITLE` 32 distinct `MSG_TUR_*` keys, all resolving in `messages.json`.
 
-## What this is not
+## Scope limit
 
 - Turret **airframes** — the five aircraft that carry a turret, and the marker rig that mounts it —
   are [markers.md](markers.md) and [vehicle.md](vehicle.md). `ai.zrd` supplies the gunner, not the
@@ -350,3 +351,7 @@ persists across save/restore.
 - Zeppelin **broadside cannons** are a separate system with their own arc and fire logic, in
   `zeppelins.json` ([mission-entities.md](mission-entities.md)). `WAKEUP_ZEP_TURRETS` and
   `COMPLETED_ZEPCANNONS` are different script ops for a reason.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

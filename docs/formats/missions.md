@@ -1,17 +1,19 @@
-# Mission objectives & the stunt danger zones
+# Mission objectives and stunt zones
 
-Part of the [format documentation](README.md). Covers how a mission names its **objectives**
-and their display text — the data behind Stunt Flying's fly-through Danger Zones. Three
-sources combine: `ia.json`'s `dzones` list (the zone set), the mission's `targets.json`
-(node → display-string keys), and the top-level `messages.json` string table (keys →
-localized text); a fourth, `dzones.json`, carries per-mission overrides the remake does not
-read. Decoded + wired 2026-07-19 (Milestone 2.5 item 1); zone positions verified
-against the C1 gamez and the assembled marker text against
-`OriginalScreenshots/C1 IA1 Cloudcoverage 1.png`. Consumed by
-`CSVM/src/Mech3/Messages.cs`, `CSVM/src/Flight/MissionTargets.cs`, and
-`CSVM/src/Flight/StuntMission.cs`.
+Part of the [format documentation](README.md). This page describes the objective data behind
+Stunt Flying: `ia.json` supplies the zone set, `targets.json` maps nodes to display-string keys,
+and `messages.json` supplies localized text. `dzones.json` carries per-mission overrides that the
+remake does not read. The current readers are `Messages.cs`, `MissionTargets.cs`, and
+`StuntMission.cs`.
 
-## The stunt objective: fly through the Danger Zones
+## Contents
+
+- [Stunt objective](#stunt-objective)
+- [Zone overrides](#zone-overrides)
+- [Target display keys](#target-display-keys)
+- [Message table](#message-table)
+- [Assembled marker text](#assembled-marker-text)
+## Stunt objective
 
 An instant-action Stunt Flying run's goal is to fly through a fixed set of **Danger Zones**
 (bridges, tunnels, hangars, arches — hence "stunt"), timed, completable in any order. Each
@@ -87,7 +89,7 @@ the polygon aperture does not score.
 `help_label` distinguishes `MSG_OBJ_FLYTHROUGH` ("Fly Through") from `MSG_OBJ_FLYOVER` ("Fly
 Over"); both use the same authored gate test (revisit only if a real mission reads wrong).
 
-## `dzones.json` — the per-mission zone overrides
+## Zone overrides
 
 A **second, separate** file, in the mission's own zrdr archive, keyed on `dzpathN` rather than
 `dzN` (23 files: story missions plus C5/IA1). It is what makes one chapter's fixed zone set
@@ -112,7 +114,7 @@ consumed. Flat alternating `KEY, [values…]`; all three keys are optional.
   `nosnapshot` alone. *(Key name and membership are data-confirmed; the scrapbook-capture
   reading is design-informed.)*
 
-## `targets.json` — node → display-string keys
+## Target display keys
 
 A mission's `targets.json` maps world-node names to their objective display text. It is a
 **list of target entries**, and each entry is a **list of `[key, value]` pairs** — *not* the
@@ -140,7 +142,7 @@ The file is generic across mission types — the same schema labels dogfight zep
 (`MSG_TRGT_ZEP_ENEMY` / `MSG_OBJ_DISABLEENG`) and reference points (`ap_transmitter`
 radio tower). The stunt loader reads only the entries whose node is a `dzN` from `dzones`.
 
-## `messages.json` — the string table
+## Message table
 
 `MSG_*` keys resolve through the game's localized string table. **This is not a zrdr
 reader** — it is a single top-level file (`extracted/messages.json`, default `--messages=`),
@@ -170,3 +172,7 @@ The remake's marker HUD (Milestone 2.5 item 2, `src/Flight/MarkerHud.cs`) append
 clock bearing (`… 7 o'clock`) — computed from the plane's heading, not stored in the data — and
 renders the assembled string either as a projected on-screen marker (at the zone's screen
 position) or, when the zone is off screen/behind, as a screen-edge arrow pointing toward it.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.

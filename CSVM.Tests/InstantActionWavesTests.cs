@@ -8,7 +8,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The E11 wave sequencer (docs/formats/instant-action.md "The wave sequencer and the mission
-/// end", PLAN-instant-action.md E11): <see cref="InstantActionWaves"/>'s own trigger (advance on
+/// end"): <see cref="InstantActionWaves"/>'s own trigger (advance on
 /// last kill, a 0-enemy wave falling through, no advance past wave 4) and its two static geometry
 /// helpers (the 500 m-from-nearest-human spawn draw with its literal-index-0 fallback, and the
 /// 100 m / 45° fan) — all pure over their inputs, so these fixtures need no engine.

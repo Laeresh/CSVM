@@ -6,7 +6,7 @@ using Godot;
 namespace CSVM.Session;
 
 /// <summary>
-/// The world's AA emplacements (M4 C9b): the 26 standalone <c>ai.zrd</c> entries resolved
+/// The world's AA emplacements: the 26 standalone <c>ai.zrd</c> entries resolved
 /// against the built chapter world (one entry instantiates as many turrets as its
 /// <c>NODES</c> patterns match — the count is a property of the world model, not of the file),
 /// each driven by the same <see cref="TurretController"/> loop as the carried gunners. Built

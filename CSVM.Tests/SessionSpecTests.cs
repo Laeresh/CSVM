@@ -251,7 +251,7 @@ public class SessionSpecTests
         Assert.True(s.ScenarioExplicit);
     }
 
-    // ---- --coop (PLAN-splitscreen-polish A1) -----------------------------------------------
+    // ---- --coop -----------------------------------------------
 
     [Fact]
     public void CoopParsesTrueAndLeavesFlyUnaffected()
@@ -837,7 +837,7 @@ public class SessionSpecTests
     }
 
     /// <summary>`--ia=` is a path VALUE only — loading the file into an `InstantActionDef` is the
-    /// runtime's job (PLAN-instant-action.md B6/C8), which is what keeps this type free of file
+    /// runtime's job, which is what keeps this type free of file
     /// I/O.</summary>
     [Fact]
     public void IaIsAPathValueOnly()

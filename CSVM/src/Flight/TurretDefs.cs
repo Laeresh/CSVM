@@ -29,7 +29,7 @@ public sealed class TurretDef
     public bool Carried;
 
     /// <summary>Initial awake state. All 16 carried entries ship 1; 22 of the 26 standalone
-    /// entries ship 0 and wait for a mission script (C9b).</summary>
+    /// entries ship 0 and wait for a mission script.</summary>
     public bool Activated;
 
     /// <summary>Authored team id (always 1 = ally where present; absent =

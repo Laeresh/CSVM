@@ -5,7 +5,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The force-path seam (PLAN-ai-flight C21): a <see cref="FlightModel"/> flows either the original's
+/// The force-path seam: a <see cref="FlightModel"/> flows either the original's
 /// player force path or its AI one, chosen once at construction.
 ///
 /// <para><b>Why a test for a flag nothing reads yet.</b> C21 lands the seam alone so wave C's diff is

@@ -1,8 +1,7 @@
 # The puffer particle system, decoded from `crimson.exe`
 
 Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
-`crimson.exe`, `language x86:LE:32:default`), 2026-08-09/10, over the course of
-[`PLAN-puffer-engine-deltas.md`](../plans/PLAN-puffer-engine-deltas.md). Every claim below names
+`crimson.exe`, `language x86:LE:32:default`), 2026-08-09/10. Every claim below names
 the function it came from.
 
 Everything here is a description of *behaviour and constants*. No decompiler output is reproduced;
@@ -15,8 +14,7 @@ and [`formats/anim-definitions.md`](../formats/anim-definitions.md). Our impleme
 plumbing and the traps. This page is the original's runtime: what the engine does with those keys.
 
 ⚠ **This page is a decode, not a proposal.** Where it disagrees with a footage measurement, the
-decode wins and the disagreement is a note (`PLAN-puffer-engine-deltas`'s standing rule on video
-evidence). Where CSVM deliberately differs, that is listed at the bottom rather than hidden.
+decode wins and the disagreement is a note. Where CSVM deliberately differs, that is listed at the bottom rather than hidden.
 
 ## Function map
 
@@ -319,7 +317,7 @@ the original**, which copies its templates per call and bounds its particles onl
 born alive. Do not read any of those numbers back as an engine constant, and do not defend one by
 citing this page — they are TUNE values, sized against measured live counts.
 
-### The fire pair, measured and then DELETED (D10, 2026-08-10)
+### The fire pair, measured and then DELETED (2026-08-10)
 
 `large_30sec_fire`'s `fire_n_smoke` measured through the real emitter for its authored 30 s, still
 host, heights above the emitter (suite `puffer-fire-column`). The tuned rows are the build as it

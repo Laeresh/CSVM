@@ -1,11 +1,19 @@
-# HUD: compass tape + cockpit gauges
+# HUD: compass tape and cockpit gauges
 
-Part of the [format documentation](README.md). Validated 2026-07-18 against
-`OriginalScreenshots/HUD.png` (2556×1440, dgVoodoo) by pixel-probing every tick and
-label; gauges decoded 2026-07-19 from the planes.zbd `gauges` subtrees +
-`OriginalScreenshots/HUD with dmg.png`. Remake implementations:
-`src/Flight/CompassTape.cs`, `src/Flight/GaugeCluster.cs`.
+Part of the [format documentation](README.md). This page records the HUD textures, compass-tape
+rendering, cockpit and weapon gauges, bitmap font, and aiming reticle. Evidence comes from the
+HUD captures and aircraft gauge subtrees; the implementation lives in `CompassTape.cs` and
+`GaugeCluster.cs`.
 
+## Contents
+
+- [Textures](#textures)
+- [Compass rendering](#compass-rendering)
+- [Cockpit gauges](#cockpit-gauges)
+- [Weapon gauges](#weapon-gauges)
+- [Bitmap font](#bitmap-font)
+- [Aiming reticle](#aiming-reticle)
+- [Known uncertainty](#known-uncertainty)
 ## Textures
 
 The compass ships as two small textures in **every chapter's `texture.zbd`** (not in
@@ -25,7 +33,7 @@ The compass ships as two small textures in **every chapter's `texture.zbd`** (no
   from the pairs). A 5 px white→black vertical gradient block sits at x 123–127 —
   purpose unknown; it does not appear in the in-flight compass.
 
-## Rendering model (measured, not decompiled)
+## Compass rendering
 
 - The tape is a **cylindrical drum viewed edge-on** showing exactly 180° of heading:
   a mark Δ° from the current heading renders at `x = center − R·sin(Δ)`. At 1440p the
@@ -50,7 +58,7 @@ The compass ships as two small textures in **every chapter's `texture.zbd`** (no
 - Labels every 45° (octants), no numeric readout, no lubber line — the current
   heading is read from the centered, brightest label.
 
-## The cockpit gauges (altimeter / speedometer / damage display)
+## Cockpit gauges
 
 **The gauge dials are 3D models inside each player plane's tree in planes.zbd** — a
 `gauges` subtree under the (otherwise skipped) cockpit, one per plane, with the same
@@ -74,11 +82,10 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   `thousands` (short/wider: x ±0.07, y −0.181…0.368, priority 8, z 0.025 — same
   texture); the speedometer one (`speed`, priority 8). The nodes' modeled rest
   rotations are arbitrary; the engine sets absolute angles. ⚠ **The pointer shape
-  lives only in the `rtexture*` tiers' copy of `needle.tif`** (decoded 2026-08-04):
+  lives only in the `rtexture*` tiers' copy of `needle.tif`** :
   the base `texture.zbd` copy is a 32×128 RGB flat full-width slab with no alpha,
   but every `rtextureN` tier ships a same-size **RGBA** copy with different art
   (beveled lance, rimmed hub discs) whose alpha channel is the complete antialiased
-  silhouette — pointed tip, tapering shaft, waist, two hub discs. An earlier note
   here claimed the shape was applied engine-side; it is simply in the archives the
   engine actually renders from (see `docs/tooling.md` on the tiers).
 - **Warning overlays** `lowalt_on` / `stallwarning_on` (priority 7 — *under* the
@@ -86,7 +93,7 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   red bezel slashes** (`redhilite.tif` quads at the dial edge, left+right of the
   window's side). The whole node toggles/blinks.
 - **The STALL lamp's blink is a RATE ramp on its own threshold** (`BL-148`, `CAP-06`
-  + the two `CAP-05` stall clips, decoded 2026-08-04). Three separate facts, each
+  + the two `CAP-05` stall clips). Three separate facts, each
   measured across four clips:
   - **Brightness is binary** — the lit plate reads 211.0 ± 0.2 red and the unlit one
     41.7 ± 0.2 at *every* speed, and the duty cycle is 0.50 throughout. There is no
@@ -105,14 +112,14 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
     (0.2989–0.2996 across four clips); inside the clip that measured it the lamp led
     the Bloodhawk's break by 2.64 sim s / 14.9 mph. The remake carries the lamp as
     `FlightModel.StallWarnFrac` over `FlightModel.StallFraction`; the nose-drop itself
-    is no longer a fixed fraction (B15) — it is the airframe's own computed
+    is no longer a fixed fraction — it is the airframe's own computed
     `FlightModel.StallSpeed`, the speed at which the aerodynamic lift ceiling can no
     longer carry that airframe's weight.
   The LOW ALT cue beside it is a plain fixed 400 ms blink — it has never been
   measured against the original, and nothing here applies to it.
 - **Damage display**: the dial's face is a single untextured 12-gon (the dark backing
   disc). ⚠ **Where it is parented differs per aircraft** — verified across the whole
-  roster 2026-07-19: on `player_bhawk` it is the `damageindicator` node's *own* mesh,
+  roster: on `player_bhawk` it is the `damageindicator` node's *own* mesh,
   but on **every other player plane** that node is mesh-less (`mesh_index` −1) and the
   identical 12-gon hangs off an extra generically-named child instead (`g951` on the
   Fury, `g927` Kestrel, `g1156` Balmoral, `g992` Warhawk, `g843` Devastator, …). A
@@ -131,7 +138,7 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
 - **Thresholds**: every player part's vehicle.json `injure_anims` carry
   `*_damage_green` at 0.72, `*_damage_yellow` at 0.46, `*_damage_red` at 0.20 (the
   anims themselves live in the undecoded cam_anim.zbd). The display uses **all four
-  cycle colors** (orange user-confirmed in the original, 2026-07-19) — each anim
+  cycle colors** (orange confirmed in the original) — each anim
   threshold steps to the *next* color: green > 0.72, yellow ≤ 0.72, orange ≤ 0.46,
   red ≤ 0.20 (red on a still-flying plane matches the damage reference shot; the
   anim names lag their effect by one state). **The scale is the zone's COMBINED
@@ -156,9 +163,9 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   artificial-horizon `horizn` and drum `comp` compass. The `gungauge` /
   `missilegauge` are decoded below.
 
-## The weapon gauges (gun / missile)
+## Weapon gauges
 
-Decoded 2026-07-24 from the planes.zbd `gungauge` / `missilegauge` subtrees +
+Read from the planes.zbd `gungauge` / `missilegauge` subtrees +
 `support\cockpit.gw` (the interp boot script that wires their texture cycles);
 remake implementation extends `src/Flight/GaugeCluster.cs`. Screen placement is
 ours (measured off `OriginalScreenshots/HUD.png`, the Warhawk): the **ROCKETS**
@@ -206,7 +213,7 @@ The functional children, and how `cockpit.gw` drives each:
   shows. The
   green/yellow/red **thresholds are a TUNE** pending an original playtest. Guns are the only class
   with a yellow tier at all (`GunIndicatorColor`, `BL-024`) — hardpoints/pylons step straight
-  green→red. The gun yellow threshold (`GaugeCluster.IndicatorLowFrac`) was retuned 2026-08-04
+  green→red. The gun yellow threshold (`GaugeCluster.IndicatorLowFrac`) is tuned
   (`BL-142`) from 0.34 — a value inherited from the unrelated 3-round rocket-pylon coincidence
   (1/3), never watched against a real gun belt — to **0.15**, judged from a screenshot sweep of a
   scaled belt drain (`--ammo=200 --gun-select=0 --fire`): at 0.34 yellow lit with ~119 sim s of
@@ -219,7 +226,7 @@ The functional children, and how `cockpit.gw` drives each:
   Unlike the dial needles, the arrow's shape IS its mesh: a single 5-vertex polygon
   (pointed tip at +y, two shoulders, a base) whose wrapping UVs (u 0.98–2.02,
   v 0.50–3.10) smear the tiny 16×16 texture across it. **The pointer sweeps, it does
-  not snap** (`BL-184`, `CAP-18`, decoded 2026-08-04): a single constant rate shared
+  not snap** (`BL-184`, `CAP-18`, : a single constant rate shared
   by both gauges, **168.7 ± 1.6 °/sim-s**, routed the shortest way round
   (`GaugeCluster.TweenArrow`); the numeric readout above still snaps on the sweep's
   first frame. CAP-18's own end-to-end capture also carries a ~97 ms sim ease at each
@@ -243,16 +250,16 @@ gauges):
 
 `%1` names the **gun group / rocket type** — which is *why* these strings exist: the counters are
 per gun group and per pylon, so the readout has to say *which* one. `%2!d!` is the integer count.
-The remake (E36, `src/Flight/WeaponReadout.cs`) resolves both through `Messages`, fills `%1` with the
+The remake (`src/Flight/WeaponReadout.cs`) resolves both through `Messages`, fills `%1` with the
 gun group's **mount name** (`Inner Wing Guns`, from `IDS_AIRFRAMEGUNGROUPNAMES`) or the rocket's
 resolved **display name** (`High-explosive rocket`, from its `MSG_WEAP_*` `DESC`), and `%2` with the
 selected group's per-group rounds / the next-to-fire pylon's per-pylon rounds. It draws in the
 `5pointhud` font at the pane's bottom centre. The placeholder grammar (`%N`, a trailing `!spec!`
 consumed, `%%` → literal `%`) is handled by `Messages.Fill`.
 
-## The HUD bitmap font (`5pointhud`)
+## Bitmap font
 
-Decoded 2026-07-24 by pixel-probing the atlas; remake reader `src/Flight/HudFont.cs`.
+Decoded by pixel-probing the atlas; remake reader `src/Flight/HudFont.cs`.
 
 Two textures in **`extracted/rimage/`** (the menu/UI image set — *not* the chapter texture
 archives that carry the compass/gauge art):
@@ -281,7 +288,7 @@ reproduces the original green), and draws each glyph with `DrawTextureRectRegion
 space / unrepresented codes as a **3 px** advance. Sizing routes through `HudMetrics` like every
 other HUD element, so a splitscreen pane damps the text the same way the dials do.
 
-## The gun aiming reticle (`impact_point.png`)
+## Aiming reticle
 
 The aiming pipper is a single image in **`extracted/rimage/`** (the UI set, alongside the
 `5pointhud` font — *not* the chapter archives): **`impact_point.png`**, a **32×32 RGBA**
@@ -311,8 +318,12 @@ pending an original-game playtest. Note the on-screen *trailing angle* is set by
 velocity/bullet-speed ratio and is essentially independent of this distance; the distance mainly
 sets where a toed-in mount would harmonise and the pipper's parallax off screen-centre.
 
-## Open question
+## Known uncertainty
 
 Which world axis is compass **north**: the remake assumes **−Z** (consistent with the
 map layout and motion), but the original's convention has not been verified in-game.
 If it differs, the fix is the one heading line in `FlightController`.
+
+## Evidence & limits
+
+This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
