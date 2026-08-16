@@ -170,7 +170,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Disabling effects
 
-13. ☐ `ScreenFlash`: the victim-routed blend channel
+13. ☑ `ScreenFlash`: the victim-routed blend channel
 14. ☑ `SONIC`/`FLASH`: the shared intensity model
 15. ☐ The player's screen wash: colour, weight, duration, blending
 16. ☐ The AI stun
@@ -510,7 +510,18 @@ and is correct as-is. Only `SURFACE_ANIMATION` takes the normal.
 
 # Wave D — Disabling effects
 
-## D13 ☐ `ScreenFlash`: the victim-routed blend channel
+## D13 ☑ `ScreenFlash`: the victim-routed blend channel
+
+**Verdict.** Landed: `ScreenFlash.PlayBlend(playerIndex, colour, weight, duration, startDelay)`
+routes by the victim's `FlightController.PlayerIndex` (a human's pane index; an AI's is out of range
+and paints nothing) into a per-pane `BlendWash` (`src/UI/BlendWash.cs`) that carries the original's
+own blend arithmetic and its attack/sustain/release envelope (0.15 / 0.35 of the duration, traced in
+`FUN_0042eb80` while building this; the decode page now states how the two timings act, plus the
+1.0 s start delay the sonic/flash caller passes and the smoke caller does not), composited over the
+untouched proximity ramp in `Apply`. `--debug-wash=N` addresses two overlapping scripted washes to
+viewer N. Pinned by `BlendWashTests` (rules) and the `fbfx-flash` suite (player 2 addressed, pane 1
+clear, ramp unchanged underneath). The at-the-controls `--coop --players=2` look remains owed to a
+human.
 
 **Goal.** A screen wash can be addressed to the viewer flying a given aircraft, and blends with
 whatever that pane is already showing.

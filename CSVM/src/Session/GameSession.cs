@@ -131,6 +131,8 @@ public partial class GameSession : Node3D
     private bool _crashFired;
     // --debug-scoreboard --vs: fires once, on the first sim step — see DriveSimSteps.
     private bool _versusDebugKillFired;
+    // --debug-wash=N: how many of its two scripted washes have fired — see DriveSimSteps.
+    private int _debugWashesFired;
     private SpectatorCamera? _spectator;
     // The session's shared world selection (--freecam/--anim-lab): the clicked leaf plus its
     // cs_name ancestor ladder, which every inspect tool reads instead of picking for itself.
@@ -648,6 +650,17 @@ public partial class GameSession : Node3D
             if (clock.ParentDriven)
             {
                 DriveSimSteps(clock);
+            }
+            // --debug-wash=N: two scripted blend washes to viewer N, red on the first sim frame
+            // and white two seconds in, overlapping so the blend and not just the routing is on
+            // screen. Sim time, every clock mode; a viewer no pane answers to paints nothing.
+            if (_spec.DebugWash is int washViewer && _debugWashesFired < 2 && _screenFlash != null
+                && clock.Time >= _debugWashesFired * 2.0)
+            {
+                _debugWashesFired++;
+                var colour = _debugWashesFired == 1 ? new Color(1f, 0f, 0f) : new Color(1f, 1f, 1f);
+                _screenFlash.PlayBlend(washViewer - 1, colour, _debugWashesFired == 1 ? 1f : 0.5f, 5f);
+                GD.Print($"--debug-wash: wash {_debugWashesFired} addressed to viewer {washViewer} of {_screenFlash.PaneCount}");
             }
         }
         // The startup line goes out on the frame that proves the first one was drawn.

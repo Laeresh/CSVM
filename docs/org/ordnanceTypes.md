@@ -572,10 +572,16 @@ is the strongest non-damaging effect in the weapon table and we model none of it
 **The player's half is `FUN_0042e9d0`, and it is purely visual.** It is a full-screen colour wash:
 `SONIC` red `(1, 0, 0)`, `FLASH` white `(1, 1, 1)`, at a **weight** equal to the intensity and for a
 **duration equal to five times the intensity**, the same number the AI stun uses. Two derived timings
-at 0.35 and 0.15 of the duration split it into phases. Overlapping washes **blend** rather than
-replace: the running colour is mixed toward the new one by the incoming weight and the weights
-combine as `w + p − w·p`, so two flashes are worse than one but never saturate. An optional sound
-handle starts with it.
+at 0.35 and 0.15 of the duration split it into phases; the tick (`FUN_0042eb80`) reads them as an
+**attack** over the first 0.15 of the duration (the displayed weight climbs `dt / attack` of the peak
+per frame, capped at the peak), a sustain at the peak, and a **release** over the last 0.35 (the
+peak sheds `dt / release` of itself per frame, decaying toward 1/e of the sustain), then a hard cut
+at the duration. Overlapping washes **blend** rather than replace: the running colour is mixed toward
+the new one by the incoming weight (`(old·p + new·w) / (p' + w)`, normalised by the NEW weight) and
+the weights combine as `p' = w + p − w·p`, so two flashes are worse than one but never saturate; a
+re-hit resets the elapsed clock but not the displayed weight. The first argument is a **start
+delay** during which nothing paints, read on the first hit only: the sonic/flash caller passes 1.0 s,
+the smoke caller 0. An optional sound handle starts with it.
 
 ⚠ **Nothing on the player's path touches the controls.** The player branch calls only the screen
 wash and returns; there is no input lockout, no state change, no stun. That asymmetry is the design:

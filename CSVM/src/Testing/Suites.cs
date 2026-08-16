@@ -335,7 +335,7 @@ public static class Suites
         into.Add(new TestHarness.Suite("effect-template-mesh",
             "an effect's template meshes show at the call site — including a CALLED template's — and go dark when it ends (BL-061)", EffectTemplateMesh));
         into.Add(new TestHarness.Suite("fbfx-flash",
-            "he_ground_effect's six-step full-screen wash reports its authored run times, so the 1.2 s ramp does not collapse into one instant", FbfxFlash));
+            "he_ground_effect's six-step full-screen wash reports its authored run times, so the 1.2 s ramp does not collapse into one instant; the ramp routes by pane proximity and the victim-routed blend wash by player index, composited over it", FbfxFlash));
         into.Add(new TestHarness.Suite("ordnance-burst-timeline",
             "the HE, flash and sonic bursts play end to end and every sequence's whole event timeline matches the authored JSON — in order, at the authored time (D31)", OrdnanceBurstTimeline));
         into.Add(new TestHarness.Suite("effects-census",
@@ -9253,7 +9253,77 @@ public static class Suites
             });
         });
         WashPaintsOnlyThePanesItReached(ctx);
+        BlendWashRoutesToTheVictimsPane(ctx);
         PlayerRangeNearestHuman(ctx);
+    }
+
+    // The victim-routed blend channel (D13): a wash addressed to player 2 paints pane 2 and leaves
+    // pane 1 untouched, whatever the cameras are doing; it composites OVER a proximity ramp already
+    // running in the pane and leaves that ramp's own picture unchanged where no wash is running.
+    // METHOD-12: the ramp readouts are the invariant, the blended pane is what moves.
+    private static void BlendWashRoutesToTheVictimsPane(TestContext ctx)
+    {
+        const float gate = 10000f;
+        var clear = new Color(0f, 0f, 0f, 0f);
+        var white = new Color(1f, 1f, 1f, 0.3f);
+        var violet = new Color(0.2f, 0f, 1f, 0.2f);
+        var red = new Color(1f, 0f, 0f);
+
+        // Both cameras at one point: the ramp's proximity gate cannot tell the panes apart, so any
+        // difference between them below is the blend channel's routing alone.
+        var p1 = ViewerCamera(ctx, Vector3.Zero);
+        var p2 = ViewerCamera(ctx, Vector3.Zero);
+        var viewers = new ViewerSet();
+        viewers.Bind(new[] { p1, p2 });
+        var (flash, panes) = PaneFlash(ctx, viewers);
+        try
+        {
+            const float dt = 1f / 60f;
+            // A wash addressed to player 2 (pane index 1), stepped through its 0.15 × 4 s attack.
+            flash.PlayBlend(1, red, 1f, 4f);
+            for (int i = 0; i < 40; i++)
+                flash.Advance(dt);
+            var pane2 = flash.CurrentFor(1);
+            ctx.Check(pane2.A > 0.99f && pane2.R > 0.99f && pane2.G < 0.01f,
+                $"a blend wash addressed to player 2 paints pane 2 red at its full weight after the attack ({pane2})");
+            ctx.Check(flash.CurrentFor(0).IsEqualApprox(clear),
+                $"and pane 1, whose camera stands at the same point, stays clear — routed by victim, not by proximity ({flash.CurrentFor(0)})");
+            ctx.Check(!flash.RunningFor(1),
+                $"and starts no RAMP in pane 2: the two channels are separate states ({flash.RunningFor(1)})");
+
+            // A proximity ramp reaching both panes: pane 1 shows the ramp alone, pane 2 the wash
+            // over the ramp — the pixel the ramp would have painted, with red laid over it.
+            flash.Play(white, violet, 0.2f, Vector3.Zero, gate);
+            ctx.Check(flash.CurrentFor(0).IsEqualApprox(white),
+                $"an HE ramp reaching both panes paints pane 1 exactly as before the blend channel existed ({flash.CurrentFor(0)})");
+            var composite = flash.CurrentFor(1);
+            var want = BlendWash.Composite(white, red, flash.BlendFor(1)!.Weight);
+            ctx.Check(composite.IsEqualApprox(want),
+                $"and pane 2 shows the wash composited over that ramp ({composite}, want {want})");
+            ctx.Check(flash.RunningFor(0) && flash.RunningFor(1),
+                $"while the ramp itself runs in both panes, its routing untouched by the wash ({flash.RunningFor(0)}/{flash.RunningFor(1)})");
+
+            // The wash ends at its duration and pane 2 falls back to whatever the ramp channel has,
+            // which by then is nothing.
+            for (int i = 0; i < 260; i++)
+                flash.Advance(dt);
+            ctx.Check(flash.CurrentFor(1).IsEqualApprox(clear) && flash.BlendFor(1)!.Running == false,
+                $"the wash is gone at its 4 s duration and pane 2 reads clear again ({flash.CurrentFor(1)})");
+
+            // A victim with no pane (an AI's player index) addresses nothing and throws nothing.
+            flash.PlayBlend(AiAircraftSpawner.ShooterIdBase, red, 1f, 4f);
+            flash.Advance(dt);
+            ctx.Check(flash.CurrentFor(0).IsEqualApprox(clear) && flash.CurrentFor(1).IsEqualApprox(clear),
+                $"a wash addressed to an AI's player index paints no pane ({flash.CurrentFor(0)} / {flash.CurrentFor(1)})");
+        }
+        finally
+        {
+            flash.Free();
+            foreach (var pane in panes)
+                pane.Free();
+            p2.Free();
+            p1.Free();
+        }
     }
 
     // The wash reaches the panes the burst reached and no others: two panes 120 m apart under the

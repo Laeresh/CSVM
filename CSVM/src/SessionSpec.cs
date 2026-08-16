@@ -483,6 +483,12 @@ public sealed record SessionSpec
 
     public bool DebugScoreboard { get; private set; }
 
+    /// <summary><c>--debug-wash=N</c>: address two scripted blend washes to viewer N (1-based)
+    /// through <c>ScreenFlash.PlayBlend</c>, a red one on the first sim step and a white one two
+    /// seconds later, so the victim-routed channel and its blending can be seen at the controls
+    /// with no weapon firing it. Null = flag absent.</summary>
+    public int? DebugWash { get; private set; }
+
     /// <summary><c>--debug-markers</c>: mark EVERY live aircraft on the targeting HUD at once,
     /// red for a hostile team and blue for your own, instead of the shipped single
     /// nearest-hostile marker. A watching aid for AI work (whose plane is where), never a
@@ -713,6 +719,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--paint-seed=")) { s.PaintSeed = ulong.Parse(arg["--paint-seed=".Length..]); s.PaintSeedExplicit = true; }
             else if (arg.StartsWith("--rof=")) { s.Rof = arg["--rof=".Length..]; }
             else if (arg == "--debug-scoreboard") { s.DebugScoreboard = true; }
+            else if (arg.StartsWith("--debug-wash=")) { s.DebugWash = int.Parse(arg["--debug-wash=".Length..]); }
             else if (arg == "--debug-markers") { s.DebugMarkers = true; }
             else if (arg == "--debug-spectate") { s.DebugSpectate = true; }
             else if (arg == "--debug-livery") { s.DebugLivery ??= 0; }

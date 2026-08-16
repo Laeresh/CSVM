@@ -181,7 +181,8 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/BoardMenuHost.cs` — menu, rows and reader kept together, so a board wires one in two lines.
 - `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2–4), shared `World3D`, per-player visual-layer band.
 - `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session.
-- `src/UI/ScreenFlash.cs` — the `FBFX_COLOR_FROM_TO` full-screen wash: a close burst ramping the frame, routed per pane.
+- `src/UI/ScreenFlash.cs` — the full-screen wash, two channels per pane: the `FBFX_COLOR_FROM_TO` ramp routed by camera proximity, and the victim-routed blend wash, composited at paint time.
+- `src/UI/BlendWash.cs` — one pane's victim-routed wash: the sonic/flash/smoke blend rule and attack/sustain/release envelope, plus the paint-time composite over the ramp.
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
 - `src/UI/MeshLab.cs` — the geometry/shading lab (M): normal lines, smoothing seams, cull/normal overrides; on the parked plane, or on the selection.
 - `src/UI/ColliderOverlay.cs` — the collider wireframes (C): every built collision shape drawn, coloured by the surface id it resolves to; needs `--collision` outside flight.
@@ -2328,16 +2329,32 @@ and every `AudioStreamPlayer3D` in the world goes silent, uncounted and unlogged
 `splitscreen-listeners` suite.
 
 ## src/UI/ScreenFlash.cs
-The `FBFX_COLOR_FROM_TO` full-screen wash — a close HE, AP or flak burst ramping the picture
-from one RGBA to another over the event's run time. **One ramp state and one hidden `ColorRect` per
+The full-screen colour wash: **two channels over one pixel per pane, one hidden `ColorRect` per
 rendered view** (`HudLayers.WorldOverlay`, under each rig's `HudParent`, built with the rigs so
-every runtime can be handed the same `Play` sink). `AnimRuntime`'s handler pushes `(from, to,
-run_time, origin, radius²)`; the node lerps in RGBA on `GameClock` sim time and ends — it does NOT
+every runtime can be handed the same sinks). The **ramp channel** is the `FBFX_COLOR_FROM_TO` wash,
+a close HE, AP or flak burst ramping the picture from one RGBA to another over the event's run time.
+`AnimRuntime`'s handler pushes `(from, to,
+run_time, origin, radius²)` into `Play`; the node lerps in RGBA on `GameClock` sim time and ends — it does NOT
 hold the `to` colour, because the original re-arms its frame-buffer object for the current frame only
 and a completed chain simply stops re-arming. `Play` **replaces** whatever that pane is running,
 which is the original's composition rule literally: one process-wide state a second burst overwrites
 (decode in `docs/formats/anim-definitions.md`).
-**Which panes wash: every pane whose own camera is inside the burst's authored
+The **blend channel** (`PlayBlend(playerIndex, colour, weight, duration, startDelay)`) is the
+victim-routed wash of a sonic, flash or smoke hit, one `BlendWash` per pane (`src/UI/BlendWash.cs`,
+below), addressed by the struck aircraft's `FlightController.PlayerIndex`: a human seat's index is
+its pane index by construction (`FlightRigAssembler` assigns `pi`), an AI's is `ShooterIdBase + n`
+and out of range, so it paints nothing. No camera is read on this channel. The two composite at
+paint time only (`Apply`: `BlendWash.Composite`, the standard alpha "over" of the wash on top of the
+ramp, folded into one RGBA), so a pane with no blend wash paints exactly the ramp's own colour and
+the HE/AP/flak picture is unchanged by the channel's existence; `CurrentFor` reads the composite,
+`BlendFor` the blend state alone. `Advance(dt)` is `_Process`'s body, exposed so a suite can step
+both channels on its own clock. **Per pane, not one global**: the original holds one wash state for
+the whole machine (`DAT_0064ef9c` and neighbours), which would blind viewer 1 when viewer 3 is
+flashed; that divergence is deliberate (`docs/PLAN-ordnance-types.md`, Decision 2). `--debug-wash=N`
+addresses two overlapping scripted washes to viewer N so the channel can be seen with no weapon
+firing it (`GameSession._Process`). Pinned by the `fbfx-flash` suite (routing: player 2 addressed,
+pane 1 untouched, ramp composited under) and `BlendWashTests` (the rules).
+**Which panes the RAMP washes: every pane whose own camera is inside the burst's authored
 radius**, read off the session's `ViewerSet`, which `GameSession` hands to `Build` alongside the
 same rig list the panes come from — so pane *i* and camera *i* are the same rig by construction, and
 a set that does not match the pane count is not indexed at all (every pane washes, the labs' case).
@@ -2346,6 +2363,26 @@ wash defs (`he_ground_effect`/`ap_ground_effect`/`flak_effect` × 8 chapters) au
 gate — so the rule here is the original's own gate re-asked per player rather than a new constant.
 Radius 0 means ungated and paints every pane; the intro cutscene's `gi_scene1` is the one such
 carrier, and an ungated wash is not a proximity effect.
+
+## src/UI/BlendWash.cs
+One pane's victim-routed wash state, the original's `FUN_0042e9d0` (start) and `FUN_0042eb80`
+(tick) held per pane instead of in their one global; pure state and arithmetic, no node, so
+`BlendWashTests` covers it off the engine. `Start(colour, weight, duration, startDelay)`: a first
+hit takes the weight as `Peak` and starts the displayed `Weight` at 0; a hit landing on a running
+wash **blends**, `Peak' = p + w − p·w` and the colour mixed as `(old·p + new·w) / (Peak' + w)`, the
+original's own arithmetic including its normalisation by the NEW peak plus the incoming weight
+(white then red at full weight reads pink `(1, 0.5, 0.5)`), then restarts the envelope's clock
+without dropping the displayed weight. A non-positive duration clears the pane, as the original's
+routine does. The **envelope**, stepped on sim time: attack over `0.15 × duration` (the displayed
+weight climbs `dt/attack` of the peak per step, capped at the peak), sustain at the peak, release
+over the last `0.35 × duration` (the peak sheds `dt/release` of itself each step, so it decays toward
+`1/e` of the sustain by the cut), then a hard cut at the duration. The release decays `Peak` itself,
+so a re-hit late in a wash blends against a lighter one. `startDelay` holds the pane clear before
+the envelope begins and is read on the first hit only; the original passes 1.0 s for the sonic/flash
+wash and 0 for the smoke wash (its two callers, `FUN_004b9bc0` and `FUN_004b8fd0`), which the
+consumers `D15`/`D18` author. `Composite(under, colour, weight)` is the paint-time rule
+`ScreenFlash.Apply` uses: the wash "over" the ramp's RGBA, `a = a₁ + w(1 − a₁)`, colour
+`(c₁·a₁·(1 − w) + c·w) / a`, clamped; weight 0 returns `under` unchanged.
 
 ## src/Flight/PlayerRig.cs
 One rendered view's state bag: index, camera, optional `SubViewport`, `HudParent`, `VisualLayer`,
@@ -2991,6 +3028,11 @@ the sink: every step reports the burst's own point and the def's authored `10000
 real two-pane `ScreenFlash` over two `Camera3D` nodes 120 m apart paints one pane, the other pane, or
 both, purely by where the burst is. The able-to-fail control is the same overlay with no `ViewerSet`
 bound, which paints both — the pre-B12 behaviour; disabling the routing fails three of the checks.
+Its blend-channel half puts both cameras at ONE point, so the ramp's proximity gate cannot tell the
+panes apart and any difference is the victim routing alone: `PlayBlend(1, …)` stepped through its
+attack paints pane 2 red and leaves pane 1 clear, an HE ramp then reaching both paints pane 1 exactly
+as before the channel existed and pane 2 the wash composited over it, the wash is gone at its
+duration, and an AI's player index addresses no pane.
 `ordnance-burst-timeline` proves the ordnance burst timeline: it plays `he_ground_effect`,
 `flash_effect` and `sonic_ground_effect` on its own miniature world-effects stage and matches the
 WHOLE recorded `OnEventDispatched` log of each — every sequence, every event, in its sequence's
