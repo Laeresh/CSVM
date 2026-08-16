@@ -377,6 +377,10 @@ public partial class FlightController : Node3D
     private const float ReticleFarRate = 1788.1599f;   // m/s that flat ceiling
     private const float UnderMapY = 0f;        // C1 terrain sits at y≈100+; below this we're lost
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
+    private const float ProbeHullRadiusM = 10f; // INVENTED: the avoid-crash probe's swept sphere —
+                                                // roughly a fighter's half-span, so the lookahead
+                                                // asks whether an aeroplane fits rather than
+                                                // whether a zero-width line is clear
     private const float AutoRespawnDelay = 1.5f; // s a HoldInput run stays crashed before auto-respawn
     private const float DebugFinishStagger = 1.5f; // s between players' forced finishes (--debug-scoreboard in a race)
 
@@ -441,6 +445,7 @@ public partial class FlightController : Node3D
     private bool _haltPrev;                      // previous frame's clock-halt state (orbit seeding)
     private bool _cyclePrev;                     // previous frame's stunt cycle-target key state (edge detection)
     private ImmediateMesh? _probe;               // debug collision-probe line
+    private SphereShape3D? _probeShape;          // the avoid-crash sweep's hull, built once
     private float _damageCooldown;               // s left before the next HP subtraction
     private float _grazeReactionCooldown;        // s left before the next touchdown_* reaction
     private float _damageFlash;                  // s left on the HUD impact line
@@ -1546,18 +1551,56 @@ public partial class FlightController : Node3D
             PhysicsRayQueryParameters3D.Create(from, to, CollisionLayers.World)).Count > 0;
     }
 
-    /// <summary>Whether anything the AI's avoid-crash ray can hit blocks the segment: the static
-    /// world or another aircraft, never this plane's own body. The original's ray has no vehicle
-    /// filter and excludes only the caster (its node is deactivated around the cast; see
-    /// docs/org/aiPilot.md, "What the ray can hit"), so this is not <see cref="WorldBlocksLine"/>.</summary>
-    internal bool AvoidCrashBlocksLine(Vector3 from, Vector3 to)
+    /// <summary>What blocks the AI's avoid-crash lookahead along the segment — the static world or
+    /// another aircraft, never this plane's own body — as the struck body's name, or null for a
+    /// clear path. The original's ray has no vehicle filter and excludes only the caster (its node
+    /// is deactivated around the cast; see docs/org/aiPilot.md, "What the ray can hit"), so this is
+    /// not <see cref="WorldBlocksLine"/>.
+    ///
+    /// <para>⚠ The SWEPT SPHERE is invented; the original casts a bare line. A fighter is a very
+    /// thin target for a zero-width ray, which the decode itself flags, so the probe asks "does a
+    /// body of my size fit along this path" instead of "is this line clear". A sweep that starts
+    /// already overlapping answers nothing about the lookahead and reads as clear — the aeroplane
+    /// is evidently still flying, and latching avoid crash on it would never release.</para></summary>
+    internal string? AvoidCrashBlocksLine(Vector3 from, Vector3 to)
     {
         var space = GetWorld3D()?.DirectSpaceState;
-        if (space == null)
-            return false;
-        return space.IntersectRay(PhysicsRayQueryParameters3D.Create(
-            from, to, CollisionLayers.WorldAndAircraft, Body?.ExcludeSelf)).Count > 0;
+        var motion = to - from;
+        if (space == null || motion.LengthSquared() < 1e-6f)
+            return null;
+        _probeShape ??= new SphereShape3D { Radius = ProbeHullRadiusM };
+        var query = new PhysicsShapeQueryParameters3D
+        {
+            Shape = _probeShape,
+            Transform = new Transform3D(Basis.Identity, from),
+            Motion = motion,
+            CollisionMask = CollisionLayers.WorldAndAircraft,
+        };
+        if (Body != null)
+            query.Exclude = Body.ExcludeSelf;
+        var cast = space.CastMotion(query); // [safe, unsafe] fractions; [1,1] = clear
+        if (cast[0] >= 1f)
+            return null;
+
+        // Name the blocker (and settle the already-overlapping case) by parking the sphere at the
+        // first-contact pose: no overlap there means the sweep started inside something.
+        query.Transform = new Transform3D(Basis.Identity, from + (motion * (float)cast[1]));
+        var hits = space.IntersectShape(query, 1);
+        if (hits.Count == 0)
+            return null;
+        // The name is the diagnostic: a block on "a5/col" is terrain, one on
+        // "ai6_player_bhawk/airframe" is the aircraft case the decode says this probe also covers.
+        return hits[0]["collider"].Obj is Node body
+            ? $"{body.GetParent()?.Name}/{body.Name}"
+            : "unnamed";
     }
+
+    /// <summary>Degrees between two vectors, 180 when either is degenerate (an unmeasurable
+    /// aspect reads as the worst case rather than as zero).</summary>
+    private static float AngleBetweenDeg(Vector3 a, Vector3 b) =>
+        a.LengthSquared() < 1e-6f || b.LengthSquared() < 1e-6f
+            ? 180f
+            : Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(a.Normalized().Dot(b.Normalized()), -1f, 1f)));
 
     /// <summary>The rocket name the text readout shows: the resolved <c>MSG_WEAP_*</c> display name
     /// (e.g. "High-explosive rocket") when it resolved, else the short internal handle ("BOOM") — a
@@ -2181,6 +2224,18 @@ public partial class FlightController : Node3D
         string surface = surfaceId is { } sid
             ? $"{sid}/{SurfaceRegistry.NameForId(sid) ?? "?"}"
             : "none";
+        // A mid-air's ASPECT (diagnostic): which AI rule should have prevented it depends entirely
+        // on whether the two met head-on, overtaking or side-on, and no crash line carries that.
+        if (hitBody is AircraftBody struckAir)
+        {
+            var mine = _model.VelocityDir;
+            var theirs = struckAir.Rig.WorldVelocity;
+            var los = struckAir.Rig.WorldPosition - _model.Position;
+            GD.Print($"midair aspect: into {hitName} — tracks {AngleBetweenDeg(mine, theirs):0}° " +
+                     $"apart (0 = same heading, 180 = head-on), line of sight " +
+                     $"{AngleBetweenDeg(mine, los):0}° off own track, " +
+                     $"spd mine={_model.Speed:0} theirs={theirs.Length():0} m/s");
+        }
         GD.Print($"CRASH into {hitName} ({part}) surface={surface} def={crashDef ?? "-"} " +
                  $"impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) " +
                  $"pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) " +

@@ -224,7 +224,7 @@ public class AiModeMachineTests
     {
         var m = Machine();
         bool blocked = false;
-        m.ProbeBlocked = (_, _) => blocked;
+        m.ProbeBlocked = (_, _) => blocked ? "test/obstacle" : null;
 
         // Clear probes: patrol undisturbed.
         Assert.Equal(AiMode.Patrol, m.Update(Home, Level, null, null, AiModeMachine.ProbeIntervalS));
