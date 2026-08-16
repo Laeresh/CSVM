@@ -100,7 +100,7 @@ public sealed class AiRocketeer
     /// <summary>World-space direction the round leaves along while <see cref="WantsFire"/>: the
     /// lead clamped into the traverse band, which is what the original's mount fires along.
     /// ⚠ Our pylon does not rotate to match, so the mounted body and the round it becomes point
-    /// up to the traverse limit apart at the launch instant (<c>BL-404</c>).</summary>
+    /// up to the traverse limit apart at the launch instant (<c>BL-405</c>).</summary>
     public Vector3 LaunchDirWorld { get; private set; }
 
     /// <summary>Seconds until ordnance may fire again — the lockout, for tests and breadcrumbs.</summary>

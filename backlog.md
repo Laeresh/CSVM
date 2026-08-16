@@ -951,7 +951,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   = bracketed, inside = not), reusing the same hysteresis machinery already built.
   *Cross-refs:* `TargetHud.GunReaches`.
 
-- `BL-403` `[Research]` **Does the player's rocket get an aim component in the original, the way
+- `BL-404` `[Research]` **Does the player's rocket get an aim component in the original, the way
   the player's guns get the assist?** *Evidence:* our rocket launch spawns from the pylon marker's
   transform with no aim direction at all (`FlightController.cs:1860-1865`), on the stated ground
   that the original's aim assist `FUN_004b6530` is reached from the gun branch alone. That claim
@@ -977,7 +977,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   gate", and its "Open" note on the muzzle-position branch),
   [`docs/org/aim-assist.md`](docs/org/aim-assist.md).
 
-- `BL-404` `[Fidelity]` **Mounted ordnance should track the aim before it launches, not hang fixed
+- `BL-405` `[Fidelity]` **Mounted ordnance should track the aim before it launches, not hang fixed
   along the pylon.** *Evidence:* the mount model is decoded
   ([`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md), "`gun_pitch`/`gun_yaw` clamp
   the mount"): `FUN_004b7670` rotates the desired lead into the vehicle frame, clamps each axis
@@ -997,7 +997,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   decision already computes, with the mounted body riding it as it does today. Ours would snap
   where the original slews unless `FUN_00460840`'s rate is read too.
   *Size:* localized, and probably closed as no-change.
-  *Cross-refs:* `AiRocketeer` (whose launch direction creates the mismatch), `BL-403` (whether the
+  *Cross-refs:* `AiRocketeer` (whose launch direction creates the mismatch), `BL-404` (whether the
   player's rocket gets a direction at all), `docs/formats/vehicle.md` (`gun_pitch`/`gun_yaw`).
 
 - `BL-401` `[Bug]` **The node names we spawn do not match the names the rosters author, so

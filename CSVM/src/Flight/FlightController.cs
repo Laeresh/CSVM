@@ -1916,7 +1916,7 @@ public partial class FlightController : Node3D
         {
             var hp = Loadout!.Hardpoints[outcome.RocketPylon];
             // A human's rocket leaves along the pylon axis, unassisted (`FUN_004b6530` is reached
-            // from the gun branch alone; `BL-403` re-checks that). An AI's leaves along the clamped
+            // from the gun branch alone; `BL-404` re-checks that). An AI's leaves along the clamped
             // mount aim its 5° gate cleared (`AiRocketeer.LaunchDirWorld`).
             var rocketAim = !IsHumanPiloted && Pilot?.Rocketeer is { } launcher
                 ? launcher.LaunchDirWorld
