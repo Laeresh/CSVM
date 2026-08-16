@@ -526,9 +526,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   graze lethal and a slow steep ram harmless, both backwards. Port the formula and read its four
   numbers from `player.zrd.json`'s `crash` block instead of hardcoding them. `SurviveHit`'s own
   `vn >= CrashSpeed` test (`FlightController.cs:2490`) is the same mistake on the plane's side of the
-  contact. The struck C1 hangar's def and its HP/thresholds are still owed (the C1 building def is
-  not `hangar3` — that zrdr def is the ON_CALL *doors* anim), but only to CHECK the ported formula,
-  no longer to calibrate a free constant. (c) The `--damage-hd`
+  contact.
+  ✅ **The owed def lookup is done, and the decoded law reproduces BOTH original-game observations
+  with nothing tuned.** The struck C1 building is the `m_build01`–`m_build07` family (the
+  `--destroy=m_build` probe's target), not `hangar3`, which is the ON_CALL *doors* anim as suspected.
+  Each carries `health 60`, `activation WeaponHit`, and `DAMAGE_SEQUENCE` thresholds at **36** and
+  **18** (`extracted/C1/cam_anim/m_build03-m_build03-m_bld_healthy.json`). Against the authored
+  `[50, 300]`: any contact shallower than ~33° deals the flat floor 50, leaving **10 HP**, which is
+  alive and past the deepest threshold, so a survivable graze lands it in stage-2 smoke-and-burn,
+  which is test 2 exactly. A contact steeper than ~36° exceeds 60 and destroys it, which is test 1.
+  Pinned by `CollisionDamageTests.AGrazeLeavesAC1BuildingAliveInItsDeepestDamageStage`. The playtest
+  is now a confirmation, not a calibration.
+  ⚠ **The object's own damage reduction (`+0xbc`) is still unmodelled**, and our destructible data
+  carries no equivalent field. The agreement above suggests it is zero or small for these defs; a
+  playtest that lands stage 2 on a graze and death on a ram leaves it that way, and one that lands
+  a stage short is the evidence that it is not. (c) The `--damage-hd`
   `collide[✓/✗]` gate (`Probes.cs:683`) *asserts the old semantics* — WeaponHit towers ignoring
   collision is its ✗ leg — and must flip with the code, or it will fail green. (d) Plane-vs-plane ram
   damage, the plane's OWN damage on a survivable contact, and zeppelin parts are NOT this item: they

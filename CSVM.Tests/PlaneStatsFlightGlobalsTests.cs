@@ -69,10 +69,9 @@ public class PlaneStatsFlightGlobalsTests
         Assert.Equal(0.6f, s.BounceFactor, 3);
         Assert.NotEqual(0.8f, s.BounceFactor, 3);
 
-        // The collision damage pair's ranges sit in that same `crash` block, authored [50, 300]
-        // for both against compiled fallbacks of [15, 200]. Element 0 is the FLOOR and element 1
-        // the SCALE; reading them in the other order would silently swap a 50 HP floor for a
-        // 300 HP one and break every contact (`BL-302`).
+        // The collision damage ranges, same `crash` block: authored [50, 300] against compiled
+        // fallbacks [15, 200]. ⚠ Element 0 is the FLOOR and element 1 the SCALE — read in the
+        // other order a 50 HP floor silently becomes a 300 HP one (`BL-302`).
         Assert.Equal(50f, s.CollideArmorFloor, 3);
         Assert.Equal(300f, s.CollideArmorScale, 3);
         Assert.Equal(50f, s.CollideHealthFloor, 3);

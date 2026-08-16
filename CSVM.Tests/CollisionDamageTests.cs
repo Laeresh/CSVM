@@ -82,6 +82,34 @@ public class CollisionDamageTests
         Assert.True(CollisionDamage.Term(Crossing + 0.05f, Floor, Scale) > Floor);
     }
 
+    /// <summary>The law against the real struck object, which is what `BL-302`'s two original-game
+    /// observations constrain. C1's airfield buildings (<c>m_build01</c>–<c>07</c>) carry
+    /// <c>health 60</c> and <c>DAMAGE_SEQUENCE</c> thresholds at 36 and 18. A shallow graze deals
+    /// the flat floor 50, leaving 10 HP: alive, past the deepest threshold, the stage-2 burn the
+    /// original showed. A steeper contact passes 60 and destroys it, as a full ram did. Nothing
+    /// here is tuned; both fall out of the authored ranges.</summary>
+    [Fact]
+    public void AGrazeLeavesAC1BuildingAliveInItsDeepestDamageStage()
+    {
+        const float BuildingHealth = 60f;
+        const float DeepestThreshold = 18f;
+
+        // ~20° off the surface, the shallow graze: the floor governs.
+        float graze = CollisionDamage.Term(
+            CollisionDamage.Severity(new Vector3(0.9397f, -0.342f, 0f).Normalized(), Vector3.Up),
+            Floor, Scale);
+        Assert.Equal(Floor, graze, 3);
+        float left = BuildingHealth - graze;
+        Assert.True(left > 0f, $"the graze must not kill it: {left} HP left");
+        Assert.True(left <= DeepestThreshold, $"…and must reach stage 2: {left} HP vs <= {DeepestThreshold}");
+
+        // ~45°, a real ram: past the pool outright.
+        float ram = CollisionDamage.Term(
+            CollisionDamage.Severity(new Vector3(0.7071f, -0.7071f, 0f).Normalized(), Vector3.Up),
+            Floor, Scale);
+        Assert.True(ram > BuildingHealth, $"a ram must destroy it: {ram} vs {BuildingHealth} HP");
+    }
+
     /// <summary>The entity-versus-entity cut is a fifth, and it is the value the non-player branch
     /// applies. The player never reaches it — that asymmetry lives in FlightController, not
     /// here.</summary>
