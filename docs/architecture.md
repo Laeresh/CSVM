@@ -1024,9 +1024,10 @@ the vehicle def's `thirdp` `TurretMount`s × `TurretDefs` × the built plane mod
 `FlightController.SimStep`) and world emplacement (`BuildEmplacements`, per matched `NODES`
 pattern node via `AnimRuntime.FindNodes` with multi-segment paths scoped to the prior match,
 ticked by `Session/TurretEmplacementRuntime`). Per tick: nearest hostile aircraft inside
-`DETECTION_RANGE` (team gate; carried = host's `FlightController.Team`, emplacement =
-`EngineTeamFor` over the authored/default TEAM, ally now the fixed `AimAssist.PlayerTeam` rather
-than a particular pilot's own), `AimAssist.TryIntercept` lead (no solution ⇒ track, hold fire),
+`DETECTION_RANGE` (team gate through `AimAssist.Hostile`; carried = host's
+`FlightController.Team`, emplacement = the authored/default `TurretDef.TeamId` with no conversion,
+since one integer space covers aircraft and emplacements alike),
+`AimAssist.TryIntercept` lead (no solution ⇒ track, hold fire),
 wrap-aware directed yaw clamp + pitch clamp, bounded slew (3.0/s), pose written onto the PARTS
 nodes, then the fire gates: `Activated`, attack window, 15° barrel-on-solution cone, cached
 1–2 s world-only line of sight, `FIRE_RATE` redraw. `PlatformOf`/`PlatformColliderRids` are what

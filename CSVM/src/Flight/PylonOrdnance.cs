@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -85,7 +86,7 @@ public sealed class PylonOrdnance
                 if (!want && _hidesLogged < 12)
                 {
                     _hidesLogged++;
-                    GD.Print($"pylon ordnance: pylon{m.Hardpoint.Index} dry — mounted model hidden");
+                    Log.Info("weapons", $"pylon ordnance: pylon{m.Hardpoint.Index} dry — mounted model hidden");
                 }
             }
         }

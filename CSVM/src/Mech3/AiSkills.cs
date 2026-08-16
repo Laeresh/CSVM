@@ -237,5 +237,9 @@ public sealed class AiSkills
     /// <summary>The quick-draw shot-acceptance cone half-angle off the target's nose/tail,
     /// degrees (50° at 1 → 89° at 9 — a better pilot takes more oblique shots).</summary>
     public float QuickDrawAngleDeg(float rating) => At("quick_draw_angle", rating);
+
+    /// <summary>The per-launch ordnance dice, 0–1 (0.05 at 1 → 0.44 at 9). Despite the shared
+    /// name this is not a gun term: it gates nothing but an ordnance launch.</summary>
+    public float QuickDrawChance(float rating) => At("quick_draw_chance", rating);
 }
 

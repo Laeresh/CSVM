@@ -341,8 +341,17 @@ public partial class GameSession : Node3D
                     DeadEyeAngleDeg = _aiSkills.DeadEyeAngleDeg(skill),
                     QuickDrawAngleDeg = _aiSkills.QuickDrawAngleDeg(skill),
                 };
+                // The ordnance half rides the same rating, on its own draw off the ai stream so the
+                // launch dice and the dead-eye scatter cannot walk each other's sequence.
+                var ordRng = new RandomNumberGenerator { Seed = (ulong)(uint)Rng.NewIntSeed(Rng.Ai) };
+                pilot.Rocketeer = new AiRocketeer(ordRng.Randf)
+                {
+                    QuickDrawAngleDeg = _aiSkills.QuickDrawAngleDeg(skill),
+                    QuickDrawChance = _aiSkills.QuickDrawChance(skill),
+                };
                 GD.Print($"ai: gunner armed at skill {skill} (dead-eye " +
-                         $"{pilot.Gunner.DeadEyeAngleDeg:0.00}°, quick-draw {pilot.Gunner.QuickDrawAngleDeg:0}°)");
+                         $"{pilot.Gunner.DeadEyeAngleDeg:0.00}°, quick-draw {pilot.Gunner.QuickDrawAngleDeg:0}°, " +
+                         $"ordnance roll {pilot.Rocketeer.QuickDrawChance:0.00} per {pilot.Rocketeer.RefireSeconds:0} s)");
             }
             catch (Exception e)
             {

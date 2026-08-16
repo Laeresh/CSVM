@@ -127,7 +127,7 @@ public sealed class AiAircraftSpawner
                 }
                 catch (Exception e)
                 {
-                    GD.PushWarning($"ai: loadout bind failed for '{stats.DefName}': {e.Message}");
+                    Log.Warn("weapons", $"ai: loadout bind failed for '{stats.DefName}' — this plane flies unarmed error={e.Message}");
                 }
             }
 

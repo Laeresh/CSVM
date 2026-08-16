@@ -173,9 +173,18 @@ public static class AimAssist
     public const int PlayerTeam = 1;
 
     /// <summary>The team CSVM's world objects (destructibles) sit on: hostile to every pilot, since
-    /// nothing in the world data makes them anyone's own. Well clear of any pilot team
-    /// (<see cref="TeamOfPilot"/> = index + 1, at most 4).</summary>
+    /// nothing CSVM reads out of the world data makes them anyone's own.
+    /// ⚠ A remake-only rule: the original leaves an unauthored world object NEUTRAL, and so
+    /// untargetable (docs/org/targeting.md "The team space"). Do not port that until the ownership
+    /// field is read, or the gun assist goes quiet over every ground target — <c>BL-407</c>.</summary>
     public const int WorldTeam = 100;
+
+    /// <summary>Where the extra humans of a splitscreen <c>--vs</c> session sit, clear of every id
+    /// the world data authors. CSVM-only: the original has no per-pilot team ladder.
+    /// ⚠ Never collapse this back onto a raw pilot index. An authored <c>TEAM</c> id is the same
+    /// integer at runtime (docs/org/targeting.md "The team space"), so player two would take the id
+    /// the 22 no-<c>TEAM</c> emplacements default to and stop being engaged by them.</summary>
+    public const int VersusTeamBand = 10;
 
     /// <summary>The proximity fuse that puts a round in flight on the assist's ordnance list: the
     /// engine tests the def's <c>DETONATION_DISTANCE²</c> against 0.01, i.e. a fuse longer than
@@ -300,13 +309,25 @@ public static class AimAssist
     public static float ConeCosFor(in AimCandidate candidate, float weaponConeCos) =>
         candidate.ConeOverride >= 0f ? Mathf.Cos(candidate.ConeOverride) : weaponConeCos;
 
-    /// <summary>The default team for a pilot index with no mission-assigned team: pilot N is team
-    /// N+1, so every pane is hostile to every other — what <c>--vs</c> and free flight run on.
-    /// <see cref="FlightController.Team"/> falls back to this until a mission sets one explicitly
-    /// (docs/architecture.md's <c>FlightController.cs</c> entry). A round nobody owns
-    /// (<see cref="ProjectilePool.NoShooter"/>) is <see cref="NeutralTeam"/>, so it is
-    /// untargetable.</summary>
-    public static int TeamOfPilot(int shooterId) => shooterId >= 0 ? shooterId + 1 : NeutralTeam;
+    /// <summary>Whether two teams may shoot each other: the ids differ AND neither is
+    /// <see cref="NeutralTeam"/>. Team 0 is not a wildcard, and the test is symmetric.
+    /// The original runs this one predicate over one integer space for every combat object alike,
+    /// aircraft, emplacement and world object (docs/org/targeting.md "The team space"), so every
+    /// gate in CSVM asks it here rather than restating it.</summary>
+    public static bool Hostile(int shooterTeam, int candidateTeam) =>
+        shooterTeam != candidateTeam && shooterTeam != NeutralTeam && candidateTeam != NeutralTeam;
+
+    /// <summary>The default team for a pilot index with no mission-assigned team: pilot 0 is
+    /// <see cref="PlayerTeam"/>, every further pilot lands in <see cref="VersusTeamBand"/>, and a
+    /// round nobody owns (<see cref="ProjectilePool.NoShooter"/>) is <see cref="NeutralTeam"/>.
+    /// ⚠ Pilot 0 must keep <see cref="PlayerTeam"/>: the four authored <c>TEAM 1</c> emplacements
+    /// are the player's own zeppelin's rings, and banding pilot 0 turns them on player one.</summary>
+    public static int TeamOfPilot(int shooterId) => shooterId switch
+    {
+        < 0 => NeutralTeam,
+        0 => PlayerTeam,
+        _ => VersusTeamBand + shooterId,
+    };
 
     /// <summary>The launch scatter (<c>FUN_00460940</c> → <c>FUN_004608a0</c>, docs/org/aim-assist.md
     /// "The scatter cone"), the only scatter the original applies to a player's round: rotate the aim
@@ -378,8 +399,7 @@ public static class AimAssist
             {
                 continue; // the engine's vtable +0x14 predicate: dead, or not live yet
             }
-            // Same team, or EITHER side unaffiliated, rejects the pair — team 0 is not a wildcard.
-            if (candidate.Team == NeutralTeam || scan.Team == NeutralTeam || candidate.Team == scan.Team)
+            if (!Hostile(scan.Team, candidate.Team))
             {
                 continue;
             }
