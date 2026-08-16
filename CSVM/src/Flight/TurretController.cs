@@ -52,7 +52,7 @@ public sealed class TurretController
     private readonly AimCandidateSet _scan = new(); // reused per tick, aircraft list only
     private readonly Transform3D _yawRest;
     private readonly Transform3D _pitchRest;
-    private readonly int _team;            // engine-space team (AimAssist convention)
+    private readonly int _team;            // team id: the authored TEAM, or the host's
     private readonly Node3D? _healthyNode; // emplacement kill switch; null on a carried turret
     private readonly Node3D? _site;        // emplacement placement node; null on a carried turret
     private readonly Node3D? _platform;    // the hull section the emplacement is mounted on

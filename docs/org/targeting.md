@@ -557,7 +557,7 @@ element draws the triangle, and how it is rotated, is unresolved.
 | Selection state | sticky in plane `+0x948`, survives everything except death and an explicit clear | none; there is no selection |
 | Candidate pool | four typed pools, rebuilt and re-sorted every frame | `AimCandidateSet`'s same four lists exist for the gun assist, but the marker walks `ProjectilePool.CollectAircraft` alone |
 | Classes | Enemy / Ally / Non-Aircraft, plus an Objective companion flag | none; a single team gate |
-| Team space | one space for everything: `0` neutral, `1` ally, enemy index `N` = `N + 2`, stored at `+0x8` on every combat object | the same space; an authored id is the runtime id (`BL-403`) |
+| Team space | one space for everything: `0` neutral, `1` ally, enemy index `N` = `N + 2`, stored at `+0x8` on every combat object | the same space; an authored id is the runtime id |
 | Hostility test | one predicate over raw ids: differ, and neither is `0` | `AimAssist.Hostile`, asked by both the gun assist and the turret gunner rather than restated at each gate |
 | Splitscreen pilots | no per-pilot ladder exists | a remake-only rule: pilot 0 is the player's side, further pilots land in `AimAssist.VersusTeamBand` so a `--vs` player cannot inherit the id the no-`TEAM` emplacements default to |
 | World objects | neutral until a scene node authors two-bit ownership, and untargetable while neutral | `AimAssist.WorldTeam` (100), hostile to every pilot; the port is `BL-407` |

@@ -612,64 +612,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Weapons & combat
 
-- `BL-403` `[Bug]` **A zeppelin's turrets shoot the fighters that zeppelin just launched: emplacement
-  teams and aircraft teams are two different numbering spaces that can never agree.** *Evidence:* the
-  user at the controls, C2 IA1 `zeppelin_run`, watching the bay-launched wave die to its own airship.
-  The log shows both halves of the mismatch in plain numbers: `ia: 24 wave enemies across 4 wave(s),
-  built inert, team=2` and `ia: zeppelin 'multiplayer1zep' turrets: 14 emplacement(s) ACTIVATED with
-  the objective`, then every one of those turrets reporting
-  `turret MSG_TUR_BELLY@ctur3: engaging (first shot, team 202)`.
-  **The mechanism.** `TurretController.EngineTeamFor` (`TurretController.cs:264-269`) maps an
-  emplacement's authored `TEAM` id into a band clear of the pilot teams: 0 stays neutral, 1 becomes
-  `PlayerTeam`, and **anything else becomes `EmplacementEnemyBand + id`**, with the band at 200
-  (`:53`). An aircraft's team is not banded: `InstantActionRuntime.EnemyTeam` is literally
-  `PlayerTeam + 1` = 2 (`InstantActionRuntime.cs:51`). So a turret authored `TEAM 2` and a fighter on
-  enemy team 2 are engine teams **202 and 2**, and the hostility test
-  (`TurretController.cs:617`, same-team-or-either-neutral rejects) can never match them. The turret
-  therefore treats every aircraft in the sky as hostile, its own side included.
-  ⚠ **What the band was protecting is real; the band is not.** The 22 no-`TEAM` world emplacements
-  must keep engaging the player, which is why they default to the loader's "first enemy team"
-  (`:49-52`, `docs/formats/turrets.md` "Teams"). Collapsing `200 + id` onto the raw id does put them
-  on team 2 alongside the Instant Action wave — and that is correct, because it is what the original
-  does: they are allies of the wave and hostile to the player on team 1, so they go on shooting at
-  the player exactly as before. Verify that at the controls rather than assuming it; it is the one
-  behaviour the removal could plausibly break.
-  ⚠ **The zeppelin case is the one that shows it, not the only one.** Any mission that puts an
-  emplacement and an AI aircraft on the same authored side has this, so a fix wants checking against
-  the `world-turrets` census (C1: 5 `aagun`, 9 `bbtur`, 9 `ctur`, 14 `ltur`/`rtur`, 2 zep
-  `doublecannon`, 12 `locklear_*`) rather than against the zeppelin alone.
-  *Fix shape: decoded, and the band is an invention to delete*
-  ([`docs/org/targeting.md`](docs/org/targeting.md) "The team space"). The original runs ONE space
-  for everything: `0` neutral, `1` ally, enemy index `N` = `N + 2` (`FUN_0045c260`), stored at
-  combat-object `+0x8` by one virtual setter (`FUN_00441b80`, write at `0x00441b86`) whatever the
-  entity kind, and read by one predicate (`FUN_004a5b90` and three siblings) that compares the two
-  RAW ids and rejects on equal-or-either-neutral. No band, no per-kind offset, anywhere. A turret's
-  own constructor default is `FUN_0045c260(_, 0)` = **2** (`FUN_004a9a60`, write at `0x004a9a99`) —
-  the same 2 an Instant Action enemy fighter carries (`FUN_0045a390` → `0x004a259f`), which is
-  exactly why the original's zeppelin turrets never engage their own wave. So store the authored
-  `TEAM` integer raw, keep the absent-key default at enemy index 0 = 2, and drop
-  `EmplacementEnemyBand` entirely. `AimAssist.WorldTeam` (100) is the same finding but NOT the same
-  fix, and is split out as `BL-407`: a world object is neutral until its scene node authors
-  ownership, and zeroing the constant with no ownership reader would silence the gun assist over
-  every ground target.
-  ⚠ **The pilot ladder is what has to move instead.** `AimAssist.TeamOfPilot` derived a team from
-  the pilot index, so a splitscreen `--vs` player two took id 2 — the id the no-`TEAM` emplacements
-  default to — and those emplacements would have stopped engaging that player the moment the band
-  went. Pilot 0 keeps `PlayerTeam` (the four authored `TEAM 1` rings are the player's own
-  zeppelin's) and every further pilot lands in `AimAssist.VersusTeamBand`.
-  ⚠ **Do not fix this by exempting the launching zeppelin's own turrets.** That hides the mismatch
-  for one mission type and leaves it live everywhere else.
-  *How you'd know it worked:* fly `--chapter=C2 --mission=IA1 --zeppelins`; the bay-launched wave
-  forms up and attacks the player, and the zeppelin's 14 emplacements engage the player and its
-  wingmen while never firing on their own wave.
-  *Cross-refs:* [`docs/org/targeting.md`](docs/org/targeting.md) ("The team space" — the decode this
-  entry is now built on), `docs/formats/turrets.md` ("Teams"), `InstantActionRuntime.cs` (`EnemyTeam`),
-  `TurretController.cs` (`EngineTeamFor`, `EmplacementEnemyBand`), `BL-350` (the drop is not gated on
-  the doors opening, open in the same mission).
-
 - `BL-407` `[Bug]` **World objects are hostile to everyone; the original leaves an unauthored one
   neutral.** *Evidence:* the team-space decode ([`docs/org/targeting.md`](docs/org/targeting.md)
-  "The team space"), taken while fixing `BL-403`. CSVM stamps every destructible with
+  "The team space"), taken while unifying the emplacement and aircraft team spaces
+  (`git log --grep=BL-403`). CSVM stamps every destructible with
   `AimAssist.WorldTeam` (100) through `AddStructures`'s default, which `FlightController.cs:1873`
   takes on every frame of every session, so a crate is hostile to every pilot alike. The original
   builds a world object through the same constructor as an aircraft (`FUN_004a3360` →
@@ -685,7 +631,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ownership field turns out to select still does.
   *Cross-refs:* `BL-400` (the other half: structures on the Non-Aircraft SELECTION cycle need a
   curated `targets.zrd`-equivalent list — this item is the gun assist's team, they fail in
-  different subsystems), `AimAssist.WorldTeam`, `BL-403` (the decode's origin).
+  different subsystems), `AimAssist.WorldTeam`, [`docs/org/targeting.md`](docs/org/targeting.md)
+  ("The team space", where the decode this splits off from is written up).
 
 - `BL-066` `[Feature]` **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
   (`messages.json` 126–129), implying world pickups that restore ammo. **Carries research
