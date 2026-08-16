@@ -120,6 +120,24 @@ public sealed class AiPilot
     public static float HeadingDegOf(Vector3 dir) =>
         Mathf.RadToDeg(Mathf.Atan2(-dir.X, -dir.Z));
 
+    /// <summary>The decoded aspect test (<c>FUN_0041d9f0</c> at <c>0x0041dd49</c>): whether the
+    /// pursuer sits on its victim's own axis, within the pilot's <c>quick_draw_angle</c> (vehicle
+    /// <c>+0x960</c>, a cosine) of it. BOTH cones count — the original compares the magnitude of
+    /// the dot against the victim's backward axis, so a victim coming at us and a victim we are
+    /// sitting behind read alike, and each aims the law at the victim itself rather than at the
+    /// lead point ahead of it. Only the reversed arm this port omits ever tells the two apart.
+    ///
+    /// <para>The original also sets the flag outright for a victim that is not an aircraft;
+    /// every quarry reaching <see cref="FlyPursuit"/> is one, so that arm has nothing to
+    /// port.</para></summary>
+    public static bool IsOnGunAxis(Vector3 toQuarry, Vector3 quarryNose, float quickDrawAngleDeg)
+    {
+        if (toQuarry.LengthSquared() < 1f || quarryNose.LengthSquared() < 1e-6f)
+            return false;
+        float cos = toQuarry.Normalized().Dot(quarryNose.Normalized());
+        return Mathf.Abs(cos) > Mathf.Cos(Mathf.DegToRad(quickDrawAngleDeg));
+    }
+
     /// <summary>The decoded merge test (<c>FUN_0041d9f0</c> at <c>0x0041e130</c>): the victim is
     /// inside <see cref="MergeRangeM"/> and the two are flying AT each other — each party's own
     /// velocity lies within <see cref="MergeClosureFraction"/> of its speed along the line of
@@ -219,9 +237,9 @@ public sealed class AiPilot
     }
 
     /// <summary>Pursuit: the aim point is the decoded lead offset ahead of the victim along the
-    /// victim's own facing, flown on the engaged table with its authority bonus. A victim coming
-    /// at us inside its own quick-draw cone is the original's head-on case, which aims at the
-    /// victim itself and lets the law solve the firing problem instead of a fly-to.
+    /// victim's own facing, flown on the engaged table with its authority bonus. Sitting on the
+    /// victim's own axis (<see cref="IsOnGunAxis"/>) aims at the victim itself instead and lets
+    /// the law solve the firing problem rather than a fly-to.
     ///
     /// <para>On top of that, a merge (<see cref="IsMerging"/>) replaces the aim VELOCITY the law
     /// is handed: the victim's own velocity gives way to a flat <see cref="MergeSpeedMps"/>
@@ -237,9 +255,8 @@ public sealed class AiPilot
 
         var nose = quarry.NoseDirection;
         var vel = quarry.WorldVelocity;
-        bool headOn = Gunner is { } g && toQuarry.LengthSquared() > 1f
-            && toQuarry.Normalized().Dot(nose) < -Mathf.Cos(Mathf.DegToRad(g.QuickDrawAngleDeg));
-        var aim = headOn
+        bool onAxis = Gunner is { } g && IsOnGunAxis(toQuarry, nose, g.QuickDrawAngleDeg);
+        var aim = onAxis
             ? quarry.WorldPosition
             : quarry.WorldPosition + (nose * AiControlLaw.LeadOffsetFor(vel.Length()));
         var aimVelocity = vel;
@@ -249,7 +266,7 @@ public sealed class AiPilot
             aimVelocity = u * MergeSpeedMps;
             aim.Y += new Vector2(u.X, u.Z).Length() * MergeVerticalBias(model.Speed);
         }
-        return Fly(model, dt, aim, aimVelocity, AiLawParams.Engaged, engaged: true, gunLead: headOn);
+        return Fly(model, dt, aim, aimVelocity, AiLawParams.Engaged, engaged: true, gunLead: onAxis);
     }
 
     /// <summary>Lay off (D15, the rubber-band assist): let the pursuer catch up. Steers the course

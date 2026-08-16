@@ -106,6 +106,34 @@ public class AiPilotTests
         Assert.False(pilot.SteeringPatrol);
     }
 
+    /// <summary>The aspect test (<c>FUN_0041d9f0</c> at <c>0x0041dd49</c>) takes BOTH of the
+    /// victim's cones: a victim coming at us and a victim we sit behind read alike, and only a
+    /// beam aspect leaves the pursuer flying to the lead point. The cone is the pilot's own
+    /// <c>quick_draw_angle</c>, so a better pilot goes to a firing solution from further off the
+    /// axis.</summary>
+    [Fact]
+    public void TheAspectTestTakesBothOfTheVictimsCones()
+    {
+        var toQuarry = new Vector3(0f, 0f, -300f);   // the victim is dead ahead of us
+        var comingAtUs = new Vector3(0f, 0f, 1f);    // its nose points back down the line
+        var flyingAway = new Vector3(0f, 0f, -1f);
+        var beam = new Vector3(1f, 0f, 0f);
+
+        Assert.True(AiPilot.IsOnGunAxis(toQuarry, comingAtUs, 50f));
+        Assert.True(AiPilot.IsOnGunAxis(toQuarry, flyingAway, 50f));   // the tail chase, decoded
+        Assert.False(AiPilot.IsOnGunAxis(toQuarry, beam, 50f));
+
+        // The cone is the pilot's: 60° off the axis is beam to a rating-1 pilot (50°) and on-axis
+        // to a rating-9 one (89°).
+        var off60 = new Vector3(Mathf.Sin(Mathf.DegToRad(60f)), 0f, -Mathf.Cos(Mathf.DegToRad(60f)));
+        Assert.False(AiPilot.IsOnGunAxis(toQuarry, off60, 50f));
+        Assert.True(AiPilot.IsOnGunAxis(toQuarry, off60, 89f));
+
+        // Degenerate inputs never claim an axis.
+        Assert.False(AiPilot.IsOnGunAxis(Vector3.Zero, comingAtUs, 50f));
+        Assert.False(AiPilot.IsOnGunAxis(toQuarry, Vector3.Zero, 50f));
+    }
+
     /// <summary>The merge test's four decoded gates (<c>FUN_0041d9f0</c> at <c>0x0041e130</c>):
     /// inside 400 m, we fly at the victim, the victim flies at us, and either party more than
     /// ~37° off the line of sight disarms it. Pure geometry, so it is pinned directly rather

@@ -470,7 +470,13 @@ gives this arm its own response instead of the two above: aim 500 m along the vi
 axis, past it, and demand `−31.292799 ×` that axis. A jousting pass at the player, not avoidance.
 CSVM does not port it.
 
-Ported 2026-08-16: `AiPilot.IsMerging` / `AiPilot.MergeVerticalBias`, applied in `FlyPursuit`.
+⚠ The aspect test takes **both** of the victim's cones, since it compares a magnitude. A pursuer
+sitting on its victim's tail reads the same as one merging with it, and both aim the law at the
+victim itself; only a beam aspect flies to the lead point. Nothing downstream tells the two apart
+except the reversed arm's own gate.
+
+Ported 2026-08-16: `AiPilot.IsOnGunAxis` (the aspect test, both cones), `AiPilot.IsMerging` and
+`AiPilot.MergeVerticalBias`, all applied in `FlyPursuit`.
 
 ## The steering law both behaviours call
 
