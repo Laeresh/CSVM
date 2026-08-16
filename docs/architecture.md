@@ -2221,8 +2221,9 @@ player picked it — `Launcher.LaunchSubject` takes an Instant Action mission's 
 `InstantAction.MissionTypeLabel` ("Attacking a Zeppelin"), never `SessionSpec.ModeName`, which is
 the log file's internal tag ("fly", "stunt") and not a player's word. ⚠ No progress bar, ever, while the build stays one
 synchronous block — `StartupProfile` reports its phases only after the fact, so a bar would be a
-fiction. The original's own load screens are artwork in `crimson.rof` and are not matched yet
-(`BL-409`). The Launcher owns the show/free pair; see its entry for the deferred-build handshake.
+fiction. The original's own load screen, its six-lamp progress bar included, is artwork in
+`extracted/rimage/` and is not matched yet (`BL-409`). The Launcher owns the show/free pair; see its
+entry for the deferred-build handshake.
 
 ## src/UI/BoardMenuItem.cs
 The rows a board menu can offer — Resume, Restart, Exit. The board owning the menu decides which it

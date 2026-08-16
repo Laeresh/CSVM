@@ -2810,16 +2810,63 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-409` `[Feature]` **The load screen shows a plain panel, not the original's artwork.** A
   session build stalls the frame loop for several seconds, so both interactive paths into one (the
   launchscreen's Fly and an Instant Action Restart) draw `UI/LoadBoard` first: the shared board
-  style, the chapter and mode named, no progress. The original showed real load screens, and that
-  artwork ships in `crimson.rof` — decode which screen it picks per environment or mission type and
-  draw that instead.
-  ⚠ *Traps:* (a) Do NOT add a progress bar to the existing board on the way: the build is one
-  synchronous block and `StartupProfile` reports its phases only after the fact, so any bar is a
-  fiction. Real progress needs an incremental build first, which is a much larger item. (b) The
-  board must stay cheap to construct — it is built on the frame BEFORE the build, and anything slow
-  there just moves the stall earlier. (c) Whatever it draws, the Launcher frees it in the same tick
+  style, the chapter and mode named, no progress. The original draws a composed screen, and every
+  piece of it sits in `extracted/rimage/`, which we already read for the HUD font and the impact
+  pipper, so no new asset pipeline is needed. The background is `loadframempt.png` (800×600: riveted
+  metal border, black interior, filmstrip column, winged skull at bottom centre), with
+  `loadframempt2.png` a second variant. The load bar is `prog_blk.png` and `prog_red.png` (236×54
+  each, the same strip of six round lamps, unlit and lit), drawn part-filled as the build proceeds;
+  `prog_blkload.png`/`prog_redload.png` (338×28) and `blkprog.png` (297×14) are other bar styles the
+  game ships. The three photos are shipped artwork rather than captures: `mp-shotdown`, `mp-crash`,
+  `mp-cannon`, `mp-zepdown`, `mp-gasbag`, `mp-torpedo`, `mp-flagcapture`, `mp-flagreturn`,
+  `mp-dangerzone2` (about 230×190 RGBA, sepia, the polaroid border and tilt baked in), named for
+  objective and event types, with per-mission campaign sets alongside them (`nw-m1*`, `rm-m4*`,
+  `ha-m2*`, `hw-m5*`, `mh-m3*`).
+  *Decoded, see [`docs/org/loading-screen.md`](docs/org/loading-screen.md).* The screen is a `zrdr`
+  dialog (`extracted/zrdr/Loading.zrd.json`, 81 of them) named by `sprintf` from `loading_i%d%c` /
+  `loading_c%d%d` / `loading_m%d%c` (`0x0062950c`, `FUN_004a1910`). **There is no per-mission photo
+  choice:** every Instant Action dialog carries the same three, `MP-shotdown`, `MP-crash`,
+  `mp-dangerzone2`, and the environment digit selects nothing; only the mission letter varies, and
+  only the text (`a` DOGFIGHT AN ACE, `d` SQUADRON, `s` STUNT FLYING, `z` ZEPPELIN RUN). Multiplayer
+  varies its pictures by game mode, campaign carries none. **The bar is not measured:**
+  `FUN_004a2100` is called at 16 fixed points with a literal fraction (0.01, 0.02, 0.04, 0.07, 0.10,
+  0.20 … 0.80, 0.90), is monotonic, and never reaches 1.0; the repaint (`0x005c3d40`) fills
+  `floor(bitmapWidth × fraction)` pixels of `prog_red` over `prog_blk`, a pixel clip rather than a
+  lamp count. **The original does not decouple its build either:** `FUN_004a18a0` is a redraw pump
+  called after each milestone and throttled to one draw per 0.1 s, so the load screen runs at 10 fps
+  off the loading thread itself. A propeller cycles beside the bar at 6.0 fps (`prp0`…`prp37`).
+  *The bar needs the build decoupled first.* Godot cannot draw while `GameSession.StartSession` is
+  on the stack, so an animated bar needs the build to yield. The cheap route is an `async`
+  `StartSession` awaiting `SceneTree.ProcessFrame` at the phase boundaries the
+  `StartupProfile.Mark`/`Record` pairs already mark (`gamez`, `world`, `bind`, `anim`, `plane` and
+  the rest); C# carries the `using` scopes and the early `return false` paths across a yield
+  unchanged. Four things break and need handling: `Launcher._Process` ticking the capture director,
+  the glTF exporter and the hitch monitor against a half-built `_session`; `_hitchMonitor.Rearm` and
+  `PerfSample.Reset`, which assume the build is one block between two frames; `StartupProfile`'s
+  `total = boot + Σ(phases) + rest + first_frame` invariant, which stops holding once render time
+  lands inside `rest`; and the CLI path, which must gain no frames at all or `--det`, `--screenshot`
+  and the goldens shift (`BeginLaunch` is already the interactive-only door).
+  ⚠ *Traps:* (a) Do NOT derive the bar from measured phase durations. The original hand-assigns a
+  fraction per step, and that is the shape to copy: our `StartupProfile.Mark`/`Record` pairs already
+  bracket the same kind of boundary, so each gets a literal fraction and a monotonic setter. A
+  measured bar is the thing that misbehaves here, because on the menu-driven path a build takes
+  about 6.75 s of which `rest` is 3.63 s, so a bar weighted by the named phases alone sits near half
+  and then jumps. The yield is the real prerequisite, not the attribution.
+  (b) `SavedGames/<pilot>/Snap_*.png` is the scrapbook memento system
+  (`MOMENTOSELECTION.SCRIPT`, the `MS_` widgets in `LAYOUT.CSV`), not this screen, and
+  `loadframe.png` is a different screen again (the light route-planning frame). (c) The artwork is
+  4:3 at 800×600 with the border painted into it, so meeting a widescreen window (pillarbox, crop,
+  or nearest-neighbour upscale for a period look) is a taste call the binary cannot settle. (d) The
+  board must stay cheap to construct: it is built on the frame BEFORE the build, so a large decode
+  there just moves the stall earlier. (e) Whatever it draws, the Launcher frees it in the same tick
   the build returns, so it can never draw over the world's first frame or a `--screenshot` capture.
-  *Cross-refs:* `UI/LoadBoard.cs`, `Launcher.BeginLaunch`/`RunOwedLaunch`, `docs/architecture.md`.
+  *Still open, and prior to the work:* whether to reproduce the original screen at all. Its art is
+  800×600 with the frame painted in, which is below our window and cannot be re-rendered at a higher
+  resolution. Reproducing it means accepting a visibly soft screen, so the alternative is to keep a
+  screen of our own and take only the mechanism (yield, milestone fractions, an animated element).
+  The decode above serves either choice.
+  *Cross-refs:* `UI/LoadBoard.cs`, `Launcher.BeginLaunch`/`RunOwedLaunch`, `Utils/StartupProfile.cs`,
+  [`docs/org/loading-screen.md`](docs/org/loading-screen.md), `docs/architecture.md`.
 
 ## Splitscreen
 
