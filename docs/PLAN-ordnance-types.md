@@ -174,7 +174,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 14. ☑ `SONIC`/`FLASH`: the shared intensity model
 15. ☐ The player's screen wash: colour, weight, duration, blending
 16. ☑ The AI stun
-17. ☐ `TANGLER`: the engine-dead timer
+17. ◐ `TANGLER`: the engine-dead timer
 18. ☐ `SMOKE_SCREEN`: the stun trap
 
 ### Wave E — Flyout and gates
@@ -661,7 +661,23 @@ state as an input state.
 **⚠ Traps.** Re-entrancy is required, not accidental: `D18` refreshes the stun every frame a pilot
 stays in smoke. Do not make it single-shot.
 
-## D17 ☐ `TANGLER`: the engine-dead timer
+## D17 ◐ `TANGLER`: the engine-dead timer
+
+**Verdict.** The mechanism landed; the hit-side wiring is pending in the Projectile lane, so nothing
+fires a choker yet. `TanglerChoke.Duration(distanceSq, radiusRaw, min, max)` is the curve, with the
+unit mismatch reproduced as Decision 7 asks, and `TanglerChoke.EngineDeadBounds(WeaponDefs)` resolves
+the `ENGINE_DEAD` pair the way the original's globals do: every `TANGLER` parse overwrites them, so
+the last entry carrying one wins. They are taken as arguments rather than added to `WeaponDefs`,
+which this item does not own; this install authors exactly one `TANGLER` (`wep_12`), so the rule is
+unobservable in play either way. The cutout is `FlightModel.ChokeEngine`, an extend-only timer that
+zeroes the thrust term and nothing else, with `FlightController.TryChokeEngine` holding the victim
+guards and `Respawn` clearing it. Two things this item's own text left open: the choker applies to a
+human exactly as to an AI (the branch has no player guard, unlike the stun), and what the original
+does beyond thrust is a **sound** swap, the rising edge exchanging the vehicle def's engine loop for
+a second authored loop (`FUN_004b15c0`, vehicle def `+0x18c`/`+0x190`), which our `PlaneStats` has no
+slot for; our side cuts thrust only, so a choked aircraft still sounds and looks like it is running.
+Owed at the controls, once the hit-side wiring lands: 13 s of dead engine at the centre and 5 s past
+about 4.6 m, bleeding speed on drag.
 
 **Goal.** A choker cuts the target's engine for a distance-scaled time, and does nothing else.
 

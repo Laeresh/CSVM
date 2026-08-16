@@ -235,6 +235,18 @@ public sealed class FlightModel
     /// read, and the gap stands recorded in docs/org/flightModel.md, "Stall".</summary>
     public float StallSpeed { get; }
 
+    /// <summary>Seconds left on the choker's engine-dead timer (<c>TANGLER</c>, the victim's
+    /// <c>+0x2e0</c> behind the disabled-systems bit): while it runs the thrust term is zero and
+    /// every other force is untouched, so the aircraft bleeds speed on drag rather than snapping to
+    /// stall. The lever is left where the pilot put it, as the original leaves it, so the engine
+    /// comes back at the throttle setting it died on. Set through <see cref="ChokeEngine"/>.</summary>
+    public float EngineDeadRemainingS { get; private set; }
+
+    /// <summary>Whether the engine is dead — the disabled-systems bit's one flight-side reader. No
+    /// AI code reads it: a choked pilot is never told, and simply flies an aircraft with no
+    /// thrust.</summary>
+    public bool EngineDead => EngineDeadRemainingS > 0f;
+
     /// <summary>How much of the available thrust the nose's attitude leaves: 1 wings-level, 0.6612
     /// pointing straight up, 1.24 pointing straight down. A climb is PENALISED and a dive rewarded.
     /// ⚠ The argument is the world-up component of the BODY Z AXIS and the nose points along −Z, so
@@ -342,10 +354,28 @@ public sealed class FlightModel
         Throttle = throttle;
     }
 
+    /// <summary>Kills the engine for <paramref name="seconds"/>, the choker's effect
+    /// (<c>FUN_004b1690</c>). The timer only ever EXTENDS: a shorter choke landing on a running one
+    /// changes nothing, which is what makes a stream of hits build rather than reset. Non-positive
+    /// seconds are ignored; the victim guards live in <c>FlightController.TryChokeEngine</c>.</summary>
+    public void ChokeEngine(float seconds)
+    {
+        if (seconds > EngineDeadRemainingS)
+            EngineDeadRemainingS = seconds;
+    }
+
+    /// <summary>Restarts a dead engine outright: the respawn reset, so a fresh airframe never flies
+    /// with the last one's choke still running.</summary>
+    public void ClearChoke() => EngineDeadRemainingS = 0f;
+
     public void Step(FlightInput input, float dt)
     {
         Throttle = Mathf.Clamp(input.Throttle, 0f, 1f);
         var s = Stats;
+
+        // Spent before the forces below read it, so the frame the timer runs out already has thrust.
+        if (EngineDeadRemainingS > 0f)
+            EngineDeadRemainingS = Mathf.Max(0f, EngineDeadRemainingS - dt);
 
         // Read through Config so config.json can override them without a recompile, and read
         // unconditionally once per step so every key registers even on a frame that never enters the
@@ -510,7 +540,10 @@ public sealed class FlightModel
         float dragAccel = s.VehWeight > 1e-3f
             ? qRefArea * s.DragFactor * cd * StandardG / s.VehWeight
             : 0f;
-        var accel = nose * (ThrustAccelAt(Speed, Throttle) * AttitudeThrustScale(Attitude.Z.Y))
+        // A choked engine contributes no thrust and nothing else: no drag term, no lift term and no
+        // airspeed clamp are touched (docs/org/ordnanceTypes.md, "The choker, settled").
+        float thrustAccel = EngineDead ? 0f : ThrustAccelAt(Speed, Throttle) * AttitudeThrustScale(Attitude.Z.Y);
+        var accel = nose * thrustAccel
                     - VelocityDir * dragAccel
                     + Vector3.Down * s.Gravity
                     + liftAccel;

@@ -112,6 +112,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
 - `src/Flight/DisablingIntensity.cs` — the decoded `SONIC`/`FLASH` intensity plateau and `FLASH`'s facing test, on squared distances; feeds the player's wash weight and the AI stun's duration.
+- `src/Flight/TanglerChoke.cs` — the choker's engine-dead duration and the `ENGINE_DEAD` globals it reads; the original's squared-distance-over-raw-radius mismatch, reproduced.
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
 - `src/Flight/CameraController.cs` — the flown plane's camera: roll-following chase, numpad fixed views, paused orbit. Steers a `Camera3D` it does not own.
 - `src/Flight/ImpactOutcome.cs` — what a weapon×surface hit should do (effect, sound, stand-in, damage) as a value; `Resolve` is pure and engine-free.
@@ -1092,6 +1093,18 @@ victim, scaled by twice the dot below 0.5); `SONIC` does not, and that is the on
 difference between the flags. The consumers are the player's screen wash, the AI stun and the smoke
 screen; the module itself knows about none of them.
 
+## src/Flight/TanglerChoke.cs
+The choker's engine-dead duration (`FUN_004b9bc0`'s `TANGLER` branch, decoded in
+[org/ordnanceTypes.md](org/ordnanceTypes.md)): a static, Godot-`Node`-free `Duration` of
+`ENGINE_DEAD_max × (1 − d²/RADIUS)` floored at `ENGINE_DEAD_min`, plus `EngineDeadBounds`, which
+resolves the bounds the way the original does — they are a pair of GLOBALS every `TANGLER` parse
+overwrites, so the last entry carrying one wins for every choker in the install (this one authors
+exactly one, `wep_12` at `[5, 13]`). **The numerator is squared and the radius is raw**, an authentic
+unit mismatch that puts the full-strength zone of a 35 m weapon at about 4.6 m; the floor covers
+everything past it, so the curve alone never returns less than the minimum and the fuse decides
+whether a hit happens at all. The seconds go to `FlightController.TryChokeEngine`; this module knows
+nothing about aircraft.
+
 ## src/Flight/CamParams.cs
 One aircraft's camera tuning out of `camparam.json` ([formats/camparam.md](formats/camparam.md)):
 the `default` block, then the plane's own block layered on top. Seven of the eleven airframes carry
@@ -1903,6 +1916,10 @@ player (`0x48c520`, `0x48cd3e`, `0x48e925`, `0x48c317`) — not copied, because 
 player and this engine flies four. `BounceNormalSpeed` is the one law here that no step of the plant
 calls: the decoded collision restitution (`bounce_factor` × the lever-arm partition), asked for
 by `FlightController.SurviveHit`, which owns the contact and the player-only gate.
+The choker's engine cutout lives here as well (`ChokeEngine` / `ClearChoke` / `EngineDeadRemainingS`):
+an extend-only timer, spent at the top of `Step`, that zeroes the thrust term and touches nothing
+else — no drag, lift or airspeed change, so a choked aircraft decelerates on drag alone. The throttle
+lever is left where the pilot put it, which is why the engine comes back at the setting it died on.
 Every mechanism and trap is documented at the line that computes
 it; the decode, the standing decode-vs-footage gaps and the deliberately-absent limiters are
 [`org/flightModel.md`](org/flightModel.md), and the measurement rules are `verification.md`.
@@ -2019,7 +2036,11 @@ built — flight, collision, weapons and damage are byte-for-byte the player's p
 `TakeProjectileHit`/`SurviveHit` run the decoded damage flow (PlaneDamage: dead-zone redirect +
 whole-pool overflow, 2026-08-14) — the struck zone is Apply's ANSWER, not the geometric guess,
 and `IsDestroyed` is tested on every hit, zone-less included; the HUD DMG line leads with the
-hull pair. Collaborators:
+hull pair. The two disabling entries a hit path calls on a struck aircraft sit beside them:
+`TryStunPilot(seconds)` (never a human) and `TryChokeEngine(seconds)`, the choker's, which does apply
+to a human because the original's `TANGLER` branch has no player guard — the engine is a mechanical
+system and nobody, AI included, is told about it. Both refuse an out-of-play airframe, and `Respawn`
+clears both. `EngineDeadRemainingS` reads the timer back out of the model. Collaborators:
 FlightModel, CameraController + CamParams, SpeedCue, Loadout + ProjectilePool (guns/rockets),
 `CollideDamageSink` →
 `AnimRuntime.CollideDamageAt` (fly-through facades), CrashRuntime, every HUD widget and animator.

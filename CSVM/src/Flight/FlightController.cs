@@ -555,6 +555,11 @@ public partial class FlightController : Node3D
     /// already placed the plane at its spawn throttle.</summary>
     public float Throttle => _model.Throttle;
 
+    /// <summary>Seconds left on this aircraft's engine-dead timer, zero when the engine runs. The
+    /// choker's one observable, since nothing else on that path changes (see
+    /// <see cref="TryChokeEngine"/>).</summary>
+    public float EngineDeadRemainingS => _model.EngineDeadRemainingS;
+
     /// <summary>This airframe's stats, the flight model's own copy (jittered for an AI spawn, so it
     /// is the plane's data and not the cached def's). Read for the airframe's DISPLAY NAME
     /// (<c>PlaneRoster.PlaneDisplayName</c> → <c>Fury</c>) by the targeting pool's label pass. Null
@@ -812,6 +817,7 @@ public partial class FlightController : Node3D
         _holdElapsed = 0f; // scripted hold sequences restart from the spawn
         _lastInput = default;
         Pilot?.ClearStun();  // a fresh airframe never wakes up with its pilot's hands still off
+        _model.ClearChoke(); // nor with the last airframe's engine still choked
         WingLights?.Reset(); // flares off; the cycle restarts from this spawn
         Surfaces?.Reset();   // control surfaces back to neutral
         Damage?.Reset();     // every part back to full HP
@@ -1036,6 +1042,23 @@ public partial class FlightController : Node3D
             return false;
         pilot.Stun(seconds);
         return true;
+    }
+
+    /// <summary>The choker's entry for a struck aircraft (decoded: <c>FUN_004b1690</c> under
+    /// <c>FUN_004b9bc0</c>'s <c>TANGLER</c> branch; the seconds come from
+    /// <see cref="TanglerChoke.Duration"/>). Unlike the stun this hits a human exactly as it hits an
+    /// AI, because the original's choker branch has no player guard: the engine is a mechanical
+    /// system and nobody is told about it, least of all the AI. Returns whether the engine is now
+    /// dead. Re-entrant, and extend-only: see <see cref="FlightModel.ChokeEngine"/>.</summary>
+    public bool TryChokeEngine(float seconds)
+    {
+        if (!InPlay || seconds <= 0f)
+            return false;
+        bool wasDead = _model.EngineDead;
+        _model.ChokeEngine(seconds);
+        if (!wasDead && _model.EngineDead)
+            Log.Info("weapons", $"engine choked on P{PlayerIndex + 1} for {seconds:0.0} s");
+        return _model.EngineDead;
     }
 
     /// <summary>The receiving half of a plane-versus-plane ram: the striker's decoded
