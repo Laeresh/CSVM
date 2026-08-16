@@ -627,26 +627,41 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   enemy team 2 are engine teams **202 and 2**, and the hostility test
   (`TurretController.cs:617`, same-team-or-either-neutral rejects) can never match them. The turret
   therefore treats every aircraft in the sky as hostile, its own side included.
-  ⚠ **The band is not a mistake to delete.** It exists so the 22 no-`TEAM` world emplacements
-  default to the original loader's "first enemy team" and engage the player (`:49-52`,
-  `docs/formats/turrets.md` "Teams"). Collapsing 200+id onto the raw id would make every one of those
-  emplacements share a team with the Instant Action wave and stop them shooting at anyone. The fix is
-  to make the two spaces meet, not to remove one.
+  ⚠ **What the band was protecting is real; the band is not.** The 22 no-`TEAM` world emplacements
+  must keep engaging the player, which is why they default to the loader's "first enemy team"
+  (`:49-52`, `docs/formats/turrets.md` "Teams"). Collapsing `200 + id` onto the raw id does put them
+  on team 2 alongside the Instant Action wave — and that is correct, because it is what the original
+  does: they are allies of the wave and hostile to the player on team 1, so they go on shooting at
+  the player exactly as before. Verify that at the controls rather than assuming it; it is the one
+  behaviour the removal could plausibly break.
   ⚠ **The zeppelin case is the one that shows it, not the only one.** Any mission that puts an
   emplacement and an AI aircraft on the same authored side has this, so a fix wants checking against
   the `world-turrets` census (C1: 5 `aagun`, 9 `bbtur`, 9 `ctur`, 14 `ltur`/`rtur`, 2 zep
   `doublecannon`, 12 `locklear_*`) rather than against the zeppelin alone.
-  *Fix shape:* one team space for both. Either band the aircraft teams the same way at the point an
-  authored side becomes an engine team, or (cleaner) drop the band and give the no-`TEAM` default its
-  own explicit enemy id, so an authored `TEAM 2` means team 2 whether it is bolted to a hull or
-  flying. `TurretController.EngineTeamFor` is the single seam; `AimAssist.WorldTeam` (100, for
-  destructibles) is a third space and should be looked at in the same pass.
+  *Fix shape: decoded, and the band is an invention to delete*
+  ([`docs/org/targeting.md`](docs/org/targeting.md) "The team space"). The original runs ONE space
+  for everything: `0` neutral, `1` ally, enemy index `N` = `N + 2` (`FUN_0045c260`), stored at
+  combat-object `+0x8` by one virtual setter (`FUN_00441b80`, write at `0x00441b86`) whatever the
+  entity kind, and read by one predicate (`FUN_004a5b90` and three siblings) that compares the two
+  RAW ids and rejects on equal-or-either-neutral. No band, no per-kind offset, anywhere. A turret's
+  own constructor default is `FUN_0045c260(_, 0)` = **2** (`FUN_004a9a60`, write at `0x004a9a99`) —
+  the same 2 an Instant Action enemy fighter carries (`FUN_0045a390` → `0x004a259f`), which is
+  exactly why the original's zeppelin turrets never engage their own wave. So store the authored
+  `TEAM` integer raw, keep the absent-key default at enemy index 0 = 2, and drop
+  `EmplacementEnemyBand` entirely. `AimAssist.WorldTeam` (100) goes the same way: a world object is
+  built through the same constructor and takes its team from a **two-bit** ownership field on its
+  scene node (`FUN_004a32f0`), defaulting to **0**, and the predicate's neutral clause is what makes
+  an unauthored one untargetable. That two-bit width is the corroboration: the engine's whole team
+  space fits in `{0, 1, 2, 3}`.
+  ⚠ `Suites.cs:5028-5031` pins the current shape (`EngineTeamFor(DefaultTeamId) > WorldTeam`) and
+  has to be rewritten with the mapping, not worked around.
   ⚠ **Do not fix this by exempting the launching zeppelin's own turrets.** That hides the mismatch
   for one mission type and leaves it live everywhere else.
   *How you'd know it worked:* fly `--chapter=C2 --mission=IA1 --zeppelins`; the bay-launched wave
   forms up and attacks the player, and the zeppelin's 14 emplacements engage the player and its
   wingmen while never firing on their own wave.
-  *Cross-refs:* `docs/formats/turrets.md` ("Teams"), `InstantActionRuntime.cs` (`EnemyTeam`),
+  *Cross-refs:* [`docs/org/targeting.md`](docs/org/targeting.md) ("The team space" — the decode this
+  entry is now built on), `docs/formats/turrets.md` ("Teams"), `InstantActionRuntime.cs` (`EnemyTeam`),
   `TurretController.cs` (`EngineTeamFor`, `EmplacementEnemyBand`), `BL-350` (the drop is not gated on
   the doors opening, open in the same mission).
 
