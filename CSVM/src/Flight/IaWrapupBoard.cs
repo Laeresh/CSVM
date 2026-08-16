@@ -5,16 +5,21 @@ using Godot;
 
 namespace CSVM.Flight;
 
+/// <summary>One stunt run's numbers for the wrap-up board's split table: the run itself, its total
+/// and how it compares to the stored best. Read at mission end, when the run is over and the clock
+/// is halted.</summary>
+public readonly record struct StuntSummary(StuntMission Mission, float Total, float? PrevBest, bool NewBest);
+
 /// <summary>
 /// Instant Action's wrap-up board: the shipped screen's four rows — Time to Complete Mission,
 /// Enemies Shot Down, Danger Zones Completed, Shot % — the ones <c>IA_WRAPUP.SCRIPT</c> and
-/// <c>LAYOUT.CSV</c> actually wire. Decode: docs/formats/instant-action/wrap-up.md. Shares
+/// <c>LAYOUT.CSV</c> actually wire. On a <c>stunt_flying</c> mission it also carries the run's
+/// per-zone splits and its best-time row, so one board covers the mission rather than stacking
+/// with <see cref="StuntScoreboard"/>. Decode: docs/formats/instant-action/wrap-up.md. Shares
 /// <see cref="VersusBoard"/>'s construction, the whole window on its own <c>CanvasLayer</c>, since
-/// the mission ends for every human at once, rather than <see cref="StuntScoreboard"/>'s per-pane
-/// shape for an individual pilot's own solo run.
-/// Every value is handed in by the caller at <see cref="Present"/> time rather than read live off
-/// any source; <see cref="VersusBoard"/> draws the same way, off <see cref="VersusMatch.Standings"/>'s
-/// snapshot.
+/// the mission ends for every human at once. Every value is handed in by the caller at
+/// <see cref="Present"/> time rather than read live off any source, the way
+/// <see cref="VersusBoard"/> draws off a <see cref="VersusMatch.Standings"/> snapshot.
 /// </summary>
 public sealed partial class IaWrapupBoard : Control
 {
@@ -23,6 +28,13 @@ public sealed partial class IaWrapupBoard : Control
     private const int TitleFont = 30;
     private const int ContextFont = 15;
     private const int RowFont = 20;
+
+    // The stunt split section's own metrics, matching StuntScoreboard's so the merged table reads
+    // as the board it came from. All TUNE.
+    private const int SplitHeaderFont = 14;
+    private const int SplitRowFont = 17;
+    private const int TotalFont = 23;
+    private const int BestFont = 16;
 
     // The shipped row titles, langui ids 1134-1137 (docs/formats/instant-action.md "The wrap-up
     // screen") — literal text, not read off ui_strings.json at runtime: that table is a build-time
@@ -38,6 +50,10 @@ public sealed partial class IaWrapupBoard : Control
     private static readonly Color LostColor = new(0.92f, 0.45f, 0.45f);
     private static readonly Color ContextColor = new(0.60f, 0.75f, 0.95f);
     private static readonly Color RowColor = new(0.86f, 0.89f, 0.94f);
+    private static readonly Color SplitHeaderColor = new(0.50f, 0.62f, 0.80f);
+    private static readonly Color TotalColor = new(0.96f, 0.98f, 1f);
+    private static readonly Color BestColor = new(0.60f, 0.75f, 0.95f);
+    private static readonly Color NewBestColor = new(1f, 0.82f, 0.28f);
 
     private string _context = "";
     private string _exitLabel = "";
@@ -99,9 +115,10 @@ public sealed partial class IaWrapupBoard : Control
     /// <see cref="InstantActionRuntime.MissionEnded"/> — every value here is that instant's
     /// snapshot, the same discipline <see cref="VersusBoard"/> takes from
     /// <see cref="VersusMatch.Standings"/>.</summary>
-    public void Present(bool won, float elapsedSeconds, int enemiesShotDown, int zonesCompleted, int shotPercent)
+    public void Present(bool won, float elapsedSeconds, int enemiesShotDown, int zonesCompleted,
+        int shotPercent, StuntSummary? stunt = null)
     {
-        Populate(won, elapsedSeconds, enemiesShotDown, zonesCompleted, shotPercent);
+        Populate(won, elapsedSeconds, enemiesShotDown, zonesCompleted, shotPercent, stunt);
         Visible = true;
         // The world stops under the board rather than flying on beneath a screen that has already
         // counted the mission. The pause key is refused while this reason is set.
@@ -136,6 +153,61 @@ public sealed partial class IaWrapupBoard : Control
         grid.AddChild(l);
     }
 
+    // The stunt run's own section, in StuntScoreboard's layout: name | split | cumulative in the
+    // order flown, then the total and the best-time comparison. Player 1's run — the board is
+    // shared, and splitscreen pilots each fly their own copy of the zone set.
+    private static void AddSplits(VBoxContainer body, StuntSummary run, float s)
+    {
+        var grid = new GridContainer { Columns = 3 };
+        grid.AddThemeConstantOverride("h_separation", Mathf.RoundToInt(26f * s));
+        grid.AddThemeConstantOverride("v_separation", Mathf.RoundToInt(5f * s));
+        body.AddChild(grid);
+
+        int nameW = (int)(280f * s), timeW = (int)(96f * s);
+        int header = (int)(SplitHeaderFont * s), font = (int)(SplitRowFont * s);
+        AddCell(grid, "ZONE", header, SplitHeaderColor, HorizontalAlignment.Left, nameW);
+        AddCell(grid, "SPLIT", header, SplitHeaderColor, HorizontalAlignment.Right, timeW);
+        AddCell(grid, "TIME", header, SplitHeaderColor, HorizontalAlignment.Right, timeW);
+
+        float prev = 0f;
+        int n = 1;
+        foreach (var z in run.Mission.InCompletionOrder())
+        {
+            string name = $"{n}.  " + (z.Description.Length > 0 ? z.Description
+                : z.MarkerText().Length > 0 ? z.MarkerText() : z.DzName);
+            AddCell(grid, name, font, RowColor, HorizontalAlignment.Left, nameW);
+            if (z.Completed)
+            {
+                AddCell(grid, StuntMission.FormatTime(z.CompletedAt - prev), font, RowColor,
+                    HorizontalAlignment.Right, timeW);
+                AddCell(grid, StuntMission.FormatTime(z.CompletedAt), font, RowColor,
+                    HorizontalAlignment.Right, timeW);
+                prev = z.CompletedAt;
+            }
+            else
+            {
+                AddCell(grid, "—", font, SplitHeaderColor, HorizontalAlignment.Right, timeW);
+                AddCell(grid, "—", font, SplitHeaderColor, HorizontalAlignment.Right, timeW);
+            }
+            n++;
+        }
+
+        body.AddChild(Centered(Label($"TOTAL   {StuntMission.FormatTime(run.Total)}",
+            (int)(TotalFont * s), TotalColor)));
+        if (run.NewBest)
+        {
+            string best = run.PrevBest is { } was
+                ? $"★  NEW BEST   (was {StuntMission.FormatTime(was)})"
+                : "★  NEW BEST";
+            body.AddChild(Centered(Label(best, (int)(BestFont * s), NewBestColor)));
+        }
+        else if (run.PrevBest is { } stored)
+        {
+            body.AddChild(Centered(Label($"BEST   {StuntMission.FormatTime(stored)}",
+                (int)(BestFont * s), BestColor)));
+        }
+    }
+
     private static HSeparator Separator(float s)
     {
         var sep = new HSeparator();
@@ -158,7 +230,8 @@ public sealed partial class IaWrapupBoard : Control
         Restart?.Invoke();
     }
 
-    private void Populate(bool won, float elapsedSeconds, int enemiesShotDown, int zonesCompleted, int shotPercent)
+    private void Populate(bool won, float elapsedSeconds, int enemiesShotDown, int zonesCompleted,
+        int shotPercent, StuntSummary? stunt)
     {
         // The board spans the whole window, not a pane — so it scales on the window height alone
         // (no HudMetrics pane damping, which is for HUD elements drawn inside a pane).
@@ -213,6 +286,12 @@ public sealed partial class IaWrapupBoard : Control
         AddCell(grid, zonesCompleted.ToString(), font, RowColor, HorizontalAlignment.Right, valueW);
         AddCell(grid, ShotsTitle, font, RowColor, HorizontalAlignment.Left, labelW);
         AddCell(grid, $"{shotPercent}%", font, RowColor, HorizontalAlignment.Right, valueW);
+
+        if (stunt is { } run)
+        {
+            body.AddChild(Separator(s));
+            AddSplits(body, run, s);
+        }
 
         body.AddChild(Separator(s));
 

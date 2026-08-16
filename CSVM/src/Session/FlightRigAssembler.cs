@@ -324,6 +324,11 @@ public sealed class FlightRigAssembler
                 controller.Marker.Race = race;
                 controller.Marker.PlayerIndex = pi;
             }
+            else if (_in.InstantActionActive)
+            {
+                // Instant Action carries the splits on its own wrap-up board instead, so the two
+                // results boards cannot wake on the same event and stack (BL-358).
+            }
             else
             {
                 // Solo: the end-of-run scoreboard — per-zone splits + total +

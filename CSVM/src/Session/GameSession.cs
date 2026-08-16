@@ -2553,7 +2553,7 @@ public partial class GameSession : Node3D
                 int shotPercent = InstantActionRuntime.ShotPercent(
                     _projectiles?.CannonHits ?? 0, _projectiles?.CannonRoundsFired ?? 0);
                 wrapupBoard.Present(outcome == InstantActionOutcome.Won, iaEnd.Elapsed,
-                    enemiesShotDown, zonesCompleted, shotPercent);
+                    enemiesShotDown, zonesCompleted, shotPercent, StuntSummaryFor(iaEnd));
             };
         }
 
@@ -2943,6 +2943,22 @@ public partial class GameSession : Node3D
         }
         foreach (var rig in _rigs)
             rig.Controller?.Rerun();
+    }
+
+    // Player 1's stunt run for the wrap-up board's split section, on a stunt mission alone. The
+    // best time is recorded here rather than on the board, under the same chapter/mission/plane key
+    // the solo scoreboard uses — a different mission id, so Instant Action bests stay their own.
+    private StuntSummary? StuntSummaryFor(InstantActionRuntime runtime)
+    {
+        if (runtime.Objective != InstantActionObjective.ZonesFlown)
+            return null;
+        if (_rigs.Count == 0 || _rigs[0].Controller?.Stunt is not { } run)
+            return null;
+        var store = ScoreStore.Load();
+        string key = $"{_spec.Chapter}/{_spec.Mission}/{PlaneRoster.PlaneFor(_spec, 0)}";
+        float? prevBest = store.GetBest(key);
+        bool newBest = store.RecordIfBest(key, run.Elapsed);
+        return new StuntSummary(run, run.Elapsed, prevBest, newBest);
     }
 
     // Rerun an Instant Action mission from the wrap-up board: the mission clock, outcome and lives
