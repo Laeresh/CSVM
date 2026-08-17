@@ -78,28 +78,28 @@
     {
       "name": "empty-stage",
       "frame": 120,
-      "hash": "d2b7c9fa043add5c82a3e0e7d7aea46e",
+      "hash": "3b4fafc18663b12d459b5b1715d432bd",
       "exercises": "the synthetic stage with no gamez at all — code-drawn grid, default sky and sun, flight model, HUD; frame-sensitive 12.21 %, and the one shot that still renders with extracted/ absent.",
       "args": ["--stage=empty", "--plane=player_bhawk", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "884595bbb715e775cec80bdffaf12f80",
+      "hash": "54c8a835da5d446ca5180ec5cb9852d1",
       "exercises": "a flying plane in its default livery, the only shaded surface in a flight: chase camera on the sim clock, prop and surface animators, sun bearing, gauges, compass tape, weapon readout, the pipper's range, an exhaust puffer, SpeedCue; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "decceaa383fd5bc0fd235d3aca4b89f1",
+      "hash": "52b4ab9d53177a757c5e53561129bc5a",
       "exercises": "the world-effects runtime rendering a puffer: a kill of the single ap_radiotwr instance calls great_balls_of_fire onto the world-effects stage, plus that rig's SpeedCue; frame-sensitive, and moves off its Rng.Effects seed.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "ad0694428c7313ffea1694d3940c322c",
+      "hash": "c715c5f2ecbba06b80f98d0fb58abfb2",
       "exercises": "the crash rig playing player_crash_default (--crash=5's null-material slot-0 arm), the airframe, the moving distance-puffer path, call_crash_trails' ranged launch and tumble, the vector-form pieces that do not turn, and flydirt's delta.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
@@ -113,7 +113,7 @@
     {
       "name": "c1-targeting-hud",
       "frame": 90,
-      "hash": "063de64f01d76f43c52dec33b9085429",
+      "hash": "25d1917c573748d50f1d79446f94e777",
       "exercises": "the targeting HUD's original-shaped marker: fixed brackets inside the selected gun's reach, the name label below the plane, and --debug-markers' identity/health string; frame-sensitive 48.18 %.",
       "args": ["--chapter=C1", "--plane=player_fury", "--ai=player_kestrel", "--target=ai1_player_kestrel", "--debug-markers", "--hold=0,0,0,0.5", "--det", "--mute"]
     }

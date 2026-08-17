@@ -199,8 +199,16 @@ def parse_profiles(block, planes):
         e = starts[k + 1] if k + 1 < len(starts) else len(block)
         body = block[s:e]
         heading = body[0][4:].strip()
-        chapter, rest = heading.split(MIDDOT, 1)
-        plane_or_pilots, situation = rest.split(EMDASH, 1)
+        # A profile whose flight is not chapter-bound may omit the leading "<Chapter> · " part;
+        # the chapter is then taken from the command's --chapter= flag (or left empty).
+        if MIDDOT in heading:
+            chapter, rest = heading.split(MIDDOT, 1)
+        else:
+            chapter, rest = "", heading
+        if EMDASH in rest:
+            plane_or_pilots, situation = rest.split(EMDASH, 1)
+        else:
+            plane_or_pilots, situation = rest, ""
         ci = next(i for i, l in enumerate(body) if l.strip().startswith("```powershell"))
         command = body[ci + 1].strip()
 
