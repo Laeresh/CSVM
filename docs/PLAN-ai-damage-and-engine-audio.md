@@ -190,7 +190,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
     destroyed aircraft's flight integration, and the three-second glide is faithful. One real
     deviation found (we neutralise the controls where the original freezes them), owed at the
     controls rather than landed
-25. ☐ Play the player's own destroy choreography: four flying pieces, the cockpit eject, `Callback 3`, against the two reference recordings
+25. ☑ Play the player's own destroy choreography: four flying pieces, the cockpit eject, `Callback 3`
+    (`Callback 3` decoded as a CAMERA command needing no runtime handler; two defects filed as
+    `BL-415` and `BL-416`)
 
 ## ⚠ Wave D — what Waves A to C got wrong
 
@@ -837,11 +839,19 @@ then an `If`/`Else` choosing `cpeject1` or `cpeject2`); both converge on `destro
 `large_fireball` and `ground_mixed_exp_sg` at `Event 0.5`. So a dead player breaks into four burning
 pieces that fly and explode where each lands, with a cockpit ejection and a parachutist.
 
-**This settles the untimed `Callback 15`.** It is not an oversight: the player's hull is not meant to
-keep flying, so the vehicle is released on the kill frame and the four pieces take over in the same
-instant. The AI's three-second glide and the player's instant disintegration are two deliberate
-designs, not an inconsistency, and **no separate networked-multiplayer path is needed** — playing the
-self-named destroy def whole gives each its own authored death off one code path.
+**⚠ The reading of the untimed `Callback 15` above was WRONG, and this is the correction.** It said
+the player's hull is released on the kill frame and the four pieces take over in the same instant.
+Both arms call `cpeject1` / `cpeject2` with **`WAIT_FOR_COMPLETION`**, so `Callback 16`, `Callback 15`
+and the four pieces are all gated behind the ejection, measured at **~5.2 s** (bhawk; the autogyro
+breaks up at 6.0 s after its authored `Event 0.15` rotor arm). The player's hull therefore flies
+itself for that window exactly as an AI wreck does for its three seconds, and a player wreck reaching
+the ground inside it **does** take the `player_crash_*` table. The untimed callbacks are untimed
+relative to an event that itself waits.
+
+What survives is the conclusion, for a better reason than the one first given: **no separate
+networked-multiplayer path is needed**, because playing the self-named destroy def whole gives each
+aircraft its own authored death off one code path. Both families fly themselves and then hand over;
+they differ in how long, and in what takes the hull afterwards.
 
 **Approach.** Confirm the piece sequences actually play and that `BuildDestroyed`'s `pieceN` meshes
 are what they move. Then the two gaps: `cpeject1` / `cpeject2` / `cpejectstop` are shipped defs we

@@ -441,9 +441,12 @@ the last of the fall and the ground explosion; from the handover on the vehicle 
 itself, so `FUN_0048b920` sees no contact and the `ai_crash_*` table is left to what it is for
 (that, and a wreck that reaches the ground inside the first three seconds), a LIVE aircraft flown into
 terrain. `player-player` authors no hull `ObjectMotion` at all — only `piece1seq`..`piece4seq`,
-each with its own `pNgrndhit` bounce — but it authors its `Callback 15` UNTIMED, so by the rule in
-the next section a dead player's hull stops on the kill frame and its ground contact does not reach
-the table either; what falls is the four pieces. `player-player_crash_dirt` leaving `destroyed`
+each with its own `pNgrndhit` bounce — and its `Callback 15` is untimed, but it sits in
+`destroy_craft`, which BOTH arms reach through a `WAIT_FOR_COMPLETION` call of `cpeject1`/
+`cpeject2`. The handover therefore waits for the cockpit eject to finish, about five seconds, and
+the player's hull flies itself until then exactly as an AI wreck does for its three; what falls
+after it is the four pieces. A player wreck that reaches the ground inside that window does take
+the crash table. `player-player_crash_dirt` leaving `destroyed`
 active with `large_10sec_fire` on it is for the other case that def family serves, a live player
 flown into terrain. Wiring both families to the kill would play the ground explosion twice.
 
@@ -462,6 +465,28 @@ authored differently: `player-player_crash_dirt` leaves `destroyed` active and p
 `large_10sec_fire` on it, so a player dirt crash does leave a burning hulk. The difference is
 entirely in the data; both take the same code path.
 
+### The player's own destroy choreography
+
+`player-player`'s `destroy` opens on `If NODE_ACTIVE 1`, and entry one of the def's own node list is
+`player_autogyro` on all eight chapters, so the condition is an AIRFRAME TEST: only the autogyro
+takes the arm that stops and sheds its rotor (`autogyro_stoprotor`, `autogyro_loserotor` at
+`Event 0.15`), always with `cpeject1`. Every other airframe falls to `random_destroy`, whose own
+`If RANDOM_WEIGHT 0.5` picks `cpeject1` or `cpeject2`. Both arms then reach `destroy_craft` through
+that eject call's `WAIT_FOR_COMPLETION`, so the breakup waits for the pilot to leave.
+
+`cpeject1`/`cpeject2` are the EXTERIOR bail-out: hide the airframe's seated `pilot` (under
+`healthy/geometry/…/pilot_pos`), show `cpilot` — a parentless root of `planes.zbd` holding an
+articulated pilot, `cpilot_parent > cpilot_drop > cp_torso`/`cp_head`/twelve limb nodes — reparent
+it onto `pilot_pos`, and drive every joint from the def's own SI scripts. `cpeject1` adds
+`snd_DA-Bail-A_id1_random` at 0.5 s and runs about five seconds; `cpeject2` is the shorter variant.
+`cpejectstop` is the teardown pair, `ObjectDeleteChild` plus a hide.
+
+`rem_pas`, called first in both arms, is the COCKPIT-INTERIOR crew: it hides the nine named
+passenger characters (`p_waldo`, `p_spks`, `p_pick`, `p_jack`, `p_bjon`, `p_fas`, `p_ilsa`, `p_ub`,
+`p_swan`) and detaches `apassengers` from `pass_st`. Its anim root is `apassengers`, a chapter-gamez
+node, not an airframe one, so it has nothing to do with the multi-crew airframes and nothing to
+render outside a cockpit view.
+
 ### A dead aircraft keeps flying itself until `Callback 15`
 
 ⚠ **`+0x91f` is what keeps a shot-down aircraft moving, and code 15 is what stops it.** The
@@ -475,8 +500,9 @@ and from the next frame the vehicle falls out of the update and stops moving its
 That is why `Callback 16`, `Callback 15` and `CallSequence randomdestseq` sit in that order behind
 the 3.0 s chute gate on all ten AI airframes: **16 samples the velocity the wreck has reached after
 three seconds of falling on its own, 15 hands the hull over, and the `ObjectMotion` flies it from
-there.** `player-player` authors the same three untimed, so a dead player's hull stops on the kill
-frame instead. ⚠ Nothing about this is `start: null` semantics — an absent `start` is `Animation 0.0`
+there.** `player-player` authors the same three untimed, but reaches them only through a
+`WAIT_FOR_COMPLETION` call of the cockpit eject, so a dead player's hull flies itself for the
+eject's own length instead. ⚠ Nothing about this is `start: null` semantics — an absent `start` is `Animation 0.0`
 and always passes, so the events behind a timed one fire at that timed event's time
 (`FUN_004ecbb0`, and [anim-definitions.md](../formats/anim-definitions.md)'s "Event scheduling").
 The fall before the parachute is the VEHICLE's, not the anim's.
@@ -487,6 +513,18 @@ the anim instance through `FUN_004ee0e0`, which is how a wreck inherits the airc
 which is where an injure-ladder smoke trail ends. **0** is the delete arm: it frees the vehicle
 (`FUN_004b0aa0` then `operator_delete` at `0x004807e3`) when node flag `0x8000000` is set, and
 otherwise only sets flag `0x10000000` and returns.
+
+**Every other code reaches the mission-script handler, and only for the player's own vehicle.**
+`LAB_00480710`'s tail at `0x004807f6` compares the callback's vehicle against `DAT_0071c298` (the
+player's) and forwards `FUN_0047e080(anim, vehicle, code)` when they match, so a code the three arms
+above do not take is a no-op on every AI aircraft. `player-player`'s `Callback 3` is the case that
+matters here: `FUN_0047e080`'s case 3 reads the camera manager `DAT_0064ef78`'s mode at `+0x14c`,
+calls the mode setter `FUN_0042c280(0)` when it is not already 0, and clears the two view
+accumulators `DAT_0064ef60`/`DAT_0064ef64`. It is a CAMERA command: leave whatever view the player
+was in (modes 6 and 7 are the cockpit views) for the default external one, and drop the free-look
+pan. Code 15's own arm does the same one line up, setting mode 8, the death camera. CSVM ships no
+cockpit view and `FlightController.Destroy` cuts to the crash vantage outright, so code 3 has
+nothing to act on and stays counted.
 
 Code 0 is never authored. The authored `Callback` handler is `FUN_004ec5e0` and passes the event's
 own value; code 0 is emitted only by `FUN_004ebbb0`, which tears an anim instance down, and no

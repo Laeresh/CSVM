@@ -382,6 +382,8 @@ public static class Suites
             "binding the crash rig leaves the airframe model under the controller — even the Devastator, whose model root shares the crash defs' authored NAME — and stages every pooled copy in the same reset pose", CrashRigAnchors));
         into.Add(new TestHarness.Suite("ai-crash-defs",
             "an AI plane's crash rig binds the ai_crash_* family and its crash indexes it by the struck surface id — dirt(13) plays ai_crash_dirt, no material plays ai_crash_default, and the def switches off both the airframe's healthy subtree and the crash root's wreck — while a human rig off the same factory keeps player_crash_* (G21)", AiCrashDefs));
+        into.Add(new TestHarness.Suite("player-destroy-choreography",
+            "a shot-down player plays player-player whole: the two authored arms are chosen by the def's own IF NODE_ACTIVE 1 (its node one is `player_autogyro`, so only the autogyro stops its rotor), the cockpit eject stages and shows its cpilot, all four wreck pieces appear and fly their own OBJECT_MOTION, and the camera-only Callback 3 stays counted rather than invented (D25)", PlayerDestroyChoreography));
         into.Add(new TestHarness.Suite("hostile-marker-hud",
             "the targeting HUD (TargetHud, every flight session): the tracker picks the " +
             "pane's nearest LIVE AI hostile off the pool's own aircraft roster (a closer human, " +
@@ -10632,6 +10634,195 @@ public static class Suites
                 textures.Dispose();
             }
         });
+    }
+
+    // The player's own destroy choreography. `player-player` is the one destroy def that does not
+    // fall as an intact hull: it breaks into four burning pieces, each flown by its own
+    // OBJECT_MOTION, with a cockpit eject and a parachutist.
+    // ⚠ Both arms are READ, never guessed: `If NODE_ACTIVE 1` names entry one of the def's own node
+    // list, `player_autogyro`, so the rotor arm is an airframe test and every other airframe takes
+    // `random_destroy`. Decode: docs/org/vehicleDamage.md.
+    private static void PlayerDestroyChoreography(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            try
+            {
+                // A fixed pair, not ctx.PlaneName: the verdict IS the branch between them, so
+                // --plane= must not be able to make both runs the same arm.
+                PlayerDestroyArm(ctx, world, planesGamez, textures, "player_bhawk", autogyro: false);
+                PlayerDestroyArm(ctx, world, planesGamez, textures, "player_autogyro", autogyro: true);
+            }
+            finally
+            {
+                textures.Dispose();
+            }
+        });
+    }
+
+    // One airframe's whole death, through the production factory and the production take-hit path.
+    private static void PlayerDestroyArm(TestContext ctx, TestWorld world, GameZ planesGamez,
+        TextureArchive textures, string planeName, bool autogyro)
+    {
+        var factory = new Session.WorldEffectsFactory(
+            SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
+        FlightController? player = null;
+        try
+        {
+            var spawn = new Vector3(0f, 500f, 0f);
+            var stats = PlaneStats.Load(ctx.ZrdrPath, planeName);
+            var builder = new PlaneBuilder(planesGamez, textures);
+            var planeModel = builder.Build(planeName);
+            player = new FlightController
+            {
+                PlaneModel = planeModel,
+                Collider = PlaneCollider.Build(planeModel),
+                PlayerIndex = 0,
+                UseKeyboard = false,
+                PadDevices = System.Array.Empty<int>(),
+                AllowPause = false,
+                // The ledger the production assembler gives a human rig — without it the take-hit
+                // path returns early and nothing can reach Destroy.
+                Damage = PlaneDamage.For(stats),
+            };
+            player.AddChild(planeModel);
+            player.Setup(new FlightModel(stats), null, new CamParams(), spawn, spawn + Vector3.Forward);
+            ctx.Host.AddChild(player);
+            factory.BuildFlightCrashRuntime(player, builder, planeName, world.Gamez,
+                world.Session.Builder.Scene, textures, world.Session.Program, verbose: false,
+                planesGamez: planesGamez);
+            if (player.CrashRuntime is not { } rig || player.CrashAnchor is not { } crashRoot)
+            {
+                ctx.Check(false, $"{planeName}: the human rig built a crash runtime");
+                return;
+            }
+
+            rig.ManualAdvance = true;
+            ctx.Check(player.DestroyDef == Session.EffectCatalogue.PlayerDestroyAnim
+                      && !player.DestroyDefFliesWreck,
+                $"{planeName}: the human rig's destroy def is '{player.DestroyDef ?? "-"}' and authors no hull ObjectMotion (fliesOwnHull={player.DestroyDefFliesWreck})");
+
+            // The eject's own template: `cpilot` is a planes-gamez root no def NAMES, so the anchor
+            // closure alone would leave cpeject1/cpeject2 playing on nothing.
+            var cpilot = Find(crashRoot, "cpilot");
+            var chuteman = Find(crashRoot, "chuteman");
+            ctx.Check(cpilot != null && chuteman != null,
+                $"{planeName}: the rig staged the bailing pilot and the parachute cpilot={(cpilot != null ? "yes" : "NO")} chuteman={(chuteman != null ? "yes" : "NO")}");
+            var pieces = new[] { "piece1", "piece2", "piece3", "piece4" }
+                .Select(n => (Name: n, Node: Find(crashRoot, n))).ToList();
+            ctx.Check(pieces.All(p => p.Node != null),
+                $"{planeName}: BuildDestroyed built all four wreck pieces [{string.Join(", ", pieces.Select(p => $"{p.Name}={(p.Node != null ? "yes" : "NO")}"))}]");
+            if (pieces.Any(p => p.Node == null) || cpilot == null)
+            {
+                return;
+            }
+
+            var before = pieces.Select(p => p.Node!.GlobalPosition).ToList();
+            var healthy = Find(planeModel, "healthy");
+            var wreck = Find(crashRoot, "destroyed");
+
+            // The kill, through the production ram entry — not a visuals API. Both magnitudes, or
+            // standing armour nulls the health damage outright (PlaneDamage.Spend).
+            float overkill = (player.Damage!.WholeHealthMax + player.Damage.WholeArmorMax) * 4f;
+            player.TakeCollisionHit(overkill, overkill, player.GlobalPosition, 1);
+            ctx.Check(player.Destroyed, $"{planeName}: the hull is spent and the destroy def is playing");
+
+            // The eject first, and destroy_craft only once it COMPLETES: both arms call
+            // cpeject1/cpeject2 with WAIT_FOR_COMPLETION, so the breakup is authored to wait for
+            // the pilot to leave. The autogyro's own call sits behind a 0.15 s rotor event.
+            float ejectAt = AdvanceUntil(rig, 30f, () => cpilot.Visible);
+            ctx.Check(ejectAt >= 0f,
+                $"{planeName}: the cockpit eject switched its cpilot on at t={ejectAt:0.00} s");
+            float breakupAt = AdvanceUntil(rig, 30f, () => wreck is { Visible: true });
+            ctx.Check(breakupAt >= 0f,
+                $"{planeName}: destroy_craft swapped the airframe for the wreck at t={breakupAt:0.00} s, once the eject completed");
+            ctx.Check(healthy is { Visible: false },
+                $"{planeName}: …and switched the airframe's healthy subtree off healthy={(healthy?.Visible.ToString() ?? "-")}");
+
+            // Which arm ran, read off the two firetrail templates the branches call: the autogyro
+            // arm hangs `sputter_firetrail` on `destroyed`, `random_destroy` hangs
+            // `dense_firetrail` on `healthy`.
+            var sputter = Find(crashRoot, "sputter_firetrail");
+            var dense = Find(crashRoot, "dense_firetrail");
+            string arm = sputter is { Visible: true } ? "autogyro" : dense is { Visible: true } ? "random_destroy" : "neither";
+            ctx.Check(arm == (autogyro ? "autogyro" : "random_destroy"),
+                $"{planeName}: IF NODE_ACTIVE 1 chose the {arm} arm (want {(autogyro ? "autogyro" : "random_destroy")})");
+            ctx.Check(pieces.All(p => p.Node!.Visible),
+                $"{planeName}: all four pieces are showing [{string.Join(", ", pieces.Select(p => $"{p.Name}={p.Node!.Visible}"))}]");
+
+            // Two seconds of the pieces' own motion.
+            for (int i = 0; i < 120; i++)
+            {
+                rig.Advance(1f / 60f);
+            }
+
+            var moved = pieces.Select((p, i) => (p.Name, Dist: p.Node!.GlobalPosition.DistanceTo(before[i]))).ToList();
+            ctx.Check(moved.All(m => m.Dist > 1f),
+                $"{planeName}: every piece flew its own ObjectMotion [{string.Join(", ", moved.Select(m => $"{m.Name}={m.Dist:0.0} m"))}]");
+            ctx.Check(rig.BallisticMotionsLaunched >= 4,
+                $"{planeName}: the rig launched {rig.BallisticMotionsLaunched} ballistic motion(s), one per piece at least");
+
+            // Callback 3 is a CAMERA command (docs/org/vehicleDamage.md), and CSVM has no view for
+            // it to leave, so the code stays counted rather than acted on.
+            ctx.Check(rig.UnhandledEventCounts.TryGetValue("Callback(3)", out int three) && three > 0,
+                $"{planeName}: the authored Callback 3 is counted, not invented (×{(rig.UnhandledEventCounts.TryGetValue("Callback(3)", out int n3) ? n3 : 0)})");
+            ctx.Check(chuteman is { Visible: true },
+                $"{planeName}: the parachutist is out too, untimed here where the ten AI defs gate him at 3.0 s");
+            ctx.Note($"{planeName}: eject at t={ejectAt:0.00} s, breakup at t={breakupAt:0.00} s, seated pilot visible={(Find(planeModel, "pilot")?.Visible.ToString() ?? "-")}, chute pilot visible={(chuteman != null ? Find(chuteman, "pilot")?.Visible.ToString() ?? "-" : "-")}");
+            ctx.Note($"{planeName}: unhandled event kinds [{string.Join(", ", rig.UnhandledEventCounts.Select(kv => $"{kv.Key}×{kv.Value}"))}]");
+        }
+        finally
+        {
+            player?.Free();
+        }
+    }
+
+    // Steps the rig at 60 Hz until the beat lands, and returns when — or -1 after the budget. A
+    // fixed frame count cannot express "once the eject completes"; the wait is authored, not timed.
+    private static float AdvanceUntil(AnimRuntime rig, float budgetSeconds, System.Func<bool> beat)
+    {
+        const float Dt = 1f / 60f;
+        for (float t = 0f; t <= budgetSeconds; t += Dt)
+        {
+            if (beat())
+            {
+                return t;
+            }
+
+            rig.Advance(Dt);
+        }
+
+        return -1f;
+    }
+
+    // The first descendant carrying this authored NAME (or Godot name), the way a def's own
+    // resolution finds it — a suite must not assume the Godot node name survived staging.
+    private static Node3D? Find(Node root, string name)
+    {
+        foreach (var child in root.GetChildren())
+        {
+            if (child is Node3D n3d)
+            {
+                string authored = n3d.HasMeta(AnimRuntime.NameMeta)
+                    ? (string)n3d.GetMeta(AnimRuntime.NameMeta)
+                    : n3d.Name.ToString();
+                if (authored.Equals(name, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    return n3d;
+                }
+            }
+
+            if (child != null && Find(child, name) is { } hit)
+            {
+                return hit;
+            }
+        }
+
+        return null;
     }
 
     // ---- the full effects sweep as suite verdicts ----------------------------------------------

@@ -200,6 +200,14 @@ public static class EffectCatalogue
     // drags the wreck and every pooled template copy to the first crash's site.
     public static readonly string[] CrashScaffoldAnchors = { "player" };
 
+    // Template roots a bound def SWITCHES ON without anchoring on: `cpilot`, the articulated
+    // bailing pilot `player-player`'s `cpeject1`/`cpeject2` show, seat and drive with SI scripts.
+    // Both defs carry the rig's own `player` as their NAME, so the anchor closure below never sees
+    // `cpilot`, and the eject would run on a name resolving nowhere.
+    // ⚠ Never list a def's own NAME here; an anchor belongs in the closure. A name here is staged
+    // only where a bound def really names it and the gamez pair carries it as a root.
+    public static readonly string[] CrashActivatedRoots = { "cpilot" };
+
     /// <summary>The crash-def vector this program can play, built over the whole surface registry
     /// with <see cref="CrashDefPrefix"/> — what <c>BuildFlightCrashRuntime</c> binds and what
     /// <c>FlightController.Crash</c> indexes with the struck material's surface id. A slot whose
@@ -325,15 +333,23 @@ public static class EffectCatalogue
         StageRootsFor(program, WorldEffectAnimNames(program), resolveRoot);
 
     /// <summary>The same for the per-plane crash rig: the closure of
-    /// <see cref="CrashRigAnimNames"/> against that rig's own scope. The rig's
-    /// <paramref name="resolveRoot"/> is scoped to the bound controller, so a name its
-    /// plane/wreck already carries needs no template. <paramref name="crashDefs"/> is the rig's
-    /// own family (player or AI); the no-table overload keeps the player family for callers that
-    /// predate the split.</summary>
+    /// <see cref="CrashRigAnimNames"/> against that rig's own scope, plus whichever
+    /// <see cref="CrashActivatedRoots"/> that closure reaches. <paramref name="resolveRoot"/> is
+    /// scoped to the bound controller, so a name its plane/wreck already carries needs no
+    /// template; <paramref name="crashDefs"/> is the rig's own family (player or AI), and the
+    /// no-table overload keeps the player family for callers that predate the split.</summary>
     public static IReadOnlyList<string> CrashStageRoots(AnimProgram program,
         Func<string, AnchorPlacement> resolveRoot, SurfaceDefTable crashDefs,
-        string? destroyAnim = null) =>
-        StageRootsFor(program, CrashRigAnimNames(crashDefs, destroyAnim), resolveRoot);
+        string? destroyAnim = null)
+    {
+        var names = CrashRigAnimNames(crashDefs, destroyAnim);
+        var roots = new List<string>(StageRootsFor(program, names, resolveRoot));
+        foreach (var activated in ActivatedRootsIn(program, names, resolveRoot))
+            if (!roots.Contains(activated, StringComparer.OrdinalIgnoreCase))
+                roots.Add(activated);
+        roots.Sort(StringComparer.OrdinalIgnoreCase);
+        return roots;
+    }
 
     /// <inheritdoc cref="CrashStageRoots(AnimProgram, Func{string, AnchorPlacement}, SurfaceDefTable)"/>
     public static IReadOnlyList<string> CrashStageRoots(AnimProgram program,
@@ -380,6 +396,23 @@ public static class EffectCatalogue
         if (missing.Count > 0)
             throw new EffectAnchorException(missing);
         return staged;
+    }
+
+    // Which CrashActivatedRoots a closure really reaches: a candidate an OBJECT_ACTIVE_STATE in one
+    // of its definitions switches, that this bind can stage. An AI rig binds no cpeject def and so
+    // stages no bailing pilot.
+    private static IEnumerable<string> ActivatedRootsIn(AnimProgram program,
+        IEnumerable<string> names, Func<string, AnchorPlacement> resolveRoot)
+    {
+        var switched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var def in program.Subset(names).Defs)
+            foreach (var seq in def.Sequences)
+                foreach (var ev in seq.Events)
+                    if (ev.Kind == "ObjectActiveState" && ev.Data.Str("node") is { Length: > 0 } node)
+                        switched.Add(node);
+        foreach (var candidate in CrashActivatedRoots)
+            if (switched.Contains(candidate) && resolveRoot(candidate) == AnchorPlacement.Stage)
+                yield return candidate;
     }
 
     // "This program defines that anim" — the one existence test all three surface vectors are built

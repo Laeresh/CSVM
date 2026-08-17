@@ -1031,6 +1031,41 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
+- `BL-415` `[Bug]` **The bail-out hides the parachutist's body instead of the pilot in the seat, so the
+  canopy deploys with nobody under it.** `cpeject1`'s `ObjectActiveState(pilot, false)` is anchored on
+  the crash root (`MAIN_ROOT_NODE` resolves to the caller's anchor), and `NameResolver.ResolveScoped`'s
+  tier 1 is that anchor's own subtree — which now contains the staged `chuteman > chutemanparent >
+  pilot` copy. It binds there instead of the airframe's `healthy/geometry/…/pilot_pos/pilot`, and
+  `chuteman`'s own def never names `pilot`, so nothing restores it. Measured on both `player_bhawk`
+  and `player_autogyro`: `seated pilot visible=True, chute pilot visible=False`, the exact inverse of
+  what the data asks for. Arrived with the `chuteman` staging (`BL-385` Wave D, D20) and became
+  visible when D25 made the ejection play.
+  **The mechanism the original uses instead:** compiled node POINTERS. `cpeject1`'s `pilot` is
+  `ptr=7655` and `pilot_pos` is `ptr=7654`, which is `NameResolver.Resolve`'s `SymbolClaims` tier. It
+  claims the name but binds nothing here, because a `PlaneBuilder`-built model carries no pointer
+  index, so resolution falls through to the scoped chain and lands on the wrong `pilot`.
+  ⚠ **Traps.** (a) The two candidate fixes are pointer indexing for plane models, or a resolver tier
+  that prefers the controller's own aircraft subtree over staged template copies for a call anchored
+  on the crash root. Both change `NameResolver`'s tier ORDER, which carries an explicit ⚠ against
+  reordering — that warning is there because the tiers were derived from the original's own
+  resolution, so a reorder needs the decode, not a local fix. (b) Do not special-case `chuteman` by
+  name: the collision is structural and any future staged template carrying a common node name hits
+  it. (c) The seated pilot exists on all eleven airframes, so a wrong fix is wrong everywhere at once.
+
+- `BL-416` `[Tuning]` **A player respawns before their own aircraft finishes coming apart.** The
+  player's destroy choreography gates its four-piece breakup behind the ejection's
+  `WAIT_FOR_COMPLETION`, measured at ~5.2 s (`player_bhawk`) and 6.0 s (`player_autogyro`), but
+  `FlightController`'s `AutoRespawnDelay` is **1.5 s** and its countdown starts at `Destroy`
+  regardless of whether the wreck is still flying. `--vs` arms `AutoRespawnAfter = 3 s`, still shorter
+  than the breakup, so a Dogfight pilot is back in the air before their old airframe breaks up behind
+  them. Interactive free flight is unaffected (manual `R` only). Verified headlessly: a scripted
+  `--hold` run respawned by frame 1250 against a kill at frame 1151.
+  ⚠ **Traps.** (a) This is a TUNING decision and the numbers are ours, not the original's — do not
+  "fix" it by shortening the authored choreography, which is decoded. (b) Respawn timing is a
+  multiplayer fairness question as much as a visual one; a longer wait is a real cost to the player
+  being shot at. (c) Whether the original even lets the wreck finish is undecoded; check before
+  assuming the answer is "make respawn wait".
+
 - `BL-414` `[Research]` **Untune the flight model: decode what is currently fitted.** `FlightModel.cs`
   carries **18 `TUNE` markers** and **11 `flightModel.*` config overrides**, and
   [`docs/org/flightModel.md`](docs/org/flightModel.md) already separates what was read out of
