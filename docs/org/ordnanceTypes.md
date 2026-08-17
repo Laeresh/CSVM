@@ -827,8 +827,13 @@ at `+0x14`. `FUN_004b8d50` fills the first two from its arguments and then, thro
 **`generate_smokescreen`** and **attaches it to a scene node** — the mount's node (mount `+4`) when
 the launch passed a mount, else the layer's own (layer `+0xc`). Attachment is what makes the smoke
 follow: nothing re-poses it per frame, it hangs on the aircraft's node and rides wherever the
-aircraft goes. `FUN_004ee160` then stores a per-frame callback (`LAB_004b9230`) and the object as its
-argument at emitter `+0x74`/`+0x78`. The two names come from `FUN_004b92c0`, which resolves
+aircraft goes. `FUN_004ee160` then stores a callback (`LAB_004b9230`) and the object as its
+argument at emitter `+0x74`/`+0x78`. It is **not per-frame and it does not shape the smoke**: the
+anim runtime invokes `+0x74` from the instance's release (`FUN_004ebbb0`) and from one event
+handler (`FUN_004ec5e0`), and the callback only finds the screen on the world list
+(`DAT_0071dbbc`), clears its `+8`/`+0x10`, and runs the same `FUN_004b8f80` →
+`FUN_004b8dd0` canister test the run-out branch below runs. Nothing grows or scales the emitter
+or its puffs outside the puffer system's own authored ramps. The two names come from `FUN_004b92c0`, which resolves
 `generate_smokescreen` and `drop_smokescreen_canister` once at mission load (`FUN_00523820`, a linear
 scan of the 0x110-byte effect records by name) into the pair at `DAT_0071dcc4`. They are **globals**,
 not weapon fields: every screen in the game lays the same smoke whatever fired it, which is also why
@@ -852,6 +857,26 @@ pylon-runs-dry question rather than to the screen, and the definition's own 2.0 
 `ANIMATION_OFFSET` `INACTIVE` events, which would cut the emission a quarter of the way into the 8 s
 screen. Our trail runs for the screen's whole `TIME`, the same reading `ProjectilePool` takes of the
 rockets' flyout trails, which carry an `Animation 10.0` stop it likewise leaves to the round's life.
+The reference footage (`CAP-23`, the Balmoral's smoker from the rear cockpit and two external
+poses) agrees with the whole-`TIME` reading: one launch, and the cloud is still being laid seven
+seconds later, which a 2 s emission with a 4 s lifetime cannot produce.
+
+**What the cloud is, from the numbers.** `smokerpuff` is four puffs per 0.65 m of track (about
+600 a second at flight speed, ~2,000 alive), each born a 0.3–0.5 m sprite that grows 85× over a
+2.5–4 s life (25–42 m at the end), thrown 10 m/s astern in the layer's frame plus −17..18 m/s of
+random on every axis, damped by `FRICTION 0.3` toward the wind, and coloured `255,180,100` for the
+first 1.5 % of its life then `53,74,37` at alpha 0.8, a `NEAR_FADE 30,10` culling it within 30 m
+of view depth and a `FADE_RANGE 500,700` fading it out beyond. `smokerpuff2` is the one-per-0.5 m,
+1–1.3 s, 4× ribbon at the tail with 1–31 m/s astern and ±1 m/s across, no near band. Two things
+in the port were dropping that authored cloud: the trail path spawned ONE puff per interval with no
+`LOCAL_VELOCITY` (a quarter of the density, drifting on the world axes), and the `COLORS` ramp was
+multiplied unlinearised, so the `53,74,37` green rendered `109,126,92` where the reference reads
+`50,68,35`; both are fixed in `Puffer`/`EmitterRenderer` (see [puffer.md](puffer.md)). What remains
+between the port and the reference at the same pose is the sprite's silhouette: the reference's
+puffs read as round soft blobs and ours, thousands of `splashbase` quads stacked, close to an
+opaque rounded square, since the texture's rim carries 2–5 % alpha that no single sprite shows and
+a thousand do. Whether the original's rasteriser dropped that rim (a 4-bit alpha format, an alpha
+test) is not decoded; nothing authored says so.
 
 The three tunables are **not per-weapon**. `FUN_004735b0`, the `ai_skill_parameters` loader, writes
 them from `player.zrd.json`, where their authored names state the mechanism outright:

@@ -50,6 +50,12 @@ public sealed class RecordingEmitterRenderer : IEmitterRenderer
         CullMargin = cullMargin;
     }
 
+    public void Grow(int capacity)
+    {
+        if (capacity > Capacity)
+            Capacity = capacity;
+    }
+
     public void Write(int index, Vector3 position, float size, float frame, float alpha, Color color)
     {
         _pending.Add(new Particle(index, position, size, frame, alpha, color));

@@ -1140,11 +1140,20 @@ DISTANCE_INTERVAL `PUFFER_STATE`s out of the world `AnimProgram` (the session wi
 chapter's textures exist) and pooling one `Puffer` per authored state, reused only once its previous
 screen's puffs have decayed. ⚠ Take the definition from the COMPILED archive: `AnimDefs`' reader
 normalizer carries no `DISTANCE_INTERVAL`, so the reader form of the same definition reads as no
-trail at all. Pinned by `SmokeScreenTests` (rules, tunables) and the `smoke-screen` suite (a
-live five-aircraft roster: the AI astern stunned throughout and recovering after expiry, the AI
-beyond 85° untouched, the human astern washed on its own pane while the layer's and a third human's
-stay clear, a downed layer's screen ending at once, the emitter started homed and stopped with the screen, and
-the two authored trail states read off C1's compiled `cam_anim`) and by the `ordnance-launch-axis` suite for the
+trail at all. The cloud's look is the authored numbers through `Puffer` unchanged (`smokerpuff`:
+four puffs per 0.65 m, `SIZE_RANGE` 0.15–0.25 growing 85× over a 2.5–4 s life, `LOCAL_VELOCITY`
+10 m/s astern plus ±17 m/s of random, `NEAR_FADE 30,10` so a camera nearer than 30 m of depth
+sees none of it, the `53,74,37` ramp at alpha 0.8; `smokerpuff2` is the thin 1–1.3 s ribbon at the
+tail); the two `INACTIVE` events at `Animation 2.0` are not applied, since the emitter runs for the
+screen's `TIME` and the reference footage shows the cloud still being laid well past 2 s. Pinned
+by `SmokeScreenTests` (rules, tunables) and the `smoke-screen` suite (a live five-aircraft roster:
+the AI astern stunned throughout and recovering after expiry, the AI beyond 85° untouched, the
+human astern washed on its own pane while the layer's and a third human's stay clear, a downed
+layer's screen ending at once, the emitter started homed and stopped with the screen, the two
+authored trail states read off C1's compiled `cam_anim`, and `smokerpuff` driven at 100 m/s for
+four seconds through the particle runtime holding thousands of puffs live past its starting pool,
+tens of metres across near the end of life and blown down the host's own backward axis) and by
+the `ordnance-launch-axis` suite for the
 launch side (a `wep_13` pylon lays one screen, spends its ammo and puts no round in the pool). Not a
 `Node`; the session owns and steps it.
 
@@ -2065,7 +2074,17 @@ them. The mechanism, field order and the three `puffer.*` switches are in
 
 The emission accumulator (a teleport guard on the distance path, no per-frame batch cap on
 either), the `PRIORITY` size nudge, and the blend-mode derivation are all decoded and traced in
-[org/puffer.md](org/puffer.md) — read it before adding a mechanism here. The authored-key side
+[org/puffer.md](org/puffer.md) — read it before adding a mechanism here. **The two continuous
+modes share one batch loop** (`EmitBatches`, fed metres by `TrailAdvance` and seconds by
+`SustainAt`, both spawning through `SpawnSustained`): a distance trail therefore lays `NUMBER`
+puffs per interval, rotates `LOCAL_VELOCITY` into the host's frame and gives each puff its
+sub-frame birth age, exactly as the time mode does. ⚠ Do not give the trail its own spawn again:
+the one it had dropped all three, and the smoke screen (`smokerpuff`: `NUMBER 4`, `LOCAL_VELOCITY`
+10 m/s astern) laid a quarter of its cloud drifting on the world axes. A continuous emitter's pool
+starts at `TrailPool` / the sustained steady-state estimate and doubles on demand up to
+`ContinuousPoolMax` (`GrowPool` → `IEmitterRenderer.Grow`); the ceiling is invented like every
+pool size here, the growth is not, since the engine bounds particles only by what can be born
+alive. The authored-key side
 stays in [formats/effects.md](formats/effects.md); the blend trace continues in
 [org/textures.md](org/textures.md). Proven by `PufferDistanceFadeTests`, `PufferWindTests`,
 `PufferPriorityTests`, `PufferStartAgeTests` and the `puffer-fire-column` suite.
@@ -2083,12 +2102,17 @@ owns the one instance and `Session/WeatherRig.Tick` writes it once per frame; `E
 is the null object every unwired puffer reads (unit suites, the plane viewer, no-weather missions).
 
 ## src/Effects/EmitterRenderer.cs
-`Puffer`'s lower seam: `IEmitterRenderer` takes live particles (`Attach` sizes the pool, `Write`
-per particle, `Show` publishes the frame) and `MultiMeshEmitterRenderer` draws them as ONE MultiMesh
-of camera-billboarded quads, owning the shader — quad-rim fade, flipbook column from per-instance
-custom data, and the soft-particle depth fade. The atlas and the blend verdict both arrive already
-resolved from `Puffer.Create`, which is what keeps the three modes reachable with no
-`TextureArchive` below this seam. Reached in a suite by `RecordingEmitterRenderer`.
+`Puffer`'s lower seam: `IEmitterRenderer` takes live particles (`Attach` sizes the pool, `Grow`
+re-sizes it when a continuous emitter outgrows it, `Write` per particle, `Show` publishes the
+frame) and `MultiMeshEmitterRenderer` draws them as ONE MultiMesh of camera-billboarded quads,
+owning the shader — quad-rim fade, flipbook column from per-instance custom data, and the
+soft-particle depth fade. The `COLORS` ramp arrives as the per-instance colour and is linearised
+in the shader (`csky_srgb_to_linear`, the same include every fullbright pass uses): the ramp is
+authored in DX7 framebuffer bytes, so multiplied in raw it drew every ramped puffer two shades
+too pale (the smoke screen's `53,74,37` came out `109,126,92` against the reference's `50,68,35`).
+The atlas and the blend verdict both arrive already resolved from `Puffer.Create`, which is what
+keeps the three modes reachable with no `TextureArchive` below this seam. Reached in a suite by
+`RecordingEmitterRenderer`.
 
 ## src/Effects/FogVolumeClutter.cs
 The ambient cloud field, entirely authored: `fogvol.zrd`'s weighted clutter table scattered

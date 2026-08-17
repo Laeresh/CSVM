@@ -352,10 +352,13 @@ public sealed partial class Puffer : Node3D
     // and out so particles don't pop at spawn/death. The flipbook itself already dims.
     private const float FadeIn = 0.12f, FadeOutStart = 0.6f;
 
-    private const int TrailPool = 640; // live-particle cap for trail emitters
+    private const int TrailPool = 640; // starting pool for trail emitters, grown on demand
     // A sustained emitter never stops, so its pool is sized to the steady-state population
     // (Number per interval, each living up to LifetimeMax) rather than to a burst duration.
     private const int SustainPoolMin = 16, SustainPoolMax = 2048;
+    // Where a continuous emitter's pool stops doubling (GrowPool). INVENTED, like every pool size
+    // here: the engine has no cap. Sized above the smoke screen's steady state with headroom.
+    private const int ContinuousPoolMax = 8192;
     // The original's teleport guard on the DISTANCE path: it
     // accumulates the frame's motion length into the emitter's interval counter only
     // `if (len &lt; 200.0)` — a respawned or pooled emitter that jumps across the world
@@ -367,8 +370,8 @@ public sealed partial class Puffer : Node3D
     // puffer stream, so a run repeats and two emitters still scatter independently.
     private readonly System.Random _rng = Rng.NewSystemRandom(Rng.Puffer);
 
-    // Dev-tunable BaseSize multipliers, one per spawn path (burst = SpawnBatch, trail =
-    // SpawnTrailPuff, sustain = SpawnSustained). Read once per emitter at Init; --det drops
+    // Dev-tunable BaseSize multipliers, one per spawn path (burst = SpawnBatch, trail and sustain
+    // = SpawnSustained by way of TrailAdvance / SustainAt). Read once per emitter at Init; --det drops
     // config overrides, so scripted captures stay a function of the committed tree.
     private float _burstSizeScale = SizeScaleDefault;
     private float _trailSizeScale = SizeScaleDefault;
@@ -534,10 +537,10 @@ public sealed partial class Puffer : Node3D
         bool moved = _trailing && (trailPos - _trailPrev).LengthSquared() > 1e-8f;
         if (!moved && staticBurnMps > 0f)
         {
-            TrailBurnAt(trailPos, dt, staticBurnMps);
+            TrailBurnAt(trailPos, worldBasis, dt, staticBurnMps);
             return;
         }
-        TrailAdvance(trailPos);
+        TrailAdvance(trailPos, worldBasis, dt);
         // An unmoved DISTANCE_INTERVAL state still runs one SustainAt batch: the synthetic
         // TIME_INTERVAL cadence sputters a single homing puff at the muzzle/exhaust.
         if (!moved)
@@ -756,11 +759,13 @@ public sealed partial class Puffer : Node3D
         return alpha > 0f;
     }
 
-    // Advances a DISTANCE_INTERVAL trail emitter to the followed node's new
-    // world position, emitting one sprite per interval of motion (with carry across
-    // frames) — the dense_firetrail smoke/fire trailing a damaged plane. The first
-    // call starts the trail; call every frame while the effect is on.
-    private void TrailAdvance(Vector3 worldPos)
+    // Advances a DISTANCE_INTERVAL trail emitter to the followed node's new world position: the
+    // engine's one emission accumulator fed with metres of motion instead of seconds, then the
+    // same batch loop as SustainAt (NUMBER particles per batch, spread along this frame's motion,
+    // born the sub-frame age, with LOCAL_VELOCITY in the host's frame). The first call starts the
+    // trail; call every frame while the effect is on. See docs/org/puffer.md, "The emission
+    // accumulator".
+    private void TrailAdvance(Vector3 worldPos, Basis worldBasis, float dt)
     {
         if (_state.DistanceInterval <= 0f)
             return;
@@ -777,8 +782,8 @@ public sealed partial class Puffer : Node3D
             Visible = true;
             return;
         }
-        var delta = worldPos - _trailPrev;
-        float dist = delta.Length();
+        var prev = _trailPrev;
+        float dist = (worldPos - prev).Length();
         _trailPrev = worldPos;
         if (dist < 1e-5f)
             return;
@@ -790,15 +795,8 @@ public sealed partial class Puffer : Node3D
                 Log.Info("world", $"puffer teleport guard tripped name={_state.Name} dist={dist:0.0}m guard={TeleportGuardMeters:0}m (first occurrence only; further ones counted silently)");
             return;
         }
-        var dir = delta / dist;
-        float interval = _state.DistanceInterval;
         _trailCarry += dist;
-        // walk back from the current position so the newest puff sits at the plane
-        var start = worldPos - dir * (_trailCarry - interval);
-        int count = (int)(_trailCarry / interval);
-        for (int k = 0; k < count; k++)
-            SpawnTrailPuff(start + dir * (k * interval));
-        _trailCarry -= count * interval;
+        EmitBatches(prev, worldPos, worldBasis, dt, ref _trailCarry, _state.DistanceInterval, _trailSizeScale);
     }
 
     // Stops trail emission; live smoke decays naturally.
@@ -809,8 +807,8 @@ public sealed partial class Puffer : Node3D
     // meters of virtual motion per second — the damage lab's parked plane, whose
     // panels burn in place (the puffs' own random velocity and growth make the
     // stacked emissions read as a flickering fire). Same carry, pool and spawn
-    // path as the moving trail.
-    private void TrailBurnAt(Vector3 worldPos, float dt, float speedMps)
+    // path as the moving trail, with no motion to spread along and no sub-frame age.
+    private void TrailBurnAt(Vector3 worldPos, Basis worldBasis, float dt, float speedMps)
     {
         if (_state.DistanceInterval <= 0f)
             return;
@@ -825,10 +823,25 @@ public sealed partial class Puffer : Node3D
             Visible = true;
         }
         _trailCarry += speedMps * dt;
-        int count = (int)(_trailCarry / _state.DistanceInterval);
-        for (int k = 0; k < count; k++)
-            SpawnTrailPuff(worldPos);
-        _trailCarry -= count * _state.DistanceInterval;
+        EmitBatches(worldPos, worldPos, worldBasis, 0f, ref _trailCarry, _state.DistanceInterval, _trailSizeScale);
+    }
+
+    // The engine's batch loop, shared by the distance and time modes: the FULL
+    // floor(accumulator / interval), uncapped, batch b at `frac = (b+1)·interval/accumulator`
+    // along `prev → origin` and born `(1 − frac)·dt` old. ⚠ Do not cap the count and do not
+    // clamp the age; both are invented divergences, see docs/org/puffer.md.
+    private void EmitBatches(Vector3 prev, Vector3 origin, Basis worldBasis, float dt,
+        ref float accumulator, float interval, float sizeScale)
+    {
+        interval = Mathf.Max(interval, 1e-3f);
+        float total = accumulator;
+        int batches = (int)(total / interval);
+        for (int b = 0; b < batches; b++)
+        {
+            float frac = (b + 1) * interval / total;
+            SpawnSustained(prev.Lerp(origin, frac), worldBasis, (1f - frac) * dt, sizeScale);
+        }
+        accumulator -= batches * interval;
     }
 
     // Continuous emission at a moving world point, spread along the emitter's own motion
@@ -853,20 +866,9 @@ public sealed partial class Puffer : Node3D
             _sustainPrevOrigin = origin;
         }
         _sustainCarry += dt;
-        float interval = Mathf.Max(_state.TimeInterval, 1e-3f);
-        float accumulator = _sustainCarry;
-        // The FULL floor(accumulator / interval), uncapped, exactly as the engine's batch loop
-        // runs it — ⚠ do not cap it; the reasons are in this method's remark.
-        int batches = (int)(accumulator / interval);
         // ⚠ The age offset rides the RAW dt, unclamped, exactly as the engine does. Clamping it to
         // keep long-hitch batches alive is an invented divergence — see docs/org/puffer.md.
-        for (int b = 0; b < batches; b++)
-        {
-            float frac = (b + 1) * interval / accumulator;
-            var spawnOrigin = _sustainPrevOrigin.Lerp(origin, frac);
-            SpawnSustained(spawnOrigin, worldBasis, (1f - frac) * dt);
-        }
-        _sustainCarry -= batches * interval;
+        EmitBatches(_sustainPrevOrigin, origin, worldBasis, dt, ref _sustainCarry, _state.TimeInterval, _sustainSizeScale);
         _sustainPrevOrigin = origin;
     }
 
@@ -922,25 +924,28 @@ public sealed partial class Puffer : Node3D
         Visible = false;
     }
 
-    // `origin` is the emitter's world point for this batch, already
-    // AT_NODE-offset and motion-interpolated (SustainAt owns both).
-    // `ageOffset` is the sub-frame `(1 - frac)·dt` correction, added to the
-    // start age even for a puffer with no `START_AGE_RANGE` authored.
-    private void SpawnSustained(Vector3 origin, Basis worldBasis, float ageOffset)
+    // One batch of a continuous emitter, trail or sustain. `origin` is the emitter's world point
+    // for this batch, already AT_NODE-offset and motion-interpolated (EmitBatches owns both).
+    // `ageOffset` is the sub-frame `(1 - frac)·dt` correction, added to the start age even for a
+    // puffer with no `START_AGE_RANGE` authored.
+    private void SpawnSustained(Vector3 origin, Basis worldBasis, float ageOffset, float sizeScale)
     {
         var min = _state.MinRandomVelocity;
         var max = _state.MaxRandomVelocity;
-        // LOCAL_VELOCITY is in the emitter node's frame (the smokestack's "up"); WORLD_VELOCITY
-        // is not. Rotating the local part is what keeps a banking/turning emitter correct.
+        // LOCAL_VELOCITY is in the emitter node's frame (the smokestack's "up", the smoke
+        // screen's astern); WORLD_VELOCITY is not. Rotating the local part is what keeps a
+        // banking/turning emitter correct.
         var baseVel = worldBasis * _state.LocalVelocity + _state.WorldVelocity;
         float d = _state.DeviationDistance;
-        for (int k = 0; k < _state.Number && _liveCount < _particles.Length; k++)
+        for (int k = 0; k < _state.Number; k++)
         {
+            if (_liveCount >= _particles.Length && !GrowPool())
+                break;
             // ⚠ The draw order (pos → vel → size → life) and the ±0.5·d half-width offset are both
             // load-bearing: changing either re-scatters every sustained emitter (c1-waterfall golden).
             var pos = origin + new Vector3(Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d));
             var vel = baseVel + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z));
-            float size = Rand(_state.SizeMin, _state.SizeMax) * _sustainSizeScale * _priorityFactor;
+            float size = Rand(_state.SizeMin, _state.SizeMax) * sizeScale * _priorityFactor;
             float life = Rand(_state.LifetimeMin, _state.LifetimeMax);
             // Gated on HasStartAgeRange so the ~2,900 puffers without the key draw nothing extra and
             // stay bit-identical. ageOffset is computed, not drawn, so it costs no extra _rng call.
@@ -964,35 +969,18 @@ public sealed partial class Puffer : Node3D
         }
     }
 
-    private void SpawnTrailPuff(Vector3 worldPos)
+    // A continuous emitter's pool grows to what its authored emission needs, up to a hard ceiling,
+    // because the engine bounds its particles only by what can be born alive (docs/org/puffer.md):
+    // the smoke screen's NUMBER 4 per 0.65 m at flight speed keeps ~2,000 puffs alive, three times
+    // the trail pool it starts on. False once the ceiling is reached; the batch then drops the rest.
+    private bool GrowPool()
     {
-        if (_liveCount >= _particles.Length)
-            return; // pool exhausted — oldest puffs finish before new ones spawn
-        var min = _state.MinRandomVelocity;
-        var max = _state.MaxRandomVelocity;
-        float d = _state.DeviationDistance;
-        // ±0.5·d, not ±d — see SpawnSustained's comment.
-        var pos = worldPos + new Vector3(Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d));
-        var vel = _state.WorldVelocity + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z));
-        float size = Rand(_state.SizeMin, _state.SizeMax) * _trailSizeScale * _priorityFactor;
-        float life = Rand(_state.LifetimeMin, _state.LifetimeMax);
-        // START_AGE_RANGE: see SpawnSustained's comment — gated draw, right after Life.
-        float age = _state.HasStartAgeRange ? Rand(_state.StartAgeMin, _state.StartAgeMax) : 0f;
-        float frame = _state.TextureSequence.Count > 0 ? 0f
-            : Mathf.Min(_state.Textures.Count - 1, Mathf.FloorToInt((float)_rng.NextDouble() * _state.Textures.Count));
-        // The engine's born-dead skip (see SpawnSustained). No sub-frame term on this path, so it
-        // only fires on an authored START_AGE_RANGE reaching a drawn lifetime.
-        if (age >= life)
-            return;
-        _particles[_liveCount++] = new Particle
-        {
-            Pos = pos,
-            Vel = vel,
-            BaseSize = size,
-            Life = life,
-            Age = age,
-            Frame = frame,
-        };
+        if (_particles.Length >= ContinuousPoolMax)
+            return false;
+        int capacity = Mathf.Min(_particles.Length * 2, ContinuousPoolMax);
+        Array.Resize(ref _particles, capacity);
+        _renderer.Grow(capacity);
+        return true;
     }
 
     // Interpolates the COLORS (lifeFrac, color) ramp.

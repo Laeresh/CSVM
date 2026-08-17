@@ -207,8 +207,14 @@ emitter resumes from its new pose with its remainder intact.
 
 ### The spawn, and its draw order
 
-Per batch, `NUMBER` particles. The engine draws **lifetime, then start age**, before its position
-draws; each position axis is `prev + delta·frac + (rand01 − 0.5)·DEVIATION_DISTANCE`.
+Per batch, `NUMBER` particles, **in both modes**: the distance arm changes only what feeds the
+accumulator, never the spawn, so a distance trail lays `NUMBER` puffs per interval with
+`LOCAL_VELOCITY` in the emitter node's frame and the sub-frame age like any time emitter. ⚠ CSVM's
+trail path once had its own single-puff spawn that dropped all three; the smoke screen's
+`smokerpuff` (`NUMBER 4`, `LOCAL_VELOCITY 0,0,10`) is the authored case that showed it, laying a
+quarter of its cloud with the 10 m/s on the world axes. The engine draws **lifetime, then start
+age**, before its position draws; each position axis is
+`prev + delta·frac + (rand01 − 0.5)·DEVIATION_DISTANCE`.
 
 - **`DEVIATION_DISTANCE` is a HALF-width**: the offset is `±0.5·d` per axis, not `±d`. (Reading it
   as `±d` scatters eight times the authored volume.)
@@ -305,7 +311,8 @@ Everything here is a known, deliberate divergence — not a gap waiting to be cl
 | **The life-fade envelope** (ease the additive glow in/out) | A render nicety with no authored key behind it. It is bypassed entirely whenever a `COLORS` ramp is present, since the ramp owns the alpha |
 | **The blend mode, derived from the sprite a particle dies on** | The authored data never states one. Measured rule in [`formats/effects.md`](../formats/effects.md) |
 | **The soft-particle depth fade** (over the last ~1.5 m before the scene depth) | A render nicety with no counterpart in the original, softening the hard line where a tilted billboard dips into terrain. Paired with the blend: off for MIX, whose dark sprites sit at ground-level sites where the fade would zero them against the terrain right behind them; on for additive, which leaks through it anyway |
-| **Fixed particle pools**, and pooled copies of each effect template | See the ⚠ below — INVENTED on both counts |
+| **Particle pools with a ceiling**, and pooled copies of each effect template | See the ⚠ below — INVENTED on both counts. A continuous emitter's pool doubles on demand up to `ContinuousPoolMax`, so only the ceiling is the divergence, not the starting size |
+| **The `COLORS` ramp linearised in the shader** | Not a divergence but a translation: the ramp's bytes are DX7 framebuffer values (the smoke screen's `53,74,37`), and Godot's linear pipeline needs `csky_srgb_to_linear` on them to put the same byte back on screen, as every fullbright pass already does |
 | **One alpha per particle across the panes** | The original evaluates the fade per particle per DRAW, so each splitscreen pane gets its own distances. Ours is one `MultiMesh` per emitter shared by every pane with the alpha written once per frame, so since `BL-339` the bands are run against EVERY pane's camera and the particle takes the most favourable answer: drawn if any pane should see it, at that pane's alpha. A pane can therefore see a puff its own camera would have faded further; per-pane alpha would take one MultiMesh per pane. Identical to the original wherever there is one viewer, which is every capture, freecam shot and single-player session. Relatedly, an emitter drawing on the very first frame of a session can beat the camera publish by one frame and draw unfaded — one frame of full alpha at session start, left alone rather than deferred |
 | ~~`puffer.fireRiseScale` / `fireLifetimeScale`~~ | **DELETED 2026-08-10.** The one invented multiplier this system carried, and it is gone — see below |
 

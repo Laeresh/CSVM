@@ -4661,6 +4661,8 @@ public static class Suites
                 AnimArchive.Load(chapterAnim, "cam_anim")?.Defs, textures, ctx.Host);
             ctx.Check(authored.StateCount == 2,
                 $"generate_smokescreen authors {authored.StateCount} DISTANCE_INTERVAL puffer state(s), the decode's two");
+            if (authored.StateCount == 2)
+                SmokeScreenCloud(ctx, authored.States[0]);
 
             const float dt = 1f / 60f;
             void Step()
@@ -5092,6 +5094,65 @@ public static class Suites
             foreach (var b in bodies)
                 b.Free();
             textures.Dispose();
+        }
+    }
+
+    // The screen's cloud through the particle runtime: `smokerpuff` (NUMBER 4 per 0.65 m,
+    // SIZE_RANGE 0.15–0.25 growing 85×, LOCAL_VELOCITY 10 m/s astern, lifetime 2.5–4 s) driven
+    // straight and level at 100 m/s for four seconds. What the authored numbers owe: every batch's
+    // four puffs, so the population runs into the thousands and past the trail pool it starts on;
+    // puffs tens of metres across near the end of life; and the local velocity blowing them down
+    // the host's own backward axis, not the world's.
+    private static void SmokeScreenCloud(TestContext ctx, PufferState state)
+    {
+        ctx.Check(state.Number == 4 && Mathf.IsEqualApprox(state.DistanceInterval, 0.65f)
+                  && Mathf.IsEqualApprox(state.GrowthFactor, 85f)
+                  && state.LocalVelocity.IsEqualApprox(new Vector3(0f, 0f, 10f)),
+            $"smokerpuff authors NUMBER 4, 0.65 m, growth 85, local (0,0,10) n={state.Number} di={state.DistanceInterval} g={state.GrowthFactor} lv={state.LocalVelocity}");
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu);
+        ctx.Host.AddChild(puffer);
+        // Detached for the run, as PufferModes does: the harness clock is a FixedStep one nothing
+        // steps, so with it attached no puff would age and every size check would pass or fail
+        // vacuously.
+        var clock = GameClock.Current;
+        GameClock.Current = null;
+        try
+        {
+            const float dt = 1f / 60f;
+            const float speed = 100f;
+            // The host flies world +X; its own backward axis (+Z of the basis) is world −Y here,
+            // so an authored local velocity that is honoured shows up as a downward drift.
+            var basis = new Basis(Vector3.Right, Vector3.Forward, Vector3.Down);
+            var pos = Vector3.Zero;
+            puffer.Emit(pos, basis, 0f);
+            float maxSize = 0f;
+            for (int i = 0; i < 240; i++)
+            {
+                pos += new Vector3(speed * dt, 0f, 0f);
+                puffer.Emit(pos, basis, dt);
+                puffer._Process(dt);
+                foreach (var p in gpu.LastFrame)
+                    maxSize = Mathf.Max(maxSize, p.Size);
+            }
+            // 4 per 0.65 m at 100 m/s is 615 births a second; with a 2.5–4 s life the fourth
+            // second holds about 2,000, so a pool that stayed at 640 or a spawn that dropped NUMBER
+            // would both read well under 1,500.
+            ctx.Check(gpu.Shown > 1500 && gpu.Capacity > 640,
+                $"the fourth second of a 100 m/s screen holds thousands of puffs live={gpu.Shown} pool={gpu.Capacity}");
+            ctx.Check(maxSize > 20f,
+                $"a puff nearing the end of its life spans tens of metres (0.5 m × 85 growth) max={maxSize:0.0}");
+            // The world-frame random vertical (−20..16 m/s, mean −2) alone leaves the cloud's mean
+            // about 2.5 m under the track over the population's ages; the authored 10 m/s astern,
+            // downward in this pose and damped by FRICTION 0.3, takes it to about −15 m.
+            float meanY = gpu.LastFrame.Count > 0 ? gpu.LastFrame.Average(p => p.Position.Y) : 0f;
+            ctx.Check(meanY < -8f,
+                $"LOCAL_VELOCITY blows the cloud down the host's backward axis, world −Y in this pose meanY={meanY:0.0}");
+        }
+        finally
+        {
+            GameClock.Current = clock;
+            puffer.Free();
         }
     }
 

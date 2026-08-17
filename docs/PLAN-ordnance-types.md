@@ -958,7 +958,11 @@ ammo gone). Owed at the controls: the 1v1 and the coop pair below.
 `generate_smokescreen` effect and attaches it to the layer's node, so it follows the aircraft, and
 `FUN_004b8f60` releases it down both of `FUN_004b8fd0`'s end branches; our side is the
 `ISmokeEmitter` seam `SmokeScreens.Lay` starts and `SimStep` stops, with `SmokeScreenEmitters`
-running the definition's two DISTANCE_INTERVAL puffers at the layer's live pose.
+running the definition's two DISTANCE_INTERVAL puffers at the layer's live pose. The cloud now
+draws as authored (four puffs per 0.65 m with the 10 m/s astern `LOCAL_VELOCITY`, and the
+`53,74,37` ramp linearised so it lands on the reference's `50,68,35`), the two gaps that had left it
+a thin pale ribbon being the trail path's single-puff spawn and the unlinearised ramp, both in
+`Puffer`/`EmitterRenderer` and shared by every distance trail and every ramped puffer.
 
 **Goal.** A smoke screen laid by an aircraft stuns AI and blinds humans behind it, and spawns no
 projectile.

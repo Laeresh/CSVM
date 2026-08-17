@@ -18,6 +18,11 @@ public interface IEmitterRenderer
     /// off the pool's computed AABB.</summary>
     void Attach(Node3D owner, int capacity, float cullMargin);
 
+    /// <summary>Re-sizes the draw pool to <paramref name="capacity"/> slots, keeping nothing: the
+    /// emitter rewrites every live slot before the next <see cref="Show"/>. A continuous emitter
+    /// calls this when its authored emission outgrows the pool it was sized with.</summary>
+    void Grow(int capacity);
+
     /// <summary>One live particle's state this frame: world <paramref name="position"/>, uniform
     /// <paramref name="size"/>, atlas column <paramref name="frame"/>, <paramref name="alpha"/>
     /// envelope and ramp <paramref name="color"/>.</summary>
@@ -40,6 +45,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
     private const string ShaderCode = """
         shader_type spatial;
         render_mode BLEND_MODE, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
+        #include "res://shaders/csky_srgb.gdshaderinc"
 
         uniform sampler2D atlas : source_color, filter_linear, repeat_disable;
         uniform float frame_count = 1.0;
@@ -78,7 +84,10 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             vec4 unproj = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, scene_raw, 1.0);
             float scene_z = unproj.z / unproj.w;
             float soft = SOFT_EXPR;
-            ALBEDO = t.rgb * v_color.rgb;
+            // The COLORS ramp is authored in DX7 framebuffer bytes, the same gamma-space
+            // modulate every fullbright pass linearises (csky_srgb.gdshaderinc); multiplied in
+            // raw it draws two shades too pale. White, the ramp-less case, is a fixed point.
+            ALBEDO = t.rgb * csky_srgb_to_linear(v_color.rgb);
             ALPHA = t.a * v_alpha * v_color.a * rim.x * rim.y * soft;
         }
         """;
@@ -135,6 +144,17 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             ExtraCullMargin = cullMargin,
         };
         owner.AddChild(_mmi);
+    }
+
+    public void Grow(int capacity)
+    {
+        // Setting InstanceCount reallocates the buffer and clears every slot; the emitter's next
+        // frame writes all its live ones back before Show, so nothing drawn is lost for longer.
+        if (_mm != null && capacity > _mm.InstanceCount)
+        {
+            _mm.VisibleInstanceCount = 0;
+            _mm.InstanceCount = capacity;
+        }
     }
 
     public void Write(int index, Vector3 position, float size, float frame, float alpha, Color color)

@@ -360,6 +360,10 @@ public sealed class SmokeScreenEmitters
     /// <summary>How many authored trail states a screen lays. Two in the retail data.</summary>
     public int StateCount => _states.Count;
 
+    /// <summary>The authored states themselves, in definition order, for a suite that wants to
+    /// drive one through the particle runtime on its own.</summary>
+    public IReadOnlyList<PufferState> States => _states;
+
     /// <summary>One screen's emitter, or null when there is nothing authored to draw.</summary>
     public ISmokeEmitter? Create()
     {
