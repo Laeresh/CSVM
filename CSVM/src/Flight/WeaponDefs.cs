@@ -136,10 +136,12 @@ public sealed class WeaponDef
     /// <c>stock_loadouts.json</c>; here, <c>IsGun</c> is just "has a caliber and fires hitscan".</summary>
     public bool IsGun => IsCannon || Caliber.HasValue;
 
-    /// <summary>Whether this rocket physically homes: no dedicated <c>GUIDED</c> flag, guidance is
-    /// encoded in <see cref="TurnRate"/>, and <see cref="LockOn"/> is not the discriminator
-    /// (docs/formats/weapons.md). Homing is not yet modelled; this describes the data rather than
-    /// driving flight.</summary>
+    /// <summary>Whether this rocket's <c>TURN_RATE</c> is a real one rather than the 0.001 sentinel
+    /// every dumbfire type authors: a label for the weapon lab and the probes, not the flight
+    /// gate. The original steers a round on <c>LOCK_ON</c> AND a held target
+    /// (<see cref="ProjectilePool.SteeringStepRuns"/>) and only then reads <c>TURN_RATE</c> for how
+    /// hard it may turn, so a sentinel-rate round with a target is steered imperceptibly and a
+    /// weapon without <c>LOCK_ON</c> never, whatever this says. <c>wep_11</c> alone is true.</summary>
     public bool IsGuided => TurnRate is > 0.01f;
 
     /// <summary>This weapon's <c>IMPACT</c> row for a struck surface id, or null when the row binds

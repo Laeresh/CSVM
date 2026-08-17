@@ -157,10 +157,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Guidance and seeking
 
-6. ☐ The steering step: both gates, the turn clamp, the speed penalty
-7. ☐ `LOCK_ON_LEAD`: blend from bearing to intercept
-8. ◐ The beeper tag: world list, countdown, expiry tail
-9. ◐ `BEEPER_SEEKER`: the per-frame retarget and its selection rule
+6. ☑ The steering step: both gates, the turn clamp, the speed penalty
+7. ☑ `LOCK_ON_LEAD`: blend from bearing to intercept
+8. ☑ The beeper tag: world list, countdown, expiry tail
+9. ☑ `BEEPER_SEEKER`: the per-frame retarget and its selection rule
 
 ### Wave C — The blast
 
@@ -407,7 +407,32 @@ any shooter is aim-assisted.
 
 # Wave B — Guidance and seeking
 
-## B6 ☐ The steering step: both gates, the turn clamp, the speed penalty
+## B6 ☑ The steering step: both gates, the turn clamp, the speed penalty
+
+**Verdict.** Landed as `ProjectilePool.Steer`, run per round after the seeker's retarget and before
+the motion step, in `FUN_005af720`'s own order. `SteeringStepRuns` (`LOCK_ON` AND a held target)
+stays the one turn gate; inside it the desired direction is the bearing (or B7's blend),
+`MaxTurnRad` is `TURN_RATE × dt × ramp` times the engine's per-shot turn scalar (`DAT_00a1e1b8`,
+found while reading `FUN_005af960`: initialised to 1.0 and reset to 1.0 by every spawn, so 1 on
+every steering frame; the ramp is kept as a term at 1), an angle over the clamp slerps by exactly
+`clamp / angle` and renormalises, otherwise it snaps, and every steering frame with a non-zero
+angle multiplies the own speed by `TurnPenaltyFactor`, `0.8 + 0.2·cos` of the angle actually swung
+THAT frame. Two corrections to this item's own text off the decompile: the cosine is of the
+per-frame swing, not of the angle to the target, so the loss over a whole turn scales with the
+frame's authority rather than "up to 20% per frame" (at 60 fps the seeker's 1.25 rad/s costs about
+0.3% over a 90° swing, asserted as the exact product in the `ordnance-guidance` suite); and the
+decay's clock is a separate field the step advances (`+0x63c`), not the round's age. ⚠ **One
+deliberate divergence, by direction:** the inherited-velocity decay is NOT hung on the target half
+of the gate here. The original's shot routine always hands a `LOCK_ON` weapon a target (a synthetic
+one when the player has none, undecoded and not reproduced), so its `LOCK_ON` rounds always decay;
+ours may hold none, and gating the decay on it would fly a torpedo fired with nothing selected at
+launcher speed plus 60 m/s for its whole range. So `InheritedFraction` decays every `LOCK_ON` round
+and only the turn stays target-gated; recorded on `Projectile.cs` in `architecture.md`, and the
+`launch-velocity-decay` suite's no-target assertion now reads 60 at 4 s. `IsGuided`'s doc comment
+and the `formats/weapons.md` gloss are rewritten: a label for the lab, not the flight gate. The
+suite also flies the dumbfire half: the torpedo with a target turns its 0.001 rad/s and no more
+(0.23° in 4 s), so the gate is on the flag. Owed at the controls: `--weapon-lab=wep_11` at a painted
+manoeuvring aircraft, and a dumbfire type at a selected one.
 
 **Goal.** Only rounds the original steers are steered, they turn no faster than authored, and turning
 costs speed.
@@ -433,7 +458,30 @@ rate.
 **⚠ Traps.** The speed penalty applies **per steering frame**, not once per turn. At 60 fps a
 sustained hard turn bleeds fast; that is the original's behaviour and not a bug to damp.
 
-## B7 ☐ `LOCK_ON_LEAD`: blend from bearing to intercept
+## B7 ☑ `LOCK_ON_LEAD`: blend from bearing to intercept
+
+**Verdict.** Landed as `ProjectilePool.LeadDesired`, reusing **`AimAssist.TryIntercept`** (the
+constant-velocity solver `AiGunner` and `AiRocketeer` already run) rather than a second solver: from
+element 0 of age, on a target with a velocity, the solve on the round's OWN speed and the target's
+velocity replaces the bearing, slerped in from the bearing at element 0 to the full solve at element
+1, and a solve with no answer leaves the bearing. The parse was checked: `+0x84` is
+`1 / (element1 − element0)` (`0x005ade1a`–`0x005ade52`), written only when the two differ, after
+element 0 is clamped up to at most element 1; the original's `FUN_0053e56d` is the same intercept
+in the same `u = 1/t` form. Two things this item's own text did not say: the lead block also
+requires the round's second target field (the target's velocity pointer, `+0x74`) to be set, which
+`TargetVelocity` answers for an aircraft or an emplacement and nothing else; and **no shipped entry
+reaches it**. The three carriers (`wep_04`, `wep_25`, `wep_27`) all pair it with the 0.001
+sentinel and `RANGE 900`, and each expires before its 4 s / 5 s onset even off a standing launcher
+(`wep_04` at about 3.46 s), which the suite asserts. The blend is therefore flown on a lab def
+cloned from `wep_11` against a real crossing rig: the heading is the plain bearing below element 0,
+eases monotonically to the intercept between the elements with no step at either end, and is the
+full solve from element 1. This item's Verify names `wep_11`, which authors no `LOCK_ON_LEAD`, so
+that clip cannot be flown as written; nothing at the controls can show this item on shipped data.
+⚠ Reported, not fixed (the AI files are not this item's): `AiRocketeer` solves its ordnance lead
+at `RoundSpeed = VELOCITY` (`FlightController.cs`, `RoundSpeed = hp.Weapon.Velocity ??
+DefaultVelocity`), while since A3 a motor round leaves at the launcher's speed and climbs to
+`VELOCITY` above it, so its lead on `wep_04`/`wep_25`/`wep_27` assumes a speed the round does not
+have.
 
 **Goal.** A guided round aims where the target will be, and eases into doing so.
 
@@ -454,13 +502,20 @@ must lead the target progressively rather than stepping to full lead at the onse
 doing three of them (guidance ramp denominator, velocity-decay window, and the inherit-at-all flag).
 Do not collapse them.
 
-## B8 ◐ The beeper tag: world list, countdown, expiry tail
+## B8 ☑ The beeper tag: world list, countdown, expiry tail
 
 **Verdict.** The list landed as `Flight/BeeperTags.cs`: `BeeperTags<FlightController>` is built
 per session beside the smoke screens, stepped after every aircraft in both step paths, and handed
-to the pool as `ProjectilePool.BeeperTags`; the hit-side call (`TryTag(shooterTeam, victim,
-BeeperTime)` on a `BEEPER` hit against an aircraft, dealing zero damage) is pending in the
-Projectile lane, so nothing paints yet. Three things this item's own text left open, settled from
+to the pool as `ProjectilePool.BeeperTags`. The hit-side call landed in `ProjectilePool.Apply`: a
+weapon with `BeeperTime` reaching an `AircraftBody`, ray-struck or fused, calls
+`BeeperTags.TryTag(round team, victim rig, TIME)` and returns before either damage path, so the
+pair is discarded structurally rather than passed as zero and an authored pair would still spend
+nothing; the impact effect and sound play as usual, and `Impact`/`Apply` carry the round's own
+`Proj.Team` for the gate. The `ordnance-guidance` suite fires a `wep_10` into a hostile rig's
+tail: painted with about 20 s remaining, every damage zone untouched, still painted at 19.5 s and
+not past 20 s, a fresh tag landing on the rig whose first is in its tail, and the tag collapsing
+the step the rig dies. Owed at the controls: `--rocket=wep_10` at an AI, which shows nothing
+visible until a seeker follows it. Three things this item's own text left open, settled from
 the code and recorded on the decode page: the countdown does not stop at zero, it keeps running to
 the −5 deletion (four seconds after a slam, five after a plain expiry), and the slam fires only
 while the tag still paints, so a death in the tail does not restart it; a second beeper hit on a
@@ -488,13 +543,22 @@ lifetime matches `TIME` with the aircraft alive and collapses immediately when i
 
 **⚠ Traps.** `wep_10` authors a real damage pair that the engine discards. Do not spend it.
 
-## B9 ◐ `BEEPER_SEEKER`: the per-frame retarget and its selection rule
+## B9 ☑ `BEEPER_SEEKER`: the per-frame retarget and its selection rule
 
 **Verdict.** The selection rule landed as `BeeperTags<FlightController>.PickTarget(roundPos,
 roundHeading)` over `BeeperTagRule.AlignmentDot` and `BeeperTagRule.Prefers`, with the four
-literals as named constants; the per-frame retarget itself (a `BEEPER_SEEKER` round calling
-`PickTarget` each frame and writing the result into `Proj.Target` for B6's steering step) is
-pending in the Projectile lane. Two corrections to this item's own text, re-read off
+literals as named constants. The per-frame retarget landed as `ProjectilePool.RetargetSeeker`:
+before the steering gate is read, a `BEEPER_SEEKER` round asks `PickTarget` with its position and
+unit heading and REPLACES `Proj.Target` with the answer, null included, as `FUN_00441780` writes
+zeros when nothing is painted. Settled from `FUN_005af720`'s order (callback at `+0x688`, then the
+health test, then the gate on `+0x70`): the shooter's spawn target is never used by a seeker, since
+the callback overwrites it before it is ever read, so a seeker steers only at a painted aircraft
+and holds nothing with nothing painted. The `ordnance-guidance` suite launches `wep_11` HOLDING an
+unpainted rig beside two painted ones and reads its held target back every frame through
+`CollectHeldTargets`: the first frame already holds `PickTarget`'s pick (the nearer rig 30° off,
+range leading), every frame matches the rule, the unpainted rig is never held, and clearing the
+list clears the slot. Owed at the controls: `--weapon-lab=wep_11` after a `wep_10` paint, which
+is the one clip that shows the pair working as one weapon. Two corrections to this item's own text, re-read off
 `0x004b8b50`–`0x004b8c91` and recorded on the decode page: both ratios are of SQUARED distances
 (`FUN_00538880`, and the routine keeps `1 / bestDistanceSq`), so "up to 20% farther" is about 9.5%
 as a length; and the net effect is not "alignment leads". With the inverted dot, `candDot <= 0.7`

@@ -137,8 +137,9 @@ public static class Suites
             "a LOCK_ON round carries its launcher's velocity and sheds it linearly over LOCK_ON " +
             "seconds (BL-290): wep_14 launched at 120 m/s leaves at 180, reads 120 at half the " +
             "window and holds its authored 60 from 2.5 s on, while a slow launch barely changes; " +
-            "the decay obeys the steering step's gate, so a round holding no target keeps its " +
-            "launcher's speed; and neither a gun nor a rocket without LOCK_ON changes",
+            "the decay runs for a LOCK_ON round holding NO target too (the recorded divergence " +
+            "from the original's target-gated step); and neither a gun nor a rocket without " +
+            "LOCK_ON changes",
             LaunchVelocityDecay));
         into.Add(new TestHarness.Suite("smoke-screen",
             "a smoke screen laid through SmokeScreens.Lay on a live roster (D18): the AI directly " +
@@ -171,6 +172,18 @@ public static class Suites
             "instead, proving the two paths are separate; and wep_14 is hidden for its first 300 m " +
             "and shown from there on",
             OrdnanceEndConditions));
+        into.Add(new TestHarness.Suite("ordnance-guidance",
+            "the steering step and the beeper pair on a live pool (B6-B9): wep_11 turns onto a target " +
+            "abeam at its authored 1.25 rad/s and its speed reads the per-frame 0.8+0.2cos penalty " +
+            "exactly; wep_14 with a target turns its 0.001 sentinel and no more, so the gate is on " +
+            "LOCK_ON and not the rate; a LOCK_ON round with no target sheds its launcher's velocity " +
+            "and does not turn; LOCK_ON_LEAD on a lab def eases from bearing to the AimAssist " +
+            "intercept between element 0 and 1 with no step at either end, while every shipped " +
+            "carrier expires before element 0; a seeker's held target is the tag list's pick every " +
+            "frame, overriding what it was launched with, never an untagged aircraft, and nothing " +
+            "once nothing is painted; and a wep_10 hit paints its victim for TIME with the damage " +
+            "ledger untouched, expiring at 20 s and collapsing on death",
+            OrdnanceGuidance));
         into.Add(new TestHarness.Suite("air-to-air",
             "a round strikes the target plane's body, maps to the data part, moves armor/HP by the " +
             "weapon's own values, downs it when whole-vehicle health exhausts (a lone dead critical " +
@@ -3204,11 +3217,12 @@ public static class Suites
             ctx.Check(Mathf.Abs(slow0 - 70f) < 0.5f && Mathf.Abs(slowEnd - 60f) < 0.5f,
                 $"a torpedo launched at 10 m/s barely slows at all launch={slow0:0.##} settled={slowEnd:0.##}");
 
-            // ⚠ The decay lives INSIDE the steering step, which a round holding no target never
-            // enters, so it keeps the launcher's velocity for its whole flight.
+            // ⚠ The recorded divergence: the original's decay lives inside its target-gated
+            // steering step, ours runs for every LOCK_ON round, so a torpedo fired with nothing
+            // selected still settles onto its authored 60 rather than flying at 180 forever.
             float untargeted = SpeedAt(torpedo, 120f, null, 4f);
-            ctx.Check(Mathf.Abs(untargeted - 180f) < 0.5f,
-                $"a LOCK_ON round holding NO target sheds nothing speed={untargeted:0.##} expected=180");
+            ctx.Check(Mathf.Abs(untargeted - 60f) < 0.5f,
+                $"a LOCK_ON round holding NO target still sheds its launcher's velocity speed={untargeted:0.##} expected=60");
 
             float chokerSpeed = SpeedAt(choker, 120f, target, 0.3f);
             ctx.Check(Mathf.Abs(chokerSpeed - (choker.Velocity ?? 0f)) < 0.5f,
@@ -3495,6 +3509,319 @@ public static class Suites
         finally
         {
             bystander?.Free();
+            mark?.Free();
+            pool?.Free();
+            textures.Dispose();
+        }
+    }
+
+    // B6-B9 on a live pool with a lab tag list beside it: the turn clamp and its speed penalty, the
+    // sentinel rate under the same gate, the target-free decay, LOCK_ON_LEAD's blend on a lab def
+    // (no shipped carrier reaches its onset), the seeker's per-frame pick, and the beeper's paint.
+    private static void OrdnanceGuidance(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        if (!weapons.TryGet("wep_11", out var seeker) || !weapons.TryGet("wep_14", out var torpedo)
+            || !weapons.TryGet("wep_10", out var beeper))
+        {
+            ctx.Check(false, $"wep_11, wep_14 and wep_10 all resolve");
+            return;
+        }
+        const float dt = 1f / 60f;
+        ctx.Check(seeker.TurnRate is 1.25f && seeker.BeeperSeeker && seeker.LockOnLead == null
+                  && torpedo.TurnRate is > 0.0009f and < 0.0011f && beeper.BeeperTime is 20f,
+            $"wep_11 authors TURN_RATE 1.25 and BEEPER_SEEKER with no LOCK_ON_LEAD, wep_14 the 0.001 sentinel, wep_10 TIME 20");
+        var carriers = weapons.All.Where(w => w.LockOnLead != null).ToList();
+        ctx.Check(carriers.Count == 3 && carriers.All(w => w.TurnRate is < 0.01f),
+            $"LOCK_ON_LEAD's carriers ({string.Join(",", carriers.Select(w => w.Id))}) all pair it with the sentinel rate");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var textures = new TextureArchive(texturesPath);
+        var tags = new BeeperTags<FlightController>();
+        ProjectilePool? pool = null;
+        Node3D? mark = null;
+        var rigs = new List<FlightController>();
+        try
+        {
+            var live = new ProjectilePool(textures, null, null) { BeeperTags = tags };
+            pool = live;
+            ctx.Host.AddChild(live);
+            // Well clear of anything another suite left in the host.
+            var origin = new Vector3(0f, 3000f, 0f);
+            var muzzle = new Transform3D(Basis.LookingAt(Vector3.Forward, Vector3.Up), origin);
+            var rounds = new List<(Vector3 Pos, Vector3 Velocity)>();
+            var held = new List<object?>();
+
+            FlightController BuildRig(int playerIndex, Vector3 pos, Vector3 lookAt)
+            {
+                var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+                var rig = new FlightController
+                {
+                    PlaneModel = model,
+                    Collider = PlaneCollider.Build(model),
+                    Damage = new PlaneDamage(stats.DestroyableParts),
+                    PlayerIndex = playerIndex,
+                    Projectiles = live,
+                    UseKeyboard = false,
+                    AllowPause = false,
+                };
+                rig.AddChild(model);
+                rig.Setup(new FlightModel(stats), ctx.Camera, new CamParams(), pos, lookAt);
+                ctx.Host.AddChild(rig);
+                rigs.Add(rig);
+                return rig;
+            }
+
+            (Vector3 Pos, Vector3 Vel)? Round()
+            {
+                rounds.Clear();
+                live.CollectLiveRounds(rounds);
+                return rounds.Count > 0 ? rounds[0] : null;
+            }
+
+            static float AngleFrom(Vector3 dir, Vector3 reference) =>
+                Mathf.Acos(Mathf.Clamp(dir.Normalized().Dot(reference.Normalized()), -1f, 1f));
+
+            // 1. The turn clamp and its penalty on a PAINTED rig dead abeam (a seeker steers only at
+            // the tag list's pick, so the plain mark would be dropped on its first frame): the swing
+            // is exactly TURN_RATE per second and every steering frame costs 0.8+0.2cos(clamp).
+            mark = new Node3D { Name = "guidance-mark" };
+            ctx.Host.AddChild(mark);
+            mark.GlobalPosition = origin + new Vector3(800f, 0f, 0f);
+            var beacon = BuildRig(6, mark.GlobalPosition, mark.GlobalPosition + Vector3.Forward);
+            ctx.Check(tags.TryTag(AimAssist.TeamOfPilot(0), beacon, beeper.BeeperTime ?? 0f),
+                $"the abeam rig is painted for the seeker to steer at");
+            live.Clear();
+            live.Spawn(seeker, muzzle, Vector3.Zero, shooterId: 0);
+            int halfSecond = Mathf.RoundToInt(0.5f / dt);
+            for (int i = 0; i < halfSecond; i++)
+                live.SimStep(dt);
+            var turning = Round();
+            float turned = turning is { } tr ? AngleFrom(tr.Vel, Vector3.Forward) : -1f;
+            float perFrame = ProjectilePool.MaxTurnRad(seeker, dt);
+            ctx.Check(turning != null && Mathf.Abs(turned - halfSecond * perFrame) < 0.002f,
+                $"the seeker turns at its authored TURN_RATE turned={Mathf.RadToDeg(turned):0.##}° expected={Mathf.RadToDeg(halfSecond * perFrame):0.##}° after 0.5 s");
+            float expectedSpeed = (seeker.Velocity ?? 0f)
+                                  * Mathf.Pow(ProjectilePool.TurnPenaltyFactor(perFrame), halfSecond);
+            float turningSpeed = turning?.Vel.Length() ?? 0f;
+            ctx.Check(turningSpeed < (seeker.Velocity ?? 0f) && Mathf.Abs(turningSpeed - expectedSpeed) < 0.05f,
+                $"and loses speed by the per-frame penalty exactly speed={turningSpeed:0.###} expected={expectedSpeed:0.###} of {seeker.Velocity:0}");
+            // Once aligned it stops paying: the angle each frame is zero.
+            for (int i = 0; i < Mathf.RoundToInt(1.5f / dt); i++)
+                live.SimStep(dt);
+            var aligned = Round();
+            ctx.Check(aligned is { } al && AngleFrom(al.Vel, mark.GlobalPosition - al.Pos) < 0.01f
+                      && al.Vel.Length() > expectedSpeed - 2f,
+                $"after the swing it is on the mark's bearing and its speed has settled speed={aligned?.Vel.Length():0.##}");
+            tags.Clear();
+
+            // 2. The dumbfire sentinel under the same gate: the torpedo IS steered (a target and
+            // LOCK_ON), by 0.001 rad/s, so 4 s buys it 0.23° toward a mark 90° off.
+            live.Clear();
+            live.Spawn(torpedo, muzzle, Vector3.Zero, target: mark);
+            for (int i = 0; i < Mathf.RoundToInt(4f / dt); i++)
+                live.SimStep(dt);
+            var dumb = Round();
+            float dumbTurn = dumb is { } db ? AngleFrom(db.Vel, Vector3.Forward) : -1f;
+            ctx.Check(dumb != null && dumbTurn > 0.003f && dumbTurn < 0.005f,
+                $"a sentinel-rate round with a target flies effectively straight, turning only its 0.001 rad/s turned={Mathf.RadToDeg(dumbTurn):0.###}° in 4 s");
+
+            // 3. No target: the launcher's velocity still decays (the recorded divergence) and the
+            // heading never moves.
+            live.Clear();
+            live.Spawn(torpedo, muzzle, Vector3.Forward * 120f);
+            for (int i = 0; i < Mathf.RoundToInt(2.5f / dt); i++)
+                live.SimStep(dt);
+            var free = Round();
+            float freeTurn = free is { } fr ? AngleFrom(fr.Vel, Vector3.Forward) : -1f;
+            ctx.Check(free != null && Mathf.Abs(free.Value.Vel.Length() - 60f) < 0.5f && freeTurn < 1e-4f,
+                $"a LOCK_ON round holding no target decays to its own 60 m/s and does not turn speed={free?.Vel.Length():0.##} turned={Mathf.RadToDeg(freeTurn):0.####}°");
+
+            // 4. LOCK_ON_LEAD. No shipped carrier reaches its element 0 before RANGE (wep_04 off a
+            // standing launcher, its slowest case, is gone by 3.5 s of its 4 s onset), so the blend
+            // is exercised on a lab def below, snapping to the desired direction every frame.
+            if (weapons.TryGet("wep_04", out var incendiary))
+            {
+                live.Clear();
+                live.Spawn(incendiary, muzzle, Vector3.Zero, target: mark);
+                int alive = 0;
+                for (int i = 0; i < Mathf.RoundToInt(4f / dt) && Round() != null; i++)
+                {
+                    live.SimStep(dt);
+                    alive++;
+                }
+                float ended = alive * dt;
+                ctx.Check(ended < (incendiary.LockOnLead?.Item1 ?? 0f),
+                    $"wep_04 off a standing launcher ends at {ended:0.##} s, before its LOCK_ON_LEAD onset at {incendiary.LockOnLead?.Item1:0} s");
+            }
+            // The heading after each step is that frame's desired direction, compared with the
+            // bearing and the AimAssist.TryIntercept solve computed off the same pre-step state of
+            // the round and a real rig crossing at its spawn speed.
+            var lab = new WeaponDef
+            {
+                Id = "lab-lead",
+                Name = "LAB LEAD",
+                IsRocket = true,
+                Velocity = seeker.Velocity,
+                LockOn = seeker.LockOn,
+                LockOnLead = (4f, 8f),
+                TurnRate = 20f,
+                Range = 10000f,
+            };
+            var crossing = BuildRig(1, origin + new Vector3(-2000f, 0f, -5000f),
+                origin + new Vector3(-1000f, 0f, -5000f));
+            ctx.Check(crossing.WorldVelocity.Length() > 10f,
+                $"the crossing rig flies at its spawn speed {crossing.WorldVelocity.Length():0.#} m/s");
+            live.Clear();
+            live.Spawn(lab, muzzle, Vector3.Zero, target: crossing);
+            bool bearingBefore = true, leadAfter = true, monotone = true, blendOk = true, solved = true;
+            float lastFraction = 0f, fractionAtOnset = -1f, fractionNearEnd = -1f;
+            int frames = 0;
+            for (int k = 0; k < Mathf.RoundToInt(9f / dt); k++)
+            {
+                if (Round() is not { } before)
+                    break;
+                float age = k * dt;
+                var targetPos = crossing.WorldPosition;
+                var targetVel = crossing.WorldVelocity;
+                var bearing = (targetPos - before.Pos).Normalized();
+                if (!AimAssist.TryIntercept(before.Pos, before.Vel.Length(), targetPos, targetVel, out var lead, out _))
+                {
+                    solved = false;
+                    break;
+                }
+                live.SimStep(dt);
+                crossing.SimStep(dt);
+                if (Round() is not { } after || k < 2)
+                    continue;
+                frames++;
+                var heading = after.Vel.Normalized();
+                if (age < 4f)
+                {
+                    bearingBefore &= heading.Dot(bearing) > 0.99999f;
+                }
+                else if (age < 8f)
+                {
+                    float fraction = AngleFrom(heading, bearing) / AngleFrom(lead, bearing);
+                    if (fractionAtOnset < 0f)
+                        fractionAtOnset = fraction;
+                    if (age > 7.9f)
+                        fractionNearEnd = fraction;
+                    blendOk &= Mathf.Abs(fraction - (age - 4f) / 4f) < 0.03f;
+                    monotone &= fraction >= lastFraction - 1e-3f;
+                    lastFraction = fraction;
+                }
+                else
+                {
+                    leadAfter &= heading.Dot(lead) > 0.99999f;
+                }
+            }
+            ctx.Check(solved && frames > 500,
+                $"the lead solve had an answer on every frame and the round flew the whole 9 s frames={frames}");
+            ctx.Check(bearingBefore, $"below element 0 the desired direction is the plain bearing");
+            ctx.Check(blendOk && monotone && fractionAtOnset is >= 0f and < 0.03f && fractionNearEnd > 0.95f,
+                $"between elements the heading eases from bearing to lead, no step at the onset onset={fractionAtOnset:0.###} near-end={fractionNearEnd:0.###}");
+            ctx.Check(leadAfter, $"from element 1 on the desired direction is the full intercept");
+            // The crossing rig stays registered with the pool until the suite's teardown (its
+            // AircraftBody is on the pool's roster; freeing it here would leave a disposed body
+            // there), 5 km away from everything below.
+
+            // 5. The seeker's pick. Two painted rigs and one unpainted, the seeker launched HOLDING
+            // the unpainted one: the tag list's pick replaces it on the first frame and every frame
+            // after, the unpainted rig is never held, and an emptied list clears the slot.
+            var ahead = BuildRig(2, origin + new Vector3(0f, 0f, -1000f), origin + new Vector3(0f, 0f, -1100f));
+            var abeam = BuildRig(3, origin + new Vector3(475f, 0f, -823f), origin + new Vector3(475f, 0f, -923f));
+            var unpainted = BuildRig(4, origin + new Vector3(-250f, 0f, -300f), origin + new Vector3(-250f, 0f, -400f));
+            int shooterTeam = AimAssist.TeamOfPilot(0);
+            bool taggedAhead = tags.TryTag(shooterTeam, ahead, beeper.BeeperTime ?? 0f);
+            tags.SimStep(dt);
+            bool taggedAbeam = tags.TryTag(shooterTeam, abeam, beeper.BeeperTime ?? 0f);
+            ctx.Check(taggedAhead && taggedAbeam && tags.PaintingCount == 2 && !tags.IsPainted(unpainted),
+                $"two rigs are painted for the pick and the third is not");
+            live.Clear();
+            live.Spawn(seeker, muzzle, Vector3.Zero, shooterId: 0, target: unpainted);
+            bool matchesRule = true, neverUnpainted = true, firstIsAbeam = false;
+            int picks = 0;
+            for (int k = 0; k < Mathf.RoundToInt(1.5f / dt); k++)
+            {
+                if (Round() is not { } before)
+                    break;
+                var expected = tags.PickTarget(before.Pos, before.Vel.Normalized());
+                live.SimStep(dt);
+                tags.SimStep(dt);
+                held.Clear();
+                live.CollectHeldTargets(held);
+                if (held.Count == 0)
+                    break;
+                picks++;
+                if (k == 0)
+                    firstIsAbeam = ReferenceEquals(held[0], abeam);
+                matchesRule &= ReferenceEquals(held[0], expected);
+                neverUnpainted &= !ReferenceEquals(held[0], unpainted);
+            }
+            ctx.Check(picks > 80 && matchesRule,
+                $"the seeker's held target is PickTarget's answer on every one of {picks} frames");
+            ctx.Check(firstIsAbeam,
+                $"the launch target is overridden on the first frame: the nearer rig 30° off steals the pick from the one dead ahead (range leads)");
+            ctx.Check(neverUnpainted, $"the unpainted rig is never held");
+            tags.Clear();
+            live.SimStep(dt);
+            held.Clear();
+            live.CollectHeldTargets(held);
+            ctx.Check(held.Count == 1 && held[0] == null,
+                $"with nothing painted the seeker holds nothing, as the callback writes zeros");
+            live.Clear();
+
+            // 6. The beeper's paint. A round into a hostile rig's tail tags it for TIME and spends
+            // nothing on it; the tag expires at TIME, a fresh one lands in the tail, and a crash
+            // collapses it on the next step.
+            var victim = BuildRig(5, origin + new Vector3(0f, -400f, -600f), origin + new Vector3(0f, -400f, -700f));
+            bool Pristine(FlightController rig) => rig.Damage!.Parts.Values.All(
+                p => p.Hp >= p.Def.MaxHp && p.Armor >= p.Def.MaxArmor);
+            var tailMuzzle = new Transform3D(Basis.LookingAt(Vector3.Forward, Vector3.Up),
+                victim.WorldPosition + new Vector3(0f, 0f, 40f));
+            int Paint()
+            {
+                live.Spawn(beeper, tailMuzzle, Vector3.Zero, shooterId: 0);
+                int steps = 0;
+                while (Round() != null && steps < 30)
+                {
+                    live.SimStep(dt);
+                    tags.SimStep(dt);
+                    steps++;
+                }
+                return steps;
+            }
+            int hitSteps = Paint();
+            float? remaining = tags.RemainingFor(victim);
+            ctx.Check(hitSteps < 30 && tags.IsPainted(victim) && remaining is { } r0
+                      && Mathf.Abs(r0 - ((beeper.BeeperTime ?? 0f) - hitSteps * dt)) < 0.05f,
+                $"a wep_10 into a hostile rig paints it for TIME steps={hitSteps} remaining={remaining:0.###} of {beeper.BeeperTime:0}");
+            ctx.Check(Pristine(victim) && victim.InPlay,
+                $"and the damage ledger is untouched: no zone lost a point");
+            for (int i = 0; i < Mathf.RoundToInt(19.5f / dt) - hitSteps; i++)
+                tags.SimStep(dt);
+            bool paintedLate = tags.IsPainted(victim);
+            for (int i = 0; i < Mathf.RoundToInt(0.6f / dt); i++)
+                tags.SimStep(dt);
+            ctx.Check(paintedLate && !tags.IsPainted(victim),
+                $"the paint lasts TIME: still on at 19.5 s, off past 20 s");
+            int again = Paint();
+            bool repainted = tags.IsPainted(victim);
+            victim.DebugForceCrash();
+            tags.SimStep(dt);
+            ctx.Check(again < 30 && repainted && !tags.IsPainted(victim) && tags.Count > 0,
+                $"a fresh tag lands on a rig whose first is in its tail, and collapses the step its rig dies (tail entries={tags.Count})");
+        }
+        finally
+        {
+            foreach (var rig in rigs)
+                rig.Free();
             mark?.Free();
             pool?.Free();
             textures.Dispose();

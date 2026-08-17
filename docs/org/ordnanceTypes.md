@@ -239,25 +239,45 @@ author `LOCK_ON` to be steered at all, and the round must have acquired somethin
 decides how hard it may turn, with the 0.001 sentinel meaning a `LOCK_ON` weapon that is steered but
 turns almost imperceptibly.
 
-**The desired direction** starts as the bearing from the round's position to its target. If the
-weapon authored `LOCK_ON_LEAD` (`+0x74` bit `0x10000`) and the round is older than `+0x7c`, the
-routine solves an intercept instead of a bearing, and between `+0x7c` and `+0x80` it **slerps** from
-the plain bearing to the full lead solution. So the lead comes in gradually rather than at once.
+**The desired direction** starts as the bearing from the round's position to its target
+(`FUN_00538ca0` on `+0x48` and `+0x70`). If the weapon authored `LOCK_ON_LEAD` (`+0x74` bit
+`0x10000`), the round's age `+0x668` is at least `+0x7c` and the round's second target field `+0x74`
+(the pointer to the target's velocity) is set, `FUN_0053e56d` solves an intercept instead: it is the
+constant-velocity intercept the aim assist also solves (in the same `u = 1/t` form, the answer
+being `normalize(targetVel + (targetPos − roundPos) × u)`) on the round's **own** speed `+0x640` and the
+target's velocity, and it returns 0 with no real root, which leaves the plain bearing standing.
+While the age is under `+0x80` the routine `FUN_00538d70`-slerps from the bearing to the lead by
+`(age − +0x7c) × +0x84`; from `+0x80` on it takes the lead outright. `+0x84` is written by the parse
+(`FUN_005ad630`, `0x005ade1a`–`0x005ade52`) as `1 / (element1 − element0)`, only when the two
+differ, after clamping element 0 up to at most element 1. So the lead comes in gradually rather than
+at once. ⚠ No shipped entry reaches it: the three carriers (`wep_04`, `wep_25`, `wep_27`, at
+`[4,8]`/`[5,10]`) all author `TURN_RATE 0.001` and `RANGE 900`, and each expires at that range
+before its onset age even off a standing launcher (`wep_04` at about 3.46 s of its 4 s), so the
+blend is real engine behaviour that this install's data never shows.
 
 **The turn authority per frame** is
 
-    maxTurn = TURN_RATE * dt * ramp,  where
+    maxTurn = turnScale * TURN_RATE * dt * ramp,  where
     ramp    = 0                                       while age < TURN_SUSPEND_TIME
             = (age - TURN_SUSPEND_TIME) / LOCK_ON     when TURN_SUSPEND_TIME > 0
             = 1                                       when TURN_SUSPEND_TIME is 0 (every shipped weapon)
 
-in radians. The routine takes the angle between the current heading and the desired one, and if it
-exceeds `maxTurn` it slerps by exactly `maxTurn / angle` and renormalises; otherwise it snaps to the
-desired direction outright.
+in radians. `turnScale` is `DAT_00a1e1b8`, a per-shot global: the weapons init (`FUN_005ad4e0`)
+writes it as 1.0 and the spawn (`FUN_005aef40`, `0x005af0cd`) copies it into the round and resets
+it to 1.0 after every round it makes, and nothing else writes it, so it is 1 on every steering
+frame in this binary. The `age` the ramp and the decay read is `+0x63c`, a clock the steering step
+itself advances (and only while it is at or under `LOCK_ON`), not the round's age `+0x668`, so a
+round that is not steered does not run it down. The routine takes the angle between the current
+heading and the desired one, and if it exceeds `maxTurn` it slerps by exactly `maxTurn / angle` and
+renormalises; otherwise it snaps to the desired direction outright.
 
-**Turning costs speed.** After the turn, the round's speed is multiplied by `0.8 + 0.2 * cos(angle)`
-every frame it steers, so a hard-turning round bleeds up to 20% of its speed per frame while the turn
-lasts. Nothing in the authored data hints at this.
+**Turning costs speed.** After the turn, whenever that angle was above zero, the round's speed is
+multiplied by `0.8 + 0.2 * cos(turned)`, where `turned` is the angle the heading actually swung this
+frame: `maxTurn` when the turn was clamped, the whole angle when it snapped (`fcos` of `local_14` in
+the clamped arm, of the acos result otherwise). It is applied per steering frame, never once per
+turn, and because it is the cosine of one frame's swing the loss over a whole turn scales with the
+frame's authority rather than with the turn: at 60 fps the seeker's 1.25 rad/s costs about 0.3%
+over a 90° swing, and a coarser step costs more. Nothing in the authored data hints at this.
 
 **Terrain avoidance is a weapon field.** When the round is within 10 m of the ground and a collision
 probe comes back clear, the routine adds `PITCH_RATE * 2/pi` of "up" to the desired direction and
@@ -283,7 +303,10 @@ starts fast and visibly slows to its own cruise, and one launched from a slow ai
 ⚠ This decay lives **inside** the steering step, so it inherits that step's gate: a `LOCK_ON` round
 fired with **no target** is never stepped through `FUN_005af960` and so keeps its inherited launch
 velocity indefinitely. In practice the shot routine hands a `LOCK_ON` weapon a target when the player
-has none, so the usual case is the decaying one, but the two are not the same rule.
+has none, so the usual case is the decaying one, but the two are not the same rule. CSVM
+deliberately runs the decay for every `LOCK_ON` round, target or none, because it does not
+reproduce that synthetic target; the divergence is recorded on `Projectile.cs` in
+[`architecture.md`](../architecture.md).
 
 `LOCK_ON` is doing three separate jobs, which is why the name misleads: it is the lead-guidance ramp
 denominator, the launch-velocity decay window, and the flag that decides whether launch velocity is
@@ -437,9 +460,13 @@ walks exactly the set that could fuse, and a plain round is invisible to it.
    `FUN_004b8b50`, passing the round's **position** (`+0x48`) and **heading** (`+0x3c`). Tags with a
    countdown at or below zero are skipped.
 4. The query keeps a running best and replaces it by the rule below.
-5. The winner is written into the round's target fields `+0x70` and `+0x74`, which are the same
-   fields the guidance step reads. From there the round steers toward it at `TURN_RATE` like any
-   other guided round.
+5. The winner's position and velocity accessors (its vtable slots 0 and 1) are written into the
+   round's target fields `+0x70` and `+0x74`, which are the same fields the guidance step reads,
+   and **zeros are written when nothing is painted**. `FUN_005af720` calls the callback (`+0x688`)
+   before it tests the steering gate on `+0x70`, so a seeker's target is the tag list's answer on
+   every frame including its first: whatever target the shot routine handed it at spawn is
+   overwritten before it is ever read, and a seeker with nothing painted holds nothing and is not
+   steered. From there the round steers toward the pick at `TURN_RATE` like any other guided round.
 
 ### The query's selection rule
 

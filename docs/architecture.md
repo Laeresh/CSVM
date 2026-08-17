@@ -118,7 +118,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
 - `src/Flight/CameraController.cs` — the flown plane's camera: roll-following chase, numpad fixed views, paused orbit. Steers a `Camera3D` it does not own.
 - `src/Flight/ImpactOutcome.cs` — what a weapon×surface hit should do (effect, sound, stand-in, damage) as a value; `Resolve` is pure and engine-free.
-- `src/Flight/Projectile.cs` — `ProjectilePool`: the weapon-fire subsystem — ballistics, tracers, flashes, per-surface impact, damage to destructibles.
+- `src/Flight/Projectile.cs` — `ProjectilePool`: the weapon-fire subsystem — ballistics, the steering step (turn clamp, speed penalty, `LOCK_ON_LEAD`, the seeker's retarget), tracers, flashes, per-surface impact, damage to destructibles, the beeper's paint.
 - `src/Flight/WarningShotCue.cs` — the shipped near-miss accumulator (player.json `warning_shot_*`) + swept-segment/point distance; engine-free so it unit-tests.
 - `src/Flight/IncomingFire.cs` — `--incoming`: the near-miss test rig — a phantom shooter on each player's six, so the cue is reachable deterministically without an AI gunner.
 - `src/Flight/SpawnPoints.cs` — flight spawn from the mission's own zrdr: ia.json `spawn_points`, or objectives.json PLAYER_INIT as fallback.
@@ -1250,17 +1250,61 @@ reader asking how fast and which way a round is travelling goes through `WorldVe
 what `InheritedFraction` has left of the second: 1 at launch falling linearly to 0 at `LOCK_ON`
 seconds. `CarriesLockOn` is the inherit-at-all flag (`FUN_005aef40` copies the launcher's vector
 only for a weapon authoring `LOCK_ON` and zeroes it otherwise, so the choker and the two
-non-`LOCK_ON` emplacement rounds inherit nothing), and `SteeringStepRuns` is the decay's gate:
-`FUN_005af720` runs the steering step only for a `LOCK_ON` weapon whose round **holds a target**, so
-a round holding none keeps its launcher's speed for its whole flight. That gate is the predicate B6
-hangs the turn clamp and the speed penalty on, and `Proj.Target` is the reference it reads —
-deliberately typed as `object?`, because the original's target slot takes an aircraft, an
-emplacement or a beeper tag alike, and B6/B9 are what write it. **Guns are held outside the rule on
+non-`LOCK_ON` emplacement rounds inherit nothing) and is the decay's whole gate here.
+⚠ **That is a deliberate, recorded divergence from the original.** There the decay lives inside
+the steering step `FUN_005af960`, which `FUN_005af720` runs only for a `LOCK_ON` weapon whose round
+**holds a target** (`SteeringStepRuns`), and its shot routine always satisfies that half by handing
+a `LOCK_ON` weapon a synthetic ring-buffer target when the player has none selected (undecoded and
+not reproduced). A CSVM round can hold no target at all, so gating the decay on it would fly a
+torpedo fired with nothing selected at launcher speed plus 60 m/s for its whole range; the turn
+stays gated on the target, only the decay does not. **Guns are held outside the rule on
 purpose** (`InheritedAtLaunch`): no `CANNON` in this install authors `LOCK_ON`, so applying it to
 them would strip every bullet of its launcher's velocity, and both the gun aim assist and the impact
 reticle (`Ballistics.March`) are built on the inheriting round. `CollectLiveRounds` is the seam a
 scripted run samples a round's speed through, and a breadcrumb reports the first four rounds that
 finish shedding.
+
+**The steering step turns only what the original turns, and turning costs speed**
+(`org/ordnanceTypes.md`, "Guidance"). Per round and per sim step, in `FUN_005af720`'s own order:
+`RetargetSeeker` (a `BEEPER_SEEKER` round asks `BeeperTags.PickTarget` with its position and unit
+heading and REPLACES `Proj.Target` with the answer, null included, as `FUN_00441780` writes zeros
+when nothing is painted; so the target a seeker was launched with is gone on its first frame and a
+seeker steers only at a painted aircraft), then `Steer` on a round `SteeringStepRuns` admits whose
+target has a position (`TargetPosition`; `Proj.Target` stays `object?` because the slot takes an
+aircraft, an emplacement or a zeppelin sub-part alike), then `Ballistics.Step`, so the motor acts
+on the penalised speed. Inside `Steer`: the desired direction is the bearing to the target, or
+`LeadDesired`'s blend; `MaxTurnRad` is `TURN_RATE × dt × ramp` in radians times the engine's
+per-shot turn scalar (`DAT_00a1e1b8`, initialised to 1.0 and reset to 1.0 by every spawn, so 1 on
+every steering frame; the ramp is `TURN_SUSPEND_TIME`'s, unauthored, so 1 from the first frame and
+kept as a term); an angle over the clamp slerps the heading by exactly `clamp / angle`
+(`SlerpDirection`, renormalised, a dead-astern target left alone), otherwise it snaps; and whenever
+the angle was above zero the own speed is multiplied by `TurnPenaltyFactor(turned)`,
+`0.8 + 0.2·cos` of the angle actually swung THIS frame (the clamp when clamped, the whole angle when
+it snapped). That is per steering frame, never per turn, and because it is the cosine of one
+frame's swing the loss over a whole turn scales with the frame's authority: at 60 fps the seeker's
+1.25 rad/s costs about 0.3% over a 90° swing (`ordnance-guidance` asserts the exact product), and a
+coarser step costs more. The gate is on the flag: every dumbfire type authors `TURN_RATE 0.001` and
+so, with a target, is steered by 0.001 rad/s, which the same suite measures on the torpedo (0.23°
+in 4 s). `LeadDesired` is `LOCK_ON_LEAD` (`FUN_005af960`'s first block): from element 0 of age, on
+a target with a velocity (`TargetVelocity`, the original's second target field, round `+0x74`),
+the constant-velocity intercept **`AimAssist.TryIntercept`** (the same solver `AiGunner` and
+`AiRocketeer` use; the original's `FUN_0053e56d` is the same solve on the round's OWN speed and the
+target's velocity) replaces the bearing, slerped in from the bearing at element 0 to the full solve
+at element 1 (`FUN_005ad630` at `0x005ade43` stores `1/(el1 − el0)` at weapon `+0x84` and clamps
+el0 to at most el1); no solution leaves the bearing. ⚠ No shipped carrier reaches it: `wep_04`,
+`wep_25` and `wep_27` are the three, all pair it with the 0.001 sentinel, and all expire at their
+900 m `RANGE` before their 4 s / 5 s onset even off a standing launcher (`wep_04` at 3.46 s), so the
+suite exercises the blend on a lab def cloned from `wep_11`.
+
+**A `BEEPER` hit paints and deals nothing.** In `Apply`, a weapon with `BeeperTime` reaching an
+`AircraftBody`, ray-struck or fused, calls `BeeperTags.TryTag(round team, victim rig, TIME)` and
+returns before either damage path (`FUN_004b9bc0`'s `BEEPER` branch: the tag, then both damage
+figures zeroed): the pair is discarded structurally rather than passed as zero, so an authored
+pair would still spend nothing; `wep_10` authors 0.0/0.0 either way. The effect and sound above it
+play as usual. `Impact`/`Apply` carry the round's own `Proj.Team` for that gate, stamped once at
+spawn and never re-derived. `CollectHeldTargets` is the seam a scripted run reads a seeker's pick
+through. All of B6 to B9 is flown by the `ordnance-guidance` suite on a live pool with a lab
+`BeeperTags` beside it.
 
 `Proj.Cap` is the own speed `ACCELERATION` climbs to, seeded beside `Vel` at spawn from
 `Ballistics.LaunchSpeed` (**after** the `weapons.rocketSpeedScale` dev factor, so scaling a rocket
@@ -2293,8 +2337,8 @@ the attacker queue `Next Enemy/Objective` walks backwards. Decode:
 `AimAssist`'s candidate set ONCE per tick (aircraft + fused ordnance off the pool, the world's
 destructibles off `Destructibles` when a world runtime wired one), then `AssistedGunDirection`
 runs each firing barrel's slot through `AimAssist.FireDirection` and hands the result to
-`ProjectilePool.Spawn`. The rocket call deliberately gets no assist — the original reaches it from
-the gun branch alone — but it does get a launch direction, from `OrdnanceLaunchDir`, and the two
+`ProjectilePool.Spawn`. The rocket call deliberately gets no assist (the original reaches it from
+the gun branch alone) but it does get a launch direction, from `OrdnanceLaunchDir`, and the two
 shooters differ there: a human's round leaves along the AIRCRAFT's own basis axis, negated (as-is
 for a `REAR` weapon), with the pylon marker giving the spawn position alone, while an AI's leaves
 along the clamped mount aim `AiRocketeer` wrote. That asymmetry is the original's
@@ -2305,9 +2349,11 @@ change. A pylon whose weapon carries `SmokeScreenTime` spawns nothing at all: it
 fire clock and the rate limit run as for any other pylon weapon. What the rocket call also passes is
 the shooter's current target, a human's own `Targeting.Current` selection or an AI's `Gunner.Target`
 quarry: it is the second half of `ProjectilePool.SteeringStepRuns`'s gate, so it decides whether a
-`LOCK_ON` round sheds the launcher velocity it left with. The original's own shot routine hands a
-`LOCK_ON` weapon a synthetic target when the player holds none; CSVM does not, so a round fired with
-nothing selected holds its inherited speed. The `ordnance-launch-axis` suite pins both halves.
+`LOCK_ON` round is steered. The original's own shot routine hands a `LOCK_ON` weapon a synthetic
+target when the player holds none; CSVM does not, so a round fired with nothing selected is not
+turned, though it still sheds its inherited launch velocity (the divergence recorded on
+`Projectile.cs`). A `BEEPER_SEEKER` round drops whatever it was handed here on its first frame and
+steers only at the tag list's pick. The `ordnance-launch-axis` suite pins the launch halves.
 Two one-shot breadcrumbs on the first gun round make the wiring visible in any flight log: the
 candidate counts per list **with the nearest structure's range** (a registry whose anchors carried
 no world transform would report its full count from the world origin — untargetable, and the count

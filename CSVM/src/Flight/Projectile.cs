@@ -109,6 +109,18 @@ public sealed partial class ProjectilePool : Node3D
     // closing — hold the fuse: the next step detonates closer, or the hit ray lands a direct hit.
     private const float StillClosingFraction = 0.999f;
 
+    // The steering step's literals (FUN_005af960, docs/org/ordnanceTypes.md "Guidance"). The turn
+    // scalar is DAT_00a1e1b8, a per-shot global the weapons init writes as 1.0 and the spawn
+    // (FUN_005aef40) resets to 1.0 after every round it makes, so it is 1 on every steering frame
+    // in this binary. The ramp is TURN_SUSPEND_TIME's, unauthored throughout, so it is 1.
+    private const float TurnPenaltyFloor = 0.8f;
+    private const float TurnPenaltyCosWeight = 0.2f;
+    private const float TurnRateScale = 1f;
+    private const float TurnRampUnsuspended = 1f;
+    // A desired direction this close to dead astern leaves the heading where it is: the axis to
+    // swing about is undefined there.
+    private const float SteerOppositeDot = 0.99999f;
+
     private const int MaxProjectiles = 1024;
     private const int MaxFlashes = 128;
     // ⚠ No rocket streak constants here any more. `he_rocket`/`ap_rocket` and every other ordnance
@@ -418,12 +430,30 @@ public sealed partial class ProjectilePool : Node3D
     public static bool CarriesLockOn(WeaponDef weapon) => weapon.LockOn is > 0f;
 
     /// <summary>The steering step's gate (<c>FUN_005af720</c> → <c>FUN_005af960</c>): the weapon
-    /// carries <c>LOCK_ON</c> AND the round holds a target. A round failing either is never stepped
-    /// through it, so it neither steers nor sheds its inherited launch velocity, which is why a
-    /// <c>LOCK_ON</c> round fired with no target keeps its launcher's speed indefinitely. B6 hangs
-    /// the turn clamp and the per-frame speed penalty on this same predicate.</summary>
+    /// carries <c>LOCK_ON</c> AND the round holds a target. A round failing either is never turned
+    /// (<see cref="Steer"/>), whatever its <c>TURN_RATE</c> says: the gate is on the flag, and the
+    /// 0.001 sentinel every dumbfire type authors only makes a gated round turn imperceptibly.
+    /// ⚠ The inherited-velocity decay is deliberately NOT hung on this predicate here, although
+    /// the original runs it inside the same step: <see cref="InheritedFraction"/>.</summary>
     public static bool SteeringStepRuns(WeaponDef weapon, bool hasTarget) =>
         CarriesLockOn(weapon) && hasTarget;
+
+    /// <summary>The steering step's per-frame speed penalty (<c>FUN_005af960</c>): the round's own
+    /// speed times <c>0.8 + 0.2·cos(turned)</c>, where <paramref name="turnedRad"/> is the angle the
+    /// heading actually swung THIS frame (the clamp when the turn was clamped, the whole angle when
+    /// it snapped). Applied on every steering frame the angle was above zero, never once per turn,
+    /// so the loss over a whole turn scales with the frame's turn authority: at 60 fps the seeker's
+    /// 1.25 rad/s costs about 0.3% over a 90° turn, and a coarser step costs more.</summary>
+    public static float TurnPenaltyFactor(float turnedRad) =>
+        TurnPenaltyFloor + TurnPenaltyCosWeight * Mathf.Cos(turnedRad);
+
+    /// <summary>The heading's turn authority for one frame, radians:
+    /// <c>TURN_RATE × dt × ramp</c>, times the engine's per-shot turn scalar. The ramp is
+    /// <c>TURN_SUSPEND_TIME</c>'s: zero until that age, then rising over <c>LOCK_ON</c>; no shipped
+    /// entry authors the key, so the term is <see cref="TurnRampUnsuspended"/> from the first
+    /// frame and is kept as a term so the formula reads as the routine's.</summary>
+    public static float MaxTurnRad(WeaponDef weapon, float dt) =>
+        TurnRateScale * (weapon.TurnRate ?? 0f) * dt * TurnRampUnsuspended;
 
     /// <summary>Whether a round that reaches <c>RANGE</c> detonates on its way out or simply
     /// vanishes (<c>FUN_005afd50</c>, the branch at <c>LAB_005b02ba</c> against
@@ -563,6 +593,21 @@ public sealed partial class ProjectilePool : Node3D
             if (p.Alive)
             {
                 into.Add((p.Travelled, p.FlyoutHidden));
+            }
+        }
+    }
+
+    /// <summary>Appends every live round's held target, in slot order (null for a round holding
+    /// none). The seam a scripted run reads a seeker's per-frame pick through, since the slot is
+    /// otherwise invisible from outside the round.</summary>
+    public void CollectHeldTargets(List<object?> into)
+    {
+        for (int i = 0; i < _projHigh; i++)
+        {
+            ref var p = ref _proj[i];
+            if (p.Alive)
+            {
+                into.Add(p.Target);
             }
         }
     }
@@ -877,6 +922,11 @@ public sealed partial class ProjectilePool : Node3D
                 }
                 p.Inherited = Vector3.Zero;
             }
+            // The original's per-round order (FUN_005af720): the retarget callback, then the
+            // steering step on what it left in the target slot, then the motion step. So a seeker's
+            // turn this frame is toward this frame's pick, and the motor acts on the penalised speed.
+            RetargetSeeker(ref p, BeeperTags);
+            Steer(ref p, dt);
             Ballistics.Step(ref next, ref p.Vel, p.Accel, p.Grav, p.Cap, dt);
             next += p.Inherited * (carried * dt);
             var vel = p.Vel + p.Inherited * carried;
@@ -908,7 +958,7 @@ public sealed partial class ProjectilePool : Node3D
                     var hitPoint = (Vector3)hit["position"];
                     NearMissPass(prev, hitPoint, p.Shooter);
                     Impact(p.Weapon, hitPoint, hit["collider"].Obj as Node, (Vector3)hit["normal"],
-                        hit["shape"].AsInt32(), p.Shooter);
+                        hit["shape"].AsInt32(), p.Shooter, p.Team);
                     RetireRound(ref p);
                     continue;
                 }
@@ -921,7 +971,7 @@ public sealed partial class ProjectilePool : Node3D
                     NearMissPass(prev, fusePoint, p.Shooter);
                     var fuseNormal = towardHull.LengthSquared() > 1e-8f
                         ? towardHull.Normalized() : Vector3.Zero;
-                    Impact(p.Weapon, fusePoint, fused, fuseNormal, -1, p.Shooter);
+                    Impact(p.Weapon, fusePoint, fused, fuseNormal, -1, p.Shooter, p.Team);
                     RetireRound(ref p);
                     continue;
                 }
@@ -1096,15 +1146,97 @@ public sealed partial class ProjectilePool : Node3D
         !weapon.IsRocket || CarriesLockOn(weapon) ? launcherVel : Vector3.Zero;
 
     // What is left of the inherited launch velocity this frame: 1 at launch, falling linearly to 0
-    // at LOCK_ON seconds. FUN_005af960 applies the decay, so only a round that step actually runs
-    // on sheds anything (SteeringStepRuns); every other round holds its vector for its whole
-    // flight, which is both the no-target case and the gun case.
+    // at LOCK_ON seconds, for EVERY round whose weapon carries LOCK_ON, target or none; a gun's
+    // rounds hold theirs for their whole flight. ⚠ Deliberately NOT gated on the target as the
+    // original's is (docs/architecture.md, Projectile.cs): the original always hands a LOCK_ON
+    // round a target, ours may hold none, and gating the decay on it would fly a torpedo fired
+    // with nothing selected at launcher speed plus 60 m/s forever. Only the turn stays gated.
     private static float InheritedFraction(in Proj p)
     {
         float window = p.Weapon.LockOn ?? 0f;
-        return SteeringStepRuns(p.Weapon, p.Target != null) && window > 0f
+        return CarriesLockOn(p.Weapon) && window > 0f
             ? Mathf.Clamp((window - p.Age) / window, 0f, 1f)
             : 1f;
+    }
+
+    // The seeker's per-frame retarget (FUN_00441780, installed at spawn by FUN_00441830 on the
+    // BEEPER_SEEKER flag): the tag list is asked with the round's position and unit heading and the
+    // answer REPLACES the held target every frame, null included, exactly as the callback writes
+    // zeros into +0x70/+0x74 when nothing is painted. It runs before the steering gate is read, so
+    // whatever target the shooter handed a seeker at spawn is overwritten on its first frame and a
+    // seeker only ever steers at a painted aircraft.
+    private static void RetargetSeeker(ref Proj p, BeeperTags<FlightController>? tags)
+    {
+        if (!p.Weapon.BeeperSeeker)
+            return;
+        var heading = p.Vel.LengthSquared() > 1e-12f ? p.Vel.Normalized() : Vector3.Zero;
+        p.Target = tags?.PickTarget(p.Pos, heading);
+    }
+
+    // The steering step proper (FUN_005af960), on a round SteeringStepRuns admits and whose target
+    // has a position: the desired direction (the bearing, or B7's lead blend), the turn clamp, and
+    // the speed penalty, rewriting the round's own velocity as heading × speed. The launcher's
+    // share is not touched here; WorldVelocity blends it back on top with the decay's fraction,
+    // which is the routine's own `heading × speed + fraction × inherited` rebuild.
+    private static void Steer(ref Proj p, float dt)
+    {
+        if (!SteeringStepRuns(p.Weapon, p.Target != null) || TargetPosition(p.Target) is not { } at)
+            return;
+        float speed = p.Vel.Length();
+        if (speed <= 1e-6f)
+            return;
+        var heading = p.Vel / speed;
+        var toTarget = at - p.Pos;
+        if (toTarget.LengthSquared() <= 1e-6f)
+            return;
+        var desired = toTarget.Normalized();
+        desired = LeadDesired(in p, speed, at, desired);
+
+        float angle = Mathf.Acos(Mathf.Clamp(heading.Dot(desired), -1f, 1f));
+        if (!(angle > 0f))
+            return;
+        float maxTurn = MaxTurnRad(p.Weapon, dt);
+        float turned;
+        if (angle > maxTurn)
+        {
+            heading = SlerpDirection(heading, desired, maxTurn / angle);
+            turned = maxTurn;
+        }
+        else
+        {
+            heading = desired;
+            turned = angle;
+        }
+        p.Vel = heading * (speed * TurnPenaltyFactor(turned));
+    }
+
+    // LOCK_ON_LEAD's blend (FUN_005af960's first block): from element 0 of age, on a target with a
+    // velocity, the intercept solve replaces the bearing, slerped in from the bearing at element 0
+    // to the full solve at element 1 (the parse at 0x005ade43 stores 1/(el1 - el0) at weapon
+    // +0x84 and clamps el0 to at most el1). The solve is FUN_0053e56d, the same constant-velocity
+    // intercept AimAssist.TryIntercept is, on the round's OWN speed and the target's velocity; no
+    // answer leaves the bearing. No shipped carrier reaches element 0 before its RANGE.
+    private static Vector3 LeadDesired(in Proj p, float speed, Vector3 targetPos, Vector3 bearing)
+    {
+        if (p.Weapon.LockOnLead is not var (onset, full) || p.Age < onset
+            || TargetVelocity(p.Target) is not { } targetVel
+            || !AimAssist.TryIntercept(p.Pos, speed, targetPos, targetVel, out var lead, out _))
+        {
+            return bearing;
+        }
+        if (!(p.Age < full))
+            return lead;
+        return SlerpDirection(bearing, lead, (p.Age - onset) / (full - onset));
+    }
+
+    // Slerp between two unit directions, renormalised. Near opposite keeps `from`: there is no
+    // axis to swing about, and a lerp through the origin would hand back nothing to normalise.
+    private static Vector3 SlerpDirection(Vector3 from, Vector3 to, float weight)
+    {
+        if (from.Dot(to) < -SteerOppositeDot)
+            return from;
+        var result = from.Slerp(to, weight);
+        return result.LengthSquared() > 1e-12f ? result.Normalized() : from;
     }
 
     // A round's velocity through the world. Proj.Vel alone is its OWN velocity (the original's
@@ -1140,13 +1272,23 @@ public sealed partial class ProjectilePool : Node3D
     }
 
     // Where a round's held target is. Typed loosely because the slot takes an aircraft, an
-    // emplacement or (once B9 lands) a beeper tag alike; anything with no position in the world
-    // answers null and fuses nothing.
+    // emplacement or a zeppelin sub-part alike; anything with no position in the world answers
+    // null, fuses nothing and steers nothing.
     private static Vector3? TargetPosition(object? target) => target switch
     {
         FlightController rig => rig.WorldPosition,
         TurretController turret => turret.WorldPosition,
         Node3D node => node.GlobalPosition,
+        _ => null,
+    };
+
+    // The held target's velocity, the second of the two fields the original's target carries
+    // (round +0x74, the pointer FUN_0053e56d reads); null for anything that has none, which is
+    // what leaves LOCK_ON_LEAD on the plain bearing.
+    private static Vector3? TargetVelocity(object? target) => target switch
+    {
+        FlightController rig => rig.WorldVelocity,
+        TurretController turret => turret.PlatformVelocity,
         _ => null,
     };
 
@@ -1584,7 +1726,7 @@ public sealed partial class ProjectilePool : Node3D
     }
 
     private void Impact(WeaponDef weapon, Vector3 point, Node? collider, Vector3 normal, int shapeIdx = -1,
-        int shooter = NoShooter)
+        int shooter = NoShooter, int team = AimAssist.NeutralTeam)
     {
         // A cannon round only ever reaches Impact through the direct-hit ray, so this one guard
         // covers the decode's three hit sites without distinguishing them.
@@ -1610,16 +1752,17 @@ public sealed partial class ProjectilePool : Node3D
                      $"({point.X:0},{point.Y:0},{point.Z:0}) on {collider?.GetParent()?.Name}/{collider?.Name}" +
                      $" fx={outcome.EffectName ?? "-"} snd={outcome.Sound ?? "-"} standin={outcome.StandIn}");
         }
-        Apply(weapon, surface, outcome, point, collider, normal, shapeIdx, shooter);
+        Apply(weapon, surface, outcome, point, collider, normal, shapeIdx, shooter, team);
     }
 
     // Perform a resolved impact: the effect, the stand-in burst, the sound and the damage.
     // Decides nothing — every branch here is keyed on `outcome`. It still takes the
     // weapon for the gun-effect rate limit (a stateful throttle, not a decision) and the surface for
     // the spark's tint (a `Color`, which the engine-free ImpactOutcome cannot
-    // carry).
+    // carry). `team` is the round's own stamp, which the beeper's tag gate tests the victim against.
     private void Apply(WeaponDef weapon, int surface, in ImpactOutcome outcome, Vector3 point,
-        Node? collider, Vector3 normal, int shapeIdx = -1, int shooter = NoShooter)
+        Node? collider, Vector3 normal, int shapeIdx = -1, int shooter = NoShooter,
+        int team = AimAssist.NeutralTeam)
     {
         // The impact sprites face the struck surface (SurfaceBasis(normal)) rather than a fixed world
         // plane — a supplier distinct from the muzzle flash's plane basis (both feed Sprite.Orient).
@@ -1647,6 +1790,14 @@ public sealed partial class ProjectilePool : Node3D
         // Per-surface IMPACT sound (landed): the struck surface's SOUND, else the default's.
         if (outcome.Sound is { } snd)
             PlaySound(snd, point);
+        // A BEEPER reaching an aircraft, struck or fused, paints it and deals nothing (FUN_004b9bc0
+        // zeroes both figures after the tag): the pair is discarded structurally rather than passed
+        // as zero, so an authored pair would still spend none of it. The gate is TryTag's own.
+        if (weapon.BeeperTime is { } tagSeconds && collider is AircraftBody painted)
+        {
+            BeeperTags?.TryTag(team, painted.Rig, tagSeconds);
+            return;
+        }
         // A ray-struck aircraft takes damage through its own part model, never the destructible
         // pipeline. A fuse detonation (shapeIdx -1) leaves its plane to the blast's aircraft pass.
         if (collider is AircraftBody plane && shapeIdx >= 0)
@@ -1700,7 +1851,7 @@ public sealed partial class ProjectilePool : Node3D
     private void EndRound(ref Proj p, Vector3 at, bool detonate)
     {
         if (detonate)
-            Impact(p.Weapon, at, null, Vector3.Zero, shooter: p.Shooter);
+            Impact(p.Weapon, at, null, Vector3.Zero, shooter: p.Shooter, team: p.Team);
         RetireRound(ref p);
     }
 
@@ -2338,9 +2489,10 @@ public sealed partial class ProjectilePool : Node3D
         public Vector3 Inherited; // the launcher's velocity copied at spawn (FUN_005aef40's
                                   // +0x30..+0x38); zero for ordnance carrying no LOCK_ON
         public object? Target;   // what this round holds as its target — the second half of the
-                                 // steering step's gate. B6/B9 write and re-write it; A2 only asks
-                                 // whether one is held. Typed loosely because the original's target
-                                 // slot takes an aircraft, an emplacement or a beeper tag alike.
+                                 // steering step's gate, filled at spawn and, on a seeker, replaced
+                                 // every frame by RetargetSeeker. Typed loosely because the
+                                 // original's slot takes an aircraft, an emplacement or a
+                                 // zeppelin sub-part alike (TargetPosition/TargetVelocity read it).
         public float Travelled;  // m of path flown so far — the original's accumulator at round
                                  // +0x664, read by both the RANGE end condition and the reveal gate
         public float Range;      // m of path this round may fly (RANGE, or DefaultRange unauthored)

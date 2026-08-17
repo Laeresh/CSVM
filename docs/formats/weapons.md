@@ -93,20 +93,26 @@ against each caliber's slug, not something the engine computes.
 | Key | n | Range | Meaning |
 |---|---|---|---|
 | `ROCKET` | 15 | flag | marks a self-propelled projectile |
-| `LOCK_ON` | 13 | 1.3–3.0 | lock-acquisition time, s |
-| `LOCK_ON_LEAD` | 3 | `[4,8]` / `[5,10]` | target-lead parameters |
+| `LOCK_ON` | 13 | 1.3–3.0 | inherit-launch-velocity flag and its decay window, s; also the guidance ramp's denominator (not a lock-acquisition time, see below) |
+| `LOCK_ON_LEAD` | 3 | `[4,8]` / `[5,10]` | round age at which the intercept lead starts blending in, and the age it is full, s |
 | `DETONATION_DISTANCE` | 13 | 1–50 | proximity-fuse trigger distance, m (**stored squared**, see below) |
 | `IMPACT_PROXIMITY` | 14 | 15–500 | blast / effect radius, m (**stored raw and squared**, see below) |
 | `DETONATION_DOT_PRODUCT` | 3 | 0.1 / 0.3 | cone-alignment threshold for a proximity detonation |
 | `DETONATION_TIME` | 1 | 2.0 | timed fuse, s (rear-arc flare). Defaults to −1.0 and the fuse demands a positive value, so an unauthored one is off rather than instant |
 | `CRATER` | 6 | 0 | ground-crater flag/scale; marks the ground-attack munitions |
 
-**Guided vs unguided is `TURN_RATE`, not a flag.** There is no `GUIDED` boolean. 13 of the 14
-`TURN_RATE` carriers hold the sentinel **0.001** (fly straight = dumbfire — the HE "BOOM" rocket
-`wep_06`/`wep_24`, AP, FLAK, incendiary, torpedo, …); **only the Seeker `wep_11` at 1.25 homes.**
-`LOCK_ON` is *not* the discriminator — it is present on dumbfire rockets too (the HE rocket carries
-`LOCK_ON 1.3`), because it is the aiming/lead acquisition time, not a steering promise. The Seeker is
-also the sole `BEEPER_SEEKER`. Reader convenience: `WeaponDef.IsGuided` (`TURN_RATE > 0.01`).
+**Whether a round is steered is a gate, and how hard it turns is `TURN_RATE`.** There is no `GUIDED`
+boolean. The engine enters its steering step only for a weapon carrying `LOCK_ON` whose round holds
+a target, and only then reads `TURN_RATE` for the turn authority
+([`org/ordnanceTypes.md`](../org/ordnanceTypes.md#guidance)). 13 of the 14 `TURN_RATE` carriers
+hold the sentinel **0.001** (the HE "BOOM" rocket `wep_06`/`wep_24`, AP, FLAK, incendiary, torpedo,
+…), so with a target they are steered by a thousandth of a radian per second, which is dumbfire in
+effect; **only the Seeker `wep_11` at 1.25 visibly homes.** `LOCK_ON` is present on the dumbfire
+rockets too (the HE rocket carries `LOCK_ON 1.3`): it is the inherit-launch-velocity flag and that
+decay's window, and the guidance ramp's denominator, not a lock-acquisition time. The Seeker is also
+the sole `BEEPER_SEEKER`. Reader convenience: `WeaponDef.IsGuided` (`TURN_RATE > 0.01`), a label
+for the lab and the probes rather than the flight gate. `LOCK_ON_LEAD`'s three carriers all pair it
+with the sentinel and expire before its onset, so the shipped data never shows it.
 
 **Three radii are stored squared.** `FUN_005ad630` keeps `IMPACT_PROXIMITY` twice, raw at weapon
 `+0x3c` and squared at `+0x40`, and keeps `DETONATION_DISTANCE` squared at `+0x44` and `RANGE`
