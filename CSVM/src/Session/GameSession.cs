@@ -1723,6 +1723,16 @@ public partial class GameSession : Node3D
         _worldRoot!.AddChild(projectiles);
         _projectiles = projectiles;
 
+        // The smoke screens' own smoke, wired here rather than at their construction because the
+        // chapter's textures and anim program are only resolved this far into the build. Same
+        // program as the rockets' flyout trails: missile_puffers carries generate_smokescreen too.
+        if (_smokeScreens != null)
+        {
+            var smokeEmitters = new SmokeScreenEmitters(state.CrashProgram?.Defs, state.Textures,
+                _worldRoot, _ambience);
+            _smokeScreens.Emitters = smokeEmitters.Create;
+        }
+
         // The world-effects runtime: one per session, rendering the impact and destruction puffers
         // the world runtime cannot. ⚠ Go through EnsureWorldEffects, never construct it directly,
         // or a later --destroy= or damage-lab demand on the same session builds a second one.

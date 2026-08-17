@@ -4166,6 +4166,24 @@ public static class Suites
                 washes.Add((player, weight, clock));
                 flashSink.PlayBlend(player, colour, weight, duration);
             });
+            // The emitter seam through a recorder rather than a Puffer: what this suite owes is
+            // that a screen starts one, drives it at the layer's live pose and stops it at the end,
+            // which is the pairing the real particle runtime cannot be asked about without a GPU.
+            var laid = new List<RecordingSmokeEmitter>();
+            screens.Emitters = () =>
+            {
+                var fresh = new RecordingSmokeEmitter();
+                laid.Add(fresh);
+                return fresh;
+            };
+            // The authored states the real factory reads, off the compiled chapter archive the
+            // session's own program is built from (docs/architecture.md, SmokeScreens.cs: the
+            // reader form of the same definition carries no DISTANCE_INTERVAL).
+            var (chapterAnim, _) = AnimProgram.ArchivePaths(ctx.DataRoot, "C1", "IA1");
+            var authored = new SmokeScreenEmitters(
+                AnimArchive.Load(chapterAnim, "cam_anim")?.Defs, textures, ctx.Host);
+            ctx.Check(authored.StateCount == 2,
+                $"generate_smokescreen authors {authored.StateCount} DISTANCE_INTERVAL puffer state(s), the decode's two");
 
             const float dt = 1f / 60f;
             void Step()
@@ -4184,6 +4202,8 @@ public static class Suites
 
             screens.Lay(layer, screenTime);
             ctx.Check(screens.ActiveCount == 1 && screens.IsLaying(layer), $"Lay registers one running screen on the layer");
+            ctx.Check(laid.Count == 1 && laid[0].HomedAtLaunch && !laid[0].Stopped,
+                $"the lay starts one emitter, homed with a zero step at the launch pose emitters={laid.Count}");
             Step();
             ctx.Check(aiBehind.Pilot.IsStunned && Mathf.Abs(aiBehind.Pilot.StunRemainingS - tunables.StunIntervalS) < 0.05f,
                 $"the AI 300 m dead astern is stunned on the first step for smokescreen_stun_interval remaining={aiBehind.Pilot.StunRemainingS:0.00}");
@@ -4219,11 +4239,17 @@ public static class Suites
                 $"the human behind's pane carries the grey-green wash ({pane2})");
             ctx.Check(flash.CurrentFor(0).IsEqualApprox(new Color(0f, 0f, 0f, 0f)),
                 $"the layer's own pane stays clear ({flash.CurrentFor(0)})");
+            ctx.Check(!laid[0].Stopped && laid[0].Steps > 400
+                      && laid[0].LastPos.IsEqualApprox(layer.WorldPosition)
+                      && laid[0].LastBasis.Z.IsEqualApprox(-layer.NoseDirection),
+                $"the emitter runs at the layer's live pose for the whole screen steps={laid[0].Steps}");
 
             // Expiry: the screen is gone at TIME, and the AI's last refresh runs down and frees it.
             for (int i = 0; i < 6; i++)
                 Step();
             ctx.Check(screens.ActiveCount == 0, $"the screen has expired at its TIME active={screens.ActiveCount}");
+            int stepsAtExpiry = laid[0].Steps;
+            ctx.Check(laid[0].Stopped, $"and its emitter is stopped with it, laying no more smoke");
             float atExpiry = aiBehind.Pilot.StunRemainingS;
             // Released so its pilot flies (and counts its stun down) again; a held airframe reads
             // no pilot input at all.
@@ -4232,6 +4258,8 @@ public static class Suites
                 Step();
             ctx.Check(atExpiry > 0f && !aiBehind.Pilot.IsStunned,
                 $"the AI recovers once its last stun runs out after the screen expires atExpiry={atExpiry:0.00} stunned={aiBehind.Pilot.IsStunned}");
+            ctx.Check(laid[0].Steps == stepsAtExpiry,
+                $"the stopped emitter takes no further step over the recovery run steps={laid[0].Steps}");
 
             // A layer going down ends its screen on the spot: nothing walks for a dead layer.
             int washesBefore = washes.Count;
@@ -4240,6 +4268,8 @@ public static class Suites
             Step();
             ctx.Check(screens.ActiveCount == 0 && washes.Count == washesBefore,
                 $"a screen whose layer is no longer in play ends immediately and hits nobody active={screens.ActiveCount}");
+            ctx.Check(laid.Count == 2 && laid[1].Stopped && laid[1].Steps == 0,
+                $"a downed layer's emitter is stopped on the same step, having laid nothing emitters={laid.Count}");
         }
         finally
         {
@@ -12359,4 +12389,39 @@ public static class Suites
     // which is how the timeline says the second call restarted a parked sequence rather than
     // being swallowed or running a second concurrent copy.
     private sealed record BurstLane(string Sequence, BurstStep[] Steps);
+
+    // The smoke-screen suite's stand-in for one screen's authored trail: it keeps the drive instead
+    // of drawing it, so the start/stop pairing and the pose the screen feeds it are assertable
+    // without a GPU or a chapter's textures.
+    private sealed class RecordingSmokeEmitter : ISmokeEmitter
+    {
+        private bool _first = true;
+
+        public bool HomedAtLaunch { get; private set; }
+
+        public bool Stopped { get; private set; }
+
+        public int Steps { get; private set; }
+
+        public Vector3 LastPos { get; private set; }
+
+        public Basis LastBasis { get; private set; }
+
+        public void Emit(Vector3 worldPos, Basis worldBasis, float dt)
+        {
+            if (_first)
+            {
+                _first = false;
+                HomedAtLaunch = dt == 0f;
+            }
+            else
+            {
+                Steps++;
+            }
+            LastPos = worldPos;
+            LastBasis = worldBasis;
+        }
+
+        public void Stop() => Stopped = true;
+    }
 }

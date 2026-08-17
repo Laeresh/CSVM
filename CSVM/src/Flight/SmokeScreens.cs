@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using CSVM.Effects;
 using CSVM.Mech3;
 using Godot;
 
@@ -10,6 +11,25 @@ namespace CSVM.Flight;
 /// start delay (the smoke caller passes none): the victim's player index, the colour, the weight
 /// and the duration.</summary>
 public delegate void SmokeWashSink(int playerIndex, Color colour, float weight, float durationSeconds);
+
+/// <summary>Builds one screen's emitter. Null (either the delegate or its result) means this build
+/// has no particle runtime to draw with, which is every off-engine and headless caller.</summary>
+public delegate ISmokeEmitter? SmokeEmitterFactory();
+
+/// <summary>One running screen's own smoke, the effect object <c>FUN_004b8d50</c> builds at the lay
+/// and <c>FUN_004b8f60</c> tears down at the end. The original attaches its instance to a scene
+/// node, so it rides the layer wherever the layer goes; here the registry feeds it the layer's live
+/// pose instead, which is the same follow through the seam <see cref="Puffer"/> already takes.</summary>
+public interface ISmokeEmitter
+{
+    /// <summary>One step of the trail at the layer's world pose. <paramref name="dt"/> is 0 on the
+    /// first call, which homes the trail at the launch point rather than drawing a line to it.</summary>
+    void Emit(Vector3 worldPos, Basis worldBasis, float dt);
+
+    /// <summary>Ends the run. Live puffs finish their own lifetimes, as the original's do: the
+    /// screen stops making smoke, it does not delete the smoke already made.</summary>
+    void Stop();
+}
 
 /// <summary>The smoke screen's per-victim rules with no aircraft in them, decoded from
 /// <c>FUN_004b8fd0</c>: the catch test and the human wash's cadence. <see cref="SmokeScreens"/>
@@ -153,6 +173,11 @@ public sealed class SmokeScreens
     /// <summary>The tunables every screen runs on.</summary>
     public SmokeScreenTunables Tunables => _tunables;
 
+    /// <summary>Where a screen gets its smoke. Settable rather than a constructor argument because
+    /// the registry is built with the wash sink, before the chapter's textures and anim program
+    /// exist; left null the screens run with no visual, which is what a headless run wants.</summary>
+    public SmokeEmitterFactory? Emitters { get; set; }
+
     /// <summary>How many screens are running (their <c>TIME</c> not yet run out).</summary>
     public int ActiveCount => _screens.Count;
 
@@ -175,14 +200,25 @@ public sealed class SmokeScreens
     {
         if (timeSeconds <= 0f)
             return;
-        _screens.Add(new Screen(layer, timeSeconds));
+        var screen = new Screen(layer, timeSeconds) { Emitter = Emitters?.Invoke() };
+        // Homed at the launch pose with a zero step, the way the pool homes a round's flyout trail:
+        // a fresh emitter's first Emit sets the trail origin, and without this one the screen's
+        // first real step would draw a puff line from wherever the emitter last ran.
+        screen.Emitter?.Emit(layer.WorldPosition, layer.SimAttitude, 0f);
+        _screens.Add(screen);
     }
 
     /// <summary>Drops every screen: the session teardown and a suite's reset.</summary>
-    public void Clear() => _screens.Clear();
+    public void Clear()
+    {
+        foreach (var screen in _screens)
+            screen.Emitter?.Stop();
+        _screens.Clear();
+    }
 
     /// <summary>One sim step for every screen: the timer runs down first, a screen whose layer is
-    /// no longer in play ends on the spot, and a screen still running walks the roster.</summary>
+    /// no longer in play ends on the spot, and a screen still running walks the roster and lays a
+    /// step of its own smoke down the layer's track.</summary>
     public void SimStep(float dt)
     {
         if (_screens.Count == 0)
@@ -197,9 +233,13 @@ public sealed class SmokeScreens
                 screen.RemainingS -= dt;
             if (screen.RemainingS <= 0f)
             {
+                // Both ends the original stops the emitter on, dead layer and run-out TIME, and one
+                // teardown for the pair, as FUN_004b8fd0 reaches FUN_004b8f60 down either branch.
+                screen.Emitter?.Stop();
                 _screens.RemoveAt(i);
                 continue;
             }
+            screen.Emitter?.Emit(screen.Layer.WorldPosition, screen.Layer.SimAttitude, dt);
             Walk(screen, roster, dt);
         }
     }
@@ -239,6 +279,7 @@ public sealed class SmokeScreens
     private sealed class Screen
     {
         public readonly FlightController Layer;
+        public ISmokeEmitter? Emitter;
         public float RemainingS;
         private readonly Dictionary<int, float> _rearm = new();
 
@@ -251,5 +292,148 @@ public sealed class SmokeScreens
         public float RearmFor(int playerIndex) => _rearm.TryGetValue(playerIndex, out float t) ? t : 0f;
 
         public void SetRearm(int playerIndex, float rearmS) => _rearm[playerIndex] = rearmS;
+    }
+}
+
+/// <summary>The one fact a screen's emitter needs off its layer that nothing else on
+/// <see cref="FlightController"/> publishes: the SIM attitude, whose backward axis the authored
+/// trail blows its puffs down. Declared here rather than in the controller for the same reason
+/// <c>IBeeperSubject</c> is: the reach is this module's, so it belongs beside the module.</summary>
+public partial class FlightController
+{
+    internal Basis SimAttitude => _model.Attitude;
+}
+
+/// <summary>The screen's authored smoke over the real particle runtime: the <c>PUFFER_STATE</c>s of
+/// the <c>generate_smokescreen</c> anim definition, which is the effect
+/// <c>FUN_004b8d50</c> reaches through the pair of scene nodes <c>FUN_004b92c0</c> looks up at
+/// mission load, and the same definition <c>wep_13</c>'s <c>FIRE</c> row names. Emitters are pooled
+/// and reused once their puffs have decayed, as the projectile pool pools its flyout trails, since
+/// each screen builds one per authored state.</summary>
+public sealed class SmokeScreenEmitters
+{
+    /// <summary>The definition's own name, the string <c>FUN_004b92c0</c> resolves at load. It is
+    /// NOT read off the weapon: the original's screen object holds a global, so every screen in the
+    /// game lays the same smoke whatever fired it.</summary>
+    public const string EffectAnimName = "generate_smokescreen";
+
+    private readonly List<PufferState> _states = new();
+    private readonly List<(PufferState State, Puffer Puffer)> _pool = new();
+    private readonly HashSet<Puffer> _inUse = new();
+    private readonly TextureArchive _textures;
+    private readonly Node _parent;
+    private readonly EffectAmbience? _ambience;
+    private bool _logged;
+
+    /// <summary>Reads the definition's trail states once out of <paramref name="defs"/>, which may
+    /// be a whole program: the definitions not carrying <see cref="EffectAnimName"/> are skipped
+    /// here rather than at the call site. A null list, no such definition or no textures for it
+    /// leaves <see cref="StateCount"/> at zero and <see cref="Create"/> returning null, so the
+    /// screens run unseen rather than throwing.</summary>
+    public SmokeScreenEmitters(IEnumerable<AnimDefinition>? defs, TextureArchive textures, Node parent,
+        EffectAmbience? ambience = null)
+    {
+        _textures = textures;
+        _parent = parent;
+        _ambience = ambience;
+        if (defs == null)
+            return;
+        foreach (var def in defs)
+        {
+            if (!string.Equals(def.AnimName, EffectAnimName, StringComparison.OrdinalIgnoreCase))
+                continue;
+            foreach (var seq in def.Sequences)
+            {
+                foreach (var ev in seq.Events)
+                {
+                    if (ev.Kind != "PufferState" || (ev.Data.Num("active_state") ?? 0f) <= 0f)
+                        continue;
+                    var state = PufferState.FromAnimEvent(ev.Data);
+                    if (state.DistanceInterval > 0f
+                        && (state.Textures.Count > 0 || state.TextureSequence.Count > 0))
+                        _states.Add(state);
+                }
+            }
+        }
+    }
+
+    /// <summary>How many authored trail states a screen lays. Two in the retail data.</summary>
+    public int StateCount => _states.Count;
+
+    /// <summary>One screen's emitter, or null when there is nothing authored to draw.</summary>
+    public ISmokeEmitter? Create()
+    {
+        if (_states.Count == 0)
+        {
+            if (!_logged)
+            {
+                _logged = true;
+                GD.Print($"smoke screen '{EffectAnimName}': no DISTANCE_INTERVAL puffer in the anim program — screens lay no smoke");
+            }
+            return null;
+        }
+        var set = new List<Puffer>(_states.Count);
+        foreach (var state in _states)
+        {
+            Puffer? puffer = null;
+            foreach (var (pooledState, candidate) in _pool)
+            {
+                // Free only once the last puff of its previous screen has died: a live trail handed
+                // to a new screen would draw a line from the old layer's track to the new one's.
+                if (ReferenceEquals(pooledState, state) && !_inUse.Contains(candidate)
+                    && candidate.LiveCount == 0)
+                {
+                    puffer = candidate;
+                    break;
+                }
+            }
+            if (puffer == null)
+            {
+                puffer = Puffer.Create(state, _textures, ambience: _ambience);
+                if (puffer == null)
+                    continue;
+                _parent.AddChild(puffer);
+                _pool.Add((state, puffer));
+            }
+            _inUse.Add(puffer);
+            set.Add(puffer);
+        }
+        return set.Count > 0 ? new PooledEmitter(this, set) : null;
+    }
+
+    // One screen's set of authored trails, driven together off the layer's pose and released back
+    // to the pool at the screen's end. Stop is idempotent because the registry stops a screen on
+    // whichever end condition comes first and Clear may stop it again.
+    private sealed class PooledEmitter : ISmokeEmitter
+    {
+        private readonly SmokeScreenEmitters _owner;
+        private readonly List<Puffer> _puffers;
+        private bool _stopped;
+
+        public PooledEmitter(SmokeScreenEmitters owner, List<Puffer> puffers)
+        {
+            _owner = owner;
+            _puffers = puffers;
+        }
+
+        public void Emit(Vector3 worldPos, Basis worldBasis, float dt)
+        {
+            if (_stopped)
+                return;
+            foreach (var puffer in _puffers)
+                puffer.Emit(worldPos, worldBasis, dt);
+        }
+
+        public void Stop()
+        {
+            if (_stopped)
+                return;
+            _stopped = true;
+            foreach (var puffer in _puffers)
+            {
+                puffer.Stop();
+                _owner._inUse.Remove(puffer);
+            }
+        }
     }
 }

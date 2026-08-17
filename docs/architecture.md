@@ -1125,11 +1125,20 @@ through the `SmokeWashSink` (`ScreenFlash.PlayBlend` in the session) addressed t
 `PlayerIndex`, an AI gets `FlightController.TryStunPilot(interval)` refreshed every step it stays
 inside, so it goes limp for the whole screen and the interval beyond it. The wash re-arm timer is
 kept per victim per screen (the original's one slot is single-player), Decision 2. It is NOT an
-occluder: no collision, no visibility, no targeting role, and no visual (the weapon's effects are
-the fire path's). Pinned by `SmokeScreenTests` (rules, tunables) and the `smoke-screen` suite (a
+occluder: no collision, no visibility and no targeting role — the smoke is drawn, and stops nothing.
+Each screen carries its own emitter over the `ISmokeEmitter` seam: `Lay` asks the settable
+`Emitters` factory for one and homes it with a zero step at the launch pose, `SimStep` drives it at
+the layer's live pose every step, and the same teardown both end conditions reach stops it.
+`SmokeScreenEmitters` is the engine side of that seam, reading `generate_smokescreen`'s
+DISTANCE_INTERVAL `PUFFER_STATE`s out of the world `AnimProgram` (the session wires it once the
+chapter's textures exist) and pooling one `Puffer` per authored state, reused only once its previous
+screen's puffs have decayed. ⚠ Take the definition from the COMPILED archive: `AnimDefs`' reader
+normalizer carries no `DISTANCE_INTERVAL`, so the reader form of the same definition reads as no
+trail at all. Pinned by `SmokeScreenTests` (rules, tunables) and the `smoke-screen` suite (a
 live five-aircraft roster: the AI astern stunned throughout and recovering after expiry, the AI
 beyond 85° untouched, the human astern washed on its own pane while the layer's and a third human's
-stay clear, a downed layer's screen ending at once) and by the `ordnance-launch-axis` suite for the
+stay clear, a downed layer's screen ending at once, the emitter started homed and stopped with the screen, and
+the two authored trail states read off C1's compiled `cam_anim`) and by the `ordnance-launch-axis` suite for the
 launch side (a `wep_13` pylon lays one screen, spends its ammo and puts no round in the pool). Not a
 `Node`; the session owns and steps it.
 

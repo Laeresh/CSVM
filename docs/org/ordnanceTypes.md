@@ -731,9 +731,41 @@ place and returns its length, compared raw and strictly against the range, and t
 against the unit vector it left behind. The screen's timer (object `+0x10`) runs down by the frame
 dt at the top of every call; a layer whose `+0x91d` dead byte is set has its emitter stopped and its
 timer forced to the `-1.0` sentinel on the spot, so the walk never runs for a dead layer. The walk
-itself is also gated on the screen's emitter handle (`+8`, created at the lay through the effect
-system) being live, which in the shipped game it always is; our side runs the walk unconditionally,
-since the visual is the fire path's business.
+itself is also gated on the screen's emitter handle (`+8`) being live, which in the shipped game it
+always is; our side runs the walk unconditionally.
+
+**The screen's own smoke.** The 0x18-byte object is six slots: the layer at `+0`, the mount at `+4`,
+the running emitter at `+8`, the expiry emitter at `+0xc`, the `TIME` at `+0x10` and the wash re-arm
+at `+0x14`. `FUN_004b8d50` fills the first two from its arguments and then, through
+`FUN_004edda0`/`FUN_004edc50`/`FUN_004ed8c0`, instances the effect record named
+**`generate_smokescreen`** and **attaches it to a scene node** — the mount's node (mount `+4`) when
+the launch passed a mount, else the layer's own (layer `+0xc`). Attachment is what makes the smoke
+follow: nothing re-poses it per frame, it hangs on the aircraft's node and rides wherever the
+aircraft goes. `FUN_004ee160` then stores a per-frame callback (`LAB_004b9230`) and the object as its
+argument at emitter `+0x74`/`+0x78`. The two names come from `FUN_004b92c0`, which resolves
+`generate_smokescreen` and `drop_smokescreen_canister` once at mission load (`FUN_00523820`, a linear
+scan of the 0x110-byte effect records by name) into the pair at `DAT_0071dcc4`. They are **globals**,
+not weapon fields: every screen in the game lays the same smoke whatever fired it, which is also why
+the skipped `FIRE` row costs the launch nothing visible. `wep_13`'s `FIRE` row names the same
+definition, so the two routes agree on what is drawn.
+
+**One teardown, two ends.** `FUN_004b8f60` releases the emitter (`FUN_004ebbb0`) and clears both `+8`
+and the re-arm slot, and `FUN_004b8fd0` reaches it down either branch: the dead-layer branch at the
+top, and the run-out-`TIME` branch, which additionally asks `FUN_004b8f80` whether the mount has run
+dry (mount `+0xc` count at or below zero with the `+0x14` byte clear) and, if it has, calls
+`FUN_004b8dd0` to drop a **`drop_smokescreen_canister`** instance at the mount node's world pose
+with 0.8 of its velocity, resetting `+0x10` to 20 s and installing `LAB_004b9280` before
+`FUN_004b8ef0` releases that one too. A layer that dies gets no canister: its branch sets the `-1.0`
+sentinel before either test.
+
+Our side is the `ISmokeEmitter` seam on `SmokeScreens`: `Lay` starts one and `SimStep` stops it on
+whichever end comes first, and `SmokeScreenEmitters` runs the definition's two DISTANCE_INTERVAL
+`PUFFER_STATE`s at the layer's live pose, which is the same follow the original gets from the node
+attachment. Two things the original has and we do not: the canister, whose 20 s tail belongs to the
+pylon-runs-dry question rather than to the screen, and the definition's own 2.0 s
+`ANIMATION_OFFSET` `INACTIVE` events, which would cut the emission a quarter of the way into the 8 s
+screen. Our trail runs for the screen's whole `TIME`, the same reading `ProjectilePool` takes of the
+rockets' flyout trails, which carry an `Animation 10.0` stop it likewise leaves to the round's life.
 
 The three tunables are **not per-weapon**. `FUN_004735b0`, the `ai_skill_parameters` loader, writes
 them from `player.zrd.json`, where their authored names state the mechanism outright:
@@ -872,7 +904,8 @@ code, and were not opened.
   `FUN_005abcf0`, `FUN_00441830`, `FUN_00441780`, `FUN_004b8b50`, `FUN_004b8ad0`, `FUN_004b89c0`,
   `FUN_004b7670`, `FUN_004b1690`, `FUN_005afd50`, `FUN_00480f50`, `FUN_005ac3a0`, `FUN_005ac7a0`,
   `FUN_005ac690`, `FUN_005ac580`, `FUN_005aca30`, `FUN_005acac0`, `FUN_0042e840`, `FUN_004200d0`,
-  `FUN_0042e9d0`, `FUN_004b8d50` and `FUN_004b8fd0` were read in full.
+  `FUN_0042e9d0`, `FUN_004b8d50`, `FUN_004b8fd0`, `FUN_004b8dd0`, `FUN_004b8f60`, `FUN_004b8f80`
+  and `FUN_004b92c0` were read in full.
 - The three `smokescreen_stun_*` values were traced from their authored names in `player.zrd.json`
   through `FUN_004735b0`'s stores to their reads in `FUN_004b8fd0`, including the `× π/180 × 0.5`
   conversion, so the half-angle reading is decoded rather than inferred.

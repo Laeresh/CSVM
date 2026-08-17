@@ -790,6 +790,12 @@ after the branch and are shared, so the smoker spends a round like any other pyl
 `ordnance-launch-axis` suite pins all three (one screen laid, zero rounds in the pool, one round of
 ammo gone). Owed at the controls: the 1v1 and the coop pair below.
 
+**The screen's emitter is started and stopped with the screen.** `FUN_004b8d50` instances the
+`generate_smokescreen` effect and attaches it to the layer's node, so it follows the aircraft, and
+`FUN_004b8f60` releases it down both of `FUN_004b8fd0`'s end branches; our side is the
+`ISmokeEmitter` seam `SmokeScreens.Lay` starts and `SimStep` stops, with `SmokeScreenEmitters`
+running the definition's two DISTANCE_INTERVAL puffers at the layer's live pose.
+
 **Goal.** A smoke screen laid by an aircraft stuns AI and blinds humans behind it, and spawns no
 projectile.
 
