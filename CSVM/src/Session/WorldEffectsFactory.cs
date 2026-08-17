@@ -312,6 +312,10 @@ public sealed class WorldEffectsFactory
         var altScene = altGamez != null ? PlanesScene(altGamez, textures) : null;
         var rootNames = CrashStageRootNames(crashProgram, gamez, controller, crashDefs, destroyAnim,
             altGamez);
+        // ⚠ Both kinds' roots, resolved HERE and not at the check below: once the templates are
+        // staged, a staged root answers InScope instead of Stage and drops out of the derivation.
+        var bothKindsRoots = BothRigKindsStageRoots(crashProgram, gamez, controller, planeName,
+            altGamez);
         // Staged in pool slots: a single shared copy would be relocated onto every new tear,
         // discarding the previous panel's burst mid-flight. Sizes come from effect_pools.json's
         // crash section; AnimRuntime.AssignCallerSlot pins each call anchor to its own slot.
@@ -398,11 +402,35 @@ public sealed class WorldEffectsFactory
         WireDamageStages(controller, crashProgram);
         if (slot0Roots != rootNames.Count)
             Log.Warn("anim", $"crash rig '{planeName}': staged {slot0Roots} of {rootNames.Count} template root(s) the bound defs anchor on — the rest built nothing from this chapter's gamez, so their defs play nothing");
-        foreach (var unknown in _pools.UnknownCrashRoots(rootNames))
-            Log.Warn("anim", $"effect pools: crash root '{unknown}' is not staged by this rig — it sizes nothing");
+        // ⚠ Both kinds' roots, never this rig's alone: one crash section sizes two families that
+        // stage different roots, so a per-rig test warns on every correct entry the other owns.
+        // What survives is the real drift, a key naming a root neither kind stages.
+        foreach (var unknown in _pools.UnknownCrashRoots(bothKindsRoots))
+        {
+            Log.Warn("anim", $"effect pools: crash root '{unknown}' is staged by no rig kind — it sizes nothing");
+        }
         if (verbose)
             GD.Print($"data-crash: {effectRoots} effect template cop(ies) over {_pools.CrashDepthFor(rootNames)} pool slot(s) "
                      + $"+ {restPoses.Count} wreck node(s) — crash runtime bound (scoped, no auto-start)");
+    }
+
+    // Every template root either rig kind stages, for the pool-config drift check alone. Derived
+    // the same way the live one is, so a root this rig does not stage still counts as known.
+    private static List<string> BothRigKindsStageRoots(AnimProgram program, GameZ gamez,
+        FlightController controller, string planeName, GameZ? altGamez)
+    {
+        var both = new List<string>();
+        foreach (bool human in new[] { true, false })
+        {
+            var defs = EffectCatalogue.CrashDefTableFor(program, human, planeName);
+            var destroy = EffectCatalogue.DestroyAnimFor(human, planeName);
+            if (destroy != null && program.ByAnimName(destroy).Count == 0)
+                destroy = null;
+            foreach (var r in CrashStageRootNames(program, gamez, controller, defs, destroy, altGamez))
+                if (!both.Contains(r))
+                    both.Add(r);
+        }
+        return both;
     }
 
     // The crash runtime also carries the damage-stage menu, so a part crossing an injure_anims

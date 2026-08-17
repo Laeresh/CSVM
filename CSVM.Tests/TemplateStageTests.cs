@@ -123,6 +123,27 @@ public class TemplateStageTests
     }
 
     [Fact]
+    public void ASecondCallSiteOnOneAnchorTakesItsOwnCopy()
+    {
+        var h = new Harness();
+        var (def, copies) = h.PooledRoot("planeflakes", slots: 3);
+        var panel = h.Node("pdp7");
+        object first = new(), second = new(), third = new();
+
+        // The anchor's own first site keeps the sticky (root, anchor) slot and starts on the call
+        // anchor, so it claims no copy of its own; each later site does.
+        Assert.Null(h.Stage.AssignCallerSlot(def, panel, first));
+        Assert.Same(copies[1], h.Stage.AssignCallerSlot(def, panel, second));
+        Assert.Same(copies[2], h.Stage.AssignCallerSlot(def, panel, third));
+        Assert.Same(copies[0], Assert.Single(h.Stage.RootsFor(def, panel)));
+
+        // Sticky per site as well as per anchor: a re-call answers with the copy it already holds.
+        Assert.Null(h.Stage.AssignCallerSlot(def, panel, first));
+        Assert.Same(copies[1], h.Stage.AssignCallerSlot(def, panel, second));
+        Assert.Equal(0, h.Stage.Recycles);
+    }
+
+    [Fact]
     public void CallerSlotsBeyondTheStagedCopiesWrapAndCountARecycle()
     {
         var h = new Harness();

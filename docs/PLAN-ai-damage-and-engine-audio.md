@@ -781,22 +781,27 @@ landing and only then hides it. Assert counts and states, never "something happe
 **⚠ Traps.** The manifest's `exercises` field is hook-checked: under 250 chars, no item id, no date,
 no "also exercises" clause, rewritten on a re-pin.
 
-**Three findings this item inherits, none of them fixed yet.**
+**Three findings this item inherits.**
 
-**(a) The Balmoral's crew loses two of its three parachutes.** `balmoral-balmoral`'s `destroy_craft`
-authors `chuteman` **three times**, all at node `destroyed`, all at `Event` offset 1.0 — a bomber's
-crew, and the only airframe that does. `AnimRuntime.AssignCallerSlot(target, callAnchor)` pins each
-`(root, call anchor)` pair to one slot, so all three calls share it, and the repeat-site guard
-(`movedAway`, gated on the site having moved) suppresses the second and third outright. ⚠ **Raising
-`crashRoots.chuteman` does not fix this** — the slot is keyed on the pair, not counted, so extra
-slots go unused. The fix is a per-call slot for a root called repeatedly from one anchor, which is a
-change to the keying and wants its own decision.
+**(a) The Balmoral's crew loses two of its three parachutes — FIXED.** `balmoral-balmoral`'s
+`destroy_craft` authors `chuteman` **three times**, all at node `destroyed`, all at `Event` offset
+1.0 (a bomber's crew, and the only airframe that does). `AssignCallerSlot` pinned each
+`(root, call anchor)` pair to one slot, so all three calls shared it and the repeat-site guard
+(`movedAway`) suppressed the second and third. ⚠ **Raising `crashRoots.chuteman` alone does not fix
+it** — the slot is keyed on the pair, not counted. The claim is now keyed on the authored call EVENT
+as well, and a repeat site starts on its own pooled copy, since instance identity is `(def, anchor)`
+and two live calls on one anchor need two anchors. The anchor's first site is unchanged, which is
+what keeps `BL-288`'s stickiness. Not Balmoral-only: `pdpanel7` authors four `gimmeflakes` calls at
+`pdp7` and drew at most two, which the `repeat-call-slots` suite pins.
 
-**(b) The crash pool's sizes are owed a re-count.** `effect_pools.json` states its `crashRoots`
-numbers are "the AUTHORED distinct-anchor counts read off the C1 cam_anim defs", and that a re-count
-is owed if the bound def set changes. D19 bound the destroy defs, which is exactly that. A kill frame
-logs `effect_pool_miss:5x37.86` against a 40 ms threshold, so the closure is calling more at once
-than the crash section sizes.
+**(b) The crash pool's sizes are owed a re-count — DONE.** Re-counted over the now-bound def set as
+distinct (call anchor, call event) pairs per rig, maximised over the twelve rigs; the convention is
+restated in `effect_pools.json`'s `_crashAbout`. ⚠ The `effect_pool_miss` sample is the EMITTER
+pool, not the template-slot pool: it is `EmitterDirector` building a puffer emitter (shader,
+material, multimesh) on a copy's first use, so pool size does not drive it and a larger pool does not
+grow it (11 builds / 85 ms before, 11 / 86 ms after, same run). Most of the reported hitch count was
+`--debug-anim`'s own once-a-second census; without that flag a scripted kill logs one 44 ms hitch,
+at the wreck's ground impact, and zero pool recycles.
 
 **(c) ❌ DISPROVEN — the fall's three-second delay was not an event-timing bug.** The hypothesis was
 that `start: null` after a timed event was misread, so `randomdestseq`'s `ObjectMotion` queued behind

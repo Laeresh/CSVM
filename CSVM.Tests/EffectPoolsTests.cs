@@ -120,15 +120,17 @@ public class EffectPoolsTests
     public void TheCrashSectionSizesThePerPanelFamilyAndDefaultsEverythingElseToOne()
     {
         var pools = Load();
-        // The per-panel damage-stage family carries one copy per authored call anchor;
-        // the exact counts live in the file's own why lines.
-        Assert.Equal(8, pools.CrashSlotsFor("planeflakes"));
+        // The damage-stage and destroy families carry one copy per authored CALL SITE, not per
+        // anchor: pdpanel7 alone calls the flakes four times at pdp7. Counts: the file's why lines.
+        Assert.Equal(12, pools.CrashSlotsFor("planeflakes"));
         Assert.True(pools.CrashSlotsFor("short_firetrail") > 1);
         Assert.True(pools.CrashSlotsFor("large_firetrail") > 1);
+        // The Balmoral's crew: three chuteman calls from one node need three copies.
+        Assert.Equal(3, pools.CrashSlotsFor("chuteman"));
         // A crash template with no entry stays single-copy — the pre-pool behaviour, right for
         // the once-per-crash choreography templates.
         Assert.Equal(1, pools.CrashSlotsFor("plane_sp_polys"));
-        Assert.Equal(8, pools.CrashDepthFor(new[] { "planeflakes", "plane_sp_polys" }));
+        Assert.Equal(12, pools.CrashDepthFor(new[] { "planeflakes", "plane_sp_polys" }));
     }
 
     [Fact]

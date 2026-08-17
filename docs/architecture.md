@@ -766,8 +766,11 @@ constructor state — `Pooled`, `Shown`, `Places` — get-only, no setter anywhe
 `NameResolver<TNode>`: engine hooks at construction, the runtime-dependent hooks (`findAll`,
 `anchors`, `isLive`, live instances, …) late-bound via `Wire` at the handover, since the factory
 that builds the stage exists before any resolver does. Off-engine charter:
-`CSVM.Tests/TemplateStageTests.cs`; `effect-template-mesh`/`effects-census`/`damage-template-pool`
-are the in-engine integration tier.
+`AssignCallerSlot` claims per (template root, call anchor, authored call event) and hands a repeat
+site its own copy to start on, because instance identity is (def, anchor) and two live calls on one
+anchor need two anchors. Off-engine charter:
+`CSVM.Tests/TemplateStageTests.cs`; `effect-template-mesh`/`effects-census`/`damage-template-pool`/
+`repeat-call-slots` are the in-engine integration tier.
 
 ## src/Mech3/SequenceRunner.cs
 The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `ISequenceHost` seam
@@ -3265,7 +3268,13 @@ human rig, `ai_crash_*` for an AI plane, keyed on `IsHumanPiloted`; handed to th
 controller as `CrashDefs`; the struck surface is only known at impact, so the whole vector is
 bound and `FlightController.Crash` indexes it with the struck body's surface id — the ai family's
 authored NAME `kestrel` resolves nowhere in a rig, so those defs take the crash root as their
-context node the way the original's caller supplies one)
+context node the way the original's caller supplies one).
+The pool-config drift check (`EffectPools.UnknownCrashRoots`) is asked against the roots BOTH rig
+kinds stage, derived by `BothRigKindsStageRoots`, not this rig's alone: `effect_pools.json` carries
+one `crashRoots` section for two families that stage different roots (an AI rig stages no
+`apassengers`, a human rig no `small_injure_fireball`), so a per-rig test reports every correct entry
+the other kind owns. ⚠ That union is resolved BEFORE the templates are staged, because a staged root
+answers `InScope` rather than `Stage` and drops out of the derivation.
 **plus** this rig's destroy def (`EffectCatalogue.DestroyAnimFor` → `DestroyDef`, with
 `DestroyDefFliesWreck` recording whether that def carries the wreck's fall and landing itself)
 **plus** `EffectCatalogue.PlaneDamageEffectAnims` (the four `<part>_damage_effects` shims →

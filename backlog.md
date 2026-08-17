@@ -3333,6 +3333,20 @@ usual.
 
 ## Tooling, platform & docs
 
+- `BL-417` `[Bug]` **`PerfSampleTests.AScopeAllocatesNothing` flakes and aborts the whole battery.**
+  It asserts a `PerfSample.Scope` allocates zero bytes and intermittently reports **3984**, the same
+  value every time. Seen twice in one session on an unchanged binary, and it passes on an immediate
+  re-run both alone and in the full unit suite, so it is timing, not a real allocation regression.
+  The cost is out of proportion to the defect: `RunTests.ps1` stops at the units stage, so a flake
+  here means the engine suites, the goldens and the hitch check never run at all, and an unattended
+  run reports a red battery for a reason unrelated to whatever it was testing.
+  ⚠ **Traps.** (a) Do not "fix" it by loosening the assertion to a byte budget: zero-allocation is
+  the property the test exists to hold, and a threshold would hide the regression it guards. The
+  fault is in what makes the measurement noisy (GC timing or JIT on first entry), not in the bound.
+  (b) 3984 being byte-identical across occurrences is a lead worth following, not a coincidence to
+  average away. (c) Whatever the fix, the battery should not lose four stages to one unit flake;
+  that ordering question is worth answering separately.
+
 - `BL-320` `[Bug]` **`RunTests.ps1` has no per-shot timeout, and the `viewer-bhawk` golden can hang
   the suite forever** (found during PLAN-overcast-match B15, 2026-08-08, reproduced on two
   consecutive runs, unrelated to that change — `--viewer` builds no chapter world). The shot

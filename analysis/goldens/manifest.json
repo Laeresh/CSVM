@@ -99,8 +99,8 @@
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "960df80f6786cbd7a0736a684faea013",
-      "exercises": "the crash rig playing player_crash_default (--crash=5's null-material slot-0 arm), the airframe, the moving distance-puffer path, call_crash_trails' ranged launch and tumble, the vector-form pieces that do not turn, and flydirt's delta.",
+      "hash": "5b5a348ff712464e039b0de97ce678c4",
+      "exercises": "the crash rig playing player_crash_default, the airframe, the moving distance-puffer path, call_crash_trails' ranged launch and tumble, the vector-form pieces that do not turn, and repeated calls on one anchor each taking their own pooled copy.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {

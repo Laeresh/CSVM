@@ -2274,18 +2274,19 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                                 relocate = libraryCopy != null;
                             }
                         }
-                        // ⚠ A pooled copy must BE Start's anchor, not the call site. Its symbol
-                        // lookup misses the by-index map and falls to the name rescue scoped to its
-                        // own subtree, which finds nothing unless the copy is the anchor.
-                        var startAnchor = libraryCopy ?? callAnchor;
+                        // A relocating call outside the pool claims its sticky slot before the
+                        // placed-where test asks for this call's copy. ⚠ Keyed on the authored
+                        // EVENT: a REPEAT call from one anchor must not take the first one's slot.
+                        Node3D? repeatCopy = relocate && libraryCopy == null
+                            ? _templateStage.AssignCallerSlot(target, callAnchor!, ev) : null;
+                        // ⚠ A pooled copy must BE Start's anchor, not the call site: its symbol
+                        // lookup falls to the name rescue scoped to its own subtree, and instance
+                        // identity is (def, anchor), so two calls on one anchor need two anchors.
+                        var ownCopy = libraryCopy ?? repeatCopy;
+                        var startAnchor = ownCopy ?? callAnchor;
                         // Added whether or not the Start below fires: "wait until it completes"
                         // is about the named animation, not about which call started it.
                         waitOn?.Add((target, startAnchor));
-                        // A relocating call anchored outside the pool claims its sticky slot before
-                        // the placed-where test below asks for this call's copy. The library-copy
-                        // path has its own pool, and a call on a pooled copy already has a slot.
-                        if (relocate && libraryCopy == null)
-                            _templateStage.AssignCallerSlot(target, callAnchor!);
                         Vector3 wantSite = default;
                         bool movedAway = false;
                         if (relocate)
@@ -2294,8 +2295,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             // ⚠ A placed template called at a DIFFERENT site restarts even while
                             // live; one copy can only be in one place, so the live guard would
                             // otherwise give the second call no effect at all.
-                            movedAway = libraryCopy != null
-                                ? libraryCopy.GlobalTransform.Origin.DistanceSquaredTo(wantSite)
+                            movedAway = ownCopy != null
+                                ? ownCopy.GlobalTransform.Origin.DistanceSquaredTo(wantSite)
                                   > TemplateStage<Node3D>.MoveToleranceSq
                                 : !_templateStage.IsAt(target, callAnchor, siteOffset);
                         }
@@ -2308,8 +2309,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             // template's own root, so re-anchoring alone emits at the gamez origin.
                             if (relocate)
                             {
-                                if (libraryCopy != null)
-                                    _templateStage.PlaceOn(new[] { (Node3D?)libraryCopy }, wantSite);
+                                if (ownCopy != null)
+                                    // Level a repeat call's copy exactly as PlaceAt would level the
+                                    // first one; the library-root pool has never levelled.
+                                    _templateStage.PlaceOn(new[] { (Node3D?)ownCopy }, wantSite,
+                                        libraryCopy == null && LevelsTemplate(target));
                                 else
                                     _templateStage.PlaceAt(target, callAnchor!, siteOffset);
                             }

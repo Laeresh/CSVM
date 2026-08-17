@@ -25,6 +25,10 @@ public sealed class TemplateStage<TNode>
     /// cannot drift.</summary>
     public const float MoveToleranceSq = 0.25f;
 
+    // Stands in for the authored event when a caller names no call site, so every claim has a key
+    // and a site-less caller keeps one slot per anchor rather than one per call.
+    private static readonly object UnkeyedCallSite = new();
+
     private readonly IEqualityComparer<TNode> _identity;
 
     // The raw ancestry walk (parent chain to the first pool-slot mark, -1 = none). Unmemoized —
@@ -68,9 +72,10 @@ public sealed class TemplateStage<TNode>
     private readonly HashSet<string> _placeExempt;
 
     // A relocating CALL_ANIMATION whose anchor sits in no slot container claims a slot per
-    // (template root, anchor) here on its first call and keeps it. Keyed per root, since one
-    // root's callers are a subset of all anchors.
-    private readonly Dictionary<string, Dictionary<TNode, int>> _callerSlots =
+    // (template root, anchor, authored call site) here on its first call and keeps it. Keyed per
+    // root, since one root's callers are a subset of all anchors. The list is in claim order, so
+    // entry 0 is the anchor's own slot: the site a repeat call splits off from.
+    private readonly Dictionary<string, Dictionary<TNode, List<(object Site, int Slot)>>> _callerSlots =
         new(StringComparer.OrdinalIgnoreCase);
 
     private readonly Dictionary<string, int> _callerSlotCursor = new(StringComparer.OrdinalIgnoreCase);
@@ -202,30 +207,36 @@ public sealed class TemplateStage<TNode>
     }
 
     /// <summary>Claims a pool slot for a relocating CALL_ANIMATION whose anchor sits in no slot
-    /// container, so a re-call from the same anchor restarts its own copy, never a sibling's.
-    /// Sticky per (template root, anchor); wraps and counts through <see cref="Recycles"/>.
-    /// No-op off the pool or for an already-slotted anchor. Plumbing: docs/architecture.md.</summary>
-    public void AssignCallerSlot(AnimDefinition callee, TNode anchor)
+    /// container, so a re-call from the same site restarts its own copy, never a sibling's.
+    /// Sticky per (template root, anchor, call site); wraps and counts through
+    /// <see cref="Recycles"/>. Returns the copy a REPEAT site must run ON, null for the anchor's
+    /// own first site and off the pool. Plumbing: docs/architecture.md.</summary>
+    public TNode? AssignCallerSlot(AnimDefinition callee, TNode anchor, object? callSite = null)
     {
         if (!Pooled || string.IsNullOrEmpty(callee.Name) || SlotOf(anchor) >= 0
             || _placeExempt.Contains(callee.Name))
-            return;
+            return null;
         if (!_callerSlots.TryGetValue(callee.Name, out var byAnchor))
-            _callerSlots[callee.Name] = byAnchor = new Dictionary<TNode, int>(_identity);
-        if (byAnchor.ContainsKey(anchor))
-            return;
+            _callerSlots[callee.Name] = byAnchor = new Dictionary<TNode, List<(object, int)>>(_identity);
+        if (!byAnchor.TryGetValue(anchor, out var claims))
+            byAnchor[anchor] = claims = new List<(object Site, int Slot)>();
+        object site = callSite ?? UnkeyedCallSite;
+        for (int i = 0; i < claims.Count; i++)
+            if (ReferenceEquals(claims[i].Site, site))
+                return i == 0 ? null : CopyInSlot(callee, claims[i].Slot);
         int copies = _findAll(callee.Name, null).Count;
         if (copies <= 1)
-            return;
+            return null;
         int next = _callerSlotCursor.TryGetValue(callee.Name, out int cur) ? cur : 0;
         _callerSlotCursor[callee.Name] = next + 1;
-        byAnchor[anchor] = next;
-        // The per-anchor claim, log-visible beside the retarget line it pairs with — a debug
+        claims.Add((site, next));
+        // The per-site claim, log-visible beside the retarget line it pairs with — a debug
         // run reads this to confirm a new tear takes a fresh copy instead of the live one.
         if (_debug())
         {
             _print($"anim: caller slot {next % copies} of '{callee.Name}' ({copies} cop(ies)) "
-                   + $"claimed by '{_nameOf(anchor)}'");
+                   + $"claimed by '{_nameOf(anchor)}'"
+                   + (claims.Count > 1 ? $" (call {claims.Count} from this anchor)" : string.Empty));
         }
         if (next >= copies)
         {
@@ -233,9 +244,10 @@ public sealed class TemplateStage<TNode>
             if (_recyclesLogged.Add(callee.AnimName ?? callee.Name))
             {
                 _print($"anim: caller pool for '{callee.AnimName ?? callee.Name}' wrapped — "
-                       + $"{next + 1} call anchor(s) over {copies} staged cop(ies) share again");
+                       + $"{next + 1} call site(s) over {copies} staged cop(ies) share again");
             }
         }
+        return claims.Count == 1 ? null : CopyInSlot(callee, next);
     }
 
     /// <summary>The copies of a definition's own template root(s) that belong with
@@ -455,14 +467,31 @@ public sealed class TemplateStage<TNode>
         return !_stillAnimated(roots) && !SharedWithLiveInstance(def, anchor, roots);
     }
 
-    // The slot AssignCallerSlot gave this (template root, anchor) pair,
-    // or -1 when it never claimed one.
+    // The slot AssignCallerSlot gave this (template root, anchor) pair, or -1 when it never
+    // claimed one. ⚠ The anchor's FIRST claim, never a later site's: a repeat site runs on its own
+    // copy AS anchor, so it is answered by SlotOf and never asks here.
     private int AssignedCallerSlot(AnimDefinition callee, TNode? anchor)
     {
         if (anchor == null || !_isValid(anchor) || string.IsNullOrEmpty(callee.Name))
             return -1;
         return _callerSlots.TryGetValue(callee.Name, out var byAnchor)
-               && byAnchor.TryGetValue(anchor, out int s) ? s : -1;
+               && byAnchor.TryGetValue(anchor, out var claims) && claims.Count > 0
+            ? claims[0].Slot : -1;
+    }
+
+    // The staged copy sitting in one pool slot, mapped onto the copies that exist the same way
+    // RootsFor maps a caller's slot — so a claim past the staged count wraps rather than missing.
+    private TNode? CopyInSlot(AnimDefinition callee, int slot)
+    {
+        var roots = _findAll(callee.Name, null);
+        var staged = roots.Select(SlotOf).Where(s => s >= 0).Distinct().OrderBy(s => s).ToList();
+        if (staged.Count == 0)
+            return null;
+        int want = staged.Contains(slot) ? slot : staged[((slot % staged.Count) + staged.Count) % staged.Count];
+        foreach (var root in roots)
+            if (SlotOf(root) == want)
+                return root;
+        return null;
     }
 
     private bool NodesEqual(TNode? a, TNode? b) =>

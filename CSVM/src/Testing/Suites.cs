@@ -340,6 +340,8 @@ public static class Suites
             "a destroy def's CALLBACK 16 hands the instance the rig's wreck velocity and its 15 stops the damage stages, on player-player and fury-fury; an authored code the runtime does not act on is counted, and no def in the chapter authors the free arm, code 0 (D18)", CallbackEvents));
         into.Add(new TestHarness.Suite("ordnance-burst-timeline",
             "the HE, flash and sonic bursts play end to end and every sequence's whole event timeline matches the authored JSON — in order, at the authored time (D31)", OrdnanceBurstTimeline));
+        into.Add(new TestHarness.Suite("repeat-call-slots",
+            "a template root CALLED REPEATEDLY from one anchor takes a pooled copy per authored call, not one for the anchor: pdpanel7's four gimmeflakes calls at pdp7 hold four copies, and a second tear reclaims those four rather than wrapping the pool (D21)", RepeatCallSlots));
         into.Add(new TestHarness.Suite("effects-census",
             "the full --effects-test sweep as verdicts: every effect resolves, template meshes show at the CALL SITE (not the stage origin), and none stays lit after its stop", EffectsCensus));
         into.Add(new TestHarness.Suite("bounce-launch",
@@ -9944,6 +9946,93 @@ public static class Suites
                     $"the two tears hold two different copies");
                 ctx.Check(runtime.PoolRecycles == 0,
                     $"no pool wrap for two anchors over two copies ({runtime.PoolRecycles})");
+            }
+            finally
+            {
+                runtime.Free();
+                stage.Free();
+            }
+        });
+    }
+
+    // ---- one anchor, several authored calls, one copy each -------------------------------------
+
+    // The other half of the pool's keying: a root CALLED REPEATEDLY from one anchor. The slot is
+    // claimed per (root, anchor, authored event), so pdpanel7's four gimmeflakes calls at pdp7 take
+    // four copies and the Balmoral's three chuteman calls at `destroyed` become three parachutes.
+    // Keyed per anchor alone, calls two to four resolve to the first call's copy and the live guard
+    // drops them, which is the "one chute where the data asks for three" symptom.
+    private static void RepeatCallSlots(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var stage = new Node3D { Name = "RepeatCallStage" };
+            var pdp7 = PoolAnchorNode("pdp7", new Vector3(-10, 0, 0));
+            stage.AddChild(pdp7);
+            var copies = new List<Node3D>();
+            for (int slot = 0; slot < 4; slot++)
+            {
+                var pool = new Node3D { Name = $"pool{slot}" };
+                pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
+                stage.AddChild(pool);
+                Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
+                    world.Session.Builder.Scene, pool, new[] { "planeflakes" });
+                foreach (var child in pool.GetChildren())
+                {
+                    if (child is Node3D copy)
+                    {
+                        copies.Add(copy);
+                    }
+                }
+            }
+
+            ctx.Check(copies.Count == 4, $"four planeflakes copies staged ({copies.Count})");
+            var runtime = new AnimRuntime(
+                Session.WorldEffectsFactory.NewCrashTemplateStage())
+            {
+                AutoStart = false,
+                ManualAdvance = true,
+                SoundHandledElsewhere = true,
+                EmitterFactory = new CountingEmitterFactory(),
+                NameResolveFallback = true,
+            };
+            ctx.Host.AddChild(stage);
+            ctx.Host.AddChild(runtime);
+            try
+            {
+                runtime.Bind(stage, world.Session.Program.Subset(new[] { "pdpanel7" }));
+                // The authored sites: one call at pdp7 + 2 m, three at pdp7 - 2 m, the last three
+                // staggered 0.2 / 0.3 / 0.4 s apart. Debris flies off after placement, so the set
+                // is collected AS each call lands rather than sampled at the end.
+                var siteA = pdp7.GlobalTransform.Origin + new Vector3(2, 0, 0);
+                var siteB = pdp7.GlobalTransform.Origin + new Vector3(-2, 0, 0);
+                var taken = new HashSet<Node3D>();
+                runtime.Play("pdpanel7", stage, applyReset: false);
+                for (int i = 0; i < 90; i++)
+                {
+                    runtime.Advance(1f / 60f);
+                    foreach (var copy in copies)
+                    {
+                        var at = copy.GlobalTransform.Origin;
+                        if (at.DistanceTo(siteA) < 0.5f || at.DistanceTo(siteB) < 0.5f)
+                            taken.Add(copy);
+                    }
+                }
+
+                ctx.Check(taken.Count == 4,
+                    $"pdpanel7's four authored gimmeflakes calls took four different copies ({taken.Count})");
+                ctx.Check(runtime.PoolRecycles == 0,
+                    $"no pool wrap for four call sites over four copies ({runtime.PoolRecycles})");
+                // Sticky per call site, as it is per anchor: a second tear reclaims the copies its
+                // own four events already hold rather than four more.
+                runtime.Play("pdpanel7", stage, applyReset: false);
+                for (int i = 0; i < 90; i++)
+                {
+                    runtime.Advance(1f / 60f);
+                }
+
+                ctx.Check(runtime.PoolRecycles == 0,
+                    $"a second tear reclaims its own copies ({runtime.PoolRecycles} wrap(s))");
             }
             finally
             {
