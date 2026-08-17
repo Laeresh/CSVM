@@ -2190,9 +2190,11 @@ public partial class FlightController : Node3D
             _hudCanvas.Visible = false;
     }
 
-    // The dead hull flying itself down: no thrust, no controls, and the world sweep that ends it in
-    // its ground-impact def. Runs until the destroy def's Callback 15 takes the hull over, so a
-    // wreck that reaches the ground before that still gets its crash def, as the original's does.
+    // The dead hull flying itself, on the same model it flew alive: the original gates nothing in
+    // the integrator on death (docs/org/flightModel.md, "A destroyed hull flies the same model").
+    // ⚠ The neutral input is OURS; the original only stops updating the commands, so they freeze.
+    // Runs until the destroy def's Callback 15 takes the hull over, so a wreck that reaches the
+    // ground before that still gets its crash def, as the original's does.
     private void StepWreckFall(float dt)
     {
         if (!_wreckFalling)

@@ -186,7 +186,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☑ The bailed pilot must not inherit the wreck's velocity
 23. ☑ Decode `start: null` after a timed event (❌ disproven as the cause; the real mechanism is the
     dead vehicle flying itself until `Callback 15`), and convert the anim family off `GD.Print`
-24. ☐ A dead hull glides instead of dropping: no lift and high drag once the engine is out
+24. ❌ A dead hull glides instead of dropping — **disproven**: the original changes nothing about a
+    destroyed aircraft's flight integration, and the three-second glide is faithful. One real
+    deviation found (we neutralise the controls where the original freezes them), owed at the
+    controls rather than landed
 25. ☐ Play the player's own destroy choreography: four flying pieces, the cockpit eject, `Callback 3`, against the two reference recordings
 
 ## ⚠ Wave D — what Waves A to C got wrong

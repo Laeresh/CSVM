@@ -181,6 +181,48 @@ where the explicit-Euler factor `(1 − dt·damp) = −4` would flip the rate's 
 tick — `CSVM.Tests/AngularDampingTests.cs` pins both the ordering (this tick's own torque is
 damped, not exempted) and this divergence.
 
+## A destroyed hull flies the same model
+
+⚠ **Nothing in the flight path is gated on death.** `FUN_0048e580` (the aircraft integrator),
+`FUN_0048c470` (the force and torque build) and `FUN_0048fc40` (thrust, drag, lift, gravity) do not
+read `+0x91d` or `+0x91f` at any instruction: a program-wide scan finds 100+ sites reading `+0x91d`
+and 39 reading `+0x91f`, and none of them lies inside those three functions. The only death test on
+the movement path is the run-or-skip gate itself, `FUN_00489ea0` at `0x00489ea3` / `0x00489ead`, and
+a vehicle that passes it dispatches the unmodified integrator for mode class 0 and 4. No lift term
+is dropped, no drag term is added, no coefficient is swapped, and no ballistic path exists. Neither
+does the death function `FUN_004b82d0` zero the throttle command or the control-surface
+deflections; those are AI-written state (`FUN_0041b560`, `FUN_004209b0` slew `+0x124`) and the AI
+think is what stops, so they **freeze at their last commanded values**.
+
+Two state flags do change the force build, and death sets neither:
+
+| Flag | Tested at | What it does | Set by |
+|---|---|---|---|
+| `+0x384` | `0x0048c4ba` | swaps the whole aerodynamic build for a velocity-match to `fd_speed · throttle` along the nose, the same arm any non-player over 1000 units from the player takes | `FUN_0043d640`, `FUN_004735b0`, `FUN_004aff80` |
+| `+0x2dc` bit `0x2` | `0x0048fdd0` | engine out: **thrust alone** goes to zero (`local_c` at `LAB_0048fdf3`); lift and drag are untouched | `FUN_004b1690` (the systems-damage setter), `FUN_004aff80` and `FUN_004b40c0` at spawn/reset |
+
+So "a dead engine means no lift and high drag" is refuted twice over: there is no engine-out state
+on the death path, and the real engine-out bit only removes thrust. `FUN_0048ad20` is a red
+herring, confirmed: it is the terrain-conform update for surface vehicles, reached from
+`FUN_00489ea0`'s class 2/3/5 arms and never for an aeroplane.
+
+**What falls, then, is the anim.** The dead hull holds altitude and travels, for the three seconds
+until `Callback 15` releases it; `randomdestseq`'s `ObjectMotion` (gravity −9.8, `impact_force`) is
+what flies it down (`docs/org/vehicleDamage.md`, "A dead aircraft keeps flying itself until
+`Callback 15`"). A headless kill measures our wreck holding 326 → 327 m over those three seconds
+and reaching 175 m downrange, then dropping to 128 m under the `ObjectMotion`. That downrange
+matches the one figure the reference recordings gave (`docs/PLAN-ai-damage-and-engine-audio.md`,
+D21).
+
+**Owed decision: we neutralise the commands where the original freezes them.**
+`FlightController.StepWreckFall` steps the model with a default `FlightInput`, so a wreck flies with
+zero throttle and neutral surfaces. Stepping it with the last commanded input instead is what the
+decode describes, and it was measured: the same kill goes from 175 m downrange and +1 m of altitude
+to 323 m and −8 m, because the frozen throttle keeps accelerating the hull. The mechanism is
+decoded; the magnitude depends on our own AI's last throttle rather than the original's, and it
+moves the downrange away from the reference figure, so it wants judging at the controls before it
+lands.
+
 ## Atmosphere
 
 `FUN_0041aca0` is a **two-band step function — there is no altitude gradient at all**:
