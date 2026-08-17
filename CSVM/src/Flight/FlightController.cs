@@ -2518,6 +2518,7 @@ public partial class FlightController : Node3D
                 Armed = hp.Ammo > 0 || InfiniteAmmo,
                 MountPos = hp.Pylon.GlobalPosition,
                 RoundSpeed = hp.Weapon.Velocity ?? ProjectilePool.DefaultVelocity,
+                RoundAccel = hp.Weapon.Acceleration ?? 0f,
             });
         }
         // No AI can aim at a gasbag yet (the acquisition collects aircraft alone), so the match's

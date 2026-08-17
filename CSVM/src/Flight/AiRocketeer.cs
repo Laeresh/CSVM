@@ -20,8 +20,14 @@ public readonly struct RocketPylonView
 
     public Vector3 MountPos { get; init; }
 
-    /// <summary>Muzzle speed of the round, for the lead solve.</summary>
+    /// <summary>The weapon's <c>VELOCITY</c>, for the lead solve: the speed a round without a motor
+    /// flies at, and the speed one with a motor climbs to above its launcher.</summary>
     public float RoundSpeed { get; init; }
+
+    /// <summary>The weapon's <c>ACCELERATION</c>, 0 for a round without a motor. Non-zero switches
+    /// the lead onto the launcher's frame and the motor's ramp, which is the branch the original's
+    /// per-mount solver takes on this same field (docs/org/aiPilot/aiWeapons.md).</summary>
+    public float RoundAccel { get; init; }
 }
 
 /// <summary>The AI's ordnance employment: when a non-human pilot pulls the rocket trigger, decoded
@@ -148,8 +154,16 @@ public sealed class AiRocketeer
             float sep2 = p.MountPos.DistanceSquaredTo(targetPos);
             if (sep2 < MinRangeM * MinRangeM || sep2 > MaxRangeM * MaxRangeM)
                 continue;
-            if (!AimAssist.TryIntercept(p.MountPos, p.RoundSpeed, targetPos,
-                    targetVelocity - ownVelocity, out var aim, out _))
+            // The original leads each round in the frame it flies in (FUN_0041afe0): a motor round
+            // in the launcher's, on the ramp it climbs, and one without a motor at VELOCITY against
+            // the target's world velocity, since it carries nothing of its launcher's.
+            Vector3 aim;
+            bool solved = p.RoundAccel != 0f
+                ? TryMotorIntercept(p.MountPos, p.RoundSpeed, p.RoundAccel, targetPos,
+                    targetVelocity - ownVelocity, out aim)
+                : AimAssist.TryIntercept(p.MountPos, p.RoundSpeed, targetPos, targetVelocity,
+                    out aim, out _);
+            if (!solved)
                 continue; // a target outrunning the round is simply not shot at
             var local = (toLocal * aim).Normalized();
             var (yawDeg, pitchDeg) = TurretController.AnglesOfLocal(local);
@@ -165,5 +179,55 @@ public sealed class AiRocketeer
             WantsFire = _roll() <= QuickDrawChance;
             return;
         }
+    }
+
+    // The accelerating intercept the original solves for a weapon authoring ACCELERATION
+    // (FUN_00462ce0, fed ACCELERATION, VELOCITY and the launcher's own velocity by FUN_0041afe0).
+    // In the launcher's frame the round starts at rest and climbs to VELOCITY, so the intercept is
+    // the time at which the separation equals the path the round has flown, found by bisection
+    // where the original roots the polynomial.
+    private static bool TryMotorIntercept(Vector3 mountPos, float velocity, float accel,
+        Vector3 targetPos, Vector3 relVel, out Vector3 aimDir)
+    {
+        aimDir = Vector3.Zero;
+        if (velocity <= 0f || accel <= 0f)
+            return false;
+        var separation = targetPos - mountPos;
+        if (separation.LengthSquared() < 1e-6f)
+            return false; // zero separation: nothing to aim at
+        float lo = 0f;
+        float hi = 1f;
+        // The gap closes for good once the motor outruns the target, so the first sign change
+        // bounds the intercept and there is nothing later to prefer over it.
+        for (int i = 0; i < 24 && Gap(hi) > 0f; i++)
+        {
+            lo = hi;
+            hi *= 2f;
+        }
+        if (Gap(hi) > 0f)
+            return false; // a target outrunning the round is simply not shot at
+        for (int i = 0; i < 40; i++)
+        {
+            float mid = 0.5f * (lo + hi);
+            if (Gap(mid) > 0f)
+                lo = mid;
+            else
+                hi = mid;
+        }
+        var lead = separation + relVel * hi;
+        if (lead.LengthSquared() < 1e-12f)
+            return false;
+        aimDir = lead.Normalized();
+        return true;
+
+        float Gap(float t) => (separation + relVel * t).Length() - Flown(t, velocity, accel);
+    }
+
+    // The path a motor round has flown by t in its launcher's frame: the ACCELERATION ramp until
+    // the motor reaches VELOCITY, then that speed held.
+    private static float Flown(float t, float velocity, float accel)
+    {
+        float ramp = velocity / accel;
+        return t <= ramp ? 0.5f * accel * t * t : (velocity * t) - (0.5f * velocity * ramp);
     }
 }

@@ -153,6 +153,36 @@ public class AiRocketeerTests
         Assert.Equal(0, atGasbag.SelectedPylon);
     }
 
+    // wep_04's authored pair: 450 m/s off a 150 m/s² motor, so the round needs 3 s to reach its
+    // VELOCITY and is led on the path it has actually flown by the intercept, not on VELOCITY.
+    // Second case sits past the ramp, where the motor holds the speed it climbed to.
+    [Theory]
+    [InlineData(600f, 800f, 26.5f)]
+    [InlineData(1500f, 2000f, 18.5f)]
+    public void AMotorRoundIsLedOnItsAccelerationRampAndNotOnVelocity(
+        float separation, float maxRange, float leadDeg)
+    {
+        var ownPos = new Vector3(0f, 0f, separation);
+        var crossing = new Vector3(100f, 0f, 0f);
+        float motor = LeadDeg(ownPos, Vector3.Zero, crossing, 450f, 150f, maxRange);
+        Assert.InRange(motor, leadDeg - 0.3f, leadDeg + 0.3f);
+        float constantSpeed = LeadDeg(ownPos, Vector3.Zero, crossing, 450f, 0f, maxRange);
+        Assert.InRange(constantSpeed, 12.5f, 13.1f);
+    }
+
+    // Each round is led in the frame it flies in: a motor round leaves at its launcher's speed, so
+    // its lead is on the target's velocity RELATIVE to the launcher, while a round without a motor
+    // is seeded at VELOCITY in the world and is led on the target's world velocity. Two aircraft
+    // crossing together at the same speed is where the two answers separate.
+    [Fact]
+    public void TheLeadIsSolvedInTheFrameTheRoundFliesIn()
+    {
+        var ownPos = new Vector3(0f, 0f, 600f);
+        var crossing = new Vector3(100f, 0f, 0f);
+        Assert.InRange(LeadDeg(ownPos, crossing, crossing, 450f, 150f), 0f, 0.1f);
+        Assert.InRange(LeadDeg(ownPos, crossing, crossing, 450f, 0f), 12.5f, 13.1f);
+    }
+
     // The walk names the pylon, so a torpedo sitting first cannot capture a launch the gates
     // cleared for the rocket behind it.
     [Fact]
@@ -296,6 +326,31 @@ public class AiRocketeerTests
         }
         Assert.Fail($"'{defName}' carries no ordnance entry in vehicle.zrd.json");
         return default!;
+    }
+
+    // The angle between the launch direction and the direct bearing: the lead the solve asked for.
+    // The traverse is opened first, so what comes back is the raw lead rather than the ±11° clamp's
+    // residual, which is the only way a lead past the limit can be read at all.
+    private static float LeadDeg(Vector3 ownPos, Vector3 ownVel, Vector3 targetVel,
+        float speed, float accel, float maxRange = 800f)
+    {
+        var r = Rocketeer(rollsPass: true);
+        r.MaxRangeM = maxRange;
+        r.PylonYawLimitDeg = 90f;
+        r.PylonPitchLimitDeg = 90f;
+        var pylon = new RocketPylonView
+        {
+            Index = 0,
+            Armed = true,
+            MountPos = ownPos,
+            RoundSpeed = speed,
+            RoundAccel = accel,
+        };
+        var bearing = (TargetPos - ownPos).Normalized();
+        r.Solve(ownPos, ownVel, Basis.LookingAt(bearing, Vector3.Up), TargetPos, targetVel,
+            TargetForward, targetIsGasbag: false, new List<RocketPylonView> { pylon });
+        Assert.True(r.WantsFire, "the geometry has to clear every gate for the lead to be readable");
+        return Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(r.LaunchDirWorld.Dot(bearing), -1f, 1f)));
     }
 
     private static RocketPylonView Pylon(int index, Vector3 mountPos,

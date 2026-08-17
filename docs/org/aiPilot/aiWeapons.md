@@ -165,11 +165,29 @@ Then, still before the shot:
   play, where the launch is decided elsewhere rather than locally.
 - Guns are subject to neither.
 
-The lead solution both classes consume is `FUN_0041afe0`, per mount, using the weapon def's speed
-(`+0x2c`) and drop (`+0x38`): a weapon authoring a non-zero drop gets a ballistic solve with the
-travel-time drop added, everything else a straight-line intercept. It writes the desired direction
+The lead solution both classes consume is `FUN_0041afe0`, per mount. It writes the desired direction
 to mount `+0x78` and a has-solution flag to `+0x84`; with no solution the mount is pointed at the
 vehicle's own reversed forward axis instead.
+
+**It solves each round in the frame that round flies in, and the branch is the weapon, not the
+weapon class.** The test at `0x0041b099` is `CANNON` (extension `+0x210`, bit `0x40`) and the one at
+`0x0041b0a2` is `ACCELERATION` (weapon `+0x38`) against zero:
+
+| Branch | Solver | Round speed | Target velocity |
+|---|---|---|---|
+| `ACCELERATION` non-zero, not `CANNON` (`0x0041b0f7`) | `FUN_00462ce0` | from rest, `ACCELERATION` m/s² up to `VELOCITY` | relative to the launcher |
+| `ACCELERATION` zero, not `CANNON` (`0x0041b276`) | `FUN_00460e30` | `VELOCITY` (`+0x2c`), constant | the target's own, in world space |
+| `CANNON` (`0x0041b330`) | `FUN_00460e30` | `VELOCITY` (`+0x2c`), constant | relative to the launcher |
+
+That matches what each round actually does: a motor round leaves at its launcher's speed and climbs
+to `VELOCITY` above it, so its lead is a launcher-frame problem over the motor's ramp, while a round
+without a motor is seeded at `VELOCITY` in world space and is led on the target's world velocity.
+`FUN_00462ce0` roots a polynomial for the intercept time and returns the direction as the lead
+vector divided by the path the round has flown by then, `0.5·a·t²` inside the ramp and
+`VELOCITY·t − VELOCITY²/(2a)` past it. The predicted impact point the caller stores at mount
+`+0x88`–`+0x90` carries the launcher's own velocity for the two launcher-frame branches and not for
+the world-frame one. Nothing here consults `LOCK_ON`, so a dumbfire round that does inherit its
+launcher's velocity for `LOCK_ON` seconds is still led as though it never did.
 
 ## `gun_pitch`/`gun_yaw` clamp the mount, they do not gate the shot
 
@@ -280,6 +298,8 @@ rarer still for the 89 mook blocks whose only authored skill is `dead_eye 1`.
 | `FUN_00443de0` | the campaign loadout build that calls it |
 | `FUN_004b20d0` | selects the current weapon (`+0x950`); refreshes the HUD when it is the player |
 | `FUN_0041afe0` | the per-mount lead solver: writes the desired direction `+0x78` and the has-solution flag `+0x84` |
+| `FUN_00460e30` | the constant-speed intercept, in the `u = 1/t` form ([`aim-assist.md`](../aim-assist.md)) |
+| `FUN_00462ce0` | the accelerating intercept a motor round is led with, fed `ACCELERATION`, `VELOCITY` and the launcher's velocity |
 | `FUN_004b7670` | the per-mount aim update: clamps to `gun_pitch`/`gun_yaw` and writes the aim quality `+0xa4` |
 | `FUN_00476250` | the spawn that copies the def's gun limits onto each mount |
 | `FUN_004897c0` | the world tick over the vehicle list that drives the mount update |

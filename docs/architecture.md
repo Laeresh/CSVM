@@ -101,7 +101,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AiControlLaw.cs` — the original's own AI steering law (decoded in `docs/org/aiControlLaw.md`): aim point + that point's velocity + one of four decoded parameter tables → stick and throttle lever. Engine-free and pure.
 - `src/Flight/AiModeMachine.cs` — the nine-mode AI state machine, the engine's decoded mode vocabulary: patrol/pursue/lay off/evade/evasive maneuver/stunned/avoid crash + two enum-only danger-zone modes; steady-hand and sixth-sense reaction rolls on the shipped chances.
 - `src/Flight/AiGunner.cs` — the AI's forward-gun gunnery: intercept lead via `AimAssist.TryIntercept`, the quick-draw cone and the engagement window as fire gates, the ±11° traverse clamp with its 10° residual gate, per-shot dead-eye scatter; mutable target, primary-target name and rating biases (the D12 script seams).
-- `src/Flight/AiRocketeer.cs` — the AI's ordnance employment: the quick-draw cone over the whole pass, then per pylon the armed check, the two-way `DAMAGES_ZEPPELIN` match, the 200–800 m band and the traverse clamp with its 5° residual gate (tighter than the gun's 10°), then the vehicle-wide lockout stamped ahead of the `quick_draw_chance` roll. Holds no target of its own: the host walks it against `AiGunner.Target`.
+- `src/Flight/AiRocketeer.cs` — the AI's ordnance employment: the quick-draw cone over the whole pass, then per pylon the armed check, the two-way `DAMAGES_ZEPPELIN` match, the 200–800 m band and the traverse clamp with its 5° residual gate (tighter than the gun's 10°), then the vehicle-wide lockout stamped ahead of the `quick_draw_chance` roll; the lead is per pylon, a motor round on its `ACCELERATION` ramp in the launcher's frame and a round without one at `VELOCITY` in the world's. Holds no target of its own: the host walks it against `AiGunner.Target`.
 - `src/Flight/AiVoiceDispatcher.cs` — the combat-voice trigger dispatch, engine-free: the talker roll, the 15 s per-slot cooldown armed on failure too, the bearing halving, the broadcast election, the DI tiers, the death cries with force, the computed bearing index.
 - `src/Flight/AiTargetRanking.cs` — the decoded target-ranking formula: rank = weight × 1200 + distance + objectiveBias, minimised; player base weight 0.7, ±0.2 bearing/altitude/facing terms, 1e21 beyond activation; rating-bias matching and the allied-attacker deconfliction pick.
 - `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints: nearest node first, then edge-list neighbours, seeded branch draws, and an anchored net offset onto its live trailer target (`BL-377`); aircraft-agnostic, shared by `AiPilot` and `ZeppelinMotion`.
@@ -1636,6 +1636,19 @@ ordnance half of a decoded pair and is deliberately not shared with `AiGunner.Ai
 cos 10°: a lead 18° off the nose clamps to 11° and is taken by the gun and refused by the ordnance.
 The lockout is stamped BEFORE the `quick_draw_chance` roll, so a failed roll spends the whole refire
 interval instead of retrying next tick.
+
+**The lead is solved in the frame the round flies in, per pylon** (`org/aiPilot/aiWeapons.md`, the
+branch table under the lead solver). A pylon whose weapon authors `ACCELERATION` (`RoundAccel`,
+`wep_04` among the AI's ordnance) takes `TryMotorIntercept`: the round starts at rest in its
+launcher's frame and climbs to `VELOCITY` at `ACCELERATION`, so the intercept is where the
+separation from the target's RELATIVE track equals the path flown, `0.5·a·t²` inside the ramp and
+`VELOCITY·t − VELOCITY²/(2a)` past it, bisected where the original roots a polynomial
+(`FUN_00462ce0`). A pylon without a motor takes `AimAssist.TryIntercept` at `VELOCITY` against the
+target's WORLD velocity, since such a round is seeded at its cap rather than off its launcher
+(`FUN_00460e30`, the world-frame call). The difference is large at the shipped numbers: `wep_04` at
+450 m/s off a 150 m/s² motor needs 3 s to reach its `VELOCITY`, and a 600 m shot at a 100 m/s
+crosser leads 26.5° where the constant-speed solve leads 12.8°. `AiGunner` keeps the relative-frame
+constant-speed solve, which is the original's third branch, the `CANNON` one.
 
 Three properties of the original hold here by construction rather than by a test. The aim gate is
 skipped for the player, and this class only runs for a non-human pilot, so player fire never reaches
