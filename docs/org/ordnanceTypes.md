@@ -148,7 +148,8 @@ guidance is `TURN_RATE` with no flag at all.
 Parsing `TANGLER` has a side effect the other flags do not: `FUN_004ba6f0` registers a handler on the
 weapon record through `FUN_005aec90` (target `0x004ba660`, which Ghidra has not resolved as a
 function). That handler lands at weapon `+0x20c` and is the per-weapon impact hook the detonation
-path calls first; see [the detonation section](#detonation-the-impact-then-the-splash).
+path calls first; it builds the choker's cloud and silences the row's sound. See
+[the detonation section](#detonation-the-impact-then-the-splash) and "The choker, settled".
 
 ## The launch-side dispatch
 
@@ -540,20 +541,38 @@ and sound a row binds and how rows are filled. It does not cover what a detonati
 
 ### Half one, the direct impact (`FUN_005ac7a0`)
 
-- **A per-weapon impact hook.** If the weapon has a callback at `+0x20c`, it runs first and returns a
-  suppression mask: bit 1 silences the row's sound, bit 2 suppresses damage and effects, bit 4
-  suppresses the impact animation. This is the slot `FUN_005aec90` writes, and the `TANGLER` parse is
-  the one caller that installs one (target `0x004ba660`), which closes the loose end noted at the top
-  of this page.
+- **A per-weapon impact hook.** If the weapon has a callback at `+0x20c`, it runs first, with the
+  weapon, the hit record and the round, and returns a suppression mask read three times further down:
+  bit 1 silences the row's sound (`FUN_005ad100` is skipped), bit 2 suppresses the crater and
+  quicksand carves and the row's `EFFECT` (row `+0x24`, spawned through `FUN_00525d90`), bit 4
+  suppresses the row's `ANIMATION` slot alone. **Neither the direct damage nor the splash is under
+  any bit**: `FUN_005abcf0` runs before the mask is first read, and the splash is the caller's
+  (`FUN_005ac3a0`) second half. This is the slot `FUN_005aec90` writes, and the `TANGLER` parse is the
+  one caller that installs one, `LAB_004ba660`, which closes the loose end noted at the top of this
+  page. That hook builds the choker's **cloud** (below, "The choker, settled") and returns **1**, so
+  a choker's `IMPACT` row plays no sound in the original; the mask's other two bits have no
+  installer in the binary. CSVM: `WeaponDef.ImpactHook` (an enum, one installer) dispatched by
+  `ProjectilePool.RunImpactHook`, the mask as `ImpactSuppression` fed to `ImpactOutcome.Resolve`.
 - **Direct damage** is the authored pair scaled by a per-round factor at round `+0x678`, applied
   through `FUN_005abcf0` to the struck object alone.
-- **The explosion effect** then spawns: `FUN_005ac690` for a `ROCKET`, `FUN_005ac580` for a
-  `TANGLER`. Both are effect spawners rather than damage, both gate on the struck node carrying
-  `0x10000`, and both randomise a count and two scales from weapon fields `+0x198`/`+0x1c0`,
-  `+0x1a4`/`+0x1cc` and `+0x1a8`/`+0x1d0`.
-- **The row's own bindings** follow: the sound through `FUN_005ad100`, the `ANIMATION`, and the
-  `SURFACE_ANIMATION` **oriented by the struck surface's normal**, which the routine builds from the
-  hit record before spawning it.
+- **The terrain carves** come next, and they are keyed on the `.zrd` dispatcher's word at weapon
+  `+0x74`, not on the extension flags: `FUN_005ac690` under bit `0x10` (**`CRATER` present**, set by
+  `FUN_005ad630` where it reads the key) and `FUN_005ac580` under bit `0x40000` (**`QUICKSAND`**,
+  unauthored). Both gate on the struck node carrying `0x10000` and randomise a count and two scales
+  from weapon fields `+0x198`/`+0x1c0`, `+0x1a4`/`+0x1cc` and `+0x1a8`/`+0x1d0`. ⚠ A crater that was
+  actually carved suppresses **both** animation slots below unless the weapon authors
+  `ANIMATION_ALWAYS` (`+0x74` bit `0x800000`; nothing in this install does), so on the six
+  `CRATER` weapons the ground effect is the crater rather than the ring where the terrain takes one.
+  This is `BL-412`/`BL-413`'s subsystem and CSVM builds none of it.
+- **The row's own bindings** follow: the sound through `FUN_005ad100`; the `ANIMATION` (row `+0x4`)
+  spawned through `FUN_004edc10` with a zero rotation, and only when `FUN_005abcf0` returned 0; and
+  the `SURFACE_ANIMATION` (row `+0x1c`) spawned with an orientation built from the hit record:
+  `FUN_00422690` normalises the record's normal (its first three floats), `FUN_0053fd40` builds the
+  shortest-arc rotation from `DAT_006379c0`, which is `(0, 1, 0)`, onto it, and `FUN_00540260` turns
+  that into the Euler triple the spawn takes. So a `SURFACE_ANIMATION` is world up rotated onto the
+  struck normal, identity on flat ground, and a plain `ANIMATION` keeps its fixed axis whatever the
+  surface. CSVM: `ProjectilePool.SurfaceUpBasis` on the slot `ImpactOutcome.SurfaceOriented` names,
+  handed to `AnimRuntime.PlayEffectAt` and the gamez-model spawn as the template's basis.
 
 ### Half two, the splash (`FUN_005aca30` then `FUN_005acac0`)
 
@@ -630,9 +649,16 @@ So any reading of this engine that treats a `FUN_00538880` result as a plain dis
 ## The hit-side dispatch
 
 `FUN_004b9bc0` is the routine that applies one weapon hit to one aircraft. It receives the victim,
-the weapon record, the **distance** from the detonation, the struck zone id, the shooter, and a
-two-float damage pair (armour, health). It reads the flags dword from `weapon+0x210` and branches,
-and the branch order is what decides which types can ever deal damage:
+the weapon record, the **squared distance** from the detonation, the struck zone id, the shooter, and
+a two-float damage pair (armour, health). It has three callers, and which aircraft they hand it is
+what decides who a burst affects: the vehicle's own hit callback `FUN_004b9770` for the struck
+aircraft (its distance is `FUN_00538880` between the vehicle position and the detonation record's
+burst point, so the aircraft's origin to the burst, squared), the splash walker `FUN_005acac0` once
+per hit-buffer entry (its distance is the entry's `dSurface²`, so **every aircraft the sphere query
+finds inside `IMPACT_PROXIMITY` is a victim**, whether the round struck one, fused on one, or burst on
+the ground beside it, cover-tested and capped at 32 like the damage), and the choker cloud's walk
+`FUN_004b9590` (below). It reads the flags dword from `weapon+0x210` and branches, and the branch
+order is what decides which types can ever deal damage:
 
 1. **Feedback magnitude.** A kind and a magnitude are computed for the player's per-hit feedback call
    `FUN_0042c070`, which runs only when the victim is the player. Kind 1 is a `CANNON` hit, sized by
@@ -643,15 +669,22 @@ and the branch order is what decides which types can ever deal damage:
    it is unread here).
    ⚠ The `HIGH_EXPLOSIVE` branch tests `distance <= 400.0` and then applies the **same** multiplier in
    both arms. The comparison is dead as shipped.
-2. **`SONIC` or `FLASH`** (`0x200 | 0x800` tested together). `FUN_0042e840` computes an intensity;
-   if it is non-zero the victim is affected, and **the victim's kind decides how**. The player gets a
-   screen flash through `FUN_0042e9d0`, white for `FLASH` and **red for `SONIC`**. An AI gets
-   `FUN_004200d0`, which is a **stun**. Either way both damage figures are then zeroed.
+2. **`SONIC` or `FLASH`** (`0x200 | 0x800` tested together). `FUN_0042e840` computes an intensity
+   from the squared distance, `IMPACT_PROXIMITY` squared on the spot (`+0x3c × +0x3c`), and the burst
+   point read off the current detonation record (`FUN_005ad430() + 0x18`); if it is non-zero the
+   victim is affected, and **the victim's kind decides how**. The player gets a screen flash through
+   `FUN_0042e9d0` with a literal `1.0` first argument (the start delay), the intensity, the five-times
+   figure as the duration, and the colour: white for `FLASH` and **red for `SONIC`**. An AI gets
+   `FUN_004200d0`, which is a **stun**. Either way both damage figures are then zeroed. CSVM:
+   `ProjectilePool.ApplyDisabling`, run from `Apply` on every burst of a `SONIC`/`FLASH` weapon over
+   the same aircraft gather the splash uses; a human's pane through `ProjectilePool.WashSink`
+   (`ScreenFlash.PlayBlend`), an AI through `FlightController.TryStunPilot`.
 3. **`BEEPER`** (`0x4000`). Tests the shooter against the victim (`FUN_004b8ce0`), then tags the
    victim by handing `FUN_004b88a0` the shared `TIME` at `+0x18`. Zeroes both damage figures and
    returns.
 4. **`TANGLER`** (`0x40000`). Zeroes both damage figures, then computes an engine-dead duration and
-   calls `FUN_004b1690`. See below.
+   calls `FUN_004b1690`. See below. There is no shooter guard ahead of it: the self-hit test comes
+   after, on the ordinary path only.
 5. **Everything else** is the ordinary damage path: a self-hit guard (a round whose shooter is its
    victim deals nothing), then the struck zone is found by walking the victim's zone list at stride
    0x58 and matching the zone id, and the pair is spent against that zone (`FUN_004b3bf0`) or against
@@ -744,7 +777,8 @@ locking a human's controls for five seconds would be intolerable.
 The choker sets the engine-dead bit and its timer, and nothing in the AI decision layer reads that
 mask. Its readers are in the flight model (`FUN_0048fc40` and the `FUN_004b18a0` group), so a choked
 AI is not told it has been choked; it simply flies an aircraft with no thrust. There is no stun, no
-state change and no evasive reaction.
+state change and no evasive reaction. The catch is a **cloud** the impact hook leaves at the burst,
+not the round alone; see "The choker, settled".
 
 ### `BEEPER`: nothing at all to the victim
 
@@ -867,6 +901,26 @@ airframe to stall speed essentially instantly, is **not** what this routine does
 second effect for it to be hiding in on the hit path. Whatever the felt instantaneity was, it is the
 engine cutout plus the flight model, not an authored clamp.
 
+**The catch is a cloud, and it lives for `TIME`.** The choker's impact hook (`LAB_004ba660`, the one
+`FUN_005aec90` installs) does not choke anything itself. It allocates a 0x1c-byte object through
+`FUN_004b94e0` holding the shooter, the weapon, the burst position (hit record `+0x48`), the
+extension's `RADIUS` **squared** (`+0x1c`, squared once here) and the shared `TIME` slot (`+0x18`,
+`wep_12` authors `2.0`), pushes it onto the world list `DAT_0071db9c`, and returns 1. Every frame
+`FUN_004b96d0` walks that list: `FUN_004b9590` counts the cloud's time down by the frame delta and,
+while any is left, walks the aircraft list `DAT_0071dabc` and hands every alive aircraft whose
+`FUN_00538880` **origin** distance to the cloud centre is under the squared radius to `FUN_004b9bc0`
+with that squared distance and a `1e-4` pair, which the `TANGLER` branch turns into the duration
+above and `FUN_004b1690` into an extend-only timer. Three things follow. The `RADIUS` is both the
+catch (squared, so 35 m is 35 m) and the duration's denominator (raw, the mismatch above), where the
+round's own `DETONATION_DISTANCE` decides only where the cloud forms. An aircraft inside the cloud is
+re-choked every frame for the cloud's 2 s, so its timer stands at the formula's value until the cloud
+is gone and only then runs down. And nothing excludes the shooter: a pilot who flies through their
+own cloud within its 2 s is choked like anyone else (the network guard in the hook decides who
+creates the cloud, not who it catches). The direct-hit callback `FUN_004b9770` reaches the same
+branch on the struck aircraft with its origin distance, so a direct hit chokes on the impact frame
+and the cloud carries on from there. CSVM: `ProjectilePool.SpawnTanglerCloud`/`StepTanglerClouds`,
+the timer through `FlightController.TryChokeEngine`, `CollectTanglerClouds` for a suite.
+
 ## Two answers this routine gives to other items
 
 **Blast knockback is authored, not invented.** Late in `FUN_004b9bc0`, when the victim is in vehicle
@@ -963,6 +1017,12 @@ engine sees; its per-polygon test (`FUN_004c9a00`) was not opened.
   `FUN_005ac690`, `FUN_005ac580`, `FUN_005aca30`, `FUN_005acac0`, `FUN_0042e840`, `FUN_004200d0`,
   `FUN_0042e9d0`, `FUN_004b8d50`, `FUN_004b8fd0`, `FUN_004b8dd0`, `FUN_004b8f60`, `FUN_004b8f80`
   and `FUN_004b92c0` were read in full.
+- The impact hook `LAB_004ba660` was read from its disassembly (Ghidra has it as a label, not a
+  function), and its cloud's builder `FUN_004b94e0`, list walker `FUN_004b96d0`, per-cloud step
+  `FUN_004b9590` and list init/teardown `FUN_004b9440`/`FUN_004b9680` in full. `FUN_005ac7a0`'s
+  `+0x74` bits `0x10` and `0x40000` were traced to `FUN_005ad630`'s `CRATER` and `QUICKSAND` reads,
+  `0x800000` to its `ANIMATION_ALWAYS` read, and `DAT_006379c0` was read as `(0, 1, 0)`;
+  `FUN_0053fd40` (the two-vector rotation) and `FUN_00422690` (normalise) were read in full.
 - `FUN_004cb420` (the splash gather), `FUN_004d8bd0` (the box-to-sphere reduction),
   `FUN_005388d0` (the rooted distance) and `FUN_004cd210` (the intersect-bit toggle) were read in
   full for the surface-distance, occlusion and cap findings under "Half two, the splash".

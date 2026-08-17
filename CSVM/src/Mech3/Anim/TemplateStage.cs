@@ -310,13 +310,13 @@ public sealed class TemplateStage<TNode>
         PlaceOn(RootsFor(callee, site), xf.Origin + xf.Basis * offset, _levels(callee));
     }
 
-    /// <summary>Places the given root(s) at an absolute world origin. The engine write behind the
-    /// <c>placeAt</c> hook world-stages each root once placed: <c>TopLevel</c> decouples it from a
-    /// moving/rotating caller (a flying plane's pdpN panel) so it holds this pose instead of being
-    /// dragged and re-yawed every later frame the caller moves — the same plane-parented-effect
-    /// trap Puffer's TrailAdvance/Burst guards against. A caller that calls again later
-    /// (or the pooled-copy path re-placing a recycled slot) simply overwrites this transform.</summary>
-    public void PlaceOn(IEnumerable<TNode?> roots, Vector3 origin, bool level = false)
+    /// <summary>Places the given root(s) at an absolute world origin, with <paramref name="orient"/>
+    /// as the whole basis when given (an impact's surface orientation) and the basis left as it
+    /// stands when null. The engine write behind the <c>placeAt</c> hook world-stages each root once
+    /// placed: <c>TopLevel</c> decouples it from a moving/rotating caller (a flying plane's pdpN
+    /// panel) so it holds this pose instead of being dragged and re-yawed every later frame the
+    /// caller moves. A later call (or a recycled pool slot) simply overwrites this transform.</summary>
+    public void PlaceOn(IEnumerable<TNode?> roots, Vector3 origin, bool level = false, Basis? orient = null)
     {
         foreach (var root in roots)
         {
@@ -328,6 +328,8 @@ public sealed class TemplateStage<TNode>
             // would fight debris scatter authored in its own co-rotating frame.
             if (level)
                 xf.Basis = Basis.Identity;
+            if (orient is { } basis)
+                xf.Basis = basis;
             _placeAt(root, xf);
         }
     }

@@ -96,8 +96,10 @@ mistakes came from reading a value without tracing it to its parse site.
 - **The engine stores radii squared.** `+0x3c` `IMPACT_PROXIMITY` raw, `+0x40` its square, `+0x44`
   `DETONATION_DISTANCE` squared, `+0x20` `RANGE` squared, `+0x48` `DETONATION_TIME` raw.
   `FUN_00538880` returns squared distances. This is the single highest-risk fact in the plan.
-- **Four types deal no damage at all** (`SONIC`, `FLASH`, `BEEPER`, `TANGLER`), and three of those
-  author damage figures the engine discards.
+- **Four types deal no damage at all** (`SONIC`, `FLASH`, `BEEPER`, `TANGLER`). The hit branch
+  discards whatever pair they author, and in this install all four author zero (`ARMOR_DAMAGE 0.0`
+  / `HEALTH_DAMAGE 0.0` on `wep_08`, `wep_10`, `wep_12`; `DAMAGE 0` on `wep_09` and `wep_15`), so
+  the discard changes nothing here and would only bite an entry authoring a real pair.
 - **Shipped AI carry the disabling weapons.** A smoker and a flash at 6 rounds each on their own
   defs, the choker on `secfury`, and eight torpedoes on `bhatwarhawk` (`BL-394`). This plan's
   player-facing half is exercised in normal play, not only in the lab.
@@ -166,15 +168,15 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 10. ☑ Splash falloff: quadratic, measured to the shape
 11. ☑ Splash occlusion test and the 32-object cap
-12. ☐ The per-weapon impact hook and `SURFACE_ANIMATION` normal orientation
+12. ☑ The per-weapon impact hook and `SURFACE_ANIMATION` normal orientation
 
 ### Wave D — Disabling effects
 
 13. ☑ `ScreenFlash`: the victim-routed blend channel
 14. ☑ `SONIC`/`FLASH`: the shared intensity model
-15. ☐ The player's screen wash: colour, weight, duration, blending
+15. ☑ The player's screen wash: colour, weight, duration, blending
 16. ☑ The AI stun
-17. ◐ `TANGLER`: the engine-dead timer
+17. ☑ `TANGLER`: the engine-dead timer
 18. ☑ `SMOKE_SCREEN`: the stun trap
 
 ### Wave E — Flyout and gates
@@ -671,7 +673,31 @@ the same burst with the building removed, which must take the curve's value. Bas
 candidate count rather than skipping the test, because the cap is authentic and the test is the
 behaviour.
 
-## C12 ☐ The per-weapon impact hook and `SURFACE_ANIMATION` normal orientation
+## C12 ☑ The per-weapon impact hook and `SURFACE_ANIMATION` normal orientation
+
+**Verdict.** Landed, and re-reading `FUN_005ac7a0` corrected this item's own evidence on three
+points, all recorded on the decode page. The mask's bits are: 1 the row's sound; 2 the crater and
+quicksand carves and the row's `EFFECT` slot, **not** the direct damage, which `FUN_005abcf0` deals
+before the mask is first read, and not the splash, which is the caller's second half; 4 the row's
+`ANIMATION` slot alone, the `SURFACE_ANIMATION` being spawned under no bit. The two "explosion
+spawners" the evidence attributed to `ROCKET` and `TANGLER` are keyed on the `.zrd` dispatcher's
+`+0x74` word and are the **`CRATER`** (`0x10`) and **`QUICKSAND`** (`0x40000`) carves, `BL-412`'s
+subsystem, so nothing of them was built; a carved crater additionally suppresses both animation
+slots unless `ANIMATION_ALWAYS`, unauthored here. And the one hook in the binary, the `TANGLER`
+parse's `LAB_004ba660`, does not suppress the choker's damage or effect: it builds the choker's
+**cloud** (D17) and returns 1, so a choker's `IMPACT` row plays no sound in the original, which
+this side reproduces. The hook is `WeaponDef.ImpactHook`, an enum with one arm dispatched by
+`ProjectilePool.RunImpactHook`, and the mask is `ImpactSuppression`, fed to `ImpactOutcome.Resolve`
+so `Apply` still performs a resolved row and decides nothing. The orientation is
+`ProjectilePool.SurfaceUpBasis`, the shortest rotation from world up (`DAT_006379c0`) onto the
+struck normal, applied only to the slot `ImpactOutcome.SurfaceOriented` names, and reaching the
+effect template through a new `Basis` on `EffectSink` → `AnimRuntime.PlayEffectAt` →
+`TemplateStage.PlaceOn` (set when given, untouched when null, so every other placement path is
+unchanged); the plain `ANIMATION` passes identity, which is BL-293's parked half left exactly as it
+was. `impact-orientation` fires `wep_06` into a 30° slope (its `he_ground_effect` arrives with its
+Y on the slope normal), into flat ground (identity) and `wep_12` into the slope (`scatter_effect`,
+a plain `ANIMATION`, identity). Owed at the controls: a rocket into a real chapter slope, never flat
+C1 terrain, where the rule changes nothing.
 
 **Goal.** A weapon can suppress parts of its own impact, and surface effects sit on the surface.
 Closes `BL-293`'s actionable half.
@@ -761,7 +787,31 @@ and 0.6. `wep_15` authors `IMPACT_PROXIMITY [500]`, so full strength reaches abo
 **⚠ Traps.** The ratio is squared on both sides. Feeding it a plain distance moves the plateau edge
 from 77% to 60% of the radius.
 
-## D15 ☐ The player's screen wash: colour, weight, duration, blending
+## D15 ☑ The player's screen wash: colour, weight, duration, blending
+
+**Verdict.** Landed as `ProjectilePool.ApplyDisabling`, run from `Apply` on every `SONIC`/`FLASH`
+burst (struck, fused or timed out), with D16's stun wired beside it. Re-reading `FUN_004b9bc0`'s
+callers settled who the victims are: **every aircraft the splash gather finds inside
+`IMPACT_PROXIMITY`**, not the struck one alone, because `FUN_005acac0` hands each hit-buffer entry
+to the same routine with its squared surface distance and the branch runs the intensity on that;
+the struck aircraft's own callback (`FUN_004b9770`) reaches it too, with the origin-to-burst square.
+So the walk here is the blast's own gather, cover test and 32 cap over the registered aircraft,
+each victim resolved through `DisablingIntensity.TryResolve` on its squared hull distance with the
+`FLASH` facing dot from its nose to the burst; a human's `PlayerIndex` gets `WashSink` (the pool's
+new sink, `GameSession` assigns `ScreenFlash.PlayBlend`) with red `(1,0,0)` for `SONIC`, white for
+`FLASH`, weight the intensity, duration five times it and the literal 1.0 s start delay the branch
+passes `FUN_0042e9d0`, and an AI gets `TryStunPilot`; nothing touches a human's control, and no
+damage moves: `AircraftDamageDiscarded` (the four no-damage types) returns `Apply` before a struck
+plane's ledger and keeps aircraft out of `ApplyDamage`'s gather, so the beeper's zero pair no
+longer flashes "HIT" either. `disabling-hits` flies it on two human rigs over a real two-pane
+`ScreenFlash` and two AI rigs: a `wep_08` into a human's tail washes that pane red at weight 1 for
+5 s, painting only after the delay and clearing at the duration, with the other pane clear
+throughout; a `wep_09` from behind washes nothing and one from ahead washes white; two humans hit
+in one step each carry their own wash; an AI 14 m from one of those bursts is stunned the full 5 s;
+an AI is stunned 3.8 s by a sonic fusing 29 m abeam (the fade), 5.0 s by a direct hit while
+stunned, and back to 3.8 s by the next passing burst (the expiry is written, never maxed); and no
+ledger moves. Owed at the controls: `--rocket=wep_08`/`wep_09` against the player for the look of
+the wash, and `--vs --players=4` with two viewers hit in one second.
 
 **Goal.** A human hit by a sonic or flash round loses their view for up to five seconds, and
 overlapping hits stack sensibly.
@@ -795,9 +845,10 @@ accepts a pilot in any mode including its own stun; and `+0x978` is the pilot's
 seconds were passed; only the sixth-sense caller passes it as the duration). The expiry is
 overwritten, not maxed. Decision 6 was applied against a machine that already carried the original's
 state 4 as `AiMode.Stunned` (the sixth-sense fail, D11), so no mode was added: `AiModeMachine.Stun`
-is the one entry both stuns share, and a machine-less pilot keeps its own countdown. Owed at the
-controls: an AI going limp for about five seconds under `--rocket=wep_08` and resuming, once the
-hit-side wiring lands.
+is the one entry both stuns share, and a machine-less pilot keeps its own countdown. The hit-side
+wiring is D15's `ApplyDisabling`, and `disabling-hits` asserts the stun, the re-stun and the
+overwrite on a live AI rig. Owed at the controls: an AI going limp for about five seconds under
+`--rocket=wep_08` and resuming.
 
 **Goal.** An AI hit by a sonic or flash round stops flying for up to five seconds.
 
@@ -821,10 +872,28 @@ state as an input state.
 **⚠ Traps.** Re-entrancy is required, not accidental: `D18` refreshes the stun every frame a pilot
 stays in smoke. Do not make it single-shot.
 
-## D17 ◐ `TANGLER`: the engine-dead timer
+## D17 ☑ `TANGLER`: the engine-dead timer
 
-**Verdict.** The mechanism landed; the hit-side wiring is pending in the Projectile lane, so nothing
-fires a choker yet. `TanglerChoke.Duration(distanceSq, radiusRaw, min, max)` is the curve, with the
+**Verdict.** The mechanism landed first (below), and the hit side landed with C12/D15, where
+re-reading the `TANGLER` hook corrected the catch: **the choker leaves a cloud.** `LAB_004ba660`
+builds an object at the burst holding the weapon's `RADIUS` squared and its `TIME` (`wep_12`
+authors 2 s) and pushes it onto a world list; every frame `FUN_004b96d0`/`FUN_004b9590` count each
+cloud down and hand every alive aircraft whose **origin** sits inside the squared radius to
+`FUN_004b9bc0` with that squared distance, so the `TANGLER` branch runs and `FUN_004b1690`'s
+extend-only timer is refreshed on every frame the aircraft stays inside. So `RADIUS` is both the
+catch (35 m is 35 m) and the duration's denominator (raw), the round's `DETONATION_DISTANCE`
+decides only where the cloud forms, nothing excludes the shooter, and a victim inside is held at
+the formula's value until the cloud is gone and only then runs down. The remake is
+`ProjectilePool.SpawnTanglerCloud` (the hook's arm) and `StepTanglerClouds` (per `SimStep`, origin
+distance squared through `TanglerChoke.Duration` into `TryChokeEngine`), with `EngineDeadBounds`
+assigned by `GameSession` from `TanglerChoke.EngineDeadBounds`. The same hook returns 1, so a
+choker's `IMPACT` row plays no sound in the original and none here. `disabling-hits` reads a 12.7 s
+choke on the AI a `wep_12` struck (about 1.1 m from its origin), the 5 s floor on a human 20 m out,
+both held while the cloud lives, the cloud gone at 2 s, and the timer running down after. Owed at
+the controls: `--rocket=wep_12` against an AI, the aircraft bleeding speed on drag, and the missing
+engine-loop swap.
+
+The mechanism, as first landed. `TanglerChoke.Duration(distanceSq, radiusRaw, min, max)` is the curve, with the
 unit mismatch reproduced as Decision 7 asks, and `TanglerChoke.EngineDeadBounds(WeaponDefs)` resolves
 the `ENGINE_DEAD` pair the way the original's globals do: every `TANGLER` parse overwrites them, so
 the last entry carrying one wins. They are taken as arguments rather than added to `WeaponDefs`,
@@ -836,8 +905,6 @@ human exactly as to an AI (the branch has no player guard, unlike the stun), and
 does beyond thrust is a **sound** swap, the rising edge exchanging the vehicle def's engine loop for
 a second authored loop (`FUN_004b15c0`, vehicle def `+0x18c`/`+0x190`), which our `PlaneStats` has no
 slot for; our side cuts thrust only, so a choked aircraft still sounds and looks like it is running.
-Owed at the controls, once the hit-side wiring lands: 13 s of dead engine at the centre and 5 s past
-about 4.6 m, bleeding speed on drag.
 
 **Goal.** A choker cuts the target's engine for a distance-scaled time, and does nothing else.
 

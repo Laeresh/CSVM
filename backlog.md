@@ -1126,8 +1126,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   never had. (b) **The engine stores radii squared** (`IMPACT_PROXIMITY²` at `+0x40`,
   `DETONATION_DISTANCE²` at `+0x44`, and `FUN_00538880` returns squared distances). Reading one of
   those as a plain radius flips a falloff from quadratic to linear; it did exactly that once during
-  the decode, which is why the page leads with the convention. (c) **`SONIC`, `BEEPER` and `TANGLER`
-  author damage figures the engine discards** — do not spend them. (d) `TORPEDO` selects **only** a
+  the decode, which is why the page leads with the convention. (c) **`SONIC`, `FLASH`, `BEEPER` and
+  `TANGLER` never spend their damage pair on an aircraft** (all four author zero in this install; the
+  hit branch discards the pair regardless) — do not spend them. (d) `TORPEDO` selects **only** a
   force-feedback effect; hang no behaviour on it. (e) The player's ordnance gets no aim component and
   the AI's does; that asymmetry is correct and must not be flattened.
   *How you'd know it worked:* per-type acceptance in `--weapon-lab`, one clip each: a torpedo
@@ -2200,24 +2201,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   10-panel row can want 8–10 concurrent sets; 6 covers most passes and wraps (recycles the oldest,
   still-flying set) on a longer burst.
 
-- `BL-293` `[Tuning]` **Rocket impact rings: orient the ground rings to the struck surface normal; the
-  fixed-axis upper ring is faithful but reads poorly — parked** (PT-35, 2026-08-06). The
-  actionable half: ALL ground rings — HE's ground ring, AP's cracks quad, the sonic stack —
-  orient to the struck surface normal. Polish framing, no observed defect: on flat C1 terrain
-  the rule changes nothing; the payoff is slopes and water. The parked half — faithfulness vs
-  feels-good, decide later: rewatching the original (`Crimson Skies 1.02 2026-07-31 23-27-53.mp4`)
-  shows the second (upper) HE ring always oriented on the same fixed axis, matching our
-  behaviour — ours is CORRECT as-is and this is not a bug. The proposal on the table for the
-  feel side: upper ring facing the plane / against the rocket's flight direction. The ring anims
-  carry no rotation data (scale/opacity only — `docs/formats/weapon-effects.md`), so any change
-  is engine-side and a deliberate deviation.
-  ✅ **The actionable half is now decoded, not just proposed.** `FUN_005ac7a0` spawns the `IMPACT`
-  row's `SURFACE_ANIMATION` (row `+0x1c`) with an orientation it builds **from the struck surface's
-  normal**, where the row's plain `ANIMATION` gets no such orientation
-  ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md), "Half one, the direct impact"). So
-  normal-orientation is the original's rule for one specific slot rather than for ground rings in
-  general, and which of our rings are `SURFACE_ANIMATION` decides which should follow it. That also
-  leaves the parked half undisturbed: the fixed-axis upper ring is a plain `ANIMATION`.
+- `BL-293` `[Tuning]` **Rocket impact rings: the fixed-axis upper ring is faithful but reads
+  poorly — parked** (PT-35). Faithfulness versus feels-good, decide later: the original
+  (`Crimson Skies 1.02 2026-07-31 23-27-53.mp4`) shows the second (upper) HE ring always oriented
+  on the same fixed axis, matching our behaviour, so ours is CORRECT as-is and this is not a bug.
+  The rule behind it is decoded: `FUN_005ac7a0` spawns the `IMPACT` row's `SURFACE_ANIMATION`
+  rotated from world up onto the struck surface's normal and the row's plain `ANIMATION` on the
+  fixed axis ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md), "Half one, the direct
+  impact"), and the remake follows it (`ProjectilePool.SurfaceUpBasis`, the `impact-orientation`
+  suite): the ground effect (the `default` row's `SURFACE_ANIMATION` on every rocket) lies on a
+  slope, while the upper ring, reached through a `CALL_ANIMATION` inside it, keeps its fixed axis
+  because that is what the data authors. The proposal on the table for the feel side: upper ring
+  facing the plane / against the rocket's flight direction. The ring anims carry no rotation data
+  (scale/opacity only — `docs/formats/weapon-effects.md`), so any change is engine-side and a
+  deliberate deviation from a decoded rule.
   Cross-link: `BL-292` (crash-splash orientation, different spawn path; scheduled in
   `docs/plans/PLAN-m3-polish-10.md` A3).
 

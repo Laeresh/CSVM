@@ -61,6 +61,39 @@ public class WeaponBlastTests
         Assert.False(ProjectilePool.HasBlastDamage(flare!), "zero-damage FLARE radius is not a damage blast");
     }
 
+    // The four no-damage types never spend a pair on an aircraft (FUN_004b9bc0's branches each zero
+    // it), and nothing else in the catalogue is under that rule.
+    [ExtractedDataFact]
+    public void ExactlyTheFourNoDamageTypesDiscardTheirAircraftDamage()
+    {
+        var weapons = WeaponDefs.Load(ZrdrPath, null);
+        foreach (var w in weapons.All)
+        {
+            bool expected = w.Id is "wep_08" or "wep_09" or "wep_10" or "wep_12" or "wep_15";
+            Assert.True(expected == ProjectilePool.AircraftDamageDiscarded(w), $"{w.Id} discards={!expected}");
+        }
+    }
+
+    // C12: the SURFACE_ANIMATION orientation is the shortest rotation from world up onto the
+    // struck normal (FUN_0053fd40 from (0,1,0)); flat ground and a surface-less burst are identity.
+    [Fact]
+    public void SurfaceUpBasisTakesWorldUpOntoTheNormalAndIsIdentityOnFlatGround()
+    {
+        Assert.Equal(Basis.Identity, ProjectilePool.SurfaceUpBasis(Vector3.Up));
+        Assert.Equal(Basis.Identity, ProjectilePool.SurfaceUpBasis(Vector3.Zero));
+
+        var slope = new Vector3(0.5f, 0.8f, -0.3f).Normalized();
+        var basis = ProjectilePool.SurfaceUpBasis(slope);
+        Assert.True((basis * Vector3.Up).IsEqualApprox(slope), $"{basis * Vector3.Up} vs {slope}");
+        Assert.True(basis.IsFinite() && Mathf.IsEqualApprox(basis.Determinant(), 1f));
+        // The shortest arc leaves the axis perpendicular to both vectors where it was.
+        var axis = Vector3.Up.Cross(slope).Normalized();
+        Assert.True((basis * axis).IsEqualApprox(axis));
+
+        var down = ProjectilePool.SurfaceUpBasis(Vector3.Down);
+        Assert.True((down * Vector3.Up).IsEqualApprox(Vector3.Down));
+    }
+
     [Fact]
     public void TheAuthoredFuseDotGateAcceptsAheadAndRejectsBehind()
     {

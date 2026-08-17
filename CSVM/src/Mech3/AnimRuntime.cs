@@ -1100,13 +1100,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public IReadOnlyList<AnimDefinition> DefsFor(string animName) => _program.ByAnimName(animName);
 
     /// <summary>Stages the named effect at an absolute world point: relocates each matching
-    /// template root onto the point and starts the definition, as a CALL_ANIMATION would with a
-    /// synthetic site. <paramref name="inputNode"/> is the callee's INPUT_NODE, so a damage-stage
-    /// sputter emits on the damaged object and its <c>NodeActive</c> loop gate reads that object.
-    /// ⚠ Give an input-governed def no TTL; its lifetime is authored. Everything else takes
-    /// <paramref name="ttl"/>, or <see cref="EffectTtl"/> when that is 0.</summary>
+    /// template root onto the point (with <paramref name="orient"/> as its basis when given) and
+    /// starts the definition, as a CALL_ANIMATION would with a synthetic site. <paramref
+    /// name="inputNode"/> is the callee's INPUT_NODE, so a damage-stage sputter emits on the damaged
+    /// object and its <c>NodeActive</c> loop gate reads that object. ⚠ Give an input-governed def no
+    /// TTL; its lifetime is authored. Everything else takes <paramref name="ttl"/>, or <see cref="EffectTtl"/> when that is 0.</summary>
     public bool PlayEffectAt(string animName, Vector3 worldPoint, Node3D? inputNode = null,
-        float ttl = 0f)
+        float ttl = 0f, Basis? orient = null)
     {
         float bound = ttl > 0f ? ttl : EffectTtl;
         bool matched = false;
@@ -1120,7 +1120,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 // motion targets live under it; null falls back to global name resolution. Pooled,
                 // that root is this call's own slot, and only that copy moves onto the site.
                 var roots = _templateStage.TakeNextSlot(def);
-                _templateStage.PlaceOn(roots, worldPoint, LevelsTemplate(def));
+                _templateStage.PlaceOn(roots, worldPoint, LevelsTemplate(def), orient);
                 var anchor = roots.FirstOrDefault();
                 bool governed = inputNode != null && IsInstanceValid(inputNode)
                                 && DefConditionsOnInputNode(def);

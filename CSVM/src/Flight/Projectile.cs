@@ -50,10 +50,22 @@ public sealed partial class ProjectilePool : Node3D
 
     /// <summary>Plays a named IMPACT effect (its puffer half) at a hit point through the world-effects
     /// runtime: the gun/rocket smoke and fireballs whose <c>ANIMATION</c> is an ON_CALL effect
-    /// def rather than a gamez model. Null in views with no anim runtime. The third argument is the
-    /// instance's time bound in seconds (0 = the runtime's own): gun hits pass
-    /// <see cref="GunEffectTtl"/>, rockets/ordnance take the default.</summary>
-    public System.Action<string, Vector3, float>? EffectSink;
+    /// def rather than a gamez model. Null in views with no anim runtime. The basis is the
+    /// template's orientation at the point (<see cref="SurfaceUpBasis"/> for a
+    /// <c>SURFACE_ANIMATION</c>, identity for an <c>ANIMATION</c>); the last argument is the
+    /// instance's time bound in seconds (0 = the runtime's own), <see cref="GunEffectTtl"/> for guns.</summary>
+    public System.Action<string, Vector3, Basis, float>? EffectSink;
+
+    /// <summary>The disabling wash's route to the struck human's pane, <c>ScreenFlash.PlayBlend</c>'s
+    /// shape (player index, colour, weight, duration, start delay). Assigned by the session; null (a
+    /// lab, a headless view) washes nobody while the AI stun beside it still runs.</summary>
+    public System.Action<int, Color, float, float, float>? WashSink;
+
+    /// <summary>The <c>ENGINE_DEAD</c> pair every choker cloud reads, resolved once by
+    /// <see cref="TanglerChoke.EngineDeadBounds"/> over the catalogue; the static image's pair
+    /// until the session assigns it.</summary>
+    public (float Min, float Max) EngineDeadBounds =
+        (TanglerChoke.ImageEngineDeadMin, TanglerChoke.ImageEngineDeadMax);
 
     /// <summary>The world's beeper tags: a <c>BEEPER</c> hit on an aircraft calls its
     /// <c>TryTag</c>, a <c>BEEPER_SEEKER</c> round asks its <c>PickTarget</c> each frame. Assigned by
@@ -128,6 +140,10 @@ public sealed partial class ProjectilePool : Node3D
     private const float TurnPenaltyCosWeight = 0.2f;
     private const float TurnRateScale = 1f;
     private const float TurnRampUnsuspended = 1f;
+
+    // The disabling wash's start delay (FUN_004b9bc0's SONIC/FLASH branch passes 1.0 s to
+    // FUN_0042e9d0 as its first argument), during which nothing paints; the colours sit below.
+    private const float DisablingWashStartDelay = 1f;
     // A desired direction this close to dead astern leaves the heading where it is: the axis to
     // swing about is undefined there.
     private const float SteerOppositeDot = 0.99999f;
@@ -241,6 +257,10 @@ public sealed partial class ProjectilePool : Node3D
     private static readonly string[] TipTextures =
         { "slugtip", "dumdumtip", "armourpiercetip", "magnesiumtip" };
 
+    // The disabling wash's colours (docs/org/ordnanceTypes.md "SONIC and FLASH"): red for SONIC,
+    // white for FLASH.
+    private static readonly Color SonicWashColour = new(1f, 0f, 0f);
+    private static readonly Color FlashWashColour = new(1f, 1f, 1f);
     // The reset value for _ray.Exclude between shots — shared and never mutated.
     private static readonly Godot.Collections.Array<Rid> NoExclude = new();
     // Nearest-first order for the splash gather, so the 32 cap drops the farthest hits.
@@ -336,6 +356,9 @@ public sealed partial class ProjectilePool : Node3D
     // nothing here.
     private readonly PhysicsRayQueryParameters3D _coverRay = new() { CollisionMask = CollisionLayers.World };
     private readonly List<BlastCandidate> _blastCandidates = new();
+    // The choker clouds the TANGLER hook leaves at each burst (FUN_004b94e0's list, DAT_0071db9c),
+    // each choking every aircraft inside its radius for its TIME. Stepped by SimStep after the rounds.
+    private readonly List<TanglerCloud> _tanglerClouds = new();
     private readonly List<AudioStreamPlayer> _sfxPool = new();
     // The stand-in fireball's sprite scatter, muzzle-flash roll, and debris/ricochet spread
     // (ApplySpread — gun dispersion itself was removed). Held rather than resolved per draw.
@@ -368,6 +391,7 @@ public sealed partial class ProjectilePool : Node3D
     private int _soundGainsLogged;               // D31 one-shot gain breadcrumb, first 8
     private int _decaysLogged;                   // launch-velocity decay breadcrumb, first 4
     private int _revealsLogged;                  // RANGE_MINIMUM reveal breadcrumb, first 2
+    private int _disablingLogged;                // sonic/flash victim breadcrumb, first 8
     private float _simClock;                   // sim seconds since the pool started (the gun-effect throttle)
     private CasingSpec? _casingSpec;           // the gunshell OBJECT_MOTION, resolved once
     private bool _casingSpecResolved;
@@ -502,6 +526,32 @@ public sealed partial class ProjectilePool : Node3D
     /// square: full at the surface, zero at the authored radius.</summary>
     public static float BlastDamage(float fullDamage, float radius, float distance) =>
         fullDamage * BlastFalloff(distance * distance, radius * radius);
+
+    /// <summary>Whether this weapon is one of the four types whose hit-side branch zeroes the damage
+    /// pair for an aircraft victim (<c>SONIC</c>, <c>FLASH</c>, <c>BEEPER</c>, <c>TANGLER</c>): its
+    /// authored figures never reach a plane's ledger, whatever they say. World bodies are not under
+    /// that branch and still take the (authored-zero) pair.</summary>
+    public static bool AircraftDamageDiscarded(WeaponDef weapon) =>
+        weapon.Sonic || weapon.Flash || weapon.BeeperTime != null || weapon.Tangler != null;
+
+    /// <summary>The <c>SURFACE_ANIMATION</c> orientation: the shortest rotation taking world up onto
+    /// the struck surface's normal, which is what <c>FUN_005ac7a0</c> builds from the hit record
+    /// (<c>FUN_0053fd40</c> from <c>(0,1,0)</c>) before spawning that slot. Identity on flat ground,
+    /// so the rule shows only on a slope, and identity for a burst with no surface (a fuse, the range
+    /// expiry). A normal straight down turns half a turn about X.</summary>
+    public static Basis SurfaceUpBasis(Vector3 normal)
+    {
+        if (normal.LengthSquared() < 1e-6f)
+            return Basis.Identity;
+        var to = normal.Normalized();
+        float dot = Vector3.Up.Dot(to);
+        if (dot > 1f - 1e-6f)
+            return Basis.Identity;
+        if (dot < -1f + 1e-6f)
+            return new Basis(Vector3.Right, Mathf.Pi);
+        var axis = Vector3.Up.Cross(to).Normalized();
+        return new Basis(axis, Mathf.Acos(Mathf.Clamp(dot, -1f, 1f)));
+    }
 
     /// <summary>Whether a candidate lies inside an authored proximity-fuse forward cone.</summary>
     public static bool FuseDotAllows(float? minimumDot, Vector3 velocity, Vector3 towardTarget)
@@ -639,6 +689,14 @@ public sealed partial class ProjectilePool : Node3D
                 into.Add(p.Target);
             }
         }
+    }
+
+    /// <summary>Appends the live choker clouds as (centre, seconds left), in spawn order: the seam a
+    /// scripted run reads the choker's cloud through, since the pool holds it privately.</summary>
+    public void CollectTanglerClouds(List<(Vector3 Centre, float Remaining)> into)
+    {
+        foreach (var cloud in _tanglerClouds)
+            into.Add((cloud.Centre, cloud.Remaining));
     }
 
     /// <summary>Appends every registered aircraft to the assist's candidate set, reading the one
@@ -1017,6 +1075,7 @@ public sealed partial class ProjectilePool : Node3D
             }
         }
 
+        StepTanglerClouds(dt);
         foreach (var m in _muzzle)
             AgeSprites(m, dt);
         AgeSprites(_impact, dt);
@@ -1059,6 +1118,7 @@ public sealed partial class ProjectilePool : Node3D
             _proj[i].Alive = false;
         }
         _projHigh = 0;
+        _tanglerClouds.Clear();
         foreach (var m in _muzzle)
             m.Clear();
         _impact.Clear();
@@ -1165,6 +1225,11 @@ public sealed partial class ProjectilePool : Node3D
         var y = z.Cross(x).Normalized();
         return new Basis(x, y, z);
     }
+
+    // The template basis an IMPACT effect is placed with: the SURFACE_ANIMATION slot takes the
+    // struck normal's rotation, the ANIMATION slot the fixed world axis (BL-293's parked half).
+    private static Basis EffectOrient(in ImpactOutcome outcome, Vector3 normal) =>
+        outcome.SurfaceOriented ? SurfaceUpBasis(normal) : Basis.Identity;
 
     // The launcher's velocity a round actually carries away. FUN_005aef40 gives it to a LOCK_ON
     // weapon and zeroes it for one without. ⚠ Guns are held outside that rule: no CANNON authors
@@ -1689,7 +1754,7 @@ public sealed partial class ProjectilePool : Node3D
         cycler.Add(mat, frames, SplashFlipbookFps, looping: true, "splash01");
     }
 
-    private bool SpawnImpactModel(string animName, Vector3 point)
+    private bool SpawnImpactModel(string animName, Vector3 point, Basis orient)
     {
         if (_flyoutScene == null || _flyoutGamez == null)
             return false;
@@ -1714,7 +1779,9 @@ public sealed partial class ProjectilePool : Node3D
             return false;
         }
         _impactFxModels.AddChild(inst);
-        inst.GlobalTransform = new Transform3D(Basis.Identity, point); // splash geometry stands upright at the hit
+        // Identity for an ANIMATION row (the splash geometry stands upright), the surface rotation
+        // for a SURFACE_ANIMATION one.
+        inst.GlobalTransform = new Transform3D(orient, point);
         // A splash prototype (splash1.flt / bsplsh.flt) carries a `*_base` disc and a `*_splash`
         // column child; when either resolves, the instance plays the authored 2 s scale curves
         // (AdvanceSplash) instead of standing statically for the short stand-in life.
@@ -1763,14 +1830,17 @@ public sealed partial class ProjectilePool : Node3D
             CannonHits++;
         int surface = SurfaceIdOf(collider);
         bool hasEffectsRuntime = EffectSink != null;
+        // The weapon's own hook runs before anything else (FUN_005ac7a0's first act) and its mask
+        // feeds the resolve, so Apply performs a row already stripped of what the hook silenced.
+        var suppression = RunImpactHook(weapon, point);
         // The decision, taken once and read twice. `modelResolved` cannot be known before the
         // attempt, so the first resolve is only for the effect NAME to attempt; the second carries
         // the answer. Everything after this line obeys `outcome` — Impact itself decides nothing.
-        var outcome = ImpactOutcome.Resolve(weapon, surface, modelResolved: false, hasEffectsRuntime);
+        var outcome = ImpactOutcome.Resolve(weapon, surface, modelResolved: false, hasEffectsRuntime, suppression);
         // A chapter gamez node name instances at the hit point and skips the spark; a reader-def
         // or unresolved name leaves the spark to stand in.
-        if (outcome.EffectName is { } fxName && SpawnImpactModel(fxName, point))
-            outcome = ImpactOutcome.Resolve(weapon, surface, modelResolved: true, hasEffectsRuntime);
+        if (outcome.EffectName is { } fxName && SpawnImpactModel(fxName, point, EffectOrient(outcome, normal)))
+            outcome = ImpactOutcome.Resolve(weapon, surface, modelResolved: true, hasEffectsRuntime, suppression);
 
         // Verification breadcrumb: the first few impacts confirm hit detection and surface
         // classification without needing a lucky screenshot; then it goes quiet.
@@ -1800,7 +1870,7 @@ public sealed partial class ProjectilePool : Node3D
         // which no-ops on a name it does not carry. Gun hits are throttled (GunEffectInterval/Ttl).
         if (outcome.StandIn != ImpactStandIn.None && outcome.EffectName is { } fxName
             && (!weapon.IsGun || GunEffectDue(fxName)))
-            EffectSink?.Invoke(fxName, point, weapon.IsGun ? GunEffectTtl : 0f);
+            EffectSink?.Invoke(fxName, point, EffectOrient(outcome, normal), weapon.IsGun ? GunEffectTtl : 0f);
         switch (outcome.StandIn)
         {
             case ImpactStandIn.Explosion:
@@ -1819,14 +1889,20 @@ public sealed partial class ProjectilePool : Node3D
         // Per-surface IMPACT sound (landed): the struck surface's SOUND, else the default's.
         if (outcome.Sound is { } snd)
             PlaySound(snd, point);
+        // A SONIC or FLASH burst disables every aircraft in its radius instead of hurting any
+        // (FUN_004b9bc0's first branch, reached for each aircraft the splash gather finds).
+        if (weapon.Sonic || weapon.Flash)
+            ApplyDisabling(weapon, point, normal, shooter);
         // A BEEPER reaching an aircraft, struck or fused, paints it and deals nothing (FUN_004b9bc0
         // zeroes both figures after the tag): the pair is discarded structurally rather than passed
         // as zero, so an authored pair would still spend none of it. The gate is TryTag's own.
         if (weapon.BeeperTime is { } tagSeconds && collider is AircraftBody painted)
-        {
             BeeperTags?.TryTag(team, painted.Rig, tagSeconds);
+        // The four no-damage types never reach an aircraft's ledger: each of FUN_004b9bc0's branches
+        // zeroes the pair before the damage path, so a struck plane takes nothing here and
+        // ApplyDamage's aircraft gather is skipped for them. The choker's own effect is its cloud.
+        if (collider is AircraftBody && AircraftDamageDiscarded(weapon))
             return;
-        }
         // A ray-struck aircraft takes damage through its own part model, never the destructible
         // pipeline. A fuse detonation (shapeIdx -1) leaves its plane to the blast's aircraft pass.
         if (collider is AircraftBody plane && shapeIdx >= 0)
@@ -1834,6 +1910,114 @@ public sealed partial class ProjectilePool : Node3D
         else
             ApplyDamage(weapon, outcome, point, normal, collider is AircraftBody ? null : collider, shooter);
     }
+
+    // The impact hook's dispatch (weapon +0x20c, FUN_005ac7a0's first call): the TANGLER parse is
+    // the binary's one installer, its hook (0x004ba660) pushes a choker cloud at the burst onto the
+    // world list and returns 1, so a choker's IMPACT row plays no sound. Every other weapon has none.
+    private ImpactSuppression RunImpactHook(WeaponDef weapon, Vector3 point)
+    {
+        switch (weapon.ImpactHook)
+        {
+            case ImpactHook.Tangler:
+                SpawnTanglerCloud(weapon, point);
+                return ImpactSuppression.Sound;
+            default:
+                return ImpactSuppression.None;
+        }
+    }
+
+    // The SONIC/FLASH hit against every aircraft the burst reaches: the same gather, cover test and
+    // 32 cap as the blast (the original hands each splash entry to FUN_004b9bc0, whose branch runs
+    // FUN_0042e840 on the entry's squared surface distance), then the victim's kind decides: a
+    // human's pane gets the wash, an AI pilot the stun, and neither takes a point of damage.
+    private void ApplyDisabling(WeaponDef weapon, Vector3 point, Vector3 normal, int shooter)
+    {
+        float radiusSq = weapon.ImpactProximitySqM ?? 0f;
+        if (radiusSq <= 0f)
+            return;
+        var space = GetWorld3D()?.DirectSpaceState;
+        _blastCandidates.Clear();
+        GatherAircraftCandidates(point, radiusSq, shooter);
+        _blastCandidates.Sort(ByDistance);
+        int accepted = 0;
+        for (int i = 0; i < _blastCandidates.Count && accepted < MaxBlastTargets; i++)
+        {
+            var c = _blastCandidates[i];
+            if (space != null && BlastCovered(space, point, normal, c))
+                continue;
+            accepted++;
+            var rig = c.Plane!.Rig;
+            float facing = DisablingIntensity.FacingDot(rig.NoseDirection, rig.WorldPosition, point);
+            if (!DisablingIntensity.TryResolve(c.DistanceSq, radiusSq, weapon.Flash, facing,
+                    out float intensity, out float stunSeconds))
+                continue;
+            bool applied;
+            if (rig.IsHumanPiloted)
+            {
+                WashSink?.Invoke(rig.PlayerIndex, weapon.Sonic ? SonicWashColour : FlashWashColour,
+                    intensity, stunSeconds, DisablingWashStartDelay);
+                applied = WashSink != null;
+            }
+            else
+            {
+                applied = rig.TryStunPilot(stunSeconds);
+            }
+            if (_disablingLogged < 8)
+            {
+                _disablingLogged++;
+                GD.Print($"disabling hit: {weapon.Id} on P{rig.PlayerIndex + 1} at {Mathf.Sqrt(c.DistanceSq):0.#} m"
+                         + $" intensity {intensity:0.00} for {stunSeconds:0.0} s"
+                         + $" ({(rig.IsHumanPiloted ? "wash" : "stun")}{(applied ? "" : ", no taker")})");
+            }
+        }
+        _blastCandidates.Clear();
+    }
+
+    // The choker cloud the TANGLER hook leaves at the burst: the weapon's RADIUS squared as the catch
+    // test (FUN_004b94e0 squares it once) and the shared TIME as its life. Nothing excludes the
+    // shooter, so a pilot flying into their own cloud is choked like anyone else.
+    private void SpawnTanglerCloud(WeaponDef weapon, Vector3 point)
+    {
+        float radius = weapon.Tangler?.Radius ?? TanglerData.DefaultRadius;
+        _tanglerClouds.Add(new TanglerCloud
+        {
+            Centre = point,
+            RadiusRaw = radius,
+            RadiusSq = radius * radius,
+            Remaining = weapon.Tangler?.Time ?? TanglerData.DefaultTime,
+        });
+    }
+
+    // One step of every cloud (FUN_004b96d0 over FUN_004b9590): its life runs down first, and while
+    // any is left every in-play aircraft whose ORIGIN sits inside the radius takes the choke for
+    // TanglerChoke.Duration of its squared origin distance. The distance is to the vehicle
+    // position, not its hull, which is what leaves the 13 s zone a few metres wide.
+    private void StepTanglerClouds(float dt)
+    {
+        for (int i = _tanglerClouds.Count - 1; i >= 0; i--)
+        {
+            var cloud = _tanglerClouds[i];
+            cloud.Remaining -= dt;
+            if (cloud.Remaining <= 0f)
+            {
+                _tanglerClouds.RemoveAt(i);
+                continue;
+            }
+            foreach (var plane in _aircraft)
+            {
+                var rig = plane.Rig;
+                if (!rig.InPlay)
+                    continue;
+                float distanceSq = rig.WorldPosition.DistanceSquaredTo(cloud.Centre);
+                if (distanceSq >= cloud.RadiusSq)
+                    continue;
+                float seconds = TanglerChoke.Duration(distanceSq, cloud.RadiusRaw,
+                    EngineDeadBounds.Min, EngineDeadBounds.Max);
+                rig.TryChokeEngine(seconds);
+            }
+        }
+    }
+
 
     // ⚠ Do not re-add a world fuse. It detonates every rocket short of its target and locks every
     // hardpoint weapon out of its per-surface IMPACT entry. Armed against aircraft only.
@@ -1982,7 +2166,10 @@ public sealed partial class ProjectilePool : Node3D
         float radiusSq = weapon.ImpactProximitySqM ?? radius * radius;
         var space = GetWorld3D()?.DirectSpaceState;
         _blastCandidates.Clear();
-        GatherAircraftCandidates(point, radiusSq, shooter);
+        // A no-damage type's aircraft half is its own branch (ApplyDisabling, the tag, the cloud),
+        // never a scaled zero through the ledger, which would still flash "HIT" and wake the AI.
+        if (!AircraftDamageDiscarded(weapon))
+            GatherAircraftCandidates(point, radiusSq, shooter);
         if (space != null && DamageSink != null)
             GatherWorldCandidates(space, point, radius, struck);
         _blastCandidates.Sort(ByDistance);
@@ -2683,6 +2870,16 @@ public sealed partial class ProjectilePool : Node3D
         public Puffer Puffer = null!;
         public PufferState State = null!;
         public bool InUse;
+    }
+
+    // One choker cloud (FUN_004b94e0's 0x1c-byte object): the burst it was left at, its RADIUS both
+    // raw (the duration's denominator) and squared (the catch test), and its remaining TIME.
+    private sealed class TanglerCloud
+    {
+        public Vector3 Centre;
+        public float RadiusRaw;
+        public float RadiusSq;
+        public float Remaining;
     }
 
     // A FLYOUT MODEL_ANIMATION def's renderable content: its trail puffer states + spin rate.

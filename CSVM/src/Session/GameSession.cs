@@ -1715,6 +1715,8 @@ public partial class GameSession : Node3D
             MixGain = mixGain,
             PlayerPositions = PlayerPositionsSnapshot,
             BeeperTags = _beeperTags,
+            WashSink = _screenFlash != null ? _screenFlash.PlayBlend : null,
+            EngineDeadBounds = TanglerChoke.EngineDeadBounds(weaponDefs),
         };
         // ⚠ Bind EVERY pane's camera, never player 1's alone. The tracer pixel floor is a
         // screen-space rule over one shared world mesh, so a single viewer sizes every round

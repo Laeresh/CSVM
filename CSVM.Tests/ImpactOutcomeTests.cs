@@ -227,9 +227,59 @@ public class ImpactOutcomeTests
 
         var outcome = ImpactOutcome.Resolve(armour, SurfaceRegistry.Default, false, true);
         Assert.Equal("ap_ground_effect", outcome.EffectName);
+        Assert.True(outcome.SurfaceOriented);
         Assert.Equal("snd_missile_pierce", outcome.Sound);
         Assert.Equal(40f, outcome.Damage);
         Assert.Equal(15f, outcome.BlastRadius);
+    }
+
+    /// <summary>The slot the name came from is carried out, because the original orients only the
+    /// <c>SURFACE_ANIMATION</c> spawn to the struck normal: the choker's <c>scatter_effect</c> is a
+    /// plain <c>ANIMATION</c> and reads unoriented; the HE rocket's ground effect is the other slot.</summary>
+    [ExtractedDataFact]
+    public void OnlyTheSurfaceAnimationSlotIsSurfaceOriented()
+    {
+        var weapons = WeaponDefs.Load(SharedZrdr);
+
+        var choker = ImpactOutcome.Resolve(weapons.Get("wep_12")!, SurfaceRegistry.Default, false, true);
+        Assert.Equal("scatter_effect", choker.EffectName);
+        Assert.False(choker.SurfaceOriented);
+
+        var he = ImpactOutcome.Resolve(weapons.Get("wep_06")!, SurfaceRegistry.Default, false, true);
+        Assert.Equal("he_ground_effect", he.EffectName);
+        Assert.True(he.SurfaceOriented);
+    }
+
+    /// <summary>The impact hook's mask strips the row piece by piece: <c>Sound</c> silences the
+    /// sound (the choker's hook, the one the binary installs), <c>Animation</c> drops the
+    /// <c>ANIMATION</c> slot and leaves a <c>SURFACE_ANIMATION</c> to stand, and the damage
+    /// figures are under no bit.</summary>
+    [ExtractedDataFact]
+    public void TheHookMaskSilencesTheSoundAndDropsOnlyTheAnimationSlot()
+    {
+        var weapons = WeaponDefs.Load(SharedZrdr);
+        var choker = weapons.Get("wep_12")!;
+        Assert.Equal(ImpactHook.Tangler, choker.ImpactHook);
+        Assert.All(weapons.All.Where(w => w.Id != "wep_12"), w => Assert.Equal(ImpactHook.None, w.ImpactHook));
+
+        var silenced = ImpactOutcome.Resolve(choker, SurfaceRegistry.Default, false, true, ImpactSuppression.Sound);
+        Assert.Null(silenced.Sound);
+        Assert.Equal("scatter_effect", silenced.EffectName);
+
+        var noAnimation = ImpactOutcome.Resolve(choker, SurfaceRegistry.Default, false, true, ImpactSuppression.Animation);
+        Assert.Null(noAnimation.EffectName);
+        Assert.Equal("snd_missile_choker", noAnimation.Sound);
+
+        var slug = weapons.Get("wep_01")!; // its default row binds SURFACE_ANIMATION alone
+        var kept = ImpactOutcome.Resolve(slug, SurfaceRegistry.Default, false, true, ImpactSuppression.Animation);
+        Assert.Equal("3040slug_gunhit", kept.EffectName);
+        Assert.True(kept.SurfaceOriented);
+
+        var he = weapons.Get("wep_06")!;
+        var all = ImpactOutcome.Resolve(he, SurfaceRegistry.Default, false, true,
+            ImpactSuppression.Sound | ImpactSuppression.Effects | ImpactSuppression.Animation);
+        Assert.Equal(he.HealthDamage, all.Damage);
+        Assert.Equal(he.ImpactProximity, all.BlastRadius);
     }
 
     /// <summary>The one shipped weapon with no <c>IMPACT</c> block at all resolves to nothing

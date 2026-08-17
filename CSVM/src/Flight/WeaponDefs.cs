@@ -4,6 +4,16 @@ using CSVM.Mech3;
 
 namespace CSVM.Flight;
 
+/// <summary>The per-weapon impact hook the detonation calls first (weapon <c>+0x20c</c>, written by
+/// <c>FUN_005aec90</c>). One installer exists in the binary, the <c>TANGLER</c> parse, so this is an
+/// enum rather than a delegate: <c>ProjectilePool.RunImpactHook</c> is the dispatch. Decode:
+/// <c>docs/org/ordnanceTypes.md</c>, "Half one, the direct impact".</summary>
+public enum ImpactHook
+{
+    None,
+    Tangler,
+}
+
 /// <summary>A muzzle (<c>FIRE</c>) or per-surface (<c>IMPACT</c>) effect binding: any slot may be
 /// null. <c>SurfaceAnimation</c> is the surface-oriented variant of <c>Animation</c> and is only
 /// present on <c>IMPACT</c> classes.</summary>
@@ -26,10 +36,18 @@ public sealed class WeaponFlyout
     public string? Sound;
 }
 
-/// <summary>The choker's <c>TANGLER</c> struct: entangle time, radius, and the engine-dead
-/// duration range. Nothing is choked yet — parsed so no key is dropped.</summary>
+/// <summary>The choker's <c>TANGLER</c> struct: the cloud's lifetime and catch radius, and the
+/// engine-dead duration range (a pair of globals in the original, see
+/// <see cref="TanglerChoke.EngineDeadBounds"/>). The engine's defaults for a block omitting a key
+/// are <see cref="DefaultTime"/> and <see cref="DefaultRadius"/>.</summary>
 public sealed class TanglerData
 {
+    /// <summary>The shared <c>TIME</c> slot's default (extension <c>+0x18</c>), s.</summary>
+    public const float DefaultTime = 5f;
+
+    /// <summary>The <c>RADIUS</c> default (extension <c>+0x1c</c>), m, stored raw.</summary>
+    public const float DefaultRadius = 10f;
+
     public float? Time;
     public float? Radius;
     public (float Min, float Max)? EngineDead;
@@ -114,10 +132,11 @@ public sealed class WeaponDef
     public bool ShakesCamera;
     public bool Crater;               // ground-attack munition
 
-    // Specials (unimplemented, parsed so no key is dropped).
+    // Specials.
     public float? BeeperTime;         // BEEPER -> TIME
     public float? SmokeScreenTime;    // SMOKE_SCREEN -> TIME
     public TanglerData? Tangler;
+    public ImpactHook ImpactHook;     // installed by the TANGLER parse alone (FUN_004ba6f0)
     public int? FlyoutHealth;         // HP of a TARGETABLE flyout (torpedo)
     public int? ProjectileBbox;
     public string? DestroyAnimation;  // effect when a TARGETABLE flyout is destroyed
@@ -287,6 +306,7 @@ public sealed class WeaponDefs
             def.SmokeScreenTime = smoke.Float("TIME");
         if (d.Dict("TANGLER") is { } tangler)
         {
+            def.ImpactHook = ImpactHook.Tangler;
             def.Tangler = new TanglerData
             {
                 Time = tangler.TryFloat("TIME", out var t) ? t : null,

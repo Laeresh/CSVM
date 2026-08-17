@@ -255,7 +255,7 @@ public sealed class WorldEffectsFactory
         }
         if (projectiles != null && projectiles.EffectSink == null)
         {
-            projectiles.EffectSink = (name, pt, ttl) => effects.PlayEffectAt(name, pt, null, ttl);
+            projectiles.EffectSink = (name, pt, orient, ttl) => effects.PlayEffectAt(name, pt, null, ttl, orient);
         }
         return effects;
     }

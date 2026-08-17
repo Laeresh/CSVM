@@ -879,6 +879,12 @@ returns a plain distance, so none of them changed. `TANGLER`'s `RADIUS` has no s
 the original stores it raw and compares it against a squared distance
 (docs/org/ordnanceTypes.md).
 
+`ImpactHook` is the per-weapon impact hook the detonation calls first (weapon `+0x20c`), an enum
+rather than a delegate because the binary installs exactly one, in the `TANGLER` parse; the parse
+here sets `ImpactHook.Tangler` where `FUN_004ba6f0` calls `FUN_005aec90`, and
+`ProjectilePool.RunImpactHook` is the dispatch. `TanglerData` carries the engine's defaults for a
+block omitting `TIME` (5.0) or `RADIUS` (10.0).
+
 ## src/Flight/Loadout.cs
 Two layers over `CSVM/data/stock_loadouts.json`. `StockLoadouts.Load` parses the file (default
 `res://data/`) into per-plane `LoadoutDef`s; `Loadout.Bind(def, builtPlane, WeaponDefs)` resolves
@@ -1103,9 +1109,9 @@ resolves the bounds the way the original does — they are a pair of GLOBALS eve
 overwrites, so the last entry carrying one wins for every choker in the install (this one authors
 exactly one, `wep_12` at `[5, 13]`). **The numerator is squared and the radius is raw**, an authentic
 unit mismatch that puts the full-strength zone of a 35 m weapon at about 4.6 m; the floor covers
-everything past it, so the curve alone never returns less than the minimum and the fuse decides
-whether a hit happens at all. The seconds go to `FlightController.TryChokeEngine`; this module knows
-nothing about aircraft.
+everything past it, so the curve alone never returns less than the minimum, and whether an aircraft
+is caught at all is the cloud's squared-radius test in `ProjectilePool.StepTanglerClouds`. The
+seconds go to `FlightController.TryChokeEngine`; this module knows nothing about aircraft.
 
 ## src/Flight/SmokeScreens.cs
 The `SMOKE_SCREEN` mechanism (`FUN_004b8fd0`, decoded in
@@ -1202,9 +1208,12 @@ authored) plus a first-order acceleration transient relaxing at the MEASURED 0.6
 
 ## src/Flight/ImpactOutcome.cs
 "What should happen when this weapon hits this surface id" as a value — `EffectName` (the row's
-`ANIMATION`, else its `SURFACE_ANIMATION`), `Sound`, the `ImpactStandIn`, `Damage`/`BlastRadius`
-(+ `HasBlastDamage`) — plus the pure static `Resolve` that computes it from a `WeaponDef` and a
-`SurfaceRegistry` id. No Godot type, no scene, no sink, no sound archive, so the dispatch's one
+`ANIMATION`, else its `SURFACE_ANIMATION`) with `SurfaceOriented` naming which slot it came from,
+`Sound`, the `ImpactStandIn`, `Damage`/`BlastRadius` (+ `HasBlastDamage`) — plus the pure static
+`Resolve` that computes it from a `WeaponDef`, a `SurfaceRegistry` id and the impact hook's
+`ImpactSuppression` mask (`FUN_005ac7a0`'s: `Sound` nulls the sound, `Animation` drops the
+`ANIMATION` slot and leaves a `SURFACE_ANIMATION` standing, `Effects` covers the crater carve and
+the row's `EFFECT`, neither of which CSVM plays; the damage figures are under no bit). No Godot type, no scene, no sink, no sound archive, so the dispatch's one
 decision is readable by a unit test; `ImpactOutcomeTests` is that test, including a suite over all 48
 shipped weapons × the eight reachable ids asserting the *rule* (an effect or a stand-in but
 never neither; a resolved sound names either a `SoundDefs` entry or a `SOUND_GROUPS` name;
@@ -1305,6 +1314,58 @@ play as usual. `Impact`/`Apply` carry the round's own `Proj.Team` for that gate,
 spawn and never re-derived. `CollectHeldTargets` is the seam a scripted run reads a seeker's pick
 through. All of B6 to B9 is flown by the `ordnance-guidance` suite on a live pool with a lab
 `BeeperTags` beside it.
+
+**The impact hook runs first, and the `SURFACE_ANIMATION` sits on the surface**
+(`org/ordnanceTypes.md`, "Half one, the direct impact"). `Impact` calls `RunImpactHook` before it
+resolves anything: the dispatch over `WeaponDef.ImpactHook`, an enum because the binary installs
+exactly one hook (the `TANGLER` parse's `LAB_004ba660`), whose arm spawns the choker cloud below and
+returns `ImpactSuppression.Sound`, so a choker's `IMPACT` row plays no sound, as the original's does
+not. The mask goes into `ImpactOutcome.Resolve`, so `Apply` performs a row already stripped of what
+the hook silenced and decides nothing new. `EffectOrient` picks the template basis the effect is
+placed with: `SurfaceUpBasis(normal)` (the shortest rotation from world up onto the struck normal,
+`FUN_0053fd40` from `DAT_006379c0 = (0,1,0)`) for the `SURFACE_ANIMATION` slot and identity for a
+plain `ANIMATION`, which is BL-293's parked half: the fixed-axis upper ring is a plain `ANIMATION`
+and stays fixed. It reaches the world-effects runtime through `EffectSink`'s new `Basis` argument
+(`AnimRuntime.PlayEffectAt(orient)` → `TemplateStage.PlaceOn(orient)`, which sets the root's whole
+basis when given and leaves it alone when null, so every other placement path is unchanged) and the
+gamez-model spawn through `SpawnImpactModel(orient)`. On flat ground the rule changes nothing;
+`impact-orientation` fires into a 30° slope and into flat ground and reads the basis back off the
+sink. `SurfaceBasis` (Z along the normal) stays the sprite stand-ins' own frame.
+
+**A `SONIC` or `FLASH` burst disables every aircraft in its radius and hurts none of them**
+(`org/ordnanceTypes.md`, "The hit-side dispatch" and "SONIC and FLASH"). `ApplyDisabling` runs
+from `Apply` on every burst of such a weapon, struck, fused or timed out, over the same
+`GatherAircraftCandidates` + `BlastCovered` + 32-cap walk the damage splash takes, because the
+original hands each splash entry to `FUN_004b9bc0` and its `SONIC`/`FLASH` branch runs the intensity
+on the entry's squared surface distance. Per victim: `DisablingIntensity.TryResolve` on that square,
+`WeaponDef.ImpactProximitySqM`, the `FLASH` flag and `FacingDot(NoseDirection, WorldPosition,
+burst)`; then the victim's kind decides. A human's pane gets `WashSink(PlayerIndex, colour,
+intensity, stunSeconds, DisablingWashStartDelay)`, red `(1,0,0)` for `SONIC` and white for `FLASH`,
+duration five times the intensity, after the 1.0 s start delay the branch passes `FUN_0042e9d0`;
+`GameSession` assigns `ScreenFlash.PlayBlend` to that sink, so it is per pane and blends on overlap.
+An AI gets `FlightController.TryStunPilot(stunSeconds)`, which holds the guards; nothing on the
+human path touches a control. `AircraftDamageDiscarded` is the four no-damage types (`SONIC`,
+`FLASH`, `BEEPER`, `TANGLER`) and is read twice: `Apply` returns before `TakeProjectileHit` for a
+struck aircraft, and `ApplyDamage` skips its aircraft gather for them, so a scaled zero never
+reaches a plane's ledger, flashes "HIT" or wakes the AI (world bodies still take the authored, zero,
+pair). `disabling-hits` flies all of it on two human rigs over a real two-pane `ScreenFlash` and two
+AI rigs, including a burst fusing 29 m abeam that stuns for the fade's 3.8 s and a direct hit that
+overwrites it to 5 s.
+
+**The choker is a cloud** (`org/ordnanceTypes.md`, "The choker, settled"). `SpawnTanglerCloud`,
+the hook's arm, leaves a `TanglerCloud` at the burst with the weapon's `RADIUS` both raw (the
+duration's denominator) and squared (the catch), living the shared `TIME` (2 s on `wep_12`);
+`StepTanglerClouds`, run by `SimStep` after the rounds, counts each down and, while it lives, hands
+every in-play aircraft whose ORIGIN sits inside the squared radius `TanglerChoke.Duration(originSq,
+radiusRaw, EngineDeadBounds)` through `FlightController.TryChokeEngine`, whose timer is extend-only,
+so a victim inside is held at the formula's value until the cloud is gone and only then runs down.
+Nothing excludes the shooter, as nothing does in `FUN_004b9590`. `EngineDeadBounds` is the pool's
+copy of `TanglerChoke.EngineDeadBounds(weaponDefs)`, assigned by `GameSession`; the static image's
+pair until then. The round's `DETONATION_DISTANCE` decides only where the cloud forms.
+`CollectTanglerClouds` is the seam a suite reads the clouds through; `disabling-hits` reads a 12.7 s
+choke on the struck AI, the 5 s floor on a human 20 m out, the refresh while the cloud lives and the
+countdown once it is gone. The at-the-controls piece still owed is the choked aircraft's sound: the
+original swaps the engine loop (`FUN_004b15c0`) and this side cuts thrust only.
 
 `Proj.Cap` is the own speed `ACCELERATION` climbs to, seeded beside `Vel` at spawn from
 `Ballistics.LaunchSpeed` (**after** the `weapons.rocketSpeedScale` dev factor, so scaling a rocket
@@ -1446,13 +1507,16 @@ at that box, so part mapping and kill attribution run the direct-hit path. Plane
 `WorldDamageGate` (→ `ZeppelinRuntime.GateWeaponDamage`, F18) is asked per struck body first,
 so a weapon without `DAMAGES_ZEPPELIN` cannot hurt a gasbag while its impact effect/sound still
 play;
-`EffectSink` (→ `AnimRuntime.PlayEffectAt`) plays the non-model impact effects — rockets on the
-runtime's own bound, gun hits under `GunEffectTtl` 0.3 s (the `*_gunhit` family's longest authored
-stop, and the only bound the stop-less slug defs have) and one play per `GunEffectInterval` 0.1 s
-per effect name = per firing group (`GunEffectDue`, on the sim clock);
-`BeeperTags` (→ the session's `BeeperTags<FlightController>`) is the world's tag list, assigned
-beside the sinks and read by nothing in this file yet: the `BEEPER` hit's `TryTag` and the
-`BEEPER_SEEKER` round's per-frame `PickTarget` are pending here (null tags and seeks nothing);
+`EffectSink` (→ `AnimRuntime.PlayEffectAt`) plays the non-model impact effects, each with the
+template basis `EffectOrient` chose — rockets on the runtime's own bound, gun hits under
+`GunEffectTtl` 0.3 s (the `*_gunhit` family's longest authored stop, and the only bound the
+stop-less slug defs have) and one play per `GunEffectInterval` 0.1 s per effect name = per firing
+group (`GunEffectDue`, on the sim clock);
+`WashSink` (→ `ScreenFlash.PlayBlend`) is the disabling wash's route to a struck human's pane and
+`EngineDeadBounds` the choker's `ENGINE_DEAD` pair, both assigned by the session (null / the image
+pair in a lab); `BeeperTags` (→ the session's `BeeperTags<FlightController>`) is the world's tag
+list, assigned beside the sinks, read by the `BEEPER` hit's `TryTag` and the `BEEPER_SEEKER` round's
+per-frame `PickTarget` (null tags and seeks nothing);
 `SurfaceIdOf` is `public static` — the struck body's numeric surface id off `SceneBuilder
 .SurfaceIdMeta`, the SAME index space the crash and graze cascades use, with `default`(0) for an
 untagged collider (`FUN_005acf60`'s null-material arm) and `player`(6) for a struck `AircraftBody`;

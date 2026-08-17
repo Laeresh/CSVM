@@ -1,3 +1,4 @@
+using System;
 using CSVM.Mech3;
 
 namespace CSVM.Flight;
@@ -6,6 +7,20 @@ namespace CSVM.Flight;
 /// <c>None</c> means an authored gamez model was instanced and nothing stands in; <c>Spark</c> is
 /// the single-sprite base case every surface falls back to.</summary>
 public enum ImpactStandIn { None, Spark, Explosion, Ricochet }
+
+/// <summary>The mask a weapon's impact hook returns to <c>FUN_005ac7a0</c>, each bit removing one
+/// piece of the row's own bindings. The direct damage and the splash run before and after the
+/// hook and are under no bit. <c>Effects</c> covers the crater/quicksand carve and the row's
+/// <c>EFFECT</c>, neither of which CSVM plays, so it is held for the record and consumed nowhere.
+/// The one hook in the binary (the choker's) returns <c>Sound</c>.</summary>
+[Flags]
+public enum ImpactSuppression
+{
+    None = 0,
+    Sound = 1,
+    Effects = 2,
+    Animation = 4,
+}
 
 /// <summary>What should happen when one weapon hits one surface — the effect name, the sound, the
 /// stand-in and the damage numbers, as a value with no <c>Node3D</c> and no physics space behind
@@ -18,8 +33,14 @@ public readonly record struct ImpactOutcome
     /// the name it hands to the world-effects runtime.</summary>
     public string? EffectName { get; init; }
 
-    /// <summary>The struck surface's own <c>SOUND</c>, null when it authors no row. A
-    /// <c>SOUND_GROUPS</c> name resolves through the group table at play time, not here.</summary>
+    /// <summary>Whether <see cref="EffectName"/> came from the row's <c>SURFACE_ANIMATION</c> slot,
+    /// which the original spawns rotated from world up onto the struck surface's normal, where the
+    /// plain <c>ANIMATION</c> slot keeps its fixed axis (<c>FUN_005ac7a0</c>).</summary>
+    public bool SurfaceOriented { get; init; }
+
+    /// <summary>The struck surface's own <c>SOUND</c>, null when it authors no row or the weapon's
+    /// impact hook silenced it. A <c>SOUND_GROUPS</c> name resolves through the group table at
+    /// play time, not here.</summary>
     public string? Sound { get; init; }
 
     /// <summary>Which stand-in burst applies — <c>None</c> once an authored model has rendered.</summary>
@@ -40,19 +61,24 @@ public readonly record struct ImpactOutcome
     /// touches no scene, sink or sound archive (docs/org/weaponImpact.md). <c>default</c> already
     /// backfills ids the weapon names no block for (<see cref="WeaponDefs.InheritDefaultRow"/>), so
     /// do not re-add a fallback here — it would also fire on ids a weapon names and leaves empty,
-    /// like <c>player</c>(6). <paramref name="modelResolved"/> and <paramref
-    /// name="hasEffectsRuntime"/> are caller facts this cannot discover on its own.</summary>
+    /// like <c>player</c>(6). <paramref name="modelResolved"/>, <paramref name="hasEffectsRuntime"/>
+    /// and <paramref name="suppression"/> (the impact hook's answer) are caller facts.</summary>
     public static ImpactOutcome Resolve(WeaponDef weapon, int surfaceId, bool modelResolved,
-        bool hasEffectsRuntime)
+        bool hasEffectsRuntime, ImpactSuppression suppression = ImpactSuppression.None)
     {
         // The struck id's IMPACT row — already carrying `default`'s binding if the weapon named no
         // block for this id (WeaponDefs.InheritDefaultRow).
         var effect = weapon.ImpactFor(surfaceId);
+        // The hook's Animation bit removes the ANIMATION slot only; SURFACE_ANIMATION is spawned
+        // under no bit (FUN_005ac7a0 tests the mask before the first spawn and not the second).
+        string? animation = (suppression & ImpactSuppression.Animation) != 0 ? null : effect?.Animation;
+        string? name = animation ?? effect?.SurfaceAnimation;
 
         return new ImpactOutcome
         {
-            EffectName = effect != null ? effect.Animation ?? effect.SurfaceAnimation : null,
-            Sound = effect?.Sound,
+            EffectName = name,
+            SurfaceOriented = name != null && animation == null,
+            Sound = (suppression & ImpactSuppression.Sound) != 0 ? null : effect?.Sound,
             StandIn = StandInFor(weapon, surfaceId, modelResolved, hasEffectsRuntime),
             Damage = weapon.HealthDamage ?? 0f,
             BlastRadius = weapon.ImpactProximity ?? 0f,

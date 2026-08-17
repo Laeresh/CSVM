@@ -154,6 +154,23 @@ public static class Suites
             "0.9 every 1.5 s while a second human elsewhere and the layer's own pane stay clear, " +
             "and a layer going down ends its screen on the spot",
             SmokeScreenSuite));
+        into.Add(new TestHarness.Suite("disabling-hits",
+            "the hit-side dispatch of the no-damage types on a live pool (D15-D17): a wep_08 into a " +
+            "human's tail washes that pane red at weight 1 for 5 s after a 1 s delay and no other " +
+            "pane, a wep_09 from behind does nothing while one from ahead washes white, two humans " +
+            "hit in one second each carry their own wash and an AI 20 m from one burst is stunned; " +
+            "an AI is stunned for DisablingIntensity's seconds by a burst on the ground inside " +
+            "IMPACT_PROXIMITY, raised to 5 s by a direct hit and overwritten back down by the next " +
+            "ground burst; a wep_12 leaves a 2 s cloud that chokes the struck AI for the formula's " +
+            "seconds at its origin distance and a human 20 m out for the 5 s floor, refreshes both " +
+            "while it lives and lets the timer run once gone; and no ledger moves",
+            DisablingHits));
+        into.Add(new TestHarness.Suite("impact-orientation",
+            "the IMPACT row's SURFACE_ANIMATION is placed with world up rotated onto the struck " +
+            "normal while the plain ANIMATION keeps its fixed axis (C12): a wep_06 into a 30° slope " +
+            "hands he_ground_effect a basis whose Y is the slope normal, the same round into flat " +
+            "ground hands identity, and a wep_12's scatter_effect on the slope stays identity",
+            ImpactOrientation));
         into.Add(new TestHarness.Suite("ordnance-launch-axis",
             "a player's pylon salvo leaves along the AIRCRAFT's axis while an AI's leaves along its " +
             "mount's (A5): no shipped airframe cants a pylon marker, so the widest rig's markers are " +
@@ -3508,7 +3525,7 @@ public static class Suites
             var effects = new List<(string Name, Vector3 At)>();
             var live = new ProjectilePool(textures, null, null)
             {
-                EffectSink = (name, at, ttl) => effects.Add((name, at)),
+                EffectSink = (name, at, orient, ttl) => effects.Add((name, at)),
             };
             pool = live;
             ctx.Host.AddChild(live);
@@ -4739,6 +4756,341 @@ public static class Suites
             foreach (var rig in rigs)
                 rig.Free();
             pool?.Free();
+            textures.Dispose();
+        }
+    }
+
+    // D15/D16/D17's hit side on a live pool: two human rigs on a real two-pane ScreenFlash and two
+    // AI rigs, all held so every distance is the one laid out here, shot in turn with the sonic,
+    // the flash and the choker. What the pool owes is the routing (a human's pane, an AI's pilot,
+    // an engine either way) and the numbers the decoded curves give at the measured distances.
+    private static void DisablingHits(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        if (!weapons.TryGet("wep_08", out var sonic) || !weapons.TryGet("wep_09", out var flashRocket)
+            || !weapons.TryGet("wep_12", out var choker))
+        {
+            ctx.Check(false, $"wep_08, wep_09 and wep_12 all resolve");
+            return;
+        }
+        ctx.Check(sonic.Sonic && !sonic.Flash && sonic.ImpactProximity is 35f && flashRocket.Flash
+                  && flashRocket.ImpactProximity is 450f && choker.Tangler is { Radius: 35f, Time: 2f },
+            $"wep_08 is SONIC at 35 m, wep_09 FLASH at 450 m, wep_12 a TANGLER of RADIUS 35 and TIME 2");
+        var bounds = TanglerChoke.EngineDeadBounds(weapons);
+        ctx.Check(bounds == (5f, 13f), $"the catalogue's ENGINE_DEAD pair is [5, 13] ({bounds.Min}, {bounds.Max})");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        var rigs = new List<FlightController>();
+        ScreenFlash? flash = null;
+        Node[] panes = System.Array.Empty<Node>();
+        try
+        {
+            (flash, panes) = PaneFlash(ctx, null);
+            var washes = new List<(int Player, Color Colour, float Weight, float Duration, float Delay)>();
+            var flashSink = flash;
+            var live = new ProjectilePool(textures, null, null)
+            {
+                EngineDeadBounds = bounds,
+                WashSink = (player, colour, weight, duration, delay) =>
+                {
+                    washes.Add((player, colour, weight, duration, delay));
+                    flashSink.PlayBlend(player, colour, weight, duration, delay);
+                },
+            };
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            FlightController BuildRig(int playerIndex, bool human, Vector3 pos)
+            {
+                var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+                var rig = new FlightController
+                {
+                    PlaneModel = model,
+                    Collider = PlaneCollider.Build(model),
+                    Damage = new PlaneDamage(stats.DestroyableParts),
+                    PlayerIndex = playerIndex,
+                    IsHumanPiloted = human,
+                    Pilot = human ? null : AiPilot.HoldingCourse(pos, pos + Vector3.Forward),
+                    Projectiles = live,
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                };
+                rig.AddChild(model);
+                rig.Setup(new FlightModel(stats), human ? ctx.Camera : null, new CamParams(), pos, pos + Vector3.Forward);
+                rig.Name = (human ? "p" : "ai") + playerIndex;
+                ctx.Host.AddChild(rig); // _Ready registers the body with the pool
+                rig.Held = true;
+                rigs.Add(rig);
+                return rig;
+            }
+            bool Pristine(FlightController rig) => rig.Damage!.Parts.Values.All(
+                p => p.Hp >= p.Def.MaxHp && p.Armor >= p.Def.MaxArmor);
+
+            // Every rig noses along -Z. The two humans a kilometre apart so no burst reaches both;
+            // the choker's AI 20 m beside the second human, inside the sonic's 35 m and the cloud's.
+            var origin = new Vector3(0f, 3500f, 0f);
+            var human0 = BuildRig(0, human: true, origin);
+            var human1 = BuildRig(1, human: true, origin + new Vector3(1000f, 0f, 0f));
+            var aiNear = BuildRig(AiAircraftSpawner.ShooterIdBase, human: false, origin + new Vector3(1020f, 0f, 0f));
+            var aiFar = BuildRig(AiAircraftSpawner.ShooterIdBase + 1, human: false, origin + new Vector3(2000f, 0f, 0f));
+
+            const float dt = 1f / 60f;
+            var rounds = new List<(Vector3 Pos, Vector3 Velocity)>();
+            bool RoundsAlive()
+            {
+                rounds.Clear();
+                live.CollectLiveRounds(rounds);
+                return rounds.Count > 0;
+            }
+            // Fires and steps until the round is gone; the flash advances on the same clock.
+            int Fire(WeaponDef weapon, Vector3 from, Vector3 along)
+            {
+                var up = Mathf.Abs(along.Normalized().Dot(Vector3.Up)) > 0.99f ? Vector3.Forward : Vector3.Up;
+                live.Spawn(weapon, new Transform3D(Basis.LookingAt(along, up), from), Vector3.Zero);
+                int steps = 0;
+                do
+                {
+                    foreach (var rig in rigs)
+                        rig.SimStep(dt);
+                    live.SimStep(dt);
+                    flash.Advance(dt);
+                    steps++;
+                }
+                while (RoundsAlive() && steps < 120);
+                return steps;
+            }
+            void Advance(float seconds)
+            {
+                for (int i = 0; i < Mathf.RoundToInt(seconds / dt); i++)
+                {
+                    foreach (var rig in rigs)
+                        rig.SimStep(dt);
+                    live.SimStep(dt);
+                    flash.Advance(dt);
+                }
+            }
+            Vector3 Tail(FlightController rig) => rig.WorldPosition + new Vector3(0f, 0f, 40f);
+            Vector3 Nose(FlightController rig) => rig.WorldPosition + new Vector3(0f, 0f, -40f);
+            bool Clear(int pane) => flash.CurrentFor(pane).IsEqualApprox(new Color(0f, 0f, 0f, 0f));
+
+            // 1. The sonic into a human's tail: one wash, red, full weight, five seconds, on that
+            // pane alone, painting only after the 1 s delay and gone at the duration.
+            int steps = Fire(sonic, Tail(human0), Vector3.Forward);
+            ctx.Check(steps < 120 && washes.Count == 1 && washes[0].Player == 0
+                      && washes[0].Colour == new Color(1f, 0f, 0f) && washes[0].Weight > 0.999f
+                      && Mathf.Abs(washes[0].Duration - 5f) < 0.01f && washes[0].Delay == 1f,
+                $"a wep_08 into P1's tail washes pane 1 red at weight 1 for 5 s after 1 s (steps={steps} washes={washes.Count} first={(washes.Count > 0 ? $"P{washes[0].Player + 1} {washes[0].Colour} w={washes[0].Weight:0.###} d={washes[0].Duration:0.##} delay={washes[0].Delay}" : "-")})");
+            Advance(0.5f);
+            ctx.Check(Clear(0) && Clear(1), $"nothing paints during the start delay ({flash.CurrentFor(0)})");
+            Advance(1.5f);
+            var pane1 = flash.CurrentFor(0);
+            ctx.Check(pane1.A > 0.9f && pane1.R > 0.9f && pane1.G < 0.1f && pane1.B < 0.1f && Clear(1),
+                $"past the delay pane 1 is washed red ({pane1}) and pane 2 stays clear ({flash.CurrentFor(1)})");
+            Advance(4.5f);
+            ctx.Check(Clear(0), $"the wash is gone at its 5 s duration ({flash.CurrentFor(0)})");
+            ctx.Check(Pristine(human0) && human0.InPlay, $"the sonic spent nothing on the human's ledger");
+
+            // 2. The flash needs the victim facing it: from behind nothing, from ahead a white wash.
+            int before = washes.Count;
+            Fire(flashRocket, Tail(human0), Vector3.Forward);
+            ctx.Check(washes.Count == before, $"a wep_09 into the same tail, behind the pilot, washes nothing (washes={washes.Count - before})");
+            Fire(flashRocket, Nose(human0), Vector3.Back);
+            ctx.Check(washes.Count == before + 1 && washes[^1].Player == 0 && washes[^1].Colour == new Color(1f, 1f, 1f)
+                      && washes[^1].Weight > 0.95f,
+                $"a wep_09 into the nose washes pane 1 white at full weight (washes={washes.Count - before} last={(washes.Count > before ? $"{washes[^1].Colour} w={washes[^1].Weight:0.###}" : "-")})");
+            Advance(7f);
+            ctx.Check(Clear(0) && Clear(1) && Pristine(human0), $"and it clears; the ledger is still untouched");
+
+            // 3. Two viewers hit inside one second: each pane its own wash, and the AI 20 m from the
+            // second burst is inside the sonic's plateau and stunned for the full 5 s.
+            before = washes.Count;
+            live.Spawn(sonic, new Transform3D(Basis.LookingAt(Vector3.Forward, Vector3.Up), Tail(human0)), Vector3.Zero);
+            live.Spawn(sonic, new Transform3D(Basis.LookingAt(Vector3.Forward, Vector3.Up), Tail(human1)), Vector3.Zero);
+            Advance(0.5f);
+            ctx.Check(!RoundsAlive() && washes.Count == before + 2
+                      && washes.Skip(before).Select(w => w.Player).OrderBy(p => p).SequenceEqual(new[] { 0, 1 }),
+                $"two sonics in one step wash P1 and P2 once each (players={string.Join(",", washes.Skip(before).Select(w => w.Player + 1))})");
+            Advance(1.5f);
+            ctx.Check(flash.CurrentFor(0).A > 0.9f && flash.CurrentFor(1).A > 0.9f && flash.CurrentFor(1).R > 0.9f,
+                $"and each pane carries its own red wash ({flash.CurrentFor(0)} / {flash.CurrentFor(1)})");
+            ctx.Check(aiNear.Pilot!.IsStunned && Mathf.Abs(aiNear.Pilot.StunRemainingS - 5f) < 0.02f,
+                $"the AI 20 m from the second burst is stunned for the full 5 s (remaining={aiNear.Pilot.StunRemainingS:0.00})");
+            ctx.Check(!aiFar.Pilot!.IsStunned && Pristine(human1) && Pristine(aiNear),
+                $"the AI a kilometre away is untouched and no ledger moved");
+            Advance(6f);
+
+            // 4. The AI's stun follows the intensity at the burst's distance to its hull: a round
+            // passing abeam fuses inside IMPACT_PROXIMITY and stuns for the fade's seconds, a direct
+            // hit raises that to 5 s, and the next passing burst overwrites it back down (written, never maxed).
+            Fire(flashRocket, Tail(aiFar), Vector3.Forward);
+            ctx.Check(!aiFar.Pilot.IsStunned, $"a wep_09 into the AI's tail, behind it, stuns nothing");
+            // A vertical line abeam whose closest approach to the hull sits in the fade band, past
+            // the plateau's 27 m and inside the 35 m fuse; the fuse bursts the round at that point.
+            float abeam = 0f, hullDistance = 0f;
+            Vector3 lineTop = default, lineBottom = default;
+            for (float x = 30f; x <= 40f && hullDistance == 0f; x += 0.5f)
+            {
+                var top = aiFar.WorldPosition + new Vector3(x, 40f, 0f);
+                var bottom = aiFar.WorldPosition + new Vector3(x, -40f, 0f);
+                float d = aiFar.Body!.SegmentDistance(top, bottom, out _, out _);
+                if (d is > 29f and < 33f)
+                {
+                    abeam = x;
+                    hullDistance = d;
+                    lineTop = top;
+                    lineBottom = bottom;
+                }
+            }
+            bool inFade = DisablingIntensity.TryResolve(hullDistance * hullDistance, sonic.ImpactProximitySqM ?? 0f,
+                requiresFacing: false, facingDot: 0f, out float fadeIntensity, out float fadeSeconds);
+            ctx.Check(hullDistance > 0f && inFade && fadeIntensity is > 0.05f and < 0.95f,
+                $"a line {abeam:0.#} m abeam passes {hullDistance:0.#} m from the AI's hull, in the fade (intensity {fadeIntensity:0.00}, {fadeSeconds:0.00} s)");
+            Fire(sonic, lineTop, lineBottom - lineTop);
+            ctx.Check(aiFar.Pilot.IsStunned && Mathf.Abs(aiFar.Pilot.StunRemainingS - fadeSeconds) < 0.1f,
+                $"a sonic fusing abeam inside IMPACT_PROXIMITY stuns the AI for the curve's {fadeSeconds:0.00} s (remaining={aiFar.Pilot.StunRemainingS:0.00})");
+            Fire(sonic, Tail(aiFar), Vector3.Forward);
+            ctx.Check(Mathf.Abs(aiFar.Pilot.StunRemainingS - 5f) < 0.02f,
+                $"a direct hit while stunned raises it to 5 s (remaining={aiFar.Pilot.StunRemainingS:0.00})");
+            Fire(sonic, lineTop, lineBottom - lineTop);
+            ctx.Check(Mathf.Abs(aiFar.Pilot.StunRemainingS - fadeSeconds) < 0.1f,
+                $"the next passing burst overwrites the running stun back down to {fadeSeconds:0.00} s (remaining={aiFar.Pilot.StunRemainingS:0.00})");
+            ctx.Check(Pristine(aiFar) && aiFar.InPlay, $"none of the three spent a point on the AI's ledger");
+
+            // 5. The choker: a round into the AI's back leaves a 2 s cloud at the burst; the AI is
+            // choked for the formula's seconds at its ORIGIN distance, the human 20 m out for the
+            // floor, both refreshed every step the cloud lives, and the timer runs once it is gone.
+            var clouds = new List<(Vector3 Centre, float Remaining)>();
+            steps = Fire(choker, aiNear.WorldPosition + new Vector3(0f, 30f, 0f), Vector3.Down);
+            live.CollectTanglerClouds(clouds);
+            ctx.Check(steps < 120 && clouds.Count == 1 && Mathf.Abs(clouds[0].Remaining - (2f - steps * dt)) < 0.02f,
+                $"a wep_12 into the AI leaves one cloud running its 2 s TIME (clouds={clouds.Count} remaining={(clouds.Count > 0 ? clouds[0].Remaining : 0f):0.00} after {steps} steps)");
+            float originSq = clouds.Count > 0 ? aiNear.WorldPosition.DistanceSquaredTo(clouds[0].Centre) : 0f;
+            float expected = TanglerChoke.Duration(originSq, choker.Tangler!.Radius!.Value, bounds.Min, bounds.Max);
+            ctx.Check(expected > 10f && Mathf.Abs(aiNear.EngineDeadRemainingS - expected) < 0.05f,
+                $"the struck AI's engine is dead for the formula's {expected:0.00} s at {Mathf.Sqrt(originSq):0.##} m from its origin (remaining={aiNear.EngineDeadRemainingS:0.00})");
+            ctx.Check(Mathf.Abs(human1.EngineDeadRemainingS - bounds.Min) < 0.05f,
+                $"the human 20 m out, inside RADIUS, is choked for the {bounds.Min:0} s floor (remaining={human1.EngineDeadRemainingS:0.00})");
+            ctx.Check(human0.EngineDeadRemainingS == 0f && aiFar.EngineDeadRemainingS == 0f,
+                $"nobody outside the cloud is touched");
+            ctx.Check(Pristine(aiNear) && Pristine(human1), $"the choker spent nothing on either ledger");
+            Advance(1.5f);
+            clouds.Clear();
+            live.CollectTanglerClouds(clouds);
+            ctx.Check(clouds.Count == 1 && Mathf.Abs(aiNear.EngineDeadRemainingS - expected) < 0.05f,
+                $"while the cloud lives the choke is refreshed every step (remaining={aiNear.EngineDeadRemainingS:0.00} at cloud {(clouds.Count > 0 ? clouds[0].Remaining : 0f):0.00} s left)");
+            Advance(0.6f);
+            clouds.Clear();
+            live.CollectTanglerClouds(clouds);
+            ctx.Check(clouds.Count == 0, $"the cloud is gone at its TIME (clouds={clouds.Count})");
+            // Released so its model steps and the timer counts down; a held airframe steps nothing.
+            aiNear.Held = false;
+            float atRelease = aiNear.EngineDeadRemainingS;
+            Advance(3f);
+            ctx.Check(atRelease > 10f && Mathf.Abs(aiNear.EngineDeadRemainingS - (atRelease - 3f)) < 0.1f,
+                $"once the cloud is gone the engine timer runs down ({atRelease:0.00} → {aiNear.EngineDeadRemainingS:0.00} over 3 s)");
+        }
+        finally
+        {
+            flash?.Free();
+            foreach (var pane in panes)
+                pane.Free();
+            foreach (var rig in rigs)
+                rig.Free();
+            pool?.Free();
+            textures.Dispose();
+        }
+    }
+
+    // C12's SURFACE_ANIMATION orientation on a live pool: the same rocket into a 30° slope and into
+    // flat ground, and the choker (whose default row is a plain ANIMATION) into the slope, with the
+    // effect sink recording the basis each play was handed.
+    private static void ImpactOrientation(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        if (!weapons.TryGet("wep_06", out var he) || !weapons.TryGet("wep_12", out var choker))
+        {
+            ctx.Check(false, $"wep_06 and wep_12 resolve");
+            return;
+        }
+        var heRow = he.ImpactFor(SurfaceRegistry.Default);
+        var chokerRow = choker.ImpactFor(SurfaceRegistry.Default);
+        ctx.Check(heRow is { Animation: null, SurfaceAnimation: "he_ground_effect" }
+                  && chokerRow is { Animation: "scatter_effect", SurfaceAnimation: null },
+            $"wep_06's default row binds SURFACE_ANIMATION he_ground_effect and wep_12's a plain ANIMATION scatter_effect");
+
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        var bodies = new List<StaticBody3D>();
+        try
+        {
+            var plays = new List<(string Name, Vector3 At, Basis Orient)>();
+            var live = new ProjectilePool(textures, null, null)
+            {
+                EffectSink = (name, at, orient, ttl) => plays.Add((name, at, orient)),
+            };
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            var origin = new Vector3(600f, 4000f, 600f);
+            // A plate rolled 30° about Z: its top normal leans toward -X.
+            var slope = new StaticBody3D { Name = "orientation-lab-slope" };
+            slope.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(60f, 0.2f, 60f) } });
+            slope.GlobalTransform = new Transform3D(new Basis(Vector3.Back, Mathf.DegToRad(30f)), origin);
+            ctx.Host.AddChild(slope);
+            bodies.Add(slope);
+            var slopeNormal = slope.GlobalTransform.Basis.Y.Normalized();
+            var flat = Plate("orientation-lab-flat", new Vector3(60f, 0.2f, 60f), origin + new Vector3(200f, 0f, 0f));
+            ctx.Host.AddChild(flat);
+            bodies.Add(flat);
+
+            (string Name, Vector3 At, Basis Orient)? Drop(WeaponDef weapon, Vector3 above)
+            {
+                plays.Clear();
+                live.Spawn(weapon, new Transform3D(Basis.LookingAt(Vector3.Down, Vector3.Forward), above), Vector3.Zero);
+                for (int i = 0; i < 120 && plays.Count == 0; i++)
+                    live.SimStep(1f / 60f);
+                live.Clear();
+                return plays.Count > 0 ? plays[0] : null;
+            }
+            static float DegreesBetween(Vector3 a, Vector3 b) =>
+                Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(a.Normalized().Dot(b.Normalized()), -1f, 1f)));
+
+            static string Describe((string Name, Vector3 At, Basis Orient)? play) =>
+                play is { } p ? $"fx={p.Name} Y={p.Orient.Y}" : "no play";
+
+            var onSlope = Drop(he, origin + new Vector3(0f, 20f, 0f));
+            ctx.Check(onSlope is { Name: "he_ground_effect" } s1 && DegreesBetween(s1.Orient.Y, slopeNormal) < 0.5f
+                      && DegreesBetween(s1.Orient.Y, Vector3.Up) > 29f,
+                $"wep_06 into the 30° slope plays he_ground_effect with its Y on the slope normal ({Describe(onSlope)} normal={slopeNormal})");
+            ctx.Check(onSlope is { } s2 && Mathf.IsEqualApprox(s2.Orient.Determinant(), 1f)
+                      && s2.Orient.Y.IsEqualApprox(s2.Orient * Vector3.Up),
+                $"the basis is a pure rotation");
+
+            var onFlat = Drop(he, flat.GlobalPosition + new Vector3(0f, 20f, 0f));
+            ctx.Check(onFlat is { Name: "he_ground_effect" } f1 && f1.Orient.IsEqualApprox(Basis.Identity),
+                $"the same round into flat ground plays it on the fixed axis ({Describe(onFlat)})");
+
+            var chokerOnSlope = Drop(choker, origin + new Vector3(0f, 20f, 0f));
+            ctx.Check(chokerOnSlope is { Name: "scatter_effect" } c1 && c1.Orient.IsEqualApprox(Basis.Identity),
+                $"wep_12's plain ANIMATION scatter_effect keeps its fixed axis on the slope ({Describe(chokerOnSlope)})");
+        }
+        finally
+        {
+            pool?.Free();
+            foreach (var b in bodies)
+                b.Free();
             textures.Dispose();
         }
     }

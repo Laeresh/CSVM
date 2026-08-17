@@ -136,7 +136,7 @@ Each selects a special behaviour; most are one bare flag or a tiny struct.
 | `FLASH` | `wep_09`, `wep_15` | flag | blinding flash |
 | `BEEPER` | `wep_10` | `TIME [20]` | tags the target for 20 s |
 | `BEEPER_SEEKER` | `wep_11` | flag | homes on a beeper-tagged target |
-| `TANGLER` | `wep_12` | `TIME [2]`, `RADIUS [35]`, `ENGINE_DEAD [5,13]` | choker: entangles + kills the engine for 5–13 s |
+| `TANGLER` | `wep_12` | `TIME [2]`, `RADIUS [35]`, `ENGINE_DEAD [5,13]` | choker: the burst leaves a cloud that lives `TIME` seconds and kills the engine of every aircraft whose origin sits inside `RADIUS` (the shooter's included) for `ENGINE_DEAD_max × (1 − d²/RADIUS)` floored at `ENGINE_DEAD_min`, the raw radius against a squared distance being the original's own mismatch; the pair is a global the last-parsed `TANGLER` sets ([`org/ordnanceTypes.md`](../org/ordnanceTypes.md) "The choker, settled"). Parsing it also installs the one impact hook in the binary, which silences the row's `SOUND` |
 | `SMOKE_SCREEN` | `wep_13` | `TIME [8]` | lays an 8 s smoke screen |
 | `REAR` | `wep_13` | flag | fires rearward |
 | `TORPEDO` | `wep_14` | flag | aerial torpedo |
@@ -147,17 +147,13 @@ Each selects a special behaviour; most are one bare flag or a tiny struct.
 | `DAMAGES_ZEPPELIN` | `wep_14`, `wep_28` | flag | may damage a zeppelin hull. The remake consumes it as the gasbag routing gate (M4 F18): a weapon without it cannot damage a zeppelin's critical `healthy` zones, while engines/turrets/cannons stay ordinary destructibles any weapon hurts |
 | `SHAKES_CAMERA` | `wep_26` | flag | the detonation shakes the camera. Sole carrier is the zero-damage scripted fake weapon, so it is NOT the player-gunfire shake mechanism — see [shakes.md](shakes.md) |
 
-**`TANGLER` — what it feels like in the original** (user recollection; **not decoded** —
-wants an original A/B before anything is built on it): *the choker stalls the hit plane
-essentially instantly — it drops the airframe to stall speed.* That is consistent with the struct
-rather than extra to it: `ENGINE_DEAD [5,13]` cuts thrust for 5-13 s, and with no thrust our
-`FlightModel` already bleeds speed on drag and drops the nose at the stall — so the felt "instant
-stall" is most likely the **symptom** of the engine cutout, not a separate authored effect. The M4
-implication is that the choker may need no bespoke flight-model hook at all, only a timed thrust
-cutout plus the `TIME [2]` entangle and `RADIUS [35]` catch. ⚠ "Essentially instantly" is the part
-to verify: a pure thrust cutout takes seconds to bleed a fast plane below stall speed, so if the
-original really stalls you at once there IS a second effect (a direct airspeed clamp) and this
-reading is wrong. `TanglerData` is parsed and unused — nothing is choked in M3 (`WeaponDefs.cs`).
+**`TANGLER` is decoded, and the recollection that it stalls a plane instantly is disproven.** The
+hit branch zeroes the damage and sets the engine-dead bit with its timer, nothing else: no airspeed
+clamp, no control authority touched ([`org/ordnanceTypes.md`](../org/ordnanceTypes.md) "The choker,
+settled"). Whatever the felt instantaneity was, it is the thrust cutout plus the flight model. The
+remake is `TanglerChoke` (the duration) and `ProjectilePool`'s cloud (the catch), the timer through
+`FlightController.TryChokeEngine`; a human is choked exactly as an AI is, since the branch has no
+player guard.
 
 ### Bindings
 
@@ -263,8 +259,12 @@ the row. Six of the fourteen names appear anywhere in this install:
 
 Each row value is again an alternating dict over `ANIMATION` / `SURFACE_ANIMATION` /
 `EFFECT` / `SOUND` (any may be null; a whole row may be null — no effect on that surface, which is
-how 28 entries author `enemy`). `SURFACE_ANIMATION` is the surface-oriented variant of `ANIMATION`.
-**Hit-testing reads the struck material's surface id** to select the row.
+how 28 entries author `enemy`). `SURFACE_ANIMATION` is the surface-oriented variant of `ANIMATION`:
+the engine spawns it with world up rotated onto the struck surface's normal, where a plain
+`ANIMATION` keeps its fixed axis, so on flat ground the two read alike and on a slope only the first
+lies on it ([`org/ordnanceTypes.md`](../org/ordnanceTypes.md) "Half one, the direct impact"; the
+remake's `ProjectilePool.SurfaceUpBasis`). No row authors both slots. **Hit-testing reads the struck
+material's surface id** to select the row.
 
 A row is only reachable if some material carries its id: `quicksand`(3), `player`(6) and `enemy`(7)
 are carried by no chapter material at all. A block named something outside the registry would be
