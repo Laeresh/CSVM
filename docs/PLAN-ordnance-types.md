@@ -344,28 +344,31 @@ would never reach `RANGE` at all. `RANGE_MINIMUM`'s gloss needed no change in
 [`formats/weapons.md`](formats/weapons.md) (`A1` had already corrected it); what it gained is the
 second element the gate demands be zero. Owed at the controls: the four clips this item's Verify
 names, all of which are asserted in the `ordnance-end-conditions` suite but none of which has been
-looked at.
+looked at. **Corrected against `CAP-23` and the binary:** `RANGE_MINIMUM` hides nothing, since
+`FUN_004cd210` writes the intersect bit (`0x10`), not the visibility one (`0x4`), so the torpedo is
+drawn from launch in `torpedo_trail`'s folded look and its 3.5 s switch is the def's own clock, not
+the 300 m gate; the invisible-for-300 m reading and the trail held back with it are gone.
 
 **Goal.** A round ends for one of exactly three reasons, and the right one.
 
 **Evidence (confidence: traced).** `FUN_005afd50` ends a round on distance travelled reaching `RANGE`
 (weapon `+0x1c`), on age exceeding `DETONATION_TIME` (weapon `+0x48`, the flare's 2.0 s), or on
 coming within `DETONATION_DISTANCE` of **its own target**. That last is a second fuse path beside the
-list sweep in `FUN_004b5fb0`. `RANGE_MINIMUM` is a **visibility** gate, not an arming one: a
-`FLYOUT_HEALTH` round is hidden until it has travelled weapon `+0x24`, so the torpedo is invisible
-for its first 300 m.
+list sweep in `FUN_004b5fb0`. `RANGE_MINIMUM` is a **hittability** gate, not an arming one: a
+`FLYOUT_HEALTH` round has its intersect bit clear until it has travelled weapon `+0x24`, so the
+torpedo cannot be struck over its first 300 m (it is drawn throughout).
 
 **Approach.** All three in the integrator, all three resolving through the same detonation entry so
 the effect and splash paths are shared. Keep the existing `ProximityFuseTriggered` list sweep: the
 two are complementary, the sweep catching any aircraft passed near and this one catching the round's
-own target. Add the reveal gate here too, since it reads the same travelled-distance accumulator.
+own target. Add the intersect gate here too, since it reads the same travelled-distance accumulator.
 
 **Model recommendation.** medium.
 
 **Verify.** One clip per condition: a rocket flown past `RANGE` over open water; `--rocket=wep_15`
 detonating 2.0 s after release with nothing near it; a round fused by its own target while another
-aircraft is nearer, proving the two paths are distinct; and `--rocket=wep_14` invisible for its first
-300 m.
+aircraft is nearer, proving the two paths are distinct; and `--rocket=wep_14` unhittable for its
+first 300 m while drawn from launch.
 
 **⚠ Traps.** `BL-233`'s aircraft-only rule for the **sweep** is decoded and must not be widened to
 world geometry. The per-round target check is a different path and is not bound by it.
@@ -1019,7 +1022,9 @@ suite's "live ordnance is not walked" assertion is rewritten as "an entry with t
 clear is refused". ⚠ At the controls this means a player's OWN `--rocket=wep_14` comes up on the
 **Ally** cycle, not the Enemy one: the round is stamped with its shooter's team and the class model
 splits it like anything else. Only a torpedo fired at you is on the Enemy cycle, where it sorts
-ahead of every aircraft.
+ahead of every aircraft. **Corrected against `CAP-23`:** the wrapper admits a round that is drawn
+from its spawn frame, since `FUN_004cd210` is the intersect toggle and not a reveal, so a torpedo
+is on the cycle and visible while it is still unhittable over its first 300 m.
 
 **Goal.** A torpedo in flight can be selected and shot at, by the player and by AI.
 
@@ -1056,9 +1061,11 @@ with that model's AABB (`Proj.HitCentre`/`HitHalf`), a round flying streak-only 
 all, which is what the original's node-less round would be too. **(3) The reveal gate is the
 shootability gate.** The spawn's tail calls `FUN_004cd210`, which sets or clears node flag `0x10`,
 the intersect bit every swept query tests: cleared for a round with no `FLYOUT_HEALTH`, and cleared
-at launch for one that also carries `RANGE_MINIMUM`, then set by the reveal in `FUN_005afd50`. So a
+at launch for one that also carries `RANGE_MINIMUM`, then set by the gate in `FUN_005afd50`. So a
 torpedo cannot be shot at over its first 300 m, which is also what stops a pilot shredding his own
-launch with his own guns.
+launch with his own guns. **Corrected against `CAP-23`:** that gate is the shootability gate and
+only that; node flag `0x10` is `INTERSECT_SURFACE`, not visibility, so the "reveal" wording here is
+wrong and the round is drawn from launch (`org/ordnanceTypes.md`, "Hittable distance").
 
 The settled questions: **any projectile's direct hit** spends the pair, gun round or ordnance alike,
 because the spend lives in the shared hit resolver; **splash does not**, since it is the caller's

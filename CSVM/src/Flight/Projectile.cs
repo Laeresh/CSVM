@@ -153,7 +153,7 @@ public sealed partial class ProjectilePool : Node3D
     // ⚠ No rocket streak constants here any more. `he_rocket`/`ap_rocket` and every other ordnance
     // FLYOUT prototype are LOD-wrapped missile BODIES — no `rabbit_blur` streak child, no tip disc
     // (measured, docs/org/tracers.md). An ordnance round's visible trail is its MODEL_ANIMATION
-    // puffer smoke, which AcquireTrails already draws. The old RocketStreakScale/RocketExhaustScale
+    // puffer smoke, which its def instance drives. The old RocketStreakScale/RocketExhaustScale
     // streaks had no counterpart in the data and are deleted; a chapter missing the prototype now
     // shows the smoke trail alone rather than a stand-in streak.
     private const float MuzzleSize = 0.5f;    // m
@@ -292,14 +292,11 @@ public sealed partial class ProjectilePool : Node3D
     private readonly SceneBuilder? _flyoutScene;
     private readonly Dictionary<string, GameZNode?> _flyoutNodes = new(); // model name → prototype (cached)
 
-    // The FLYOUT MODEL_ANIMATION smoke trail: each rocket type's def (`he_rocket`, `sonic`, …,
-    // compiled in cam_anim, reader source missile_puffers.zrd.json) carries one or two
-    // DISTANCE_INTERVAL PUFFER_STATEs AT_NODE the round itself — the authored thick trail with its
-    // per-type colour ramp (HE orange→grey, flak orange→near-black, incendiary red→white, sonic
-    // teal ×2). Resolved once per anim name from the world program; each live round drives its own
-    // Puffer emitters via TrailAdvance, reused from a free-list once their smoke has decayed.
+    // The FLYOUT MODEL_ANIMATION defs (`he_rocket`, `sonic`, `torpedo_trail`, …, compiled in
+    // cam_anim): each live round runs its own instance of its weapon's def, which is where its
+    // trail puffers, its launch look and its sounds come from (ProjectileFlyoutAnim.cs). The
+    // emitters those instances switch on are pooled here and reused once their smoke has decayed.
     private readonly AnimProgram? _flyoutAnims;
-    private readonly Dictionary<string, TrailSpec?> _trailSpecs = new(); // anim name → parsed spec (null = none)
     private readonly List<TrailEmitter> _trailEmitters = new();          // reusable emitters, all states
 
     // Casing ejection: each gun shot ejects the authored `gunshell` casing — the chapter-gamez
@@ -390,7 +387,7 @@ public sealed partial class ProjectilePool : Node3D
     private int _impactsLogged;
     private int _soundGainsLogged;               // D31 one-shot gain breadcrumb, first 8
     private int _decaysLogged;                   // launch-velocity decay breadcrumb, first 4
-    private int _revealsLogged;                  // RANGE_MINIMUM reveal breadcrumb, first 2
+    private int _armedLogged;                    // RANGE_MINIMUM intersect-bit breadcrumb, first 2
     private int _flyoutDestroysLogged;           // shot-down flyout breadcrumb, first 2
     private int _disablingLogged;                // sonic/flash victim breadcrumb, first 8
     private float _simClock;                   // sim seconds since the pool started (the gun-effect throttle)
@@ -508,11 +505,12 @@ public sealed partial class ProjectilePool : Node3D
     /// silently.</summary>
     public static bool DetonatesAtRange(WeaponDef weapon) => CarriesLockOn(weapon);
 
-    /// <summary>Whether the weapon's <c>FLYOUT</c> body starts hidden and is revealed only after
-    /// <c>RANGE_MINIMUM</c> metres of flight — <c>FLYOUT_HEALTH</c> and <c>RANGE_MINIMUM</c> both
-    /// present, which the torpedo alone is (<c>FUN_005afd50</c> at <c>0x005b01c4</c>). The key is a
-    /// visibility gate and arms nothing.</summary>
-    public static bool FlyoutHiddenAtLaunch(WeaponDef weapon) =>
+    /// <summary>Whether the round leaves with its intersect bit clear, so nothing can strike it
+    /// until it has flown <c>RANGE_MINIMUM</c> metres — <c>FLYOUT_HEALTH</c> and
+    /// <c>RANGE_MINIMUM</c> both present, which the torpedo alone is (<c>FUN_005aef40</c> clears
+    /// node flag <c>0x10</c>, <c>FUN_005afd50</c> at <c>0x005b01c4</c> sets it). The round is drawn
+    /// from its first frame; the key hides nothing and arms nothing.</summary>
+    public static bool FlyoutUnhittableAtLaunch(WeaponDef weapon) =>
         weapon.FlyoutHealth is > 0 && weapon.RangeMinimum is > 0f;
 
     /// <summary>Seeds one round's shootable-flyout state, or null for a round that is neither
@@ -690,17 +688,31 @@ public sealed partial class ProjectilePool : Node3D
     }
 
     /// <summary>Appends every live round's path length so far and whether the
-    /// <c>RANGE_MINIMUM</c> gate is still hiding its flyout, in slot order. The seam a scripted run
-    /// reads the reveal through, since a pool with no world scene builds no flyout body to look
-    /// at.</summary>
-    public void CollectFlyoutReveal(List<(float Travelled, bool Hidden)> into)
+    /// <c>RANGE_MINIMUM</c> gate is still holding its intersect bit clear, in slot order. The seam
+    /// a scripted run reads the gate through without firing at the round.</summary>
+    public void CollectFlyoutIntersect(List<(float Travelled, bool Unhittable)> into)
     {
         for (int i = 0; i < _projHigh; i++)
         {
             ref var p = ref _proj[i];
             if (p.Alive)
             {
-                into.Add((p.Travelled, p.FlyoutHidden));
+                into.Add((p.Travelled, p.IntersectOff));
+            }
+        }
+    }
+
+    /// <summary>Appends every live round's <c>FLYOUT</c> body, in slot order, skipping rounds
+    /// flying without one. The seam a scripted run reads the launch look through: which of the
+    /// body's nodes the running <c>MODEL_ANIMATION</c> has shown or hidden.</summary>
+    public void CollectFlyoutBodies(List<Node3D> into)
+    {
+        for (int i = 0; i < _projHigh; i++)
+        {
+            ref var p = ref _proj[i];
+            if (p.Alive && p.Model != null)
+            {
+                into.Add(p.Model);
             }
         }
     }
@@ -877,15 +889,6 @@ public sealed partial class ProjectilePool : Node3D
                 model.GlobalTransform = FlyoutPose(muzzle.Origin,
                     poseVel.LengthSquared() > 1e-6f ? poseVel : forward);
             }
-            // The torpedo runs its first RANGE_MINIMUM metres unseen, so neither its body nor the
-            // trail that would announce it exists yet; RevealFlyout builds both at the reveal
-            // point, where the trail's emitters home instead of at the launcher.
-            bool hidden = FlyoutHiddenAtLaunch(weapon);
-            if (hidden && model != null)
-                model.Visible = false;
-            float rollRate = 0f;
-            var trails = weapon.IsRocket && !hidden
-                ? AcquireTrails(weapon, muzzle.Origin, muzzle.Basis, out rollRate) : null;
             // The shootable half. The hittable box comes off the model because the engine's
             // hittable thing is the round's own scene node: a round flying streak-only (no FLYOUT
             // MODEL in this chapter's gamez) has no node to strike, so it gets no box either.
@@ -901,7 +904,7 @@ public sealed partial class ProjectilePool : Node3D
                 Pos = muzzle.Origin,
                 Vel = vel,
                 Range = weapon.Range ?? DefaultRange,
-                FlyoutHidden = hidden,
+                IntersectOff = FlyoutUnhittableAtLaunch(weapon),
                 Accel = accel,
                 Cap = cap,
                 Grav = weapon.Gravity ?? 0f,
@@ -912,8 +915,6 @@ public sealed partial class ProjectilePool : Node3D
                 Shootable = shootable,
                 HitCentre = hitBox.GetCenter(),
                 HitHalf = hitBox.Size * 0.5f,
-                Trails = trails,
-                RollRate = rollRate,
                 Shooter = shooterId,
                 Team = team ?? AimAssist.TeamOfPilot(shooterId),
                 Inherited = inherited,
@@ -921,6 +922,10 @@ public sealed partial class ProjectilePool : Node3D
             };
             if (slot >= _projHigh)
                 _projHigh = slot + 1;
+            // The def runs from the spawn frame on every ordnance round: its RESET_STATE is the
+            // launch look and its t=0 events start the trail at the muzzle.
+            if (weapon.IsRocket)
+                StartFlyoutAnim(slot, muzzle.Origin, muzzle.Basis);
         }
 
         int ammoIdx = MuzzleAmmoIndex(weapon);
@@ -1067,7 +1072,7 @@ public sealed partial class ProjectilePool : Node3D
             float stepLen = (next - prev).Length();
             p.Age += dt;
             p.Travelled += stepLen;
-            RevealFlyout(ref p, prev, vel);
+            ArmFlyoutIntersect(ref p);
 
             // ⚠ Resolve the three end conditions BEFORE the swept step, never after: the original
             // ends a round inside its motion step and moves and collides only what survives
@@ -1143,14 +1148,10 @@ public sealed partial class ProjectilePool : Node3D
             }
             NearMissPass(prev, next, p.Shooter);
             p.Pos = next;
-            // The FLYOUT smoke trail rides the round: one authored puff per DISTANCE_INTERVAL
-            // meters of flight, emitted in world space and left behind.
-            if (p.Trails != null)
-            {
-                var trailBasis = FlyoutPose(next, vel).Basis;
-                foreach (var t in p.Trails)
-                    t.Puffer.Emit(next, trailBasis, dt);
-            }
+            // The round's def ticks on the moved round: its trail puffs are laid along this step
+            // and anything it switches on now homes at the new pose.
+            if (p.Rig != null)
+                AdvanceFlyoutAnim(i, ref p, dt, next, FlyoutPose(next, vel).Basis);
         }
 
         StepTanglerClouds(dt);
@@ -1192,7 +1193,7 @@ public sealed partial class ProjectilePool : Node3D
         for (int i = 0; i < _projHigh; i++)
         {
             KillModel(ref _proj[i]);
-            ReleaseTrails(ref _proj[i]);
+            ReleaseRig(ref _proj[i]);
             ReleaseFlyout(ref _proj[i]);
             _proj[i].Alive = false;
         }
@@ -1474,18 +1475,6 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    private static void ReleaseTrails(ref Proj p)
-    {
-        if (p.Trails == null)
-            return;
-        foreach (var t in p.Trails)
-        {
-            t.Puffer.Stop(); // live smoke decays naturally
-            t.InUse = false;
-        }
-        p.Trails = null;
-    }
-
     private static void AgeSprites(List<Sprite> sprites, float dt)
     {
         for (int i = sprites.Count - 1; i >= 0; i--)
@@ -1680,105 +1669,6 @@ public sealed partial class ProjectilePool : Node3D
         if (inst != null)
             _flyoutModels.AddChild(inst);
         return inst;
-    }
-
-    // Starts the round's FLYOUT smoke trail: one Puffer per
-    // DISTANCE_INTERVAL `PUFFER_STATE` in the weapon's `MODEL_ANIMATION` def, taken
-    // from the free-list when an earlier round's emitter has fully decayed, else freshly built.
-    // `rollRate` is the def's spinner rate (rad/s about the nose axis; the
-    // sonic), 0 for everything else. Null when there is no anim program (no world / the weapon
-    // lab), the weapon names no `MODEL_ANIMATION`, or its textures are absent.
-    private TrailEmitter[]? AcquireTrails(WeaponDef weapon, Vector3 origin, Basis basis, out float rollRate)
-    {
-        rollRate = 0f;
-        var spec = TrailSpecFor(weapon);
-        if (spec == null || spec.States.Count == 0)
-            return null;
-        rollRate = spec.RollRate;
-        var set = new List<TrailEmitter>(spec.States.Count);
-        foreach (var state in spec.States)
-        {
-            TrailEmitter? emitter = null;
-            foreach (var e in _trailEmitters)
-            {
-                // Reusable once its round died AND its smoke finished decaying — TrailAdvance
-                // would otherwise graft a new rocket's trail onto the old one's live puffs.
-                if (!e.InUse && e.State == state && e.Puffer.LiveCount == 0)
-                {
-                    emitter = e;
-                    break;
-                }
-            }
-            if (emitter == null)
-            {
-                var puffer = Puffer.Create(state, _textures, ambience: _ambience);
-                if (puffer == null)
-                {
-                    if (_flyoutLogged.Add("trail:" + state.Name))
-                        GD.Print($"rocket trail puffer '{state.Name}' ({weapon.Id}) has no textures in this chapter — skipped");
-                    continue;
-                }
-                AddChild(puffer);
-                emitter = new TrailEmitter { Puffer = puffer, State = state };
-                _trailEmitters.Add(emitter);
-            }
-            emitter.InUse = true;
-            emitter.Puffer.Emit(origin, basis, 0f); // first call homes the trail at the muzzle
-            set.Add(emitter);
-        }
-        return set.Count > 0 ? set.ToArray() : null;
-    }
-
-    // Resolves a weapon's FLYOUT MODEL_ANIMATION name to its trail spec, cached (misses too).
-    private TrailSpec? TrailSpecFor(WeaponDef weapon)
-    {
-        if (_flyoutAnims == null || weapon.Flyout?.ModelAnimation is not { } animName)
-            return null;
-        if (_trailSpecs.TryGetValue(animName, out var spec))
-            return spec;
-        spec = BuildTrailSpec(animName, weapon.Id);
-        _trailSpecs[animName] = spec;
-        return spec;
-    }
-
-    // Reads a FLYOUT def's trail out of the anim program: every ACTIVE
-    // DISTANCE_INTERVAL `PUFFER_STATE` (the authored per-type smoke — colour ramp, size,
-    // lifetime, one puff per interval meters), plus the def's steady `ObjectMotion` spin
-    // rate if it carries one. Time-interval puffers (the torpedo's blast cloud) are left to a
-    // future pass — this path renders the trail the round leaves behind.
-    private TrailSpec? BuildTrailSpec(string animName, string weaponId)
-    {
-        foreach (var def in _flyoutAnims!.ByAnimName(animName))
-        {
-            var spec = new TrailSpec();
-            foreach (var seq in def.Sequences)
-            {
-                foreach (var ev in seq.Events)
-                {
-                    if (ev.Kind == "PufferState" && (ev.Data.Num("active_state") ?? 0f) > 0f)
-                    {
-                        var state = PufferState.FromAnimEvent(ev.Data);
-                        if (state.DistanceInterval > 0f
-                            && (state.Textures.Count > 0 || state.TextureSequence.Count > 0))
-                            spec.States.Add(state);
-                    }
-                    else if (ev.Kind == "ObjectMotion"
-                             && ev.Data.Obj("xyz_rotation")?.Vec3("initial") is { } rate
-                             && !rate.IsZeroApprox())
-                    {
-                        spec.RollRate = rate.Z; // the spinners roll about the nose (z) axis
-                    }
-                }
-            }
-            if (spec.States.Count > 0)
-            {
-                GD.Print($"rocket trail '{animName}' ({weaponId}): {spec.States.Count} puffer state(s)"
-                         + (spec.RollRate != 0f ? $", roll {spec.RollRate:0.##} rad/s" : ""));
-                return spec;
-            }
-        }
-        GD.Print($"rocket trail '{animName}' ({weaponId}): no DISTANCE_INTERVAL puffer in the anim program — no trail");
-        return null;
     }
 
     /// <summary>Instances a named IMPACT effect's gamez MODEL prototype at the hit point (the water
@@ -2002,9 +1892,9 @@ public sealed partial class ProjectilePool : Node3D
         for (int i = 0; i < _projHigh; i++)
         {
             ref var q = ref _proj[i];
-            // The intersect bit: set only once RANGE_MINIMUM has revealed the round
-            // (FUN_005aef40 clears it at launch, FUN_005afd50 sets it at the reveal).
-            if (i == selfSlot || !q.Alive || q.FlyoutHidden || q.HitHalf == Vector3.Zero
+            // The intersect bit: clear from launch until RANGE_MINIMUM on the torpedo
+            // (FUN_005aef40 clears it, FUN_005afd50 sets it once the accumulator passes 300 m).
+            if (i == selfSlot || !q.Alive || q.IntersectOff || q.HitHalf == Vector3.Zero
                 || q.Shootable is not { HealthMax: > 0f } flyout)
             {
                 continue;
@@ -2240,7 +2130,7 @@ public sealed partial class ProjectilePool : Node3D
     {
         p.Alive = false;
         KillModel(ref p);
-        ReleaseTrails(ref p);
+        ReleaseRig(ref p);
         ReleaseFlyout(ref p);
     }
 
@@ -2277,23 +2167,19 @@ public sealed partial class ProjectilePool : Node3D
         p.HitHalf = Vector3.Zero;
     }
 
-    // The RANGE_MINIMUM visibility gate: a torpedo runs its first 300 m with no body and no trail,
-    // and both appear together once the accumulator passes the authored distance. The original also
+    // The RANGE_MINIMUM gate (FUN_005afd50 at 0x005b01c4): once the accumulator passes the authored
+    // distance the round's intersect bit is set and FlyoutStruck can find it. Nothing visible
+    // changes here; the body and its def have been running since the spawn. The original also
     // requires RANGE_MINIMUM's second element to be zero, which the sole carrier authors.
-    private void RevealFlyout(ref Proj p, Vector3 at, Vector3 vel)
+    private void ArmFlyoutIntersect(ref Proj p)
     {
-        if (!p.FlyoutHidden || p.Travelled <= (p.Weapon.RangeMinimum ?? 0f))
+        if (!p.IntersectOff || p.Travelled <= (p.Weapon.RangeMinimum ?? 0f))
             return;
-        p.FlyoutHidden = false;
-        if (p.Model != null)
-            p.Model.Visible = true;
-        // The same gate sets the node's intersect bit, so the round becomes shootable exactly when
-        // it becomes visible — FlyoutStruck reads FlyoutHidden for that.
-        p.Trails ??= AcquireTrails(p.Weapon, at, FlyoutPose(at, vel).Basis, out p.RollRate);
-        if (_revealsLogged < 2)
+        p.IntersectOff = false;
+        if (_armedLogged < 2)
         {
-            _revealsLogged++;
-            GD.Print($"flyout reveal: {p.Weapon.Id} shown after {p.Travelled:0.#} m of its"
+            _armedLogged++;
+            GD.Print($"flyout intersect: {p.Weapon.Id} hittable after {p.Travelled:0.#} m of its"
                      + $" RANGE_MINIMUM {p.Weapon.RangeMinimum ?? 0f:0.#} m");
         }
     }
@@ -2930,7 +2816,7 @@ public sealed partial class ProjectilePool : Node3D
                 }
             }
             // Ordnance draws no streak and no tip: its FLYOUT prototype is a missile body, and its
-            // trail is the MODEL_ANIMATION puffer smoke AcquireTrails already runs.
+            // trail is the MODEL_ANIMATION puffer smoke its def instance runs.
             if (p.Weapon.IsRocket)
                 continue;
             var yAxis = worldVel.Normalized();
@@ -2997,7 +2883,7 @@ public sealed partial class ProjectilePool : Node3D
         public float Travelled;  // m of path flown so far — the original's accumulator at round
                                  // +0x664, read by both the RANGE end condition and the reveal gate
         public float Range;      // m of path this round may fly (RANGE, or DefaultRange unauthored)
-        public bool FlyoutHidden; // the RANGE_MINIMUM visibility gate is still holding the body back
+        public bool IntersectOff; // node flag 0x10 clear: the RANGE_MINIMUM gate has not passed yet
         public float Accel;      // ACCELERATION along the velocity direction, m/s²
         public float Cap;        // the own speed ACCELERATION climbs to and stops at, m/s — seeded
                                  // with Vel at spawn (Ballistics.LaunchSpeed)
@@ -3011,7 +2897,7 @@ public sealed partial class ProjectilePool : Node3D
         public Vector3 HitCentre; // the hittable box, in the round's own flyout pose: the FLYOUT
         public Vector3 HitHalf;   // MODEL's AABB. Zero when nothing is hittable (no body to strike)
         public Node3D? Model;    // the FLYOUT MODEL body (rockets only; null for gun tracers)
-        public TrailEmitter[]? Trails; // the FLYOUT MODEL_ANIMATION smoke-trail emitters
+        public FlyoutRig? Rig;   // the running FLYOUT MODEL_ANIMATION instance and what it drives
         public float RollRate;   // rad/s about the nose axis (the sonic spinner); 0 = no roll
         public float Age;        // s since launch — drives the roll angle
         public int Shooter;      // who fired it (PlayerIndex); NoShooter when nobody owns it
@@ -3058,8 +2944,6 @@ public sealed partial class ProjectilePool : Node3D
         public MeshInstance3D? SplashMesh;
     }
 
-    // One reusable trail emitter: a Puffer built for one authored PUFFER_STATE, owned by the pool
-    // and lent to one live round at a time (see AcquireTrails).
     /// <summary>One aircraft the near-miss cue tests rounds against. The rig supplies its own live
     /// position (the plane is a moving sim value, not a node transform the pool could cache) and
     /// takes the pass distance in metres; <see cref="ShooterId"/> is the identity whose own rounds
@@ -3141,6 +3025,8 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
+    // One reusable trail emitter: a Puffer built for one authored PUFFER_STATE, owned by the pool
+    // and lent to one live round at a time (see AcquireEmitter).
     private sealed class TrailEmitter
     {
         public Puffer Puffer = null!;
@@ -3156,13 +3042,6 @@ public sealed partial class ProjectilePool : Node3D
         public float RadiusRaw;
         public float RadiusSq;
         public float Remaining;
-    }
-
-    // A FLYOUT MODEL_ANIMATION def's renderable content: its trail puffer states + spin rate.
-    private sealed class TrailSpec
-    {
-        public readonly List<PufferState> States = new();
-        public float RollRate;
     }
 
     // The gunshell def's OBJECT_MOTION, read once from the anim program: the authored

@@ -191,8 +191,8 @@ public static class Suites
             "expires silently; wep_15's 2.0 s timed fuse ends it two metres out with nothing near; a " +
             "round fuses on its OWN target while a registered aircraft is nearer, and the same " +
             "round holding no target flies past that point and is fused by the aircraft sweep " +
-            "instead, proving the two paths are separate; and wep_14 is hidden for its first 300 m " +
-            "and shown from there on",
+            "instead, proving the two paths are separate; and wep_14 is unhittable for its first " +
+            "300 m and hittable from there on",
             OrdnanceEndConditions));
         into.Add(new TestHarness.Suite("shootable-flyout",
             "the torpedo's two shootable halves (E19/E20): a live wep_14 is the player's one Enemy " +
@@ -201,7 +201,8 @@ public static class Suites
             "same fourth list with the admission byte clear and contributes nothing; the entry " +
             "vanishes when the round ends; and the 10-point pair spends armour-then-health, holds " +
             "the −1.0 sentinel on a round without FLYOUT_HEALTH, and on zero plays " +
-            "torpedo_destroy_effect with no detonation at all",
+            "torpedo_destroy_effect with no detonation at all; the body is drawn from launch in " +
+            "torpedo_trail's folded look and unfolds its wings at the def's 3.5 s",
             ShootableFlyout));
         into.Add(new TestHarness.Suite("ordnance-guidance",
             "the steering step and the beeper pair on a live pool (B6-B9): wep_11 turns onto a target " +
@@ -3493,8 +3494,8 @@ public static class Suites
         }
     }
 
-    // A4's three end conditions on a live pool, plus the RANGE_MINIMUM reveal that rides the same
-    // travelled-distance accumulator. The detonation observer is the pool's EffectSink: a round
+    // A4's three end conditions on a live pool, plus the RANGE_MINIMUM intersect gate that rides the
+    // same travelled-distance accumulator. The detonation observer is the pool's EffectSink: a round
     // that ends by detonating hands its IMPACT row's effect name and the point it went off, and one
     // that expires quietly hands nothing, so the same seam reads all four outcomes.
     private static void OrdnanceEndConditions(TestContext ctx)
@@ -3521,8 +3522,8 @@ public static class Suites
         ctx.Check(sonic.DetonationDistance is 35f && sonic.DetonationDistanceSqM is 1225f,
             $"the sonic's DETONATION_DISTANCE is 35 m, stored squared as 1225 the way the engine keeps it");
         ctx.Check(torpedo.RangeMinimum is 300f && torpedo.FlyoutHealth is 10
-                  && ProjectilePool.FlyoutHiddenAtLaunch(torpedo) && !ProjectilePool.FlyoutHiddenAtLaunch(he),
-            $"the torpedo alone carries both halves of the reveal gate (RANGE_MINIMUM 300 m and FLYOUT_HEALTH)");
+                  && ProjectilePool.FlyoutUnhittableAtLaunch(torpedo) && !ProjectilePool.FlyoutUnhittableAtLaunch(he),
+            $"the torpedo alone carries both halves of the intersect gate (RANGE_MINIMUM 300 m and FLYOUT_HEALTH)");
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
@@ -3550,7 +3551,7 @@ public static class Suites
             ctx.Host.AddChild(mark);
             mark.GlobalPosition = origin + new Vector3(30f, 0f, -300f);
 
-            var reveal = new List<(float Travelled, bool Hidden)>();
+            var gate = new List<(float Travelled, bool Unhittable)>();
 
             // Flies one round until it ends or the bound runs out. `At` is where it detonated (null
             // for a quiet expiry), `Travelled` its path length on the last step it was alive, and
@@ -3565,11 +3566,11 @@ public static class Suites
                 for (int i = 0; i < Mathf.RoundToInt(seconds * 60f); i++)
                 {
                     live.SimStep(1f / 60f);
-                    reveal.Clear();
-                    live.CollectFlyoutReveal(reveal);
-                    if (reveal.Count == 0)
+                    gate.Clear();
+                    live.CollectFlyoutIntersect(gate);
+                    if (gate.Count == 0)
                         break;
-                    travelled = reveal[0].Travelled;
+                    travelled = gate[0].Travelled;
                     steps++;
                 }
                 return (effects.Count > 0 ? effects[0].At : null, travelled, steps);
@@ -3606,30 +3607,31 @@ public static class Suites
             ctx.Check(gated.At == null && gated.Travelled > 500f,
                 $"and a weapon without LOCK_ON holding the same target flies past it untouched travelled={gated.Travelled:0.#} m");
 
-            // 4. The reveal, on the same accumulator. The torpedo's 60 m/s puts 300 m at 5 s.
+            // 4. The intersect gate, on the same accumulator. The torpedo's 60 m/s puts 300 m at
+            // 5 s; the round is drawn from its first frame, only its hittability waits.
             live.Clear();
             live.Spawn(torpedo, muzzle, Vector3.Zero);
-            bool hiddenEarly = true, shownLate = false;
-            float shownAt = 0f;
+            bool unhittableEarly = true, armedLate = false;
+            float armedAt = 0f;
             for (int i = 0; i < 400; i++)
             {
                 live.SimStep(1f / 60f);
-                reveal.Clear();
-                live.CollectFlyoutReveal(reveal);
-                if (reveal.Count == 0)
+                gate.Clear();
+                live.CollectFlyoutIntersect(gate);
+                if (gate.Count == 0)
                     break;
-                var (travelled, hidden) = reveal[0];
-                if (travelled < (torpedo.RangeMinimum ?? 0f) && !hidden)
-                    hiddenEarly = false;
-                if (!hidden && !shownLate)
+                var (travelled, unhittable) = gate[0];
+                if (travelled < (torpedo.RangeMinimum ?? 0f) && !unhittable)
+                    unhittableEarly = false;
+                if (!unhittable && !armedLate)
                 {
-                    shownLate = true;
-                    shownAt = travelled;
+                    armedLate = true;
+                    armedAt = travelled;
                 }
             }
-            ctx.Check(hiddenEarly, $"the torpedo's flyout stays hidden for every metre short of RANGE_MINIMUM");
-            ctx.Check(shownLate && Mathf.Abs(shownAt - (torpedo.RangeMinimum ?? 0f)) < 2f,
-                $"and is shown as it passes it at={shownAt:0.#} m minimum={torpedo.RangeMinimum:0} m");
+            ctx.Check(unhittableEarly, $"the torpedo's intersect bit stays clear for every metre short of RANGE_MINIMUM");
+            ctx.Check(armedLate && Mathf.Abs(armedAt - (torpedo.RangeMinimum ?? 0f)) < 2f,
+                $"and is set as it passes it at={armedAt:0.#} m minimum={torpedo.RangeMinimum:0} m");
             live.Clear();
 
             // 5. The two fuse paths are separate. An aircraft 25 m off the flight line, closer to
@@ -3679,7 +3681,8 @@ public static class Suites
     // cycle with the right class, label and health figure and takes it off again when the round
     // ends; FLYOUT_HEALTH gives it a 10-point pool spent armour-then-health, an intersect box that
     // only exists past RANGE_MINIMUM, and a destruction that plays DESTROY_ANIMATION and does NOT
-    // detonate. An ordinary rocket carries neither and is inert to both.
+    // detonate. An ordinary rocket carries neither and is inert to both. The body itself is drawn
+    // from the spawn frame in the launch look its def's RESET_STATE poses (wings and prop off).
     private static void ShootableFlyout(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -3835,7 +3838,8 @@ public static class Suites
             try
             {
                 live = new ProjectilePool(worldTextures, null, null,
-                    flyoutGamez: world.Gamez, flyoutScene: world.Session.Builder.Scene);
+                    flyoutGamez: world.Gamez, flyoutScene: world.Session.Builder.Scene,
+                    flyoutAnims: world.Session.Program);
                 ctx.Host.AddChild(live);
 
                 var origin = new Vector3(6000f, 3000f, 0f);
@@ -3844,6 +3848,32 @@ public static class Suites
                     team: InstantActionRuntime.EnemyTeam);
                 var rounds = new List<(Vector3 Pos, Vector3 Velocity)>();
                 var flyouts = new List<ProjectilePool.Flyout>();
+
+                // The launch look: the body is drawn from the spawn frame, its wings and prop
+                // hidden by torpedo_trail's RESET_STATE, and the wings come on at the def's 3.5 s.
+                var bodies = new List<Node3D>();
+                live.CollectFlyoutBodies(bodies);
+                var body = bodies.Count > 0 ? bodies[0] : null;
+                bool NodeShown(string name)
+                {
+                    foreach (var n in body!.FindChildren("*", "Node3D", recursive: true, owned: false))
+                    {
+                        if (n is Node3D n3d && n3d.HasMeta(AnimRuntime.NameMeta)
+                            && n3d.GetMeta(AnimRuntime.NameMeta).AsString() == name)
+                            return n3d.Visible;
+                    }
+                    return false;
+                }
+                ctx.Check(body is { Visible: true } && !NodeShown("rightwing") && !NodeShown("leftwing")
+                          && !NodeShown("atprop") && NodeShown("atbody"),
+                    $"a torpedo just launched is VISIBLE with wings and prop off: body={body?.Visible} rightwing={(body != null && NodeShown("rightwing"))} atbody={(body != null && NodeShown("atbody"))}");
+                for (int i = 0; i < 60 * 5; i++)
+                    live.SimStep(1f / 60f);
+                ctx.Check(body != null && NodeShown("rightwing") && NodeShown("leftwing") && NodeShown("atprop"),
+                    $"five seconds on, the def has switched the wings (3.5 s) and the prop (4.0 s) on rightwing={(body != null && NodeShown("rightwing"))} atprop={(body != null && NodeShown("atprop"))}");
+                live.Clear();
+                live.Spawn(torpedo, muzzle, Vector3.Zero, shooterId: 7,
+                    team: InstantActionRuntime.EnemyTeam);
 
                 // A gun round fired from five metres astern of the torpedo, along its own flight
                 // line: whether it lands is the hit ray's answer, not this suite's.
@@ -3862,7 +3892,8 @@ public static class Suites
                     return flyouts.Count > 0 ? flyouts[0].Health : -1f;
                 }
 
-                // Hidden by RANGE_MINIMUM: the intersect bit is clear, so gunfire passes through.
+                // Inside RANGE_MINIMUM the intersect bit is clear, so gunfire passes through the
+                // drawn body.
                 float early = ShootIt();
                 ctx.Check(Mathf.IsEqualApprox(early, 10f),
                     $"a torpedo still inside RANGE_MINIMUM takes nothing from a round straight through it health={early}");

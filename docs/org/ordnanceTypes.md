@@ -350,19 +350,25 @@ ballistics keys. In order:
   acceleration of magnitude `5 * dt`, sign-flipped to keep pushing outward, integrated into an offset
   bounded at ±1.0, ±0.75, ±1.0 with a restoring `10 * dt`. An unguided or far-from-target round
   wobbles rather than flying a perfect line.
-- **Reveal distance, which is what `RANGE_MINIMUM` actually is.** The key sets `+0x74` bit
+- **Hittable distance, which is what `RANGE_MINIMUM` actually is.** The key sets `+0x74` bit
   `0x80000000` and stores **both** its elements, element 0 at `+0x24` and element 1 at `+0x28`
-  (`FUN_005ad630` at `0x005adfbb`), and a `FLYOUT_HEALTH` round carrying that bit is made
-  **visible** only once it has travelled `+0x24`. So `wep_14`'s `RANGE_MINIMUM [300, 0]` hides the
-  torpedo for its first 300 m rather than disarming it. The gate is a four-way conjunction at
+  (`FUN_005ad630` at `0x005adfbb`), and a `FLYOUT_HEALTH` round carrying that bit gets its
+  **intersect bit** only once it has travelled `+0x24`. The gate is a four-way conjunction at
   `0x005b01c4`: `(flags & 0x8) && (flags & 0x80000000) && +0x28 == 0 && travelled > +0x24`, calling
-  `FUN_004cd210(node, 1)` to set the scene node's `0x10` visibility flag. The same parse **clears**
-  that flag for every `FLYOUT_HEALTH` weapon (`0x005ae188`), which is what makes the round start
-  hidden; a weapon with the health but no `RANGE_MINIMUM` therefore has no reveal call at all.
-  Element 1 is 0.0 in the sole authored entry, so the third clause holds throughout this install and
-  what element 1 would otherwise mean is unknown.
-  ⚠ [`formats/weapons.md`](../formats/weapons.md) glosses the key as "minimum arming range". That
-  reading is contradicted here: nothing on this path gates arming.
+  `FUN_004cd210(node, 1)`. That routine (`Class.c:0x76f`) sets or clears node flag `0x10` at
+  `node+0x24` and nothing else, and `0x10` is `INTERSECT_SURFACE`, the collision-participation bit
+  every swept query tests ([`formats/gamez.md`](../formats/gamez.md), "flags.intersect_surface");
+  visibility is bit `0x4`, written by `FUN_004cca30` (`gwNodeSetActive`) alone, which nothing on
+  the projectile path calls. So `wep_14`'s `RANGE_MINIMUM [300, 0]` makes the torpedo unhittable
+  for its first 300 m; it is drawn, with its trail, from the spawn frame. The spawn's tail
+  (`FUN_005aef40`) clears the bit for a `RANGE_MINIMUM` carrier and leaves it set for any other
+  `FLYOUT_HEALTH` weapon; a weapon with the health but no `RANGE_MINIMUM` therefore has no gate call
+  at all. Element 1 is 0.0 in the sole authored entry, so the third clause holds throughout this
+  install and what element 1 would otherwise mean is unknown.
+  ⚠ [`formats/weapons.md`](../formats/weapons.md) once glossed the key as "minimum arming range",
+  and this page once read `0x10` as a visibility flag; both are contradicted here. Nothing on this
+  path gates arming and nothing on it hides the round; what the round shows over those 300 m is
+  its `MODEL_ANIMATION` def's own timeline, below.
 - **The ceiling.** `TETHER_GUIDED` clamps the vertical step so the round cannot climb past a global
   limit, confirming the reading in the guidance section.
 
@@ -522,8 +528,61 @@ round's node, which sets or clears node flag `0x10`, **the intersect bit** every
 every cover ray tests. A round without `FLYOUT_HEALTH` has it cleared and is not in the collision
 database at all; a round with it has it set, **unless** the weapon also carries `RANGE_MINIMUM` with
 a zero second element (`+0x74` bit `0x80000000` and `+0x28`), in which case it is cleared at launch
-and set later by the reveal in `FUN_005afd50` (`0x005b01c4`). So the torpedo's 300 m visibility gate
-is also its shootability gate: for as long as it cannot be seen it cannot be hit.
+and set later by the gate in `FUN_005afd50` (`0x005b01c4`). So the torpedo's 300 m gate is a
+shootability gate and only that: the round is drawn throughout, and the steering step's own
+terrain probe treats the bit the same way, saving it (`FUN_004cd260`), clearing it around the
+probe and restoring it (`FUN_005af960`, the `flags & 8` arms).
+
+### The launch look is the def's timeline
+
+`FUN_005aef40` hides nothing. What it does with the visuals, in order: it aims and places the node
+(`FUN_004d1a30`/`FUN_004d1d50`), then, when the per-shot slot at weapon `+0x150` is not −1, it
+starts the `FLYOUT` row's `ANIMATION` (`+0xfc`, `FUN_004ee0b0`), `ANIMATION_ATTACHED` (`+0x10c`,
+`FUN_004edf50`) and `MODEL_ANIMATION` (`+0x110`, `FUN_004edda0` on the round's own model clone at
+round `+0x1c`, with `LAB_005ad320` as its callback), each stored on the round. The
+`MODEL_ANIMATION` runs from that call on its own anim clock; nothing on the projectile path
+switches its sequences, and the `RANGE_MINIMUM` gate above touches the intersect bit alone. So the
+torpedo's launch look, its switch and its cruise look are all `torpedo_trail`
+(`torpedo_effects.zrd.json`, compiled per chapter as `a_torpedo-torpedo_trail`), read off the
+data:
+
+| Anim time | Event | What is seen or heard |
+|---|---|---|
+| reset | `RESET_STATE`: `rightwing`, `leftwing`, `atprop` INACTIVE, `atpayload` scale 1 | the wings folded and the prop absent, so the round that leaves the rail is the same `a_torpedo` model as the pylon-mounted one with three nodes off, which reads as a different, wingless body |
+| 0 s | `CALL_SEQUENCE torpuffer_trail1` | `torpuffertrail1`, a `DISTANCE_INTERVAL 0.2` puffer AT_NODE `a_torpedo (0, −0.2, 1.5)` cycling `fire_f01`…`fire_f06`: the orange rocket-flame ribbon |
+| 3.5 s | `torpuffertrail1` INACTIVE at `ANIMATION_OFFSET 3.5` | the flame stops; its last puffs live up to 1 s more |
+| 3.5 s | `CALL_SEQUENCE rightwing`, `leftwing` (`EVENT_OFFSET 3.5`) | both wings ACTIVE and swung from ±90° yaw to 0 over 5 s (`OBJECT_MOTION_FROM_TO`) |
+| 3.5 s | `CALL_SEQUENCE torpuffer_blast` | `torpufferblast`, a `TIME_INTERVAL 0.001` puffer AT_NODE `a_torpedo (0, −0.2, 1.7)` on `smoke101`…`smoke103`, off 30 s later: the white puffs |
+| 3.5 s | `CALL_SEQUENCE propstart` | `snd_propstart` at `atprop`; the prop ACTIVE 0.5 s later, spinning at 45°/s for 30 s |
+| 3.5 s | `CALL_SEQUENCE growpayload` | `atpayload` scaled to (1.8, 1.5, 1.0) over 3 s |
+| 3.75, 4.5, 5.25, 6.0 s | `SOUND snd_Atorp_armed` ×4 | the arming beeps |
+
+The switch is therefore at **3.5 s on the anim clock**, not at 300 m; the two coincide only because
+a torpedo leaving a launcher at cruise speed covers about 300 m in those seconds. The motor-start
+sound and the beeps heard at the switch are the def's own `snd_propstart` and `snd_Atorp_armed`,
+which is also why the `torpedo_trail` def carries them in its `static_sounds` table. The
+`FLYOUT SOUND` slot (`snd_torpedo_loop`, parsed by `FUN_005ae990` into weapon `+0x124`/`+0x128`)
+has **no reader**: every instruction naming either offset was enumerated and none is in the
+projectile system, and the block's base `+0xf8` is formed only by the parser, so the loop is dead
+in this build. `torpuffer_trail2` (a second fire trail off at 29 s) is defined and never called.
+
+**How long the flight is, and how fast.** The spawn's `+0x38 == 0.0 && !(flags & 0x800)` test picks
+the branch for a weapon without `ACCELERATION` and without `INSTANT` (bit `0x800` is `INSTANT`,
+`FUN_005ad630` at its `s_INSTANT` read), which `wep_14` is: speed `+0x640` and cap `+0x644` are both
+`VELOCITY` 60 (`0x005af147`), and the velocity vector at `+0x60` is `launcherVel + dir × 60`
+(`FUN_005389a0(launcherVel, dir, 60, +0x60)`). With `LOCK_ON` the launcher vector is also copied to
+`+0x30` and the steering step, which the shot routine's synthetic target guarantees runs, rebuilds
+`+0x60` as `heading × 60 + inherited × (2.5 − age)/2.5`; the motion step's accelerate branch is
+skipped (`speed < cap` is false), so nothing else touches the speed and the `TURN_RATE 0.001` turn
+penalty is `1 − 5·10⁻¹²` per frame. The round ends at `RANGE` 1200 m of path (`+0x664`) by
+detonating, since it carries `LOCK_ON` and no `EXPIRES`. Off a 50 m/s launcher that is 1200 m in
+about 21 s (60 m/s plus the 62 m the decay adds), with the flame off at 3.5 s and 300 m passed at
+about 4.5 s. ⚠ The at-the-controls reading of `CAP-23` (a 6 s launch phase and about 33 s of
+flight) is not what this rule gives: the 3.5 s flame plus its 1 s of surviving puffs, the 5 s wing
+swing and the beeps ending at 6.0 s make the launch phase read as roughly 6 s, but 33 s at 60 m/s is
+about 2000 m, and no reader of `RANGE`, `+0x664` or the speed pair changes that. Whether the clip's
+timing, its launcher's speed or an unread path (the tick's `+0x1a2` callback, the `DAT_009c6c44`
+pre-hook) accounts for it is open, and this page does not tune to it.
 
 ### `PROJECTILE_BBOX` is a node flag, and its default is ON
 
@@ -1024,7 +1083,8 @@ Every part of `wep_14`'s flight is now accounted for by keys that **do** have re
 | `VELOCITY` | 60 m/s | its own cruise speed, and a slow one |
 | `ACCELERATION` | 0 | no motor ramp |
 | `LOCK_ON` | 2.5 s | inherits the launcher's velocity, decaying linearly to zero over 2.5 s |
-| `RANGE_MINIMUM` | 300 m | the one entry carrying it |
+| `RANGE_MINIMUM` | 300 m | the one entry carrying it: unhittable for its first 300 m, drawn throughout |
+| `MODEL_ANIMATION` | `torpedo_trail` | the launch look, the 3.5 s switch and the cruise look, all on the def's own clock |
 | `DETONATION_DISTANCE` | 1 m | fuse trigger distance, and its ticket into the fuse list |
 | `IMPACT_PROXIMITY` | 30 m | blast radius |
 | `TARGETABLE` + `FLYOUT_HEALTH 10` | | wrapped into the target list, with 10 HP to absorb |
@@ -1073,7 +1133,13 @@ engine sees; its per-polygon test (`FUN_004c9a00`) was not opened.
   `FUN_0042e9d0`, `FUN_004b8d50`, `FUN_004b8fd0`, `FUN_004b8dd0`, `FUN_004b8f60`, `FUN_004b8f80`
   and `FUN_004b92c0` were read in full. `FUN_005aeca0`, `FUN_004cd210` and `FUN_004cd2a0` were read
   in full for the intersect bit and `PROJECTILE_BBOX`; the consumer of node flag `0x20` inside the
-  collision database was not.
+  collision database was not. `FUN_004cd210`'s bit was named against `FUN_004cca30`
+  (`gwNodeSetActive`, bit `0x4`) and the gamez node-flag decode, so "intersect, not visibility"
+  rests on both the toggle and the writer of the other bit. `FUN_005ae990` (the binding-block
+  parser) was read in full for the `FLYOUT` layout at `+0xf8`, and the no-reader claim for its
+  `SOUND` slots rests on an instruction sweep over the `+0x124`/`+0x128` operand forms plus the
+  `LEA`s forming `+0xf8`; a reader reaching the slot through an unrelated base register would be
+  outside that sweep.
 - The impact hook `LAB_004ba660` was read from its disassembly (Ghidra has it as a label, not a
   function), and its cloud's builder `FUN_004b94e0`, list walker `FUN_004b96d0`, per-cloud step
   `FUN_004b9590` and list init/teardown `FUN_004b9440`/`FUN_004b9680` in full. `FUN_005ac7a0`'s

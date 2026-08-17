@@ -119,6 +119,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/CameraController.cs` — the flown plane's camera: roll-following chase, numpad fixed views, paused orbit. Steers a `Camera3D` it does not own.
 - `src/Flight/ImpactOutcome.cs` — what a weapon×surface hit should do (effect, sound, stand-in, damage) as a value; `Resolve` is pure and engine-free.
 - `src/Flight/Projectile.cs` — `ProjectilePool`: the weapon-fire subsystem — ballistics, the steering step (turn clamp, speed penalty, `LOCK_ON_LEAD`, the seeker's retarget), tracers, flashes, per-surface impact, damage to destructibles, the beeper's paint.
+- `src/Flight/ProjectileFlyoutAnim.cs` — `ProjectilePool`'s `FLYOUT MODEL_ANIMATION` half: each ordnance round runs its def on the sequence interpreter, the pool as host (trail puffers, the torpedo's launch look and switch, its sounds).
 - `src/Flight/WarningShotCue.cs` — the shipped near-miss accumulator (player.json `warning_shot_*`) + swept-segment/point distance; engine-free so it unit-tests.
 - `src/Flight/IncomingFire.cs` — `--incoming`: the near-miss test rig — a phantom shooter on each player's six, so the cue is reachable deterministically without an AI gunner.
 - `src/Flight/SpawnPoints.cs` — flight spawn from the mission's own zrdr: ia.json `spawn_points`, or objectives.json PLAYER_INIT as fallback.
@@ -1412,17 +1413,19 @@ aircraft-only by decode (`BL-233`), and holds fire while a candidate is still be
 two are complementary, and the `ordnance-end-conditions` suite flies a case where the sweep is
 holding fire on a nearer aircraft while the target fuse goes off anyway.
 
-**`RANGE_MINIMUM` is a visibility gate riding the same accumulator.** A weapon carrying both
-`FLYOUT_HEALTH` and `RANGE_MINIMUM` (`FlyoutHiddenAtLaunch`, the torpedo alone) spawns with no
-flyout body shown and no trail emitters acquired at all; `RevealFlyout` shows the body and acquires
-the trail together once `Proj.Travelled` passes the authored distance, so the smoke homes at the
-reveal point rather than dumping the hidden leg's worth of puffs at once. Holding the trail back is
-a judgement rather than a decode: the original's reveal switches the round's scene node, and
-whether its `MODEL_ANIMATION` puffer rides that flag was not traced. `CollectFlyoutReveal` is the
-seam a scripted run reads the gate through, since a pool with no world scene builds no body to look
-at. **The same gate is the intersect bit** (`FUN_005aef40` clears the round node's `0x10` at launch
-for a `RANGE_MINIMUM` carrier, `FUN_005afd50` sets it at the reveal), so a torpedo is unshootable for
-exactly as long as it is invisible.
+**`RANGE_MINIMUM` is a hittability gate riding the same accumulator, and hides nothing.** A weapon
+carrying both `FLYOUT_HEALTH` and `RANGE_MINIMUM` (`FlyoutUnhittableAtLaunch`, the torpedo alone)
+spawns with `Proj.IntersectOff` set, and `ArmFlyoutIntersect` clears it once `Proj.Travelled`
+passes the authored distance; `FlyoutStruck` skips a round while it is set. That is the whole
+effect: `FUN_004cd210`, which the spawn and the gate call, writes node flag `0x10`, the
+`INTERSECT_SURFACE` bit, and visibility is a different bit nothing on the projectile path touches
+(`org/ordnanceTypes.md`, "Hittable distance"). The body and its `MODEL_ANIMATION` run from the
+spawn frame like every other ordnance round's; the torpedo's folded launch look, its 3.5 s switch
+to wings, prop and white puffs, and its beeps are all the def's own timeline, run by
+`ProjectileFlyoutAnim.cs` below. `CollectFlyoutIntersect` is the seam a scripted run reads the gate
+through and `CollectFlyoutBodies` the one it reads the launch look through. ⚠ An earlier reading
+here had the round hidden for 300 m and held its trail back to match; both are gone, and the
+`ordnance-end-conditions` and `shootable-flyout` suites assert the drawn-from-launch rule.
 
 **A `TARGETABLE` or `FLYOUT_HEALTH` round carries a `ProjectilePool.Flyout`** (`SeedFlyout`,
 minted for the torpedo alone in this data), which is both halves of "shootable": the admission byte
@@ -1576,10 +1579,10 @@ nothing — the first 8
 impacts log a breadcrumb of that record (`id/name` + `fx=`/`snd=`/`standin=`), so the probe line and the unit
 assertion say the same thing, which is what makes a "these two surfaces look the same" report
 answerable without a lucky screenshot (`BL-019`); rockets fly
-their FLYOUT model body via `BuildFlyoutBody` (shared with `PylonOrdnance`) and trail their FLYOUT
-`MODEL_ANIMATION` smoke: the def's DISTANCE_INTERVAL puffers resolved from the world
-`AnimProgram` (ctor `flyoutAnims`), one pooled/reused `Puffer.Emit`/`Stop` set per live round,
-plus the sonic's authored 8.73 rad/s body roll (weapon-effects.md). Gun shots add the
+their FLYOUT model body via `BuildFlyoutBody` (shared with `PylonOrdnance`) and run their FLYOUT
+`MODEL_ANIMATION` def from the spawn frame (`ProjectileFlyoutAnim.cs`, resolved from the world
+`AnimProgram`, ctor `flyoutAnims`): the trail puffers, the sonic's authored 8.73 rad/s body roll and
+the torpedo's launch look all come off that instance. Gun shots add the
 `muzzle_burst` secondaries: a pooled per-shot `gunshell` casing instance flying the def's
 OBJECT_MOTION verbatim (per-shot nodes on purpose — a shared anchor under `CallAnimation`'s
 already-live gate drops gun-rate ejections), the authored `muzzlepuffer` smoke on a gravity-free
@@ -1627,6 +1630,29 @@ the pool prints one `blast cap:` line naming the weapon, the burst and how many 
 query ceiling. The fuse tests the whole swept segment per candidate plane (no tunnelling at
 ~20 m/step) and gates through `DETONATION_DOT_PRODUCT` toward the nearest hull point. The
 1 N·s/HP impulse is TUNE (BL-227's open half).
+
+## src/Flight/ProjectileFlyoutAnim.cs
+The `FLYOUT MODEL_ANIMATION` half of `ProjectilePool`, a partial-class file. Every ordnance round
+runs its own `AnimInstance` of its weapon's def (`he_rocket`, `sonic`, `torpedo_trail`, …) on the
+real `SequenceRunner`, and the pool is the `ISequenceHost`: `StartFlyoutAnim` poses the def's
+`RESET_STATE`, adds the initial sequences and fires their t=0 events inside `Spawn`, which is where
+the original starts it (`FUN_005aef40` hands weapon `+0x110` to `FUN_004edda0`), and
+`AdvanceFlyoutAnim` runs the instance each sim step after the round has moved, then ticks its
+motions and feeds every emitter it has on. `Dispatch` runs the kinds these defs author against
+the round's own model instance: `ObjectActiveState` (node visibility, the torpedo's folded wings
+and absent prop), `ObjectScaleState`, `ObjectMotionFromTo` (`FlyoutTween`, `FromToMotion`'s rule
+without the world runtime: absolute channels, held components), `ObjectMotion` spins (`SpinMotion`
+on a child node; on the model root the rate becomes `Proj.RollRate`, since the flight pose rewrites
+the root every frame), `PufferState` (`AcquireEmitter`/`StopEmitter` over the pool's reusable
+`TrailEmitter`s, `Puffer.Emit` driving both `DISTANCE_INTERVAL` and `TIME_INTERVAL` states),
+`Sound` (`PlaySound` at the round), `CallSequence`/`StopSequence`, and `CallAnimation` (the
+`EffectSink`, placed where the round is now). Anything else is logged once and skipped, which
+today is the rear-arc flare's `ObjectOpacityFromTo`. Targets bind through the def's symbol table
+to the built node's gamez index first (`AnimRuntime.IndexMeta`), the original name second. The
+host seam carries no round identity, so `_animSlot`/`_animPos`/`_animBasis` are pinned around each
+`Advance`. `PufferState`s are cached per authored event so emitter reuse can match on identity, and
+a round with no anim program (the suites' bare pools, the empty stage) runs none of this. Decode:
+`org/ordnanceTypes.md`, "The launch look is the def's timeline".
 
 ## src/Flight/WarningShotCue.cs
 The incoming-fire near-miss cue's shipped accumulator (player.json `warning_shot_max` 2.0 /

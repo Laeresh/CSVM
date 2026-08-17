@@ -40,18 +40,23 @@ whole character (each stops emitting at animation time 10 s):
 | Scatter / beeper / flash | `scatterpuffer_dark` / `beeper_trail` / `flash_trail` | 2.0 m | 2.5–5 s | the flak ramp |
 | AA flak (`wep_27`) | `trailpuffer` | 2.0 m | 2.0–3.0 s | no ramp — a fire→smoke flipbook (`fireflare1`/`fire_f01`/`smoke101`/`smoke102`) |
 | Cannonball (`wep_28`) | `trailpuffer2` + `forwardpuffer` | 2.0 m | 0.2–0.3 s | white trail + an orange forward glow (`local_velocity` z −350) |
-| Torpedo (`wep_14`) | `torpuffertrail1`/`2` + `torpufferblast` | 0.2 m | 0.5–1.2 s | fire flipbooks; the blast cloud is TIME-interval |
+| Torpedo (`wep_14`) | `torpuffertrail1` (+ `torpufferblast` from 3.5 s) | 0.2 m | 0.5–1.0 s | fire flipbook `fire_f01`…`f06`, off at 3.5 s; the blast cloud is TIME-interval 0.001 on `smoke101`…`103`, off 30 s later; `torpuffertrail2` is defined and never called |
 
 The `sonic` def additionally runs a `sonic_spinner` sequence: a steady `OBJECT_MOTION`
 `XYZ_ROTATION` roll of the round's body at **8.7266 rad/s (500°/s)** about z, looped forever —
-the only rocket that spins.
+the only rocket that spins. The torpedo def is a whole launch sequence, timed on the anim clock:
+`RESET_STATE` folds `rightwing`/`leftwing` and hides `atprop`, and at 3.5 s the wings swing out
+over 5 s, the prop comes on and spins, `atpayload` grows, `snd_propstart` and four
+`snd_Atorp_armed` beeps play. Decoded event by event in
+[`org/ordnanceTypes.md`](../../org/ordnanceTypes.md), "The launch look is the def's timeline".
 
-**Engine wiring (M3).** `ProjectilePool` resolves each rocket's `MODEL_ANIMATION` name
-through the world `AnimProgram`, takes every ACTIVE `DISTANCE_INTERVAL` `PUFFER_STATE` verbatim
-(`PufferState.FromAnimEvent`) and drives one `Puffer.TrailAdvance` per live round; the spinner
-rate rolls the FLYOUT body. Emitters are pooled and reused once their smoke decays. Deliberately
-not rendered yet: the TIME-interval `torpufferblast` cloud, and the torpedo def's wing/prop
-`OBJECT_MOTION` events (`wep_14` is mountable via `--rocket=` but on no stock loadout).
+**Engine wiring.** `ProjectilePool` resolves each rocket's `MODEL_ANIMATION` name through the
+world `AnimProgram` and runs the def as a per-round `AnimInstance` on the sequence interpreter
+(`ProjectileFlyoutAnim.cs`), the pool being the host: every `PUFFER_STATE` the timeline switches
+on becomes a pooled `Puffer` fed each step (`DISTANCE_INTERVAL` and `TIME_INTERVAL` alike), the
+spinner rate rolls the FLYOUT body, node visibility and from-to tweens drive the round's own model
+instance, and the def's sounds play at the round. Not run on a round: `ObjectOpacityFromTo`
+(the rear-arc flare's fade), logged once and skipped.
 
 `large_fireball` / `small_fireball` (bound by `FIRE`/`IMPACT` on the heaviest ordnance) are the
 **shared** destruction fireballs defined in `flame_ball.zrd.json` and reused by nearly every

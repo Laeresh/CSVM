@@ -63,7 +63,7 @@ See [CLUSTER_SIZE vs AMMO_LIMIT](#cluster-size-and-ammo-limit) for which entries
 | `VELOCITY` | 47 | 1.0–1200 | muzzle / flyout speed, m/s — with `ACCELERATION` it is the speed the motor climbs to **above the launcher's own**, not the launch speed |
 | `ACCELERATION` | 16 | 0–150 | rocket-motor acceleration, m/s² (0 = constant velocity). A round carrying one leaves at its launcher's speed and climbs from there; the cap is `VELOCITY` plus that speed. Decoded in [`org/ordnanceTypes.md`](../org/ordnanceTypes.md) |
 | `RANGE` | 46 | 900–10000 | path length a round may fly before it ends, m (Seeker 10000). **Defaults to 500** when unauthored, which is what the smoke screen and the rear-arc flare fly. Reaching it detonates a round only if the weapon carries `LOCK_ON`, so the choker, the cannonball and the fake weapon vanish instead ([`org/ordnanceTypes.md`](../org/ordnanceTypes.md)) |
-| `RANGE_MINIMUM` | 1 | `[300, 0]` | **a visibility gate, not an arming range** (torpedo): the flyout is hidden until it has travelled element 0. Element 1 is stored too and the reveal demands it be zero, which the sole entry authors; what a non-zero one would mean is unknown. Decoded in [`org/ordnanceTypes.md`](../org/ordnanceTypes.md); nothing on that path gates arming |
+| `RANGE_MINIMUM` | 1 | `[300, 0]` | **a hittability gate, neither an arming range nor a visibility one** (torpedo): the round's intersect bit (node flag `0x10`) stays clear until it has travelled element 0, so nothing can shoot it down over that leg; it is drawn, with its `MODEL_ANIMATION`, from the spawn frame. Element 1 is stored too and the gate demands it be zero, which the sole entry authors; what a non-zero one would mean is unknown. Decoded in [`org/ordnanceTypes.md`](../org/ordnanceTypes.md); nothing on that path gates arming or hides anything |
 | `GRAVITY` | 5 | 0.0 | the round's own downward acceleration, m/s² — an absolute rate, not a scale on world gravity (0 throughout this install, so inert as shipped) |
 | `CANNON_SPREAD` | 31 | 6.0 | **not a dispersion cone** — the gun aim assist's acceptance-cone half-angle, degrees (constant). See [`org/aim-assist.md`](../org/aim-assist.md) |
 | `FIRING_HEAT` | 4 | 5.0 | nominally heat added per shot; only the base guns `wep_00`–`03`. **Parsed but never consumed by the original** : `FUN_004ba6f0` stores it at `+0x14` of the game-side weapon-extension struct (0x38 bytes, hung off the ZWEP record at `+0x210`), defaulting to 0 when the key is absent, and no consumer of that struct reads the field. Its partner `cannon_jam` is dead data too, see [vehicle.md](vehicle.md) |
@@ -239,9 +239,12 @@ slot values may be `null`.
 `ANIMATION ["muzzle_burst_slug"]`; rockets give `SOUND ["snd_missile_sm"]` with null anim.
 
 **`FLYOUT`** — the projectile itself, over slots `MODEL` (the `.flt` handle), `MODEL_ANIMATION`
-(spin/trail while in flight — decoded per type in
-[weapon-effects.md](weapon-effects.md#bullet-impacts)), and
-`SOUND` (looped in-flight sound, e.g. the torpedo). Present on all 48 entries.
+(the def the round runs from its spawn frame on its own anim clock: the trail, and on the torpedo
+the whole launch look, its 3.5 s switch and its sounds — decoded per type in
+[weapon-effects.md](weapon-effects.md#bullet-impacts) and for `torpedo_trail` in
+[`org/ordnanceTypes.md`](../org/ordnanceTypes.md)), and `SOUND` (`snd_torpedo_loop` on the
+torpedo alone; parsed into the def, but no reader of the slot exists in this build, so nothing plays
+it). Present on all 48 entries.
 
 **`IMPACT`** — keyed by **surface name**, one value per name. The names are the game's global
 surface registry (the fourteen `soil` types a material can carry, [gamez.md](gamez.md)), so the
