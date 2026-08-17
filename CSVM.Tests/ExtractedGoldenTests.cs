@@ -110,8 +110,11 @@ public class ExtractedGoldenTests
             }
             if (loadout.Hardpoints is { } hp)
             {
-                Assert.True(weapons.Get(hp.Stock) != null,
-                    $"{def}: hardpoint stock {hp.Stock} not in weapons.json");
+                foreach (var stock in hp.Stock)
+                {
+                    Assert.True(weapons.Get(stock) != null,
+                        $"{def}: hardpoint stock {stock} not in weapons.json");
+                }
             }
         }
     }

@@ -81,7 +81,8 @@ public class LoadoutTests
             }
             withPylons++;
             Assert.InRange(hp.Count, 1, 8);              // pylon1..pylonN, max 8 on the rig
-            Assert.StartsWith("wep_", hp.Stock);
+            Assert.Equal(hp.Count, hp.Stock.Length);
+            Assert.All(hp.Stock, stock => Assert.StartsWith("wep_", stock));
         }
         Assert.Equal(11, withPylons);
     }

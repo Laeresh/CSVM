@@ -28,7 +28,7 @@
       ],
       "hardpoints": {
         "count": 2,
-        "stock": "wep_06"
+        "stock": ["wep_06", "wep_06"]
       }
     },
     "pavenger": {
@@ -69,7 +69,7 @@
       ],
       "hardpoints": {
         "count": 3,
-        "stock": "wep_06"
+        "stock": ["wep_06", "wep_06", "wep_06"]
       }
     },
     "pbalmoral": {
@@ -121,7 +121,7 @@
       ],
       "hardpoints": {
         "count": 8,
-        "stock": "wep_06"
+        "stock": ["wep_06", "wep_06", "wep_06", "wep_06", "wep_06", "wep_06", "wep_06", "wep_06"]
       }
     },
     "pbloodhawk": {
@@ -151,7 +151,7 @@
       ],
       "hardpoints": {
         "count": 3,
-        "stock": "wep_06"
+        "stock": ["wep_06", "wep_06", "wep_06"]
       }
     },
     "pbrigand": {
@@ -192,7 +192,7 @@
       ],
       "hardpoints": {
         "count": 4,
-        "stock": "wep_06"
+        "stock": ["wep_06", "wep_06", "wep_06", "wep_06"]
       }
     },
     "pdevastator": {
@@ -232,7 +232,7 @@
       ],
       "hardpoints": {
         "count": 4,
-        "stock": "wep_06"
+        "stock": ["wep_06", "wep_06", "wep_06", "wep_06"]
       }
     },
     "pfirebrand": {
@@ -273,7 +273,7 @@
       ],
       "hardpoints": {
         "count": 6,
-        "stock": "wep_06"
+        "stock": ["wep_06", "wep_06", "wep_06", "wep_06", "wep_06", "wep_06"]
       }
     },
     "pfury": {
@@ -303,7 +303,7 @@
       ],
       "hardpoints": {
         "count": 3,
-        "stock": "wep_06"
+        "stock": ["wep_06", "wep_06", "wep_06"]
       }
     },
     "pkestrel": {
@@ -343,7 +343,7 @@
       ],
       "hardpoints": {
         "count": 5,
-        "stock": "wep_06"
+        "stock": ["wep_06", "wep_06", "wep_06", "wep_06", "wep_06"]
       }
     },
     "ppeacemaker": {
@@ -373,7 +373,7 @@
       ],
       "hardpoints": {
         "count": 3,
-        "stock": "wep_06"
+        "stock": ["wep_06", "wep_06", "wep_06"]
       }
     },
     "pwarhawk": {
@@ -403,7 +403,7 @@
       ],
       "hardpoints": {
         "count": 8,
-        "stock": "wep_06"
+        "stock": ["wep_06", "wep_06", "wep_06", "wep_06", "wep_06", "wep_06", "wep_06", "wep_06"]
       }
     }
   }

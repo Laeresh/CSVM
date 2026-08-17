@@ -25,7 +25,7 @@ no extracted game asset data.
       {"slot": 2, "mount": "Outer Wing Guns", "caliber": 30, "ammo": "slug",
        "markers": ["firepoint5", "firepoint6"]}
     ],
-    "hardpoints": {"count": 3, "stock": "wep_06"}
+    "hardpoints": {"count": 3, "stock": ["wep_06", "wep_06", "wep_06"]}
   }
 }
 ```
@@ -44,7 +44,7 @@ Keyed by **vehicle def name** (`vehicle.json`), matching `PlaneStats`. Per plane
 | `guns[].markers` | the firepoint node(s) this group fires from (see binding rule) |
 | `guns[].turret` | present + `true` on turret slots — parsed but **inert in M3** (see below) |
 | `hardpoints.count` | number of underwing pylons carried; **which** physical `pylonN` markers get used is `Loadout.PylonFillOrder`, not `1..count` (below) |
-| `hardpoints.stock` | the `wep_*` id every pylon carries in stock fit (`wep_06`, HE) — one id for all pylons, see the [schema limitation](#schema-limit) |
+| `hardpoints.stock[]` | the `wep_*` id each pylon carries in stock fit, in `PylonFillOrder` order; its length equals `hardpoints.count` |
 
 ## Resolution rules
 
@@ -89,7 +89,7 @@ rear one); its real barrels are the `fgun`/`rgun`/`bgun*` gun nodes.
 
 11 planes, 22 stock guns + 6 turret slots. Verified: every plane parses, every `markers` entry
 exists on that plane's model, every gun matches the binding rule, and every derived `wep_*`
-(guns) and `hardpoints.stock` resolves in `weapons.zrd.json`.
+(guns) and `hardpoints.stock[]` entry resolves in `weapons.zrd.json`.
 
 | Plane | W1 | W2 | W3 | W4 | Pylons |
 |---|---|---|---|---|---|
@@ -110,11 +110,11 @@ pylon carries `wep_06` (HE) in stock fit.
 
 ## Schema limit
 
-**`hardpoints.stock` being a single HE id per plane is what the retail Ammo Selection UI shows**
-corroborated by `OriginalScreenshots/Ammo Selector Hoplite.png` /
-`… Balmoral.png`) — it is an observation of the shipped default, not a statement that a plane
-*can only* carry one ordnance type. It cannot be checked against the extraction, because there
-is no player loadout in the data at all (above).
+**Each `hardpoints.stock[]` entry is a separate pylon's stock id.** The all-HE retail fit is
+corroborated by `OriginalScreenshots/Ammo Selector Hoplite.png` / the Balmoral capture - it is an
+observation of the shipped default, not a statement that a plane *can only* carry one ordnance
+type. It cannot be checked against the extraction, because there is no player loadout in the data
+at all (above).
 
 The original design describes the opposite as normal: its Ordinance Loadout screen is a pop-up
 menu **per hardpoint**, each listing that hardpoint's available types, so a plane's pylons could
@@ -123,15 +123,10 @@ fit does on several planes — one of many places its numbers were rebalanced be
 the retail observation wins on *what the stock fit is* and the design wins only on *whether
 mixing is possible*.
 
-**Our runtime is already mixed-capable; only this file's schema is not.** `Loadout.Hardpoint`
-carries a per-pylon `Weapon`, and `FlightController` builds `_ordnanceTypes` by collecting the
-**distinct** weapon ids across the bound hardpoints in pylon order — so a plane with three
-different rocket types on its pylons gets a three-entry ordnance selector with no code change.
-What cannot express it is `hardpoints: {count, stock}`, which has room for exactly one id.
-Expressing a mixed fit means widening that to a per-pylon list (e.g. `"pylons": ["wep_06",
-"wep_06", "wep_08"]`), with `{count, stock}` kept as the shorthand. **Record this as a schema
-limitation of our own config file, not a bug** — nothing is wrong with the stock table as it
-stands, and the widening is only worth doing when the configurator lands.
+**The runtime and schema are mixed-capable.** `Loadout.Hardpoint` carries a per-pylon `Weapon`,
+and `FlightController` builds `_ordnanceTypes` by collecting the **distinct** weapon ids across the
+bound hardpoints in pylon order. A mixed stock fit such as `"stock": ["wep_06", "wep_06",
+"wep_08"]` therefore produces a three-entry ordnance selector without another runtime change.
 
 ## Evidence & limits
 

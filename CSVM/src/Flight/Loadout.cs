@@ -93,7 +93,7 @@ public sealed class StockLoadouts
             }
             if (body.TryGetProperty("hardpoints", out var hp) && hp.ValueKind == JsonValueKind.Object)
             {
-                def.Hardpoints = new HardpointSpec { Count = Int(hp, "count"), Stock = Str(hp, "stock") };
+                def.Hardpoints = new HardpointSpec { Count = Int(hp, "count"), Stock = Strings(hp, "stock") };
             }
             loadouts._byDef[def.Def] = def;
         }
@@ -105,6 +105,23 @@ public sealed class StockLoadouts
 
     private static string Str(JsonElement e, string key) =>
         e.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
+
+    private static string[] Strings(JsonElement e, string key)
+    {
+        if (!e.TryGetProperty(key, out var value) || value.ValueKind != JsonValueKind.Array)
+        {
+            return Array.Empty<string>();
+        }
+        var strings = new List<string>();
+        foreach (var item in value.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.String)
+            {
+                strings.Add(item.GetString() ?? "");
+            }
+        }
+        return strings.ToArray();
+    }
 
     private static int Int(JsonElement e, string key) =>
         e.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;
@@ -131,11 +148,11 @@ public sealed class GunSpec
     public bool Turret;           // an AI turret slot — parsed but built inert
 }
 
-/// <summary>The authored hardpoint block: pylon count + the stock ordnance id.</summary>
+/// <summary>The authored hardpoint block: pylon count + one stock ordnance id per pylon.</summary>
 public sealed class HardpointSpec
 {
     public int Count;
-    public string Stock = "";
+    public string[] Stock = Array.Empty<string>();
 }
 
 /// <summary>
@@ -218,15 +235,16 @@ public sealed class Loadout
         var hardpoints = new List<Hardpoint>();
         if (def.Hardpoints is { } hp && hp.Count > 0)
         {
-            var weapon = weapons.Get(hp.Stock)
-                ?? throw new InvalidOperationException(
-                    $"loadout {def.Def}: hardpoint stock '{hp.Stock}' not in weapons.json");
-            // Pylons bind via PylonFillOrder, not sequentially 1..N — count N takes the
+            // Pylons bind via PylonFillOrder, not sequentially 1..N: count N takes the
             // sequence's first N entries, so a partial stock fit lands on both wings alternately
             // instead of piling onto one side.
-            int perPylon = weapon.ClusterSize ?? 0;
             for (int i = 0; i < hp.Count; i++)
             {
+                string stockId = hp.Stock[i];
+                var weapon = weapons.Get(stockId)
+                    ?? throw new InvalidOperationException(
+                        $"loadout {def.Def}: hardpoint stock {i + 1} '{stockId}' not in weapons.json");
+                int perPylon = weapon.ClusterSize ?? 0;
                 int pylonNumber = PylonFillOrder[i];
                 var pylon = Resolve(markerNodes, $"pylon{pylonNumber}", def, "hardpoint");
                 hardpoints.Add(new Hardpoint
@@ -318,13 +336,16 @@ public sealed class Loadout
 
         if (pylons.Count > 0)
         {
-            // "wep_06" is the stock rocket every one of the 11 planes' hardpoints block names
-            // (CSVM/data/stock_loadouts.json) — the fallback for the (never observed) case of a
-            // plane with pylons but no stock hardpoints block at all.
+            string stockId = stock?.Hardpoints?.Stock is { Length: > 0 } s ? s[0] : "wep_06";
+            var hardpointStock = new string[pylons.Count];
+            for (int i = 0; i < hardpointStock.Length; i++)
+            {
+                hardpointStock[i] = stockId;
+            }
             def.Hardpoints = new HardpointSpec
             {
                 Count = pylons.Count,
-                Stock = stock?.Hardpoints?.Stock is { Length: > 0 } s ? s : "wep_06",
+                Stock = hardpointStock,
             };
         }
 
