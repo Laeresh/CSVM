@@ -25,9 +25,11 @@ launch/contact/run-time model behind the `OBJECT_MOTION` sections of
 steering law behind [ai-rosters.md](ai-rosters.md)'s skill and control-scale slots),
 [aiPilot.md](../org/aiPilot.md) (what a roster vehicle actually flies: the `mode` classes, the
 patrol-net follower and the formation escort, behind [ai-rosters.md](ai-rosters.md) and
-[ai-nets.md](ai-nets.md)) and
+[ai-nets.md](ai-nets.md)),
 [textures.md](../org/textures.md) (the texture header layout and the additive-vs-mix blend rule
-behind [effects.md](effects.md)'s sprites).
+behind [effects.md](effects.md)'s sprites) and
+[loading-screen.md](../org/loading-screen.md) (how the mission load screen is named, filled and
+redrawn, behind the `Loading.zrd` dialogs in [zrdr.md](zrdr.md)).
 
 ## Reader map
 

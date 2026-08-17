@@ -392,13 +392,14 @@ public sealed class FlightRigAssembler
         // Every player's start comes from ONE call: a grid start is not decomposable, since no
         // single pilot's answer exists until every slot is known. Resolved lazily on the first
         // rig, so the caller can keep constructing the assembler before the rigs are known.
-        var (spawnPos, spawnLookAt) = (_starts ??= _spawns.ChooseStarts(
+        var start = (_starts ??= _spawns.ChooseStarts(
             _in.SpawnList, _in.MissionZrdrPath, _in.SpawnBase, _in.RigCount))[pi];
         // The plant's force path is chosen once, here, off who is flying — a person, so the
         // player path. FlightModel.UsesAiForcePath carries why this is a construction argument
         // rather than the original's own pointer-compare-against-the-player test.
         controller.Setup(new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
-            rig.Camera, _in.CamParamsFor(planeName), spawnPos, spawnLookAt);
+            rig.Camera, _in.CamParamsFor(planeName), start.Pos, start.LookAt,
+            start.ThrottleFrac, start.SpeedMps);
         // --weapon-lab: a flight session whose aircraft is pinned at the spawn pose. Set after
         // Setup, so the pin, captured at the first held sim step, takes the pose Setup just wrote.
         if (_spec.WeaponLab)

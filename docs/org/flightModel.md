@@ -533,6 +533,59 @@ rate exceeds full-elevator authority (~0.58 rad/s steady) and the drop is decisi
 recovers; while stalled the nose additionally cannot be raised over the horizon at any bank
 (user-observed behaviour of the original). Nothing in the executable has been traced to either.
 
+## The keyboard stick is an accumulator, not a switch (`FUN_00487460`)
+
+The player input handler runs once per frame from the tick function `FUN_004897c0`, which sets the
+flight model's `dt` (`DAT_0071c56c`) from the same frame delta (`DAT_009ad744`) the handler ramps
+with — input and flight share one clock. Each of the three stick axes is a stored deflection the
+keys move, not a flag the keys set:
+
+```
+axis = 0                                     ; if the key is released, or the command opposes
+                                             ;   the current sign — pitch: 0x48786a
+axis += dt · dir · 2.5                       ; while a key is held — pitch: 0x487880-0x48788f,
+                                             ;   the 2.5 at 0x006040a8
+axis = clamp(axis, -1, +1)
+```
+
+Pitch is `obj+0x108`, roll `obj+0x100`, yaw `obj+0x10c`, all three the identical block (roll at
+`0x48794c`, yaw at `0x487a18`); the throttle follows at `0x487a54`/`0x487a7d` with the same shape
+and its own `±0.5·dt`. The three are then copied to the slots the force path reads — `obj+0x114`
+roll, `obj+0x11c` pitch, `obj+0x120` yaw — through `FUN_00460890`, **which is an identity stub**:
+its `0.5`/`1.0` arguments are dead, so no expo curve exists on the way out.
+
+**The rule, and its asymmetry.** A held key takes **0.4 sim s** to reach full deflection; a released
+or reversed key drops the axis to centre in a single frame. Gradual on, instant off. An analogue
+axis bypasses the ramp entirely — the joystick path assigns its scaled value to the same slot and
+suppresses that frame's zero-snap, so a stick's deflection is absolute where a key's is accumulated.
+
+**What it settles.** A tap never reaches the deflection its key nominally commands: 115 ms of press
+is `2.5 × 0.115` = **0.29** of full travel. The original's fast pitch cadences therefore fly a
+much smaller stick than its slow ones, which is roll-off produced in the input stage before any
+aerodynamics are involved — see the landing note below.
+
+**Landing note — it closes about a third of the residual roll-off, and a 1.57× gap survives it.**
+Ported as `StickRamp`, applied to the keyboard axes in `FlightController.ReadKeyboard` (the
+gamepad's analogue axes add on top, unramped, matching the joystick path). Driving `ZzCadenceSweep`
+through the ramp moves the 1300 → 570 ms roll-off from **20.5× to 26.8×** against the original's
+**42×**, so the deficit falls from 2.05× to **1.57×**. That remainder is outside the ±20% amplitude
+systematics and the ±12% spread in the clips' mean airspeed, so it is a real difference and not
+measurement slack; the pitch transient nonetheless reads right at the controls, which is why no
+constant is chased for it. Three candidates have never been examined: the original's 0.5/s throttle
+slew (decoded, unimplemented — it contaminates the first seconds of any manoeuvre), the `liftAOAs`
+airflow blend under a rapidly reversing demand, and the possibility that the original's 570 ms point
+(a 4.9× drop from 700 ms over a 1.23 frequency ratio) is a resonance rather than a point on a smooth
+roll-off, which no monotone transfer function produces and which the corpus cannot separate from
+noise at 0.63 ± 0.13 ft.
+⚠ **Quote the sweep's WALL reading, not its sim reading.** The macro drove the keys in wall
+milliseconds, so the period the game saw is that × 1.390 (`docs/verification.md` DET-11); the sim
+column answers a question nobody flew. It used to be defensible to quote either, because with a
+square wave on both sides the ratio barely moved between them — a rate limit destroys that, since
+2.5/s is an absolute timescale that does not rescale with the cadence. The sim column reads 36.4×
+for the same run.
+⚠ **The 23.3× the C23 note above quotes is neither today's baseline nor the right column** — the
+unramped model reads 20.5× on the current build, and ratios are comparable only within one run.
+
 ## Control authority vs speed
 
 `FUN_0048bdd0` derives three independent scalars from airspeed alone, reading nine globals at
@@ -630,7 +683,7 @@ inside the ramp and stalls at roughly **21 %** of roll and pitch authority.
 speed-independent" it becomes the misreading that had `turn_fade_in`/`turn_fade_out` filed as a
 candidate *bank* effect through four consecutive items — see the CORRECTION at the end of
 "Bank-independent lift vs the measured knife-edge sag". The ramp is keyed on airspeed alone and is
-saturated across the whole regime in which that 1.6× gap appears.
+saturated across the whole regime in which the footage reads a 1.6×-slower banked rotation.
 
 ## Torques and the limiters
 
@@ -727,20 +780,20 @@ wings-level scenario is unmoved to the last printed digit across all eleven airf
 (`level-top-speed`, `terminal-dive`, `roll-360`, `pitch-rate`, `yaw-360`, `altitude-cap`,
 `accel`/`decel`, `eighth-throttle`) — the coupling cannot reach them, which is the cleanest
 possible confirmation of the "vanishes at zero bank" property.
-⚠ **It does NOT close the sustained-turn-rate gap, and it moves it the wrong way**: 32.35 →
-34.71 °/s against the original's 18.95, and up on ten of eleven airframes. Both terms *add*
-heading rate in the direction of bank, so the plan's expectation that this item would explain the
-original's 1.6×-slower banked turn is disproved at the mechanism. Whatever makes the original
-turn slowly when banked is still missing — and as of 2026-08-09 **no authored field is a candidate
-for it**: `highGs` is measured inert, and `turn_fade_*` is this document's own base ramp,
-keyed on airspeed alone and saturated at 1 above 50 mph (see "Control authority vs speed" and the
-correction note at the end of this section).
+⚠ **It does NOT close the sustained-turn-rate difference, and it moves it the wrong way**: 32.35 →
+34.71 °/s against the 18.95 measured off `CAP-01`, and up on ten of eleven airframes. Both terms
+*add* heading rate in the direction of bank, so the plan's expectation that this item would explain
+the footage's slower banked turn is disproved at the mechanism. **No authored field is a candidate
+for the remaining difference either**: `highGs` is measured inert, and `turn_fade_*` is this
+document's own base ramp, keyed on airspeed alone and saturated at 1 above 50 mph (see "Control
+authority vs speed" and the correction note at the end of this section). The rotation path is
+decoded; what disagrees with it is a frame measurement, which does not outrank one.
 The one place it clearly improves fidelity is the **knife-edge**: a neutral-stick 90° bank held
 for 35 s used to pin the nose at the bounded −4.01° sag and settle (−316 m); it now drifts
 linearly at ≈1.08 °/s to −41.8° with no equilibrium (−1993 m), which is the *shape*
 `BL-247` measured on the original (0.69–0.89 °/s to −27° over 36 s) and could not previously be
-produced at all. Recorded for `D31`, not acted on — the drift is now ≈1.2–1.6× too fast, which is
-a magnitude question where it used to be a mechanism question.
+produced at all. Recorded for `D31`, not acted on — the drift is ≈1.2–1.6× the frame-measured rate,
+which is a magnitude difference against video where it used to be a missing mechanism.
 
 ## Weathervane centring — resolved, and the summary line above was wrong
 
@@ -798,13 +851,14 @@ attitude** — a weathervane cannot bank an aeroplane.
 
 **C23 landing note — what implementing it settled, and what it did not.**
 
-- **`BL-147` does not close.** The square-wave pitch-cadence sweep run through our own build (same
-  input, same estimator, so no transfer function is assumed on either side) falls **19.6×** between
-  the 1300 ms and 570 ms cadences before the change and **23.3×** after, against the original's
-  **42×**. Right direction, about a sixth of the gap. A second-order response is part of the answer
-  and demonstrably not the whole of it.
-- ⚠ **And the sweep corrects `BL-147`'s own arithmetic.** Its "42× is 3.5× steeper than any single
-  first-order lag permits" reasoning assumed the chain is *double integration + one lag*. The
+- **It moves the pitch transient the right way and does not account for all of it.** The square-wave
+  pitch-cadence sweep run through our own build (same input, same estimator, so no transfer function
+  is assumed on either side) falls **19.6×** between the 1300 ms and 570 ms cadences before the
+  change and **23.3×** after, against the original's **42×** — about a sixth of the gap, on the sim
+  reading the sweep then quoted. A second-order response is part of the answer and demonstrably not
+  the whole of it; the stick ramp is most of the rest.
+- ⚠ **The sweep also refutes a "3.5× steeper than any single first-order lag permits" reading of
+  the original's roll-off.** That reasoning assumed the chain is *double integration + one lag*. The
   remake's is not, and never was: the flight path chases the nose through a **second** first-order
   lag (`lift_accel_rate`, τ = 1.33 s), so the pre-C23 build already rolled off 19.6× — 1.65× past
   that "ceiling" — with `return_rate` still folded into the damping. The 3.5× figure is therefore
@@ -851,6 +905,27 @@ take, with the throttle trimmed for level flight at the entry speed:
 | nose drift 3→36 s (°/s) | 0.69 | 1.05 | 1.09 |
 | altitude lost in 36 s (m) | 540 (in 38.9 s) | 1187 | **1087** |
 
+The whole measured trajectory, from both takes at 143 and 300 mph — they agree to ~13%, so the
+knife-edge is driven by time-since-roll-in rather than by airspeed:
+
+| time since roll-in | nose | path | sink |
+|---|---|---|---|
+| 0–3 s | −4° step, then drifting | ≈0° | **0.5 ft/sim-s — genuinely holds altitude** |
+| +12 s | −12.0° | −6.0° | 24 ft/sim-s |
+| +24 s | −20.0° | −12.8° | 60 ft/sim-s |
+| +36 s | −27.0° | −18.7° | 93 ft/sim-s, still steepening |
+
+The sag is an immediate ≈4° step followed by an unbounded drift of 0.69–0.89 °/sim-s, which is why
+the bounded pair is retired rather than retuned: a bounded term cannot produce a drift that never
+settles.
+
+⚠ **Do not back an absolute align rate out of this table.** `KnifeAlignFloor`'s observable here is
+the path lagging the nose (4.8° at +3 s, 7.2° at +24 s, 8.3° at +36 s), and `CAP-05` cannot separate
+that lag from gravity pulling the path down over the same interval. What the A/B above uses is only
+the *direction* each row moves under a change on one build, which the confound cannot reverse:
+gravity pulling the path down can only shrink the gap, so the inferred chase is an upper bound
+either way.
+
 It was also never really a knife-edge term: it keyed on `1 − |bodyUp·up|`, which is 0.29 at a 45°
 nose-up attitude with the wings dead level, so it fought every pull at up to 11.5 °/s. Removing it
 moves `zoom-climb` toward its measured 936 ft on **all eleven** airframes (Bloodhawk 1396 → 1338 ft,
@@ -868,25 +943,29 @@ row toward the footage (at 0.10: gap 3.5° → 2.1°, drift 0.96 °/s, 874 m) an
 — and it walks the knife-edge α up to 5.36°, past `liftAOAs[0] = 5°`, where the airflow blend
 starts engaging in a knife-edge. Left at 0.35; `KnifeEdgeTests` pins the α margin on all eleven.
 
-**What is still open, and it is one number, not four.** The whole banked rotation runs ≈1.6× fast:
-nose drift 1.09 °/s against a measured 0.69–0.89, heading 1.7 °/s against 0.68–1.13 — the same
-≈1.6× by which `sustained-turn-rate` exceeds the original's banked pull (32.8 against 18.95). Two
-independent manoeuvres, two different body axes, one ratio. Nothing was tuned to close it here.
+**The banked rotation runs ≈1.6× the footage rate, and that is a note, not a gap.** Nose drift
+1.09 °/s against a frame-measured 0.69–0.89, heading 1.7 °/s against 0.68–1.13, and
+`sustained-turn-rate` 32.8 against `CAP-01`'s 18.95 — two independent manoeuvres, two different
+body axes, one ratio. Every number on the original's side of that comparison is frame-measured off
+video; the rotation that produces our side is decoded from the force path (the torques, the
+limiters, the bank coupling, the weathervane and the airspeed authority ramp all sit in this
+document). A decode is not corrected by a footage measurement, and a single ratio across two
+manoeuvres and two axes is the signature of a common factor in how the footage was read rather than
+of a force term that would have to reach both. Nothing is tuned to close it.
 
 ⚠ **Do not reintroduce a nose-sag term to deepen the knife-edge.** The decoded bank→yaw coupling
 already drops the nose there, and the weathervane then pulls it onto the falling path; a second
 nose-down term double-counts what is already present and re-creates the wings-level leak above (the
 retired term rotated the nose down at up to 11.5 °/s in a plain 45° pull).
-⚠ **Do not lower `KnifeAlignFloor` to close the remaining gap either.** Lowering it moves every row
-toward the footage and still cannot reach it, because the remaining error is in the ROTATION rate —
-the ≈1.6× above — and retuning the chase constant would hide a rotation error inside it. It also
+⚠ **Do not lower `KnifeAlignFloor` to close the footage difference either.** Lowering it moves every
+row toward the footage and still cannot reach it, because what separates the two is the ROTATION
+rate — the ≈1.6× above — and retuning the chase constant would hide a rotation rate inside it. It also
 runs into a real boundary at 0.10, where the knife-edge α reaches 5.36° and crosses
 `liftAOAs[0] = 5°`.
 
 ⚠ **CORRECTION (2026-08-09): the authored candidates are exhausted, and this document said
 otherwise for four items running.** C22, C23, D31 and D33 each parked this gap on "the unconsumed
-`turn_fade_in`/`turn_fade_out`/`highGs` are the only authored fields shaped like it" (then
-`backlog.md`'s `BL-095`, retired 2026-08-15; the gap itself is now `BL-383`).
+`turn_fade_in`/`turn_fade_out`/`highGs` are the only authored fields shaped like it".
 Both halves are now false. `highGs` is measured inert on every airframe. And `turn_fade_*` is
 **already decoded in this very document** — "Control authority vs speed" above: `FUN_00490e10`'s
 base ramp is a function of **airspeed alone**, 0 at `turn_fade_in` (10) rising to 1 at
@@ -894,9 +973,11 @@ base ramp is a function of **airspeed alone**, 0 at `turn_fade_in` (10) rising t
 bank or load-factor term anywhere in it. The banked turn settles at 222–260 mph and the knife-edge
 takes are at 143 and 300, so the ramp is saturated across the whole regime where the 1.6× appears
 and cannot be its cause. The ramp is a real low-speed behaviour (`BL-330`, implemented 2026-08-15 by
-C24) — it is simply not this, and landing it moved no row of the envelope suite. **What remains is not a decode question.** Recorded rather than quietly
-re-pointed: a gap that has been attributed to the same three fields four times is exactly the kind
-of inherited claim that stops being re-checked.
+C24) — it is simply not this, and landing it moved no row of the envelope suite. **What is left over
+is not a decode question**: the rotation path is decoded, and the only thing on the other side of the
+comparison is frame-measured video. Recorded rather than quietly re-pointed: a difference that was
+attributed to the same three fields four times is exactly the kind of inherited claim that stops
+being re-checked.
 
 ⚠ **UPDATE (2026-08-15): the "not internally consistent with a coordinated level turn" half of that
 paragraph was itself wrong, and `CAP-33` is what corrected it.** The apparent inconsistency was
@@ -1201,9 +1282,11 @@ calls the field **`FakeDynSpeed`** and *measures* `TopSpeed` separately (if `fd_
 speed there would be nothing to measure), and at runtime `fd_speed` is used as a **normalising
 reference speed** — `speed/fd_speed` for gauge and effect fractions (`0x4b1e54`), a far-field
 cruise speed `fd_speed · throttle` (`0x48c593`, A2 below; this used to read "an AI target speed",
-which it is not), and a speed clamp (`0x46aaf4`) — never as a solved
-equilibrium. **Do not treat `fd_speed` as the original's top speed in B12/B13 without settling
-this.**
+which it is not), and an **initial** velocity for a spawning AI aircraft (`0x46aaf4`, the
+mission-event "move object to node" action; ⚠ this used to read "a speed clamp", which it is not,
+and it is the same `min(plane_speed_max, fd_speed)` rule the vehicle factory applies, item 13
+above) — never as a solved equilibrium. **Do not treat `fd_speed` as the original's top speed in
+B12/B13 without settling this.**
 
 **Bonus, and load-bearing for B13:** `[obj+0x124]` and `[obj+0x128]` are the **commanded** and
 **current throttle** — `FUN_0048e585` rate-limits the current toward the commanded and burns fuel
@@ -1973,9 +2056,10 @@ high-speed fade" above.
 The refits are **Bloodhawk-pinned**, as they always were; the other ten airframes have no measured
 target of their own and simply move with them.
 
-⚠ **Do not chase `BL-147`'s transient gap through these constants.** They set the STEADY rate,
-which matches; a transient chased through them breaks the thing that currently works. The
-square-wave cadence sweep is the measurement that belongs to that gap — see the C23 landing note.
+⚠ **Do not chase the pitch transient's residual roll-off through these constants.** They set the
+STEADY rate, which matches; a transient chased through them breaks the thing that currently works.
+The square-wave cadence sweep is the measurement that belongs to that gap — see the stick-ramp
+section's landing note.
 
 ## What the test suite pins, and why each test can fail
 
@@ -1989,6 +2073,12 @@ the tests, not the prose, are what stops a mechanism being quietly re-derived.
   timestep cannot separate them; the case that can is `dt · damp = 5`, past the linear form's
   stability edge at **`dt · damp = 2`**, where `(1 − dt·damp) = −4` flips the rate's sign and grows
   it every tick while `exp(−dt·damp)` stays in `(0, 1)` and only decays.
+- **`StickRampTests`** — `FUN_00487460`, the three per-axis blocks. Pins the RATE (0.4 s of held key
+  is full deflection, and half that time is half deflected, so a linear ramp cannot be swapped for an
+  exponential approach) and, twice over, the ASYMMETRY: release centres the axis in one frame, and a
+  reversal ramps from centre rather than counting down from the old deflection. ⚠ A symmetric ramp
+  agrees on a held key and differs on every release and every reversal — which is the whole of the
+  cadence roll-off, so the held-key case alone would pin nothing that matters.
 - **`WeathervaneTests`** — `FUN_00490f70`, `0x4916fe`–`0x4917f0`. Reads the torque directly, or the
   body rates after ONE step from rest where the arithmetic is closed form, so a sign flip, a missing
   halving or a leak into roll fails exactly instead of being absorbed a hundred frames later. Pins:
@@ -2002,7 +2092,7 @@ the tests, not the prose, are what stops a mechanism being quietly re-derived.
   45° up, path on the nose, stick centred, every torque in the model is identically zero, so one
   step must not rotate the attitude at all. The bounded term keyed on `1 − |bodyUp·up|`, which is
   0.29 in exactly that attitude, so it rotated the nose down at up to **11.5 °/s** — a nose-down
-  bias in every pull at any bank, filed as `BL-115`'s "knife-at-zero-bank leak". Also pinned: the
+  bias in every pull at any bank — the "knife-at-zero-bank leak". Also pinned: the
   knife-edge never settles on any of the eleven (a bounded sag puts almost none of its total in the
   last third of a 36 s hold, a genuine drift about a third), the nose stays well below the path
   (retiring `wingVert` makes the chase faster and fails it), and α stays inside `liftAOAs[0]` on
@@ -2030,8 +2120,8 @@ the tests, not the prose, are what stops a mechanism being quietly re-derived.
   scenarios is **pinned at 7** so that silently demoting one to informational cannot read as a green
   run. Three informational rows are recorded CONFLICTS rather than open questions —
   `accel-150-290` (footage vs the byte-verified force path), `sustained-turn-speed` and
-  `sustained-turn-sink` (both riding the unattributed turn-rate gap C22 was expected to close and
-  demonstrably does not). `terminal-dive` came BACK from that list when the attitude-thrust terms
+  `sustained-turn-sink` (both riding the banked turn-rate difference against the footage, which C22
+  was expected to close and demonstrably does not). `terminal-dive` came BACK from that list when the attitude-thrust terms
   landed: the count went 7 → 6 → 7, and a demotion is never the quiet way to make a run green.
 
 ## What this changes for the remake
@@ -2051,7 +2141,7 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
 3. **The two hardcoded bank constants (0.205, 0.165).** These are in no data file — they are
    developer-console variables — so no amount of data extraction would have surfaced them. Landed
    in `C22`; see "Bank coupling — resolved". ⚠ They make the banked turn **faster**, not slower,
-   so they are not the explanation of the original's 1.6×-slower banked turn.
+   so they do not account for the footage reading a slower banked turn than ours.
 4. **The attitude-dependent thrust (0.24 / 0.13).** A video fit would absorb these into gravity
    or drag and then fail in the opposite manoeuvre.
 5. **Rudder at 10 % authority in flight**, full only between 22.5 and 45 mph.
@@ -2077,9 +2167,28 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
 12. **The throttle lever slews at 0.5/s with no idle floor** (2 s full-to-idle); the remake applies
     it instantly. Decoded, unimplemented — a feel/transient gap, not a steady-state one, and the
     one mechanism that could contaminate the first seconds of any throttle-step footage.
-13. **Spawn speed is a fixed 53.6 m/s (≈120 mph) for every airframe.** The original's is
-    plane-dependent; this is a remake placeholder (`FlightController.SpawnSpeed`), kept fixed for
-    now per user decision, not a decode.
+13. **Spawn speed is the mission's own, and it is not plane-dependent.** ⚠ This item previously
+    read "the original's is plane-dependent"; that is false at source, and the remake now reads
+    the authored value. The player spawn routine `FUN_0047f1f0` takes its speed from the
+    mission's own `PLAYER_INIT[4] × 0.1` (18 m/s in 48 of 51 records) and touches no per-aircraft
+    data at all: no reference to `fd_speed` (object `+0x668`) or to the def pointer appears in any
+    of its 349 instructions. The remake's 53.6 m/s traces to `−53.6448` at `0060803c`, read only
+    by the cheat dispatcher `FUN_0047e080`'s case `0x3b7` (teleport player to camera), which is
+    120.000 mph exactly. Spawn throttle is `PLAYER_INIT[3]` (0.8 in 49 of 51 records), replacing
+    the remake's 0.5. Full decode, including the mode-3 Instant Action branch and the reset paths:
+    [../formats/spawns.md](../formats/spawns.md), "Story mission spawns".
+    ⚠ **The spawn now sits inside the force-scale conflict recorded above.** A start at 18 m/s is
+    well below cruise, where the polar reads 2–3.6× too strong against `CAP-05`, and the aircraft
+    accelerates through its own computed stall speed at about 4.4 G rather than dropping. The
+    climb-out reads right at the controls, so this is a dependency to know about rather than a
+    defect: a change to the sub-cruise force path moves the feel of every mission's first seconds.
+    The spawn speed is authored data and is not the knob to compensate with.
+    The per-airframe spawn rule that does exist belongs to **AI** aircraft: the vehicle factory
+    `FUN_0047c210` gives a pathless aircraft `min(plane_speed_max, fd_speed)` along its nose
+    (comparison at `0047d84f`) and gives one with an authored waypoint path zero velocity and
+    throttle 1.0 (`0047d82d`). `plane_speed` is a two-value authored tag at def `+0x1e4`/`+0x1e8`,
+    each scaled by `0.44704` on parse (`00607b2c`), which the AI speed controller then uses as the
+    lower and upper clamps.
 
 ## Confidence
 

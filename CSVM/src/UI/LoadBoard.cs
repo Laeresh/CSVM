@@ -8,8 +8,9 @@ namespace CSVM.UI;
 /// the frame loop for a second or two, so nothing can be drawn DURING it; the Launcher shows this,
 /// lets one frame render, and builds on the next tick.
 /// ⚠ Deliberately has no progress: the build reports its phases only after the fact
-/// (<c>StartupProfile</c>), so a bar here would be a fiction. The original's own load screens are
-/// artwork in <c>crimson.rof</c> and are not matched yet — see the backlog.
+/// (<c>StartupProfile</c>), so a bar here would be a fiction. The original's own load screen,
+/// its lamp bar included, is artwork in <c>extracted/rimage/</c> and is not matched yet; see
+/// the backlog.
 /// </summary>
 public sealed partial class LoadBoard : Control
 {

@@ -53,6 +53,10 @@ public sealed class RaceGrid : IFlightStarts
         float clearance = Config.GetFloat("raceGrid.groundClearance", GroundClearanceDefault);
 
         var (anchorPos, anchorLookAt) = _picker.ChooseSpawn(spawns, missionZrdrPath, spawnBase, 0, "grid anchor ");
+        // One start state for the whole grid, from the picker, so every slot begins on the same
+        // throttle and speed. Deriving it per slot is the mixed-grid unfairness the grid exists
+        // to remove, in the one coordinate the slot geometry does not control.
+        var (throttle, speed) = _picker.StartState(spawns, missionZrdrPath);
 
         // The heading comes from the anchor's own pos→look-at pair, never from the spawn's
         // HeadingDeg: the --pos override has no heading field, and re-reading the list entry would
@@ -100,7 +104,7 @@ public sealed class RaceGrid : IFlightStarts
         for (int i = 0; i < playerCount; i++)
         {
             var pos = slots[i] + Vector3.Up * lift;
-            starts[i] = new FlightStart(pos, pos + dir);
+            starts[i] = new FlightStart(pos, pos + dir, throttle, speed);
             Log.Info("flight", $"spawn [P{i + 1} grid slot {i + 1} of {playerCount}] pos=({pos.X:0},{pos.Y:0},{pos.Z:0}) heading={headingDeg:0}° spacing={spacing:0.#}m lift={lift:0.#}m");
         }
         return starts;
