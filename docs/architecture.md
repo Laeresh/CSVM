@@ -687,7 +687,17 @@ The animation engine: bootstrap passes (mission setup, anchored RESET_STATEs, ON
 startanims, a safety net), then dispatch-table event playback; an unhandled event kind is counted,
 never fatal. Also hosts the destructible-damage entries (`DamageAt`/`CollideDamageAt`/
 `ApplyDamageStages`/`RunDeathSequence`/`ResetDestructible`) and the world-effects runtime
-(`PlayEffectAt` over a hidden template stage). `Play`/`PlayWithin`/`StopWithin` start a def's
+(`PlayEffectAt` over a hidden template stage). **A pool-slot checkout re-resets its copies**
+(`ResetCheckedOutCopies`, run by `PlayEffectAt` between `TakeNextSlot`/`PlaceOn` and `Start`): the
+RESET_STATE of every def the played anim reaches through CALL_ANIMATION (`AnimProgram.Subset`, memoized
+per anim name) is re-applied on the anchors sitting in the slot(s) the call took. The original
+instances a fresh template copy per call, which always starts from its authored base pose; the pool
+hands the same node tree out again, still in whatever END pose its last run left, so a def whose
+sequences end INACTIVE (the sonic burst's `ring_up1..4`/`ring_down1` on `sonic_ring1..5`) played once
+per slot and drew nothing from the wrap on. `RESET_TIME -1` is "never self-reset while playing", not
+an exemption from this. Scoped to the call's own closure and its slot, never the whole `pool<N>`
+container: another effect live on the same slot number must not be re-posed under its running
+motions. Regression: the `effect-pool-reset` suite. `Play`/`PlayWithin`/`StopWithin` start a def's
 instances by anim name, the latter two scoped to one subtree (a NAME can repeat across a chapter,
 e.g. C1's three `hangerdoors`). Every construction site hands over a sealed `TemplateStage`
 (`NewTemplateStage`/`ForEffects`/`ForCrashRig`). Sibling modules, each with its own entry: the
@@ -769,7 +779,11 @@ The effect-template stage as one module (`TemplateStage<TNode>`): pool-slot arit
 `TakeNextSlot`, `RootsFor`, the `AssignCallerSlot` caller-slot claim), template placement
 (`PlaceAt`/`PlaceOn`), the copy-identity questions (`IsAt`, `RootsOf`, `SharedWithLiveInstance`),
 the pooled-copy staging entry (`IndexPooledCopy`), `Recycles`, and the reveal/retire/sweep ritual
-(`Reveal`, `RetireWhenIdle`, `Sweep`). Carries the three template policy flags as sealed
+(`Reveal`, `RetireWhenIdle`, `Sweep`). The stage's own reset pass (`applyResetStates`, wired from
+`AnimRuntime.ApplyResetStatesWithin`) runs once per copy, when it is staged; a copy `TakeNextSlot`
+hands out is re-reset by the runtime on every checkout (`AnimRuntime.ResetCheckedOutCopies`, its
+entry above), because the copy is a reused node tree standing in for the original's fresh instance
+per call. Carries the three template policy flags as sealed
 constructor state — `Pooled`, `Shown`, `Places` — get-only, no setter anywhere. Generic like
 `NameResolver<TNode>`: engine hooks at construction, the runtime-dependent hooks (`findAll`,
 `anchors`, `isLive`, live instances, …) late-bound via `Wire` at the handover, since the factory
@@ -3475,6 +3489,13 @@ construction rather than by assertion order alone: the staged template roots are
 nowhere) instead of hand-listed, and the TTL is 32 s — inheriting `--effects-test`'s 0.3 s would
 truncate the 1.2 s wash while everything else still read green. The full log of all three lands in
 `.scratch/ordnance-burst-timeline.txt`.
+`effect-pool-reset` proves the checkout re-reset (`AnimRuntime.ResetCheckedOutCopies`): the same
+derived sonic stage built over FOUR pool slots, `sonic_ground_effect` played five times to completion
+(so `PoolRecycles` stays 0 and the fifth play lands on the first's copy), and every ring mesh under
+slot 0's `sonic_ring1..5` read three frames into play 1 and play 5: visible-in-tree, scale and the
+per-instance opacity must agree, and both plays must be drawing at least one ring. Without the
+re-reset the fifth play's rings read INACTIVE at opacity 0, which is the sortie-long dead-burst
+symptom this suite exists to hold shut.
 ## src/Testing/GoldenShot.cs
 The engine half of the golden-image tripwire: `PixelHash(Image)` (md5, lower-case hex) and
 `Adapter()` (`"<gpu> / <api>"`). Called at the `--screenshot` save site, which prints

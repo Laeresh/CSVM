@@ -421,6 +421,8 @@ public static class Suites
             "he_ground_effect's six-step full-screen wash reports its authored run times, so the 1.2 s ramp does not collapse into one instant; the ramp routes by pane proximity and the victim-routed blend wash by player index, composited over it", FbfxFlash));
         into.Add(new TestHarness.Suite("ordnance-burst-timeline",
             "the HE, flash and sonic bursts play end to end and every sequence's whole event timeline matches the authored JSON — in order, at the authored time (D31)", OrdnanceBurstTimeline));
+        into.Add(new TestHarness.Suite("effect-pool-reset",
+            "a pooled effect copy is re-reset on checkout: the sonic burst played five times over a four-slot pool draws its rings on the fifth play exactly as on the first (BL-406)", EffectPoolReset));
         into.Add(new TestHarness.Suite("effects-census",
             "the full --effects-test sweep as verdicts: every effect resolves, template meshes show at the CALL SITE (not the stage origin), and none stays lit after its stop", EffectsCensus));
         into.Add(new TestHarness.Suite("bounce-launch",
@@ -11713,25 +11715,7 @@ public static class Suites
     private static void WithBurst(TestContext ctx, TestWorld world, string animName,
         System.Text.StringBuilder report, System.Action<IReadOnlyList<BurstFire>> body)
     {
-        var roots = Session.EffectCatalogue.StageRootsFor(world.Session.Program, new[] { animName },
-            Session.WorldEffectsFactory.StageRootResolver(world.Gamez));
-        ctx.Check(roots.Count > 0,
-            $"{animName}: its call closure's anchor roots derived ({roots.Count}: {string.Join(", ", roots)})");
-        var stage = new Node3D { Name = $"BurstStage_{animName}" };
-        var pool = new Node3D { Name = "pool0" };
-        pool.SetMeta(AnimRuntime.PoolSlotMeta, 0);
-        stage.AddChild(pool);
-        int built = Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
-            world.Session.Builder.Scene, pool, roots);
-        ctx.Same(roots.Count, built, $"{animName}: template roots staged from the chapter gamez");
-        foreach (var child in pool.GetChildren())
-        {
-            if (child is Node3D root)
-            {
-                root.Visible = false;
-            }
-        }
-
+        var stage = StageBurstRoots(ctx, world, animName, slots: 1);
         var runtime = AnimRuntime.ForEffects(
             AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true),
             1, new CountingEmitterFactory(), false, BurstTtl,
@@ -11766,6 +11750,129 @@ public static class Suites
         {
             runtime.Free();
             stage.Free();
+        }
+    }
+
+    // A burst's miniature world-effects stage: the def's derived anchor roots (its CALL_ANIMATION
+    // closure against the chapter gamez, the production derivation, so an unresolvable anchor
+    // throws here naming itself) built once per pool slot, each copy hidden, exactly as
+    // WorldEffectsFactory stages them. The caller frees the returned stage.
+    private static Node3D StageBurstRoots(TestContext ctx, TestWorld world, string animName, int slots)
+    {
+        var roots = Session.EffectCatalogue.StageRootsFor(world.Session.Program, new[] { animName },
+            Session.WorldEffectsFactory.StageRootResolver(world.Gamez));
+        ctx.Check(roots.Count > 0,
+            $"{animName}: its call closure's anchor roots derived ({roots.Count}: {string.Join(", ", roots)})");
+        var stage = new Node3D { Name = $"BurstStage_{animName}" };
+        for (int slot = 0; slot < slots; slot++)
+        {
+            var pool = new Node3D { Name = $"pool{slot}" };
+            pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
+            stage.AddChild(pool);
+            int built = Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
+                world.Session.Builder.Scene, pool, roots);
+            ctx.Same(roots.Count, built, $"{animName}: template roots staged from the chapter gamez (slot {slot})");
+            foreach (var child in pool.GetChildren())
+            {
+                if (child is Node3D root)
+                {
+                    root.Visible = false;
+                }
+            }
+        }
+        return stage;
+    }
+
+    // ---- a pooled copy is re-reset on checkout ------------------------------------------------
+
+    // The sonic burst's five ring defs end with the ring INACTIVE at opacity 0, and only their
+    // RESET_STATE ever re-activates it. The original instances a fresh copy per CALL_ANIMATION, so
+    // that pose is what every burst starts from; the pool reuses each copy, so from the wrap on it
+    // is what every burst starts WITHOUT unless the checkout re-applies it. Four slots, five plays:
+    // the fifth lands on the first's copy, and its rings must draw as the first's did.
+    private static void EffectPoolReset(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            const int slots = 4;
+            const int plays = slots + 1;
+            const string anim = "sonic_ground_effect";
+            var stage = StageBurstRoots(ctx, world, anim, slots);
+            var runtime = AnimRuntime.ForEffects(
+                AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true),
+                1, new CountingEmitterFactory(), false, BurstTtl,
+                () => ctx.Camera.GlobalPosition);
+            runtime.ManualAdvance = true;
+            ctx.Host.AddChild(stage);
+            ctx.Host.AddChild(runtime);
+            try
+            {
+                runtime.Bind(stage, world.Session.Program.Subset(anim));
+                var slot0 = stage.GetNode<Node3D>("pool0");
+                var readings = new List<List<RingReading>>();
+                for (int play = 1; play <= plays; play++)
+                {
+                    ctx.Check(runtime.PlayEffectAt(anim, ctx.Camera.GlobalPosition), $"play {play} started");
+                    // Three frames in: the rings' opening motions have taken their FROM poses.
+                    for (int i = 0; i < 3; i++)
+                        runtime.Advance(1f / 60f);
+                    readings.Add(RingReadingsIn(slot0));
+                    // Play the burst out; the next play must find its slot idle, not recycled.
+                    int steps = Mathf.RoundToInt(BurstSeconds * 60f);
+                    for (int i = 0; i < steps; i++)
+                        runtime.Advance(1f / 60f);
+                }
+
+                ctx.Same(0, runtime.PoolRecycles, $"no play wrapped onto a live copy: each burst ended before the pool came round");
+                var first = readings[0];
+                var fifth = readings[plays - 1];
+                ctx.Check(first.Count > 0 && first.Any(r => r.Visible),
+                    $"play 1 draws its rings on slot 0 ({first.Count(r => r.Visible)}/{first.Count} ring mesh(es) visible)");
+                ctx.Check(fifth.Any(r => r.Visible),
+                    $"play {plays} draws its rings on the same copy ({fifth.Count(r => r.Visible)}/{fifth.Count} visible)");
+                ctx.Same(first.Count, fifth.Count, $"the same ring meshes were read on both plays");
+                for (int i = 0; i < System.Math.Min(first.Count, fifth.Count); i++)
+                {
+                    var (a, b) = (first[i], fifth[i]);
+                    ctx.Check(a.Visible == b.Visible && a.Scale.IsEqualApprox(b.Scale)
+                              && Mathf.Abs(a.Opacity - b.Opacity) < 0.01f,
+                        $"{a.Root}/{a.Mesh}: play {plays} starts as play 1 did (visible {b.Visible} vs {a.Visible}, scale {b.Scale} vs {a.Scale}, opacity {b.Opacity:0.00} vs {a.Opacity:0.00})");
+                }
+            }
+            finally
+            {
+                runtime.Free();
+                stage.Free();
+            }
+        });
+    }
+
+    // Every ring mesh under the slot's five sonic_ring<N> copies, in tree order: whether it is
+    // drawing, its scale, and its per-instance opacity (1 when never faded).
+    private static List<RingReading> RingReadingsIn(Node3D slot)
+    {
+        var rows = new List<RingReading>();
+        foreach (var child in slot.GetChildren())
+        {
+            if (child is not Node3D root || !root.Name.ToString().StartsWith("sonic_ring", System.StringComparison.Ordinal))
+                continue;
+            foreach (var mesh in Descendants(root).OfType<MeshInstance3D>())
+            {
+                var alpha = mesh.GetInstanceShaderParameter(SceneBuilder.OpacityParam);
+                rows.Add(new RingReading(root.Name, mesh.Name, mesh.IsVisibleInTree(), mesh.Scale,
+                    alpha.VariantType == Variant.Type.Nil ? 1f : alpha.AsSingle()));
+            }
+        }
+        return rows;
+    }
+
+    private static IEnumerable<Node> Descendants(Node node)
+    {
+        foreach (var child in node.GetChildren())
+        {
+            yield return child;
+            foreach (var deeper in Descendants(child))
+                yield return deeper;
         }
     }
 
@@ -13527,6 +13634,10 @@ public static class Suites
     // definitions its CALL_ANIMATIONs reach.
     private readonly record struct BurstFire(float T, string Anim, string Sequence, int Index,
         string Kind, string? Name);
+
+    // One ring mesh's state at a sampled instant of a sonic play (the effect-pool-reset suite):
+    // which staged root it sits under, whether it draws, its scale and its per-instance opacity.
+    private readonly record struct RingReading(string Root, string Mesh, bool Visible, Vector3 Scale, float Opacity);
 
     // One authored sequence PASS. A pass, not a sequence: `sonic_ground_effect`
     // calls `sonic_light_seq` from two sites 1.2 s apart, and each call is its own lane,

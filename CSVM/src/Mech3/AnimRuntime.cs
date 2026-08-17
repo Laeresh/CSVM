@@ -392,6 +392,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private readonly List<(AnimDefinition Def, Node3D? Anchor, float Deadline)> _effectTtls = new();
 
+    // Per effect anim name, the definitions one PlayEffectAt reaches through CALL_ANIMATION, the
+    // set whose RESET_STATE a pool-slot checkout re-applies (ResetCheckedOutCopies). Memoized:
+    // the program is fixed at Bind and gun hits check a slot out many times a second.
+    private readonly Dictionary<string, List<AnimDefinition>> _checkoutClosure =
+        new(StringComparer.OrdinalIgnoreCase);
+
     // ---- IF/ELSEIF conditions ----
     // Per condition kind: how often it evaluated true / false. Reported after the bootstrap
     // passes, which is the headless proof that (say) the refinery's AnimationLod branch is
@@ -1121,6 +1127,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 // that root is this call's own slot, and only that copy moves onto the site.
                 var roots = _templateStage.TakeNextSlot(def);
                 _templateStage.PlaceOn(roots, worldPoint, LevelsTemplate(def), orient);
+                // ⚠ Before Start, every play: the copy is a reused node tree, not the fresh one
+                // the original instances per call, and its last run left it in its END pose.
+                ResetCheckedOutCopies(animName, roots);
                 var anchor = roots.FirstOrDefault();
                 bool governed = inputNode != null && IsInstanceValid(inputNode)
                                 && DefConditionsOnInputNode(def);
@@ -1806,6 +1815,32 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 continue;
             foreach (var a in Anchors(def))
                 if (a != null && (a == subtree || subtree.IsAncestorOf(a)))
+                    ApplyInstant(def.ResetState.Events, def, a);
+        }
+    }
+
+    // Re-applies the RESET_STATE of every def a PlayEffectAt of animName reaches, on the anchors
+    // sitting in the pool slot(s) the call just took: the checkout's stand-in for the original's
+    // fresh template copy per CALL_ANIMATION. Without it a copy whose sequences end INACTIVE (the
+    // sonic burst's five rings) plays once per slot and is dead from the wrap on. Scoped to the
+    // call's own closure, never the whole slot: another effect live on the same slot number must
+    // not be re-posed under its running motions. RESET_TIME -1 does not exempt a def (docs/architecture.md).
+    private void ResetCheckedOutCopies(string animName, IReadOnlyList<Node3D?> roots)
+    {
+        var slots = new HashSet<int>();
+        foreach (var root in roots)
+            if (root != null && IsInstanceValid(root) && _templateStage.SlotOf(root) is >= 0 and var slot)
+                slots.Add(slot);
+        if (slots.Count == 0)
+            return;
+        if (!_checkoutClosure.TryGetValue(animName, out var closure))
+            _checkoutClosure[animName] = closure = _program.Subset(animName).Defs.ToList();
+        foreach (var def in closure)
+        {
+            if (def.ResetState == null)
+                continue;
+            foreach (var a in Anchors(def))
+                if (a != null && IsInstanceValid(a) && slots.Contains(_templateStage.SlotOf(a)))
                     ApplyInstant(def.ResetState.Events, def, a);
         }
     }

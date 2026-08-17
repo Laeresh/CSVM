@@ -1991,6 +1991,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   this is explicitly NOT — a size increase would not touch this cost), `docs/verification.md`
   PERF-14.
 
+- `BL-418` `[Bug]` **The sonic burst hitches on its first plays: first-time emitter/material
+  construction for its nine puffers, the `BL-355` mechanism on the world-effects runtime.**
+  *Evidence:* the sonic weapon-lab probe (`--chapter=C1 --weapon-lab=wep_08 --weapon-fire
+  --infinite-ammo --weapon-surface=default --weapon-standoff=90`) trips `HitchMonitor` on the first
+  bursts (sim frames 141/202/263, one per fresh slot copy) with 130-290 ms frames whose samples read
+  `effect_pool_miss:8x`, and once with a 70 ms frame naming `effect_checkout` alone; `PoolRecycles`
+  stays 0, so it is not the pool wrapping. `sonic_ground_effect` calls nine puffer defs (`sonic_puff1`,
+  `sonic_puff4`..`sonic_puff11`, `extracted/zrdr/sonic_control.zrd.json`), and each first
+  `PUFFER_STATE 1` on a never-seen `(name, host, def)` key takes `EmitterDirector.Assert`'s miss
+  branch (`CSVM/src/Mech3/Anim/EmitterDirector.cs`, the `PerfSite.EffectPoolMiss` scope), building
+  the `Puffer` and, nested inside it, `EmitterRenderer.Attach`'s material, synchronously in the frame
+  the burst fires. With four pool slots per root, four bursts each pay it once per slot copy before
+  every key exists.
+  *Fix shape:* pre-warm those emitter keys at stage build (`WorldEffectsFactory.BuildWorldEffectsRuntime`,
+  once per pool copy), the same idea `BL-355` names for the crash rig, so the first burst finds every
+  emitter built. Not a pool-size change (`effect_pools.json` sizes concurrency, not first construction).
+  *How you would know:* the same probe run to eight bursts shows no `effect_pool_miss` sample after
+  the build, and no `HitchMonitor` trip whose samples name `effect_checkout`.
+  ⚠ *Trap:* the checkout re-reset (`AnimRuntime.ResetCheckedOutCopies`) runs in the same
+  `effect_checkout` scope; a hitch attributed to that site is this item's construction cost, not the
+  reset, until measured otherwise.
+  *Cross-refs:* `BL-355` (the crash/damage cascade's identical mechanism), `BL-406`.
+
 ## Audio
 
 - `BL-079` `[Feature]` **Positional 3D audio for other aircraft** — all sound is own-plane non-positional today;
