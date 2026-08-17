@@ -2607,17 +2607,6 @@ usual.
   per-def volume terms feeding `Projectile.cs`'s `def.Volume * 0.2f * MixGain * distanceGain`
   (line ~2238) — not the `1/sqrt(N)` splitscreen term itself, which is confirmed correct.
 
-- `BL-390` `[Bug]` **`PerfHud` (`--debug-fps`) overlaps player 1's VS HUD status text — both anchor
-  top-left.** Found at the `BL-126` chrome playtest (F52, 2026-08-15; folds in `PT-49`) at both 2P
-  and 4P: `PerfHud.cs:237` anchors its label `Control.LayoutPreset.TopLeft`, the same corner
-  `VersusBoard`'s status line uses for player 1's pane, so the two draw on top of each other
-  whenever `--debug-fps` is live in a VS session. Otherwise legible (font size, Compact/Full
-  content all read fine — the pane-size legibility question `PT-49` asked is answered: readable).
-  *Fix shape:* anchor `PerfHud` to a different corner (top-right reads as the natural pick, clear
-  of every pane's own status text) or give its label an outline/backdrop that survives sitting
-  over other text — pick whichever also serves NodeLabels/MarkerOverlay's existing debug-overlay
-  precedent, if any.
-
 - `BL-392` `[Feature]` **VS HUD status-line font size wants a config knob.** Found at the `BL-126`
   chrome playtest (F52, 2026-08-15; folds in `PT-43(d)`): the opponent edge-arrows + status line
   (`VersusBoard.cs`) read fine at 2P and 4P as currently sized, but the user asked for a way to
