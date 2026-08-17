@@ -187,7 +187,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave F — Sign-off
 
-22. ☐ Four-viewer splitscreen pass and the per-type playtest
+22. ◐ Four-viewer splitscreen pass and the per-type playtest
 
 ## Dependency and parallelism notes
 
@@ -1066,7 +1066,16 @@ against aircraft and launch at a zeppelin. Then an ordinary rocket AI, which mus
 
 # Wave F — Sign-off
 
-## F22 ☐ Four-viewer splitscreen pass and the per-type playtest
+## F22 ◐ Four-viewer splitscreen pass and the per-type playtest
+
+**Verdict.** The harness half is done: the sign-off rows exist in
+[`playtest.md`](../playtest.md) as `PT-62`–`PT-76`, one per behaviour a human has to judge, each
+naming its command line, the decoded rule it is judged against and the item it signs off. The
+flying is the user's, and **the plan completes when those rows are signed off**, not when they are
+written. Three of them cannot be flown to completion today and say so in the row rather than being
+left out: `PT-72` waits on `E19`/`E20` landing, `PT-73`'s AI half waits on `BL-363` and `BL-394`,
+and every row reaches its ordnance through `--weapon-lab=`/`--rocket=` because `BL-353` is the
+screen that would let a pilot fit these types in a real flight.
 
 **Goal.** Every landed behaviour is correct with four viewers, and each type has been seen doing the
 right thing at the controls.
@@ -1077,11 +1086,14 @@ weapons, per Decision 2. This item is judgement at the controls against the plan
 **Approach.** One pass per type under `--coop --players=4` and `--vs --players=4`, plus a re-run of
 the single-viewer clips from each item's Verify to confirm the wash channel did not regress them.
 
-**Model recommendation.** <TODO: this is a human-at-the-controls item; a model tier applies only to
-the harness work around it.>
+**Model recommendation.** none for the judging half, which is a human at the controls and cannot be
+delegated to any tier. The harness half (writing the rows) was documentation work against the
+landed items' verdicts and the CLI reference, and needed no model tier beyond that.
 
-**Verify.** <TODO: write the playtest rows. They belong in `playtest.md` as an `[Owed-playtest]` set
-once the first Wave D item lands, not before.>
+**Verify.** `PT-62`–`PT-76` in [`playtest.md`](../playtest.md), grouped as five flight profiles:
+ordinary flight with a swapped pylon (`PT-62`, `PT-63`), the weapon lab (`PT-64`–`PT-67`), an
+empty stage against AI for the four no-damage types and the flyout (`PT-68`–`PT-73`), the two-pane
+wash routing (`PT-74`), and the four-viewer `--coop` and `--vs` passes (`PT-75`, `PT-76`).
 
 **⚠ Traps.** `BL-389` already reports the splitscreen weapon mix needs a retune, with rockets too
 quiet against guns. Do not conflate a mix problem with a behaviour problem while judging these.
