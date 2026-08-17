@@ -182,7 +182,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 20. ☑ The parachute: `chuteman` at 3.0 s, and the wreck's own landing sequences (the planes gamez is
     now a second stage source for the crash rig; ⚠ the Balmoral's three chutes still collapse to
     one, see D21)
-21. ☐ Evidence for the fall
+21. ☑ Evidence for the fall (findings (a) and (b) fixed, (c) disproven; `SHOT-29`'s objection
+    re-measured and overturned for this subject, so the fall IS pinned by a golden)
 22. ☑ The bailed pilot must not inherit the wreck's velocity
 23. ☑ Decode `start: null` after a timed event (❌ disproven as the cause; the real mechanism is the
     dead vehicle flying itself until `Callback 15`), and convert the anim family off `GD.Print`
@@ -780,6 +781,40 @@ landing and only then hides it. Assert counts and states, never "something happe
 
 **⚠ Traps.** The manifest's `exercises` field is hook-checked: under 250 chars, no item id, no date,
 no "also exercises" clause, rewritten on a re-pin.
+
+**Result.** A suite, a golden, and a correction to `SHOT-29`'s reach.
+
+*The suite: `ai-wreck-fall`.* One aircraft through `AiAircraftSpawner`, killed through
+`TakeCollisionHit`, then driven frame by frame on both clocks at once (`SimStep` for the hull the
+flight model still owns, `Advance` for the def that will take it). It counts one start of the
+self-named `fury` def and **zero** starts of the `ai_crash_*` family on the kill frame, samples the
+airframe's visibility on every one of the 181 frames of the fall rather than at its ends, measures
+the 143 m the hull covers before the handover, pins the handover itself at the authored 3.0 s, and
+asserts `Callback 16` handed the anim the velocity the wreck had reached THERE (drag had taken it
+from 54 to 43 m/s, which is what separates a handover sample from a kill-frame one). A second arm
+spawns low and diving so the wreck meets the ground inside that window: `ai_crash_dirt` fires on the
+contact and the airframe is hidden only then. The permanent control is a third rig whose
+`DestroyDef` is nulled, which reproduces the old bug exactly (hidden on the death frame, 0 m
+travelled).
+
+*Made to fail four ways*, each caught by the checks that name it: hiding the airframe in `Destroy`
+(4 red), unwiring `WreckVelocity` (1), unwiring `StopWreckFlying` (3), and playing the `*_crash_*`
+family on the kill as Waves A to C did (7, including "nothing of the aircraft was drawn on any of
+480 frames").
+
+*The golden: pinned, and `SHOT-29` re-measured rather than inherited.* `c1-ai-wreck` is the same
+`--ai=` kill at frame 280, the handover. It differs from an unkilled control by **25.7 % of the
+frame** (1.9 % past a channel delta of 16) in a readable 215 × 206 px fireball, repeats bit for bit
+across runs, and is 54.5 % frame-sensitive. `SHOT-29`'s 0.043 % was measured on the pristine
+aircraft's damage ladder; the burning wreck is a different subject at 600× the signal, and
+`SHOT-31` records that the verdict was about the subject and not about AI aircraft.
+
+*One trap found and pinned as `INSTR-18`.* The first fall arm spawned at 2500 m and reported 454 m
+of falling in a single frame: `FlightModel`'s altitude cap snaps anything above it down to 2045.8 m
+on the first step. Below the cap the hull holds its altitude to the metre for the whole three
+seconds, which is `D24`'s glide seen from the instrument side. A second instrument died to a rule
+already on the page: a hand-built slab added to the collision space and then MOVED into position was
+invisible to every query (`INSTR-13`), which is why the landing arm strikes chapter terrain.
 
 **Three findings this item inherits.**
 

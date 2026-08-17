@@ -1950,7 +1950,8 @@ down is asked of the data (`EffectCatalogue.FliesOwnHull`): the eleven airframe 
 `*_crash_*` follows; `player` authors none, so `_wreckFalling` keeps the hull in the flight model
 (no input, no weapons) until `StepWreckFall`'s sweep reaches the world and `Crash` plays
 `player_crash_*`. That second call is the one re-entry `Crash` allows while `_crashed`, and it
-re-fires neither `Downed` nor the camera cut. `player_crash_default` is the cascade's **fallback
+re-fires neither `Downed` nor the camera cut. The `ai-wreck-fall` suite drives both stages on one
+spawned aircraft end to end and is where a regression in either shows up. `player_crash_default` is the cascade's **fallback
 arm**, reached by a null material, an out-of-range id or an empty slot — it is NOT an air/no-impact
 variant, a reading `BL-059` disproved. `this+0x19f ∈ {0,4}` inside `FUN_004b82d0` is undecoded and
 stays unmodelled.
@@ -2810,7 +2811,7 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/Suites.cs
-The 58 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
+The 76 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
 the full-rig `Loadout.ForRig`), live weapon fire, the carried turret gunners (`carried-turrets`:
 build from ai.zrd + the thirdp mount, arc-centre rest pose, track/fire/hit under the host's
 shooter id, bored-window fire suppression with live tracking, the nearer-end-stop park, YAW [0,0]

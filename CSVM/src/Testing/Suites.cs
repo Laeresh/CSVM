@@ -384,6 +384,8 @@ public static class Suites
             "binding the crash rig leaves the airframe model under the controller — even the Devastator, whose model root shares the crash defs' authored NAME — and stages every pooled copy in the same reset pose", CrashRigAnchors));
         into.Add(new TestHarness.Suite("ai-crash-defs",
             "an AI plane's crash rig binds the ai_crash_* family and its crash indexes it by the struck surface id — dirt(13) plays ai_crash_dirt, no material plays ai_crash_default, and the def switches off both the airframe's healthy subtree and the crash root's wreck — while a human rig off the same factory keeps player_crash_* (G21)", AiCrashDefs));
+        into.Add(new TestHarness.Suite("ai-wreck-fall",
+            "a killed AI aircraft's whole fall: the kill starts its self-named destroy def and no ai_crash_* def, the airframe is drawn on every frame of the fall, the hull travels under the flight model until Callback 15 releases it at the authored 3.0 s, Callback 16 hands the anim the velocity it reached THERE, and a wreck that meets the ground first plays its surface-indexed crash def and is hidden only then (D21)", AiWreckFall));
         into.Add(new TestHarness.Suite("player-destroy-choreography",
             "a shot-down player plays player-player whole: the two authored arms are chosen by the def's own IF NODE_ACTIVE 1 (its node one is `player_autogyro`, so only the autogyro stops its rotor), the cockpit eject stages and shows its cpilot, all four wreck pieces appear and fly their own OBJECT_MOTION, and the camera-only Callback 3 stays counted rather than invented (D25)", PlayerDestroyChoreography));
         into.Add(new TestHarness.Suite("hostile-marker-hud",
@@ -10723,6 +10725,314 @@ public static class Suites
                 textures.Dispose();
             }
         });
+    }
+
+    // ---- an AI kill, from the death frame to the ground -----------------------------------------
+
+    // The whole fall as one sequence: the kill starts the SELF-NAMED destroy def and nothing else,
+    // the airframe stays VISIBLE for every frame of it, the hull travels a measured distance under
+    // the flight model, Callback 16 hands the anim the velocity it reached THERE, and a wreck that
+    // meets the ground first plays the ground-impact def and is hidden only then.
+    // ⚠ Keep the unwired control: the bug this pins is a hull hidden on the death frame.
+    // Decode: docs/org/vehicleDamage.md, "What happens to the wreck".
+    private static void AiWreckFall(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.WithWorld(ctx.Chapter, collision: true, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            ProjectilePool? pool = null;
+            try
+            {
+                var live = new ProjectilePool(textures, null, null);
+                pool = live;
+                ctx.Host.AddChild(live);
+                var spec = SessionSpec.Parse(System.Array.Empty<string>());
+                var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
+                var factory = new Session.WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero);
+                var inputs = new FlightRigAssembler.Inputs
+                {
+                    PlanesGamez = planesGamez,
+                    StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                    AiStatsFor = plane => PlaneStats.LoadForAi(ctx.ZrdrPath, plane),
+                    RigCount = 0,
+                    PaintRng = new RandomNumberGenerator(),
+                    ZrdrPath = ctx.ZrdrPath,
+                    StockLoadouts = StockLoadouts.Load(),
+                    WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                    Textures = textures,
+                    Projectiles = live,
+                    Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                    Gamez = world.Gamez,
+                    WorldScene = world.Session.Builder.Scene,
+                    CrashProgram = world.Session.Program,
+                };
+                var spawner = new AiAircraftSpawner(spec, liveries, factory, ctx.Host, inputs);
+
+                // A suite that built no colliders would pass the landing arm by never reaching the
+                // ground at all, so the chapter's geometry is found before anything is asked of it.
+                var space = world.Session.Root.GetWorld3D()?.DirectSpaceState;
+                if (space == null)
+                {
+                    ctx.Check(false, $"the world built a collision space to fall into chapter={ctx.Chapter}");
+                    return;
+                }
+
+                bool found = FindFlatRun(space, out var lowSpawn, out var lowAim);
+                ctx.Check(found,
+                    $"chapter {ctx.Chapter} offers a flat run of land to sink onto at {(found ? $"({lowSpawn.X:0},{lowSpawn.Y:0},{lowSpawn.Z:0})" : "nowhere")}");
+
+                // ⚠ Below FlightModel's altitude cap, which SNAPS a higher spawn down to 2045.8 m on
+                // its first step: a fall arm above it measures that teleport as 450 m of falling.
+                const float FallFrom = 1500f;
+                WreckFallsBeforeItIsHandedOver(ctx, spawner, FallFrom);
+                WreckWithNoDestroyDefIsHiddenOnTheKill(ctx, spawner, FallFrom);
+                if (found)
+                    WreckReachingTheGroundPlaysItsCrashDef(ctx, spawner, lowSpawn, lowAim);
+            }
+            finally
+            {
+                pool?.Free();
+                textures.Dispose();
+            }
+        });
+    }
+
+    // The fall itself, from a height clear of both the ground and the altitude cap. Everything here
+    // is one aircraft's own timeline, so the checks are ordered as the frames are.
+    private static void WreckFallsBeforeItIsHandedOver(TestContext ctx, AiAircraftSpawner spawner,
+        float fallFrom)
+    {
+        const float Dt = 1f / 60f;
+        FlightController? ai = null;
+        try
+        {
+            var spawn = new Vector3(0f, fallFrom, 0f);
+            ai = spawner.Spawn("player_fury", spawn, spawn + Vector3.Forward,
+                AiPilot.HoldingCourse(spawn, spawn + Vector3.Forward));
+            if (ai.CrashRuntime is not { } rig || ai.Damage is not { } damage
+                || ai.PlaneModel is not { } model)
+            {
+                ctx.Check(false, $"the spawner built the AI Fury a crash runtime, a damage ledger and a model");
+                return;
+            }
+
+            rig.ManualAdvance = true;
+            ctx.Check(ai.DestroyDef == "fury" && ai.DestroyDefFliesWreck,
+                $"the AI Fury's death slot is its own self-named def '{ai.DestroyDef ?? "-"}', and the def flies the hull itself (fliesOwnHull={ai.DestroyDefFliesWreck})");
+
+            var starts = new Dictionary<string, int>(System.StringComparer.OrdinalIgnoreCase);
+            rig.OnInstanceStarted += (def, _) =>
+            {
+                string n = def.AnimName ?? def.Name ?? "";
+                starts[n] = starts.TryGetValue(n, out var c) ? c + 1 : 1;
+            };
+
+            var healthy = Find(model, "healthy");
+            var wreck = ai.CrashAnchor != null ? Find(ai.CrashAnchor, "destroyed") : null;
+            var posAtKill = ai.WorldPosition;
+            var velAtKill = ai.WorldVelocity;
+
+            // The kill through the production ram entry, both magnitudes — standing armour would
+            // otherwise null the health damage outright (PlaneDamage.Spend).
+            float overkill = (damage.WholeHealthMax + damage.WholeArmorMax) * 4f;
+            ai.TakeCollisionHit(overkill, overkill, ai.GlobalPosition, 0);
+
+            ctx.Check(ai.Destroyed && ai.WreckFalling,
+                $"the kill starts the destroy anim and leaves the hull FLYING destroyed={ai.Destroyed} falling={ai.WreckFalling}");
+            ctx.Same(1, Count(starts, "fury"),
+                $"the rig started the self-named destroy def exactly once on the kill");
+            int crashStarts = starts.Where(kv => kv.Key.StartsWith(
+                Session.EffectCatalogue.AiCrashDefPrefix, System.StringComparison.OrdinalIgnoreCase))
+                .Sum(kv => kv.Value);
+            ctx.Same(0, crashStarts,
+                $"…and no ai_crash_* def, which belongs to the ground contact seconds away");
+            ctx.Check(model.Visible && healthy is { Visible: true },
+                $"the airframe is still there on the death frame model={model.Visible} healthy={(healthy?.Visible.ToString() ?? "-")}");
+
+            // The fall, sampled every frame rather than at its ends: a hull hidden for part of it and
+            // shown again would read as never hidden from the endpoints alone.
+            int blankFrames = 0;
+            int hullHiddenFrames = 0;
+            float handoverAt = -1f;
+            var velAtHandover = Vector3.Zero;
+            var posAtHandover = posAtKill;
+            for (float t = 0f; t < 8f && handoverAt < 0f; t += Dt)
+            {
+                ai.SimStep(Dt);
+                // Read between the two halves of the frame: Callback 16 fires inside Advance below
+                // and samples the hull the step above has just moved.
+                velAtHandover = ai.WorldVelocity;
+                posAtHandover = ai.WorldPosition;
+                rig.Advance(Dt);
+                if (!model.Visible)
+                    hullHiddenFrames++;
+                if (healthy is { Visible: false } && wreck is { Visible: false })
+                    blankFrames++;
+                if (!ai.WreckFalling)
+                    handoverAt = t + Dt;
+            }
+
+            float travelled = posAtHandover.DistanceTo(posAtKill);
+            ctx.Note($"the AI Fury's wreck flew {travelled:0} m of its own in {handoverAt:0.00} s, from y={posAtKill.Y:0} to y={posAtHandover.Y:0} m (a glide, not a drop), at {velAtKill.Length():0} → {velAtHandover.Length():0} m/s");
+            ctx.Check(handoverAt is >= 2.9f and <= 3.2f,
+                $"Callback 15 released the hull at the def's authored 3.0 s gate t={handoverAt:0.00} s");
+            ctx.Same(0, hullHiddenFrames,
+                $"the airframe node was never hidden across the {handoverAt:0.00} s fall");
+            ctx.Same(0, blankFrames,
+                $"…and something of the aircraft was drawn on every one of those frames (healthy, then the destroyed wreck)");
+            // The dead hull GLIDES rather than dropping, which the decode says is faithful: the
+            // original changes nothing about a destroyed aircraft's integration.
+            ctx.Check(travelled > 100f,
+                $"the hull TRAVELLED under the flight model before the handover: {travelled:0} m (want over 100)");
+            ctx.Check(rig.InheritedWorldVelocity.IsEqualApprox(velAtHandover)
+                      && velAtHandover != Vector3.Zero,
+                $"Callback 16 handed the anim the velocity the wreck had reached inherited={rig.InheritedWorldVelocity} wreck={velAtHandover}");
+            ctx.Check(velAtKill.Length() - rig.InheritedWorldVelocity.Length() > 5f,
+                $"…sampled at the handover, not at the kill: drag took it from {velAtKill.Length():0.0} to {rig.InheritedWorldVelocity.Length():0.0} m/s over those seconds");
+            ctx.Check(ai.LastCrashDef == null,
+                $"nothing played the ground-impact family on the way down def={ai.LastCrashDef ?? "-"}");
+
+            // Past the handover the hull is the anim's: the flight model must not still be moving it,
+            // or the wreck and its ObjectMotion would fly the same node apart.
+            var afterHandover = ai.WorldPosition;
+            for (int i = 0; i < 60; i++)
+                ai.SimStep(Dt);
+            ctx.Check(ai.WorldPosition.IsEqualApprox(afterHandover),
+                $"and the flight model stopped moving it once released moved={ai.WorldPosition.DistanceTo(afterHandover):0.00} m");
+        }
+        finally
+        {
+            ai?.Free();
+        }
+    }
+
+    // THE ABLE-TO-FAIL CONTROL, and the bug in one line: with no destroy def bound the airframe is
+    // hidden on the death frame and never travels a metre. Every check in the arm above passes on
+    // this rig too if it is written loosely enough, which is why it runs.
+    private static void WreckWithNoDestroyDefIsHiddenOnTheKill(TestContext ctx,
+        AiAircraftSpawner spawner, float fallFrom)
+    {
+        const float Dt = 1f / 60f;
+        FlightController? ai = null;
+        try
+        {
+            var spawn = new Vector3(3000f, fallFrom, 0f);
+            ai = spawner.Spawn("player_fury", spawn, spawn + Vector3.Forward,
+                AiPilot.HoldingCourse(spawn, spawn + Vector3.Forward));
+            if (ai.Damage is not { } damage || ai.PlaneModel is not { } model)
+            {
+                ctx.Check(false, $"the control rig spawned with a damage ledger and a model");
+                return;
+            }
+
+            ai.DestroyDef = null;
+            var posAtKill = ai.WorldPosition;
+            float overkill = (damage.WholeHealthMax + damage.WholeArmorMax) * 4f;
+            ai.TakeCollisionHit(overkill, overkill, ai.GlobalPosition, 0);
+            for (int i = 0; i < 180; i++)
+                ai.SimStep(Dt);
+            ctx.Check(!model.Visible && !ai.WreckFalling,
+                $"ABLE-TO-FAIL CONTROL: with no destroy def the airframe is hidden on the death frame model={model.Visible} falling={ai.WreckFalling}");
+            ctx.Check(ai.WorldPosition.DistanceTo(posAtKill) < 1f,
+                $"…and the hull never falls: {ai.WorldPosition.DistanceTo(posAtKill):0.00} m in three seconds");
+        }
+        finally
+        {
+            ai?.Free();
+        }
+    }
+
+    // A run of chapter land for a wreck to strike, 60 m under the spawn and aimed into it. ⚠ The
+    // DIVE is what makes it reachable: a dead hull holds its altitude almost exactly, so one killed
+    // in level flight glides out its three seconds and never meets the ground at all. Both ends of
+    // the run must be land at one height; sea level is skipped, so the crash table indexes its own
+    // ground slot rather than the water one.
+    private static bool FindFlatRun(PhysicsDirectSpaceState3D space, out Vector3 spawn, out Vector3 aim)
+    {
+        spawn = Vector3.Zero;
+        aim = Vector3.Forward;
+        for (int xi = -3; xi <= 3; xi++)
+        {
+            for (int zi = -3; zi <= 3; zi++)
+            {
+                var a = new Vector3(xi * 1500f, 0f, zi * 1500f);
+                var b = a + Vector3.Forward * 120f;
+                if (SurfaceHeight(space, a) is not { } ha || SurfaceHeight(space, b) is not { } hb)
+                    continue;
+                if (ha < 1f || Mathf.Abs(ha - hb) > 10f)
+                    continue;
+                spawn = new Vector3(a.X, ha + 60f, a.Z);
+                aim = spawn + new Vector3(0f, -1f, -0.3f);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static float? SurfaceHeight(PhysicsDirectSpaceState3D space, Vector3 column)
+    {
+        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+            new Vector3(column.X, 3000f, column.Z), new Vector3(column.X, -200f, column.Z),
+            CollisionLayers.World));
+        return hit.Count > 0 ? hit["position"].AsVector3().Y : null;
+    }
+
+    // The other outcome the same code path serves: a wreck that reaches the world INSIDE the three
+    // seconds is still a vehicle, so its contact runs the surface-indexed ai_crash_* table, and that
+    // def is what hides it. Spawned low over the flat run above, because a hull that holds its
+    // altitude for three seconds started high reaches no ground at all.
+    private static void WreckReachingTheGroundPlaysItsCrashDef(TestContext ctx,
+        AiAircraftSpawner spawner, Vector3 spawn, Vector3 aim)
+    {
+        const float Dt = 1f / 60f;
+        FlightController? ai = null;
+        try
+        {
+            ai = spawner.Spawn("player_fury", spawn, aim, AiPilot.HoldingCourse(spawn, aim));
+            if (ai.CrashRuntime is not { } rig || ai.Damage is not { } damage
+                || ai.PlaneModel is not { } model)
+            {
+                ctx.Check(false, $"the low rig spawned with a crash runtime, a damage ledger and a model");
+                return;
+            }
+
+            rig.ManualAdvance = true;
+            float overkill = (damage.WholeHealthMax + damage.WholeArmorMax) * 4f;
+            ai.TakeCollisionHit(overkill, overkill, ai.GlobalPosition, 0);
+            ctx.Check(model.Visible && ai.LastCrashDef == null,
+                $"this wreck leaves the kill frame visible and unlanded too def={ai.LastCrashDef ?? "-"}");
+
+            float landedAt = -1f;
+            int visibleFramesBeforeLanding = 0;
+            for (float t = 0f; t < 8f && landedAt < 0f; t += Dt)
+            {
+                ai.SimStep(Dt);
+                rig.Advance(Dt);
+                if (ai.LastCrashDef != null)
+                    landedAt = t + Dt;
+                else if (model.Visible)
+                    visibleFramesBeforeLanding++;
+            }
+
+            ctx.Note($"the gliding wreck struck the ground at t={landedAt:0.00} s, {spawn.DistanceTo(ai.WorldPosition):0} m out, def={ai.LastCrashDef ?? "-"}");
+            ctx.Check(landedAt is > 0f and < 3f,
+                $"the wreck reached the world inside the 3.0 s window, so it was still a vehicle t={landedAt:0.00} s");
+            ctx.Check(ai.LastCrashDef != null && ai.LastCrashDef.StartsWith(
+                    Session.EffectCatalogue.AiCrashDefPrefix, System.StringComparison.Ordinal),
+                $"…and its contact played the AI ground-impact family, indexed by the struck surface def={ai.LastCrashDef ?? "-"}");
+            ctx.Check(visibleFramesBeforeLanding > 0 && !model.Visible,
+                $"…which is what hides it, and only then: {visibleFramesBeforeLanding} visible frame(s) of flight, then model={model.Visible}");
+            ctx.Check(!ai.WreckFalling,
+                $"…and the wreck stopped flying itself on that contact falling={ai.WreckFalling}");
+        }
+        finally
+        {
+            ai?.Free();
+        }
     }
 
     // The player's own destroy choreography. `player-player` is the one destroy def that does not

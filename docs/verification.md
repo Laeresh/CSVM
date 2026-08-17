@@ -159,9 +159,17 @@ and leave gaps when retiring old ones.
 - **SHOT-30** — **A headless AI shootdown is reachable, and it writes `DESTROYED …`, not
   `CRASH into …`.** `RunProbe.ps1 --chapter=C1 --plane=player_bhawk --ai=player_fury
   --ai-damage=0.02 --fire --frames=1200` kills the AI plane in about a second and logs
-  `DESTROYED by gunfire (…) def=fury wreck=falling (anim)`. Grepping a run for `CRASH` alone
-  reads a working shootdown as nothing having happened, because the two death stages are two
-  different log lines and only the ground contact writes the second.
+  `DESTROYED by gunfire (…) def=fury wreck=falling (flight model) lands=anim (bounce sequence)`.
+  Grepping a run for `CRASH` alone reads a working shootdown as nothing having happened, because
+  the two death stages are two different log lines and only the ground contact writes the second.
+
+- **SHOT-31** — **`SHOT-29`'s verdict is about the SUBJECT, not about AI aircraft, so re-measure
+  it for each one.** The same `--ai=` kill three seconds later, at the destroy def's handover,
+  differs from an unkilled control by **236,925 of 921,600 pixels, 25.7 %** (17,438, 1.9 %, past a
+  channel delta of 16), in a readable 215 × 206 px fireball; the shot repeats bit for bit across
+  runs and is 54.5 % frame-sensitive. A pristine AI aircraft's staged damage ladder moved 0.043 %
+  of the same frame. Same camera, same flags, 600× the signal: what fails a golden is the size of
+  the subject in frame, and a burning wreck is a different subject from the plane that was flying.
 
 ## GOLD — golden images
 
@@ -429,6 +437,12 @@ and leave gaps when retiring old ones.
   so the outer site's record absorbs the inner ones' cost by construction. Read a high
   `sample_violations` on a dominant site as "more happened here than the named sites show," not as
   a defect to chase.
+- **INSTR-18** — **Never place a flight-model probe above `flightModel.altitudeCapM`: the first step
+  teleports it down to the cap and every distance downstream measures the teleport.** The clamp
+  snaps any position over 2003 m to 2045.8 m, so a wreck released at 2500 m reports 454 m of
+  "falling" in one frame and a distance check passes on nothing having flown. Measured on the death
+  path, where the same wreck spawned at 1500 m holds its altitude to the metre across all three
+  seconds, a dead hull gliding rather than dropping.
 
 ## SRC — sources and documents
 

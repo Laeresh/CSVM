@@ -116,6 +116,13 @@
       "hash": "5b5664afc8764db93e9c087c8ff82c2f",
       "exercises": "the targeting HUD's original-shaped marker: fixed brackets inside the selected gun's reach, the name label below the plane, and --debug-markers' identity/health string; frame-sensitive 48.18 %.",
       "args": ["--chapter=C1", "--plane=player_fury", "--ai=player_kestrel", "--target=ai1_player_kestrel", "--debug-markers", "--hold=0,0,0,0.5", "--det", "--mute"]
+    },
+    {
+      "name": "c1-ai-wreck",
+      "frame": 280,
+      "hash": "ff1ecb8f7f32c4551eb3ec56b4ae0b72",
+      "exercises": "a shot-down AI aircraft still in the air three seconds after the kill: its self-named destroy def's second fireball and trail at the handover, where randomdestseq takes the hull over; frame-sensitive 54.5 %.",
+      "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_fury", "--ai-damage=0.02", "--fire", "--det", "--mute"]
     }
   ]
 }
