@@ -982,8 +982,10 @@ registered aircraft's carried gunners, on their host's team), `Structures`
 (`AddStructures(DestructibleRegistry)` — an **approximation** of the original's `targets.zrd`
 `MStructList`, recorded as one; `MissionTargets` is not the analogue, it holds objective display
 strings and nothing damageable) and `Ordnance` (`ProjectilePool.CollectFusedOrdnance` — a FILTER
-over the rounds in flight, `DetonationDistance > AimAssist.MinFuseDistance`, not a structure of its
-own).
+over the rounds in flight, not a structure of its own). The ordnance filter is
+`FUN_00441830`'s two independent reasons to wrap a round: a fuse over `AimAssist.MinFuseDistance`,
+**or** `TARGETABLE`. Only a `TARGETABLE` round carries a `Source` (its `ProjectilePool.Flyout`),
+which is the admission byte the wrapper sets at `+0x6c` and the only thing `TargetPool` admits.
 
 `AimAssist.FireDirection` is the whole fire call in one place (`FUN_004b6530`'s step order):
 seed the slot's target with the plane's forward axis, run `Scan`, rotate the winner world→local into
@@ -997,16 +999,20 @@ turret emplacement are three unrelated C# types, and every consumer downstream (
 the cycles, the label formatter, the marker) reads this and never the underlying type. It WRAPS an
 `AimCandidate` rather than restating it, adding what the aim assist has no use for: `Kind`, `Class` +
 `Objective`, `Name`/`DisplayName`/`TypeLabel`/`Category`, and optional `Health`/`Armor`. `Classify`
-is the decoded class model (`FUN_004b5cd0`); `CategoryLine` composes the marker's line 1. Pure data,
-no Godot node. Decode: [org/targeting.md](org/targeting.md). Pinned by the `target-ref` suite.
+is the decoded class model (`FUN_004b5cd0`); `CategoryLine` composes the marker's line 1;
+`SortsFirst` is `FUN_004bbd60`'s pair of `key = −1` overrides, an objective **or** a hostile round in
+flight. Pure data, no Godot node. Decode: [org/targeting.md](org/targeting.md). Pinned by the
+`target-ref` suite.
 
 ## src/Flight/TargetPool.cs
 The player's classed candidate pool: three lists of `TargetRef` (`Enemy`, `Ally`, `NonAircraft`,
 reachable through `Of(TargetClass)`), rebuilt from scratch on every `Rebuild` call, which is the
 original's own contract and why a runtime spawn appears and a death disappears with no extra
-plumbing. It walks two of the aim assist's four lists (`Vehicles`, `Turrets`); selectable structures
-arrive through `Rebuild`'s separate `subParts` argument, filled only by
-`ZeppelinRuntime.CollectTargetParts`. `Describe` is the only place in the targeting path that reads
+plumbing. It walks three of the aim assist's four lists (`Vehicles`, `Turrets`, `Ordnance`);
+selectable structures arrive through `Rebuild`'s separate `subParts` argument, filled only by
+`ZeppelinRuntime.CollectTargetParts`. An `Ordnance` entry is admitted only when its source is a
+`ProjectilePool.Flyout` with the `TARGETABLE` admission byte set and still live, so a round wrapped
+only because it is fused stays unselectable. `Describe` is the only place in the targeting path that reads
 a concrete source type. `TargetSelection` owns the instance; `FlightRigAssembler` wires one per human
 pane and `FlightController.StepTargeting` feeds it every frame. Decode:
 [org/targeting.md](org/targeting.md) "The candidate list". Pinned by the `target-pool` suite, with
@@ -1019,7 +1025,8 @@ class and the selection identity, stepping the list that already exists) and `Re
 pass that re-sorts and re-finds the selection by entity, falling back to the list head) is the
 original's, and that one fallback is the entire lifecycle: auto-acquire, switch-on-death and
 drop-on-class-change are all the same failed re-find. `SectorKey` is the cycle comparator
-(ahead, behind, left, right, nearest-first inside each); `Select`/`ApplyInitial` are `--target=`'s
+(`TargetRef.SortsFirst` ahead of every sector, then ahead, behind, left, right, nearest-first inside
+each); `Select`/`ApplyInitial` are `--target=`'s
 seam, the only things here with no counterpart in the original. No Godot node dependency. Decode:
 [org/targeting.md](org/targeting.md). Pinned by the `target-selection` and `target-flag` suites.
 
@@ -1253,8 +1260,9 @@ at the fire call, not in this file's integrator.
 what every rig, the bench and the rockets pass. Only the round's velocity uses it — the muzzle flash still rides
 `muzzle.Basis`, because the barrel has not moved.
 `CollectFusedOrdnance`/`CollectAircraft`/`CollectTurrets` build three of the assist's four
-candidate lists off this pool's own state: the live proximity-fused rounds in flight (a FILTER,
-every def with a fuse longer than `AimAssist.MinFuseDistance`), the registered aircraft, and each
+candidate lists off this pool's own state: the live rounds the engine wraps (a FILTER, every def
+with a fuse longer than `AimAssist.MinFuseDistance` **or** `TARGETABLE`, `FUN_00441830`'s two
+independent reasons), the registered aircraft, and each
 registered aircraft's carried turret gunners — the same roster the hit ray and the fuse
 already use, so the assist cannot drift onto a second list. `PlayShotSound` is the turret gunners'
 launch bark through the pool's own one-shot pool. `DefaultVelocity` (500 m/s, the
@@ -1412,7 +1420,41 @@ reveal point rather than dumping the hidden leg's worth of puffs at once. Holdin
 a judgement rather than a decode: the original's reveal switches the round's scene node, and
 whether its `MODEL_ANIMATION` puffer rides that flag was not traced. `CollectFlyoutReveal` is the
 seam a scripted run reads the gate through, since a pool with no world scene builds no body to look
-at.
+at. **The same gate is the intersect bit** (`FUN_005aef40` clears the round node's `0x10` at launch
+for a `RANGE_MINIMUM` carrier, `FUN_005afd50` sets it at the reveal), so a torpedo is unshootable for
+exactly as long as it is invisible.
+
+**A `TARGETABLE` or `FLYOUT_HEALTH` round carries a `ProjectilePool.Flyout`** (`SeedFlyout`,
+minted for the torpedo alone in this data), which is both halves of "shootable": the admission byte
+`TARGETABLE` sets on the target wrapper (`FUN_00441830`, the byte at `+0x6c`) and the armour/health
+pair the spawn seeds from weapon `+0x8c`/`+0x90`. It is a CLASS because the player's target registry
+re-finds a selection by source object every frame and a pooled round is a slot in a struct array with
+no identity of its own; a round carrying neither key gets none of it, which is the same outcome as
+the engine's **−1.0** not-shootable sentinel without the per-round allocation. The sentinel itself is
+still carried, on a `TARGETABLE` round authoring no `FLYOUT_HEALTH`, and is what keeps the
+`Health == 0` frame test safe. `Flyout.Spend` is `FUN_005abcf0`'s arithmetic verbatim: each pool
+clamped at zero, health touched only once armour is empty. ⚠ It is NOT `PlaneDamage.Spend`
+(`FUN_004b7f80`), which is a different, richer routine with an armour-shielded share; the flyout
+branch is the plain clamp-and-subtract pair, and the two must not be merged.
+
+**A flyout is struck through the pool, not through a Godot body.** `FlyoutStruck` walks the live
+rounds and slab-tests each swept segment against the struck round's own box (`Proj.HitCentre`/
+`HitHalf`, the `FLYOUT MODEL`'s AABB in the round's flyout pose), and the nearer of that answer and
+the world ray's wins, which is `FUN_005b03f0`'s rule for its one intersect database. The round
+excludes its OWN box and nothing else: the decode has no owner exclusion here, so a pilot can shoot
+down a torpedo he launched himself. Splash never reaches a flyout — the pair is spent only on this
+direct-hit path — and a flyout is never cover. A struck flyout spends the pair and the impact ends
+there: no per-surface effect, no sound, no splash (`FUN_005abcf0`'s first branch returns). The
+choice of a pool sweep over a physics body is deliberate: a `--run-tests` pass never yields a frame,
+so a body's queued transform never reaches the physics server and a real ray through it misses.
+
+**Destruction at zero is not a detonation.** `FUN_005af720` tests health `== 0.0` every frame after
+the retarget callback and before the guidance gate, so a shot-down round neither steers nor moves on
+the frame it dies. `DestroyFlyout` plays `DESTROY_ANIMATION` (`torpedo_destroy_effect`) at the
+round's position through `EffectSink` and retires it; only a shootable round authoring no
+`DESTROY_ANIMATION` falls through to the ordinary detonation, which nothing in this install does, so
+a shot-down torpedo never sets off its warhead. `CollectFlyouts` is the seam a scripted run reads the
+pair and the admission byte through. Pinned by the `shootable-flyout` suite.
 
 `ProjectilePool` — the shared-world weapon-fire subsystem: a fixed pool of projectiles integrated
 with `Ballistics` (VELOCITY/ACCELERATION/GRAVITY, ending at RANGE), plus tracer streaks,

@@ -391,6 +391,7 @@ public sealed partial class ProjectilePool : Node3D
     private int _soundGainsLogged;               // D31 one-shot gain breadcrumb, first 8
     private int _decaysLogged;                   // launch-velocity decay breadcrumb, first 4
     private int _revealsLogged;                  // RANGE_MINIMUM reveal breadcrumb, first 2
+    private int _flyoutDestroysLogged;           // shot-down flyout breadcrumb, first 2
     private int _disablingLogged;                // sonic/flash victim breadcrumb, first 8
     private float _simClock;                   // sim seconds since the pool started (the gun-effect throttle)
     private CasingSpec? _casingSpec;           // the gunshell OBJECT_MOTION, resolved once
@@ -514,6 +515,13 @@ public sealed partial class ProjectilePool : Node3D
     public static bool FlyoutHiddenAtLaunch(WeaponDef weapon) =>
         weapon.FlyoutHealth is > 0 && weapon.RangeMinimum is > 0f;
 
+    /// <summary>Seeds one round's shootable-flyout state, or null for a round that is neither
+    /// shootable nor targetable (every gun round, and every ordnance type but the torpedo), which
+    /// is what keeps this allocation off the hot path. <paramref name="slot"/> only names the
+    /// round for <c>--target=</c>.</summary>
+    public static Flyout? SeedFlyout(WeaponDef weapon, int slot) =>
+        weapon.FlyoutHealth is > 0 || weapon.Targetable ? new Flyout(weapon, slot) : null;
+
     /// <summary>The splash share at a squared surface distance: <c>1 − d² / IMPACT_PROXIMITY²</c>
     /// (<c>FUN_005acac0</c>, docs/org/ordnanceTypes.md "Half two, the splash"), applied to both
     /// damage pools. Quadratic in distance, so 0.75 at half the radius where a linear curve gives
@@ -626,21 +634,42 @@ public sealed partial class ProjectilePool : Node3D
         return null;
     }
 
-    /// <summary>Appends this pool's live proximity-fused rounds to the gun assist's candidate set:
-    /// a filter over rounds in flight whose def carries a fuse longer than
-    /// <see cref="AimAssist.MinFuseDistance"/>. Reads the round's own <c>Team</c>, stamped once at
-    /// <see cref="Spawn"/>; a round nobody owns lands on <see cref="AimAssist.NeutralTeam"/> and
-    /// is rejected by the scorer's team gate.</summary>
+    /// <summary>Appends this pool's live rounds to the engine's fourth candidate list: a round is on
+    /// it when its def carries a fuse longer than <see cref="AimAssist.MinFuseDistance"/> OR
+    /// <c>TARGETABLE</c>, which are <c>FUN_00441830</c>'s two independent reasons to wrap a round.
+    /// Reads the round's own <c>Team</c>, stamped once at <see cref="Spawn"/>; a round nobody owns
+    /// lands on <see cref="AimAssist.NeutralTeam"/> and is rejected by the scorer's team gate.</summary>
     public void CollectFusedOrdnance(AimCandidateSet into)
     {
         for (int i = 0; i < _proj.Length; i++)
         {
             ref var p = ref _proj[i];
-            if (!p.Alive || p.Weapon.DetonationDistance is not > AimAssist.MinFuseDistance)
+            if (!p.Alive || (p.Weapon.DetonationDistance is not > AimAssist.MinFuseDistance
+                             && !p.Weapon.Targetable))
             {
                 continue;
             }
-            into.AddOrdnance(p.Pos, WorldVelocity(in p), p.Team, source: null);
+            // The SOURCE is the round's flyout state, present only for a TARGETABLE round: it is
+            // the identity the player's target registry holds a selection by, and a merely fused
+            // round hands null, which is the admission byte clear (FUN_00441830).
+            into.AddOrdnance(p.Pos, WorldVelocity(in p), p.Team,
+                source: p.Shootable is { Targetable: true } ? p.Shootable : null);
+        }
+    }
+
+    /// <summary>Appends every live round's flyout state, in slot order, skipping a round carrying
+    /// neither <c>FLYOUT_HEALTH</c> nor <c>TARGETABLE</c>. The seam a scripted run reads the health
+    /// pair and the admission byte through, since both are otherwise invisible from outside the
+    /// round.</summary>
+    public void CollectFlyouts(List<Flyout> into)
+    {
+        for (int i = 0; i < _projHigh; i++)
+        {
+            ref var p = ref _proj[i];
+            if (p.Alive && p.Shootable is { } f)
+            {
+                into.Add(f);
+            }
         }
     }
 
@@ -857,6 +886,12 @@ public sealed partial class ProjectilePool : Node3D
             float rollRate = 0f;
             var trails = weapon.IsRocket && !hidden
                 ? AcquireTrails(weapon, muzzle.Origin, muzzle.Basis, out rollRate) : null;
+            // The shootable half. The hittable box comes off the model because the engine's
+            // hittable thing is the round's own scene node: a round flying streak-only (no FLYOUT
+            // MODEL in this chapter's gamez) has no node to strike, so it gets no box either.
+            var shootable = SeedFlyout(weapon, slot);
+            var hitBox = shootable is { HealthMax: > 0f } && model != null
+                ? ModelAabb(model) : new Aabb();
             // Team is stamped once here, never re-derived from shooterId on a later scan, so a
             // caller with a real FlightController.Team is answered faithfully for the round's
             // whole flight.
@@ -874,6 +909,9 @@ public sealed partial class ProjectilePool : Node3D
                 Tint = tracerTint,
                 TracerIdx = tracerIdx,
                 Model = model,
+                Shootable = shootable,
+                HitCentre = hitBox.GetCenter(),
+                HitHalf = hitBox.Size * 0.5f,
                 Trails = trails,
                 RollRate = rollRate,
                 Shooter = shooterId,
@@ -1013,6 +1051,15 @@ public sealed partial class ProjectilePool : Node3D
             // steering step on what it left in the target slot, then the motion step. So a seeker's
             // turn this frame is toward this frame's pick, and the motor acts on the penalised speed.
             RetargetSeeker(ref p, BeeperTags);
+            // The health test runs here, after the retarget callback and BEFORE the guidance gate
+            // and the motion step, which is FUN_005af720's own order. A shot-down round therefore
+            // neither steers nor moves on the frame it dies.
+            if (p.Shootable is { Destroyed: true })
+            {
+                DestroyFlyout(ref p);
+                continue;
+            }
+
             Steer(ref p, dt);
             Ballistics.Step(ref next, ref p.Vel, p.Accel, p.Grav, p.Cap, dt);
             next += p.Inherited * (carried * dt);
@@ -1031,21 +1078,52 @@ public sealed partial class ProjectilePool : Node3D
                 continue;
             }
 
-            if (space != null && stepLen > 1e-5f)
+            if (stepLen > 1e-5f)
             {
-                _ray.From = prev;
-                _ray.To = next;
-                // Per-shot owner exclusion on the SHARED query object: set for this round's
-                // shooter, reset right after — a leaked Exclude shields the next round's target.
-                _ray.Exclude = ExcludeFor(p.Shooter);
-                var hit = space.IntersectRay(_ray);
-                _ray.Exclude = NoExclude;
-                if (hit.Count > 0)
+                // A live flyout is in the same intersect database as the world, so the two answers
+                // compete on distance and the nearer wins (FUN_005b03f0). The round excludes its
+                // OWN box, never another's: a torpedo must not strike itself.
+                var struckFlyout = FlyoutStruck(i, prev, next, out var flyoutPoint);
+                float flyoutDistSq = struckFlyout != null
+                    ? prev.DistanceSquaredTo(flyoutPoint) : float.PositiveInfinity;
+                Vector3 hitPoint = default, hitNormal = default;
+                Node? hitCollider = null;
+                int hitShape = -1;
+                float hitDistSq = float.PositiveInfinity;
+                if (space != null)
                 {
-                    var hitPoint = (Vector3)hit["position"];
+                    _ray.From = prev;
+                    _ray.To = next;
+                    // Per-shot owner exclusion on the SHARED query object: set for this round's
+                    // shooter, reset right after — a leaked Exclude shields the next round's target.
+                    _ray.Exclude = ExcludeFor(p.Shooter);
+                    var hit = space.IntersectRay(_ray);
+                    _ray.Exclude = NoExclude;
+                    if (hit.Count > 0)
+                    {
+                        hitPoint = (Vector3)hit["position"];
+                        hitCollider = hit["collider"].Obj as Node;
+                        hitNormal = (Vector3)hit["normal"];
+                        hitShape = hit["shape"].AsInt32();
+                        hitDistSq = prev.DistanceSquaredTo(hitPoint);
+                    }
+                }
+
+                // A struck flyout is FUN_005abcf0's first branch: it spends the pair against the
+                // round the node points back to and nothing else of the impact happens — no
+                // per-surface effect, no sound, no splash. The frame check above acts on the result.
+                if (struckFlyout != null && flyoutDistSq <= hitDistSq)
+                {
+                    NearMissPass(prev, flyoutPoint, p.Shooter);
+                    struckFlyout.Spend(p.Weapon.ArmorDamage ?? 0f, p.Weapon.HealthDamage ?? 0f);
+                    RetireRound(ref p);
+                    continue;
+                }
+
+                if (hitDistSq < float.PositiveInfinity)
+                {
                     NearMissPass(prev, hitPoint, p.Shooter);
-                    Impact(p.Weapon, hitPoint, hit["collider"].Obj as Node, (Vector3)hit["normal"],
-                        hit["shape"].AsInt32(), p.Shooter, p.Team);
+                    Impact(p.Weapon, hitPoint, hitCollider, hitNormal, hitShape, p.Shooter, p.Team);
                     RetireRound(ref p);
                     continue;
                 }
@@ -1115,6 +1193,7 @@ public sealed partial class ProjectilePool : Node3D
         {
             KillModel(ref _proj[i]);
             ReleaseTrails(ref _proj[i]);
+            ReleaseFlyout(ref _proj[i]);
             _proj[i].Alive = false;
         }
         _projHigh = 0;
@@ -1911,6 +1990,93 @@ public sealed partial class ProjectilePool : Node3D
             ApplyDamage(weapon, outcome, point, normal, collider is AircraftBody ? null : collider, shooter);
     }
 
+    // The nearest live flyout the segment from→to passes through, or null. Kept in the pool rather
+    // than on a Godot body: the engine has ONE intersect database and its swept query finds a
+    // flyout node in it exactly as it finds a wall, so the two answers compete on distance
+    // (FUN_005b03f0 takes the nearer). It also makes the test independent of a physics frame.
+    private Flyout? FlyoutStruck(int selfSlot, Vector3 from, Vector3 to, out Vector3 point)
+    {
+        point = to;
+        Flyout? best = null;
+        float bestT = float.PositiveInfinity;
+        for (int i = 0; i < _projHigh; i++)
+        {
+            ref var q = ref _proj[i];
+            // The intersect bit: set only once RANGE_MINIMUM has revealed the round
+            // (FUN_005aef40 clears it at launch, FUN_005afd50 sets it at the reveal).
+            if (i == selfSlot || !q.Alive || q.FlyoutHidden || q.HitHalf == Vector3.Zero
+                || q.Shootable is not { HealthMax: > 0f } flyout)
+            {
+                continue;
+            }
+
+            var pose = FlyoutPose(q.Pos, WorldVelocity(in q));
+            var inv = new Transform3D(pose.Basis, pose * q.HitCentre).AffineInverse();
+            if (!SegmentHitsBox(inv * from, inv * to, q.HitHalf, out float t) || t >= bestT)
+            {
+                continue;
+            }
+
+            bestT = t;
+            best = flyout;
+            point = from.Lerp(to, t);
+        }
+        return best;
+    }
+
+    // Segment against an origin-centred axis-aligned box, both in the box's own frame: the slab
+    // test, returning the entry fraction along the segment (0 when it starts inside).
+    private bool SegmentHitsBox(Vector3 a, Vector3 b, Vector3 half, out float t)
+    {
+        t = 0f;
+        float lo = 0f, hi = 1f;
+        var d = b - a;
+        for (int axis = 0; axis < 3; axis++)
+        {
+            float o = a[axis], dir = d[axis], h = half[axis];
+            if (Mathf.Abs(dir) < 1e-9f)
+            {
+                if (Mathf.Abs(o) > h)
+                    return false;
+                continue;
+            }
+
+            float t0 = (-h - o) / dir, t1 = (h - o) / dir;
+            if (t0 > t1)
+                (t0, t1) = (t1, t0);
+            lo = Mathf.Max(lo, t0);
+            hi = Mathf.Min(hi, t1);
+            if (lo > hi)
+                return false;
+        }
+        t = lo;
+        return true;
+    }
+
+    // A built subtree's extent in the subtree root's own frame: the union of every
+    // MeshInstance3D's AABB, each carried up through its local transform.
+    private Aabb ModelAabb(Node3D model)
+    {
+        var box = new Aabb();
+        bool any = false;
+        void Walk(Node node, Transform3D xf)
+        {
+            if (node is Node3D n3d && node != model)
+                xf *= n3d.Transform;
+            if (node is MeshInstance3D { Mesh: not null } mi)
+            {
+                var local = xf * mi.Mesh.GetAabb();
+                box = any ? box.Merge(local) : local;
+                any = true;
+            }
+            foreach (var child in node.GetChildren())
+                Walk(child, xf);
+        }
+
+        Walk(model, Transform3D.Identity);
+        return box;
+    }
+
     // The impact hook's dispatch (weapon +0x20c, FUN_005ac7a0's first call): the TANGLER parse is
     // the binary's one installer, its hook (0x004ba660) pushes a choker cloud at the burst onto the
     // world list and returns 1, so a choker's IMPACT row plays no sound. Every other weapon has none.
@@ -2075,6 +2241,40 @@ public sealed partial class ProjectilePool : Node3D
         p.Alive = false;
         KillModel(ref p);
         ReleaseTrails(ref p);
+        ReleaseFlyout(ref p);
+    }
+
+    // A round shot out of the air (FUN_005af720's health branch): it plays its DESTROY_ANIMATION
+    // where it was and dies WITHOUT detonating — the warhead is not set off. Only a shootable round
+    // authoring no DESTROY_ANIMATION falls through to the ordinary detonation, which no entry in
+    // this install does, so the torpedo never splashes what shot it down.
+    private void DestroyFlyout(ref Proj p)
+    {
+        if (p.Weapon.DestroyAnimation is { } anim)
+        {
+            EffectSink?.Invoke(anim, p.Pos, Basis.Identity, 0f);
+            if (_flyoutDestroysLogged < 2)
+            {
+                _flyoutDestroysLogged++;
+                GD.Print($"flyout destroyed: {p.Weapon.Id} shot down, playing '{anim}'");
+            }
+            RetireRound(ref p);
+            return;
+        }
+
+        EndRound(ref p, p.Pos, detonate: true);
+    }
+
+    // The admission byte and the health pair leave with the round: a selection held on a dead
+    // flyout has to drop, and the box must stop being hittable the frame the round ends.
+    private void ReleaseFlyout(ref Proj p)
+    {
+        if (p.Shootable != null)
+        {
+            p.Shootable.Live = false;
+            p.Shootable = null;
+        }
+        p.HitHalf = Vector3.Zero;
     }
 
     // The RANGE_MINIMUM visibility gate: a torpedo runs its first 300 m with no body and no trail,
@@ -2087,6 +2287,8 @@ public sealed partial class ProjectilePool : Node3D
         p.FlyoutHidden = false;
         if (p.Model != null)
             p.Model.Visible = true;
+        // The same gate sets the node's intersect bit, so the round becomes shootable exactly when
+        // it becomes visible — FlyoutStruck reads FlyoutHidden for that.
         p.Trails ??= AcquireTrails(p.Weapon, at, FlyoutPose(at, vel).Basis, out p.RollRate);
         if (_revealsLogged < 2)
         {
@@ -2804,6 +3006,10 @@ public sealed partial class ProjectilePool : Node3D
         public WeaponDef Weapon;
         public Color Tint;       // tracer brightness multiplier (uniform, TracerTint)
         public int TracerIdx;    // which TracerTextures entry/MultiMesh this round's streak draws into
+        public Flyout? Shootable; // the FLYOUT_HEALTH pair and the TARGETABLE admission byte; null
+                                  // for a round carrying neither key (SeedFlyout)
+        public Vector3 HitCentre; // the hittable box, in the round's own flyout pose: the FLYOUT
+        public Vector3 HitHalf;   // MODEL's AABB. Zero when nothing is hittable (no body to strike)
         public Node3D? Model;    // the FLYOUT MODEL body (rockets only; null for gun tracers)
         public TrailEmitter[]? Trails; // the FLYOUT MODEL_ANIMATION smoke-trail emitters
         public float RollRate;   // rad/s about the nose axis (the sonic spinner); 0 = no roll
@@ -2863,6 +3069,76 @@ public sealed partial class ProjectilePool : Node3D
         public int ShooterId;
         public System.Func<Vector3> Position = null!;
         public System.Action<float> OnPass = null!;
+    }
+
+    /// <summary>One round's shootable-flyout state: the armour/health pair the spawn seeds at round
+    /// <c>+0x670</c>/<c>+0x674</c>, and the admission byte <c>TARGETABLE</c> sets
+    /// (<c>FUN_00441830</c>). It is a CLASS because the player's target registry re-finds a
+    /// selection by source object every frame and a pooled round is a slot in a struct array with
+    /// no identity of its own; a round carrying neither key gets none of this
+    /// (<see cref="SeedFlyout"/>).</summary>
+    public sealed class Flyout
+    {
+        /// <summary>The not-shootable sentinel both pools take without <c>FLYOUT_HEALTH</c>. Kept
+        /// as −1.0 rather than a flag because it is what makes <see cref="Destroyed"/>'s equality
+        /// against zero safe on a round that was never shootable.</summary>
+        public const float NotShootable = -1f;
+
+        internal Flyout(WeaponDef weapon, int slot)
+        {
+            Weapon = weapon;
+            Targetable = weapon.Targetable;
+            Name = $"{weapon.Id}#{slot}";
+            // FUN_005ad630 at 0x005ae164: the armour pool is the literal 0 the parser writes, with
+            // no key feeding it, so the first hit spends health directly. Implemented as a pool
+            // rather than dropped, because the spend ORDER below is what the decode fixes.
+            HealthMax = weapon.FlyoutHealth is { } hp and > 0 ? hp : NotShootable;
+            Health = HealthMax;
+            Armour = weapon.FlyoutHealth is > 0 ? 0f : NotShootable;
+        }
+
+        /// <summary>The weapon this round flies.</summary>
+        public WeaponDef Weapon { get; }
+
+        /// <summary>The admission byte at the target wrapper's <c>+0x6c</c>: a <c>TARGETABLE</c>
+        /// round is selectable, a merely fused one is on the same list with the byte clear.</summary>
+        public bool Targetable { get; }
+
+        /// <summary>This round's identity string, what <c>--target=</c> matches.</summary>
+        public string Name { get; }
+
+        /// <summary>The armour pool (round <c>+0x670</c>), always 0 as shipped.</summary>
+        public float Armour { get; private set; }
+
+        /// <summary>The health pool (round <c>+0x674</c>).</summary>
+        public float Health { get; private set; }
+
+        /// <summary><c>FLYOUT_HEALTH</c>, or <see cref="NotShootable"/>.</summary>
+        public float HealthMax { get; }
+
+        /// <summary>False once the round has left the pool, so a stale selection drops.</summary>
+        public bool Live { get; internal set; } = true;
+
+        /// <summary>Whether the per-frame test <c>FUN_005af720</c> runs before anything else has
+        /// tripped: health exactly zero. A sentinel round never satisfies it.</summary>
+        public bool Destroyed => Health == 0f;
+
+        /// <summary>Spends one hit's pair, armour then health (<c>FUN_005abcf0</c>): each pool is
+        /// clamped at zero, and health is only touched once armour is empty — which, with the
+        /// armour pool shipped at 0, is the same call.</summary>
+        public void Spend(float armourDamage, float healthDamage)
+        {
+            if (HealthMax <= 0f)
+            {
+                return;     // the −1.0 sentinel: this round is not shootable at all
+            }
+
+            Armour = Mathf.Max(0f, Armour - armourDamage);
+            if (Armour == 0f)
+            {
+                Health = Mathf.Max(0f, Health - healthDamage);
+            }
+        }
     }
 
     private sealed class TrailEmitter

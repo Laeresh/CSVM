@@ -55,15 +55,15 @@ public sealed class TargetSelection
     /// <summary>The attacker queue, oldest first — see <see cref="NextEnemy"/>.</summary>
     public IReadOnlyList<object> Attackers => _attackers;
 
-    /// <summary>The cycle's sort key for one candidate (<c>FUN_004bbd60</c>): −1 for an objective,
-    /// otherwise the 90° sector the target sits in, measured against the plane's own basis. Godot's
-    /// convention makes this a direct port (the X column IS the engine's <c>row0</c>, the Z column
-    /// its <c>row2</c>), so no sign fixing is needed. The quadrant is taken after a π/4 rotation and
-    /// has its 0 and 3 swapped, which puts <b>ahead</b> first and <b>right</b> last.</summary>
-    /// <returns>−1 objective, 0 ahead, 1 behind, 2 left, 3 right.</returns>
-    public static int SectorKey(Vector3 toTarget, Basis basis, bool objective)
+    /// <summary>The cycle's sort key for one candidate (<c>FUN_004bbd60</c>): −1 for a
+    /// <see cref="TargetRef.SortsFirst"/> candidate, otherwise the 90° sector it sits in, measured
+    /// against the plane's own basis. Godot's convention makes this a direct port (the X column IS
+    /// the engine's <c>row0</c>, the Z column its <c>row2</c>). The quadrant is taken after a π/4
+    /// rotation and has its 0 and 3 swapped, which puts <b>ahead</b> first and <b>right</b> last.</summary>
+    /// <returns>−1 ahead of every sector, 0 ahead, 1 behind, 2 left, 3 right.</returns>
+    public static int SectorKey(Vector3 toTarget, Basis basis, bool sortsFirst)
     {
-        if (objective)
+        if (sortsFirst)
         {
             return -1;
         }
@@ -405,7 +405,7 @@ public sealed class TargetSelection
         for (int i = 0; i < n; i++)
         {
             var v = _ordered[i].Position - position;
-            keys[i] = (SectorKey(v, basis, _ordered[i].Objective), v.LengthSquared(), i);
+            keys[i] = (SectorKey(v, basis, _ordered[i].SortsFirst), v.LengthSquared(), i);
         }
 
         var byKey = new TargetRef[n];

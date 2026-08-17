@@ -140,10 +140,10 @@ Each selects a special behaviour; most are one bare flag or a tiny struct.
 | `SMOKE_SCREEN` | `wep_13` | `TIME [8]` | lays an 8 s smoke screen |
 | `REAR` | `wep_13` | flag | fires rearward |
 | `TORPEDO` | `wep_14` | flag | aerial torpedo |
-| `TARGETABLE` | `wep_14` | flag | the in-flight projectile can itself be shot down |
-| `FLYOUT_HEALTH` | `wep_14` | `[10]` | HP of the flyout projectile (pairs with `TARGETABLE`) |
-| `PROJECTILE_BBOX` | `wep_14` | `[0]` | projectile bounding-box selector |
-| `DESTROY_ANIMATION` | `wep_14` | anim | effect played when the flyout is destroyed |
+| `TARGETABLE` | `wep_14` | flag | admits the round in flight to the player's target list, on the Enemy/Ally cycle by the round's own team. It does NOT make the round shootable; that is `FLYOUT_HEALTH`. Implemented E19 |
+| `FLYOUT_HEALTH` | `wep_14` | `[10]` | the round's own health pool, spent by a hit through the armour pool first (an armour pool the parser only ever writes as 0). Without the key both pools take the −1.0 not-shootable sentinel. Implemented E20 |
+| `PROJECTILE_BBOX` | `wep_14` | `[0]` | ⚠ not a selector and not a size: bit 0 of def `+0x78`, which becomes node flag `0x20` on the pooled round node. **Absent sets the bit**, so the shipped default is ON and `wep_14`'s authored `0` is the one entry that turns it off. See [org/ordnanceTypes.md](../org/ordnanceTypes.md) |
+| `DESTROY_ANIMATION` | `wep_14` | anim | effect played where the flyout is shot down. It replaces the detonation rather than accompanying it: a round dying on zero health with this authored never spends its warhead |
 | `DAMAGES_ZEPPELIN` | `wep_14`, `wep_28` | flag | may damage a zeppelin hull. The remake consumes it as the gasbag routing gate (M4 F18): a weapon without it cannot damage a zeppelin's critical `healthy` zones, while engines/turrets/cannons stay ordinary destructibles any weapon hurts |
 | `SHAKES_CAMERA` | `wep_26` | flag | the detonation shakes the camera. Sole carrier is the zero-damage scripted fake weapon, so it is NOT the player-gunfire shake mechanism — see [shakes.md](shakes.md) |
 

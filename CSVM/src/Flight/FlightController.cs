@@ -2293,6 +2293,9 @@ public partial class FlightController : Node3D
             _targetScan.Clear();
             Projectiles.CollectAircraft(_targetScan);
             Projectiles.CollectTurrets(_targetScan);
+            // The fourth pool (E19): a TARGETABLE round in flight is selectable, which is why a
+            // torpedo can be locked and shot at. The pool itself reads the admission byte.
+            Projectiles.CollectFusedOrdnance(_targetScan);
             _targetParts.Clear();
             TargetSubParts?.Invoke(_targetParts);
         }

@@ -194,6 +194,15 @@ public static class Suites
             "instead, proving the two paths are separate; and wep_14 is hidden for its first 300 m " +
             "and shown from there on",
             OrdnanceEndConditions));
+        into.Add(new TestHarness.Suite("shootable-flyout",
+            "the torpedo's two shootable halves (E19/E20): a live wep_14 is the player's one Enemy " +
+            "entry, named for --target= and labelled 'Aerial torpedo' with a full health bar, " +
+            "sorting ahead of every sector as incoming ordnance, while a fused wep_06 reaches the " +
+            "same fourth list with the admission byte clear and contributes nothing; the entry " +
+            "vanishes when the round ends; and the 10-point pair spends armour-then-health, holds " +
+            "the −1.0 sentinel on a round without FLYOUT_HEALTH, and on zero plays " +
+            "torpedo_destroy_effect with no detonation at all",
+            ShootableFlyout));
         into.Add(new TestHarness.Suite("ordnance-guidance",
             "the steering step and the beeper pair on a live pool (B6-B9): wep_11 turns onto a target " +
             "abeam at its authored 1.25 rad/s and its speed reads the per-frame 0.8+0.2cos penalty " +
@@ -476,7 +485,8 @@ public static class Suites
             + "pilot-index derivation, which is the wingman-in-the-marker bug), the selecting plane "
             + "is excluded from its own pool, a dead plane and a destroyed zeppelin engine are "
             + "absent, the destructible registry contributes nothing however full "
-            + "AimCandidateSet.Structures is, live ordnance is not walked, and a zeppelin "
+            + "AimCandidateSet.Structures is, an ordnance entry with the admission byte clear is "
+            + "refused (the TARGETABLE half is the shootable-flyout suite's), and a zeppelin "
             + "contributes one entry per gasbag/engine/cannon with its hull's velocity; plus C1's "
             + "real emplacements landing on the Non-Aircraft cycle", TargetPoolModel));
         into.Add(new TestHarness.Suite("target-selection",
@@ -3663,6 +3673,236 @@ public static class Suites
             pool?.Free();
             textures.Dispose();
         }
+    }
+
+    // E19/E20: the torpedo's two shootable halves. TARGETABLE puts a round on the player's Enemy
+    // cycle with the right class, label and health figure and takes it off again when the round
+    // ends; FLYOUT_HEALTH gives it a 10-point pool spent armour-then-health, an intersect box that
+    // only exists past RANGE_MINIMUM, and a destruction that plays DESTROY_ANIMATION and does NOT
+    // detonate. An ordinary rocket carries neither and is inert to both.
+    private static void ShootableFlyout(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequireData(ctx.MessagesPath, $"messages.json");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, Messages.Load(ctx.MessagesPath));
+        if (!weapons.TryGet("wep_14", out var torpedo) || !weapons.TryGet("wep_06", out var rocket))
+        {
+            ctx.Check(false, $"wep_14 and wep_06 both resolve");
+            return;
+        }
+
+        var gun = weapons.All.FirstOrDefault(w => w.IsGun && w.HealthDamage is > 0f);
+        if (gun == null)
+        {
+            ctx.Check(false, $"a gun with HEALTH_DAMAGE exists in the data");
+            return;
+        }
+
+        // --- the authored halves ---------------------------------------------------------------
+        ctx.Check(torpedo.Targetable && torpedo.FlyoutHealth is 10 && torpedo.ProjectileBbox is 0
+                  && torpedo.DestroyAnimation == "torpedo_destroy_effect",
+            $"wep_14 is the one entry carrying TARGETABLE, FLYOUT_HEALTH 10, PROJECTILE_BBOX 0 and a DESTROY_ANIMATION");
+        ctx.Check(!rocket.Targetable && rocket.FlyoutHealth == null && rocket.DestroyAnimation == null
+                  && rocket.DetonationDistance is > AimAssist.MinFuseDistance,
+            $"wep_06 carries neither key though it IS fused, so it reaches the same fourth pool with the admission byte clear");
+        ctx.Check(weapons.All.Count(w => w.Targetable) == 1 && weapons.All.Count(w => w.FlyoutHealth is > 0) == 1,
+            $"and nothing else in the table authors either key");
+
+        // --- the pair's arithmetic, off the round's own state ------------------------------------
+        var seeded = ProjectilePool.SeedFlyout(torpedo, 3);
+        ctx.Check(seeded is { Targetable: true, Armour: 0f, Health: 10f, HealthMax: 10f }
+                  && seeded.Name == "wep_14#3",
+            $"a torpedo's pair seeds from weapon +0x8c/+0x90: armour {seeded?.Armour} (the parser's literal 0) and health {seeded?.Health}");
+        ctx.Check(ProjectilePool.SeedFlyout(rocket, 0) == null,
+            $"an ordinary rocket gets no flyout state at all, which is the −1.0 sentinel's outcome without the per-round allocation");
+        seeded!.Spend(999f, 4f);
+        ctx.Check(seeded is { Armour: 0f, Health: 6f },
+            $"the first hit spends HEALTH directly because the armour pool is already empty health={seeded.Health}");
+        seeded.Spend(0f, 100f);
+        ctx.Check(seeded is { Health: 0f, Destroyed: true },
+            $"an overkill hit clamps the pool at zero rather than going negative, which is what the equality test reads");
+
+        // The sentinel, on a lab def carrying TARGETABLE and no FLYOUT_HEALTH: the pool the original
+        // seeds to −1.0 must never satisfy the == 0.0 test however hard it is hit.
+        var labSentinel = ProjectilePool.SeedFlyout(
+            new WeaponDef { Id = "lab_targetable", Targetable = true }, 0);
+        labSentinel!.Spend(500f, 500f);
+        ctx.Check(labSentinel is { Health: ProjectilePool.Flyout.NotShootable, Destroyed: false },
+            $"a TARGETABLE round with no FLYOUT_HEALTH holds the −1.0 sentinel and is never destroyed health={labSentinel.Health}");
+
+        // --- the live pool: admission, the cycle, and the end -----------------------------------
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        try
+        {
+            var effects = new List<(string Name, Vector3 At)>();
+            var live = new ProjectilePool(textures, null, null)
+            {
+                EffectSink = (name, at, orient, ttl) => effects.Add((name, at)),
+            };
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            var origin = new Vector3(3000f, 2000f, 0f);
+            var muzzle = new Transform3D(Basis.LookingAt(Vector3.Forward, Vector3.Up), origin);
+            var shooterTeam = InstantActionRuntime.EnemyTeam;
+            live.Spawn(torpedo, muzzle, Vector3.Zero, shooterId: 7, team: shooterTeam);
+            live.Spawn(rocket, muzzle, Vector3.Zero, shooterId: 7, team: shooterTeam);
+
+            var flyouts = new List<ProjectilePool.Flyout>();
+            live.CollectFlyouts(flyouts);
+            ctx.Check(flyouts.Count == 1 && flyouts[0].Targetable && flyouts[0].Health == 10f,
+                $"exactly one of the two live rounds carries flyout state count={flyouts.Count}");
+
+            var scan = new AimCandidateSet();
+            live.CollectFusedOrdnance(scan);
+            ctx.Check(scan.Ordnance.Count == 2
+                      && scan.Ordnance.Count(c => c.Source is ProjectilePool.Flyout) == 1,
+                $"both rounds are wrapped onto the fourth list, and only the TARGETABLE one carries a source count={scan.Ordnance.Count}");
+
+            var pilot = new FlightController { PlayerIndex = 0, Team = AimAssist.PlayerTeam };
+            try
+            {
+                var sel = new TargetSelection();
+                sel.Rebuild(scan, null, pilot.Team, pilot, origin + new Vector3(0f, 0f, 400f),
+                    Basis.Identity);
+                ctx.Check(sel.Pool.Enemy.Count == 1 && sel.Pool.Ally.Count == 0
+                          && sel.Pool.NonAircraft.Count == 0,
+                    $"the torpedo is the pool's one entry and lands on the ENEMY cycle, the ordinary rocket contributing nothing");
+                var round = sel.Pool.Enemy[0];
+                ctx.Check(round.Kind == AimTargetKind.Ordnance && round.Name == "wep_14#0"
+                          && round.DisplayName == "Aerial torpedo" && round.TypeLabel == null,
+                    $"…named for --target= and labelled with the weapon's own DESC name='{round.Name}' display='{round.DisplayName}'");
+                ctx.Check(round.Health is { } h && Mathf.IsEqualApprox(h, 1f) && round.Armor == null,
+                    $"…carrying a full health bar and no armour figure at all health={round.Health}");
+                ctx.Check(round.SortsFirst && sel.Current is { } cur && cur.IsSameTarget(round),
+                    $"…sorting ahead of every sector as incoming hostile ordnance, and auto-acquired as the cycle head");
+
+                // The end. Flying the torpedo to its RANGE takes it off the list; nothing survives it.
+                for (int i = 0; i < 60 * 25; i++)
+                    live.SimStep(1f / 60f);
+                scan.Clear();
+                live.CollectFusedOrdnance(scan);
+                sel.Rebuild(scan, null, pilot.Team, pilot, origin, Basis.Identity);
+                ctx.Check(scan.Ordnance.Count == 0 && sel.Pool.Count == 0 && sel.Current == null,
+                    $"the entry vanishes when the round ends, and the selection drops with it");
+                ctx.Check(round.Source is ProjectilePool.Flyout { Live: false },
+                    $"…the retired round's own state reads dead, so a stale reference cannot be re-selected");
+            }
+            finally
+            {
+                pilot.Free();
+            }
+
+            // --- destruction: the pair emptied, then the frame check ---------------------------
+            live.Clear();
+            effects.Clear();
+            live.Spawn(torpedo, muzzle, Vector3.Zero, shooterId: 7, team: shooterTeam);
+            flyouts.Clear();
+            live.CollectFlyouts(flyouts);
+            int shots = 0;
+            while (!flyouts[0].Destroyed && shots < 100)
+            {
+                flyouts[0].Spend(gun.ArmorDamage ?? 0f, gun.HealthDamage ?? 0f);
+                shots++;
+            }
+            int expected = Mathf.CeilToInt(10f / (gun.HealthDamage ?? 1f));
+            ctx.Check(shots == expected,
+                $"{gun.Id}'s HEALTH_DAMAGE {gun.HealthDamage} empties the 10-point pool in {shots} hits (expected {expected})");
+            live.SimStep(1f / 60f);
+            flyouts.Clear();
+            live.CollectFlyouts(flyouts);
+            ctx.Check(flyouts.Count == 0,
+                $"the frame check destroys the round the step after its health reaches zero");
+            ctx.Check(effects.Count == 1 && effects[0].Name == "torpedo_destroy_effect",
+                $"…playing DESTROY_ANIMATION and NOTHING else: no impact effect, no detonation ({string.Join(",", effects.Select(e => e.Name))})");
+        }
+        finally
+        {
+            pool?.Free();
+            textures.Dispose();
+        }
+
+        // --- the same thing through a REAL hit ray, which needs a real flyout body ---------------
+        // The box is built over the round's instanced FLYOUT MODEL, so this half wants a chapter
+        // gamez; C1 carries a_torpedo. Built without collision, so nothing but the round is solid.
+        ctx.WithWorld("C1", collision: false, world =>
+        {
+            var worldTextures = new TextureArchive(texturesPath);
+            ProjectilePool? live = null;
+            try
+            {
+                live = new ProjectilePool(worldTextures, null, null,
+                    flyoutGamez: world.Gamez, flyoutScene: world.Session.Builder.Scene);
+                ctx.Host.AddChild(live);
+
+                var origin = new Vector3(6000f, 3000f, 0f);
+                var muzzle = new Transform3D(Basis.LookingAt(Vector3.Forward, Vector3.Up), origin);
+                live.Spawn(torpedo, muzzle, Vector3.Zero, shooterId: 7,
+                    team: InstantActionRuntime.EnemyTeam);
+                var rounds = new List<(Vector3 Pos, Vector3 Velocity)>();
+                var flyouts = new List<ProjectilePool.Flyout>();
+
+                // A gun round fired from five metres astern of the torpedo, along its own flight
+                // line: whether it lands is the hit ray's answer, not this suite's.
+                float ShootIt()
+                {
+                    rounds.Clear();
+                    live.CollectLiveRounds(rounds);
+                    if (rounds.Count == 0)
+                        return -1f;
+                    var dir = rounds[0].Velocity.Normalized();
+                    live.Spawn(gun, new Transform3D(Basis.LookingAt(dir, Vector3.Up),
+                        rounds[0].Pos - dir * 5f), Vector3.Zero);
+                    live.SimStep(1f / 60f);
+                    flyouts.Clear();
+                    live.CollectFlyouts(flyouts);
+                    return flyouts.Count > 0 ? flyouts[0].Health : -1f;
+                }
+
+                // Hidden by RANGE_MINIMUM: the intersect bit is clear, so gunfire passes through.
+                float early = ShootIt();
+                ctx.Check(Mathf.IsEqualApprox(early, 10f),
+                    $"a torpedo still inside RANGE_MINIMUM takes nothing from a round straight through it health={early}");
+
+                for (int i = 0; i < 60 * 6; i++)
+                    live.SimStep(1f / 60f);
+                float after = ShootIt();
+                ctx.Check(after >= 0f && after < 10f,
+                    $"once revealed, the same shot spends {10f - after} of its 10 points through the real hit ray health={after}");
+
+                int hits = 1;
+                while (flyouts.Count > 0 && !flyouts[0].Destroyed && hits < 40)
+                {
+                    ShootIt();
+                    hits++;
+                }
+                ctx.Check(flyouts.Count > 0 && flyouts[0].Destroyed
+                          && hits == Mathf.CeilToInt(10f / (gun.HealthDamage ?? 1f)),
+                    $"and {hits} hits of {gun.Id} empty the pool, the count its HEALTH_DAMAGE {gun.HealthDamage} predicts");
+                live.SimStep(1f / 60f);
+                flyouts.Clear();
+                live.CollectFlyouts(flyouts);
+                ctx.Check(flyouts.Count == 0, $"…after which the round is gone from the pool");
+
+                // No shot can catch a REVEALED wep_06: at 1200 m/s it outruns every gun in the
+                // table. The hidden-torpedo shot above is this rig's able-to-fail control instead.
+                live.Clear();
+                live.Spawn(rocket, muzzle, Vector3.Zero, shooterId: 7,
+                    team: InstantActionRuntime.EnemyTeam);
+                flyouts.Clear();
+                live.CollectFlyouts(flyouts);
+                ctx.Check(flyouts.Count == 0,
+                    $"CONTROL: an ordinary rocket flying the same line has no flyout state and so no body to strike");
+            }
+            finally
+            {
+                live?.Free();
+                worldTextures.Dispose();
+            }
+        });
     }
 
     // B6-B9 on a live pool with a lab tag list beside it: the turn clamp and its speed penalty, the
@@ -7864,7 +8104,7 @@ public static class Suites
                 $"a dead plane is listed by the collector but absent from the cycles");
             ctx.Check(pool.NonAircraft.Count == 0 && scan.Structures.Count == 1
                       && scan.Ordnance.Count == 1,
-                $"the registry and the ordnance list contribute NOTHING though both are populated structures={scan.Structures.Count} ordnance={scan.Ordnance.Count} nonAircraft={pool.NonAircraft.Count}");
+                $"the registry contributes NOTHING though it is populated, and neither does an ordnance entry carrying no flyout state structures={scan.Structures.Count} ordnance={scan.Ordnance.Count} nonAircraft={pool.NonAircraft.Count}");
             ctx.Check(!pool.Enemy.Concat(pool.Ally).Concat(pool.NonAircraft)
                     .Any(t => ReferenceEquals(t.Source, crateInst)),
                 $"…and specifically the crate never becomes selectable (decision 8: ours would walk every crate and fence, the original's walks a curated targets.zrd list)");

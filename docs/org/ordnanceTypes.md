@@ -433,6 +433,10 @@ wrapper, which is exactly the admission byte [`aiPilot.md`](aiPilot.md) names fo
 So `TARGETABLE` is what makes a round appear in the target list, while `FLYOUT_HEALTH` is what lets
 it absorb damage; the two flags do different halves of "shootable" and the torpedo carries both.
 
+The name string id `0x2f6a` is a **literal**, not a read of the weapon's `DESC`: it is 12138,
+`MSG_WEAP_AERIAL_TORPEDO`, "Aerial torpedo". Every wrapper the engine builds carries that one
+string, which costs nothing here because the torpedo is the only `TARGETABLE` entry in the table.
+
 ⚠ This also corrects the fuse section above: `DAT_0064f78c` is **not** every round in flight. Only
 rounds that are `TARGETABLE` or carry a fuse distance are ever wrapped into it, so the fuse loop
 walks exactly the set that could fuse, and a plain round is invisible to it.
@@ -513,11 +517,30 @@ all.
 
 `TARGETABLE`'s half of the job, admitting the round to the target list, is `FUN_00441830` above.
 
+The `0x8000000` node flag is not the whole story: the same tail also calls `FUN_004cd210` on the
+round's node, which sets or clears node flag `0x10`, **the intersect bit** every swept query and
+every cover ray tests. A round without `FLYOUT_HEALTH` has it cleared and is not in the collision
+database at all; a round with it has it set, **unless** the weapon also carries `RANGE_MINIMUM` with
+a zero second element (`+0x74` bit `0x80000000` and `+0x28`), in which case it is cleared at launch
+and set later by the reveal in `FUN_005afd50` (`0x005b01c4`). So the torpedo's 300 m visibility gate
+is also its shootability gate: for as long as it cannot be seen it cannot be hit.
+
+### `PROJECTILE_BBOX` is a node flag, and its default is ON
+
+`FUN_005ad630` at `0x005ae132`–`0x005ae155` reads the key into bit 0 of def `+0x78`: **absent sets
+the bit**, present sets it to `value != 0`. `FUN_005aeca0` then passes that bit to `FUN_004cd2a0`,
+which sets node flag `0x20` on the pooled round node. `wep_14` authors `PROJECTILE_BBOX [0]` and is
+therefore the one entry in the table that turns the flag **off**, every other round carrying it by
+default. The flag's consumer inside the collision database was not read, but the shape of the data
+says what it is for: the one round anything can shoot at is the one round taken off the cheap path.
+
 ### How the flyout's health is spent, and what happens at zero
 
 `FUN_005abcf0`, the projectile-hit resolver, tests the struck node's `+0xbc` for the `1` the spawn
-wrote and follows the node's `+0x40` back-pointer to the round. It then spends the pair exactly the
-way an aircraft damage zone is spent, **armour first, then health**:
+wrote and follows the node's `+0x40` back-pointer to the round. It then spends the pair **armour
+first, then health**. ⚠ That is the same ORDER an aircraft damage zone is spent in and not the same
+arithmetic: `FUN_004b7f80`, the aircraft take-hit, carries an armour-shielded share that reduces the
+health damage; the flyout branch is a plain clamp-and-subtract on each pool.
 
     flyout[+0x670] = max(0, flyout[+0x670] - incomingArmourDamage)
     if flyout[+0x670] == 0:
@@ -532,6 +555,13 @@ The projectile tick `FUN_005af720` then checks `+0x674 == 0.0` **every frame, be
 and on zero destroys the round: it plays the weapon's `DESTROY_ANIMATION` (weapon `+0x188`) if one is
 authored, or calls `FUN_005ac3a0` if not, and clears the alive flag. This is why the not-shootable
 sentinel is **-1.0** rather than 0: a round without `FLYOUT_HEALTH` must never satisfy that equality.
+
+Two consequences worth stating separately. **A shot-down round does not detonate**: `FUN_005ac3a0`
+is the detonation, and it is the branch taken only when no `DESTROY_ANIMATION` is authored, which
+`wep_14` is not. So the torpedo dies playing `torpedo_destroy_effect` and its 200/200 warhead is
+never spent. And the test runs **after** the per-frame retarget callback at `+0x688` and **before**
+the guidance gate and the motion step, so a round whose health reached zero neither steers nor moves
+on the frame it dies.
 
 ## Detonation: the impact, then the splash
 
@@ -1041,7 +1071,9 @@ engine sees; its per-polygon test (`FUN_004c9a00`) was not opened.
   `FUN_004b7670`, `FUN_004b1690`, `FUN_005afd50`, `FUN_00480f50`, `FUN_005ac3a0`, `FUN_005ac7a0`,
   `FUN_005ac690`, `FUN_005ac580`, `FUN_005aca30`, `FUN_005acac0`, `FUN_0042e840`, `FUN_004200d0`,
   `FUN_0042e9d0`, `FUN_004b8d50`, `FUN_004b8fd0`, `FUN_004b8dd0`, `FUN_004b8f60`, `FUN_004b8f80`
-  and `FUN_004b92c0` were read in full.
+  and `FUN_004b92c0` were read in full. `FUN_005aeca0`, `FUN_004cd210` and `FUN_004cd2a0` were read
+  in full for the intersect bit and `PROJECTILE_BBOX`; the consumer of node flag `0x20` inside the
+  collision database was not.
 - The impact hook `LAB_004ba660` was read from its disassembly (Ghidra has it as a label, not a
   function), and its cloud's builder `FUN_004b94e0`, list walker `FUN_004b96d0`, per-cloud step
   `FUN_004b9590` and list init/teardown `FUN_004b9440`/`FUN_004b9680` in full. `FUN_005ac7a0`'s

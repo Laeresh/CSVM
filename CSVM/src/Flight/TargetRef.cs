@@ -114,6 +114,12 @@ public readonly struct TargetRef
     /// selection is held by, never the wrapper (see <see cref="IsSameTarget"/>).</summary>
     public object? Source => Candidate.Source;
 
+    /// <summary>Whether this sorts ahead of every sector (<c>FUN_004bbd60</c>'s two <c>key = −1</c>
+    /// overrides): a mission objective, or a hostile round in flight. The second is why incoming
+    /// ordnance comes up first on the Enemy cycle rather than waiting its turn by bearing.</summary>
+    public bool SortsFirst =>
+        Objective || (Kind == AimTargetKind.Ordnance && Class == TargetClass.Enemy);
+
     /// <summary>The marker's line 1, through the original's four format strings
     /// (<c>0x006253ac</c>/<c>0x006253b8</c>/<c>0x006253c0</c>/blank): both halves, label only,
     /// category only, or empty. The trailing " -" is the original's, not a separator we
@@ -152,6 +158,15 @@ public readonly struct TargetRef
         string? category = null, bool objective = false) =>
         new(candidate, AimTargetKind.Turret, cls, objective, name, null, null, category,
             health: null, armor: null);
+
+    /// <summary>A <c>TARGETABLE</c> round in flight, the fourth pool's one selectable shape. Health
+    /// only: a flyout's armour pool is the literal zero the parser writes, so
+    /// <see cref="Fraction"/> reports none. No type label — the original's wrapper carries one
+    /// hard-coded display string and no category.</summary>
+    public static TargetRef ForOrdnance(AimCandidate candidate, TargetClass cls, string name,
+        string? displayName = null, float? health = null) =>
+        new(candidate, AimTargetKind.Ordnance, cls, objective: false, name, displayName, null, null,
+            health, armor: null);
 
     /// <summary>A current/maximum pair as a 0..1 fraction, or null when the maximum is zero or
     /// negative, i.e. when the source has no pool of that kind. The one place the

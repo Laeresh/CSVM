@@ -67,6 +67,13 @@ public sealed class TargetPool
             Offer(c, AimTargetKind.Turret, ownTeam, self);
         }
 
+        // The fourth pool. Its collector lists every round the engine wraps, fused or TARGETABLE;
+        // only a TARGETABLE one carries a source, so the admission byte is what admits it here.
+        foreach (var c in scan.Ordnance)
+        {
+            Offer(c, AimTargetKind.Ordnance, ownTeam, self);
+        }
+
         if (subParts == null)
         {
             return;
@@ -110,6 +117,7 @@ public sealed class TargetPool
     {
         FlightController fc => fc.Name,
         TurretController t => t.Label,
+        ProjectilePool.Flyout f => f.Name,
         DestructibleRegistry.Instance inst =>
             GodotObject.IsInstanceValid(inst.Anchor) ? inst.Anchor.Name : inst.Def.Name,
         _ => "",
@@ -138,6 +146,13 @@ public sealed class TargetPool
                 // No health figure exists for an emplacement: the retail loaders read no HEALTH key
                 // and its aliveness is its healthy node's visibility.
                 return TargetRef.ForTurret(c, cls, name);
+            case AimTargetKind.Ordnance:
+                var round = c.Source as ProjectilePool.Flyout;
+                // The marker prints the weapon's own DESC. The original hard-codes message 0x2f6a
+                // there (MSG_WEAP_AERIAL_TORPEDO) for every wrapper it builds, which is the same
+                // string on the one entry that can reach this, and honest on any other.
+                return TargetRef.ForOrdnance(c, cls, name, round?.Weapon.DisplayName,
+                    round == null ? null : TargetRef.Fraction(round.Health, round.HealthMax));
             default:
                 var inst = c.Source as DestructibleRegistry.Instance;
                 return TargetRef.ForStructure(c, cls, name,
@@ -148,6 +163,14 @@ public sealed class TargetPool
     private void Offer(AimCandidate c, AimTargetKind kind, int ownTeam, object? self)
     {
         if (c.Source == null || ReferenceEquals(c.Source, self))
+        {
+            return;
+        }
+
+        // The admission byte, read explicitly rather than inferred from a non-null source: a round
+        // wrapped only because it is fused is on the same list and must not become selectable.
+        if (kind == AimTargetKind.Ordnance
+            && c.Source is not ProjectilePool.Flyout { Targetable: true, Live: true })
         {
             return;
         }

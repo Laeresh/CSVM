@@ -181,8 +181,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E — Flyout and gates
 
-19. ☐ `TARGETABLE`: admission to the target list
-20. ☐ `FLYOUT_HEALTH`: the health pair, and destruction at zero
+19. ☑ `TARGETABLE`: admission to the target list
+20. ☑ `FLYOUT_HEALTH`: the health pair, and destruction at zero
 21. ☑ `DAMAGES_ZEPPELIN` two-way gate and the AI ordnance aim threshold
 
 ### Wave F — Sign-off
@@ -993,7 +993,33 @@ cosine, so 170° means 85° off-axis, and reading it as a full cone halves the w
 
 # Wave E — Flyout and gates
 
-## E19 ☐ `TARGETABLE`: admission to the target list
+## E19 ☑ `TARGETABLE`: admission to the target list
+
+**Verdict.** Landed on the existing registry, with no parallel structure and no widening of AI
+acquisition. `ProjectilePool.Flyout` is the round's identity, minted at spawn for a `TARGETABLE` or
+`FLYOUT_HEALTH` weapon (the torpedo alone), and `CollectFusedOrdnance` hands it as the
+`AimCandidate.Source`. That is the admission byte: `FUN_00441830` wraps a round for **either** of two
+independent reasons, a fuse over 0.01 (squared) **or** `TARGETABLE`, and sets the wrapper's `+0x6c`
+only on the second, so the collector's filter is now the same OR and only a `TARGETABLE` round
+carries a source. `TargetPool` walks `AimCandidateSet.Ordnance` as its third list and admits an entry
+only when that source is a live `Flyout` with the byte set; `TargetRef.ForOrdnance` is the new
+factory, and `TargetRef.Classify` already admitted `AimTargetKind.Ordnance`, so the round lands on
+the **Enemy** cycle against a hostile team and **Ally** otherwise, exactly as `FUN_004b5cd0` splits
+it. One thing the item did not ask for came off the same decode and landed with it:
+`FUN_004bbd60`'s second `key = −1` override, a hostile round in flight sorting ahead of every sector,
+is now `TargetRef.SortsFirst` and `SectorKey`'s third argument. The marker prints `Aerial torpedo`:
+the original hard-codes string id `0x2f6a` (`MSG_WEAP_AERIAL_TORPEDO`) on every wrapper rather than
+reading the weapon's `DESC`, which is the same string on the one entry that can reach it, and the
+remake reads `DisplayName` so a second carrier would be named honestly. `--target=` matches
+`wep_14#<slot>`. **AI acquisition is untouched**: it admits aircraft alone (`BL-363`), so an AI
+still cannot lock a torpedo, and widening it is that item's, not this one's. The entry leaves the
+pool when the round ends, both because the collector skips a dead round and because `Flyout.Live`
+goes false, which drops a stale selection. Pinned by the `shootable-flyout` suite; the `target-pool`
+suite's "live ordnance is not walked" assertion is rewritten as "an entry with the admission byte
+clear is refused". ⚠ At the controls this means a player's OWN `--rocket=wep_14` comes up on the
+**Ally** cycle, not the Enemy one: the round is stamped with its shooter's team and the class model
+splits it like anything else. Only a torpedo fired at you is on the Enemy cycle, where it sorts
+ahead of every aircraft.
 
 **Goal.** A torpedo in flight can be selected and shot at, by the player and by AI.
 
@@ -1013,7 +1039,44 @@ rocket does not.
 **⚠ Traps.** `TARGETABLE` and `FLYOUT_HEALTH` are different halves of "shootable" and the torpedo
 carries both. Admission alone does not make it destructible; that is `E20`.
 
-## E20 ☐ `FLYOUT_HEALTH`: the health pair, and destruction at zero
+## E20 ☑ `FLYOUT_HEALTH`: the health pair, and destruction at zero
+
+**Verdict.** Landed, and three of this item's own instructions were corrected against the code.
+**(1) The aircraft zone's spend is NOT reusable.** `FUN_005abcf0`'s flyout branch is a plain
+clamp-and-subtract on each pool with health touched only once armour is empty; `PlaneDamage.Spend`
+(`FUN_004b7f80`) is a different, richer routine carrying an armour-shielded share that reduces the
+health damage. What the two share is the ORDER, not the arithmetic, and merging them would have
+changed the numbers. `Flyout.Spend` is the flyout branch verbatim, and the decode page now says so.
+**(2) `PROJECTILE_BBOX` is not a bbox selector and does not bound anything here.** Traced to its
+parse at `0x005ae132`: it is bit 0 of def `+0x78`, which `FUN_005aeca0` turns into node flag `0x20`
+on the pooled round node, and **absent sets the bit**, so the shipped default is ON and `wep_14`'s
+authored `[0]` is the one entry that turns it off. The `formats/weapons.md` gloss is corrected. The
+hittable shape is therefore the round's own `FLYOUT MODEL` geometry, and the remake approximates it
+with that model's AABB (`Proj.HitCentre`/`HitHalf`), a round flying streak-only getting no box at
+all, which is what the original's node-less round would be too. **(3) The reveal gate is the
+shootability gate.** The spawn's tail calls `FUN_004cd210`, which sets or clears node flag `0x10`,
+the intersect bit every swept query tests: cleared for a round with no `FLYOUT_HEALTH`, and cleared
+at launch for one that also carries `RANGE_MINIMUM`, then set by the reveal in `FUN_005afd50`. So a
+torpedo cannot be shot at over its first 300 m, which is also what stops a pilot shredding his own
+launch with his own guns.
+
+The settled questions: **any projectile's direct hit** spends the pair, gun round or ordnance alike,
+because the spend lives in the shared hit resolver; **splash does not**, since it is the caller's
+second half and reaches only the plane and world pools; and **the shooter is not excluded** — the
+decode has no owner test on this path, so a pilot can shoot down a torpedo he launched, and the only
+exclusion is a round's own box against its own ray. `FlyoutStruck` is a pool-internal slab test
+rather than a Godot collider, and the nearer of it and the world ray wins, which is `FUN_005b03f0`'s
+own rule for its single intersect database; a physics body was built first and abandoned, because
+`--run-tests` never yields a frame, so a body's queued transform never reaches the physics server
+and a real ray straight through it missed. **A shot-down round does not detonate**: `FUN_005ac3a0`
+is reached only when no `DESTROY_ANIMATION` is authored, so `DestroyFlyout` plays
+`torpedo_destroy_effect` through the existing `EffectSink` and retires the round with its 200/200
+warhead unspent. The frame test runs after the retarget callback and before the guidance gate, so a
+round dying this frame neither steers nor moves. The −1.0 sentinel is kept rather than a bool, and
+both pools are implemented with no armour value invented. `shootable-flyout` fires real `wep_00`
+rounds through a revealed torpedo in a built C1 world: 5 hits at `HEALTH_DAMAGE 2` empty the 10
+points and the sixth step destroys it playing `torpedo_destroy_effect` and nothing else, while the
+identical shot at the same torpedo before its reveal takes nothing — the able-to-fail control.
 
 **Goal.** A torpedo can be shot down, and its destruction plays the authored effect.
 

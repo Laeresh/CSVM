@@ -276,7 +276,11 @@ small and that no banding scheme exists anywhere.
    - `VehicleList` (`DAT_0071dabc`): every entry.
    - Turrets (`DAT_0071d914`): only if `+0x4c` or `+0x4d`.
    - `MStructList` (`DAT_0071d33c`): only if `+0x4c` or `+0x4d`.
-   - Live fused ordnance (`DAT_0064f78c`): only if its `+0x6c` tracking byte is set.
+   - Live fused ordnance (`DAT_0064f78c`): only if its `+0x6c` tracking byte is set. `FUN_00441830`
+     sets that byte on the `TARGETABLE` path alone, so a round wrapped only because it is fused is
+     on the list and unselectable. The wrapper's display name is the literal string id `0x2f6a`
+     (`MSG_WEAP_AERIAL_TORPEDO`, "Aerial torpedo") for every such round, not the weapon's own
+     `DESC`; see [ordnanceTypes.md](ordnanceTypes.md).
 3. Sort with `FUN_004bb9b0` under the comparator `FUN_004bbd60`.
 4. Re-resolve the current selection: `FUN_004b6490(currentTarget, 0)` finds the entry whose
    underlying entity matches, or returns the **first entry** if it is gone. Clone it, release the
