@@ -2607,14 +2607,6 @@ usual.
   per-def volume terms feeding `Projectile.cs`'s `def.Volume * 0.2f * MixGain * distanceGain`
   (line ~2238) — not the `1/sqrt(N)` splitscreen term itself, which is confirmed correct.
 
-- `BL-392` `[Feature]` **VS HUD status-line font size wants a config knob.** Found at the `BL-126`
-  chrome playtest (F52, 2026-08-15; folds in `PT-43(d)`): the opponent edge-arrows + status line
-  (`VersusBoard.cs`) read fine at 2P and 4P as currently sized, but the user asked for a way to
-  size them up/down rather than accept the fixed `HudMetrics`-scaled default — a legibility
-  preference, not a defect. *Fix shape:* a `Config` key (matching the `versusBoard.*`-style naming
-  already in use elsewhere) multiplying `VersusBoard`'s font-size call (`VersusBoard.cs:85`),
-  defaulting to today's unscaled size so single-player and the default splitscreen case are
-  unaffected.
 
 ## Missions, modes & campaign
 
@@ -2788,7 +2780,7 @@ usual.
   spacing, the self-blast exemption (own rockets can't hurt you — the guns invariant applied
   consistently, not a balance call), VS HUD line/arrow sizing at 4-player panes (`PT-43`(d):
   confirmed readable and correctly edge-flipping at both 2 and 4 players, `BL-126` chrome playtest
-  2026-08-15 — no retune owed; a font-size preference surfaced separately as `BL-392`). Related,
+  2026-08-15 — no retune owed; the general HUD text-scale config covers the separate font-size preference). Related,
   not absorbed: `BL-126` (splitscreen chrome, closed 2026-08-15). ⚠ The stunt race's
   abreast starting grid landed 2026-08-08 and deliberately did **not** touch `--vs` — it is
   selected only when a race exists, so Dogfight still walks the scattered `dogfight_ace` list.
