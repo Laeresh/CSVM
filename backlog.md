@@ -2013,6 +2013,32 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `effect_checkout` scope; a hitch attributed to that site is this item's construction cost, not the
   reset, until measured otherwise.
   *Cross-refs:* `BL-355` (the crash/damage cascade's identical mechanism), `BL-406`.
+- `BL-419` `[Fidelity]` **The sonic ground burst does not read like the original's: ours is soft cyan
+  hoops rising in the air, the original is one flat crisp pale-green ring growing on the terrain.**
+  *Evidence:* `OriginalScreenshots/Videos/CAP-23 Rocket Sonic Ground.mp4` (frames 200-330 at 30 fps,
+  impact at ~204): a bright white star flare with two or three thin pale rings for ~0.3 s, then ONE
+  flat crisp pale yellow-green annulus lying on the terrain with radial striations and a dark centre,
+  expanding smoothly for ~3 s and fading by ~4.2 s, plus a thin blue-white vapour column and no
+  smoke. `CAP-23 Rocket SONIC Air.mp4`: the air detonation is a small brief white sparkle. Ours
+  (`--weapon-lab=wep_08 --weapon-fire`, sim frames 12-126): three or four fat soft cyan hoops read as
+  rings rising in mid-air, all finished inside ~1.1 s, then `ring_down1` grows into a very large
+  fuzzy cyan torus above the ground from 1.3 to 2.1 s, under a thick grey puffer column the original
+  does not have. Total life is comparable (~3.8 s authored vs ~4.2 s measured), but ours is
+  front-loaded and airborne where the original is one continuous ground ring. The defs are
+  `sonic_ground_effect` calling `ring_up1..4` at t=0 and `ring_down1` at +1.2 s on `sonic_ring1..5`
+  (`extracted/zrdr/sonic_rings.zrd.json`, `sonic_control.zrd.json`), placed as a `SURFACE_ANIMATION`
+  with world up rotated onto the struck normal.
+  *Where to look:* how the anim runtime reads the ring defs' motion (a translation up versus a scale
+  in the ground plane), their opacity ramps and colour, and whether the puffer smoke belongs to this
+  def at all; the burst can be filmed frame by frame in the weapon lab against the reference frames.
+  This is a decode question against `crimson.exe`'s anim interpreter before it is a tuning one: no
+  number here should be adjusted to the footage.
+  *How you would know:* a weapon-lab burst on flat C1 ground reads as one flat pale-green ring on the
+  terrain growing for about three seconds, no airborne torus, and the same def in the air reads as
+  a brief sparkle.
+  *Cross-refs:* `CAP-26` (the rocket-impact rings capture; the sonic half is answered by the CAP-23
+  clips above, and its "look for" list should gain the flat-ring-versus-airborne-hoops question),
+  `BL-418`, `BL-406`.
 
 ## Audio
 
