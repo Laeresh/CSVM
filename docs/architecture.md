@@ -1476,6 +1476,8 @@ The one place the flight HUD decides how big it draws: `Scale(control, reference
 window height / reference, damped by `PaneFactor` = sqrt(paneH/windowH) inside a splitscreen
 pane (2P ≈ 71 %, 4P 50 %; the damping exponent is TUNE). CompassTape, GaugeCluster, MarkerHud,
 StuntScoreboard and FlightController's text block all route through it.
+`hud.statusTextScale` and `hud.markerTextScale` multiply only their matching flight-HUD text,
+clamped from 0.5 to 2.0; arrows and layout remain at the base scale.
 
 ## src/Flight/HudFont.cs
 The game's own HUD bitmap font, rebuilt from `extracted/rimage/5pointhud.png` (+ the brighter
