@@ -133,6 +133,11 @@ public static class Suites
         into.Add(new TestHarness.Suite("blast-neighbor-shape",
             "splash falloff on a neighbour scores to its nearest collision-shape surface, not its " +
             "transform origin (BL-239)", BlastNeighborShape));
+        into.Add(new TestHarness.Suite("blast-curve-cover-cap",
+            "splash damage follows 1 - d^2/R^2 at 0.25R, 0.5R and 0.75R (C10), a destructible " +
+            "behind a wall takes nothing while the same layout without the wall takes the curve's " +
+            "value (C11), and a burst over 40 targets damages exactly the nearest 32 (C11)",
+            BlastCurveCoverCap));
         into.Add(new TestHarness.Suite("launch-velocity-decay",
             "a LOCK_ON round carries its launcher's velocity and sheds it linearly over LOCK_ON " +
             "seconds (BL-290): wep_14 launched at 120 m/s leaves at 180, reads 120 at half the " +
@@ -3139,6 +3144,134 @@ public static class Suites
             pool?.Free();
             wall?.Free();
             neighbor?.Free();
+            textures.Dispose();
+        }
+    }
+
+    // C10/C11 on controlled geometry: a torpedo fired straight down onto a ground plate, so the burst
+    // sits at a known point on a known face and every target's near face is a measured distance
+    // away. Boxes stand on the plate with a bottom edge at the exact range, so the nearest-shape
+    // distance IS the range. Phase one is the curve at 0.25R/0.5R/0.75R; phase two the same target
+    // without and then with a wall in the way; phase three forty targets against the 32 cap.
+    private static void BlastCurveCoverCap(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        if (!weapons.TryGet("wep_14", out var torpedo)
+            || torpedo.HealthDamage is not > 0f || torpedo.ImpactProximity is not > 0f)
+        {
+            ctx.Check(false, $"torpedo (wep_14) carries HEALTH_DAMAGE + IMPACT_PROXIMITY");
+            return;
+        }
+        float full = torpedo.HealthDamage!.Value;
+        float radius = torpedo.ImpactProximity!.Value;
+        ctx.Check(Mathf.IsEqualApprox(full, 200f) && Mathf.IsEqualApprox(radius, 30f),
+            $"wep_14 authors HEALTH_DAMAGE 200 and IMPACT_PROXIMITY 30 (the data this lab is scaled to)");
+
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        var bodies = new List<StaticBody3D>();
+        StaticBody3D Box(string name, Vector3 size, Vector3 at)
+        {
+            var b = Plate(name, size, at);
+            ctx.Host.AddChild(b);
+            bodies.Add(b);
+            return b;
+        }
+        // A unit box standing on the plate whose near face is `range` metres from `burst` along
+        // `dir` (a horizontal unit vector): its bottom edge toward the burst is at exactly `range`.
+        StaticBody3D Target(string name, Vector3 burst, Vector3 dir, float range) =>
+            Box(name, Vector3.One, burst + dir * (range + 0.5f) + new Vector3(0f, 0.5f, 0f));
+        try
+        {
+            var plate = Box("blast-lab-plate", new Vector3(400f, 0.2f, 400f), new Vector3(0f, -0.1f, 0f));
+            var recorded = new List<(Node? Body, float Damage)>();
+            pool = new ProjectilePool(textures, null, null)
+            {
+                DamageSink = (body, damage) => { recorded.Add((body, damage)); return true; },
+            };
+            ctx.Host.AddChild(pool);
+
+            // One burst: fired from 20 m straight above `at`, stepped until the plate records the
+            // direct hit, then the pool is emptied so the next burst starts clean.
+            void Burst(Vector3 at)
+            {
+                recorded.Clear();
+                var muzzle = new Transform3D(Basis.LookingAt(Vector3.Down, Vector3.Forward), at + new Vector3(0f, 20f, 0f));
+                pool!.Spawn(torpedo, muzzle, Vector3.Zero);
+                for (int i = 0; i < 120 && recorded.Count == 0; i++)
+                    pool.SimStep(1f / 60f);
+                pool.Clear();
+                var plateHit = recorded.FirstOrDefault(r => r.Body == plate);
+                ctx.Check(plateHit.Body == plate && Mathf.IsEqualApprox(plateHit.Damage, full),
+                    $"the round struck the plate under ({at.X:0},{at.Z:0}) for the full {full:0} (direct hit, unscaled)");
+            }
+            float DealtTo(Node body) => recorded.Where(r => r.Body == body).Sum(r => r.Damage);
+
+            // --- the curve. Three targets on three bearings so no cover ray crosses another.
+            var origin = Vector3.Zero;
+            var near = Target("blast-lab-025R", origin, Vector3.Left, 0.25f * radius);
+            var mid = Target("blast-lab-050R", origin, Vector3.Back, 0.5f * radius);
+            var far = Target("blast-lab-075R", origin, Vector3.Forward, 0.75f * radius);
+            Burst(origin);
+            (StaticBody3D Body, float Fraction)[] curve = { (near, 0.25f), (mid, 0.5f), (far, 0.75f) };
+            foreach (var (body, f) in curve)
+            {
+                float expected = full * (1f - f * f);
+                float linear = full * (1f - f);
+                float dealt = DealtTo(body);
+                ctx.Check(Mathf.Abs(dealt - expected) < 1f,
+                    $"at {f:0.00}R the splash is {dealt:0.#} against the curve's {expected:0.#} (a linear curve would give {linear:0.#})");
+            }
+            ctx.Check(recorded.Count(r => r.Body != plate) == 3,
+                $"the three targets and nothing else took splash (dealt to {recorded.Count(r => r.Body != plate)} bodies)");
+            foreach (var b in curve) { b.Body.Free(); bodies.Remove(b.Body); }
+
+            // --- cover. The same target with nothing in the way, then a wall between.
+            var site = new Vector3(0f, 0f, 100f);
+            var behind = Target("blast-lab-behind", site, Vector3.Right, 20f);
+            float open = full * (1f - (20f * 20f) / (radius * radius));
+            Burst(site);
+            float dealtOpen = DealtTo(behind);
+            ctx.Check(Mathf.Abs(dealtOpen - open) < 1f,
+                $"with the way clear the target 20 m out takes the curve's {open:0.#} (dealt {dealtOpen:0.#})");
+            var wall = Box("blast-lab-wall", new Vector3(1f, 5f, 3f), site + new Vector3(10f, 2.5f, 0f));
+            Burst(site);
+            float dealtCovered = DealtTo(behind);
+            ctx.Check(dealtCovered == 0f,
+                $"with a wall between the burst and the target it takes nothing (dealt {dealtCovered:0.#})");
+            float wallShare = full * (1f - (9.5f * 9.5f) / (radius * radius));
+            ctx.Check(Mathf.Abs(DealtTo(wall) - wallShare) < 1f,
+                $"the wall itself, 9.5 m out and in the open, takes the curve's {wallShare:0.#} (dealt {DealtTo(wall):0.#})");
+            behind.Free(); bodies.Remove(behind);
+            wall.Free(); bodies.Remove(wall);
+
+            // --- the cap. Forty small targets on a golden-angle spiral, 4 m to 23.5 m out, all
+            // inside the radius and none shadowing another; the nearest 32 take damage, the last 8
+            // are dropped and the pool prints the cap line.
+            var ringSite = new Vector3(100f, 0f, 0f);
+            var ring = new List<StaticBody3D>();
+            for (int i = 0; i < 40; i++)
+            {
+                float d = 4f + 0.5f * i;
+                float a = Mathf.DegToRad(137.508f * i);
+                var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                ring.Add(Box($"blast-lab-ring-{i:00}", new Vector3(0.3f, 0.3f, 0.3f),
+                    ringSite + dir * d + new Vector3(0f, 0.15f, 0f)));
+            }
+            Burst(ringSite);
+            int hit = ring.Count(b => DealtTo(b) > 0f);
+            ctx.Check(hit == 32, $"forty targets inside the radius, exactly 32 damaged (the original's hit buffer): {hit}");
+            ctx.Check(ring.Take(32).All(b => DealtTo(b) > 0f) && ring.Skip(32).All(b => DealtTo(b) == 0f),
+                $"the 32 that took damage are the nearest 32; the farthest 8 were dropped");
+        }
+        finally
+        {
+            pool?.Free();
+            foreach (var b in bodies)
+                b.Free();
             textures.Dispose();
         }
     }

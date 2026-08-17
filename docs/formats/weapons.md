@@ -119,8 +119,10 @@ with the sentinel and expire before its onset, so the shipped data never shows i
 squared at `+0x20`; every distance the original compares them against comes from `FUN_00538880`,
 which returns a squared distance with no square root. Read as plain radii they give the wrong
 falloff curve and the wrong trigger range, so `WeaponDef` exposes both forms
-(`ImpactProximitySqM`, `DetonationDistanceSqM`, `RangeSqM` beside the authored fields). The full
-decode, including which offsets stay raw, is in
+(`ImpactProximitySqM`, `DetonationDistanceSqM`, `RangeSqM` beside the authored fields). The raw
+`+0x3c` is the splash gather's sphere radius and the square at `+0x40` is the falloff's denominator,
+`1 − d²/IMPACT_PROXIMITY²` over both damage figures, with `d` the distance from the burst to the
+target's surface. The full decode, including which offsets stay raw, is in
 [`org/ordnanceTypes.md`](../org/ordnanceTypes.md#the-engine-stores-radii-squared).
 
 ### Class flags & specials

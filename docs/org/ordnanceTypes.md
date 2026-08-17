@@ -571,19 +571,44 @@ at the radius and scales both pools by the same factor. At half the radius a lin
 0.5 and this gives **0.75**, so the original is markedly more generous close in and falls away faster
 near the edge.
 
-Three further details:
+The per-entry `dSurface²` is computed inside the gather, `FUN_004cb420`, and it is the one place on
+this path that takes a square root:
 
-- **The distance is to the object's bounding-sphere surface, not its centre**, and is clamped to zero
-  when the object overlaps the burst. Anything the burst engulfs takes full damage.
-- **The blast is occlusion-tested.** `FUN_005aca30` passes both the distance flag and the occlusion
-  flag, so for each candidate `FUN_004cb420` casts from the burst centre to the object and drops it
-  if something blocks the way. Cover works against splash in the original.
-- **At most 32 objects** are collected; past that the query logs "Database intersections array is
-  full" and silently stops adding.
+- **The distance is to the object's bounding-sphere surface, not its centre.** For each candidate
+  node the gather builds the world-space corners of the node's box (`FUN_004cd960` then
+  `FUN_004cb8b0`), and `FUN_004d8bd0` reduces those eight corners to their axis-aligned centre and a
+  radius equal to half the box diagonal. `FUN_005388d0` (unlike `FUN_00538880`, this one does take
+  the root) gives the plain centre-to-centre distance; the radius is subtracted, the result is
+  clamped to zero, and the clamped value is squared into the hit entry at `+0x20`. So a target the
+  burst engulfs, meaning the burst centre lies inside that sphere, records `0` and takes full
+  damage, and everything else records the square of its surface distance.
+- **The gate and the falloff use different radii.** The gather's sphere is
+  `round[+0x678] × IMPACT_PROXIMITY` (the raw `+0x3c`), and a candidate is dropped when its
+  `dSurface²` exceeds that radius squared. `FUN_005acac0` then divides by the unscaled `+0x40`.
+  Since nothing observed writes a yield other than 1, the two radii coincide in shipped play.
+- **The blast is occlusion-tested, for the nodes that opt in.** `FUN_005aca30` passes both the
+  distance flag and the occlusion flag. Under the occlusion flag `FUN_004cb420` casts
+  `FUN_004c8f70` from the burst centre to the candidate's sphere centre through the whole intersect
+  database, with the candidate's own intersect bit (`node+0x24` bit `0x10`) cleared for the
+  duration of the cast so it cannot shadow itself, and drops the candidate on any hit. The round's
+  owner node has that bit cleared for the whole gather (`FUN_005aca30`), so a shooter's own aircraft
+  neither takes splash nor shields anything from it. ⚠ The cast runs only for a candidate carrying
+  node flag `0x400000`; that bit is not in the GameZ node flags and no instruction in the binary sets
+  it by an immediate, so which objects opt in is not decoded. CSVM tests every candidate.
+- **At most 32 objects** are collected. The gather checks `count < 0x20` before testing each
+  candidate and, once the buffer is full, logs "Database intersections array is full" for every
+  further candidate in the walk and adds nothing. The buffer is reset per query, so the cap is per
+  burst, and which 32 win is the order the spatial grid walk finds them in.
 
 A weapon carrying `MINE` (`+0x74` bit `0x4000`) skips the falloff entirely and applies full damage to
 everything inside the radius. `round[+0x678]` is a per-round yield multiplier scaling the radius and
 both damage figures together, so it is one knob over the whole burst.
+
+CSVM keeps the falloff, the engulf clamp, the occlusion cast and the 32 cap, and departs on two
+points by choice (`Projectile.ApplyDamage`): the surface distance is to the nearest point of the
+target's own collision shape rather than to a bounding sphere, because a Godot collision body has no
+per-node box and a chapter mesh's enclosing sphere would hand full damage to everything inside it;
+and the 32 winners are the nearest 32, since the original's grid order is placement luck.
 
 ### The engine stores radii squared
 
@@ -914,9 +939,14 @@ wins, compared by squared distance.
 
 ## Still open
 
-Nothing bearing on ordnance behaviour. `FUN_004c8ec0` and `FUN_004c8f70` (the swept and segment
-queries themselves) are geometry-layer routines shared with the collision system rather than weapon
-code, and were not opened.
+Nothing bearing on ordnance behaviour. `FUN_004c8ec0` (the swept query) is a geometry-layer routine
+shared with the collision system rather than weapon code, and was not opened. `FUN_004c8f70` (the
+segment query the splash occlusion cast uses) was read far enough to say what it tests: it walks the
+spatial grid along the segment and tests every node carrying both `ACTIVE` (`0x4`) and the intersect
+bit (`0x10`), plus the terrain cells it crosses, so it is the same database every other ray in the
+engine sees; its per-polygon test (`FUN_004c9a00`) was not opened.
+- Which nodes carry the runtime flag `0x400000` that opts them into the splash occlusion cast (see
+  "Half two, the splash").
 - `FUN_004881e0` is the player's fire-input tick. It routes by `CANNON` (`0x40`) and `ROCKET`
   (`0x10`) only, feeding `CALIBER` to `FUN_004810d0` for guns and the whole weapon to `FUN_00480f50`
   for ordnance.
@@ -933,6 +963,9 @@ code, and were not opened.
   `FUN_005ac690`, `FUN_005ac580`, `FUN_005aca30`, `FUN_005acac0`, `FUN_0042e840`, `FUN_004200d0`,
   `FUN_0042e9d0`, `FUN_004b8d50`, `FUN_004b8fd0`, `FUN_004b8dd0`, `FUN_004b8f60`, `FUN_004b8f80`
   and `FUN_004b92c0` were read in full.
+- `FUN_004cb420` (the splash gather), `FUN_004d8bd0` (the box-to-sphere reduction),
+  `FUN_005388d0` (the rooted distance) and `FUN_004cd210` (the intersect-bit toggle) were read in
+  full for the surface-distance, occlusion and cap findings under "Half two, the splash".
 - The three `smokescreen_stun_*` values were traced from their authored names in `player.zrd.json`
   through `FUN_004735b0`'s stores to their reads in `FUN_004b8fd0`, including the `× π/180 × 0.5`
   conversion, so the half-angle reading is decoded rather than inferred.

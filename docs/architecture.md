@@ -1435,13 +1435,13 @@ per-surface IMPACT entry) — checked AFTER the ray so a dead-on rocket keeps it
 detonating at the round's CLOSEST APPROACH to the registered boxes within the swept step
 (`AircraftBody.SegmentDistance`), holding while still closing at step end: most rockets author
 `DETONATION_DISTANCE` equal to `IMPACT_PROXIMITY`, so a first-entry fuse would always detonate
-exactly where the linear blast reaches zero. The fused-on body rides into `Impact` for
-per-surface effect/sound selection, but its damage arrives only through `BlastAircraftPass`: every
-registered plane inside the blast radius — never the shooter's own, never a wreck — takes the
-weapon's ARMOR/HEALTH scaled by the linear falloff, measured to the nearest point of its OWN
-boxes (`NearestShape`, the blast-neighbor-shape rule) and struck at that box, so part mapping and
-kill attribution run the direct-hit path. Planes never enter `DamageSink`; the destructible blast
-sphere stays world-masked.
+exactly where the blast reaches zero. The fused-on body rides into `Impact` for
+per-surface effect/sound selection, but its damage arrives only through `ApplyDamage`'s gather
+(`GatherAircraftCandidates`): every registered plane inside the blast radius — never the shooter's
+own, never a wreck — takes the weapon's ARMOR/HEALTH scaled by the splash falloff, measured to the
+nearest point of its OWN boxes (`NearestShape`, 0 inside, the blast-neighbor-shape rule) and struck
+at that box, so part mapping and kill attribution run the direct-hit path. Planes never enter
+`DamageSink`; the destructible blast sphere stays world-masked.
 `DamageSink` (→ `AnimRuntime.DamageAt`) turns a world hit into destructible damage —
 `WorldDamageGate` (→ `ZeppelinRuntime.GateWeaponDamage`, F18) is asked per struck body first,
 so a weapon without `DAMAGES_ZEPPELIN` cannot hurt a gasbag while its impact effect/sound still
@@ -1489,17 +1489,29 @@ and impact read full volume (distance ≈ 0 to themselves); a firefight at the f
 splitscreen map fades for everyone else. `PlayerPositions` null (the weapon bench, `Suites.cs`
 labs — no human to measure against) skips the term entirely, gain 1. `PlayShotSound` (a turret
 gunner's launch bark) takes the same treatment from its firepoint's position.
-Positive-`HEALTH_DAMAGE` blasts linearly fall from full at direct contact to zero at the authored
-`IMPACT_PROXIMITY`; `DAMAGE 0` effect radii never damage. The struck body always takes full damage
-(`ApplyDamage`'s direct-hit branch, unscaled by falloff); every OTHER body the blast sphere overlaps
-is scored from the nearest point on **its own collision shape**, not its transform origin
-(`NearestBlastPoint`, BL-239) — a `GetRestInfo` query against the same sphere with every other
-candidate body excluded, so a large neighbour (a zeppelin gasbag, a long building mesh) is scored by
-how close the blast actually is to its skin, not by how far the blast is from wherever its origin
-happens to sit. Falls back to the shape owner's transform origin only if that query somehow finds no
-contact. The fuse tests the whole swept segment per candidate plane (no tunnelling at ~20 m/step)
-and gates through `DETONATION_DOT_PRODUCT` toward the nearest hull point. The linear curve and
-1 N·s/HP impulse are TUNE.
+Positive-`HEALTH_DAMAGE` blasts fall on the original's curve, `1 − d²/IMPACT_PROXIMITY²`
+(`BlastFalloff`, fed `WeaponDef.ImpactProximitySqM` and a `DistanceSquaredTo`; `FUN_005acac0`,
+docs/org/ordnanceTypes.md "Half two, the splash"), quadratic in distance so 0.75 at half the
+radius, zero at it, and applied to both pools; `DAMAGE 0` effect radii never damage. The struck body
+always takes full damage (`ApplyDamage`'s direct-hit branch, unscaled by falloff); every OTHER body
+the blast sphere overlaps is scored from the nearest point on **its own collision shape**, not its
+transform origin (`NearestBlastPoint`, BL-239) — a `GetRestInfo` query against the same sphere with
+every other candidate body excluded, so a large neighbour (a zeppelin gasbag, a long building mesh)
+is scored by how close the blast actually is to its skin, not by how far the blast is from wherever
+its origin happens to sit. Falls back to the shape owner's transform origin only if that query
+somehow finds no contact. The original measures to a per-node bounding sphere instead; the shape is
+kept because a Godot body has no such sphere and a chapter mesh's would engulf the map. Planes and
+world bodies then share ONE candidate list (`_blastCandidates`), sorted nearest first, and each is
+**cover-tested** before it takes its share (`BlastCovered`, C11): a ray from the burst, lifted
+`CoverRayLift` 0.1 m along the struck normal so the wall the round hit shields what stands behind it
+and not its own side, to the candidate's centre, world layer only (`_coverRay`; aircraft are not
+cover, see the field), the candidate itself excluded; any hit drops it. At most `MaxBlastTargets`
+32 candidates take damage per burst, the original's hit-buffer size; when more are inside the radius
+the pool prints one `blast cap:` line naming the weapon, the burst and how many were dropped
+(Decision 9 of PLAN-ordnance-types: never silent). `MaxBlastBodies` 4096 is only the raw sphere
+query ceiling. The fuse tests the whole swept segment per candidate plane (no tunnelling at
+~20 m/step) and gates through `DETONATION_DOT_PRODUCT` toward the nearest hull point. The
+1 N·s/HP impulse is TUNE (BL-227's open half).
 
 ## src/Flight/WarningShotCue.cs
 The incoming-fire near-miss cue's shipped accumulator (player.json `warning_shot_max` 2.0 /

@@ -17,7 +17,7 @@ namespace CSVM.Flight;
 /// IMPACT row by the struck collider's surface id (<see cref="SurfaceIdOf"/>); an aircraft hit
 /// routes its damage to the struck plane's own part model, never the destructible pipeline. A
 /// round that misses may still fuse — see <see cref="ProximityFuseTriggered"/> and
-/// <see cref="BlastAircraftPass"/>.
+/// <see cref="ApplyDamage"/>.
 /// </summary>
 public sealed partial class ProjectilePool : Node3D
 {
@@ -100,10 +100,21 @@ public sealed partial class ProjectilePool : Node3D
     // single group still gets its smoke on essentially every round.
     private const float GunEffectInterval = 0.1f;
 
-    // Blast damage falls linearly from the weapon's authored HEALTH_DAMAGE at the detonation point
-    // to zero at IMPACT_PROXIMITY. The shape is a design choice, not encoded by the weapon data.
+    // The knockback on a directly struck rigid body. The original's impulse is decoded (BL-227:
+    // damage × a per-airframe constant, two magnitudes, a 5.0 threshold) and not yet consumed.
     private const float BlastImpulsePerDamage = 1f; // N*s per point of dealt damage; TUNE
+    // The raw candidate ceiling of the sphere query, well above anything a chapter packs into
+    // one blast radius; the behavioural limit is MaxBlastTargets below.
     private const int MaxBlastBodies = 4096;
+    // The original's splash gather (FUN_004cb420) writes into a 32-entry hit buffer and logs
+    // "Database intersections array is full" for every candidate past it, so a burst damages at
+    // most 32 objects. Which 32 is grid-walk order there; here it is the nearest 32, so the cap
+    // drops the farthest and weakest hits, and the log line names the burst it bit.
+    private const int MaxBlastTargets = 32;
+    // The cover ray starts this far off the struck surface along its normal, so a burst sitting on
+    // a wall's face does not read that wall as cover for its own side while a target behind the
+    // wall still finds it in the way.
+    private const float CoverRayLift = 0.1f;
 
     // A fuse candidate whose closest approach sits at the very end of the swept step is still
     // closing — hold the fuse: the next step detonates closer, or the hit ray lands a direct hit.
@@ -232,6 +243,9 @@ public sealed partial class ProjectilePool : Node3D
 
     // The reset value for _ray.Exclude between shots — shared and never mutated.
     private static readonly Godot.Collections.Array<Rid> NoExclude = new();
+    // Nearest-first order for the splash gather, so the 32 cap drops the farthest hits.
+    private static readonly Comparison<BlastCandidate> ByDistance =
+        (a, b) => a.DistanceSq.CompareTo(b.DistanceSq);
 
     private readonly Proj[] _proj = new Proj[MaxProjectiles];
     // One sprite list per muzzle-flash ammo texture (MuzzleAmmoTextures) — a separate MultiMesh per
@@ -314,8 +328,14 @@ public sealed partial class ProjectilePool : Node3D
     private readonly SphereShape3D _proximitySphere = new();
     // The destructible blast sphere stays world-masked on purpose: planes never enter the
     // destructible DamageSink. The aircraft halves of fuse and blast run off the registered
-    // `_aircraft` list instead (ProximityFuseTriggered / BlastAircraftPass) — never this query.
+    // `_aircraft` list instead (ProximityFuseTriggered / GatherAircraftCandidates) — never this query.
     private readonly PhysicsShapeQueryParameters3D _proximityQuery = new() { CollisionMask = CollisionLayers.World };
+    // The splash occlusion ray (C11): world geometry is cover, aircraft are not. The original casts
+    // through its whole intersect database; whether aircraft nodes are in it was not settled, and
+    // our hulls live on their own query layer, so a plane between a burst and its victim shields
+    // nothing here.
+    private readonly PhysicsRayQueryParameters3D _coverRay = new() { CollisionMask = CollisionLayers.World };
+    private readonly List<BlastCandidate> _blastCandidates = new();
     private readonly List<AudioStreamPlayer> _sfxPool = new();
     // The stand-in fireball's sprite scatter, muzzle-flash roll, and debris/ricochet spread
     // (ApplySpread — gun dispersion itself was removed). Held rather than resolved per draw.
@@ -470,9 +490,18 @@ public sealed partial class ProjectilePool : Node3D
     public static bool FlyoutHiddenAtLaunch(WeaponDef weapon) =>
         weapon.FlyoutHealth is > 0 && weapon.RangeMinimum is > 0f;
 
-    /// <summary>Linear blast falloff: full at the centre and zero at the authored radius.</summary>
+    /// <summary>The splash share at a squared surface distance: <c>1 − d² / IMPACT_PROXIMITY²</c>
+    /// (<c>FUN_005acac0</c>, docs/org/ordnanceTypes.md "Half two, the splash"), applied to both
+    /// damage pools. Quadratic in distance, so 0.75 at half the radius where a linear curve gives
+    /// 0.5. <paramref name="radiusSq"/> is <see cref="WeaponDef.ImpactProximitySqM"/>, the square
+    /// the engine stores at weapon <c>+0x40</c>; a burst that engulfs its target passes 0.</summary>
+    public static float BlastFalloff(float distanceSq, float radiusSq) =>
+        radiusSq > 0f ? Mathf.Clamp(1f - distanceSq / radiusSq, 0f, 1f) : 0f;
+
+    /// <summary>The same curve in plain metres, for a caller holding a distance rather than its
+    /// square: full at the surface, zero at the authored radius.</summary>
     public static float BlastDamage(float fullDamage, float radius, float distance) =>
-        radius > 0f ? fullDamage * Mathf.Clamp(1f - distance / radius, 0f, 1f) : 0f;
+        fullDamage * BlastFalloff(distance * distance, radius * radius);
 
     /// <summary>Whether a candidate lies inside an authored proximity-fuse forward cone.</summary>
     public static bool FuseDotAllows(float? minimumDot, Vector3 velocity, Vector3 towardTarget)
@@ -1803,13 +1832,13 @@ public sealed partial class ProjectilePool : Node3D
         if (collider is AircraftBody plane && shapeIdx >= 0)
             plane.TakeProjectileHit(weapon, point, shapeIdx, shooter);
         else
-            ApplyDamage(weapon, outcome, point, collider is AircraftBody ? null : collider, shooter);
+            ApplyDamage(weapon, outcome, point, normal, collider is AircraftBody ? null : collider, shooter);
     }
 
     // ⚠ Do not re-add a world fuse. It detonates every rocket short of its target and locks every
     // hardpoint weapon out of its per-surface IMPACT entry. Armed against aircraft only.
     // Detonates at CLOSEST APPROACH within the swept step, not first entry, or most rockets would
-    // detonate where the linear blast falls to zero and never hurt a plane. The shooter's own
+    // detonate where the blast falls to zero and never hurt a plane. The shooter's own
     // plane and a wreck/INERT airframe are never candidates. ⚠ This walk is the pool's own roster,
     // not a physics query, so it needs FlightController.InPlay itself.
     private bool ProximityFuseTriggered(WeaponDef weapon, int shooter, Vector3 from, Vector3 to,
@@ -1921,35 +1950,105 @@ public sealed partial class ProjectilePool : Node3D
         return rest.Count > 0 ? (Vector3)rest["point"] : DamageZonePosition(body, shapeIndex);
     }
 
-    private void ApplyDamage(WeaponDef weapon, in ImpactOutcome outcome, Vector3 point, Node? struck,
-        int shooter)
+    // The detonation's damage: the struck body takes the full figure, then every candidate inside
+    // IMPACT_PROXIMITY takes the falloff share of it, nearest first, cover-tested, at most 32 of
+    // them (FUN_005aca30 then FUN_005acac0). Planes and destructibles share one gather and one cap
+    // because the original's hit buffer holds both; planes are struck through their own part
+    // model, destructibles through DamageSink, and neither is ever handed to the other's path.
+    private void ApplyDamage(WeaponDef weapon, in ImpactOutcome outcome, Vector3 point, Vector3 normal,
+        Node? struck, int shooter)
     {
-        // The blast's aircraft half runs beside the destructible sink, never through it: planes
-        // take their share via their own armor-first part model under the same linear falloff.
-        if (outcome.HasBlastDamage)
-            BlastAircraftPass(weapon, point, outcome.BlastRadius, shooter);
-
         float fullDamage = outcome.Damage;
         float radius = outcome.BlastRadius;
-        if (DamageSink == null || fullDamage <= 0f)
-            return;
 
         // The F18 zeppelin gate, per struck body: a refused body takes no damage while the
         // impact effect/sound above played normally.
         bool Gated(Node? body) => WorldDamageGate != null && !WorldDamageGate(body, weapon);
 
-        if (!outcome.HasBlastDamage || GetWorld3D()?.DirectSpaceState is not { } space)
+        if (!outcome.HasBlastDamage)
         {
-            if (!Gated(struck))
+            if (DamageSink != null && fullDamage > 0f && !Gated(struck))
                 DamageSink(struck, fullDamage);
             return;
         }
 
         // The ray contact is the detonation centre even when the collider's transform origin is far
         // away (large chapter meshes), so preserve full direct-hit damage and exclude it below.
-        if (struck != null && !Gated(struck))
+        if (DamageSink != null && struck != null && !Gated(struck))
             DamageSink(struck, fullDamage);
 
+        // The falloff denominator is the engine's stored square (weapon +0x40), never a root of
+        // the authored radius taken here.
+        float radiusSq = weapon.ImpactProximitySqM ?? radius * radius;
+        var space = GetWorld3D()?.DirectSpaceState;
+        _blastCandidates.Clear();
+        GatherAircraftCandidates(point, radiusSq, shooter);
+        if (space != null && DamageSink != null)
+            GatherWorldCandidates(space, point, radius, struck);
+        _blastCandidates.Sort(ByDistance);
+
+        int accepted = 0;
+        for (int i = 0; i < _blastCandidates.Count; i++)
+        {
+            if (accepted == MaxBlastTargets)
+            {
+                GD.Print($"blast cap: {weapon.Id} burst at ({point.X:0},{point.Y:0},{point.Z:0}) had"
+                         + $" {_blastCandidates.Count} targets inside {radius:0.#} m; the nearest"
+                         + $" {MaxBlastTargets} took damage and {_blastCandidates.Count - i} were dropped"
+                         + " (the original's 32-entry hit buffer)");
+                break;
+            }
+            var c = _blastCandidates[i];
+            if (space != null && BlastCovered(space, point, normal, c))
+                continue;
+            float share = BlastFalloff(c.DistanceSq, radiusSq);
+            if (c.Plane != null)
+                c.Plane.TakeProjectileHit(weapon, c.NearPoint, c.ShapeIdx, shooter, damageScale: share);
+            else if (share > 0f && !Gated(c.Body))
+                DamageSink!(c.Body, fullDamage * share);
+            accepted++;
+        }
+        _blastCandidates.Clear();
+
+        if (struck is RigidBody3D rigid)
+        {
+            var away = rigid.GlobalPosition - point;
+            if (away.LengthSquared() > 1e-6f)
+                rigid.ApplyCentralImpulse(away.Normalized() * fullDamage * BlastImpulsePerDamage);
+        }
+    }
+
+    // Every registered flying plane inside the radius, never the shooter's own and never one out
+    // of play (same roster-walk caveat as the fuse), measured to the nearest point on its own
+    // collision boxes (0 inside, the engulf clamp) and struck at that box, so part mapping and
+    // kill attribution run the exact direct-hit path.
+    private void GatherAircraftCandidates(Vector3 point, float radiusSq, int shooter)
+    {
+        foreach (var plane in _aircraft)
+        {
+            if (plane.PlayerIndex == shooter || !plane.Rig.InPlay)
+                continue;
+            int shapeIdx = plane.NearestShape(point, out float distance, out var nearPoint);
+            if (shapeIdx < 0 || distance * distance >= radiusSq)
+                continue;
+            _blastCandidates.Add(new BlastCandidate
+            {
+                Plane = plane,
+                Rid = plane.GetRid(),
+                ShapeIdx = shapeIdx,
+                NearPoint = nearPoint,
+                Centre = plane.GlobalPosition,
+                DistanceSq = distance * distance,
+            });
+        }
+    }
+
+    // Every world body the blast sphere overlaps except the struck one, scored from the nearest
+    // point on its own collision shape (NearestBlastPoint, BL-239). The struck body's contact
+    // point is the burst, so its own share is the full figure already dealt.
+    private void GatherWorldCandidates(PhysicsDirectSpaceState3D space, Vector3 point, float radius,
+        Node? struck)
+    {
         ConfigureSphereQuery(radius, point);
         var hits = space.IntersectShape(_proximityQuery, MaxBlastBodies);
         if (hits.Count == MaxBlastBodies)
@@ -1962,36 +2061,35 @@ public sealed partial class ProjectilePool : Node3D
             var rid = (Rid)hit["rid"];
             int shapeIndex = hit["shape"].AsInt32();
             var nearPoint = NearestBlastPoint(space, point, radius, body3D, rid, hits, shapeIndex);
-            float damage = BlastDamage(fullDamage, radius, nearPoint.DistanceTo(point));
-            if (damage > 0f && !Gated(body))
-                DamageSink(body, damage);
-        }
-
-        if (struck is RigidBody3D rigid)
-        {
-            var away = rigid.GlobalPosition - point;
-            if (away.LengthSquared() > 1e-6f)
-                rigid.ApplyCentralImpulse(away.Normalized() * fullDamage * BlastImpulsePerDamage);
+            _blastCandidates.Add(new BlastCandidate
+            {
+                Body = body,
+                Rid = rid,
+                ShapeIdx = shapeIndex,
+                NearPoint = nearPoint,
+                Centre = DamageZonePosition(body3D, shapeIndex),
+                DistanceSq = nearPoint.DistanceSquaredTo(point),
+            });
         }
     }
 
-    // Every registered flying plane inside the weapon's IMPACT_PROXIMITY radius, never the
-    // shooter's own and never one out of play (same roster-walk caveat as the fuse above), takes
-    // damage scaled by the same linear falloff as the destructible sink, measured to the nearest
-    // point on the plane's own collision boxes and struck there, so kill attribution runs the
-    // exact direct-hit path.
-    private void BlastAircraftPass(WeaponDef weapon, Vector3 point, float radius, int shooter)
+    // The occlusion test (FUN_004cb420 under FUN_005aca30's occlusion flag): a ray from the burst
+    // to the candidate's centre, the candidate itself excluded, and anything it meets on the way
+    // is cover. The origin is lifted off the struck surface along its normal (CoverRayLift) so the
+    // wall the round hit is cover for what stands behind it and transparent to its own side; a
+    // fuse or range burst in the air has no normal and no lift.
+    private bool BlastCovered(PhysicsDirectSpaceState3D space, Vector3 point, Vector3 normal,
+        in BlastCandidate c)
     {
-        foreach (var plane in _aircraft)
-        {
-            if (plane.PlayerIndex == shooter || !plane.Rig.InPlay)
-                continue;
-            int shapeIdx = plane.NearestShape(point, out float distance, out var nearPoint);
-            if (shapeIdx < 0 || distance >= radius)
-                continue;
-            plane.TakeProjectileHit(weapon, nearPoint, shapeIdx, shooter,
-                damageScale: 1f - distance / radius);
-        }
+        var from = point + normal * CoverRayLift;
+        if (from.DistanceSquaredTo(c.Centre) <= 1e-6f)
+            return false;
+        _coverRay.From = from;
+        _coverRay.To = c.Centre;
+        _coverRay.Exclude = new Godot.Collections.Array<Rid> { c.Rid };
+        var hit = space.IntersectRay(_coverRay);
+        _coverRay.Exclude = NoExclude;
+        return hit.Count > 0;
     }
 
     // Whether this gun's impact effect may play again now, stamping the time when it may.
@@ -2478,6 +2576,20 @@ public sealed partial class ProjectilePool : Node3D
             _tracerMm[i].VisibleInstanceCount = _tracerCounts[i];
             _tipMm[i].VisibleInstanceCount = _tracerCounts[i];
         }
+    }
+
+    // One splash candidate: a registered plane (Plane set, its nearest hull box) or a world body
+    // the blast sphere overlaps (Body set). DistanceSq is the squared distance from the burst to
+    // the candidate's own surface, and Centre is where the cover ray aims.
+    private struct BlastCandidate
+    {
+        public AircraftBody? Plane;
+        public Node? Body;
+        public Rid Rid;
+        public int ShapeIdx;
+        public Vector3 NearPoint;
+        public Vector3 Centre;
+        public float DistanceSq;
     }
 
     private struct Proj

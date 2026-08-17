@@ -25,12 +25,30 @@ public class WeaponBlastTests
         Assert.Equal(30f, torpedo.ImpactProximity ?? -1f);
     }
 
+    // C10: FUN_005acac0's `1 − d²/IMPACT_PROXIMITY²`, quadratic in distance, full at the surface
+    // and zero at the radius. The half-radius point is where it parts from the linear curve it
+    // replaced (0.75 against 0.5), so that value is the one that proves the shape.
     [Fact]
-    public void BlastDamageFallsOffLinearlyFromFullAtCentreToZeroAtTheEdge()
+    public void BlastDamageFallsOffQuadraticallyFromFullAtTheSurfaceToZeroAtTheEdge()
     {
         Assert.Equal(200f, ProjectilePool.BlastDamage(200f, 30f, 0f));
-        Assert.Equal(100f, ProjectilePool.BlastDamage(200f, 30f, 15f));
+        Assert.Equal(187.5f, ProjectilePool.BlastDamage(200f, 30f, 7.5f), 3);
+        Assert.Equal(150f, ProjectilePool.BlastDamage(200f, 30f, 15f), 3);
+        Assert.Equal(87.5f, ProjectilePool.BlastDamage(200f, 30f, 22.5f), 3);
         Assert.True(Mathf.IsZeroApprox(ProjectilePool.BlastDamage(200f, 30f, 30f)));
+        Assert.Equal(0f, ProjectilePool.BlastDamage(200f, 30f, 45f));
+    }
+
+    // The sim path feeds the curve squared quantities straight from the engine's stored square
+    // (WeaponDef.ImpactProximitySqM) and a DistanceSquaredTo, and an engulfing burst passes 0.
+    [Fact]
+    public void BlastFalloffTakesSquaredQuantitiesAndClampsBothEnds()
+    {
+        Assert.Equal(1f, ProjectilePool.BlastFalloff(0f, 900f));
+        Assert.Equal(0.75f, ProjectilePool.BlastFalloff(225f, 900f), 5);
+        Assert.Equal(0f, ProjectilePool.BlastFalloff(900f, 900f));
+        Assert.Equal(0f, ProjectilePool.BlastFalloff(1600f, 900f));
+        Assert.Equal(0f, ProjectilePool.BlastFalloff(0f, 0f));
     }
 
     [ExtractedDataFact]

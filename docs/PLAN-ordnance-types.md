@@ -164,8 +164,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — The blast
 
-10. ☐ Splash falloff: quadratic, measured to the shape
-11. ☐ Splash occlusion test and the 32-object cap
+10. ☑ Splash falloff: quadratic, measured to the shape
+11. ☑ Splash occlusion test and the 32-object cap
 12. ☐ The per-weapon impact hook and `SURFACE_ANIMATION` normal orientation
 
 ### Wave D — Disabling effects
@@ -595,7 +595,22 @@ two halves are one weapon system: neither is useful alone, so neither is testabl
 
 # Wave C — The blast
 
-## C10 ☐ Splash falloff: quadratic, measured to the shape
+## C10 ☑ Splash falloff: quadratic, measured to the shape
+
+**Verdict.** Landed. `ProjectilePool.BlastFalloff(distanceSq, radiusSq)` is `1 − d²/R²` clamped
+to `[0, 1]`, fed `WeaponDef.ImpactProximitySqM` and a `DistanceSquaredTo`; the metre-form
+`BlastDamage` wraps it for callers holding a distance. Both pools take the same share: destructibles
+through `DamageSink`, planes through `TakeProjectileHit(damageScale)`. The distance stays the
+`BL-239` nearest-collision-shape measure (0 inside a plane's boxes, so the engulf clamp is built in),
+which was already a surface distance; the original's per-node bounding sphere was not adopted
+because a Godot body has no such sphere and a chapter mesh's would engulf the map. Reading
+`FUN_004cb420` corrected one detail of the evidence: the surface distance IS rooted there
+(`FUN_005388d0`, centre to centre, minus the half-diagonal of the node's box from `FUN_004d8bd0`,
+clamped, then squared), so `DistanceSquaredTo` on our nearest point is the matching quantity. The
+`MINE` branch is not built. `BL-227`'s falloff half is closed; its impulse half stays open.
+`blast-curve-cover-cap` measures three destructibles at 0.25R/0.5R/0.75R from one burst: 187.5,
+150 and 87.5 of 200 where the linear curve gave 150, 100 and 50 (baseline seen failing on the
+committed code before the change).
 
 **Goal.** Blast damage falls off on the original's curve. Closes `BL-227`'s falloff half.
 
@@ -618,7 +633,25 @@ number here is not evidence unless you have seen it able to move.
 **⚠ Traps.** This is wrong-claim 2. `+0x40` is a square. A weapon carrying `MINE` skips the falloff
 entirely, but nothing authors `MINE`, so that branch is unreachable and must not be built.
 
-## C11 ☐ Splash occlusion test and the 32-object cap
+## C11 ☑ Splash occlusion test and the 32-object cap
+
+**Verdict.** Landed. Planes and world bodies now share one candidate list in `ApplyDamage`, sorted
+nearest first; each is cover-tested by `BlastCovered` (a ray from the burst, lifted 0.1 m along the
+struck normal so the wall the round hit shields what is behind it and not its own side, to the
+candidate's centre, world layer only, the candidate excluded) and at most `MaxBlastTargets` 32 take
+damage per burst, with one `blast cap:` line naming the weapon, the burst and the dropped count
+(Decision 9). Reading `FUN_004cb420` settled the open questions and corrected two: the ray is
+centre-to-centre through the whole intersect database with the candidate's own intersect bit
+cleared and the round's owner cleared for the whole gather; the cap is per burst (the buffer is
+reset per query) and counts accepted objects, checked before each candidate, with one log line per
+surplus candidate; the gather includes aircraft (they are nodes in the same database and the shooter
+exclusion at `FUN_005acac0` is written for them), so planes get the same treatment here. ⚠ One
+thing the decode did not settle: the cast runs only for a candidate carrying node flag `0x400000`,
+which is not in the GameZ flags and has no immediate setter in the binary; the remake tests every
+candidate. Cover is world geometry only, aircraft are not cover (`_coverRay`'s field comment).
+`blast-curve-cover-cap`: a target 20 m out takes 111.1 with the way clear and 0 with a wall between
+(the wall itself takes 179.9), and forty targets inside the radius leave exactly the nearest 32
+damaged; the baseline dealt 66.7 through the wall and damaged all forty.
 
 **Goal.** Cover protects against splash, and the gather has the original's limit.
 
