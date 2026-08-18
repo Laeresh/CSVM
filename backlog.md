@@ -2383,8 +2383,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     `magnitude_factor`.** The `camera+0x24` consumer traced NEGATIVE (2026-08-19): the original's
     own accumulator is near-dead in its build, so the gap is a **mechanism mismatch, not a
     render-pipeline loss** — this port is the first real feel of the kick law.
-  - **(B) fire-rate** — settled by decode: one round per fire-tick at authored `FIRE_RATE` (8.0 for
-    wep_40); the "12–13/s" was a redraw-window artifact. Pose-interp render loss tested NEGATIVE.
+    (The old approach-(B) suspects are also settled: fire-rate is one round per tick at authored
+    `FIRE_RATE` (8.0 for wep_40) — the "12–13/s" was a redraw-window artifact — and 60 fps
+    pose-interpolated render loss tested NEGATIVE.)
   **Still open, all data/fidelity questions:**
   - (b) the impact sources' per-event quantities are stand-ins declared TUNE (gun hits reuse
     caliber, rockets use armor damage) — a being-hit capture pins them.
