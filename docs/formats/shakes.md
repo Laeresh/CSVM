@@ -38,10 +38,13 @@ envelope `E` renders only ~0.28·E as RMS at the real 8/s fire rate (sawtooth du
 envelope decay), so the engine renders ~0.28× the law's literal number regardless of the clip
 (decoded: ~8e-4 rad RMS / ~0.20 px/frame at the ±205 px lever). ⚠ **The ×CALIBER multiplicand is
 confirmed, but the original's downstream gain is not yet reconciled** — `FUN_0042be10` scales the
-`2.8e-3` product by the camera-shake-component gain (×2.0 at `camera+0x1c`) and the sawtooth
-coeff (×4.0) before the roll oscillator, so the original's per-shot input is
-`2.8e-3 × 8 × (rand−0.5) × 1.2`, an order larger than the raw law (instrument the live
-`camera+0x24` accumulator to pin the true kick). Whether `magnitude_factor` needs a ~3.5× decode
+`2.8e-3` product by the camera-shake-component gain (×2.0 at `camera+0x1c`) and the waveform
+factor, whose selector `*this == 0` takes the **`6.2832`** branch (not the 4.0 sawtooth branch),
+so `fVar1 = mag × 2.0 × 6.2832 = 3.518e-2` and the per-shot input is
+`(rand01−0.5) × fVar1 × 1.2` — **Δroll uniform in ±2.11e-2 rad/shot** for wep40, an order larger
+than the raw law (see `analysis/gun-wobble-shake/FINDINGS.md`; the decode is closed-form from the
+binary — `FUN_0042be10` only kicks the `camera+0x24` accumulator, its render is a deeper untraced
+camera function; no live instrument needed). Whether `magnitude_factor` needs a ~3.5× decode
 correction to match the original is the clip/fidelity judgment, not the decode — see
 `analysis/gun-wobble-shake/FINDINGS.md`. Unmeasured residue: whether plane model/weight also
 enter (single-plane, single-gun clip — owed capture in `playtest.md`), and the impact sources'

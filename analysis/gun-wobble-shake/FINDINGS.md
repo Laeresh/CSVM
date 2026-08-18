@@ -141,14 +141,22 @@ geometry (sawtooth duty × damp decay between kicks); the render chain adds noth
 
 ⚠ **This model is the remake's `PlaneShake.cs` oscillator** (that is why it validates against
 `PlaneShakeTests`). The binary trace shows the ORIGINAL feeds `2.80e-3` through a *camera-shake
-component* first: `FUN_0042be10(this=camera+0x18)` scales by `this[1]` = **2.0** (camera-ctor,
-`FUN_0042bab0`, dword 7) and the sawtooth coeff **4.0** (≈`6.2832` for sine), then kicks roll/pitch
-with `(rand−0.5)×fVar1×1.2`. So the original's per-shot input to its roll oscillator is
-`2.80e-3 × 2.0 × 4.0 × (rand−0.5) × 1.2` — an order of magnitude larger than the raw law. The
-two gangs of scalars (remake `PlaneShake` gain vs original camera-shake-component gain ×4.0) are
-**not yet reconciled**; the 0.284/0.20-px figure is the remake's render of a `2.80e-3` kick, and
-comparing it to the original demands the original's true kick (instrument the live process:
-log `camera+0x24` roll accumulator per tick after a burst).
+component* first, and the per-shot kick law is now closed-form and binary-derived:
+`FUN_0042be10(this=camera+0x18)` scales by `this[1]` = **2.0** (camera-ctor `FUN_0042bab0`, dword
+7) and the waveform factor, whose selector `*this == 0` takes the **`6.2832`** (sine) branch —
+**not** the `4.0` sawtooth branch — then kicks the three accumulators:
+`fVar1 = mag × 2.0 × 6.2832 = 3.518e-2`, `Δroll/pitch = (rand01−0.5) × fVar1 × 1.2`,
+`Δyaw = (rand01−0.5) × fVar1 × 2.5`. For wep40 (`mag = 2.80e-3`): **Δroll is uniform in
+±2.11e-2 rad per shot**, Δyaw in ±4.40e-2. So the original's per-shot kick to its roll oscillator
+is `(rand01−0.5) × 2.80e-3 × 2.0 × 6.2832 × 1.2` — an order of magnitude larger than the raw law.
+⚠ `FUN_0042be10` only *kicks* the accumulator at `camera+0x24/+0x28/+0x2c` (random-delta walk,
+confirmed: it returns right after the three adds, with no decay/oscillation/render); the visible
+wobble is a separate, deeper camera function not yet traced. The two gangs of scalars (remake
+`PlaneShake` gain vs original camera-shake-component gain ×12.566) are **not yet reconciled**; the
+0.284/0.20-px figure is the remake's render of a `2.80e-3` kick, and comparing it to the original
+demands the original's true kick. Decode persisted: `.scratch/magnitude-factor-binary-decode.txt`.
+The one remaining static trace is the `camera+0x24` consumer (whose decay turns the random walk
+into the visible wobble) — no live instrument is required for the formula itself.
 
 ⚠ **Neither the engine A/B nor the clip is consistent with the one model, and they disagree in
 opposite directions** — so the table's "2–4× under" is not a clean pipeline-loss claim:
@@ -191,7 +199,8 @@ look) is decided.
   reading is a flag on that old clip measurement, not on the law.
 - **The `7e-5 × caliber` multiplicate is confirmed, but its downstream gain is not yet
   reconciled.** The binary leaves the law intact but routes `2.80e-3` through the camera-shake
-  component gain (×2.0) and sawtooth coeff (×4.0) in `FUN_0042be10` before the roll oscillator.
-  The remake's `PlaneShake.cs` (whose render this doc models) applies a different gain, so
-  remake-vs-original amplitude equality is an open question — instrument the live original's
-  `camera+0x24` accumulator to close it.
+  component gain (×2.0) and waveform factor (×6.2832, the `*this==0` sine branch) in
+  `FUN_0042be10`, giving a closed-form per-shot `Δroll` uniform in ±2.11e-2 rad (see the
+  amplitude section). The remake's `PlaneShake.cs` (whose render this doc models) applies a
+  different gain, so remake-vs-original amplitude equality is an open question — still purely a
+  static trace of the `camera+0x24` consumer, no live instrument needed.

@@ -2464,11 +2464,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     was previously only clip-fitted; it is now a traced binary fact. (ii) New caveat: the
     `2.80e-3` product is NOT the kick the origin's roll oscillator sees — `FUN_0042be10` scales it
     by the camera-shake-component gain ×2.0 (`camera+0x1c`, set by ctor `FUN_0042bab0`) and the
-    sawtooth coeff ×4.0, then `(rand−0.5)×1.2` into roll. So the original's per-shot input is
-    `2.80e-3 × 8 × (rand−0.5) × 1.2`, an order larger than the raw law, and this gain gang is NOT
-    yet reconciled with the remake's `PlaneShake.cs` gain (whose render the 0.284/0.20-px model
-    describes). Next: instrument the live original's `camera+0x24` roll accumulator per tick to
-    pin the true kick before any amplitude correction.
+    waveform factor whose selector `*this == 0` takes the `6.2832` branch, then
+    `(rand01−0.5)×1.2` into roll. So the original's per-shot input is closed-form
+    `(rand01−0.5) × 2.80e-3 × 2.0 × 6.2832 × 1.2` — Δroll uniform in **±2.11e-2 rad/shot** for
+    wep40, an order larger than the raw law — and this gain gang is NOT yet reconciled with the
+    remake's `PlaneShake.cs` gain (whose render the 0.284/0.20-px model describes). (Earlier text
+    in this entry said "×4.0" / "×8"; that was the sawtooth branch, superseded by the exact
+    `6.2832` sine-branch selector — corrected 2026-08-19.) ⚠ `FUN_0042be10` only *kicks* the
+    `camera+0x24` accumulator (returns right after the three random adds — no decay/oscillation/
+    render); the visible wobble is a deeper untraced camera function, still a static trace, no
+    live instrument needed. Next (optional, for the full render law): trace the `camera+0x24`
+    consumer to pin the decay before any amplitude correction.
   - **Passing:** being-hit rocks read right — guns give a short rock, rockets read ok (user,
     2026-08-07, `--vs`).
   - **Unjudged:** (d) view coupling — the plane wobbling against the world in chase view cannot
