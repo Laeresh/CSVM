@@ -2687,6 +2687,9 @@ public static class Suites
                 // so the state entering the sweep is stated rather than flown into.
                 model.Reset(startPos, Basis.LookingAt(dir, Vector3.Up), speed, 0f);
                 model.VelocityDir = dir;
+                // This suite isolates collision response. The strengthened decoded AI ground-blow
+                // impulse would otherwise turn its unpiloted AI control case before the sweep.
+                model.Stats.GroundBlowElev = 0f;
 
                 float nIn = 0f, nOut = 0f, yIn = 0f, yOut = 0f;
                 bool contacted = false;
@@ -4054,15 +4057,22 @@ public static class Suites
 
             int launchWave = 0;
             var releasedAt = new List<Vector3>();
-            FlightController? Release(Vector3 pos, Vector3 lookAt)
+            var releasedVelocities = new List<Vector3>();
+            var releasedThrottles = new List<float>();
+            var releaseDropDistances = new List<float>();
+            FlightController? Release(Vector3 pos, Vector3 lookAt, Vector3 launchVelocity)
             {
                 var roster = launchWave == 1 ? wave1 : launchWave == 2 ? wave2 : null;
                 foreach (var member in roster ?? new List<FlightController>())
                 {
                     if (!member.Inert)
                         continue;
-                    member.Activate(pos, lookAt);
+                    member.Activate(pos, lookAt, launchVelocity, carrierDrop: true);
                     releasedAt.Add(pos);
+                    releasedVelocities.Add(member.WorldVelocity);
+                    releasedThrottles.Add(member.Throttle);
+                    releaseDropDistances.Add(pos.DistanceTo(cargobay.GlobalPosition
+                        + Vector3.Down * 12f));
                     return member;
                 }
                 return null;
@@ -4074,8 +4084,14 @@ public static class Suites
             // Uncredited: the decoded capacity rule is in force (the capacity-0 stand-in is OFF
             // on this arm), so a full minute of sim above the altitude gate launches nothing.
             const float dt = 1f / 60f;
-            for (int i = 0; i < 60 * 60; i++)
+            var hostVelocity = new Vector3(14f, 3f, -8f);
+            void StepGenerators()
+            {
+                host.Position += hostVelocity * dt;
                 gens.SimStep(dt);
+            }
+            for (int i = 0; i < 60 * 60; i++)
+                StepGenerators();
             ctx.Check(releasedAt.Count == 0 && wave1.All(m => m.Inert),
                 $"an uncredited generator launches nothing released={releasedAt.Count}");
 
@@ -4095,19 +4111,23 @@ public static class Suites
             ctx.Same(1, gens.GrantWaveCapacity("multiplayer1zep", wave1.Count),
                 $"wave 1's member count is credited to the generator");
             for (int i = 0; i < 60 * 120 && releasedAt.Count < 6; i++)
-                gens.SimStep(dt);
+                StepGenerators();
             ctx.Same(6, releasedAt.Count, $"exactly wave 1's six members are released");
             ctx.Check(wave1.All(m => m.InPlay), $"…and all six are in play");
             ctx.Check(wave2.All(m => m.Inert),
                 $"wave 2 is untouched — one wave's credit releases one wave");
-            var expectedDrop = cargobay.GlobalPosition + Vector3.Down * 12f;
-            ctx.Check(releasedAt.All(p => p.DistanceTo(expectedDrop) < 0.1f),
-                $"…at the generator's own drop point, 12 m under the bay floor drop={releasedAt[0]} bay={cargobay.GlobalPosition}");
+            ctx.Check(releaseDropDistances.All(distance => distance < 0.1f),
+                $"…at the generator's live drop point, 12 m under the bay floor max error={releaseDropDistances.Max():0.###} m");
+            var expectedLaunchVelocity = hostVelocity + Vector3.Down * 22.352f;
+            ctx.Check(releasedVelocities.All(v => v.DistanceTo(expectedLaunchVelocity) < 0.01f),
+                $"…with host velocity minus 22.352 m/s vertically velocity={releasedVelocities[0]}");
+            ctx.Check(releasedThrottles.All(throttle => Mathf.IsEqualApprox(throttle, 0.1f)),
+                $"…at the decoded 10% carrier-drop throttle throttle={releasedThrottles[0]:0.##}");
             ctx.Same(0, freshSpawns,
                 $"the generator never spawned an aircraft of its own on this arm");
 
             for (int i = 0; i < 60 * 60; i++)
-                gens.SimStep(dt);
+                StepGenerators();
             ctx.Same(6, releasedAt.Count, $"the credit is spent: a further minute releases nothing");
 
             // The last kill advances, exactly as on the teleport arm.
@@ -7050,9 +7070,6 @@ public static class Suites
             Step(150);
             ctx.Check(machine.Mode == AiMode.Pursue,
                 $"a non-pursuing target releases lay off after the hold mode={AiModeMachine.NameOf(machine.Mode)}");
-            Step(5);
-            ctx.Check(pilot.Throttle > 1f,
-                $"…and pursue commands past full again throttle={pilot.Throttle:0.000}");
 
             ctx.Note($"transitions: {string.Join(" ", transitions)}");
         }

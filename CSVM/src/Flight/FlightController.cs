@@ -374,6 +374,7 @@ public partial class FlightController : Node3D
     // invented answer rather than that rule (docs/org/flightModel.md, "What this changes" #13).
     private const float FallbackSpawnThrottle = 0.5f;
     private const float FallbackSpawnSpeed = 53.6f;
+    private const float CarrierDropThrottle = 0.1f;
     // The pipper's placement and smoothing are decoded (docs/org/aim-assist.md "What the pipper follows"); no TUNE left in it.
     private const float ReticleFlightTime = 0.5f;      // s of flight the pipper marks
     private const float ReticleDefaultSpeed = 860f;    // m/s used when no weapon def resolves
@@ -887,7 +888,8 @@ public partial class FlightController : Node3D
         _postDropGroundBlow = carrierDrop ? 2.5f : 0f;
     }
 
-    public void Activate(Vector3 pos, Vector3 lookAt, bool carrierDrop = false)
+    public void Activate(Vector3 pos, Vector3 lookAt, Vector3? launchVelocity = null,
+        bool carrierDrop = false)
     {
         var dir = lookAt - pos;
         _spawnPos = pos;
@@ -901,6 +903,16 @@ public partial class FlightController : Node3D
         // than fly back to wherever it was parked.
         Pilot?.Patrol?.Reseat();
         Respawn();
+        if (launchVelocity is { } velocity)
+            _model.SetVelocity(velocity);
+        if (carrierDrop)
+        {
+            _throttle = CarrierDropThrottle;
+            _model.Throttle = CarrierDropThrottle;
+            if (Pilot != null)
+                Pilot.Throttle = CarrierDropThrottle;
+            ThrottleSmoke?.Reset(_throttle);
+        }
     }
 
     /// <summary>Weapon lab: pin the held airframe at <paramref name="pos"/> with its nose on
@@ -1160,8 +1172,14 @@ public partial class FlightController : Node3D
             var input = HoldSegments != null ? NextHoldInput(dt)
                 : Pilot != null ? NextPilotInput(dt)
                 : ReadKeyboard(dt);
-            ProbeGroundBlow(ref input);      // reads the pose this step ENTERED with, as the original does
-            input.AiGroundBlowScale = _postDropGroundBlow > 0f ? 0.15f : 1f;
+            // FUN_0048c220 does not merely make the post-drop response small: it is not called
+            // at all until +0xAC (the 1.5 s spawn grace) expires. Until +0xB4 (2.5 s), its
+            // two AI terms then run at 15%. Keep the probe off as well, so the verification
+            // log reflects an effective original-style response rather than an inert hit.
+            bool groundBlowReady = IsHumanPiloted || _collisionGrace <= 0f;
+            if (groundBlowReady)
+                ProbeGroundBlow(ref input);  // reads the pose this step ENTERED with, as the original does
+            input.AiGroundBlowScale = !groundBlowReady ? -1f : _postDropGroundBlow > 0f ? 0.15f : 1f;
             _lastInput = input;
             _damageCooldown -= dt;
             _grazeReactionCooldown -= dt;
@@ -2388,9 +2406,9 @@ public partial class FlightController : Node3D
         return segments[^1].Input;
     }
 
-    // The AI pilot's step: ask Pilot for this frame's input and mirror its
-    // throttle into the controller's own lever, so the readers of `_throttle` (spawn smoke,
-    // telemetry) see the flown value exactly as the keyboard ramp path leaves it.
+    // The AI pilot's throttle is the desired lever (+0x124); like keyboard input, its live
+    // flight-model lever (+0x128) must traverse at 0.5/s. Carrier launch seeds both at 0.1,
+    // then the AI may immediately request full power without erasing the visible settling ramp.
     private FlightInput NextPilotInput(float dt)
     {
         // The mode machine's obstacle probe (D11 avoid crash) is this node's world-and-aircraft
@@ -2399,7 +2417,8 @@ public partial class FlightController : Node3D
         if (Pilot!.Machine is { ProbeBlocked: null } machine && IsInsideTree())
             machine.ProbeBlocked = AvoidCrashBlocksLine;
         var input = Pilot!.Next(_model, dt);
-        _throttle = input.Throttle;
+        _throttle = Mathf.MoveToward(_throttle, input.Throttle, ThrottleRate * dt);
+        input.Throttle = _throttle;
         return input;
     }
 

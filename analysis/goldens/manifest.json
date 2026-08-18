@@ -113,7 +113,7 @@
     {
       "name": "c1-targeting-hud",
       "frame": 90,
-      "hash": "ca2394a2df480c78fab757fe3c754d26",
+      "hash": "903b324ccca8c7a3510c18e0922179af",
       "exercises": "the targeting HUD's original-shaped marker: fixed brackets inside the selected gun's reach, the name label below the plane, and --debug-markers' identity/health string; frame-sensitive 48.18 %.",
       "args": ["--chapter=C1", "--plane=player_fury", "--ai=player_kestrel", "--target=ai1_player_kestrel", "--debug-markers", "--hold=0,0,0,0.5", "--det", "--mute"]
     }

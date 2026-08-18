@@ -3241,7 +3241,8 @@ public partial class GameSession : Node3D
     // member of the CURRENT wave at the generator's own drop point and attitude. ⚠ Do not re-derive
     // that point here. Null once the wave has nothing parked left, which the generator accounts as
     // a failed spawn.
-    private FlightController? ReleaseInstantActionWaveMember(Vector3 pos, Vector3 lookAt)
+    private FlightController? ReleaseInstantActionWaveMember(Vector3 pos, Vector3 lookAt,
+        Vector3 launchVelocity)
     {
         if (_iaWaveRosters == null || _iaLaunchWave is < 1 or > 4)
         {
@@ -3253,7 +3254,7 @@ public partial class GameSession : Node3D
             {
                 continue;
             }
-            member.Activate(pos, lookAt, carrierDrop: true);
+            member.Activate(pos, lookAt, launchVelocity, carrierDrop: true);
             return member;
         }
         return null;
