@@ -5,41 +5,76 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The wobble-oscillator law (<c>docs/formats/shakes.md</c>): impulse kick + exponential decay,
-/// the measured <c>magnitude_factor × caliber</c> amplitude, the <c>he_factor</c> doubling, the
-/// overspeed gate, and determinism of the whole sum. Input is <c>fixtures/zrdr/shakes.json</c>
-/// (probe values under the real source ids; <c>bullet_impact</c>/<c>explosion</c> deliberately
-/// absent so missing sources prove to no-op).
+/// The wobble-oscillator law (<c>docs/formats/shakes.md</c>): <b>fire is a random-walk accumulator</b>
+/// (BL-266(a) branch — per-shot uniform step ±7.54·(factor×caliber), explosion, pulled from an
+/// injected <see cref="Random"/> so the trace pins without the engine), the being-hit he_factor
+/// doubling, the overspeed gate, and determinism of the whole sum. Input is
+/// <c>fixtures/zrdr/shakes.json</c> (probe values under the real source ids; <c>bullet_impact</c>/
+/// <c>explosion</c> deliberately absent so missing sources prove to no-op).
 /// </summary>
 public class PlaneShakeTests
 {
     private const float Dt = 1f / 60f;
 
+    // fixture fire_bullet.magnitude_factor = 2e-4; × caliber 40 = 8e-3; × the decoded 7.54 gain
+    // (2.0×6.2832×1.2 over the rand half-range) = max single-shot step 6.03e-2 rad.
+    private const float MaxSingleStep = 2e-4f * 40f * 7.54f;
+
     [Fact]
-    public void AFiredRoundKicksTheEnvelopeToFactorTimesCaliberAndDampDecaysIt()
+    public void AFiredRoundStepsTheAccumulatorByABoundedRandomWalkStep()
     {
+        // One shot from a fixed seed: |step| must be in (0, 7.54·(factor×caliber)] — the decoded
+        // uniform ±6.03e-2 law, not the old ±8e-3 sawtooth envelope.
         var shake = NewShake();
         shake.FireBullet(40f);
-        float peak = MaxAbsRollOver(shake, seconds: 0.1f);
-        // fixture factor 2e-4 × caliber 40 = 8e-3 rad envelope. The envelope decays (τ = 80 ms)
-        // while the sawtooth still sweeps toward ±1, so the observed peak sits well under the
-        // kick but the same order — the bound pins the magnitude law, not the waveform phase.
-        Assert.InRange(peak, 8e-3f * 0.25f, 8e-3f * 1.001f);
-
-        // several damp time-constants later (damp 12.5 → τ = 80 ms) the buzz is gone
-        MaxAbsRollOver(shake, seconds: 0.5f);
-        float end = MaxAbsRollOver(shake, seconds: 0.2f);
-        Assert.True(end < peak * 0.05f, $"envelope did not decay: peak {peak}, end {end}");
+        float roll = PeakAfter(shake, seconds: 0.02f); // ~1 tick later, before decay eats the step
+        Assert.True(roll > 0f && Math.Abs(roll) <= MaxSingleStep * 1.001f,
+            $"single kick step out of the decoded bound: {roll} (max {MaxSingleStep})");
     }
 
     [Fact]
-    public void ARepeatKickRaisesTheEnvelopeBackInsteadOfStacking()
+    public void TheKickStepScalesWithMagnitudeAndIsRandomAcrossSeeds()
     {
+        // Same event, different seed → the step direction/size differs (it is a random walk, not a
+        // fixed sawtooth)
+        float a = SingleKickStep(NewShake(seed: 1));
+        float b = SingleKickStep(NewShake(seed: 2));
+        Assert.NotEqual(a, b);
+
+        // A bigger caliber (or factor) gives a proportionally bigger step: factor×caliber doubles
+        // → the step's absolute upper bound doubles.
+        var big = NewShake();
+        big.FireBullet(80f); // twice the caliber of the wep40 shot
+        float bigRoll = PeakAfter(big, seconds: 0.02f);
+        Assert.True(Math.Abs(bigRoll) <= MaxSingleStep * 2f * 1.001f,
+            $"step did not scale with caliber: {bigRoll}");
+    }
+
+    [Fact]
+    public void RepeatedShotsAccumulateThenDampDecaysTheWalkBackToZero()
+    {
+        // A burst injects many steps; letting fire stop lets the authored damp (12.5, τ=80 ms)
+        // pull the walk back to rest — the mechanism is bounded, it does not drift monotonic.
         var shake = NewShake();
-        shake.FireBullet(40f);
-        shake.FireBullet(40f); // same tick: max, not sum
-        float peak = MaxAbsRollOver(shake, seconds: 0.1f);
-        Assert.True(peak <= 8e-3f * 1.001f, $"kicks stacked: {peak}");
+        float peak = 0f;
+        for (int i = 0; i < 30; i++) // ~0.5 s at 60 Hz
+        {
+            if (i % 8 == 0)
+            {
+                shake.FireBullet(40f); // ~8 shots/s
+            }
+            shake.Advance(Dt);
+            peak = Math.Max(peak, Math.Abs(shake.Roll));
+        }
+        Assert.True(peak > MaxSingleStep * 0.5f, $"burst never reached a sizeable walk: {peak}");
+
+        // several damp time-constants after the last shot the walk is essentially at rest
+        for (int i = 0; i < 30; i++) // 0.5 s ≈ 6 damp time-constants (τ=80 ms)
+        {
+            shake.Advance(Dt);
+        }
+        Assert.True(Math.Abs(shake.Roll) < peak * 0.05f,
+            $"walk did not decay to rest: peak {peak}, final {shake.Roll}");
     }
 
     [Fact]
@@ -87,9 +122,9 @@ public class PlaneShakeTests
     [Fact]
     public void TheSameEventScriptReplaysToTheSameRollTrace()
     {
-        float[] Run()
+        float[] Run(int seed)
         {
-            var shake = NewShake();
+            var shake = NewShake(seed);
             var trace = new float[120];
             for (int i = 0; i < trace.Length; i++)
             {
@@ -108,11 +143,31 @@ public class PlaneShakeTests
             return trace;
         }
 
-        Assert.Equal(Run(), Run());
+        Assert.Equal(Run(1), Run(1));       // same seed (fixed) → identical wobble
+        Assert.NotEqual(Run(1), Run(2));    // the fire walk is seeded → different mission, different buzz
     }
 
-    private static PlaneShake NewShake() =>
-        new(ShakeDefs.Load(TestData.Fixture("zrdr")));
+    private static PlaneShake NewShake() => NewShake(seed: 1);
+
+    private static PlaneShake NewShake(int seed) =>
+        new(ShakeDefs.Load(TestData.Fixture("zrdr")), new Random(seed));
+
+    private static float SingleKickStep(PlaneShake shake)
+    {
+        shake.FireBullet(40f);
+        return PeakAfter(shake, seconds: 0.02f);
+    }
+
+    private static float PeakAfter(PlaneShake shake, float seconds)
+    {
+        float max = 0f;
+        for (float t = 0f; t < seconds; t += Dt)
+        {
+            shake.Advance(Dt);
+            max = Math.Max(max, Math.Abs(shake.Roll));
+        }
+        return max;
+    }
 
     private static float MaxAbsRollOver(PlaneShake shake, float seconds)
     {
