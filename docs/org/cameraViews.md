@@ -202,9 +202,10 @@ node.
 ⚠ **No wobble is added at placement — the first-person camera inherits it from the plane.**
 `FUN_0042d980` reads the plane's raw orientation basis directly and applies zero shake of its own;
 the random-walk wobble state is written onto the **camera object** (component blocks via
-`FUN_0042c070`, e.g. high_speed block 4 at `camera+0xd4/+0xd8/+0xdc`) and consumed in the render
-layer to rock the **plane node's** rendered rotation. So both 6 and 7, being plane-mounted, inherit
-the wobble automatically and are not handled differently from each other — see
+`FUN_0042c070`, e.g. high_speed block 4 at `camera+0xd4/+0xd8/+0xdc`) and consumed by
+`FUN_0042c0e0` (in the render layer) to rock the **plane node's** rendered rotation. So both 6 and
+7, being plane-mounted, inherit the wobble automatically and are not handled differently from each
+other — see
 `docs/formats/shakes.md`. The chase/3rd-person modes read the plane position/attitude but sit
 outside the rocking node, which is why `damage_shakes` gives the chase camera its own authored
 half.

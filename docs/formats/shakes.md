@@ -43,13 +43,13 @@ factor, whose selector `*this == 0` takes the **`6.2832`** branch (not the 4.0 s
 so `fVar1 = mag × 2.0 × 6.2832 = 3.518e-2` and the per-shot input is
 `(rand01−0.5) × fVar1 × 1.2` — **Δroll uniform in ±2.11e-2 rad/shot** for wep40, an order larger
 than the raw law (see `analysis/gun-wobble-shake/FINDINGS.md`; the decode is closed-form from the
-binary — `FUN_0042be10` only kicks the `camera+0x24` accumulator, and the static trace of its
-consumer came back negative: the accumulators are not read by any camera mode driver, the transform-
-apply, or the orientation getter/setters — so they are either consumed in an untraced render-layer
-function or effectively dead; no live instrument needed). ⚠ **That negative is the fire block only —
-see the `high_speed` note below: it drives the IDENTICAL `FUN_0042be10` random-walk accumulator (a
-second component, block index 4, at `camera+0xd4/+0xd8/+0xdc`) and visibly wobbles in the clips, so
-the mechanism is demonstrably live; `camera+0x24` is not the whole mechanism.** Whether `magnitude_factor` needs a ~3.5× decode
+binary — `FUN_0042be10` kicks the `camera+0x24` accumulator, and its render-layer consumer is
+`FUN_0042c0e0` (walks the 7 blocks, springs them via `FUN_0042bec0`, sums roll/pitch/yaw, rocks the
+plane node `DAT_0071c304`) — called unconditionally by `FUN_0042e5e0` with **no camera-mode gate**,
+so there is **no per-view dampening**; no live instrument needed). ⚠ **That consumer is shared —
+the `high_speed` note below drives the IDENTICAL `FUN_0042be10` random-walk accumulator (a
+second component, block index 4, at `camera+0xd4/+0xd8/+0xdc`) through the same `FUN_0042c0e0`, and
+visibly wobbles in the clips, so the mechanism is live for both.** Whether `magnitude_factor` needs a ~3.5× decode
 correction to match the original is the clip/fidelity judgment, not the decode — see
 `analysis/gun-wobble-shake/FINDINGS.md`. Unmeasured residue: whether plane model/weight also
 enter (single-plane, single-gun clip — owed capture in `playtest.md`), and the impact sources'
@@ -64,18 +64,36 @@ authored half because the chase camera is not rigidly attached). The engine impl
 this: `PlaneShake` rolls a pivot the plane model hangs under; physics and the camera never see
 it.
 
-⚠**Where the wobble STATE lives vs. where it displaces** (2026-08-19): the random-walk
-accumulators are written **onto the camera object**, not the plane — `FUN_0048c470` / the gun
-path call `FUN_0042c070(block, mag)`, which kicks `camera`-relative component blocks (fire
-`+0x24/+0x28/+0x2c`, high_speed `+0xd4/+0xd8/+0xdc`, impact `+0x??`). The camera therefore holds
-several parallel shake blocks; the render apply multiplies them into the **plane node's** rendered
-rotation. Because the first-person placement `FUN_0042d980` (modes 6/7, `docs/org/cameraViews.md`)
-reads the plane's basis directly and adds **no** wobble of its own at attachment, a plane-mounted
-camera inherits that rocked rotation automatically — that is why cockpit/nose read as camera shake
-and the two cockpit views need no separate handling. The earlier `camera+0x24` "static-trace
-NEGATIVE" (`BL-266`, `7f8881a0`) is exactly this split: the reader of the fire block wasn't found
-because it runs in the untraced render layer, and the accumulator state being camera-side made a
-plane-basis search miss it.
+⚠**Where the wobble STATE lives vs. where it displaces — and the CONSUMER (2026-08-19, consumer
+found):** the random-walk accumulators are written **onto the camera object**, not the plane —
+`FUN_0048c470` / the gun path call `FUN_0042c070(block, mag)`, which kicks `camera`-relative
+component blocks (fire block 0 `+0x24/+0x28/+0x2c`, high_speed block 4 `+0xd4/+0xd8/+0xdc`,
+impact block 5). Each block's `[3]/[4]/[5]` (roll/pitch/yaw) are the positions; `[6]/[7]/[8]` are
+velocity. The render consumer is **`FUN_0042c0e0`**: it walks the camera's **seven** component
+blocks (0xb dwords = 0x2c bytes apart), runs the per-block spring-damper `FUN_0042bec0`, **sums all
+blocks**' accumulated roll/pitch/yaw, transforms the total through the quaternion helpers
+(`FUN_0053fbf0/f850/fa40/df30`) and applies it to the **plane node** `DAT_0071c304` via
+`FUN_004d1a30`. Its only caller, the per-view render handler **`FUN_0042e5e0`**, calls it **first,
+unconditionally, every frame — with no branch on the live mode byte `camera+0x14c`**. The mode
+byte is used elsewhere only for FOV (mode 6→80°, `FUN_0042b660`), head-lock (mode 7), cockpit-
+interior draw, and hiding scene nodes — **never to scale the wobble**. So **there is no per-view
+dampening**: cockpit(6)/nose(7) inherit the full undampened wobble 1:1 from the plane node.
+
+  *The "dampening" is per-**source**, not per-**view**: `FUN_0042bec0` runs a small damped-spring
+  integrator per block — velocity `[6]/[7]/[8]` integrates from position `[3]/[4]/[5]` at dt=1/150,
+  and position decays through `[1]`=frequency and `[2]`=damping — smoothing each random-walk
+  source into a bounded wobble. Identical for every camera view.*
+
+  *`camera+0x24` is therefore **not** a cockpit dampener — it is block 0's roll accumulator
+  `[3]` (base `camera+0x18`). The earlier "static-trace NEGATIVE" on it (`BL-266`, `7f8881a0`)
+  is now a POSITIVE: the reader is `FUN_0042c0e0`, which read it indirectly via the 7-block walk
+  (a register-relative float add, not a direct `camera+0x24` load) — that indirection is why the
+  original field search missed it.*
+
+Because the first-person placement `FUN_0042d980` (modes 6/7, `docs/org/cameraViews.md`) reads
+the plane's basis directly and adds **no** wobble of its own at attachment, a plane-mounted camera
+inherits the rocked rotation automatically — that is why cockpit/nose read as camera shake and the
+two cockpit views need no separate handling.
 
 **Camera-attachment rule for our port**: mount the cockpit (mode 6) and nose (mode 7) cameras as
 children of the **plane model** (below `ShakePivot`) so they inherit the wobble for free — the

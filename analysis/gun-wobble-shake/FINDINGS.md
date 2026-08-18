@@ -151,37 +151,42 @@ component* first, and the per-shot kick law is now closed-form and binary-derive
 is `(rand01−0.5) × 2.80e-3 × 2.0 × 6.2832 × 1.2` — an order of magnitude larger than the raw law.
 ⚠ `FUN_0042be10` only *kicks* the accumulator at `camera+0x24/+0x28/+0x2c` (random-delta walk,
 confirmed: it returns right after the three adds, with no decay/oscillation/render); the visible
-wobble is a separate camera function. **That consumer has now been static-traced to a negative**
-(see below). The two gangs of scalars (remake `PlaneShake` gain vs original
+wobble is a separate camera function. **That consumer has now been found: `FUN_0042c0e0`** (see
+below) — the earlier "static-trace NEGATIVE" is a POSITIVE, missed because the reader walks the
+blocks indirectly. The two gangs of scalars (remake `PlaneShake` gain vs original
 camera-shake-component gain ×12.566) are **not reconciled**; the 0.284/0.20-px figure is the
 remake's render of a `2.80e-3` kick, and comparing it to the original demands the original's true
 kick. Decode persisted: `.scratch/magnitude-factor-binary-decode.txt`.
 
-The remaining static trace — **the `camera+0x24` consumer** — is now conclusively *not* in the
-camera update/render path: mode dispatcher (`FUN_0042c5c0`), all seven mode drivers
-(`FUN_0042c7f0/0042ca50/0042cb70/0042ce00/0042d980/0042cf10/0042db40`), the post-mode driver
-`FUN_0042ba70`, transform-apply `FUN_0042c670`, and the z-class orientation getters/setters
-(`FUN_004d2890/004d2490/004d2680`) were each disassembled and **none read `camera+0x24`**. The
-committed camera orientation is the `camera+0x0c..+0x14` triplet, which the traced path never
-folds `camera+0x24` into (the writer, `FUN_0042c070`, is confirmed `this = camera + index*0x2c +
-0x18`, so index-0 accumulators are exactly `camera+0x24/+0x28/+0x2c`). Byte-pattern sweeps for
-`fld [reg+0x24/+0x28/+0x2c]` find **no hit in the 0x0042 camera region** (only non-camera
-subsystems at `0x0041c4xx`/`0x004269xx`/`0x0053xxx`).
+The consumer trace — **how the fire block's roll accumulator `camera+0x24` becomes visible**
+(2026-08-19): the earlier search disassembled the mode dispatcher (`FUN_0042c5c0`), all seven
+mode drivers, the post-mode driver `FUN_0042ba70`, transform-apply `FUN_0042c670`, and the z-class
+orientation getters/setters, and found **none read `camera+0x24`**; a byte sweep for
+`fld [reg+0x24/+0x28/+0x2c]` found no hit in the `0x0042` camera region. That is because the reader
+is a **render-layer consumer outside the mode-driver path**:
 
-So the random-walk accumulators have no traced reader in the camera update path. Either a
-render-layer function (non-`0x0042`; SIB-form loads were not swept exhaustively) reads them, or
-they are effectively **dead/near-unused** in this build — the remake's actual gun-shake
-(`PlaneShake.cs`: deterministic damped sawtooth, no RNG) is a *different mechanism* from the
-original's random-walk camera accumulator. This strengthens the structural-mismatch view: the ~40×
-per-shot-kick gap is a mechanism difference (original random-walk accumulator vs remake damped
-sawtooth), not a render-pipeline gain loss.
+- **`FUN_0042c0e0`** (camera + 0x0) walks the camera's **seven** component blocks — `pfVar6` from
+  `camera+0x30`, each `0xb` dwords (`0x2c` bytes) apart — running the per-block spring-damper
+  **`FUN_0042bec0`**, then **sums all seven blocks'** accumulated roll/pitch/yaw (`[3]/[4]/[5]`),
+  transforms the total through the quaternion helpers `FUN_0053fbf0/f850/fa40/df30`, and applies it
+  to the **plane node `DAT_0071c304`** via `FUN_004d1a30`.
+- Its only caller, the per-view render handler **`FUN_0042e5e0`**, calls it **first and
+  unconditionally every frame** — with **no branch on the live mode byte `camera+0x14c`**. The mode
+  byte is used downstream only to hide scene nodes for first-person (`healthy` body, `dontmove`,
+  `markers`) and (elsewhere) to pick FOV / head-lock — **never to scale the wobble**.
+
+  ⇒ **There is no per-view dampening**: cockpit(6)/nose(7) inherit the full plane-node wobble 1:1.
+  The smoothing is a per-**source** damped spring in `FUN_0042bec0` (velocity `[6]/[7]/[8]`
+  integrates from position `[3]/[4]/[5]` at dt=1/150; position decays through `[1]`=frequency,
+  `[2]`=damping), identical for every view. `camera+0x24` is block-0's **roll accumulator**, not a
+  dampener.
 
 ## High-speed (`high_speed`) shares the SAME random-walk accumulator as the gun
 
-(2026-08-19.) The `camera+0x24` negative above is the **fire** component only. The `high_speed`
-oscillator writes a **different** component block, through the **identical** write function
-`FUN_0042be10` — so the two sources are the same random-walk mechanism, differing only by
-component index and magnitude law.
+(2026-08-19.) The consumer above is **shared across blocks**: `FUN_0042c0e0` walks all seven
+component blocks and sums roll/pitch/yaw, so the `fire` (block 0) and `high_speed` (block 4)
+oscillators feed the **same** render consumer. They are therefore the same random-walk mechanism,
+differing only by component index and magnitude law.
 
 The consumer is in `FUN_0048c470` (the per-frame player-plane updater; sole caller
 `FUN_0048e580`, the tick velocity/position integrator that also computes `plane[0x24d]` =
@@ -219,13 +224,15 @@ if (min < plane[0x24d]) {                  // overspeed gate: current speed > mi
 2. **High-speed re-kicks every frame** (the updater runs each physics tick) while fire kicks once
    per shot at 8/s, so the visible dive walk is sustained accumulation — why terminal-dive wobble
    "looks about the same" regardless of overspeed depth and reads at least as strong as the guns.
-3. **The `camera+0x24` negative does NOT generalise to high_speed.** The high_speed accumulator
-   lives at `camera+0xd4/+0xd8/+0xdc`, a different address than the searched `camera+0x24`. Since
-   high-speed visibly wobbles in the original clips through this exact `FUN_0042be10` writer, the
-   mechanism is demonstrably live — the earlier "near-dead" reading for `camera+0x24` is at minimum
-   unproven for the shared mechanism and the high_speed block's reader was never searched. (The
-   decoded high_speed accumulator offsets are recorded here so a future sweep can look for the
-   `camera+0xd4/+0xd8/+0xdc` reader.)
+3. **The consumer is now found and shared: `FUN_0042c0e0`.** The render-layer consumer walks all
+   seven component blocks (0 fire, 4 high_speed, 5 impact, …), runs the per-block spring-damper
+   `FUN_0042bec0`, sums roll/pitch/yaw across them, and rocks the **plane node `DAT_0071c304`** —
+   called **unconditionally by `FUN_0042e5e0` with no camera-mode gate**. The earlier fire-only
+   "negative" (searching a *direct* `camera+0x24` load) missed it because the consumer reads the
+   blocks via a register-relative walk, not a direct field load. High-speed (block 4 at
+   `camera+0xd4/+0xd8/+0xdc`) flows through the same consumer, so both sources rock the plane and
+   both plane-mounted first-person cameras inherit them 1:1 with **no per-view dampening**. (The
+   decoded offsets are recorded here for cross-reference.)
 
 No live instrument is required — every step above is a static trace from the open `crimson.exe`
 (project `CSVMCrimsonExe`): disasm of `FUN_0042c070` (index→block address math), `FUN_0048c470`
@@ -277,15 +284,19 @@ look) is decided.
   `FUN_0042be10`, giving a closed-form per-shot `Δroll` uniform in ±2.11e-2 rad (see the
   amplitude section). The remake's `PlaneShake.cs` (whose render this doc models) applies a
   different gain, so remake-vs-original amplitude equality is an open question. The `camera+0x24`
-  consumer (decay/oscillator that turns the random walk into wobble) is **not in the traced camera
-  update/render path** — all mode drivers, the transform-apply, and the orientation getter/setters
-  are ruled out, and byte-pattern sweeps find no `fld [camera-region+0x24]` reader. ⚠ **That
-  negative is the fire block only. The new `high_speed` trace (see the section above) proves the
-  shared `FUN_0042be10` writer is LIVE** — the original's `high_speed` drives the identical random-walk
-  accumulator (component index 4, at `camera+0xd4/+0xd8/+0xdc`, not the searched `camera+0x24`) and
-  visibly wobbles in the clips, so the mechanism is demonstrably not dead; the `camera+0x24` negative
-  does not generalise and the high_speed block's reader was simply never searched. Either way the
-  original's shake is a random-walk accumulator (both sources), while the remake's `PlaneShake.cs`
+  consumer — the decay/oscillator that turns the random walk into wobble — is **`FUN_0042c0e0`**
+  (render-layer): it walks the 7 component blocks, runs the per-block spring-damper `FUN_0042bec0`,
+  sums roll/pitch/yaw across blocks, and rocks the **plane node `DAT_0071c304`** — called
+  **unconditionally by `FUN_0042e5e0` with no mode-byte gate**, so there is **no per-view (cockpit/
+nose) dampening**; plane-mounted first-person cameras inherit the wobble 1:1. The mode byte
+  `+0x14c` is used only for FOV / interior-draw / head-lock / node-hiding — never to scale wobble.
+  (The earlier negative was a missed indirect read — the consumer loads the blocks via a register-
+  relative walk, not a direct `camera+0x24`.) ⚠ **That consumer is shared with `high_speed`:** the
+  new trace (see the section above) proves the shared `FUN_0042be10` writer is LIVE — the original's
+  `high_speed` drives the identical random-walk accumulator (component index 4, at
+  `camera+0xd4/+0xd8/+0xdc`, not the searched `camera+0x24`) and visibly wobbles in the clips. Either
+  way the original's shake is a random-walk accumulator (both sources), while the remake's
+  `PlaneShake.cs`
   `_speed` path (deterministic damped sawtooth, no RNG) is a *different mechanism* — that structural
   mismatch is the root of `BL-266(d)`'s muted dive. No live instrument is needed for any of this —
   every step is a static trace.
