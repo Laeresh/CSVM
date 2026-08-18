@@ -2372,142 +2372,38 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-266` `[Research]` `[Owed-playtest]` **Plane wobble: residual decode questions after the
   wiring landed.** The oscillators are wired (`ShakeDefs`/`PlaneShake`, visual-only roll on the
   plane node; law and measurement in [`docs/formats/shakes.md`](docs/formats/shakes.md) and
-  `analysis/gun-wobble-shake/`). Still open, all data questions: (a) the pure-caliber magnitude
-  law is measured on ONE clip (Bloodhawk, 40-cal) — whether plane model/weight also enter waits
-  on `CAP-30`; (b) the impact sources' per-event quantities are stand-ins declared TUNE (gun
-  hits reuse caliber, rockets use armor damage) — a being-hit capture pins them; (c) the
-  `ON_CALL` `small/medium/large` `damage_shakes` defs stay unwired — unknown caller, likely
-  script/set-piece; (d) `high_speed`'s normalised-by-`fd_speed` reading fits the quiet-cruise
-  evidence but is unverified against a calibrated dive.
-  **`PT-44` flown 2026-08-07 and retired — three verdicts, and (d) is now half-answered:**
-  - **(d) the normalisation is right, the OFFSET is missing — a decode correction.** At the
-    controls the overspeed rattle is "too strong, and should ramp up the more we are over the
-    speed" (user). The numbers agree: `PlaneShake.cs` computes `speedRatio / magnitude_quotient`,
-    so at the gate it switches on at **1.0/70 = 0.0143 rad — 5.1× the 40-cal gun buzz
-    (7e-5 × 40 = 0.0028)** — then grows only **27 %** across the whole remaining envelope
-    (0.0181 at the 1.27× `fd_speed` dive terminal). Read instead as **excess over the gate**,
-    `(speedRatio − min_speed) / magnitude_quotient`: zero at rated max, 0.0039 at the dive
-    terminal — it enters imperceptibly, ramps with overspeed, and lands in the same order as the
-    gun buzz instead of 5× above it. That is also why `min_speed` is authored as a gate *value*
-    at all. Falsifiable against a calibrated dive.
-    **(d) landed 2026-08-18**: `PlaneShake.SetSpeedRatio` now computes the excess over the gate,
-    `(speedRatio − min_speed)/quotient` (zero at rated max, gentle ramp), the whole-ratio
-    version having snapped on at 5× the buzz. Test updated to assert zero at the gate 1.0 and
-    settle `(1.2−1.0)/70` at 1.2; unit suite green. A re-fly confirms the ramp; docs update:
-    `docs/formats/shakes.md`.
-  - **The frequency is NOT to be tuned** (user suggested lowering it): 15 Hz / damp 12.5 /
-    sawtooth 1 is authored data, identical to `fire_bullet`. Expect the "too buzzy" complaint to
-    dissolve once the magnitude drops — a 15 Hz buzz at 0.0143 rad reads nothing like the same
-    buzz at 0.002.
-  - **(a) the gun buzz is too small, and it is a pipeline loss, not a wrong constant.** Two
-    independent sources agree: "barely noticeable" at the controls, and `engine_check.py` reads
-    **~2–4× under the original clip**. But the `7e-5 × caliber` law was *measured from that very
-    clip*, so a render 2–4× weaker than the clip means the chain from law to pixels loses
-    amplitude — raising `magnitude_factor` would write a false number into decoded data to hide
-    it. ⚠ `FINDINGS.md`'s leading explanation does not carry the gap: with `damp` 12.5 the
-    envelope's mean over a kick cycle is 0.506 at 8 rounds/s vs 0.645 at 13, a factor of
-    **1.27×**, not 2–4×. The wiring is not the problem either — `FlightController.cs:1417` kicks
-    once per round per muzzle. *Approach, decided with the user 2026-08-07:* **(B) find the
-    missing amplitude first** — reconcile the counter-derived 12–13 rounds/s against authored
-    `FIRE_RATE` 8.0 (two guns at 8/s would be 16/s; check whether the probe fired one gun group
-    or two), re-run `engine_check.py` rate-matched, and check what the 60 fps render-interpolated
-    pose does to a 15 Hz buzz. Only if nothing survives that does it fall back to **(C)** a
-    second amplitude measurement from `CAP-30` (whose row was extended for exactly this — as
-    originally written it asks only about caliber and plane weight and **could not** have
-    answered a uniform shortfall).
-    **(2026-08-18) the rate half of (B) is settled by decode, not analysis: the original fires
-    ONE round per fire-tick from a single selected gun group at the authored `FIRE_RATE`** —
-    `crimson.exe` keeps 4 gun groups under a single selection index `plane+0x604`; the fire-tick
-    `FUN_004881e0` reads exactly the one armed def (`+0x950`, set by `FUN_004b20b0`) and spawns
-    exactly ONE round per tick (one `0045e470` spawn, no salvo loop), gated by the group's
-    cooldown/magazine counter (`+0x138+12·group`, set in `FUN_004b2550`). The two barrel slots
-    per group (`+0x3a4+i·0x24`; `FUN_004b3e50` iterates 4×2) drive muzzle-flash/assist, NOT a
-    doubled rate. So the effective rounds/s equals `FIRE_RATE` (8.0 for wep_40 — the engine's
-    value), and the engine's one-slot-at-FIRE_RATE model is exactly right: it is NOT under-firing
-    by rate. The clip's "12–13/s" was a redraw-window artifact — the counter dropped 46 rounds at
-    8.0/s implies a ~5.75 s burst, but the motion-redraw window only captured ~4.5 s (so
-    46/4.5≈10.2, narrower windows higher), giving the inflated number. Removing the rate as a
-    suspect leaves the render/decay amplitude loss ((B)'s 60 fps pose-interpolation check) as the
-    only open amplitude avenue; recorded as [`docs/org/weaponFire.md`](org/weaponFire.md).
-    **(2026-08-18) the pose-interpolation half of (B) is TESTED NEGATIVE, and the gap is reframed
-    as a law-derivation conflation, not a render-pipeline loss.** (i) The 60 fps pose-interp
-    hypothesis does not survive: the shake pivot is a child of the `FlightController`, its roll
-    written once per 60 Hz physics tick, and Godot auto physics interpolation is OFF
-    (`CSVM/project.godot` is 35 lines, no `physics_interpolation` entry) — the plane's manual
-    `_renderPose` interpolation does not touch the pivot, so a 15 Hz sawtooth at 60 Hz renders
-    stepped ~3.5× above Nyquist with no smoothing loss. (ii) Model the engine's own oscillator
-    (validated against `PlaneShakeTests`'s single-kick 0.435·E bound): a kick of envelope
-    `E = 7e-5×40 = 2.80e-3 rad` renders, at the real 8/s fire rate, **~0.28× itself as RMS**
-    (phase-averaged sawtooth duty × damp decay), i.e. rendered RMS ~8e-4 rad and per-frame roll
-    step ~9.5e-4 rad ⇒ **~0.20 px of wing motion** at the ±205 px lever — all decodable from
-    authored constants + oscillator math with NO clip. So the engine NEVER renders near the law's
-    literal number — the FINDINGS arrived at `7e-5` by setting the kick amplitude EQUAL to the
-    clip's *rendered* RMS (both 2.80e-3), a conflation of two different physical quantities.
-    (iii) Neither OLD measurement is consistent with the decoded model and they disagree in
-    opposite directions — the clip reads ~6.5× HIGH (its raw
-    5.7e-3 rad/frame step; the "Nyquist ≈2×" correction was applied to a damped re-excited
-    sawtooth, not a clean tone), the engine probe reads ~4–5× LOW (0.032–0.049 px, barely above
-    the 0.003–0.004 idle floor, asymmetric wings ⇒ noise). So "the engine renders 2–4× under" was
-    a comparison of two mutually-inconsistent measurements, not a clean pipeline-loss claim.
-    *What this means:* the constant is the product of the rendered≈kick conflation, so a change is
-    a **decode correction**, not a tune-to-hide. The decoded engine-render (~0.20 px/frame,
-    ~0.28× kick) stands without the clip; the clip enters only as the fidelity target (whether
-    ~3.5× more is needed to match the original's look is a judgment, not a decode).
-    `magnitude_factor` must not change until that fidelity target is decided. Leads recorded in
-    `analysis/gun-wobble-shake/FINDINGS.md`.
-    **(2026-08-18) the `× caliber` claim is now EDGE-TRACED in `crimson.exe`, and the original's
-    downstream gain is a new caveat.** (i) Confirm: `fire_bullet.magnitude_factor` is consumed in
-    the plane per-tick firing loop `FUN_004b6820` (`FILD` weapons-ext `CALIBER` at
-    `weapon+0x210 → +0x10` × `*(camera+0x3c)` = `magnitude_factor`, loaded raw by the `shakes.zrd`
-    parser `FUN_0042bc10`; camera = `DAT_0064ef78`). The `FILD` integer read decides it: it is
-    CALIBER (40), not damage (4.5 float) nor velocity (900). The docs' `7e-5 × caliber = 2.80e-3`
-    was previously only clip-fitted; it is now a traced binary fact. (ii) New caveat: the
-    `2.80e-3` product is NOT the kick the origin's roll oscillator sees — `FUN_0042be10` scales it
-    by the camera-shake-component gain ×2.0 (`camera+0x1c`, set by ctor `FUN_0042bab0`) and the
-    waveform factor whose selector `*this == 0` takes the `6.2832` branch, then
-    `(rand01−0.5)×1.2` into roll. So the original's per-shot input is closed-form
-    `(rand01−0.5) × 2.80e-3 × 2.0 × 6.2832 × 1.2` — Δroll uniform in **±2.11e-2 rad/shot** for
-    wep40, an order larger than the raw law — and this gain gang is NOT yet reconciled with the
-    remake's `PlaneShake.cs` gain (whose render the 0.284/0.20-px model describes). (Earlier text
-    in this entry said "×4.0" / "×8"; that was the sawtooth branch, superseded by the exact
-    `6.2832` sine-branch selector — corrected 2026-08-19.) ⚠ `FUN_0042be10` only *kicks* the
-    `camera+0x24` accumulator (returns right after the three random adds — no decay/oscillation/
-    render); the visible wobble is a deeper untraced camera function, still a static trace, no
-    live instrument needed. **Next (optional, for the full render law): trace the `camera+0x24`
-    consumer to pin the decay before any amplitude correction.**
-    **(2026-08-19) the `camera+0x24` consumer has been static-traced to a NEGATIVE — it is not in
-    the camera update/render path.** Mode dispatcher `FUN_0042c5c0`, all seven mode drivers
-    (`FUN_0042c7f0/0042ca50/0042cb70/0042ce00/0042d980/0042cf10/0042db40`), the post-mode driver
-    `FUN_0042ba70`, the transform-apply `FUN_0042c670`, and the z-class orientation
-    getters/setters (`FUN_004d2890/004d2490/004d2680`) were each disassembled and **none read
-    `camera+0x24`**; the committed camera orientation is the `camera+0x0c..+0x14` triplet, which
-    the traced path never folds `camera+0x24` into. The writer is confirmed
-    (`FUN_0042c070`: `this = camera + index*0x2c + 0x18`, so index-0 accumulators = `camera+0x24/
-    +0x28/+0x2c`). Byte-pattern sweeps for `fld [reg+0x24/+0x28/+0x2c]` find **no hit in the 0x0042
-    camera region** (only non-camera subsystems at `0x0041c4xx`/`0x004269xx`/`0x0053xxx`). So the
-    random-walk accumulators either are consumed in an untraced render-layer function (non-0x0042;
-    SIB-form loads not swept exhaustively) or are effectively **dead/near-unused** in this build.
-    Either way this reframes the gap as a **mechanism mismatch, not a render-pipeline gain loss**:
-    the original's fire-shake is a random-walk camera accumulator (per-shot Δroll uniform in
-    ±2.11e-2 rad for wep40); the remake renders a deterministic damped sawtooth (`PlaneShake.cs`,
-    no RNG) at ~40× smaller per-shot input. A faithful port replaces the damped sawtooth with a
-    random-walk accumulator — a design task, not a constant edit — and the session guardrail
-    (don't change `magnitude_factor` until the fidelity target is decided) still holds. No live
-    instrument needed for any of this.
-  - **Passing:** being-hit rocks read right — guns give a short rock, rockets read ok (user,
-    2026-08-07, `--vs`).
-  - **Unjudged:** (d) view coupling — the plane wobbling against the world in chase view cannot
-    be seen while (a) is too small to see at all.
-  *Playtest after fix:* re-fly the `PT-44` sortie once the remaining **(a)** residual lands —
-  the overspeed ramp (its offset landed 2026-08-18), the gun-buzz magnitude, and the
-  view-coupling check that (a)
-  currently blocks.
+  `analysis/gun-wobble-shake/`). The dressing behind the shake is a decoded camera
+  random-walk (`crimson.exe`), not the remake's dated sawtooth — details below.
+  **Resolved (landed on `main`):**
+  - **(a) made faithful** — 2026-08-19 the fire source now IS the original's random-walk
+    accumulator (`PlaneShake.FireBullet` steps `Walk += (rand−0.5)×2·(factor×caliber)·2.0·6.2832·1.2`
+    = uniform ±7.54·(factor×caliber)/shot, wep40 ±2.11e-2 rad, decoded from `FUN_0042be10`; decayed
+    by the authored `damp` τ≈80 ms). Merged to `main` (`eba69782`, branch experiment `bl266-random-walk`).
+    **`GunBuzzKickScale` (default 1.0 = faithful) is the one tune knob — dial it, never
+    `magnitude_factor`.** The `camera+0x24` consumer traced NEGATIVE (2026-08-19): the original's
+    own accumulator is near-dead in its build, so the gap is a **mechanism mismatch, not a
+    render-pipeline loss** — this port is the first real feel of the kick law.
+  - **(d) high_speed** — 2026-08-18 corrected to excess-over-gate `(speedRatio − gate)/quotient`
+    (`554edcee`): zero at rated max, ramps with overspeed instead of the old 5×-buzz snap. Kept as
+    the sawtooth control on the port.
+  - **(B) fire-rate** — settled by decode: one round per fire-tick at authored `FIRE_RATE` (8.0 for
+    wep_40); the "12–13/s" was a redraw-window artifact. Pose-interp render loss tested NEGATIVE.
+  **Still open, all data/fidelity questions:**
+  - (b) the impact sources' per-event quantities are stand-ins declared TUNE (gun hits reuse
+    caliber, rockets use armor damage) — a being-hit capture pins them.
+  - (c) the `ON_CALL` `small/medium/large` `damage_shakes` defs stay unwired — unknown caller,
+    likely script/set-piece.
+  - **(fidelity) judge the port, then dial.** Playtest owed: fly the merged build and judge
+    `GunBuzzKickScale` (1.0 default = faithful step) against the original clip before touching it.
+    Two honest caveats: the random-walk **decay model (τ≈80 ms) is an engineering guess, not a
+    decode** (the original's consumer is negative); and with the buzz now ~7× louder, the quiet
+    `554edcee` dive rattle reads ~6× softer than the gun — track whether `high_speed` needs the
+    same random-walk / re-baselined magnitude.
   ⚠ Traps: `SHAKES_CAMERA` is NOT the fire-path shake mechanism — its sole carrier among all
   48 weapons is `wep_26` "FW", a zero-damage scripted fake weapon (a scripted detonation-shake
   marker); the fire path is the unflagged `fire_bullet` source. And the near-match trap: several
   magnitude candidates coincide with authored constants — wire nothing on one coincidence (the
   caliber law stood because the candidates separated by an order of magnitude each way).
-
 - `BL-420` `[Research]` **Decode the original's per-view base FOV from `crimson.exe` and record it under `docs/org/` — the engine holds a single 62° assumption that the binary refutes.** The original's camera projection has **exactly two base horizontal FOVs, 60° and 80°, both stored in radians as half-angle constants** (`1.0471976` = `92 0a 86 3f` and `1.3962634`), and **which one applies is gated per-camera-mode** (live mode at `camera+0x14c`, selected in `FUN_0042b660`): mode **6** → 80° (`FUN_006024d9`), every other mode (0–5, 7, 8, 9) → 60° (`FUN_00602508`). Modes 6 and 7 are the only two first-person views (both set the `DAT_009fd17c` first-person flag via `FUN_004e7100`, both route through the first-person placement `FUN_0042d980`, neither uses chase-position math — `FUN_0042dc20`/`FUN_0042c5c0` dispatch). So the three named views resolve definitively: **3rd Person / chase = 60°; Cockpit view = mode 6 = 80°; Nose view = mode 7 = 60°**. The cockpit/nose assignment is pinned by a direct render gate: `FUN_0049fb00` (the per-frame player render, sole caller `FUN_004a0220` = main tick) draws the cockpit interior model `cockpit1` (`DAT_0071c314`) **only when mode == 6**, so mode 6 is the interior cockpit view (80°), and mode 7 is the no-interior forward view (60°). The two first-person views also share the **same camera position** — both place the camera at the plane's `cockpit_camera` marker (`DAT_0071c328/32c/330`), so there is **no separate nose-camera offset**; mode 7 differs only in not drawing the interior/hull, not head-looking (fixed forward), and being 60°. The constants are **horizontal**; `FUN_006024d9`/`FUN_00602508` aspect-correct to stored vertical via `atan(tan(H/2) · (16:9)/(4:3))` → 60°→46.8° vertical, 80°→64.4° vertical. The project's current single **62° vertical assumption does not exist in the binary** — the 62°-in-radians constant `1.082104` (`63 82 8a 3f`) is absent, so the assumed number is unsupported and the correct base is 60°.
   *Evidence:* ghidra-mcp read of the open `crimson.exe` (`/crimson.exe`): `FUN_0049fb00` (player render; draws `cockpit1` `DAT_0071c314` only when mode==6 via `FUN_004cca30(x,1/0)` around the interior draw), `FUN_0042b660` (mode gate), `FUN_00602508` (60° H-FOV; writes `_DAT_00a1eff0`/`_DAT_00a1eff4`), `FUN_006024d9` (80° H-FOV, mode 6), `FUN_0042b570` (frustum/projection, contains `0.5235987755982` = 30° = 60°/2), plus the 60°/80°/50.0/2.5 constants side-by-side at the data table `0060409c`. FOV is stored in radians (anim loader `FUN_00502da0` converts degrees→radians via `0.017453292`). The `0x3f860a92` 60° literal is also used by `FUN_0049d940` (player aim camera) and `FUN_004a0220`. Camera object is `DAT_0064ef78`. Placing the camera: both first-person modes run the same placement `FUN_0042d980`, which sets the camera to `plane_pos + plane_rot · (DAT_0071c328,32c,330)`, i.e. the plane's `cockpit_camera` marker offset (bound in `FUN_00473480` from the `cockpit_camera` node; default fallback `DAT_0075d1b8/bc/c0` = `(0,0,0)`). Plane-model `cockpit_camera` node translations (decoded from `extracted/C1/... planes/nodes.json`) put the camera on the fuselage centerline a bit above the local origin — default fighter `player_pfighter`: `(0, +0.75, −0.2)` — with +Y up, ±X the wingspan (ailerons at ±63, elevators/tail at −Z ≈ −37), so +Z = nose/forward and the marker is centered, ~0.75 up, marginally aft of the origin. There is **no `nose_camera` node or per-mode offset** — mode 7 reuses the cockpit_camera point. The `cam_anim` ZAN cockpit sequence (`player-gi_1stperson`) carries no FOV (it shows the interior/hides the plane via `cockpit1`/`camera1`), so the base FOV is not authored in `.ani` data.
   *Fix shape:* **done — decoded facts landed as [`docs/org/cameraViews.md`](org/cameraViews.md) (2026-08-18)**, covering both the per-view FOV model (60° base; mode-6 cockpit = 80°) and the camera-placement fact (cockpit & nose share the `cockpit_camera` marker; no separate nose offset; per-plane authored offsets like `player_pfighter` `(0,0.75,−0.2)`). Remaining fix work is the engine-side amend: change CSVM's single-FOV assumption + the `docs/formats/camparam.md`/`camparam` references to the 60°/80° model. The engine's live FOV read (`GameSession.cs` and the 62° references in `PLAN-overcast-match.md:1463` and `docs/org/tracers.md:258`) should be corrected to 60° base, with the mode-6 80° first-person variant and the per-mode gating as the full model.
