@@ -1886,7 +1886,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   SAME slider back past the SAME threshold) — the capture shows many DIFFERENT keys firing once
   each, not one key firing twice, so that narrower question is untested either way.
   *Cross-refs:* `PLAN-perf-hitches` G15/G16 (the diagnosis), `BL-356` (the sidecar losing 6 of this
-  session's 31 trips), `BL-231` (the pool-size tuning item
+  session's 31 trips to its queue — fixed in commit `73512b47` by raising the defaults to fit the
+  storm), `BL-231` (the pool-size tuning item
   this is explicitly NOT — a size increase would not touch this cost), `docs/verification.md`
   PERF-14.
 
@@ -3002,32 +3003,6 @@ usual.
   hand-killed silently corrupts unattended runs.
   *Workaround on record:* kill the lingering Godot process for that shot; the hash it printed
   is still valid.
-
-- `BL-356` `[Bug]` **`HitchSidecar`'s queue (default depth 8, 3 s flush) loses records under a real
-  hitch storm — confirmed at the controls, not just a theoretical TUNE gap.** A user session
-  dragging the `DamageLab` sliders repeatedly (`.scratch/logs/fly-20260814-210336.{log,hitches.jsonl}`,
-  see `BL-355` for the mechanism these hitches share) tripped `HitchMonitor` **31 times** in ~7 s
-  (frames 3373-4243) but only **25 reached the sidecar/log** — three separate
-  `hitch sidecar queue overflowed dropped=N` warnings (`N` = 1, 2, 3; the counter resets after each
-  report per `HitchSidecar.Flush`, so the drops are additive: **6 records lost**, not 3). Both the
-  human-readable `[perf] hitch …` line and the JSON sidecar entry are written together at flush time
-  (`HitchSidecar.Flush`'s `WriteLogLine`+`WriteJsonLine` pair), so a dropped record vanishes from
-  *both* — not silently (the warning fires, per the module's own design intent), but a diagnosis
-  session reading the sidecar for "every hitch this session" is missing up to a fifth of them, and
-  exactly during the busiest, most interesting stretch.
-  *Fix shape:* `hitchSidecar.queueDepth`/`hitchSidecar.flushSeconds` are already `Config` keys
-  (TUNE) — raising depth or lowering the flush interval is a one-line config change with no code
-  risk, and is probably enough on its own for a solo-player session. Whether the DEFAULTS should
-  move, or whether a compound event (BL-355 alone can produce 6-7 trips in two frames) needs a
-  different policy (e.g. an immediate out-of-band flush the moment the queue nears full, rather than
-  waiting the full interval), is the open design question — the constant fix is cheap, the policy
-  question is not.
-  ⚠ **Traps.** Do not read this as evidence the instrument is unreliable in general: every drop was
-  reported (no silent gap), and the 25 records that DID land are exactly what diagnosed `BL-355` —
-  this is a capacity tuning gap under a specific heavy workload, not a correctness defect in the
-  detection or attribution logic.
-  *Cross-refs:* `BL-355` (the hitches this session's queue couldn't keep up with),
-  `PLAN-perf-hitches` B6 (`HitchSidecar`'s own design, `docs/architecture.md`).
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
   RunGame.ps1/RunDev.ps1) once tools/godot ships a Godot bundling **SDL ≥ 3.4.4**: the bundled
