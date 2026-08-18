@@ -55,6 +55,12 @@ One placement of a decoration by the UV-lattice stamper. Not a Godot instance, w
 rendering mechanism a stamp may be drawn by.
 _Avoid_: place, scatter, plant, dress, decorate
 
+## Aircraft assembly
+
+**Flight roster**:
+The session's aircraft set: the human field prepared at session start and the AI aircraft introduced later by missions, waves, or generators.
+_Avoid_: AI roster (it excludes the human field)
+
 ## Boards and the sim clock
 
 **Board**:
