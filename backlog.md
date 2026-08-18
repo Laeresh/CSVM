@@ -2455,6 +2455,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     ~3.5× more is needed to match the original's look is a judgment, not a decode).
     `magnitude_factor` must not change until that fidelity target is decided. Leads recorded in
     `analysis/gun-wobble-shake/FINDINGS.md`.
+    **(2026-08-18) the `× caliber` claim is now EDGE-TRACED in `crimson.exe`, and the original's
+    downstream gain is a new caveat.** (i) Confirm: `fire_bullet.magnitude_factor` is consumed in
+    the plane per-tick firing loop `FUN_004b6820` (`FILD` weapons-ext `CALIBER` at
+    `weapon+0x210 → +0x10` × `*(camera+0x3c)` = `magnitude_factor`, loaded raw by the `shakes.zrd`
+    parser `FUN_0042bc10`; camera = `DAT_0064ef78`). The `FILD` integer read decides it: it is
+    CALIBER (40), not damage (4.5 float) nor velocity (900). The docs' `7e-5 × caliber = 2.80e-3`
+    was previously only clip-fitted; it is now a traced binary fact. (ii) New caveat: the
+    `2.80e-3` product is NOT the kick the origin's roll oscillator sees — `FUN_0042be10` scales it
+    by the camera-shake-component gain ×2.0 (`camera+0x1c`, set by ctor `FUN_0042bab0`) and the
+    sawtooth coeff ×4.0, then `(rand−0.5)×1.2` into roll. So the original's per-shot input is
+    `2.80e-3 × 8 × (rand−0.5) × 1.2`, an order larger than the raw law, and this gain gang is NOT
+    yet reconciled with the remake's `PlaneShake.cs` gain (whose render the 0.284/0.20-px model
+    describes). Next: instrument the live original's `camera+0x24` roll accumulator per tick to
+    pin the true kick before any amplitude correction.
   - **Passing:** being-hit rocks read right — guns give a short rock, rockets read ok (user,
     2026-08-07, `--vs`).
   - **Unjudged:** (d) view coupling — the plane wobbling against the world in chase view cannot

@@ -23,19 +23,27 @@ Readings with confidence: `frequency` in Hz, `damp` a decay rate (the impulse so
 self-evidently airspeed — it carries a `min_speed` gate). `nitro` is the only source with an
 **absolute** magnitude, 0.05.
 
-**`fire_bullet`'s magnitude is `magnitude_factor × CALIBER`, in radians of roll — measured, not
-inferred** (`analysis/gun-wobble-shake/`). A dead-astern chase clip of the original
-firing 40-cal slugs shows a roll-dominated wobble (left/right wing vertical motion
-anti-correlated at −0.86) of 2.8e-3 rad RMS / ~4.0e-3 rad peak; the dead-astern view makes the
-screen angle the world roll angle with no projection model. Candidates: caliber 40 × 7e-5 =
+**`fire_bullet`'s magnitude is `magnitude_factor × CALIBER`, in radians of roll — edge-traced in
+`crimson.exe`** (`analysis/gun-wobble-shake/`). The consume site is the plane per-tick firing
+loop `FUN_004b6820` (`FILD` weapons-ext `CALIBER` at `weapon+0x210 → +0x10` × `*(camera+0x3c)`
+=`magnitude_factor`, loaded raw by the `shakes.zrd` parser `FUN_0042bc10`; camera =
+`DAT_0064ef78`). A dead-astern chase clip of the original firing 40-cal slugs shows a
+roll-dominated wobble (left/right wing vertical motion anti-correlated at −0.86) of 2.8e-3 rad
+RMS / ~4.0e-3 rad peak; the dead-astern view makes the screen angle the world roll angle with
+no projection model. Candidates: caliber 40 × 7e-5 =
 2.8e-3 rad (match); damage 4.5 → 3.15e-4 (~9× under); velocity 900 → 6.3e-2 (~16× over) — an
 order-of-magnitude discrimination, not a one-coincidence match. ⚠ **Amplitude-call caution:**
 the 2.8e-3 rad is the clip's *rendered* RMS, not the oscillator's *kick* amplitude — a kick of
 envelope `E` renders only ~0.28·E as RMS at the real 8/s fire rate (sawtooth duty × damp
 envelope decay), so the engine renders ~0.28× the law's literal number regardless of the clip
-(decoded: ~8e-4 rad RMS / ~0.20 px/frame at the ±205 px lever). Whether `magnitude_factor` needs
-a ~3.5× decode correction to match the original is the clip/fidelity judgment, not the decode —
-see `analysis/gun-wobble-shake/FINDINGS.md`. Unmeasured residue: whether plane model/weight also
+(decoded: ~8e-4 rad RMS / ~0.20 px/frame at the ±205 px lever). ⚠ **The ×CALIBER multiplicand is
+confirmed, but the original's downstream gain is not yet reconciled** — `FUN_0042be10` scales the
+`2.8e-3` product by the camera-shake-component gain (×2.0 at `camera+0x1c`) and the sawtooth
+coeff (×4.0) before the roll oscillator, so the original's per-shot input is
+`2.8e-3 × 8 × (rand−0.5) × 1.2`, an order larger than the raw law (instrument the live
+`camera+0x24` accumulator to pin the true kick). Whether `magnitude_factor` needs a ~3.5× decode
+correction to match the original is the clip/fidelity judgment, not the decode — see
+`analysis/gun-wobble-shake/FINDINGS.md`. Unmeasured residue: whether plane model/weight also
 enter (single-plane, single-gun clip — owed capture in `playtest.md`), and the impact sources'
 own quantities (the engine stands in caliber for gun hits and armor damage for rockets, declared
 TUNE).

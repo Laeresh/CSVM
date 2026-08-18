@@ -8,8 +8,17 @@ or muzzle velocity. Which one, and in what units?
 slugs, 2.80e-3 rad (0.160°), against a measured roll oscillation of 2.8e-3 rad RMS / ~4.0e-3 rad
 peak. The other candidates miss by an order of magnitude in each direction: damage (4.5) →
 3.15e-4 rad, ~9× under; velocity (900) → 6.3e-2 rad, ~16× over. The candidate separation is so
-wide that the peak-vs-RMS ambiguity (×√2–2) cannot flip the verdict — this is a measured
-discrimination, not a one-coincidence match.
+wide that the peak-vs-RMS ambiguity (×√2–2) cannot flip the verdict.
+
+**The `× CALIBER` law is now edge-traced in `crimson.exe`, not just clip-fitted.** The consume
+site for `fire_bullet.magnitude_factor` is the plane per-tick firing-feedback loop `FUN_004b6820`
+(disasm at `0x004b6e20`): it `FILD`s the weapon-ext `CALIBER` (signed integer at `weapon+0x210`
+→ `+0x10`, built by `FUN_004ba6f0`) and `FMUL`s it against `*(camera + 0x3c)` = `magnitude_factor`
+(loaded raw into the camera object by the `shakes.zrd` parser `FUN_0042bc10`; camera =
+`DAT_0064ef78`). The product is the per-shot shake input = `7e-5 × 40 = 2.80e-3`. `FILD`
+(integer load) is decisive: it is CALIBER (integer 40), not damage (4.5 float) nor velocity (900).
+Chain: `shakes.zrd → camera+0x3c → (fire tick) CALIBER(weapon_ext+0x10) × it → FUN_0042c070 →
+FUN_0042be10` (camera shake kick, see below).
 ⚠ The 2.80e-3 rad is a *rendered* measurement of the clip; it is **not** the oscillator's kick
 amplitude (a kick of that size renders ~0.28× itself at 8/s). It discriminates `7e-5 × CALIBER`
 from competing laws, but reading it as the engine's intended per-kick roll is the conflation
@@ -130,6 +139,17 @@ So, clip aside, the law renders **~0.28× its own literal number** (RMS/kick = 0
 **~0.20 px/frame** of wing motion under steady 8/s fire. That reduction is entirely oscillator
 geometry (sawtooth duty × damp decay between kicks); the render chain adds nothing.
 
+⚠ **This model is the remake's `PlaneShake.cs` oscillator** (that is why it validates against
+`PlaneShakeTests`). The binary trace shows the ORIGINAL feeds `2.80e-3` through a *camera-shake
+component* first: `FUN_0042be10(this=camera+0x18)` scales by `this[1]` = **2.0** (camera-ctor,
+`FUN_0042bab0`, dword 7) and the sawtooth coeff **4.0** (≈`6.2832` for sine), then kicks roll/pitch
+with `(rand−0.5)×fVar1×1.2`. So the original's per-shot input to its roll oscillator is
+`2.80e-3 × 2.0 × 4.0 × (rand−0.5) × 1.2` — an order of magnitude larger than the raw law. The
+two gangs of scalars (remake `PlaneShake` gain vs original camera-shake-component gain ×4.0) are
+**not yet reconciled**; the 0.284/0.20-px figure is the remake's render of a `2.80e-3` kick, and
+comparing it to the original demands the original's true kick (instrument the live process:
+log `camera+0x24` roll accumulator per tick after a burst).
+
 ⚠ **Neither the engine A/B nor the clip is consistent with the one model, and they disagree in
 opposite directions** — so the table's "2–4× under" is not a clean pipeline-loss claim:
 
@@ -169,3 +189,9 @@ look) is decided.
   size renders ~0.28× of itself at 8/s. The decoded engine-render is ~0.20 px/frame regardless
   of the clip; the clip is only the eventual fidelity target. The clip's own ~6.5×-over-model
   reading is a flag on that old clip measurement, not on the law.
+- **The `7e-5 × caliber` multiplicate is confirmed, but its downstream gain is not yet
+  reconciled.** The binary leaves the law intact but routes `2.80e-3` through the camera-shake
+  component gain (×2.0) and sawtooth coeff (×4.0) in `FUN_0042be10` before the roll oscillator.
+  The remake's `PlaneShake.cs` (whose render this doc models) applies a different gain, so
+  remake-vs-original amplitude equality is an open question — instrument the live original's
+  `camera+0x24` accumulator to close it.
