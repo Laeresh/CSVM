@@ -18,6 +18,10 @@ public struct FlightInput
 
     /// <inheritdoc cref="GroundBlowNormal"/>
     public float GroundBlowDistM;
+
+    /// <summary>Multiplier for both AI ground-blow terms during the post-drop settling window.
+    /// Zero keeps the normal factor, preserving callers that do not set it.</summary>
+    public float AiGroundBlowScale;
 }
 
 /// <summary>
@@ -654,8 +658,9 @@ public sealed class FlightModel
         {
             // AI law (0x0048c317): a fixed push, independent of the AI's own command, never
             // suppressed by command direction — unlike the player law below.
-            velocitySteerRate = GroundBlowVelocitySteer * proximity;
-            return v * (Stats.AiGroundBlow * Stats.GroundBlowMag);
+            float scale = input.AiGroundBlowScale == 0f ? 1f : input.AiGroundBlowScale;
+            velocitySteerRate = GroundBlowVelocitySteer * proximity * scale;
+            return v * (Stats.AiGroundBlow * Stats.GroundBlowMag * scale);
         }
 
         float p = cmd.Dot(v);

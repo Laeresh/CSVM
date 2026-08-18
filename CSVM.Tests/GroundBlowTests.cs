@@ -222,6 +222,20 @@ public class GroundBlowTests
     }
 
     [Fact]
+    public void TheAiPostDropWindowCutsBothGroundBlowTermsToFifteenPercent()
+    {
+        const float aiGroundBlow = 0.5f;
+        var full = OneStep(Basis.Identity, pitch: 0f, normal: SlopeNormalBody, dist: 0f, ai: true);
+        var settling = OneStep(Basis.Identity, pitch: 0f, normal: SlopeNormalBody, dist: 0f,
+            ai: true, groundBlowScale: 0.15f);
+        var baseline = OneStep(Basis.Identity, pitch: 0f, normal: Vector3.Zero, dist: 0f, ai: true);
+        var expected = ExpectedAiDelta(ExpectedAxis(0f), aiGroundBlow);
+
+        AssertMatches(baseline + expected * 0.15f, settling, 0f);
+        AssertMatches(baseline + expected, full, 0f);
+    }
+
+    [Fact]
     public void TheAiVelocitySteerNeverSuppresses()
     {
         // The player path zeroes its steer while commanding into the obstacle (S is zeroed on that
@@ -268,19 +282,20 @@ public class GroundBlowTests
         return m.VelocityDir.AngleTo(-m.Attitude.Z);
     }
 
-    private static Vector3 OneStep(Basis attitude, float pitch, Vector3 normal, float dist, bool ai = false)
+    private static Vector3 OneStep(Basis attitude, float pitch, Vector3 normal, float dist, bool ai = false, float groundBlowScale = 1f)
     {
         var m = Fresh(attitude, ai);
-        m.Step(Input(pitch, normal, dist), Dt);
+        m.Step(Input(pitch, normal, dist, groundBlowScale), Dt);
         return m.BodyRates;
     }
 
-    private static FlightInput Input(float pitch, Vector3 normal, float dist) => new()
+    private static FlightInput Input(float pitch, Vector3 normal, float dist, float groundBlowScale = 1f) => new()
     {
         Pitch = pitch,
         Throttle = 1f,
         GroundBlowNormal = normal,
         GroundBlowDistM = dist,
+        AiGroundBlowScale = groundBlowScale,
     };
 
     private static FlightModel Fresh(Basis? attitude = null, bool ai = false)

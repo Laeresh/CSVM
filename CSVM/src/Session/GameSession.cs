@@ -3253,7 +3253,7 @@ public partial class GameSession : Node3D
             {
                 continue;
             }
-            member.Activate(pos, lookAt);
+            member.Activate(pos, lookAt, carrierDrop: true);
             return member;
         }
         return null;

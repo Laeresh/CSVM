@@ -469,6 +469,7 @@ public partial class FlightController : Node3D
     private float _damageCooldown;               // s left before the next HP subtraction
     private float _grazeReactionCooldown;        // s left before the next touchdown_* reaction
     private float _collisionGrace;               // s left with no collision at all (obj+0xAC)
+    private float _postDropGroundBlow;           // s left at the carrier-drop 0.15 multiplier
     private float _collideArmorDamage;           // this contact's decoded pair, spent in SurviveHit
     private float _collideHealthDamage;
     private bool _collideDooms;                  // this contact kills the striker whatever its HP
@@ -880,7 +881,13 @@ public partial class FlightController : Node3D
     /// work it always does (spawn speed and throttle, a healthy repaired airframe, full ammo, the
     /// start choreography), so a wave arrives flying rather than parked. Calling this on an
     /// aircraft already in play is simply that teleport-and-reset.</summary>
-    public void Activate(Vector3 pos, Vector3 lookAt)
+    public void ArmSpawnTimers(bool carrierDrop = false)
+    {
+        _collisionGrace = CollisionDamage.SpawnGrace;
+        _postDropGroundBlow = carrierDrop ? 2.5f : 0f;
+    }
+
+    public void Activate(Vector3 pos, Vector3 lookAt, bool carrierDrop = false)
     {
         var dir = lookAt - pos;
         _spawnPos = pos;
@@ -888,6 +895,7 @@ public partial class FlightController : Node3D
         if (dir.LengthSquared() > 1e-6f)
             _spawnAttitude = Basis.LookingAt(dir.Normalized(), Vector3.Up);
         Inert = false;
+        ArmSpawnTimers(carrierDrop);
         // The original snaps an activated vehicle to its net's nearest node (FUN_004b0f40 →
         // FUN_00432010), which is what makes a teleported wave patrol where it ARRIVED rather
         // than fly back to wherever it was parked.
@@ -1153,10 +1161,12 @@ public partial class FlightController : Node3D
                 : Pilot != null ? NextPilotInput(dt)
                 : ReadKeyboard(dt);
             ProbeGroundBlow(ref input);      // reads the pose this step ENTERED with, as the original does
+            input.AiGroundBlowScale = _postDropGroundBlow > 0f ? 0.15f : 1f;
             _lastInput = input;
             _damageCooldown -= dt;
             _grazeReactionCooldown -= dt;
             _collisionGrace -= dt;
+            _postDropGroundBlow -= dt;
             _model.Step(input, dt);
 
             // The airframe boxes sweep along the frame's motion; the center ray stays as an
