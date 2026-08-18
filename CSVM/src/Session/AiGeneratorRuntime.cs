@@ -29,14 +29,6 @@ public sealed partial class AiGeneratorRuntime : Node
     // the −90° drop attitude itself is the authored `rotation`.
     private const float MaxDropPitchDeg = 80f;
 
-    // INVENTED clearance below the origin node. The authored `cargobay` sits on
-    // the bay floor inside the hull, so an airframe spawned exactly there overlaps the bay
-    // geometry and crashes on frame one (measured: C1B/M03's drop dies into the vostok's own
-    // `g459`). The binary carries two untraced launch timers (BL-350 trap b) that are NOT
-    // interpreted here; instead the fighter appears this far straight below the doors, in
-    // open air under the hull.
-    private const float DropClearanceM = 12f;
-
     // FUN_00452450 preserves the carrier's world velocity, then adds this vertical component.
     private const float CarrierLaunchDownwardSpeed = 22.352f;
 
@@ -236,10 +228,6 @@ public sealed partial class AiGeneratorRuntime : Node
     {
         var anchor = gen.Origin ?? gen.Host;
         var pos = anchor.GlobalPosition;
-        if (gen.Def.IsZeppelin)
-        {
-            pos += Vector3.Down * DropClearanceM;   // clear the bay floor + door swing
-        }
         Vector3? launchVelocity = gen.Def.IsZeppelin
             ? gen.HostVelocity + Vector3.Down * CarrierLaunchDownwardSpeed
             : null;

@@ -180,7 +180,7 @@ public static class Suites
             "off AND held (placed, no longer flown), and the wave arm is the generator alone: the " +
             "claimed generator launches nothing on an uncredited budget, one wave's credit " +
             "releases exactly that wave's built-inert members from the live cargobay drop point " +
-            "(12 m under the doors) and no more, a still-parked member counts as present so the " +
+            "and no more, a still-parked member counts as present so the " +
             "sequencer does not skip the wave, and the last kill advances it; in C1/IA1's real " +
             "world the objective starts hidden with every one of its gasbag's collision shapes " +
             "switched off, and the activation brings the hull and those colliders back together " +
@@ -4071,8 +4071,7 @@ public static class Suites
                     releasedAt.Add(pos);
                     releasedVelocities.Add(member.WorldVelocity);
                     releasedThrottles.Add(member.Throttle);
-                    releaseDropDistances.Add(pos.DistanceTo(cargobay.GlobalPosition
-                        + Vector3.Down * 12f));
+                    releaseDropDistances.Add(pos.DistanceTo(cargobay.GlobalPosition));
                     return member;
                 }
                 return null;
@@ -4117,7 +4116,7 @@ public static class Suites
             ctx.Check(wave2.All(m => m.Inert),
                 $"wave 2 is untouched — one wave's credit releases one wave");
             ctx.Check(releaseDropDistances.All(distance => distance < 0.1f),
-                $"…at the generator's live drop point, 12 m under the bay floor max error={releaseDropDistances.Max():0.###} m");
+                $"…at the generator's live cargobay drop point max error={releaseDropDistances.Max():0.###} m");
             var expectedLaunchVelocity = hostVelocity + Vector3.Down * 22.352f;
             ctx.Check(releasedVelocities.All(v => v.DistanceTo(expectedLaunchVelocity) < 0.01f),
                 $"…with host velocity minus 22.352 m/s vertically velocity={releasedVelocities[0]}");
@@ -7768,8 +7767,8 @@ public static class Suites
             ctx.Check(animPlays.Count == 1 && animPlays[0] == "mp1_open_doors",
                 $"the door opened with the authored anim plays=[{string.Join(",", animPlays)}]");
             ctx.Check(spawnPositions.Count == 1
-                && spawnPositions[0].DistanceTo(cargobay.GlobalPosition + Vector3.Down * 12f) < 0.1f,
-                $"the fighter dropped at the origin node's LIVE position (riding the moving hull), 12 m under the doors (the invented bay clearance) pos={spawnPositions[0]} bay={cargobay.GlobalPosition}");
+                && spawnPositions[0].DistanceTo(cargobay.GlobalPosition) < 0.1f,
+                $"the fighter dropped at the origin node's LIVE position (riding the moving hull) pos={spawnPositions[0]} bay={cargobay.GlobalPosition}");
             ctx.Check(spawnLooks.Count == 1 && (spawnLooks[0] - spawnPositions[0]).Normalized().Y < -0.9f,
                 $"…in the authored drop attitude (pitch −90°, clamped shy of vertical) dropY={(spawnLooks[0] - spawnPositions[0]).Normalized().Y:0.##}");
 
