@@ -177,7 +177,7 @@ public class GroundBlowTests
     public void TheAiLawIsAFixedPushNotACommandProportionalOne()
     {
         // The un-cut authored value (docs/org/flightModel.md's "Ground blow"); the 2.5 s
-        // post-carrier-drop cut is a separate, unmodelled factor. The push does not read cmd, so
+        // post-carrier-drop cut is applied by FlightController. The push does not read cmd, so
         // a deflected and a centred stick get the same bias relative to their own baseline.
         const float aiGroundBlow = 0.5f;
         var deflectedBase = OneStep(Basis.Identity, pitch: 1f, normal: Vector3.Zero, dist: 0f, ai: true);

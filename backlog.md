@@ -1053,27 +1053,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   data port. (`rof/ui_strings.json` carries "NITRO-BOOST: %4!s!" on the purchase screen and the
   buyable engines come in plain and "… nitro" variants, so the engine choice is what grants it.)
 
-- `BL-382` `[Feature]` **A just-dropped AI fighter gets the full ground blow, where the original cuts
-  it to 15 % for 2.5 s.** Split out of `BL-095` when that umbrella retired 2026-08-15; the mechanism
-  is decoded and the gap is narrow but real. The original's AI ground-blow branch multiplies BOTH the
-  push factor (`ai_groundblow × groundblow_mag`, 5.0 authored) and the velocity-steer's proximity by
-  **0.15** while the game clock sits inside `obj+0xB4`, a 2.5 s window written on the carrier-drop
-  spawn path (`FUN_00452450`: repositioned, yawed to −π/2, launch velocity minus 22.352 m/s
-  vertically — a drop from a carrier at 50 mph). See
-  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Ground blow" and its collision-response
-  timers.
-  ⚠ **The window IS reachable here.** A zeppelin's fighter-drop launch (`AiGeneratorRuntime` →
-  `AiAircraftSpawner.Spawn`) is this engine's carrier drop, and it puts a freshly-dropped AI aircraft
-  on the same `UsesAiForcePath` plant `FlightModel.GroundBlowTerm` reads. `PLAN-ai-flight` `C23`
-  scoped to the response law and left this out deliberately.
-  *Fix shape:* thread a per-aircraft spawn timestamp through `AiAircraftSpawner`/`FlightController`
-  (nothing carries one today) and cut both terms while the clock is inside 2.5 s of it. The same
-  per-object clock family holds `obj+0xAC`, a 1.5 s collision-grace window that disables collision
-  outright on a fresh spawn and 1.0 s on both parties after an entity-versus-entity impact — decoded,
-  also unmodelled, and worth landing in the same change.
-  *How you'd know it worked:* a fighter dropped from a zeppelin over terrain is not shoved off its
-  drop for its first 2.5 s.
-
 - `BL-393` `[Tuning]` **The control surfaces' deflection angles, mix and slew are decoded and the
   TUNEs are still in place.** `ControlSurfaceAnimator` deflects ±20° per kind and slews linearly at
   3 units/s, both chosen by eye. `PLAN-ai-flight` `C24` decoded what the original does while tracing
@@ -2688,14 +2667,9 @@ usual.
   ⚠ **Traps.** (a) Do NOT "fix" the spawn placement — it matches the decode; the missing piece is
   the door animation, not the position. (b) Leads preserved from a partial decode: the launch also
   sets two timers (`+0xac = now + 1.5`, `+0xb4 = now + 2.5`) and an initial velocity with a
-  −22.352 m/s vertical component (the zeppelin drop case). `+0xb4`'s consumer is now traced
-  (`PLAN-ai-flight` `C23`): it cuts the AI ground-blow factor to ×0.15 for its 2.5 s span, reachable
-  in this engine via the same launch routine (`AiGeneratorRuntime` → `AiAircraftSpawner.Spawn`) but
-  not yet ported — a recorded gap, not a fix for THIS bug (ground blow is a control-response bias on
-  an already-flying aircraft; it cannot save a plane the collision sweep kills on the spawn frame).
-  `+0xac`'s consumer (the collision-grace gate) is decoded — it returns out of the collision resolver
-  outright, so the object has no collision at all inside the window — and unmodelled; `BL-382` owns
-  landing it with the drop timer beside it, so read that before inventing any grace window here. (c) The launched-vehicle mechanism itself
+  −22.352 m/s vertical component (the zeppelin drop case). The carrier path now carries both timers:
+  `+0xac` suppresses collision and AI ground blow for 1.5 s, then `+0xb4` limits the ground-blow
+  response to ×0.15 until 2.5 s. (c) The launched-vehicle mechanism itself
   (parked roster planes, not fresh spawns) is a separate fidelity gap from this bug; B6's fresh-spawn
   stand-in is documented in its landing commit.
 

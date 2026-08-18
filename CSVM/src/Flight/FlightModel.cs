@@ -642,8 +642,8 @@ public sealed class FlightModel
     // closing on (docs/org/flightModel.md, "Ground blow"). The caller owns the probe. Two laws share
     // it — the player's biases the STICK, the AI's is a fixed per-tick push. The caller applies
     // dt only to the player command bias; the AI return goes straight to persistent angular speed.
-    // ⚠ The AI factor is ai_groundblow · groundblow_mag, never ai_groundblow alone. The original's
-    // 2.5 s post-spawn cut of it is a recorded gap here rather than an omission (BL-382).
+    // ⚠ The AI factor is ai_groundblow · groundblow_mag, never ai_groundblow alone. The caller gates
+    // carrier drops for 1.5 s, then applies their ×0.15 final-second response.
     private Vector3 GroundBlowTerm(in FlightInput input, Vector3 cmd, out float velocitySteerRate)
     {
         velocitySteerRate = 0f;
