@@ -75,15 +75,39 @@ the cockpit-vs-nose split below. Modes `1`, `5`, `8`, `9` each have a handler of
 the non-first-person handlers read distance/eye geometry from the `camparam.json` chase table
 (`DAT_0064efd0`), so they are all chase/external poses rather than first-person ones.
 
-### The in-binary strings expose only `POSITION_1ST` / `POSITION_3RD`
+### Only three views are player-selectable: Chase `0`, Cockpit `6`, Nose `7`
 
-The executable holds **no friendly view names** for the modes (`Chase`, `Cockpit`, `Nose`, …).
-What the HUD initializer `FUN_00454e70` actually reads from the HUD data archive (`hud_v2.zrd`)
-are two **layout keys**: `POSITION_1ST` (`00624f28`) and `POSITION_3RD` (`00624f38`), used to
-place the gauges differently for the first-person and third-person HUD variants. So the *display*
-names of the views that a player sees come from the HUD/video-menu **data files**, not the ship
-binary — this page's mode numbers are therefore keyed to the dispatch map above, not to any string
-token.
+The player-facing view selector falls back to exactly three valid modes. `FUN_0042c210` rejects
+any candidate that is not `0`, `6` or `7` (it stores the accepted value in `DAT_0064ef94`);
+`FUN_0042c1f0()` just reads that stored value back. The selector key handler `FUN_004414a0` takes
+the requested view and, if it is not one of `{0, 6, 7}`, falls back to **6** (cockpit) before
+applying it through the setter `FUN_0042c280`. `FUN_00443de0` applies the stored desired view at
+game start / on the cycle key. So the selectable set is:
+
+| Mode | Player-selected view |
+|---|---|
+| `0` | **Chase** (3rd person) |
+| `6` | **Cockpit** (interior, 80°, free-look) |
+| `7` | **Nose** (no interior, 60°, head locked forward) |
+
+Modes `1`, `2`, `3`, `4`, `5`, `8`, `9` are **not** reachable as player-selected views — they are
+internal / context camera modes (e.g. other aircraft, cut-scene or context poses), which is why
+`FUN_0042c210` rejects them. The controls data in `extracted/messages.json` names the two bindings
+as **"Access Chase View"** (`MSG_LOOK_FLYBY` → chase) and **"Cycle Cockpit Views"**
+(`MSG_LOOK_FORWARD` → cycles the 6/7 pair); the command dispatcher `FUN_0047e080` (case `0x3`,
+`MSG_LOOK_FLYBY`) forces mode `0` when the current mode is non-zero. The options menu labels the
+positions "external" (`MSG_OPT_3RD_PERSON`), "cockpit" (`MSG_OPT_COCKPIT`) and "default view"
+(`MSG_OPT_DEF_VIEW`).
+
+### The in-binary strings expose no view-name tokens
+
+Beyond those binding labels, the executable holds **no friendly view-name strings** for the modes
+(`Chase`, `Cockpit`, `Nose`, … used as display text). The HUD initializer `FUN_00454e70` reads only
+two **layout keys** from the HUD data archive (`hud_v2.zrd`): `POSITION_1ST` (`00624f28`) and
+`POSITION_3RD` (`00624f38`), used to place the gauges differently for the first-person and
+third-person HUD variants. So the small per-view display names seen in-game come from the
+HUD/video-menu **data files**, not the ship binary — but the *selection wiring* above pins which
+mode is which player view.
 
 ### Modes 6 and 7 are the only first-person views
 
@@ -201,14 +225,11 @@ the cockpit view, hide the interior + lock the head + 60° for the nose view, an
 
 ## Not resolved
 
-- **The non-first-person modes (`1`, `2`, `3`, `4`, `5`, `8`, `9`) carry no friendly in-binary
-  name.** The exe only exposes HUD layout keys (`POSITION_1ST`/`POSITION_3RD`, read from
-  `hud_v2.zrd` by `FUN_00454e70`), not view names — the friendly labels a player sees live in the
-  HUD/video-menu **data files**, outside the ship binary. The rows above therefore characterise
-  each mode by its dispatch handler, not by an in-game name. Their exact poses (offsets, whether
-  any is a discrete look-behind, orbit or re-framing flyby) are only high-level reads of each
-  handler, not fully pinned — modes `5`, `8` and `9` in particular are confirmed "external
-  camera at the plane" but their exact identities are capture-gated to tell apart.
+- **The non-selectable modes (`1`, `2`, `3`, `4`, `5`, `8`, `9`) still have no friendly name or
+  identity.** The player-view selector (`FUN_0042c210`) rejects all of them, so none is a
+  player-selected view; they are internal/context camera poses. Their exact purpose (and which
+  context triggers each) is not pinned — modes `5`, `8` and `9` are confirmed "external camera at
+  the plane" but their precise triggers/poses are capture-gated to tell apart.
 - The `markers`/`dontmove` nodes' exact visual role (what mode 7 strips beyond the interior) —
   visible in-game, not traced to a named object.
 - The remaining `camparam.json` death and flyby geometries — capture-gated on `BL-260`.
