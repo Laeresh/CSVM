@@ -21,7 +21,9 @@
                pass rather than as an in-engine suite because the --run-tests harness completes
                inside one _Ready call and never yields a frame, so it cannot photograph anything.
                A mismatch names the shot and leaves the actual PNG and that shot's engine log in
-               .scratch/goldens/.
+               .scratch/goldens/. Each shot is launched under a per-shot timeout
+               ($EngineTimeoutSec); a shot that exceeds it is killed, reported as FAIL, and has its
+               evidence preserved -- it never silently hangs the suite (BL-320).
       hitch    Two scripted Godot launches -- a clean one and one carrying --hitch-inject=50@300
                -- that report whether the frame-hitch detector (HitchMonitor/HitchSidecar) still
                fires on a known stall and stays silent without one. Awareness-only for the same reason
@@ -663,8 +665,22 @@ if ($SkipGoldens) {
                 $godotArgs += "--verbose"
             }
             $ErrorActionPreference = "Continue"
-            $shotCode = Invoke-Godot ($godotArgs + @("res://scenes/Main.tscn", "--") + $shotArgs)
+            $shotCode = Invoke-Godot ($godotArgs + @("res://scenes/Main.tscn", "--") + $shotArgs) `
+                                      -TimeoutSec $EngineTimeoutSec
             $ErrorActionPreference = "Stop"
+
+            # BL-320: a timeout is deterministic, not the transient silent-exit-1 BL-039 guards
+            # against -- retrying a hung shot with --verbose just doubles its wall-clock (every
+            # hung shot would then eat $EngineTimeoutSec twice). Short-circuit: preserve the
+            # evidence, break out, and let the no-PNG block below report it once.
+            if ($shotCode -eq 124) {
+                if ($failureRoot -eq $null) {
+                    $failureRoot = Join-Path $ScratchDir "goldens-failures\$failureStamp"
+                }
+                Save-GoldenFailureEvidence -FailureDir $failureRoot -ShotName $shot.name `
+                    -Attempt $attempt -ShotLog $shotLog -Png $png
+                break
+            }
 
             # SHOT-10: --screenshot exits 0 even when the save fails, so the file's existence is
             # the only proof it wrote anything.
@@ -709,7 +725,11 @@ if ($SkipGoldens) {
         }
 
         if (-not (Test-Path $png)) {
-            $detail = "$($shot.name): no PNG written (Godot exited $shotCode) -- see $shotLog"
+            if ($shotCode -eq 124) {
+                $detail = "$($shot.name): timed out after ${EngineTimeoutSec}s (Godot exited 124) -- see $shotLog"
+            } else {
+                $detail = "$($shot.name): no PNG written (Godot exited $shotCode) -- see $shotLog"
+            }
             if ($failureRoot) { $detail = "$detail; evidence preserved in $failureRoot" }
             $broken += $detail
             Write-Host "  FAIL $($shot.name): no PNG at $png" -ForegroundColor Red
