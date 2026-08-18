@@ -1,0 +1,1362 @@
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using CSVM.Effects;
+using CSVM.Flight;
+using CSVM.Mech3;
+using CSVM.Mech3.Anim;
+using CSVM.Session;
+using CSVM.UI;
+using CSVM.Utils;
+using Godot;
+
+using static CSVM.Testing.SuiteConstants;
+namespace CSVM.Testing;
+
+internal static class PufferSuites
+{
+    internal static void EmitterLifetime(TestContext ctx)
+    {
+        const string chapter = "C1";   // the only chapter shipping refuel* (5 defs) — matches bounce-launch
+        const string pufferName = "fire_n_smoke";
+        var fake = new CountingEmitterFactory();
+        ctx.EmitterFactory = fake;
+        try
+        {
+            ctx.WithWorld(chapter, collision: false, world =>
+            {
+                var runtime = world.Runtime;
+                DestructibleRegistry.Instance? tank = null;
+                foreach (var inst in runtime.Destructibles.All)
+                {
+                    if (inst.Def.AnimName is { } name
+                        && name.StartsWith("refuel", System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        tank = inst;
+                        break;
+                    }
+                }
+                ctx.Check(tank != null, $"chapter ships a refuel tank chapter={chapter}");
+                if (tank == null)
+                {
+                    return;
+                }
+
+                if (tank.Status == DestructibleRegistry.State.Destroyed)
+                {
+                    runtime.ResetDestructible(tank);
+                }
+
+                var before = new HashSet<string>(runtime.Emitters.Census.Select(r => r.Name));
+                ctx.Check(!before.Contains(pufferName), $"{pufferName} is not yet known before the kill");
+
+                runtime.DamageAt(tank.Anchor, tank.MaxHealth + 1f);
+                ctx.Check(fake.Built.Count > 0, $"the death reached the fake factory count={fake.Built.Count}");
+
+                bool sawEmitting = false;
+                const float tick = 1f / 60f;
+                for (int i = 0; i < 600; i++)   // 10 s, comfortably past the ~5 s the tank's own death instance takes to retire
+                {
+                    runtime.Advance(tick);
+                    if (runtime.Emitters.Census.Any(r => r.Name == pufferName && r.Emitting))
+                    {
+                        sawEmitting = true;
+                    }
+                }
+                ctx.Check(sawEmitting, $"{pufferName} started emitting after the kill");
+
+                bool rowPresent = runtime.Emitters.Census.Any(r => r.Name == pufferName);
+                ctx.Check(rowPresent, $"{pufferName}'s emitter row survives the kill — EndFor pauses, it does not forget");
+
+                bool stillEmitting = rowPresent
+                    && runtime.Emitters.Census.First(r => r.Name == pufferName).Emitting;
+                ctx.Check(!stillEmitting,
+                    $"{pufferName} stopped once the death instance retired (BL-236's own rule)");
+            });
+        }
+        finally
+        {
+            ctx.EmitterFactory = null;
+        }
+    }
+
+    // ---- the emitter's own modes, with no GPU ---------------------------------------------------
+
+    // Every Puffer emission path through the collapsed Emit/Stop pair, plus Burst, over a
+    // RecordingEmitterRenderer. No atlas, TextureArchive or MultiMesh is built anywhere here, which
+    // is its own tripwire: if it gets slow, something started building real emitters again. Both
+    // states are read from the shipped readers, so every expected number derives from authored data.
+    // ⚠ Keep GameClock.Current detached for the suite's duration. The harness clock is a FixedStep
+    // one nothing steps, so FrameDt is 0 and every check would pass vacuously.
+    internal static void PufferModes(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr effect readers");
+
+        var burstState = PufferState.Load(ctx.ZrdrPath, "flame_ball.json", "fierypuffer");
+        var trailState = PufferState.Load(ctx.ZrdrPath, "pufftrails.json", "smokepuffer");
+        var speedCueState = PufferState.Load(
+            SessionPaths.ChapterZrdr(ctx.DataRoot, ctx.Chapter), "speed_cue.json", "cuepuffer1");
+        var speedCue2 = PufferState.Load(
+            SessionPaths.ChapterZrdr(ctx.DataRoot, ctx.Chapter), "speed_cue.json", "cuepuffer2");
+        var speedCue3 = PufferState.Load(
+            SessionPaths.ChapterZrdr(ctx.DataRoot, ctx.Chapter), "speed_cue.json", "cuepuffer3");
+        ctx.Check(burstState != null, $"flame_ball.json defines fierypuffer");
+        ctx.Check(trailState != null, $"pufftrails.json defines smokepuffer");
+        ctx.Check(speedCueState != null, $"{ctx.Chapter} speed_cue.json defines cuepuffer1");
+        ctx.Check(speedCue2 != null, $"{ctx.Chapter} speed_cue.json defines cuepuffer2");
+        ctx.Check(speedCue3 != null, $"{ctx.Chapter} speed_cue.json defines cuepuffer3");
+        if (burstState == null || trailState == null || speedCueState == null
+            || speedCue2 == null || speedCue3 == null)
+            return;
+
+        // The authored inputs every expected count below is derived from. Asserted rather than
+        // assumed: a reader change must fail here, naming itself, rather than silently re-baselining
+        // the mode assertions that read off it.
+        ctx.Same(18, burstState.Number, $"fierypuffer NUMBER");
+        ctx.Check(Mathf.IsEqualApprox(0.2f, burstState.TimeInterval), $"fierypuffer TIME_INTERVAL is 0.2 s");
+        ctx.Check(Mathf.IsEqualApprox(1f, burstState.LifetimeMax), $"fierypuffer LIFETIME_RANGE max is 1 s");
+        ctx.Same(6, burstState.TextureSequence.Count, $"fierypuffer flipbook frames");
+        ctx.Same(0, burstState.Colors.Count, $"fierypuffer has no COLORS ramp");
+        ctx.Check(Mathf.IsEqualApprox(2f, trailState.DistanceInterval), $"smokepuffer DISTANCE_INTERVAL is 2 m");
+        ctx.Check(trailState.Colors.Count > 0, $"smokepuffer carries a COLORS ramp");
+        ctx.Check(Mathf.IsEqualApprox(0.1f, trailState.TimeInterval),
+            $"smokepuffer authors no TIME_INTERVAL — the still-host cadence is the synthetic 0.1 s");
+        ctx.Same(1, trailState.Number, $"smokepuffer authors no NUMBER — a still-host batch is one puff");
+
+        // Detached for the duration: the harness's own clock is a FixedStep one nothing steps, so
+        // left installed every emitter tick would advance no sim and every check would pass
+        // vacuously. The suites below drive their own dt directly instead.
+        var clock = GameClock.Current;
+        GameClock.Current = null;
+        try
+        {
+            PufferBurstMode(ctx, burstState);
+            PufferSustainMode(ctx, burstState);
+            PufferSustainSubFrameEmission(ctx);
+            PufferTrailMode(ctx, trailState);
+            PufferTrailOffset(ctx, speedCueState);
+            SpeedCueBands(ctx, speedCueState, speedCue2, speedCue3);
+            SpeedCueChapterVariants(ctx);
+            PufferStillSputter(ctx, trailState);
+            PufferStaticBurn(ctx, trailState);
+            PufferStopRevive(ctx, trailState);
+            PufferTeleportGuard(ctx, trailState);
+            PufferStartAgeBehavior(ctx);
+        }
+        finally
+        {
+            GameClock.Current = clock;
+        }
+    }
+
+    // The particle integrator against the original's own arithmetic (docs/org/puffer.md), on a state
+    // built here rather than loaded, because an authored puffer's random draws would obscure the
+    // closed form. Three claims, each with the control that makes its "unchanged" readable: at zero
+    // wind the coupling is algebraically absent, acceleration is applied after the position step and
+    // before the damp, and WIND_FACTOR 0 is becalmed while 1 is fully carried behind the friction gate.
+    internal static void PufferWind(TestContext ctx)
+    {
+        var clock = GameClock.Current;
+        GameClock.Current = null;
+        try
+        {
+            PufferWindZeroIsNoOp(ctx);
+            PufferAccelOrder(ctx);
+            PufferWindFactorCoupling(ctx);
+            PufferFrictionlessIgnoresWind(ctx);
+            PufferWindGustModel(ctx);
+        }
+        finally
+        {
+            GameClock.Current = clock;
+        }
+    }
+
+    // ---- the camera-distance fade ---------------------------------------------------------------
+
+    // The distance alpha, driven entirely off the numbers two shipped readers author.
+    // Every distance below is a VIEW-SPACE DEPTH: the camera sits at the origin looking down −Z
+    // (Godot's forward), so a particle placed at `(0, 0, −d)` is at depth `d`, and one
+    // pushed sideways is deliberately used to prove the measure is depth and not range.
+    internal static void PufferDistanceFade(TestContext ctx)
+    {
+        var clock = GameClock.Current;
+        GameClock.Current = null;
+        try
+        {
+            PufferFadeBands(ctx);
+            PufferFadeCrossWire(ctx);
+            PufferFadeSwitchesOff(ctx);
+            PufferFadeNoCameraNoFade(ctx);
+            PufferFadeEveryPane(ctx);
+        }
+        finally
+        {
+            GameClock.Current = clock;
+        }
+    }
+
+    // One particle that never moves and never dies, carrying a COLORS ramp so the drawn
+    // alpha channel is the DISTANCE alpha alone: the ramp path writes `1 × distAlpha` and
+    // leaves the life envelope out of it (the ramp's own alpha rides in the colour, exactly as
+    // the shader's `v_alpha × v_color.a` expects).
+    internal static PufferState FadeTestState(string name,
+        float nearStart, float nearEnd, float farStart, float farEnd) => new()
+        {
+            Name = name,
+            Number = 1,
+            TimeInterval = 10f,
+            SizeMin = 1f,
+            SizeMax = 1f,
+            LifetimeMin = 1000f,
+            LifetimeMax = 1000f,
+            NearFadeStart = nearStart,
+            NearFadeEnd = nearEnd,
+            FarFadeStart = farStart,
+            FarFadeEnd = farEnd,
+            Textures = new[] { "smoke101" },
+            Colors = new[] { (0f, Colors.White), (1f, Colors.White) },
+        };
+
+    // Bursts one particle at `at` and returns the alpha it was drawn
+    // with, or null when it was discarded. The burst is fired AT the point (burst mode stores
+    // positions in the node's own frame, whose origin is the burst point), and a single
+    // `_Process` at a dt small enough to leave the particle where it was born runs the draw.
+    internal static float? FadeAlphaAt(TestContext ctx, PufferState state, Vector3 at,
+        EffectAmbience ambience, PufferFadeSwitches? switches = null)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu, activeDuration: 0.01f, ambience: ambience,
+            fade: switches);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            puffer.Burst(at);
+            puffer._Process(1f / 60f);
+            ctx.Same(1, puffer.LiveCount,
+                $"{state.Name}: the particle stays ALIVE whatever the fade decides — it is a draw rule, not a reaper");
+            return gpu.Shown > 0 ? gpu.LastFrame[0].Alpha : null;
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    // C3's `spew_puffer` exactly as `waterfalls.zrd.json` authors it —
+    // `FADE_RANGE [300, 400]`, `NEAR_FADE [40, 5]` — the only puffer in the install
+    // carrying both a near fade and the tightest far band.
+    internal static void PufferFadeBands(TestContext ctx)
+    {
+        var state = FadeTestState("spew_puffer", 40f, 5f, 300f, 400f);
+        var amb = new EffectAmbience();
+        amb.SetCamera(Vector3.Zero, Vector3.Forward);   // at the origin, looking down −Z
+
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -20f), amb) == null,
+            $"inside NEAR_FADE[0] the particle is culled outright, not faded (20 m < 40 m)");
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -100f), amb) is { } mid
+                  && Mathf.IsEqualApprox(mid, 1f),
+            $"between the bands it draws at full alpha");
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -300f), amb) is { } edge
+                  && Mathf.IsEqualApprox(edge, 1f),
+            $"FADE_RANGE[0] is the LAST full-alpha distance, not the first faded one");
+
+        float? half = FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -350f), amb);
+        ctx.Check(half is { } h && Mathf.IsEqualApprox(h, 0.5f, 1e-4f),
+            $"half way across the far band the alpha is half alpha={half}");
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -450f), amb) == null,
+            $"past FADE_RANGE[1] it is discarded (450 m > 400 m)");
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, 100f), amb) == null,
+            $"and a particle BEHIND the camera is culled by the unauthored-near rule at depth 0");
+
+        // Depth, not range: 350 m ahead and 600 m sideways is 694 m away and still mid-band.
+        float? sideways = FadeAlphaAt(ctx, state, new Vector3(600f, 0f, -350f), amb);
+        ctx.Check(sideways is { } s && Mathf.IsEqualApprox(s, 0.5f, 1e-4f),
+            $"the measure is VIEW-SPACE DEPTH: 600 m off-axis does not change the fade alpha={sideways}");
+        float range = new Vector3(600f, 0f, -350f).Length();
+        ctx.Check(range > 400f,
+            $"ABLE-TO-FAIL CONTROL: that same point is {range:0} m away — a euclidean-range implementation would have discarded it");
+    }
+
+    // The cross-wire, reproduced rather than repaired: the near ramp's origin is FAR_FADE[0]. C3's
+    // volcanosmoke is the only puffer in the install whose near pair ascends, so it is the only one
+    // reaching the ramp branch, where the wrong origin drives alpha negative and the gate culls it.
+    internal static void PufferFadeCrossWire(TestContext ctx)
+    {
+        var state = FadeTestState("volcanosmoke", 1f, 75f, 2000f, 3000f);
+        var amb = new EffectAmbience();
+        amb.SetCamera(Vector3.Zero, Vector3.Forward);
+
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -50f), amb) == null,
+            $"at 50 m volcanosmoke is culled: the near ramp reads FAR_FADE[0] (2000), so its alpha is (50-2000)/74");
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -80f), amb) is { } beyond
+                  && Mathf.IsEqualApprox(beyond, 1f),
+            $"past NEAR_FADE[1] it pops in at full alpha — a hard edge at 75 m, not a 1-to-75 m fade-in");
+        // The repair we deliberately did NOT make, stated as a number so it cannot creep back in.
+        float repaired = (50f - 1f) / (75f - 1f);
+        ctx.Check(repaired > 0.6f,
+            $"ABLE-TO-FAIL CONTROL: with NEAR_FADE[0] as the ramp origin the 50 m sample would have drawn at alpha {repaired:0.000}");
+    }
+
+    // The author's three switches, each shown to switch. Config is file-backed with no
+    // setter, so these come through `CreateWith`'s test-only override — see
+    // PufferFadeSwitches.
+    internal static void PufferFadeSwitchesOff(TestContext ctx)
+    {
+        var state = FadeTestState("spew_puffer", 40f, 5f, 300f, 400f);
+        var amb = new EffectAmbience();
+        amb.SetCamera(Vector3.Zero, Vector3.Forward);
+        var near = new Vector3(0f, 0f, -20f);
+        var far = new Vector3(0f, 0f, -450f);
+        var band = new Vector3(0f, 0f, -350f);
+
+        var noNear = new PufferFadeSwitches(DistanceFade: true, FarCull: true, NearCull: false);
+        ctx.Check(FadeAlphaAt(ctx, state, near, amb, noNear) is { } n && Mathf.IsEqualApprox(n, 1f),
+            $"puffer.nearCull false draws the particle the camera flew through");
+
+        var noFade = new PufferFadeSwitches(DistanceFade: false, FarCull: true, NearCull: true);
+        ctx.Check(FadeAlphaAt(ctx, state, band, amb, noFade) is { } b && Mathf.IsEqualApprox(b, 1f),
+            $"puffer.distanceFade false keeps full alpha across the authored band");
+        ctx.Check(FadeAlphaAt(ctx, state, far, amb, noFade) == null,
+            $"and leaves the far CUTOFF alone — the ramp and the cull are two switches");
+
+        // ⚠ farCull alone is a no-op, and that is a finding, not an oversight: the authored ramp
+        // reaches zero at exactly the cutoff distance, so the alpha > 0 gate removes what the cull
+        // would have. Asserted so the pairing stays documented in something that runs.
+        var noFarCull = new PufferFadeSwitches(DistanceFade: true, FarCull: false, NearCull: true);
+        ctx.Check(FadeAlphaAt(ctx, state, far, amb, noFarCull) == null,
+            $"puffer.farCull false ALONE changes nothing — past the band the ramp's own alpha is already negative");
+        var wideOpen = new PufferFadeSwitches(DistanceFade: false, FarCull: false, NearCull: true);
+        ctx.Check(FadeAlphaAt(ctx, state, far, amb, wideOpen) is { } w && Mathf.IsEqualApprox(w, 1f),
+            $"it takes distanceFade AND farCull together to keep a distant puffer drawn");
+
+        // The original's own far-band multiplier: below 1 it pushes the fade outward, and it
+        // touches the far band only.
+        var pushedOut = new PufferFadeSwitches(true, true, true, GlobalFadeFactor: 0.5f);
+        var wayOut = new Vector3(0f, 0f, -700f);
+        ctx.Check(FadeAlphaAt(ctx, state, wayOut, amb) == null,
+            $"ABLE-TO-FAIL CONTROL: at the default factor 700 m is well past the cutoff and culled");
+        float? scaled = FadeAlphaAt(ctx, state, wayOut, amb, pushedOut);
+        ctx.Check(scaled is { } sc && Mathf.IsEqualApprox(sc, 0.5f, 1e-4f),
+            $"globalFadeFactor 0.5 measures that same 700 m as 350 m — half way across the band alpha={scaled}");
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -20f), amb, pushedOut) == null,
+            $"and it does NOT reach the near band, which still culls at 20 m on the unscaled depth");
+    }
+
+    // No camera published ⇒ no distance fade at all, rather than one measured against
+    // the world origin. This is what keeps the unit suites, the plane viewer and the damage lab
+    // out of the unauthored near cull at depth 0, and it is the state every OTHER puffer suite
+    // runs in — which is why none of them moved.
+    internal static void PufferFadeNoCameraNoFade(TestContext ctx)
+    {
+        var state = FadeTestState("no_camera", 40f, 5f, 300f, 400f);
+        var amb = new EffectAmbience();          // wind may be written; a camera never is
+        ctx.Check(!amb.HasCamera, $"the ambience under test has no camera");
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -450f), amb) is { } far
+                  && Mathf.IsEqualApprox(far, 1f),
+            $"with no camera a particle past the far cutoff still draws at full alpha");
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -20f), amb) is { } near
+                  && Mathf.IsEqualApprox(near, 1f),
+            $"and one inside the near cull draws too");
+    }
+
+    // The splitscreen rule: the bands are evaluated against EVERY
+    // pane's camera and the particle takes the most favourable answer, so a trail 20 m in front of
+    // player 2 draws even while player 1's own camera near-culls it. Driven through the real
+    // ViewerSet over real `Camera3D` nodes, which is the seam
+    // `WeatherRig.Tick` publishes from.
+    internal static void PufferFadeEveryPane(TestContext ctx)
+    {
+        var state = FadeTestState("spew_puffer", 40f, 5f, 300f, 400f);
+
+        // Two panes looking the same way down −Z, player 2 astern of player 1 by 200 m — the
+        // repro's geometry (P2 behind P1, shooting past him).
+        var p1 = SuiteViewers.Camera(ctx, Vector3.Zero);
+        var p2 = SuiteViewers.Camera(ctx, new Vector3(0f, 0f, 200f));
+        try
+        {
+            var both = new ViewerSet();
+            both.Bind(new[] { p1, p2 });
+            var amb = new EffectAmbience();
+            amb.SetViewers(both);
+
+            var justAheadOfP1 = new Vector3(0f, 0f, -20f);
+            ctx.Check(FadeAlphaAt(ctx, state, justAheadOfP1, amb) is { } near
+                      && Mathf.IsEqualApprox(near, 1f),
+                $"20 m ahead of P1 is inside P1's near cull but 220 m ahead of P2, so it DRAWS — the pane that can see it decides");
+
+            var onlyP1 = new EffectAmbience();
+            onlyP1.SetCamera(Vector3.Zero, Vector3.Forward);
+            ctx.Check(FadeAlphaAt(ctx, state, justAheadOfP1, onlyP1) == null,
+                $"ABLE-TO-FAIL CONTROL: that same particle against P1's camera alone is culled, which is the reported bug");
+
+            ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, 300f), amb) == null,
+                $"behind BOTH panes it is still culled — 'any pane' is a union, not a disabled fade");
+
+            // The most FAVOURABLE answer, not the first or the last: P1 reads 350 m (half way
+            // across its far band), P2 sits 50 m short of it and reads full alpha.
+            var p3 = SuiteViewers.Camera(ctx, new Vector3(0f, 0f, -300f));
+            try
+            {
+                var nearer = new ViewerSet();
+                nearer.Bind(new[] { p1, p3 });
+                var ambNearer = new EffectAmbience();
+                ambNearer.SetViewers(nearer);
+                float? shared = FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -350f), ambNearer);
+                ctx.Check(shared is { } s && Mathf.IsEqualApprox(s, 1f),
+                    $"a particle half-faded for P1 and full-alpha for the nearer pane draws at full alpha={shared}");
+                ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -350f), onlyP1) is { } lone
+                          && Mathf.IsEqualApprox(lone, 0.5f, 1e-4f),
+                    $"ABLE-TO-FAIL CONTROL: P1 alone reads that same particle at half alpha");
+            }
+            finally
+            {
+                p3.Free();
+            }
+
+            // One pane is the old behaviour exactly — the single-viewer case must not move, and it
+            // is what every capture, freecam shot and single-player session runs.
+            var alone = new ViewerSet();
+            alone.Bind(new[] { p1 });
+            var ambAlone = new EffectAmbience();
+            ambAlone.SetViewers(alone);
+            float? single = FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -350f), ambAlone);
+            ctx.Check(single is { } one && Mathf.IsEqualApprox(one, 0.5f, 1e-4f),
+                $"with ONE viewer the answer is that viewer's own, unchanged alpha={single}");
+        }
+        finally
+        {
+            p1.Free();
+            p2.Free();
+        }
+    }
+
+    // ---- PRIORITY inflates the sprite -------------------------------------------------------------
+
+    // A PRIORITY 10 puffer spawns particles exactly 20% larger
+    // than the same state at PRIORITY 0 — `1 + 0.02·10 = 1.2`, the hardware-path `K`
+    // (`PriorityScaleDefault`). Burst mode, NUMBER 1, a degenerate SIZE_RANGE so the drawn
+    // size is deterministic and the only thing that can move it is PRIORITY.
+    internal static void PufferPrioritySize(TestContext ctx)
+    {
+        static PufferState State(float priority) => new()
+        {
+            Name = "test_priority",
+            Number = 1,
+            TimeInterval = 10f,
+            SizeMin = 2f,
+            SizeMax = 2f,
+            LifetimeMin = 100f,
+            LifetimeMax = 100f,
+            Priority = priority,
+            Textures = new[] { "smoke101" },
+        };
+
+        static float DrawnSize(TestContext ctx, PufferState state)
+        {
+            var gpu = new RecordingEmitterRenderer();
+            var puffer = Puffer.CreateWith(state, gpu, activeDuration: 0.01f);
+            ctx.Host.AddChild(puffer);
+            try
+            {
+                puffer.Burst(Vector3.Zero);
+                puffer._Process(1f / 60f);
+                ctx.Same(1, gpu.Shown, $"{state.Name} priority={state.Priority}: exactly one particle is under test");
+                return gpu.LastFrame[0].Size;
+            }
+            finally
+            {
+                puffer.Free();
+            }
+        }
+
+        float baseline = DrawnSize(ctx, State(0f));
+        float inflated = DrawnSize(ctx, State(10f));
+
+        ctx.Check(Mathf.IsEqualApprox(baseline, 4f, 1e-4f),
+            $"PRIORITY 0 draws at the plain size (radius 2 × diameter convention, A1) size={baseline:0.0000}");
+        ctx.Check(Mathf.IsEqualApprox(inflated, baseline * 1.2f, 1e-4f),
+            $"PRIORITY 10 draws 20% larger than PRIORITY 0 — 1 + 0.02·10 baseline={baseline:0.0000} inflated={inflated:0.0000}");
+    }
+
+    // One particle, no randomness: NUMBER 1, a degenerate random-velocity range (min ==
+    // max, so the draw is exact), no deviation, no growth, no ramps. Burst mode, so the single
+    // batch lands at t = 0 at the burst point.
+    internal static PufferState WindTestState(string name, Vector3 v0, Vector3 accel,
+        float friction, float windFactor) => new()
+        {
+            Name = name,
+            Number = 1,
+            TimeInterval = 10f,          // one batch only, inside the 0.01 s active duration below
+            SizeMin = 1f,
+            SizeMax = 1f,
+            LifetimeMin = 100f,
+            LifetimeMax = 100f,
+            MinRandomVelocity = v0,
+            MaxRandomVelocity = v0,
+            WorldAcceleration = accel,
+            Friction = friction,
+            WindFactor = windFactor,
+            Textures = new[] { "smoke101" },
+        };
+
+    // Runs one WindTestState particle for `frames` steps of
+    // `dt` and returns its displacement. The burst is fired at the world origin
+    // and a burst puffer's particles are stored in its own (there, identity) frame, so the
+    // written position IS the displacement.
+    internal static Vector3 RunWindParticle(TestContext ctx, PufferState state, EffectAmbience ambience,
+        int frames, float dt)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu, activeDuration: 0.01f, ambience: ambience);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            puffer.Burst(Vector3.Zero);
+            for (int i = 0; i < frames; i++)
+                puffer._Process(dt);
+            ctx.Same(1, gpu.Shown, $"{state.Name}: exactly one particle is under test");
+            return gpu.LastFrame.Count > 0 ? gpu.LastFrame[0].Position : Vector3.Zero;
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    // Zero wind means the coupling term vanishes, so a friction particle decays to rest on the pure
+    // damped curve: v_n = v0*damp^n and pos_n = v0*dt*(1 - damp^n)/(1 - damp), the geometric sum of
+    // the position step, which the traced order takes before the damp.
+    // ⚠ Keep the able-to-fail control: the identical emitter in a 10 m/s wind must land somewhere
+    // else, or the match is a statement about a branch nothing exercised (docs/verification.md).
+    internal static void PufferWindZeroIsNoOp(TestContext ctx)
+    {
+        const float Dt = 1f / 60f, Friction = 3f;
+        const int Frames = 120;
+        var v0 = new Vector3(20f, 0f, 0f);
+        float damp = Mathf.Exp(-Friction * Dt);
+        float expectedX = v0.X * Dt * (1f - Mathf.Pow(damp, Frames)) / (1f - damp);
+
+        var still = new EffectAmbience();   // never written: Wind stays Vector3.Zero
+        var calm = RunWindParticle(ctx, WindTestState("wind_zero", v0, Vector3.Zero, Friction, 1f),
+            still, Frames, Dt);
+        ctx.Check(Mathf.IsEqualApprox(calm.X, expectedX, 0.01f),
+            $"at zero wind a friction particle rides the pure damped curve x={calm.X:0.0000} expected={expectedX:0.0000}");
+        ctx.Check(Mathf.Abs(calm.Y) < 1e-4f && Mathf.Abs(calm.Z) < 1e-4f,
+            $"and moves in no other axis y={calm.Y:0.000000} z={calm.Z:0.000000}");
+        // 2 s at friction 3 leaves damp^120 = e^-6 = 0.0025 of the launch speed: at rest, and the
+        // remaining travel per frame is below a millimetre.
+        ctx.Check(Mathf.Pow(damp, Frames) < 0.01f,
+            $"120 frames at friction 3 really is 'to rest' remaining={Mathf.Pow(damp, Frames):0.0000}");
+
+        var blowing = new EffectAmbience();
+        blowing.SetWind(new Vector3(0f, 0f, 10f));
+        var carried = RunWindParticle(ctx, WindTestState("wind_control", v0, Vector3.Zero, Friction, 1f),
+            blowing, Frames, Dt);
+        ctx.Check(carried.Z > 5f,
+            $"ABLE-TO-FAIL CONTROL: the same particle in a 10 m/s crosswind is carried instead z={carried.Z:0.000}");
+        ctx.Check(Mathf.IsEqualApprox(carried.X, expectedX, 0.01f),
+            $"and the crosswind leaves the unblown axis alone x={carried.X:0.0000}");
+    }
+
+    // The reorder, isolated: friction 0, no wind, a pure world acceleration. The traced
+    // order steps position on LAST frame's velocity and only then adds `a·dt`, giving
+    // `pos_n = a·dt²·n(n−1)/2`. Our old order (`v += a·dt` first, position after) gave
+    // `a·dt²·n(n+1)/2` — larger by exactly `a·dt²·n`, i.e. one frame of the current
+    // velocity, which is the whole of the difference and is asserted as such.
+    internal static void PufferAccelOrder(TestContext ctx)
+    {
+        const float Dt = 1f / 60f;
+        const int Frames = 60;
+        var accel = new Vector3(0f, -9.8f, 0f);
+        float traced = accel.Y * Dt * Dt * Frames * (Frames - 1) / 2f;
+        float oldOrder = accel.Y * Dt * Dt * Frames * (Frames + 1) / 2f;
+
+        var still = new EffectAmbience();
+        var end = RunWindParticle(ctx, WindTestState("accel_order", Vector3.Zero, accel, 0f, 1f),
+            still, Frames, Dt);
+
+        ctx.Check(Mathf.IsEqualApprox(end.Y, traced, 0.0005f),
+            $"accel lands after the position step y={end.Y:0.00000} traced={traced:0.00000}");
+        ctx.Check(!Mathf.IsEqualApprox(end.Y, oldOrder, 0.0005f),
+            $"and NOT where the old order put it old={oldOrder:0.00000}");
+        ctx.Check(Mathf.IsEqualApprox(oldOrder - traced, accel.Y * Dt * Dt * Frames, 0.0005f),
+            $"the gap is exactly one frame of the final velocity gap={oldOrder - traced:0.00000}");
+    }
+
+    // The per-puffer coupling. Both particles start at rest with no acceleration, so the
+    // ONLY thing that can move them is the wind: `WIND_FACTOR` 0 must therefore not move at
+    // all, and 1 must converge on the wind velocity. The carried one's closed form is exact —
+    // `v_n = w(1 − damp^n)`, `pos_n = w·dt·(n − (1 − damp^n)/(1 − damp))`.
+    internal static void PufferWindFactorCoupling(TestContext ctx)
+    {
+        const float Dt = 1f / 60f, Friction = 3f;
+        const int Frames = 120;
+        var wind = new Vector3(8f, 0f, 0f);
+        float damp = Mathf.Exp(-Friction * Dt);
+        float geometric = (1f - Mathf.Pow(damp, Frames)) / (1f - damp);
+        float carriedX = wind.X * Dt * (Frames - geometric);
+
+        var blowing = new EffectAmbience();
+        blowing.SetWind(wind);
+
+        var uncoupled = RunWindParticle(ctx,
+            WindTestState("wf_zero", Vector3.Zero, Vector3.Zero, Friction, 0f), blowing, Frames, Dt);
+        ctx.Check(uncoupled.Length() < 1e-5f,
+            $"WIND_FACTOR 0 is genuinely becalmed in an 8 m/s wind drift={uncoupled.Length():0.000000}");
+
+        var carried = RunWindParticle(ctx,
+            WindTestState("wf_one", Vector3.Zero, Vector3.Zero, Friction, 1f), blowing, Frames, Dt);
+        ctx.Check(Mathf.IsEqualApprox(carried.X, carriedX, 0.01f),
+            $"WIND_FACTOR 1 is fully carried x={carried.X:0.0000} expected={carriedX:0.0000}");
+
+        var half = RunWindParticle(ctx,
+            WindTestState("wf_half", Vector3.Zero, Vector3.Zero, Friction, 0.3f), blowing, Frames, Dt);
+        ctx.Check(Mathf.IsEqualApprox(half.X, carriedX * 0.3f, 0.01f),
+            $"and the coupling is linear in WIND_FACTOR — 0.3 drifts 0.3× as far x={half.X:0.0000}");
+    }
+
+    // The engine's own gate: the whole damp-toward-wind block sits inside
+    // `if (friction != 0)`, so a frictionless puffer is untouched by any wind at any factor.
+    // It is load-bearing only because there is a wind term inside the block: with an unconditional
+    // `Exp(0) == 1` damp and no wind the gate would be the identity.
+    internal static void PufferFrictionlessIgnoresWind(TestContext ctx)
+    {
+        const float Dt = 1f / 60f;
+        const int Frames = 120;
+        var blowing = new EffectAmbience();
+        blowing.SetWind(new Vector3(50f, 0f, 0f));
+
+        var end = RunWindParticle(ctx,
+            WindTestState("no_friction", Vector3.Zero, Vector3.Zero, 0f, 1f), blowing, Frames, Dt);
+        ctx.Check(end.Length() < 1e-5f,
+            $"a FRICTION 0 puffer feels no wind at all drift={end.Length():0.000000}");
+    }
+
+    // The gust itself (WorldWind), against the shipped authored values —
+    // `STATIC_VELOCITY (0,2,0)`, `RANDOM_MAX_SPEED 10`, `RANDOM_ACCEL 5`,
+    // `RANDOM_ANG_VEL 5`, which every one of the install's 53 weather readers carries.
+    internal static void PufferWindGustModel(TestContext ctx)
+    {
+        var wind = new WorldWind(new Vector3(0f, 2f, 0f), 10f, 5f, 5f, new System.Random(7));
+        ctx.Check(wind.Velocity == new Vector3(0f, 2f, 0f),
+            $"frame 0 is the static vector alone (the engine's globals start at BSS zero)");
+
+        float maxHorizontal = 0f;
+        bool everGusted = false;
+        for (int i = 0; i < 2000; i++)
+        {
+            wind.Step(1f / 60f);
+            ctx.Check(wind.Magnitude >= 0f && wind.Magnitude <= 10f,
+                $"gust magnitude stays in [0, RANDOM_MAX_SPEED] mag={wind.Magnitude:0.000}");
+            if (!Mathf.IsEqualApprox(wind.Velocity.Y, 2f))
+                ctx.Check(false, $"the gust is horizontal — Y must stay the static 2 m/s, saw {wind.Velocity.Y}");
+            float h = new Vector2(wind.Velocity.X, wind.Velocity.Z).Length();
+            maxHorizontal = Mathf.Max(maxHorizontal, h);
+            if (h > 1f)
+                everGusted = true;
+        }
+        ctx.Check(everGusted, $"the gust actually blows over 2000 frames");
+        ctx.Check(maxHorizontal <= 10.001f, $"and never exceeds the ceiling max={maxHorizontal:0.000}");
+
+        // The still-air wind a mission without a weather.json gets: no draws, no drift, ever.
+        var still = WorldWind.Still();
+        for (int i = 0; i < 100; i++)
+            still.Step(1f / 60f);
+        ctx.Check(still.Velocity == Vector3.Zero, $"WorldWind.Still() never blows v={still.Velocity}");
+    }
+
+    // A moving DISTANCE_INTERVAL host keeps AT_NODE's offset in the host frame for every
+    // emitted puff, not only the still-host fallback. The retail speed cue is the canary: its
+    // player,0,0,-60 attachment is what places the wisps 60 m ahead of the aircraft.
+    internal static void PufferTrailOffset(TestContext ctx, PufferState state)
+    {
+        ctx.Check(state.AtNodeOffset.IsEqualApprox(new Vector3(0f, 0f, -60f)),
+            $"cuepuffer1 carries its authored 60 m forward AT_NODE offset");
+        ctx.Check(Mathf.IsEqualApprox(30f, state.DistanceInterval),
+            $"cuepuffer1 emits every authored 30 m");
+        state.DeviationDistance = 0f;
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            const float dt = 1f / 60f;
+            puffer.Emit(Vector3.Zero, Basis.Identity, dt);
+            puffer.Emit(new Vector3(60f, 0f, 0f), Basis.Identity, dt);
+            puffer._Process(dt);
+            ctx.Same(3, gpu.Shown, $"homing puff plus two distance puffs were emitted");
+            ctx.Check(gpu.LastFrame.All(p => Mathf.Abs(p.Position.Z + 60f) < 0.1f),
+                $"every moving-trail puff keeps the authored -60 m local-Z offset");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    // The speed-cue adapter selects the retail altitude bands, preserves the selected
+    // puffer above the final authored threshold, suppresses every cue near ground, and Reset
+    // removes live particles so a respawn cannot bridge positions.
+    internal static void SpeedCueBands(TestContext ctx, params PufferState[] states)
+    {
+        var gpu = new RecordingEmitterRenderer[3];
+        var puffer = new Puffer[3];
+        for (int i = 0; i < 3; i++)
+        {
+            states[i].DeviationDistance = 0f;
+            gpu[i] = new RecordingEmitterRenderer();
+            puffer[i] = Puffer.CreateWith(states[i], gpu[i]);
+            ctx.Host.AddChild(puffer[i]);
+        }
+        try
+        {
+            var cue = SpeedCue.CreateWith(puffer[0], puffer[1], puffer[2]);
+            const float dt = 1f / 60f;
+            void Tick()
+            {
+                foreach (var p in puffer)
+                    p._Process(dt);
+            }
+
+            cue.Update(dt, Vector3.Zero, Basis.Identity, 700f, 100f);
+            Tick();
+            cue.Update(dt, new Vector3(60f, 0f, 0f), Basis.Identity, 700f, 100f);
+            Tick();
+            ctx.Same(3, gpu[0].Shown, $"below 800 m cue1 emits at its 30 m interval");
+            ctx.Same(-1, gpu[1].Shown, $"below 800 m cue2 has never started");
+            ctx.Same(-1, gpu[2].Shown, $"below 800 m cue3 has never started");
+
+            for (int i = 0; i < 6; i++)
+            {
+                cue.Update(dt, new Vector3(60f, 0f, 0f), Basis.Identity, 850f, 100f);
+                Tick();
+            }
+            Tick();
+            cue.Update(dt, new Vector3(90f, 0f, 0f), Basis.Identity, 850f, 100f);
+            Tick();
+            ctx.Same(3, gpu[1].Shown, $"800-900 m cue2 emits at its 15 m interval");
+
+            for (int i = 0; i < 6; i++)
+            {
+                cue.Update(dt, new Vector3(90f, 0f, 0f), Basis.Identity, 1000f, 100f);
+                Tick();
+            }
+            Tick();
+            cue.Update(dt, new Vector3(106f, 0f, 0f), Basis.Identity, 1000f, 100f);
+            Tick();
+            ctx.Same(3, gpu[2].Shown, $"900-1200 m cue3 emits at its 8 m interval");
+
+            cue.Reset();
+            ctx.Same(0, gpu[0].Shown, $"speed-cue reset clears cue1 particles");
+            ctx.Same(0, gpu[1].Shown, $"speed-cue reset clears cue2 particles");
+            ctx.Same(0, gpu[2].Shown, $"speed-cue reset clears cue3 particles");
+
+            cue.Update(dt, Vector3.Zero, Basis.Identity, 700f, 49f);
+            Tick();
+            ctx.Same(0, gpu[0].Shown, $"within 50 m of ground no speed cue starts");
+
+            for (int i = 0; i < 6; i++)
+                cue.Update(dt, Vector3.Zero, Basis.Identity, 850f, 100f);
+            for (int i = 0; i < 6; i++)
+                cue.Update(dt, Vector3.Zero, Basis.Identity, 1600f, 100f);
+            cue.Update(dt, new Vector3(30f, 0f, 0f), Basis.Identity, 1600f, 100f);
+            Tick();
+            ctx.Same(4, gpu[1].Shown,
+                $"above 1500 m preserves the previously selected puffer, matching the empty ELSE");
+        }
+        finally
+        {
+            foreach (var p in puffer)
+                p.Free();
+        }
+    }
+
+    // C1 and C4 share cue geometry and timing but retain their chapter-authored alpha
+    // variants instead of collapsing onto one global tune.
+    internal static void SpeedCueChapterVariants(TestContext ctx)
+    {
+        var expected = new[]
+        {
+            (Chapter: "C1", PeakAlpha: new[] { 0.4f, 0.5f, 0.5f }),
+            (Chapter: "C4", PeakAlpha: new[] { 0.6f, 0.7f, 0.7f }),
+        };
+        foreach (var chapter in expected)
+        {
+            string path = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter.Chapter);
+            for (int i = 0; i < 3; i++)
+            {
+                var state = PufferState.Load(path, "speed_cue.json", $"cuepuffer{i + 1}");
+                ctx.Check(state != null, $"{chapter.Chapter} defines cuepuffer{i + 1}");
+                if (state == null)
+                    continue;
+                ctx.Check(state.Colors.Count == 3,
+                    $"{chapter.Chapter} cuepuffer{i + 1} keeps its three-point colour ramp");
+                if (state.Colors.Count == 3)
+                    ctx.Check(Mathf.Abs(chapter.PeakAlpha[i] - state.Colors[1].Color.A) < 0.001f,
+                        $"{chapter.Chapter} cuepuffer{i + 1} keeps its authored peak alpha");
+            }
+        }
+    }
+
+    // Burst: the pool is sized from the calling animation's stop time, the first batch is
+    // spawned at t = 0 rather than one interval in, the flipbook walks its whole sequence, and the
+    // emitter puts itself away once the last particle dies.
+    internal static void PufferBurstMode(TestContext ctx, PufferState state)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu, activeDuration: 0.3f);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            // 0.3 s of emission at one batch per 0.2 s = batches at t=0 and t=0.2, so 2 × NUMBER.
+            ctx.Same(36, gpu.Capacity, $"burst pool = NUMBER × the batches 0.3 s of emission fits");
+            ctx.Check(gpu.CullMargin >= 4f, $"burst emitter pads its cull margin margin={gpu.CullMargin}");
+
+            puffer.Burst(new Vector3(0f, 500f, 0f));
+            puffer._Process(1f / 60f);
+            ctx.Same(18, gpu.Shown, $"burst spawns its first batch at t=0, not one interval in");
+            ctx.Check(gpu.LastFrame.Count > 0 && gpu.LastFrame.All(p => p.Alpha < 1f),
+                $"a ramp-less state fades in on the life envelope rather than drawing at full alpha");
+
+            for (int i = 0; i < 6; i++)   // 0.3 s: comfortably past the second batch at 0.2 s
+                puffer._Process(0.05f);
+            ctx.Same(36, gpu.Shown, $"burst's second batch lands one TIME_INTERVAL in");
+
+            for (int i = 0; i < 30; i++)  // 1.5 s: past the last batch's 1 s lifetime
+                puffer._Process(0.05f);
+            ctx.Same(0, gpu.Shown, $"burst ends when its last particle dies");
+            ctx.Check(!puffer.Visible, $"a finished burst hides itself");
+            ctx.Same(5, (long)gpu.MaxFrame, $"the flipbook reaches its last column (TEXTURE_SEQUENCE keys are life fractions)");
+            ctx.Check(gpu.MaxIndex < gpu.Capacity, $"burst never writes past its pool max={gpu.MaxIndex} pool={gpu.Capacity}");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    // A TIME_INTERVAL state through Emit: the authored state picks the sustain path, the pool is
+    // sized to the steady-state population, emission starts on the first frame, a long frame's older
+    // catch-up batches are born already dead while its youngest are born alive, the hitch drains its
+    // own accumulator, and Stop ends emission without cutting the live particles short.
+    // See docs/org/puffer.md.
+    internal static void PufferSustainMode(TestContext ctx, PufferState state)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu, sustained: true);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            // ceil(NUMBER × LIFETIME_max / TIME_INTERVAL) + NUMBER = ceil(18 × 1 / 0.2) + 18.
+            ctx.Same(108, gpu.Capacity, $"sustain pool = the steady-state population, not a burst count");
+
+            var origin = new Vector3(0f, 800f, 0f);
+            puffer.Emit(origin, Basis.Identity, 1f / 60f);
+            puffer._Process(1f / 60f);
+            ctx.Same(18, gpu.Shown, $"a time state through Emit sustains, on its very first frame");
+            ctx.Check(gpu.LastFrame.All(p => p.Position.DistanceTo(origin) < 3f),
+                $"sustained particles spawn at the world point they are driven at, not at the node");
+
+            // A 5 s hitch: the uncapped batch loop asks for all 25 batches at once, each carrying the
+            // engine's sub-frame start-age offset, so the early ones are past LIFETIME_RANGE and the
+            // born-dead skip drops them. Read before _Process, so this is the spawn path, not the reaper.
+            puffer.Emit(origin, Basis.Identity, 5f);
+            int afterHitch = puffer.LiveCount;
+            ctx.Check(afterHitch <= gpu.Capacity,
+                $"a 25-batch hitch cannot overrun the pool live={afterHitch} pool={gpu.Capacity}");
+            ctx.Check(afterHitch > 18,
+                $"its youngest batches ARE born alive — the hitch is not silently dropped whole live={afterHitch}");
+            // ⚠ Do not assert how many of the spawns the born-dead skip discarded. The pool is sized to one
+            // lifetime and the survivors are one lifetime's worth, so the pool clamp would answer the check
+            // instead of the skip; the drain assertion below is where the skip's arithmetic is readable.
+            puffer._Process(1f / 60f);
+
+            // The hitch drained its own accumulator, so the next ordinary frame carries a sixth of an interval
+            // and emits nothing. A per-frame batch cap would instead burst 8 more batches, which the engine
+            // never produces. Able to fail: with a cap in place this reads a full pool instead of no change.
+            int beforeNext = puffer.LiveCount;
+            puffer.Emit(origin, Basis.Identity, 1f / 60f);
+            ctx.Same(beforeNext, puffer.LiveCount,
+                $"the hitch drained its accumulator; the next frame emits no catch-up burst live={puffer.LiveCount}");
+            puffer._Process(1f / 60f);
+            ctx.Check(gpu.MaxIndex < gpu.Capacity,
+                $"the sustain path never writes past its pool max={gpu.MaxIndex} pool={gpu.Capacity}");
+
+            puffer.Stop();
+            puffer._Process(0.05f);
+            ctx.Check(gpu.Shown > 0, $"Stop ends emission without clearing the live particles");
+            for (int i = 0; i < 30; i++)  // 1.5 s, past LIFETIME_RANGE's 1 s
+                puffer._Process(0.05f);
+            ctx.Same(0, gpu.Shown, $"the live particles finish their own lifetimes and the emitter goes quiet");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    // A fast-moving TIME_INTERVAL emitter spreads a frame's batches along its motion since the
+    // previous call instead of stacking them on today's pose, and the first frame after a
+    // Stop()/restart re-homes rather than interpolating from the stale pre-stop pose (the
+    // rocket-explosion ghost-trail rule). See docs/org/puffer.md. A synthetic zero-velocity,
+    // zero-deviation, zero-COLORS state removes every other source of scatter, and LIFETIME_RANGE is
+    // pinned to 10 s so the batches clear the born-dead skip and stay in the fade envelope's ramp.
+    internal static void PufferSustainSubFrameEmission(TestContext ctx)
+    {
+        var state = new PufferState
+        {
+            Name = "test_subframe_sustain",
+            Number = 1,
+            TimeInterval = 0.1f,
+            SizeMin = 1f,
+            SizeMax = 1f,
+            LifetimeMin = 10f,
+            LifetimeMax = 10f,
+        };
+
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu, sustained: true);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            var a = new Vector3(0f, 1200f, 0f);
+            puffer.Emit(a, Basis.Identity, 0f); // homes at A, carry = TimeInterval exactly ⇒ 0 leftover
+            puffer._Process(0f);
+            ctx.Same(1, gpu.Shown, $"the homing frame sputters its own single batch at A");
+
+            var b = a + new Vector3(100f, 0f, 0f); // 100 m in one (hitched) frame
+            puffer.Emit(b, Basis.Identity, 0.8f);  // accumulator = 0 + 0.8 = 8 × interval exactly
+            puffer._Process(0f);
+            ctx.Same(9, gpu.Shown, $"8 more batches join the homing one shown={gpu.Shown}");
+
+            var moved = gpu.LastFrame.Where(p => p.Position.X > 1f).OrderBy(p => p.Position.X).ToList();
+            ctx.Same(8, moved.Count, $"the jump's own 8 batches, excluding the homing puff at A");
+
+            bool evenlySpaced = true, endsAtB = false, noneAtOrigin = true;
+            for (int k = 0; k < moved.Count; k++)
+            {
+                float expectedX = 12.5f * (k + 1);
+                if (!Mathf.IsEqualApprox(moved[k].Position.X, expectedX, 0.05f))
+                    evenlySpaced = false;
+                // ageOffset_k = (1 - (k+1)/8) * dt with the raw dt = 0.8 s, i.e. 0.7, 0.6, … 0.0;
+                // alpha = ageOffset / (10 * FadeIn=0.12).
+                float expectedAlpha = (0.8f - 0.1f * (k + 1)) / 1.2f;
+                if (!Mathf.IsEqualApprox(moved[k].Alpha, expectedAlpha, 0.001f))
+                    ctx.Check(false,
+                        $"batch {k} alpha reads its age offset directly: want {expectedAlpha:F4} got {moved[k].Alpha:F4}");
+            }
+            endsAtB = Mathf.IsEqualApprox(moved[^1].Position.X, 100f, 0.05f);
+            noneAtOrigin = moved.All(p => p.Position.X > 5f);
+            ctx.Check(evenlySpaced,
+                $"eight spawn positions evenly spaced 12.5 m apart along the segment, not stacked at one point");
+            ctx.Check(endsAtB, $"the last (frac=1) batch sits exactly at the current pose");
+            ctx.Check(noneAtOrigin, $"none of the eight sit back at the segment's start");
+
+            // Restart case: Stop() then Emit() at a far new site, whose first frame's puffs must appear only
+            // there. ⚠ Give the restart frame a multi-batch accumulator; at exactly one batch frac is 1
+            // regardless of prevOrigin and the check passes with the re-home missing.
+            puffer.Stop();
+            var c = b + new Vector3(1000f, 0f, 0f);
+            puffer.Emit(c, Basis.Identity, 0.8f);
+            puffer._Process(0f);
+            int strays = gpu.LastFrame.Count(p => p.Position.X > b.X + 10f && p.Position.X < c.X - 10f);
+            ctx.Same(0, strays,
+                $"a restart re-homes at the new site — no puffs interpolated across the 1000 m jump");
+            ctx.Check(gpu.LastFrame.Any(p => p.Position.DistanceTo(c) < 3f),
+                $"the restart's first batch lands at the new site");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    // A DISTANCE_INTERVAL state through `Emit`: the first call homes the trail and
+    // time-sputters one batch (the still-host rule — on the homing frame no motion has elapsed
+    // yet), a moving host emits one puff per interval of actual motion with the remainder carried
+    // across frames instead of rounded away.
+    internal static void PufferTrailMode(TestContext ctx, PufferState state)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            ctx.Same(640, gpu.Capacity, $"trail pool is the live-particle cap, not a burst count");
+
+            puffer.Emit(new Vector3(0f, 600f, 0f), Basis.Identity, 1f / 60f);
+            puffer._Process(1f / 60f);
+            ctx.Same(1, gpu.Shown, $"the first call homes the trail and time-sputters one still-host batch");
+
+            // 10 m at one puff per 2 m = 5 (+ the homing sputter), then 3 m more = 1 puff with
+            // 1 m carried, not 2 rounded up.
+            puffer.Emit(new Vector3(10f, 600f, 0f), Basis.Identity, 1f / 60f);
+            puffer._Process(1f / 60f);
+            ctx.Same(6, gpu.Shown, $"a moving host emits one puff per DISTANCE_INTERVAL of motion");
+            ctx.Check(gpu.LastFrame.All(p => Mathf.IsEqualApprox(p.Alpha, 1f)),
+                $"a COLORS ramp owns the fade, so the life envelope stays out of it");
+
+            puffer.Emit(new Vector3(13f, 600f, 0f), Basis.Identity, 1f / 60f);
+            puffer._Process(1f / 60f);
+            ctx.Same(7, gpu.Shown, $"a partial interval carries into the next frame instead of rounding");
+            ctx.Check(gpu.MaxIndex < gpu.Capacity, $"trail never writes past its pool max={gpu.MaxIndex} pool={gpu.Capacity}");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    // A distance state whose host stands still keeps the time cadence (the damaged
+    // building's sputter): the authored interval can never elapse, so `Emit` with no burn
+    // rate falls back to one batch per synthetic 0.1 s TIME_INTERVAL, at the held point.
+    internal static void PufferStillSputter(TestContext ctx, PufferState state)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            var p0 = new Vector3(0f, 900f, 0f);
+            const float dt = 1f / 60f;
+            for (int i = 0; i < 60; i++)   // 1 s held still — no particle dies (LIFETIME ≥ 1.5 s)
+            {
+                puffer.Emit(p0, Basis.Identity, dt);
+                puffer._Process(dt);
+            }
+            ctx.Check(gpu.Shown >= 10 && gpu.Shown <= 12,
+                $"a still host sputters on the 0.1 s time cadence, ~11 batches in 1 s shown={gpu.Shown}");
+            ctx.Check(gpu.LastFrame.All(p => p.Position.DistanceTo(p0) < 3f),
+                $"the sputter stays at the held point");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    // A host that CANNOT move (the damage lab's parked plane) declares a burn rate:
+    // `Emit` with `staticBurnMps` spends virtual metres at the held point — the
+    // authored per-metre density, not the time cadence — through the same carry as the moving
+    // trail.
+    internal static void PufferStaticBurn(TestContext ctx, PufferState state)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            var p0 = new Vector3(0f, 1000f, 0f);
+            // 15 m/s × 0.2 s = 3 m/call over DISTANCE_INTERVAL 2: puff counts 1,2,1,2 as the
+            // carry wraps — 6 total for 12 virtual metres. The time cadence over the same 0.8 s
+            // would be 9 batches, so the count also proves which fallback ran.
+            for (int i = 0; i < 4; i++)
+            {
+                puffer.Emit(p0, Basis.Identity, 0.2f, staticBurnMps: 15f);
+                puffer._Process(0.2f);
+            }
+            ctx.Same(6, gpu.Shown, $"a declared burn rate spends virtual metres, not the time cadence");
+            ctx.Check(gpu.LastFrame.All(p => p.Position.DistanceTo(p0) < 6f),
+                $"the burn stays at the held point");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    // The pause + far revive, through `Stop` itself: a pooled effect-template slot
+    // is teleported to each new call site, so a distance-state emitter stopped at one blast and
+    // revived at the next must re-home there — a kept trail origin draws a puff line across the
+    // whole jump (the rocket-explosion ghost trails). `Stop` ends trail AND sustain
+    // unconditionally; the revive's first call sputters fresh at the new site.
+    internal static void PufferStopRevive(TestContext ctx, PufferState state)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu, sustained: true);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            const float dt = 1f / 60f;
+            var a = new Vector3(0f, 700f, 0f);
+            puffer.Emit(a, Basis.Identity, dt);                              // homes at A
+            puffer.Emit(a + new Vector3(10f, 0f, 0f), Basis.Identity, dt);   // trails 10 m
+            puffer._Process(dt);
+            ctx.Check(gpu.Shown > 0, $"the emitter trailed at the first site shown={gpu.Shown}");
+
+            puffer.Stop();
+            puffer.Stop();   // idempotent — a second stop is a no-op, not an error
+            var b = a + new Vector3(1000f, 0f, 0f);
+            puffer.Emit(b, Basis.Identity, dt);
+            puffer._Process(dt);
+            int strays = gpu.LastFrame.Count(p => p.Position.X > 20f && p.Position.X < 980f);
+            ctx.Same(0, strays,
+                $"a stopped trail revived at a far site re-homes there, no puff line across the jump");
+            ctx.Check(gpu.LastFrame.Any(p => p.Position.DistanceTo(b) < 3f),
+                $"the revive restarted emission fresh at the new site");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    // The original's teleport guard on the DISTANCE path: the frame's motion length joins the emission
+    // accumulator only if len < 200, so an emitter carried across the world lays no puff line along
+    // the jump. PufferStopRevive covers the jump that goes through Stop and re-homes; this is the one
+    // that does not. Four steps, each failing differently: a 199 m move pins the boundary from below,
+    // the 500 m jump emits nothing, the guard counter reads 1, and a 20 m move afterwards proves the
+    // carried remainder survived the guard rather than being reset with it.
+    internal static void PufferTeleportGuard(TestContext ctx, PufferState state)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            const float dt = 1f / 60f;
+            const float interval = 2f;   // smokepuffer's authored DISTANCE_INTERVAL, asserted above
+            var a = new Vector3(0f, 1400f, 0f);
+            puffer.Emit(a, Basis.Identity, dt);          // homes, + one still-host sputter batch
+            puffer._Process(dt);
+            ctx.Same(1, gpu.Shown, $"the homing frame sputters its own batch shown={gpu.Shown}");
+
+            // 199 m: one metre under the guard, and the largest move the engine still accumulates.
+            var b = a + new Vector3(199f, 0f, 0f);
+            puffer.Emit(b, Basis.Identity, dt);
+            puffer._Process(dt);
+            ctx.Same(1 + (int)(199f / interval), gpu.Shown,
+                $"a 199 m move is under the 200 m guard and emits its full 99 puffs shown={gpu.Shown}");
+            ctx.Same(0, puffer.TeleportGuardCount, $"and does not trip the guard");
+
+            // The teleport: 500 m in one frame, with no Stop in between — the case Stop's re-home
+            // rule cannot reach.
+            int before = gpu.Shown;
+            var c = b + new Vector3(500f, 0f, 0f);
+            puffer.Emit(c, Basis.Identity, dt);
+            puffer._Process(dt);
+            ctx.Same(before, gpu.Shown, $"a 500 m frame emits nothing at all shown={gpu.Shown}");
+            ctx.Same(1, puffer.TeleportGuardCount,
+                $"the guard tripped once, which is also the proof its log line fired");
+            ctx.Same(0, gpu.LastFrame.Count(p => p.Position.X > b.X + 10f && p.Position.X < c.X - 10f),
+                $"no puff was laid anywhere along the 500 m jump");
+
+            // 20 m from the new pose: 1 m of carry survived the guard, so 21 m buys 10 puffs.
+            puffer.Emit(c + new Vector3(20f, 0f, 0f), Basis.Identity, dt);
+            puffer._Process(dt);
+            ctx.Same(before + 10, gpu.Shown,
+                $"the emitter resumes at the new site with its carry intact shown={gpu.Shown}");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    // START_AGE_RANGE, on a synthetic state authoring a negative minimum like fire_at_zepskin3's
+    // (-1.0, 0.1), the census's only negative case. Checks what the integrator settles: every particle
+    // is drawn, a negative-age particle pins to stop 0 of the colour and growth ramps rather than
+    // being skipped or extrapolated, and it outlives its authored LIFETIME_RANGE by up to StartAgeMin.
+    internal static void PufferStartAgeBehavior(TestContext ctx)
+    {
+        var state = new PufferState
+        {
+            Name = "test_start_age",
+            Number = 40,
+            TimeInterval = 1000f, // never re-fires on its own — one Burst, one batch
+            SizeMin = 2f,
+            SizeMax = 2f,
+            GrowthFactor = 5f, // an unclamped negative t would shrink (or negate) size below BaseSize
+            LifetimeMin = 1f,
+            LifetimeMax = 1f,
+            StartAgeMin = -1f,
+            StartAgeMax = 0.1f,
+            Colors = new[] { (0f, Colors.Red), (0.5f, Colors.Green) },
+        };
+        ctx.Check(state.HasStartAgeRange, $"the synthetic state authors START_AGE_RANGE");
+
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu, activeDuration: 0.01f);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            puffer.Burst(new Vector3(0f, 1100f, 0f));
+            puffer._Process(1f / 60f);
+
+            ctx.Same(40, gpu.Shown,
+                $"every particle draws — this state's start age (max 0.1) never reaches its lifetime (1), so the born-dead skip stays silent shown={gpu.Shown}");
+
+            int redCount = gpu.LastFrame.Count(p => p.Color == Colors.Red);
+            ctx.Check(redCount > gpu.LastFrame.Count / 2,
+                $"most particles (born with age <= 0) show the colour ramp's stop 0, not skipped or interpolated past it red={redCount}/{gpu.LastFrame.Count}");
+
+            var bySize = gpu.LastFrame.GroupBy(p => p.Size).OrderByDescending(g => g.Count()).First();
+            ctx.Check(bySize.Count() > gpu.LastFrame.Count / 2,
+                $"most particles collapse onto one identical size — the growth ramp clamps age<=0 to stop 0 rather than each drawing its own extrapolated value count={bySize.Count()}/{gpu.LastFrame.Count}");
+            float commonSize = bySize.Key;
+            ctx.Check(gpu.LastFrame.All(p => p.Size >= commonSize - 1e-3f),
+                $"no particle sits below the clamped stop-0 size — an unclamped negative age would shrink (or negate) it");
+
+            // Past the unmodified 1 s LIFETIME_RANGE, particles born with a negative start age
+            // must still be alive: they need up to Life - StartAgeMin = 2 s of Age to reap.
+            for (int i = 0; i < 63; i++) // 1.05 s
+                puffer._Process(1f / 60f);
+            // ~85% of the authored range is expected to still be alive here (age0 in [-1,0.1)
+            // uniformly, elapsed ~1.07 s ⇒ P(dead) ≈ 0.15); a generous >=20/40 margin below that.
+            ctx.Check(gpu.Shown >= 20,
+                $"negative-age particles outlive their authored LIFETIME_RANGE by |age0| instead of reaping on the old schedule shown={gpu.Shown}");
+
+            for (int i = 0; i < 60; i++) // + 1 s more = past every particle's 2 s worst case
+                puffer._Process(1f / 60f);
+            ctx.Same(0, gpu.Shown, $"every particle eventually reaps once its real (shifted) age reaches its lifetime");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    // The fire_n_smoke column, measured: the AUTHORED column with no engine-side rise or lifetime
+    // multiplier on top, so a change that shortens the fire has to argue with a number. Its state
+    // comes from the chapter's compiled program, which the reader would call a stub. It is run in
+    // still air and in C1 IA1's authored upward wind, which friction damps toward. docs/org/puffer.md.
+    // ⚠ Assert ratios and bands, never a pinned decimal; a height is one seed's extreme and moves
+    // about 1.5 m with suite order, so the exact figures belong in ctx.Note.
+    internal static void PufferFireColumn(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var defs = world.Session.Program.Subset(new[] { "large_30sec_fire" }).ByAnimName("large_30sec_fire");
+            ctx.Check(defs.Count > 0, $"chapter program has large_30sec_fire defs={defs.Count}");
+            if (defs.Count == 0)
+                return;
+
+            AnimData? payload = null;
+            foreach (var seq in defs[0].Sequences)
+            {
+                foreach (var ev in seq.Events)
+                {
+                    if (payload == null && ev.Kind == "PufferState" && (ev.Data.Num("active_state") ?? 0f) > 0f)
+                        payload = ev.Data;
+                }
+            }
+            ctx.Check(payload != null, $"large_30sec_fire carries an ACTIVE_STATE 1 PufferState event");
+            if (payload == null)
+                return;
+
+            var fire = PufferState.FromAnimEvent(payload);
+
+            // The compiled numbers this measurement rests on, asserted rather than assumed: a data
+            // change must fail here naming itself, not silently re-baseline the heights below.
+            ctx.Check(fire.Name == "fire_n_smoke", $"the 30 s fire's emitter name={fire.Name}");
+            ctx.Same(1, fire.Number, $"large_30sec_fire authors no NUMBER — one puff per interval (BL-218)");
+            ctx.Check(Mathf.IsEqualApprox(0.1f, fire.TimeInterval), $"TIME_INTERVAL 0.1 s");
+            ctx.Check(Mathf.IsEqualApprox(5f, fire.LocalVelocity.Y) && Mathf.IsEqualApprox(4f, fire.WorldVelocity.Y),
+                $"the rise is LOCAL_VELOCITY 5 + WORLD_VELOCITY 4 m/s");
+            ctx.Check(Mathf.IsEqualApprox(-1f, fire.WorldAcceleration.Y), $"WORLD_ACCELERATION −1 m/s²");
+            ctx.Check(Mathf.IsEqualApprox(0.6f, fire.Friction), $"FRICTION 0.6");
+            ctx.Check(Mathf.IsEqualApprox(1f, fire.SizeMin) && Mathf.IsEqualApprox(3.5f, fire.SizeMax),
+                $"SIZE_RANGE 1–3.5 m (a RADIUS — A1)");
+            ctx.Check(Mathf.IsEqualApprox(3.5f, fire.LifetimeMin) && Mathf.IsEqualApprox(5.5f, fire.LifetimeMax),
+                $"LIFETIME_RANGE 3.5–5.5 s");
+            ctx.Check(Mathf.IsEqualApprox(2.5f, fire.GrowthFactor), $"GROWTH_FACTOR 2.5");
+
+            var clock = GameClock.Current;
+            GameClock.Current = null;
+            try
+            {
+                // C1 IA1's authored weather, static part held: extracted/C1/IA1/zrdr/weather.zrd.json
+                // WIND STATIC_VELOCITY [0, 2, 0].
+                var breeze = new EffectAmbience();
+                breeze.SetWind(new Vector3(0f, 2f, 0f));
+
+                var still = MeasureFireColumn(ctx, fire, EffectAmbience.Still);
+                var wind = MeasureFireColumn(ctx, fire, breeze);
+
+                ctx.Note($"large_30sec_fire column, 30 s at 1/60, still host — heights above the emitter:");
+                ctx.Note($"  still air: centre apex {still.Centre:0.0} m, drawn top {still.Top:0.0} m (pre-A1 sprite: {still.PreA1Top:0.0} m), peak live {still.Live}, largest sprite {still.Sprite:0.0} m");
+                ctx.Note($"  C1 IA1 wind (0,2,0): centre apex {wind.Centre:0.0} m, drawn top {wind.Top:0.0} m, peak live {wind.Live}");
+
+                // What the authored column has to keep doing, as assertions rather than prose:
+                // (1) the rise itself — LOCAL+WORLD velocity against FRICTION and the −1 accel;
+                ctx.Check(still.Centre > 8f && still.Centre < 22f,
+                    $"the authored rise integrates to a high-teens column centre={still.Centre:0.0} m");
+                // (2) the sprite's own half-extent is a real share of the plume — the SIZE_RANGE
+                //     radius showing up in the picture rather than only in a constant;
+                ctx.Check(still.Top > still.Centre * 1.3f,
+                    $"the drawn top stands well above the centre apex — A1's sprite is a real share of the plume top={still.Top:0.0} centre={still.Centre:0.0}");
+                // (3) the wind coupling lifts this puffer. C1 IA1's authored wind blows straight
+                //     UP, and with no engine-side fire tune this is the whole reason the authored
+                //     column reaches: decouple the wind and the plume loses ~6 m of height.
+                ctx.Check(wind.Centre > still.Centre + 3f,
+                    $"C1's upward wind lifts the authored column wind={wind.Centre:0.0} still={still.Centre:0.0}");
+                // (4) the height the controls verdict settled on: a plume ~2x this band was judged
+                //     twice too tall, so re-introducing any rise/lifetime multiplier breaks it
+                //     immediately.
+                ctx.Check(wind.Top > 24f && wind.Top < 42f,
+                    $"the wind-carried plume tops out in the judged band top={wind.Top:0.0} m");
+            }
+            finally
+            {
+                GameClock.Current = clock;
+            }
+        });
+    }
+
+    // Drives one sustained emitter for 30 s of held-still emission and reports the
+    // column it built: the highest particle CENTRE, the highest drawn sprite TOP (centre plus the
+    // quad's half-side — the renderer scales a 1×1 quad by `Size`), the peak live population
+    // and the largest sprite ever drawn. Heights are relative to the emitter's own origin.
+    internal static (float Centre, float Top, float PreA1Top, int Live, float Sprite) MeasureFireColumn(
+        TestContext ctx, PufferState state, EffectAmbience ambience)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        // Every switch off: this puffer authors NEAR_FADE (70, 20) and the suite's camera sits at
+        // the origin, so the authored near cull would discard the whole column before it is read.
+        var puffer = Puffer.CreateWith(state, gpu, sustained: true, ambience: ambience,
+            fade: new PufferFadeSwitches(DistanceFade: false, FarCull: false, NearCull: false));
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            var origin = Vector3.Zero;
+            const float dt = 1f / 60f;
+            float centre = 0f, top = 0f, preA1 = 0f, sprite = 0f;
+            int live = 0;
+            for (int i = 0; i < 1800; i++)   // the authored 30 s of ACTIVE_STATE 1
+            {
+                puffer.Emit(origin, Basis.Identity, dt);
+                puffer._Process(dt);
+                foreach (var p in gpu.LastFrame)
+                {
+                    float y = p.Position.Y - origin.Y;
+                    if (y > centre)
+                        centre = y;
+                    if (y + p.Size * 0.5f > top)
+                        top = y + p.Size * 0.5f;
+                    // The same run read at the half-size sprite convention: Size is exactly linear in
+                    // SizeScaleDefault and the RNG stream does not depend on it, so quartering the side here is that
+                    // convention's drawn top exactly rather than an estimate.
+                    if (y + p.Size * 0.25f > preA1)
+                        preA1 = y + p.Size * 0.25f;
+                    if (p.Size > sprite)
+                        sprite = p.Size;
+                }
+                if (puffer.LiveCount > live)
+                    live = puffer.LiveCount;
+            }
+            ctx.Check(live > 0, $"{state.Name}: the emitter actually ran live={live}");
+            return (centre, top, preA1, live, sprite);
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    // Stays whole here rather than splitting an engine-free half into CSVM.Tests: Probes.Loadouts
+    // calls StockLoadouts.Load (Godot.FileAccess) and PlaneBuilder.Build to resolve Loadout.Bind's
+    // markers, both native-backed and fatal off-engine (AccessViolationException). Binding needs a
+    // built plane, so there is no pure half to extract without reimplementing marker resolution.
+
+}
