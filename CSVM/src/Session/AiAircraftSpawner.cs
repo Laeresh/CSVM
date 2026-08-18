@@ -137,6 +137,7 @@ public sealed class AiAircraftSpawner
             controller.Setup(
                 new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
                 null, new CamParams(), pos, lookAt);
+            controller.ArmSpawnTimers();
             controller.Name = $"ai{index + 1}_{planeName}";
             _worldRoot.AddChild(controller);
 

@@ -37,6 +37,9 @@ public sealed partial class AiGeneratorRuntime : Node
     // open air under the hull.
     private const float DropClearanceM = 12f;
 
+    // FUN_00452450 preserves the carrier's world velocity, then adds this vertical component.
+    private const float CarrierLaunchDownwardSpeed = 22.352f;
+
     private readonly List<LiveGenerator> _live = new();
     private readonly string _planeName;
     private readonly Func<string, Vector3, Vector3, AiPilot, FlightController?> _spawn;
@@ -113,7 +116,7 @@ public sealed partial class AiGeneratorRuntime : Node
     /// like a failed spawn. Returns how many generators this claimed; 0 means the selected
     /// zeppelin carries no generator, so nothing on that mode will ever launch.</summary>
     public int UseInstantActionLaunches(string hostNode,
-        Func<Vector3, Vector3, FlightController?> release)
+        Func<Vector3, Vector3, Vector3, FlightController?> release)
     {
         int claimed = 0;
         foreach (var gen in _live)
@@ -188,9 +191,12 @@ public sealed partial class AiGeneratorRuntime : Node
     {
         foreach (var gen in _live)
         {
+            var hostPosition = gen.Host.GlobalPosition;
+            gen.HostVelocity = dt > 0f ? (hostPosition - gen.LastHostPosition) / dt : Vector3.Zero;
+            gen.LastHostPosition = hostPosition;
             // The altitude read is live off the host node, so the min_altitude gate holds (not
             // cancels) whenever F17's flown zeppelin sits below it.
-            bool spawned = gen.Cycle.Step(dt, gen.Host.GlobalPosition.Y);
+            bool spawned = gen.Cycle.Step(dt, hostPosition.Y);
             if (gen.Cycle.DoorOpen != gen.DoorOpen)
             {
                 gen.DoorOpen = gen.Cycle.DoorOpen;
@@ -234,6 +240,9 @@ public sealed partial class AiGeneratorRuntime : Node
         {
             pos += Vector3.Down * DropClearanceM;   // clear the bay floor + door swing
         }
+        Vector3? launchVelocity = gen.Def.IsZeppelin
+            ? gen.HostVelocity + Vector3.Down * CarrierLaunchDownwardSpeed
+            : null;
         var forward = -gen.Host.GlobalTransform.Basis.Z;
         forward.Y = 0f;
         forward = forward.LengthSquared() > 1e-6f ? forward.Normalized() : Vector3.Forward;
@@ -254,7 +263,7 @@ public sealed partial class AiGeneratorRuntime : Node
         // primary_target, not a generator-authored patroller.
         if (gen.Release is { } release)
         {
-            var released = release(pos, pos + drop);
+            var released = release(pos, pos + drop, launchVelocity ?? Vector3.Zero);
             if (released == null)
             {
                 gen.Cycle.SpawnRemoved();   // the slot was counted before the release could fail
@@ -285,6 +294,8 @@ public sealed partial class AiGeneratorRuntime : Node
             gen.Cycle.SpawnRemoved();   // the slot was counted before the spawn could fail
             return;
         }
+        if (launchVelocity is { } velocity)
+            controller.Activate(pos, pos + drop, velocity, carrierDrop: true);
         gen.SpawnCount++;
         controller.Downed += (_, _) => gen.Cycle.SpawnRemoved();
         GD.Print($"egen: '{gen.Def.Node}' spawn #{gen.SpawnCount}: '{_planeName}' dropped at " +
@@ -303,6 +314,7 @@ public sealed partial class AiGeneratorRuntime : Node
             Host = host;
             Origin = origin;
             Nets = nets;
+            LastHostPosition = host.GlobalPosition;
         }
 
         public EnemyGeneratorDef Def { get; }
@@ -313,12 +325,16 @@ public sealed partial class AiGeneratorRuntime : Node
 
         public Node3D? Origin { get; }
 
+        public Vector3 LastHostPosition { get; set; }
+
+        public Vector3 HostVelocity { get; set; }
+
         public List<AiNet> Nets { get; }
 
         /// <summary>F12's Instant Action launch hook: non-null once
         /// <see cref="AiGeneratorRuntime.UseInstantActionLaunches"/> has claimed this generator,
         /// and then it replaces the plane spawn entirely.</summary>
-        public Func<Vector3, Vector3, FlightController?>? Release { get; set; }
+        public Func<Vector3, Vector3, Vector3, FlightController?>? Release { get; set; }
 
         public int NetCursor { get; set; }
 
