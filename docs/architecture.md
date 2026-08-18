@@ -224,7 +224,9 @@ instead.
 - `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
 - `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/RecordingEmitterRenderer.cs` — the no-GPU `IEmitterRenderer` fake that keeps a `Puffer`'s particles instead of drawing them, so its three modes are assertable.
-- `src/Testing/Suites.cs` — the 26 registered suites and their golden counts (48 weapon defs, destructibles, glTF round trip). Six no-blocker suites (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` — 11 airframes, blast/fuse rules — moved to `CSVM.Tests` (`FlightEnvelopeTests`, `GaugeColoursTests`, `GaugeArrowTweenTests`, `WeaponsDefsTests`, `WeaponBlastTests`, `MarkersRigTests`) since their bodies called only `Probes.*`/plain statics with no live Node. `GaugeCluster`'s colour/sweep statics (`GunIndicatorColor`, `HardpointIndicatorColor`, `SlotIndicatorColor`, `DamageZoneColor`, `TargetArrowAngle`, `TweenArrow`, `IndicatorLowFrac`, `ArrowSweepDegPerSimS`) went `internal` → `public` for the move; `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the stall-specific consts stay `internal` (`stall-warning` is Wave B, scoped to `GaugeCluster` only).
+- `src/Testing/SuiteCatalog.cs` — the ordered registry of the in-engine suites; domain scenario bodies live in `*Suites.cs` modules, while `SuiteConstants` holds their shared golden inputs. Six no-blocker suites (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` — 11 airframes, blast/fuse rules — moved to `CSVM.Tests` (`FlightEnvelopeTests`, `GaugeColoursTests`, `GaugeArrowTweenTests`, `WeaponsDefsTests`, `WeaponBlastTests`, `MarkersRigTests`) since their bodies called only `Probes.*`/plain statics with no live Node. `GaugeCluster`'s colour/sweep statics (`GunIndicatorColor`, `HardpointIndicatorColor`, `SlotIndicatorColor`, `DamageZoneColor`, `TargetArrowAngle`, `TweenArrow`, `IndicatorLowFrac`, `ArrowSweepDegPerSimS`) went `internal` → `public` for the move; `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the stall-specific consts stay `internal` (`stall-warning` is Wave B, scoped to `GaugeCluster` only).
+- `src/Testing/*Suites.cs` — six domain scenario modules: puffer, combat, Instant Action, AI/targeting/zeppelins, world/tools, and animation/effects.
+- `src/Testing/SuiteConstants.cs` / `BurstTimeline.cs` / `SuiteViewers.cs` / `EffectStageSuiteHelper.cs` — the focused shared inputs, timeline values, pane-camera fixtures, and staged-effect fixture used by more than one suite module.
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
 - `src/Testing/CaptureDirector.cs` — the `--screenshot=`/`--shots=`/`--frames=` capture state machine + F11/F12, ticked from `_Process`.
@@ -2883,8 +2885,11 @@ so `puffer-modes` asserts on burst / distance-trail / sustain with no atlas, `Te
 the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replaces the draw so the
 emitter's own MODES are. Neither covers the other's job.
 
-## src/Testing/Suites.cs
-The 58 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
+## src/Testing/SuiteCatalog.cs
+The ordered registry of 70 in-engine assertion suites. Scenario bodies are grouped by domain in the
+six `*Suites.cs` modules; `Names` is the registry-order test surface. It preserves the original
+suite order, including `emitter-lifetime` first, because that suite installs the shared C1 world's
+fake emitter factory. The suites cover plane/loadout bindings (stock and, since M3 B4,
 the full-rig `Loadout.ForRig`), live weapon fire, the carried turret gunners (`carried-turrets`:
 build from ai.zrd + the thirdp mount, arc-centre rest pose, track/fire/hit under the host's
 shooter id, bored-window fire suppression with live tracking, the nearer-end-stop park, YAW [0,0]
@@ -2965,6 +2970,25 @@ construction rather than by assertion order alone: the staged template roots are
 nowhere) instead of hand-listed, and the TTL is 32 s — inheriting `--effects-test`'s 0.3 s would
 truncate the 1.2 s wash while everything else still read green. The full log of all three lands in
 `.scratch/ordnance-burst-timeline.txt`.
+
+## src/Testing/*Suites.cs
+Six domain modules hold the in-engine scenario bodies: `PufferSuites`, `CombatSuites`,
+`InstantActionSuites`, `AiTargetingAndZeppelinSuites`, `WorldAndToolSuites`, and
+`AnimationAndEffectsSuites`. They depend on `TestHarness` through `TestContext`; shared fixtures
+are separate focused modules, not an all-purpose suite helper.
+
+## src/Testing/SuiteConstants.cs
+The shared golden inputs used by more than one scenario module: airframe and weapon counts, puffer
+timing, the destructible census, and texture samples.
+
+## src/Testing/BurstTimeline.cs
+The three value types describing an authored ordnance-burst timeline and its observed dispatches.
+
+## src/Testing/SuiteViewers.cs
+Builds a test pane camera at a supplied world position for suites that exercise `ViewerSet`.
+
+## src/Testing/EffectStageSuiteHelper.cs
+Builds and frees a production-shaped, pooled effect-template stage for mesh-visibility suites.
 ## src/Testing/GoldenShot.cs
 The engine half of the golden-image tripwire: `PixelHash(Image)` (md5, lower-case hex) and
 `Adapter()` (`"<gpu> / <api>"`). Called at the `--screenshot` save site, which prints
