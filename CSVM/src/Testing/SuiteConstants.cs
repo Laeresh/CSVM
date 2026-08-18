@@ -13,7 +13,8 @@ using Godot;
 namespace CSVM.Testing;
 
 internal static class SuiteConstants
-{    internal const int PlayerAirframes = 11;
+{
+    internal const int PlayerAirframes = 11;
     internal const int WeaponDefCount = 48;
 
     // B4's scan fixture (aim-assist): a shooter at the origin on player 0's team, nose down world
