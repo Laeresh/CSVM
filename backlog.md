@@ -2383,9 +2383,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     `magnitude_factor`.** The `camera+0x24` consumer traced NEGATIVE (2026-08-19): the original's
     own accumulator is near-dead in its build, so the gap is a **mechanism mismatch, not a
     render-pipeline loss** — this port is the first real feel of the kick law.
-  - **(d) high_speed** — 2026-08-18 corrected to excess-over-gate `(speedRatio − gate)/quotient`
-    (`554edcee`): zero at rated max, ramps with overspeed instead of the old 5×-buzz snap. Was kept
-    as the sawtooth control on the port, but is now **re-opened — reads too muted vs the original**; see the open list.
   - **(B) fire-rate** — settled by decode: one round per fire-tick at authored `FIRE_RATE` (8.0 for
     wep_40); the "12–13/s" was a redraw-window artifact. Pose-interp render loss tested NEGATIVE.
   **Still open, all data/fidelity questions:**
@@ -2393,9 +2390,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     caliber, rockets use armor damage) — a being-hit capture pins them.
   - (c) the `ON_CALL` `small/medium/large` `damage_shakes` defs stay unwired — unknown caller,
     likely script/set-piece.
-  - **(d) high_speed re-opened** — ported buzz ~7× louder exposed the dive rattle as ~6× muted vs
-    the original; re-baseline its magnitude (and possibly random-walk it) once the gun-buzz feel
-    is judged.
+  - **(d) high_speed — re-opened (too muted).** The 2026-08-18 excess-over-gate correction
+    (`(speedRatio − gate)/quotient`, `554edcee`) returned the dive rattle to ~zero at rated max,
+    but the ported gun buzz (~7× louder) exposes it as ~6× muted vs the original's dive.
+    Re-baseline `high_speed`'s magnitude — and likely give it the same random-walk accumulator as
+    the gun — once the gun-buzz feel is judged.
   - **(fidelity) judge the port, then dial.** Playtest owed: fly the merged build and judge
     `GunBuzzKickScale` (1.0 default = faithful step) against the original clip before touching it.
     Two honest caveats: the random-walk **decay model (τ≈80 ms) is an engineering guess, not a
