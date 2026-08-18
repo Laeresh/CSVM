@@ -51,12 +51,29 @@ so in practice the gate is purely "is the mode 6".
 
 ## The camera modes
 
-| Mode | View | Position | Interior | Head-look | FOV (H) | ~V @ 16:9 |
+Every mode `0`–`9` is dispatched by `FUN_0042c5c0` (the camera-object position dispatcher;
+the scene-object twin `FUN_0042dc20` mirrors it) to a per-mode placement, then hands to the
+shared render-camera `FUN_0042ba70`. Only **modes `6` and `7` are first-person**, and only
+**mode `6` is 80°**.
+
+| Mode | Position dispatcher | View | FOV (H) | ~V @ 16:9 | Interior | Head-look |
 |---|---|---|---|---|---|---|
-| `0`, `2`–`5`, `8`, `9` | 3rd-person / chase variants | chase camera (`camparam.json`) | — | — | 60° | 46.8° |
-| `1` | (reserved / non-first-person) | chase | — | — | 60° | 46.8° |
-| **`6`** | **Cockpit** | `cockpit_camera` marker | **drawn** | free-look on | **80°** | 64.4° |
-| **`7`** | **Nose** | **same** `cockpit_camera` marker | hidden | locked forward | 60° | 46.8° |
+| `0` | `FUN_0042c7f0` | **Chase / 3rd-person** (smoothed, `camparam` distance) | 60° | 46.8° | — | — |
+| `1` | `FUN_0042ca50` | Chase behind (fixed world angle) | 60° | 46.8° | — | — |
+| `2` | `FUN_0042c7f0` +flag | Chase variant (fixed-scale) | 60° | 46.8° | — | — |
+| `3` | `FUN_0042cb70` | Chase behind, turn-flippable (+side) | 60° | 46.8° | — | — |
+| `4` | `FUN_0042cb70` +flag | Chase, same base, −side offset | 60° | 46.8° | — | — |
+| `5` | `FUN_0042ce00` | Chase variant | 60° | 46.8° | — | — |
+| **`6`** | `FUN_0042d980` | **Cockpit** | **80°** | 64.4° | **drawn** | free-look |
+| **`7`** | `FUN_0042d980` | **Nose** | 60° | 46.8° | hidden | locked forward |
+| `8` | `FUN_0042cf10` | Chase variant | 60° | 46.8° | — | — |
+| `9` | `FUN_0042db40` | Chase variant | 60° | 46.8° | — | — |
+
+The modes pair up around shared handlers: `(0,2)`, `(3,4)` and `(6,7)` share a placement
+function and differ only by the boolean flag each passes in — in `(6,7)`'s case the difference is
+the cockpit-vs-nose split below. Modes `1`, `5`, `8`, `9` each have a handler of their own. All of
+the non-first-person handlers read distance/eye geometry from the `camparam.json` chase table
+(`DAT_0064efd0`), so they are all chase/external poses rather than first-person ones.
 
 ### Modes 6 and 7 are the only first-person views
 
@@ -174,6 +191,11 @@ the cockpit view, hide the interior + lock the head + 60° for the nose view, an
 
 ## Not resolved
 
+- **The non-first-person modes (`1`, `2`, `3`, `4`, `5`, `8`, `9`) carry no friendly in-binary
+  name.** They map to distinct chase handlers but the *menu/HUD labels* (if any) behind them are
+  not decoded — rows above characterise them by handler, not by in-game name. Their exact poses
+  (offsets, whether any is a discrete look-behind or orbit) are only high-level reads of each
+  handler, not fully pinned.
 - The `markers`/`dontmove` nodes' exact visual role (what mode 7 strips beyond the interior) —
   visible in-game, not traced to a named object.
 - The remaining `camparam.json` death and flyby geometries — capture-gated on `BL-260`.
