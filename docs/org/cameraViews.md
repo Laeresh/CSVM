@@ -67,7 +67,7 @@ shared render-camera `FUN_0042ba70`. Only **modes `6` and `7` are first-person**
 | **`6`** | `FUN_0042d980` | **Cockpit** | **80°** | 64.4° | **drawn** | free-look |
 | **`7`** | `FUN_0042d980` | **Nose** | 60° | 46.8° | hidden | locked forward |
 | `8` | `FUN_0042cf10` | External — camera at the plane, aim built from the plane's transform | 60° | 46.8° | — | — |
-| `9` | `FUN_0042db40` | External — camera at the plane, re-frames its aim on a distance trigger | 60° | 46.8° | — | — |
+| `9` | `FUN_0042db40` | **Flyby** — camera holds a **world** position, re-aims at the plane, re-sites to a new spot on the `camparam` flyby trigger | 60° | 46.8° | — | — |
 
 The modes pair up around shared handlers: `(0,2)`, `(3,4)` and `(6,7)` share a placement
 function and differ only by the boolean flag each passes in — in `(6,7)`'s case the difference is
@@ -92,19 +92,28 @@ game start / on the cycle key. So the selectable set is:
 
 Modes `1`, `2`, `3`, `4`, `5`, `8`, `9` are **not** reachable as player-selected views — they are
 internal / context camera modes (e.g. other aircraft, cut-scene or context poses), which is why
-`FUN_0042c210` rejects them. The controls data in `extracted/messages.json` names the two bindings
-as **"Access Chase View"** (`MSG_LOOK_FLYBY` → chase) and **"Cycle Cockpit Views"**
-(`MSG_LOOK_FORWARD` → cycles the 6/7 pair); the command dispatcher `FUN_0047e080` (case `0x3`,
-`MSG_LOOK_FLYBY`) forces mode `0` when the current mode is non-zero.
+`FUN_0042c210` rejects them. The controls data in `extracted/messages.json` names the two view
+bindings as **"Access Chase View"** (`MSG_LOOK_FLYBY`, the F7 flyby — see the correction below, it
+is **not** the following chase) and **"Cycle Cockpit Views"** (`MSG_LOOK_FORWARD` → cycles the 6/7
+pair). The command dispatcher `FUN_0047e080` (case `0x3`, **inferred** to be `MSG_LOOK_FLYBY` —
+the input keymap isn't in the decoded data, and `0x3` is my best-match reading, not a read from a
+config file) forces mode `0` when the current mode is non-zero (a mode-reset), but that tells us
+nothing about which camera the F7 key actually shows; your live run settles it — the flyby. See
+the correction block that follows.
 
-"Access Chase View" is *not* a distinct cinematic or world-fixed camera — it selects the ordinary
-**following** chase. Mode `0`'s handler `FUN_0042c7f0` sizes the offset from `camparam.json`
-(`DAT_0064efd0`, clamped) and the plane's speed, reads the plane's orientation (`param_1+0x150`),
-then hands them to the shared follower `FUN_0042c670`, which each frame sets the camera position to
-`plane_world_pos + orientation_rotated_offset` (`DAT_0064ef20..28 = offset·dist + plane +0x204/208/20c`).
-The camera therefore tracks the plane; it is not anchored to a fixed point in the world. The name
-"flyby" (`MSG_LOOK_FLYBY`) is legacy — the binding's real effect is "switch to the standard chase"
-and it also clears the external-camera pan state (`DAT_0064ef60`/`64`). The options menu labels the
+⚠ **Correction (2026-08 later): "Access Chase View" IS the flyby — a world-fixed, re-siting
+camera**, not the ordinary following chase (an earlier draft of this page said otherwise; a live
+run of the original with F7 showed the camera hold a fixed world position that the plane flies
+through, re-aiming at the centre, then re-site after a beat). That behaviour is mode **9**: its
+handlers are `FUN_0042db40` (camera object) and `FUN_0042e1f0` (scene object). `FUN_0042e1f0` only
+runs on a re-site — it picks a fresh **world** position from a random azimuth and a random radius
+drawn between `camparam.json`'s `flyby_min_radius`/`flyby_max_radius` (table `DAT_0064efd0`, and the
+default block's re-site/watch/switch fields), and stashes it in `DAT_0064ef08/0c/10`.
+`FUN_0042db40` then, on every frame the re-site trigger is idle, sets the camera to that **held**
+position (`FUN_004d2710`) and only **re-aims** at the plane (`FUN_004d2490`) — i.e. a camera anchored
+in world space that watches the plane fly past, re-siting (via `FUN_0042e1f0`) when the
+watch/intervals/switch-distance fields say so. This is the same "re-siting roadside pass" the
+`camparam.json` flyby fields describe (`docs/formats/camparam.md`). The options menu labels the
 positions "external" (`MSG_OPT_3RD_PERSON`), "cockpit" (`MSG_OPT_COCKPIT`) and "default view"
 (`MSG_OPT_DEF_VIEW`).
 
@@ -225,6 +234,7 @@ mode 7 reuses the exact `cockpit_camera` point.
 | FOV axis | stored/ported as **horizontal** half-angle, aspect-corrected at runtime | assumed vertical |
 | First-person pair | modes 6/7 share the `cockpit_camera` position; differ in interior render, head-look, FOV | `CameraController.cs` has no cockpit/nose/per-view FOV or position split |
 | Cockpit interior gate | drawer (`FUN_0049fb00`) draws `cockpit1` only in mode 6 | not represented |
+| **Flyby** ("Access Chase View") | world-fixed, re-siting camera (mode `9`): holds a world point, re-aims at the plane, re-sites on `camparam` flyby trigger | not represented (no world-fixed / re-siting camera concept) |
 | Camera position | per-plane authored `cockpit_camera` offset, read from the model (`player_pfighter` `(0,0.75,−0.2)`) | not represented |
 
 To place the virtual camera faithfully: read the plane's `cockpit_camera` offset from the model
@@ -234,11 +244,13 @@ the cockpit view, hide the interior + lock the head + 60° for the nose view, an
 
 ## Not resolved
 
-- **The non-selectable modes (`1`, `2`, `3`, `4`, `5`, `8`, `9`) still have no friendly name or
+- **The non-selectable modes (`1`, `2`, `3`, `4`, `5`, `8`) still have no friendly name or
   identity.** The player-view selector (`FUN_0042c210`) rejects all of them, so none is a
-  player-selected view; they are internal/context camera poses. Their exact purpose (and which
-  context triggers each) is not pinned — modes `5`, `8` and `9` are confirmed "external camera at
-  the plane" but their precise triggers/poses are capture-gated to tell apart.
+  player-selected view; they are internal/context camera poses. Modes `5`/`8` are confirmed
+  "external camera at the plane" but their precise triggers/poses are capture-gated to tell apart.
+  Mode `9` is now pinned as the **flyby** (world-fixed re-siting camera — see the "Access Chase
+  View" note above); the same long-range/fixed re-siting pose likely underlies `5`/`8` too, but
+  that remains capture-gated.
 - The `markers`/`dontmove` nodes' exact visual role (what mode 7 strips beyond the interior) —
   visible in-game, not traced to a named object.
 - The remaining `camparam.json` death and flyby geometries — capture-gated on `BL-260`.

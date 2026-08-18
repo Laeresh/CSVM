@@ -147,6 +147,12 @@ and the flyby's 12 fields describe a re-siting roadside pass) but no death or fl
 on disk — `BL-260` owes those captures. Everything else is carried deliberately dormant behind
 the warnings above.
 
+⚡ Update: a live run of the original confirmed the flyby is **player-reachable** — pressing the
+"Access Chase View" key (F7) drops the camera to a fixed world position that re-aims as the plane
+flies through, then re-sites, exactly as the `flyby_*` fields above read. It is not a passive/dormant
+path; the binary ties it to mode `9` of the camera dispatch (see `docs/org/cameraViews.md`). The
+`death_*` fields remain capture-gated.
+
 ## Evidence & limits
 
 This page states current format facts. Claim-specific evidence and limits remain beside the claims they support.
