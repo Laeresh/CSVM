@@ -10,6 +10,10 @@ peak. The other candidates miss by an order of magnitude in each direction: dama
 3.15e-4 rad, ~9× under; velocity (900) → 6.3e-2 rad, ~16× over. The candidate separation is so
 wide that the peak-vs-RMS ambiguity (×√2–2) cannot flip the verdict — this is a measured
 discrimination, not a one-coincidence match.
+⚠ The 2.80e-3 rad is a *rendered* measurement of the clip; it is **not** the oscillator's kick
+amplitude (a kick of that size renders ~0.25× itself at 8/s). It discriminates `7e-5 × CALIBER`
+from competing laws, but reading it as the engine's intended per-kick roll is the conflation
+`BL-266(a)` tracks — see the amplitude sections below.
 
 ## Source clip
 
@@ -68,20 +72,62 @@ The same instrument run over the engine's own frames (`RunProbe --stage=empty
 | right wing dy | 0.049 | 0.003 | ×17.9 |
 
 Left-vs-right wing dy correlation **−0.96** — the same roll signature as the original.
-Per-frame amplitude reads ~2–4× under the original clip's after normalising lever arm and
-frame rate; known contributors: the engine kicks at the authored `FIRE_RATE` 8/s while the
-original clip's counter ran ~12–13 rounds/s (higher envelope refresh), and the 60 fps
-render-interpolated pose smooths a near-Nyquist buzz more than the original's 30 fps capture.
-Whether the residual matters is a feel call — **`PT-44` judged it at the controls 2026-08-07 and
-it FAILS: "gun wobble is too small, barely noticable."** The residual matters.
-⚠ **Neither named contributor carries the gap, so do not treat this table as explained.** With
-`damp` 12.5 the envelope's mean over a kick cycle is 0.506 at 8 rounds/s vs 0.645 at 13 — a factor
-of **1.27×**, not 2–4×. And the law being tested was *measured from this very clip*, so a render
-2–4× under it is a loss in the chain from law to pixels, **not** a wrong `magnitude_factor`:
-raising the constant would write a false number into decoded data to hide a pipeline bug. The
-wiring is not the suspect either (`FlightController.cs:1417` kicks once per round per muzzle).
-Next step is the fire-rate reconciliation in the caveat below — re-run rate-matched, then check
-what the 60 fps render-interpolated pose does to a 15 Hz buzz. `BL-266` carries it.
+**Per-frame amplitude reads ~4–5× UNDER what the wired law should render** (see the
+analysis section below), and the two attributions the table once floated are both TESTED
+NEGATIVE — the residual is **not** a rate shortfall and **not** a pose-interpolation loss:
+- *Rate:* the original fires ONE round per fire-tick at the authored `FIRE_RATE` (8.0 for
+  `wep_40`; `docs/org/weaponFire.md`); the clip's "12–13/s" was a redraw-window artifact.
+  The engine probe already fired at 8/s, so the rate was never a confounder.
+- *Render interpolation:* the shake pivot is a child of the `FlightController`, its roll
+  written once per 60 Hz physics tick (`FlightController.cs:1302-1303`), and the plane's own
+  manual pose interpolation (`_renderPose`, `:1388`) does **not** touch the pivot. Godot auto
+  physics interpolation is OFF (`CSVM/project.godot`, 35 lines, no `physics_interpolation`
+  entry; defaults OFF). A 15 Hz sawtooth at 60 Hz sampling is ~3.5× above Nyquist, so the pivot
+  renders *stepped* — there is no smoothing and no amplitude loss from the rendering chain.
+
+## Where the ~4–5× shortfall actually comes from: a law-derivation conflation
+
+Model the engine's own oscillator (validated against `PlaneShakeTests`'s single-kick bound:
+one kick of envelope `E` peaks at `0.435·E`, exactly the test's `0.25–1.001` window). At the
+real fire rate the sustained rendered roll is **`Amp × sawtooth(phase) × envelope`**, and because
+the sawtooth is rarely at ±1 and the envelope decays between kicks, the *rendered* RMS is only
+**~0.25× the kick amplitude** (`magnitude_factor × caliber`):
+
+| render | fire/s | rendered RMS (rad) | ×kick | rendered peak (rad) | ×kick |
+|---|---|---|---|---|---|
+| 60 fps | **8.0** (engine's real config) | 6.99e-4 | **0.249** | 1.22e-3 | 0.435 |
+| 60 fps | 12.5 (clip's apparent rate) | 9.98e-4 | 0.356 | 2.27e-3 | 0.812 |
+| 30 fps | 8.0 | 6.58e-4 | 0.235 | 1.22e-3 | 0.435 |
+| 30 fps | 12.5 | 1.15e-3 | 0.412 | 2.27e-3 | 0.812 |
+
+The corresponding per-frame roll STEP (what patch registration measures) at 8/s is mean
+~8.5e-4 rad/frame ⇒ **~0.18 px/frame of wing motion** at the ±205 px lever.
+
+The wire's `7e-5 × caliber` law (= kick amplitude **2.80e-3 rad**) was derived by setting it
+EQUAL to the clip's *rendered* RMS (**2.80e-3 rad**). But those are different physical
+quantities — rendered ≈ 0.25× kick at 8/s. So the engine never renders near the law's literal
+value; it renders ~0.25× of it. To render 2.80e-3 RMS at 8/s the kick must be 2.80e-3/0.249 =
+**1.12e-2 rad** (magnitude_factor ≈ **2.8e-4**, ~4× the current 7e-5) — *if* the clip RMS figure
+is trustworthy.
+
+⚠ **Neither the engine A/B nor the clip is consistent with the one model, and they disagree in
+opposite directions** — so the table's "2–4× under" is not a clean pipeline-loss claim:
+
+| measurement | per-frame step | vs model@8/s |
+|---|---|---|
+| clip raw (`track.py`) | 5.7e-3 rad/fr | ~6.5× **high** (30 fps capture; its own "Nyquist ≈ 2×"
+  correction was applied to a damped re-excited sawtooth, not a clean tone) |
+| engine probe | 1.6–2.4e-4 rad/fr | ~4–5× **low** (fire signal 0.032–0.049 px sits barely above
+  the 0.003–0.004 px idle floor; asymmetric wings ⇒ registration noise) |
+| model (this law) | ~8.5e-4 rad/fr | reference |
+
+The upshot: the shortfall is **not** a render-pipeline loss and **not** a wrong `magnitude_factor`
+hiding a bug — the constant is the product of a documented conflation (rendered RMS typed as kick
+amplitude). Whether the fix is a **decode correction** to `~4×` (if the clip's 2.8e-3 RMS is
+real) or a **feeler** that 0.18 px of 15 Hz@8/s wobble is simply what the authored data renders
+(if the clip over-read) is UNRESOLVED and needs a clean engine ground truth: log the actual pivot
+`Roll` per physics tick under `--fire` (no pixel registration), then a rate-matched 30 fps clip
+re-read. `BL-266(a)` carries it; `magnitude_factor` must not change until that measurement lands.
 
 ## Caveats
 
@@ -89,7 +135,15 @@ what the 60 fps render-interpolated pose does to a 15 Hz buzz. `BL-266` carries 
   second caliber on the same plane, and the same gun on a light vs heavy plane, would confirm the
   pure-caliber law (owed capture, see `playtest.md`).
 - The fire-window spectrum peaks near 10.4 Hz, not 15: a damped sawtooth re-excited per shot
-  (~12–13 rounds/s from the counter) and sampled at 30 fps does not yield a clean oscillator
-  line. Frequency comes authored regardless; amplitude was the question.
-- Counter-derived fire rate (~12–13 rounds/s) vs authored `FIRE_RATE` 8.0 is unreconciled
-  (two guns at 8/s would be 16/s); not needed for this decode.
+  and sampled at 30 fps does not yield a clean oscillator line. Frequency comes authored
+  regardless; amplitude was the question.
+- The counter-derived "12–13 rounds/s" is a **redraw-window artifact, not the true rate**:
+  `crimson.exe` fires ONE round per fire-tick at the authored `FIRE_RATE` 8.0
+  (`docs/org/weaponFire.md`); the counter dropped 46 rounds at 8/s (~5.75 s) while the motion
+  window only captured ~4.5 s, inflating the per-second reading. The two-guns-at-16/s guess is
+  ruled out — one gun group, one round per tick.
+- **The `magnitude` law is a rendered quantity, not a kick amplitude** — see the conflation
+  section above: `7e-5 × caliber` was matched to the clip's rendered RMS, but a kick of that
+  size renders ~0.25× of itself at 8/s. Any re-derivation (and any `magnitude_factor` change)
+  must use a measurement of the ENGINE's real render, not the clip RMS, until the clip's
+  ~6.5×-over-model reading is explained.

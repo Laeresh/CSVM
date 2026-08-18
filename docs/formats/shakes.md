@@ -29,10 +29,16 @@ firing 40-cal slugs shows a roll-dominated wobble (left/right wing vertical moti
 anti-correlated at −0.86) of 2.8e-3 rad RMS / ~4.0e-3 rad peak; the dead-astern view makes the
 screen angle the world roll angle with no projection model. Candidates: caliber 40 × 7e-5 =
 2.8e-3 rad (match); damage 4.5 → 3.15e-4 (~9× under); velocity 900 → 6.3e-2 (~16× over) — an
-order-of-magnitude discrimination, not a one-coincidence match. Unmeasured residue: whether
-plane model/weight also enter (single-plane, single-gun clip — owed capture in `playtest.md`),
-and the impact sources' own quantities (the engine stands in caliber for gun hits and armor
-damage for rockets, declared TUNE).
+order-of-magnitude discrimination, not a one-coincidence match. ⚠ **Amplitude-call caution:**
+the 2.8e-3 rad is the clip's *rendered* RMS, not the oscillator's *kick* amplitude — a kick of
+envelope `E` renders only ~0.25·E as RMS at the real 8/s fire rate (sawtooth duty × damp
+envelope decay), so the engine renders well under the law's literal number. Whether the
+`magnitude_factor` κ needs a ~4× decode correction (to *render* the clip's 2.8e-3 RMS) or is
+already right (the clip over-read at ~6.5× the model) is unresolved — see
+`analysis/gun-wobble-shake/FINDINGS.md`. Unmeasured residue: whether plane model/weight also
+enter (single-plane, single-gun clip — owed capture in `playtest.md`), and the impact sources'
+own quantities (the engine stands in caliber for gun hits and armor damage for rockets, declared
+TUNE).
 
 **What the oscillators displace**: in 3rd-person views of the original the **plane itself**
 wobbles against the world; cockpit/nose views read as camera shake. One mechanism explains

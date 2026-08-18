@@ -35,6 +35,14 @@ and leave gaps when retiring old ones.
   cadence-sweep data it moved the 930 ms amplitude by 45% as the filter's span changed. A
   polynomial and a sinusoid fitted together, inside a window of at least eight periods, leaves a
   cubic almost nothing of the fundamental to absorb (`ZzCadenceSweep`).
+- **METHOD-25** — **Never equate a measured OUTPUT of an oscillator with its INPUT amplitude
+  (a rendered RMS is not a kick).** The gun-wobble law `7e-5×caliber = 2.80e-3 rad` was set equal
+  to the clip's rendered RMS — but a kick of envelope `E` renders only ~0.25·E as RMS at the real
+  8/s fire rate (sawtooth duty × damp-envelope decay), so the engine read ~4× under the law's
+  literal number *by construction* and was misread as a render-pipeline loss. The law's derivation
+  conflated what was fed in with what comes out; a fitted constant is only interpretable if it
+  names the quantity it multiplies at the right point in the chain (`BL-266(a)`;
+  `analysis/gun-wobble-shake/`).
 
 ## DIAG — chasing a symptom
 

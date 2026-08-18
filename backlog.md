@@ -2429,6 +2429,32 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     46/4.5≈10.2, narrower windows higher), giving the inflated number. Removing the rate as a
     suspect leaves the render/decay amplitude loss ((B)'s 60 fps pose-interpolation check) as the
     only open amplitude avenue; recorded as [`docs/org/weaponFire.md`](org/weaponFire.md).
+    **(2026-08-18) the pose-interpolation half of (B) is TESTED NEGATIVE, and the gap is reframed
+    as a law-derivation conflation, not a render-pipeline loss.** (i) The 60 fps pose-interp
+    hypothesis does not survive: the shake pivot is a child of the `FlightController`, its roll
+    written once per 60 Hz physics tick, and Godot auto physics interpolation is OFF
+    (`CSVM/project.godot` is 35 lines, no `physics_interpolation` entry) — the plane's manual
+    `_renderPose` interpolation does not touch the pivot, so a 15 Hz sawtooth at 60 Hz renders
+    stepped ~3.5× above Nyquist with no smoothing loss. (ii) Model the engine's own oscillator
+    (validated against `PlaneShakeTests`'s single-kick 0.435·E bound): a kick of envelope
+    `E = 7e-5×40 = 2.80e-3 rad` renders, at the real 8/s fire rate, only **0.249× itself as RMS**
+    (sawtooth duty × damp decay), i.e. per-frame roll step ~8.5e-4 rad ⇒ ~0.18 px of wing motion
+    at the ±205 px lever. So the engine NEVER renders near the law's literal number — the FINDINGS
+    arrived at `7e-5` by setting the kick amplitude EQUAL to the clip's *rendered* RMS (both
+    2.80e-3), a conflation of two different physical quantities. To render 2.80e-3 RMS at 8/s the
+    kick must be ~1.12e-2 rad (factor ~2.8e-4, ~4×). (iii) Neither measurement is consistent with
+    the one model and they disagree in opposite directions — the clip reads ~6.5× HIGH (its raw
+    5.7e-3 rad/frame step; the "Nyquist ≈2×" correction was applied to a damped re-excited
+    sawtooth, not a clean tone), the engine probe reads ~4–5× LOW (0.032–0.049 px, barely above
+    the 0.003–0.004 idle floor, asymmetric wings ⇒ noise). So "the engine renders 2–4× under" was
+    a comparison of two mutually-inconsistent measurements, not a clean pipeline-loss claim.
+    *What this means:* the constant is the product of the rendered≈kick conflation, so a change is
+    a **decode correction**, not a tune-to-hide — but whether the fix is ×~4 (clip RMS is real) or
+    no change (clip over-read; 0.18 px is simply what 15 Hz@8/s renders) is UNRESOLVED. The next
+    step is not pixel registration but an engine ground truth: log the actual pivot `Roll` per
+    physics tick under `--fire` (deterministic law, no render noise), then a rate-matched 30 fps
+    clip re-read to decide if the clip's 2.8e-3 RMS is inflated. `magnitude_factor` must not
+    change until that lands. Leads recorded in `analysis/gun-wobble-shake/FINDINGS.md`.
   - **Passing:** being-hit rocks read right — guns give a short rock, rockets read ok (user,
     2026-08-07, `--vs`).
   - **Unjudged:** (d) view coupling — the plane wobbling against the world in chase view cannot

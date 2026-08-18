@@ -72,8 +72,13 @@ narrower window). This is the same redraw-artifact trap `FINDINGS.md` already fl
 
 ## Implication for the gun-rattle amplitude (`BL-266`(a))
 
-With rate ruled out as a contributor, the remaining cause of the engine's gun wobble reading
-~2–4× weaker than the clip is the render/decay amplitude loss — a 15 Hz buzz / damp 12.5 sampled
-and render-interpolated at 60 fps (the "(B) 60 fps pose-interpolation" check the backlog keeps
-open). The magnitude law (`7e-5 × caliber`) is still measured-from-the-clip and is not to be
-tampered with to hide the pipeline loss.
+With rate ruled out, BL-266's remaining amplitude avenue — the "(B) 60 fps pose-interpolation"
+loss — is now also ruled out: the shake pivot is written once per 60 Hz physics tick and Godot
+auto physics interpolation is OFF, so the 15 Hz sawtooth renders stepped (~3.5× above Nyquist)
+with no smoothing loss. The gap is instead a **law-derivation conflation**: the `7e-5 × caliber`
+law (kick amplitude 2.80e-3 rad) was matched to the clip's *rendered* RMS (2.80e-3 rad), but a
+kick of envelope `E` renders only ~0.25·E as RMS at 8/s, so the engine reads ~4× under the law's
+literal number by construction — not a pipeline loss. Whether the clip's 2.8e-3 RMS is itself
+inflated (it reads ~6.5× over the model) is unresolved and needs an engine ground truth
+(pivot-`Roll` log) before any `magnitude_factor` change. Full reconciliation:
+`analysis/gun-wobble-shake/FINDINGS.md`.
